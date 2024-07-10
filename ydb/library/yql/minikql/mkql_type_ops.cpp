@@ -1008,6 +1008,7 @@ private:
     }
 
     i32 EnrichYear2(i32 value, i32 solarCycles, i32& year) const {
+        // TODO use YearsCache_ and return/update TYearCache
         auto y = std::upper_bound(Years_.cbegin(), Years_.cend(), value) - 1;
         value -= *y;
         year = NUdf::MIN_YEAR + SOLAR_CYCLE_YEARS * solarCycles + std::distance(Years_.cbegin(), y);
@@ -1037,16 +1038,16 @@ private:
             auto daysInYear = IsLeapYear(year) ? 366u : 365u;
             auto lastDayOfWeek = (dayOfWeek + daysInYear - 1) % 7;
             YearsCache_[yearIdx] = TYearCache(date, 7 + dayOfWeek, (dayOfWeek >= 4) ? dayOfWeek : dayOfWeek + 7, lastDayOfWeek, weekOfYearIso8601 == 53);
-if (yearIdx <= 15) {
-    Cerr
-        << " year " << year
-        << " days " << YearsCache_[yearIdx].CumulatveDays
-        << " weekOffset " << YearsCache_[yearIdx].WeekOffset
-        << " isoWeekOffset " << YearsCache_[yearIdx].Iso8601WeekOffset
-        << " lastDayOfWeek " << YearsCache_[yearIdx].LastDayOfWeek
-        << " firstIsoWeek " << YearsCache_[yearIdx].FirstIsoWeek53
-        << Endl;
-}
+// if (yearIdx <= 15) {
+//     Cerr
+//         << " year " << year
+//         << " days " << YearsCache_[yearIdx].CumulatveDays
+//         << " weekOffset " << YearsCache_[yearIdx].WeekOffset
+//         << " isoWeekOffset " << YearsCache_[yearIdx].Iso8601WeekOffset
+//         << " lastDayOfWeek " << YearsCache_[yearIdx].LastDayOfWeek
+//         << " firstIsoWeek " << YearsCache_[yearIdx].FirstIsoWeek53
+//         << Endl;
+// }
             ui32 weekOfYear = 1;
             for (ui32 dayOfYear = 0; dayOfYear < daysInYear; ++dayOfYear) {
                 ui32 month, day;

@@ -69,12 +69,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             i32 year;
             ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
 
-            EnrichDate32(date, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
-            UNIT_ASSERT_VALUES_EQUAL(dayOfYear16, dayOfYear);
-            UNIT_ASSERT_VALUES_EQUAL(weekOfYear16, weekOfYear);
-            UNIT_ASSERT_VALUES_EQUAL(weekOfYearIso8601_16, weekOfYearIso8601);
-            UNIT_ASSERT_VALUES_EQUAL(dayOfWeek16, dayOfWeek);
-
             FullSplitDate32(date, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, 0);
             UNIT_ASSERT_VALUES_EQUAL(year16, year);
             UNIT_ASSERT_VALUES_EQUAL(month16, month);
@@ -105,6 +99,67 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             << Endl;
     }
 
+    Y_UNIT_TEST(FullSplitDate32CornerCases) {
+            i32 year;
+            ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
+
+            FullSplitDate32(NYql::NUdf::MIN_DATE32, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, 0);
+            UNIT_ASSERT_VALUES_EQUAL(NYql::NUdf::MIN_YEAR32, year);
+            UNIT_ASSERT_VALUES_EQUAL(1, month);
+            UNIT_ASSERT_VALUES_EQUAL(1, day);
+            UNIT_ASSERT_VALUES_EQUAL(1, dayOfYear);
+            UNIT_ASSERT_VALUES_EQUAL(7, dayOfWeek);
+            UNIT_ASSERT_VALUES_EQUAL(1, weekOfYear);
+            UNIT_ASSERT_VALUES_EQUAL(52, weekOfYearIso8601);
+
+            FullSplitDate32(NYql::NUdf::MAX_DATE32, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, 0);
+            UNIT_ASSERT_VALUES_EQUAL(NYql::NUdf::MAX_YEAR32 - 1, year);
+            UNIT_ASSERT_VALUES_EQUAL(12, month);
+            UNIT_ASSERT_VALUES_EQUAL(31, day);
+            UNIT_ASSERT_VALUES_EQUAL(365, dayOfYear);
+            UNIT_ASSERT_VALUES_EQUAL(6, dayOfWeek);
+            UNIT_ASSERT_VALUES_EQUAL(53, weekOfYear);
+            UNIT_ASSERT_VALUES_EQUAL(52, weekOfYearIso8601);
+
+            // -4713-11-24
+            FullSplitDate32(DATETIME_MIN_JULIAN - UNIX_EPOCH_JDATE, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, 0);
+            UNIT_ASSERT_VALUES_EQUAL(JULIAN_MINYEAR - 1, year);
+            UNIT_ASSERT_VALUES_EQUAL(JULIAN_MINMONTH, month);
+            UNIT_ASSERT_VALUES_EQUAL(JULIAN_MINDAY, day);
+            UNIT_ASSERT_VALUES_EQUAL(328, dayOfYear);
+            UNIT_ASSERT_VALUES_EQUAL(1, dayOfWeek);
+            UNIT_ASSERT_VALUES_EQUAL(48, weekOfYear);
+            UNIT_ASSERT_VALUES_EQUAL(48, weekOfYearIso8601);
+
+            // 0001-01-01
+            FullSplitDate32(-719162, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, 0);
+            UNIT_ASSERT_VALUES_EQUAL(1, year);
+            UNIT_ASSERT_VALUES_EQUAL(1, month);
+            UNIT_ASSERT_VALUES_EQUAL(1, day);
+            UNIT_ASSERT_VALUES_EQUAL(1, dayOfYear);
+            UNIT_ASSERT_VALUES_EQUAL(1, dayOfWeek);
+            UNIT_ASSERT_VALUES_EQUAL(1, weekOfYear);
+            UNIT_ASSERT_VALUES_EQUAL(1, weekOfYearIso8601);
+
+            FullSplitDate32(0, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, 0);
+            UNIT_ASSERT_VALUES_EQUAL(1970, year);
+            UNIT_ASSERT_VALUES_EQUAL(1, month);
+            UNIT_ASSERT_VALUES_EQUAL(1, day);
+            UNIT_ASSERT_VALUES_EQUAL(1, dayOfYear);
+            UNIT_ASSERT_VALUES_EQUAL(4, dayOfWeek);
+            UNIT_ASSERT_VALUES_EQUAL(1, weekOfYear);
+            UNIT_ASSERT_VALUES_EQUAL(1, weekOfYearIso8601);
+
+            FullSplitDate32(-1, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, 0);
+            UNIT_ASSERT_VALUES_EQUAL(1969, year);
+            UNIT_ASSERT_VALUES_EQUAL(12, month);
+            UNIT_ASSERT_VALUES_EQUAL(31, day);
+            UNIT_ASSERT_VALUES_EQUAL(365, dayOfYear);
+            UNIT_ASSERT_VALUES_EQUAL(3, dayOfWeek);
+            UNIT_ASSERT_VALUES_EQUAL(53, weekOfYear);
+            UNIT_ASSERT_VALUES_EQUAL(1, weekOfYearIso8601);
+    }
+
     Y_UNIT_TEST(Date32vsPostgres) {
         int value;
         UNIT_ASSERT(MakeDate32(JULIAN_MINYEAR, JULIAN_MINMONTH, JULIAN_MINDAY, value));
@@ -131,7 +186,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(date32, value - UNIX_EPOCH_JDATE);
             
             ui32 dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
-            ui32 y, m, d;
+            i32 y;
+            ui32 m, d;
             FullSplitDate32(date32, y, m, d, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, 0);
             UNIT_ASSERT_VALUES_EQUAL(dayOfWeek % 7, j2day(value));
 

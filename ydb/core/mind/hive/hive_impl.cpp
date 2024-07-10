@@ -2747,6 +2747,7 @@ void THive::UpdateTabletFollowersNumber(TLeaderTabletInfo& tablet, NIceDb::TNice
             db.Table<Schema::Metrics>().Key(tablet.Id, follower.Id).Delete();
             follower.InitiateStop(sideEffects);
             tablet.Followers.erase(std::prev(itFollower.base()));
+            UpdateCounterTabletsTotal(-1);
             --followerCount;
         }
     }

@@ -56,19 +56,19 @@ class OneTimeWaiter:
 
 one_time_waiter = OneTimeWaiter(
     expected_tables=[
-        "column_selection_A_b_C_d_E_NATIVE",
-        "column_selection_COL1_NATIVE",
-        "column_selection_asterisk_NATIVE",
-        "column_selection_col2_COL1_NATIVE",
-        "column_selection_col2_NATIVE",
-        "column_selection_col3_NATIVE",
-        "primitive_types_NATIVE",
-        "optional_types_NATIVE",
-        "constant_NATIVE",
-        "count_NATIVE",
-        "pushdown_NATIVE",
-        "unsupported_types_NATIVE",
-        "json_NATIVE",
+        "column_selection_A_b_C_d_E",
+        "column_selection_COL1",
+        "column_selection_asterisk",
+        "column_selection_col2_COL1",
+        "column_selection_col2",
+        "column_selection_col3",
+        "primitive_types",
+        "optional_types",
+        "constant",
+        "count",
+        "pushdown",
+        "unsupported_types",
+        "json",
     ]
 )
 

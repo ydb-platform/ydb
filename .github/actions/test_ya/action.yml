@@ -165,12 +165,12 @@ runs:
 
     - name: Print test history link
       shell: bash
-      if: inputs.testman_token && inputs.run_test
+      if: inputs.testman_token && inputs.run_tests
       run: |
         echo "10 [Test history](${TEST_HISTORY_URL})" >> $SUMMARY_LINKS
 
     - name: set environment variables required by some tests
-      if: inputs.run_test
+      if: inputs.run_tests
       shell: bash
       run: |
         echo "PSQL_BINARY=/usr/bin/psql" >> $GITHUB_ENV
@@ -198,7 +198,7 @@ runs:
           relwithdebinfo)
             params+=(--build "relwithdebinfo")
             ;;
-          release)
+          release)  
             params+=(--build "release")
             ;;
           release-clang14)
@@ -298,13 +298,13 @@ runs:
         fi
 
     - name: archive unitest reports (orig)
-      if: inputs.run_test
+      if: inputs.run_tests
       shell: bash
       run: |
         gzip -c $JUNIT_REPORT_XML > $REPORTS_ARTIFACTS_DIR/orig_junit.xml.gz
 
     - name: postprocess junit report
-      if: inputs.run_test
+      if: inputs.run_tests
       shell: bash
       run: |
         set -x
@@ -320,7 +320,7 @@ runs:
         .github/scripts/tests/split-junit.py -o "$JUNIT_REPORT_PARTS" "$JUNIT_REPORT_XML"
     
     - name: Test history upload results to YDB
-      if: inputs.run_test
+      if: inputs.run_tests
       continue-on-error: true
       shell: bash
       env:
@@ -342,13 +342,13 @@ runs:
         result=`.github/scripts/upload_tests_results.py --test-results-file ${JUNIT_REPORT_XML} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull ${PR_NUMBER} --job-name ${JOB_NAME} --job-id ${JOB_ID} --branch ${GITHUB_REF_NAME}`
 
     - name: archive unitest reports (transformed)
-      if: inputs.run_test
+      if: inputs.run_tests
       shell: bash
       run: |
         tar -C $JUNIT_REPORT_PARTS/.. -czf $REPORTS_ARTIFACTS_DIR/junit_parts.xml.tar.gz $(basename $JUNIT_REPORT_PARTS)
 
     - name: Unit test history upload results
-      if: inputs.testman_token && inputs.run_test
+      if: inputs.testman_token && inputs.run_tests
       shell: bash
       env:
         TESTMO_TOKEN: ${{ inputs.testman_token }}
@@ -376,7 +376,7 @@ runs:
         kill $proxy_pid
 
     - name: Test history run complete
-      if: always() && inputs.testman_token && inputs.run_test
+      if: always() && inputs.testman_token && inputs.run_tests
       shell: bash
       env:
         TESTMO_TOKEN: ${{ inputs.testman_token }}
@@ -394,7 +394,7 @@ runs:
     
     - name: write tests summary
       shell: bash
-      if: always() && inputs.run_test
+      if: always() && inputs.run_tests
       env:
         GITHUB_TOKEN: ${{ github.token }}
       run: |
@@ -423,7 +423,7 @@ runs:
             -d '{"state":"'$teststatus'","description":"'"$testmessage"'","context":"test_${{inputs.build_preset}}"}'
 
     - name: sync test results to s3
-      if: always() && inputs.run_test
+      if: always() && inputs.run_tests
       shell: bash
       run: |
         set -x
@@ -433,7 +433,7 @@ runs:
         echo "::endgroup::"
     
     - name: check test results
-      if: inputs.run_test
+      if: inputs.run_tests
       shell: bash
       run: |
         .github/scripts/tests/fail-checker.py "$JUNIT_REPORT_XML"

@@ -2,7 +2,7 @@
 
 namespace NKikimr::NOlap::NIndexes {
 
-bool IIndexMeta::DeserializeFromProto(const NKikimrSchemeOp::TOlapSecondaryData& proto) {
+bool IIndexMeta::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) {
     if (!proto.GetId()) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse secondary data builder")("reason", "incorrect id - 0");
         return false;
@@ -11,17 +11,17 @@ bool IIndexMeta::DeserializeFromProto(const NKikimrSchemeOp::TOlapSecondaryData&
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse secondary data builder")("reason", "incorrect name - empty string");
         return false;
     }
-    EntityId = proto.GetId();
-    Name = proto.GetName();
+    IndexId = proto.GetId();
+    IndexName = proto.GetName();
     StorageId = proto.GetStorageId() ? proto.GetStorageId() : IStoragesManager::DefaultStorageId;
     return DoDeserializeFromProto(proto);
 }
 
-void IIndexMeta::SerializeToProto(NKikimrSchemeOp::TOlapSecondaryData& proto) const {
-    AFL_VERIFY(EntityId);
-    proto.SetId(EntityId);
-    AFL_VERIFY(Name);
-    proto.SetName(Name);
+void IIndexMeta::SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const {
+    AFL_VERIFY(IndexId);
+    proto.SetId(IndexId);
+    AFL_VERIFY(IndexName);
+    proto.SetName(IndexName);
     if (StorageId) {
         proto.SetStorageId(StorageId);
     }

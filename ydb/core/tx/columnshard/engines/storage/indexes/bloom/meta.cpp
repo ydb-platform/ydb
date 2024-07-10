@@ -13,7 +13,7 @@ namespace NKikimr::NOlap::NIndexes {
 std::shared_ptr<arrow::RecordBatch> TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
     std::set<ui64> hashes;
     {
-        NArrow::NHash::NXX64::TStreamStringHashCalcer hashCalcer;
+        NArrow::NHash::NXX64::TStreamStringHashCalcer hashCalcer(0);
         for (reader.Start(); reader.IsCorrect(); reader.ReadNext()) {
             hashCalcer.Start();
             for (auto&& i : reader) {
@@ -25,7 +25,7 @@ std::shared_ptr<arrow::RecordBatch> TBloomIndexMeta::DoBuildIndexImpl(TChunkedBa
 
     const ui32 bitsCount = HashesCount * hashes.size() / std::log(2);
     std::vector<bool> flags(bitsCount, false);
-    const auto pred = [](const ui64 hash) {
+    const auto pred = [&flags](const ui64 hash) {
         flags[hash % flags.size()] = true;
     };
     BuildHashesSet(hashes, pred);
@@ -61,8 +61,8 @@ void TBloomIndexMeta::DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataF
         const auto pred = [&hashes](const ui64 hash) {
             hashes.emplace(hash);
         };
+        NArrow::NHash::NXX64::TStreamStringHashCalcer calcer(0);
         for (ui32 i = 0; i < HashesCount; ++i) {
-            NArrow::NHash::NXX64::TStreamStringHashCalcer calcer;
             calcer.Start();
             for (auto&& i : foundColumns) {
                 NArrow::NHash::TXX64::AppendField(i.second, calcer);

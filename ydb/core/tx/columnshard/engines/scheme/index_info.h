@@ -209,7 +209,7 @@ public:
 
     void AppendIndexes(THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData) const {
         for (auto&& i : Indexes) {
-            std::shared_ptr<IPortionDataChunk> chunk = i.second->BuildIndex(i.first, originalData, *this);
+            std::shared_ptr<IPortionDataChunk> chunk = i.second->BuildIndex(originalData, *this);
             AFL_VERIFY(originalData.emplace(i.first, std::vector<std::shared_ptr<IPortionDataChunk>>({chunk})).second);
         }
     }
@@ -217,7 +217,7 @@ public:
     void AppendIndex(THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData, const ui32 indexId) const {
         auto it = Indexes.find(indexId);
         AFL_VERIFY(it != Indexes.end());
-        std::shared_ptr<IPortionDataChunk> chunk = it->second->BuildIndex(indexId, originalData, *this);
+        std::shared_ptr<IPortionDataChunk> chunk = it->second->BuildIndex(originalData, *this);
         AFL_VERIFY(originalData.emplace(indexId, std::vector<std::shared_ptr<IPortionDataChunk>>({chunk})).second);
     }
 

@@ -26,9 +26,9 @@ private:
 
     template <class TActor>
     void BuildHashesSet(const ui64 originalHash, const TActor& actor) const {
-        AFL_VERIFY(HashesCount < p);
+        AFL_VERIFY(HashesCount < HashesConstructorP);
         for (ui32 b = 1; b < HashesCount; ++b) {
-            const ui64 hash = (HashesConstructorA * hOriginal + b) % HashesConstructorP;
+            const ui64 hash = (HashesConstructorA * originalHash + b) % HashesConstructorP;
             actor(hash);
         }
     }

@@ -60,8 +60,8 @@ public:
 
     virtual ~IIndexMeta() = default;
 
-    std::shared_ptr<IPortionDataChunk> BuildIndex(const ui32 indexId, THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const {
-        return DoBuildIndex(indexId, data, indexInfo);
+    std::shared_ptr<IPortionDataChunk> BuildIndex(THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const {
+        return DoBuildIndex(data, indexInfo);
     }
 
     void FillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const {

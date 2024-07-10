@@ -26,4 +26,5 @@ ENDIF()
 
 RECURSE_FOR_TESTS(
     test
+    test_bigdates
 )

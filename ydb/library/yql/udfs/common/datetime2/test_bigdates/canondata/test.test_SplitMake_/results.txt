@@ -1,0 +1,38 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "dt";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Date32"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "-719162"
+                        ]
+                    ];
+                    [
+                        [
+                            "0"
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

@@ -4,26 +4,34 @@
 
 namespace NYql::DateTime {
 
-void TTM64Storage::FromDate32(i32 value, ui16 timezoneId) {
+void TTM64Storage::FromDate32(i32 value, ui16 tzId) {
     i32 year;
-    ui32 month, day; // , dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
+    ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
 
-    if (!NKikimr::NMiniKQL::SplitDate32(value, year, month, day)) {
-        ythrow yexception() << "Error in SplitDate32";
-    }
+    NKikimr::NMiniKQL::FullSplitDate32(
+            value, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
 
-    TimezoneId = timezoneId;
+    TimezoneId = tzId;
 
     Year = year;
     Month = month;
     Day = day;
 
-    /* TODO impl enrich
     DayOfYear = dayOfYear;
     WeekOfYear = weekOfYear;
     WeekOfYearIso8601 = weekOfYearIso8601;
     DayOfWeek = dayOfWeek;
-    */
 }
+
+i32 TTM64Storage::ToDate32() const {
+    Y_ASSERT(IsUniversal(TimezoneId));
+    i32 date;
+    if (!NKikimr::NMiniKQL::MakeDate32(Year, Month, Day, date)) {
+        ythrow yexception() << "Error in MakeDate32";
+    }
+    return date;
+}
+
+
 
 }

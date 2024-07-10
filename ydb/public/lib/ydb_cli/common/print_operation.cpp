@@ -37,8 +37,8 @@ namespace {
             }
         }
         
-        if (!operation.User().Empty()) {
-            freeText << "User: " << operation.User() << Endl;
+        if (!operation.CreatedBy().Empty()) {
+            freeText << "Created by: " << operation.CreatedBy() << Endl;
         }
 
         if (operation.StartTime() != TInstant::Zero()) {
@@ -126,8 +126,8 @@ namespace {
 
         freeText << "TypeV3: " << (settings.UseTypeV3_ ? "true" : "false") << Endl;
 
-        if (!operation.User().Empty()) {
-            freeText << "User: " << operation.User() << Endl;
+        if (!operation.CreatedBy().Empty()) {
+            freeText << "Created by: " << operation.CreatedBy() << Endl;
         }
 
         if (operation.StartTime() != TInstant::Zero()) {
@@ -192,8 +192,8 @@ namespace {
             freeText << "Number of retries: " << settings.NumberOfRetries_.GetRef() << Endl;
         }
 
-        if (!operation.User().Empty()) {
-            freeText << "User: " << operation.User() << Endl;
+        if (!operation.CreatedBy().Empty()) {
+            freeText << "Created by: " << operation.CreatedBy() << Endl;
         }
 
         if (operation.StartTime() != TInstant::Zero()) {

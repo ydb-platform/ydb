@@ -19,7 +19,7 @@ public:
         , Ready_(operation.ready())
         , StartTime_(ProtoTimestampToInstant(operation.start_time()))
         , EndTime_(ProtoTimestampToInstant(operation.end_time()))
-        , User_(operation.user())
+        , CreatedBy_(operation.created_by())
         , Operation_(std::move(operation))
     {
     }
@@ -44,8 +44,8 @@ public:
         return EndTime_;
     }
 
-    const TString& User() const {
-        return User_;
+    const TString& CreatedBy() const {
+        return CreatedBy_;
     }
 
     const Ydb::Operations::Operation& GetProto() const {
@@ -58,7 +58,7 @@ private:
     const bool Ready_;
     const TInstant StartTime_;
     const TInstant EndTime_;
-    const TString User_;
+    const TString CreatedBy_;
     const Ydb::Operations::Operation Operation_;
 };
 
@@ -90,8 +90,8 @@ TInstant TOperation::EndTime() const {
     return Impl_->EndTime();
 }
 
-const TString& TOperation::User() const {
-    return Impl_->User();
+const TString& TOperation::CreatedBy() const {
+    return Impl_->CreatedBy();
 }
 
 TString TOperation::ToString() const {

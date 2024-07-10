@@ -128,6 +128,6 @@ message Operation {
     // The time at which this operation was completed, doesn't matter successful or not (if supported).
     google.protobuf.Timestamp end_time = 9;
 
-    // User SID (Security ID) of the user who requested this operation (if supported).
-    string user = 10;
+    // User SID (Security ID) of the user who created this operation (if supported).
+    string created_by = 10;
 }

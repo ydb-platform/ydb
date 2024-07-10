@@ -34,7 +34,7 @@ public:
     const TStatus& Status() const;
     TInstant StartTime() const;
     TInstant EndTime() const;
-    const TString& User() const;
+    const TString& CreatedBy() const;
 
     TString ToString() const;
     TString ToJsonString() const;

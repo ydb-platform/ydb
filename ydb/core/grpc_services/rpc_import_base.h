@@ -50,7 +50,7 @@ struct TImportConv {
         }
 
         if (import.HasUserSID()) {
-            operation.set_user(import.GetUserSID());
+            operation.set_created_by(import.GetUserSID());
         }
 
         using namespace Ydb::Import;

@@ -53,7 +53,7 @@ struct TExportConv {
         }
 
         if (exprt.HasUserSID()) {
-            operation.set_user(exprt.GetUserSID());
+            operation.set_created_by(exprt.GetUserSID());
         }
 
         using namespace Ydb::Export;

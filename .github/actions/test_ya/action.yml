@@ -263,7 +263,7 @@ runs:
         
         ./ya make ${{ inputs.build_target }} "${params[@]}" \
           --stat --log-file "$YA_TEST_LOG_FILENAME" -DCONSISTENT_DEBUG \
-          --no-dir-outputs --test-failure-code 0 \
+          --no-dir-outputs --test-failure-code 0 --build-all \
           --cache-size 2TB --force-build-depends --evlog-file "$TMP_DIR/ya_evlog.jsonl" \
           --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR" || (
             RC=$?

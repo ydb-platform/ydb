@@ -342,9 +342,9 @@ class Factory:
         schema = Schema(
             columns=ColumnList(
                 Column(
-                    name='col',
-                    ydb_type=Type.UTF8,
-                    data_source_type=DataSourceType(my=mysql.Text()),
+                    name='col_01',
+                    ydb_type=Type.INT32,
+                    data_source_type=DataSourceType(my=mysql.Integer()),
                 ),
             )
         )
@@ -369,74 +369,57 @@ class Factory:
 
         return [tc]
 
-    # def _pushdown(self) -> TestCase:
-    #     schema = Schema(
-    #         columns=ColumnList(
-    #             Column(
-    #                 name='col_int32',
-    #                 ydb_type=Type.INT32,
-    #                 data_source_type=DataSourceType(my=mysql.Int4()),
-    #             ),
-    #             Column(
-    #                 name='col_int64',
-    #                 ydb_type=Type.INT64,
-    #                 data_source_type=DataSourceType(my=mysql.Int8()),
-    #             ),
-    #             Column(
-    #                 name='col_string',
-    #                 ydb_type=Type.UTF8,
-    #                 data_source_type=DataSourceType(my=mysql.Text()),
-    #             ),
-    #             Column(
-    #                 name='col_float',
-    #                 ydb_type=Type.FLOAT,
-    #                 data_source_type=DataSourceType(my=mysql.Float4()),
-    #             ),
-    #         ),
-    #     )
+    def _pushdown(self) -> TestCase:
+        schema = Schema(
+            columns=ColumnList(
+                Column(
+                    name='col_00_id',
+                    ydb_type=Type.INT32,
+                    data_source_type=DataSourceType(my=mysql.Integer()),
+                ),
+                Column(
+                    name='col_01_integer',
+                    ydb_type=Type.INT32,
+                    data_source_type=DataSourceType(my=mysql.Integer()),
+                ),
+                Column(
+                    name='col_02_text',
+                    ydb_type=Type.STRING,
+                    data_source_type=DataSourceType(my=mysql.Text()),
+                ),
+            ),
+        )
 
-    #     data_in = [
-    #         [1, 2, 'one', 1.1],
-    #         [2, 2, 'two', 1.23456789],
-    #         [3, 5, 'three', 0.00000012],
-    #     ]
+        test_case_name = 'pushdown'
 
-    #     data_out_1 = [
-    #         ['one'],
-    #     ]
-
-    #     data_out_2 = [
-    #         ['two'],
-    #     ]
-
-    #     data_source_kind = EDataSourceKind.mysql
-
-    #     test_case_name = 'pushdown'
-
-    #     return [
-    #         TestCase(
-    #             name_=test_case_name,
-    #             data_in=data_in,
-    #             data_out_=data_out_1,
-    #             protocol=EProtocol.NATIVE,
-    #             pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
-    #             select_what=SelectWhat(SelectWhat.Item(name='col_string')),
-    #             select_where=SelectWhere('col_int32 = 1'),
-    #             data_source_kind=data_source_kind,
-    #             schema=schema,
-    #         ),
-    #         TestCase(
-    #             name_=test_case_name,
-    #             data_in=data_in,
-    #             data_out_=data_out_2,
-    #             protocol=EProtocol.NATIVE,
-    #             pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
-    #             select_what=SelectWhat(SelectWhat.Item(name='col_string')),
-    #             select_where=SelectWhere('col_int32 = col_int64'),
-    #             data_source_kind=data_source_kind,
-    #             schema=schema,
-    #         ),
-    #     ]
+        return [
+            TestCase(
+                name_=test_case_name,
+                data_in=None,
+                data_out_=[
+                    [4, None, None]
+                ],
+                protocol=EProtocol.NATIVE,
+                pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
+                select_what=SelectWhat.asterisk(schema.columns),
+                select_where=SelectWhere('col_00_id = 4'),
+                data_source_kind=EDataSourceKind.MYSQL,
+                schema=schema,
+            ),
+            TestCase(
+                name_=test_case_name,
+                data_in=None,
+                data_out_=[
+                    ['b'],
+                ],
+                protocol=EProtocol.NATIVE,
+                pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
+                select_what=SelectWhat(SelectWhat.Item(name='col_02_text')),
+                select_where=SelectWhere('col_00_id = col_01_integer'),
+                data_source_kind=EDataSourceKind.MYSQL,
+                schema=schema,
+            ),
+        ]
 
     # def _json(self) -> TestCase:
     #     schema = Schema(
@@ -485,7 +468,7 @@ class Factory:
                 self._primitive_types(),
                 self._constant(),
                 self._count_rows(),
-                # self._pushdown(),
+                self._pushdown(),
                 # self._json(),
             )
         )

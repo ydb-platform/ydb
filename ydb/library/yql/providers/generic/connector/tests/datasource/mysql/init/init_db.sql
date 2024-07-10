@@ -72,6 +72,18 @@ CREATE TABLE count_rows (
 
 INSERT INTO count_rows VALUES (0), (1), (2);
 
+DROP TABLE IF EXISTS pushdown;
+CREATE TABLE pushdown (
+    col_00_id INT NOT NULL,
+    col_01_integer INT,
+    col_02_text VARCHAR(255)
+);
+
+INSERT INTO pushdown VALUES
+                     (1, 10, 'a'),
+                     (2, 2, 'b'),
+                     (3, 30, 'c'),
+                     (4, NULL, NULL);
 
 DROP TABLE IF EXISTS datetimes;
 CREATE TABLE datetimes (
@@ -85,16 +97,3 @@ CREATE TABLE datetimes (
 INSERT INTO datetimes VALUES (1, '1950-05-27', '1950-05-27 01:02:03.111111', NULL);
 INSERT INTO datetimes VALUES (2, '1988-11-20', '1988-11-20 12:55:28.123000', '1988-11-20 12:55:28.123000');
 INSERT INTO datetimes VALUES (3, '2023-03-21', '2023-03-21 11:21:31', '2023-03-21 11:21:31');
-
-DROP TABLE IF EXISTS pushdown;
-CREATE TABLE pushdown (
-    id INT NOT NULL,
-    int_column INT,
-    varchar_column VARCHAR(255)
-);
-
-INSERT INTO pushdown VALUES
-                     (1, 10, 'a'),
-                     (2, 20, 'b'),
-                     (3, 30, 'c'),
-                     (4, NULL, NULL);

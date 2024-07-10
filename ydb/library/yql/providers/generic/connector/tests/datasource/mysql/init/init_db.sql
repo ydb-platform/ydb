@@ -85,6 +85,18 @@ INSERT INTO pushdown VALUES
                      (3, 30, 'c'),
                      (4, NULL, NULL);
 
+DROP TABLE IF EXISTS json;
+CREATE TABLE json (
+    col_00_id INT NOT NULL,
+    col_01_json JSON,
+    PRIMARY KEY (col_00_id)
+);
+
+INSERT INTO json VALUES 
+    (0, '{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}'), 
+    (1, '{ "TODO" : "unicode" }'),
+    (2, NULL);
+
 DROP TABLE IF EXISTS datetimes;
 CREATE TABLE datetimes (
     id int,

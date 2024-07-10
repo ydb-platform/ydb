@@ -396,9 +396,7 @@ class Factory:
             TestCase(
                 name_=test_case_name,
                 data_in=None,
-                data_out_=[
-                    [4, None, None]
-                ],
+                data_out_=[[4, None, None]],
                 protocol=EProtocol.NATIVE,
                 pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
                 select_what=SelectWhat.asterisk(schema.columns),
@@ -421,46 +419,39 @@ class Factory:
             ),
         ]
 
-    # def _json(self) -> TestCase:
-    #     schema = Schema(
-    #         columns=ColumnList(
-    #             Column(
-    #                 name='col_json',
-    #                 ydb_type=Type.JSON,
-    #                 data_source_type=DataSourceType(my=mysql.Json()),
-    #             ),
-    #         ),
-    #     )
+    def _json(self) -> TestCase:
+        schema = Schema(
+            columns=ColumnList(
+                Column(
+                    name='col_00_id',
+                    ydb_type=Type.INT32,
+                    data_source_type=DataSourceType(my=mysql.Integer()),
+                ),
+                Column(
+                    name='col_01_json',
+                    ydb_type=Type.JSON,
+                    data_source_type=DataSourceType(my=mysql.Json()),
+                ),
+            ),
+        )
 
-    #     data_in = [
-    #         ['{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}'],
-    #         ['{ "TODO" : "unicode" }'],
-    #         [None],
-    #     ]
-
-    #     data_out_1 = [
-    #         ['{"age":35,"name":"James Holden"}'],
-    #         [None],
-    #         [None],
-    #     ]
-
-    #     data_source_kind = EDataSourceKind.mysql
-
-    #     test_case_name = 'json'
-
-    #     return [
-    #         TestCase(
-    #             name_=test_case_name,
-    #             data_in=data_in,
-    #             data_out_=data_out_1,
-    #             protocol=EProtocol.NATIVE,
-    #             select_what=SelectWhat(SelectWhat.Item(name='JSON_QUERY(col_json, "$.friends[0]")', kind='expr')),
-    #             select_where=None,
-    #             data_source_kind=data_source_kind,
-    #             pragmas=dict(),
-    #             schema=schema,
-    #         ),
-    #     ]
+        return [
+            TestCase(
+                name_='json',
+                data_in=None,
+                data_out_=[
+                    ['{"age":35,"name":"James Holden"}'],
+                    [None],
+                    [None],
+                ],
+                protocol=EProtocol.NATIVE,
+                select_what=SelectWhat(SelectWhat.Item(name='JSON_QUERY(col_01_json, "$.friends[0]")', kind='expr')),
+                select_where=None,
+                data_source_kind=EDataSourceKind.MYSQL,
+                pragmas=dict(),
+                schema=schema,
+            ),
+        ]
 
     def make_test_cases(self) -> Sequence[TestCase]:
         return list(
@@ -469,6 +460,6 @@ class Factory:
                 self._constant(),
                 self._count_rows(),
                 self._pushdown(),
-                # self._json(),
+                self._json(),
             )
         )

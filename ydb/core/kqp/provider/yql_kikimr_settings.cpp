@@ -127,7 +127,7 @@ bool TKikimrSettings::HasOptUseFinalizeByKey() const {
 }
 
 bool TKikimrSettings::HasOptEnableConstantFolding() const {
-    return GetOptionalFlagValue(OptEnableConstantFolding.Get()) == EOptionalFlag::Enabled;
+    return GetOptionalFlagValue(OptEnableConstantFolding.Get()) != EOptionalFlag::Disabled;
 }
 
 

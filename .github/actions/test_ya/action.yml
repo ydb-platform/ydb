@@ -242,7 +242,7 @@ runs:
       shell: bash
       run: |
         gzip -c $JUNIT_REPORT_XML > $REPORTS_ARTIFACTS_DIR/orig_junit.xml.gz
-    
+
     - name: postprocess junit report
       shell: bash
       run: |
@@ -258,6 +258,28 @@ runs:
     
         .github/scripts/tests/split-junit.py -o "$JUNIT_REPORT_PARTS" "$JUNIT_REPORT_XML"
     
+    - name: Test history upload results to YDB
+      if: always()
+      continue-on-error: true
+      shell: bash
+      env:
+        PR_NUMBER: ${{ github.event.number }}
+        JOB_NAME: ${{ github.workflow }}
+        JOB_ID: ${{github.run_id }}
+      run: |
+        set -x
+        python3 -m pip install ydb ydb[yc] codeowners
+
+        #Variables
+        echo "JUNIT_REPORT_XML=${JUNIT_REPORT_XML}"
+        echo "BUILD_PRESET=${BUILD_PRESET}"
+        echo "PR_NUMBER=${PR_NUMBER}"
+        echo "JOB_NAME=${JOB_NAME}"
+        echo "JOB_ID=${JOB_ID}"
+        echo "GITHUB_REF_NAME=${GITHUB_REF_NAME}"
+        
+        result=`.github/scripts/upload_tests_results.py --test-results-file ${JUNIT_REPORT_XML} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull ${PR_NUMBER} --job-name ${JOB_NAME} --job-id ${JOB_ID} --branch ${GITHUB_REF_NAME}`
+
     - name: archive unitest reports (transformed)
       shell: bash
       run: |

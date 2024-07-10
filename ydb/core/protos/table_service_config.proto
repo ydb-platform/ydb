@@ -249,7 +249,7 @@ message TTableServiceConfig {
 
     optional EBindingsMode BindingsMode = 40 [default = BM_ENABLED];
     optional TIteratorReadsRetrySettings IteratorReadsRetrySettings = 41;
-    optional bool PredicateExtract20 = 44 [default = true];
+    reserved 44; // optional bool PredicateExtract20 = 44 [default = true];
     optional TIteratorReadQuotaSettings IteratorReadQuotaSettings = 45;
 
     enum EChannelTransportVersion {
@@ -280,7 +280,7 @@ message TTableServiceConfig {
     optional bool EnableCreateTableAs = 57 [default = true];
 
     optional uint64 IdxLookupJoinPointsLimit = 58 [default = 3];
-    optional bool OldLookupJoinBehaviour = 59 [default = false];
+    reserved 59; //optional bool OldLookupJoinBehaviour = 59 [default = false];
 
     optional bool EnableOltpSink = 60 [default = false];
 

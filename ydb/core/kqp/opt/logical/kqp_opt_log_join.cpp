@@ -569,10 +569,6 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         return {};
     }
 
-    if ((!kqpCtx.Config->PredicateExtract20 || kqpCtx.Config->OldLookupJoinBehaviour) && prefixLookup->Filter.IsValid()) {
-        return {};
-    }
-
     TMap<std::string_view, TString> rightJoinKeyToLeft;
     TVector<TCoAtom> rightKeyColumns;
     rightKeyColumns.reserve(join.JoinKeys().Size());
@@ -632,9 +628,6 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
                             .Build()
                         .Done());
                 deduplicateLeftColumns.insert(*leftColumn);
-                if ((!kqpCtx.Config->PredicateExtract20 || kqpCtx.Config->OldLookupJoinBehaviour)) {
-                    return {};
-                }
             }
 
             member = Build<TCoNth>(ctx, prefixRowArg.Pos())

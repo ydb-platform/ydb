@@ -151,7 +151,6 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableKqpDataQueryStreamLookup = false;
     bool EnableKqpScanQueryStreamIdxLookupJoin = false;
     bool EnableKqpDataQueryStreamIdxLookupJoin = false;
-    bool PredicateExtract20 = false;
     bool EnablePreparedDdl = false;
     bool EnableSequences = false;
     bool EnableColumnsWithDefault = false;
@@ -163,7 +162,6 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnablePerStatementQueryExecution = false;
     bool EnableCreateTableAs = false;
     ui64 IdxLookupJoinsPrefixPointLimit = 1;
-    bool OldLookupJoinBehaviour = true;
     bool EnableOlapSink = false;
     bool EnableOltpSink = false;
     NKikimrConfig::TTableServiceConfig_EBlockChannelsMode BlockChannelsMode;

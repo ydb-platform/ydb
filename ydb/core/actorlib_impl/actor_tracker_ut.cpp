@@ -112,7 +112,7 @@ Y_UNIT_TEST_SUITE(TActorTracker) {
             TAutoPtr<IEventHandle> handle;
             runtime.GrabEdgeEventRethrow<TEvents::TEvPoisonTaken>(handle);
         }
-        UNIT_ASSERT_VALUES_EQUAL(AtomicGet(SubworkerNew), 6);
+        UNIT_ASSERT_VALUES_EQUAL(AtomicGet(SubworkerNew), 42);
         UNIT_ASSERT_VALUES_EQUAL(AtomicGet(SubworkerBootstrap), 6);
         UNIT_ASSERT_VALUES_EQUAL(AtomicGet(SubworkerPoison), 6);
         UNIT_ASSERT_VALUES_EQUAL(AtomicGet(SubworkerDelete), 6);

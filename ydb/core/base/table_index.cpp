@@ -13,6 +13,10 @@ TVector<TString>::const_iterator IsUniq(const TVector<TString>& names) {
     return names.end();
 }
 
+bool Contains(const TVector<TString>& names, TString str) {
+    return std::find(names.begin(), names.end(), str) != names.end();
+}
+
 namespace NKikimr {
 namespace NTableIndex {
 
@@ -69,6 +73,16 @@ bool IsCompatibleIndex(const NKikimrSchemeOp::EIndexType indexType, const TTable
     if (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
         if (index.KeyColumns.size() != 1) {
             explain = "Only single key column is supported for vector index";
+            return false;
+        }
+
+        if (Contains(index.KeyColumns, NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn)) {
+            explain = TStringBuilder() << "Key column should not have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn;
+            return false;
+        }
+
+        if (Contains(index.DataColumns, NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn)) {
+            explain = TStringBuilder() << "Data column should not have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn;
             return false;
         }
     }

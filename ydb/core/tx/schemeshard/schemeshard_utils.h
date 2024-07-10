@@ -137,25 +137,30 @@ public:
 namespace NTableIndex {
 
 NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
-    const NKikimrSchemeOp::EIndexType indexType,
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NTableIndex::TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc);
 
 NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
-    const NKikimrSchemeOp::EIndexType indexType,
     const NKikimrSchemeOp::TTableDescription& baseTableDesc,
     const NTableIndex::TTableColumns& implTableColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc
-);
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
 
-NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
+NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
+
+NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const NTableIndex::TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc);
 
-NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
-    const NKikimrSchemeOp::TTableDescription& baseTableDesc,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
+NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
+    const NKikimrSchemeOp::TTableDescription &baseTableDescr,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const NTableIndex::TTableColumns& implTableColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc);    
 
 TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr& tableInfo);
 TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription& tableDesc);

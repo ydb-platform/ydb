@@ -2114,7 +2114,9 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
         *index.AddDataColumnNames() = x;
     }
 
-    *index.AddIndexImplTableDescriptions() = ImplTableDescription;
+    for (const auto& implTableDescription : ImplTableDescriptions) {
+        *index.AddIndexImplTableDescriptions() = implTableDescription;
+    }
 }
 
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {

@@ -10,6 +10,8 @@
 
 namespace NKikimr::NSchemeShard {
 
+using namespace NTableIndex;    
+
 TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild);
 
@@ -111,18 +113,21 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         result.push_back(CreateInitializeBuildIndexMainTable(NextPartId(opId, result), outTx));
     }
 
-    {
+    auto createIndexImplTable = [&] (NKikimrSchemeOp::TTableDescription&& implTableDesc) {
         auto outTx = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable);
-        auto& indexImplTableDescription = *outTx.MutableCreateTable();
+        *outTx.MutableCreateTable() = implTableDesc;
 
-        // This description provided by user to override partition policy
-        const auto& userIndexDesc = indexDesc.GetIndexImplTableDescriptions(0);
-        indexImplTableDescription = CalcImplTableDesc(indexDesc.GetType(), tableInfo, implTableColumns, userIndexDesc);
-
-        indexImplTableDescription.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
-        indexImplTableDescription.MutablePartitionConfig()->SetShadowData(true);
+        implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
+        implTableDesc.MutablePartitionConfig()->SetShadowData(true);
 
         result.push_back(CreateInitializeBuildIndexImplTable(NextPartId(opId, result), outTx));
+    };
+
+    if (indexDesc.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+        createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexDesc.GetIndexImplTableDescriptions(0)));
+        createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexDesc.GetIndexImplTableDescriptions(1)));
+    } else {
+        createIndexImplTable(CalcImplTableDesc(tableInfo, implTableColumns, indexDesc.GetIndexImplTableDescriptions(0)));
     }
 
     return result;

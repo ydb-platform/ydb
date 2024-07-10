@@ -219,9 +219,11 @@ private:
             switch (index.type_case()) {
             case Ydb::Table::TableIndex::TypeCase::kGlobalIndex:
                 buildInfo->IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobal;
+                buildInfo->ImplTableDescriptions.resize(1);
                 break;
             case Ydb::Table::TableIndex::TypeCase::kGlobalAsyncIndex:
                 buildInfo->IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync;
+                buildInfo->ImplTableDescriptions.resize(1);
                 break;
             case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
                 explain = "unsupported index type to build";
@@ -239,7 +241,7 @@ private:
             buildInfo->DataColumns.assign(index.data_columns().begin(), index.data_columns().end());
 
             Ydb::StatusIds::StatusCode status;
-            if (!FillIndexTablePartitioning(buildInfo->ImplTableDescription, index, status, explain)) {
+            if (!FillIndexTablePartitioning(buildInfo->ImplTableDescriptions, index, status, explain)) {
                 return false;
             } 
         }

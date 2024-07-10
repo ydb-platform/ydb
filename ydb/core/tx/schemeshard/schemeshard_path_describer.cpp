@@ -1246,22 +1246,26 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
 
     auto* indexPath = PathsById.FindPtr(pathId);
     Y_ABORT_UNLESS(indexPath);
-    Y_ABORT_UNLESS((*indexPath)->GetChildren().size() == 1);
-    const auto& indexImplTablePathId = (*indexPath)->GetChildren().begin()->second;
+    const ui8 expectedIndexImplTableCount = indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree ? 2 : 1;
+    Y_ABORT_UNLESS((*indexPath)->GetChildren().size() == expectedIndexImplTableCount);
 
-    auto* tableInfo = Tables.FindPtr(indexImplTablePathId);
-    Y_ABORT_UNLESS(tableInfo);
+    ui64 dataSize = 0;
+    for (const auto& indexImplTablePathId : (*indexPath)->GetChildren()) {
+        auto* tableInfo = Tables.FindPtr(indexImplTablePathId.second);
+        Y_ABORT_UNLESS(tableInfo);
 
-    const auto& tableStats = (*tableInfo)->GetStats().Aggregated;
-    entry.SetDataSize(tableStats.DataSize + tableStats.IndexSize);
+        const auto& tableStats = (*tableInfo)->GetStats().Aggregated;
+        dataSize += tableStats.DataSize + tableStats.IndexSize;
 
-    auto* tableDescription = entry.AddIndexImplTableDescriptions();
-    if (fillConfig) {
-        FillPartitionConfig((*tableInfo)->PartitionConfig(), *tableDescription->MutablePartitionConfig());
+        auto* tableDescription = entry.AddIndexImplTableDescriptions();
+        if (fillConfig) {
+            FillPartitionConfig((*tableInfo)->PartitionConfig(), *tableDescription->MutablePartitionConfig());
+        }
+        if (fillBoundaries) {
+            FillTableBoundaries(*tableInfo, *tableDescription->MutableSplitBoundary());
+        }
     }
-    if (fillBoundaries) {
-        FillTableBoundaries(*tableInfo, *tableDescription->MutableSplitBoundary());
-    }
+    entry.SetDataSize(dataSize);
 
     if (indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
         if (const auto* vectorIndexKmeansTreeDescription = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(&indexInfo->SpecializedIndexDescription)) {

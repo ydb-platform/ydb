@@ -959,9 +959,11 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
             break;
         }
 
-        if (!FillIndexTablePartitioning(*indexDesc->AddIndexImplTableDescriptions(), index, status, error)) {
+        std::vector<NKikimrSchemeOp::TTableDescription> indexImplTableDescriptionsVector(indexDesc->MutableIndexImplTableDescriptions()->begin(), indexDesc->MutableIndexImplTableDescriptions()->end());
+        if (!FillIndexTablePartitioning(indexImplTableDescriptionsVector, index, status, error)) {
             return false;
         }
+        *indexDesc->MutableIndexImplTableDescriptions() = {indexImplTableDescriptionsVector.begin(), indexImplTableDescriptionsVector.end()};
     }
 
     return true;

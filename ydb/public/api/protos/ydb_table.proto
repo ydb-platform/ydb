@@ -103,8 +103,9 @@ message GlobalUniqueIndex {
 }
 
 message GlobalVectorKMeansTreeIndex {
-    GlobalIndexSettings settings = 1;
-    VectorIndexSettings vector_settings = 2;
+    GlobalIndexSettings level_table_settings = 1;
+    GlobalIndexSettings posting_table_settings = 2;
+    VectorIndexSettings vector_settings = 3;
 }
 
 // Represent secondary index

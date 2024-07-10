@@ -494,10 +494,12 @@ TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const T
             result.push_back(CreateDropCdcStreamImpl(NextPartId(nextId, result), dropStream));
         }
 
-        Y_ABORT_UNLESS(child.Base()->GetChildren().size() == 1);
         for (auto& [implName, implPathId] : child.Base()->GetChildren()) {
-            Y_ABORT_UNLESS(implName == "indexImplTable" || implName == "streamImpl",
-                "unexpected name %s", implName.c_str());
+            Y_ABORT_UNLESS(implName == "indexImplTable" 
+                        || implName == "streamImpl"
+                        || implName == NTableIndex::NTableVectorKmeansTreeIndex::LevelTable
+                        || implName == NTableIndex::NTableVectorKmeansTreeIndex::PostingTable
+                , "unexpected name %s", implName.c_str());
 
             TPath implPath = child.Child(implName);
             {

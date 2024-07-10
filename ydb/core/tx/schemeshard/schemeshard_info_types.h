@@ -2365,7 +2365,6 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
         alterData->IndexKeys.assign(config.GetKeyColumnNames().begin(), config.GetKeyColumnNames().end());
         Y_ABORT_UNLESS(alterData->IndexKeys.size());
         alterData->IndexDataColumns.assign(config.GetDataColumnNames().begin(), config.GetDataColumnNames().end());
-        Y_ABORT_UNLESS(alterData->IndexDataColumns.empty() || config.GetType() != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
 
         alterData->State = config.HasState() ? config.GetState() : EState::EIndexStateReady;
 
@@ -2923,7 +2922,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     TString ImplTablePath;
     NTableIndex::TTableColumns ImplTableColumns;
-    NKikimrSchemeOp::TTableDescription ImplTableDescription;
+    TVector<NKikimrSchemeOp::TTableDescription> ImplTableDescriptions;
 
     EState State = EState::Invalid;
     TString Issue;

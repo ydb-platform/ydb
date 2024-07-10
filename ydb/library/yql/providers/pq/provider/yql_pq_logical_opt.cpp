@@ -11,12 +11,22 @@
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 #include <ydb/library/yql/utils/log/log.h>
 
+#include <ydb/library/yql/providers/common/pushdown/collection.h>
+#include <ydb/library/yql/providers/common/pushdown/predicate_node.h>
 
 namespace NYql {
 
 using namespace NNodes;
 
 namespace {
+    struct TPushdownSettings: public NPushdown::TSettings {
+        TPushdownSettings()
+            : NPushdown::TSettings(NLog::EComponent::ProviderGeneric)
+        {
+            using EFlag = NPushdown::TSettings::EFeatureFlag;
+            Enable(EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64);
+        }
+    };
 
 std::unordered_set<TString> GetUsedMetadataFields(const TCoExtractMembers& extract) {
     std::unordered_set<TString> usedMetadataFields;
@@ -123,6 +133,7 @@ public:
 #define HNDL(name) "LogicalOptimizer-"#name, Hndl(&TPqLogicalOptProposalTransformer::name)
       //  AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembers));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqWrap));
+        AddHandler(0, &TCoFlatMap::Match, HNDL(PushFilterToReadTable));
         #undef HNDL
     }
 
@@ -199,6 +210,121 @@ public:
             .InitFrom(extract)
             .Input(ctx.ReplaceNode(input.Ptr(), dqSourceWrap.Ref(), newDqSourceWrap))
             .Done();
+    }
+        
+    bool IsEmptyFilterPredicate(const TCoLambda& lambda) const {
+        auto maybeBool = lambda.Body().Maybe<TCoBool>();
+        if (!maybeBool) {
+            return false;
+        }
+        return TStringBuf(maybeBool.Cast().Literal()) == "true"sv;
+    }
+
+
+    TMaybeNode<TExprBase> PushFilterToReadTable(TExprBase node, TExprContext& ctx) const {
+        YQL_CLOG(INFO, ProviderPq) << "PushFilterToReadTable0 ";
+
+        auto flatmap = node.Cast<TCoFlatMap>();
+
+        auto maybeExtractMembers = flatmap.Input().Maybe<TCoExtractMembers>();
+        if (!maybeExtractMembers) {
+            YQL_CLOG(INFO, ProviderPq) << "PushFilterToReadTable0 !maybeExtractMembers";
+            return node;
+        }
+        
+        auto maybeDqSourceWrap = maybeExtractMembers.Cast().Input().Maybe<TDqSourceWrap>();
+        if (!maybeDqSourceWrap) {
+            YQL_CLOG(INFO, ProviderPq) << "PushFilterToReadTable0 !maybeDqSourceWrap";
+            return node;
+        }
+        TDqSourceWrap dqSourceWrap = maybeDqSourceWrap.Cast();
+        auto maybeDqPqTopicSource = dqSourceWrap.Input().Maybe<TDqPqTopicSource>();
+        if (!maybeDqPqTopicSource) {
+            YQL_CLOG(INFO, ProviderPq) << "PushFilterToReadTable0 !maybeDqPqTopicSource";
+            return node;
+        }
+        TDqPqTopicSource dqPqTopicSource = maybeDqPqTopicSource.Cast();
+        YQL_CLOG(INFO, ProviderPq) << "PushFilterToReadTable0 found!";
+
+        if (!IsEmptyFilterPredicate(dqPqTopicSource.FilterPredicate())) {
+            YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
+            return node;
+        }
+        
+        auto newFilterLambda = MakePushdownPredicate(flatmap.Lambda(), ctx, node.Pos());
+        if (!newFilterLambda) {
+            return node;
+        }
+
+        return Build<TCoFlatMap>(ctx, flatmap.Pos())
+            .InitFrom(flatmap) // Leave existing filter in flatmap for the case of not applying predicate in connector
+            .Input<TCoExtractMembers>()
+                .InitFrom(maybeExtractMembers.Cast())
+                .Input<TDqSourceWrap>()
+                    .InitFrom(dqSourceWrap)
+                    .Input<TDqPqTopicSource>()
+                        .InitFrom(dqPqTopicSource)
+                        .FilterPredicate(newFilterLambda.Cast())
+                        .Build()
+                    .Build()
+                .Build()
+            .Done();
+    }
+
+    static NPushdown::TPredicateNode SplitForPartialPushdown(const NPushdown::TPredicateNode& predicateTree,
+                                                            TExprContext& ctx, TPositionHandle pos)
+    {
+        if (predicateTree.CanBePushed) {
+            return predicateTree;
+        }
+
+        if (predicateTree.Op != NPushdown::EBoolOp::And) {
+            return NPushdown::TPredicateNode(); // Not valid, => return the same node from optimizer
+        }
+
+        std::vector<NPushdown::TPredicateNode> pushable;
+        for (auto& predicate : predicateTree.Children) {
+            if (predicate.CanBePushed) {
+                pushable.emplace_back(predicate);
+            }
+        }
+        NPushdown::TPredicateNode predicateToPush;
+        predicateToPush.SetPredicates(pushable, ctx, pos);
+        return predicateToPush;
+    }
+
+    TMaybeNode<TCoLambda> MakePushdownPredicate(const TCoLambda& lambda, TExprContext& ctx, const TPositionHandle& pos) const {
+        auto lambdaArg = lambda.Args().Arg(0).Ptr();
+
+        YQL_CLOG(DEBUG, ProviderPq) << "Push filter. Initial filter lambda: " << NCommon::ExprToPrettyString(ctx, lambda.Ref());
+
+        auto maybeOptionalIf = lambda.Body().Maybe<TCoOptionalIf>();
+        if (!maybeOptionalIf.IsValid()) { // Nothing to push
+            return {};
+        }
+
+        TCoOptionalIf optionalIf = maybeOptionalIf.Cast();
+        NPushdown::TPredicateNode predicateTree(optionalIf.Predicate());
+        NPushdown::CollectPredicates(optionalIf.Predicate(), predicateTree, lambdaArg.Get(), TExprBase(lambdaArg), TPushdownSettings());
+        YQL_ENSURE(predicateTree.IsValid(), "Collected filter predicates are invalid");
+
+        NPushdown::TPredicateNode predicateToPush = SplitForPartialPushdown(predicateTree, ctx, pos);
+        if (!predicateToPush.IsValid()) {
+            return {};
+        }
+
+        // clang-format off
+        auto newFilterLambda = Build<TCoLambda>(ctx, pos)
+            .Args({"filter_row"})
+            .Body<TExprApplier>()
+                .Apply(predicateToPush.ExprNode.Cast())
+                .With(TExprBase(lambdaArg), "filter_row")
+                .Build()
+            .Done();
+        // clang-format on
+
+        YQL_CLOG(INFO, ProviderGeneric) << "Push filter lambda: " << NCommon::ExprToPrettyString(ctx, *newFilterLambda.Ptr());
+        return newFilterLambda;
     }
 
 private:

@@ -28,6 +28,7 @@ public:
 #define HNDL(name) "PhysicalOptimizer-"#name, Hndl(&TPqPhysicalOptProposalTransformer::name)
         AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
         AddHandler(0, &TPqWriteTopic::Match, HNDL(PqWriteTopic));
+        AddHandler(0, &TCoFlatMap::Match, HNDL(PushFilterToReadTable));
 #undef HNDL
 
         SetGlobal(0); // Stage 0 of this optimizer is global => we can remap nodes.
@@ -123,6 +124,27 @@ public:
 
         return dqQueryBuilder.Done();
     }
+
+    TMaybeNode<TExprBase> PushFilterToReadTable(TExprBase node, TExprContext& /*ctx*/) const {
+
+        YQL_CLOG(INFO, ProviderPq) << "PushFilterToReadTable ";
+
+        auto flatmap = node.Cast<TCoFlatMap>();
+
+        auto maybeExtractMembers = flatmap.Input().Maybe<TCoExtractMembers>();
+        if (!maybeExtractMembers) {
+            YQL_CLOG(INFO, ProviderPq) << "PushFilterToReadTable !maybeExtractMembers";
+            return node;
+        }
+        
+        auto maybeDqSourceWrap = maybeExtractMembers.Cast().Input().Maybe<TDqSourceWrap>();
+        if (!maybeDqSourceWrap) {
+            YQL_CLOG(INFO, ProviderPq) << "PushFilterToReadTable !maybeDqSourceWrap";
+            return node;
+        }
+        return node;
+    }
+
 
 private:
     TPqState::TPtr State_;

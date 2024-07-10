@@ -19,6 +19,7 @@ struct TEvRowDispatcher {
         EvStartSession,
         EvStopSession,
         EvSessionData,
+        EvSessionError,
 
         EvRowDispatcherRequest,
         EvRowDispatcherResult,
@@ -77,6 +78,11 @@ struct TEvRowDispatcher {
     struct TEvSessionData : public NActors::TEventPB<TEvSessionData,
         NFq::NRowDispatcherProto::TEvSessionData, EEv::EvSessionData> {
         TEvSessionData() = default;
+    };
+
+    struct TEvSessionError : public NActors::TEventPB<TEvSessionData,
+        NFq::NRowDispatcherProto::TEvSessionError, EEv::EvSessionError> {
+        TEvSessionError() = default;
     };
 
 

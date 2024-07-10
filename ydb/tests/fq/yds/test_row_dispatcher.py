@@ -63,7 +63,132 @@ class TestPqRowDispatcher(TestYdsBase):
 
     @yq_v1
     @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
-    def test_row_dispatcher_simple(self, kikimr, client):
+    def test_simple_not_null(self, kikimr, client):
+        client.create_yds_connection(name=YDS_CONNECTION, database_id="FakeDatabaseId", use_row_dispatcher=True)
+        self.init_topics(Rf"test_simple")
+
+        sql = Rf'''
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+            SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String NOT NULL));'''
+    
+        query_id = start_yds_query(kikimr, client, sql)
+
+        data = [
+            '{"time": 101, "data": "hello1", "event": "event1"}',
+            '{"time": 102, "data": "hello2", "event": "event2"}'
+        ]
+
+        self.write_stream(data)
+        expected = ['101', '102']
+        assert self.read_stream(len(expected), topic_path = self.output_topic) == expected
+
+        kikimr.control_plane.wait_worker_count(1, "DQ_PQ_READ_ACTOR", 1, timeout = 60, exact_match = True)
+        kikimr.control_plane.wait_worker_count(1, "YQ_ROW_DISPATCHER_SESSION", 1, timeout = 60, exact_match = True)
+
+        stop_yds_query(client, query_id)
+        # Assert that all read rules were removed after query stops
+        read_rules = list_read_rules(self.input_topic)
+        assert len(read_rules) == 0, read_rules
+        kikimr.control_plane.wait_worker_count(1, "YQ_ROW_DISPATCHER_SESSION", 0, timeout = 60, exact_match = True)
+
+    @yq_v1
+    @pytest.mark.skip(reason="Is not implemented")
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
+    def test_simple_optional(self, kikimr, client):
+        client.create_yds_connection(name=YDS_CONNECTION, database_id="FakeDatabaseId", use_row_dispatcher=True)
+        self.init_topics(Rf"test_simple")
+
+        sql = Rf'''
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+            SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String));'''
+    
+        query_id = start_yds_query(kikimr, client, sql)
+
+        data = [
+            '{"time": 101, "data": "hello1", "event": "event1"}',
+            '{"time": 102, "event": "event2"}'
+        ]
+
+        self.write_stream(data)
+        expected = ['101', '102']
+        assert self.read_stream(len(expected), topic_path = self.output_topic) == expected
+
+        kikimr.control_plane.wait_worker_count(1, "DQ_PQ_READ_ACTOR", 1, timeout = 60, exact_match = True)
+        kikimr.control_plane.wait_worker_count(1, "YQ_ROW_DISPATCHER_SESSION", 1, timeout = 60, exact_match = True)
+
+        stop_yds_query(client, query_id)
+        # Assert that all read rules were removed after query stops
+        read_rules = list_read_rules(self.input_topic)
+        assert len(read_rules) == 0, read_rules
+        kikimr.control_plane.wait_worker_count(1, "YQ_ROW_DISPATCHER_SESSION", 0, timeout = 60, exact_match = True)
+
+    @yq_v1
+    @pytest.mark.skip(reason="Is not implemented / How to get error from purecalc?")
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
+    def test_scheme_error(self, kikimr, client):
+        client.create_yds_connection(name=YDS_CONNECTION, database_id="FakeDatabaseId", use_row_dispatcher=True)
+        self.init_topics(Rf"test_simple")
+
+        sql = Rf'''
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+            SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String));'''
+    
+        query_id = start_yds_query(kikimr, client, sql)
+
+        data = ['{"this": "is", not json}']
+
+        self.write_stream(data)
+
+        expected = ['101', '102']
+        assert self.read_stream(len(expected), topic_path = self.output_topic) == expected
+
+        kikimr.control_plane.wait_worker_count(1, "DQ_PQ_READ_ACTOR", 1, timeout = 60, exact_match = True)
+        kikimr.control_plane.wait_worker_count(1, "YQ_ROW_DISPATCHER_SESSION", 1, timeout = 60, exact_match = True)
+
+        stop_yds_query(client, query_id)
+        # Assert that all read rules were removed after query stops
+        read_rules = list_read_rules(self.input_topic)
+        assert len(read_rules) == 0, read_rules
+        kikimr.control_plane.wait_worker_count(1, "YQ_ROW_DISPATCHER_SESSION", 0, timeout = 60, exact_match = True)
+
+    @yq_v1
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
+    def test_simple_filter(self, kikimr, client):
+        client.create_yds_connection(name=YDS_CONNECTION, database_id="FakeDatabaseId", use_row_dispatcher=True)
+        self.init_topics(Rf"test_simple")
+
+        sql = Rf'''
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+            SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String NOT NULL))
+                WHERE time > 101;'''
+    
+        query_id = start_yds_query(kikimr, client, sql)
+
+        data = [
+            '{"time": 101, "data": "hello1", "event": "event1"}',
+            '{"time": 102, "data": "hello2", "event": "event2"}'
+        ]
+
+        self.write_stream(data)
+        expected = ['102']
+        assert self.read_stream(len(expected), topic_path = self.output_topic) == expected
+
+        kikimr.control_plane.wait_worker_count(1, "DQ_PQ_READ_ACTOR", 1, timeout = 60, exact_match = True)
+        kikimr.control_plane.wait_worker_count(1, "YQ_ROW_DISPATCHER_SESSION", 1, timeout = 60, exact_match = True)
+
+        stop_yds_query(client, query_id)
+        # Assert that all read rules were removed after query stops
+        read_rules = list_read_rules(self.input_topic)
+        assert len(read_rules) == 0, read_rules
+        kikimr.control_plane.wait_worker_count(1, "YQ_ROW_DISPATCHER_SESSION", 0, timeout = 60, exact_match = True)
+
+    @yq_v1
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
+    def test_start_new_query(self, kikimr, client):
         client.create_yds_connection(name=YDS_CONNECTION, database_id="FakeDatabaseId", use_row_dispatcher=True)
         self.init_topics(Rf"pq_test_pq_read_write", create_output = False)
         
@@ -138,6 +263,7 @@ class TestPqRowDispatcher(TestYdsBase):
         # Assert that all read rules were removed after query stops
         read_rules = list_read_rules(self.input_topic)
         assert len(read_rules) == 0, read_rules
+        kikimr.control_plane.wait_worker_count(1, "YQ_ROW_DISPATCHER_SESSION", 0, timeout = 60, exact_match = True)
 
     @yq_v1
     @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
@@ -235,12 +361,29 @@ class TestPqRowDispatcher(TestYdsBase):
         assert self.read_stream(len(expected), topic_path = output_topic2) == expected
         assert not read_stream(output_topic1, 1, True, self.consumer_name, timeout = 1)
 
-        # TODO
-        # client.modify_query(query_id1, "continue", sql1,
-        #     type=fq.QueryContent.QueryType.STREAMING,
-        #     state_load_mode=fq.StateLoadMode.EMPTY,
-        #     streaming_disposition=StreamingDisposition.from_last_checkpoint())
-        # client.wait_query_status(query_id1, fq.QueryMeta.RUNNING)
+        client.modify_query(query_id1, "continue", sql1,
+            type=fq.QueryContent.QueryType.STREAMING,
+            state_load_mode=fq.StateLoadMode.EMPTY,
+            streaming_disposition=StreamingDisposition.from_last_checkpoint())
+        client.wait_query_status(query_id1, fq.QueryMeta.RUNNING)
+
+        kikimr.control_plane.wait_worker_count(1, "YQ_ROW_DISPATCHER_SESSION", 2, timeout = 60, exact_match = True)
+        assert self.read_stream(len(expected), topic_path = output_topic1) == expected
+
+        data = [
+            '{"time":105}',
+            '{"time":106}'
+        ]
+        self.write_stream(data)
+        expected = data
+        assert self.read_stream(len(expected), topic_path = output_topic1) == expected
+        assert self.read_stream(len(expected), topic_path = output_topic2) == expected
+
+        stop_yds_query(client, query_id1)
+        stop_yds_query(client, query_id2)
+
+        kikimr.control_plane.wait_worker_count(1, "YQ_ROW_DISPATCHER_SESSION", 0, timeout = 60, exact_match = True)
+
 
     # @yq_v1
     # @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)

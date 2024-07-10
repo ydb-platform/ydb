@@ -131,7 +131,11 @@ public:
     }
 
     TStatus HandleDqTopicSource(TExprBase input, TExprContext& ctx) {
-        if (!EnsureArgsCount(input.Ref(), 4, ctx)) {
+
+        YQL_CLOG(DEBUG, ProviderPq) << "HandleDqTopicSource" ;
+
+        if (!EnsureArgsCount(input.Ref(), 5, ctx)) {
+            YQL_CLOG(DEBUG, ProviderPq) << "HandleDqTopicSource Error1" ;
             return TStatus::Error;
         }
 
@@ -139,6 +143,7 @@ public:
         TPqTopic topic = topicSource.Topic();
 
         if (!EnsureCallable(topic.Ref(), ctx)) {
+            YQL_CLOG(DEBUG, ProviderPq) << "HandleDqTopicSource Error2" ;
             return TStatus::Error;
         }
 
@@ -147,7 +152,17 @@ public:
         const auto* meta = State_->FindTopicMeta(cluster, topicPath);
         if (!meta) {
             ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Unknown topic `" << cluster << "`.`" << topicPath << "`"));
+            YQL_CLOG(DEBUG, ProviderPq) << "HandleDqTopicSource Error3" ;
             return TStatus::Error;
+        }
+
+        //const auto stringType = ctx.MakeType<TDataExprType>(EDataSlot::String);
+        auto rowSchema = topic.RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+        YQL_CLOG(DEBUG, ProviderGeneric) << "struct column order " << rowSchema->ToString();
+
+        const TStatus filterAnnotationStatus = AnnotateFilterPredicate(input.Ptr(), TDqPqTopicSource::idx_FilterPredicate, rowSchema, ctx);
+        if (filterAnnotationStatus != TStatus::Ok) {
+            return filterAnnotationStatus;
         }
 
         if (topic.Metadata().Empty()) {
@@ -253,6 +268,43 @@ public:
         }
 
         input->SetTypeAnn(ctx.MakeType<TDataExprType>(descriptor->Type));
+        return TStatus::Ok;
+    }
+
+    TStatus AnnotateFilterPredicate(const TExprNode::TPtr& input, size_t childIndex, const TStructExprType* itemType, TExprContext& ctx) {
+        
+        YQL_CLOG(DEBUG, ProviderPq) << "AnnotateFilterPredicate" ;
+        if (childIndex >= input->ChildrenSize()) {
+            YQL_CLOG(DEBUG, ProviderPq) << "AnnotateFilterPredicate Error1" ;
+            return TStatus::Error;
+        }
+
+        auto& filterLambda = input->ChildRef(childIndex);
+        if (!EnsureLambda(*filterLambda, ctx)) {
+            YQL_CLOG(DEBUG, ProviderPq) << "AnnotateFilterPredicate Error2" ;
+
+            return TStatus::Error;
+        }
+
+        if (!UpdateLambdaAllArgumentsTypes(filterLambda, {itemType}, ctx)) {
+            YQL_CLOG(DEBUG, ProviderPq) << "AnnotateFilterPredicate Error3" ;
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (const auto* filterLambdaType = filterLambda->GetTypeAnn()) {
+            if (filterLambdaType->GetKind() != ETypeAnnotationKind::Data) {
+                YQL_CLOG(DEBUG, ProviderPq) << "AnnotateFilterPredicate Error4" ;
+                return IGraphTransformer::TStatus::Error;
+            }
+            const TDataExprType* dataExprType = static_cast<const TDataExprType*>(filterLambdaType);
+            if (dataExprType->GetSlot() != EDataSlot::Bool) {
+                YQL_CLOG(DEBUG, ProviderPq) << "AnnotateFilterPredicate Error5" ;
+                return IGraphTransformer::TStatus::Error;
+            }
+        } else {
+            YQL_CLOG(DEBUG, ProviderPq) << "AnnotateFilterPredicate Repeat" ;
+            return IGraphTransformer::TStatus::Repeat;
+        }
         return TStatus::Ok;
     }
 

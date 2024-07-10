@@ -45,3 +45,7 @@ message TEvSessionData {
     uint32 PartitionId = 2;
 }
 
+message TEvSessionError {
+    string Message = 1;
+}
+

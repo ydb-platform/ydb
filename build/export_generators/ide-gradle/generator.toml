@@ -59,6 +59,9 @@ runs-out="list"
 runs-out_dir="list"
 runs-tool="list"
 
+javac-flags="str"
+javac-opts="str"
+
 [attrs.root]
 
 [attrs.dir]

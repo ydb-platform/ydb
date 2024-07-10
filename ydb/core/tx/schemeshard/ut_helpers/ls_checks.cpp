@@ -471,8 +471,7 @@ void IsResourcePool(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeResourcePool);
 }
 
-TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns,
-                        NKikimrSchemeOp::EPathState pathState) {
+TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns, bool strictCount) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT(record.HasPathDescription());
         NKikimrSchemeOp::TPathDescription descr = record.GetPathDescription();
@@ -483,13 +482,13 @@ TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const
         TString curName = self.GetName();
         ui32 curPathState = self.GetPathState();
         UNIT_ASSERT_STRINGS_EQUAL(curName, name);
-        UNIT_ASSERT_VALUES_EQUAL(curPathState, (ui32)pathState);
+        UNIT_ASSERT_VALUES_EQUAL(curPathState, (ui32)NKikimrSchemeOp::EPathState::EPathStateNoChanges);
 
         UNIT_ASSERT(descr.HasTable());
         NKikimrSchemeOp::TTableDescription table = descr.GetTable();
         UNIT_ASSERT(table.ColumnsSize());
 
-        UNIT_ASSERT(columns.size() - droppedColumns.size() == table.ColumnsSize());
+        UNIT_ASSERT(!strictCount || columns.size() - droppedColumns.size() == table.ColumnsSize());
         for (auto& col : table.GetColumns()) {
             UNIT_ASSERT(col.HasName());
             UNIT_ASSERT(col.HasId());
@@ -500,7 +499,7 @@ TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const
             UNIT_ASSERT(!droppedColumns.contains(name));
         }
 
-        UNIT_ASSERT(keyColumns.size() == table.KeyColumnNamesSize());
+        UNIT_ASSERT(!strictCount || keyColumns.size() == table.KeyColumnNamesSize());
         for (auto& keyName : table.GetKeyColumnNames()) {
             UNIT_ASSERT(keyColumns.contains(keyName));
         }

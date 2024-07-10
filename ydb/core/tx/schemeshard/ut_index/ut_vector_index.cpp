@@ -59,11 +59,11 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplLevelTable"),
             { NLs::PathExist,
-              NLs::CheckColumns(LevelTable, {LevelTable_ParentIdColumn, LevelTable_IdColumn, LevelTable_EmbeddingColumn}, {}, {LevelTable_ParentIdColumn, LevelTable_IdColumn}) });
+              NLs::CheckColumns(LevelTable, {LevelTable_ParentIdColumn, LevelTable_IdColumn, LevelTable_EmbeddingColumn}, {}, {LevelTable_ParentIdColumn, LevelTable_IdColumn}, true) });
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplPostingTable"),
             { NLs::PathExist,
-              NLs::CheckColumns(PostingTable, {PostingTable_ParentIdColumn, "id", "covered"}, {}, {PostingTable_ParentIdColumn, "id"}) });
+              NLs::CheckColumns(PostingTable, {PostingTable_ParentIdColumn, "id", "covered"}, {}, {PostingTable_ParentIdColumn, "id"}, true) });
 
 
         TVector<ui64> dropTxIds;
@@ -114,11 +114,11 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplLevelTable"),
             { NLs::PathExist,
-              NLs::CheckColumns(LevelTable, {LevelTable_ParentIdColumn, LevelTable_IdColumn, LevelTable_EmbeddingColumn}, {}, {LevelTable_ParentIdColumn, LevelTable_IdColumn}) });
+              NLs::CheckColumns(LevelTable, {LevelTable_ParentIdColumn, LevelTable_IdColumn, LevelTable_EmbeddingColumn}, {}, {LevelTable_ParentIdColumn, LevelTable_IdColumn}, true) });
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplPostingTable"),
             { NLs::PathExist,
-              NLs::CheckColumns(PostingTable, {PostingTable_ParentIdColumn, "id1", "id2", "covered1", "covered2"}, {}, {PostingTable_ParentIdColumn, "id1", "id2"}) });
+              NLs::CheckColumns(PostingTable, {PostingTable_ParentIdColumn, "id1", "id2", "covered1", "covered2"}, {}, {PostingTable_ParentIdColumn, "id1", "id2"}, true) });
     } 
 
 

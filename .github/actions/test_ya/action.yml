@@ -198,6 +198,15 @@ runs:
           relwithdebinfo)
             params+=(--build "relwithdebinfo")
             ;;
+          release)
+            params+=(--build "release")
+            ;;
+          release-clang14)
+            params+=(--build "release")
+            extra_params+=(--target-platform="CLANG14-LINUX-X86_64")
+            extra_params+=(-DLLD_VERSION=16)
+            extra_params+=(-DSTRIP)
+            ;;
           release-asan)
             params+=(
               --build "release" --sanitize="address"

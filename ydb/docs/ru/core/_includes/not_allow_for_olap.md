@@ -1,1 +1,0 @@
-Поддерживается только для [строчных](../concepts/datamodel/table.md#row-tables) таблиц. Поддержка функциональности для [колоночных](../concepts/datamodel/table.md#column-tables) таблиц находится в разработке.

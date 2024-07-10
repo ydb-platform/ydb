@@ -1,10 +1,6 @@
 # Change Data Capture (CDC)
 
-{% note warning %}
-
-{% include [olap_not_allow](../_includes/not_allow_for_olap.md) %}
-
-{% endnote %}
+{% include [olap_not_allow](../_includes/not_allow_for_olap_note.md) %}
 
 Change Data Capture (CDC) обеспечивает захват изменений строк строковой таблицы {{ ydb-short-name }}, формирует из них _поток изменений (changefeed)_, записывает в распределенное хранилище и предоставляет доступ к этим записям для дальнейшей обработки. В качестве распределенного хранилища используется [топик](topic.md), который позволяет эффективно хранить лог изменений таблицы.
 

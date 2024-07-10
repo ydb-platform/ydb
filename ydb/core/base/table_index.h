@@ -22,7 +22,7 @@ struct TIndexColumns {
 };
 
 bool IsCompatibleIndex(const NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index, TString& explain);
-TTableColumns CalcTableImplDescription(const TTableColumns& table, const TIndexColumns& index);
+TTableColumns CalcTableImplDescription(const NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index);
 
 }
 }

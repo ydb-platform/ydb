@@ -20,12 +20,17 @@ bool Contains(const TVector<TString>& names, TString str) {
 namespace NKikimr {
 namespace NTableIndex {
 
-TTableColumns CalcTableImplDescription(const TTableColumns& table, const TIndexColumns& index) {
+TTableColumns CalcTableImplDescription(const NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index) {
     TTableColumns result;
 
-    for (const auto& ik: index.KeyColumns) {
-        result.Keys.push_back(ik);
-        result.Columns.insert(ik);
+    if (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+        result.Keys.push_back(NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn);
+        result.Columns.insert(NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn);
+    } else {
+        for (const auto& ik: index.KeyColumns) {
+            result.Keys.push_back(ik);
+            result.Columns.insert(ik);
+        }
     }
 
     for (const auto& tk: table.Keys) {

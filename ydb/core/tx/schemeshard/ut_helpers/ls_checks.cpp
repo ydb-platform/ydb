@@ -489,6 +489,7 @@ TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const
         NKikimrSchemeOp::TTableDescription table = descr.GetTable();
         UNIT_ASSERT(table.ColumnsSize());
 
+        UNIT_ASSERT(columns.size() - droppedColumns.size() == table.ColumnsSize());
         for (auto& col : table.GetColumns()) {
             UNIT_ASSERT(col.HasName());
             UNIT_ASSERT(col.HasId());
@@ -499,6 +500,7 @@ TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const
             UNIT_ASSERT(!droppedColumns.contains(name));
         }
 
+        UNIT_ASSERT(keyColumns.size() == table.KeyColumnNamesSize());
         for (auto& keyName : table.GetKeyColumnNames()) {
             UNIT_ASSERT(keyColumns.contains(keyName));
         }

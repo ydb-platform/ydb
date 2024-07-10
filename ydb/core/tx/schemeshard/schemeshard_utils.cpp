@@ -534,8 +534,6 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
         parentIdColumn->SetId(0);
     }
 
-    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn);
-
     FillIndexImplTableColumns(baseTableInfo->Columns, implTableColumns, implTableDesc);
 
     return implTableDesc;
@@ -560,8 +558,6 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
         parentIdColumn->SetTypeId(NScheme::NTypeIds::Uint32);
         parentIdColumn->SetId(0);
     }
-
-    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn);
 
     FillIndexImplTableColumns(baseTableDescr.GetColumns(), implTableColumns, implTableDesc);
 

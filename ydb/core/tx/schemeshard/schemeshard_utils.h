@@ -208,6 +208,8 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         return false;
     }
 
+    implTableColumns = CalcTableImplDescription(indexDesc.GetType(), baseTableColumns, indexKeys);
+
     if (indexDesc.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
         //We have already checked this in IsCompatibleIndex
         Y_ABORT_UNLESS(indexKeys.KeyColumns.size() == 1);
@@ -222,8 +224,6 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
             return false;
         }
     } else {
-        implTableColumns = CalcTableImplDescription(baseTableColumns, indexKeys);
-
         if (!IsCompatibleKeyTypes(baseColumnTypes, implTableColumns, uniformTable, error)) {
             status = NKikimrScheme::EStatus::StatusInvalidParameter;
             return false;

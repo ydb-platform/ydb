@@ -241,6 +241,7 @@ class TDataShard
     class TTxCdcStreamScanProgress;
     class TTxCdcStreamEmitHeartbeats;
     class TTxUpdateFollowerReadEdge;
+    class TTxRemoveSchemaSnapshots;
 
     template <typename T> friend class TTxDirectBase;
     class TTxUploadRows;
@@ -374,6 +375,7 @@ class TDataShard
             EvPlanPredictedTxs,
             EvStatisticsScanFinished,
             EvTableStatsError,
+            EvRemoveSchemaSnapshots,
             EvEnd
         };
 
@@ -595,6 +597,8 @@ class TDataShard
         struct TEvPlanPredictedTxs : public TEventLocal<TEvPlanPredictedTxs, EvPlanPredictedTxs> {};
 
         struct TEvStatisticsScanFinished : public TEventLocal<TEvStatisticsScanFinished, EvStatisticsScanFinished> {};
+
+        struct TEvRemoveSchemaSnapshots : public TEventLocal<TEvRemoveSchemaSnapshots, EvRemoveSchemaSnapshots> {};
     };
 
     struct Schema : NIceDb::Schema {
@@ -1383,6 +1387,8 @@ class TDataShard
 
     void Handle(TEvPrivate::TEvPlanPredictedTxs::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(TEvPrivate::TEvRemoveSchemaSnapshots::TPtr& ev, const TActorContext& ctx);
+
     void HandleByReplicationSourceOffsetsServer(STATEFN_SIG);
 
     void DoPeriodicTasks(const TActorContext &ctx);
@@ -1920,6 +1926,8 @@ public:
     bool LoadChangeRecordCommits(NIceDb::TNiceDb& db, TVector<IDataShardChangeCollector::TChange>& records);
     void ScheduleRemoveLockChanges(ui64 lockId);
     void ScheduleRemoveAbandonedLockChanges();
+    void ScheduleRemoveSchemaSnapshot(const TSchemaSnapshotKey& key);
+    void ScheduleRemoveAbandonedSchemaSnapshots();
 
     static void PersistCdcStreamScanLastKey(NIceDb::TNiceDb& db, const TSerializedCellVec& value,
         const TPathId& tablePathId, const TPathId& streamPathId);
@@ -2871,6 +2879,7 @@ private:
     THashMap<ui64, TUncommittedLockChangeRecords> LockChangeRecords; // ui64 is lock id
     THashMap<ui64, TCommittedLockChangeRecords> CommittedLockChangeRecords; // ui64 is lock id
     TVector<ui64> PendingLockChangeRecordsToRemove;
+    TVector<TSchemaSnapshotKey> PendingSchemaSnapshotsToRemove;
 
     // in
     THashMap<ui64, TInChangeSender> InChangeSenders; // ui64 is shard id
@@ -2991,6 +3000,7 @@ protected:
             HFuncTraced(TEvMediatorTimecast::TEvNotifyPlanStep, Handle);
             HFuncTraced(TEvPrivate::TEvMediatorRestoreBackup, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveLockChangeRecords, Handle);
+            HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateInactive unhandled event type: " << ev->GetTypeRewrite()
@@ -3119,6 +3129,7 @@ protected:
             HFunc(TEvPrivate::TEvPlanPredictedTxs, Handle);
             HFunc(NStat::TEvStatistics::TEvStatisticsRequest, Handle);
             HFunc(TEvPrivate::TEvStatisticsScanFinished, Handle);
+            HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWork unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());

@@ -214,6 +214,7 @@ private:
         THPTimer UsageTimer;
         TString Name;
         double Threads;
+        double LimitThreads;
 
         void Init(NMonitoring::TDynamicCounters* group, const TString& poolName, ui32 threads) {
             LastElapsedSeconds = 0;
@@ -221,6 +222,7 @@ private:
             UsageTimer.Reset();
             Name = poolName;
             Threads = threads;
+            LimitThreads = threads;
 
             PoolGroup = group->GetSubgroup("execpool", poolName);
 
@@ -374,6 +376,7 @@ private:
             Y_UNUSED(stats);
 #endif
             Threads = poolStats.CurrentThreadCount;
+            LimitThreads = poolStats.PotentialMaxThreadCount;
         }
     };
 

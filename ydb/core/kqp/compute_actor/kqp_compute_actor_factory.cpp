@@ -63,6 +63,10 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
         return TotalQueryAllocationsSize >= ReasonableSpillingTreshold;
     }
 
+    TString MemoryConsumptionDetails() const override {
+        return ResourceManager->GetTxResourcesUsageDebugInfo(TxId);
+    }
+
     void TerminateHandler(bool success, const NYql::TIssues& issues) {
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)
             ("problem", "finish_compute_actor")

@@ -9,8 +9,8 @@ import "ydb/library/yql/providers/generic/connector/api/common/endpoint.proto";
 /////////////////////////////// common ///////////////////////////////
 
 message TActivationByHour {
-    required uint32 Hour = 1;
-    required uint32 Percentage = 2;
+    optional uint32 Hour = 1;
+    optional uint32 Percentage = 2;
 }
 
 message TActivationPercentage {

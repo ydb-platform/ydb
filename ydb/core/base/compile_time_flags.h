@@ -8,11 +8,6 @@
 #define KIKIMR_VDISK_SYNCLOG_ENTRY_POINT_PROTO_FORMAT 0
 #endif
 
-// This feature flag enables use of flow controlled queue in statestorage lookup requests
-#ifndef KIKIMR_ALLOW_FLOWCONTROLLED_QUEUE_FOR_SSLOOKUP
-#define KIKIMR_ALLOW_FLOWCONTROLLED_QUEUE_FOR_SSLOOKUP 0
-#endif
-
 // This feature flag enables statestorage replica probes
 #ifndef KIKIMR_ALLOW_SSREPLICA_PROBES
 #define KIKIMR_ALLOW_SSREPLICA_PROBES 0

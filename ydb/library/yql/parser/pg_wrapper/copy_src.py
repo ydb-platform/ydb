@@ -340,6 +340,7 @@ def make_sources_list(build_dir):
                 if name.endswith(".switch.c"): continue
                 basename = os.path.basename(name)
                 if basename.startswith("regc_") and basename.endswith(".c"): continue
+                if basename == "rege_dfa.c": continue
                 if name.endswith(".c") and need_copy(name) and name not in exclude_from_source_list:
                     fdst.write("    " + name + "\n")
             fdst.write(")\n")

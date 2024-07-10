@@ -51,10 +51,6 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
     TVector<NKikimrKqp::TKqpSetting> settings;
 
     NKikimrKqp::TKqpSetting setting;
-   
-    setting.SetName("CostBasedOptimizationLevel");
-    setting.SetValue("3");
-    settings.push_back(setting);
 
     setting.SetName("OptEnableConstantFolding");
     setting.SetValue("true");

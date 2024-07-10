@@ -304,4 +304,6 @@ message TTableServiceConfig {
     optional bool EnableQueryServiceSpilling = 63 [ default = true ];
 
     optional bool EnableImplicitQueryParameterTypes = 66 [ default = false ];
+    optional uint32 DefaultCostBasedOptimizationLevel = 64 [default = 3];
+
 };

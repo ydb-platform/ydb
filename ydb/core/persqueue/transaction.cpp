@@ -369,6 +369,8 @@ void TDistributedTransaction::AddCmdDelete(NKikimrClient::TKeyValueRequest& requ
     range->SetIncludeFrom(true);
     range->SetTo(key);
     range->SetIncludeTo(true);
+
+    PQ_LOG_D("add CmdDeleteRange for key " << key);
 }
 
 void TDistributedTransaction::SetDecision(NKikimrTx::TReadSetData::EDecision& var, NKikimrTx::TReadSetData::EDecision value)

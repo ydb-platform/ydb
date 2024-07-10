@@ -356,7 +356,7 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
         const ui64 magic = 0x123951924;
         const ui64 offset = format.SectorSize * 17;
         ui64 nonce = 1;
-        for (ui32 i = 0; i < sectors.Size(); ++i) {
+        for (ui32 i = 1; i < sectors.Size(); ++i) {
             memset(sectors[i].Begin(), 13, sectors[i].Size());
             sectors[i].SetCanary();
             auto *footer = sectors[i].GetDataFooter();

@@ -36,67 +36,66 @@ class TestCase(select_positive_common.TestCase):
 class Factory:
     _name = 'datetime'
 
-    # def _make_test_yql_mysql(self) -> TestCase:
-    #     schema = Schema(
-    #         columns=ColumnList(
-    #             Column(
-    #                 name='col_0_id',
-    #                 ydb_type=Type.INT32,
-    #                 data_source_type=DataSourceType(pg=mysql.Int4()),
-    #             ),
-    #             # TODO: timestamp
-    #             Column(
-    #                 name='col_1_datetime64',
-    #                 ydb_type=Type.TIMESTAMP,
-    #                 data_source_type=DataSourceType(pg=mysql.TimestampWithoutTimeZone()),
-    #             ),
-    #         ),
-    #     )
-    #     data_in = [
-    #         # Date is OK for CH, but too early for YQL
-    #         [
-    #             1,
-    #             datetime.datetime(1950, 5, 27, 12, 23, 45, 678910),
-    #         ],
-    #         # Date is OK for both CH and YQL
-    #         [2, datetime.datetime(1988, 11, 20, 12, 23, 45, 678910)],
-    #         # Date is OK for CH, but too late for YQL
-    #         [
-    #             3,
-    #             datetime.datetime(2108, 1, 1, 12, 23, 45, 678910),
-    #         ],
-    #     ]
+    def _make_test_yql(self) -> TestCase:
+        schema = Schema(
+            columns=ColumnList(
+                Column(
+                    name='col_00_id',
+                    ydb_type=Type.INT32,
+                    data_source_type=DataSourceType(my=mysql.Integer()),
+                ),
+                Column(
+                    name='col_01_date',
+                    ydb_type=Type.DATE,
+                    data_source_type=DataSourceType(my=mysql.Date()),
+                ),
+                Column(
+                    name='col_02_datetime',
+                    ydb_type=Type.TIMESTAMP,
+                    data_source_type=DataSourceType(my=mysql.Datetime()),
+                ),
+                Column(
+                    name='col_03_timestamp',
+                    ydb_type=Type.TIMESTAMP,
+                    data_source_type=DataSourceType(my=mysql.Timestamp()),
+                ),
+            ),
+        )
 
-    #     data_out = [
-    #         [
-    #             1,
-    #             None,
-    #         ],
-    #         [
-    #             2,
-    #             # datetime.datetime(1988, 11, 20, 12, 23, 45, 678000).astimezone(ZoneInfo('UTC')).replace(tzinfo=None),
-    #             datetime.datetime(1988, 11, 20, 12, 23, 45, 678910),
-    #         ],
-    #         [
-    #             3,
-    #             None,
-    #         ],
-    #     ]
+        data_out = [
+            [
+                1,
+                datetime.date(1950, 5, 27),
+                datetime.datetime(1950, 5, 27, 1, 2, 3, 111111),
+                None,
+            ],
+            [
+                2,
+                datetime.date(1988, 11, 20),
+                # datetime.datetime(1988, 11, 20, 12, 23, 45, 678000).astimezone(ZoneInfo('UTC')).replace(tzinfo=None),
+                datetime.datetime(1988, 11, 20, 12, 55, 28, 123000),
+                datetime.datetime(1988, 11, 20, 12, 55, 28, 123000),
+            ],
+            [
+                3,
+                datetime.date(2023, 3, 21),
+                datetime.datetime(2023, 3, 21, 11, 21, 31, 0),
+                datetime.datetime(2023, 3, 21, 11, 21, 31, 0),
+            ],
+        ]
 
-    #     test_case_name = self._name + '_YQL'
-
-    #     return TestCase(
-    #         name_=test_case_name,
-    #         date_time_format=EDateTimeFormat.YQL_FORMAT,
-    #         data_in=data_in,
-    #         data_out_=data_out,
-    #         select_what=SelectWhat.asterisk(schema.columns),
-    #         select_where=None,
-    #         data_source_kind=EDataSourceKind.MYSQL,
-    #         protocol=EProtocol.NATIVE,
-    #         schema=schema,
-    #         pragmas=dict(),
-    #     )
+        return TestCase(
+            name_="datetimes",
+            date_time_format=EDateTimeFormat.YQL_FORMAT,
+            data_in=None,
+            data_out_=data_out,
+            select_what=SelectWhat.asterisk(schema.columns),
+            select_where=None,
+            data_source_kind=EDataSourceKind.MYSQL,
+            protocol=EProtocol.NATIVE,
+            schema=schema,
+            pragmas=dict(),
+        )
 
     # def _make_test_string_mysql(self) -> TestCase:
     #     schema = Schema(
@@ -158,6 +157,6 @@ class Factory:
 
     def make_test_cases(self) -> Sequence[TestCase]:
         return [
-            # self._make_test_yql_mysql(),
+            self._make_test_yql(),
             # self._make_test_string_mysql(),
         ]

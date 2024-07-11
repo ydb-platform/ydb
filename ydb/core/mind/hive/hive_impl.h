@@ -934,8 +934,8 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
         return CurrentConfig.GetStorageBalancerInflight();
     }
 
-    double GetMinNodeUsageToNotBalance() const {
-        return CurrentConfig.GetMinNodeUsageToNotBalance();
+    double GetNodeUsageDiffToEmergencyBalance() const {
+        return CurrentConfig.GetNodeUsageDiffToEmergencyBalance();
     }
 
     static void ActualizeRestartStatistics(google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);

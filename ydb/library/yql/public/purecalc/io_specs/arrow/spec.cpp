@@ -83,10 +83,13 @@ public:
         Y_ENSURE(nvalues == static_cast<size_t>(batch->num_values()));
 
         TUnboxedValue* datums = nullptr;
-        result = Factory_.CreateDirectArrayHolder(nvalues, datums);
+        result = Factory_.CreateDirectArrayHolder(nvalues + 1, datums);
         for (size_t i = 0; i < nvalues; i++) {
             datums[i] = Factory_.CreateArrowBlock(std::move(batch->values[i]));
         }
+
+        arrow::Datum length(std::make_shared<arrow::UInt64Scalar>(batch->length));
+        datums[nvalues] = Factory_.CreateArrowBlock(std::move(length));
     }
 };
 
@@ -116,11 +119,24 @@ public:
     OutputItemType DoConvert(TUnboxedValue value) {
         OutputItemType batch = Batch_.Get();
         size_t nvalues = Schema_.Size();
+
+        const auto& sizeDatum = TArrowBlock::From(value.GetElement(nvalues)).GetDatum();
+        Y_ENSURE(sizeDatum.is_scalar());
+        const auto& sizeScalar = sizeDatum.scalar();
+        const auto& sizeData = arrow::internal::checked_cast<const arrow::UInt64Scalar&>(*sizeScalar);
+        const int64_t length = sizeData.value;
+
         TVector<arrow::Datum> datums(nvalues);
         for (size_t i = 0; i < nvalues; i++) {
-            datums[i] = TArrowBlock::From(value.GetElement(i)).GetDatum();
+            const auto& datum = TArrowBlock::From(value.GetElement(i)).GetDatum();
+            datums[i] = datum;
+            if (datum.is_scalar()) {
+                continue;
+            }
+            Y_ENSURE(datum.length() == length);
         }
-        *batch = ARROW_RESULT(arrow::compute::ExecBatch::Make(datums));
+
+        *batch = arrow::compute::ExecBatch(std::move(datums), length);
         return batch;
     }
 };

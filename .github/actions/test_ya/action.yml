@@ -263,11 +263,11 @@ runs:
           --cache-size 2TB --force-build-depends --evlog-file "$TMP_DIR/ya_evlog.jsonl" \
           --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR"; echo $? > exit_code) |& tee $TMP_DIR/ya_make.log
         
-        RC = `cat exit_code`
+        RC=`cat exit_code`
 
         if [ $RC -ne 0 ]; then
           echo "10 [Ya make output]($LOG_URL)" >> $SUMMARY_LINKS
-          echo "10 [Ya logs]($YA_TEST_LOG_URL)" >> $SUMMARY_LINKS
+          echo "20 [Ya logs]($YA_TEST_LOG_URL)" >> $SUMMARY_LINKS
 
           echo "ya make returned $RC, build failed"
           echo "status=failed" >> $GITHUB_OUTPUT

@@ -128,7 +128,10 @@ def select_missing_database(
         generic_settings=test_case.generic_settings,
     )
 
-    assert test_case.database.missing_database_msg() in result.output, result.output
+    assert test_case.database.missing_database_msg() in result.output, (
+        test_case.database.missing_database_msg(),
+        result.output,
+    )
 
 
 def select_missing_table(

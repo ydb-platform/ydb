@@ -47,7 +47,7 @@ class Database:
     def missing_database_msg(self) -> str:
         match self.kind:
             case EDataSourceKind.CLICKHOUSE:
-                return f"Database {self.name} doesn't exist"
+                return f"Database {self.name} does not exist"
             case EDataSourceKind.POSTGRESQL:
                 return f'database "{self.name}" does not exist'
             case EDataSourceKind.YDB:

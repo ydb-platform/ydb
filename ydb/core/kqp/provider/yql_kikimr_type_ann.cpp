@@ -1397,7 +1397,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                     } else if (alterColumnAction == "changeColumnConstraints") {
                         auto constraintsList = alterColumnList.Item(1).Cast<TExprList>();
 
-                        if (constraintsList.Size() > 1) {
+                        if (constraintsList.Size() != 1) {
                             ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() 
                                 << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
                                 << " Column: \"" << name

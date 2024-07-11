@@ -1419,7 +1419,7 @@ public:
                         } else if (alterColumnAction == "changeColumnConstraints") {
                             auto constraintsList = alterColumnList.Item(1).Cast<TExprList>();
 
-                            if (constraintsList.Size() > 1) {
+                            if (constraintsList.Size() != 1) {
                                 ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
                                     << "\". Several column constrains for a single column are not yet supported"));
                                 return SyncError();
@@ -1433,7 +1433,7 @@ public:
                                 return SyncError();
                             }
 
-                            auto value = TString(constraint.Item(0).Cast<TCoAtom>());
+                            auto value = constraint.Item(0).Cast<TCoAtom>();
 
                             if (value == "drop_not_null") {
                                 alter_columns->set_not_null(false);

@@ -1561,7 +1561,7 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
         break;
     }
     case TRule_alter_table_action::kAltAlterTableAction17: {
-        // ALTER COLUMN id SET (NOT NULL | NULL)
+        // ALTER COLUMN id DROP NOT NULL
         const auto& alterRule = node.GetAlt_alter_table_action17().GetRule_alter_table_alter_column_drop_not_null1();
 
         if (!AlterTableAlterColumnDropNotNull(alterRule, params)) {

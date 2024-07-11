@@ -431,7 +431,7 @@ namespace NKikimr {
             , ChunksToDeleteDelayed(std::move(chunksToDeleteDelayed))
         {}
 
-        void TEntryPointSerializer::Serialize(const TDeltaToDiskRecLog &delta, bool oldFormat) {
+        void TEntryPointSerializer::Serialize(const TDeltaToDiskRecLog &delta) {
             // fill in the protobuf
             NKikimrVDiskData::TSyncLogEntryPoint pb;
             pb.SetRecoveryLogConfirmedLsn(RecoveryLogConfirmedLsn);
@@ -441,7 +441,7 @@ namespace NKikimr {
             }
             const ui32 indexRecsNum = SyncLogSnap->SerializeToProto(pb, delta);
             // produce serialized data for the entry point
-            SerializedData = Serialize(pb, oldFormat);
+            SerializedData = Serialize(pb);
 
             // fill in EntryPointDbgInfo
             EntryPointDbgInfo = TEntryPointDbgInfo(SerializedData.size(),
@@ -449,40 +449,30 @@ namespace NKikimr {
                     indexRecsNum);
         }
 
-        TString TEntryPointSerializer::Serialize(const NKikimrVDiskData::TSyncLogEntryPoint &pb, bool oldFormat) {
-            if (oldFormat) {
-                TStringStream s;
-                // Header
-                const ui32 reservedData = 0;
-                const ui32 signature = TSyncLogHeader::SyncLogOldSignature;
-                s.Write(&signature, sizeof(signature));
-                s.Write(&reservedData, sizeof(reservedData));
-                const ui64 pdiskGuid = pb.GetPDiskGuid();
-                s.Write(&pdiskGuid, sizeof(pdiskGuid));
-                const ui64 vdiskIncarnationGuid = pb.GetVDiskIncarnationGuid();
-                s.Write(&vdiskIncarnationGuid, sizeof(vdiskIncarnationGuid));
-                // LogStartLsn
-                const ui64 logStartLsn = pb.GetLogStartLsn();
-                s.Write(&logStartLsn, sizeof(logStartLsn));
-                // chunksToDeleteDelayed
-                const ui32 delChunksSize = pb.ChunksToDeleteDelayedSize();
-                s.Write(&delChunksSize, sizeof(delChunksSize));
-                for (ui64 i = 0; i < delChunksSize; ++i) {
-                    const ui32 chunkId = pb.GetChunksToDeleteDelayed(i);
-                    s.Write(&chunkId, sizeof(chunkId));
-                }
-                s.Write(pb.GetDiskRecLogSerialized().data(), pb.GetDiskRecLogSerialized().size());
-
-                return s.Str();
-            } else {
-                // signature
-                TStringStream s;
-                s.Write(&TSyncLogHeader::SyncLogPbSignature, sizeof(ui32));
-                // pb payload
-                bool success = pb.SerializeToArcadiaStream(&s);
-                Y_ABORT_UNLESS(success);
-                return s.Str();
+        TString TEntryPointSerializer::Serialize(const NKikimrVDiskData::TSyncLogEntryPoint &pb) {
+            TStringStream s;
+            // Header
+            const ui32 reservedData = 0;
+            const ui32 signature = TSyncLogHeader::SyncLogOldSignature;
+            s.Write(&signature, sizeof(signature));
+            s.Write(&reservedData, sizeof(reservedData));
+            const ui64 pdiskGuid = pb.GetPDiskGuid();
+            s.Write(&pdiskGuid, sizeof(pdiskGuid));
+            const ui64 vdiskIncarnationGuid = pb.GetVDiskIncarnationGuid();
+            s.Write(&vdiskIncarnationGuid, sizeof(vdiskIncarnationGuid));
+            // LogStartLsn
+            const ui64 logStartLsn = pb.GetLogStartLsn();
+            s.Write(&logStartLsn, sizeof(logStartLsn));
+            // chunksToDeleteDelayed
+            const ui32 delChunksSize = pb.ChunksToDeleteDelayedSize();
+            s.Write(&delChunksSize, sizeof(delChunksSize));
+            for (ui64 i = 0; i < delChunksSize; ++i) {
+                const ui32 chunkId = pb.GetChunksToDeleteDelayed(i);
+                s.Write(&chunkId, sizeof(chunkId));
             }
+            s.Write(pb.GetDiskRecLogSerialized().data(), pb.GetDiskRecLogSerialized().size());
+
+            return s.Str();
         }
 
         ////////////////////////////////////////////////////////////////////////////
@@ -564,7 +554,7 @@ namespace NKikimr {
             const ui32 signature = *(const ui32*)serializedData;
             if (signature == TSyncLogHeader::SyncLogOldSignature) {
                 // old format, convert to proto
-                return ConvertOldFormatArrayToProto(pb, serializedData, size, explanation);
+                return ConvertArrayToProto(pb, serializedData, size, explanation);
             } else if (signature == TSyncLogHeader::SyncLogPbSignature) {
                 // new format -- protobuf
                 bool success = pb.ParseFromArray(serializedData + sizeof(ui32),
@@ -581,15 +571,15 @@ namespace NKikimr {
             }
         }
 
-        bool TEntryPointParser::ConvertOldFormatToProto(
+        bool TEntryPointParser::ConvertToProto(
                 NKikimrVDiskData::TSyncLogEntryPoint &pb,
                 const TString &serializedData,
                 TString &explanation)
         {
-            return ConvertOldFormatArrayToProto(pb, serializedData.data(), serializedData.size(), explanation);
+            return ConvertArrayToProto(pb, serializedData.data(), serializedData.size(), explanation);
         }
 
-        bool TEntryPointParser::ConvertOldFormatArrayToProto(
+        bool TEntryPointParser::ConvertArrayToProto(
                 NKikimrVDiskData::TSyncLogEntryPoint &pb,
                 const char* serializedData,
                 size_t size,

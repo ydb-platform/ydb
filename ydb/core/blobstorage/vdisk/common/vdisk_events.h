@@ -15,7 +15,6 @@
 #include <ydb/core/blobstorage/storagepoolmon/storagepool_counters.h>
 #include <ydb/core/base/blobstorage_common.h>
 
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/base/event_filter.h>
 #include <ydb/core/base/interconnect_channels.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>

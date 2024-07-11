@@ -8,8 +8,6 @@
 #include <util/generic/list.h>
 #include <util/generic/map.h>
 
-// sample
-
 namespace NKikimr {
 
 struct TEvStateStorage {

@@ -347,7 +347,10 @@ def main():
     summary = gen_summary(args.summary_url_prefix, args.summary_out_path, title_path)
     write_summary(summary, args.test_log_url)
 
-    if summary.is_empty | summary.is_failed:
+    if summary.is_failed:
+        color = 'red'
+        overall_status = "failure"
+    elif summary.is_empty | summary.is_failed:
         color = 'yellow'
         overall_status = "success"
     else:

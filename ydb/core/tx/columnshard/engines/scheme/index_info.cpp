@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 
 #include <ydb/core/base/appdata.h>
@@ -336,7 +337,7 @@ void TIndexInfo::InitializeCaches(const std::shared_ptr<IStoragesManager>& opera
 
     for (auto&& c : Columns) {
         AFL_VERIFY(ArrowColumnByColumnIdCache.emplace(c.first, GetColumnFieldVerified(c.first)).second);
-        AFL_VERIFY(ColumnFeatures.emplace(c.first, TColumnFeatures(c.first, GetColumnFieldVerified(c.first), DefaultSerializer, operators->GetDefaultOperator(), 
+        AFL_VERIFY(ColumnFeatures.emplace(c.first, TColumnFeatures(c.first, GetColumnFieldVerified(c.first), DefaultSerializer, operators->GetDefaultOperator(),
             NArrow::IsPrimitiveYqlType(c.second.PType), c.first == GetPKFirstColumnId(), nullptr)).second);
     }
     for (auto&& cId : GetSystemColumnIds()) {
@@ -403,6 +404,19 @@ std::shared_ptr<NIndexes::NMax::TIndexMeta> TIndexInfo::GetIndexMax(const ui32 c
         auto maxIndex = static_pointer_cast<NIndexes::NMax::TIndexMeta>(i.second.GetObjectPtr());
         if (maxIndex->GetColumnId() == columnId) {
             return maxIndex;
+        }
+    }
+    return nullptr;
+}
+
+std::shared_ptr<NIndexes::NCountMinSketch::TIndexMeta> TIndexInfo::GetIndexCountMinSketch(const std::set<ui32>& columnIds) const {
+    for (auto&& i : Indexes) {
+        if (i.second->GetClassName() != NIndexes::NCountMinSketch::TIndexMeta::GetClassNameStatic()) {
+            continue;
+        }
+        auto index = static_pointer_cast<NIndexes::NCountMinSketch::TIndexMeta>(i.second.GetObjectPtr());
+        if (index->GetColumnIds() == columnIds) {
+            return index;
         }
     }
     return nullptr;

@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/portions/portions.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch/meta.h>
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>
@@ -414,6 +415,9 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
                 std::make_shared<NOlap::NIndexes::NMax::TIndexMeta>(1000 + i, "MAX::INDEX::" + columns[i].GetName(), "__LOCAL_METADATA", i + 1))
                     .SerializeToProto();
         }
+        *schema->AddIndexes() = NOlap::NIndexes::TIndexMetaContainer(
+            std::make_shared<NOlap::NIndexes::NCountMinSketch::TIndexMeta>(10000 + i, "COUNT_MIN_SKETCH::INDEX::" + columns[i].GetName(), "__LOCAL_METADATA", std::set<ui32>{i + 1}))
+                .SerializeToProto();
     }
 
     Y_ABORT_UNLESS(pk.size() > 0);

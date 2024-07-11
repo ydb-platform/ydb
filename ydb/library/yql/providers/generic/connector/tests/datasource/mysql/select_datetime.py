@@ -73,11 +73,12 @@ class Factory:
                 datetime.datetime(1988, 11, 20, 12, 55, 28, 123000),
                 datetime.datetime(1988, 11, 20, 12, 55, 28, 123000),
             ],
+            # [3, '2038-01-19', '2038-01-19T03:14:07.000000Z', '2038-01-19T03:14:07.000009Z'],
             [
                 3,
-                datetime.date(2023, 3, 21),
-                datetime.datetime(2023, 3, 21, 11, 21, 31, 0),
-                datetime.datetime(2023, 3, 21, 11, 21, 31, 0),
+                datetime.date(2038, 1, 18),
+                datetime.datetime(2038, 1, 19, 3, 14, 7, 0),
+                datetime.datetime(2038, 1, 19, 3, 14, 7, 0),
             ],
             [4, None, None, None],
         ]
@@ -100,7 +101,7 @@ class Factory:
             [
                 1,
                 '1950-05-27',
-                '1950-05-27 01:02:03.111111',
+                '1950-05-27T01:02:03.111111Z',
                 None,
             ],
             [
@@ -109,11 +110,12 @@ class Factory:
                 '1988-11-20T12:23:45.67891Z',
                 '1988-11-20T12:23:45.67891Z',
             ],
-            [3, '2023-03-21', '2023-03-21T11:21:31Z' '2023-03-21T11:21:31Z'],
+            [3, '2038-01-19', '2038-01-19T03:14:07.000000Z', '2038-01-19T03:14:07.000009Z'],
+            [4, '9999-12-31', '9999-12-31T23:59:59.999999Z', None],
         ]
 
         return TestCase(
-            name_="datetime_string",
+            name_="datetimes",
             date_time_format=EDateTimeFormat.STRING_FORMAT,
             data_in=None,
             data_out_=data_out,
@@ -128,5 +130,5 @@ class Factory:
     def make_test_cases(self) -> Sequence[TestCase]:
         return [
             self._make_test_yql(),
-            # self._make_test_string(),
+            self._make_test_string(),
         ]

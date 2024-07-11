@@ -257,13 +257,14 @@ runs:
         
         echo "Build+Tests **{platform_name}-${BUILD_PRESET}** is running..." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
-        RC=0
-        ./ya make ${{ inputs.build_target }} "${params[@]}" \
+        (./ya make ${{ inputs.build_target }} "${params[@]}" \
           --stat --log-file "$YA_TEST_LOG_FILENAME" -DCONSISTENT_DEBUG \
           --no-dir-outputs --test-failure-code 0 --build-all \
           --cache-size 2TB --force-build-depends --evlog-file "$TMP_DIR/ya_evlog.jsonl" \
-          --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR" || RC=$? |& tee $TMP_DIR/ya_make.log
-          
+          --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR"; echo $? > exit_code) |& tee $TMP_DIR/ya_make.log
+        
+        RC = `cat exit_code`
+
         if [ $RC -ne 0 ]; then
           echo "10 [Ya make output]($LOG_URL)" >> $SUMMARY_LINKS
           echo "10 [Ya logs]($YA_TEST_LOG_URL)" >> $SUMMARY_LINKS

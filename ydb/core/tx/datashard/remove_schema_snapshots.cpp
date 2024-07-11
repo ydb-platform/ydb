@@ -11,33 +11,33 @@ public:
     TTxType GetTxType() const override { return TXTYPE_REMOVE_SCHEMA_SNAPSHOTS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        while (!Self->PendingSchemaSnapshotsToRemove.empty()) {
-            const auto key = Self->PendingSchemaSnapshotsToRemove.back();
+        while (!Self->PendingSchemaSnapshotsToGc.empty()) {
+            const auto key = Self->PendingSchemaSnapshotsToGc.back();
             const auto* snapshot = Self->GetSchemaSnapshotManager().FindSnapshot(key);
 
             if (!snapshot) {
-                Self->PendingSchemaSnapshotsToRemove.pop_back();
+                Self->PendingSchemaSnapshotsToGc.pop_back();
                 continue;
             }
 
             if (Self->GetSchemaSnapshotManager().HasReference(key)) {
-                Self->PendingSchemaSnapshotsToRemove.pop_back();
+                Self->PendingSchemaSnapshotsToGc.pop_back();
                 continue;
             }
 
             auto table = Self->FindUserTable(TPathId(key.OwnerId, key.PathId));
             if (!table) {
-                Self->PendingSchemaSnapshotsToRemove.pop_back();
+                Self->PendingSchemaSnapshotsToGc.pop_back();
                 continue;
             }
 
             if (snapshot->Schema->GetTableSchemaVersion() >= table->GetTableSchemaVersion()) {
-                Self->PendingSchemaSnapshotsToRemove.pop_back();
+                Self->PendingSchemaSnapshotsToGc.pop_back();
                 continue;
             }
 
             Self->GetSchemaSnapshotManager().RemoveShapshot(txc.DB, key);
-            Self->PendingSchemaSnapshotsToRemove.pop_back();
+            Self->PendingSchemaSnapshotsToGc.pop_back();
         }
 
         return true;

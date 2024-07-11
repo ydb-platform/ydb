@@ -77,6 +77,8 @@ public:
     virtual i32 GetProtocolVersion() = 0;
     virtual TStatus GetStatus() = 0;
     virtual void Kill() { }
+
+    virtual void SetSpillerFactory(std::shared_ptr<NKikimr::NMiniKQL::ISpillerFactory> spillerFactory) = 0;
 };
 
 class IProxyFactory: public TThrRefBase, private TNonCopyable {

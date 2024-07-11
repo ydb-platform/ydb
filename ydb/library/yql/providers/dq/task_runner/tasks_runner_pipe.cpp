@@ -1510,6 +1510,9 @@ public:
         return Input;
     }
 
+    void SetSpillerFactory(std::shared_ptr<NKikimr::NMiniKQL::ISpillerFactory>) override {
+    }
+
 private:
     void InitTaskMeta() {
         Yql::DqsProto::TTaskMeta taskMeta;

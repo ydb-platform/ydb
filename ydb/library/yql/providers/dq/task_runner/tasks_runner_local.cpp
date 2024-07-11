@@ -181,6 +181,10 @@ public:
         return {0, ""};
     }
 
+    void SetSpillerFactory(std::shared_ptr<NKikimr::NMiniKQL::ISpillerFactory> spillerFactory) override {
+        Runner->SetSpillerFactory(spillerFactory);
+    }
+
 private:
     void UpdateStats() {
         QueryStat.AddTaskRunnerStats(*Runner->GetStats(), Task.GetId(), Task.GetStageId());

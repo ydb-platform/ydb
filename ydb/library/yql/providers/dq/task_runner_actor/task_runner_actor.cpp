@@ -1,6 +1,7 @@
 #include "task_runner_actor.h"
 
 #include <ydb/library/yql/dq/actors/dq.h>
+#include <ydb/library/yql/dq/actors/spilling/spiller_factory.h>
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
 #include <ydb/library/yql/providers/dq/actors/events.h>
 #include <ydb/library/yql/providers/dq/runtime/runtime_data.h>
@@ -613,6 +614,12 @@ private:
 
             NDq::TDqTaskSettings settings(&ev->Get()->Task);
             TaskRunner = Factory->GetOld(Alloc, settings, TraceId);
+
+            if (settings.GetEnableSpilling()) {
+                auto wakeUpCallback = ev->Get()->ExecCtx->GetWakeupCallback();
+                TTxId txid;
+                TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(txid, NActors::TActivationContext::ActorSystem(), wakeUpCallback));
+            } 
         } catch (...) {
             TString message = "Could not create TaskRunner for " + ToString(taskId) + " on node " + ToString(replyTo.NodeId()) + ", error: " + CurrentExceptionMessage();
             Send(replyTo, TEvDq::TEvAbortExecution::Unavailable(message), 0, cookie); // retries, fallback on retries limit

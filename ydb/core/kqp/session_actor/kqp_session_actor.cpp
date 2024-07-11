@@ -291,6 +291,7 @@ public:
     void CommitTx() {
         YQL_ENSURE(QueryState->HasTxControl());
         const auto& txControl = QueryState->GetTxControl();
+
         YQL_ENSURE(txControl.tx_selector_case() == Ydb::Table::TransactionControl::kTxId, "Can't commit transaction - "
             << " there is no TxId in Query's TxControl");
 
@@ -974,7 +975,9 @@ public:
 
         if (queryState) {
             request.Snapshot = queryState->TxCtx->GetSnapshot();
-            request.IsolationLevel = *queryState->TxCtx->EffectiveIsolationLevel;
+            request.IsolationLevel = queryState->HasImplicitTx() ?
+                NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE :
+                *queryState->TxCtx->EffectiveIsolationLevel;
         } else {
             request.IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
         }
@@ -1096,7 +1099,6 @@ public:
 
     bool ExecutePhyTx(const TKqpPhyTxHolder::TConstPtr& tx, bool commit) {
         if (tx) {
-            QueryState->PrepareStatementTransaction(tx->GetType());
             switch (tx->GetType()) {
                 case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
                     YQL_ENSURE(tx->StagesSize() == 0);

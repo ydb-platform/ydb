@@ -509,13 +509,17 @@ TDqPhyStage RebuildStageInputsAsWide(const TDqPhyStage& stage, TExprContext& ctx
         return stage;
     }
 
-    return Build<TDqPhyStage>(ctx, stage.Pos())
+    auto newStage = Build<TDqPhyStage>(ctx, stage.Pos())
         .InitFrom(stage)
         .Program()
             .Args(newArgs)
             .Body(ctx.ReplaceNodes(stage.Program().Body().Ptr(), argsMap))
         .Build()
         .Done();
+
+    Cerr << newStage.Ref().Dump() << Endl;
+
+    return newStage;
 }
 
 TDqPhyStage RebuildStageOutputAsWide(const TDqPhyStage& stage, const TStructExprType& outputItemType, TExprContext& ctx)

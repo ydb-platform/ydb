@@ -60,7 +60,7 @@ namespace {
 
         constexpr bool WithTypes = false;
         constexpr bool WithConstraints = false;
-        constexpr bool WithScope = false;
+        constexpr bool WithScope = true;
 
         if constexpr (WithTypes) {
             if (node.GetTypeAnn()) {
@@ -1966,7 +1966,7 @@ namespace {
                 res = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), TStringBuf("world"), pool);
                 break;
             case TExprNode::Argument: {
-                YQL_ENSURE(ctx.AllowFreeArgs, "Free arguments are not allowed"); 
+                YQL_ENSURE(ctx.AllowFreeArgs, "Free arguments are not allowed");
                 auto iter = ctx.FreeArgs.emplace(&node, ctx.FreeArgs.size());
                 res = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), ctx.Expr.AppendString("_FreeArg" + ToString(iter.first->second)), pool);
                 break;

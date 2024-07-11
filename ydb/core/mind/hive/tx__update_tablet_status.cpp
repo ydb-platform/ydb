@@ -82,7 +82,11 @@ public:
                 tablet->ActualizeTabletStatistics(now);
                 if (tablet->BootTime != TInstant()) {
                     TDuration startTime = now - tablet->BootTime;
+                    if (startTime > TDuration::Seconds(30)) {
+                        BLOG_W("Tablet " << tablet->GetFullTabletId() << " was starting for " << startTime.Seconds() << " seconds");
+                    }
                     Self->TabletCounters->Percentile()[NHive::COUNTER_TABLETS_START_TIME].IncrementFor(startTime.MilliSeconds());
+                    Self->UpdateCounterTabletsStarting(-1);
                 }
                 TNodeInfo* node = Self->FindNode(Local.NodeId());
                 if (node == nullptr) {

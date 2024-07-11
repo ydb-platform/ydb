@@ -41,8 +41,11 @@ private:
     THolder<IParamStream> Input;
     bool IsFirstEncounter = true;
     size_t SkipRows = 0;
+    size_t DeprecatedSkipRows = 0;
     char Delimiter;
     TCsvParser CsvParser;
+    size_t DeprecatedBatchLimit;
+    TDuration DeprecatedBatchMaxDelay;
 
 protected:
     TVector<TString> ParameterOptions, ParameterFiles, StdinParameters;

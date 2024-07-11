@@ -8,6 +8,11 @@
 namespace NYdb {
 namespace NConsoleClient {
 
+namespace {
+    static const size_t DEFAULT_BATCH_LIMIT = 1000;
+    static const TDuration DEFAULT_BATCH_MAX_DELAY = TDuration::Seconds(1);
+}
+
 void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
     switch (InputFormat) {
         case EOutputFormat::Default:
@@ -109,6 +114,15 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
     if (BatchMode != EBatchMode::Adaptive && (config.ParseResult->Has("batch-limit") || config.ParseResult->Has("batch-max-delay"))) {
         throw TMisuseException() << "Options \"--batch-limit\" and \"--batch-max-delay\" are allowed only in \"adaptive\" batch mode.";
     }
+    if (DeprecatedSkipRows != 0) {
+        SkipRows = DeprecatedSkipRows;
+    }
+    if (DeprecatedBatchLimit != DEFAULT_BATCH_LIMIT) {
+        BatchLimit = DeprecatedBatchLimit;
+    }
+    if (DeprecatedBatchMaxDelay != DEFAULT_BATCH_MAX_DELAY) {
+        BatchMaxDelay = DeprecatedBatchMaxDelay;
+    }
 }
 
 void TCommandWithParameters::AddParametersOption(TClientCommand::TConfig& config, const TString& clarification) {
@@ -151,32 +165,61 @@ void TCommandWithParameters::AddParametersOption(TClientCommand::TConfig& config
 }
 
 void TCommandWithParameters::AddParametersStdinOption(TClientCommand::TConfig& config, const TString& requestString) {
+    config.Opts->AddLongOption("param-columns", "String with column names that replaces header when passing "
+        "parameters in CSV/TSV format. It is assumed that there is no header in the file")
+        .RequiredArgument("STR").StoreResult(&Columns);
+    config.Opts->AddLongOption("columns", "For backward compatibility")
+        .RequiredArgument("STR").StoreResult(&Columns).Hidden();
+    config.Opts->MutuallyExclusive("param-columns", "columns");
+
+    config.Opts->AddLongOption("param-skip-rows", "Number of header rows to skip when passing parameters in "
+        "CSV/TSV format (not including the row of column names, if any).")
+        .RequiredArgument("NUM").StoreResult(&SkipRows).DefaultValue(0);
+    config.Opts->AddLongOption("skip-rows", "For backward compatibility")
+        .RequiredArgument("NUM").StoreResult(&DeprecatedSkipRows).DefaultValue(0).Hidden();
+    config.Opts->MutuallyExclusive("param-skip-rows", "skip-rows");
+
+    config.Opts->AddLongOption("param-name-stdin", "Name of a parameter whose value is provided on stdin, without a "
+        "$ sign. This name is required when you use the raw format in --stdin-format.\n"
+        "When used with JSON formats, stdin is interpreted not as a JSON document but as a JSON value passed to "
+        "the parameter with the specified name.")
+        .RequiredArgument("STRING").AppendTo(&StdinParameters);
+    config.Opts->AddLongOption("stdin-par", "For backward compatibility").RequiredArgument("STRING")
+        .AppendTo(&StdinParameters).Hidden();
+    config.Opts->MutuallyExclusive("param-name-stdin", "stdin-par");
+
     TStringStream descr;
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     descr << "Batching mode for stdin parameters processing. Available options:\n  "
         << colors.BoldColor() << "iterative" << colors.OldColor()
         << "\n    Executes " << requestString << " for each parameter set (exactly one execution "
-        "when no framing specified in \"stdin-format\")\n  "
+        "when no framing is specified in \"stdin-format\")\n  "
         << colors.BoldColor() << "full" << colors.OldColor()
         << "\n    Executes " << requestString << " once, with all parameter sets wrapped in json list, when EOF is reached on stdin\n  "
         << colors.BoldColor() << "adaptive" << colors.OldColor()
         << "\n    Executes " << requestString << " with a json list of parameter sets every time when its number reaches batch-limit, "
-        "or the waiting time reaches batch-max-delay."
+        "or the waiting time reaches batch-max-delay. An stdin parameter name must be specified via "
+        "\"--param-name-stdin\" option for \"adaptive\" batch mode."
         "\nDefault: " << colors.CyanColor() << "\"iterative\"" << colors.OldColor() << ".";
-    config.Opts->AddLongOption("columns", "String with column names that replaces header. "
-            "Relevant when passing parameters in CSV/TSV format only. "
-            "It is assumed that there is no header in the file")
-            .RequiredArgument("STR").StoreResult(&Columns);
-    config.Opts->AddLongOption("skip-rows", "Number of header rows to skip (not including the row of column names, if any). "
-            "Relevant when passing parameters in CSV/TSV format only.")
-            .RequiredArgument("NUM").StoreResult(&SkipRows).DefaultValue(0);
-    config.Opts->AddLongOption("stdin-par", "Parameter name on stdin, required/applicable when stdin-format implies values only.")
-            .RequiredArgument("STRING").AppendTo(&StdinParameters);
-    config.Opts->AddLongOption("batch", descr.Str()).RequiredArgument("STRING").StoreResult(&BatchMode);
-    config.Opts->AddLongOption("batch-limit", "Maximum size of list for adaptive batching mode").RequiredArgument("INT")
-            .StoreResult(&BatchLimit).DefaultValue(1000);
-    config.Opts->AddLongOption("batch-max-delay", "Maximum delay to process first item in the list for adaptive batching mode")
-            .RequiredArgument("VAL").StoreResult(&BatchMaxDelay).DefaultValue(TDuration::Seconds(1));
+
+    config.Opts->AddLongOption("param-batch", descr.Str()).RequiredArgument("STRING")
+        .StoreResult(&BatchMode);
+    config.Opts->AddLongOption("batch", "For backward compatibility").RequiredArgument("STRING")
+        .StoreResult(&BatchMode).Hidden();
+    config.Opts->MutuallyExclusive("param-batch", "batch");
+
+    config.Opts->AddLongOption("param-batch-limit", "Maximum size of list for adaptive parameter batching mode")
+        .RequiredArgument("INT").StoreResult(&BatchLimit).DefaultValue(DEFAULT_BATCH_LIMIT);
+    config.Opts->AddLongOption("batch-limit", "For backward compatibility")
+            .RequiredArgument("INT").StoreResult(&DeprecatedBatchLimit).DefaultValue(DEFAULT_BATCH_LIMIT).Hidden();
+    config.Opts->MutuallyExclusive("param-batch-limit", "batch-limit");
+
+    config.Opts->AddLongOption("param-batch-max-delay", "Maximum delay to process first item in the list for "
+        "adaptive parameter batching mode")
+        .RequiredArgument("VAL").StoreResult(&BatchMaxDelay).DefaultValue(DEFAULT_BATCH_MAX_DELAY);
+    config.Opts->AddLongOption("batch-max-delay", "For backward compatibility")
+            .RequiredArgument("VAL").StoreResult(&DeprecatedBatchMaxDelay).DefaultValue(DEFAULT_BATCH_MAX_DELAY).Hidden();
+    config.Opts->MutuallyExclusive("param-batch-max-delay", "batch-max-delay");
 }
 
 void TCommandWithParameters::AddParams(TParamsBuilder& paramBuilder) {

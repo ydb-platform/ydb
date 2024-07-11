@@ -58,12 +58,35 @@ void TCommandSql::Config(TConfig& config) {
         EOutputFormat::Parquet,
     });
 
+    AddParametersOption(config);
+
+    AddExamplesOption(config);
+
+    AddInputFormats(config, {
+        EOutputFormat::JsonUnicode,
+        EOutputFormat::JsonBase64
+    });
+
+    AddStdinFormats(config, {
+        EOutputFormat::JsonUnicode,
+        EOutputFormat::JsonBase64,
+        EOutputFormat::Raw,
+        EOutputFormat::Csv,
+        EOutputFormat::Tsv
+    }, {
+        EOutputFormat::NoFraming,
+        EOutputFormat::NewlineDelimited
+    });
+
+    AddParametersStdinOption(config, "script");
+
     config.SetFreeArgsNum(0);
 }
 
 void TCommandSql::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ParseFormats();
+    ParseParameters(config);
     if (Query && QueryFile) {
         throw TMisuseException() << "Both mutually exclusive options \"Text of query\" (\"--query\", \"-q\") "
             << "and \"Path to file with query text\" (\"--file\", \"-f\") were provided.";

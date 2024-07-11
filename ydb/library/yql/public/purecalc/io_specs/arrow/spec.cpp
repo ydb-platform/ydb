@@ -79,12 +79,12 @@ public:
     }
 
     void DoConvert(arrow::compute::ExecBatch* batch, TUnboxedValue& result) {
-        ui64 nvalues = Schema_.Size();
+        size_t nvalues = Schema_.Size();
         Y_ENSURE(nvalues == static_cast<size_t>(batch->num_values()));
 
         TUnboxedValue* datums = nullptr;
         result = Factory_.CreateDirectArrayHolder(nvalues, datums);
-        for (ui64 i = 0; i < nvalues; i++) {
+        for (size_t i = 0; i < nvalues; i++) {
             datums[i] = Factory_.CreateArrowBlock(std::move(batch->values[i]));
         }
     }
@@ -115,9 +115,9 @@ public:
 
     OutputItemType DoConvert(TUnboxedValue value) {
         OutputItemType batch = Batch_.Get();
-        ui64 nvalues = Schema_.Size();
+        size_t nvalues = Schema_.Size();
         TVector<arrow::Datum> datums(nvalues);
-        for (ui32 i = 0; i < nvalues; i++) {
+        for (size_t i = 0; i < nvalues; i++) {
             datums[i] = TArrowBlock::From(value.GetElement(i)).GetDatum();
         }
         *batch = ARROW_RESULT(arrow::compute::ExecBatch::Make(datums));

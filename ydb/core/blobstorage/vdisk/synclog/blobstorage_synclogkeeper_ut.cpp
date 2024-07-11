@@ -185,7 +185,7 @@ namespace NKikimr {
         Y_ABORT_UNLESS(commit);
 
         // start parallel commit
-        TCommitWithNoSwapAndDelChunks parallelCommit();
+        TCommitWithNoSwapAndDelChunks parallelCommit;
         parallelCommit.Start(State.get(), 10);
 
         // write more messages during parallel commit
@@ -206,7 +206,7 @@ namespace NKikimr {
         Y_ABORT_UNLESS(commit);
 
         // start parallel commit
-        TCommitWithNoSwapAndDelChunks parallelCommit2();
+        TCommitWithNoSwapAndDelChunks parallelCommit2;
         parallelCommit2.Start(State.get(), 31);
 
         // commit finished with lsn=33

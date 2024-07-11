@@ -31,6 +31,8 @@
 #include <queue>
 
 #include <ydb/core/fq/libs/row_dispatcher/json_parser.h>
+#include <ydb/core/fq/libs/row_dispatcher/json_filter.h>
+
 #include <ydb/core/fq/libs/row_dispatcher/predicate_builder.h>
 
 
@@ -95,9 +97,13 @@ private:
    // NKikimr::NMiniKQL::TScopedAlloc Alloc; // TODO ?
 
     struct ConsumersInfo {
+        
         TMaybe<ui64> Offset;
         TInstant StartingMessageTimestamp;
         ui64 LastSendedMessage = 0;
+
+        std::unique_ptr<TJsonFilter> Filter;
+        std::queue<TString> Buffer;
     };
     TMap<NActors::TActorId, ConsumersInfo> Consumers;
     std::unique_ptr<TJsonParser> Parser;
@@ -121,7 +127,8 @@ public:
     NYdb::NTopic::IReadSession& GetReadSession();
     void SubscribeOnNextEvent();
     void ParseData();
-    void SendData(const TString& json);
+    void DataParsed(const NYql::NUdf::TUnboxedValue* json);
+    void SendData();
     void CloseSession();
 
     void Handle(TEvPrivate::TEvPqEventsReady::TPtr&);
@@ -179,8 +186,8 @@ TTopicSession::TTopicSession(
     , BufferSize(16_MB)
     , LogPrefix("TopicSession: ")
    // , StartingMessageTimestamp(TInstant::MilliSeconds(TInstant::Now().MilliSeconds())) // this field is serialized as milliseconds, so drop microseconds part to be consistent with storage
-    , Parser(NewJsonParser(GetColumns(), [&](const TString& json){
-            SendData(json);
+    , Parser(NewJsonParser(GetColumns(), [&](const NYql::NUdf::TUnboxedValue* json){
+            DataParsed(json);
         }))
 {
    // Alloc.DisableStrictAllocationCheck();
@@ -196,13 +203,6 @@ TTopicSession::TTopicSession(
 void TTopicSession::Bootstrap() {
     Become(&TTopicSession::StateFunc);
     LOG_ROW_DISPATCHER_DEBUG("id " << SelfId());
-    try {
-        auto where = FormatWhere(SourceParams.GetPredicate());
-        LOG_ROW_DISPATCHER_DEBUG("where " << where);
-    } catch (const yexception &ex) {
-        LOG_ROW_DISPATCHER_DEBUG("FormatWhere failed: "  << ex.what());
-        // TODO
-    }
 }
 
 void TTopicSession::PassAway() {
@@ -472,20 +472,33 @@ void TTopicSession::ParseData() {
 }
 
 
-void TTopicSession::SendData(const TString& json) {
-    LOG_ROW_DISPATCHER_DEBUG("SendData: " << json);
-    
-    NFq::NRowDispatcherProto::TEvMessage message;
-    message.SetJson(json);
-    message.SetOffset(CurrentOffset);
+void TTopicSession::DataParsed(const NYql::NUdf::TUnboxedValue* json) {
+    LOG_ROW_DISPATCHER_DEBUG("DataParsed");
     
     for (auto& [actorId, info] : Consumers) {
-        auto event = std::make_unique<TEvRowDispatcher::TEvSessionData>();
-        event->Record.SetPartitionId(PartitionId);    
-        event->Record.AddMessages()->CopyFrom(message);
+        info.Filter->Push(json);
+    }
+}
 
-        LOG_ROW_DISPATCHER_DEBUG("SendData to " << actorId);
-        Send(actorId, event.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+void TTopicSession::SendData() {
+    LOG_ROW_DISPATCHER_DEBUG("SendData");
+    
+    for (auto& [actorId, info] : Consumers) {
+        while (!info.Buffer.empty()) {
+            const TString json = info.Buffer.front();
+            NFq::NRowDispatcherProto::TEvMessage message;
+            message.SetJson(json);
+            message.SetOffset(CurrentOffset);
+            
+            auto event = std::make_unique<TEvRowDispatcher::TEvSessionData>();
+            event->Record.SetPartitionId(PartitionId);    
+            event->Record.AddMessages()->CopyFrom(message);
+
+            LOG_ROW_DISPATCHER_DEBUG("SendData to " << actorId);
+            Send(actorId, event.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+
+            info.Buffer.pop();
+        }
     }
 }
 
@@ -506,8 +519,27 @@ void TTopicSession::Handle(TEvRowDispatcher::TEvSessionAddConsumer::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvSessionAddConsumer: " << ev->Get()->ConsumerActorId);
     LOG_ROW_DISPATCHER_DEBUG("TEvSessionAddConsumer: offset " << ev->Get()->Offset);
     LOG_ROW_DISPATCHER_DEBUG("TEvSessionAddConsumer: StartingMessageTimestampMs " << ev->Get()->StartingMessageTimestampMs);
-    Consumers[ev->Get()->ConsumerActorId].Offset = ev->Get()->Offset;
-    Consumers[ev->Get()->ConsumerActorId].StartingMessageTimestamp = TInstant::MilliSeconds(ev->Get()->StartingMessageTimestampMs);
+    auto& newConsumer = Consumers[ev->Get()->ConsumerActorId];
+
+    TString predicate;
+    try {
+        predicate = FormatWhere(ev->Get()->SourceParams.GetPredicate());
+        LOG_ROW_DISPATCHER_DEBUG("predicate " << predicate);
+    } catch (const yexception &ex) {
+        LOG_ROW_DISPATCHER_DEBUG("FormatWhere failed: "  << ex.what());
+        // TODO
+    }
+
+    newConsumer.Offset = ev->Get()->Offset;
+    newConsumer.StartingMessageTimestamp = TInstant::MilliSeconds(ev->Get()->StartingMessageTimestampMs);
+    newConsumer.Filter = NewJsonFilter(
+        GetColumns(),
+        predicate,
+        [&, actorId = ev->Get()->ConsumerActorId](const TString& json){
+            auto& consumer = Consumers[actorId];
+            consumer.Buffer.push(json);
+            SendData();
+        });
 
     LOG_ROW_DISPATCHER_DEBUG("Consumers size " << Consumers.size());
 

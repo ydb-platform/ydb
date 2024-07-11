@@ -91,6 +91,7 @@ struct TEvRowDispatcher {
         NActors::TActorId ConsumerActorId;
         TMaybe<ui64> Offset;
         ui64 StartingMessageTimestampMs;
+        NYql::NPq::NProto::TDqPqTopicSource SourceParams;
     };
 
     struct TEvSessionDeleteConsumer : public NActors::TEventLocal<TEvSessionDeleteConsumer, EEv::EvSessionDeleteConsumer> {

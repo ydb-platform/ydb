@@ -133,7 +133,9 @@ public:
 #define HNDL(name) "LogicalOptimizer-"#name, Hndl(&TPqLogicalOptProposalTransformer::name)
       //  AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembers));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqWrap));
-        AddHandler(0, &TCoFlatMap::Match, HNDL(PushFilterToReadTable));
+        AddHandler(0, &TCoFlatMap::Match, HNDL(PushFilterToPqTopicSource));
+        AddHandler(0, &TCoFlatMap::Match, HNDL(PushFilterToPqTopicSource2));
+
         #undef HNDL
     }
 
@@ -220,27 +222,21 @@ public:
         return TStringBuf(maybeBool.Cast().Literal()) == "true"sv;
     }
 
-
-    TMaybeNode<TExprBase> PushFilterToReadTable(TExprBase node, TExprContext& ctx) const {
+    TMaybeNode<TExprBase> PushFilterToPqTopicSource(TExprBase node, TExprContext& ctx) const {
         YQL_CLOG(INFO, ProviderPq) << "PushFilterToReadTable0 ";
-
         auto flatmap = node.Cast<TCoFlatMap>();
-
         auto maybeExtractMembers = flatmap.Input().Maybe<TCoExtractMembers>();
         if (!maybeExtractMembers) {
-            YQL_CLOG(INFO, ProviderPq) << "PushFilterToReadTable0 !maybeExtractMembers";
             return node;
         }
         
         auto maybeDqSourceWrap = maybeExtractMembers.Cast().Input().Maybe<TDqSourceWrap>();
         if (!maybeDqSourceWrap) {
-            YQL_CLOG(INFO, ProviderPq) << "PushFilterToReadTable0 !maybeDqSourceWrap";
             return node;
         }
         TDqSourceWrap dqSourceWrap = maybeDqSourceWrap.Cast();
         auto maybeDqPqTopicSource = dqSourceWrap.Input().Maybe<TDqPqTopicSource>();
         if (!maybeDqPqTopicSource) {
-            YQL_CLOG(INFO, ProviderPq) << "PushFilterToReadTable0 !maybeDqPqTopicSource";
             return node;
         }
         TDqPqTopicSource dqPqTopicSource = maybeDqPqTopicSource.Cast();
@@ -253,6 +249,7 @@ public:
         
         auto newFilterLambda = MakePushdownPredicate(flatmap.Lambda(), ctx, node.Pos());
         if (!newFilterLambda) {
+             YQL_CLOG(TRACE, ProviderPq) << "MakePushdownPredicate failed";
             return node;
         }
 
@@ -271,9 +268,47 @@ public:
             .Done();
     }
 
+    TMaybeNode<TExprBase> PushFilterToPqTopicSource2(TExprBase node, TExprContext& ctx) const {
+        YQL_CLOG(INFO, ProviderPq) << "PushFilterToReadTable2 ";
+        auto flatmap = node.Cast<TCoFlatMap>();
+
+        auto maybeDqSourceWrap = flatmap.Input().Maybe<TDqSourceWrap>();
+        if (!maybeDqSourceWrap) {
+            return node;
+        }
+        TDqSourceWrap dqSourceWrap = maybeDqSourceWrap.Cast();
+        auto maybeDqPqTopicSource = dqSourceWrap.Input().Maybe<TDqPqTopicSource>();
+        if (!maybeDqPqTopicSource) {
+            return node;
+        }
+        TDqPqTopicSource dqPqTopicSource = maybeDqPqTopicSource.Cast();
+        YQL_CLOG(INFO, ProviderPq) << "PushFilterToReadTable0 found!";
+
+        if (!IsEmptyFilterPredicate(dqPqTopicSource.FilterPredicate())) {
+            YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
+            return node;
+        }
+        
+        auto newFilterLambda = MakePushdownPredicate(flatmap.Lambda(), ctx, node.Pos());
+        if (!newFilterLambda) {
+            YQL_CLOG(TRACE, ProviderPq) << "MakePushdownPredicate failed";
+            return node;
+        }
+
+        return Build<TCoFlatMap>(ctx, flatmap.Pos())
+            .InitFrom(flatmap) // Leave existing filter in flatmap for the case of not applying predicate in connector
+            .Input<TDqSourceWrap>()
+                .InitFrom(dqSourceWrap)
+                .Input<TDqPqTopicSource>()
+                    .InitFrom(dqPqTopicSource)
+                    .FilterPredicate(newFilterLambda.Cast())
+                    .Build()
+                .Build()
+            .Done();
+    }
+
     static NPushdown::TPredicateNode SplitForPartialPushdown(const NPushdown::TPredicateNode& predicateTree,
-                                                            TExprContext& ctx, TPositionHandle pos)
-    {
+                                                            TExprContext& ctx, TPositionHandle pos) {
         if (predicateTree.CanBePushed) {
             return predicateTree;
         }
@@ -300,6 +335,7 @@ public:
 
         auto maybeOptionalIf = lambda.Body().Maybe<TCoOptionalIf>();
         if (!maybeOptionalIf.IsValid()) { // Nothing to push
+            YQL_CLOG(DEBUG, ProviderPq) << "Nothing to push";
             return {};
         }
 
@@ -310,6 +346,7 @@ public:
 
         NPushdown::TPredicateNode predicateToPush = SplitForPartialPushdown(predicateTree, ctx, pos);
         if (!predicateToPush.IsValid()) {
+            YQL_CLOG(DEBUG, ProviderPq) << "SplitForPartialPushdown failed" ;
             return {};
         }
 

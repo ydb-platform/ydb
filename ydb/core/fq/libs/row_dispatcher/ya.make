@@ -7,6 +7,7 @@ SRCS(
     leader_detector.cpp
     leader_election.cpp
     topic_session.cpp
+    json_filter.cpp
     json_parser.cpp
     predicate_builder.cpp
 )

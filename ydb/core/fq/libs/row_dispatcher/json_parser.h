@@ -3,9 +3,12 @@
 
 namespace NFq {
 
-class TJsonParser {    
+class TJsonParser {
 public:
-    TJsonParser(const TVector<TString>& columns, std::function<void(const TString&)> callback);
+    using TCallback = std::function<void(const NYql::NUdf::TUnboxedValue*)>;
+    
+public:
+    TJsonParser(const TVector<TString>& columns, TCallback callback);
     ~TJsonParser();
     void Push(const TString& value);
 
@@ -16,6 +19,6 @@ private:
 
 std::unique_ptr<TJsonParser> NewJsonParser(
     const TVector<TString>& columns,
-    std::function<void(const TString&)> callback);
+    TJsonParser::TCallback callback);
 
 } // namespace NFq

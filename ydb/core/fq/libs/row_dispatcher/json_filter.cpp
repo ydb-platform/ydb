@@ -13,15 +13,13 @@
 #include <ydb/library/yql/minikql/mkql_terminator.h>
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
-#include <ydb/core/fq/libs/row_dispatcher/json_parser.h>
+#include <ydb/core/fq/libs/row_dispatcher/json_filter.h>
 
 
 namespace NFq {
 
 
-
-
-using TCallback = TJsonParser::TCallback;
+using TCallback = TJsonFilter::TCallback;
 
 static void AddField(NYT::TNode& node, const TString& field) {
     node.Add(
@@ -39,20 +37,21 @@ static NYT::TNode MakeSchema(const TVector<TString>& columns) {
     return NYT::TNode::CreateList().Add("StructType").Add(std::move(structMembers));
 }
 
-class TParserInputConsumer : public NYql::NPureCalc::IConsumer<TString> {
+class TFilterInputConsumer : public NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*> {
 public:
-    explicit TParserInputConsumer(NYql::NPureCalc::TWorkerHolder<NYql::NPureCalc::IPushStreamWorker> worker)
+    explicit TFilterInputConsumer(NYql::NPureCalc::TWorkerHolder<NYql::NPureCalc::IPushStreamWorker> worker)
         : Worker(std::move(worker)) {
+        LOG_ROW_DISPATCHER_DEBUG("TFilterInputConsumer::TFilterInputConsumer()");
     }
 
-    ~TParserInputConsumer() override {
+    ~TFilterInputConsumer() override {
         with_lock(Worker->GetScopedAlloc()) {
             Cache.Clear();
         }
     }
 
-    void OnObject(TString value) override {
-        LOG_ROW_DISPATCHER_DEBUG("TParserInputConsumer::OnObject: " << value);
+    void OnObject(const NYql::NUdf::TUnboxedValue* value) override {
+        LOG_ROW_DISPATCHER_DEBUG("TFilterInputConsumer::OnObject: ");
 
         with_lock (Worker->GetScopedAlloc()) {
             auto& holderFactory = Worker->GetGraph().GetHolderFactory();
@@ -60,18 +59,18 @@ public:
 
             NYql::NUdf::TUnboxedValue result = Cache.NewArray(
                 holderFactory,
-                static_cast<ui32>(1),
+                static_cast<ui32>(value->GetListLength()),
                 items);
     
-            NYql::NUdf::TStringValue str(value.Size());
-            std::memcpy(str.Data(), value.Data(), value.Size());
-            items[0] = NYql::NUdf::TUnboxedValuePod(std::move(str));
-            LOG_ROW_DISPATCHER_DEBUG("Push ");
-            try {
-                Worker->Push(std::move(result));
-            } catch (...) {
-                
+            for (size_t i = 0; i != value->GetListLength(); ++i) {
+                const auto& cell = value->GetElement(i);
+                NYql::NUdf::TStringRef strRef(cell.AsStringRef());
+                NYql::NUdf::TStringValue str(strRef.Size());
+                std::memcpy(str.Data(), strRef.Data(), strRef.Size());
+                items[i] = NYql::NUdf::TUnboxedValuePod(std::move(str));
             }
+            LOG_ROW_DISPATCHER_DEBUG("Push ");
+            Worker->Push(std::move(result));
             LOG_ROW_DISPATCHER_DEBUG("Push end");
         }
     }
@@ -86,14 +85,14 @@ public:
 private:
     NYql::NPureCalc::TWorkerHolder<NYql::NPureCalc::IPushStreamWorker> Worker;
     NKikimr::NMiniKQL::TPlainContainerCache Cache;
-    TString LogPrefix = "JsonParser: ";
+    TString LogPrefix = "JsonFilter: ";
 };
 
 
-class TParserInputSpec : public NYql::NPureCalc::TInputSpecBase {
+class TFilterInputSpec : public NYql::NPureCalc::TInputSpecBase {
 public:
-    TParserInputSpec() {
-        Schemas = {MakeSchema({"data"})};
+    TFilterInputSpec(const NYT::TNode& schema)
+        : Schemas({schema}) {
     }
 
     const TVector<NYT::TNode>& GetSchemas() const override {
@@ -105,17 +104,13 @@ private:
 };
 
 
-class TParserOutputConsumer: public NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*> {
+class TFilterOutputConsumer: public NYql::NPureCalc::IConsumer<const TString&> {
 public:
-    TParserOutputConsumer(TCallback callback)
+    TFilterOutputConsumer(TCallback callback)
         : Callback(callback) {
     }
 
-    void OnObject(const NYql::NUdf::TUnboxedValue* value) override {
-        // TString result;
-        // for (const auto& field : parsedRecord->AsMap()) {
-        //     result += field.second.AsString();
-        // }
+    void OnObject(const TString& value) override {
         Callback(value);
     }
 
@@ -126,9 +121,9 @@ private:
     TCallback Callback;
 };
 
-class TParserOutputSpec: public NYql::NPureCalc::TOutputSpecBase {
+class TFilterOutputSpec: public NYql::NPureCalc::TOutputSpecBase {
 public:
-    explicit TParserOutputSpec(const NYT::TNode& schema)
+    explicit TFilterOutputSpec(const NYT::TNode& schema)
         : Schema(schema)
     {}
 
@@ -163,9 +158,9 @@ private:
 //     }
 // };
 
-class TParserPushRelayImpl: public NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*> {
+class TFilterPushRelayImpl: public NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*> {
 public:
-    TParserPushRelayImpl(const TParserOutputSpec& /*outputSpec*/, NYql::NPureCalc::IPushStreamWorker* worker, THolder<NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*>> underlying)
+    TFilterPushRelayImpl(const TFilterOutputSpec& /*outputSpec*/, NYql::NPureCalc::IPushStreamWorker* worker, THolder<NYql::NPureCalc::IConsumer<const TString&>> underlying)
         : Underlying(std::move(underlying))
         , Worker(worker)
        // , FieldsMapping(outputSpec.GetSchema())
@@ -185,8 +180,14 @@ public:
     void OnObject(const NYql::NUdf::TUnboxedValue* value) override {
         NYT::TNode result = NYT::TNode::CreateMap();
         //FillOutputNode(value, result, FieldsMapping);
+        const auto& cell = value->GetElement(0);
+        if (!cell) {
+            // TODO
+            return;
+        }
+        TString str(cell.AsStringRef());
         auto unguard = Unguard(Worker->GetScopedAlloc());
-        Underlying->OnObject(value);
+        Underlying->OnObject(str);
     }
 
     void OnFinish() override {
@@ -195,61 +196,68 @@ public:
     }
 
 private:
-    THolder<NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*>> Underlying;
+    THolder<NYql::NPureCalc::IConsumer<const TString&>> Underlying;
     [[maybe_unused]]    NYql::NPureCalc::IWorker* Worker;
   //  TFieldsMapping FieldsMapping;
 };
 
 } // namespace NFq
 
+TString LogPrefix = "JsonFilter: ";
+
 template <>
-struct NYql::NPureCalc::TInputSpecTraits<NFq::TParserInputSpec> {
+struct NYql::NPureCalc::TInputSpecTraits<NFq::TFilterInputSpec> {
     static constexpr bool IsPartial = false;
     static constexpr bool SupportPushStreamMode = true;
 
-    using TConsumerType = THolder<NYql::NPureCalc::IConsumer<TString>>;
+    using TConsumerType = THolder<NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*>>;
 
     static TConsumerType MakeConsumer(
-        const NFq::TParserInputSpec& spec,
+        const NFq::TFilterInputSpec& spec,
         NYql::NPureCalc::TWorkerHolder<NYql::NPureCalc::IPushStreamWorker> worker
     ) {
+
+        LOG_STREAMS_IMPL(DEBUG, YQ_ROW_DISPATCHER, "MakeConsumer()")
+       // LOG_ROW_DISPATCHER_DEBUG("MakeConsumer()");
+
         Y_UNUSED(spec);
-        return MakeHolder<NFq::TParserInputConsumer>(std::move(worker));
+        return MakeHolder<NFq::TFilterInputConsumer>(std::move(worker));
     }
 };
 
 template <>
-struct NYql::NPureCalc::TOutputSpecTraits<NFq::TParserOutputSpec> {
+struct NYql::NPureCalc::TOutputSpecTraits<NFq::TFilterOutputSpec> {
     static const constexpr bool IsPartial = false;
 
     static const constexpr bool SupportPullStreamMode = false;
     static const constexpr bool SupportPullListMode = false;
     static const constexpr bool SupportPushStreamMode = true;
 
-    static void SetConsumerToWorker(const NFq::TParserOutputSpec& outputSpec, NYql::NPureCalc::IPushStreamWorker* worker, THolder<NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*>> consumer) {
-        worker->SetConsumer(MakeHolder<NFq::TParserPushRelayImpl>(outputSpec, worker, std::move(consumer)));
+    static void SetConsumerToWorker(const NFq::TFilterOutputSpec& outputSpec, NYql::NPureCalc::IPushStreamWorker* worker, THolder<NYql::NPureCalc::IConsumer<const TString&>> consumer) {
+        worker->SetConsumer(MakeHolder<NFq::TFilterPushRelayImpl>(outputSpec, worker, std::move(consumer)));
     }
 };
 
 namespace NFq {
 
-class TJsonParser::TImpl {
+class TJsonFilter::TImpl {
 public:
     TImpl(const TVector<TString>& columns,
+        const TString& whereFilter,
         TCallback callback)
-        : LogPrefix("JsonParser: ") {
+        : LogPrefix("JsonFilter: ") {
         auto factory = NYql::NPureCalc::MakeProgramFactory(NYql::NPureCalc::TProgramFactoryOptions());
 
         try {
             LOG_ROW_DISPATCHER_DEBUG("Creating program...");
             Program = factory->MakePushStreamProgram(
-                TParserInputSpec(),
-                TParserOutputSpec(MakeSchema(columns)),
-                GenerateSql(columns),
+                TFilterInputSpec(MakeSchema(columns)),
+                TFilterOutputSpec(MakeSchema({"data"})),
+                GenerateSql(columns, whereFilter),
                 NYql::NPureCalc::ETranslationMode::SQL
             );
             LOG_ROW_DISPATCHER_DEBUG("Program created");
-            InputConsumer = Program->Apply(MakeHolder<TParserOutputConsumer>(callback));
+            InputConsumer = Program->Apply(MakeHolder<TFilterOutputConsumer>(callback));
             LOG_ROW_DISPATCHER_DEBUG("InputConsumer created");
 
         } catch (NYql::NPureCalc::TCompileError& e) {
@@ -258,52 +266,55 @@ public:
         }
     }
 
-    void Push(const TString& value) {
+    void Push(const NYql::NUdf::TUnboxedValue* value) {
         try {
-            LOG_ROW_DISPATCHER_DEBUG("Push " << value);
+            LOG_ROW_DISPATCHER_DEBUG("Push ");
+            LOG_ROW_DISPATCHER_DEBUG("Push " << value->GetListLength());
+
             InputConsumer->OnObject(value);
         } catch (const yexception& ex) {
-                LOG_ROW_DISPATCHER_DEBUG("Push error");
+            LOG_ROW_DISPATCHER_DEBUG("Push error");
         }
     }
 
 private:
-    TString GenerateSql(const TVector<TString>& columns) {
+    TString GenerateSql(const TVector<TString>& columns, const TString& whereFilter) {
         TStringStream str;
-        str << R"($json = SELECT CAST(data AS Json) as `Json` FROM Input;)"; 
-        str << "\nSELECT ";
+        str << "\n$fields = SELECT ";
         for (auto it = columns.begin(); it != columns.end(); ++it) {
-            str << R"(CAST(Unwrap(JSON_VALUE(`Json`, "$.)" << *it << "\")) as String) as "
-                << *it << ((it != columns.end() - 1) ? "," : "");
+            str << *it << ((it != columns.end() - 1) ? "," : "");
         }
-        str << " FROM $json;";
+        str << " FROM Input " + whereFilter + ";";
+        str << "\nSELECT Unwrap(Json::SerializeJson(Yson::From(TableRow()))) as data FROM $fields";
         LOG_ROW_DISPATCHER_DEBUG("GenerateSql " << str.Str());
         return str.Str();
     }
 
 private:
-    THolder<NYql::NPureCalc::TPushStreamProgram<TParserInputSpec, TParserOutputSpec>> Program;
-    THolder<NYql::NPureCalc::IConsumer<TString>> InputConsumer;
+    THolder<NYql::NPureCalc::TPushStreamProgram<TFilterInputSpec, TFilterOutputSpec>> Program;
+    THolder<NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*>> InputConsumer;
     const TString LogPrefix;
 };
 
-TJsonParser::TJsonParser(
+TJsonFilter::TJsonFilter(
     const TVector<TString>& columns,
+    const TString& whereFilter,
     TCallback callback)
-    : Impl(std::make_unique<TJsonParser::TImpl>(columns, callback)) { 
+    : Impl(std::make_unique<TJsonFilter::TImpl>(columns, whereFilter, callback)) { 
 }
 
-TJsonParser::~TJsonParser() {
+TJsonFilter::~TJsonFilter() {
 }
     
-void TJsonParser::Push(const TString& value) {
+void TJsonFilter::Push(const NYql::NUdf::TUnboxedValue* value) {
      Impl->Push(value);
 }
 
-std::unique_ptr<TJsonParser> NewJsonParser(
+std::unique_ptr<TJsonFilter> NewJsonFilter(
     const TVector<TString>& columns,
+    const TString& whereFilter,
     TCallback callback) {
-    return std::unique_ptr<TJsonParser>(new TJsonParser(columns, callback));
+    return std::unique_ptr<TJsonFilter>(new TJsonFilter(columns, whereFilter, callback));
 }
 
 } // namespace NFq

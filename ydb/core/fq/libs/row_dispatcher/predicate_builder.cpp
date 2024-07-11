@@ -147,7 +147,9 @@ TString FormatPredicate(const NYql::NPq::NProto::TPredicate& predicate, bool /*t
 
 TString FormatWhere(const NYql::NPq::NProto::TPredicate& predicate) {
     auto stream = FormatPredicate(predicate, true);
-
+	if (stream.empty()) {
+		ythrow yexception() << "Empty predicate";
+	}
     return "WHERE " + stream;
 }
 

@@ -218,6 +218,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
     event->ConsumerActorId = ev->Sender;
     event->Offset = readOffset;
     event->StartingMessageTimestampMs = ev->Get()->Record.GetStartingMessageTimestampMs(); 
+    event->SourceParams = ev->Get()->Record.GetSource();
     Send(sessionActorId, event.release());
 }
 

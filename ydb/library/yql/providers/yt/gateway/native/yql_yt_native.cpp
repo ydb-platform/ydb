@@ -796,7 +796,16 @@ public:
             const bool initial = NYql::HasSetting(publish.Settings().Ref(), EYtSettingType::Initial);
 
             std::unordered_map<EYtSettingType, TString> strOpts;
+            TVector<TString> securityTags;
             for (const auto& setting : publish.Settings().Ref().Children()) {
+                if (FromString<EYtSettingType>(setting->Head().Content()) ==  EYtSettingType::SecurityTags) {
+                    securityTags.reserve(setting->ChildrenSize() - 1);
+                    for (size_t pos = 1; pos < setting->ChildrenSize(); pos++) {
+                        securityTags.emplace_back(setting->ChildRef(pos)->Content());
+                    }
+                    continue;
+                }
+
                 if (setting->ChildrenSize() == 2) {
                     strOpts.emplace(FromString<EYtSettingType>(setting->Head().Content()), setting->Tail().Content());
                 } else if (setting->ChildrenSize() == 1) {
@@ -864,9 +873,9 @@ public:
             const ui32 dstEpoch = TEpochInfo::Parse(publish.Publish().Epoch().Ref()).GetOrElse(0);
             auto execCtx = MakeExecCtx(std::move(options), session, cluster, node.Get(), &ctx);
 
-            return session->Queue_->Async([execCtx, src = std::move(src), dst, dstEpoch, isAnonymous, mode, initial, srcColumnGroups, combineChunks, strOpts = std::move(strOpts)] () {
+            return session->Queue_->Async([execCtx, src = std::move(src), dst, dstEpoch, isAnonymous, mode, initial, srcColumnGroups, combineChunks, strOpts = std::move(strOpts), securityTags = std::move(securityTags)] () {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
-                return ExecPublish(execCtx, src, dst, dstEpoch, isAnonymous, mode, initial, srcColumnGroups, combineChunks, strOpts);
+                return ExecPublish(execCtx, src, dst, dstEpoch, isAnonymous, mode, initial, srcColumnGroups, combineChunks, strOpts, securityTags);
             })
             .Apply([nodePos] (const TFuture<void>& f) {
                 try {
@@ -2016,7 +2025,8 @@ private:
         const bool initial,
         const TString& srcColumnGroups,
         const bool combineChunks,
-        const std::unordered_map<EYtSettingType, TString>& strOpts)
+        const std::unordered_map<EYtSettingType, TString>& strOpts,
+        const TVector<TString> securityTags)
     {
         TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config());
         auto cluster = execCtx->Cluster_;
@@ -2155,6 +2165,15 @@ private:
             if (execCtx->Options_.Config()->NightlyCompress.Get(cluster).GetOrElse(false)) {
                 yqlAttrs["force_nightly_compress"] = true;
             }
+        }
+
+        {
+            auto securityTagsNode = NYT::TNode::CreateList();
+            auto &securityTagsNodeList = securityTagsNode.AsList();
+            for (size_t pos = 0; pos < securityTags.size(); pos++) {
+                securityTagsNodeList.emplace_back(securityTags[pos]);
+            }
+            yqlAttrs[SecurityTagsName] = securityTagsNode;
         }
 
         const auto userAttrsIt = strOpts.find(EYtSettingType::UserAttrs);

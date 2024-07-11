@@ -91,6 +91,7 @@ namespace NKikimr {
             // outgoing messages
             std::deque<std::tuple<TNodeId, std::unique_ptr<IEventBase>, ui64>> Outbox;
             std::deque<std::unique_ptr<IEventBase>> StatProcessorOutbox;
+            std::deque<std::unique_ptr<IEventBase>> NodeWhiteboardOutbox;
             THolder<TEvControllerUpdateSelfHealInfo> UpdateSelfHealInfoMsg;
 
             // deferred callbacks

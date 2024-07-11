@@ -57,7 +57,7 @@ namespace NKikimr {
         , ReplPDiskWriteQuoter(std::move(replPDiskWriteQuoter))
         , ReplNodeRequestQuoter(std::move(replNodeRequestQuoter))
         , ReplNodeResponseQuoter(std::move(replNodeResponseQuoter))
-        , CostTracker(std::make_shared<TBsCostTracker>(Top->GType, type, vdiskCounters))
+        , CostTracker()
         , OOSMonGroup(std::make_shared<NMonGroup::TOutOfSpaceGroup>(VDiskCounters, "subsystem", "oos"))
         , OutOfSpaceState(Top->GetTotalVDisksNum(), Top->GetOrderNumber(ShortSelfVDisk))
         , CostMonGroup(vdiskCounters, "subsystem", "cost")

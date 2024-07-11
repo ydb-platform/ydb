@@ -14,23 +14,24 @@ private:
 protected:
     std::shared_ptr<TGranuleMeta> GranuleMeta;
 
+    virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
+
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
-    virtual void DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) override;
     virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) override;
-    virtual void DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) override;
     virtual void DoDebugString(TStringOutput& out) const override;
     virtual void DoCompile(TFinalizationContext& context) override;
-    virtual bool DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) override;
     virtual TPortionMeta::EProduced GetResultProducedClass() const = 0;
     virtual void OnAbortEmergency() override {
         NeedGranuleStatusProvide = false;
     }
+    virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
+        return std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + GetTaskIdentifier(), SwitchedPortions);
+    }
+
 public:
     std::vector<TPortionInfo> SwitchedPortions; // Portions that would be replaced by new ones
 
-    virtual THashSet<TPortionAddress> GetTouchedPortions() const override;
-
-    TCompactColumnEngineChanges(const TSplitSettings& splitSettings, std::shared_ptr<TGranuleMeta> granule, const std::vector<std::shared_ptr<TPortionInfo>>& portions, const TSaverContext& saverContext);
+    TCompactColumnEngineChanges(std::shared_ptr<TGranuleMeta> granule, const std::vector<std::shared_ptr<TPortionInfo>>& portions, const TSaverContext& saverContext);
     ~TCompactColumnEngineChanges();
 
     static TString StaticTypeName() {

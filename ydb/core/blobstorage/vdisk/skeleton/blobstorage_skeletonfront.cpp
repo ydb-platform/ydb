@@ -1241,7 +1241,7 @@ namespace NKikimr {
         void HandleRequestWithQoS(const TActorContext &ctx, TEventPtr &ev, const char *msgName, ui64 cost,
                                   TIntQueueClass &intQueue) {
             CheckEvent(ev, msgName);
-            const ui64 advancedCost = VCtx->CostTracker->GetCost(*ev->Get());
+            const ui64 advancedCost = VCtx->CostTracker ? VCtx->CostTracker->GetCost(*ev->Get()) : 0;
             const ui32 recByteSize = ev->Get()->GetCachedByteSize();
             auto &record = ev->Get()->Record;
             auto &msgQoS = *record.MutableMsgQoS();
@@ -1289,10 +1289,14 @@ namespace NKikimr {
                 } else {
                     if (clientId.GetType() == NBackpressure::EQueueClientType::DSProxy) {
                         CostGroup.SkeletonFrontUserCostNs() += cost;
-                        VCtx->CostTracker->CountUserCost(advancedCost);
+                        if (VCtx->CostTracker) {
+                            VCtx->CostTracker->CountUserCost(advancedCost);
+                        }
                     } else {
                         CostGroup.SkeletonFrontInternalCostNs() += cost;
-                        VCtx->CostTracker->CountInternalCost(advancedCost);
+                        if (VCtx->CostTracker) {
+                            VCtx->CostTracker->CountInternalCost(advancedCost);
+                        }
                     }
                 }
             }
@@ -1640,6 +1644,9 @@ namespace NKikimr {
             extQueue.Completed(ctx, msgCtx, event);
             TIntQueueClass &intQueue = GetIntQueue(msgCtx.IntQueueId);
             intQueue.Completed(ctx, msgCtx, *this, id);
+            if (VCtx->CostTracker) {
+                VCtx->CostTracker->CountPDiskResponse();
+            }
             if (!ev->Get()->DoNotResend) {
                 TActivationContext::Send(event.release());
             }

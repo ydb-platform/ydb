@@ -8,6 +8,12 @@ const TDiskOperationCostEstimator TBsCostModelBase::HDDEstimator{
     { 6.089e+06, 8.1 }, // HugeWriteCoefficients
 };
 
+const TDiskOperationCostEstimator TBsCostModelBase::SSDEstimator{
+    { 180000, 3.00 },   // ReadCoefficients
+    { 430, 4.2 },     // WriteCoefficients
+    { 110000, 3.6 },     // HugeWriteCoefficients
+};
+
 const TDiskOperationCostEstimator TBsCostModelBase::NVMEEstimator{
     { 10000, 1.3 },   // ReadCoefficients
     { 3300, 1.5 },     // WriteCoefficients
@@ -36,11 +42,18 @@ public:
 };
 
 TBsCostTracker::TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::EDeviceType diskType,
-        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
+        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
+        const TCostMetricsParameters& costMetricsParameters)
     : GroupType(groupType)
     , CostCounters(counters->GetSubgroup("subsystem", "advancedCost"))
     , MonGroup(std::make_shared<NMonGroup::TCostTrackerGroup>(CostCounters))
+    , DiskTimeAvailableCtr(CostCounters->GetCounter("DiskTimeAvailable", false))
+    , Bucket(&DiskTimeAvailable, &BucketCapacity, nullptr, nullptr, nullptr, nullptr, true)
+    , BurstThresholdNs(costMetricsParameters.BurstThresholdNs)
+    , DiskTimeAvailableScale(costMetricsParameters.DiskTimeAvailableScale)
 {
+    AtomicSet(BucketCapacity, GetDiskTimeAvailableScale() * BurstThresholdNs);
+    BurstDetector.Initialize(CostCounters, "BurstDetector");
     switch (GroupType.GetErasure()) {
     case TBlobStorageGroupType::ErasureMirror3dc:
         CostModel = std::make_unique<TBsCostModelMirror3dc>(diskType);

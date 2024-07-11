@@ -1,7 +1,14 @@
 #pragma once
-#include <ydb/core/base/logoblob.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include "common/owner.h"
+
+#include <ydb/core/base/logoblob.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/common.h>
+
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
+namespace NKikimr::NOlap {
+class TTabletsByBlob;
+}
 
 namespace NKikimr::NColumnShard {
 
@@ -48,7 +55,7 @@ public:
 
     void OnBlobsKeep(const TSet<TLogoBlobID>& blobs) const;
 
-    void OnBlobsDelete(const TSet<TLogoBlobID>& /*blobs*/) const;
+    void OnBlobsDelete(const NOlap::TTabletsByBlob& blobs) const;
 
     void OnAddSmallBlob(const ui32 bSize) const {
         AddSmallBlobBytes->Add(bSize);

@@ -107,7 +107,7 @@ namespace NKikimr::NBsController {
                 }
                 pdisk->SetPDiskGuid(pdiskInfo.Guid);
                 pdisk->SetPDiskCategory(pdiskInfo.Kind.GetRaw());
-                pdisk->SetExpectedSerial(pdiskInfo.ExpectedSerial);
+                //pdisk->SetExpectedSerial(pdiskInfo.ExpectedSerial);
                 pdisk->SetManagementStage(Self->SerialManagementStage);
                 if (pdiskInfo.PDiskConfig && !pdisk->MutablePDiskConfig()->ParseFromString(pdiskInfo.PDiskConfig)) {
                     // TODO(alexvru): report this somehow
@@ -241,6 +241,18 @@ namespace NKikimr::NBsController {
                 for (TNodeId nodeId : nodes) {
                     NKikimrBlobStorage::TNodeWardenServiceSet *service = Services[nodeId].MutableServiceSet();
                     SerializeGroupInfo(service->AddGroups(), groupInfo, storagePoolName, scopeId);
+                }
+
+                // push group state notification to NodeWhiteboard (for virtual groups only)
+                if (groupInfo.VirtualGroupState) {
+                    TBlobStorageGroupInfo::TDynamicInfo dynInfo(groupInfo.ID, groupInfo.Generation);
+                    for (const auto& vdisk : groupInfo.VDisksInGroup) {
+                        const auto& id = vdisk->VSlotId;
+                        dynInfo.PushBackActorId(MakeBlobStorageVDiskID(id.NodeId, id.PDiskId, id.VSlotId));
+                    }
+                    State.NodeWhiteboardOutbox.emplace_back(new NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate(
+                        MakeIntrusive<TBlobStorageGroupInfo>(groupInfo.Topology, std::move(dynInfo), storagePoolName,
+                        scopeId, NPDisk::DEVICE_TYPE_UNKNOWN)));
                 }
             }
 
@@ -605,6 +617,9 @@ namespace NKikimr::NBsController {
             for (auto& ev : StatProcessorOutbox) {
                 Self.SelfId().Send(Self.StatProcessorActorId, ev.release());
             }
+            for (auto& ev : NodeWhiteboardOutbox) {
+                Self.SelfId().Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(Self.SelfId().NodeId()), ev.release());
+            }
 
             if (UpdateSelfHealInfoMsg) {
                 UpdateSelfHealInfoMsg->ConfigTxSeqNo = Self.NextConfigTxSeqNo;
@@ -906,8 +921,8 @@ namespace NKikimr::NBsController {
             pb->SetDecommitStatus(pdisk.DecommitStatus);
             pb->MutablePDiskMetrics()->CopyFrom(pdisk.Metrics);
             pb->MutablePDiskMetrics()->ClearPDiskId();
-            pb->SetExpectedSerial(pdisk.ExpectedSerial);
-            pb->SetLastSeenSerial(pdisk.LastSeenSerial);
+            //pb->SetExpectedSerial(pdisk.ExpectedSerial);
+            //pb->SetLastSeenSerial(pdisk.LastSeenSerial);
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TVSlotId *pb, TVSlotId id) {

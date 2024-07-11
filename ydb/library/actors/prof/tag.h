@@ -78,7 +78,7 @@ class TMemoryProfileGuard: TNonCopyable {
 private:
     const TString Id;
 public:
-    TMemoryProfileGuard(const TString& id);
+    TMemoryProfileGuard(const TString& id, const bool enabled = true);
     ~TMemoryProfileGuard();
 
 };

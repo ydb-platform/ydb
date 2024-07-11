@@ -29,3 +29,7 @@ Y_DECLARE_OUT_SPEC(, NKikimrTxSequenceShard::TEvRestoreSequenceResult::EStatus, 
 Y_DECLARE_OUT_SPEC(, NKikimrTxSequenceShard::TEvRedirectSequenceResult::EStatus, stream, value) {
     stream << NKikimrTxSequenceShard::TEvRedirectSequenceResult::EStatus_Name(value);
 }
+
+Y_DECLARE_OUT_SPEC(, NKikimrTxSequenceShard::TEvGetSequenceResult::EStatus, stream, value) {
+    stream << NKikimrTxSequenceShard::TEvGetSequenceResult::EStatus_Name(value);
+}

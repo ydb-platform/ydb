@@ -35,7 +35,7 @@ namespace NTabletFlatExecutor {
         void Terminate(ETerminationReason reason, const TActorContext& ctx) noexcept;
 
         void StartEnqueuedSpan() noexcept {
-            WaitingSpan = NWilson::TSpan(TWilsonTablet::Tablet, Self->TxSpan.GetTraceId(), "Tablet.Transaction.Enqueued");
+            WaitingSpan = NWilson::TSpan(TWilsonTablet::TabletDetailed, Self->TxSpan.GetTraceId(), "Tablet.Transaction.Enqueued");
         }
 
         void FinishEnqueuedSpan() noexcept {
@@ -43,7 +43,7 @@ namespace NTabletFlatExecutor {
         }
 
         void CreatePendingSpan() noexcept {
-            WaitingSpan = NWilson::TSpan(TWilsonTablet::Tablet, Self->TxSpan.GetTraceId(), "Tablet.Transaction.Pending");
+            WaitingSpan = NWilson::TSpan(TWilsonTablet::TabletDetailed, Self->TxSpan.GetTraceId(), "Tablet.Transaction.Pending");
         }
 
         void FinishPendingSpan() noexcept {

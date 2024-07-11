@@ -38,9 +38,9 @@ static const TString defaultTableSchema = R"(
     }
 )";
 
-static const TVector<std::pair<TString, TTypeInfo>> defaultYdbSchema = {
-    {"timestamp", TTypeInfo(NTypeIds::Timestamp) },
-    {"data", TTypeInfo(NTypeIds::Utf8) }
+static const TVector<NArrow::NTest::TTestColumn> defaultYdbSchema = {
+    NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) ),
+    NArrow::NTest::TTestColumn("data", TTypeInfo(NTypeIds::Utf8) )
 };
 
 }}
@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             SchemaPresets {
                 Name: "default"
                 Schema {
-                    Columns { Name: "timestamp" Type: "Timestamp" }
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
                     Columns { Name: "data" Type: "Utf8" }
                     KeyColumnNames: "timestamp"
                     Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             SchemaPresets {
                 Name: "default"
                 Schema {
-                    Columns { Name: "timestamp" Type: "Timestamp" }
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
                     Columns { Name: "data" Type: "Utf8" }
                     KeyColumnNames: "timestamp"
                     Engine: COLUMN_ENGINE_REPLACING_TIMESERIES

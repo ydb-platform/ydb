@@ -39,6 +39,7 @@
 #include <ydb/core/cms/console/configs_cache.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/immediate_controls_configurator.h>
+#include <ydb/core/cms/console/jaeger_tracing_configurator.h>
 #include <ydb/core/cms/console/log_settings_configurator.h>
 #include <ydb/core/cms/console/shared_cache_configurator.h>
 #include <ydb/core/cms/console/validators/core_validators.h>
@@ -828,22 +829,69 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
         }
     }
 
-    if (Config.HasTracingConfig()) {
-        const auto& tracing = Config.GetTracingConfig();
+    if (Config.HasTracingConfig() && Config.GetTracingConfig().HasBackend()) {
+        const auto& tracingConfig = Config.GetTracingConfig();
+        const auto& tracingBackend = tracingConfig.GetBackend();
+
         std::unique_ptr<NWilson::IGrpcSigner> grpcSigner;
-        if (tracing.HasAuthConfig() && Factories && Factories->WilsonGrpcSignerFactory) {
-            grpcSigner = Factories->WilsonGrpcSignerFactory(tracing.GetAuthConfig());
+        if (tracingBackend.HasAuthConfig() && Factories && Factories->WilsonGrpcSignerFactory) {
+            grpcSigner = Factories->WilsonGrpcSignerFactory(tracingBackend.GetAuthConfig());
+            if (!grpcSigner) {
+                Cerr << "Failed to initialize wilson grpc signer due to misconfiguration. Config provided: "
+                        << tracingBackend.GetAuthConfig().DebugString() << Endl;
+            }
         }
-        auto wilsonUploader = NWilson::WilsonUploaderParams {
-            .Host = tracing.GetHost(),
-            .Port = static_cast<ui16>(tracing.GetPort()),
-            .RootCA = tracing.GetRootCA(),
-            .ServiceName = tracing.GetServiceName(),
-            .GrpcSigner = std::move(grpcSigner),
-        }.CreateUploader();
-        setup->LocalServices.emplace_back(
-            NWilson::MakeWilsonUploaderId(),
-            TActorSetupCmd(wilsonUploader, TMailboxType::ReadAsFilled, appData->BatchPoolId));
+
+        std::unique_ptr<NActors::IActor> wilsonUploader;
+        switch (tracingBackend.GetBackendCase()) {
+            case NKikimrConfig::TTracingConfig::TBackendConfig::BackendCase::kOpentelemetry: {
+                const auto& opentelemetry = tracingBackend.GetOpentelemetry();
+                if (!(opentelemetry.HasCollectorUrl() && opentelemetry.HasServiceName())) {
+                    Cerr << "Both collector_url and service_name should be present in opentelemetry backend config" << Endl;
+                    break;
+                }
+
+                NWilson::TWilsonUploaderParams uploaderParams {
+                    .CollectorUrl = opentelemetry.GetCollectorUrl(),
+                    .ServiceName = opentelemetry.GetServiceName(),
+                    .GrpcSigner = std::move(grpcSigner),
+                };
+
+                if (tracingConfig.HasUploader()) {
+                    const auto& uploaderConfig = tracingConfig.GetUploader();
+
+#ifdef GET_FIELD_FROM_CONFIG
+#error Macro collision
+#endif
+#define GET_FIELD_FROM_CONFIG(field) \
+                    if (uploaderConfig.Has##field()) { \
+                        uploaderParams.field = uploaderConfig.Get##field(); \
+                    }
+
+                    GET_FIELD_FROM_CONFIG(MaxExportedSpansPerSecond)
+                    GET_FIELD_FROM_CONFIG(MaxSpansInBatch)
+                    GET_FIELD_FROM_CONFIG(MaxBytesInBatch)
+                    GET_FIELD_FROM_CONFIG(MaxBatchAccumulationMilliseconds)
+                    GET_FIELD_FROM_CONFIG(SpanExportTimeoutSeconds)
+                    GET_FIELD_FROM_CONFIG(MaxExportRequestsInflight)
+
+#undef GET_FIELD_FROM_CONFIG
+                }
+
+                wilsonUploader.reset(std::move(uploaderParams).CreateUploader());
+                break;
+            }
+
+            case NKikimrConfig::TTracingConfig::TBackendConfig::BackendCase::BACKEND_NOT_SET: {
+                Cerr << "No backend option was provided in tracing config" << Endl;
+                break;
+            }
+        }
+        if (wilsonUploader) {
+            setup->LocalServices.emplace_back(
+                NWilson::MakeWilsonUploaderId(),
+                TActorSetupCmd(wilsonUploader.release(), TMailboxType::ReadAsFilled, appData->BatchPoolId));
+        }
     }
 }
 
@@ -1618,15 +1666,22 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
 
     if (!IsServiceInitialized(setup, NGRpcService::CreateGRpcRequestProxyId(0))) {
         const size_t proxyCount = Config.HasGRpcConfig() ? Config.GetGRpcConfig().GetGRpcProxyCount() : 1UL;
+        NJaegerTracing::TSamplingThrottlingConfigurator tracingConfigurator(appData->TimeProvider, appData->RandomProvider);
         for (size_t i = 0; i < proxyCount; ++i) {
             auto grpcReqProxy = Config.HasGRpcConfig() && Config.GetGRpcConfig().GetSkipSchemeCheck()
                 ? NGRpcService::CreateGRpcRequestProxySimple(Config)
-                : NGRpcService::CreateGRpcRequestProxy(Config, appData->Icb);
+                : NGRpcService::CreateGRpcRequestProxy(Config, tracingConfigurator.GetControl());
             setup->LocalServices.push_back(std::pair<TActorId,
                                            TActorSetupCmd>(NGRpcService::CreateGRpcRequestProxyId(i),
                                                            TActorSetupCmd(grpcReqProxy, TMailboxType::ReadAsFilled,
                                                                           appData->UserPoolId)));
         }
+        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+                TActorId(),
+                TActorSetupCmd(
+                    NConsole::CreateJaegerTracingConfigurator(std::move(tracingConfigurator), Config.GetTracingConfig()),
+                    TMailboxType::ReadAsFilled,
+                    appData->UserPoolId)));
     }
 
     if (!IsServiceInitialized(setup, NKesus::MakeKesusProxyServiceId())) {

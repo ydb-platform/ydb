@@ -173,7 +173,7 @@ struct TEvYardInitResult : public TEventLocal<TEvYardInitResult, TEvBlobStorage:
     TEvYardInitResult(const NKikimrProto::EReplyStatus status, const TString &errorReason)
         : Status(status)
         , StatusFlags(0)
-        , PDiskParams(new TPDiskParams(0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+        , PDiskParams(new TPDiskParams(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, DEVICE_TYPE_ROT))
         , ErrorReason(errorReason)
     {
         Y_ABORT_UNLESS(status != NKikimrProto::OK, "Single-parameter constructor is for error responses only");
@@ -183,7 +183,7 @@ struct TEvYardInitResult : public TEventLocal<TEvYardInitResult, TEvBlobStorage:
             ui64 writeSpeedBps, ui64 readBlockSize, ui64 writeBlockSize,
             ui64 bulkWriteBlockSize, ui32 chunkSize, ui32 appendBlockSize,
             TOwner owner, TOwnerRound ownerRound, TStatusFlags statusFlags, TVector<TChunkIdx> ownedChunks,
-            const TString &errorReason)
+            EDeviceType trueMediaType, const TString &errorReason)
         : Status(status)
         , StatusFlags(statusFlags)
         , PDiskParams(new TPDiskParams(
@@ -196,8 +196,8 @@ struct TEvYardInitResult : public TEventLocal<TEvYardInitResult, TEvBlobStorage:
                     writeSpeedBps,
                     readBlockSize,
                     writeBlockSize,
-                    bulkWriteBlockSize
-                    ))
+                    bulkWriteBlockSize,
+                    trueMediaType))
         , OwnedChunks(std::move(ownedChunks))
         , ErrorReason(errorReason)
     {}

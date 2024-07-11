@@ -528,9 +528,17 @@ protected:
     }
 
     void Handle(TEvWhiteboard::TEvBSGroupStateUpdate::TPtr &ev, const TActorContext &ctx) {
-        auto& bSGroupStateInfo = BSGroupStateInfo[ev->Get()->Record.GetGroupID()];
-        if (CheckedMerge(bSGroupStateInfo, ev->Get()->Record) >= 100) {
-            bSGroupStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+        const auto& from = ev->Get()->Record;
+        auto& to = BSGroupStateInfo[from.GetGroupID()];
+        int modified = 0;
+        if (from.GetNoVDisksInGroup() && to.GetGroupGeneration() <= from.GetGroupGeneration()) {
+            modified += 100 * (2 - to.GetVDiskIds().empty() - to.GetVDiskNodeIds().empty());
+            to.ClearVDiskIds();
+            to.ClearVDiskNodeIds();
+        }
+        modified += CheckedMerge(to, from);
+        if (modified >= 100) {
+            to.SetChangeTime(ctx.Now().MilliSeconds());
         }
     }
 

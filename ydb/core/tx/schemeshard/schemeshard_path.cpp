@@ -923,6 +923,23 @@ const TPath::TChecker& TPath::TChecker::NotChildren(EStatus status) const {
         << ", children: " << childrenCount);
 }
 
+const TPath::TChecker& TPath::TChecker::CanBackupTable(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    for (const auto& child: Path.Base()->GetChildren()) {
+        auto name = child.first;
+
+        TPath childPath = Path.Child(name);
+        if (childPath->IsTableIndex()) {
+            return Fail(status, TStringBuilder() << "path has indexes, request doesn't accept it");
+        }
+    }
+
+    return *this;
+}
+
 const TPath::TChecker& TPath::TChecker::NotDeleted(EStatus status) const {
     if (Failed) {
         return *this;

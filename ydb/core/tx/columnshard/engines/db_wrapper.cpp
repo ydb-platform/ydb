@@ -48,11 +48,12 @@ void TDbWrapper::WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRe
         *rowProto.MutablePortionMeta() = std::move(*proto);
     }
     using IndexColumns = NColumnShard::Schema::IndexColumns;
+    auto removeSnapshot = portion.GetRemoveSnapshotOptional();
     db.Table<IndexColumns>().Key(0, portion.GetDeprecatedGranuleId(), row.ColumnId,
-        portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Update(
-            NIceDb::TUpdate<IndexColumns::XPlanStep>(portion.GetRemoveSnapshot().GetPlanStep()),
-            NIceDb::TUpdate<IndexColumns::XTxId>(portion.GetRemoveSnapshot().GetTxId()),
-            NIceDb::TUpdate<IndexColumns::Blob>(row.SerializedBlobId()),
+        portion.GetMinSnapshotDeprecated().GetPlanStep(), portion.GetMinSnapshotDeprecated().GetTxId(), portion.GetPortion(), row.Chunk).Update(
+            NIceDb::TUpdate<IndexColumns::XPlanStep>(removeSnapshot ? removeSnapshot->GetPlanStep() : 0),
+            NIceDb::TUpdate<IndexColumns::XTxId>(removeSnapshot ? removeSnapshot->GetTxId() : 0),
+            NIceDb::TUpdate<IndexColumns::Blob>(portion.GetBlobId(row.GetBlobRange().GetBlobIdxVerified()).SerializeBinary()),
             NIceDb::TUpdate<IndexColumns::Metadata>(rowProto.SerializeAsString()),
             NIceDb::TUpdate<IndexColumns::Offset>(row.BlobRange.Offset),
             NIceDb::TUpdate<IndexColumns::Size>(row.BlobRange.Size),
@@ -64,7 +65,7 @@ void TDbWrapper::EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRe
     NIceDb::TNiceDb db(Database);
     using IndexColumns = NColumnShard::Schema::IndexColumns;
     db.Table<IndexColumns>().Key(0, portion.GetDeprecatedGranuleId(), row.ColumnId,
-        portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Delete();
+        portion.GetMinSnapshotDeprecated().GetPlanStep(), portion.GetMinSnapshotDeprecated().GetTxId(), portion.GetPortion(), row.Chunk).Delete();
 }
 
 bool TDbWrapper::LoadColumns(const std::function<void(const NOlap::TPortionInfo&, const TColumnChunkLoadContext&)>& callback) {
@@ -78,7 +79,7 @@ bool TDbWrapper::LoadColumns(const std::function<void(const NOlap::TPortionInfo&
     while (!rowset.EndOfSet()) {
         NOlap::TPortionInfo portion = NOlap::TPortionInfo::BuildEmpty();
         portion.SetPathId(rowset.GetValue<IndexColumns::PathId>());
-        portion.SetMinSnapshot(rowset.GetValue<IndexColumns::PlanStep>(), rowset.GetValue<IndexColumns::TxId>());
+        portion.SetMinSnapshotDeprecated(NOlap::TSnapshot(rowset.GetValue<IndexColumns::PlanStep>(), rowset.GetValue<IndexColumns::TxId>()));
         portion.SetPortion(rowset.GetValue<IndexColumns::Portion>());
         portion.SetDeprecatedGranuleId(rowset.GetValue<IndexColumns::Granule>());
 
@@ -100,7 +101,7 @@ void TDbWrapper::WriteIndex(const TPortionInfo& portion, const TIndexChunk& row)
     using IndexIndexes = NColumnShard::Schema::IndexIndexes;
     NIceDb::TNiceDb db(Database);
     db.Table<IndexIndexes>().Key(portion.GetPathId(), portion.GetPortionId(), row.GetIndexId(), row.GetChunkIdx()).Update(
-            NIceDb::TUpdate<IndexIndexes::Blob>(row.GetBlobRange().BlobId.SerializeBinary()),
+            NIceDb::TUpdate<IndexIndexes::Blob>(portion.GetBlobId(row.GetBlobRange().GetBlobIdxVerified()).SerializeBinary()),
             NIceDb::TUpdate<IndexIndexes::Offset>(row.GetBlobRange().Offset),
             NIceDb::TUpdate<IndexIndexes::Size>(row.GetBlobRange().Size),
             NIceDb::TUpdate<IndexIndexes::RecordsCount>(row.GetRecordsCount()),

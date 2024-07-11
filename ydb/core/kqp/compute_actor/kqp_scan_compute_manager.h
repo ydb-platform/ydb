@@ -253,17 +253,6 @@ private:
     const IExternalObjectsProvider& ExternalObjectsProvider;
 public:
 
-    bool RestartScanner(TShardState& state) {
-        StopScanner(state.TabletId, false);
-        state.ResetRetry();
-        static constexpr ui64 MAX_SHARD_RETRIES = 5; // retry after: 0, 250, 500, 1000, 2000
-        if (++state.TotalRetries >= MAX_SHARD_RETRIES) {
-            return false;
-        }
-        StartScanner(state);
-        return true;
-    }
-
     void AbortAllScanners(const TString& errorMessage) {
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "abort_all_scanners")("error_message", errorMessage);
         for (auto&& itTablet : ShardScanners) {

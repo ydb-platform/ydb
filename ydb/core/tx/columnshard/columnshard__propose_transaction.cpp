@@ -3,17 +3,17 @@
 #include "columnshard_schema.h"
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/dq.h>
+#include <ydb/core/tx/columnshard/transactions/propose_transaction_base.h>
 
 namespace NKikimr::NColumnShard {
 
 using namespace NTabletFlatExecutor;
 
-class TTxProposeTransaction : public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
+class TTxProposeTransaction : public TProposeTransactionBase {
 public:
     TTxProposeTransaction(TColumnShard* self, TEvColumnShard::TEvProposeTransaction::TPtr& ev)
-        : TBase(self)
+        : TProposeTransactionBase(self)
         , Ev(ev)
-        , TabletTxNo(++Self->TabletTxCounter)
     {}
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
@@ -22,25 +22,16 @@ public:
 
 private:
     TEvColumnShard::TEvProposeTransaction::TPtr Ev;
-    const ui32 TabletTxNo;
     std::unique_ptr<TEvColumnShard::TEvProposeTransactionResult> Result;
 
-    TStringBuilder TxPrefix() const {
-        return TStringBuilder() << "TxProposeTransaction[" << ToString(TabletTxNo) << "] ";
-    }
-
-    TString TxSuffix() const {
-        return TStringBuilder() << " at tablet " << Self->TabletID();
-    }
-
-    void ConstructResult(TTxController::TProposeResult& proposeResult, const TTxController::TBasicTxInfo& txInfo);
+    void OnProposeResult(TTxController::TProposeResult& proposeResult, const TTxController::TTxInfo& txInfo) override;
+    void OnProposeError(TTxController::TProposeResult& proposeResult, const TTxController::TBasicTxInfo& txInfo) override;
     TTxController::TProposeResult ProposeTtlDeprecated(const TString& txBody);
 };
 
 
 bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) {
     Y_ABORT_UNLESS(Ev);
-    LOG_S_DEBUG(TxPrefix() << "execute" << TxSuffix());
 
     txc.DB.NoMoreReadsForTx();
     NIceDb::TNiceDb db(txc.DB);
@@ -48,9 +39,9 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
     Self->IncCounter(COUNTER_PREPARE_REQUEST);
 
     auto& record = Proto(Ev->Get());
-    auto txKind = record.GetTxKind();
-    ui64 txId = record.GetTxId();
-    auto& txBody = record.GetTxBody();
+    const auto txKind = record.GetTxKind();
+    const ui64 txId = record.GetTxId();
+    const auto& txBody = record.GetTxBody();
 
     if (txKind == NKikimrTxColumnShard::TX_KIND_TTL) {
         auto proposeResult = ProposeTtlDeprecated(txBody);
@@ -71,39 +62,7 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
             Y_ABORT_UNLESS(Self->CurrentSchemeShardId == record.GetSchemeShardId());
         }
     }
-
-    TTxController::TBasicTxInfo fakeTxInfo;
-    fakeTxInfo.TxId = txId;
-    fakeTxInfo.TxKind = txKind;
-
-    auto txOperator = TTxController::ITransactionOperatior::TFactory::MakeHolder(txKind, fakeTxInfo);
-    if (!txOperator || !txOperator->Parse(txBody)) {
-        TTxController::TProposeResult proposeResult(NKikimrTxColumnShard::EResultStatus::ERROR, TStringBuilder() << "Error processing commit TxId# " << txId
-                                                << (txOperator ? ". Parsing error " : ". Unknown operator for txKind"));
-        ConstructResult(proposeResult, fakeTxInfo);
-        return true;
-    }
-
-    auto txInfoPtr = Self->ProgressTxController->GetTxInfo(txId);
-    if (!!txInfoPtr) {
-        if (txInfoPtr->Source != Ev->Get()->GetSource() || txInfoPtr->Cookie != Ev->Cookie) {
-            TTxController::TProposeResult proposeResult(NKikimrTxColumnShard::EResultStatus::ERROR, TStringBuilder() << "Another commit TxId# " << txId << " has already been proposed");
-            ConstructResult(proposeResult, fakeTxInfo);
-        }
-        TTxController::TProposeResult proposeResult;
-        ConstructResult(proposeResult, *txInfoPtr);
-    } else {
-        auto proposeResult = txOperator->Propose(*Self, txc, false);
-        if (!!proposeResult) {
-            const auto& txInfo = txOperator->TxWithDeadline() ? Self->ProgressTxController->RegisterTxWithDeadline(txId, txKind, txBody, Ev->Get()->GetSource(), Ev->Cookie, txc)
-                                                              : Self->ProgressTxController->RegisterTx(txId, txKind, txBody, Ev->Get()->GetSource(), Ev->Cookie, txc);
-
-            ConstructResult(proposeResult, txInfo);
-        } else {
-            ConstructResult(proposeResult, fakeTxInfo);
-        }
-    }
-    AFL_VERIFY(!!Result);
+    ProposeTransaction(TTxController::TBasicTxInfo(txKind, txId), txBody, Ev->Get()->GetSource(), Ev->Cookie, txc);
     return true;
 }
 
@@ -143,32 +102,33 @@ TTxController::TProposeResult TTxProposeTransaction::ProposeTtlDeprecated(const 
         const TInstant now = TlsActivationContext ? AppData()->TimeProvider->Now() : TInstant::Now();
         for (ui64 pathId : ttlBody.GetPathIds()) {
             NOlap::TTiering tiering;
-            tiering.Ttl = NOlap::TTierInfo::MakeTtl(now - unixTime, columnName);
+            AFL_VERIFY(tiering.Add(NOlap::TTierInfo::MakeTtl(now - unixTime, columnName)));
             pathTtls.emplace(pathId, std::move(tiering));
         }
     }
-    if (!Self->SetupTtl(pathTtls, true)) {
+    if (!Self->SetupTtl(pathTtls)) {
         return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL not started");
     }
+    Self->TablesManager.MutablePrimaryIndex().OnTieringModified(Self->Tiers, Self->TablesManager.GetTtl(), {});
 
     return TTxController::TProposeResult();
 }
 
-void TTxProposeTransaction::ConstructResult(TTxController::TProposeResult& proposeResult, const TTxController::TBasicTxInfo& txInfo) {
+void TTxProposeTransaction::OnProposeError(TTxController::TProposeResult& proposeResult, const TTxController::TBasicTxInfo& txInfo) {
     Result = std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(Self->TabletID(), txInfo.TxKind, txInfo.TxId, proposeResult.GetStatus(), proposeResult.GetStatusMessage());
-    if (proposeResult.GetStatus() == NKikimrTxColumnShard::EResultStatus::PREPARED) {
-        Self->IncCounter(COUNTER_PREPARE_SUCCESS);
-        Result->Record.SetMinStep(txInfo.MinStep);
-        Result->Record.SetMaxStep(txInfo.MaxStep);
-        if (Self->ProcessingParams) {
-            Result->Record.MutableDomainCoordinators()->CopyFrom(Self->ProcessingParams->GetCoordinators());
-        }
-    } else if (proposeResult.GetStatus() == NKikimrTxColumnShard::EResultStatus::SUCCESS) {
-        Self->IncCounter(COUNTER_PREPARE_SUCCESS);
-    } else {
-        Self->IncCounter(COUNTER_PREPARE_ERROR);
-        LOG_S_INFO(TxPrefix() << "error txId " << txInfo.TxId << " " << proposeResult.GetStatusMessage() << TxSuffix());
+    Self->IncCounter(COUNTER_PREPARE_ERROR);
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("message", proposeResult.GetStatusMessage())("tablet_id", Self->TabletID())("tx_id", txInfo.TxId);
+}
+
+void TTxProposeTransaction::OnProposeResult(TTxController::TProposeResult& proposeResult, const TTxController::TTxInfo& txInfo) {
+    AFL_VERIFY(proposeResult.GetStatus() == NKikimrTxColumnShard::EResultStatus::PREPARED)("tx_id", txInfo.TxId)("details", proposeResult.DebugString());
+    Result = std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(Self->TabletID(), txInfo.TxKind, txInfo.TxId, proposeResult.GetStatus(), proposeResult.GetStatusMessage());
+    Result->Record.SetMinStep(txInfo.MinStep);
+    Result->Record.SetMaxStep(txInfo.MaxStep);
+    if (Self->ProcessingParams) {
+        Result->Record.MutableDomainCoordinators()->CopyFrom(Self->ProcessingParams->GetCoordinators());
     }
+    Self->IncCounter(COUNTER_PREPARE_SUCCESS);
 }
 
 void TTxProposeTransaction::Complete(const TActorContext& ctx) {
@@ -180,12 +140,6 @@ void TTxProposeTransaction::Complete(const TActorContext& ctx) {
 
 
 void TColumnShard::Handle(TEvColumnShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx) {
-    auto& record = Proto(ev->Get());
-    auto txKind = record.GetTxKind();
-    ui64 txId = record.GetTxId();
-    LOG_S_DEBUG("ProposeTransaction " << NKikimrTxColumnShard::ETransactionKind_Name(txKind)
-        << " txId " << txId << " at tablet " << TabletID());
-
     Execute(new TTxProposeTransaction(this, ev), ctx);
 }
 

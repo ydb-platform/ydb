@@ -308,8 +308,11 @@ public:
                     sb << ", ";
                 }
             }
-            sb << "], "
-                << ", RetryAttempt: " << RetryAttempt << ", ResolveAttempt: " << ResolveAttempt << " }";
+            sb << "], Points: [";
+            for(size_t i = 0; i < Points.size(); ++i) {
+                sb << "# " << i << ": " << DebugPrintPoint(keyTypes, Points[i].GetCells(), *AppData()->TypeRegistry);
+            }
+            sb << "], RetryAttempt: " << RetryAttempt << ", ResolveAttempt: " << ResolveAttempt << " }";
             return sb;
         }
 

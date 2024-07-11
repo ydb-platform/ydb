@@ -53,6 +53,7 @@ protected:
     NActors::TActorId BaseHttpProxyId;
     NActors::TActorId HttpProxyId;
     NActors::TActorId HandlerId;
+    NMVP::EAuthProfile AuthProfile;
 
     TString YdbUserToken;
     static NMvp::TTokensConfig TokensConfig;

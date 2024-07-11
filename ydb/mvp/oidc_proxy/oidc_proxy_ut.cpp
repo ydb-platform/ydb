@@ -8,6 +8,7 @@
 #include <ydb/mvp/core/mvp_test_runtime.h>
 #include "oidc_protected_page.h"
 #include "oidc_session_create.h"
+#include "oidc_session_create_n.h"
 
 namespace {
 
@@ -22,7 +23,7 @@ void EatWholeString(TIntrusivePtr<HttpType>& request, const TString& data) {
 }
 
 Y_UNIT_TEST_SUITE(Mvp) {
-    Y_UNIT_TEST(OpenIdConnectRequestWithIamToken) {
+    void OpenIdConnectRequestWithIamTokenTest(NMVP::EAuthProfile profile) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -32,7 +33,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AllowedProxyHosts = {allowedProxyHost}
+            .AllowedProxyHosts = {allowedProxyHost},
+            .AuthProfile = profile
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
@@ -59,7 +61,15 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Body, "this is test.");
     }
 
-    Y_UNIT_TEST(OpenIdConnectNonAuthorizeRequestWithOptionMethod) {
+    Y_UNIT_TEST(OpenIdConnectRequestWithIamTokenY) {
+        OpenIdConnectRequestWithIamTokenTest(NMVP::EAuthProfile::YProfile);
+    }
+
+    Y_UNIT_TEST(OpenIdConnectRequestWithIamTokenN) {
+        OpenIdConnectRequestWithIamTokenTest(NMVP::EAuthProfile::NProfile);
+    }
+
+    void OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile profile) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -69,7 +79,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AllowedProxyHosts = {allowedProxyHost}
+            .AllowedProxyHosts = {allowedProxyHost},
+            .AuthProfile = profile
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
@@ -103,7 +114,15 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRINGS_EQUAL(headers.Get("Access-Control-Allow-Credentials"), "true");
     }
 
-    Y_UNIT_TEST(OpenIdConnectSessionServiceCheckValidCookie) {
+    Y_UNIT_TEST(OpenIdConnectNonAuthorizeRequestWithOptionMethodY) {
+        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile::YProfile);
+    }
+
+    Y_UNIT_TEST(OpenIdConnectNonAuthorizeRequestWithOptionMethodN) {
+        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile::NProfile);
+    }
+
+    void OpenIdConnectSessionServiceCheckValidCookieTest(NMVP::EAuthProfile profile) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -113,7 +132,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AllowedProxyHosts = {allowedProxyHost}
+            .AllowedProxyHosts = {allowedProxyHost},
+            .AuthProfile = profile
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
@@ -145,6 +165,14 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Body, "this is test.");
     }
 
+    Y_UNIT_TEST(OpenIdConnectSessionServiceCheckValidCookieY) {
+        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile::YProfile);
+    }
+
+    Y_UNIT_TEST(OpenIdConnectSessionServiceCheckValidCookieN) {
+        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile::NProfile);
+    }
+
     Y_UNIT_TEST(OpenIdConnectProxyOnHttpsHost) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
@@ -155,7 +183,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AllowedProxyHosts = {allowedProxyHost}
+            .AllowedProxyHosts = {allowedProxyHost},
+            .AuthProfile = NMVP::EAuthProfile::YProfile
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
@@ -200,6 +229,69 @@ Y_UNIT_TEST_SUITE(Mvp) {
                                          "Content-Length: " + ToString(okResponseBody.size()) + "\r\n\r\n" + okResponseBody);
         runtime.Send(new IEventHandle(handle->Sender, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(outgoingRequestEv->Request, incomingResponse)));
 
+        auto outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "200");
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Body, "this is test");
+    }
+
+
+    Y_UNIT_TEST(OpenIdConnectExchangeN) {
+        TPortManager tp;
+        ui16 sessionServicePort = tp.GetPort(8655);
+        TMvpTestRuntime runtime;
+        runtime.Initialize();
+
+        const TString allowedProxyHost {"ydb.viewer.page"};
+
+        TOpenIdConnectSettings settings {
+            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
+            .AuthorizationServerAddress = "https://auth.test.net",
+            .AllowedProxyHosts = {allowedProxyHost},
+            .AuthProfile = NMVP::EAuthProfile::NProfile
+        };
+
+        const NActors::TActorId edge = runtime.AllocateEdgeActor();
+        const NActors::TActorId target = runtime.Register(new NMVP::TProtectedPageHandler(edge, settings));
+
+        TSessionServiceMock sessionServiceMock;
+        sessionServiceMock.AllowedCookies.second = "allowed_session_cookie";
+        grpc::ServerBuilder builder;
+        builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
+        std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
+
+        NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
+        EatWholeString(incomingRequest, "GET /" + allowedProxyHost + "/counters HTTP/1.1\r\n"
+                                "Host: oidcproxy.net\r\n"
+                                "Cookie: yc_session=allowed_session_cookie;"
+                                + CreateSecureCookie(settings.ClientId, "session_cookie") + "\r\n\r\n");
+        runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
+        TAutoPtr<IEventHandle> handle;
+
+        auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, "auth.test.net");
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/oauth2/session/exchange");
+        UNIT_ASSERT_EQUAL(outgoingRequestEv->Request->Secure, true);
+        NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
+        TString okResponseBody {"{\"access_token\": \"access_token\"}"};
+        EatWholeString(incomingResponse, "HTTP/1.1 200 OK\r\n"
+                                         "Connection: close\r\n"
+                                         "Content-Type: text/html\r\n"
+                                         "Content-Length: " + ToString(okResponseBody.size()) + "\r\n\r\n" + okResponseBody);
+        runtime.Send(new IEventHandle(handle->Sender, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(outgoingRequestEv->Request, incomingResponse)));
+
+        outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, allowedProxyHost);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/counters");
+        UNIT_ASSERT_STRING_CONTAINS(outgoingRequestEv->Request->Headers, "Authorization: Bearer access_token");
+        UNIT_ASSERT_EQUAL(outgoingRequestEv->Request->Secure, false);
+        incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
+        okResponseBody = "this is test";
+        EatWholeString(incomingResponse, "HTTP/1.1 200 OK\r\n"
+                                         "Connection: close\r\n"
+                                         "Content-Type: text/html\r\n"
+                                         "Content-Length: " + ToString(okResponseBody.size()) + "\r\n\r\n" + okResponseBody);
+
+        runtime.Send(new IEventHandle(handle->Sender, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(outgoingRequestEv->Request, incomingResponse)));
         auto outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "200");
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Body, "this is test");

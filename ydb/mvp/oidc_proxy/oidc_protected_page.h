@@ -18,7 +18,7 @@
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/core/util/wildcard.h>
 #include "openid_connect.h"
-#include "oidc_protected_page_v2.h"
+#include "oidc_protected_page_n.h"
 
 namespace NMVP {
 
@@ -289,10 +289,10 @@ public:
     {}
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx) {
-        if (Settings.SchemaVersion == TOpenIdConnectSettings::ESchemaVersion::V1) {
+        if (Settings.AuthProfile == NMVP::EAuthProfile::YProfile) {
             ctx.Register(new THandlerSessionServiceCheck(event->Sender, event->Get()->Request, HttpProxyId, Settings));
         } else {
-            ctx.Register(new THandlerSessionServiceCheckV2(event->Sender, event->Get()->Request, HttpProxyId, Settings));
+            ctx.Register(new THandlerSessionServiceCheckN(event->Sender, event->Get()->Request, HttpProxyId, Settings));
         }
     }
 

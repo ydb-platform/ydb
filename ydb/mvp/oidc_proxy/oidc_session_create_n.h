@@ -23,9 +23,9 @@
 
 namespace NMVP {
 
-class THandlerSessionCreateV2 : public NActors::TActorBootstrapped<THandlerSessionCreateV2> {
+class THandlerSessionCreateN : public NActors::TActorBootstrapped<THandlerSessionCreateN> {
 private:
-    using TBase = NActors::TActorBootstrapped<THandlerSessionCreateV2>;
+    using TBase = NActors::TActorBootstrapped<THandlerSessionCreateN>;
     using TSessionService = yandex::cloud::priv::oauth::v1::SessionService;
 
     const NActors::TActorId Sender;
@@ -47,6 +47,8 @@ private:
             return false;
         }
         RemoveAppliedCookie(cookieName);
+        ResponseHeaders.Set("Set-Cookie", TStringBuilder() << CreateNameSessionCookie(Settings.ClientId) << "=; Max-Age=0");
+
         TString cookieStruct = Base64Decode(cookies.Get(cookieName));
         TString stateStruct;
         TString expectedDigest;
@@ -110,21 +112,8 @@ private:
         return (!expectedState.Empty() && expectedState == state);
     }
 
-    TString ChangeSameSiteFieldInSessionCookie(const TString& cookie) {
-        const static TStringBuf SameSiteParameter {"SameSite=Lax"};
-        size_t n = cookie.find(SameSiteParameter);
-        if (n == TString::npos) {
-            return cookie;
-        }
-        TStringBuilder cookieBuilder;
-        cookieBuilder << cookie.substr(0, n);
-        cookieBuilder << "SameSite=None";
-        cookieBuilder << cookie.substr(n + SameSiteParameter.size());
-        return cookieBuilder;
-    }
-
 public:
-    THandlerSessionCreateV2(const NActors::TActorId& sender,
+    THandlerSessionCreateN(const NActors::TActorId& sender,
                           const NHttp::THttpIncomingRequestPtr& request,
                           const NActors::TActorId& httpProxyId,
                           const TOpenIdConnectSettings& settings)
@@ -143,27 +132,34 @@ public:
         NHttp::TCookies cookies(headers.Get("cookie"));
 
         if (IsStateValid(state, cookies, ctx) && !code.Empty()) {
+            TStringBuilder body;
+            TStringBuf host = Request->Host;
+            body << "code=" << code
+                 << "&client_id=" << Settings.ClientId
+                 << "&grant_type=authorization_code"
+                 << "&redirect_uri="
+                    << (Request->Endpoint->Secure ? "https://" : "http://")
+                    << host
+                    << GetAuthCallbackUrl();
+
             NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.GetTokenEndpoint());
             httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/x-www-form-urlencoded");
             httpRequest->Set("Authorization", "Basic " + Settings.GetAuthorizationString());
-            TStringBuilder body;
-            body << "code=" << code
-                 << "&client_id=" << Settings.ClientId
-                 << "&grant_type=" << code;
             httpRequest->Set<&NHttp::THttpRequest::Body>(body);
+
             ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
+            Become(&THandlerSessionCreateN::StateWork);
         } else {
             NHttp::THttpOutgoingResponsePtr response = GetHttpOutgoingResponsePtr(TStringBuf(), Request, Settings, ResponseHeaders, IsAjaxRequest);
             ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
             TBase::Die(ctx);
             return;
         }
-        Become(&THandlerSessionCreateV2::StateWork);
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
         NHttp::THttpOutgoingResponsePtr httpResponse;
-        if (event->Get()->Error.empty() && event->Get()->Response) {
+        if (event->Get()->Response) {
             NHttp::THttpIncomingResponsePtr response = event->Get()->Response;
             LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Incoming response from authorization server: " << response->Status);
             if (response->Status == "200") {
@@ -175,12 +171,13 @@ public:
                     if (jsonValue.GetValuePointer("access_token", &jsonSessionToken)) {
                         TString sessionToken = jsonSessionToken->GetStringRobust();
                         auto response = event->Get()->Response;
-                        ResponseHeaders.Set("Set-Cookie", sessionToken);
+                        ResponseHeaders.Set("Set-Cookie", CreateSecureCookie(Settings.ClientId, sessionToken));
                         ResponseHeaders.Set("Location", RedirectUrl);
                         NHttp::THttpOutgoingResponsePtr httpResponse;
                         httpResponse = Request->CreateResponse("302", "Cookie set", ResponseHeaders);
                         ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
                         Die(ctx);
+                        return;
                     } else {
                         jsonError = "Wrong OIDC provider response: access_token not found";
                     }

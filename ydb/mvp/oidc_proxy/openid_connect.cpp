@@ -24,18 +24,18 @@ struct TRedirectUrlParameters {
     TStringBuf State;
     TStringBuf Scheme;
     TStringBuf Host;
-    TOpenIdConnectSettings::ESchemaVersion SchemaVersion;
+    NMVP::EAuthProfile AuthProfile;
 };
 
-bool TryAppendAuthEndpointFromDetailsV1(const TRedirectUrlParameters& parameters, TStringBuilder& locationHeaderValue) {
-    if (parameters.SchemaVersion != TOpenIdConnectSettings::ESchemaVersion::V1) {
+bool TryAppendAuthEndpointFromDetailsYProfile(const TRedirectUrlParameters& parameters, TStringBuilder& locationHeaderValue) {
+    if (parameters.AuthProfile != NMVP::EAuthProfile::YProfile) {
         return false;
     }
     const auto& eventDetails = parameters.SessionServerCheckDetails;
-    size_t posAuthUrl = eventDetails.find(TOpenIdConnectSettings::AUTH_REQUEST_V1);
+    size_t posAuthUrl = eventDetails.find(TOpenIdConnectSettings::AUTH_REQUEST_Y);
     if (posAuthUrl != TStringBuf::npos) {
         size_t pos = eventDetails.rfind("https://", posAuthUrl);
-        locationHeaderValue << eventDetails.substr(pos, posAuthUrl - pos) + TOpenIdConnectSettings::AUTH_REQUEST_V1;
+        locationHeaderValue << eventDetails.substr(pos, posAuthUrl - pos) + TOpenIdConnectSettings::AUTH_REQUEST_Y;
         return true;
     }
     return false;
@@ -43,7 +43,7 @@ bool TryAppendAuthEndpointFromDetailsV1(const TRedirectUrlParameters& parameters
 
 TString CreateRedirectUrl(const TRedirectUrlParameters& parameters) {
     TStringBuilder locationHeaderValue;
-    if (!TryAppendAuthEndpointFromDetailsV1(parameters, locationHeaderValue)) {
+    if (!TryAppendAuthEndpointFromDetailsYProfile(parameters, locationHeaderValue)) {
         locationHeaderValue << parameters.OidcSettings.GetAuthEndpoint();
     }
     locationHeaderValue << "?response_type=code"
@@ -123,7 +123,7 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(TStringBuf eventDetai
                                                     .State = state,
                                                     .Scheme = (request->Endpoint->Secure ? "https://" : "http://"),
                                                     .Host = request->Host,
-                                                    .SchemaVersion = settings.SchemaVersion});
+                                                    .AuthProfile = settings.AuthProfile});
     const size_t cookieMaxAgeSec = 420;
     TStringBuilder setCookieBuilder;
     setCookieBuilder << CreateNameYdbOidcCookie(settings.ClientSecret, state) << "=" << GenerateCookie(state, GetRequestedUrl(request, isAjaxRequest), settings.ClientSecret, isAjaxRequest)
@@ -158,7 +158,18 @@ TString CreateNameYdbOidcCookie(TStringBuf key, TStringBuf state) {
     return TOpenIdConnectSettings::YDB_OIDC_COOKIE + "_" + HexEncode(HmacSHA256(key, state));
 }
 
+TString CreateNameSessionCookie(TStringBuf key) {
+    return "__Host_" + TOpenIdConnectSettings::SESSION_COOKIE + "_" + HexEncode(key);
+}
+
 const TString& GetAuthCallbackUrl() {
     static const TString callbackUrl = "/auth/callback";
     return callbackUrl;
+}
+
+TString CreateSecureCookie(const TString& key, const TString& value) {
+    TStringBuilder cookieBuilder;
+    cookieBuilder << CreateNameSessionCookie(key) << "=" << Base64Encode(value)
+            << "; Path=/; Secure; HttpOnly; SameSite=Lax";
+    return cookieBuilder;
 }

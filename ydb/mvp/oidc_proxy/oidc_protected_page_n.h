@@ -21,9 +21,9 @@
 
 namespace NMVP {
 
-class THandlerSessionServiceCheckV2 : public NActors::TActorBootstrapped<THandlerSessionServiceCheckV2> {
+class THandlerSessionServiceCheckN : public NActors::TActorBootstrapped<THandlerSessionServiceCheckN> {
 private:
-    using TBase = NActors::TActorBootstrapped<THandlerSessionServiceCheckV2>;
+    using TBase = NActors::TActorBootstrapped<THandlerSessionServiceCheckN>;
     using TSessionService = yandex::cloud::priv::oauth::v1::SessionService;
 
     const NActors::TActorId Sender;
@@ -39,7 +39,7 @@ private:
     const static inline TStringBuf AUTH_HEADER_NAME = "Authorization";
 
 public:
-    THandlerSessionServiceCheckV2(const NActors::TActorId& sender,
+    THandlerSessionServiceCheckN(const NActors::TActorId& sender,
                                 const NHttp::THttpIncomingRequestPtr& request,
                                 const NActors::TActorId& httpProxyId,
                                 const TOpenIdConnectSettings& settings)
@@ -50,6 +50,20 @@ public:
         , ProtectedPageUrl(Request->URL.SubStr(1))
         {}
 
+    void StartOidcProcess(const NActors::TActorContext& ctx) {
+        NHttp::THeaders headers(Request->Headers);
+        LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Start OIDC process");
+
+        NHttp::TCookies cookies(headers.Get("Cookie"));
+        TString sessionToken = Base64Decode(cookies.Get(CreateNameSessionCookie(Settings.ClientId)));
+
+        if (sessionToken) {
+            ExchangeSessionToken(sessionToken, ctx);
+        } else {
+            RequestAuthorizationCode(ctx);
+        }
+    }
+
     void Bootstrap(const NActors::TActorContext& ctx) {
         if (!CheckRequestedHost()) {
             ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponseNotFound(NOT_FOUND_HTML_PAGE, "text/html")));
@@ -57,13 +71,13 @@ public:
             return;
         }
         NHttp::THeaders headers(Request->Headers);
+        IsAjaxRequest = DetectAjaxRequest(headers);
         TStringBuf authHeader = headers.Get(AUTH_HEADER_NAME);
         if (Request->Method == "OPTIONS" || IsAuthorizedRequest(authHeader)) {
             LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Forward request bypass OIDC");
-            ForwardRequest(TString(authHeader), ctx);
+            ForwardUserRequest(TString(authHeader), ctx);
         } else {
-            LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Start OIDC process");
-            RequestAccessToken(headers, ctx);
+            StartOidcProcess(ctx);
         }
     }
 
@@ -71,12 +85,13 @@ public:
         NHttp::THttpOutgoingResponsePtr httpResponse;
         if (event->Get()->Response != nullptr) {
             NHttp::THttpIncomingResponsePtr response = event->Get()->Response;
+            LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Incoming response for protected resource: " << response->Status);
             if (response->Status == "400" && RequestedPageScheme.empty()) {
                 NHttp::THttpOutgoingRequestPtr request = response->GetRequest();
                 if (!request->Secure) {
                     LOG_DEBUG_S(ctx, EService::MVP, "Try to send request to HTTPS port");
                     NHttp::THeadersBuilder headers {request->Headers};
-                    ForwardRequest(headers.Get(AUTH_HEADER_NAME), ctx, true);
+                    ForwardUserRequest(headers.Get(AUTH_HEADER_NAME), ctx, true);
                     return;
                 }
             }
@@ -96,7 +111,7 @@ public:
     }
 
     void HandleExchange(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
-        if (!event->Get()->Error.empty() || !event->Get()->Response) {
+        if (!event->Get()->Response) {
             NHttp::THeadersBuilder ResponseHeaders;
             ResponseHeaders.Set("Content-Type", "text/plain");
             NHttp::THttpOutgoingResponsePtr httpResponse = Request->CreateResponse("400", "Bad Request", ResponseHeaders, event->Get()->Error);
@@ -108,7 +123,7 @@ public:
             if (response->Status.StartsWith("2")) {
                 LOG_DEBUG_S(ctx, EService::MVP, "SessionService.Check(): OK");
 
-                TString iamToken; // ??????????????
+                TString iamToken;
                 static NJson::TJsonReaderConfig JsonConfig;
                 NJson::TJsonValue requestData;
                 bool success = NJson::ReadJsonTree(response->Body, &JsonConfig, &requestData);
@@ -117,18 +132,19 @@ public:
                 }
 
                 const TString authHeader = IAM_TOKEN_SCHEME + iamToken;
-                ForwardRequest(authHeader, ctx);
+                ForwardUserRequest(authHeader, ctx);
             } else {
-                NHttp::THttpOutgoingResponsePtr httpResponse;
-                if (response->Status == "401") {
-                    httpResponse = GetHttpOutgoingResponsePtr(TStringBuf(), Request, Settings, IsAjaxRequest);
+                if (response->Status == "400" || response->Status == "401") {
+                    StartOidcProcess(ctx);
+                    RequestAuthorizationCode(ctx);
                 } else {
+                    NHttp::THttpOutgoingResponsePtr httpResponse;
                     NHttp::THeadersBuilder ResponseHeaders;
                     ResponseHeaders.Parse(response->Headers);
                     httpResponse = Request->CreateResponse(response->Status, response->Message, ResponseHeaders, response->Body);
+                    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
+                    Die(ctx);
                 }
-                ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
-                Die(ctx);
             }
         }
     }
@@ -172,36 +188,38 @@ private:
         return authHeader.StartsWith(IAM_TOKEN_SCHEME);
     }
 
-    void RequestAccessToken(const NHttp::THeaders& headers, const NActors::TActorContext& ctx) {
-        TStringBuf session_token = headers.Get("cookie");
-        IsAjaxRequest = DetectAjaxRequest(headers);
+    void ExchangeSessionToken(const TString sessionToken, const NActors::TActorContext& ctx) {
+        LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Exchange session token");
+        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.GetExchangeEndpoint());
+        httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/x-www-form-urlencoded");
 
         NMVP::TMvpTokenator* tokenator = MVPAppData()->Tokenator;
         TString token = "";
         if (tokenator) {
             token = tokenator->GetToken(Settings.SessionServiceTokenName);
         }
-
-        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequest("POST", Settings.GetExchangeEndpoint());
-        const TString authHeader = IAM_TOKEN_SCHEME + token; // ??????????????
-        httpRequest->Set(AUTH_HEADER_NAME, authHeader);
-        httpRequest->Set("Content-Type", "application/x-www-form-urlencoded");
+        httpRequest->Set("Authorization", token); // Bearer included
         TStringBuilder body;
         body << "grant_type=urn:ietf:params:oauth:grant-type:token-exchange"
              << "&requested_token_type=urn:ietf:params:oauth:token-type:access_token"
              << "&subject_token_type=urn:ietf:params:oauth:token-type:session_token"
-             << "&subject_token=" << session_token;
+             << "&subject_token=" << sessionToken;
         httpRequest->Set<&NHttp::THttpRequest::Body>(body);
 
-        // if (Request->HaveBody()) {
-        //     httpRequest->SetBody(Request->Body);
-        // }
         ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
 
-        Become(&THandlerSessionServiceCheckV2::StateExchange);
+        Become(&THandlerSessionServiceCheckN::StateExchange);
     }
 
-    void ForwardRequest(TStringBuf authHeader, const NActors::TActorContext& ctx, bool secure = false) {
+    void RequestAuthorizationCode(const NActors::TActorContext& ctx) {
+        LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Request authorization code");
+        NHttp::THttpOutgoingResponsePtr httpResponse = GetHttpOutgoingResponsePtr(TStringBuf(), Request, Settings, IsAjaxRequest);
+        ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
+        Die(ctx);
+    }
+
+    void ForwardUserRequest(TStringBuf authHeader, const NActors::TActorContext& ctx, bool secure = false) {
+        LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Forward user request");
         NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequest(Request->Method, ProtectedPageUrl);
         ForwardRequestHeaders(httpRequest);
         if (!authHeader.empty()) {
@@ -214,7 +232,7 @@ private:
             httpRequest->Secure = secure;
         }
         ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
-        Become(&THandlerSessionServiceCheckV2::StateWork);
+        Become(&THandlerSessionServiceCheckN::StateWork);
     }
 
     TString FixReferenceInHtml(TStringBuf html, TStringBuf host, TStringBuf findStr) {

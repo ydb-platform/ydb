@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package nebius.iam.v1;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+
+// DO NOT REMOVE! THESE OPTIONS ARE NEEDED FOR Bazel BUILD TO CORRESPOND TO buf generate:
+option java_multiple_files = true;
+option java_outer_classname = "TokenServiceProto";
+option java_package = "ai.nebius.iam.token.v1";
+option go_package = "a.yandex-team.ru/api/nebius-ai/proto/go/nebius/iam/v1";
+// END
+
+service TokenService {
+  rpc Exchange(ExchangeTokenRequest) returns (CreateTokenResponse); // not auth for jwt exchange
+  rpc Create(CreateTokenRequest) returns (CreateTokenResponse); // auth, used under service acc
+  rpc Revoke(RevokeTokenRequest) returns (RevokeTokenResponse); // auth
+  rpc CreateDBToken(CreateDbTokenRequest) returns (CreateTokenResponse); //not auth
+}
+
+//https://www.rfc-editor.org/rfc/rfc8693.html
+message ExchangeTokenRequest {
+  string grant_type = 1; // required - urn:ietf:params:oauth:token-type:access_token
+  string requested_token_type = 2; // optional type of requested token, default is access_token
+  string subject_token = 3; // required - could be self signed JWT token or access token with token issue scope
+  string subject_token_type = 4; //required
+  repeated string scopes = 5; // optional (scopes of the token)
+  string audience = 6; //optional, name of the oauth client id on which this token will be used
+}
+
+message CreateTokenRequest {
+  string grant_type = 1; // required - urn:ietf:params:oauth:token-type:access_token
+  string subject_id = 2; // optional - used for impersanation subject creation and for metadata service token creation
+  string audience = 3; //optional,  name of the cliend id on which this token will be used
+  repeated string scopes = 4; // optional
+}
+
+message CreateTokenResponse {
+  string access_token = 1; // required
+  string issued_token_type = 2; //required
+  string token_type = 3; // required - Bearer
+  google.protobuf.Timestamp expires_in = 4; //
+  repeated string scopes = 5;
+}
+
+message RevokeTokenRequest {
+  oneof revoke {
+    string token = 1; // to revoke only token
+    string key = 2; // to revoke all token created under service acc key
+    string subject_id = 3; // to revoke all tokens for some subject
+    string aud = 4; // to revoke all tokens created for some oauth client id
+  }
+}
+
+message RevokeTokenResponse {}
+
+message CreateDbTokenRequest {
+  string token = 1;
+}

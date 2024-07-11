@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/api/client/yc_private/oauth/session_service.grpc.pb.h>
+#include <ydb/mvp/core/core_ydb.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/actors/core/events.h>
@@ -10,18 +11,14 @@
 #include <library/cpp/string_utils/base64/base64.h>
 
 struct TOpenIdConnectSettings {
-    enum ESchemaVersion {
-        V1 = 1,
-        V2 = 2
-    };
-
     static const inline TString YDB_OIDC_COOKIE = "ydb_oidc_cookie";
+    static const inline TString SESSION_COOKIE = "session_cookie";
 
-    static const inline TString AUTH_REQUEST_V1 = "/oauth/authorize";
-    static const inline TString AUTH_REQUEST_V2 = "/oauth2/authorize";
-    static const inline TString TOKEN_REQUEST_V1 = "/oauth/token";
-    static const inline TString TOKEN_REQUEST_V2 = "/oauth2/token";
-    static const inline TString EXCHANGE_REQUEST = "/oauth/session/exchange";
+    static const inline TString AUTH_REQUEST_Y = "/oauth/authorize";
+    static const inline TString AUTH_REQUEST_N = "/oauth2/authorize";
+    static const inline TString TOKEN_REQUEST_Y = "/oauth/token";
+    static const inline TString TOKEN_REQUEST_N = "/oauth2/token";
+    static const inline TString EXCHANGE_REQUEST = "/oauth2/session/exchange";
 
     TString ClientId;
     TString SessionServiceEndpoint;
@@ -29,7 +26,7 @@ struct TOpenIdConnectSettings {
     TString AuthorizationServerAddress;
     TString ClientSecret;
     std::vector<TString> AllowedProxyHosts;
-    ESchemaVersion SchemaVersion = TOpenIdConnectSettings::ESchemaVersion::V1;
+    NMVP::EAuthProfile AuthProfile = NMVP::EAuthProfile::YProfile;
 
     TString GetAuthorizationString() const {
         return Base64Encode(ClientId + ":" + ClientSecret);
@@ -37,12 +34,12 @@ struct TOpenIdConnectSettings {
 
     TString GetAuthEndpoint() const {
         return AuthorizationServerAddress +
-            (SchemaVersion == ESchemaVersion::V1 ? AUTH_REQUEST_V1 : AUTH_REQUEST_V2);
+            (AuthProfile == NMVP::EAuthProfile::YProfile ? AUTH_REQUEST_Y : AUTH_REQUEST_N);
     }
 
     TString GetTokenEndpoint() const {
         return AuthorizationServerAddress +
-            (SchemaVersion == ESchemaVersion::V1 ? TOKEN_REQUEST_V1 : TOKEN_REQUEST_V2);
+            (AuthProfile == NMVP::EAuthProfile::YProfile ? TOKEN_REQUEST_Y : TOKEN_REQUEST_N);
     }
 
     TString GetExchangeEndpoint() const {
@@ -57,7 +54,9 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(TStringBuf eventDetai
 NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(TStringBuf eventDetails, const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, bool isAjaxRequest = false);
 bool DetectAjaxRequest(const NHttp::THeaders& headers);
 TString CreateNameYdbOidcCookie(TStringBuf key, TStringBuf state);
+TString CreateNameSessionCookie(TStringBuf key);
 const TString& GetAuthCallbackUrl();
+TString CreateSecureCookie(const TString& name, const TString& value);
 
 template <typename TSessionService>
 std::unique_ptr<NYdbGrpc::TServiceConnection<TSessionService>> CreateGRpcServiceConnection(const TString& endpoint) {

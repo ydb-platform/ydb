@@ -20,7 +20,7 @@
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/mvp/core/appdata.h>
 #include "openid_connect.h"
-#include "oidc_session_create_v2.h"
+#include "oidc_session_create_n.h"
 
 namespace NMVP {
 
@@ -270,10 +270,10 @@ public:
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx) {
         NHttp::THttpIncomingRequestPtr request = event->Get()->Request;
         if (request->Method == "GET") {
-            if (Settings.SchemaVersion == TOpenIdConnectSettings::ESchemaVersion::V1) {
+            if (Settings.AuthProfile == NMVP::EAuthProfile::YProfile) {
                 ctx.Register(new THandlerSessionCreate(event->Sender, request, HttpProxyId, Settings));
             } else {
-                ctx.Register(new THandlerSessionCreateV2(event->Sender, request, HttpProxyId, Settings));
+                ctx.Register(new THandlerSessionCreateN(event->Sender, request, HttpProxyId, Settings));
             }
             return;
         }

@@ -74,7 +74,7 @@ int TMVP::Init() {
     ActorSystem.Register(NActors::CreateProcStatCollector(TDuration::Seconds(5), AppData.MetricRegistry = std::make_shared<NMonitoring::TMetricRegistry>()));
 
     BaseHttpProxyId = ActorSystem.Register(NHttp::CreateHttpProxy(AppData.MetricRegistry));
-    ActorSystem.Register(AppData.Tokenator = TMvpTokenator::CreateTokenator(TokensConfig, BaseHttpProxyId));
+    ActorSystem.Register(AppData.Tokenator = TMvpTokenator::CreateTokenator(TokensConfig, BaseHttpProxyId, AuthProfile));
 
     HttpProxyId = ActorSystem.Register(NHttp::CreateHttpCache(BaseHttpProxyId, GetCachePolicy));
 
@@ -225,14 +225,10 @@ void TMVP::TryGetOidcOptionsFromConfig(const YAML::Node& config) {
     }
 
     SecretName = oidc["secret_name"].as<std::string>("");
-    OpenIdConnectSettings.ClientId = oidc["client_id"].as<std::string>("yc.oauth.ydb-viewer"); // ??????????????
+    OpenIdConnectSettings.ClientId = oidc["client_id"].as<std::string>("yc.oauth.ydb-viewer");
     OpenIdConnectSettings.SessionServiceEndpoint = oidc["session_service_endpoint"].as<std::string>("");
     OpenIdConnectSettings.SessionServiceTokenName = oidc["session_service_token_name"].as<std::string>("");
     OpenIdConnectSettings.AuthorizationServerAddress = oidc["authorization_server_address"].as<std::string>("");
-    auto chemaVersion = oidc["schema_version"].as<std::string>("");
-    OpenIdConnectSettings.SchemaVersion = chemaVersion != "v2"
-        ? TOpenIdConnectSettings::ESchemaVersion::V1
-        : TOpenIdConnectSettings::ESchemaVersion::V2;
     Cout << "Started processing allowed_proxy_hosts..." << Endl;
     for (const std::string& host : oidc["allowed_proxy_hosts"].as<std::vector<std::string>>()) {
         Cout << host << " added to allowed_proxy_hosts" << Endl;
@@ -287,6 +283,14 @@ void TMVP::TryGetGenericOptionsFromConfig(
         if (opts.FindLongOptParseResult("https-port") == nullptr) {
             HttpsPort = server["https_port"].as<ui16>(0);
         }
+    }
+
+    if (generic["auth_profile"]) {
+        auto authProfile = generic["auth_profile"].as<std::string>("y-profile");
+        AuthProfile = authProfile != "n-profile"
+            ? NMVP::EAuthProfile::YProfile
+            : NMVP::EAuthProfile::NProfile;
+        OpenIdConnectSettings.AuthProfile = AuthProfile;
     }
 }
 

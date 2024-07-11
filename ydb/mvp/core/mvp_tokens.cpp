@@ -1,12 +1,15 @@
 #include <contrib/libs/jwt-cpp/include/jwt-cpp/jwt.h>
 #include <ydb/library/actors/http/http_proxy.h>
+#include <ydb/mvp/core/core_ydb.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 #include "mvp_tokens.h"
+#include <ydb/public/api/client/nc_private/iam/token_service.grpc.pb.h>
+#include <ydb/public/api/client/nc_private/iam/token_exchange_service.grpc.pb.h>
 
 namespace NMVP {
 
-TMvpTokenator* TMvpTokenator::CreateTokenator(const NMvp::TTokensConfig& tokensConfig,  const NActors::TActorId& httpProxy) {
-    return new TMvpTokenator(tokensConfig, httpProxy);
+TMvpTokenator* TMvpTokenator::CreateTokenator(const NMvp::TTokensConfig& tokensConfig,  const NActors::TActorId& httpProxy, const NMVP::EAuthProfile authProfile) {
+    return new TMvpTokenator(tokensConfig, httpProxy, authProfile);
 }
 
 TString TMvpTokenator::GetToken(const TString& name) {
@@ -21,8 +24,9 @@ TString TMvpTokenator::GetToken(const TString& name) {
     return token;
 }
 
-TMvpTokenator::TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TActorId& httpProxy)
+TMvpTokenator::TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TActorId& httpProxy, const NMVP::EAuthProfile authProfile)
     : HttpProxy(httpProxy)
+    , AuthProfile(authProfile)
 {
     if (tokensConfig.HasStaffApiUserTokenInfo()) {
         UpdateStaffApiUserToken(&tokensConfig.staffapiusertokeninfo());
@@ -72,7 +76,11 @@ void TMvpTokenator::Handle(TEvPrivate::TEvRefreshToken::TPtr event) {
     BLOG_D("Refreshing token " << name);
     const NMvp::TJwtInfo* jwtInfo = TokenConfigs.GetJwtTokenConfig(name);
     if (jwtInfo != nullptr) {
-        UpdateJwtToken(jwtInfo);
+        if (AuthProfile == NMVP::EAuthProfile::YProfile) {
+            UpdateJwtTokenY(jwtInfo);
+        } else {
+            UpdateJwtTokenN(jwtInfo);
+        }
         return;
     }
     const NMvp::TOAuthInfo* oauthInfo = TokenConfigs.GetOAuthTokenConfig(name);
@@ -100,6 +108,21 @@ void TMvpTokenator::Handle(TEvPrivate::TEvUpdateIamToken::TPtr event) {
         {
             auto guard = Guard(TokensLock);
             Tokens[event->Get()->Name] = "Bearer " + std::move(event->Get()->Response.iam_token());
+        }
+    } else {
+        BLOG_ERROR("Error refreshing token " << event->Get()->Name << ", status: " << event->Get()->Status.GRpcStatusCode << ", error: " << event->Get()->Status.Msg);
+        refreshPeriod = ERROR_REFRESH_PERIOD;
+    }
+    RefreshQueue.push({TInstant::Now() + refreshPeriod, event->Get()->Name});
+}
+
+void TMvpTokenator::Handle(TEvPrivate::TEvUpdateIamTokenN::TPtr event) {
+    TDuration refreshPeriod = SUCCESS_REFRESH_PERIOD;
+    if (event->Get()->Status.Ok()) {
+        BLOG_D("Updating token " << event->Get()->Name << " to " << event->Get()->Subject);
+        {
+            auto guard = Guard(TokensLock);
+            Tokens[event->Get()->Name] = "Bearer " + std::move(event->Get()->Response.access_token());
         }
     } else {
         BLOG_ERROR("Error refreshing token " << event->Get()->Name << ", status: " << event->Get()->Status.GRpcStatusCode << ", error: " << event->Get()->Status.Msg);
@@ -219,7 +242,7 @@ void TMvpTokenator::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr ev
     HttpRequestNames.erase(httpRequstsIt);
 }
 
-void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
+void TMvpTokenator::UpdateJwtTokenY(const NMvp::TJwtInfo* jwtInfo) {
     auto now = std::chrono::system_clock::now();
     auto expires_at = now + std::chrono::hours(1);
     auto serviceAccountId = jwtInfo->accountid();
@@ -242,6 +265,37 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
                        yandex::cloud::priv::iam::v1::CreateIamTokenRequest,
                        yandex::cloud::priv::iam::v1::CreateIamTokenResponse,
                        TEvPrivate::TEvUpdateIamToken>(jwtInfo->name(), jwtInfo->endpoint(), request, &yandex::cloud::priv::iam::v1::IamTokenService::Stub::AsyncCreate);
+}
+
+void TMvpTokenator::UpdateJwtTokenN(const NMvp::TJwtInfo* jwtInfo) {
+    auto now = std::chrono::system_clock::now();
+    auto expires_at = now + std::chrono::hours(1);
+    auto serviceAccountId = jwtInfo->accountid();
+    auto keyId = jwtInfo->keyid();
+    std::set<std::string> audience;
+    audience.insert(jwtInfo->audience());
+    auto algorithm = jwt::algorithm::rs256(jwtInfo->publickey(), jwtInfo->privatekey());
+
+    auto encoded_token = jwt::create()
+            .set_key_id(keyId)
+            .set_issuer(serviceAccountId)
+            .set_subject(serviceAccountId)
+            .set_audience(audience)
+            .set_issued_at(now)
+            .set_expires_at(expires_at)
+            .sign(algorithm);
+
+    nebius::iam::v1::ExchangeTokenRequest request;
+    request.set_grant_type("urn:ietf:params:oauth:grant-type:token-exchange");
+    request.set_requested_token_type("urn:ietf:params:oauth:token-type:access_token");
+    request.set_subject_token_type("urn:ietf:params:oauth:token-type:jwt");
+    request.set_subject_token(TString(encoded_token));
+    request.set_audience("mvp-oidc-testing");
+
+    RequestCreateToken<nebius::iam::v1::TokenExchangeService,
+                       nebius::iam::v1::ExchangeTokenRequest,
+                       nebius::iam::v1::CreateTokenResponse,
+                       TEvPrivate::TEvUpdateIamTokenN>(jwtInfo->name(), jwtInfo->endpoint(), request, &nebius::iam::v1::TokenExchangeService::Stub::AsyncExchange, serviceAccountId);
 }
 
 void TMvpTokenator::UpdateOAuthToken(const NMvp::TOAuthInfo* oauthInfo) {

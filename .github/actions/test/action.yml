@@ -223,6 +223,53 @@ runs:
       s3cmd sync -P --no-progress --stats --no-check-md5 -P $ARTIFACTS_DIR/ $S3_BUCKET_PATH
       echo "::endgroup::"
 
+  - name: Test history upload results to YDB
+      if: always()
+      continue-on-error: true
+      shell: bash
+      env:
+        PR_NUMBER: ${{ github.event.number }}
+        JOB_NAME: ${{ github.workflow }}
+        JOB_ID: ${{github.run_id }}
+      run: |
+        set -x
+        python3 -m pip install ydb ydb[yc] codeowners
+
+        #Variables
+        echo "JUNIT_REPORT_XML=${JUNIT_REPORT_XML}"
+        echo "BUILD_PRESET=${BUILD_PRESET}"
+        echo "PR_NUMBER=${PR_NUMBER}"
+        echo "JOB_NAME=${JOB_NAME}"
+        echo "JOB_ID=${JOB_ID}"
+        echo "GITHUB_REF_NAME=${GITHUB_REF_NAME}"
+
+        case $GITHUB_EVENT_NAME in
+          workflow_dispatch)
+            TESTMO_RUN_NAME="${{ github.run_id }} manual"
+            EXTRA_TAG="manual"
+            ;;
+          pull_request | pull_request_target)
+            TESTMO_RUN_NAME="${{ github.run_id }} PR #${PR_NUMBER}"
+            EXTRA_TAG="pr"
+            BRANCH_TAG=""
+            ;;
+          schedule)
+            TESTMO_RUN_NAME="${{ github.run_id }} schedule"
+            EXTRA_TAG="schedule"
+            ;;
+          push)
+            TESTMO_RUN_NAME="${{ github.run_id }} POST"
+            EXTRA_TAG="post-commit"
+            ;;
+          *)
+            TESTMO_RUN_NAME="${{ github.run_id }}"
+            EXTRA_TAG=""
+            ;;
+        esac
+        
+        result=`.github/scripts/upload_tests_results.py --test-results-file ${JUNIT_REPORT_XML} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull ${TESTMO_RUN_NAME} --job-name ${JOB_NAME} --job-id ${JOB_ID} --branch ${GITHUB_REF_NAME}`
+
+    
   - name: Unit test history upload results
     if: always() && inputs.run_unit_tests == 'true' && inputs.testman_token
     shell: bash

@@ -342,8 +342,32 @@ runs:
         echo "JOB_NAME=${JOB_NAME}"
         echo "JOB_ID=${JOB_ID}"
         echo "GITHUB_REF_NAME=${GITHUB_REF_NAME}"
+
+        case $GITHUB_EVENT_NAME in
+          workflow_dispatch)
+            TESTMO_RUN_NAME="${{ github.run_id }} manual"
+            EXTRA_TAG="manual"
+            ;;
+          pull_request | pull_request_target)
+            TESTMO_RUN_NAME="${{ github.run_id }} PR #${PR_NUMBER}"
+            EXTRA_TAG="pr"
+            BRANCH_TAG=""
+            ;;
+          schedule)
+            TESTMO_RUN_NAME="${{ github.run_id }} schedule"
+            EXTRA_TAG="schedule"
+            ;;
+          push)
+            TESTMO_RUN_NAME="${{ github.run_id }} POST"
+            EXTRA_TAG="post-commit"
+            ;;
+          *)
+            TESTMO_RUN_NAME="${{ github.run_id }}"
+            EXTRA_TAG=""
+            ;;
+        esac
         
-        result=`.github/scripts/upload_tests_results.py --test-results-file ${JUNIT_REPORT_XML} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull ${PR_NUMBER} --job-name ${JOB_NAME} --job-id ${JOB_ID} --branch ${GITHUB_REF_NAME}`
+        result=`.github/scripts/upload_tests_results.py --test-results-file ${JUNIT_REPORT_XML} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull ${TESTMO_RUN_NAME} --job-name ${JOB_NAME} --job-id ${JOB_ID} --branch ${GITHUB_REF_NAME}`
 
     - name: Unit test history upload results
       if: inputs.testman_token && inputs.run_tests

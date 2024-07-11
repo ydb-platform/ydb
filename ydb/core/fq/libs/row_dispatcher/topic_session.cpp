@@ -31,6 +31,8 @@
 #include <queue>
 
 #include <ydb/core/fq/libs/row_dispatcher/json_parser.h>
+#include <ydb/core/fq/libs/row_dispatcher/predicate_builder.h>
+
 
 
 namespace NFq {
@@ -168,18 +170,15 @@ TVector<TString> TTopicSession::GetColumns() {
 TTopicSession::TTopicSession(
     const NYql::NPq::NProto::TDqPqTopicSource& sourceParams,
     ui32 partitionId,
-   // TMaybe<ui64> readOffset,
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory)
     : SourceParams(sourceParams)
     , PartitionId(partitionId)
-   // , ReadOffset(readOffset)
     , Driver(driver)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , BufferSize(16_MB)
     , LogPrefix("TopicSession: ")
    // , StartingMessageTimestamp(TInstant::MilliSeconds(TInstant::Now().MilliSeconds())) // this field is serialized as milliseconds, so drop microseconds part to be consistent with storage
-   // , Alloc(__LOCATION__)
     , Parser(GetColumns(), [&](const TString& json){
             SendData(json);
         })
@@ -197,14 +196,19 @@ TTopicSession::TTopicSession(
 void TTopicSession::Bootstrap() {
     Become(&TTopicSession::StateFunc);
     LOG_ROW_DISPATCHER_DEBUG("id " << SelfId());
+    try {
+        auto where = FormatWhere(SourceParams.GetPredicate());
+        LOG_ROW_DISPATCHER_DEBUG("where " << where);
+    } catch (const yexception &ex) {
+        LOG_ROW_DISPATCHER_DEBUG("FormatWhere failed: "  << ex.what());
+        // TODO
+    }
 }
-
 
 void TTopicSession::PassAway() {
     LOG_ROW_DISPATCHER_DEBUG("PassAway");
     NActors::TActorBootstrapped<TTopicSession>::PassAway();
 }
-
 
 void TTopicSession::SubscribeOnNextEvent() {
     if (!ReadSession) {
@@ -457,7 +461,12 @@ void TTopicSession::ParseData() {
     auto& readyBatch = ReadyBuffer.front();
     for (const auto& [offset, value] : readyBatch.Data) {
         CurrentOffset = offset;
-        Parser.Push(value);
+        try {
+            Parser.Push(value);
+        } catch (...) {
+            auto message = CurrentExceptionMessage();
+            LOG_ROW_DISPATCHER_DEBUG("Parsing error: " << message);
+        } 
     }
     ReadyBuffer.pop();
 }

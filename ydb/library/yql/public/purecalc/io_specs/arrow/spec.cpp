@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/public/udf/arrow/udf_arrow_helpers.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
@@ -65,6 +66,7 @@ protected:
     IWorker* Worker_;
     const THolderFactory& Factory_;
     const NYT::TNode& Schema_;
+    TVector<ui32> DatumToMemberIDMap_;
 
 public:
     explicit TArrowInputConverter(
@@ -76,6 +78,20 @@ public:
         , Factory_(Worker_->GetGraph().GetHolderFactory())
         , Schema_(inputSpec.GetSchema(index))
     {
+        DatumToMemberIDMap_.resize(Schema_.Size());
+
+        const auto* type = Worker_->GetInputType(index, true);
+
+        Y_ENSURE(type->IsStruct());
+        Y_ENSURE(Schema_.ChildAsString(0) == "StructType");
+
+        const auto& members = Schema_.ChildAsList(1);
+        for (size_t i = 0; i < DatumToMemberIDMap_.size(); i++) {
+            const auto& name = members[i].ChildAsString(0);
+            const auto& memberIndex = type->FindMemberIndex(name);
+            Y_ENSURE(memberIndex);
+            DatumToMemberIDMap_[i] = *memberIndex;
+        }
     }
 
     void DoConvert(arrow::compute::ExecBatch* batch, TUnboxedValue& result) {
@@ -85,7 +101,8 @@ public:
         TUnboxedValue* datums = nullptr;
         result = Factory_.CreateDirectArrayHolder(nvalues + 1, datums);
         for (size_t i = 0; i < nvalues; i++) {
-            datums[i] = Factory_.CreateArrowBlock(std::move(batch->values[i]));
+            const ui32 id = DatumToMemberIDMap_[i];
+            datums[id] = Factory_.CreateArrowBlock(std::move(batch->values[i]));
         }
 
         arrow::Datum length(std::make_shared<arrow::UInt64Scalar>(batch->length));
@@ -102,6 +119,7 @@ protected:
     IWorker* Worker_;
     const THolderFactory& Factory_;
     const NYT::TNode& Schema_;
+    TVector<ui32> MemberToDatumIDMap_;
     THolder<arrow::compute::ExecBatch> Batch_;
 
 public:
@@ -114,6 +132,22 @@ public:
         , Schema_(outputSpec.GetSchema())
     {
         Batch_.Reset(new arrow::compute::ExecBatch);
+        MemberToDatumIDMap_.resize(Schema_.Size());
+
+        const auto* type = Worker_->GetOutputType();
+
+        Y_ENSURE(type->IsStruct());
+        Y_ENSURE(Schema_.ChildAsString(0) == "StructType");
+
+        const auto* stype = AS_TYPE(NKikimr::NMiniKQL::TStructType, type);
+
+        const auto& members = Schema_.ChildAsList(1);
+        for (size_t i = 0; i < MemberToDatumIDMap_.size(); i++) {
+            const auto& name = members[i].ChildAsString(0);
+            const auto& memberIndex = stype->FindMemberIndex(name);
+            Y_ENSURE(memberIndex);
+            MemberToDatumIDMap_[*memberIndex] = i;
+        }
     }
 
     OutputItemType DoConvert(TUnboxedValue value) {
@@ -129,7 +163,7 @@ public:
         TVector<arrow::Datum> datums(nvalues);
         for (size_t i = 0; i < nvalues; i++) {
             const auto& datum = TArrowBlock::From(value.GetElement(i)).GetDatum();
-            datums[i] = datum;
+            datums[MemberToDatumIDMap_[i]] = datum;
             if (datum.is_scalar()) {
                 continue;
             }

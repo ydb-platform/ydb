@@ -870,6 +870,19 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             break;
         }
         case EYtSettingType::SecurityTags: {
+            if (!EnsureTupleMinSize(*setting, 1, ctx)) {
+                return false;
+            }
+            for (size_t pos = 1; pos < setting->ChildrenSize(); pos++) {
+                if (!EnsureAtom(*setting->ChildRef(pos), ctx)) {
+                    return false;
+                }
+                if (setting->ChildRef(pos)->Content().Size() == 0) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting->ChildRef(pos)->Pos()), TStringBuilder() 
+                        << "Security tag cannot be empty"));
+                    return false;
+                }
+            }
             return true;
         }
         case EYtSettingType::LAST: {

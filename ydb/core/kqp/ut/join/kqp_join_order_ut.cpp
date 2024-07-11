@@ -55,10 +55,6 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
 
     NKikimrKqp::TKqpSetting setting;
 
-    setting.SetName("OptEnableConstantFolding");
-    setting.SetValue("true");
-    settings.push_back(setting);
-
     if (stats != "") {
         setting.SetName("OverrideStatistics");
         setting.SetValue(stats);
@@ -67,6 +63,7 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
 
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookupJoin);
+    appConfig.MutableTableServiceConfig()->SetEnableConstantFolding(true);
     appConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(TDuration::Minutes(10).MilliSeconds());
 
     auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);

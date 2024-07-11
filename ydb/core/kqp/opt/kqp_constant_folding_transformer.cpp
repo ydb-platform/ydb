@@ -24,7 +24,7 @@ namespace {
             return;
         }
 
-        if (IsConstantExpr(input)) {
+        if (IsConstantExpr(input) && !input->IsCallable("PgConst")) {
             TNodeOnNodeOwnedMap deepClones;
             auto inputClone = ctx.DeepCopy(*input, ctx, deepClones, false, true, true);
 
@@ -60,7 +60,7 @@ IGraphTransformer::TStatus TKqpConstantFoldingTransformer::DoTransform(TExprNode
     TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
 
-    if (!Config->HasOptEnableConstantFolding()) {
+    if (!Config->EnableConstantFolding) {
         return IGraphTransformer::TStatus::Ok;
     }
 

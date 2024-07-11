@@ -69,7 +69,6 @@ TKikimrConfiguration::TKikimrConfiguration() {
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
     REGISTER_SETTING(*this, CostBasedOptimizationLevel);
-    REGISTER_SETTING(*this, OptEnableConstantFolding);
 
     REGISTER_SETTING(*this, MaxDPccpDPTableSize);
 
@@ -124,10 +123,6 @@ bool TKikimrSettings::HasOptEnableOlapProvideComputeSharding() const {
 
 bool TKikimrSettings::HasOptUseFinalizeByKey() const {
     return GetOptionalFlagValue(OptUseFinalizeByKey.Get()) != EOptionalFlag::Disabled;
-}
-
-bool TKikimrSettings::HasOptEnableConstantFolding() const {
-    return GetOptionalFlagValue(OptEnableConstantFolding.Get()) == EOptionalFlag::Enabled;
 }
 
 

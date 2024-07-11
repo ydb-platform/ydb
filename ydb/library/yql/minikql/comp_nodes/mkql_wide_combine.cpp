@@ -133,8 +133,14 @@ struct TCombinerNodes {
     }
 
     void ExtractValues(TComputationContext& ctx, NUdf::TUnboxedValue** values, NUdf::TUnboxedValue* keys) const {
+        for (size_t i = 0U; i < ItemNodes.size(); ++i) {
+            keys[i] = std::move(*(values[i]));
+        }
+    }
+
+    void ExtractValues(TComputationContext& ctx, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue** values) const {
         for (size_t i = 0U, j = 0U; i < ItemNodes.size(); ++i) {
-            keys[i] = *(values[j++]);
+            keys[i] = std::move(*(values[j++]));
         }
     }
 
@@ -353,6 +359,7 @@ public:
         Init = -1,
         Update,
         DataRequired,
+        DataExtractionRequired,
         Skip
     };
     TSpillingSupportState(
@@ -629,8 +636,15 @@ private:
             }
             AsyncReadOperation = std::nullopt;
         }
+
         auto& bucket = SpilledBuckets.front();
         if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory) return false;
+        if (HasDataForProcessing) {
+            Tongue = bucket.InMemoryProcessingState->Tongue;
+            Throat = bucket.InMemoryProcessingState->Throat;
+            HasDataForProcessing = false;
+            return false;
+        }
         //recover spilled state
         while(!bucket.SpilledState->Empty()) {
             RecoverState = true;
@@ -660,15 +674,14 @@ private:
             if (AsyncReadOperation) {
                 return true;
             }
-            auto **fields = Ctx.WideFields.data() + WideFieldsIndex;
+            /* auto **fields = Ctx.WideFields.data() + WideFieldsIndex;
             for (size_t i = 0, j = 0; i < ItemNodesSize; ++i) {
                 if (fields[i]) {
                     fields[i] = &(BufferForUsedInputItems[j++]);
                 }
-            }
+            }*/ 
 
-            Tongue = bucket.InMemoryProcessingState->Tongue;
-            Throat = bucket.InMemoryProcessingState->Throat;
+            Throat = BufferForKeyAndState.data();
             
             HasDataForProcessing = true;
             return false;
@@ -1287,6 +1300,10 @@ public:
                         case TSpillingSupportState::ETasteResult::DataRequired:
                             Nodes.ExtractValues(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
                             break;
+                        case TSpillingSupportState::ETasteResult::DataExtractionRequired:
+                            Nodes.ExtractValues(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Throat), fields);
+                            break;
+
                         case TSpillingSupportState::ETasteResult::Skip:
                             break;
                     }

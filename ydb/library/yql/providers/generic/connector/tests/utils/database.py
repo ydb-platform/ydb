@@ -52,6 +52,8 @@ class Database:
                 return f'database "{self.name}" does not exist'
             case EDataSourceKind.YDB:
                 raise Exception("Fix me first in YQ-3315")
+            case EDataSourceKind.MYSQL:
+                return 'database does not exist'
             case _:
                 raise Exception(f'invalid data source: {self.kind}')
 
@@ -63,6 +65,8 @@ class Database:
                 return 'table does not exist'
             case EDataSourceKind.YDB:
                 return 'issues = [{\'Path not found\'}])'
+            case EDataSourceKind.MYSQL:
+                return 'table does not exist'
             case _:
                 raise Exception(f'invalid data source: {self.kind}')
 

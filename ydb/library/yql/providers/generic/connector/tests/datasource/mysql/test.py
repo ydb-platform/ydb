@@ -16,8 +16,8 @@ import ydb.library.yql.providers.generic.connector.tests.utils.scenario.mysql as
 from conftest import docker_compose_dir
 from collection import Collection
 
-# import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_database as select_missing_database
-# import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_table as select_missing_table
+import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_database as select_missing_database
+import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_table as select_missing_table
 import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_positive_common as select_positive_common
 
 LOGGER = make_logger(__name__)
@@ -66,48 +66,6 @@ def test_select_positive(
     )
 
 
-# @pytest.mark.parametrize("runner_type", runner_types)
-# @pytest.mark.parametrize(
-#     "test_case", tc_collection.get('select_missing_database'), ids=tc_collection.ids('select_missing_database')
-# )
-# @pytest.mark.usefixtures("settings")
-# def test_select_missing_database(
-#     request: pytest.FixtureRequest,
-#     settings: Settings,
-#     runner_type: str,
-#     test_case: select_missing_database.TestCase,
-# ):
-#     runner = configure_runner(runner_type=runner_type, settings=settings)
-#     scenario.select_missing_table(
-#         settings=settings,
-#         runner=runner,
-#         test_case=test_case,
-#         test_name=request.node.name,
-#     )
-#
-#
-# @pytest.mark.parametrize("runner_type", runner_types)
-# @pytest.mark.parametrize(
-#     "test_case", tc_collection.get('select_missing_table'), ids=tc_collection.ids('select_missing_table')
-# )
-# @pytest.mark.usefixtures("settings")
-# def test_select_missing_table(
-#     request: pytest.FixtureRequest,
-#     settings: Settings,
-#     runner_type: str,
-#     test_case: select_missing_table.TestCase,
-# ):
-#     runner = configure_runner(runner_type=runner_type, settings=settings)
-#     scenario.select_missing_table(
-#         test_name=request.node.name,
-#         settings=settings,
-#         runner=runner,
-#         test_case=test_case,
-#     )
-#
-#
-
-
 @pytest.mark.parametrize("runner_type", runner_types)
 @pytest.mark.parametrize("test_case", tc_collection.get('select_datetime'), ids=tc_collection.ids('select_datetime'))
 @pytest.mark.usefixtures("settings")
@@ -123,4 +81,44 @@ def test_select_datetime(
         runner=runner,
         test_case=test_case,
         test_name=request.node.name,
+    )
+
+
+@pytest.mark.parametrize("runner_type", runner_types)
+@pytest.mark.parametrize(
+    "test_case", tc_collection.get('select_missing_database'), ids=tc_collection.ids('select_missing_database')
+)
+@pytest.mark.usefixtures("settings")
+def test_select_missing_database(
+    request: pytest.FixtureRequest,
+    settings: Settings,
+    runner_type: str,
+    test_case: select_missing_database.TestCase,
+):
+    runner = configure_runner(runner_type=runner_type, settings=settings)
+    scenario.select_missing_table(
+        settings=settings,
+        runner=runner,
+        test_case=test_case,
+        test_name=request.node.name,
+    )
+
+
+@pytest.mark.parametrize("runner_type", runner_types)
+@pytest.mark.parametrize(
+    "test_case", tc_collection.get('select_missing_table'), ids=tc_collection.ids('select_missing_table')
+)
+@pytest.mark.usefixtures("settings")
+def test_select_missing_table(
+    request: pytest.FixtureRequest,
+    settings: Settings,
+    runner_type: str,
+    test_case: select_missing_table.TestCase,
+):
+    runner = configure_runner(runner_type=runner_type, settings=settings)
+    scenario.select_missing_table(
+        test_name=request.node.name,
+        settings=settings,
+        runner=runner,
+        test_case=test_case,
     )

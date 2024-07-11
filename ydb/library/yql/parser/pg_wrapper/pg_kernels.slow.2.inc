@@ -48,9 +48,11 @@ TExecFunc arrow_pg_is_wal_replay_paused() { return MakeIndirectExec<true, true>(
 TExecFunc arrow_pg_last_wal_receive_lsn() { return MakeIndirectExec<true, true>(&pg_last_wal_receive_lsn); }
 TExecFunc arrow_pg_last_wal_replay_lsn() { return MakeIndirectExec<true, true>(&pg_last_wal_replay_lsn); }
 TExecFunc arrow_pg_last_xact_replay_timestamp() { return MakeIndirectExec<true, true>(&pg_last_xact_replay_timestamp); }
+TExecFunc arrow_pg_log_standby_snapshot() { return MakeIndirectExec<true, true>(&pg_log_standby_snapshot); }
 TExecFunc arrow_pg_promote() { return MakeIndirectExec<true, true>(&pg_promote); }
 TExecFunc arrow_pg_sequence_last_value() { return MakeIndirectExec<true, true>(&pg_sequence_last_value); }
 TExecFunc arrow_pg_sequence_parameters() { return MakeIndirectExec<true, false>(&pg_sequence_parameters); }
+TExecFunc arrow_pg_split_walfile_name() { return MakeIndirectExec<true, false>(&pg_split_walfile_name); }
 TExecFunc arrow_pg_switch_wal() { return MakeIndirectExec<true, true>(&pg_switch_wal); }
 TExecFunc arrow_pg_wal_lsn_diff() { return MakeIndirectExec<true, false>(&pg_wal_lsn_diff); }
 TExecFunc arrow_pg_wal_replay_pause() { return MakeIndirectExec<true, true>(&pg_wal_replay_pause); }

@@ -3,7 +3,7 @@
  * buffile.c
  *	  Management of large buffered temporary files.
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -95,6 +95,11 @@ struct BufFile
 	off_t		curOffset;		/* offset part of current pos */
 	int			pos;			/* next read/write position in buffer */
 	int			nbytes;			/* total # of valid bytes in buffer */
+
+	/*
+	 * XXX Should ideally us PGIOAlignedBlock, but might need a way to avoid
+	 * wasting per-file alignment padding when some users create many files.
+	 */
 	PGAlignedBlock buffer;
 };
 
@@ -104,7 +109,7 @@ static void extendBufFile(BufFile *file);
 static void BufFileLoadBuffer(BufFile *file);
 static void BufFileDumpBuffer(BufFile *file);
 static void BufFileFlush(BufFile *file);
-static File MakeNewFileSetSegment(BufFile *file, int segment);
+static File MakeNewFileSetSegment(BufFile *buffile, int segment);
 
 /*
  * Create BufFile and perform the common initialization.
@@ -119,7 +124,7 @@ makeBufFileCommon(int nfiles)
 	file->dirty = false;
 	file->resowner = CurrentResourceOwner;
 	file->curFile = 0;
-	file->curOffset = 0L;
+	file->curOffset = 0;
 	file->pos = 0;
 	file->nbytes = 0;
 
@@ -439,13 +444,15 @@ BufFileLoadBuffer(BufFile *file)
 		file->curFile + 1 < file->numFiles)
 	{
 		file->curFile++;
-		file->curOffset = 0L;
+		file->curOffset = 0;
 	}
 
 	thisfile = file->files[file->curFile];
 
 	if (track_io_timing)
 		INSTR_TIME_SET_CURRENT(io_start);
+	else
+		INSTR_TIME_SET_ZERO(io_start);
 
 	/*
 	 * Read whatever we can get, up to a full bufferload.
@@ -467,8 +474,7 @@ BufFileLoadBuffer(BufFile *file)
 	if (track_io_timing)
 	{
 		INSTR_TIME_SET_CURRENT(io_time);
-		INSTR_TIME_SUBTRACT(io_time, io_start);
-		INSTR_TIME_ADD(pgBufferUsage.temp_blk_read_time, io_time);
+		INSTR_TIME_ACCUM_DIFF(pgBufferUsage.temp_blk_read_time, io_time, io_start);
 	}
 
 	/* we choose not to advance curOffset here */
@@ -509,7 +515,7 @@ BufFileDumpBuffer(BufFile *file)
 			while (file->curFile + 1 >= file->numFiles)
 				extendBufFile(file);
 			file->curFile++;
-			file->curOffset = 0L;
+			file->curOffset = 0;
 		}
 
 		/*
@@ -525,6 +531,8 @@ BufFileDumpBuffer(BufFile *file)
 
 		if (track_io_timing)
 			INSTR_TIME_SET_CURRENT(io_start);
+		else
+			INSTR_TIME_SET_ZERO(io_start);
 
 		bytestowrite = FileWrite(thisfile,
 								 file->buffer.data + wpos,
@@ -540,8 +548,7 @@ BufFileDumpBuffer(BufFile *file)
 		if (track_io_timing)
 		{
 			INSTR_TIME_SET_CURRENT(io_time);
-			INSTR_TIME_SUBTRACT(io_time, io_start);
-			INSTR_TIME_ADD(pgBufferUsage.temp_blk_write_time, io_time);
+			INSTR_TIME_ACCUM_DIFF(pgBufferUsage.temp_blk_write_time, io_time, io_start);
 		}
 
 		file->curOffset += bytestowrite;
@@ -573,14 +580,19 @@ BufFileDumpBuffer(BufFile *file)
 }
 
 /*
- * BufFileRead
+ * BufFileRead variants
  *
  * Like fread() except we assume 1-byte element size and report I/O errors via
  * ereport().
+ *
+ * If 'exact' is true, then an error is also raised if the number of bytes
+ * read is not exactly 'size' (no short reads).  If 'exact' and 'eofOK' are
+ * true, then reading zero bytes is ok.
  */
-size_t
-BufFileRead(BufFile *file, void *ptr, size_t size)
+static size_t
+BufFileReadCommon(BufFile *file, void *ptr, size_t size, bool exact, bool eofOK)
 {
+	size_t		start_size = size;
 	size_t		nread = 0;
 	size_t		nthistime;
 
@@ -607,12 +619,51 @@ BufFileRead(BufFile *file, void *ptr, size_t size)
 		memcpy(ptr, file->buffer.data + file->pos, nthistime);
 
 		file->pos += nthistime;
-		ptr = (void *) ((char *) ptr + nthistime);
+		ptr = (char *) ptr + nthistime;
 		size -= nthistime;
 		nread += nthistime;
 	}
 
+	if (exact &&
+		(nread != start_size && !(nread == 0 && eofOK)))
+		ereport(ERROR,
+				errcode_for_file_access(),
+				file->name ?
+				errmsg("could not read from file set \"%s\": read only %zu of %zu bytes",
+					   file->name, nread, start_size) :
+				errmsg("could not read from temporary file: read only %zu of %zu bytes",
+					   nread, start_size));
+
 	return nread;
+}
+
+/*
+ * Legacy interface where the caller needs to check for end of file or short
+ * reads.
+ */
+size_t
+BufFileRead(BufFile *file, void *ptr, size_t size)
+{
+	return BufFileReadCommon(file, ptr, size, false, false);
+}
+
+/*
+ * Require read of exactly the specified size.
+ */
+void
+BufFileReadExact(BufFile *file, void *ptr, size_t size)
+{
+	BufFileReadCommon(file, ptr, size, true, false);
+}
+
+/*
+ * Require read of exactly the specified size, but optionally allow end of
+ * file (in which case 0 is returned).
+ */
+size_t
+BufFileReadMaybeEOF(BufFile *file, void *ptr, size_t size, bool eofOK)
+{
+	return BufFileReadCommon(file, ptr, size, true, eofOK);
 }
 
 /*
@@ -622,7 +673,7 @@ BufFileRead(BufFile *file, void *ptr, size_t size)
  * ereport().
  */
 void
-BufFileWrite(BufFile *file, void *ptr, size_t size)
+BufFileWrite(BufFile *file, const void *ptr, size_t size)
 {
 	size_t		nthistime;
 
@@ -655,7 +706,7 @@ BufFileWrite(BufFile *file, void *ptr, size_t size)
 		file->pos += nthistime;
 		if (file->nbytes < file->pos)
 			file->nbytes = file->pos;
-		ptr = (void *) ((char *) ptr + nthistime);
+		ptr = (const char *) ptr + nthistime;
 		size -= nthistime;
 	}
 }

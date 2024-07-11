@@ -2,7 +2,7 @@
  * output_plugin.h
  *	   PostgreSQL Logical Decode Plugin Interface
  *
- * Copyright (c) 2012-2022, PostgreSQL Global Development Group
+ * Copyright (c) 2012-2023, PostgreSQL Global Development Group
  *
  *-------------------------------------------------------------------------
  */
@@ -34,6 +34,8 @@ typedef struct OutputPluginOptions
  * when loading an output plugin shared library.
  */
 typedef void (*LogicalOutputPluginInit) (struct OutputPluginCallbacks *cb);
+
+extern PGDLLEXPORT void _PG_output_plugin_init(struct OutputPluginCallbacks *cb);
 
 /*
  * Callback that gets called in a user-defined plugin. ctx->private_data can
@@ -110,7 +112,7 @@ typedef bool (*LogicalDecodeFilterPrepareCB) (struct LogicalDecodingContext *ctx
 											  const char *gid);
 
 /*
- * Callback called for every BEGIN of a prepared trnsaction.
+ * Callback called for every BEGIN of a prepared transaction.
  */
 typedef void (*LogicalDecodeBeginPrepareCB) (struct LogicalDecodingContext *ctx,
 											 ReorderBufferTXN *txn);

@@ -3,7 +3,7 @@
  * parse_merge.c
  *	  handle merge-statement in parser
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -170,8 +170,8 @@ transformMergeStmt(ParseState *pstate, MergeStmt *stmt)
 
 	/*
 	 * Set up the MERGE target table.  The target table is added to the
-	 * namespace below and to joinlist in transform_MERGE_to_join, so don't
-	 * do it here.
+	 * namespace below and to joinlist in transform_MERGE_to_join, so don't do
+	 * it here.
 	 */
 	qry->resultRelation = setTargetTable(pstate, stmt->relation,
 										 stmt->relation->inh,
@@ -220,6 +220,7 @@ transformMergeStmt(ParseState *pstate, MergeStmt *stmt)
 	 */
 	qry->targetList = NIL;
 	qry->rtable = pstate->p_rtable;
+	qry->rteperminfos = pstate->p_rteperminfos;
 
 	/*
 	 * Transform the join condition.  This includes references to the target
@@ -292,7 +293,7 @@ transformMergeStmt(ParseState *pstate, MergeStmt *stmt)
 				{
 					List	   *exprList = NIL;
 					ListCell   *lc;
-					RangeTblEntry *rte;
+					RTEPermissionInfo *perminfo;
 					ListCell   *icols;
 					ListCell   *attnos;
 					List	   *icolumns;
@@ -351,7 +352,7 @@ transformMergeStmt(ParseState *pstate, MergeStmt *stmt)
 					 * of expressions. Also, mark all the target columns as
 					 * needing insert permissions.
 					 */
-					rte = pstate->p_target_nsitem->p_rte;
+					perminfo = pstate->p_target_nsitem->p_perminfo;
 					forthree(lc, exprList, icols, icolumns, attnos, attrnos)
 					{
 						Expr	   *expr = (Expr *) lfirst(lc);
@@ -365,8 +366,8 @@ transformMergeStmt(ParseState *pstate, MergeStmt *stmt)
 											  false);
 						action->targetList = lappend(action->targetList, tle);
 
-						rte->insertedCols =
-							bms_add_member(rte->insertedCols,
+						perminfo->insertedCols =
+							bms_add_member(perminfo->insertedCols,
 										   attr_num - FirstLowInvalidHeapAttributeNumber);
 					}
 				}

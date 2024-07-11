@@ -69,26 +69,26 @@ int NodeTag(const Node* node) {
     return nodeTag(node);
 }
 
-int NodeTag(const A_Const::ValUnion& val) {
+int NodeTag(const ValUnion& val) {
     return NodeTag(&val.node);
 }
 
-int IntVal(const A_Const::ValUnion& val) {
+int IntVal(const ValUnion& val) {
     Y_ENSURE(val.node.type == T_Integer);
     return intVal(&val.node);
 }
 
-bool BoolVal(const A_Const::ValUnion& val) {
+bool BoolVal(const ValUnion& val) {
     Y_ENSURE(val.node.type == T_Boolean);
     return boolVal(&val.node);
 }
 
-const char* StrFloatVal(const A_Const::ValUnion& val) {
+const char* StrFloatVal(const ValUnion& val) {
     Y_ENSURE(val.node.type == T_Float);
     return strVal(&val.node);
 }
 
-const char* StrVal(const A_Const::ValUnion& val) {
+const char* StrVal(const ValUnion& val) {
     Y_ENSURE(val.node.type == T_String || val.node.type == T_BitString);
     return strVal(&val.node);
 }
@@ -113,7 +113,7 @@ const char* StrVal(const Node* node) {
     return strVal(node);
 }
 
-bool ValueAsString(const A_Const::ValUnion& val, bool isNull, TString& ret) {
+bool ValueAsString(const ValUnion& val, bool isNull, TString& ret) {
     if (isNull) {
         ret = "NULL";
         return true;

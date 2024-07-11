@@ -8,15 +8,15 @@
  * storage implementation and the details about individual types of
  * statistics.
  *
- * Replication slot stats work a bit different than other other
- * variable-numbered stats. Slots do not have oids (so they can be created on
- * physical replicas). Use the slot index as object id while running. However,
- * the slot index can change when restarting. That is addressed by using the
- * name when (de-)serializing. After a restart it is possible for slots to
- * have been dropped while shut down, which is addressed by not restoring
- * stats for slots that cannot be found by name when starting up.
+ * Replication slot stats work a bit different than other variable-numbered
+ * stats. Slots do not have oids (so they can be created on physical
+ * replicas). Use the slot index as object id while running. However, the slot
+ * index can change when restarting. That is addressed by using the name when
+ * (de-)serializing. After a restart it is possible for slots to have been
+ * dropped while shut down, which is addressed by not restoring stats for
+ * slots that cannot be found by name when starting up.
  *
- * Copyright (c) 2001-2022, PostgreSQL Global Development Group
+ * Copyright (c) 2001-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/utils/activity/pgstat_replslot.c
@@ -44,7 +44,7 @@ pgstat_reset_replslot(const char *name)
 {
 	ReplicationSlot *slot;
 
-	AssertArg(name != NULL);
+	Assert(name != NULL);
 
 	/* Check if the slot exits with the given name. */
 	slot = SearchNamedReplicationSlot(name, true);
@@ -213,7 +213,7 @@ get_replslot_index(const char *name)
 {
 	ReplicationSlot *slot;
 
-	AssertArg(name != NULL);
+	Assert(name != NULL);
 
 	slot = SearchNamedReplicationSlot(name, true);
 

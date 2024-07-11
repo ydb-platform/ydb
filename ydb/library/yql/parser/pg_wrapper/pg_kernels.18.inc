@@ -124,3 +124,4 @@ TExecFunc arrow_spg_quad_inner_consistent() { return TGenericExec<TPgDirectFunc<
 TExecFunc arrow_spg_quad_leaf_consistent() { return TGenericExec<TPgDirectFunc<&spg_quad_leaf_consistent>, true, true, TArgs_spg_quad_leaf_consistent_Policy>({}); }
 TExecFunc arrow_spg_quad_picksplit() { return TGenericExec<TPgDirectFunc<&spg_quad_picksplit>, true, true, TArgs_spg_quad_picksplit_Policy>({}); }
 TExecFunc arrow_spghandler() { return TGenericExec<TPgDirectFunc<&spghandler>, true, true, TArgs_spghandler_Policy>({}); }
+TExecFunc arrow_system_user() { return TGenericExec<TPgDirectFunc<&system_user>, true, false, TArgs_system_user_Policy>({}); }

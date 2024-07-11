@@ -8,6 +8,7 @@ LLVM_BC(
     postgresql/src/backend/utils/adt/orderedsetaggs.c
     postgresql/src/backend/utils/adt/pg_lsn.c
     postgresql/src/backend/utils/adt/ruleutils.c
+    postgresql/src/backend/utils/init/miscinit.c
     pg_kernels.18.cpp
 
     NAME PgFuncs18
@@ -139,4 +140,5 @@ LLVM_BC(
     arrow_spg_quad_leaf_consistent
     arrow_spg_quad_picksplit
     arrow_spghandler
+    arrow_system_user
 )

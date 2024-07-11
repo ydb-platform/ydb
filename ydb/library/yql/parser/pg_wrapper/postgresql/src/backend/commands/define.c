@@ -4,7 +4,7 @@
  *	  Support routines for various kinds of object creation.
  *
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -108,7 +108,7 @@ bool
 defGetBoolean(DefElem *def)
 {
 	/*
-	 * If no parameter given, assume "true" is meant.
+	 * If no parameter value given, assume "true" is meant.
 	 */
 	if (def->arg == NULL)
 		return true;

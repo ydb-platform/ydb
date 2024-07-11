@@ -4,7 +4,7 @@
  *	  Functions for the built-in type "char" (not to be confused with
  *	  bpchar, which is the SQL CHAR(n) type).
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -19,6 +19,7 @@
 
 #include "libpq/pqformat.h"
 #include "utils/builtins.h"
+#include "varatt.h"
 
 #define ISOCTAL(c)   (((c) >= '0') && ((c) <= '7'))
 #define TOOCTAL(c)   ((c) + '0')

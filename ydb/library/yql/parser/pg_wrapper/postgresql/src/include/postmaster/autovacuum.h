@@ -4,7 +4,7 @@
  *	  header file for integrated autovacuum daemon
  *
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/postmaster/autovacuum.h
@@ -62,9 +62,6 @@ extern int	StartAutoVacWorker(void);
 
 /* called from postmaster when a worker could not be forked */
 extern void AutoVacWorkerFailed(void);
-
-/* autovacuum cost-delay balancer */
-extern void AutoVacuumUpdateDelay(void);
 
 #ifdef EXEC_BACKEND
 extern void AutoVacLauncherMain(int argc, char *argv[]) pg_attribute_noreturn();

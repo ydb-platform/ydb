@@ -3,7 +3,7 @@
  * regexp.c
  *	  Postgres' interface to the regular expression package.
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -96,9 +96,13 @@ typedef struct regexp_matches_ctx
 #define MAX_CACHED_RES	32
 #endif
 
+/* A parent memory context for regular expressions. */
+static __thread MemoryContext RegexpCacheMemoryContext;
+
 /* this structure describes one cached regular expression */
 typedef struct cached_re_str
 {
+	MemoryContext cre_context;	/* memory context for this regexp */
 	char	   *cre_pat;		/* original RE (not null terminated!) */
 	int			cre_pat_len;	/* length of original RE, in bytes */
 	int			cre_flags;		/* compile flags: extended,icase etc */
@@ -121,7 +125,7 @@ void RE_cleanup_cache(void) {
 
 /* Local functions */
 static regexp_matches_ctx *setup_regexp_matches(text *orig_str, text *pattern,
-												pg_re_flags *flags,
+												pg_re_flags *re_flags,
 												int start_search,
 												Oid collation,
 												bool use_subpatterns,
@@ -154,6 +158,7 @@ RE_compile_and_cache(text *text_re, int cflags, Oid collation)
 	int			regcomp_result;
 	cached_re_str re_temp;
 	char		errMsg[100];
+	MemoryContext oldcontext;
 
 	/*
 	 * Look for a match among previously compiled REs.  Since the data
@@ -181,6 +186,13 @@ RE_compile_and_cache(text *text_re, int cflags, Oid collation)
 		}
 	}
 
+	/* Set up the cache memory on first go through. */
+	if (unlikely(RegexpCacheMemoryContext == NULL))
+		RegexpCacheMemoryContext =
+			AllocSetContextCreate(TopMemoryContext,
+								  "RegexpCacheMemoryContext",
+								  ALLOCSET_SMALL_SIZES);
+
 	/*
 	 * Couldn't find it, so try to compile the new RE.  To avoid leaking
 	 * resources on failure, we build into the re_temp local.
@@ -191,6 +203,18 @@ RE_compile_and_cache(text *text_re, int cflags, Oid collation)
 	pattern_len = pg_mb2wchar_with_len(text_re_val,
 									   pattern,
 									   text_re_len);
+
+	/*
+	 * Make a memory context for this compiled regexp.  This is initially a
+	 * child of the current memory context, so it will be cleaned up
+	 * automatically if compilation is interrupted and throws an ERROR. We'll
+	 * re-parent it under the longer lived cache context if we make it to the
+	 * bottom of this function.
+	 */
+	re_temp.cre_context = AllocSetContextCreate(CurrentMemoryContext,
+												"RegexpMemoryContext",
+												ALLOCSET_SMALL_SIZES);
+	oldcontext = MemoryContextSwitchTo(re_temp.cre_context);
 
 	regcomp_result = pg_regcomp(&re_temp.cre_re,
 								pattern,
@@ -203,36 +227,23 @@ RE_compile_and_cache(text *text_re, int cflags, Oid collation)
 	if (regcomp_result != REG_OKAY)
 	{
 		/* re didn't compile (no need for pg_regfree, if so) */
-
-		/*
-		 * Here and in other places in this file, do CHECK_FOR_INTERRUPTS
-		 * before reporting a regex error.  This is so that if the regex
-		 * library aborts and returns REG_CANCEL, we don't print an error
-		 * message that implies the regex was invalid.
-		 */
-		CHECK_FOR_INTERRUPTS();
-
 		pg_regerror(regcomp_result, &re_temp.cre_re, errMsg, sizeof(errMsg));
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_REGULAR_EXPRESSION),
 				 errmsg("invalid regular expression: %s", errMsg)));
 	}
 
-	/*
-	 * We use malloc/free for the cre_pat field because the storage has to
-	 * persist across transactions, and because we want to get control back on
-	 * out-of-memory.  The Max() is because some malloc implementations return
-	 * NULL for malloc(0).
-	 */
-	re_temp.cre_pat = malloc(Max(text_re_len, 1));
-	if (re_temp.cre_pat == NULL)
-	{
-		pg_regfree(&re_temp.cre_re);
-		ereport(ERROR,
-				(errcode(ERRCODE_OUT_OF_MEMORY),
-				 errmsg("out of memory")));
-	}
+	/* Copy the pattern into the per-regexp memory context. */
+	re_temp.cre_pat = palloc(text_re_len + 1);
 	memcpy(re_temp.cre_pat, text_re_val, text_re_len);
+
+	/*
+	 * NUL-terminate it only for the benefit of the identifier used for the
+	 * memory context, visible in the pg_backend_memory_contexts view.
+	 */
+	re_temp.cre_pat[text_re_len] = 0;
+	MemoryContextSetIdentifier(re_temp.cre_context, re_temp.cre_pat);
+
 	re_temp.cre_pat_len = text_re_len;
 	re_temp.cre_flags = cflags;
 	re_temp.cre_collation = collation;
@@ -245,15 +256,20 @@ RE_compile_and_cache(text *text_re, int cflags, Oid collation)
 	{
 		--num_res;
 		Assert(num_res < MAX_CACHED_RES);
-		pg_regfree(&re_array[num_res].cre_re);
-		free(re_array[num_res].cre_pat);
+		/* Delete the memory context holding the regexp and pattern. */
+		MemoryContextDelete(re_array[num_res].cre_context);
 	}
+
+	/* Re-parent the memory context to our long-lived cache context. */
+	MemoryContextSetParent(re_temp.cre_context, RegexpCacheMemoryContext);
 
 	if (num_res > 0)
 		memmove(&re_array[1], &re_array[0], num_res * sizeof(cached_re_str));
 
 	re_array[0] = re_temp;
 	num_res++;
+
+	MemoryContextSwitchTo(oldcontext);
 
 	return &re_array[0].cre_re;
 }
@@ -292,7 +308,6 @@ RE_wchar_execute(regex_t *re, pg_wchar *data, int data_len,
 	if (regexec_result != REG_OKAY && regexec_result != REG_NOMATCH)
 	{
 		/* re failed??? */
-		CHECK_FOR_INTERRUPTS();
 		pg_regerror(regexec_result, re, errMsg, sizeof(errMsg));
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_REGULAR_EXPRESSION),
@@ -1766,7 +1781,7 @@ regexp_split_to_array(PG_FUNCTION_ARGS)
 		splitctx->next_match++;
 	}
 
-	PG_RETURN_ARRAYTYPE_P(makeArrayResult(astate, CurrentMemoryContext));
+	PG_RETURN_DATUM(makeArrayResult(astate, CurrentMemoryContext));
 }
 
 /* This is separate to keep the opr_sanity regression test from complaining */
@@ -1985,7 +2000,6 @@ regexp_fixed_prefix(text *text_re, bool case_insensitive, Oid collation,
 
 		default:
 			/* re failed??? */
-			CHECK_FOR_INTERRUPTS();
 			pg_regerror(re_result, re, errMsg, sizeof(errMsg));
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_REGULAR_EXPRESSION),
@@ -1999,7 +2013,7 @@ regexp_fixed_prefix(text *text_re, bool case_insensitive, Oid collation,
 	slen = pg_wchar2mb_with_len(str, result, slen);
 	Assert(slen < maxlen);
 
-	free(str);
+	pfree(str);
 
 	return result;
 }

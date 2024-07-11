@@ -4,7 +4,7 @@
  *	  definition of the "constraint" system catalog (pg_constraint)
  *
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_constraint.h
@@ -102,7 +102,7 @@ CATALOG(pg_constraint,2606,ConstraintRelationId)
 	bool		conislocal;
 
 	/* Number of times inherited from direct parent relation(s) */
-	int32		coninhcount;
+	int16		coninhcount;
 
 	/* Has a local definition and cannot be inherited */
 	bool		connoinherit;

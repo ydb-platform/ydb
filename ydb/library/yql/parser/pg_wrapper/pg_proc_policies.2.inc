@@ -198,6 +198,10 @@ struct TArgs_pg_last_xact_replay_timestamp_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 0> IsFixedArg = {};
 };
+struct TArgs_pg_log_standby_snapshot_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 0> IsFixedArg = {};
+};
 struct TArgs_pg_promote_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
@@ -209,6 +213,10 @@ struct TArgs_pg_sequence_last_value_Policy {
 struct TArgs_pg_sequence_parameters_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+struct TArgs_pg_split_walfile_name_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
 struct TArgs_pg_switch_wal_Policy {
     static constexpr bool VarArgs = false;

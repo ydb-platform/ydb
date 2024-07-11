@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -eu
 
-VERSION="15.7"
+VERSION="16.3"
 
 errexit() {
     echo $1
@@ -24,7 +24,7 @@ tar zxf $DIST.tar.gz
 mv $DIST postgresql
 cd postgresql
 echo patching postgresql sources
-patch -p0 < ../../source.patch || errexit "Source patching failed"
+patch -p0 < ../../source16.patch || errexit "Source patching failed"
 
 COMPILER=$(ya tool cc --print-path)
 TOOL_DIR=$(dirname $COMPILER)

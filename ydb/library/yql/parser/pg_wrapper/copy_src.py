@@ -394,7 +394,8 @@ static __thread int pg_thread_init_flag;
 
 void pg_thread_init(void) {
     if (pg_thread_init_flag) return;
-    pg_thread_init_flag=1;""", file=f)
+    pg_thread_init_flag=1;
+    my_wait_event_info_init();""", file=f)
 
         for a in sorted(thread_funcs):
             print("    " + a + "();", file=f)

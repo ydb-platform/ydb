@@ -54,6 +54,7 @@ extern "C" {
 #include "utils/datetime.h"
 #include "utils/numeric.h"
 #include "utils/typcache.h"
+#include "utils/memutils_internal.h"
 #include "mb/pg_wchar.h"
 #include "nodes/execnodes.h"
 #include "executor/executor.h"
@@ -85,6 +86,24 @@ extern "C" {
 #include "arrow.h"
 #include "arrow_impl.h"
 
+extern "C" {
+extern void *MkqlAlloc(MemoryContext context, Size size);
+extern void MkqlFree(void *pointer);
+extern void *MkqlRealloc(void *pointer, Size size);
+extern void MkqlReset(MemoryContext context);
+extern void MkqlDelete(MemoryContext context);
+extern MemoryContext MkqlGetChunkContext(void *pointer);
+extern Size MkqlGetChunkSpace(void *pointer);
+extern bool MkqlIsEmpty(MemoryContext context);
+extern void MkqlStats(MemoryContext context,
+						  MemoryStatsPrintFunc printfunc, void *passthru,
+						  MemoryContextCounters *totals,
+						  bool print_to_stderr);
+#ifdef MEMORY_CONTEXT_CHECKING
+extern void MkqlCheck(MemoryContext context);
+#endif
+}
+
 namespace NYql {
 
 using namespace NKikimr::NMiniKQL;
@@ -109,16 +128,18 @@ NUdf::TUnboxedValue CreatePgString(i32 typeLen, ui32 targetTypeId, TStringBuf da
     }
 }
 
-void *MkqlAllocSetAlloc(MemoryContext context, Size size) {
+extern "C" void *MkqlAlloc(MemoryContext context, Size size) {
+    Y_UNUSED(context);
     auto fullSize = size + sizeof(TMkqlPAllocHeader);
     auto header = (TMkqlPAllocHeader*)MKQLAllocWithSize(fullSize, EMemorySubPool::Default);
     header->Size = size;
     header->U.Entry.Link(TlsAllocState->CurrentPAllocList);
-    header->Self = context;
+    Y_ENSURE((ui64(context) & MEMORY_CONTEXT_METHODID_MASK) == 0);
+    header->Self = ui64(context) | MCTX_UNUSED3_ID;
     return header + 1;
 }
 
-void MkqlAllocSetFree(MemoryContext context, void* pointer) {
+extern "C" void MkqlFree(void* pointer) {
     if (pointer) {
         auto header = ((TMkqlPAllocHeader*)pointer) - 1;
         // remove this block from list
@@ -128,58 +149,58 @@ void MkqlAllocSetFree(MemoryContext context, void* pointer) {
     }
 }
 
-void* MkqlAllocSetRealloc(MemoryContext context, void* pointer, Size size) {
+extern "C" void* MkqlRealloc(void* pointer, Size size) {
     if (!size) {
-        MkqlAllocSetFree(context, pointer);
+        MkqlFree(pointer);
         return nullptr;
     }
 
-    auto ret = MkqlAllocSetAlloc(context, size);
+    auto ret = MkqlAlloc(nullptr, size);
     if (pointer) {
         auto header = ((TMkqlPAllocHeader*)pointer) - 1;
         memmove(ret, pointer, header->Size);
-        MkqlAllocSetFree(context, pointer);
+        MkqlFree(pointer);
     }
 
     return ret;
 }
 
-void MkqlAllocSetReset(MemoryContext context) {
+extern "C" void MkqlReset(MemoryContext context) {
+    Y_UNUSED(context);
 }
 
-void MkqlAllocSetDelete(MemoryContext context) {
+extern "C" void MkqlDelete(MemoryContext context) {
+    Y_UNUSED(context);
 }
 
-Size MkqlAllocSetGetChunkSpace(MemoryContext context, void* pointer) {
+extern "C" MemoryContext MkqlGetChunkContext(void *pointer) {
+    return (MemoryContext)(((ui64*)pointer)[-1] & ~MEMORY_CONTEXT_METHODID_MASK);
+}
+
+extern "C" Size MkqlGetChunkSpace(void* pointer) {
+    Y_UNUSED(pointer);
     return 0;
 }
 
-bool MkqlAllocSetIsEmpty(MemoryContext context) {
+extern "C" bool MkqlIsEmpty(MemoryContext context) {
+    Y_UNUSED(context);
     return false;
 }
 
-void MkqlAllocSetStats(MemoryContext context,
+extern "C" void MkqlStats(MemoryContext context,
     MemoryStatsPrintFunc printfunc, void *passthru,
     MemoryContextCounters *totals,
     bool print_to_stderr) {
+    Y_UNUSED(context);
+    Y_UNUSED(printfunc);
+    Y_UNUSED(passthru);
+    Y_UNUSED(totals);
+    Y_UNUSED(print_to_stderr);
 }
 
-void MkqlAllocSetCheck(MemoryContext context) {
+extern "C" void MkqlCheck(MemoryContext context) {
+    Y_UNUSED(context);
 }
-
-const MemoryContextMethods MkqlMethods = {
-    MkqlAllocSetAlloc,
-    MkqlAllocSetFree,
-    MkqlAllocSetRealloc,
-    MkqlAllocSetReset,
-    MkqlAllocSetDelete,
-    MkqlAllocSetGetChunkSpace,
-    MkqlAllocSetIsEmpty,
-    MkqlAllocSetStats
-#ifdef MEMORY_CONTEXT_CHECKING
-    ,MkqlAllocSetCheck
-#endif
-};
 
 Datum MakeArrayOfText(const TVector<TString>& arr) {
     TVector<Datum> elems(arr.size());
@@ -319,7 +340,7 @@ public:
                     {"typname", [](const NPg::TTypeDesc& desc) { return PointerDatumToPod((Datum)(MakeFixedString(desc.Name, NAMEDATALEN))); }},
                     {"typinput", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.InFuncId)); }},
                     {"typnamespace", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(PG_CATALOG_NAMESPACE)); }},
-                    {"typtype", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(CharGetDatum(desc.TypType)); }},
+                    {"typtype", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(CharGetDatum((char)desc.TypType)); }},
                     {"typrelid", [](const NPg::TTypeDesc&) { return ScalarDatumToPod(ObjectIdGetDatum(0)); }},
                     {"typelem", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.ElementTypeId)); }},
                 };
@@ -377,7 +398,7 @@ public:
                 static const std::pair<const char*, TPgAmFiller> AllPgAmFillers[] = {
                     {"oid", [](const NPg::TAmDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.Oid)); }},
                     {"amname", [](const NPg::TAmDesc& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.AmName, NAMEDATALEN)); }},
-                    {"amtype", [](const NPg::TAmDesc& desc) { return ScalarDatumToPod(CharGetDatum(desc.AmType)); }},
+                    {"amtype", [](const NPg::TAmDesc& desc) { return ScalarDatumToPod(CharGetDatum((char)desc.AmType)); }},
                 };
 
                 ApplyFillers(AllPgAmFillers, Y_ARRAY_SIZE(AllPgAmFillers), PgAmFillers_);
@@ -439,7 +460,7 @@ public:
                 static const std::pair<const char*, TPgClassFiller> AllPgClassFillers[] = {
                     {"oid", [](const NPg::TTableInfo& desc, ui32, ui32) { return ScalarDatumToPod(ObjectIdGetDatum(desc.Oid)); }},
                     {"relispartition", [](const NPg::TTableInfo&, ui32, ui32) { return ScalarDatumToPod(BoolGetDatum(false)); }},
-                    {"relkind", [](const NPg::TTableInfo& desc, ui32, ui32) { return ScalarDatumToPod(CharGetDatum(desc.Kind)); }},
+                    {"relkind", [](const NPg::TTableInfo& desc, ui32, ui32) { return ScalarDatumToPod(CharGetDatum((char)desc.Kind)); }},
                     {"relname", [](const NPg::TTableInfo& desc, ui32, ui32) { return PointerDatumToPod((Datum)MakeFixedString(desc.Name, NAMEDATALEN)); }},
                     {"relnamespace", [](const NPg::TTableInfo&, ui32 namespaceOid,ui32) { return ScalarDatumToPod(ObjectIdGetDatum(namespaceOid)); }},
                     {"relowner", [](const NPg::TTableInfo&, ui32, ui32) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
@@ -455,7 +476,7 @@ public:
                     {"proowner", [](const NPg::TProcDesc&) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
                     {"prorettype", [](const NPg::TProcDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.ResultType)); }},
                     {"prolang", [](const NPg::TProcDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.Lang)); }},
-                    {"prokind", [](const NPg::TProcDesc& desc) { return ScalarDatumToPod(CharGetDatum(desc.Kind)); }},
+                    {"prokind", [](const NPg::TProcDesc& desc) { return ScalarDatumToPod(CharGetDatum((char)desc.Kind)); }},
                 };
 
                 ApplyFillers(AllPgProcFillers, Y_ARRAY_SIZE(AllPgProcFillers), PgProcFillers_);
@@ -476,7 +497,7 @@ public:
             } else if (Table_ == "pg_aggregate") {
                 static const std::pair<const char*, TPgAggregateFiller> AllPgAggregateFillers[] = {
                     {"aggfnoid", [](const NPg::TAggregateDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.AggId)); }},
-                    {"aggkind", [](const NPg::TAggregateDesc& desc) { return ScalarDatumToPod(CharGetDatum(desc.Kind)); }},
+                    {"aggkind", [](const NPg::TAggregateDesc& desc) { return ScalarDatumToPod(CharGetDatum((char)desc.Kind)); }},
                     {"aggtranstype", [](const NPg::TAggregateDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.TransTypeId)); }},
                 };
 
@@ -1096,6 +1117,7 @@ public:
         PgFuncNode.funcid = procDesc.ProcId;
         PgFuncNode.funcresulttype = procDesc.ResultType;
         PgFuncNode.funcretset = procDesc.ReturnSet;
+        PgFuncNode.funcvariadic = procDesc.VariadicArgType && procDesc.VariadicArgType != procDesc.VariadicType;
         PgFuncNode.args = PgFuncArgsList.get();
         return (Node*)&PgFuncNode;
     }
@@ -2024,7 +2046,7 @@ NUdf::TUnboxedValuePod ConvertToPgValue(NUdf::TUnboxedValuePod value, TMaybe<NUd
         auto input = MakeCString(value.AsStringRef());
         auto res = DirectFunctionCall1Coll(json_in, DEFAULT_COLLATION_OID, PointerGetDatum(input));
         pfree(input);
-        return PointerDatumToPod(PointerGetDatum(res));
+        return PointerDatumToPod(PointerGetDatum((void*)res));
     }
     case NUdf::EDataSlot::JsonDocument: {
         auto str = NKikimr::NBinaryJson::SerializeToJson(value.AsStringRef());
@@ -2039,7 +2061,7 @@ NUdf::TUnboxedValuePod ConvertToPgValue(NUdf::TUnboxedValuePod value, TMaybe<NUd
         TStringOutput out(str);
         NKikimr::NUuid::UuidToString(dw, out);
         auto res = DirectFunctionCall1Coll(uuid_in, DEFAULT_COLLATION_OID, PointerGetDatum(str.c_str()));
-        return PointerDatumToPod(PointerGetDatum(res));
+        return PointerDatumToPod(PointerGetDatum((void*)res));
     }
     case NUdf::EDataSlot::TzDate:
     case NUdf::EDataSlot::TzDatetime:
@@ -4843,14 +4865,16 @@ NUdf::IEquate::TPtr MakePgEquate(const TPgType* type) {
 
 void* PgInitializeMainContext() {
     auto ctx = new TMainContext();
+    static_assert(MEMORY_CONTEXT_METHODID_MASK < alignof(decltype(TMainContext::Data)));
     MemoryContextCreate((MemoryContext)&ctx->Data,
         T_AllocSetContext,
-        &MkqlMethods,
+        MCTX_UNUSED3_ID,
         nullptr,
         "mkql");
+    static_assert(MEMORY_CONTEXT_METHODID_MASK < alignof(decltype(TMainContext::ErrorData)));
     MemoryContextCreate((MemoryContext)&ctx->ErrorData,
         T_AllocSetContext,
-        &MkqlMethods,
+        MCTX_UNUSED3_ID,
         nullptr,
         "mkql-err");
     ctx->StartTimestamp = GetCurrentTimestamp();

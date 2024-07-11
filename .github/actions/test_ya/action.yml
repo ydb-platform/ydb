@@ -82,7 +82,10 @@ runs:
         echo "YA_TEST_LOG_FILENAME=$LOG_DIR/ya_test.log" >> $GITHUB_ENV
         echo "YA_TEST_LOG_URL=$S3_URL_PREFIX/test_logs/ya_test.log" >> $GITHUB_ENV
         echo "S3_LOG_BUCKET_PATH=$S3_BUCKET_PATH/test_logs" >> $GITHUB_ENV
-        
+
+        export log_url="$S3_URL_PREFIX/build_logs/ya_make.log"
+        echo "LOG_URL=$log_url" >> $GITHUB_ENV
+        echo "log_url=$log_url" >> $GITHUB_OUTPUT
     
     - name: prepare
       shell: bash
@@ -245,12 +248,6 @@ runs:
           params+=(--bazel-remote-put --dist-cache-max-file-size=209715200)
         fi
 
-        if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
-          params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
-          params+=(--bazel-remote-password "${{ inputs.bazel_remote_password }}")
-          params+=(--bazel-remote-put --dist-cache-max-file-size=209715200)
-        fi
-
         if [ true = ${{ inputs.run_tests }} ]; then
           params+=(-A)
         fi
@@ -260,21 +257,23 @@ runs:
         
         echo "Build+Tests **{platform_name}-${BUILD_PRESET}** is running..." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
+        RC=0
         ./ya make ${{ inputs.build_target }} "${params[@]}" \
           --stat --log-file "$YA_TEST_LOG_FILENAME" -DCONSISTENT_DEBUG \
           --no-dir-outputs --test-failure-code 0 --build-all \
           --cache-size 2TB --force-build-depends --evlog-file "$TMP_DIR/ya_evlog.jsonl" \
-          --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR" || (
-            RC=$?
-            if [ $RC -ne 0 ]; then
-              echo "10 [Test run log]($YA_TEST_LOG_URL)" >> $SUMMARY_LINKS
+          --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR" || RC=$? |& tee $TMP_DIR/ya_make.log
+          
+        if [ $RC -ne 0 ]; then
+          echo "10 [Ya make output]($LOG_URL)" >> $SUMMARY_LINKS
+          echo "10 [Ya logs]($YA_TEST_LOG_URL)" >> $SUMMARY_LINKS
 
-              echo "ya make returned $RC, build failed"
-              echo "status=failed" >> $GITHUB_OUTPUT
-            else
-              echo "status=true" >> $GITHUB_OUTPUT
-            fi
-        )
+          echo "ya make returned $RC, build failed"
+          echo "status=failed" >> $GITHUB_OUTPUT
+        else
+          echo "status=true" >> $GITHUB_OUTPUT
+        fi
+
 
     - name: comment-build-status
       if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
@@ -288,7 +287,7 @@ runs:
           curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
             -d '{"state":"failure","description":"The check has been failed","context":"build_${{inputs.build_preset}}"}'
-          echo "Build failed. see the [logs]($YA_TEST_LOG_URL)." | .github/scripts/tests/comment-pr.py --fail
+          echo "Build failed. see the [logs]($LOG_URL)." | .github/scripts/tests/comment-pr.py --fail
         else
           curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
@@ -389,6 +388,7 @@ runs:
         set -x
         echo "::group::s3-sync"
         s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$LOG_DIR/" "$S3_LOG_BUCKET_PATH/"
+        s3cmd sync --acl-public --no-progress --stats --no-check-md5 "$TMP_DIR/ya_make.log" "$S3_BUCKET_PATH/build_logs/"
         echo "::endgroup::"
     
     - name: write tests summary

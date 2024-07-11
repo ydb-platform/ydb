@@ -486,4 +486,5 @@ enum ETxTypes {
     TXTYPE_CLEANUP_VOLATILE = 80                          [(TxTypeOpts) = {Name: "TxCleanupVolatile"}];
     TXTYPE_PLAN_PREDICTED_TXS = 81                        [(TxTypeOpts) = {Name: "TxPlanPredictedTxs"}];
     TXTYPE_WRITE = 82                                     [(TxTypeOpts) = {Name: "TxWrite"}];
+    TXTYPE_REMOVE_SCHEMA_SNAPSHOTS = 83                   [(TxTypeOpts) = {Name: "TxRemoveSchemaSnapshots"}];
 }

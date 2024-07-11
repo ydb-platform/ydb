@@ -346,24 +346,18 @@ runs:
         case $GITHUB_EVENT_NAME in
           workflow_dispatch)
             TESTMO_RUN_NAME="${{ github.run_id }} manual"
-            EXTRA_TAG="manual"
             ;;
           pull_request | pull_request_target)
             TESTMO_RUN_NAME="${{ github.run_id }} PR #${PR_NUMBER}"
-            EXTRA_TAG="pr"
-            BRANCH_TAG=""
             ;;
           schedule)
             TESTMO_RUN_NAME="${{ github.run_id }} schedule"
-            EXTRA_TAG="schedule"
             ;;
           push)
             TESTMO_RUN_NAME="${{ github.run_id }} POST"
-            EXTRA_TAG="post-commit"
             ;;
           *)
             TESTMO_RUN_NAME="${{ github.run_id }}"
-            EXTRA_TAG=""
             ;;
         esac
         

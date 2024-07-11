@@ -1,6 +1,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_sdk_core_access.h>
+#include <ydb/core/driver_lib/cli_config_base/config_base.h>
 #include "cli_kicli.h"
 
 namespace NKikimr {
@@ -71,7 +72,7 @@ int InvokeThroughKikimr(TClientCommand::TConfig& config, std::function<int(NClie
 
     if (!config.StaticCredentials.User.empty()) {
         NYdb::TDriverConfig driverConfig;
-        driverConfig.SetEndpoint(config.Address);
+        driverConfig.SetEndpoint(TCommandConfig::ParseServerAddress(config.Address).Address);
         NYdb::TDriver connection(driverConfig);
         NYdb::NConsoleClient::TDummyClient client(connection);
 

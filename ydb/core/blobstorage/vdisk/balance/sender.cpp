@@ -46,6 +46,7 @@ namespace {
                         // part is already in memory, no need to read it from disk
                         Y_DEBUG_ABORT_UNLESS(item.PartsMask.CountBits() == 1);
                         Result[i].PartsData = {data};
+                        ++Responses;
                     },
                     [&](const TDiskPart& diskPart) {
                         auto ev = std::make_unique<NPDisk::TEvChunkRead>(
@@ -94,6 +95,10 @@ namespace {
 
         ui32 GetPartsSize() const {
             return Parts.size();
+        }
+
+        ui32 GetResponses() const {
+            return Responses;
         }
 
         bool IsDone() const {
@@ -153,7 +158,7 @@ namespace {
                         );
                         SendRequest(TVDiskIdShort(vDiskId), selfId, ev.release(), data.size());
                     } else {
-                        STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB12, VDISKP(Ctx->VCtx, "Add in multiput"), (LogoBlobId, key.ToString()),
+                        STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB11, VDISKP(Ctx->VCtx, "Add in multiput"), (LogoBlobId, key.ToString()),
                             (To, GInfo->GetTopology().GetOrderNumber(TVDiskIdShort(vDiskId))), (DataSize, data.size()));
 
                         auto& ev = vDiskToEv[vDiskId];
@@ -181,7 +186,7 @@ namespace {
         void Handle(TEvBlobStorage::TEvVPutResult::TPtr ev) {
             ++Responses;
             if (ev->Get()->Record.GetStatus() != NKikimrProto::OK) {
-                STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB13, VDISKP(Ctx->VCtx, "Put failed"), (Msg, ev->Get()->ToString()));
+                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB13, VDISKP(Ctx->VCtx, "Put failed"), (Msg, ev->Get()->ToString()));
             } else {
                 ++Ctx->MonGroup.SentOnMain();
                 Ctx->MonGroup.SentOnMainWithResponseBytes() += GInfo->GetTopology().GType.PartSize(LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetBlobID()));
@@ -194,12 +199,12 @@ namespace {
             const auto& items = ev->Get()->Record.GetItems();
             for (const auto& item: items) {
                 if (item.GetStatus() != NKikimrProto::OK) {
-                    STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB15, VDISKP(Ctx->VCtx, "Put failed"), (Key, LogoBlobIDFromLogoBlobID(item.GetBlobID()).ToString()));
+                    STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB15, VDISKP(Ctx->VCtx, "MultiPut failed"), (Key, LogoBlobIDFromLogoBlobID(item.GetBlobID()).ToString()));
                     continue;
                 }
                 ++Ctx->MonGroup.SentOnMain();
                 Ctx->MonGroup.SentOnMainWithResponseBytes() += GInfo->GetTopology().GType.PartSize(LogoBlobIDFromLogoBlobID(item.GetBlobID()));
-                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB16, VDISKP(Ctx->VCtx, "Put done"), (Key, LogoBlobIDFromLogoBlobID(item.GetBlobID()).ToString()));
+                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB16, VDISKP(Ctx->VCtx, "MultiPut done"), (Key, LogoBlobIDFromLogoBlobID(item.GetBlobID()).ToString()));
             }
         }
 
@@ -231,6 +236,10 @@ namespace {
             }
 
             Reader.SendReadRequests(SelfId());
+            if (Reader.IsDone()) {
+                SendPartsOnMain();
+                return;
+            }
 
             Schedule(TDuration::Seconds(15), new NActors::TEvents::TEvWakeup(READ_TIMEOUT_TAG)); // read timeout
         }
@@ -246,7 +255,7 @@ namespace {
             if (ev->Get()->Tag != READ_TIMEOUT_TAG) {
                 return;
             }
-            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB10, VDISKP(Ctx->VCtx, "TimeoutRead"));
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB17, VDISKP(Ctx->VCtx, "TimeoutRead"), (Requests, Reader.GetPartsSize()),  (Responses, Reader.GetResponses()));
             SendPartsOnMain();
         }
 
@@ -266,7 +275,7 @@ namespace {
             Become(&TThis::StateSend);
 
             if (Reader.GetResult().empty()) {
-                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB10, VDISKP(Ctx->VCtx, "Nothing to send. PassAway"));
+                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB18, VDISKP(Ctx->VCtx, "Nothing to send. PassAway"));
                 PassAway();
                 return;
             }
@@ -288,7 +297,7 @@ namespace {
             if (ev->Get()->Tag != SEND_TIMEOUT_TAG) {
                 return;
             }
-            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB10, VDISKP(Ctx->VCtx, "TimeoutSend"));
+            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB19, VDISKP(Ctx->VCtx, "TimeoutSend"));
             PassAway();
         }
 

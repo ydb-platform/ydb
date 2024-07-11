@@ -40,7 +40,8 @@ namespace {
             , QueueActorMapPtr(queueActorMapPtr)
             , MonGroup(monGroup)
             , Result(parts.size())
-        {}
+        {
+        }
 
         void SendRequestsToCheckPartsOnMain(const TActorId& selfId) {
             THashMap<TVDiskID, std::unique_ptr<TEvBlobStorage::TEvVGet>> vDiskToQueries;
@@ -137,7 +138,7 @@ namespace {
             TIngress ingress;
             ingress.DeleteHandoff(&GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, key);
 
-            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB10, VDISKP(Ctx->VCtx, "Deleting local"), (LogoBlobID, key.ToString()),
+            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB20, VDISKP(Ctx->VCtx, "Deleting local"), (LogoBlobID, key.ToString()),
                 (Ingress, ingress.ToString(&GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, keyWithoutPartId)));
 
             TlsActivationContext->Send(
@@ -152,6 +153,7 @@ namespace {
             ++Responses;
             ++Ctx->MonGroup.MarkedReadyToDeleteResponse();
             Ctx->MonGroup.MarkedReadyToDeleteWithResponseBytes() += GInfo->GetTopology().GType.PartSize(ev->Get()->Id);
+            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB21, VDISKP(Ctx->VCtx, "Deleted local"), (LogoBlobID, ev->Get()->Id));
         }
 
         bool IsDone() const {
@@ -174,8 +176,10 @@ namespace {
         void SendRequestsToCheckPartsOnMain() {
             Become(&TThis::RequestState);
 
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB22, VDISKP(Ctx->VCtx, "SendRequestsToCheckPartsOnMain"), (Parts, PartsRequester.GetPartsSize()));
+
             if (PartsRequester.GetPartsSize() == 0) {
-                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB10, VDISKP(Ctx->VCtx, "Nothing to request. PassAway"));
+                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB23, VDISKP(Ctx->VCtx, "Nothing to request. PassAway"));
                 PassAway();
                 return;
             }
@@ -196,7 +200,7 @@ namespace {
             if (ev->Get()->Tag != REQUEST_TIMEOUT_TAG) {
                 return;
             }
-            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB10, VDISKP(Ctx->VCtx, "TimeoutRequest"));
+            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB24, VDISKP(Ctx->VCtx, "SendRequestsToCheckPartsOnMain timeout"));
             DeleteLocalParts();
         }
 
@@ -217,9 +221,17 @@ namespace {
             Become(&TThis::DeleteState);
 
             if (PartsRequester.GetResult().empty()) {
-                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB10, VDISKP(Ctx->VCtx, "Nothing to delete. PassAway"));
+                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB25, VDISKP(Ctx->VCtx, "Nothing to delete. PassAway"));
                 PassAway();
                 return;
+            }
+
+            {
+                ui32 partsOnMain = 0;
+                for (const auto& part: PartsRequester.GetResult()) {
+                    partsOnMain += part.HasOnMain;
+                }
+                STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB26, VDISKP(Ctx->VCtx, "DeleteLocalParts"), (Parts, PartsRequester.GetResult().size()), (PartsOnMain, partsOnMain));
             }
 
             PartsDeleter.DeleteParts(SelfId(), PartsRequester.GetResult());
@@ -230,6 +242,7 @@ namespace {
         void HandleDelLogoBlobResult(TEvDelLogoBlobDataSyncLogResult::TPtr ev) {
             PartsDeleter.Handle(ev);
             if (PartsDeleter.IsDone()) {
+                STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB27, VDISKP(Ctx->VCtx, "DeleteLocalParts done"));
                 PassAway();
             }
         }
@@ -238,7 +251,7 @@ namespace {
             if (ev->Get()->Tag != DELETE_TIMEOUT_TAG) {
                 return;
             }
-            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB10, VDISKP(Ctx->VCtx, "TimeoutDelete"));
+            STLOG(PRI_INFO, BS_VDISK_BALANCING, BSVB28, VDISKP(Ctx->VCtx, "DeleteLocalParts timeout"));
             PassAway();
         }
 

@@ -4142,7 +4142,9 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         // the number of TEvReadSetAck sent should not be greater than the number of senders
         // from TEvProposeTransaction
         //
-        Y_ABORT_UNLESS(tx.ReadSetAcks.size() <= tx.Senders.size());
+        Y_ABORT_UNLESS(tx.ReadSetAcks.size() <= tx.Senders.size(),
+                       "tx.ReadSetAcks.size=%" PRISZT ", tx.Senders.size=%" PRISZT,
+                       tx.ReadSetAcks.size(), tx.Senders.size());
 
         SendEvReadSetToReceivers(ctx, tx);
 

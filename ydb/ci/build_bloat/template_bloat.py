@@ -110,6 +110,9 @@ def build_tree(items):
     tree = {}
     total_size = 0
     for name, (size, count, obj_files, avg, min, max) in items:
+        # we skip small entities to order to make html view usable
+        if size < THRESHHOLD_TO_SHOW_ON_TREE_VIEW:
+            continue
 
         # use braces only for args
         name = name.replace("(anonymous namespace)", "[anonymous namespace]")
@@ -133,7 +136,7 @@ def build_tree(items):
             # signed 'char* NKikimr::NCHash::TListPool<>::GetList<>(unsigned long)'
             path[0] = path[0].rsplit(' ', 1)[1]
 
-        path = ["root"] + path
+        path = ["root"] + "something about threshhold" + path
 
         print(path)
         add_to_tree(tree, path, size, count)

@@ -335,7 +335,6 @@ def make_sources_list(build_dir):
             for line in fsrc:
                 #print(line.strip())
                 name = line.strip()
-                if name.endswith("_scanner.c"): continue
                 if name.endswith(".funcs.c"): continue
                 if name.endswith(".switch.c"): continue
                 basename = os.path.basename(name)

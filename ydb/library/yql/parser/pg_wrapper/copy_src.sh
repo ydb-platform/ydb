@@ -45,7 +45,6 @@ echo collecting *.c file list
 for i in $(find postgresql -name "*.o" | sed -e 's/o$/c/'); do if [ -f $i ]; then realpath --relative-to=.  $i; fi; done > src_files
 echo collecting *.h file list
 find postgresql -type f -name "*.h" | sort >> src_files
-find postgresql -type f -name "*_scanner.c" | sort >> src_files
 find postgresql -type f -name "*.funcs.c" | sort >> src_files
 find postgresql -type f -name "*.switch.c" | sort >> src_files
 find postgresql -type f -name "regc_*.c" | sort >> src_files

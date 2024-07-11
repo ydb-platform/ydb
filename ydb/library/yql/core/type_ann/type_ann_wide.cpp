@@ -520,6 +520,7 @@ IGraphTransformer::TStatus NarrowMapWrapper(const TExprNode::TPtr& input, TExprN
     auto& lambda = input->TailRef();
     const auto status = ConvertToLambda(lambda, ctx.Expr, multiType->GetSize());
     if (status.Level != IGraphTransformer::TStatus::Ok) {
+        Cerr << lambda->Dump() << Endl;
         return status;
     }
 

@@ -3,6 +3,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/base/memory_controller_iface.h>
+#include <ydb/core/memory_controller/memory_controller.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/core/protos/shared_cache.pb.h>
 
@@ -36,7 +37,7 @@ namespace NActors {
             ~TNodeData();
             ui64 GetLoggerPoolId() const override;
             THolder<NActors::TMon> Mon;
-            TIntrusivePtr<NKikimr::NMemory::IMemoryConsumers> MemoryConsumers = MakeIntrusive<NKikimr::NMemory::TMemoryConsumers>();
+            TIntrusivePtr<NKikimr::NMemory::IMemoryConsumers> MemoryConsumers = NKikimr::NMemory::CreateMemoryConsumers();
         };
 
         struct TNodeFactory: public INodeFactory {

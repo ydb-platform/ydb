@@ -394,7 +394,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     void Handle(NMemory::TEvMemoryLimit::TPtr &ev) {
         auto *msg = ev->Get();
 
-        MemLimitBytes = msg->Limit;
+        MemLimitBytes = msg->LimitBytes;
         if (Config->Counters) {
             Config->Counters->MemLimitBytes->Set(MemLimitBytes);
         }
@@ -1318,7 +1318,7 @@ public:
     }
 
     void Bootstrap() {
-        MemLimitBytes = MemoryConsumer->GetInitialLimit();
+        MemLimitBytes = MemoryConsumer->GetLimit();
 
         Become(&TThis::StateFunc);
         Schedule(TDuration::Seconds(1), new TKikimrEvents::TEvWakeup(UPDATE_WHITEBOARD_TAG));

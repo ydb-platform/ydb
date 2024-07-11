@@ -5,13 +5,17 @@
 
 namespace NKikimr::NMemory {
 
+enum class EConsumerKind {
+    SharedCache,
+};
+
 struct IMemoryConsumer : public TThrRefBase {
-    virtual ui64 GetInitialLimit() = 0;
+    virtual ui64 GetLimit() const = 0;
     virtual void SetConsumption(ui64 value) = 0;
 };
 
 struct IMemoryConsumers : public TThrRefBase {
-    virtual TIntrusivePtr<IMemoryConsumer> Register(TString consumer) = 0;
+    virtual TIntrusivePtr<IMemoryConsumer> Register(EConsumerKind consumer) = 0;
 };
 
 enum EEvMemory {
@@ -23,10 +27,10 @@ enum EEvMemory {
 static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_MEMORY), "expected EvEnd < EventSpaceEnd");
 
 struct TEvMemoryLimit : public TEventLocal<TEvMemoryLimit, EvMemoryLimit> {
-    ui64 Limit;
+    ui64 LimitBytes;
 
-    TEvMemoryLimit(ui64 limit)
-        : Limit(limit)
+    TEvMemoryLimit(ui64 limitBytes)
+        : LimitBytes(limitBytes)
     {}
 };
 

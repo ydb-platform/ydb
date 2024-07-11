@@ -105,6 +105,8 @@ PEERDIR(
 )
 ENDIF()
 
+GENERATE_ENUM_SERIALIZATION(memory_controller_iface.h)
+
 END()
 
 RECURSE_FOR_TESTS(

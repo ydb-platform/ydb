@@ -399,6 +399,13 @@ runs:
         GITHUB_TOKEN: ${{ github.token }}
       run: |
         set -x
+
+        if [ "${{ inputs.run_tests }}" != "true" ]; then
+          # I have no idea why 'always() && inputs.run_tests' not working 
+          # Probably because of implicit bool->str cast? 
+          exit 0
+        fi
+
         mkdir $ARTIFACTS_DIR/summary/
         
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY

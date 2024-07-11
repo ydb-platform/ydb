@@ -186,6 +186,7 @@ LLVM_BC(
     arrow_pg_operator_is_visible
     arrow_pg_opfamily_is_visible
     arrow_pg_stat_clear_snapshot
+    arrow_pg_stat_force_next_flush
     arrow_pg_stat_get_analyze_count
     arrow_pg_stat_get_archiver
     arrow_pg_stat_get_autoanalyze_count
@@ -257,7 +258,9 @@ LLVM_BC(
     arrow_pg_stat_get_live_tuples
     arrow_pg_stat_get_mod_since_analyze
     arrow_pg_stat_get_numscans
+    arrow_pg_stat_get_replication_slot
     arrow_pg_stat_get_snapshot_timestamp
+    arrow_pg_stat_get_subscription_stats
     arrow_pg_stat_get_tuples_deleted
     arrow_pg_stat_get_tuples_fetched
     arrow_pg_stat_get_tuples_hot_updated
@@ -278,12 +281,14 @@ LLVM_BC(
     arrow_pg_stat_get_xact_tuples_inserted
     arrow_pg_stat_get_xact_tuples_returned
     arrow_pg_stat_get_xact_tuples_updated
+    arrow_pg_stat_have_stats
     arrow_pg_stat_reset
     arrow_pg_stat_reset_replication_slot
     arrow_pg_stat_reset_shared
     arrow_pg_stat_reset_single_function_counters
     arrow_pg_stat_reset_single_table_counters
     arrow_pg_stat_reset_slru
+    arrow_pg_stat_reset_subscription_stats
     arrow_pg_statistics_obj_is_visible
     arrow_pg_table_is_visible
     arrow_pg_trigger_depth

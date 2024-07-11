@@ -3,7 +3,7 @@
  * jsonfuncs.c
  *		Functions to process JSON data types.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -1918,9 +1918,6 @@ each_worker_jsonb(FunctionCallInfo fcinfo, const char *funcname, bool as_text)
 {
 	Jsonb	   *jb = PG_GETARG_JSONB_P(0);
 	ReturnSetInfo *rsi;
-	Tuplestorestate *tuple_store;
-	TupleDesc	tupdesc;
-	TupleDesc	ret_tdesc;
 	MemoryContext old_cxt,
 				tmp_cxt;
 	bool		skipNested = false;
@@ -1935,32 +1932,7 @@ each_worker_jsonb(FunctionCallInfo fcinfo, const char *funcname, bool as_text)
 						funcname)));
 
 	rsi = (ReturnSetInfo *) fcinfo->resultinfo;
-
-	if (!rsi || !IsA(rsi, ReturnSetInfo) ||
-		(rsi->allowedModes & SFRM_Materialize) == 0 ||
-		rsi->expectedDesc == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("set-valued function called in context that "
-						"cannot accept a set")));
-
-	rsi->returnMode = SFRM_Materialize;
-
-	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("function returning record called in context "
-						"that cannot accept type record")));
-
-	old_cxt = MemoryContextSwitchTo(rsi->econtext->ecxt_per_query_memory);
-
-	ret_tdesc = CreateTupleDescCopy(tupdesc);
-	BlessTupleDesc(ret_tdesc);
-	tuple_store =
-		tuplestore_begin_heap(rsi->allowedModes & SFRM_Materialize_Random,
-							  false, work_mem);
-
-	MemoryContextSwitchTo(old_cxt);
+	InitMaterializedSRF(fcinfo, MAT_SRF_BLESS);
 
 	tmp_cxt = AllocSetContextCreate(CurrentMemoryContext,
 									"jsonb_each temporary cxt",
@@ -1975,7 +1947,6 @@ each_worker_jsonb(FunctionCallInfo fcinfo, const char *funcname, bool as_text)
 		if (r == WJB_KEY)
 		{
 			text	   *key;
-			HeapTuple	tuple;
 			Datum		values[2];
 			bool		nulls[2] = {false, false};
 
@@ -2012,9 +1983,7 @@ each_worker_jsonb(FunctionCallInfo fcinfo, const char *funcname, bool as_text)
 				values[1] = PointerGetDatum(val);
 			}
 
-			tuple = heap_form_tuple(ret_tdesc, values, nulls);
-
-			tuplestore_puttuple(tuple_store, tuple);
+			tuplestore_putvalues(rsi->setResult, rsi->setDesc, values, nulls);
 
 			/* clean up and switch back */
 			MemoryContextSwitchTo(old_cxt);
@@ -2023,9 +1992,6 @@ each_worker_jsonb(FunctionCallInfo fcinfo, const char *funcname, bool as_text)
 	}
 
 	MemoryContextDelete(tmp_cxt);
-
-	rsi->setResult = tuple_store;
-	rsi->setDesc = ret_tdesc;
 
 	PG_RETURN_NULL();
 }
@@ -2038,8 +2004,6 @@ each_worker(FunctionCallInfo fcinfo, bool as_text)
 	JsonLexContext *lex;
 	JsonSemAction *sem;
 	ReturnSetInfo *rsi;
-	MemoryContext old_cxt;
-	TupleDesc	tupdesc;
 	EachState  *state;
 
 	lex = makeJsonLexContext(json, true);
@@ -2048,28 +2012,9 @@ each_worker(FunctionCallInfo fcinfo, bool as_text)
 
 	rsi = (ReturnSetInfo *) fcinfo->resultinfo;
 
-	if (!rsi || !IsA(rsi, ReturnSetInfo) ||
-		(rsi->allowedModes & SFRM_Materialize) == 0 ||
-		rsi->expectedDesc == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("set-valued function called in context that "
-						"cannot accept a set")));
-
-	rsi->returnMode = SFRM_Materialize;
-
-	(void) get_call_result_type(fcinfo, NULL, &tupdesc);
-
-	/* make these in a sufficiently long-lived memory context */
-	old_cxt = MemoryContextSwitchTo(rsi->econtext->ecxt_per_query_memory);
-
-	state->ret_tdesc = CreateTupleDescCopy(tupdesc);
-	BlessTupleDesc(state->ret_tdesc);
-	state->tuple_store =
-		tuplestore_begin_heap(rsi->allowedModes & SFRM_Materialize_Random,
-							  false, work_mem);
-
-	MemoryContextSwitchTo(old_cxt);
+	InitMaterializedSRF(fcinfo, MAT_SRF_BLESS);
+	state->tuple_store = rsi->setResult;
+	state->ret_tdesc = rsi->setDesc;
 
 	sem->semstate = (void *) state;
 	sem->array_start = each_array_start;
@@ -2087,9 +2032,6 @@ each_worker(FunctionCallInfo fcinfo, bool as_text)
 	pg_parse_json_or_ereport(lex, sem);
 
 	MemoryContextDelete(state->tmp_cxt);
-
-	rsi->setResult = state->tuple_store;
-	rsi->setDesc = state->ret_tdesc;
 
 	PG_RETURN_NULL();
 }
@@ -2215,9 +2157,6 @@ elements_worker_jsonb(FunctionCallInfo fcinfo, const char *funcname,
 {
 	Jsonb	   *jb = PG_GETARG_JSONB_P(0);
 	ReturnSetInfo *rsi;
-	Tuplestorestate *tuple_store;
-	TupleDesc	tupdesc;
-	TupleDesc	ret_tdesc;
 	MemoryContext old_cxt,
 				tmp_cxt;
 	bool		skipNested = false;
@@ -2236,28 +2175,7 @@ elements_worker_jsonb(FunctionCallInfo fcinfo, const char *funcname,
 
 	rsi = (ReturnSetInfo *) fcinfo->resultinfo;
 
-	if (!rsi || !IsA(rsi, ReturnSetInfo) ||
-		(rsi->allowedModes & SFRM_Materialize) == 0 ||
-		rsi->expectedDesc == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("set-valued function called in context that "
-						"cannot accept a set")));
-
-	rsi->returnMode = SFRM_Materialize;
-
-	/* it's a simple type, so don't use get_call_result_type() */
-	tupdesc = rsi->expectedDesc;
-
-	old_cxt = MemoryContextSwitchTo(rsi->econtext->ecxt_per_query_memory);
-
-	ret_tdesc = CreateTupleDescCopy(tupdesc);
-	BlessTupleDesc(ret_tdesc);
-	tuple_store =
-		tuplestore_begin_heap(rsi->allowedModes & SFRM_Materialize_Random,
-							  false, work_mem);
-
-	MemoryContextSwitchTo(old_cxt);
+	InitMaterializedSRF(fcinfo, MAT_SRF_USE_EXPECTED_DESC | MAT_SRF_BLESS);
 
 	tmp_cxt = AllocSetContextCreate(CurrentMemoryContext,
 									"jsonb_array_elements temporary cxt",
@@ -2271,7 +2189,6 @@ elements_worker_jsonb(FunctionCallInfo fcinfo, const char *funcname,
 
 		if (r == WJB_ELEM)
 		{
-			HeapTuple	tuple;
 			Datum		values[1];
 			bool		nulls[1] = {false};
 
@@ -2297,9 +2214,7 @@ elements_worker_jsonb(FunctionCallInfo fcinfo, const char *funcname,
 				values[0] = PointerGetDatum(val);
 			}
 
-			tuple = heap_form_tuple(ret_tdesc, values, nulls);
-
-			tuplestore_puttuple(tuple_store, tuple);
+			tuplestore_putvalues(rsi->setResult, rsi->setDesc, values, nulls);
 
 			/* clean up and switch back */
 			MemoryContextSwitchTo(old_cxt);
@@ -2308,9 +2223,6 @@ elements_worker_jsonb(FunctionCallInfo fcinfo, const char *funcname,
 	}
 
 	MemoryContextDelete(tmp_cxt);
-
-	rsi->setResult = tuple_store;
-	rsi->setDesc = ret_tdesc;
 
 	PG_RETURN_NULL();
 }
@@ -2336,38 +2248,15 @@ elements_worker(FunctionCallInfo fcinfo, const char *funcname, bool as_text)
 	JsonLexContext *lex = makeJsonLexContext(json, as_text);
 	JsonSemAction *sem;
 	ReturnSetInfo *rsi;
-	MemoryContext old_cxt;
-	TupleDesc	tupdesc;
 	ElementsState *state;
 
 	state = palloc0(sizeof(ElementsState));
 	sem = palloc0(sizeof(JsonSemAction));
 
+	InitMaterializedSRF(fcinfo, MAT_SRF_USE_EXPECTED_DESC | MAT_SRF_BLESS);
 	rsi = (ReturnSetInfo *) fcinfo->resultinfo;
-
-	if (!rsi || !IsA(rsi, ReturnSetInfo) ||
-		(rsi->allowedModes & SFRM_Materialize) == 0 ||
-		rsi->expectedDesc == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("set-valued function called in context that "
-						"cannot accept a set")));
-
-	rsi->returnMode = SFRM_Materialize;
-
-	/* it's a simple type, so don't use get_call_result_type() */
-	tupdesc = rsi->expectedDesc;
-
-	/* make these in a sufficiently long-lived memory context */
-	old_cxt = MemoryContextSwitchTo(rsi->econtext->ecxt_per_query_memory);
-
-	state->ret_tdesc = CreateTupleDescCopy(tupdesc);
-	BlessTupleDesc(state->ret_tdesc);
-	state->tuple_store =
-		tuplestore_begin_heap(rsi->allowedModes & SFRM_Materialize_Random,
-							  false, work_mem);
-
-	MemoryContextSwitchTo(old_cxt);
+	state->tuple_store = rsi->setResult;
+	state->ret_tdesc = rsi->setDesc;
 
 	sem->semstate = (void *) state;
 	sem->object_start = elements_object_start;
@@ -2386,9 +2275,6 @@ elements_worker(FunctionCallInfo fcinfo, const char *funcname, bool as_text)
 	pg_parse_json_or_ereport(lex, sem);
 
 	MemoryContextDelete(state->tmp_cxt);
-
-	rsi->setResult = state->tuple_store;
-	rsi->setDesc = state->ret_tdesc;
 
 	PG_RETURN_NULL();
 }
@@ -3807,12 +3693,15 @@ populate_recordset_worker(FunctionCallInfo fcinfo, const char *funcname,
 
 	rsi = (ReturnSetInfo *) fcinfo->resultinfo;
 
-	if (!rsi || !IsA(rsi, ReturnSetInfo) ||
-		(rsi->allowedModes & SFRM_Materialize) == 0)
+	if (!rsi || !IsA(rsi, ReturnSetInfo))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("set-valued function called in context that "
-						"cannot accept a set")));
+				 errmsg("set-valued function called in context that cannot accept a set")));
+
+	if (!(rsi->allowedModes & SFRM_Materialize))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("materialize mode required, but it is not allowed in this context")));
 
 	rsi->returnMode = SFRM_Materialize;
 
@@ -4243,7 +4132,6 @@ json_strip_nulls(PG_FUNCTION_ARGS)
 
 	PG_RETURN_TEXT_P(cstring_to_text_with_len(state->strval->data,
 											  state->strval->len));
-
 }
 
 /*
@@ -4932,7 +4820,7 @@ setPath(JsonbIterator **it, Datum *path_elems,
 		case WJB_BEGIN_ARRAY:
 
 			/*
-			 * If instructed complain about attempts to replace whithin a raw
+			 * If instructed complain about attempts to replace within a raw
 			 * scalar value. This happens even when current level is equal to
 			 * path_len, because the last path key should also correspond to
 			 * an object or an array, not raw scalar.
@@ -4964,7 +4852,7 @@ setPath(JsonbIterator **it, Datum *path_elems,
 		case WJB_VALUE:
 
 			/*
-			 * If instructed complain about attempts to replace whithin a
+			 * If instructed complain about attempts to replace within a
 			 * scalar value. This happens even when current level is equal to
 			 * path_len, because the last path key should also correspond to
 			 * an object or an array, not an element or value.

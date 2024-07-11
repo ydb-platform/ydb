@@ -254,7 +254,6 @@ struct TUserTable : public TThrRefBase {
         using EType = NKikimrSchemeOp::EIndexType;
         using EState = NKikimrSchemeOp::EIndexState;
 
-        TString Name;
         EType Type;
         EState State;
         TVector<ui32> KeyColumnIds;
@@ -263,10 +262,12 @@ struct TUserTable : public TThrRefBase {
         TTableIndex() = default;
 
         TTableIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc, const TMap<ui32, TUserColumn>& columns)
-            : Name(indexDesc.GetName())
-            , Type(indexDesc.GetType())
+            : Type(indexDesc.GetType())
             , State(indexDesc.GetState())
         {
+            if (Type != EType::EIndexTypeGlobalAsync) {
+                return;
+            }
             THashMap<TStringBuf, ui32> nameToId;
             for (const auto& [id, column] : columns) {
                 Y_DEBUG_ABORT_UNLESS(!nameToId.contains(column.Name));
@@ -284,6 +285,10 @@ struct TUserTable : public TThrRefBase {
 
             fillColumnIds(indexDesc.GetKeyColumnNames(),  KeyColumnIds);
             fillColumnIds(indexDesc.GetDataColumnNames(), DataColumnIds);
+        }
+
+        static void Rename(NKikimrSchemeOp::TIndexDescription& indexDesc, const TString& newName) {
+            indexDesc.SetName(newName);
         }
     };
 

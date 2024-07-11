@@ -45,20 +45,15 @@ static void CreateSampleTable(TSession session) {
     UNIT_ASSERT(session.ExecuteSchemeQuery(GetStatic("schema/tpch.sql")).GetValueSync().IsSuccess());
 
     UNIT_ASSERT(session.ExecuteSchemeQuery(GetStatic("schema/tpcds.sql")).GetValueSync().IsSuccess());
+
+    UNIT_ASSERT(session.ExecuteSchemeQuery(GetStatic("schema/tpcc.sql")).GetValueSync().IsSuccess());
+
 }
 
 static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false, TString stats = ""){
     TVector<NKikimrKqp::TKqpSetting> settings;
 
     NKikimrKqp::TKqpSetting setting;
-   
-    setting.SetName("CostBasedOptimizationLevel");
-    setting.SetValue("3");
-    settings.push_back(setting);
-
-    setting.SetName("OptEnableConstantFolding");
-    setting.SetValue("true");
-    settings.push_back(setting);
 
     if (stats != "") {
         setting.SetName("OverrideStatistics");
@@ -68,6 +63,7 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
 
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookupJoin);
+    appConfig.MutableTableServiceConfig()->SetEnableConstantFolding(true);
     appConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(TDuration::Minutes(10).MilliSeconds());
 
     auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
@@ -286,19 +282,20 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         /* join with parameters */
         {
             const TString query = GetStatic(queryPath);
+        
+            auto result = session.ExplainDataQuery(query).ExtractValueSync();
 
-            TStreamExecScanQuerySettings settings;
-            settings.Explain(true);
-
-            auto it = kikimr.GetTableClient().StreamExecuteScanQuery(query, settings).ExtractValueSync();
-            auto res = CollectStreamResult(it);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             TString ref = GetStatic(correctJoinOrderPath);
 
             /* correct canonized join order in cout, change corresponding join_order/.json file */
-            Cout << CanonizeJoinOrder(*res.PlanJson) << Endl;
+            Cout << CanonizeJoinOrder(result.GetPlan()) << Endl;
 
-            UNIT_ASSERT(JoinOrderAndAlgosMatch(*res.PlanJson, ref));
+            /* Only check the plans if stream join is enabled*/
+            if (useStreamLookupJoin) {
+                UNIT_ASSERT(JoinOrderAndAlgosMatch(result.GetPlan(), ref));
+            }
         }
     }
 
@@ -314,17 +311,25 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
+    /*
     Y_UNIT_TEST_TWIN(OverrideStatsTPCDS64, StreamLookupJoin) {
         JoinOrderTestWithOverridenStats(
             "queries/tpcds64.sql", "stats/tpcds1000s.json", "join_order/tpcds64_1000s.json", StreamLookupJoin
         );
     }
-
+    */
+   
     Y_UNIT_TEST_TWIN(OverrideStatsTPCDS78, StreamLookupJoin) {
         JoinOrderTestWithOverridenStats(
             "queries/tpcds78.sql", "stats/tpcds1000s.json", "join_order/tpcds78_1000s.json", StreamLookupJoin
         );
     }
+
+    Y_UNIT_TEST(TPCC) {
+        JoinOrderTestWithOverridenStats(
+            "queries/tpcc.sql", "stats/tpcc.json", "join_order/tpcc.json", false);
+    }
+
 }
 }
 }

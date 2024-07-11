@@ -3,7 +3,7 @@
  * restrictinfo.c
  *	  RestrictInfo node manipulation routines.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -217,7 +217,8 @@ make_restrictinfo_internal(PlannerInfo *root,
 	restrictinfo->left_mcvfreq = -1;
 	restrictinfo->right_mcvfreq = -1;
 
-	restrictinfo->hasheqoperator = InvalidOid;
+	restrictinfo->left_hasheqoperator = InvalidOid;
+	restrictinfo->right_hasheqoperator = InvalidOid;
 
 	return restrictinfo;
 }
@@ -368,7 +369,8 @@ commute_restrictinfo(RestrictInfo *rinfo, Oid comm_op)
 	result->right_bucketsize = rinfo->left_bucketsize;
 	result->left_mcvfreq = rinfo->right_mcvfreq;
 	result->right_mcvfreq = rinfo->left_mcvfreq;
-	result->hasheqoperator = InvalidOid;
+	result->left_hasheqoperator = InvalidOid;
+	result->right_hasheqoperator = InvalidOid;
 
 	return result;
 }
@@ -493,6 +495,35 @@ extract_actual_join_clauses(List *restrictinfo_list,
 			*joinquals = lappend(*joinquals, rinfo->clause);
 		}
 	}
+}
+
+/*
+ * has_pseudoconstant_clauses
+ *
+ * Returns true if 'restrictinfo_list' includes pseudoconstant clauses.
+ *
+ * This is used when we determine whether to allow extensions to consider
+ * pushing down joins in add_paths_to_joinrel().
+ */
+bool
+has_pseudoconstant_clauses(PlannerInfo *root,
+						   List *restrictinfo_list)
+{
+	ListCell   *l;
+
+	/* No need to look if we know there are no pseudoconstants */
+	if (!root->hasPseudoConstantQuals)
+		return false;
+
+	/* See if there are pseudoconstants in the RestrictInfo list */
+	foreach(l, restrictinfo_list)
+	{
+		RestrictInfo *rinfo = lfirst_node(RestrictInfo, l);
+
+		if (rinfo->pseudoconstant)
+			return true;
+	}
+	return false;
 }
 
 

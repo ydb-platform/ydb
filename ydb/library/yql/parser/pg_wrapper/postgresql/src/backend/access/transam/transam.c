@@ -3,7 +3,7 @@
  * transam.c
  *	  postgres transaction (commit) log interface routines
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -216,38 +216,6 @@ TransactionIdDidAbort(TransactionId transactionId)
 	/*
 	 * It's not aborted.
 	 */
-	return false;
-}
-
-/*
- * TransactionIdIsKnownCompleted
- *		True iff transaction associated with the identifier is currently
- *		known to have either committed or aborted.
- *
- * This does NOT look into pg_xact but merely probes our local cache
- * (and so it's not named TransactionIdDidComplete, which would be the
- * appropriate name for a function that worked that way).
- *
- * NB: This is unused, and will be removed in v15. This was used to
- * short-circuit TransactionIdIsInProgress, but that was wrong for a
- * transaction that was known to be marked as committed in CLOG but not
- * yet removed from the proc array. This is kept in backbranches just in
- * case it is still used by extensions.  However, extensions doing
- * something similar to tuple visibility checks should also be careful to
- * check the proc array first!
- *
- * Note:
- *		Assumes transaction identifier is valid.
- */
-bool
-TransactionIdIsKnownCompleted(TransactionId transactionId)
-{
-	if (TransactionIdEquals(transactionId, cachedFetchXid))
-	{
-		/* If it's in the cache at all, it must be completed. */
-		return true;
-	}
-
 	return false;
 }
 

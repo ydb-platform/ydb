@@ -9,7 +9,7 @@
  * Reading data from the input file or client and parsing it into Datums
  * is handled in copyfromparse.c.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -115,21 +115,19 @@ void
 CopyFromErrorCallback(void *arg)
 {
 	CopyFromState cstate = (CopyFromState) arg;
-	char		curlineno_str[32];
-
-	snprintf(curlineno_str, sizeof(curlineno_str), UINT64_FORMAT,
-			 cstate->cur_lineno);
 
 	if (cstate->opts.binary)
 	{
 		/* can't usefully display the data */
 		if (cstate->cur_attname)
-			errcontext("COPY %s, line %s, column %s",
-					   cstate->cur_relname, curlineno_str,
+			errcontext("COPY %s, line %llu, column %s",
+					   cstate->cur_relname,
+					   (unsigned long long) cstate->cur_lineno,
 					   cstate->cur_attname);
 		else
-			errcontext("COPY %s, line %s",
-					   cstate->cur_relname, curlineno_str);
+			errcontext("COPY %s, line %llu",
+					   cstate->cur_relname,
+					   (unsigned long long) cstate->cur_lineno);
 	}
 	else
 	{
@@ -139,16 +137,19 @@ CopyFromErrorCallback(void *arg)
 			char	   *attval;
 
 			attval = limit_printout_length(cstate->cur_attval);
-			errcontext("COPY %s, line %s, column %s: \"%s\"",
-					   cstate->cur_relname, curlineno_str,
-					   cstate->cur_attname, attval);
+			errcontext("COPY %s, line %llu, column %s: \"%s\"",
+					   cstate->cur_relname,
+					   (unsigned long long) cstate->cur_lineno,
+					   cstate->cur_attname,
+					   attval);
 			pfree(attval);
 		}
 		else if (cstate->cur_attname)
 		{
 			/* error is relevant to a particular column, value is NULL */
-			errcontext("COPY %s, line %s, column %s: null input",
-					   cstate->cur_relname, curlineno_str,
+			errcontext("COPY %s, line %llu, column %s: null input",
+					   cstate->cur_relname,
+					   (unsigned long long) cstate->cur_lineno,
 					   cstate->cur_attname);
 		}
 		else
@@ -163,14 +164,16 @@ CopyFromErrorCallback(void *arg)
 				char	   *lineval;
 
 				lineval = limit_printout_length(cstate->line_buf.data);
-				errcontext("COPY %s, line %s: \"%s\"",
-						   cstate->cur_relname, curlineno_str, lineval);
+				errcontext("COPY %s, line %llu: \"%s\"",
+						   cstate->cur_relname,
+						   (unsigned long long) cstate->cur_lineno, lineval);
 				pfree(lineval);
 			}
 			else
 			{
-				errcontext("COPY %s, line %s",
-						   cstate->cur_relname, curlineno_str);
+				errcontext("COPY %s, line %llu",
+						   cstate->cur_relname,
+						   (unsigned long long) cstate->cur_lineno);
 			}
 		}
 	}
@@ -755,6 +758,9 @@ CopyFrom(CopyFromState cstate)
 		 * Can't support multi-inserts if there are any volatile function
 		 * expressions in WHERE clause.  Similarly to the trigger case above,
 		 * such expressions may query the table we're inserting into.
+		 *
+		 * Note: the whereClause was already preprocessed in DoCopy(), so it's
+		 * okay to use contain_volatile_functions() directly.
 		 */
 		insertMethod = CIM_SINGLE;
 	}
@@ -1237,7 +1243,7 @@ BeginCopyFrom(ParseState *pstate,
 
 	tupDesc = RelationGetDescr(cstate->rel);
 
-	/* process commmon options or initialization */
+	/* process common options or initialization */
 
 	/* Generate or convert list of attributes to process */
 	cstate->attnumlist = CopyGetAttnums(tupDesc, cstate->rel, attnamelist);
@@ -1334,15 +1340,17 @@ BeginCopyFrom(ParseState *pstate,
 		cstate->need_transcoding = true;
 		cstate->conversion_proc = FindDefaultConversionProc(cstate->file_encoding,
 															GetDatabaseEncoding());
+		if (!OidIsValid(cstate->conversion_proc))
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_FUNCTION),
+					 errmsg("default conversion function for encoding \"%s\" to \"%s\" does not exist",
+							pg_encoding_to_char(cstate->file_encoding),
+							pg_encoding_to_char(GetDatabaseEncoding()))));
 	}
 
 	cstate->copy_src = COPY_FILE;	/* default */
 
 	cstate->whereClause = whereClause;
-
-	MemoryContextSwitchTo(oldcontext);
-
-	oldcontext = MemoryContextSwitchTo(cstate->copycontext);
 
 	/* Initialize state variables */
 	cstate->eol_type = EOL_UNKNOWN;
@@ -1448,7 +1456,8 @@ BeginCopyFrom(ParseState *pstate,
 				 * known to be safe for use with the multi-insert
 				 * optimization. Hence we use this special case function
 				 * checker rather than the standard check for
-				 * contain_volatile_functions().
+				 * contain_volatile_functions().  Note also that we already
+				 * ran the expression through expression_planner().
 				 */
 				if (!volatile_defexprs)
 					volatile_defexprs = contain_volatile_functions_not_nextval((Node *) defexpr);

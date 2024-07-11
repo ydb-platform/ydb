@@ -3,7 +3,7 @@
  * copy.c
  *		Implements the COPY utility command
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -80,26 +80,26 @@ DoCopy(ParseState *pstate, const CopyStmt *stmt,
 	{
 		if (stmt->is_program)
 		{
-			if (!is_member_of_role(GetUserId(), ROLE_PG_EXECUTE_SERVER_PROGRAM))
+			if (!has_privs_of_role(GetUserId(), ROLE_PG_EXECUTE_SERVER_PROGRAM))
 				ereport(ERROR,
 						(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-						 errmsg("must be superuser or a member of the pg_execute_server_program role to COPY to or from an external program"),
+						 errmsg("must be superuser or have privileges of the pg_execute_server_program role to COPY to or from an external program"),
 						 errhint("Anyone can COPY to stdout or from stdin. "
 								 "psql's \\copy command also works for anyone.")));
 		}
 		else
 		{
-			if (is_from && !is_member_of_role(GetUserId(), ROLE_PG_READ_SERVER_FILES))
+			if (is_from && !has_privs_of_role(GetUserId(), ROLE_PG_READ_SERVER_FILES))
 				ereport(ERROR,
 						(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-						 errmsg("must be superuser or a member of the pg_read_server_files role to COPY from a file"),
+						 errmsg("must be superuser or have privileges of the pg_read_server_files role to COPY from a file"),
 						 errhint("Anyone can COPY to stdout or from stdin. "
 								 "psql's \\copy command also works for anyone.")));
 
-			if (!is_from && !is_member_of_role(GetUserId(), ROLE_PG_WRITE_SERVER_FILES))
+			if (!is_from && !has_privs_of_role(GetUserId(), ROLE_PG_WRITE_SERVER_FILES))
 				ereport(ERROR,
 						(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-						 errmsg("must be superuser or a member of the pg_write_server_files role to COPY to a file"),
+						 errmsg("must be superuser or have privileges of the pg_write_server_files role to COPY to a file"),
 						 errhint("Anyone can COPY to stdout or from stdin. "
 								 "psql's \\copy command also works for anyone.")));
 		}
@@ -222,9 +222,8 @@ DoCopy(ParseState *pstate, const CopyStmt *stmt,
 				{
 					/*
 					 * Build the ColumnRef for each column.  The ColumnRef
-					 * 'fields' property is a String 'Value' node (see
-					 * nodes/value.h) that corresponds to the column name
-					 * respectively.
+					 * 'fields' property is a String node that corresponds to
+					 * the column name respectively.
 					 */
 					cr = makeNode(ColumnRef);
 					cr->fields = list_make1(lfirst(lc));
@@ -277,6 +276,12 @@ DoCopy(ParseState *pstate, const CopyStmt *stmt,
 	{
 		Assert(stmt->query);
 
+		/* MERGE is allowed by parser, but unimplemented. Reject for now */
+		if (IsA(stmt->query, MergeStmt))
+			ereport(ERROR,
+					errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					errmsg("MERGE not supported in COPY"));
+
 		query = makeNode(RawStmt);
 		query->stmt = stmt->query;
 		query->stmt_location = stmt_location;
@@ -315,6 +320,71 @@ DoCopy(ParseState *pstate, const CopyStmt *stmt,
 
 	if (rel != NULL)
 		table_close(rel, NoLock);
+}
+
+/*
+ * Extract a CopyHeaderChoice value from a DefElem.  This is like
+ * defGetBoolean() but also accepts the special value "match".
+ */
+static CopyHeaderChoice
+defGetCopyHeaderChoice(DefElem *def, bool is_from)
+{
+	/*
+	 * If no parameter given, assume "true" is meant.
+	 */
+	if (def->arg == NULL)
+		return COPY_HEADER_TRUE;
+
+	/*
+	 * Allow 0, 1, "true", "false", "on", "off", or "match".
+	 */
+	switch (nodeTag(def->arg))
+	{
+		case T_Integer:
+			switch (intVal(def->arg))
+			{
+				case 0:
+					return COPY_HEADER_FALSE;
+				case 1:
+					return COPY_HEADER_TRUE;
+				default:
+					/* otherwise, error out below */
+					break;
+			}
+			break;
+		default:
+			{
+				char	   *sval = defGetString(def);
+
+				/*
+				 * The set of strings accepted here should match up with the
+				 * grammar's opt_boolean_or_string production.
+				 */
+				if (pg_strcasecmp(sval, "true") == 0)
+					return COPY_HEADER_TRUE;
+				if (pg_strcasecmp(sval, "false") == 0)
+					return COPY_HEADER_FALSE;
+				if (pg_strcasecmp(sval, "on") == 0)
+					return COPY_HEADER_TRUE;
+				if (pg_strcasecmp(sval, "off") == 0)
+					return COPY_HEADER_FALSE;
+				if (pg_strcasecmp(sval, "match") == 0)
+				{
+					if (!is_from)
+						ereport(ERROR,
+								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								 errmsg("cannot use \"%s\" with HEADER in COPY TO",
+										sval)));
+					return COPY_HEADER_MATCH;
+				}
+			}
+			break;
+	}
+	ereport(ERROR,
+			(errcode(ERRCODE_SYNTAX_ERROR),
+			 errmsg("%s requires a Boolean value or \"match\"",
+					def->defname)));
+	return COPY_HEADER_FALSE;	/* keep compiler quiet */
 }
 
 /*
@@ -360,10 +430,7 @@ ProcessCopyOptions(ParseState *pstate,
 			char	   *fmt = defGetString(defel);
 
 			if (format_specified)
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("conflicting or redundant options"),
-						 parser_errposition(pstate, defel->location)));
+				errorConflictingDefElem(defel, pstate);
 			format_specified = true;
 			if (strcmp(fmt, "text") == 0)
 				 /* default format */ ;
@@ -380,66 +447,45 @@ ProcessCopyOptions(ParseState *pstate,
 		else if (strcmp(defel->defname, "freeze") == 0)
 		{
 			if (freeze_specified)
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("conflicting or redundant options"),
-						 parser_errposition(pstate, defel->location)));
+				errorConflictingDefElem(defel, pstate);
 			freeze_specified = true;
 			opts_out->freeze = defGetBoolean(defel);
 		}
 		else if (strcmp(defel->defname, "delimiter") == 0)
 		{
 			if (opts_out->delim)
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("conflicting or redundant options"),
-						 parser_errposition(pstate, defel->location)));
+				errorConflictingDefElem(defel, pstate);
 			opts_out->delim = defGetString(defel);
 		}
 		else if (strcmp(defel->defname, "null") == 0)
 		{
 			if (opts_out->null_print)
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("conflicting or redundant options"),
-						 parser_errposition(pstate, defel->location)));
+				errorConflictingDefElem(defel, pstate);
 			opts_out->null_print = defGetString(defel);
 		}
 		else if (strcmp(defel->defname, "header") == 0)
 		{
 			if (header_specified)
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("conflicting or redundant options"),
-						 parser_errposition(pstate, defel->location)));
+				errorConflictingDefElem(defel, pstate);
 			header_specified = true;
-			opts_out->header_line = defGetBoolean(defel);
+			opts_out->header_line = defGetCopyHeaderChoice(defel, is_from);
 		}
 		else if (strcmp(defel->defname, "quote") == 0)
 		{
 			if (opts_out->quote)
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("conflicting or redundant options"),
-						 parser_errposition(pstate, defel->location)));
+				errorConflictingDefElem(defel, pstate);
 			opts_out->quote = defGetString(defel);
 		}
 		else if (strcmp(defel->defname, "escape") == 0)
 		{
 			if (opts_out->escape)
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("conflicting or redundant options"),
-						 parser_errposition(pstate, defel->location)));
+				errorConflictingDefElem(defel, pstate);
 			opts_out->escape = defGetString(defel);
 		}
 		else if (strcmp(defel->defname, "force_quote") == 0)
 		{
 			if (opts_out->force_quote || opts_out->force_quote_all)
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("conflicting or redundant options"),
-						 parser_errposition(pstate, defel->location)));
+				errorConflictingDefElem(defel, pstate);
 			if (defel->arg && IsA(defel->arg, A_Star))
 				opts_out->force_quote_all = true;
 			else if (defel->arg && IsA(defel->arg, List))
@@ -454,10 +500,7 @@ ProcessCopyOptions(ParseState *pstate,
 		else if (strcmp(defel->defname, "force_not_null") == 0)
 		{
 			if (opts_out->force_notnull)
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("conflicting or redundant options"),
-						 parser_errposition(pstate, defel->location)));
+				errorConflictingDefElem(defel, pstate);
 			if (defel->arg && IsA(defel->arg, List))
 				opts_out->force_notnull = castNode(List, defel->arg);
 			else
@@ -470,9 +513,7 @@ ProcessCopyOptions(ParseState *pstate,
 		else if (strcmp(defel->defname, "force_null") == 0)
 		{
 			if (opts_out->force_null)
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("conflicting or redundant options")));
+				errorConflictingDefElem(defel, pstate);
 			if (defel->arg && IsA(defel->arg, List))
 				opts_out->force_null = castNode(List, defel->arg);
 			else
@@ -490,10 +531,7 @@ ProcessCopyOptions(ParseState *pstate,
 			 * allowed for the column list to be NIL.
 			 */
 			if (opts_out->convert_selectively)
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("conflicting or redundant options"),
-						 parser_errposition(pstate, defel->location)));
+				errorConflictingDefElem(defel, pstate);
 			opts_out->convert_selectively = true;
 			if (defel->arg == NULL || IsA(defel->arg, List))
 				opts_out->convert_select = castNode(List, defel->arg);
@@ -507,10 +545,7 @@ ProcessCopyOptions(ParseState *pstate,
 		else if (strcmp(defel->defname, "encoding") == 0)
 		{
 			if (opts_out->file_encoding >= 0)
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("conflicting or redundant options"),
-						 parser_errposition(pstate, defel->location)));
+				errorConflictingDefElem(defel, pstate);
 			opts_out->file_encoding = pg_char_to_encoding(defGetString(defel));
 			if (opts_out->file_encoding < 0)
 				ereport(ERROR,
@@ -594,10 +629,10 @@ ProcessCopyOptions(ParseState *pstate,
 				 errmsg("COPY delimiter cannot be \"%s\"", opts_out->delim)));
 
 	/* Check header */
-	if (!opts_out->csv_mode && opts_out->header_line)
+	if (opts_out->binary && opts_out->header_line)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("COPY HEADER available only in CSV mode")));
+				 errmsg("cannot specify HEADER in BINARY mode")));
 
 	/* Check quote */
 	if (!opts_out->csv_mode && opts_out->quote != NULL)

@@ -4,7 +4,7 @@
  *	  include file for the bootstrapping code
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/bootstrap/bootstrap.h
@@ -27,12 +27,12 @@
 #define BOOTCOL_NULL_FORCE_NULL		2
 #define BOOTCOL_NULL_FORCE_NOT_NULL 3
 
-extern __thread Relation boot_reldesc;
-extern __thread Form_pg_attribute attrtypes[MAXATTR];
-extern __thread int	numattr;
+extern __thread PGDLLIMPORT Relation boot_reldesc;
+extern __thread PGDLLIMPORT Form_pg_attribute attrtypes[MAXATTR];
+extern __thread PGDLLIMPORT int numattr;
 
 
-extern void AuxiliaryProcessMain(int argc, char *argv[]) pg_attribute_noreturn();
+extern void BootstrapModeMain(int argc, char *argv[], bool check_only) pg_attribute_noreturn();
 
 extern void closerel(char *name);
 extern void boot_openrel(char *name);

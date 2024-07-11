@@ -113,6 +113,7 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
     const TVector<TString>& rightJoinKeys,
     TKqpProviderContext& ctx) {
 
+    Y_UNUSED(joinConditions);
     Y_UNUSED(left);
     Y_UNUSED(leftJoinKeys);
 
@@ -125,21 +126,13 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
     if (rightStats->Type != EStatisticsType::BaseTable) {
         return false;
     }
-    if (joinConditions.size() > rightStats->KeyColumns->Data.size()) {
-        return false;
-    }
 
-    for (auto [leftCol, rightCol] : joinConditions) {
-        // Fix for clang14, somehow structured binding does not create a variable in clang14
-        auto r = rightCol;
-        if (find_if(rightStats->KeyColumns->Data.begin(), rightStats->KeyColumns->Data.end(), 
-            [&r] (const TString& s) {
-            return r.AttributeName == s;
-        } ) == rightStats->KeyColumns->Data.end()) {
+    for (auto rightCol : rightJoinKeys) {
+        if (std::find(rightStats->KeyColumns->Data.begin(), rightStats->KeyColumns->Data.end(), rightCol) == rightStats->KeyColumns->Data.end()) {
             return false;
         }
     }
-
+    
     return IsLookupJoinApplicableDetailed(std::static_pointer_cast<TRelOptimizerNode>(right), rightJoinKeys, ctx);
 }
 
@@ -160,6 +153,15 @@ bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerN
             }
             return IsLookupJoinApplicable(left, right, joinConditions, leftJoinKeys, rightJoinKeys, *this);
 
+        case EJoinAlgoType::LookupJoinReverse:
+            if (joinKind != EJoinKind::LeftSemi) {
+                return false;
+            }
+            if ((OptLevel >= 2) && (right->Stats->Nrows > 1000)) {
+                return false;
+            }
+            return IsLookupJoinApplicable(right, left, joinConditions, rightJoinKeys, leftJoinKeys, *this);
+
         case EJoinAlgoType::MapJoin:
             return joinKind != EJoinKind::OuterJoin && joinKind != EJoinKind::Exclusion && right->Stats->ByteSize < 5e8;
         case EJoinAlgoType::GraceJoin:
@@ -178,6 +180,13 @@ double TKqpProviderContext::ComputeJoinCost(const TOptimizerStatistics& leftStat
                 return -1;
             }
             return leftStats.Nrows + outputRows;
+
+        case EJoinAlgoType::LookupJoinReverse:
+            if (OptLevel==1) {
+                return -1;
+            }
+            return rightStats.Nrows + outputRows;
+            
         case EJoinAlgoType::MapJoin:
             return leftStats.Nrows + 1.8 * rightStats.Nrows + outputRows;
         case EJoinAlgoType::GraceJoin:

@@ -7,7 +7,7 @@
  *	  and join trees.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/nodes/primnodes.h
@@ -32,7 +32,7 @@
  *	  specifies an alias for a range variable; the alias might also
  *	  specify renaming of columns within the table.
  *
- * Note: colnames is a list of Value nodes (always strings).  In Alias structs
+ * Note: colnames is a list of String nodes.  In Alias structs
  * associated with RTEs, there may be entries corresponding to dropped
  * columns; these are normally empty strings ("").  See parsenodes.h for info.
  */
@@ -76,7 +76,7 @@ typedef struct RangeVar
 /*
  * TableFunc - node for a table function, such as XMLTABLE.
  *
- * Entries in the ns_names list are either string Value nodes containing
+ * Entries in the ns_names list are either String nodes containing
  * literal namespace names, or NULL pointers to represent DEFAULT.
  */
 typedef struct TableFunc
@@ -159,8 +159,8 @@ typedef struct Expr
  * is abused to signify references to columns of a custom scan tuple type.)
  *
  * ROWID_VAR is used in the planner to identify nonce variables that carry
- * row identity information during UPDATE/DELETE.  This value should never
- * be seen outside the planner.
+ * row identity information during UPDATE/DELETE/MERGE.  This value should
+ * never be seen outside the planner.
  *
  * In the parser, varnosyn and varattnosyn are either identical to
  * varno/varattno, or they specify the column's position in an aliased JOIN
@@ -172,12 +172,12 @@ typedef struct Expr
  * in the planner and doesn't correspond to any simple relation column may
  * have varnosyn = varattnosyn = 0.
  */
-#define    INNER_VAR		65000	/* reference to inner subplan */
-#define    OUTER_VAR		65001	/* reference to outer subplan */
-#define    INDEX_VAR		65002	/* reference to index column */
-#define    ROWID_VAR		65003	/* row identity column during planning */
+#define    INNER_VAR		(-1)	/* reference to inner subplan */
+#define    OUTER_VAR		(-2)	/* reference to outer subplan */
+#define    INDEX_VAR		(-3)	/* reference to index column */
+#define    ROWID_VAR		(-4)	/* row identity column during planning */
 
-#define IS_SPECIAL_VARNO(varno)		((varno) >= INNER_VAR)
+#define IS_SPECIAL_VARNO(varno)		((int) (varno) < 0)
 
 /* Symbols for the indexes of the special RTE entries in rules */
 #define    PRS2_OLD_VARNO			1
@@ -186,8 +186,8 @@ typedef struct Expr
 typedef struct Var
 {
 	Expr		xpr;
-	Index		varno;			/* index of this var's relation in the range
-								 * table, or INNER_VAR/OUTER_VAR/INDEX_VAR */
+	int			varno;			/* index of this var's relation in the range
+								 * table, or INNER_VAR/OUTER_VAR/etc */
 	AttrNumber	varattno;		/* attribute number of this var, or zero for
 								 * all attrs ("whole-row Var") */
 	Oid			vartype;		/* pg_type OID for the type of this var */
@@ -580,10 +580,18 @@ typedef OpExpr NullIfExpr;
  * the result type (or the collation) because it must be boolean.
  *
  * A ScalarArrayOpExpr with a valid hashfuncid is evaluated during execution
- * by building a hash table containing the Const values from the rhs arg.
- * This table is probed during expression evaluation.  Only useOr=true
- * ScalarArrayOpExpr with Const arrays on the rhs can have the hashfuncid
- * field set. See convert_saop_to_hashed_saop().
+ * by building a hash table containing the Const values from the RHS arg.
+ * This table is probed during expression evaluation.  The planner will set
+ * hashfuncid to the hash function which must be used to build and probe the
+ * hash table.  The executor determines if it should use hash-based checks or
+ * the more traditional means based on if the hashfuncid is set or not.
+ *
+ * When performing hashed NOT IN, the negfuncid will also be set to the
+ * equality function which the hash table must use to build and probe the hash
+ * table.  opno and opfuncid will remain set to the <> operator and its
+ * corresponding function and won't be used during execution.  For
+ * non-hashtable based NOT INs, negfuncid will be set to InvalidOid.  See
+ * convert_saop_to_hashed_saop().
  */
 typedef struct ScalarArrayOpExpr
 {
@@ -591,6 +599,8 @@ typedef struct ScalarArrayOpExpr
 	Oid			opno;			/* PG_OPERATOR OID of the operator */
 	Oid			opfuncid;		/* PG_PROC OID of comparison function */
 	Oid			hashfuncid;		/* PG_PROC OID of hash func or InvalidOid */
+	Oid			negfuncid;		/* PG_PROC OID of negator of opfuncid function
+								 * or InvalidOid.  See above */
 	bool		useOr;			/* true for ANY, false for ALL */
 	Oid			inputcollid;	/* OID of collation that operator should use */
 	List	   *args;			/* the scalar and array operands */
@@ -1042,15 +1052,13 @@ typedef struct ArrayExpr
  * than vice versa.)  It is important not to assume that length(args) is
  * the same as the number of columns logically present in the rowtype.
  *
- * colnames provides field names in cases where the names can't easily be
- * obtained otherwise.  Names *must* be provided if row_typeid is RECORDOID.
- * If row_typeid identifies a known composite type, colnames can be NIL to
- * indicate the type's cataloged field names apply.  Note that colnames can
- * be non-NIL even for a composite type, and typically is when the RowExpr
- * was created by expanding a whole-row Var.  This is so that we can retain
- * the column alias names of the RTE that the Var referenced (which would
- * otherwise be very difficult to extract from the parsetree).  Like the
- * args list, colnames is one-for-one with physical fields of the rowtype.
+ * colnames provides field names if the ROW() result is of type RECORD.
+ * Names *must* be provided if row_typeid is RECORDOID; but if it is a
+ * named composite type, colnames will be ignored in favor of using the
+ * type's cataloged field names, so colnames should be NIL.  Like the
+ * args list, colnames is defined to be one-for-one with physical fields
+ * of the rowtype (although dropped columns shouldn't appear in the
+ * RECORD case, so this fine point is currently moot).
  */
 typedef struct RowExpr
 {
@@ -1205,7 +1213,7 @@ typedef enum XmlExprOp
 	IS_DOCUMENT					/* xmlval IS DOCUMENT */
 } XmlExprOp;
 
-typedef enum
+typedef enum XmlOptionType
 {
 	XMLOPTION_DOCUMENT,
 	XMLOPTION_CONTENT
@@ -1217,7 +1225,7 @@ typedef struct XmlExpr
 	XmlExprOp	op;				/* xml function ID */
 	char	   *name;			/* name in xml(NAME foo ...) syntaxes */
 	List	   *named_args;		/* non-XML expressions for xml_attributes */
-	List	   *arg_names;		/* parallel list of Value strings */
+	List	   *arg_names;		/* parallel list of String values */
 	List	   *args;			/* list of expressions */
 	XmlOptionType xmloption;	/* DOCUMENT or CONTENT */
 	Oid			type;			/* target type/typmod for XMLSERIALIZE */
@@ -1341,6 +1349,7 @@ typedef struct SetToDefault
  * of the target relation being constrained; this aids placing the expression
  * correctly during planning.  We can assume however that its "levelsup" is
  * always zero, due to the syntactic constraints on where it can appear.
+ * Also, cvarno will always be a true RT index, never INNER_VAR etc.
  *
  * The referenced cursor can be represented either as a hardwired string
  * or as a reference to a run-time parameter of type REFCURSOR.  The latter

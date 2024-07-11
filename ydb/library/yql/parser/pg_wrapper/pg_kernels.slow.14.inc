@@ -94,6 +94,8 @@ TExecFunc arrow_void_in() { return MakeIndirectExec<true, true>(&void_in); }
 TExecFunc arrow_void_out() { return MakeIndirectExec<true, false>(&void_out); }
 TExecFunc arrow_void_recv() { return MakeIndirectExec<true, true>(&void_recv); }
 TExecFunc arrow_void_send() { return MakeIndirectExec<true, false>(&void_send); }
+TExecFunc arrow_xid8_larger() { return MakeIndirectExec<true, true>(&xid8_larger); }
+TExecFunc arrow_xid8_smaller() { return MakeIndirectExec<true, true>(&xid8_smaller); }
 TExecFunc arrow_xid8cmp() { return MakeIndirectExec<true, true>(&xid8cmp); }
 TExecFunc arrow_xid8eq() { return MakeIndirectExec<true, true>(&xid8eq); }
 TExecFunc arrow_xid8ge() { return MakeIndirectExec<true, true>(&xid8ge); }

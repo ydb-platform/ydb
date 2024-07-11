@@ -4,7 +4,7 @@
  *	  prototypes for restrictinfo.c.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/optimizer/restrictinfo.h
@@ -41,6 +41,8 @@ extern void extract_actual_join_clauses(List *restrictinfo_list,
 										Relids joinrelids,
 										List **joinquals,
 										List **otherquals);
+extern bool has_pseudoconstant_clauses(PlannerInfo *root,
+									   List *restrictinfo_list);
 extern bool join_clause_is_movable_to(RestrictInfo *rinfo, RelOptInfo *baserel);
 extern bool join_clause_is_movable_into(RestrictInfo *rinfo,
 										Relids currentrelids,

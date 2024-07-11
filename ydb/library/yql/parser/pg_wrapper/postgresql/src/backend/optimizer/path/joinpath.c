@@ -3,7 +3,7 @@
  * joinpath.c
  *	  Routines to find all possible paths for processing a set of joins
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -24,6 +24,7 @@
 #include "optimizer/pathnode.h"
 #include "optimizer/paths.h"
 #include "optimizer/planmain.h"
+#include "optimizer/restrictinfo.h"
 #include "utils/typcache.h"
 
 /* Hook for plugins to get control in add_paths_to_joinrel() */
@@ -130,6 +131,7 @@ add_paths_to_joinrel(PlannerInfo *root,
 {
 	JoinPathExtraData extra;
 	bool		mergejoin_allowed = true;
+	bool		consider_join_pushdown = false;
 	ListCell   *lc;
 	Relids		joinrelids;
 
@@ -319,20 +321,37 @@ add_paths_to_joinrel(PlannerInfo *root,
 							 jointype, &extra);
 
 	/*
+	 * createplan.c does not currently support handling of pseudoconstant
+	 * clauses assigned to joins pushed down by extensions; check if the
+	 * restrictlist has such clauses, and if not, allow them to consider
+	 * pushing down joins.
+	 */
+	if ((joinrel->fdwroutine &&
+		 joinrel->fdwroutine->GetForeignJoinPaths) ||
+		set_join_pathlist_hook)
+		consider_join_pushdown = !has_pseudoconstant_clauses(root,
+															 restrictlist);
+
+	/*
 	 * 5. If inner and outer relations are foreign tables (or joins) belonging
 	 * to the same server and assigned to the same user to check access
 	 * permissions as, give the FDW a chance to push down joins.
 	 */
 	if (joinrel->fdwroutine &&
-		joinrel->fdwroutine->GetForeignJoinPaths)
+		joinrel->fdwroutine->GetForeignJoinPaths &&
+		consider_join_pushdown)
 		joinrel->fdwroutine->GetForeignJoinPaths(root, joinrel,
 												 outerrel, innerrel,
 												 jointype, &extra);
 
 	/*
-	 * 6. Finally, give extensions a chance to manipulate the path list.
+	 * 6. Finally, give extensions a chance to manipulate the path list.  They
+	 * could add new paths (such as CustomPaths) by calling add_path(), or
+	 * add_partial_path() if parallel aware.  They could also delete or modify
+	 * paths added by the core code.
 	 */
-	if (set_join_pathlist_hook)
+	if (set_join_pathlist_hook &&
+		consider_join_pushdown)
 		set_join_pathlist_hook(root, joinrel, outerrel, innerrel,
 							   jointype, &extra);
 }
@@ -396,9 +415,15 @@ paraminfo_get_equal_hashops(PlannerInfo *root, ParamPathInfo *param_info,
 			RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
 			OpExpr	   *opexpr;
 			Node	   *expr;
+			Oid			hasheqoperator;
 
-			/* can't use a memoize node without a valid hash equals operator */
-			if (!OidIsValid(rinfo->hasheqoperator) ||
+			opexpr = (OpExpr *) rinfo->clause;
+
+			/*
+			 * Bail if the rinfo is not compatible.  We need a join OpExpr
+			 * with 2 args.
+			 */
+			if (!IsA(opexpr, OpExpr) || list_length(opexpr->args) != 2 ||
 				!clause_sides_match_join(rinfo, outerrel, innerrel))
 			{
 				list_free(*operators);
@@ -406,17 +431,26 @@ paraminfo_get_equal_hashops(PlannerInfo *root, ParamPathInfo *param_info,
 				return false;
 			}
 
-			/*
-			 * We already checked that this is an OpExpr with 2 args when
-			 * setting hasheqoperator.
-			 */
-			opexpr = (OpExpr *) rinfo->clause;
 			if (rinfo->outer_is_left)
+			{
 				expr = (Node *) linitial(opexpr->args);
+				hasheqoperator = rinfo->left_hasheqoperator;
+			}
 			else
+			{
 				expr = (Node *) lsecond(opexpr->args);
+				hasheqoperator = rinfo->right_hasheqoperator;
+			}
 
-			*operators = lappend_oid(*operators, rinfo->hasheqoperator);
+			/* can't do memoize if we can't hash the outer type */
+			if (!OidIsValid(hasheqoperator))
+			{
+				list_free(*operators);
+				list_free(*param_exprs);
+				return false;
+			}
+
+			*operators = lappend_oid(*operators, hasheqoperator);
 			*param_exprs = lappend(*param_exprs, expr);
 
 			/*
@@ -578,6 +612,23 @@ get_memoize_path(PlannerInfo *root, RelOptInfo *innerrel,
 
 		if (contain_volatile_functions((Node *) rinfo))
 			return NULL;
+	}
+
+	/*
+	 * Also check the parameterized path restrictinfos for volatile functions.
+	 * Indexed functions must be immutable so shouldn't have any volatile
+	 * functions, however, with a lateral join the inner scan may not be an
+	 * index scan.
+	 */
+	if (inner_path->param_info != NULL)
+	{
+		foreach(lc, inner_path->param_info->ppi_clauses)
+		{
+			RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
+
+			if (contain_volatile_functions((Node *) rinfo))
+				return NULL;
+		}
 	}
 
 	/*
@@ -1255,7 +1306,7 @@ sort_inner_and_outer(PlannerInfo *root,
 
 	foreach(l, all_pathkeys)
 	{
-		PathKey	   *front_pathkey = (PathKey *) lfirst(l);
+		PathKey    *front_pathkey = (PathKey *) lfirst(l);
 		List	   *cur_mergeclauses;
 		List	   *outerkeys;
 		List	   *innerkeys;

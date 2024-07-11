@@ -1198,6 +1198,26 @@ auto MakePgAgg_range_intersect_agg_4450() {
                      false, false, false, false
                      >(&range_intersect_agg_transfn, &range_intersect_agg_transfn, nullptr, nullptr, nullptr);
 }
+auto MakePgAgg_max_5099() {
+    return TGenericAgg<
+                     TPgIndirectFunc, true, TDefaultArgsPolicy,
+                     TPgIndirectFunc, true, TDefaultArgsPolicy,
+                     false, TPgIndirectFunc, TDefaultArgsPolicy,
+                     false, TPgIndirectFunc, TDefaultArgsPolicy,
+                     false, TPgIndirectFunc, false, TDefaultArgsPolicy,
+                     true, true, true, false
+                     >(&xid8_larger, &xid8_larger, nullptr, nullptr, nullptr);
+}
+auto MakePgAgg_min_5100() {
+    return TGenericAgg<
+                     TPgIndirectFunc, true, TDefaultArgsPolicy,
+                     TPgIndirectFunc, true, TDefaultArgsPolicy,
+                     false, TPgIndirectFunc, TDefaultArgsPolicy,
+                     false, TPgIndirectFunc, TDefaultArgsPolicy,
+                     false, TPgIndirectFunc, false, TDefaultArgsPolicy,
+                     true, true, true, false
+                     >(&xid8_smaller, &xid8_smaller, nullptr, nullptr, nullptr);
+}
 auto MakePgAgg_bit_xor_6164() {
     return TGenericAgg<
                      TPgIndirectFunc, true, TDefaultArgsPolicy,

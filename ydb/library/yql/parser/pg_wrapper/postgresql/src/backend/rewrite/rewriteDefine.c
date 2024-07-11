@@ -3,7 +3,7 @@
  * rewriteDefine.c
  *	  routines for defining a rewrite rule
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -29,6 +29,7 @@
 #include "catalog/pg_rewrite.h"
 #include "catalog/storage.h"
 #include "commands/policy.h"
+#include "commands/tablecmds.h"
 #include "miscadmin.h"
 #include "nodes/nodeFuncs.h"
 #include "parser/parse_utilcmd.h"
@@ -268,8 +269,9 @@ DefineQueryRewrite(const char *rulename,
 		event_relation->rd_rel->relkind != RELKIND_PARTITIONED_TABLE)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-				 errmsg("\"%s\" is not a table or view",
-						RelationGetRelationName(event_relation))));
+				 errmsg("relation \"%s\" cannot have rules",
+						RelationGetRelationName(event_relation)),
+				 errdetail_relkind_not_supported(event_relation->rd_rel->relkind)));
 
 	if (!allowSystemTableMods && IsSystemRelation(event_relation))
 		ereport(ERROR,
@@ -421,6 +423,9 @@ DefineQueryRewrite(const char *rulename,
 		 * whole business of converting relations to views is just an obsolete
 		 * kluge to allow dump/reload of views that participate in circular
 		 * dependencies.)
+		 *
+		 * Also ensure the relation isn't being manipulated in any outer SQL
+		 * command of our own session.
 		 */
 		if (event_relation->rd_rel->relkind != RELKIND_VIEW &&
 			event_relation->rd_rel->relkind != RELKIND_MATVIEW)
@@ -428,6 +433,8 @@ DefineQueryRewrite(const char *rulename,
 			TableScanDesc scanDesc;
 			Snapshot	snapshot;
 			TupleTableSlot *slot;
+
+			CheckTableNotInUse(event_relation, "CREATE RULE");
 
 			if (event_relation->rd_rel->relkind == RELKIND_PARTITIONED_TABLE)
 				ereport(ERROR,
@@ -947,7 +954,8 @@ RangeVarCallbackForRenameRule(const RangeVar *rv, Oid relid, Oid oldrelid,
 		form->relkind != RELKIND_PARTITIONED_TABLE)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-				 errmsg("\"%s\" is not a table or view", rv->relname)));
+				 errmsg("relation \"%s\" cannot have rules", rv->relname),
+				 errdetail_relkind_not_supported(form->relkind)));
 
 	if (!allowSystemTableMods && IsSystemClass(relid, form))
 		ereport(ERROR,

@@ -27,6 +27,7 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorCombineAll>> PrepareCom
     case 3526: return MakePgAgg_max_3526().PrepareCombineAll(filterColumn, argsColumns, aggDesc);
     case 3564: return MakePgAgg_max_3564().PrepareCombineAll(filterColumn, argsColumns, aggDesc);
     case 4189: return MakePgAgg_max_4189().PrepareCombineAll(filterColumn, argsColumns, aggDesc);
+    case 5099: return MakePgAgg_max_5099().PrepareCombineAll(filterColumn, argsColumns, aggDesc);
     default: throw yexception() << "Unsupported agg id: " << aggDesc.AggId;
     }
 }
@@ -58,6 +59,7 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorCombineKeys>> PrepareCo
     case 3526: return MakePgAgg_max_3526().PrepareCombineKeys(argsColumns, aggDesc);
     case 3564: return MakePgAgg_max_3564().PrepareCombineKeys(argsColumns, aggDesc);
     case 4189: return MakePgAgg_max_4189().PrepareCombineKeys(argsColumns, aggDesc);
+    case 5099: return MakePgAgg_max_5099().PrepareCombineKeys(argsColumns, aggDesc);
     default: throw yexception() << "Unsupported agg id: " << aggDesc.AggId;
     }
 }
@@ -90,6 +92,7 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     case 3526: return MakePgAgg_max_3526().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     case 3564: return MakePgAgg_max_3564().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     case 4189: return MakePgAgg_max_4189().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
+    case 5099: return MakePgAgg_max_5099().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     default: throw yexception() << "Unsupported agg id: " << aggDesc.AggId;
     }
 }
@@ -123,6 +126,7 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorCombineAll>> PrepareCom
     case 3527: return MakePgAgg_min_3527().PrepareCombineAll(filterColumn, argsColumns, aggDesc);
     case 3565: return MakePgAgg_min_3565().PrepareCombineAll(filterColumn, argsColumns, aggDesc);
     case 4190: return MakePgAgg_min_4190().PrepareCombineAll(filterColumn, argsColumns, aggDesc);
+    case 5100: return MakePgAgg_min_5100().PrepareCombineAll(filterColumn, argsColumns, aggDesc);
     default: throw yexception() << "Unsupported agg id: " << aggDesc.AggId;
     }
 }
@@ -154,6 +158,7 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorCombineKeys>> PrepareCo
     case 3527: return MakePgAgg_min_3527().PrepareCombineKeys(argsColumns, aggDesc);
     case 3565: return MakePgAgg_min_3565().PrepareCombineKeys(argsColumns, aggDesc);
     case 4190: return MakePgAgg_min_4190().PrepareCombineKeys(argsColumns, aggDesc);
+    case 5100: return MakePgAgg_min_5100().PrepareCombineKeys(argsColumns, aggDesc);
     default: throw yexception() << "Unsupported agg id: " << aggDesc.AggId;
     }
 }
@@ -186,6 +191,7 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareF
     case 3527: return MakePgAgg_min_3527().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     case 3565: return MakePgAgg_min_3565().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     case 4190: return MakePgAgg_min_4190().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
+    case 5100: return MakePgAgg_min_5100().PrepareFinalizeKeys(argsColumns.front(), aggDesc);
     default: throw yexception() << "Unsupported agg id: " << aggDesc.AggId;
     }
 }

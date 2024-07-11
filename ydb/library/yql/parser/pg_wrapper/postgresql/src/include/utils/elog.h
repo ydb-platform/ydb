@@ -4,7 +4,7 @@
  *	  POSTGRES error reporting/logging definitions.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/elog.h
@@ -428,23 +428,37 @@ typedef enum
 	PGERROR_VERBOSE				/* all the facts, ma'am */
 }			PGErrorVerbosity;
 
-extern __thread int	Log_error_verbosity;
-extern __thread char *Log_line_prefix;
-extern __thread int	Log_destination;
-extern __thread char *Log_destination_string;
-extern __thread bool syslog_sequence_numbers;
-extern __thread bool syslog_split_messages;
+extern __thread PGDLLIMPORT int Log_error_verbosity;
+extern __thread PGDLLIMPORT char *Log_line_prefix;
+extern __thread PGDLLIMPORT int Log_destination;
+extern __thread PGDLLIMPORT char *Log_destination_string;
+extern __thread PGDLLIMPORT bool syslog_sequence_numbers;
+extern __thread PGDLLIMPORT bool syslog_split_messages;
 
 /* Log destination bitmap */
 #define LOG_DESTINATION_STDERR	 1
 #define LOG_DESTINATION_SYSLOG	 2
 #define LOG_DESTINATION_EVENTLOG 4
 #define LOG_DESTINATION_CSVLOG	 8
+#define LOG_DESTINATION_JSONLOG	16
 
 /* Other exported functions */
 extern void DebugFileOpen(void);
 extern char *unpack_sql_state(int sql_state);
 extern bool in_error_recursion_trouble(void);
+
+/* Common functions shared across destinations */
+extern void reset_formatted_start_time(void);
+extern char *get_formatted_start_time(void);
+extern char *get_formatted_log_time(void);
+extern const char *get_backend_type_for_log(void);
+extern bool check_log_of_query(ErrorData *edata);
+extern const char *error_severity(int elevel);
+extern void write_pipe_chunks(char *data, int len, int dest);
+
+/* Destination-specific functions */
+extern void write_csvlog(ErrorData *edata);
+extern void write_jsonlog(ErrorData *edata);
 
 #ifdef HAVE_SYSLOG
 extern void set_syslog_parameters(const char *ident, int facility);
@@ -456,5 +470,11 @@ extern void set_syslog_parameters(const char *ident, int facility);
  * safely (memory context, GUC load etc)
  */
 extern void write_stderr(const char *fmt,...) pg_attribute_printf(1, 2);
+
+/*
+ * Write a message to STDERR using only async-signal-safe functions.  This can
+ * be used to safely emit a message from a signal handler.
+ */
+extern void write_stderr_signal_safe(const char *fmt);
 
 #endif							/* ELOG_H */

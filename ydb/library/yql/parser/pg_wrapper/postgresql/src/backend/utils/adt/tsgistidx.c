@@ -3,7 +3,7 @@
  * tsgistidx.c
  *	  GiST support functions for tsvector_ops
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -728,7 +728,7 @@ gtsvector_picksplit(PG_FUNCTION_ARGS)
 				size_alpha = SIGLENBIT(siglen) -
 					sizebitvec((cache[j].allistrue) ?
 							   GETSIGN(datum_l) :
-							   GETSIGN(cache[j].sign),
+							   cache[j].sign,
 							   siglen);
 		}
 		else
@@ -742,7 +742,7 @@ gtsvector_picksplit(PG_FUNCTION_ARGS)
 				size_beta = SIGLENBIT(siglen) -
 					sizebitvec((cache[j].allistrue) ?
 							   GETSIGN(datum_r) :
-							   GETSIGN(cache[j].sign),
+							   cache[j].sign,
 							   siglen);
 		}
 		else

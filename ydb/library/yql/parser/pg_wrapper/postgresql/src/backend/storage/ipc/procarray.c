@@ -34,7 +34,7 @@
  * happen, it would tie up KnownAssignedXids indefinitely, so we protect
  * ourselves by pruning the array when a valid list of running XIDs arrives.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -52,7 +52,7 @@
 #include "access/transam.h"
 #include "access/twophase.h"
 #include "access/xact.h"
-#include "access/xlog.h"
+#include "access/xlogutils.h"
 #include "catalog/catalog.h"
 #include "catalog/pg_authid.h"
 #include "commands/dbcommands.h"
@@ -243,7 +243,6 @@ typedef struct ComputeXidHorizonsResult
 	 * session's temporary tables.
 	 */
 	TransactionId temp_oldest_nonremovable;
-
 } ComputeXidHorizonsResult;
 
 /*
@@ -345,11 +344,6 @@ static void DisplayXidCache(void);
 #define xc_no_overflow_inc()		((void) 0)
 #define xc_slow_answer_inc()		((void) 0)
 #endif							/* XIDCACHE_DEBUG */
-
-static VirtualTransactionId *GetVirtualXIDsDelayingChkptGuts(int *nvxids,
-															 int type);
-static bool HaveVirtualXIDsDelayingChkptGuts(VirtualTransactionId *vxids,
-											 int nvxids, int type);
 
 /* Primitives for KnownAssignedXids array handling for standby */
 static void KnownAssignedXidsCompress(KAXCompressReason reason, bool haveLock);
@@ -714,9 +708,8 @@ ProcArrayEndTransaction(PGPROC *proc, TransactionId latestXid)
 		proc->lxid = InvalidLocalTransactionId;
 		proc->xmin = InvalidTransactionId;
 
-		/* be sure these are cleared in abort */
-		proc->delayChkpt = false;
-		proc->delayChkptEnd = false;
+		/* be sure this is cleared in abort */
+		proc->delayChkptFlags = 0;
 
 		proc->recoveryConflictPending = false;
 
@@ -757,9 +750,8 @@ ProcArrayEndTransactionInternal(PGPROC *proc, TransactionId latestXid)
 	proc->lxid = InvalidLocalTransactionId;
 	proc->xmin = InvalidTransactionId;
 
-	/* be sure these are cleared in abort */
-	proc->delayChkpt = false;
-	proc->delayChkptEnd = false;
+	/* be sure this is cleared in abort */
+	proc->delayChkptFlags = 0;
 
 	proc->recoveryConflictPending = false;
 
@@ -946,7 +938,7 @@ ProcArrayClearTransaction(PGPROC *proc)
 	proc->recoveryConflictPending = false;
 
 	Assert(!(proc->statusFlags & PROC_VACUUM_STATE_MASK));
-	Assert(!proc->delayChkpt);
+	Assert(!proc->delayChkptFlags);
 
 	/*
 	 * Need to increment completion count even though transaction hasn't
@@ -1199,8 +1191,8 @@ ProcArrayApplyRecoveryInfo(RunningTransactions running)
 		 *
 		 * We have to sort them logically, because in KnownAssignedXidsAdd we
 		 * call TransactionIdFollowsOrEquals and so on. But we know these XIDs
-		 * come from RUNNING_XACTS, which means there are only normal XIDs from
-		 * the same epoch, so this is safe.
+		 * come from RUNNING_XACTS, which means there are only normal XIDs
+		 * from the same epoch, so this is safe.
 		 */
 		qsort(xids, nxids, sizeof(TransactionId), xidLogicalComparator);
 
@@ -1838,21 +1830,28 @@ ComputeXidHorizons(ComputeXidHorizonsResult *h)
 			TransactionIdOlder(h->shared_oldest_nonremovable, xmin);
 
 		/*
-		 * Normally queries in other databases are ignored for anything but
-		 * the shared horizon. But in recovery we cannot compute an accurate
-		 * per-database horizon as all xids are managed via the
-		 * KnownAssignedXids machinery.
+		 * Normally sessions in other databases are ignored for anything but
+		 * the shared horizon.
 		 *
-		 * Be careful to compute a pessimistic value when MyDatabaseId is not
-		 * set. If this is a backend in the process of starting up, we may not
-		 * use a "too aggressive" horizon (otherwise we could end up using it
-		 * to prune still needed data away). If the current backend never
-		 * connects to a database that is harmless, because
-		 * data_oldest_nonremovable will never be utilized.
+		 * However, include them when MyDatabaseId is not (yet) set.  A
+		 * backend in the process of starting up must not compute a "too
+		 * aggressive" horizon, otherwise we could end up using it to prune
+		 * still-needed data away.  If the current backend never connects to a
+		 * database this is harmless, because data_oldest_nonremovable will
+		 * never be utilized.
+		 *
+		 * Also, sessions marked with PROC_AFFECTS_ALL_HORIZONS should always
+		 * be included.  (This flag is used for hot standby feedback, which
+		 * can't be tied to a specific database.)
+		 *
+		 * Also, while in recovery we cannot compute an accurate per-database
+		 * horizon, as all xids are managed via the KnownAssignedXids
+		 * machinery.
 		 */
-		if (in_recovery ||
-			MyDatabaseId == InvalidOid || proc->databaseId == MyDatabaseId ||
-			proc->databaseId == 0)	/* always include WalSender */
+		if (proc->databaseId == MyDatabaseId ||
+			MyDatabaseId == InvalidOid ||
+			(statusFlags & PROC_AFFECTS_ALL_HORIZONS) ||
+			in_recovery)
 		{
 			h->data_oldest_nonremovable =
 				TransactionIdOlder(h->data_oldest_nonremovable, xmin);
@@ -2054,6 +2053,7 @@ GetOldestNonRemovableTransactionId(Relation rel)
 			return horizons.temp_oldest_nonremovable;
 	}
 
+	/* just to prevent compiler warnings */
 	return InvalidTransactionId;
 }
 
@@ -2176,7 +2176,7 @@ GetSnapshotDataReuse(Snapshot snapshot)
 	 * GetSnapshotData() cannot change while ProcArrayLock is held. Snapshot
 	 * contents only depend on transactions with xids and xactCompletionCount
 	 * is incremented whenever a transaction with an xid finishes (while
-	 * holding ProcArrayLock) exclusively). Thus the xactCompletionCount check
+	 * holding ProcArrayLock exclusively). Thus the xactCompletionCount check
 	 * ensures we would detect if the snapshot would have changed.
 	 *
 	 * As the snapshot contents are the same as it was before, it is safe to
@@ -2220,8 +2220,7 @@ GetSnapshotDataReuse(Snapshot snapshot)
  * but since PGPROC has only a limited cache area for subxact XIDs, full
  * information may not be available.  If we find any overflowed subxid arrays,
  * we have to mark the snapshot's subxid data as overflowed, and extra work
- * *may* need to be done to determine what's running (see XidInMVCCSnapshot()
- * in heapam_visibility.c).
+ * *may* need to be done to determine what's running (see XidInMVCCSnapshot()).
  *
  * We also update the following backend-global variables:
  *		TransactionXmin: the oldest xmin of any snapshot in use in the
@@ -2351,7 +2350,7 @@ GetSnapshotData(Snapshot snapshot)
 
 			/*
 			 * We don't include our own XIDs (if any) in the snapshot. It
-			 * needs to be includeded in the xmin computation, but we did so
+			 * needs to be included in the xmin computation, but we did so
 			 * outside the loop.
 			 */
 			if (pgxactoff == mypgxactoff)
@@ -3071,28 +3070,27 @@ GetOldestSafeDecodingTransactionId(bool catalogOnly)
 }
 
 /*
- * GetVirtualXIDsDelayingChkptGuts -- Get the VXIDs of transactions that are
- * delaying the start or end of a checkpoint because they have critical
- * actions in progress.
+ * GetVirtualXIDsDelayingChkpt -- Get the VXIDs of transactions that are
+ * delaying checkpoint because they have critical actions in progress.
  *
  * Constructs an array of VXIDs of transactions that are currently in commit
- * critical sections, as shown by having delayChkpt or delayChkptEnd set in
- * their PGPROC.
+ * critical sections, as shown by having specified delayChkptFlags bits set
+ * in their PGPROC.
  *
  * Returns a palloc'd array that should be freed by the caller.
  * *nvxids is the number of valid entries.
  *
- * Note that because backends set or clear delayChkpt and delayChkptEnd
- * without holding any lock, the result is somewhat indeterminate, but we
- * don't really care.  Even in a multiprocessor with delayed writes to
- * shared memory, it should be certain that setting of delayChkpt will
- * propagate to shared memory when the backend takes a lock, so we cannot
- * fail to see a virtual xact as delayChkpt if it's already inserted its
- * commit record.  Whether it takes a little while for clearing of
- * delayChkpt to propagate is unimportant for correctness.
+ * Note that because backends set or clear delayChkptFlags without holding any
+ * lock, the result is somewhat indeterminate, but we don't really care.  Even
+ * in a multiprocessor with delayed writes to shared memory, it should be
+ * certain that setting of delayChkptFlags will propagate to shared memory
+ * when the backend takes a lock, so we cannot fail to see a virtual xact as
+ * delayChkptFlags if it's already inserted its commit record.  Whether it
+ * takes a little while for clearing of delayChkptFlags to propagate is
+ * unimportant for correctness.
  */
-static VirtualTransactionId *
-GetVirtualXIDsDelayingChkptGuts(int *nvxids, int type)
+VirtualTransactionId *
+GetVirtualXIDsDelayingChkpt(int *nvxids, int type)
 {
 	VirtualTransactionId *vxids;
 	ProcArrayStruct *arrayP = procArray;
@@ -3112,8 +3110,7 @@ GetVirtualXIDsDelayingChkptGuts(int *nvxids, int type)
 		int			pgprocno = arrayP->pgprocnos[index];
 		PGPROC	   *proc = &allProcs[pgprocno];
 
-		if (((type & DELAY_CHKPT_START) && proc->delayChkpt) ||
-			((type & DELAY_CHKPT_COMPLETE) && proc->delayChkptEnd))
+		if ((proc->delayChkptFlags & type) != 0)
 		{
 			VirtualTransactionId vxid;
 
@@ -3130,26 +3127,6 @@ GetVirtualXIDsDelayingChkptGuts(int *nvxids, int type)
 }
 
 /*
- * GetVirtualXIDsDelayingChkpt - Get the VXIDs of transactions that are
- * delaying the start of a checkpoint.
- */
-VirtualTransactionId *
-GetVirtualXIDsDelayingChkpt(int *nvxids)
-{
-	return GetVirtualXIDsDelayingChkptGuts(nvxids, DELAY_CHKPT_START);
-}
-
-/*
- * GetVirtualXIDsDelayingChkptEnd - Get the VXIDs of transactions that are
- * delaying the end of a checkpoint.
- */
-VirtualTransactionId *
-GetVirtualXIDsDelayingChkptEnd(int *nvxids)
-{
-	return GetVirtualXIDsDelayingChkptGuts(nvxids, DELAY_CHKPT_COMPLETE);
-}
-
-/*
  * HaveVirtualXIDsDelayingChkpt -- Are any of the specified VXIDs delaying?
  *
  * This is used with the results of GetVirtualXIDsDelayingChkpt to see if any
@@ -3158,9 +3135,8 @@ GetVirtualXIDsDelayingChkptEnd(int *nvxids)
  * Note: this is O(N^2) in the number of vxacts that are/were delaying, but
  * those numbers should be small enough for it not to be a problem.
  */
-static bool
-HaveVirtualXIDsDelayingChkptGuts(VirtualTransactionId *vxids, int nvxids,
-								 int type)
+bool
+HaveVirtualXIDsDelayingChkpt(VirtualTransactionId *vxids, int nvxids, int type)
 {
 	bool		result = false;
 	ProcArrayStruct *arrayP = procArray;
@@ -3178,8 +3154,7 @@ HaveVirtualXIDsDelayingChkptGuts(VirtualTransactionId *vxids, int nvxids,
 
 		GET_VXID_FROM_PGPROC(vxid, *proc);
 
-		if ((((type & DELAY_CHKPT_START) && proc->delayChkpt) ||
-			 ((type & DELAY_CHKPT_COMPLETE) && proc->delayChkptEnd)) &&
+		if ((proc->delayChkptFlags & type) != 0 &&
 			VirtualTransactionIdIsValid(vxid))
 		{
 			int			i;
@@ -3200,28 +3175,6 @@ HaveVirtualXIDsDelayingChkptGuts(VirtualTransactionId *vxids, int nvxids,
 	LWLockRelease(ProcArrayLock);
 
 	return result;
-}
-
-/*
- * HaveVirtualXIDsDelayingChkpt -- Are any of the specified VXIDs delaying
- * the start of a checkpoint?
- */
-bool
-HaveVirtualXIDsDelayingChkpt(VirtualTransactionId *vxids, int nvxids)
-{
-	return HaveVirtualXIDsDelayingChkptGuts(vxids, nvxids,
-											DELAY_CHKPT_START);
-}
-
-/*
- * HaveVirtualXIDsDelayingChkptEnd -- Are any of the specified VXIDs delaying
- * the end of a checkpoint?
- */
-bool
-HaveVirtualXIDsDelayingChkptEnd(VirtualTransactionId *vxids, int nvxids)
-{
-	return HaveVirtualXIDsDelayingChkptGuts(vxids, nvxids,
-											DELAY_CHKPT_COMPLETE);
 }
 
 /*
@@ -4554,8 +4507,6 @@ RecordKnownAssignedTransactionIds(TransactionId xid)
 
 		/* ShmemVariableCache->nextXid must be beyond any observed xid */
 		AdvanceNextFullTransactionIdPastXid(latestObservedXid);
-		next_expected_xid = latestObservedXid;
-		TransactionIdAdvance(next_expected_xid);
 	}
 }
 

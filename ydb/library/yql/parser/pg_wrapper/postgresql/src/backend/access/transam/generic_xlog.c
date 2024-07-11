@@ -4,7 +4,7 @@
  *	 Implementation of generic xlog records.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/backend/access/transam/generic_xlog.c
@@ -342,6 +342,10 @@ GenericXLogFinish(GenericXLogState *state)
 
 		START_CRIT_SECTION();
 
+		/*
+		 * Compute deltas if necessary, write changes to buffers, mark
+		 * buffers dirty, and register changes.
+		 */
 		for (i = 0; i < MAX_GENERIC_XLOG_PAGES; i++)
 		{
 			PageData   *pageData = &state->pages[i];
@@ -354,41 +358,34 @@ GenericXLogFinish(GenericXLogState *state)
 			page = BufferGetPage(pageData->buffer);
 			pageHeader = (PageHeader) pageData->image;
 
+			/*
+			 * Compute delta while we still have both the unmodified page and
+			 * the new image. Not needed if we are logging the full image.
+			 */
+			if (!(pageData->flags & GENERIC_XLOG_FULL_IMAGE))
+				computeDelta(pageData, page, (Page) pageData->image);
+
+			/*
+			 * Apply the image, being careful to zero the "hole" between
+			 * pd_lower and pd_upper in order to avoid divergence between
+			 * actual page state and what replay would produce.
+			 */
+			memcpy(page, pageData->image, pageHeader->pd_lower);
+			memset(page + pageHeader->pd_lower, 0,
+				   pageHeader->pd_upper - pageHeader->pd_lower);
+			memcpy(page + pageHeader->pd_upper,
+				   pageData->image + pageHeader->pd_upper,
+				   BLCKSZ - pageHeader->pd_upper);
+
+			MarkBufferDirty(pageData->buffer);
+
 			if (pageData->flags & GENERIC_XLOG_FULL_IMAGE)
 			{
-				/*
-				 * A full-page image does not require us to supply any xlog
-				 * data.  Just apply the image, being careful to zero the
-				 * "hole" between pd_lower and pd_upper in order to avoid
-				 * divergence between actual page state and what replay would
-				 * produce.
-				 */
-				memcpy(page, pageData->image, pageHeader->pd_lower);
-				memset(page + pageHeader->pd_lower, 0,
-					   pageHeader->pd_upper - pageHeader->pd_lower);
-				memcpy(page + pageHeader->pd_upper,
-					   pageData->image + pageHeader->pd_upper,
-					   BLCKSZ - pageHeader->pd_upper);
-
 				XLogRegisterBuffer(i, pageData->buffer,
 								   REGBUF_FORCE_IMAGE | REGBUF_STANDARD);
 			}
 			else
 			{
-				/*
-				 * In normal mode, calculate delta and write it as xlog data
-				 * associated with this page.
-				 */
-				computeDelta(pageData, page, (Page) pageData->image);
-
-				/* Apply the image, with zeroed "hole" as above */
-				memcpy(page, pageData->image, pageHeader->pd_lower);
-				memset(page + pageHeader->pd_lower, 0,
-					   pageHeader->pd_upper - pageHeader->pd_lower);
-				memcpy(page + pageHeader->pd_upper,
-					   pageData->image + pageHeader->pd_upper,
-					   BLCKSZ - pageHeader->pd_upper);
-
 				XLogRegisterBuffer(i, pageData->buffer, REGBUF_STANDARD);
 				XLogRegisterBufData(i, pageData->delta, pageData->deltaLen);
 			}
@@ -397,7 +394,7 @@ GenericXLogFinish(GenericXLogState *state)
 		/* Insert xlog record */
 		lsn = XLogInsert(RM_GENERIC_ID, 0);
 
-		/* Set LSN and mark buffers dirty */
+		/* Set LSN */
 		for (i = 0; i < MAX_GENERIC_XLOG_PAGES; i++)
 		{
 			PageData   *pageData = &state->pages[i];
@@ -405,7 +402,6 @@ GenericXLogFinish(GenericXLogState *state)
 			if (BufferIsInvalid(pageData->buffer))
 				continue;
 			PageSetLSN(BufferGetPage(pageData->buffer), lsn);
-			MarkBufferDirty(pageData->buffer);
 		}
 		END_CRIT_SECTION();
 	}
@@ -482,10 +478,10 @@ generic_redo(XLogReaderState *record)
 	uint8		block_id;
 
 	/* Protect limited size of buffers[] array */
-	Assert(record->max_block_id < MAX_GENERIC_XLOG_PAGES);
+	Assert(XLogRecMaxBlockId(record) < MAX_GENERIC_XLOG_PAGES);
 
 	/* Iterate over blocks */
-	for (block_id = 0; block_id <= record->max_block_id; block_id++)
+	for (block_id = 0; block_id <= XLogRecMaxBlockId(record); block_id++)
 	{
 		XLogRedoAction action;
 
@@ -525,7 +521,7 @@ generic_redo(XLogReaderState *record)
 	}
 
 	/* Changes are done: unlock and release all buffers */
-	for (block_id = 0; block_id <= record->max_block_id; block_id++)
+	for (block_id = 0; block_id <= XLogRecMaxBlockId(record); block_id++)
 	{
 		if (BufferIsValid(buffers[block_id]))
 			UnlockReleaseBuffer(buffers[block_id]);

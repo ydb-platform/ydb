@@ -4,7 +4,7 @@
  *	  POSTGRES table access method definitions.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/tableam.h
@@ -28,8 +28,8 @@
 #define DEFAULT_TABLE_ACCESS_METHOD	"heap"
 
 /* GUCs */
-extern __thread char *default_table_access_method;
-extern __thread bool synchronize_seqscans;
+extern __thread PGDLLIMPORT char *default_table_access_method;
+extern __thread PGDLLIMPORT bool synchronize_seqscans;
 
 
 struct BulkInsertStateData;
@@ -157,7 +157,7 @@ typedef struct TM_FailureData
  * work, too.  This is a little like bottom-up deletion, but not too much.
  * The tableam will only perform speculative work when it's practically free
  * to do so in passing for simple deletion caller (while always performing
- * whatever work is is needed to enable knowndeletable/LP_DEAD index tuples to
+ * whatever work is needed to enable knowndeletable/LP_DEAD index tuples to
  * be deleted within index AM).  This is the real reason why it's possible for
  * simple index deletion caller to specify knowndeletable = false up front
  * (this means "check if it's possible for me to delete corresponding index
@@ -220,6 +220,8 @@ typedef struct TM_IndexStatus
  */
 typedef struct TM_IndexDeleteOp
 {
+	Relation	irel;			/* Target index relation */
+	BlockNumber iblknum;		/* Index block number (for error reports) */
 	bool		bottomup;		/* Bottom-up (not simple) deletion? */
 	int			bottomupfreespace;	/* Bottom-up space target */
 
@@ -599,8 +601,8 @@ typedef struct TableAmRoutine
 									   const RelFileNode *newrnode);
 
 	/* See table_relation_copy_for_cluster() */
-	void		(*relation_copy_for_cluster) (Relation NewTable,
-											  Relation OldTable,
+	void		(*relation_copy_for_cluster) (Relation OldTable,
+											  Relation NewTable,
 											  Relation OldIndex,
 											  bool use_sort,
 											  TransactionId OldestXmin,
@@ -1453,8 +1455,8 @@ table_multi_insert(Relation rel, TupleTableSlot **slots, int nslots,
  * TM_BeingModified (the last only possible if wait == false).
  *
  * In the failure cases, the routine fills *tmfd with the tuple's t_ctid,
- * t_xmax, and, if possible, and, if possible, t_cmax.  See comments for
- * struct TM_FailureData for additional info.
+ * t_xmax, and, if possible, t_cmax.  See comments for struct
+ * TM_FailureData for additional info.
  */
 static inline TM_Result
 table_tuple_delete(Relation rel, ItemPointer tid, CommandId cid,

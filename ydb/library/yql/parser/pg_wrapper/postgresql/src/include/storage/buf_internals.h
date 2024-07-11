@@ -5,7 +5,7 @@
  *	  strategy.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/storage/buf_internals.h
@@ -136,7 +136,7 @@ typedef struct buftag
  *	BufferDesc -- shared descriptor/state data for a single shared buffer.
  *
  * Note: Buffer header lock (BM_LOCKED flag) must be held to examine or change
- * the tag, state or wait_backend_pid fields.  In general, buffer header lock
+ * tag, state or wait_backend_pgprocno fields.  In general, buffer header lock
  * is a spinlock which is combined with flags, refcount and usagecount into
  * single atomic variable.  This layout allow us to do some operations in a
  * single atomic operation, without actually acquiring and releasing spinlock;
@@ -150,7 +150,7 @@ typedef struct buftag
  * is held.  Thus buffer header lock holder can do complex updates of the
  * state variable in single write, simultaneously with lock release (cleaning
  * BM_LOCKED flag).  On the other hand, updating of state without holding
- * buffer header lock is restricted to CAS, which insure that BM_LOCKED flag
+ * buffer header lock is restricted to CAS, which ensures that BM_LOCKED flag
  * is not set.  Atomic increment/decrement, OR/AND etc. are not allowed.
  *
  * An exception is that if we have the buffer pinned, its tag can't change
@@ -161,8 +161,8 @@ typedef struct buftag
  *
  * We can't physically remove items from a disk page if another backend has
  * the buffer pinned.  Hence, a backend may need to wait for all other pins
- * to go away.  This is signaled by storing its own PID into
- * wait_backend_pid and setting flag bit BM_PIN_COUNT_WAITER.  At present,
+ * to go away.  This is signaled by storing its own pgprocno into
+ * wait_backend_pgprocno and setting flag bit BM_PIN_COUNT_WAITER.  At present,
  * there can be only one such waiter per buffer.
  *
  * We use this same struct for local buffer headers, but the locks are not
@@ -187,7 +187,7 @@ typedef struct BufferDesc
 	/* state of the tag, containing flags, refcount and usagecount */
 	pg_atomic_uint32 state;
 
-	int			wait_backend_pid;	/* backend PID of pin-count waiter */
+	int			wait_backend_pgprocno;	/* backend of pin-count waiter */
 	int			freeNext;		/* link in freelist chain */
 	LWLock		content_lock;	/* to lock access to buffer contents */
 } BufferDesc;
@@ -279,7 +279,7 @@ extern __thread PGDLLIMPORT BufferDescPadded *BufferDescriptors;
 extern __thread PGDLLIMPORT WritebackContext BackendWritebackContext;
 
 /* in localbuf.c */
-extern __thread BufferDesc *LocalBufferDescriptors;
+extern __thread PGDLLIMPORT BufferDesc *LocalBufferDescriptors;
 
 /* in bufmgr.c */
 
@@ -298,7 +298,7 @@ typedef struct CkptSortItem
 	int			buf_id;
 } CkptSortItem;
 
-extern __thread CkptSortItem *CkptBufferIds;
+extern __thread PGDLLIMPORT CkptSortItem *CkptBufferIds;
 
 /*
  * Internal buffer management routines

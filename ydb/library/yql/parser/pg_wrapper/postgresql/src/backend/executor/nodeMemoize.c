@@ -3,7 +3,7 @@
  * nodeMemoize.c
  *	  Routines to handle caching of results from parameterized nodes
  *
- * Portions Copyright (c) 2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2021-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -13,7 +13,7 @@
  * Memoize nodes are intended to sit above parameterized nodes in the plan
  * tree in order to cache results from them.  The intention here is that a
  * repeat scan with a parameter value that has already been seen by the node
- * can fetch tuples from the cache rather than having to re-scan the outer
+ * can fetch tuples from the cache rather than having to re-scan the inner
  * node all over again.  The query planner may choose to make use of one of
  * these when it thinks rescans for previously seen values are likely enough
  * to warrant adding the additional node.
@@ -115,8 +115,8 @@ typedef struct MemoizeKey
 typedef struct MemoizeEntry
 {
 	MemoizeKey *key;			/* Hash key for hash table lookups */
-	MemoizeTuple *tuplehead;	/* Pointer to the first tuple or NULL if
-								 * no tuples are cached for this entry */
+	MemoizeTuple *tuplehead;	/* Pointer to the first tuple or NULL if no
+								 * tuples are cached for this entry */
 	uint32		hash;			/* Hash value (cached) */
 	char		status;			/* Hash status */
 	bool		complete;		/* Did we read the outer plan to completion? */
@@ -158,16 +158,20 @@ static uint32
 MemoizeHash_hash(struct memoize_hash *tb, const MemoizeKey *key)
 {
 	MemoizeState *mstate = (MemoizeState *) tb->private_data;
+	ExprContext *econtext = mstate->ss.ps.ps_ExprContext;
+	MemoryContext oldcontext;
 	TupleTableSlot *pslot = mstate->probeslot;
 	uint32		hashkey = 0;
 	int			numkeys = mstate->nkeys;
+
+	oldcontext = MemoryContextSwitchTo(econtext->ecxt_per_tuple_memory);
 
 	if (mstate->binary_mode)
 	{
 		for (int i = 0; i < numkeys; i++)
 		{
-			/* rotate hashkey left 1 bit at each step */
-			hashkey = (hashkey << 1) | ((hashkey & 0x80000000) ? 1 : 0);
+			/* combine successive hashkeys by rotating */
+			hashkey = pg_rotate_left32(hashkey, 1);
 
 			if (!pslot->tts_isnull[i])	/* treat nulls as having hash key 0 */
 			{
@@ -189,8 +193,8 @@ MemoizeHash_hash(struct memoize_hash *tb, const MemoizeKey *key)
 
 		for (int i = 0; i < numkeys; i++)
 		{
-			/* rotate hashkey left 1 bit at each step */
-			hashkey = (hashkey << 1) | ((hashkey & 0x80000000) ? 1 : 0);
+			/* combine successive hashkeys by rotating */
+			hashkey = pg_rotate_left32(hashkey, 1);
 
 			if (!pslot->tts_isnull[i])	/* treat nulls as having hash key 0 */
 			{
@@ -203,6 +207,7 @@ MemoizeHash_hash(struct memoize_hash *tb, const MemoizeKey *key)
 		}
 	}
 
+	MemoryContextSwitchTo(oldcontext);
 	return murmurhash32(hashkey);
 }
 
@@ -214,7 +219,7 @@ MemoizeHash_hash(struct memoize_hash *tb, const MemoizeKey *key)
  */
 static bool
 MemoizeHash_equal(struct memoize_hash *tb, const MemoizeKey *key1,
-			  const MemoizeKey *key2)
+				  const MemoizeKey *key2)
 {
 	MemoizeState *mstate = (MemoizeState *) tb->private_data;
 	ExprContext *econtext = mstate->ss.ps.ps_ExprContext;
@@ -226,7 +231,11 @@ MemoizeHash_equal(struct memoize_hash *tb, const MemoizeKey *key1,
 
 	if (mstate->binary_mode)
 	{
+		MemoryContext oldcontext;
 		int			numkeys = mstate->nkeys;
+		bool		match = true;
+
+		oldcontext = MemoryContextSwitchTo(econtext->ecxt_per_tuple_memory);
 
 		slot_getallattrs(tslot);
 		slot_getallattrs(pslot);
@@ -236,7 +245,10 @@ MemoizeHash_equal(struct memoize_hash *tb, const MemoizeKey *key1,
 			FormData_pg_attribute *attr;
 
 			if (tslot->tts_isnull[i] != pslot->tts_isnull[i])
-				return false;
+			{
+				match = false;
+				break;
+			}
 
 			/* both NULL? they're equal */
 			if (tslot->tts_isnull[i])
@@ -246,15 +258,20 @@ MemoizeHash_equal(struct memoize_hash *tb, const MemoizeKey *key1,
 			attr = &tslot->tts_tupleDescriptor->attrs[i];
 			if (!datum_image_eq(tslot->tts_values[i], pslot->tts_values[i],
 								attr->attbyval, attr->attlen))
-				return false;
+			{
+				match = false;
+				break;
+			}
 		}
-		return true;
+
+		MemoryContextSwitchTo(oldcontext);
+		return match;
 	}
 	else
 	{
 		econtext->ecxt_innertuple = tslot;
 		econtext->ecxt_outertuple = pslot;
-		return ExecQualAndReset(mstate->cache_eq_expr, econtext);
+		return ExecQual(mstate->cache_eq_expr, econtext);
 	}
 }
 
@@ -382,7 +399,7 @@ static void
 cache_purge_all(MemoizeState *mstate)
 {
 	uint64		evictions = mstate->hashtable->members;
-	PlanState *pstate = (PlanState *) mstate;
+	PlanState  *pstate = (PlanState *) mstate;
 
 	/*
 	 * Likely the most efficient way to remove all items is to just reset the
@@ -485,7 +502,7 @@ cache_reduce_memory(MemoizeState *mstate, MemoizeKey *specialkey)
 			break;
 	}
 
-	mstate->stats.cache_evictions += evictions;	/* Update Stats */
+	mstate->stats.cache_evictions += evictions; /* Update Stats */
 
 	return specialkey_intact;
 }
@@ -675,8 +692,17 @@ static TupleTableSlot *
 ExecMemoize(PlanState *pstate)
 {
 	MemoizeState *node = castNode(MemoizeState, pstate);
+	ExprContext *econtext = node->ss.ps.ps_ExprContext;
 	PlanState  *outerNode;
 	TupleTableSlot *slot;
+
+	CHECK_FOR_INTERRUPTS();
+
+	/*
+	 * Reset per-tuple memory context to free any expression evaluation
+	 * storage allocated in the previous tuple cycle.
+	 */
+	ResetExprContext(econtext);
 
 	switch (node->mstatus)
 	{
@@ -966,8 +992,8 @@ ExecInitMemoize(Memoize *node, EState *estate, int eflags)
 												 &TTSOpsVirtual);
 
 	mstate->param_exprs = (ExprState **) palloc(nkeys * sizeof(ExprState *));
-	mstate->collations = node->collations; /* Just point directly to the plan
-											* data */
+	mstate->collations = node->collations;	/* Just point directly to the plan
+											 * data */
 	mstate->hashfunctions = (FmgrInfo *) palloc(nkeys * sizeof(FmgrInfo));
 
 	eqfuncoids = palloc(nkeys * sizeof(Oid));
@@ -1142,7 +1168,7 @@ double
 ExecEstimateCacheEntryOverheadBytes(double ntuples)
 {
 	return sizeof(MemoizeEntry) + sizeof(MemoizeKey) + sizeof(MemoizeTuple) *
-			ntuples;
+		ntuples;
 }
 
 /* ----------------------------------------------------------------

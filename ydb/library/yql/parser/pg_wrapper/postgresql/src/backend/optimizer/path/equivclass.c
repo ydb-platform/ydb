@@ -6,7 +6,7 @@
  * See src/backend/optimizer/README for discussion of EquivalenceClasses.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -932,35 +932,6 @@ is_exprlist_member(Expr *node, List *exprs)
 }
 
 /*
- * Find an equivalence class member expression, all of whose Vars, come from
- * the indicated relation.
- */
-Expr *
-find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
-{
-	ListCell   *lc_em;
-
-	foreach(lc_em, ec->ec_members)
-	{
-		EquivalenceMember *em = lfirst(lc_em);
-
-		if (bms_is_subset(em->em_relids, rel->relids) &&
-			!bms_is_empty(em->em_relids))
-		{
-			/*
-			 * If there is more than one equivalence member whose Vars are
-			 * taken entirely from this relation, we'll be content to choose
-			 * any one of those.
-			 */
-			return em->em_expr;
-		}
-	}
-
-	/* We didn't find any suitable equivalence class expression */
-	return NULL;
-}
-
-/*
  * relation_can_be_sorted_early
  *		Can this relation be sorted on this EC before the final output step?
  *
@@ -1019,7 +990,7 @@ relation_can_be_sorted_early(PlannerInfo *root, RelOptInfo *rel,
 	}
 
 	/*
-	 * Try to find a expression computable from the reltarget.
+	 * Try to find an expression computable from the reltarget.
 	 */
 	em = find_computable_ec_member(root, ec, target->exprs, rel->relids,
 								   require_parallel_safe);
@@ -1879,6 +1850,21 @@ create_join_clause(PlannerInfo *root,
 										bms_union(leftem->em_nullable_relids,
 												  rightem->em_nullable_relids),
 										ec->ec_min_security);
+
+	/*
+	 * If either EM is a child, force the clause's clause_relids to include
+	 * the relid(s) of the child rel.  In normal cases it would already, but
+	 * not if we are considering appendrel child relations with pseudoconstant
+	 * translated variables (i.e., UNION ALL sub-selects with constant output
+	 * items).  We must do this so that join_clause_is_movable_into() will
+	 * think that the clause should be evaluated at the correct place.
+	 */
+	if (leftem->em_is_child)
+		rinfo->clause_relids = bms_add_members(rinfo->clause_relids,
+											   leftem->em_relids);
+	if (rightem->em_is_child)
+		rinfo->clause_relids = bms_add_members(rinfo->clause_relids,
+											   rightem->em_relids);
 
 	/* Mark the clause as redundant, or not */
 	rinfo->parent_ec = parent_ec;

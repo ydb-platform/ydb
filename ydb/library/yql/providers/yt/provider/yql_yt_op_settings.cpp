@@ -869,6 +869,9 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             }
             break;
         }
+        case EYtSettingType::LAST: {
+            YQL_ENSURE(false);
+        }
         }
     }
 
@@ -1217,6 +1220,18 @@ ui32 GetMinChildrenForIndexedKeyFilter(EYtSettingType type) {
     }
     YQL_ENSURE(type == EYtSettingType::KeyFilter2);
     return 3u;
+}
+
+EYtSettingTypes operator|(EYtSettingTypes left, const EYtSettingTypes& right) {
+    return left |= right;
+}
+
+EYtSettingTypes operator&(EYtSettingTypes left, const EYtSettingTypes& right) {
+    return left &= right;
+}
+
+EYtSettingTypes operator|(EYtSettingType left, EYtSettingType right) {
+    return EYtSettingTypes(left) | EYtSettingTypes(right);
 }
 
 } // NYql

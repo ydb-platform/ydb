@@ -275,7 +275,7 @@ public:
         for (const auto& [tableId, tableInfo] : self->GetUserTables()) {
             const auto fullTableId = TTableId(self->GetPathOwnerId(), tableId);
 
-            tableInfo->ForEachAsyncIndex([&] (const auto& indexPathId, const auto&) {
+            tableInfo->ForEachAsyncIndex([&](const auto& indexPathId, const auto&) {
                 AddChangeSender(indexPathId, fullTableId, ESenderType::AsyncIndex);
             });
 

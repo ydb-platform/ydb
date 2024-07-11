@@ -59,7 +59,7 @@
  * error during lookup: returns an errno code, *result is NULL
  * (caller should *not* assume that the errno variable is set)
  */
-int
+static int
 pqGetpwuid(uid_t uid, struct passwd *resultbuf, char *buffer,
 		   size_t buflen, struct passwd **result)
 {

@@ -4,7 +4,7 @@
  *	  header file for postgres btree access method implementation.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/nbtree.h
@@ -69,6 +69,8 @@ typedef struct BTPageOpaqueData
 } BTPageOpaqueData;
 
 typedef BTPageOpaqueData *BTPageOpaque;
+
+#define BTPageGetOpaque(page) ((BTPageOpaque) PageGetSpecialPointer(page))
 
 /* Bits defined in btpo_flags */
 #define BTP_LEAF		(1 << 0)	/* leaf page, i.e. not internal page */
@@ -241,7 +243,7 @@ BTPageSetDeleted(Page page, FullTransactionId safexid)
 	PageHeader	header;
 	BTDeletedPageData *contents;
 
-	opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+	opaque = BTPageGetOpaque(page);
 	header = ((PageHeader) page);
 
 	opaque->btpo_flags &= ~BTP_HALF_DEAD;
@@ -263,7 +265,7 @@ BTPageGetDeleteXid(Page page)
 
 	/* We only expect to be called with a deleted page */
 	Assert(!PageIsNew(page));
-	opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+	opaque = BTPageGetOpaque(page);
 	Assert(P_ISDELETED(opaque));
 
 	/* pg_upgrade'd deleted page -- must be safe to delete now */
@@ -294,7 +296,7 @@ BTPageIsRecyclable(Page page)
 	Assert(!PageIsNew(page));
 
 	/* Recycling okay iff page is deleted and safexid is old enough */
-	opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+	opaque = BTPageGetOpaque(page);
 	if (P_ISDELETED(opaque))
 	{
 		/*
@@ -1029,8 +1031,10 @@ typedef struct BTArrayKeyInfo
 
 typedef struct BTScanOpaqueData
 {
-	/* these fields are set by _bt_preprocess_keys(): */
+	/* all fields (except arraysStarted) are set by _bt_preprocess_keys(): */
 	bool		qual_ok;		/* false if qual can never be satisfied */
+	bool		arraysStarted;	/* Started array keys, but have yet to "reach
+								 * past the end" of all arrays? */
 	int			numberOfKeys;	/* number of preprocessed scan keys */
 	ScanKey		keyData;		/* array of preprocessed scan keys */
 

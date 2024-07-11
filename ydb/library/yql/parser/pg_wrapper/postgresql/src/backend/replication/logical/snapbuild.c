@@ -107,10 +107,10 @@
  * is a convenient point to initialize replication from, which is why we
  * export a snapshot at that point, which *can* be used to read normal data.
  *
- * Copyright (c) 2012-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2012-2022, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
- *	  src/backend/replication/snapbuild.c
+ *	  src/backend/replication/logical/snapbuild.c
  *
  *-------------------------------------------------------------------------
  */
@@ -165,15 +165,15 @@ struct SnapBuild
 	XLogRecPtr	start_decoding_at;
 
 	/*
-	 * LSN at which we found a consistent point at the time of slot creation.
-	 * This is also the point where we have exported a snapshot for the
-	 * initial copy.
+	 * LSN at which two-phase decoding was enabled or LSN at which we found a
+	 * consistent point at the time of slot creation.
 	 *
-	 * The prepared transactions that are not covered by initial snapshot
-	 * needs to be sent later along with commit prepared and they must be
-	 * before this point.
+	 * The prepared transactions, that were skipped because previously
+	 * two-phase was not enabled or are not covered by initial snapshot, need
+	 * to be sent later along with commit prepared and they must be before
+	 * this point.
 	 */
-	XLogRecPtr	initial_consistent_point;
+	XLogRecPtr	two_phase_at;
 
 	/*
 	 * Don't start decoding WAL until the "xl_running_xacts" information
@@ -301,6 +301,17 @@ static void SnapBuildSerialize(SnapBuild *builder, XLogRecPtr lsn);
 static bool SnapBuildRestore(SnapBuild *builder, XLogRecPtr lsn);
 
 /*
+ * Memory context reset callback for clearing the array of running transactions
+ * and subtransactions.
+ */
+static void
+SnapBuildResetRunningXactsCallback(void *arg)
+{
+	NInitialRunningXacts = 0;
+	InitialRunningXacts = NULL;
+}
+
+/*
  * Allocate a new snapshot builder.
  *
  * xmin_horizon is the xid >= which we can be sure no catalog rows have been
@@ -311,11 +322,12 @@ AllocateSnapshotBuilder(ReorderBuffer *reorder,
 						TransactionId xmin_horizon,
 						XLogRecPtr start_lsn,
 						bool need_full_snapshot,
-						XLogRecPtr initial_consistent_point)
+						XLogRecPtr two_phase_at)
 {
 	MemoryContext context;
 	MemoryContext oldcontext;
 	SnapBuild  *builder;
+	MemoryContextCallback *mcallback;
 
 	/* allocate memory in own context, to have better accountability */
 	context = AllocSetContextCreate(CurrentMemoryContext,
@@ -339,7 +351,11 @@ AllocateSnapshotBuilder(ReorderBuffer *reorder,
 	builder->initial_xmin_horizon = xmin_horizon;
 	builder->start_decoding_at = start_lsn;
 	builder->building_full_snapshot = need_full_snapshot;
-	builder->initial_consistent_point = initial_consistent_point;
+	builder->two_phase_at = two_phase_at;
+
+	mcallback = palloc0(sizeof(MemoryContextCallback));
+	mcallback->func = SnapBuildResetRunningXactsCallback;
+	MemoryContextRegisterResetCallback(CurrentMemoryContext, mcallback);
 
 	MemoryContextSwitchTo(oldcontext);
 
@@ -366,10 +382,6 @@ FreeSnapshotBuilder(SnapBuild *builder)
 
 	/* other resources are deallocated via memory context reset */
 	MemoryContextDelete(context);
-
-	/* InitialRunningXacts is freed along with the context */
-	NInitialRunningXacts = 0;
-	InitialRunningXacts = NULL;
 }
 
 /*
@@ -407,12 +419,21 @@ SnapBuildCurrentState(SnapBuild *builder)
 }
 
 /*
- * Return the LSN at which the snapshot was exported
+ * Return the LSN at which the two-phase decoding was first enabled.
  */
 XLogRecPtr
-SnapBuildInitialConsistentPoint(SnapBuild *builder)
+SnapBuildGetTwoPhaseAt(SnapBuild *builder)
 {
-	return builder->initial_consistent_point;
+	return builder->two_phase_at;
+}
+
+/*
+ * Set the LSN at which two-phase decoding is enabled.
+ */
+void
+SnapBuildSetTwoPhaseAt(SnapBuild *builder, XLogRecPtr ptr)
+{
+	builder->two_phase_at = ptr;
 }
 
 /*
@@ -1473,7 +1494,6 @@ SnapBuildFindSnapshot(SnapBuild *builder, XLogRecPtr lsn, xl_running_xacts *runn
 	 * records so incremental cleanup can be performed.
 	 */
 	return true;
-
 }
 
 /* ---
@@ -1531,7 +1551,6 @@ SnapBuildWaitSnapshot(xl_running_xacts *running, TransactionId cutoff)
  * We store current state of struct SnapBuild on disk in the following manner:
  *
  * struct SnapBuildOnDisk;
- * TransactionId * running.xcnt_space;
  * TransactionId * committed.xcnt; (*not xcnt_space*)
  *
  */
@@ -2107,11 +2126,13 @@ SnapBuildXidSetCatalogChanges(SnapBuild *builder, TransactionId xid, int subxcnt
 							  TransactionId *subxacts, XLogRecPtr lsn)
 {
 	/*
-	 * Skip if there is no initial running xacts information or the
-	 * transaction is already marked as containing catalog changes.
+	 * Skip if there is no initial running xacts information.
+	 *
+	 * Even if the transaction has been marked as containing catalog
+	 * changes, it cannot be skipped because its subtransactions that
+	 * modified the catalog may not be marked.
 	 */
-	if (NInitialRunningXacts == 0 ||
-		ReorderBufferXidHasCatalogChanges(builder->reorder, xid))
+	if (NInitialRunningXacts == 0)
 		return;
 
 	if (bsearch(&xid, InitialRunningXacts, NInitialRunningXacts,

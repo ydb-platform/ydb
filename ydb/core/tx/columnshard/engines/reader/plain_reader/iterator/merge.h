@@ -80,7 +80,8 @@ private:
     bool OnlyEmptySources = true;
     THashMap<ui32, std::shared_ptr<IDataSource>> Sources;
 protected:
-    virtual bool DoExecute() override;
+    virtual TConclusionStatus DoExecuteImpl() override;
+
 public:
     virtual TString GetTaskClassIdentifier() const override {
         return "CS::MERGE_START";
@@ -94,7 +95,8 @@ class TContinueMergeTask: public TBaseMergeTask {
 private:
     using TBase = TBaseMergeTask;
 protected:
-    virtual bool DoExecute() override;
+    virtual TConclusionStatus DoExecuteImpl() override;
+
 public:
     virtual TString GetTaskClassIdentifier() const override {
         return "CS::MERGE_CONTINUE";

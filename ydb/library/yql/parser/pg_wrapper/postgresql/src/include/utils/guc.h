@@ -4,7 +4,7 @@
  * External declarations pertaining to backend/utils/misc/guc.c and
  * backend/utils/misc/guc-file.l
  *
- * Copyright (c) 2000-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2000-2022, PostgreSQL Global Development Group
  * Written by Peter Eisentraut <peter_e@gmx.net>.
  *
  * src/include/utils/guc.h
@@ -83,8 +83,7 @@ typedef enum
  * override the postmaster command line.)  Tracking the source allows us
  * to process sources in any convenient order without affecting results.
  * Sources <= PGC_S_OVERRIDE will set the default used by RESET, as well
- * as the current value.  Note that source == PGC_S_OVERRIDE should be
- * used when setting a PGC_INTERNAL option.
+ * as the current value.
  *
  * PGC_S_INTERACTIVE isn't actually a source value, but is the
  * dividing line between "interactive" and "non-interactive" sources for
@@ -98,6 +97,11 @@ typedef enum
  * In particular, references to nonexistent database objects generally
  * shouldn't throw hard errors in this case, at most NOTICEs, since the
  * objects might exist by the time the setting is used for real.
+ *
+ * When setting the value of a non-compile-time-constant PGC_INTERNAL option,
+ * source == PGC_S_DYNAMIC_DEFAULT should typically be used so that the value
+ * will show as "default" in pg_settings.  If there is a specific reason not
+ * to want that, use source == PGC_S_OVERRIDE.
  *
  * NB: see GucSource_Names in guc.c if you change this.
  */
@@ -229,57 +233,63 @@ typedef enum
 
 #define GUC_EXPLAIN			  0x100000	/* include in explain */
 
+/*
+ * GUC_RUNTIME_COMPUTED is intended for runtime-computed GUCs that are only
+ * available via 'postgres -C' if the server is not running.
+ */
+#define GUC_RUNTIME_COMPUTED  0x200000
+
 #define GUC_UNIT				(GUC_UNIT_MEMORY | GUC_UNIT_TIME)
 
 
 /* GUC vars that are actually declared in guc.c, rather than elsewhere */
-extern __thread bool Debug_print_plan;
-extern __thread bool Debug_print_parse;
-extern __thread bool Debug_print_rewritten;
-extern __thread bool Debug_pretty_print;
+extern __thread PGDLLIMPORT bool Debug_print_plan;
+extern __thread PGDLLIMPORT bool Debug_print_parse;
+extern __thread PGDLLIMPORT bool Debug_print_rewritten;
+extern __thread PGDLLIMPORT bool Debug_pretty_print;
 
-extern __thread bool log_parser_stats;
-extern __thread bool log_planner_stats;
-extern __thread bool log_executor_stats;
-extern __thread bool log_statement_stats;
-extern __thread bool log_btree_build_stats;
+extern __thread PGDLLIMPORT bool log_parser_stats;
+extern __thread PGDLLIMPORT bool log_planner_stats;
+extern __thread PGDLLIMPORT bool log_executor_stats;
+extern __thread PGDLLIMPORT bool log_statement_stats;
+extern __thread PGDLLIMPORT bool log_btree_build_stats;
 
 extern __thread PGDLLIMPORT bool check_function_bodies;
-extern __thread bool session_auth_is_superuser;
+extern __thread PGDLLIMPORT bool session_auth_is_superuser;
 
-extern __thread bool log_duration;
-extern __thread int	log_parameter_max_length;
-extern __thread int	log_parameter_max_length_on_error;
-extern __thread int	log_min_error_statement;
+extern __thread PGDLLIMPORT bool log_duration;
+extern __thread PGDLLIMPORT int log_parameter_max_length;
+extern __thread PGDLLIMPORT int log_parameter_max_length_on_error;
+extern __thread PGDLLIMPORT int log_min_error_statement;
 extern __thread PGDLLIMPORT int log_min_messages;
 extern __thread PGDLLIMPORT int client_min_messages;
-extern __thread int	log_min_duration_sample;
-extern __thread int	log_min_duration_statement;
-extern __thread int	log_temp_files;
-extern __thread double log_statement_sample_rate;
-extern __thread double log_xact_sample_rate;
-extern __thread char *backtrace_functions;
-extern __thread char *backtrace_symbol_list;
+extern __thread PGDLLIMPORT int log_min_duration_sample;
+extern __thread PGDLLIMPORT int log_min_duration_statement;
+extern __thread PGDLLIMPORT int log_temp_files;
+extern __thread PGDLLIMPORT double log_statement_sample_rate;
+extern __thread PGDLLIMPORT double log_xact_sample_rate;
+extern __thread PGDLLIMPORT char *backtrace_functions;
+extern __thread PGDLLIMPORT char *backtrace_symbol_list;
 
-extern __thread int	temp_file_limit;
+extern __thread PGDLLIMPORT int temp_file_limit;
 
-extern __thread int	num_temp_buffers;
+extern __thread PGDLLIMPORT int num_temp_buffers;
 
-extern __thread char *cluster_name;
+extern __thread PGDLLIMPORT char *cluster_name;
 extern __thread PGDLLIMPORT char *ConfigFileName;
-extern __thread char *HbaFileName;
-extern __thread char *IdentFileName;
-extern __thread char *external_pid_file;
+extern __thread PGDLLIMPORT char *HbaFileName;
+extern __thread PGDLLIMPORT char *IdentFileName;
+extern __thread PGDLLIMPORT char *external_pid_file;
 
 extern __thread PGDLLIMPORT char *application_name;
 
-extern __thread int	tcp_keepalives_idle;
-extern __thread int	tcp_keepalives_interval;
-extern __thread int	tcp_keepalives_count;
-extern __thread int	tcp_user_timeout;
+extern __thread PGDLLIMPORT int tcp_keepalives_idle;
+extern __thread PGDLLIMPORT int tcp_keepalives_interval;
+extern __thread PGDLLIMPORT int tcp_keepalives_count;
+extern __thread PGDLLIMPORT int tcp_user_timeout;
 
 #ifdef TRACE_SORT
-extern __thread bool trace_sort;
+extern __thread PGDLLIMPORT bool trace_sort;
 #endif
 
 /*
@@ -348,14 +358,20 @@ extern void DefineCustomEnumVariable(const char *name,
 									 GucEnumAssignHook assign_hook,
 									 GucShowHook show_hook);
 
-extern void EmitWarningsOnPlaceholders(const char *className);
+extern void MarkGUCPrefixReserved(const char *className);
+
+/* old name for MarkGUCPrefixReserved, for backwards compatibility: */
+#define EmitWarningsOnPlaceholders(className) MarkGUCPrefixReserved(className)
 
 extern const char *GetConfigOption(const char *name, bool missing_ok,
 								   bool restrict_privileged);
 extern const char *GetConfigOptionResetString(const char *name);
 extern int	GetConfigOptionFlags(const char *name, bool missing_ok);
 extern void ProcessConfigFile(GucContext context);
+extern char *convert_GUC_name_for_parameter_acl(const char *name);
+extern bool check_GUC_name_for_parameter_acl(const char *name);
 extern void InitializeGUCOptions(void);
+extern void InitializeWalConsistencyChecking(void);
 extern bool SelectConfigFiles(const char *userDoption, const char *progname);
 extern void ResetAllOptions(void);
 extern void AtStart_GUC(void);
@@ -372,6 +388,11 @@ extern int	set_config_option(const char *name, const char *value,
 							  GucContext context, GucSource source,
 							  GucAction action, bool changeVal, int elevel,
 							  bool is_reload);
+extern int	set_config_option_ext(const char *name, const char *value,
+								  GucContext context, GucSource source,
+								  Oid srole,
+								  GucAction action, bool changeVal, int elevel,
+								  bool is_reload);
 extern void AlterSystemSetConfigFile(AlterSystemStmt *altersysstmt);
 extern char *GetConfigOptionByName(const char *name, const char **varname,
 								   bool missing_ok);
@@ -440,5 +461,9 @@ extern void assign_search_path(const char *newval, void *extra);
 /* in access/transam/xlog.c */
 extern bool check_wal_buffers(int *newval, void **extra, GucSource source);
 extern void assign_xlog_sync_method(int new_sync_method, void *extra);
+
+/* in access/transam/xlogprefetcher.c */
+extern bool check_recovery_prefetch(int *new_value, void **extra, GucSource source);
+extern void assign_recovery_prefetch(int new_value, void *extra);
 
 #endif							/* GUC_H */

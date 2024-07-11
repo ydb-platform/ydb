@@ -46,7 +46,7 @@
  * exported rather than being "static" in this file.)
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -208,6 +208,8 @@ typedef struct ScalarArrayOpExprHashTable
 {
 	saophash_hash *hashtab;		/* underlying hash table */
 	struct ExprEvalStep *op;
+	FmgrInfo	hash_finfo;		/* function's lookup data */
+	FunctionCallInfoBaseData hash_fcinfo_data;	/* arguments etc */
 } ScalarArrayOpExprHashTable;
 
 /* Define parameters for ScalarArrayOpExpr hash table code generation. */
@@ -1969,7 +1971,8 @@ CheckOpSlotCompatibility(ExprEvalStep *op, TupleTableSlot *slot)
  * changed: if not NULL, *changed is set to true on any update
  *
  * The returned TupleDesc is not guaranteed pinned; caller must pin it
- * to use it across any operation that might incur cache invalidation.
+ * to use it across any operation that might incur cache invalidation,
+ * including for example detoasting of input tuples.
  * (The TupleDesc is always refcounted, so just use IncrTupleDescRefCount.)
  *
  * NOTE: because composite types can change contents, we must be prepared
@@ -3128,17 +3131,6 @@ ExecEvalFieldSelect(ExprState *state, ExprEvalStep *op, ExprContext *econtext)
 void
 ExecEvalFieldStoreDeForm(ExprState *state, ExprEvalStep *op, ExprContext *econtext)
 {
-	TupleDesc	tupDesc;
-
-	/* Lookup tupdesc if first time through or if type changes */
-	tupDesc = get_cached_rowtype(op->d.fieldstore.fstore->resulttype, -1,
-								 op->d.fieldstore.rowcache, NULL);
-
-	/* Check that current tupdesc doesn't have more fields than we allocated */
-	if (unlikely(tupDesc->natts > op->d.fieldstore.ncolumns))
-		elog(ERROR, "too many columns in composite type %u",
-			 op->d.fieldstore.fstore->resulttype);
-
 	if (*op->resnull)
 	{
 		/* Convert null input tuple into an all-nulls row */
@@ -3154,12 +3146,27 @@ ExecEvalFieldStoreDeForm(ExprState *state, ExprEvalStep *op, ExprContext *econte
 		Datum		tupDatum = *op->resvalue;
 		HeapTupleHeader tuphdr;
 		HeapTupleData tmptup;
+		TupleDesc	tupDesc;
 
 		tuphdr = DatumGetHeapTupleHeader(tupDatum);
 		tmptup.t_len = HeapTupleHeaderGetDatumLength(tuphdr);
 		ItemPointerSetInvalid(&(tmptup.t_self));
 		tmptup.t_tableOid = InvalidOid;
 		tmptup.t_data = tuphdr;
+
+		/*
+		 * Lookup tupdesc if first time through or if type changes.  Because
+		 * we don't pin the tupdesc, we must not do this lookup until after
+		 * doing DatumGetHeapTupleHeader: that could do database access while
+		 * detoasting the datum.
+		 */
+		tupDesc = get_cached_rowtype(op->d.fieldstore.fstore->resulttype, -1,
+									 op->d.fieldstore.rowcache, NULL);
+
+		/* Check that current tupdesc doesn't have more fields than allocated */
+		if (unlikely(tupDesc->natts > op->d.fieldstore.ncolumns))
+			elog(ERROR, "too many columns in composite type %u",
+				 op->d.fieldstore.fstore->resulttype);
 
 		heap_deform_tuple(&tmptup, tupDesc,
 						  op->d.fieldstore.values,
@@ -3447,13 +3454,13 @@ static uint32
 saop_element_hash(struct saophash_hash *tb, Datum key)
 {
 	ScalarArrayOpExprHashTable *elements_tab = (ScalarArrayOpExprHashTable *) tb->private_data;
-	FunctionCallInfo fcinfo = elements_tab->op->d.hashedscalararrayop.hash_fcinfo_data;
+	FunctionCallInfo fcinfo = &elements_tab->hash_fcinfo_data;
 	Datum		hash;
 
 	fcinfo->args[0].value = key;
 	fcinfo->args[0].isnull = false;
 
-	hash = elements_tab->op->d.hashedscalararrayop.hash_fn_addr(fcinfo);
+	hash = elements_tab->hash_finfo.fn_addr(fcinfo);
 
 	return DatumGetUInt32(hash);
 }
@@ -3475,7 +3482,7 @@ saop_hash_element_match(struct saophash_hash *tb, Datum key1, Datum key2)
 	fcinfo->args[1].value = key2;
 	fcinfo->args[1].isnull = false;
 
-	result = elements_tab->op->d.hashedscalararrayop.fn_addr(fcinfo);
+	result = elements_tab->op->d.hashedscalararrayop.finfo->fn_addr(fcinfo);
 
 	return DatumGetBool(result);
 }
@@ -3498,6 +3505,7 @@ ExecEvalHashedScalarArrayOp(ExprState *state, ExprEvalStep *op, ExprContext *eco
 {
 	ScalarArrayOpExprHashTable *elements_tab = op->d.hashedscalararrayop.elements_tab;
 	FunctionCallInfo fcinfo = op->d.hashedscalararrayop.fcinfo_data;
+	bool		inclause = op->d.hashedscalararrayop.inclause;
 	bool		strictfunc = op->d.hashedscalararrayop.finfo->fn_strict;
 	Datum		scalar = fcinfo->args[0].value;
 	bool		scalar_isnull = fcinfo->args[0].isnull;
@@ -3521,6 +3529,7 @@ ExecEvalHashedScalarArrayOp(ExprState *state, ExprEvalStep *op, ExprContext *eco
 	/* Build the hash table on first evaluation */
 	if (elements_tab == NULL)
 	{
+		ScalarArrayOpExpr *saop;
 		int16		typlen;
 		bool		typbyval;
 		char		typalign;
@@ -3531,6 +3540,8 @@ ExecEvalHashedScalarArrayOp(ExprState *state, ExprEvalStep *op, ExprContext *eco
 		int			bitmask;
 		MemoryContext oldcontext;
 		ArrayType  *arr;
+
+		saop = op->d.hashedscalararrayop.saop;
 
 		arr = DatumGetArrayTypeP(*op->resvalue);
 		nitems = ArrayGetNItems(ARR_NDIM(arr), ARR_DIMS(arr));
@@ -3543,9 +3554,20 @@ ExecEvalHashedScalarArrayOp(ExprState *state, ExprEvalStep *op, ExprContext *eco
 		oldcontext = MemoryContextSwitchTo(econtext->ecxt_per_query_memory);
 
 		elements_tab = (ScalarArrayOpExprHashTable *)
-			palloc(sizeof(ScalarArrayOpExprHashTable));
+			palloc0(offsetof(ScalarArrayOpExprHashTable, hash_fcinfo_data) +
+					SizeForFunctionCallInfo(1));
 		op->d.hashedscalararrayop.elements_tab = elements_tab;
 		elements_tab->op = op;
+
+		fmgr_info(saop->hashfuncid, &elements_tab->hash_finfo);
+		fmgr_info_set_expr((Node *) saop, &elements_tab->hash_finfo);
+
+		InitFunctionCallInfoData(elements_tab->hash_fcinfo_data,
+								 &elements_tab->hash_finfo,
+								 1,
+								 saop->inputcollid,
+								 NULL,
+								 NULL);
 
 		/*
 		 * Create the hash table sizing it according to the number of elements
@@ -3601,7 +3623,12 @@ ExecEvalHashedScalarArrayOp(ExprState *state, ExprEvalStep *op, ExprContext *eco
 	/* Check the hash to see if we have a match. */
 	hashfound = NULL != saophash_lookup(elements_tab->hashtab, scalar);
 
-	result = BoolGetDatum(hashfound);
+	/* the result depends on if the clause is an IN or NOT IN clause */
+	if (inclause)
+		result = BoolGetDatum(hashfound);	/* IN */
+	else
+		result = BoolGetDatum(!hashfound);	/* NOT IN */
+
 	resultnull = false;
 
 	/*
@@ -3610,7 +3637,7 @@ ExecEvalHashedScalarArrayOp(ExprState *state, ExprEvalStep *op, ExprContext *eco
 	 * hashtable, but instead marked if we found any when building the table
 	 * in has_nulls.
 	 */
-	if (!DatumGetBool(result) && op->d.hashedscalararrayop.has_nulls)
+	if (!hashfound && op->d.hashedscalararrayop.has_nulls)
 	{
 		if (strictfunc)
 		{
@@ -3636,8 +3663,15 @@ ExecEvalHashedScalarArrayOp(ExprState *state, ExprEvalStep *op, ExprContext *eco
 			fcinfo->args[1].value = (Datum) 0;
 			fcinfo->args[1].isnull = true;
 
-			result = op->d.hashedscalararrayop.fn_addr(fcinfo);
+			result = op->d.hashedscalararrayop.finfo->fn_addr(fcinfo);
 			resultnull = fcinfo->isnull;
+
+			/*
+			 * Reverse the result for NOT IN clauses since the above function
+			 * is the equality function and we need not-equals.
+			 */
+			if (!inclause)
+				result = !result;
 		}
 	}
 

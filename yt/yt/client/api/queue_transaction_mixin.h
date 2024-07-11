@@ -14,13 +14,6 @@ class TQueueTransactionMixin
 public:
     // TODO(nadya73): Remove it: YT-20712
     void AdvanceConsumer(
-        const NYPath::TYPath& path,
-        int partitionIndex,
-        std::optional<i64> oldOffset,
-        i64 newOffset) override;
-
-    // TODO(nadya73): Remove it: YT-20712
-    void AdvanceConsumer(
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
         int partitionIndex,

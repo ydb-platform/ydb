@@ -12,6 +12,7 @@ TExecFunc arrow_multirange_adjacent_multirange() { return TGenericExec<TPgDirect
 TExecFunc arrow_multirange_adjacent_range() { return TGenericExec<TPgDirectFunc<&multirange_adjacent_range>, true, true, TArgs_multirange_adjacent_range_Policy>({}); }
 TExecFunc arrow_multirange_after_multirange() { return TGenericExec<TPgDirectFunc<&multirange_after_multirange>, true, true, TArgs_multirange_after_multirange_Policy>({}); }
 TExecFunc arrow_multirange_after_range() { return TGenericExec<TPgDirectFunc<&multirange_after_range>, true, true, TArgs_multirange_after_range_Policy>({}); }
+TExecFunc arrow_multirange_agg_transfn() { return TGenericExec<TPgDirectFunc<&multirange_agg_transfn>, false, true, TArgs_multirange_agg_transfn_Policy>({}); }
 TExecFunc arrow_multirange_before_multirange() { return TGenericExec<TPgDirectFunc<&multirange_before_multirange>, true, true, TArgs_multirange_before_multirange_Policy>({}); }
 TExecFunc arrow_multirange_before_range() { return TGenericExec<TPgDirectFunc<&multirange_before_range>, true, true, TArgs_multirange_before_range_Policy>({}); }
 TExecFunc arrow_multirange_cmp() { return TGenericExec<TPgDirectFunc<&multirange_cmp>, true, true, TArgs_multirange_cmp_Policy>({}); }

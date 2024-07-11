@@ -3,7 +3,7 @@
  * schemapg.h
  *    Schema_pg_xxx macros for use by relcache.c
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -153,37 +153,40 @@
 { 2610, {"indnatts"}, 21, -1, 2, 3, 0, -1, -1, true, 's', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
 { 2610, {"indnkeyatts"}, 21, -1, 2, 4, 0, -1, -1, true, 's', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
 { 2610, {"indisunique"}, 16, -1, 1, 5, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 2610, {"indisprimary"}, 16, -1, 1, 6, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 2610, {"indisexclusion"}, 16, -1, 1, 7, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 2610, {"indimmediate"}, 16, -1, 1, 8, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 2610, {"indisclustered"}, 16, -1, 1, 9, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 2610, {"indisvalid"}, 16, -1, 1, 10, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 2610, {"indcheckxmin"}, 16, -1, 1, 11, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 2610, {"indisready"}, 16, -1, 1, 12, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 2610, {"indislive"}, 16, -1, 1, 13, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 2610, {"indisreplident"}, 16, -1, 1, 14, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 2610, {"indkey"}, 22, -1, -1, 15, 1, -1, -1, false, 'i', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 2610, {"indcollation"}, 30, -1, -1, 16, 1, -1, -1, false, 'i', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 2610, {"indclass"}, 30, -1, -1, 17, 1, -1, -1, false, 'i', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 2610, {"indoption"}, 22, -1, -1, 18, 1, -1, -1, false, 'i', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 2610, {"indexprs"}, 194, -1, -1, 19, 0, -1, -1, false, 'i', 'x', '\0', false, false, false, '\0', '\0', false, true, 0, 950 }, \
-{ 2610, {"indpred"}, 194, -1, -1, 20, 0, -1, -1, false, 'i', 'x', '\0', false, false, false, '\0', '\0', false, true, 0, 950 }
+{ 2610, {"indnullsnotdistinct"}, 16, -1, 1, 6, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 2610, {"indisprimary"}, 16, -1, 1, 7, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 2610, {"indisexclusion"}, 16, -1, 1, 8, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 2610, {"indimmediate"}, 16, -1, 1, 9, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 2610, {"indisclustered"}, 16, -1, 1, 10, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 2610, {"indisvalid"}, 16, -1, 1, 11, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 2610, {"indcheckxmin"}, 16, -1, 1, 12, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 2610, {"indisready"}, 16, -1, 1, 13, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 2610, {"indislive"}, 16, -1, 1, 14, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 2610, {"indisreplident"}, 16, -1, 1, 15, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 2610, {"indkey"}, 22, -1, -1, 16, 1, -1, -1, false, 'i', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 2610, {"indcollation"}, 30, -1, -1, 17, 1, -1, -1, false, 'i', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 2610, {"indclass"}, 30, -1, -1, 18, 1, -1, -1, false, 'i', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 2610, {"indoption"}, 22, -1, -1, 19, 1, -1, -1, false, 'i', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 2610, {"indexprs"}, 194, -1, -1, 20, 0, -1, -1, false, 'i', 'x', '\0', false, false, false, '\0', '\0', false, true, 0, 950 }, \
+{ 2610, {"indpred"}, 194, -1, -1, 21, 0, -1, -1, false, 'i', 'x', '\0', false, false, false, '\0', '\0', false, true, 0, 950 }
 
 #define Schema_pg_database \
 { 1262, {"oid"}, 26, -1, 4, 1, 0, -1, -1, true, 'i', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
 { 1262, {"datname"}, 19, -1, NAMEDATALEN, 2, 0, -1, -1, false, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 950 }, \
 { 1262, {"datdba"}, 26, -1, 4, 3, 0, -1, -1, true, 'i', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
 { 1262, {"encoding"}, 23, -1, 4, 4, 0, -1, -1, true, 'i', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 1262, {"datcollate"}, 19, -1, NAMEDATALEN, 5, 0, -1, -1, false, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 950 }, \
-{ 1262, {"datctype"}, 19, -1, NAMEDATALEN, 6, 0, -1, -1, false, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 950 }, \
-{ 1262, {"datistemplate"}, 16, -1, 1, 7, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 1262, {"datallowconn"}, 16, -1, 1, 8, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 1262, {"datconnlimit"}, 23, -1, 4, 9, 0, -1, -1, true, 'i', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 1262, {"datlastsysoid"}, 26, -1, 4, 10, 0, -1, -1, true, 'i', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 1262, {"datfrozenxid"}, 28, -1, 4, 11, 0, -1, -1, true, 'i', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 1262, {"datminmxid"}, 28, -1, 4, 12, 0, -1, -1, true, 'i', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 1262, {"dattablespace"}, 26, -1, 4, 13, 0, -1, -1, true, 'i', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 1262, {"datacl"}, 1034, -1, -1, 14, 1, -1, -1, false, 'i', 'x', '\0', false, false, false, '\0', '\0', false, true, 0, 0 }
+{ 1262, {"datlocprovider"}, 18, -1, 1, 5, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 1262, {"datistemplate"}, 16, -1, 1, 6, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 1262, {"datallowconn"}, 16, -1, 1, 7, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 1262, {"datconnlimit"}, 23, -1, 4, 8, 0, -1, -1, true, 'i', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 1262, {"datfrozenxid"}, 28, -1, 4, 9, 0, -1, -1, true, 'i', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 1262, {"datminmxid"}, 28, -1, 4, 10, 0, -1, -1, true, 'i', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 1262, {"dattablespace"}, 26, -1, 4, 11, 0, -1, -1, true, 'i', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 1262, {"datcollate"}, 25, -1, -1, 12, 0, -1, -1, false, 'i', 'x', '\0', true, false, false, '\0', '\0', false, true, 0, 950 }, \
+{ 1262, {"datctype"}, 25, -1, -1, 13, 0, -1, -1, false, 'i', 'x', '\0', true, false, false, '\0', '\0', false, true, 0, 950 }, \
+{ 1262, {"daticulocale"}, 25, -1, -1, 14, 0, -1, -1, false, 'i', 'x', '\0', false, false, false, '\0', '\0', false, true, 0, 950 }, \
+{ 1262, {"datcollversion"}, 25, -1, -1, 15, 0, -1, -1, false, 'i', 'x', '\0', false, false, false, '\0', '\0', false, true, 0, 950 }, \
+{ 1262, {"datacl"}, 1034, -1, -1, 16, 1, -1, -1, false, 'i', 'x', '\0', false, false, false, '\0', '\0', false, true, 0, 0 }
 
 #define Schema_pg_authid \
 { 1260, {"oid"}, 26, -1, 4, 1, 0, -1, -1, true, 'i', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
@@ -214,14 +217,17 @@
 #define Schema_pg_subscription \
 { 6100, {"oid"}, 26, -1, 4, 1, 0, -1, -1, true, 'i', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
 { 6100, {"subdbid"}, 26, -1, 4, 2, 0, -1, -1, true, 'i', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 6100, {"subname"}, 19, -1, NAMEDATALEN, 3, 0, -1, -1, false, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 950 }, \
-{ 6100, {"subowner"}, 26, -1, 4, 4, 0, -1, -1, true, 'i', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 6100, {"subenabled"}, 16, -1, 1, 5, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 6100, {"subbinary"}, 16, -1, 1, 6, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 6100, {"substream"}, 16, -1, 1, 7, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
-{ 6100, {"subconninfo"}, 25, -1, -1, 8, 0, -1, -1, false, 'i', 'x', '\0', true, false, false, '\0', '\0', false, true, 0, 950 }, \
-{ 6100, {"subslotname"}, 19, -1, NAMEDATALEN, 9, 0, -1, -1, false, 'c', 'p', '\0', false, false, false, '\0', '\0', false, true, 0, 950 }, \
-{ 6100, {"subsynccommit"}, 25, -1, -1, 10, 0, -1, -1, false, 'i', 'x', '\0', true, false, false, '\0', '\0', false, true, 0, 950 }, \
-{ 6100, {"subpublications"}, 1009, -1, -1, 11, 1, -1, -1, false, 'i', 'x', '\0', true, false, false, '\0', '\0', false, true, 0, 950 }
+{ 6100, {"subskiplsn"}, 3220, -1, 8, 3, 0, -1, -1, FLOAT8PASSBYVAL, 'd', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 6100, {"subname"}, 19, -1, NAMEDATALEN, 4, 0, -1, -1, false, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 950 }, \
+{ 6100, {"subowner"}, 26, -1, 4, 5, 0, -1, -1, true, 'i', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 6100, {"subenabled"}, 16, -1, 1, 6, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 6100, {"subbinary"}, 16, -1, 1, 7, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 6100, {"substream"}, 16, -1, 1, 8, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 6100, {"subtwophasestate"}, 18, -1, 1, 9, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 6100, {"subdisableonerr"}, 16, -1, 1, 10, 0, -1, -1, true, 'c', 'p', '\0', true, false, false, '\0', '\0', false, true, 0, 0 }, \
+{ 6100, {"subconninfo"}, 25, -1, -1, 11, 0, -1, -1, false, 'i', 'x', '\0', true, false, false, '\0', '\0', false, true, 0, 950 }, \
+{ 6100, {"subslotname"}, 19, -1, NAMEDATALEN, 12, 0, -1, -1, false, 'c', 'p', '\0', false, false, false, '\0', '\0', false, true, 0, 950 }, \
+{ 6100, {"subsynccommit"}, 25, -1, -1, 13, 0, -1, -1, false, 'i', 'x', '\0', true, false, false, '\0', '\0', false, true, 0, 950 }, \
+{ 6100, {"subpublications"}, 1009, -1, -1, 14, 1, -1, -1, false, 'i', 'x', '\0', true, false, false, '\0', '\0', false, true, 0, 950 }
 
 #endif							/* SCHEMAPG_H */

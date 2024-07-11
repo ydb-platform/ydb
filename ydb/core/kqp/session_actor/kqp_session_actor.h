@@ -11,6 +11,14 @@
 #include <ydb/core/control/immediate_control_board_wrapper.h>
 #include <ydb/library/actors/core/actorid.h>
 
+namespace NKikimr::NKqp::NComputeActor {
+    struct IKqpNodeComputeActorFactory;
+}
+
+namespace NKikimr::NKqp::NRm {
+    class IKqpResourceManager;
+}
+
 namespace NKikimr::NKqp {
 
 struct TKqpWorkerSettings {
@@ -48,7 +56,10 @@ struct TKqpWorkerSettings {
     }
 };
 
-IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
+IActor* CreateKqpSessionActor(const TActorId& owner,
+    std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> resourceManager_,
+    std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> caFactory_,
+    const TString& sessionId,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,

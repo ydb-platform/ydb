@@ -2,7 +2,7 @@
  * logical.c
  *	   PostgreSQL logical decoding coordination
  *
- * Copyright (c) 2012-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2012-2022, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/replication/logical/logical.c
@@ -202,12 +202,13 @@ StartupDecodingContext(List *output_plugin_options,
 	if (!ctx->reader)
 		ereport(ERROR,
 				(errcode(ERRCODE_OUT_OF_MEMORY),
-				 errmsg("out of memory")));
+				 errmsg("out of memory"),
+				 errdetail("Failed while allocating a WAL reading processor.")));
 
 	ctx->reorder = ReorderBufferAllocate();
 	ctx->snapshot_builder =
 		AllocateSnapshotBuilder(ctx->reorder, xmin_horizon, start_lsn,
-								need_full_snapshot, slot->data.initial_consistent_point);
+								need_full_snapshot, slot->data.two_phase_at);
 
 	ctx->reorder->private_data = ctx;
 
@@ -432,10 +433,12 @@ CreateInitDecodingContext(const char *plugin,
 	MemoryContextSwitchTo(old_context);
 
 	/*
-	 * We allow decoding of prepared transactions iff the two_phase option is
-	 * enabled at the time of slot creation.
+	 * We allow decoding of prepared transactions when the two_phase is
+	 * enabled at the time of slot creation, or when the two_phase option is
+	 * given at the streaming start, provided the plugin supports all the
+	 * callbacks for two-phase.
 	 */
-	ctx->twophase &= MyReplicationSlot->data.two_phase;
+	ctx->twophase &= slot->data.two_phase;
 
 	ctx->reorder->output_rewrites = ctx->options.receive_rewrites;
 
@@ -518,8 +521,12 @@ CreateDecodingContext(XLogRecPtr start_lsn,
 		 * xlog records didn't result in anything relevant for logical
 		 * decoding. Clients have to be able to do that to support synchronous
 		 * replication.
+		 *
+		 * Starting at a different LSN than requested might not catch certain
+		 * kinds of client errors; so the client may wish to check that
+		 * confirmed_flush_lsn matches its expectations.
 		 */
-		elog(DEBUG1, "cannot stream from %X/%X, minimum is %X/%X, forwarding",
+		elog(LOG, "%X/%X has been already streamed, forwarding to %X/%X",
 			 LSN_FORMAT_ARGS(start_lsn),
 			 LSN_FORMAT_ARGS(slot->data.confirmed_flush));
 
@@ -538,10 +545,24 @@ CreateDecodingContext(XLogRecPtr start_lsn,
 	MemoryContextSwitchTo(old_context);
 
 	/*
-	 * We allow decoding of prepared transactions iff the two_phase option is
-	 * enabled at the time of slot creation.
+	 * We allow decoding of prepared transactions when the two_phase is
+	 * enabled at the time of slot creation, or when the two_phase option is
+	 * given at the streaming start, provided the plugin supports all the
+	 * callbacks for two-phase.
 	 */
-	ctx->twophase &= MyReplicationSlot->data.two_phase;
+	ctx->twophase &= (slot->data.two_phase || ctx->twophase_opt_given);
+
+	/* Mark slot to allow two_phase decoding if not already marked */
+	if (ctx->twophase && !slot->data.two_phase)
+	{
+		SpinLockAcquire(&slot->mutex);
+		slot->data.two_phase = true;
+		slot->data.two_phase_at = start_lsn;
+		SpinLockRelease(&slot->mutex);
+		ReplicationSlotMarkDirty();
+		ReplicationSlotSave();
+		SnapBuildSetTwoPhaseAt(ctx->snapshot_builder, start_lsn);
+	}
 
 	ctx->reorder->output_rewrites = ctx->options.receive_rewrites;
 
@@ -587,9 +608,9 @@ DecodingContextFindStartpoint(LogicalDecodingContext *ctx)
 		/* the read_page callback waits for new WAL */
 		record = XLogReadRecord(ctx->reader, &err);
 		if (err)
-			elog(ERROR, "%s", err);
+			elog(ERROR, "could not find logical decoding starting point: %s", err);
 		if (!record)
-			elog(ERROR, "no record found"); /* shouldn't happen */
+			elog(ERROR, "could not find logical decoding starting point");
 
 		LogicalDecodingProcessRecord(ctx, ctx->reader);
 
@@ -602,7 +623,8 @@ DecodingContextFindStartpoint(LogicalDecodingContext *ctx)
 
 	SpinLockAcquire(&slot->mutex);
 	slot->data.confirmed_flush = ctx->reader->EndRecPtr;
-	slot->data.initial_consistent_point = ctx->reader->EndRecPtr;
+	if (slot->data.two_phase)
+		slot->data.two_phase_at = ctx->reader->EndRecPtr;
 	SpinLockRelease(&slot->mutex);
 }
 
@@ -652,12 +674,14 @@ OutputPluginWrite(struct LogicalDecodingContext *ctx, bool last_write)
  * Update progress tracking (if supported).
  */
 void
-OutputPluginUpdateProgress(struct LogicalDecodingContext *ctx)
+OutputPluginUpdateProgress(struct LogicalDecodingContext *ctx,
+						   bool skipped_xact)
 {
 	if (!ctx->update_progress)
 		return;
 
-	ctx->update_progress(ctx, ctx->write_location, ctx->write_xid);
+	ctx->update_progress(ctx, ctx->write_location, ctx->write_xid,
+						 skipped_xact);
 }
 
 /*
@@ -1041,7 +1065,7 @@ change_cb_wrapper(ReorderBuffer *cache, ReorderBufferTXN *txn,
 	ctx->write_xid = txn->xid;
 
 	/*
-	 * report this change's lsn so replies from clients can give an up2date
+	 * Report this change's lsn so replies from clients can give an up-to-date
 	 * answer. This won't ever be enough (and shouldn't be!) to confirm
 	 * receipt of this transaction, but it might allow another transaction's
 	 * commit to be confirmed with one message.
@@ -1083,7 +1107,7 @@ truncate_cb_wrapper(ReorderBuffer *cache, ReorderBufferTXN *txn,
 	ctx->write_xid = txn->xid;
 
 	/*
-	 * report this change's lsn so replies from clients can give an up2date
+	 * Report this change's lsn so replies from clients can give an up-to-date
 	 * answer. This won't ever be enough (and shouldn't be!) to confirm
 	 * receipt of this transaction, but it might allow another transaction's
 	 * commit to be confirmed with one message.
@@ -1225,10 +1249,10 @@ stream_start_cb_wrapper(ReorderBuffer *cache, ReorderBufferTXN *txn,
 	ctx->write_xid = txn->xid;
 
 	/*
-	 * report this message's lsn so replies from clients can give an up2date
-	 * answer. This won't ever be enough (and shouldn't be!) to confirm
-	 * receipt of this transaction, but it might allow another transaction's
-	 * commit to be confirmed with one message.
+	 * Report this message's lsn so replies from clients can give an
+	 * up-to-date answer. This won't ever be enough (and shouldn't be!) to
+	 * confirm receipt of this transaction, but it might allow another
+	 * transaction's commit to be confirmed with one message.
 	 */
 	ctx->write_location = first_lsn;
 
@@ -1274,10 +1298,10 @@ stream_stop_cb_wrapper(ReorderBuffer *cache, ReorderBufferTXN *txn,
 	ctx->write_xid = txn->xid;
 
 	/*
-	 * report this message's lsn so replies from clients can give an up2date
-	 * answer. This won't ever be enough (and shouldn't be!) to confirm
-	 * receipt of this transaction, but it might allow another transaction's
-	 * commit to be confirmed with one message.
+	 * Report this message's lsn so replies from clients can give an
+	 * up-to-date answer. This won't ever be enough (and shouldn't be!) to
+	 * confirm receipt of this transaction, but it might allow another
+	 * transaction's commit to be confirmed with one message.
 	 */
 	ctx->write_location = last_lsn;
 
@@ -1450,7 +1474,7 @@ stream_change_cb_wrapper(ReorderBuffer *cache, ReorderBufferTXN *txn,
 	ctx->write_xid = txn->xid;
 
 	/*
-	 * report this change's lsn so replies from clients can give an up2date
+	 * Report this change's lsn so replies from clients can give an up-to-date
 	 * answer. This won't ever be enough (and shouldn't be!) to confirm
 	 * receipt of this transaction, but it might allow another transaction's
 	 * commit to be confirmed with one message.
@@ -1545,7 +1569,7 @@ stream_truncate_cb_wrapper(ReorderBuffer *cache, ReorderBufferTXN *txn,
 	ctx->write_xid = txn->xid;
 
 	/*
-	 * report this change's lsn so replies from clients can give an up2date
+	 * Report this change's lsn so replies from clients can give an up-to-date
 	 * answer. This won't ever be enough (and shouldn't be!) to confirm
 	 * receipt of this transaction, but it might allow another transaction's
 	 * commit to be confirmed with one message.
@@ -1573,6 +1597,7 @@ LogicalIncreaseXminForSlot(XLogRecPtr current_lsn, TransactionId xmin)
 {
 	bool		updated_xmin = false;
 	ReplicationSlot *slot;
+	bool		got_new_xmin = false;
 
 	slot = MyReplicationSlot;
 
@@ -1610,8 +1635,18 @@ LogicalIncreaseXminForSlot(XLogRecPtr current_lsn, TransactionId xmin)
 	{
 		slot->candidate_catalog_xmin = xmin;
 		slot->candidate_xmin_lsn = current_lsn;
+
+		/*
+		 * Log new xmin at an appropriate log level after releasing the
+		 * spinlock.
+		 */
+		got_new_xmin = true;
 	}
 	SpinLockRelease(&slot->mutex);
+
+	if (got_new_xmin)
+		elog(DEBUG1, "got new catalog xmin %u at %X/%X", xmin,
+			 LSN_FORMAT_ARGS(current_lsn));
 
 	/* candidate already valid with the current flush position, apply */
 	if (updated_xmin)
@@ -1817,7 +1852,6 @@ UpdateDecodingStats(LogicalDecodingContext *ctx)
 		 (long long) rb->totalTxns,
 		 (long long) rb->totalBytes);
 
-	namestrcpy(&repSlotStat.slotname, NameStr(ctx->slot->data.name));
 	repSlotStat.spill_txns = rb->spillTxns;
 	repSlotStat.spill_count = rb->spillCount;
 	repSlotStat.spill_bytes = rb->spillBytes;
@@ -1827,7 +1861,7 @@ UpdateDecodingStats(LogicalDecodingContext *ctx)
 	repSlotStat.total_txns = rb->totalTxns;
 	repSlotStat.total_bytes = rb->totalBytes;
 
-	pgstat_report_replslot(&repSlotStat);
+	pgstat_report_replslot(ctx->slot, &repSlotStat);
 
 	rb->spillTxns = 0;
 	rb->spillCount = 0;

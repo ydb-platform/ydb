@@ -10,6 +10,7 @@ from enum import StrEnum
 class WorkloadType(StrEnum):
     Clickbench = 'clickbench'
     TPC_H = 'tpch'
+    TPC_DS = 'tpcds'
 
 
 class YdbCliHelper:
@@ -46,6 +47,18 @@ class YdbCliHelper:
     @staticmethod
     def workload_run(type: WorkloadType, path: str, query_num: int, iterations: int = 5,
                      timeout: float = 100.) -> YdbCliHelper.WorkloadRunResult:
+        def _try_extract_error_message(stderr: str) -> str:
+            begin_str = f'{query_num}:\n'
+            end_str = 'Query text:\n'
+            begin_pos = stderr.find(begin_str)
+            if begin_pos < 0:
+                return ''
+            begin_pos += len(begin_str)
+            end_pos = stderr.find(end_str, begin_pos)
+            if end_pos < 0:
+                return stderr[begin_pos:]
+            return stderr[begin_pos:end_pos]
+
         try:
             if not YdbCluster.wait_ydb_alive(60):
                 return YdbCliHelper.WorkloadRunResult(error_message='Ydb cluster is dead')
@@ -71,13 +84,17 @@ class YdbCliHelper:
                 exec: yatest.common.process._Execution = yatest.common.process.execute(cmd, wait=False, check_exit_code=False)
                 exec.wait(check_exit_code=False, timeout=timeout)
                 if exec.returncode != 0:
-                    err = f'Invalid return code: {exec.returncode} instesd 0.'
+                    err = _try_extract_error_message(exec.stderr.decode('utf-8'))
+                    if not err:
+                        err = f'Invalid return code: {exec.returncode} instesd 0.'
             except (yatest.common.process.TimeoutError, yatest.common.process.ExecutionTimeoutError):
                 err = f'Timeout {timeout}s expeared.'
             stats = {}
             if (os.path.exists(json_path)):
                 with open(json_path, 'r') as r:
-                    for signal in json.load(r):
+                    json_data = r.read()
+                if json_data:
+                    for signal in json.loads(json_data):
                         q = signal['labels']['query']
                         if q not in stats:
                             stats[q] = {}

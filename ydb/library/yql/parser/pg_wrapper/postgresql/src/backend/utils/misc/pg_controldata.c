@@ -5,7 +5,7 @@
  * Routines to expose the contents of the control data file via
  * a set of SQL functions.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -24,6 +24,7 @@
 #include "common/controldata_utils.h"
 #include "funcapi.h"
 #include "miscadmin.h"
+#include "storage/lwlock.h"
 #include "utils/builtins.h"
 #include "utils/pg_lsn.h"
 #include "utils/timestamp.h"
@@ -54,7 +55,9 @@ pg_control_system(PG_FUNCTION_ARGS)
 	tupdesc = BlessTupleDesc(tupdesc);
 
 	/* read the control file */
+	LWLockAcquire(ControlFileLock, LW_SHARED);
 	ControlFile = get_controlfile(DataDir, &crc_ok);
+	LWLockRelease(ControlFileLock);
 	if (!crc_ok)
 		ereport(ERROR,
 				(errmsg("calculated CRC checksum does not match value stored in file")));
@@ -79,8 +82,8 @@ pg_control_system(PG_FUNCTION_ARGS)
 Datum
 pg_control_checkpoint(PG_FUNCTION_ARGS)
 {
-	Datum		values[19];
-	bool		nulls[19];
+	Datum		values[18];
+	bool		nulls[18];
 	TupleDesc	tupdesc;
 	HeapTuple	htup;
 	ControlFileData *ControlFile;
@@ -132,7 +135,9 @@ pg_control_checkpoint(PG_FUNCTION_ARGS)
 	tupdesc = BlessTupleDesc(tupdesc);
 
 	/* Read the control file. */
+	LWLockAcquire(ControlFileLock, LW_SHARED);
 	ControlFile = get_controlfile(DataDir, &crc_ok);
+	LWLockRelease(ControlFileLock);
 	if (!crc_ok)
 		ereport(ERROR,
 				(errmsg("calculated CRC checksum does not match value stored in file")));
@@ -235,7 +240,9 @@ pg_control_recovery(PG_FUNCTION_ARGS)
 	tupdesc = BlessTupleDesc(tupdesc);
 
 	/* read the control file */
+	LWLockAcquire(ControlFileLock, LW_SHARED);
 	ControlFile = get_controlfile(DataDir, &crc_ok);
+	LWLockRelease(ControlFileLock);
 	if (!crc_ok)
 		ereport(ERROR,
 				(errmsg("calculated CRC checksum does not match value stored in file")));
@@ -300,7 +307,9 @@ pg_control_init(PG_FUNCTION_ARGS)
 	tupdesc = BlessTupleDesc(tupdesc);
 
 	/* read the control file */
+	LWLockAcquire(ControlFileLock, LW_SHARED);
 	ControlFile = get_controlfile(DataDir, &crc_ok);
+	LWLockRelease(ControlFileLock);
 	if (!crc_ok)
 		ereport(ERROR,
 				(errmsg("calculated CRC checksum does not match value stored in file")));

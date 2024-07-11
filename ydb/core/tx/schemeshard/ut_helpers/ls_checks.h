@@ -169,6 +169,8 @@ namespace NLs {
     TCheckFunc SharedHive(ui64 sharedHiveId);
     TCheckFunc ServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode);
 
+    TCheckFunc IncrementalBackup(bool flag);
+
     struct TInverseTag {
         bool Value = false;
     };

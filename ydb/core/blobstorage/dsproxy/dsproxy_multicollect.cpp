@@ -99,7 +99,7 @@ public:
             NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
                 NKikimrServices::BS_PROXY_MULTICOLLECT, false, {}, now, storagePoolCounters, 0,
-                NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.MultiCollect"), std::move(ev->ExecutionRelay))
+                std::move(traceId), "DSProxy.MultiCollect", ev, std::move(ev->ExecutionRelay))
         , Iterations(ev->PerGenerationCounterStepSize())
         , TabletId(ev->TabletId)
         , RecordGeneration(ev->RecordGeneration)

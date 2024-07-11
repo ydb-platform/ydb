@@ -123,7 +123,8 @@ public:
         std::shared_ptr<IKqpNodeState> State = nullptr;
     };
 
-    virtual NActors::TActorId CreateKqpComputeActor(TCreateArgs&& args) = 0;
+    typedef std::variant<TActorId, NKikimr::NKqp::NRm::TKqpRMAllocateResult> TActorStartResult;
+    virtual TActorStartResult CreateKqpComputeActor(TCreateArgs&& args) = 0;
 
     virtual void ApplyConfig(const NKikimrConfig::TTableServiceConfig::TResourceManager& config) = 0;
 };

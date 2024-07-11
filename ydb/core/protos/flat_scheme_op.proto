@@ -464,6 +464,12 @@ message TRequestedMaxIndex {
     optional string ColumnName = 1;
 }
 
+message TRequestedCountMinSketch {
+    optional uint32 Width = 1 [default = 256];
+    optional uint32 Depth = 2 [default = 8];
+    repeated string ColumnNames = 3;
+}
+
 message TOlapIndexRequested {
     optional string Name = 1;
     optional TCompressionOptions Compression = 3;
@@ -473,6 +479,7 @@ message TOlapIndexRequested {
     oneof Implementation {
         TRequestedBloomFilter BloomFilter = 40;
         TRequestedMaxIndex MaxIndex = 41;
+        TRequestedCountMinSketch CountMinSketch = 42;
     }
 }
 
@@ -484,6 +491,12 @@ message TBloomFilter {
 
 message TMaxIndex {
     optional uint32 ColumnId = 1;
+}
+
+message TCountMinSketch {
+    optional uint32 Width = 1 [default = 256];
+    optional uint32 Depth = 2 [default = 8];
+    repeated uint32 ColumnIds = 3;
 }
 
 message TOlapIndexDescription {
@@ -499,6 +512,7 @@ message TOlapIndexDescription {
     oneof Implementation {
         TBloomFilter BloomFilter = 41;
         TMaxIndex MaxIndex = 42;
+        TCountMinSketch CountMinSketch = 43;
     }
 }
 

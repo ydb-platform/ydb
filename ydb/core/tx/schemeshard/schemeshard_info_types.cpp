@@ -3,7 +3,6 @@
 #include "schemeshard_utils.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>

@@ -100,7 +100,7 @@ private:
         ui64 LastSendedMessage = 0;
     };
     TMap<NActors::TActorId, ConsumersInfo> Consumers;
-    TJsonParser Parser;
+    std::unique_ptr<TJsonParser> Parser;
 
     ui64 CurrentOffset = 0;
 
@@ -179,9 +179,9 @@ TTopicSession::TTopicSession(
     , BufferSize(16_MB)
     , LogPrefix("TopicSession: ")
    // , StartingMessageTimestamp(TInstant::MilliSeconds(TInstant::Now().MilliSeconds())) // this field is serialized as milliseconds, so drop microseconds part to be consistent with storage
-    , Parser(GetColumns(), [&](const TString& json){
+    , Parser(NewJsonParser(GetColumns(), [&](const TString& json){
             SendData(json);
-        })
+        }))
 {
    // Alloc.DisableStrictAllocationCheck();
     LOG_ROW_DISPATCHER_DEBUG("MetadataFieldsSize " << SourceParams.MetadataFieldsSize());
@@ -462,7 +462,7 @@ void TTopicSession::ParseData() {
     for (const auto& [offset, value] : readyBatch.Data) {
         CurrentOffset = offset;
         try {
-            Parser.Push(value);
+            Parser->Push(value);
         } catch (...) {
             auto message = CurrentExceptionMessage();
             LOG_ROW_DISPATCHER_DEBUG("Parsing error: " << message);

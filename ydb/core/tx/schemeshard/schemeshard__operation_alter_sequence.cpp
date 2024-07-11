@@ -241,6 +241,57 @@ std::optional<NKikimrSchemeOp::TSequenceDescription> GetAlterSequenceDescription
         maxValue = alter.GetMaxValue();
     }
 
+    // if (alter.HasDataType()) {
+    //     i64 dataTypeMaxValue = Max<i64>();
+    //     i64 dataTypeMinValue = Min<i64>();
+    //     const auto& dataType = result.GetDataType();
+    //     auto typeName = NMiniKQL::AdaptLegacyYqlType(dataType);
+    //     const NScheme::IType* type = typeRegistry.GetType(typeName);
+    //     if (type) {
+    //         if (!NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
+    //             errStr = Sprintf("Type '%s' specified for sequence '%s' is not supported", dataType.data(), name.data());
+    //             status = NKikimrScheme::StatusInvalidParameter;
+    //             return std::nullopt;
+    //         }
+    //     } else {
+    //         auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+    //         if (!typeDesc) {
+    //             errStr = Sprintf("Type '%s' specified for sequence '%s' is not supported", dataType.data(), name.data());
+    //             status = NKikimrScheme::StatusInvalidParameter;
+    //             return std::nullopt;
+    //         }
+    //         if (!pgTypesEnabled) {
+    //             errStr = Sprintf("Type '%s' specified for sequence '%s', but support for pg types is disabled (EnableTablePgTypes feature flag is off)", dataType.data(), name.data());
+    //             status = NKikimrScheme::StatusInvalidParameter;
+    //             return nullptr;
+    //         }
+    //     }
+    //     if (type->GetTypeId() == NScheme::NTypeIds::Int64
+    //             || NPg::PgTypeIdFromTypeDesc(*typeDesc) == INT8OID) {
+    //         dataTypeMaxValue = Max<i64>();
+    //         dataTypeMinValue = Min<i64>();
+    //     } else if (type->GetTypeId() == NScheme::NTypeIds::Int32
+    //             || NPg::PgTypeIdFromTypeDesc(*typeDesc) == INT4OID) {
+    //         dataTypeMaxValue = Max<i32>();
+    //         dataTypeMinValue = Min<i32>();
+    //     } else if (type->GetTypeId() == NScheme::NTypeIds::Int16
+    //             || NPg::PgTypeIdFromTypeDesc(*typeDesc) == INT2OID) {
+    //         dataTypeMaxValue = Max<i16>();
+    //         dataTypeMinValue = Min<i16>();
+    //     } else {
+    //         errStr = Sprintf("Type '%s' is not supported for sequences", dataType.data());
+    //         status = NKikimrScheme::StatusInvalidParameter;
+    //         return nullptr;
+    //     }
+
+    //     if (maxValue > dataTypeMaxValue) {
+    //         MAXVALUE (65307) is out of range for sequence data type smallint
+    //         errStr = Sprintf("MAXVALUE (%ld) is out of range for sequence data type", minValue, maxValue);
+    //         status = NKikimrScheme::StatusInvalidParameter;
+    //         return std::nullopt;
+    //     }
+    // }
+
     if (minValue >= maxValue) {
         errStr = Sprintf("MINVALUE (%ld) must be less than MAXVALUE (%ld)", minValue, maxValue);
         status = NKikimrScheme::StatusInvalidParameter;

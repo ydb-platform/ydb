@@ -1429,6 +1429,11 @@ message TSequenceDescription {
         optional sint64 NextValue = 1;
         optional bool NextUsed = 2;
     }
+    enum EDataType {
+        BIGINT = 0;
+        INTEGER = 1;
+        SMALLINT = 2;
+    }
     optional string Name = 1; // mandatory
     optional NKikimrProto.TPathID PathId = 2; // sequence path id, assigned by schemeshard
     optional uint64 Version = 3; // incremented every time sequence is altered
@@ -1441,6 +1446,7 @@ message TSequenceDescription {
     optional sint64 Increment = 9; // increment at each call, defaults to 1
     optional bool Cycle = 10; // true when cycle on overflow is allowed
     optional TSetVal SetVal = 11; // SetVal(NextValue, NextUsed) is executed atomically when creating
+    optional EDataType DataType = 12; // data type of the sequence, defaults to BIGINT
 }
 
 message TSequenceSharding {

@@ -77,6 +77,23 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
                     setVal->SetNextUsed(fromSequence.set_val().next_used());
                     setVal->SetNextValue(fromSequence.set_val().next_value());
                 }
+                if (fromSequence.has_data_type()) {
+                    switch (fromSequence.data_type()) {
+                        case Ydb::Table::SequenceDescription::DATA_TYPE_BIGINT: {
+                            seqDesc->SetDataType(NKikimrSchemeOp::TSequenceDescription::BIGINT);
+                            break;
+                        }
+                        case Ydb::Table::SequenceDescription::DATA_TYPE_INTEGER: {
+                            seqDesc->SetDataType(NKikimrSchemeOp::TSequenceDescription::INTEGER);
+                            break;
+                        }
+                        case Ydb::Table::SequenceDescription::DATA_TYPE_SMALLINT: {
+                            seqDesc->SetDataType(NKikimrSchemeOp::TSequenceDescription::SMALLINT);
+                            break;
+                        }
+                        default: break;
+                    }
+                }
 
                 break;
             }

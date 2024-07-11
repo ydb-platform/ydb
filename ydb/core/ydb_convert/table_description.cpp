@@ -1491,6 +1491,23 @@ void FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrS
                     setVal->set_next_used(sequenceDescription.GetSetVal().GetNextUsed());
                     setVal->set_next_value(sequenceDescription.GetSetVal().GetNextValue());
                 }
+                if (sequenceDescription.HasDataType()) {
+                    switch (sequenceDescription.GetDataType()) {
+                        case NKikimrSchemeOp::TSequenceDescription::BIGINT: {
+                            fromSequence->set_data_type(Ydb::Table::SequenceDescription::DATA_TYPE_BIGINT);
+                            break;
+                        }
+                        case NKikimrSchemeOp::TSequenceDescription::INTEGER: {
+                            fromSequence->set_data_type(Ydb::Table::SequenceDescription::DATA_TYPE_INTEGER);
+                            break;
+                        }
+                        case NKikimrSchemeOp::TSequenceDescription::SMALLINT: {
+                            fromSequence->set_data_type(Ydb::Table::SequenceDescription::DATA_TYPE_SMALLINT);
+                            break;
+                        }
+                        default: break;
+                    }
+                }
                 break;
             }
             case Ydb::Table::ColumnMeta::kFromLiteral: {

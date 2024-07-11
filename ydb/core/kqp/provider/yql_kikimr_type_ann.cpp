@@ -1564,16 +1564,16 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             return TStatus::Error;
         }
 
-        TString valueType = TString(node.ValueType());
-        if (valueType != "int8") {
-            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                << "Unsupported value type: " << valueType));
-            return TStatus::Error;
-        }
-
         if (TString(node.Temporary()) == "true") {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
                 << "Temporary sequences is currently not supported"));
+            return TStatus::Error;
+        }
+
+        TString valueType = TString(node.ValueType());
+        if (valueType != "int8" && valueType != "int4" && valueType != "int2") {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                << "Unsupported value type for sequence: " << valueType));
             return TStatus::Error;
         }
 
@@ -1586,6 +1586,13 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             auto name = setting.Name().Value();
             ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                 TStringBuilder() << "Unknown drop sequence setting: " << name));
+            return TStatus::Error;
+        }
+
+        TString valueType = TString(node.ValueType());
+        if (valueType != "Null" && valueType != "int8" && valueType != "int4" && valueType != "int2") {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                << "Unsupported value type for sequence: " << valueType));
             return TStatus::Error;
         }
 

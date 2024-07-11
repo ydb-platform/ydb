@@ -24,9 +24,9 @@ class TestTpcds1(TpcdsSuiteBase):
 
 class TestTpcds10(TpcdsSuiteBase):
     size: int = 10
-    timeout = 300.
+    timeout = max(TpcdsSuiteBase.timeout, 300.)
 
 
 class TestTpcds100(TpcdsSuiteBase):
     size: int = 100
-    timeout = 900.
+    timeout = max(TpcdsSuiteBase.timeout, 900.)

@@ -71,6 +71,57 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
         env.TestWaitNotification(runtime, dropTxIds);              
     } 
 
+    Y_UNIT_TEST(CreateTableCoveredEmbedding) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "vectors"
+              Columns { Name: "id" Type: "Uint64" }
+              Columns { Name: "embedding" Type: "String" }
+              Columns { Name: "another" Type: "String" }
+              KeyColumnNames: ["id"]
+            }
+            IndexDescription {
+              Name: "idx_vector"
+              KeyColumnNames: ["embedding"]
+              DataColumnNames: ["embedding"]
+              Type: EIndexTypeGlobalVectorKmeansTree
+              VectorIndexKmeansTreeDescription {
+                Settings : {
+                  distance: DISTANCE_COSINE,
+                  vector_type: VECTOR_TYPE_FLOAT,
+                  vector_dimension: 1024
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector"),
+            { NLs::PathExist,
+              NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree),
+              NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+              NLs::IndexKeys({"embedding"}),
+              NLs::IndexDataColumns({"embedding"}),
+              NLs::VectorIndexDescription(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
+                                          Ydb::Table::VectorIndexSettings::SIMILARITY_UNSPECIFIED,
+                                          Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
+                                          1024
+                                          ),
+            });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplLevelTable"),
+            { NLs::PathExist,
+              NLs::CheckColumns(LevelTable, {LevelTable_ParentIdColumn, LevelTable_IdColumn, LevelTable_EmbeddingColumn}, {}, {LevelTable_ParentIdColumn, LevelTable_IdColumn}, true) });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplPostingTable"),
+            { NLs::PathExist,
+              NLs::CheckColumns(PostingTable, {PostingTable_ParentIdColumn, "id", "embedding"}, {}, {PostingTable_ParentIdColumn, "id"}, true) });
+    }
+
     Y_UNIT_TEST(CreateTableMultiColumn) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

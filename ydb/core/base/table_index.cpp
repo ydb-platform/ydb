@@ -48,6 +48,8 @@ TTableColumns CalcTableImplDescription(const NKikimrSchemeOp::EIndexType indexTy
 }
 
 bool IsCompatibleIndex(const NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index, TString& explain) {
+    const bool isVectorIndex = indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
+
     {
         auto brokenAt = IsUniq(table.Keys);
         if (brokenAt != table.Keys.end()) {
@@ -75,7 +77,7 @@ bool IsCompatibleIndex(const NKikimrSchemeOp::EIndexType indexType, const TTable
         }
     }
 
-    if (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+    if (isVectorIndex) {
         if (index.KeyColumns.size() != 1) {
             explain = "Only single key column is supported for vector index";
             return false;
@@ -123,7 +125,7 @@ bool IsCompatibleIndex(const NKikimrSchemeOp::EIndexType indexType, const TTable
     }
 
     for (const auto& dataName: index.DataColumns) {
-        if (indexKeys.contains(dataName)) {
+        if (indexKeys.contains(dataName) && !isVectorIndex) {
             explain = TStringBuilder()
                     << "The same column can't be used as key column and data column for one index";
             return false;

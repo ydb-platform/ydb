@@ -2,6 +2,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/security/ticket_parser_log.h>
+#include <ydb/core/util/address_classifier.h>
 #include <queue>
 #include "ldap_auth_provider.h"
 #include "ldap_utils.h"
@@ -392,35 +393,25 @@ private:
         return {TEvLdapAuthProvider::EStatus::SUCCESS, {}};
     }
 
-    TString GetUris(ui32 port) const {
+    TString GetUris(ui32 configuredPort) const {
         TStringBuilder uris;
         if (Settings.HostsSize() > 0) {
             for (const auto& host : Settings.GetHosts()) {
-                uris << CreateUri(host, port) << " ";
+                uris << CreateUri(host, configuredPort) << " ";
             }
             uris.remove(uris.size() - 1);
         } else {
-            uris << CreateUri(Settings.GetHost(), port);
+            uris << CreateUri(Settings.GetHost(), configuredPort);
         }
         return uris;
     }
 
-    TString CreateUri(const TString& endpoint, ui32 port) const {
-        TStringBuilder uri;
-        uri << Settings.GetScheme() << "://" << endpoint;
-        if (!HasEndpointPort(endpoint)) {
-            uri << ':' << port;
-        }
-        return uri;
-    }
-
-    static bool HasEndpointPort(const TString& endpoint) {
-        size_t colonPos = endpoint.rfind(':');
-        if (colonPos == TString::npos) {
-            return false;
-        }
-        ++colonPos;
-        return (endpoint.size() - colonPos) > 0;
+    TString CreateUri(const TString& address, ui32 configuredPort) const {
+        TString hostname;
+        ui32 port = 0;
+        NKikimr::NAddressClassifier::ParseAddress(address, hostname, port);
+        port = (port != 0) ? port : configuredPort;
+        return TStringBuilder() << Settings.GetScheme() << "://" << hostname << ':' << port;
     }
 
 private:

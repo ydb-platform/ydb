@@ -45,6 +45,9 @@ static void CreateSampleTable(TSession session) {
     UNIT_ASSERT(session.ExecuteSchemeQuery(GetStatic("schema/tpch.sql")).GetValueSync().IsSuccess());
 
     UNIT_ASSERT(session.ExecuteSchemeQuery(GetStatic("schema/tpcds.sql")).GetValueSync().IsSuccess());
+
+    UNIT_ASSERT(session.ExecuteSchemeQuery(GetStatic("schema/tpcc.sql")).GetValueSync().IsSuccess());
+
 }
 
 static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false, TString stats = ""){
@@ -324,6 +327,12 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             "queries/tpcds78.sql", "stats/tpcds1000s.json", "join_order/tpcds78_1000s.json", StreamLookupJoin
         );
     }
+
+    Y_UNIT_TEST(TPCC) {
+        JoinOrderTestWithOverridenStats(
+            "queries/tpcc.sql", "stats/tpcc.json", "join_order/tpcc.json", false);
+    }
+
 }
 }
 }

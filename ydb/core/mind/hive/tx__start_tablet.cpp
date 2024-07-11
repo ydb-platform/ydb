@@ -27,6 +27,7 @@ public:
         BLOG_D("THive::TTxStartTablet::Execute Tablet " << TabletId);
         TTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
+            tablet->BootTime = TActivationContext::Now();
             // finish fast-move operation
             if (tablet->LastNodeId != 0 && tablet->LastNodeId != Local.NodeId()) {
                 TNodeInfo* lastNode = Self->FindNode(tablet->LastNodeId);

@@ -1,0 +1,191 @@
+syntax = "proto3";
+
+package nebius;
+
+import "google/protobuf/descriptor.proto";
+
+// DO NOT REMOVE! THESE OPTIONS ARE NEEDED FOR Bazel BUILD TO CORRESPOND TO buf generate:
+option java_multiple_files = true;
+option java_outer_classname = "AnnotationsProto";
+option java_package = "ai.nebius";
+// END
+
+enum Visibility {
+  // Default visibility depends on the item type annotated with this option.
+  VISIBILITY_UNSPECIFIED = 0;
+
+  // The item is not exposed to the public users.
+  PRIVATE = 1;
+
+  // The item is exposed to the public users.
+  PUBLIC = 2;
+}
+
+extend google.protobuf.ServiceOptions {
+  // By default, all services are PRIVATE, i.e. not available to the public users.
+  // Use `option (service_visibility) = PUBLIC;` if you need to expose the service
+  // to the public users via public API gateway. All methods will be exposed as well.
+  // It can be changed with the method_visibility option.
+  Visibility service_visibility = 4207;
+}
+
+
+// TerraformGeneration lists all the options for generating Terraform code from
+// the service.
+enum TerraformGeneration {
+
+  // Default — use default behavior.
+  // * For private terraform provider TF_DEFAULT = TF_DISABLE
+  // * For public terraform provider TF_DEFAULT = Private TerraformGeneration
+  TF_DEFAULT = 0;
+
+  // Don't generate.
+  TF_DISABLE = 1;
+
+  // Generate only DataSource. Requires to adhere to API Guidelines in structure
+  // and implement Get method as per specification. Otherwise build will fail.
+  // If the module implements full resource specification, it won't generate
+  // full resource.
+  TF_DATASOURCE = 2;
+
+  // Generate both DataSource and Resource. Requires to adhere to API Guidelines
+  // in structure and implement Get, Create, Update and Delete methods as per
+  // specification. Otherwise build will fail.
+  TF_FULL = 3;
+
+  // Generate both DataSource and Resource, but mark all the resource as
+  // recreate on change. Requires to adhere to API Guidelines in structure and
+  // implement Get, Create, and Delete methods as per specification.
+  // Otherwise build will fail.
+  // The Update method is not required for this service and will not be used
+  // even if it exists.
+  TF_IMMUTABLE = 4;
+}
+
+extend google.protobuf.ServiceOptions {
+  // service_terraform specifies whether to generate Terraform
+  // resources or data sources from this service specification.
+  // By default it is set to `TF_DISABLE` and won't generate anything.
+  // If you want your service to be generated, add this annotation and specify
+  // how you want it to be generated — data source only, both with resource or
+  // both with resource that will be recreated on any change.
+  TerraformGeneration service_terraform = 4208;
+
+  // service_terraform_public specifies whether to generate public Terraform
+  // resources or data sources from this service specification.
+  // By default it is the same as `service_terraform`.
+  // If you want your service to be generated differently in public scope
+  // (eg. only data source in public, but full in private), you can set this
+  // option.
+  // Obviously, the resource has to be public itself with all the necessary
+  // methods not marked private.
+  TerraformGeneration service_terraform_public = 4209;
+}
+
+extend google.protobuf.MethodOptions {
+  // All methods are PRIVATE inside a private service. You can not change it.
+  // By default, a method is PUBLIC inside a public service.
+  // Use `{ option (method_visibility) = PRIVATE; }` to change it.
+  Visibility method_visibility = 1244;
+}
+
+extend google.protobuf.MessageOptions {
+  // Tree shaking is used to determine default visibility of a message.
+  // It is PUBLIC if a public item depends on it, for example is returned by a public method.
+  // Use `option (message_visibility) = PUBLIC;` if you want to override the result of tree shaking.
+  // NOTE: tree shaking takes into account only .proto files inside the current directory.
+  Visibility message_visibility = 5944;
+}
+
+extend google.protobuf.FieldOptions {
+  // All fields are PUBLIC by default.
+  // Use `[(field_visibility) = PRIVATE]` to change it.
+  Visibility field_visibility = 6267;
+}
+
+extend google.protobuf.EnumOptions {
+  // Tree shaking is used to determine default visibility of an enum.
+  // It is PUBLIC if a public item depends on it, for example the enum is used in a public message.
+  // Use `option (enum_visibility) = PUBLIC;` if you want to override the result of tree shaking.
+  // NOTE: tree shaking takes into account only .proto files inside the current directory.
+  Visibility enum_visibility = 8769;
+}
+
+extend google.protobuf.MessageOptions {
+  repeated ResourceBehavior resource_behavior = 6231;
+}
+
+enum ResourceBehavior {
+  // The behavior of the resource is unspecified.
+  // Avoid using this default value.
+  RESOURCE_BEHAVIOR_UNSPECIFIED = 0;
+
+  // Indicates that the resource can be moved to another parent, typically an
+  // IAM container, though not necessarily limited to this.
+  // This behavior suggests that the `metadata.parent_id` attribute could be modified.
+  MOVABLE = 1;
+
+  // Indicates that the resource name can be unspecified or does not follow
+  // uniqueness requirement within parent_id and resource type.
+  UNNAMED = 2;
+}
+
+extend google.protobuf.ServiceOptions {
+  // by default API tools assume that every service is configured with address
+  //    in a format: <first-part-after-nebius-in-grpc-path>.<domain>
+  //    example: nebius.dns.v1alpha1.ZoneService => dns.<domain>
+  // this option is used to override the default behavior for private api domains
+  //    example for iam access: option (api_service_name) = "access-service.iam";
+  //    that leads to access-service.iam.<domain>
+  string api_service_name = 8296;
+}
+
+extend google.protobuf.FieldOptions {
+  // Sensitive field is masked/removed from the message while logging, storing in DB and
+  // on all others peristent layers (except specialized storage like PDS).
+  bool sensitive = 8756;
+}
+
+extend google.protobuf.FieldOptions {
+  // Field behavior describes how the field behaves on input or output.
+  repeated FieldBehavior field_behavior = 4169;
+}
+
+extend google.protobuf.OneofOptions {
+  // Field behavior describes how oneof behaves on input or output.
+  repeated FieldBehavior oneof_behavior = 3930;
+}
+
+enum FieldBehavior {
+  FIELD_BEHAVIOR_UNSPECIFIED = 0;
+
+  // This indicates that the field can't be changed during a resource update.
+  // Changing the field value will cause an `INVALID_ARGUMENT` error.
+  // Resource recreate requires a change of the field value.
+  IMMUTABLE = 2;
+
+  // Indicates field is a resource ID, so it MUST be present on a resource
+  // update, but MUST NOT be set on create.
+  // Otherwise, RPC will fail with the `INVALID_ARGUMENT` error
+  IDENTIFIER = 3;
+
+  // Indicates field is not present in output.
+  INPUT_ONLY = 4;
+
+  // Indicates field can't be set on create or changed on update.
+  // Otherwise, RPC will fail with the `INVALID_ARGUMENT` error
+  OUTPUT_ONLY = 5;
+
+  // Indicates that an empty message and a null have different semantics.
+  // Usually, that field is a feature spec message: its empty message enables
+  // that feature, and null disables it. Such a message is different from `bool`
+  // because it already has some feature parameters, or they can be added later
+  // in a backward-compatible way.
+  MEANINGFUL_EMPTY_VALUE = 6;
+
+  // Indicates that an empty (default) value will be filled by the server.
+  // Usually, that field is a feature spec value, which by default is computed.
+  // Values marked with this annotation won't raise error if they are not set
+  // and the returned value is not equal to protobuf default.
+  NON_EMPTY_DEFAULT = 7;
+}

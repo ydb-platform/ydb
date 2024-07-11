@@ -53,7 +53,7 @@ class Database:
             case EDataSourceKind.YDB:
                 raise Exception("Fix me first in YQ-3315")
             case EDataSourceKind.MYSQL:
-                return 'database does not exist'
+                return 'Unknown database'
             case _:
                 raise Exception(f'invalid data source: {self.kind}')
 

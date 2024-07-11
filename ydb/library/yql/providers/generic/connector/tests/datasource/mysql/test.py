@@ -96,7 +96,7 @@ def test_select_missing_database(
     test_case: select_missing_database.TestCase,
 ):
     runner = configure_runner(runner_type=runner_type, settings=settings)
-    scenario.select_missing_table(
+    scenario.select_missing_database(
         settings=settings,
         runner=runner,
         test_case=test_case,

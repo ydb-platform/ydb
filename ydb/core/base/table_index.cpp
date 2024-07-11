@@ -107,7 +107,8 @@ bool IsCompatibleIndex(const NKikimrSchemeOp::EIndexType indexType, const TTable
     }
 
     for (const auto& indexKeyName: index.KeyColumns) {
-        indexKeys.insert(indexKeyName);
+        if (!isVectorIndex)
+            indexKeys.insert(indexKeyName);
         if (!table.Columns.contains(indexKeyName)) {
             explain = TStringBuilder()
                     << "all index keys should be in table columns"
@@ -116,16 +117,14 @@ bool IsCompatibleIndex(const NKikimrSchemeOp::EIndexType indexType, const TTable
         }
     }
 
-    if (indexType != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-        if (index.KeyColumns == table.Keys) {
-            explain = TStringBuilder()
-                      << "table and index keys are the same";
-            return false;
-        }
+    if (index.KeyColumns == table.Keys && !isVectorIndex) {
+        explain = TStringBuilder()
+                    << "table and index keys are the same";
+        return false;
     }
 
     for (const auto& dataName: index.DataColumns) {
-        if (indexKeys.contains(dataName) && !isVectorIndex) {
+        if (indexKeys.contains(dataName)) {
             explain = TStringBuilder()
                     << "The same column can't be used as key column and data column for one index";
             return false;

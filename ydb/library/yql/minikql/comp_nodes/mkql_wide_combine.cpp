@@ -431,6 +431,11 @@ public:
     }
 
     ETasteResult TasteIt() {
+        if (HasDataForProcessing) {
+            // Tongue not used here.
+            Throat = BufferForKeyAndState.data();
+            return ETasteResult::DataExtractionRequired;
+        }
         if (GetMode() == EOperatingMode::InMemory) {
             bool isNew = InMemoryProcessingState.TasteIt();
             Throat = InMemoryProcessingState.Throat;

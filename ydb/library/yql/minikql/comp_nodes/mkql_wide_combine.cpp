@@ -134,9 +134,7 @@ struct TCombinerNodes {
 
     void ExtractValues(TComputationContext& ctx, NUdf::TUnboxedValue** values, NUdf::TUnboxedValue* keys) const {
         for (size_t i = 0U, j = 0U; i < ItemNodes.size(); ++i) {
-            if (values[i]) {
-                keys[i] = *(values[j++]);
-            }
+            keys[i] = *(values[j++]);
         }
     }
 
@@ -454,7 +452,7 @@ public:
         
         // Corresponding bucket is spilled, we don't need a key anymore, full input will be spilled
         BufferForKeyAndState.resize(0);
-        // Prepare space for raw data
+        // Prepare space for raw data 
         BufferForUsedInputItems.resize(ItemNodesSize);
         Throat = BufferForUsedInputItems.data();
         

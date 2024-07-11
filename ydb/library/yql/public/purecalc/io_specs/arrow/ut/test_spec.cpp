@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(TestSimplePullListArrowIO) {
         {
             auto program = factory->MakePullListProgram(
                 TArrowInputSpec({schema}),
-                TArrowOutputSpec(schema),
+                TArrowOutputSpec({NYT::TNode::CreateEntity()}),
                 "SELECT * FROM Input",
                 ETranslationMode::SQL
             );
@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(TestSimplePullListArrowIO) {
         {
             auto program = factory->MakePullListProgram(
                 TArrowInputSpec({schema, schema}),
-                TArrowOutputSpec(schema),
+                TArrowOutputSpec({NYT::TNode::CreateEntity()}),
                 R"(
                     SELECT * FROM Input0
                     UNION ALL
@@ -206,7 +206,7 @@ Y_UNIT_TEST_SUITE(TestSimplePullStreamArrowIO) {
         {
             auto program = factory->MakePullStreamProgram(
                 TArrowInputSpec({schema}),
-                TArrowOutputSpec(schema),
+                TArrowOutputSpec({NYT::TNode::CreateEntity()}),
                 "SELECT * FROM Input",
                 ETranslationMode::SQL
             );
@@ -240,7 +240,7 @@ Y_UNIT_TEST_SUITE(TestPushStreamArrowIO) {
         {
             auto program = factory->MakePushStreamProgram(
                 TArrowInputSpec({schema}),
-                TArrowOutputSpec(schema),
+                TArrowOutputSpec({NYT::TNode::CreateEntity()}),
                 "SELECT * FROM Input",
                 ETranslationMode::SQL
             );

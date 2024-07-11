@@ -1096,11 +1096,14 @@ public:
     void Add(ui32 argOid)
     {
         PgArgNodes.emplace_back();
-        auto& v = PgArgNodes.back();
-        Zero(v);
-        v.xpr.type = T_Var;
-        v.vartype = argOid;
-        v.vartypmod = -1;
+        auto& p = PgArgNodes.back();
+        Zero(p);
+        p.xpr.type = T_Param;
+        p.paramkind = PARAM_EXTERN;
+        p.paramtype = argOid;
+        p.paramcollid = DEFAULT_COLLATION_OID;
+        p.paramtypmod = -1;
+        p.paramid = PgArgNodes.size();
     }
 
     Node* Build(const NPg::TProcDesc& procDesc) {
@@ -1123,7 +1126,7 @@ public:
     }
 
 private:
-    TVector<Var> PgArgNodes;
+    TVector<Param> PgArgNodes;
     std::unique_ptr<List, decltype(&free)> PgFuncArgsList;
     FuncExpr PgFuncNode;
 };

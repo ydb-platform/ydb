@@ -1,4 +1,5 @@
 #include "const.h"
+#include "datashard_integrity_trails.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
@@ -53,6 +54,13 @@ EExecutionStatus TStoreDataTxUnit::Execute(TOperation::TPtr op,
         Pipeline.RegisterDistributedWrites(op, txc.DB);
     }
     Pipeline.ProposeTx(op, tx->GetTxBody(), txc, ctx);
+    
+    if (!op->IsReadOnly() && op->IsKqpDataTransaction()) {
+        if (op->HasKeysInfo()) {
+            const NMiniKQL::IEngineFlat::TValidationInfo& keys = op->GetKeysInfo();
+            LogIntegrityTrails(ctx, keys);
+        }
+    }
 
     if (!op->HasVolatilePrepareFlag()) {
         tx->ClearTxBody();

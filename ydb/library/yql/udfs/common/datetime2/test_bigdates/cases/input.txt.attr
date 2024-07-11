@@ -4,10 +4,10 @@
             "StructType";
             [
                 [
-                    "dt";
+                    "d";
                     [
                         "DataType";
-                        "String"
+                        "Date32"
                     ]
                 ]
             ]

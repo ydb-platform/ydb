@@ -136,16 +136,15 @@ def build_tree(items):
             # signed 'char* NKikimr::NCHash::TListPool<>::GetList<>(unsigned long)'
             path[0] = path[0].rsplit(' ', 1)[1]
 
-        path = ["root"] + "something about threshhold" + path
+        root_name = "root (all function less than {} KiB are ommited)".format(THRESHHOLD_TO_SHOW_ON_TREE_VIEW // 1024)
+        path = [root_name] + path
 
-        print(path)
         add_to_tree(tree, path, size, count)
     children_to_list(tree)
     propogate_size(tree)
     enrich_names_with_sec(tree)
     print("Total size =", total_size)
     return tree
-
 
 
 def parse_args():

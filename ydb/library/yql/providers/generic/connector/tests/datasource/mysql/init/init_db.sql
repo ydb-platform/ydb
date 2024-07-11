@@ -97,15 +97,29 @@ INSERT INTO json VALUES
     (1, '{ "TODO" : "unicode" }'),
     (2, NULL);
 
+-- DATE 
+-- Value Range: 1000-01-01 to 9999-12-31
+    
+-- DATETIME values do not depend on the time zone. 
+-- They store the exact date and time you specify, regardless of what the time zone 
+-- is for your MySQL server or session.
+-- Value Range: 1000-01-01 00:00:00 to 9999-12-31 23:59:59
+
+-- TIMESTAMP values are timezone-aware. 
+-- They are stored in UTC (Coordinated Universal Time) and are 
+-- converted to the session time zone when retrieved.
+-- Value Range: 1970-01-01 00:00:01 UTC to 2038-01-19 03:14:07 UTC
+
 DROP TABLE IF EXISTS datetimes;
 CREATE TABLE datetimes (
-    id int,
+    col_00_id int NOT NULL,
     col_01_date DATE,
     col_02_datetime DATETIME(6),
     col_03_timestamp TIMESTAMP(6),
-    PRIMARY KEY (id)
+    PRIMARY KEY (col_00_id)
 );
 
 INSERT INTO datetimes VALUES (1, '1950-05-27', '1950-05-27 01:02:03.111111', NULL),
-                             (2, '1988-11-20', '1988-11-20 12:55:28.123000', '1988-11-20 12:55:28.123000'),
-                             (3, '2023-03-21', '2023-03-21 11:21:31', '2023-03-21 11:21:31');
+                                 (2, '1988-11-20', '1988-11-20 12:55:28.123000', '1988-11-20 12:55:28.123000'),
+                                 (3, '2038-01-19', '2038-01-19 03:14:07.000000', '2038-01-19 03:14:07.000009'),
+                                 (4, '9999-12-31', '9999-12-31 23:59:59.999999', NULL);

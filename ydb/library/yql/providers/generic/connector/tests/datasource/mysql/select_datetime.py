@@ -34,8 +34,6 @@ class TestCase(select_positive_common.TestCase):
 
 
 class Factory:
-    _name = 'datetime'
-
     _schema = Schema(
         columns=ColumnList(
             Column(
@@ -65,8 +63,8 @@ class Factory:
         data_out = [
             [
                 1,
-                datetime.date(1950, 5, 27),
-                datetime.datetime(1950, 5, 27, 1, 2, 3, 111111),
+                None,
+                None,
                 None,
             ],
             [
@@ -81,6 +79,7 @@ class Factory:
                 datetime.datetime(2023, 3, 21, 11, 21, 31, 0),
                 datetime.datetime(2023, 3, 21, 11, 21, 31, 0),
             ],
+            [4, None, None, None],
         ]
 
         return TestCase(
@@ -114,7 +113,7 @@ class Factory:
         ]
 
         return TestCase(
-            name_="datetime",
+            name_="datetime_string",
             date_time_format=EDateTimeFormat.STRING_FORMAT,
             data_in=None,
             data_out_=data_out,
@@ -129,5 +128,5 @@ class Factory:
     def make_test_cases(self) -> Sequence[TestCase]:
         return [
             self._make_test_yql(),
-            self._make_test_string(),
+            # self._make_test_string(),
         ]

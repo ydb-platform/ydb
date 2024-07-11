@@ -750,6 +750,39 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
             NIceDb::TUpdate<Schema::ChangeRecordDetails::Kind>(record.GetKind()),
             NIceDb::TUpdate<Schema::ChangeRecordDetails::Body>(record.GetBody()),
             NIceDb::TUpdate<Schema::ChangeRecordDetails::Source>(record.GetSource()));
+
+        auto res = ChangesQueue.emplace(record.GetOrder(), record);
+        Y_VERIFY_S(res.second, "Duplicate change record: " << record.GetOrder());
+
+        if (res.first->second.SchemaVersion) {
+            res.first->second.SchemaSnapshotAcquired = SchemaSnapshotManager.AcquireReference(
+                TSchemaSnapshotKey(res.first->second.TableId, res.first->second.SchemaVersion));
+        }
+
+        if (CommittingChangeRecords.empty()) {
+            db.GetDatabase().OnCommit([this] {
+                CommittingChangeRecords.clear();
+            });
+            db.GetDatabase().OnRollback([this] {
+                for (const auto order : CommittingChangeRecords) {
+                    auto cIt = ChangesQueue.find(order);
+                    Y_VERIFY_S(cIt != ChangesQueue.end(), "Cannot find change record: " << order);
+
+                    if (cIt->second.SchemaSnapshotAcquired) {
+                        const auto snapshotKey = TSchemaSnapshotKey(cIt->second.TableId, cIt->second.SchemaVersion);
+                        if (const auto last = SchemaSnapshotManager.ReleaseReference(snapshotKey)) {
+                            ScheduleRemoveSchemaSnapshot(snapshotKey);
+                        }
+                    }
+
+                    ChangesQueue.erase(cIt);
+                }
+
+                CommittingChangeRecords.clear();
+            });
+        }
+
+        CommittingChangeRecords.push_back(record.GetOrder());
     } else {
         auto& state = LockChangeRecords[lockId];
         Y_ABORT_UNLESS(state.Changes.empty() || state.Changes.back().LockOffset < record.GetLockOffset(),
@@ -829,6 +862,14 @@ void TDataShard::CommitLockChangeRecords(NIceDb::TNiceDb& db, ui64 lockId, ui64 
         committed.Step = rowVersion.Step;
         committed.TxId = rowVersion.TxId;
         collected.push_back(committed);
+
+        auto res = ChangesQueue.emplace(committed.Order, committed);
+        Y_VERIFY_S(res.second, "Duplicate change record: " << committed.Order);
+
+        if (res.first->second.SchemaVersion) {
+            res.first->second.SchemaSnapshotAcquired = SchemaSnapshotManager.AcquireReference(
+                TSchemaSnapshotKey(res.first->second.TableId, res.first->second.SchemaVersion));
+        }
     }
 
     Y_VERIFY_S(!CommittedLockChangeRecords.contains(lockId), "Cannot commit lock " << lockId << " more than once");
@@ -855,7 +896,26 @@ void TDataShard::CommitLockChangeRecords(NIceDb::TNiceDb& db, ui64 lockId, ui64 
         LockChangeRecords.erase(it);
     });
     db.GetDatabase().OnRollback([this, lockId]() {
-        CommittedLockChangeRecords.erase(lockId);
+        auto it = CommittedLockChangeRecords.find(lockId);
+        Y_VERIFY_S(it != CommittedLockChangeRecords.end(), "Unexpected failure to find lockId# " << lockId);
+
+        for (size_t i = 0; i < it->second.Count; ++i) {
+            const ui64 order = it->second.Order + i;
+
+            auto cIt = ChangesQueue.find(order);
+            Y_VERIFY_S(cIt != ChangesQueue.end(), "Cannot find change record: " << order);
+
+            if (cIt->second.SchemaSnapshotAcquired) {
+                const auto snapshotKey = TSchemaSnapshotKey(cIt->second.TableId, cIt->second.SchemaVersion);
+                if (const auto last = SchemaSnapshotManager.ReleaseReference(snapshotKey)) {
+                    ScheduleRemoveSchemaSnapshot(snapshotKey);
+                }
+            }
+
+            ChangesQueue.erase(cIt);
+        }
+
+        CommittedLockChangeRecords.erase(it);
     });
 }
 
@@ -889,7 +949,6 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
 
     auto it = ChangesQueue.find(order);
     if (it == ChangesQueue.end()) {
-        Y_VERIFY_DEBUG_S(false, "Trying to remove non-enqueud record: " << order);
         return;
     }
 
@@ -917,23 +976,9 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
     ChangesQueueBytes -= record.BodySize;
 
     if (record.SchemaSnapshotAcquired) {
-        Y_ABORT_UNLESS(record.TableId);
-        auto tableIt = TableInfos.find(record.TableId.LocalPathId);
-
-        if (tableIt != TableInfos.end()) {
-            const auto snapshotKey = TSchemaSnapshotKey(record.TableId, record.SchemaVersion);
-            const bool last = SchemaSnapshotManager.ReleaseReference(snapshotKey);
-
-            if (last) {
-                const auto* snapshot = SchemaSnapshotManager.FindSnapshot(snapshotKey);
-                Y_ABORT_UNLESS(snapshot);
-
-                if (snapshot->Schema->GetTableSchemaVersion() < tableIt->second->GetTableSchemaVersion()) {
-                    SchemaSnapshotManager.RemoveShapshot(db, snapshotKey);
-                }
-            }
-        } else {
-            Y_DEBUG_ABORT_UNLESS(State == TShardState::PreOffline);
+        const auto snapshotKey = TSchemaSnapshotKey(record.TableId, record.SchemaVersion);
+        if (const bool last = SchemaSnapshotManager.ReleaseReference(snapshotKey)) {
+            ScheduleRemoveSchemaSnapshot(snapshotKey);
         }
     }
 
@@ -954,7 +999,7 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
     CheckChangesQueueNoOverflow();
 }
 
-void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records, ui64 cookie) {
+void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records, ui64 cookie, bool afterMove) {
     if (!records) {
         return;
     }
@@ -974,27 +1019,24 @@ void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange
     const auto now = AppData()->TimeProvider->Now();
     TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> forward(Reserve(records.size()));
     for (const auto& record : records) {
+        auto it = ChangesQueue.find(record.Order);
+        if (it == ChangesQueue.end()) {
+            Y_ABORT_UNLESS(afterMove);
+            continue;
+        }
+
         forward.emplace_back(record.Order, record.PathId, record.BodySize);
 
-        auto res = ChangesQueue.emplace(
-            std::piecewise_construct,
-            std::forward_as_tuple(record.Order),
-            std::forward_as_tuple(record, now, cookie)
-        );
-        if (res.second) {
-            ChangesList.PushBack(&res.first->second);
+        it->second.EnqueuedAt = now;
+        it->second.ReservationCookie = cookie;
+        ChangesList.PushBack(&it->second);
 
-            Y_ABORT_UNLESS(ChangesQueueBytes <= (Max<ui64>() - record.BodySize));
-            ChangesQueueBytes += record.BodySize;
-
-            if (record.SchemaVersion) {
-                res.first->second.SchemaSnapshotAcquired = SchemaSnapshotManager.AcquireReference(
-                    TSchemaSnapshotKey(record.TableId, record.SchemaVersion));
-            }
-        }
+        Y_ABORT_UNLESS(ChangesQueueBytes <= (Max<ui64>() - record.BodySize));
+        ChangesQueueBytes += record.BodySize;
     }
- 
+
     if (auto it = ChangeQueueReservations.find(cookie); it != ChangeQueueReservations.end()) {
+        Y_ABORT_UNLESS(!afterMove);
         ChangeQueueReservedCapacity -= it->second;
         ChangeQueueReservedCapacity += records.size();
     }
@@ -1160,6 +1202,14 @@ bool TDataShard::LoadChangeRecords(NIceDb::TNiceDb& db, TVector<IDataShardChange
             .SchemaVersion = schemaVersion,
         });
 
+        auto res = ChangesQueue.emplace(records.back().Order, records.back());
+        Y_VERIFY_S(res.second, "Duplicate change record: " << records.back().Order);
+
+        if (res.first->second.SchemaVersion) {
+            res.first->second.SchemaSnapshotAcquired = SchemaSnapshotManager.AcquireReference(
+                TSchemaSnapshotKey(res.first->second.TableId, res.first->second.SchemaVersion));
+        }
+
         if (!rowset.Next()) {
             return false;
         }
@@ -1258,6 +1308,14 @@ bool TDataShard::LoadChangeRecordCommits(NIceDb::TNiceDb& db, TVector<IDataShard
             });
             entry.Count++;
             needSort = true;
+
+            auto res = ChangesQueue.emplace(records.back().Order, records.back());
+            Y_VERIFY_S(res.second, "Duplicate change record: " << records.back().Order);
+
+            if (res.first->second.SchemaVersion) {
+                res.first->second.SchemaSnapshotAcquired = SchemaSnapshotManager.AcquireReference(
+                    TSchemaSnapshotKey(res.first->second.TableId, res.first->second.SchemaVersion));
+            }
         }
 
         LockChangeRecords.erase(lockId);
@@ -1313,6 +1371,51 @@ void TDataShard::ScheduleRemoveAbandonedLockChanges() {
 
     if (wasEmpty && !PendingLockChangeRecordsToRemove.empty()) {
         Send(SelfId(), new TEvPrivate::TEvRemoveLockChangeRecords);
+    }
+}
+
+void TDataShard::ScheduleRemoveSchemaSnapshot(const TSchemaSnapshotKey& key) {
+    Y_ABORT_UNLESS(!SchemaSnapshotManager.HasReference(key));
+
+    const auto* snapshot = SchemaSnapshotManager.FindSnapshot(key);
+    Y_ABORT_UNLESS(snapshot);
+
+    auto it = TableInfos.find(key.PathId);
+    if (it == TableInfos.end()) {
+        Y_DEBUG_ABORT_UNLESS(State == TShardState::PreOffline);
+        return;
+    }
+
+    if (snapshot->Schema->GetTableSchemaVersion() < it->second->GetTableSchemaVersion()) {
+        bool wasEmpty = PendingSchemaSnapshotsToGc.empty();
+        PendingSchemaSnapshotsToGc.push_back(key);
+        if (wasEmpty) {
+            Send(SelfId(), new TEvPrivate::TEvRemoveSchemaSnapshots);
+        }
+    }
+}
+
+void TDataShard::ScheduleRemoveAbandonedSchemaSnapshots() {
+    bool wasEmpty = PendingSchemaSnapshotsToGc.empty();
+
+    for (const auto& [key, snapshot] : SchemaSnapshotManager.GetSnapshots()) {
+        auto it = TableInfos.find(key.PathId);
+        if (it == TableInfos.end()) {
+            Y_DEBUG_ABORT_UNLESS(State == TShardState::PreOffline);
+            break;
+        }
+        if (SchemaSnapshotManager.HasReference(key)) {
+            continue;
+        }
+        if (snapshot.Schema->GetTableSchemaVersion() >= it->second->GetTableSchemaVersion()) {
+            continue;
+        }
+
+        PendingSchemaSnapshotsToGc.push_back(key);
+    }
+
+    if (wasEmpty && !PendingSchemaSnapshotsToGc.empty()) {
+        Send(SelfId(), new TEvPrivate::TEvRemoveSchemaSnapshots);
     }
 }
 
@@ -1529,8 +1632,18 @@ void TDataShard::AddSchemaSnapshot(const TPathId& pathId, ui64 tableSchemaVersio
     Y_ABORT_UNLESS(TableInfos.contains(pathId.LocalPathId));
     auto tableInfo = TableInfos[pathId.LocalPathId];
 
-    const auto key = TSchemaSnapshotKey(pathId.OwnerId, pathId.LocalPathId, tableSchemaVersion);
+    const auto key = TSchemaSnapshotKey(pathId, tableSchemaVersion);
     SchemaSnapshotManager.AddSnapshot(txc.DB, key, TSchemaSnapshot(tableInfo, step, txId));
+
+    const auto& snapshots = SchemaSnapshotManager.GetSnapshots();
+    for (auto it = snapshots.lower_bound(TSchemaSnapshotKey(pathId, 1)); it != snapshots.end(); ++it) {
+        if (it->first == key) {
+            break;
+        }
+        if (!SchemaSnapshotManager.HasReference(it->first)) {
+            ScheduleRemoveSchemaSnapshot(it->first);
+        }
+    }
 }
 
 void TDataShard::PersistLastLoanTableTid(NIceDb::TNiceDb& db, ui32 localTid) {

@@ -874,10 +874,18 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     break;
                 }
 
+                const auto& headersProto = opentelemetry.GetHeaders();
+                TMap<TString, TString> headers;
+
+                for (const auto& header : headersProto) {
+                    headers.insert({header.first, header.second});
+                }
+
                 NWilson::TWilsonUploaderParams uploaderParams {
                     .CollectorUrl = opentelemetry.GetCollectorUrl(),
                     .ServiceName = opentelemetry.GetServiceName(),
                     .GrpcSigner = std::move(grpcSigner),
+                    .Headers = headers,
                 };
 
                 if (tracingConfig.HasUploader()) {
@@ -899,6 +907,13 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     GET_FIELD_FROM_CONFIG(MaxExportRequestsInflight)
 
 #undef GET_FIELD_FROM_CONFIG
+                }
+
+                if (const auto& mon = appData->Mon) {
+                    uploaderParams.RegisterMonPage = [mon](TActorSystem *actorSystem, const TActorId& actorId) {
+                        NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
+                        mon->RegisterActorPage(actorsMonPage, "wilson_uploader", "Wilson Trace Uploader", false, actorSystem, actorId);
+                    };
                 }
 
                 wilsonUploader.reset(std::move(uploaderParams).CreateUploader());

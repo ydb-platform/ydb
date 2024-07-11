@@ -69,7 +69,7 @@ def select_positive(
         test_name=test_name,
         client=client,
         database=test_case.database,
-        table_name=test_case.sql_table_name,
+        table_name=test_case.table_name,
         schema=test_case.schema,
         data_in=test_case.data_in,
     )
@@ -78,7 +78,7 @@ def select_positive(
     if test_case.select_where is not None:
         where_statement = "WHERE " + test_case.select_where.render(
             cluster_name=settings.clickhouse.cluster_name,
-            table_name=test_case.qualified_table_name,
+            table_name=test_case.table_name,
         )
 
     # NOTE: to assert equivalence we have to add explicit ORDER BY,
@@ -91,7 +91,7 @@ def select_positive(
     yql_script = f"""
         {test_case.pragmas_sql_string}
         SELECT {test_case.select_what.yql_select_names}
-        FROM {settings.clickhouse.cluster_name}.{test_case.qualified_table_name}
+        FROM {settings.clickhouse.cluster_name}.{test_case.table_name}
         {where_statement}
         {order_by_expression}
     """
@@ -120,7 +120,7 @@ def select_missing_database(
     # select table from the database that does not exist
     yql_script = f"""
         SELECT *
-        FROM {settings.clickhouse.cluster_name}.{test_case.qualified_table_name}
+        FROM {settings.clickhouse.cluster_name}.{test_case.table_name}
     """
     result = runner.run(
         test_name=test_name,
@@ -148,7 +148,7 @@ def select_missing_table(
 
     yql_script = f"""
         SELECT *
-        FROM {settings.clickhouse.cluster_name}.{test_case.qualified_table_name}
+        FROM {settings.clickhouse.cluster_name}.{test_case.table_name}
     """
     result = runner.run(
         test_name=test_name,

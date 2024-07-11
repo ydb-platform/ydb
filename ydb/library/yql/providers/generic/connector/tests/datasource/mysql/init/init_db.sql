@@ -1,4 +1,42 @@
-DROP TABLE IF EXISTS primitives;
+CREATE TABLE column_selection_A_b_C_d_E (COL1 INTEGER, col2 INTEGER);
+INSERT INTO column_selection_A_b_C_d_E (COL1, col2) VALUES
+    (1, 2),
+    (10, 20);
+
+CREATE TABLE column_selection_COL1 (COL1 INTEGER, col2 INTEGER);
+INSERT INTO column_selection_COL1 (COL1, col2) VALUES
+    (1, 2),
+    (10, 20);
+
+CREATE TABLE column_selection_col1 (COL1 INTEGER, col2 INTEGER);
+INSERT INTO column_selection_col1 (COL1, col2) VALUES
+    (1, 2),
+    (10, 20);
+
+CREATE TABLE column_selection_asterisk (COL1 INTEGER, col2 INTEGER);
+INSERT INTO column_selection_asterisk (COL1, col2) VALUES
+    (1, 2),
+    (10, 20);
+
+CREATE TABLE column_selection_col2_COL1 (COL1 INTEGER, col2 INTEGER);
+INSERT INTO column_selection_col2_COL1 (COL1, col2) VALUES
+    (1, 2),
+    (10, 20);
+
+CREATE TABLE column_selection_col2_col1 (COL1 INTEGER, col2 INTEGER);
+INSERT INTO column_selection_col2_col1 (COL1, col2) VALUES
+    (1, 2),
+    (10, 20);
+
+CREATE TABLE column_selection_col2 (COL1 INTEGER, col2 INTEGER);
+INSERT INTO column_selection_col2 (COL1, col2) VALUES
+    (1, 2),
+    (10, 20);
+
+CREATE TABLE column_selection_col3 (COL1 INTEGER, col2 INTEGER);
+INSERT INTO column_selection_col3 (COL1, col2) VALUES
+    (1, 2),
+    (10, 20);
 
 CREATE TABLE primitives (
     col_00_id INT NOT NULL, 
@@ -56,7 +94,6 @@ INSERT INTO primitives VALUES
        ;
 
 
-DROP TABLE IF EXISTS constant;
 CREATE TABLE constant (
     col_00_id INTEGER NOT NULL,
     PRIMARY KEY (col_00_id)
@@ -64,7 +101,7 @@ CREATE TABLE constant (
 
 INSERT INTO constant VALUES (0), (1), (2);
 
-DROP TABLE IF EXISTS count_rows;
+
 CREATE TABLE count_rows (
     col_00_id INTEGER NOT NULL,
     PRIMARY KEY (col_00_id)
@@ -72,7 +109,7 @@ CREATE TABLE count_rows (
 
 INSERT INTO count_rows VALUES (0), (1), (2);
 
-DROP TABLE IF EXISTS pushdown;
+
 CREATE TABLE pushdown (
     col_00_id INT NOT NULL,
     col_01_integer INT,
@@ -85,7 +122,7 @@ INSERT INTO pushdown VALUES
                      (3, 30, 'c'),
                      (4, NULL, NULL);
 
-DROP TABLE IF EXISTS json;
+
 CREATE TABLE json (
     col_00_id INT NOT NULL,
     col_01_json JSON,
@@ -110,7 +147,6 @@ INSERT INTO json VALUES
 -- converted to the session time zone when retrieved.
 -- Value Range: 1970-01-01 00:00:01 UTC to 2038-01-19 03:14:07 UTC
 
-DROP TABLE IF EXISTS datetimes;
 CREATE TABLE datetimes (
     col_00_id int NOT NULL,
     col_01_date DATE,

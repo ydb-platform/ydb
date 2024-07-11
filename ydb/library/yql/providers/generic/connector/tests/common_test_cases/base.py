@@ -49,7 +49,7 @@ class BaseTestCase:
                 return Database("local", self.data_source_kind)
 
     @functools.cached_property
-    def _table_name(self) -> str:
+    def table_name(self) -> str:
         '''
         For some database we cannot use test case name as table name because of special symbols,
         so we provide a random table name instead were necessary.
@@ -65,14 +65,6 @@ class BaseTestCase:
                 return self.name
             case _:
                 raise Exception(f'invalid data source: {self.data_source_kind}')
-
-    @property
-    def sql_table_name(self) -> str:
-        return self._table_name
-
-    @property
-    def qualified_table_name(self) -> str:
-        return self._table_name
 
     @property
     def pragmas_sql_string(self) -> str:

@@ -643,11 +643,7 @@ private:
             }
             case EOperatingMode::Spilling: {
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
-                const auto errorCallback = [&](const TString& error) {
-                    YQL_LOG(ERROR) << error;
-                    MKQL_ENSURE(false, "Internal logic error");
-                };
-                auto spiller = ctx.SpillerFactory->CreateSpiller(errorCallback);
+                auto spiller = ctx.SpillerFactory->CreateSpiller();
                 RightPacker->TablePtr->InitializeBucketSpillers(spiller);
                 LeftPacker->TablePtr->InitializeBucketSpillers(spiller);
                 break;

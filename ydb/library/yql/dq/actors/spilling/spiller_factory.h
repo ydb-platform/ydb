@@ -18,8 +18,8 @@ public:
     {
     }
 
-    NKikimr::NMiniKQL::ISpiller::TPtr CreateSpiller(NKikimr::NMiniKQL::ISpiller::TErrorCallback errorCallback) override {
-        return std::make_shared<TDqComputeStorage>(TxId_, WakeUpCallback_, errorCallback, ActorSystem_);
+    NKikimr::NMiniKQL::ISpiller::TPtr CreateSpiller() override {
+        return std::make_shared<TDqComputeStorage>(TxId_, WakeUpCallback_, ActorSystem_);
     }
 
 private:

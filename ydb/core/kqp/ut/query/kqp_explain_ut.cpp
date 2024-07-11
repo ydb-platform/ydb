@@ -278,7 +278,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         auto& rangeRead = operators[lookupMember].GetMapSafe();
         UNIT_ASSERT(rangeRead.at("Name") == "TableRangeScan");
-        UNIT_ASSERT_VALUES_EQUAL(rangeRead.at("ReadRange").GetArraySafe()[0], "App («new_app_1»)");
+        UNIT_ASSERT_VALUES_EQUAL(rangeRead.at("ReadRange").GetArraySafe()[0], "App (new_app_1)");
     }
 
     Y_UNIT_TEST(SortStage) {

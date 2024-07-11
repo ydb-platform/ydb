@@ -60,7 +60,7 @@ IGraphTransformer::TStatus TKqpConstantFoldingTransformer::DoTransform(TExprNode
     TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
 
-    if (!Config->HasOptEnableConstantFolding()) {
+    if (!Config->EnableConstantFolding) {
         return IGraphTransformer::TStatus::Ok;
     }
 

@@ -7,8 +7,3 @@
 #ifndef KIKIMR_VDISK_SYNCLOG_ENTRY_POINT_PROTO_FORMAT
 #define KIKIMR_VDISK_SYNCLOG_ENTRY_POINT_PROTO_FORMAT 0
 #endif
-
-// This feature flag enables statestorage replica probes
-#ifndef KIKIMR_ALLOW_SSREPLICA_PROBES
-#define KIKIMR_ALLOW_SSREPLICA_PROBES 0
-#endif

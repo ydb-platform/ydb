@@ -736,8 +736,6 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
 
     TIntrusivePtr<TStateStorageInfo> FlowControlledInfo;
 
-    TMap<TActorId, TActorId> ReplicaProbes;
-
     THashMap<std::tuple<TActorId, ui64>, std::tuple<ui64, TIntrusivePtr<TStateStorageInfo> TThis::*>> Subscriptions;
     THashSet<std::tuple<TActorId, ui64>> SchemeBoardSubscriptions;
 
@@ -830,42 +828,11 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
         Send(ev->Sender, new TEvStateStorage::TEvListStateStorageResult(Info), 0, ev->Cookie);
     }
 
-    void Handle(TEvStateStorage::TEvReplicaProbeSubscribe::TPtr &ev) {
-        const auto *msg = ev->Get();
-
-        if (!KIKIMR_ALLOW_SSREPLICA_PROBES) {
-            Send(ev->Sender, new TEvStateStorage::TEvReplicaProbeConnected(msg->ReplicaId));
-            return;
-        }
-
-        auto it = ReplicaProbes.find(msg->ReplicaId);
-        if (it == ReplicaProbes.end()) {
-            Send(ev->Sender, new TEvStateStorage::TEvReplicaProbeDisconnected(msg->ReplicaId));
-            return;
-        }
-
-        TActivationContext::Send(ev->Forward(it->second));
-    }
-
-    void Handle(TEvStateStorage::TEvReplicaProbeUnsubscribe::TPtr &ev) {
-        if (!KIKIMR_ALLOW_SSREPLICA_PROBES)
-            return;
-
-        const auto *msg = ev->Get();
-
-        auto it = ReplicaProbes.find(msg->ReplicaId);
-        if (it != ReplicaProbes.end()) {
-            TActivationContext::Send(ev->Forward(it->second));
-        }
-    }
-
     void Handle(TEvStateStorage::TEvUpdateGroupConfig::TPtr &ev) {
         auto *msg = ev->Get();
         Info = msg->GroupConfig;
         BoardInfo = msg->BoardConfig;
         SchemeBoardInfo = msg->SchemeBoardConfig;
-
-        RegisterReplicaProbes(TlsActivationContext->ExecutorThread.ActorSystem);
 
         for (const auto& [key, value] : Subscriptions) {
             const auto& [sender, cookie] = key;
@@ -878,21 +845,6 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
         }
     }
 
-    void RegisterReplicaProbes(TActorSystem *sys) {
-        if (!KIKIMR_ALLOW_SSREPLICA_PROBES)
-            return;
-
-        for (auto &xpair : ReplicaProbes)
-            sys->Send(xpair.second, new TEvents::TEvPoisonPill());
-        ReplicaProbes.clear();
-
-        for (auto &ring : Info->Rings)
-            for (const TActorId replicaId : ring.Replicas) {
-                const TActorId probeId = sys->Register(CreateStateStorageReplicaProbe(replicaId));
-                ReplicaProbes.emplace(replicaId, probeId);
-            }
-    }
-
     template<typename TEventPtr>
     void ResolveReplicas(const TEventPtr &ev, ui64 tabletId, const TIntrusivePtr<TStateStorageInfo> &info) const {
         THolder<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());
@@ -902,10 +854,6 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
         reply->Replicas.insert(reply->Replicas.end(), selection->SelectedReplicas.Get(), selection->SelectedReplicas.Get() + selection->Sz);
         reply->ConfigContentHash = info->ContentHash();
         Send(ev->Sender, reply.Release(), 0, ev->Cookie);
-    }
-
-    void Registered(TActorSystem* sys, const TActorId&) {
-        RegisterReplicaProbes(sys);
     }
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -936,8 +884,6 @@ public:
             hFunc(TEvStateStorage::TEvListSchemeBoard, Handle);
             hFunc(TEvStateStorage::TEvListStateStorage, Handle);
             hFunc(TEvStateStorage::TEvUpdateGroupConfig, Handle);
-            hFunc(TEvStateStorage::TEvReplicaProbeSubscribe, Handle);
-            hFunc(TEvStateStorage::TEvReplicaProbeUnsubscribe, Handle);
             fFunc(TEvents::TSystem::Unsubscribe, HandleUnsubscribe);
         default:
             TActivationContext::Forward(ev, RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, FlowControlledInfo)));

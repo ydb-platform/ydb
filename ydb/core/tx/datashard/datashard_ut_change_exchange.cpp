@@ -3500,6 +3500,106 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
+    void MustNotLoseSchemaSnapshot(bool enableVolatileTx) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableDataShardVolatileTransactions(enableVolatileTx)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            Updates(NKikimrSchemeOp::ECdcStreamFormatJson)));
+
+        auto tabletIds = GetTableShards(server, edgeActor, "/Root/Table");
+        UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
+
+        std::vector<std::unique_ptr<IEventHandle>> blockedRemoveRecords;
+        auto blockRemoveRecords = runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvRemoveRecords>([&](auto& ev) {
+            Cerr << "... blocked remove record" << Endl;
+            blockedRemoveRecords.emplace_back(ev.Release());
+        });
+
+        Cerr << "... execute first query" << Endl;
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);
+        )");
+
+        WaitFor(runtime, [&]{ return blockedRemoveRecords.size() == 1; }, "blocked remove records");
+        blockRemoveRecords.Remove();
+
+        std::vector<std::unique_ptr<IEventHandle>> blockedPlans;
+        auto blockPlans = runtime.AddObserver<TEvTxProxy::TEvProposeTransaction>([&](auto& ev) {
+            blockedPlans.emplace_back(ev.Release());
+        });
+
+        Cerr << "... execute scheme query" << Endl;
+        const auto alterTxId = AsyncAlterAddExtraColumn(server, "/Root", "Table");
+
+        WaitFor(runtime, [&]{ return blockedPlans.size() > 0; }, "blocked plans");
+        blockPlans.Remove();
+
+        std::vector<std::unique_ptr<IEventHandle>> blockedPutResponses;
+        auto blockPutResponses = runtime.AddObserver<TEvBlobStorage::TEvPutResult>([&](auto& ev) {
+            auto* msg = ev->Get();
+            if (msg->Id.TabletID() == tabletIds[0]) {
+                Cerr << "... blocked put response:" << msg->Id << Endl;
+                blockedPutResponses.emplace_back(ev.Release());
+            }
+        });
+
+        Cerr << "... execute second query" << Endl;
+        SendSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES (2, 20);
+        )");
+
+        WaitFor(runtime, [&]{ return blockedPutResponses.size() > 0; }, "blocked put responses");
+        auto wasBlockedPutResponses = blockedPutResponses.size();
+
+        Cerr << "... release blocked plans" << Endl;
+        for (auto& ev : std::exchange(blockedPlans, {})) {
+            runtime.Send(ev.release(), 0, true);
+        }
+
+        WaitFor(runtime, [&]{ return blockedPutResponses.size() > wasBlockedPutResponses; }, "blocked put responses");
+        wasBlockedPutResponses = blockedPutResponses.size();
+
+        Cerr << "... release blocked remove records" << Endl;
+        for (auto& ev : std::exchange(blockedRemoveRecords, {})) {
+            runtime.Send(ev.release(), 0, true);
+        }
+
+        WaitFor(runtime, [&]{ return blockedPutResponses.size() > wasBlockedPutResponses; }, "blocked put responses");
+        blockPutResponses.Remove();
+
+        Cerr << "... release blocked put responses" << Endl;
+        for (auto& ev : std::exchange(blockedPutResponses, {})) {
+            runtime.Send(ev.release(), 0, true);
+        }
+
+        Cerr << "... finalize" << Endl;
+        WaitTxNotification(server, edgeActor, alterTxId);
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
+        });
+    }
+
+    Y_UNIT_TEST(MustNotLoseSchemaSnapshot) {
+        MustNotLoseSchemaSnapshot(false);
+    }
+
+    Y_UNIT_TEST(MustNotLoseSchemaSnapshotWithVolatileTx) {
+        MustNotLoseSchemaSnapshot(true);
+    }
+
 } // Cdc
 
 } // NKikimr

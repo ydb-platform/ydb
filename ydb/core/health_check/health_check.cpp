@@ -186,6 +186,7 @@ public:
                     State = ETabletState::Stopped;
                 } else if (!settings.IsHiveSynchronizationPeriod
                             && info.volatilestate() != NKikimrHive::TABLET_VOLATILE_STATE_RUNNING
+                            && info.has_lastalivetimestamp()
                             && TInstant::MilliSeconds(info.lastalivetimestamp()) < settings.AliveBarrier
                             && info.tabletbootmode() == NKikimrHive::TABLET_BOOT_MODE_DEFAULT) {
                     State = ETabletState::Dead;
@@ -1202,10 +1203,10 @@ public:
 
     void AggregateHiveInfo() {
         TNodeTabletState::TTabletStateSettings settings;
-        settings.AliveBarrier = TInstant::Now() - TDuration::Minutes(5);
         for (const auto& [hiveId, hiveResponse] : HiveInfo) {
             if (hiveResponse) {
                 settings.IsHiveSynchronizationPeriod = IsHiveSynchronizationPeriod(hiveResponse->Record);
+                settings.AliveBarrier = TInstant::MilliSeconds(hiveResponse->Record.GetResponseTimestamp()) - TDuration::Minutes(5);
                 for (const NKikimrHive::TTabletInfo& hiveTablet : hiveResponse->Record.GetTablets()) {
                     TSubDomainKey tenantId = TSubDomainKey(hiveTablet.GetObjectDomain());
                     auto itDomain = FilterDomainKey.find(tenantId);

@@ -822,13 +822,8 @@ void FillPartitioningSettingsImpl(TYdbProto& out,
 }
 
 void FillGlobalIndexSettings(Ydb::Table::GlobalIndexSettings& settings,
-    const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TTableDescription>& indexImplTables
+    const NKikimrSchemeOp::TTableDescription& indexImplTableDescription
 ) {
-    if (indexImplTables.empty()) {
-        return;
-    }
-    const auto& indexImplTableDescription = indexImplTables.Get(0);
-
     if (indexImplTableDescription.SplitBoundarySize()) {
         NKikimrMiniKQL::TType splitKeyType;
         Ydb::Table::DescribeTableResult unused;
@@ -865,23 +860,30 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobal:
             FillGlobalIndexSettings(
                 *index->mutable_global_index()->mutable_settings(),
-                tableIndex.GetIndexImplTableDescriptions()
+                tableIndex.GetIndexImplTableDescriptions(0)
             );
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync:
             FillGlobalIndexSettings(
                 *index->mutable_global_async_index()->mutable_settings(),
-                tableIndex.GetIndexImplTableDescriptions()
+                tableIndex.GetIndexImplTableDescriptions(0)
             );
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique:
             FillGlobalIndexSettings(
                 *index->mutable_global_unique_index()->mutable_settings(),
-                tableIndex.GetIndexImplTableDescriptions()
+                tableIndex.GetIndexImplTableDescriptions(0)
             );
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
-            *index->mutable_global_vector_kmeans_tree_index() = Ydb::Table::GlobalVectorKMeansTreeIndex();
+            FillGlobalIndexSettings(
+                *index->mutable_global_vector_kmeans_tree_index()->mutable_level_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(0)
+            );
+            FillGlobalIndexSettings(
+                *index->mutable_global_vector_kmeans_tree_index()->mutable_posting_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(1)
+            );
             break;
         default:
             break;

@@ -259,7 +259,7 @@ runs:
         set +e
         (./ya make ${{ inputs.build_target }} "${params[@]}" \
           --stat --log-file "$YA_TEST_LOG_FILENAME" -DCONSISTENT_DEBUG \
-          --no-dir-outputs --test-failure-code 0 --build-all \
+          --no-dir-outputs --test-failure-code 0 --build-all --skip-test-console-report \
           --cache-size 2TB --force-build-depends --evlog-file "$TMP_DIR/ya_evlog.jsonl" \
           --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR"; echo $? > exit_code) |& tee $TMP_DIR/ya_make.log
         set -e

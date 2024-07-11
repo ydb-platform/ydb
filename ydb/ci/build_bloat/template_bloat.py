@@ -119,7 +119,6 @@ def build_tree(items):
         total_size += size
 
         if '(' in name:
-            # use only rightmost '(' because of 'std::__y1::__function::__func<>::operator()(std::__y1::vector<>&)'
             prefix, args = name.split('(', 1)
             args = "(" + args
         else: 
@@ -131,7 +130,7 @@ def build_tree(items):
         path = prefix.split("::")
         path[-1] += args
 
-        if ' ' in path[0]:
+        if ' ' in path[0] and (len(path) > 1):
             # sometimes return value specified, so strip it 
             # signed 'char* NKikimr::NCHash::TListPool<>::GetList<>(unsigned long)'
             path[0] = path[0].rsplit(' ', 1)[1]

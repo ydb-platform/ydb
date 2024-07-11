@@ -1703,8 +1703,12 @@ public:
         Span = std::move(span);
     }
 
-    void LegacyFinishSpan() override {
+    void FinishSpan() override {
         Span.End();
+    }
+
+    bool* IsTracingDecided() override {
+        return nullptr;
     }
 
     bool Validate(TString& /*error*/) override {
@@ -1799,10 +1803,6 @@ public:
     const TString& GetRequestName() const override {
         static TString str = "request auth and check internal request";
         return str;
-    }
-
-    const TString& GetInternalRequestType() const final {
-        return GetRequestName();
     }
 
     TMaybe<NRpcService::TRlPath> GetRlPath() const override {

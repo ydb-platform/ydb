@@ -465,7 +465,7 @@ private:
     }
 
     void HandleAndDie(TEvRequestAuthAndCheck::TPtr& ev) {
-        GrpcRequestBaseCtx_->LegacyFinishSpan();
+        GrpcRequestBaseCtx_->FinishSpan();
         ev->Get()->ReplyWithYdbStatus(Ydb::StatusIds::SUCCESS);
         TBase::PassAway();
     }

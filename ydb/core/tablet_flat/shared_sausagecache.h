@@ -1,6 +1,6 @@
 #pragma once
 #include "defs.h"
-#include <ydb/core/base/memobserver.h>
+#include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/protos/shared_cache.pb.h>
 #include <ydb/core/util/cache_cache.h>
 #include <util/system/unaligned_mem.h>
@@ -56,7 +56,7 @@ struct TSharedPageCacheConfig {
     ui32 MemTableReservationPercent = 20;
 };
 
-IActor* CreateSharedPageCache(THolder<TSharedPageCacheConfig> config, TIntrusivePtr<TMemObserver> memObserver);
+IActor* CreateSharedPageCache(THolder<TSharedPageCacheConfig> config, TIntrusivePtr<NMemory::IMemoryConsumer> memoryConsumer);
 
 inline TActorId MakeSharedPageCacheId(ui64 id = 0) {
     char x[12] = { 's', 'h', 's', 'c' };

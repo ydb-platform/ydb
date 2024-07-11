@@ -29,7 +29,7 @@ SRCS(
     location.h
     logoblob.cpp
     logoblob.h
-    memobserver.h
+    memory_controller_iface.h
     nameservice.h
     path.cpp
     pool_stats_collector.cpp

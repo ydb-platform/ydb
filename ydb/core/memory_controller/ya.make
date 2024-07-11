@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    
+    memory_controller.cpp
 )
 
 PEERDIR(

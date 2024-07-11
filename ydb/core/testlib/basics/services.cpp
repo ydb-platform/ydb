@@ -165,7 +165,7 @@ namespace NPDisk {
 
         runtime.AddLocalService(MakeSharedPageCacheId(0),
             TActorSetupCmd(
-                CreateSharedPageCache(std::move(pageCollectionCacheConfig), runtime.GetMemObserver(nodeIndex)),
+                CreateSharedPageCache(std::move(pageCollectionCacheConfig), runtime.GetMemoryConsumers(nodeIndex)->Register("SharedCache")),
                 TMailboxType::ReadAsFilled,
                 0),
             nodeIndex);

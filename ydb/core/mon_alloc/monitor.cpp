@@ -426,9 +426,9 @@ namespace NKikimr {
         };
     }
 
-    IActor* CreateMemProfMonitor(ui32 intervalSec, TDynamicCountersPtr counters, const TString& filePathPrefix) {
+    IActor* CreateMemProfMonitor(TDuration interval, TDynamicCountersPtr counters, const TString& filePathPrefix) {
         return new TMemProfMonitor(
-            TDuration::Seconds(intervalSec),
+            interval,
             CreateAllocMonitor(GetServiceCounters(counters, "utils")),
             filePathPrefix);
     }

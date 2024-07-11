@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/base/memobserver.h>
+#include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
 
 #include <ydb/library/actors/core/defs.h>
@@ -46,7 +46,7 @@ namespace NKikimr {
     };
 
     NActors::IActor* CreateMemProfMonitor(
-        ui32 intervalSec,
+        TDuration interval,
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
         const TString& filePathPrefix = "");
 }

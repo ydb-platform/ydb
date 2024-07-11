@@ -16,7 +16,7 @@
 #include <ydb/core/client/server/grpc_server.h>
 #include <ydb/core/fq/libs/shared_resources/interface/shared_resources.h>
 #include <ydb/core/kqp/common/kqp.h>
-#include <ydb/core/base/memobserver.h>
+#include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/tablet/node_tablet_monitor.h>
 #include <ydb/core/tablet/tablet_setup.h>
 #include <ydb/core/ymq/http/http.h>
@@ -59,7 +59,7 @@ protected:
     std::shared_ptr<TLogBackend> LogBackend;
     TAutoPtr<TActorSystem> ActorSystem;
 
-    TIntrusivePtr<TMemObserver> MemObserver;
+    TIntrusivePtr<NMemory::IMemoryConsumers> MemoryConsumers;
 
     TKikimrRunner(std::shared_ptr<TModuleFactories> factories = {});
 

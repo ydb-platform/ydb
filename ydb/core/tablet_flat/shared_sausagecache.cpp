@@ -319,7 +319,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     TAutoPtr<NUtil::ILogger> Logger;
     THashMap<TLogoBlobID, TCollection> Collections;
     THashMap<TActorId, TCollectionsOwner> CollectionsOwners;
-    TIntrusivePtr<TMemObserver> MemObserver;
+    TIntrusivePtr<NMemory::IMemoryConsumer> MemoryConsumer;
     std::shared_ptr<TSharedPageCacheMemTableTracker> MemTableTracker;
 
     TRequestQueue AsyncRequests;
@@ -387,27 +387,14 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (recheck) {
             CheckExpiredCollections(std::move(recheck));
         }
+
+        MemoryConsumer->SetConsumption(GetStatAllBytes());
     }
 
-    void Handle(NSharedCache::TEvMem::TPtr &) {
-        // always get the latest value
-        auto mem = MemObserver->GetStat();
+    void Handle(NMemory::TEvMemoryLimit::TPtr &ev) {
+        auto *msg = ev->Get();
 
-        if (mem.SoftLimit) {
-            ui64 usedExternal = 0;
-            // we have: mem.Used = usedExternal + StatAllBytes
-            if (mem.Used > GetStatAllBytes()) {
-                usedExternal = mem.Used - GetStatAllBytes();
-            }
-
-            // we want: MemLimitBytes + externalUsage <= mem.SoftLimit
-            MemLimitBytes = mem.SoftLimit > usedExternal
-                ? mem.SoftLimit - usedExternal
-                : 1;
-        } else {
-            MemLimitBytes = 0;
-        }
-
+        MemLimitBytes = msg->Limit;
         if (Config->Counters) {
             Config->Counters->MemLimitBytes->Set(MemLimitBytes);
         }
@@ -1318,8 +1305,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
 public:
-    TSharedPageCache(THolder<TSharedPageCacheConfig> config, TIntrusivePtr<TMemObserver> memObserver)
-        : MemObserver(std::move(memObserver))
+    TSharedPageCache(THolder<TSharedPageCacheConfig> config, TIntrusivePtr<NMemory::IMemoryConsumer> memoryConsumer)
+        : MemoryConsumer(std::move(memoryConsumer))
         , MemTableTracker(std::make_shared<TSharedPageCacheMemTableTracker>(config->Counters))
         , Config(std::move(config))
         , Cache(*Config->CacheConfig)
@@ -1331,9 +1318,7 @@ public:
     }
 
     void Bootstrap() {
-        MemObserver->Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), selfId = SelfId()] () {
-            actorSystem->Send(selfId, new NSharedCache::TEvMem());
-        });
+        MemLimitBytes = MemoryConsumer->GetInitialLimit();
 
         Become(&TThis::StateFunc);
         Schedule(TDuration::Seconds(1), new TKikimrEvents::TEvWakeup(UPDATE_WHITEBOARD_TAG));
@@ -1346,7 +1331,7 @@ public:
             hFunc(NSharedCache::TEvTouch, Handle);
             hFunc(NSharedCache::TEvUnregister, Handle);
             hFunc(NSharedCache::TEvInvalidate, Handle);
-            hFunc(NSharedCache::TEvMem, Handle);
+
             hFunc(NSharedCache::TEvMemTableRegister, Handle);
             hFunc(NSharedCache::TEvMemTableUnregister, Handle);
             hFunc(NSharedCache::TEvMemTableCompacted, Handle);
@@ -1355,6 +1340,8 @@ public:
             hFunc(TEvSharedPageCache::TEvConfigure, Handle);
             hFunc(TKikimrEvents::TEvWakeup, Wakeup);
             cFunc(TEvents::TSystem::PoisonPill, TakePoison);
+
+            hFunc(NMemory::TEvMemoryLimit, Handle);
         }
     }
 
@@ -1365,8 +1352,8 @@ public:
 
 } // NTabletFlatExecutor
 
-IActor* CreateSharedPageCache(THolder<TSharedPageCacheConfig> config, TIntrusivePtr<TMemObserver> memObserver) {
-    return new NTabletFlatExecutor::TSharedPageCache(std::move(config), std::move(memObserver));
+IActor* CreateSharedPageCache(THolder<TSharedPageCacheConfig> config, TIntrusivePtr<NMemory::IMemoryConsumer> memoryConsumer) {
+    return new NTabletFlatExecutor::TSharedPageCache(std::move(config), std::move(memoryConsumer));
 }
 
 }

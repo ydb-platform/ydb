@@ -59,6 +59,7 @@
 
 #include <ydb/core/keyvalue/keyvalue.h>
 
+#include <ydb/core/memory_controller/memory_controller.h>
 #include <ydb/core/test_tablet/test_tablet.h>
 #include <ydb/core/test_tablet/state_server_interface.h>
 
@@ -1131,9 +1132,9 @@ void TLocalServiceInitializer::InitializeServices(
 
 // TSharedCacheInitializer
 
-TSharedCacheInitializer::TSharedCacheInitializer(const TKikimrRunConfig& runConfig, TIntrusivePtr<TMemObserver> memObserver)
+TSharedCacheInitializer::TSharedCacheInitializer(const TKikimrRunConfig& runConfig, TIntrusivePtr<NMemory::IMemoryConsumer> memoryConsumer)
     : IKikimrServicesInitializer(runConfig)
-    , MemObserver(std::move(memObserver))
+    , MemoryConsumer(std::move(memoryConsumer))
 {}
 
 void TSharedCacheInitializer::InitializeServices(
@@ -1169,7 +1170,7 @@ void TSharedCacheInitializer::InitializeServices(
     config->Counters = new TSharedPageCacheCounters(sausageGroup);
 
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeSharedPageCacheId(0),
-        TActorSetupCmd(CreateSharedPageCache(std::move(config), MemObserver), TMailboxType::ReadAsFilled, appData->UserPoolId)));
+        TActorSetupCmd(CreateSharedPageCache(std::move(config), MemoryConsumer), TMailboxType::ReadAsFilled, appData->UserPoolId)));
 
     auto *configurator = NConsole::CreateSharedCacheConfigurator();
     setup->LocalServices.emplace_back(TActorId(),
@@ -2061,8 +2062,6 @@ void TPersQueueDirectReadCacheInitializer::InitializeServices(NActors::TActorSys
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
 }
 
-// TMemProfMonitorInitializer
-
 TMemProfMonitorInitializer::TMemProfMonitorInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig)
 {}
@@ -2078,7 +2077,7 @@ void TMemProfMonitorInitializer::InitializeServices(
     }
 
     IActor* monitorActor = CreateMemProfMonitor(
-        1, // seconds
+        TDuration::Seconds(1),
         appData->Counters,
         filePathPrefix);
 
@@ -2089,8 +2088,6 @@ void TMemProfMonitorInitializer::InitializeServices(
             TMailboxType::HTSwap,
             appData->BatchPoolId));
 }
-
-// TMemoryTrackerInitializer
 
 TMemoryTrackerInitializer::TMemoryTrackerInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig)
@@ -2104,6 +2101,21 @@ void TMemoryTrackerInitializer::InitializeServices(
     setup->LocalServices.emplace_back(
         TActorId(),
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)
+    );
+}
+
+TMemoryControllerInitializer::TMemoryControllerInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{}
+
+void TMemoryControllerInitializer::InitializeServices(
+    NActors::TActorSystemSetup* setup,
+    const NKikimr::TAppData* appData)
+{
+    auto* actor = NMemory::CreateMemoryController(TDuration::Seconds(1), appData->Counters);
+    setup->LocalServices.emplace_back(
+        TActorId(),
+        TActorSetupCmd(actor, TMailboxType::HTSwap, appData->BatchPoolId)
     );
 }
 

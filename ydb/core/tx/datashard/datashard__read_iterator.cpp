@@ -861,6 +861,9 @@ private:
             if (!precharging && env.MissingReferencesSize()) {
                 precharging = true;
 
+                ui64 deletedRowSkips = iter->Stats.DeletedRowSkips;
+                ui64 invisibleRowSkips = iter->Stats.InvisibleRowSkips;
+
                 const ui64 processedRecords = ResetRowSkips(iter->Stats);
                 
                 if ((RowsProcessed + processedRecords) > 0) {
@@ -868,6 +871,9 @@ private:
                     // this transaction won't be restarting and there is no point in precharging missing references.
                     RowsSinceLastCheck += processedRecords;
                     RowsProcessed += processedRecords;
+
+                    DeletedRowSkips += deletedRowSkips;
+                    InvisibleRowSkips += invisibleRowSkips;
 
                     // We will be continuing from the current key (inclusive).
                     LastProcessedKey = TSerializedCellVec::Serialize(rowKey.Cells());

@@ -24,7 +24,7 @@ namespace {
             return;
         }
 
-        if (IsConstantExpr(input)) {
+        if (IsConstantExpr(input) && !input->IsCallable("PgConst")) {
             TNodeOnNodeOwnedMap deepClones;
             auto inputClone = ctx.DeepCopy(*input, ctx, deepClones, false, true, true);
 

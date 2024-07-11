@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 import argparse
-import sys
 import json
+import os
+import shutil
+import sys
+
+THRESHHOLD_TO_SHOW_ON_TREE_VIEW = 1024*10 
 
 class Walker:
     def __init__(self):
@@ -71,10 +75,10 @@ def add_to_tree(tree, path, value, count):
         if "size" not in tree:
             tree["size"] = 0
         tree["size"] += value
-        tree["type"] = "cpp"
+        tree["type"] = "function"
         tree["count"] = count
     else:
-        tree["type"] = "dir"
+        tree["type"] = "namespace"
         if path[1] not in tree["children"]:
             tree["children"][path[1]] = {}
         add_to_tree(tree["children"][path[1]], path[1:], value, count)
@@ -106,9 +110,8 @@ def build_tree(items):
     tree = {}
     total_size = 0
     for name, (size, count, obj_files, avg, min, max) in items:
+
         # use braces only for args
-        if size < 25000:
-            continue
         name = name.replace("(anonymous namespace)", "[anonymous namespace]")
         total_size += size
 
@@ -137,9 +140,6 @@ def build_tree(items):
     children_to_list(tree)
     propogate_size(tree)
     enrich_names_with_sec(tree)
-    with open("bloat.json", "w") as f:
-        f.write("kTree = ")
-        json.dump(tree, f, indent=4)
     print("Total size =", total_size)
     return tree
 
@@ -158,8 +158,14 @@ def parse_args():
     parser.add_argument(
         "-o",
         "--output-prefix",
-        required=True,
+        required=False,
         help="Prefix for the output files",
+    )
+    parser.add_argument(
+        "-t",
+        "--html-template-bloat",
+        required=False,
+        help="Generate html output for template bloat",
     )
     return parser.parse_args()
 
@@ -173,14 +179,28 @@ def main():
     walker = Walker()
     walker.process(data["tree"])
     items = walker.stats.items()  # [name, (size, count, avg, min, max)]
-    with open(output_prefix + ".by_size.txt","w") as f:
-        for p in sorted(items, key=lambda p: p[1][0], reverse=True):
-            print_stat(f, p)
-    with open(output_prefix + ".by_count.txt","w") as f:
-        for p in sorted(items, key=lambda p: p[1][1], reverse=True):
-            print_stat(f, p)
+    if output_prefix:
+        with open(output_prefix + ".by_size.txt","w") as f:
+            for p in sorted(items, key=lambda p: p[1][0], reverse=True):
+                print_stat(f, p)
+        with open(output_prefix + ".by_count.txt","w") as f:
+            for p in sorted(items, key=lambda p: p[1][1], reverse=True):
+                print_stat(f, p)
+    
+    if options.html_template_bloat:
+        output_dir = options.html_template_bloat
+        current_script_dir = os.path.dirname(os.path.realpath(__file__))
+        html_dir = os.path.join(current_script_dir, "html_template_bloat")
 
-    build_tree(items)
+        tree = build_tree(items)
+
+        shutil.copytree(html_dir, output_dir, dirs_exist_ok=True)
+
+
+        with open(os.path.join(output_dir, "bloat.json"), "w") as f:
+            f.write("kTree = ")
+            json.dump(tree, f, indent=4)
+
     return 0
 
 if __name__ == "__main__":

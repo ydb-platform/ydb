@@ -329,12 +329,12 @@ namespace NKikimr {
                     bool &needsInitialCommit,
                     TString &explanation);
 
-            bool ConvertOldFormatToProto(
+            bool ConvertToProto(
                     NKikimrVDiskData::TSyncLogEntryPoint &pb,
                     const TString &serializedData,
                     TString &explanation);
 
-            bool ConvertOldFormatArrayToProto(
+            bool ConvertArrayToProto(
                     NKikimrVDiskData::TSyncLogEntryPoint &pb,
                     const char* serializedData,
                     size_t size,

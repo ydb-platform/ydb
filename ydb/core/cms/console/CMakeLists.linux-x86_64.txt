@@ -114,7 +114,7 @@ target_sources(core-cms-console PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/util.cpp
 )
 generate_enum_serilization(core-cms-console
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/config_item_info.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/config/init/init.h
   INCLUDE_HEADERS
-  ydb/core/cms/console/config_item_info.h
+  ydb/core/config/init/init.h
 )

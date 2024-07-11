@@ -488,7 +488,7 @@ static void SetupServices(TTestActorRuntime &runtime, const TTestEnvOpts &option
     appConfig.MutableFeatureFlags()->SetEnableCMSRequestPriorities(options.EnableCMSRequestPriorities);
     runtime.AddLocalService(MakeConfigsDispatcherID(runtime.GetNodeId(0)),
                             TActorSetupCmd(CreateConfigsDispatcher(
-                                NKikimr::NConsole::TConfigsDispatcherInitInfo {
+                                NConfig::TConfigsDispatcherInitInfo {
                                     .InitialConfig = appConfig,
                                 }),
                                 TMailboxType::Simple,

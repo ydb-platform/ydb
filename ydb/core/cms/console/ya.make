@@ -84,6 +84,7 @@ PEERDIR(
     ydb/core/blobstorage/base
     ydb/core/blobstorage/groupinfo
     ydb/core/cms/console/validators
+    ydb/core/config/init
     ydb/core/control
     ydb/core/engine/minikql
     ydb/core/mind

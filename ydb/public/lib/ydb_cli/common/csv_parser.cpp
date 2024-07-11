@@ -133,15 +133,33 @@ public:
         case EPrimitiveType::Interval:
             Builder.Interval(GetArithmetic<i64>(token));
             break;
-        case EPrimitiveType::Date32:
-            Builder.Date32(GetArithmetic<i32>(token));
+        case EPrimitiveType::Date32: {
+            TInstant date;
+            if (TInstant::TryParseIso8601(token, date)) {
+                Builder.Date32(date.Days());
+            } else {
+                Builder.Date32(GetArithmetic<i32>(token));
+            }
             break;
-        case EPrimitiveType::Datetime64:
-            Builder.Datetime64(GetArithmetic<i64>(token));
+        }
+        case EPrimitiveType::Datetime64: {
+            TInstant date;
+            if (TInstant::TryParseIso8601(token, date)) {
+                Builder.Datetime64(date.Seconds());
+            } else {
+                Builder.Datetime64(GetArithmetic<i64>(token));
+            }
             break;
-        case EPrimitiveType::Timestamp64:
-            Builder.Timestamp64(GetArithmetic<i64>(token));
+        }
+        case EPrimitiveType::Timestamp64: {
+            TInstant date;
+            if (TInstant::TryParseIso8601(token, date)) {
+                Builder.Timestamp64(date.MicroSeconds());
+            } else {
+                Builder.Timestamp64(GetArithmetic<i64>(token));
+            }
             break;
+        }
         case EPrimitiveType::Interval64:
             Builder.Interval64(GetArithmetic<i64>(token));
             break;            

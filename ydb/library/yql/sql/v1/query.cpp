@@ -1339,7 +1339,7 @@ public:
                     columns = L(columns, Q(columnDesc));
                 } else if (col.TypeOfChange == TColumnSchema::ETypeOfChange::SetNotNullConstraint) {
                     // todo flown4qqqq
-                } else if (col.TypeOfChange == TColumnSchema::ETypeOfChange::SetFamaly) {
+                } else if (col.TypeOfChange == TColumnSchema::ETypeOfChange::SetFamily) {
                     auto columnDesc = Y();
                     columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name));
                     auto familiesDesc = Y();

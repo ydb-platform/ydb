@@ -692,7 +692,7 @@ namespace NSQLTranslationV1 {
             Nothing,
             DropNotNullConstraint,
             SetNotNullConstraint, // todo flown4qqqq
-            SetFamaly
+            SetFamily
         };
 
         TPosition Pos;

@@ -40,10 +40,6 @@ class Database:
             case _:
                 raise Exception(f'invalid data source: {self.kind}')
 
-    # FIXME: function does nothing; avoid it
-    def sql_table_name(self, table_name: str) -> str:
-        return table_name
-
     def missing_database_msg(self) -> str:
         match self.kind:
             case EDataSourceKind.CLICKHOUSE:

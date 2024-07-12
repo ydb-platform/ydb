@@ -1274,14 +1274,14 @@ public:
             auto **fields = ctx.WideFields.data() + WideFieldsIndex;
 
             while (true) {
-                for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i)
-                    fields[i] = Nodes.GetUsedInputItemNodePtrOrNull(ctx, i);
-
                 if (ptr->UpdateAndWait()) {
                     return EFetchResult::Yield;
                 }
 
                 if (ptr->InputStatus != EFetchResult::Finish) {
+                    for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i)
+                        fields[i] = Nodes.GetUsedInputItemNodePtrOrNull(ctx, i);
+                    
                     switch (ptr->InputStatus = Flow->FetchValues(ctx, fields)) {
                         case EFetchResult::One:
                             break;

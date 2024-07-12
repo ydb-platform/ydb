@@ -103,6 +103,9 @@ struct IExecuting {
     virtual void LoanTable(ui32 tableId, const TString &partsInfo) = 0; // attach table parts to table (called on part destination)
     virtual void CleanupLoan(const TLogoBlobID &bundleId, ui64 from) = 0; // mark loan completion (called on part source)
     virtual void ConfirmLoan(const TLogoBlobID &bundleId, const TLogoBlobID &borrowId) = 0; // confirm loan update delivery (called on part destination)
+    virtual void EnableReadMissingReferences() noexcept = 0;
+    virtual void DisableReadMissingReferences() noexcept = 0;
+    virtual ui64 MissingReferencesSize() const noexcept = 0;
 };
 
 class TTxMemoryProviderBase : TNonCopyable {

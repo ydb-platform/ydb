@@ -349,13 +349,7 @@ size_t TOwnedCellVecBatch::Append(TConstArrayRef<TCell> cells) {
         return 0;
     }
 
-    size_t size = sizeof(TCell) * cellsSize;
-    for (auto& cell : cells) {
-        if (!cell.IsNull() && !cell.IsInline()) {
-            const size_t cellSize = cell.Size();
-            size += AlignUp(cellSize);
-        }
-    }
+    size_t size = EstimateSize(cells);
 
     char * allocatedBuffer = reinterpret_cast<char *>(Pool->Allocate(size));
 

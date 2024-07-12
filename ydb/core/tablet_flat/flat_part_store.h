@@ -79,6 +79,13 @@ public:
         return PageCollections[groupId.Index]->GetPageSize(pageId);
     }
 
+    ui64 GetPageSize(ELargeObj lob, ui64 ref) const override
+    {
+        auto* cache = Locate(lob, ref);
+
+        return cache->PageCollection->Page(ref).Size;
+    }
+
     NPage::EPage GetPageType(NPage::TPageId pageId, NPage::TGroupId groupId) const override
     {
         Y_ABORT_UNLESS(groupId.Index < PageCollections.size());

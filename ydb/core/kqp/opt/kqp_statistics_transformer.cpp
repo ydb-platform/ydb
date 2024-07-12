@@ -44,6 +44,17 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
         Y_ENSURE(false, "Invalid node type for InferStatisticsForReadTable");
     }
 
+    auto keyColumns = inputStats->KeyColumns;
+    if (auto indexRead = inputNode.Maybe<TKqlReadTableIndex>()) {
+        TVector<TString> keyColumnNames;
+
+        const auto& tableData = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, indexRead.Cast().Table().Path().Value());
+        const auto& [indexMeta, _] = tableData.Metadata->GetIndexMetadata(indexRead.Cast().Index().StringValue());
+
+        keyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(
+            new TOptimizerStatistics::TKeyColumns(indexMeta->KeyColumnNames));
+    }
+
     /**
      * We need index statistics to calculate this in the future
      * Right now we use very small estimates to make sure CBO picks Lookup Joins
@@ -65,7 +76,7 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
         nAttrs, 
         byteSize, 
         0.0, 
-        inputStats->KeyColumns,
+        keyColumns,
         inputStats->ColumnStatistics);
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for read table, nrows: " << stats->Nrows << ", nattrs: " << stats->Ncols << ", byteSize: " << stats->ByteSize;

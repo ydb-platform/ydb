@@ -641,6 +641,7 @@ PostmasterMain(int argc, char *argv[])
 	pqinitmask();
 	sigprocmask(SIG_SETMASK, &BlockSig, NULL);
 
+#ifndef WIN32	
 	pqsignal(SIGHUP, handle_pm_reload_request_signal);
 	pqsignal(SIGINT, handle_pm_shutdown_request_signal);
 	pqsignal(SIGQUIT, handle_pm_shutdown_request_signal);
@@ -650,6 +651,7 @@ PostmasterMain(int argc, char *argv[])
 	pqsignal(SIGUSR1, handle_pm_pmsignal_signal);
 	pqsignal(SIGUSR2, dummy_handler);	/* unused, reserve for children */
 	pqsignal(SIGCHLD, handle_pm_child_exit_signal);
+#endif
 
 	/* This may configure SIGURG, depending on platform. */
 	InitializeLatchSupport();

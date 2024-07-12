@@ -176,3 +176,6 @@
 
 /* srand is PostgreSQL's implementation of srandom from stdlib.h for windows. */
 #define srandom srand
+
+#define BLCKSZ 8192
+

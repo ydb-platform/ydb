@@ -286,11 +286,10 @@ struct stat						/* This should match struct __stat64 */
 
 extern int	_pgfstat64(int fileno, struct stat *buf);
 extern int	_pgstat64(const char *name, struct stat *buf);
-extern int	_pglstat64(const char *name, struct stat *buf);
 
 #define fstat(fileno, sb)	_pgfstat64(fileno, sb)
 #define stat(path, sb)		_pgstat64(path, sb)
-#define lstat(path, sb)		_pglstat64(path, sb)
+#define lstat(path, sb)		_pgstat64(path, sb)
 
 /* These macros are not provided by older MinGW, nor by MSVC */
 #ifndef S_IRUSR

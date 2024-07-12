@@ -14,7 +14,11 @@
 #ifndef PG_RUSAGE_H
 #define PG_RUSAGE_H
 
+#ifdef HAVE_SYS_RESOURCE_H
 #include <sys/resource.h>
+#else
+#include "rusagestub.h"
+#endif
 #include <sys/time.h>
 
 

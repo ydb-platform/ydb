@@ -1,31 +1,4 @@
-#include <ydb/library/yql/core/pg_settings/guc_settings.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/interface.h>
-#include <ydb/library/yql/parser/pg_wrapper/memory_context.h>
-#include <ydb/library/yql/parser/pg_wrapper/pg_catalog_consts.h>
-#include <ydb/library/yql/minikql/computation/mkql_block_impl.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_pack_impl.h>
-#include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
-#include <ydb/library/yql/minikql/computation/presort_impl.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_buffer.h>
-#include <ydb/library/yql/minikql/mkql_node_builder.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/minikql/mkql_type_builder.h>
-#include <ydb/library/binary_json/read.h>
-#include <ydb/library/uuid/uuid.h>
-#include <ydb/library/yql/public/udf/arrow/block_reader.h>
-#include <ydb/library/yql/public/udf/arrow/block_builder.cpp>
-#include <ydb/library/yql/parser/pg_catalog/catalog.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_buf.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_results.h>
-#include <ydb/library/yql/public/udf/udf_value_builder.h>
-#include <ydb/library/yql/utils/fp_bits.h>
-#include <library/cpp/yson/detail.h>
-#include <util/string/split.h>
-#include <util/system/getpid.h>
+#include "pg_compat.h"
 
 #define TypeName PG_TypeName
 #define SortBy PG_SortBy
@@ -81,10 +54,49 @@ extern "C" {
 #undef fopen
 #undef bind
 #undef locale_t
+constexpr auto PG_DAY = DAY;
+constexpr auto PG_SECOND = SECOND;
+constexpr auto PG_ERROR = ERROR;
+#undef DAY
+#undef SECOND
+#undef ERROR
 }
+
+#include <ydb/library/yql/core/pg_settings/guc_settings.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/interface.h>
+#include <ydb/library/yql/parser/pg_wrapper/memory_context.h>
+#include <ydb/library/yql/parser/pg_wrapper/pg_catalog_consts.h>
+#include <ydb/library/yql/minikql/computation/mkql_block_impl.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_pack_impl.h>
+#include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
+#include <ydb/library/yql/minikql/computation/presort_impl.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/minikql/mkql_alloc.h>
+#include <ydb/library/yql/minikql/mkql_buffer.h>
+#include <ydb/library/yql/minikql/mkql_node_builder.h>
+#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/minikql/mkql_type_builder.h>
+#include <ydb/library/binary_json/read.h>
+#include <ydb/library/uuid/uuid.h>
+#include <ydb/library/yql/public/udf/arrow/block_reader.h>
+#include <ydb/library/yql/public/udf/arrow/block_builder.cpp>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <ydb/library/yql/providers/common/codec/yql_codec_buf.h>
+#include <ydb/library/yql/providers/common/codec/yql_codec_results.h>
+#include <ydb/library/yql/public/udf/udf_value_builder.h>
+#include <ydb/library/yql/utils/fp_bits.h>
+#include <library/cpp/yson/detail.h>
+#include <util/string/split.h>
+#include <util/system/getpid.h>
 
 #include "arrow.h"
 #include "arrow_impl.h"
+
+#define DAY PG_DAY
+#define SECOND PG_SECOND
+#define ERROR PG_ERROR
 
 extern "C" {
 extern void *MkqlAlloc(MemoryContext context, Size size);

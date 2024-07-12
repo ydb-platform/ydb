@@ -330,7 +330,7 @@
  * isn't available before Visual Studio 2019.  For now, use a different
  * definition that also works on older compilers.
  */
-#ifdef _MSC_VER
+#if defined(_MSC_VER) && !defined(__clang__)
 #define EXPAND(args) args
 #define VA_ARGS_NARGS(...) \
 	VA_ARGS_NARGS_ EXPAND((__VA_ARGS__, \

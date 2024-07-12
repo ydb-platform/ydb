@@ -17,7 +17,9 @@
 #define PQCOMM_H
 
 #include <sys/socket.h>
+#ifdef HAVE_SYS_UN_H
 #include <sys/un.h>
+#endif
 #include <netdb.h>
 #include <netinet/in.h>
 

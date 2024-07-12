@@ -67,7 +67,9 @@
 #include <sys/time.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#ifdef HAVE_NETINET_TCP_H
 #include <netinet/tcp.h>
+#endif
 #include <utime.h>
 #ifdef WIN32
 #include <mstcpip.h>
@@ -344,6 +346,7 @@ StreamServerPort(int family, const char *hostName, unsigned short portNumber,
 	hint.ai_flags = AI_PASSIVE;
 	hint.ai_socktype = SOCK_STREAM;
 
+#ifdef HAVE_UNIX_SOCKETS
 	if (family == AF_UNIX)
 	{
 		/*
@@ -364,6 +367,7 @@ StreamServerPort(int family, const char *hostName, unsigned short portNumber,
 		service = unixSocketPath;
 	}
 	else
+#endif
 	{
 		snprintf(portNumberStr, sizeof(portNumberStr), "%d", portNumber);
 		service = portNumberStr;

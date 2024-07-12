@@ -23,7 +23,9 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #endif
+#ifdef HAVE_NETINET_TCP_H
 #include <netinet/tcp.h>
+#endif
 
 #ifdef ENABLE_GSS
 #if defined(HAVE_GSSAPI_H)

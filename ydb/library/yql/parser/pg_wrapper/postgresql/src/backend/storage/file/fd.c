@@ -75,7 +75,9 @@
 #include <dirent.h>
 #include <sys/file.h>
 #include <sys/param.h>
+#ifdef HAVE_SYS_RESOURCE_H
 #include <sys/resource.h>		/* for getrlimit */
+#endif
 #include <sys/stat.h>
 #include <sys/types.h>
 #ifndef WIN32
@@ -462,7 +464,11 @@ pg_fdatasync(int fd)
 		return 0;
 
 retry:
+#ifdef HAVE_FDATASYNC
 	rc = fdatasync(fd);
+#else
+	rc = fsync(fd);
+#endif	
 
 	if (rc == -1 && errno == EINTR)
 		goto retry;

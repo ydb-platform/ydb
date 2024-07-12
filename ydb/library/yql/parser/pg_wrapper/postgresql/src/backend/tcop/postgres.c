@@ -23,9 +23,15 @@
 #include <limits.h>
 #include <signal.h>
 #include <unistd.h>
-#include <sys/resource.h>
 #include <sys/socket.h>
+#ifdef HAVE_SYS_RESOURCE_H
+#include <sys/resource.h>
+#endif
 #include <sys/time.h>
+
+#ifndef HAVE_GETRUSAGE
+#include "rusagestub.h"
+#endif
 
 #ifdef USE_VALGRIND
 #include <valgrind/valgrind.h>

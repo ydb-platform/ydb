@@ -16,7 +16,9 @@
 
 #include <sys/param.h>
 #include <sys/socket.h>
+#ifdef HAVE_SYS_UN_H
 #include <sys/un.h>
+#endif
 #include <unistd.h>
 #ifdef HAVE_UCRED_H
 #include <ucred.h>

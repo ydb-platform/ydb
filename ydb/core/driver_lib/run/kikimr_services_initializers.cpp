@@ -110,6 +110,7 @@
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/node_limits.pb.h>
 #include <ydb/core/protos/compile_service_config.pb.h>
+#include <ydb/core/protos/memory_controller_config.pb.h>
 
 #include <ydb/core/public_http/http_service.h>
 
@@ -2113,6 +2114,7 @@ void TMemoryControllerInitializer::InitializeServices(
     NActors::TActorSystemSetup* setup,
     const NKikimr::TAppData* appData)
 {
+    auto config = appData->MemoryControllerConfig;
     auto* actor = NMemory::CreateMemoryController(TDuration::Seconds(1), MemoryConsumers, appData->Counters);
     setup->LocalServices.emplace_back(
         TActorId(),

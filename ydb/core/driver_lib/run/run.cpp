@@ -1126,6 +1126,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->MetadataCacheConfig.CopyFrom(runConfig.AppConfig.GetMetadataCacheConfig());
     }
 
+    if (runConfig.AppConfig.HasMemoryControllerConfig()) {
+        AppData->MemoryControllerConfig.CopyFrom(runConfig.AppConfig.GetMemoryControllerConfig());
+    }
+
     // setup resource profiles
     AppData->ResourceProfiles = new TResourceProfiles;
     if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())

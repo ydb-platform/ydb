@@ -44,6 +44,15 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
         Y_ENSURE(false, "Invalid node type for InferStatisticsForReadTable");
     }
 
+    auto keyColumns = inputStats->KeyColumns;
+    if (auto indexRead = inputNode.Maybe<TKqlReadTableIndex>()) {
+        const auto& tableData = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, indexRead.Cast().Table().Path().Value());
+        const auto& [indexMeta, _] = tableData.Metadata->GetIndexMetadata(indexRead.Cast().Index().StringValue());
+
+        keyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(
+            new TOptimizerStatistics::TKeyColumns(indexMeta->KeyColumnNames));
+    }
+
     /**
      * We need index statistics to calculate this in the future
      * Right now we use very small estimates to make sure CBO picks Lookup Joins
@@ -65,7 +74,7 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
         nAttrs, 
         byteSize, 
         0.0, 
-        inputStats->KeyColumns,
+        keyColumns,
         inputStats->ColumnStatistics);
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for read table, nrows: " << stats->Nrows << ", nattrs: " << stats->Ncols << ", byteSize: " << stats->ByteSize;
@@ -169,7 +178,9 @@ void InferStatisticsForLookupTable(const TExprNode::TPtr& input, TTypeAnnotation
  * We look into range expression to check if its a point lookup or a full scan
  * We currently don't try to figure out whether this is a small range vs full scan
  */
-void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx,
+    const TKqpOptimizeContext& kqpCtx) {
+
     auto inputNode = TExprBase(input);
     auto sourceSettings = inputNode.Cast<TKqpReadRangesSourceSettings>();
 
@@ -192,6 +203,15 @@ void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnn
         }
     }
 
+    auto keyColumns = inputStats->KeyColumns;
+    if (auto indexRead = inputNode.Maybe<TKqlReadTableIndexRanges>()) {
+        const auto& tableData = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, indexRead.Cast().Table().Path().Value());
+        const auto& [indexMeta, _] = tableData.Metadata->GetIndexMetadata(indexRead.Cast().Index().StringValue());
+
+        keyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(
+            new TOptimizerStatistics::TKeyColumns(indexMeta->KeyColumnNames));
+    }
+
     int nAttrs = sourceSettings.Columns().Size();
 
     double sizePerRow = inputStats->ByteSize / (inputRows==0?1:inputRows);
@@ -204,7 +224,7 @@ void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnn
         nAttrs, 
         byteSize, 
         cost, 
-        inputStats->KeyColumns, 
+        keyColumns, 
         inputStats->ColumnStatistics));
 }
 
@@ -355,7 +375,7 @@ bool TKqpStatisticsTransformer::BeforeLambdasSpecific(const TExprNode::TPtr& inp
         InferStatisticsForKqpTable(input, TypeCtx, KqpCtx);
     }
     else if (TKqpReadRangesSourceSettings::Match(input.Get())) {
-        InferStatisticsForRowsSourceSettings(input, TypeCtx);
+        InferStatisticsForRowsSourceSettings(input, TypeCtx, KqpCtx);
     }
     else if (TKqpCnStreamLookup::Match(input.Get())) {
         InferStatisticsForSteamLookup(input, TypeCtx);

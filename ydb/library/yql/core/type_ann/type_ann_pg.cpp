@@ -2043,7 +2043,7 @@ void AddColumns(const TInputs& inputs, const bool* hasStar, const THashSet<TStri
                         TString lcase = to_lower(TString(item->GetName()));
                         if (auto it = usedInUsing.find(lcase); it != usedInUsing.end()) {
                             if (!present.contains(lcase)) {
-                                items.push_back(RenameOnOrder(ctx, order, ctx.MakeType<TItemExprType>(it->second, item->GetItemType())));
+                                items.push_back(ctx.MakeType<TItemExprType>(it->second, item->GetItemType()));
                                 present.emplace(lcase);
                             }
                             continue;

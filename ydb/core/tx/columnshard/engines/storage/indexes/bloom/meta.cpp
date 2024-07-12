@@ -10,7 +10,7 @@
 
 namespace NKikimr::NOlap::NIndexes {
 
-std::shared_ptr<arrow::RecordBatch> TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
+TString TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
     std::set<ui64> hashes;
     {
         NArrow::NHash::NXX64::TStreamStringHashCalcer hashCalcer(0);
@@ -24,19 +24,12 @@ std::shared_ptr<arrow::RecordBatch> TBloomIndexMeta::DoBuildIndexImpl(TChunkedBa
     }
 
     const ui32 bitsCount = HashesCount * hashes.size() / std::log(2);
-    std::vector<bool> flags(bitsCount, false);
-    const auto pred = [&flags](const ui64 hash) {
-        flags[hash % flags.size()] = true;
+    TFixStringBitsStorage bits(bitsCount);
+    const auto pred = [&bits](const ui64 hash) {
+        bits.Set(true, hash % bits.GetSizeBits());
     };
     BuildHashesSet(hashes, pred);
-
-    arrow::BooleanBuilder builder;
-    auto res = builder.Reserve(flags.size());
-    NArrow::TStatusValidator::Validate(builder.AppendValues(flags));
-    std::shared_ptr<arrow::BooleanArray> out;
-    NArrow::TStatusValidator::Validate(builder.Finish(&out));
-
-    return arrow::RecordBatch::Make(ResultSchema, bitsCount, {out});
+    return bits.GetData();
 }
 
 void TBloomIndexMeta::DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const {

@@ -244,32 +244,7 @@ struct TTestSchema {
     static void InitSchema(const std::vector<NArrow::NTest::TTestColumn>& columns,
                            const std::vector<NArrow::NTest::TTestColumn>& pk,
                            const TTableSpecials& specials,
-                           NKikimrSchemeOp::TColumnTableSchema* schema)
-    {
-        schema->SetEngine(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
-
-        for (ui32 i = 0; i < columns.size(); ++i) {
-            *schema->MutableColumns()->Add() = columns[i].CreateColumn(i + 1);
-            if (!specials.NeedTestStatistics()) {
-                continue;
-            }
-            if (NOlap::NStatistics::NMax::TOperator::IsAvailableType(columns[i].GetType())) {
-                *schema->AddStatistics() = NOlap::NStatistics::TOperatorContainer("MAX::" + columns[i].GetName(), std::make_shared<NOlap::NStatistics::NMax::TOperator>(i + 1)).SerializeToProto();
-            }
-        }
-
-        Y_ABORT_UNLESS(pk.size() > 0);
-        for (auto& column : ExtractNames(pk)) {
-            schema->AddKeyColumnNames(column);
-        }
-
-        if (specials.HasCodec()) {
-            schema->MutableDefaultCompression()->SetCodec(specials.GetCodecId());
-        }
-        if (specials.CompressionLevel) {
-            schema->MutableDefaultCompression()->SetLevel(*specials.CompressionLevel);
-        }
-    }
+                           NKikimrSchemeOp::TColumnTableSchema* schema);
 
     static void InitTtl(const TTableSpecials& specials, NKikimrSchemeOp::TColumnDataLifeCycle::TTtl* ttl) {
         Y_ABORT_UNLESS(specials.HasTtl());

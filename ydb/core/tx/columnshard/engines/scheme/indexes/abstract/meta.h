@@ -16,6 +16,7 @@ class TExprBase;
 namespace NKikimr::NOlap {
 struct TIndexInfo;
 class TProgramContainer;
+class TIndexChunk;
 }
 
 namespace NKikimr::NSchemeShard {
@@ -30,23 +31,29 @@ private:
     YDB_READONLY(ui32, IndexId, 0);
     YDB_READONLY(TString, StorageId, IStoragesManager::DefaultStorageId);
 protected:
-    virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const = 0;
+    virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const = 0;
     virtual void DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const = 0;
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) = 0;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const = 0;
     virtual TConclusionStatus DoCheckModificationCompatibility(const IIndexMeta& newMeta) const = 0;
+    virtual NJson::TJsonValue DoSerializeDataToJson(const TString& /*data*/, const TIndexInfo& /*indexInfo*/) const {
+        return "NO_IMPLEMENTED";
+    }
 
 public:
     using TFactory = NObjectFactory::TObjectFactory<IIndexMeta, TString>;
     using TProto = NKikimrSchemeOp::TOlapIndexDescription;
 
     IIndexMeta() = default;
-    IIndexMeta(const ui32 indexId, const TString& indexName)
+    IIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId)
         : IndexName(indexName)
         , IndexId(indexId)
+        , StorageId(storageId)
     {
 
     }
+
+    NJson::TJsonValue SerializeDataToJson(const TIndexChunk& iChunk, const TIndexInfo& indexInfo) const;
 
     TConclusionStatus CheckModificationCompatibility(const std::shared_ptr<IIndexMeta>& newMeta) const {
         if (!newMeta) {
@@ -60,7 +67,7 @@ public:
 
     virtual ~IIndexMeta() = default;
 
-    std::shared_ptr<IPortionDataChunk> BuildIndex(THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const {
+    std::shared_ptr<IPortionDataChunk> BuildIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const {
         return DoBuildIndex(data, indexInfo);
     }
 

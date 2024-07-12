@@ -1,4 +1,5 @@
 #include "meta.h"
+#include <ydb/core/tx/columnshard/engines/portions/index_chunk.h>
 
 namespace NKikimr::NOlap::NIndexes {
 
@@ -26,6 +27,16 @@ void IIndexMeta::SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto)
         proto.SetStorageId(StorageId);
     }
     return DoSerializeToProto(proto);
+}
+
+NJson::TJsonValue IIndexMeta::SerializeDataToJson(const TIndexChunk& iChunk, const TIndexInfo& indexInfo) const {
+    NJson::TJsonValue result = NJson::JSON_MAP;
+    result.InsertValue("entity_id", iChunk.GetEntityId());
+    result.InsertValue("chunk_idx", iChunk.GetChunkIdx());
+    if (iChunk.HasBlobData()) {
+        result.InsertValue("data", DoSerializeDataToJson(iChunk.GetBlobDataVerified(), indexInfo));
+    }
+    return result;
 }
 
 }   // namespace NKikimr::NOlap::NIndexes

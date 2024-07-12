@@ -52,7 +52,7 @@ protected:
     }
     virtual void DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const override;
 
-    virtual std::shared_ptr<arrow::RecordBatch> DoBuildIndexImpl(TChunkedBatchReader& reader) const override;
+    virtual TString DoBuildIndexImpl(TChunkedBatchReader& reader) const override;
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override {
         AFL_VERIFY(TBase::DoDeserializeFromProto(proto));
@@ -76,7 +76,7 @@ protected:
 public:
     TBloomIndexMeta() = default;
     TBloomIndexMeta(const ui32 indexId, const TString& indexName, std::set<ui32>& columnIds, const double fpProbability)
-        : TBase(indexId, indexName, columnIds)
+        : TBase(indexId, indexName, columnIds, NBlobOperations::TGlobal::DefaultStorageId)
         , FalsePositiveProbability(fpProbability) {
         Initialize();
     }

@@ -61,10 +61,6 @@ TMaybe<TStringBuf> FindTimezoneIANAName(ui16 id);
 TStringBuf GetTimezoneIANAName(ui16 id);
 std::vector<ui16> GetTzBlackList();
 
-void ToLocalTime(ui32 utcSeconds, ui16 tzId, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec);
-void ToLocalTime64(i64 utcSeconds, ui16 tzId, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec);
-ui32 FromLocalTime(ui16 tzId, ui32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec);
-
 void SerializeTzDate(ui16 date, ui16 tzId, IOutputStream& out);
 void SerializeTzDatetime(ui32 datetime, ui16 tzId, IOutputStream& out);
 void SerializeTzTimestamp(ui64 timestamp, ui16 tzId, IOutputStream& out);

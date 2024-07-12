@@ -307,8 +307,8 @@ public:
 
     // Cluster helpers
     void UpdateNodeCpuInfo(double usage, ui32 threads, ui64 nodeIndex = 0) override {
-        TVector<std::tuple<TString, double, ui32>> pools;
-        pools.emplace_back("User", usage, threads);
+        TVector<std::tuple<TString, double, ui32, ui32>> pools;
+        pools.emplace_back("User", usage, threads, threads);
 
         auto edgeActor = GetRuntime()->AllocateEdgeActor(nodeIndex);
         GetRuntime()->Send(

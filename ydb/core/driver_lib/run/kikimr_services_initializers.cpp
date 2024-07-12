@@ -2104,15 +2104,16 @@ void TMemoryTrackerInitializer::InitializeServices(
     );
 }
 
-TMemoryControllerInitializer::TMemoryControllerInitializer(const TKikimrRunConfig& runConfig)
+TMemoryControllerInitializer::TMemoryControllerInitializer(const TKikimrRunConfig& runConfig, TIntrusivePtr<NMemory::IMemoryConsumers> memoryConsumers)
     : IKikimrServicesInitializer(runConfig)
+    , MemoryConsumers(std::move(memoryConsumers))
 {}
 
 void TMemoryControllerInitializer::InitializeServices(
     NActors::TActorSystemSetup* setup,
     const NKikimr::TAppData* appData)
 {
-    auto* actor = NMemory::CreateMemoryController(TDuration::Seconds(1), appData->Counters);
+    auto* actor = NMemory::CreateMemoryController(TDuration::Seconds(1), MemoryConsumers, appData->Counters);
     setup->LocalServices.emplace_back(
         TActorId(),
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->BatchPoolId)

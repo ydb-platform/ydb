@@ -373,8 +373,9 @@ public:
 };
 
 class TMemoryControllerInitializer : public IKikimrServicesInitializer {
+    TIntrusivePtr<NMemory::IMemoryConsumers> MemoryConsumers;
 public:
-    TMemoryControllerInitializer(const TKikimrRunConfig& runConfig);
+    TMemoryControllerInitializer(const TKikimrRunConfig& runConfig, TIntrusivePtr<NMemory::IMemoryConsumers> memoryConsumers);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };

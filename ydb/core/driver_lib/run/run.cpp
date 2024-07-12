@@ -3,6 +3,7 @@
 #include "service_initializer.h"
 #include "kikimr_services_initializers.h"
 
+#include <ydb/core/memory_controller/memory_controller.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -399,7 +400,7 @@ TKikimrRunner::TKikimrRunner(std::shared_ptr<TModuleFactories> factories)
     : ModuleFactories(std::move(factories))
     , Counters(MakeIntrusive<::NMonitoring::TDynamicCounters>())
     , PollerThreads(new NInterconnect::TPollerThreads)
-    , MemoryConsumers(MakeIntrusive<NMemory::TMemoryConsumers>())
+    , MemoryConsumers(NMemory::CreateMemoryConsumers())
 {
 }
 
@@ -1424,7 +1425,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TLocalServiceInitializer(runConfig));
     }
     if (serviceMask.EnableSharedCache) {
-        sil->AddServiceInitializer(new TSharedCacheInitializer(runConfig, MemoryConsumers->Register("SharedCache")));
+        sil->AddServiceInitializer(new TSharedCacheInitializer(runConfig, MemoryConsumers->Register(NMemory::EConsumerKind::SharedCache)));
     }
     if (serviceMask.EnableBlobCache) {
         sil->AddServiceInitializer(new TBlobCacheInitializer(runConfig));
@@ -1533,7 +1534,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
 #endif
 
-    sil->AddServiceInitializer(new TMemoryControllerInitializer(runConfig));
+    sil->AddServiceInitializer(new TMemoryControllerInitializer(runConfig, MemoryConsumers));
 
     if (serviceMask.EnableKqp) {
         sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories, *this));

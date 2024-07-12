@@ -239,6 +239,10 @@ namespace {
     };
 }
 
+TIntrusivePtr<IMemoryConsumers> CreateMemoryConsumers() {
+    return MakeIntrusive<TMemoryConsumers>();
+}
+
 IActor* CreateMemoryController(TDuration interval, TIntrusivePtr<IMemoryConsumers> consumers, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
     return new TMemoryController(interval, consumers,
         GetServiceCounters(counters, "utils")->GetSubgroup("component", "memory_controller"));

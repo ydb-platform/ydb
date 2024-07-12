@@ -336,8 +336,9 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             }
 
             bool isDropNotNull = col.HasNotNull(); // if has, then always false
+            bool isSetNotNull = col.HasIsCheckingNotNullInProgress();
 
-            if (!isDropNotNull && !columnFamily && !col.HasDefaultFromSequence()) {
+            if (!isSetNotNull && !isDropNotNull && !columnFamily && !col.HasDefaultFromSequence()) {
                 errStr = Sprintf("Nothing to alter for column '%s'", colName.data());
                 return nullptr;
             }
@@ -377,9 +378,14 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 column.NotNull = false;
             }
 
+            if (isSetNotNull) {
+                column.IsCheckingNotNullInProgress = true;
+            }
+
             if (columnFamily) {
                 column.Family = columnFamily->GetId();
             }
+
             if (col.HasDefaultFromSequence()) {
                 column.DefaultKind = ETableColumnDefaultKind::FromSequence;
                 column.DefaultValue = col.GetDefaultFromSequence();

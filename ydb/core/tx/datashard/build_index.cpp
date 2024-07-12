@@ -178,14 +178,9 @@ bool BuildExtraColumns(TVector<TCell>& cells, const NKikimrIndexBuilder::TColumn
     return true;
 }
 
-bool CheckNotNullConstraint(
-    const TConstArrayRef<TCell>& cells,
-    TString& err
-)
-{
+bool CheckNotNullConstraint(const TConstArrayRef<TCell>& cells) {
     for (const auto& cell : cells) {
         if (cell.IsNull()) {
-            err = "DATASHARD: Column contains null value, so not-null constraint was not set.";
             return false;
         }
     }
@@ -334,6 +329,12 @@ class TBuildIndexScan : public TActor<TBuildIndexScan>, public NTable::IScan {
     TUploadMonStats Stats = TUploadMonStats("tablets", "build_index_upload");
     TStatus UploadStatus;
 
+    enum class ECheckingNotNullStatus {
+        None,
+        Ok,
+        NullFound
+    } CheckingNotNullStatus = ECheckingNotNullStatus::None;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BUILD_INDEX_SCAN_ACTOR;
@@ -447,8 +448,12 @@ public:
                 std::move(keyCopy),
                 std::move(serializedValue));
         } else if (CheckingNotNullSettings.columnSize() > 0) {
-            TString err;
-            Y_ABORT_UNLESS(CheckNotNullConstraint(rowCells, err));
+            if (!CheckNotNullConstraint(rowCells)) {
+                CheckingNotNullStatus = ECheckingNotNullStatus::NullFound;
+                return EScan::Final;
+            } else {
+                CheckingNotNullStatus = ECheckingNotNullStatus::Ok;
+            }
         } else {
             ReadBuf.AddRow(
                 TSerializedCellVec(key),
@@ -494,6 +499,18 @@ public:
 
             LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
                        Debug());
+        } else if (CheckingNotNullStatus != ECheckingNotNullStatus::None) {
+            switch (CheckingNotNullStatus) {
+                case ECheckingNotNullStatus::NullFound:
+                    progress->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::CHECKING_NOT_NULL_ERROR);
+                    UploadStatus.Issues.AddIssue(NYql::TIssue("Column contains null value, so not-null constraint was not set."));
+                    break;
+                case ECheckingNotNullStatus::Ok:
+                    progress->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::DONE);
+                    break;
+                default:
+                    break;
+            }
         } else if (!UploadStatus.IsSuccess()) {
             progress->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::BUILD_ERROR);
         } else {

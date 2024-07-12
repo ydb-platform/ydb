@@ -3536,8 +3536,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(AlterTable_SetNotNull_Invalid) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(false);
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
             .SetWithSampleTables(false);
@@ -3573,6 +3571,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_C(initValues.IsSuccess(), initValues.GetIssues().ToString());
         }
 
+        std::cerr << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << std::endl;
         {
             auto setNotNull = client.ExecuteQuery(R"sql(
                 ALTER TABLE `/Root/test/alterNotNull`
@@ -3580,12 +3579,11 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
         }
+        std::cerr << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << std::endl;
     }
 
     Y_UNIT_TEST(AlterTable_SetNotNull_Valid) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(false);
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
             .SetWithSampleTables(false);
@@ -3621,7 +3619,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_C(initValues.IsSuccess(), initValues.GetIssues().ToString());
         }
 
-    std::cerr << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << std::endl;
         {
             auto setNotNull = client.ExecuteQuery(R"sql(
                 ALTER TABLE `/Root/test/alterNotNull`
@@ -3629,7 +3626,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
         }
-    std::cerr << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << std::endl;
 
         {
             auto initNullValues = client.ExecuteQuery(R"sql(
@@ -3644,8 +3640,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(ReplaceIntoWithDefaultValue) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(false);
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
             .SetWithSampleTables(false);

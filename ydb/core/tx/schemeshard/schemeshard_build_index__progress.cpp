@@ -313,6 +313,7 @@ public:
                         buildInfo->ToUploadShards.push_back(item.first);
                         break;
                     case NKikimrTxDataShard::TEvBuildIndexProgressResponse::DONE:
+                    case NKikimrTxDataShard::TEvBuildIndexProgressResponse::CHECKING_NOT_NULL_ERROR:
                         buildInfo->DoneShards.insert(item.first);
                         break;
                     case NKikimrTxDataShard::TEvBuildIndexProgressResponse::BUILD_ERROR:
@@ -832,7 +833,17 @@ public:
                     Progress(buildId);
                 }
                 break;
+            case  NKikimrTxDataShard::TEvBuildIndexProgressResponse::CHECKING_NOT_NULL_ERROR:
+                buildInfo->Issue += TStringBuilder()
+                    << "One of the shards report CHECKING_NOT_NULL_ERROR at Filling stage, process has to be canceled"
+                    << ", shardId: " << shardId
+                    << ", shardIdx: " << shardIdx;
 
+                Self->PersistBuildIndexIssue(db, buildInfo);
+                ChangeState(buildInfo->Id, TIndexBuildInfo::EState::Rejection_Applying);
+
+                Progress(buildId);
+                break;
             case  NKikimrTxDataShard::TEvBuildIndexProgressResponse::BUILD_ERROR:
                 buildInfo->Issue += TStringBuilder()
                     << "One of the shards report BUILD_ERROR at Filling stage, process has to be canceled"

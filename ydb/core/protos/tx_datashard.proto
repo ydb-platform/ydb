@@ -1437,6 +1437,8 @@ message TEvBuildIndexProgressResponse {
         ABORTED = 4;
         BUILD_ERROR = 5;
         BAD_REQUEST = 6;
+
+        CHECKING_NOT_NULL_ERROR = 7;
     }
 
     optional EStatus Status = 5;

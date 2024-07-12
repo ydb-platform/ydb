@@ -796,17 +796,7 @@ public:
             const bool initial = NYql::HasSetting(publish.Settings().Ref(), EYtSettingType::Initial);
 
             std::unordered_map<EYtSettingType, TString> strOpts;
-            TMaybe<TVector<TString>> securityTags = Nothing();
             for (const auto& setting : publish.Settings().Ref().Children()) {
-                if (FromString<EYtSettingType>(setting->Head().Content()) ==  EYtSettingType::SecurityTags) {
-                    securityTags = TVector<TString>();
-                    securityTags->reserve(setting->ChildrenSize() - 1);
-                    for (size_t pos = 1; pos < setting->ChildrenSize(); pos++) {
-                        securityTags->emplace_back(setting->ChildRef(pos)->Content());
-                    }
-                    continue;
-                }
-
                 if (setting->ChildrenSize() == 2) {
                     strOpts.emplace(FromString<EYtSettingType>(setting->Head().Content()), setting->Tail().Content());
                 } else if (setting->ChildrenSize() == 1) {
@@ -874,9 +864,9 @@ public:
             const ui32 dstEpoch = TEpochInfo::Parse(publish.Publish().Epoch().Ref()).GetOrElse(0);
             auto execCtx = MakeExecCtx(std::move(options), session, cluster, node.Get(), &ctx);
 
-            return session->Queue_->Async([execCtx, src = std::move(src), dst, dstEpoch, isAnonymous, mode, initial, srcColumnGroups, combineChunks, strOpts = std::move(strOpts), securityTags = std::move(securityTags)] () {
+            return session->Queue_->Async([execCtx, src = std::move(src), dst, dstEpoch, isAnonymous, mode, initial, srcColumnGroups, combineChunks, strOpts = std::move(strOpts)] () {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
-                return ExecPublish(execCtx, src, dst, dstEpoch, isAnonymous, mode, initial, srcColumnGroups, combineChunks, strOpts, securityTags);
+                return ExecPublish(execCtx, src, dst, dstEpoch, isAnonymous, mode, initial, srcColumnGroups, combineChunks, strOpts);
             })
             .Apply([nodePos] (const TFuture<void>& f) {
                 try {
@@ -2026,8 +2016,7 @@ private:
         const bool initial,
         const TString& srcColumnGroups,
         const bool combineChunks,
-        const std::unordered_map<EYtSettingType, TString>& strOpts,
-        const TMaybe<TVector<TString>> securityTags)
+        const std::unordered_map<EYtSettingType, TString>& strOpts)
     {
         TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config());
         auto cluster = execCtx->Cluster_;
@@ -2168,15 +2157,9 @@ private:
             }
         }
 
-        TMaybe<NYT::TNode> securityTagsNode = Nothing();
-        if (securityTags) {
-            securityTagsNode = NYT::TNode::CreateList();
-            auto &securityTagsNodeList = securityTagsNode->AsList();
-            for (size_t pos = 0; pos < securityTags->size(); pos++) {
-                securityTagsNodeList.emplace_back((*securityTags)[pos]);
-            }
-            if (!(EYtWriteMode::Append == mode && !appendToSorted)) {
-                yqlAttrs[SecurityTagsName] = *securityTagsNode;
+        if (EYtWriteMode::Append != mode || appendToSorted) {
+            if (strOpts.contains(EYtSettingType::SecurityTags)) {
+                yqlAttrs[SecurityTagsName] = NYT::NodeFromYsonString(strOpts.at(EYtSettingType::SecurityTags));
             }
         }
 
@@ -2234,8 +2217,9 @@ private:
             res = cacheCheck.Apply([mode, srcPaths, execCtx, rowSpec, forceTransform,
                                     appendToSorted, initial, entry, dstPath, dstEpoch, yqlAttrs, combineChunks,
                                     dstCompressionCodec, dstErasureCodec, dstReplicationFactor, dstMedia, dstPrimaryMedium,
-                                    nativeYtTypeCompatibility, publishTx, cluster, securityTagsNode,
-                                    commitCheckpoint, columnGroupsSpec = std::move(columnGroupsSpec)] (const auto& f) mutable
+                                    nativeYtTypeCompatibility, publishTx, cluster,
+                                    commitCheckpoint, columnGroupsSpec = std::move(columnGroupsSpec),
+                                    strOpts = std::move(strOpts)] (const auto& f) mutable
             {
                 if (f.GetValue()) {
                     execCtx->QueryCacheItem.Destroy();
@@ -2273,8 +2257,8 @@ private:
                 auto ytDst = TRichYPath(dstPath);
                 if (EYtWriteMode::Append == mode && !appendToSorted) {
                     ytDst.Append(true);
-                    if (securityTagsNode) {
-                        spec["additional_security_tags"] = *securityTagsNode;
+                    if (strOpts.contains(EYtSettingType::SecurityTags)) {
+                        spec["additional_security_tags"] = NYT::NodeFromYsonString(strOpts[EYtSettingType::SecurityTags]);
                     }
                 } else {
                     NYT::TNode fullSpecYson;

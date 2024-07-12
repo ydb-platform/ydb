@@ -870,23 +870,21 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             break;
         }
         case EYtSettingType::SecurityTags: {
-            if (!EnsureTupleMinSize(*setting, 1, ctx)) {
+            if (!EnsureTupleSize(*setting, 2, ctx)) {
                 return false;
             }
-            for (size_t pos = 1; pos < setting->ChildrenSize(); pos++) {
-                if (!EnsureAtom(*setting->ChildRef(pos), ctx)) {
-                    return false;
-                }
-                if (setting->ChildRef(pos)->Content().Size() == 0) {
-                    ctx.AddError(TIssue(ctx.GetPosition(setting->ChildRef(pos)->Pos()), TStringBuilder() 
-                        << "Security tag cannot be empty"));
-                    return false;
-                }
+            NYT::TNode securityTagsNode;
+            try {
+                securityTagsNode = NYT::NodeFromYsonString(setting->Tail().Content());
+            } catch (const std::exception& e) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
+                    << "Failed to parse Yson: " << e.what()));
+                return false;
             }
             return true;
         }
         case EYtSettingType::LAST: {
-            YQL_ENSURE(false);
+            YQL_ENSURE(false, "Unexpected EYtSettingType");
         }
         }
     }

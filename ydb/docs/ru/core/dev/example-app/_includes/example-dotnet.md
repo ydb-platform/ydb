@@ -36,7 +36,7 @@ using var tableClient = new TableClient(driver, new TableClientConfig());
 
 {% include [steps/02_create_table.md](steps/02_create_table.md) %}
 
-Для создания таблиц используется метод `session.ExecuteSchemeQuery` с DDL (Data Definition Language) YQL-запросом.
+Для создания строковых таблиц используется метод `session.ExecuteSchemeQuery` с DDL (Data Definition Language) YQL-запросом.
 
 ```c#
 var response = await tableClient.SessionExec(async session =>

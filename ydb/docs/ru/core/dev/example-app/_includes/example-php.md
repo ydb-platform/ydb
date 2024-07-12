@@ -37,7 +37,7 @@ $ydb = new Ydb($config);
 
 {% include [create_table.md](steps/02_create_table.md) %}
 
-Для создания таблиц используется метод `session->createTable()`:
+Для создания строковых таблиц используется метод `session->createTable()`:
 ```php
 protected function createTabels()
 {
@@ -93,7 +93,7 @@ protected function createTabels()
 }
 ```
 
-С помощью метода `session->describeTable()` можно вывести информацию о структуре таблицы и убедиться, что она успешно создалась:
+С помощью метода `session->describeTable()` можно вывести информацию о структуре строковой таблицы и убедиться, что она успешно создалась:
 
 ```php
 protected function describeTable($table)

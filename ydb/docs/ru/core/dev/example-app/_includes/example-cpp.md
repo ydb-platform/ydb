@@ -23,7 +23,7 @@
 
 {% include [steps/02_create_table.md](steps/02_create_table.md) %}
 
-Для создания таблиц используется метод `CreateTable`:
+Для создания строковых таблиц используется метод `CreateTable`:
 
 ```c++
 //! Creates sample tables with CrateTable API.
@@ -40,7 +40,7 @@
     }));
 ```
 
-С помощью метода `DescribeTable` можно вывести информацию о структуре таблицы и убедиться, что она успешно создалась:
+С помощью метода `DescribeTable` можно вывести информацию о структуре строковой таблицы и убедиться, что она успешно создалась:
 
 ```c++
     TMaybe<TTableDescription> desc;

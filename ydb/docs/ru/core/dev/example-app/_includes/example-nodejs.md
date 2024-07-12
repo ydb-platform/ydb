@@ -27,7 +27,7 @@ await driver.tableClient.withSession(async (session) => {
 
 {% include [create_table.md](steps/02_create_table.md) %}
 
-Для создания таблиц используется метод `Session.createTable()`:
+Для создания строковых таблиц используется метод `Session.createTable()`:
 
 ```ts
 async function createTables(session: Session, logger: Logger) {
@@ -108,7 +108,7 @@ async function createTables(session: Session, logger: Logger) {
 }
 ```
 
-С помощью метода `Session.describeTable()` можно вывести информацию о структуре таблицы и убедиться, что она успешно создалась:
+С помощью метода `Session.describeTable()` можно вывести информацию о структуре строковой таблицы и убедиться, что она успешно создалась:
 
 ```ts
 async function describeTable(session: Session, tableName: string, logger: Logger) {

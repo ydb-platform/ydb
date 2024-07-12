@@ -33,7 +33,7 @@
 
 {% include [query_processing.md](steps/04_query_processing.md) %}
 
-{% if oss %}[C++](../example-cpp.md#query-processing) | {% endif %} [C# (.NET)](../example-dotnet.md#query-processing) | [Go](../go/index.md#query-processing) | [Java](../java/index.md#query-processing) | Node.js | P[PHP](../example-php.md#query-processing) | [Python](../python/index.md#query-processing)
+{% if oss %}[C++](../example-cpp.md#query-processing) | {% endif %} [C# (.NET)](../example-dotnet.md#query-processing) | [Go](../go/index.md#query-processing) | [Java](../java/index.md#query-processing) | Node.js | [PHP](../example-php.md#query-processing) | [Python](../python/index.md#query-processing)
 
 {% include [param_queries.md](steps/06_param_queries.md) %}
 

@@ -2,9 +2,9 @@
 
 С помощью [Terraform](https://www.terraform.io/) можно создавать, удалять и изменять следующие объекты внутри кластера {{ ydb-short-name }}:
 
-* [таблицы](../concepts/datamodel/table.md);
-* [индексы](../concepts/secondary_indexes.md) таблиц;
-* [потоки изменений](../concepts/cdc.md) таблиц;
+* [строковые](../concepts/datamodel/table.md#row-oriented-tables) таблицы;
+* [индексы](../concepts/secondary_indexes.md) строковых таблиц;
+* [потоки изменений](../concepts/cdc.md) строковых таблиц;
 * [топики](../concepts/topic.md).
 
 {% note warning %}
@@ -85,7 +85,7 @@
 
 * Строка соединения `connection_string` — выражение вида `grpc(s)://HOST:PORT/?database=/database/path`, где `grpc(s)://HOST:PORT/` эндпоинт, а `/database/path` — путь БД.
   Например, `grpcs://example.com:2135?database=/Root/testdb0`.
-* `database_endpoint` - используется при работе с ресурсом [топиков](#topic_resource) (аналог `connection_string` при работе с ресурсами таблиц).
+* `database_endpoint` - используется при работе с ресурсом [топиков](#topic_resource) (аналог `connection_string` при работе с ресурсами строковых таблиц).
 
 {% note info %}
 
@@ -150,7 +150,7 @@ resource "ydb_table_index" "table_index" {
   type              = "global_sync" # "global_async"
   columns           = ["a", "b"]
 
-  depends_on = [ydb_table.table] # ссылка на ресурс создания таблицы
+  depends_on = [ydb_table.table] # ссылка на ресурс создания строковой таблицы
 }
 
 resource "ydb_table_changefeed" "table_changefeed" {
@@ -163,7 +163,7 @@ resource "ydb_table_changefeed" "table_changefeed" {
     supported_codecs = ["raw", "gzip"]
   }
 
-  depends_on = [ydb_table.table] # ссылка на ресурс создания таблицы
+  depends_on = [ydb_table.table] # ссылка на ресурс создания строковой таблицы
 }
 
 resource "ydb_topic" "test" {
@@ -195,13 +195,9 @@ resource "ydb_topic" "test" {
 
 ### Строковая таблица {#ydb-table}
 
-{% note info %}
+{% include [not_allow_for_olap](../_includes/not_allow_for_olap_note_main.md) %}
 
-Работа с колоночными таблицами через Terraform пока не доступна.
-
-{% endnote %}
-
-Для работы с таблицами используется ресурс `ydb_table`.
+Для работы со строковыми таблицами используется ресурс `ydb_table`.
 
 Пример:
 
@@ -242,12 +238,12 @@ resource "ydb_topic" "test" {
 
 Поддерживаются следующие аргументы:
 
-* `path` — (обязательный) путь таблицы, относительно корня базы (пример - `/path/to/table`).
+* `path` — (обязательный) путь строковой таблицы, относительно корня базы (пример - `/path/to/table`).
 * `connection_string` — (обязательный) [строка соединения](#connection_string).
 
 * `column` — (обязательный) свойства колонки (см. аргумент [column](#column)).
 * `family` — (необязательный) группа колонок (см. аргумент [family](#family)).
-* `primary_key` — (обязательный) [первичный ключ](../yql/reference/syntax/create_table.md#columns) таблицы, содержит упорядоченный список имён колонок первичного ключа.
+* `primary_key` — (обязательный) [первичный ключ](../yql/reference/syntax/create_table.md#columns) строковой таблицы, содержит упорядоченный список имён колонок первичного ключа.
 * `ttl` — (необязательный) TTL (см. аргумент [ttl](#ttl)).
 * `partitioning_settings` — (необязательный) настройки партицирования (см. аргумент [partitioning_settings](#partitioning-settings)).
 * `key_bloom_filter` — (необязательный) (bool) использовать [фильтра Блума для первичного ключа](../concepts/datamodel/table.md#bloom-filter), значение по умолчанию - false.
@@ -255,11 +251,11 @@ resource "ydb_topic" "test" {
 
 #### column {#column}
 
-Аргумент `column` описывает [свойства колонки](../yql/reference/syntax/create_table.md#columns) таблицы.
+Аргумент `column` описывает [свойства колонки](../yql/reference/syntax/create_table.md#columns) строковой таблицы.
 
 {% note warning %}
 
-При помощи Terraform нельзя удалить колонку, можно только добавить. Чтобы удалить колонку, используйте средства {{ ydb-short-name }}, затем удалите колонку из описания ресурса. При попытке "прокатки" изменений колонок таблицы (смена типа, имени), Terraform не попытается их удалить, а попытается сделать update-in-place, но изменения применены не будут.
+При помощи Terraform нельзя удалить колонку, можно только добавить. Чтобы удалить колонку, используйте средства {{ ydb-short-name }}, затем удалите колонку из описания ресурса. При попытке "прокатки" изменений колонок строковой таблицы (смена типа, имени), Terraform не попытается их удалить, а попытается сделать update-in-place, но изменения применены не будут.
 
 {% endnote %}
 
@@ -275,7 +271,7 @@ column {
 ```
 
 * `name` — (обязательный) имя колонки.
-* `type` — (обязательный) [тип данных YQL](../yql/reference/types/primitive.html) колонки. Допускается использовать простые типы колонок. Как пример, контейнерные типы не могут быть использованы в качестве типов данных колонок таблиц.
+* `type` — (обязательный) [тип данных YQL](../yql/reference/types/primitive.html) колонки. Допускается использовать простые типы колонок. Как пример, контейнерные типы не могут быть использованы в качестве типов данных колонок строковых таблиц.
 * `family` — (необязательный) имя группы колонок (см. аргумент [family](#family)).
 * `not_null` — (необязательный) колонка не может содержать `NULL`. Значение по умолчанию: `false`.
 
@@ -344,9 +340,9 @@ ttl {
   * `microseconds`
   * `nanoseconds`
 
-### Вторичный индекс таблицы {#ydb-table-index}
+### Вторичный индекс строковой таблицы {#ydb-table-index}
 
-Для работы с индексом таблицы используется ресурс [ydb_table_index](../concepts/secondary_indexes.md).
+Для работы с индексом строковой таблицы используется ресурс [ydb_table_index](../concepts/secondary_indexes.md).
 
 Пример:
 
@@ -363,18 +359,20 @@ resource "ydb_table_index" "ydb_table_index" {
 
 Поддерживаются следующие аргументы:
 
-* `table_path` — путь таблицы. Указывается, если не задан `table_id`.
+* `table_path` — путь строковой таблицы. Указывается, если не задан `table_id`.
 * `connection_string` — [строка соединения](#connection_string). Указывается, если не задан `table_id`.
-* `table_id` - terraform-идентификатор таблицы. Указывается, если не задан `table_path` или `connection_string`.
+* `table_id` - terraform-идентификатор строковой таблицы. Указывается, если не задан `table_path` или `connection_string`.
 
 * `name` — (обязательный) имя индекса.
 * `type` — (обязательный) тип индекса [global_sync | global_async](../yql/reference/syntax/create_table.md#secondary_index).
 * `columns` — (обязательный) упорядоченный список имён колонок, участвующий в индексе.
 * `cover` — (обязательный) список дополнительных колонок для покрывающего индекса.
 
-### Поток изменений таблицы {#ydb-table-changefeed}
+### Поток изменений строковой таблицы {#ydb-table-changefeed}
 
-Для работы с [потоком изменений](../concepts/cdc.md) таблицы используется ресурс `ydb_table_changefeed`.
+{% include [not_allow_for_olap](../_includes/not_allow_for_olap_note_main.md) %}
+
+Для работы с [потоком изменений](../concepts/cdc.md) строковой таблицы используется ресурс `ydb_table_changefeed`.
 
 Пример:
 
@@ -389,9 +387,9 @@ resource "ydb_table_changefeed" "ydb_table_changefeed" {
 
 Поддерживаются следующие аргументы:
 
-* `table_path` — путь таблицы. Указывается, если не задан `table_id`.
+* `table_path` — путь строковой таблицы. Указывается, если не задан `table_id`.
 * `connection_string` — [строка соединения](#connection_string). Указывается, если не задан `table_id`.
-* `table_id` — terraform-идентификатор таблицы. Указывается, если не задан `table_path` или `connection_string`.
+* `table_id` — terraform-идентификатор строковой таблицы. Указывается, если не задан `table_path` или `connection_string`.
 
 * `name` — (обязательный) имя потока изменений.
 * `mode` — (обязательный) режим работы [потока изменений](../yql/reference/syntax/alter_table#changefeed-options).
@@ -410,11 +408,11 @@ resource "ydb_table_changefeed" "ydb_table_changefeed" {
 
 ### Примеры использования {manage-examples}
 
-#### Создание таблицы в существующей БД {#example-with-connection-string}
+#### Создание строковой таблицы в существующей БД {#example-with-connection-string}
 
 ```tf
 resource "ydb_table" "ydb_table" {
-  # Путь до таблицы
+  # Путь до строковой таблицы
   path = "path/to/table" # путь относительно корня базы
 
   connection_string = "grpc(s)://HOST:PORT/?database=/database/path" #пример подключения к БД
@@ -453,11 +451,11 @@ resource "ydb_table" "ydb_table" {
 }
 ```
 
-#### Создание таблицы, индекса и потока изменений {#example-with-table}
+#### Создание строковой таблицы, индекса и потока изменений {#example-with-table}
 
 ```tf
 resource "ydb_table" "ydb_table" {
-  # Путь до таблицы
+  # Путь до строковой таблицы
   path = "path/to/table" # путь относительно корня базы
   
   # ConnectionString до базы данных.
@@ -523,7 +521,7 @@ resource "ydb_table_changefeed" "ydb_table_changefeed" {
     name = "test_consumer"
   }
 
-  depends_on = [ydb_table.ydb_table] # ссылка на ресурс создания таблицы
+  depends_on = [ydb_table.ydb_table] # ссылка на ресурс создания строковой таблицы
 }
 
 resource "ydb_table_index" "ydb_table_index" {
@@ -533,7 +531,7 @@ resource "ydb_table_index" "ydb_table_index" {
   cover = ["e"]
   type = "global_sync"
 
-  depends_on = [ydb_table.ydb_table] # ссылка на ресурс создания таблицы
+  depends_on = [ydb_table.ydb_table] # ссылка на ресурс создания строковой таблицы
 }
 ```
 
@@ -580,7 +578,7 @@ resource "ydb_topic" "ydb_topic" {
 Поддерживаются следующие аргументы:
 
 * `name` - (обязательный) имя топика.
-* `database_endpoint` - (обязательный) полный путь до базы данных, например: `"grpcs://example.com:2135/?database=/Root/testdb0"`; аналог `connection_string` для таблиц.
+* `database_endpoint` - (обязательный) полный путь до базы данных, например: `"grpcs://example.com:2135/?database=/Root/testdb0"`; аналог `connection_string` для строковых таблиц.
 * `retention_period_ms` - длительность хранения данных в миллисекундах, значение по умолчанию - `86400000` (сутки).
 * `partitions_count` - количество партиций, значение по умолчанию - `2`.
 * `supported_codecs` - поддерживаемые кодеки сжатия данных, значение по умолчанию - `"gzip", "raw", "zstd"`.

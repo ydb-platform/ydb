@@ -73,7 +73,7 @@ defer db.Close(ctx)
 
 {% include [steps/02_create_table.md](../_includes/steps/02_create_table.md) %}
 
-Для создания таблиц используется метод `table.Session.CreateTable()`:
+Для создания строковых таблиц используется метод `table.Session.CreateTable()`:
 
 ```go
 err = db.Table().Do(ctx,
@@ -93,7 +93,7 @@ if err != nil {
 }
 ```
 
-С помощью метода `table.Session.DescribeTable()` можно вывести информацию о структуре таблицы и убедиться, что она успешно создалась:
+С помощью метода `table.Session.DescribeTable()` можно вывести информацию о структуре строковой таблицы и убедиться, что она успешно создалась:
 
 ```go
 err = db.Table().Do(ctx,

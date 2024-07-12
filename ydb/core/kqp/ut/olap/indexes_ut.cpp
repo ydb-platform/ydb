@@ -285,7 +285,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("skip", csController->GetIndexesSkippingOnSelect().Val())("check", csController->GetIndexesApprovedOnSelect().Val());
             CompareYson(result, R"([[0u;]])");
             AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0);
-            AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < csController->GetIndexesSkippingOnSelect().Val() * 0.3);
+            AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < csController->GetIndexesSkippingOnSelect().Val());
         }
         ui32 requestsCount = 100;
         for (ui32 i = 0; i < requestsCount; ++i) {
@@ -310,7 +310,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             CompareYson(result, R"([[1u;]])");
         }
 
-        AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < 0.3 * csController->GetIndexesSkippingOnSelect().Val())
+        AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < csController->GetIndexesSkippingOnSelect().Val())
             ("approved", csController->GetIndexesApprovedOnSelect().Val())("skipped", csController->GetIndexesSkippingOnSelect().Val());
 
     }

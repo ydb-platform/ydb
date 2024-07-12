@@ -223,28 +223,22 @@ private:
 };
 
 struct TEvalScope {
-    TEvalScope(TTypeAnnotationContext& types, TExprContext& ctx)
+    TEvalScope(TTypeAnnotationContext& types)
         : Types(types)
-        , Ctx(ctx)
-        , PrevSteps(ctx.Step)
     {
         ++Types.EvaluationInProgress;
         for (auto& dataProvider : Types.DataSources) {
             dataProvider->EnterEvaluation(Types.EvaluationInProgress);
         }
-        Ctx.Step = TExprStep{};
     }
 
     ~TEvalScope() {
-        Ctx.Step = PrevSteps;
         for (auto& dataProvider : Types.DataSources) {
             dataProvider->LeaveEvaluation(Types.EvaluationInProgress);
         }
         --Types.EvaluationInProgress;
     }
     TTypeAnnotationContext& Types;
-    TExprContext& Ctx;
-    TExprStep PrevSteps;
 };
 
 bool ValidateCalcWorlds(const TExprNode& node, const TTypeAnnotationContext& types, TNodeSet& visited) {
@@ -1003,8 +997,11 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             calcProvider.Clear();
             calcWorldRoot.Drop();
             fullTransformer->Rewind();
-            TEvalScope scope(types, ctx);
+            auto prevSteps = ctx.Step;
+            TEvalScope scope(types);
+            ctx.Step = TExprStep();
             status = SyncTransform(*fullTransformer, clonedArg, ctx);
+            ctx.Step = prevSteps;
             if (status.Level == IGraphTransformer::TStatus::Error) {
                 return nullptr;
             }

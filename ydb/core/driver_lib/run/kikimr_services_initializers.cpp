@@ -579,6 +579,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
 
     for (ui32 poolId = 0; poolId != setup->GetExecutorsCount(); ++poolId) {
         const auto &execConfig = systemConfig.GetExecutor(poolId);
+        setup->Executors[poolId] = CreateExecutorPool(execConfig, poolId);
     }
 
     auto schedulerConfig = CreateSchedulerConfig(systemConfig.GetScheduler());

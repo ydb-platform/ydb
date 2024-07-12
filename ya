@@ -232,7 +232,10 @@ def _extract(path, into):
     # mock it with noop to retain current user ownership.
     tar.chown = lambda *args, **kwargs: None
 
-    tar.extractall(path=into)
+    if sys.version_info >= (3, 12):
+        tar.extractall(path=into, filter='data')
+    else:
+        tar.extractall(path=into)
     tar.close()
 
 

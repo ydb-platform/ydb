@@ -341,8 +341,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
     bool GCScheduled = false;
 
-    // 0 means unlimited
-    ui64 MemLimitBytes = 0;
+    ui64 MemLimitBytes;
     ui64 ConfigLimitBytes;
 
     void ActualizeCacheSizeLimit() {
@@ -352,10 +351,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         ConfigLimitBytes = Config->CacheConfig->Limit;
 
-        ui64 limit = ConfigLimitBytes;
-        if (MemLimitBytes && ConfigLimitBytes > MemLimitBytes) {
-            limit = MemLimitBytes;
-        }
+        ui64 limit = Min(ConfigLimitBytes, MemLimitBytes);
 
         // limit of cache depends only on config and mem because passive pages may go in and out arbitrary
         // we may have some passive bytes, so if we fully fill this Cache we may exceed the limit
@@ -376,7 +372,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         ui64 configActiveReservedBytes = ConfigLimitBytes * Config->ActivePagesReservationPercent / 100;
 
         THashSet<TCollection*> recheck;
-        while (MemLimitBytes && GetStatAllBytes() > MemLimitBytes
+        while (GetStatAllBytes() > MemLimitBytes
                 || GetStatAllBytes() > ConfigLimitBytes && StatActiveBytes > configActiveReservedBytes) {
             auto page = Cache.EvictNext();
             if (!page) {
@@ -403,7 +399,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         DoGC();
 
-        if (MemLimitBytes && MemLimitBytes < ConfigLimitBytes) {
+        // TODO: move out
+        if (MemLimitBytes < ConfigLimitBytes) {
             // in normal scenario we expect that we can fill the whole shared cache
             ui64 memTableReservedBytes = ConfigLimitBytes * Config->MemTableReservationPercent / 100;
             ui64 memTableTotal = MemTableTracker->GetTotalConsumption();
@@ -982,7 +979,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
     void SendWhiteboardStats() {
         TActorId whiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
-        Send(whiteboardId, NNodeWhiteboard::TEvWhiteboard::CreateSharedCacheStatsUpdateRequest(GetStatAllBytes(), MemLimitBytes));
+        Send(whiteboardId, NNodeWhiteboard::TEvWhiteboard::CreateSharedCacheStatsUpdateRequest(GetStatAllBytes(), Min(ConfigLimitBytes, MemLimitBytes)));
     }
 
     void ProcessGCList() {

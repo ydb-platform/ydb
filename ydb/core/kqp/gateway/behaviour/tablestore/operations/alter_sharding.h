@@ -1,5 +1,4 @@
 #include "abstract.h"
-#include <ydb/core/tx/columnshard/engines/scheme/statistics/abstract/constructor.h>
 
 namespace NKikimr::NKqp {
 

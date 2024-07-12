@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/tx/columnshard/blob_cache.h>
-#include <ydb/core/tx/columnshard/engines/scheme/statistics/max/operator.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>

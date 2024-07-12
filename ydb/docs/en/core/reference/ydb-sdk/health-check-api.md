@@ -54,7 +54,7 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
 
 This is a short messages each about a single problem. All parameters will affect the amount of information the service returns for the specified database.
 
-The whole list of extra parameters presented below:
+The complete list of extra parameters is presented below:
 
 {% list tabs %}
 
@@ -118,7 +118,7 @@ message IssueLog {
 | `issue_log.reason` | This is a set of elements, each of which describes an issue in the system at a certain level. |
 | `issue_log.type` | Issue category (by subsystem). Each type is at a certain level and interconnected with others through a [rigid hierarchy](#issues-hierarchy) (as shown in the picture above). |
 | `issue_log.level` | Issue [nesting depth](#issues-hierarchy). |
-| `database_status` | If settings contains `ReturnVerboseStatus` parameter than `database_status` field will be filled. <br/>It provides a summary of the overall health of the database. <br/>It's used to quickly review the overall health of the database, helping to assess its health and whether there are any serious issues at a high level. [Example](#example-verbose). |
+| `database_status` | If the settings include `ReturnVerboseStatus` parameter, the `database_status` field will be populated. <br/>This field offers a comprehensive summary of the overall health of the database. <br/>It is designed to provide a quick overview of the database's condition, helping to assess its health and identify any major issuehs at a high level. [Example](#example-verbose). For the full response structure, see the [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/public/api/protos/ydb_monitoring.proto) file in the {{ ydb-short-name }} Git repository. |
 | `location` | Contains information about the host, where the `HealthCheck` service was called |
 
 #### Issues hierarchy {#issues-hierarchy}

@@ -281,8 +281,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString result = StreamResultToYson(it);
-            Cout << result << Endl;
-            Cout << csController->GetIndexesSkippingOnSelect().Val() << " / " << csController->GetIndexesApprovedOnSelect().Val() << Endl;
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("result", result);
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("skip", csController->GetIndexesSkippingOnSelect().Val())("check", csController->GetIndexesApprovedOnSelect().Val());
             CompareYson(result, R"([[0u;]])");
             AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0);
             AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < csController->GetIndexesSkippingOnSelect().Val() * 0.3);

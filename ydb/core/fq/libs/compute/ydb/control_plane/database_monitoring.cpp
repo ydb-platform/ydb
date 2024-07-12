@@ -1,6 +1,7 @@
-#include <ydb/core/fq/libs/compute/common/cpu_quota_manager.h>
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
+
+#include <ydb/core/kqp/workload_service/common/cpu_quota_manager.h>
 
 #include <ydb/library/services/services.pb.h>
 
@@ -194,7 +195,7 @@ private:
     const ui32 PendingQueueSize;
     const bool Strict;
 
-    TCpuQuotaManager CpuQuotaManager;
+    NKikimr::NKqp::NWorkload::TCpuQuotaManager CpuQuotaManager;
     TQueue<TEvYdbCompute::TEvCpuQuotaRequest::TPtr> PendingQueue;
 
     TInstant StartCpuLoad;

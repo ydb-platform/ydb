@@ -306,7 +306,7 @@ protected:
     }
 
     TMaybe<double> GetLoadCpuThreshold() const {
-        if (PoolConfig.DatabaseLoadCpuThreshold == -1) {
+        if (PoolConfig.DatabaseLoadCpuThreshold < 0.0) {
             return Nothing();
         }
         return PoolConfig.DatabaseLoadCpuThreshold;
@@ -925,7 +925,7 @@ private:
 }  // anonymous namespace
 
 IActor* CreatePoolHandlerActor(const TString& database, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, NMonitoring::TDynamicCounterPtr counters) {
-    if (poolConfig.ConcurrentQueryLimit == 0 || (poolConfig.ConcurrentQueryLimit == -1 && poolConfig.DatabaseLoadCpuThreshold == -1.0)) {
+    if (poolConfig.ConcurrentQueryLimit == 0 || (poolConfig.ConcurrentQueryLimit == -1 && poolConfig.DatabaseLoadCpuThreshold < 0.0)) {
         return new TUnlimitedPoolHandlerActor(database, poolId, poolConfig, counters);
     }
     return new TFifoPoolHandlerActor(database, poolId, poolConfig, counters);

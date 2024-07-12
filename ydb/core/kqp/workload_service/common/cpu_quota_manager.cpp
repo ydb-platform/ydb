@@ -3,7 +3,7 @@
 #include <util/string/builder.h>
 
 
-namespace NFq {
+namespace NKikimr::NKqp::NWorkload {
 
 //// TCpuQuotaManager::TCounters
 
@@ -153,4 +153,4 @@ void TCpuQuotaManager::AdjustCpuQuota(double quota, TDuration duration, double c
     }
 }
 
-}  // namespace NFq
+}  // namespace NKikimr::NKqp::NWorkload

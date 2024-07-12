@@ -7,7 +7,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
 
 
-namespace NFq {
+namespace NKikimr::NKqp::NWorkload {
 
 class TCpuQuotaManager {
     struct TCounters {
@@ -73,4 +73,4 @@ private:
     bool Ready = false;
 };
 
-}  // namespace NFq
+}  // namespace NKikimr::NKqp::NWorkload

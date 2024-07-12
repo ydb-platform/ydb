@@ -2,8 +2,7 @@
 
 #include <queue>
 
-#include <ydb/core/fq/libs/compute/common/cpu_quota_manager.h>
-
+#include <ydb/core/kqp/workload_service/common/cpu_quota_manager.h>
 #include <ydb/core/kqp/workload_service/common/events.h>
 
 
@@ -53,7 +52,7 @@ struct TPoolState {
 };
 
 struct TCpuQuotaManagerState {
-    NFq::TCpuQuotaManager CpuQuotaManager;
+    TCpuQuotaManager CpuQuotaManager;
     NActors::TActorContext ActorContext;
     bool CpuLoadRequestRunning = false;
     TInstant CpuLoadRequestTime = TInstant::Zero();

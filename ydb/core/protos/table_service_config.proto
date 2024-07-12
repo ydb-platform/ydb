@@ -294,4 +294,6 @@ message TTableServiceConfig {
     optional uint64 QueryReplayCacheUploadTTLSec = 62 [default = 36000];
 
     optional bool EnableQueryServiceSpilling = 63 [ default = true ];
+    
+    optional bool EnableImplicitQueryParameterTypes = 66 [ default = false ];
 };

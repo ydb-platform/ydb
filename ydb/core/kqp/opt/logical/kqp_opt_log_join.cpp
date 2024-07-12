@@ -395,11 +395,15 @@ TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(
         }
     }
 
+    auto strategy = join.JoinType().Value() == "LeftSemi"
+        ? TKqpStreamLookupSemiJoinStrategyName
+        : TKqpStreamLookupJoinStrategyName;
+
     TExprBase lookupJoin = Build<TKqlStreamLookupTable>(ctx, join.Pos())
         .Table(rightLookup.MainTable)
         .LookupKeys(leftInput)
         .Columns(lookupColumns.Cast())
-        .LookupStrategy().Build(TKqpStreamLookupJoinStrategyName)
+        .LookupStrategy().Build(strategy)
         .Done();
 
     // Stream lookup join output: stream<tuple<left_row_struct, optional<right_row_struct>>>

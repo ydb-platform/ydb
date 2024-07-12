@@ -1429,6 +1429,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TLocalServiceInitializer(runConfig));
     }
     if (serviceMask.EnableSharedCache) {
+        MemoryConsumers->Register(NMemory::EConsumerKind::MemTable); // TODO
         sil->AddServiceInitializer(new TSharedCacheInitializer(runConfig, MemoryConsumers->Register(NMemory::EConsumerKind::SharedCache)));
     }
     if (serviceMask.EnableBlobCache) {

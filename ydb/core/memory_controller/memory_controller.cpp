@@ -232,6 +232,9 @@ private:
             case EConsumerKind::SharedCache:
                 Send(MakeSharedPageCacheId(), new TEvMemoryLimit(limitBytes));
                 break;
+            case EConsumerKind::MemTable:
+                // TODO
+                break;
             default:
                 Y_ABORT("Unhandled consumer");
         }
@@ -255,24 +258,34 @@ private:
 
     TConsumerLimitBounds GetConsumerLimitBounds(EConsumerKind consumer, ui64 availableMemory) const {
         auto config = GetConsumerConfig(consumer);
-        TConsumerLimitBounds result;
+        
+        std::optional<ui64> minBytes;
+        std::optional<ui64> maxBytes;
 
         if (config.MinPercent.has_value() && config.MinBytes.has_value()) {
-            result.MinBytes = Max(GetPercent(config.MinPercent.value(), availableMemory), config.MinBytes.value());
+            minBytes = Max(GetPercent(config.MinPercent.value(), availableMemory), config.MinBytes.value());
         } else if (config.MinPercent.has_value()) {
-            result.MinBytes = GetPercent(config.MinPercent.value(), availableMemory);
+            minBytes = GetPercent(config.MinPercent.value(), availableMemory);
         } else if (config.MinBytes.has_value()) {
-            result.MinBytes = config.MinBytes.value();
+            minBytes = config.MinBytes.value();
         }
 
         if (config.MaxPercent.has_value() && config.MaxBytes.has_value()) {
-            result.MaxBytes = Min(GetPercent(config.MaxPercent.value(), availableMemory), config.MaxBytes.value());
+            maxBytes = Min(GetPercent(config.MaxPercent.value(), availableMemory), config.MaxBytes.value());
         } else if (config.MaxPercent.has_value()) {
-            result.MaxBytes = GetPercent(config.MaxPercent.value(), availableMemory);
+            maxBytes = GetPercent(config.MaxPercent.value(), availableMemory);
         } else if (config.MaxBytes.has_value()) {
-            result.MaxBytes = config.MaxBytes.value();
+            maxBytes = config.MaxBytes.value();
         }
 
+        if (minBytes.has_value() && !maxBytes.has_value()) {
+            maxBytes = minBytes;
+        }
+        if (!minBytes.has_value() && maxBytes.has_value()) {
+            minBytes = maxBytes;
+        }
+
+        TConsumerLimitBounds result(minBytes.value_or(0), maxBytes.value_or(0));
         if (result.MinBytes > result.MaxBytes) {
             result.MinBytes = result.MaxBytes;
         }
@@ -298,6 +311,21 @@ private:
                     result.MaxBytes = Config.GetSharedCacheMaxBytes();
                 }
                 result.CanZeroLimit = true;
+                break;
+            }
+            case EConsumerKind::MemTable: {
+                if (Config.HasMemTableMinPercent() || Config.GetMemTableMinPercent()) {
+                    result.MinPercent = Config.GetMemTableMinPercent();
+                }
+                if (Config.HasMemTableMinBytes() || Config.GetMemTableMinBytes()) {
+                    result.MinBytes = Config.GetMemTableMinBytes();
+                }
+                if (Config.HasMemTableMaxPercent() || Config.GetMemTableMaxPercent()) {
+                    result.MaxPercent = Config.GetMemTableMaxPercent();
+                }
+                if (Config.HasMemTableMaxBytes() || Config.GetMemTableMaxBytes()) {
+                    result.MaxBytes = Config.GetMemTableMaxBytes();
+                }
                 break;
             }
             default:

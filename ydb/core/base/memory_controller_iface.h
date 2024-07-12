@@ -7,6 +7,7 @@ namespace NKikimr::NMemory {
 
 enum class EConsumerKind {
     SharedCache,
+    MemTable,
 };
 
 struct IMemoryConsumer : public TThrRefBase {

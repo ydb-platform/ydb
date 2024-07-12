@@ -140,7 +140,6 @@ NConfig::TControlPlaneStorageConfig FillDefaultParameters(NConfig::TControlPlane
     }
 
     if (!config.RetryPolicyMappingSize()) {
-        Cerr << "---------------------------- Added default policy\n";
         {
             auto& policyMapping = *config.AddRetryPolicyMapping();
             policyMapping.AddStatusCode(NYql::NDqProto::StatusIds::UNAVAILABLE);

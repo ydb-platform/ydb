@@ -129,5 +129,5 @@ message Operation {
     google.protobuf.Timestamp end_time = 9;
 
     // User SID (Security ID) of the user who created this operation (if supported).
-    string created_by = 8;
+    string created_by = 10;
 }

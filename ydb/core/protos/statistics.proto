@@ -117,7 +117,7 @@ message TEvAnalyzeTable {
 
 // Shard -> SA
 message TEvAnalyzeTableResponse {
-    optional NKikimrProto.TPathID PathId = 1;   
+    optional NKikimrProto.TPathID PathId = 1;
 }
 
 
@@ -147,6 +147,7 @@ message TEvStatisticsResponse {
         STATUS_SUCCESS = 1;
         STATUS_ABORTED = 2;
         STATUS_ERROR = 3;
+        STATUS_PROCESSING = 4;
     }
     optional EStatus Status = 2;
     optional fixed64 ShardTabletId = 3;

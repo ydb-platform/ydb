@@ -5,7 +5,6 @@
 
 #include <ydb/core/actorlib_impl/destruct_actor.h>
 #include <ydb/core/actorlib_impl/load_network.h>
-#include <ydb/core/actorlib_impl/mad_squirrel.h>
 
 #include "ydb/core/audit/audit_log.h"
 
@@ -577,15 +576,6 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     setup->NodeId = NodeId;
     setup->CpuManager = CreateCpuManagerConfig(systemConfig, appData);
     setup->MonitorStuckActors = systemConfig.GetMonitorStuckActors();
-
-    for (ui32 poolId = 0; poolId != setup->GetExecutorsCount(); ++poolId) {
-        const auto &execConfig = systemConfig.GetExecutor(poolId);
-        if (execConfig.HasInjectMadSquirrels()) {
-            for (ui32 i = execConfig.GetInjectMadSquirrels(); i > 0; --i) {
-                setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(TActorId(), TActorSetupCmd(CreateMadSquirrel(), TMailboxType::HTSwap, poolId)));
-            }
-        }
-    }
 
     auto schedulerConfig = CreateSchedulerConfig(systemConfig.GetScheduler());
     schedulerConfig.MonCounters = GetServiceCounters(counters, "utils");

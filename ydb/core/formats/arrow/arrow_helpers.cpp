@@ -892,24 +892,33 @@ std::shared_ptr<arrow::RecordBatch> MergeColumns(const std::vector<std::shared_p
 }
 
 std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std::shared_ptr<arrow::Table>& t) {
-    std::set<ui32> splitPositions;
-    const ui32 numRows = t->num_rows();
-    for (auto&& i : t->columns()) {
-        ui32 pos = 0;
-        for (auto&& arr : i->chunks()) {
-            splitPositions.emplace(pos);
-            pos += arr->length();
-        }
-        AFL_VERIFY(pos == t->num_rows());
+    if (!t->num_rows()) {
+        return {};
     }
+    std::set<ui32> splitPositions;
+    {
+        const ui32 numRows = t->num_rows();
+        for (auto&& i : t->columns()) {
+            ui32 pos = 0;
+            for (auto&& arr : i->chunks()) {
+                splitPositions.emplace(pos);
+                pos += arr->length();
+            }
+            AFL_VERIFY(pos == t->num_rows());
+        }
+        splitPositions.emplace(numRows);
+    }
+
     std::vector<std::vector<std::shared_ptr<arrow::Array>>> slicedData;
-    slicedData.resize(splitPositions.size());
-    std::vector<ui32> positions(splitPositions.begin(), splitPositions.end());
-    for (auto&& i : t->columns()) {
-        for (ui32 idx = 0; idx < positions.size(); ++idx) {
-            auto slice = i->Slice(positions[idx], ((idx + 1 == positions.size()) ? numRows : positions[idx + 1]) - positions[idx]);
-            AFL_VERIFY(slice->num_chunks() == 1);
-            slicedData[idx].emplace_back(slice->chunks().front());
+    slicedData.resize(splitPositions.size() - 1);
+    {
+        std::vector<ui32> positions(splitPositions.begin(), splitPositions.end());
+        for (auto&& i : t->columns()) {
+            for (ui32 idx = 0; idx + 1 < positions.size(); ++idx) {
+                auto slice = i->Slice(positions[idx], positions[idx + 1] - positions[idx]);
+                AFL_VERIFY(slice->num_chunks() == 1);
+                slicedData[idx].emplace_back(slice->chunks().front());
+            }
         }
     }
     std::vector<std::shared_ptr<arrow::RecordBatch>> result;

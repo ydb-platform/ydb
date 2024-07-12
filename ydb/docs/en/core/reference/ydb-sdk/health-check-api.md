@@ -106,51 +106,53 @@ message IssueLog {
 }
 ```
 
-These issues can be arranged hierarchically with `id` and `reason` fields, which help to visualize how issues in a separate module affect the state of the system as a whole. All issues are arranged in a hierarchy where higher levels can depend on nested levels:
-
-![cards_hierarchy](./_assets/hc_cards_hierarchy.png)
-
-Each issue has a nesting `level` - the higher the `level`, the deeper the ish is in the hierarchy. Issues with the same `type` always have the same `level` and they can be represented as a hierarchy.
-
-![issues_hierarchy](./_assets/hc_types_hierarchy.png)
-
-Description of all fields in the response is provided below:
+#### Description of fields in the response {#fields-description}
 
 | Field | Description |
 |:----|:----|
-| `self_check_result` | enum field which contains the [DB check result](#selfcheck-result) |
+| `self_check_result` | enum field which contains the [database check result](#selfcheck-result) |
 | `issue_log.id` | A unique issue ID within this response. |
 | `issue_log.status` |  enum field which contains the [issue status](#issue-status) |
 | `issue_log.message` | Text that describes the issue. |
 | `issue_log.location` | Location of the issue. This can be a physical location or an execution context. |
-| `issue_log.reason` | This is a set of elements, each of which describes a issue in the system at a certain level. |
-| `issue_log.type` | Issue category (by subsystem). Each type is at a certain level and interconnected with others through a rigid hierarchy (as shown in the picture above). |
-| `issue_log.level` | The depth of issue nesting. |
+| `issue_log.reason` | This is a set of elements, each of which describes an issue in the system at a certain level. |
+| `issue_log.type` | Issue category (by subsystem). Each type is at a certain level and interconnected with others through a [rigid hierarchy](#issues-hierarchy) (as shown in the picture above). |
+| `issue_log.level` | Issue [nesting depth](#issues-hierarchy). |
 | `database_status` | If settings contains `ReturnVerboseStatus` parameter than `database_status` field will be filled. <br/>It provides a summary of the overall health of the database. <br/>It's used to quickly review the overall health of the database, helping to assess its health and whether there are any serious issues at a high level. [Example](#example-verbose). |
-| `location` | Contains information about host, where `HealthCheck` service was called |
+| `location` | Contains information about the host, where the `HealthCheck` service was called |
 
-### DB check result {#selfcheck-result}
+#### Issues hierarchy {#issues-hierarchy}
+
+Issues can be arranged hierarchically with `id` and `reason` fields, which help to visualize how issues in a separate module affect the state of the system as a whole. All issues are arranged in a hierarchy where higher levels can depend on nested levels:
+
+![cards_hierarchy](./_assets/hc_cards_hierarchy.png)
+
+Each issue has a nesting `level`. The higher the `level`, the deeper the issue is in the hierarchy. Issues with the same `type` always have the same `level`, and they can be represented as a hierarchy.
+
+![issues_hierarchy](./_assets/hc_types_hierarchy.png)
+
+#### Database check result {#selfcheck-result}
 
 The most general statuses of the database, which can have the following values:
 
 | Value | Description |
 |:----|:----|
 | `GOOD` | No issues were detected. |
-| `DEGRADED` | Degradation of one of the database systems was detected, but the database is still functioning (for example, allowable disk loss). |
-| `MAINTENANCE_REQUIRED` | Significant degradation was detected, there is a risk of availability loss, and human maintenance is required. |
-| `EMERGENCY` | A serious issue was detected in the database, with complete or partial loss of availability. |
+| `DEGRADED` | Degradation of at least one of the database systems was detected, but the database is still functioning (for example, allowable disk loss). |
+| `MAINTENANCE_REQUIRED` | Significant degradation was detected, there is a risk of database unavailability, and human intervention is required. |
+| `EMERGENCY` | A serious problem was detected in the database, with complete or partial unavailability. |
 
-### Issue status {#issue-status}
+#### Issue status {#issue-status}
 
 Status (severity) of the current issue:
 
 | Value | Description |
 |:----|:----|
-| `GREY` | Failed to determine the status (a issue with the self-diagnostic mechanism). |
+| `GREY` | Failed to determine the status (an issue with the self-diagnostic subsystem). |
 | `GREEN` | No issues were detected. |
-| `BLUE` | Temporary minor degradation that does not affect database availability. The system is expected to switch to `GREEN`. |
-| `YELLOW` | A minor issue, no risks to availability. We recommend you continue monitoring the issue. |
-| `ORANGE` | A serious issue, we are one step away from losing availability. Maintenance may be required. |
+| `BLUE` | Temporary minor degradation that does not affect database availability; the system is expected to switch to `GREEN`. |
+| `YELLOW` | A minor issue, no risks to availability. It is recommended to continue monitoring the issue. |
+| `ORANGE` | A serious issue, a step away from losing availability. Maintenance may be required. |
 | `RED` | A component is faulty or unavailable. |
 
 ## Possible issues {#issues}
@@ -209,7 +211,7 @@ Status (severity) of the current issue:
 | **NODES_TIME_DIFFERENCE** ||
 | `Node is ... ms behind peer [id]` <br>`Node is ... ms ahead of peer [id]` | Time drift on nodes might lead to potential issues with coordinating distributed transactions. This issus starts to appear from 5 ms |
 
-## Example {#examples}
+## Examples {#examples}
 
 The shortest `HealthCheck` response looks like this. It is returned if there is nothing wrong with the database
 ```json

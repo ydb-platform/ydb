@@ -1946,11 +1946,6 @@ TExprNode::TPtr BuildCrossJoinsBetweenGroups(TPositionHandle pos, const TExprNod
     return ctx.NewCallable(pos, "EquiJoin", std::move(args));
 }
 
-TExprNode::TPtr RenameOnOrder(TExprContext& ctx, TColumnOrder& order, const TExprNode::TPtr& node) {
-    YQL_ENSURE(node->IsAtom());
-    return ctx.Builder(node->Pos()).Atom(order.AddColumn(TString(node->Content()))).Build();
-}
-
 TExprNode::TPtr BuildProjectionLambda(TPositionHandle pos, const TExprNode::TPtr& result, const TStructExprType* finalType,
     const TColumnOrder& nodeColumnOrder, const TColumnOrder& setItemColumnOrder,
     bool subLink, bool emitPgStar, TExprContext& ctx) {
@@ -2032,10 +2027,11 @@ TExprNode::TPtr BuildProjectionLambda(TPositionHandle pos, const TExprNode::TPtr
                             continue;
                         }
                         const auto& columnName = x->Head().Content();
+                        auto rightColumnName = order.AddColumn(TString(columnName));
 
                         auto listBuilder = parent.List(index++);
-                        listBuilder.Add(0, RenameOnOrder(ctx, order, x->HeadPtr()));
-                        addPgCast(listBuilder, 1, columnName, x->GetTypeAnn(),
+                        listBuilder.Add(0, ctx.NewAtom(x->Pos(), rightColumnName));
+                        addPgCast(listBuilder, 1, rightColumnName, x->GetTypeAnn(),
                              [&addResultItem, &x] (TExprNodeBuilder& builder, ui32 idx) { addResultItem(builder, idx, x.Get()); });
                     } else {
                         auto type = x->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
@@ -2044,16 +2040,17 @@ TExprNode::TPtr BuildProjectionLambda(TPositionHandle pos, const TExprNode::TPtr
                         for (const auto& item : type->GetItems()) {
                             TStringBuf column = item->GetName();
                             auto columnName = subLink ? column : NTypeAnnImpl::RemoveAlias(column);
+                            auto rightColumnName = order.AddColumn(TString(columnName));
 
                             auto listBuilder = parent.List(index++);
                             if (auto* columnNode = overrideColumns.FindPtr(columnName)) {
                                 // we never get here while processing SELECTs,
                                 // so no need to add PgCasts due to query combining with UNION ALL et al
-                                listBuilder.Add(0, RenameOnOrder(ctx, order, (*columnNode)->HeadPtr()));
+                                listBuilder.Add(0, ctx.NewAtom(x->Pos(), rightColumnName));
                                 addResultItem(listBuilder, 1, *columnNode);
                             } else {
-                                listBuilder.Add(0, RenameOnOrder(ctx, order, ctx.NewAtom(x->Pos(), columnName)));
-                                addPgCast(listBuilder, 1, columnName, item->GetItemType(),
+                                listBuilder.Add(0, ctx.NewAtom(x->Pos(), rightColumnName));
+                                addPgCast(listBuilder, 1, rightColumnName, item->GetItemType(),
                                     [&addStructMember, &column] (TExprNodeBuilder& builder, ui32 idx) { addStructMember(builder, idx, column); });
                             }
                         }

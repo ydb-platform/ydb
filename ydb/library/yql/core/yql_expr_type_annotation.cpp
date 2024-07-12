@@ -6856,6 +6856,9 @@ TStringBuf NormalizeCallableName(TStringBuf name) {
 void CheckExpectedTypeAndColumnOrder(const TExprNode& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
     auto it = typesCtx.ExpectedTypes.find(node.UniqueId());
     if (it != typesCtx.ExpectedTypes.end()) {
+        if (!IsSameAnnotation(*node.GetTypeAnn(), *it->second)) {
+            Cerr << 123;
+        }
         YQL_ENSURE(IsSameAnnotation(*node.GetTypeAnn(), *it->second),
             "Rewrite error, type should be : " <<
             *it->second << ", but it is: " << *node.GetTypeAnn() << " for node " << node.Content());

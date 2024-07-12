@@ -119,7 +119,7 @@ void OutputConfigDebugInfoHTML(
     const NKikimrConfig::TAppConfig &initialConfig,
     const NKikimrConfig::TAppConfig &yamlConfig,
     const NKikimrConfig::TAppConfig &protoConfig,
-    const THashMap<ui32, TConfigItemInfo>& configInitInfo,
+    const THashMap<ui32, NConfig::TConfigItemInfo>& configInitInfo,
     const THashSet<ui32> &dynamicKinds,
     const THashSet<ui32> &nonYamlKinds,
     bool yamlEnabled)

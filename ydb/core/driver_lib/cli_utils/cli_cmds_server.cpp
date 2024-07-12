@@ -28,16 +28,18 @@ struct TCallContext {
     int Line;
 };
 
+using TConfigItemInfo = NKikimr::NConfig::TConfigItemInfo;
+
 #define TRACE_CONFIG_CHANGE(CHANGE_CONTEXT, KIND, CHANGE_KIND) \
-    RunConfig.ConfigInitInfo[KIND].Updates.emplace_back( \
+    RunConfig.ConfigsDispatcherInitInfo.DebugInfo->InitInfo[KIND].Updates.emplace_back( \
         TConfigItemInfo::TUpdate{CHANGE_CONTEXT.File, static_cast<ui32>(CHANGE_CONTEXT.Line), TConfigItemInfo::EUpdateKind:: CHANGE_KIND})
 
 #define TRACE_CONFIG_CHANGE_INPLACE(KIND, CHANGE_KIND) \
-    RunConfig.ConfigInitInfo[KIND].Updates.emplace_back( \
+    RunConfig.ConfigsDispatcherInitInfo.DebugInfo->InitInfo[KIND].Updates.emplace_back( \
         TConfigItemInfo::TUpdate{__FILE__, static_cast<ui32>(__LINE__), TConfigItemInfo::EUpdateKind:: CHANGE_KIND})
 
 #define TRACE_CONFIG_CHANGE_INPLACE_T(KIND, CHANGE_KIND) \
-    RunConfig.ConfigInitInfo[NKikimrConsole::TConfigItem:: KIND ## Item].Updates.emplace_back( \
+    RunConfig.ConfigsDispatcherInitInfo.DebugInfo->InitInfo[NKikimrConsole::TConfigItem:: KIND ## Item].Updates.emplace_back( \
         TConfigItemInfo::TUpdate{__FILE__, static_cast<ui32>(__LINE__), TConfigItemInfo::EUpdateKind:: CHANGE_KIND})
 
 #define CALL_CTX() TCallContext{__FILE__, __LINE__}
@@ -113,7 +115,9 @@ protected:
     TClientCommandServerBase(const char *cmd, const char *description)
         : TClientCommand(cmd, {}, description)
         , RunConfig(AppConfig)
-    {}
+    {
+        RunConfig.ConfigsDispatcherInitInfo.DebugInfo = NConfig::TDebugInfo{};
+    }
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
@@ -278,7 +282,7 @@ protected:
         config.Opts->AddLongOption("label", "labels for this node")
             .Optional().RequiredArgument("KEY=VALUE")
             .KVHandler([&](TString key, TString val) {
-                RunConfig.Labels[key] = val;
+                RunConfig.ConfigsDispatcherInitInfo.Labels[key] = val;
             });
 
         config.SetFreeArgsMin(0);
@@ -427,16 +431,16 @@ protected:
             RunConfig.ServicesMask.SetTinyMode();
         }
 
-        RunConfig.Labels["node_id"] = ToString(NodeId);
-        RunConfig.Labels["node_host"] = FQDNHostName();
-        RunConfig.Labels["tenant"] = TenantName;
-        RunConfig.Labels["node_type"] = NodeType;
+        RunConfig.ConfigsDispatcherInitInfo.Labels["node_id"] = ToString(NodeId);
+        RunConfig.ConfigsDispatcherInitInfo.Labels["node_host"] = FQDNHostName();
+        RunConfig.ConfigsDispatcherInitInfo.Labels["tenant"] = TenantName;
+        RunConfig.ConfigsDispatcherInitInfo.Labels["node_type"] = NodeType;
         // will be replaced with proper version info
-        RunConfig.Labels["branch"] = GetBranch();
-        RunConfig.Labels["rev"] = GetProgramCommitId();
-        RunConfig.Labels["dynamic"] = ToString(NodeBrokerAddresses.empty() ? "false" : "true");
+        RunConfig.ConfigsDispatcherInitInfo.Labels["branch"] = GetBranch();
+        RunConfig.ConfigsDispatcherInitInfo.Labels["rev"] = GetProgramCommitId();
+        RunConfig.ConfigsDispatcherInitInfo.Labels["dynamic"] = ToString(NodeBrokerAddresses.empty() ? "false" : "true");
 
-        for (const auto& [name, value] : RunConfig.Labels) {
+        for (const auto& [name, value] : RunConfig.ConfigsDispatcherInitInfo.Labels) {
             auto *label = AppConfig.AddLabels();
             label->SetName(name);
             label->SetValue(value);
@@ -450,8 +454,8 @@ protected:
         } else {
             RegisterDynamicNode();
 
-            RunConfig.Labels["node_id"] = ToString(RunConfig.NodeId);
-            AddLabelToAppConfig("node_id", RunConfig.Labels["node_id"]);
+            RunConfig.ConfigsDispatcherInitInfo.Labels["node_id"] = ToString(RunConfig.NodeId);
+            AddLabelToAppConfig("node_id", RunConfig.ConfigsDispatcherInitInfo.Labels["node_id"]);
 
             if (!IgnoreCmsConfigs) {
                 LoadConfigForDynamicNode();
@@ -830,8 +834,8 @@ protected:
 
         if (AppConfig.HasDynamicNameserviceConfig()) {
             bool isDynamic = RunConfig.NodeId > AppConfig.GetDynamicNameserviceConfig().GetMaxStaticNodeId();
-            RunConfig.Labels["dynamic"] = ToString(isDynamic ? "true" : "false");
-            AddLabelToAppConfig("node_id", RunConfig.Labels["node_id"]);
+            RunConfig.ConfigsDispatcherInitInfo.Labels["dynamic"] = ToString(isDynamic ? "true" : "false");
+            AddLabelToAppConfig("node_id", RunConfig.ConfigsDispatcherInitInfo.Labels["node_id"]);
         }
 
         RunConfig.ClusterName = AppConfig.GetNameserviceConfig().GetClusterUUID();
@@ -1235,7 +1239,7 @@ protected:
         // config for naming service.
         if (!AppConfig.HasNameserviceConfig()) {
             AppConfig.MutableNameserviceConfig()->Swap(appConfig.MutableNameserviceConfig());
-            RunConfig.ConfigInitInfo[NKikimrConsole::TConfigItem::NameserviceConfigItem].Updates.pop_back();
+            RunConfig.ConfigsDispatcherInitInfo.DebugInfo->InitInfo[NKikimrConsole::TConfigItem::NameserviceConfigItem].Updates.pop_back();
         }
     }
 
@@ -1270,14 +1274,14 @@ protected:
             NYamlConfig::ResolveAndParseYamlConfig(
                 result.GetYamlConfig(),
                 result.GetVolatileYamlConfigs(),
-                RunConfig.Labels,
+                RunConfig.ConfigsDispatcherInitInfo.Labels,
                 yamlConfig);
         }
 
-        RunConfig.InitialCmsConfig.CopyFrom(result.GetConfig());
+        RunConfig.ConfigsDispatcherInitInfo.DebugInfo->InitialCmsConfig.CopyFrom(result.GetConfig());
 
-        RunConfig.InitialCmsYamlConfig.CopyFrom(yamlConfig);
-        NYamlConfig::ReplaceUnmanagedKinds(result.GetConfig(), RunConfig.InitialCmsYamlConfig);
+        RunConfig.ConfigsDispatcherInitInfo.DebugInfo->InitialCmsYamlConfig.CopyFrom(yamlConfig);
+        NYamlConfig::ReplaceUnmanagedKinds(result.GetConfig(), yamlConfig);
 
         if (yamlConfig.HasYamlConfigEnabled() && yamlConfig.GetYamlConfigEnabled()) {
             appConfig = yamlConfig;

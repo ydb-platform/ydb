@@ -35,6 +35,8 @@
 
 namespace NKikimr::NConsole {
 
+using namespace NConfig;
+
 const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem,
     (ui32)NKikimrConsole::TConfigItem::BootstrapConfigItem,
@@ -393,8 +395,8 @@ void TConfigsDispatcher::ReplyMonJson(TActorId mailbox) {
 
     if (DebugInfo) {
         response.InsertValue("initial_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(DebugInfo->StaticConfig, NYamlConfig::GetProto2JsonConfig()), true));
-        response.InsertValue("initial_cms_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(DebugInfo->OldDynConfig, NYamlConfig::GetProto2JsonConfig()), true));
-        response.InsertValue("initial_cms_yaml_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(DebugInfo->NewDynConfig, NYamlConfig::GetProto2JsonConfig()), true));
+        response.InsertValue("initial_cms_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(DebugInfo->InitialCmsYamlConfig, NYamlConfig::GetProto2JsonConfig()), true));
+        response.InsertValue("initial_cms_yaml_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(DebugInfo->InitialCmsYamlConfig, NYamlConfig::GetProto2JsonConfig()), true));
     }
 
     NJson::WriteJson(&str, &response, {});
@@ -680,11 +682,11 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                         if  (DebugInfo) {
                             str << "<br />" << Endl;
                             COLLAPSED_REF_CONTENT("initial-cms-config", "Initial CMS config") {
-                                NHttp::OutputConfigHTML(str, DebugInfo->OldDynConfig);
+                                NHttp::OutputConfigHTML(str, DebugInfo->InitialCmsConfig);
                             }
                             str << "<br />" << Endl;
                             COLLAPSED_REF_CONTENT("initial-cms-yaml-config", "Initial CMS YAML config") {
-                                NHttp::OutputConfigHTML(str, DebugInfo->NewDynConfig);
+                                NHttp::OutputConfigHTML(str, DebugInfo->InitialCmsYamlConfig);
                             }
                         }
                     }

@@ -2438,26 +2438,12 @@ void THttpProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetup
 
 TConfigsDispatcherInitializer::TConfigsDispatcherInitializer(const TKikimrRunConfig& runConfig)
    : IKikimrServicesInitializer(runConfig)
-   , Labels(runConfig.Labels)
-   , InitialCmsConfig(runConfig.InitialCmsConfig)
-   , InitialCmsYamlConfig(runConfig.InitialCmsYamlConfig)
-   , ConfigInitInfo(runConfig.ConfigInitInfo)
+   , InitInfo(runConfig.ConfigsDispatcherInitInfo)
 {
 }
 
 void TConfigsDispatcherInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    NKikimr::NConsole::TConfigsDispatcherInitInfo initInfo {
-        .InitialConfig = Config,
-        .Labels = Labels,
-        .ItemsServeRules = std::monostate{},
-        .DebugInfo = NKikimr::NConsole::TDebugInfo {
-            .StaticConfig = Config,
-            .OldDynConfig = InitialCmsConfig,
-            .NewDynConfig = InitialCmsYamlConfig,
-            .InitInfo = ConfigInitInfo,
-        },
-    };
-    IActor* actor = NConsole::CreateConfigsDispatcher(initInfo);
+    IActor* actor = NConsole::CreateConfigsDispatcher(InitInfo);
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
             NConsole::MakeConfigsDispatcherID(NodeId),
             TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));

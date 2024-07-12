@@ -1271,9 +1271,9 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
         if (const auto* vectorIndexKmeansTreeDescription = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(&indexInfo->SpecializedIndexDescription)) {
             const auto& indexInfoSettings = vectorIndexKmeansTreeDescription->GetSettings(); 
             auto entrySettings = entry.MutableVectorIndexKmeansTreeDescription()->MutableSettings();
-            if (indexInfoSettings.Hasdistance())
+            if (indexInfoSettings.has_distance())
                 entrySettings->set_distance(indexInfoSettings.distance());
-            else if (indexInfoSettings.Hassimilarity())
+            else if (indexInfoSettings.has_similarity())
                 entrySettings->set_similarity(indexInfoSettings.similarity());
             else
                 Y_FAIL_S("Either distance or similarity should be set in index settings: " << indexInfoSettings);

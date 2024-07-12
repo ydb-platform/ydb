@@ -3961,7 +3961,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             // this value of MaxNodeUsageToKick is selected specifically to make test scenario work
             // in link with number of tablets and values of network usage metrics used below
             app.HiveConfig.SetMaxNodeUsageToKick(0.01);
-            app.HiveConfig.SetNodeUsageDiffToEmergencyBalance(0);
+            app.HiveConfig.SetNodeUsageRangeToKick(0);
             app.HiveConfig.SetEmergencyBalancerInflight(1); // to ensure fair distribution
         });
 

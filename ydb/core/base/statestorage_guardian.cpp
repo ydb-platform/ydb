@@ -4,7 +4,6 @@
 #include "tablet.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>

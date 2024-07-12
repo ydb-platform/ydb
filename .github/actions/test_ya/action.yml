@@ -1,4 +1,4 @@
-name: Run tests (ya make)
+name: Run build and tests (ya make)
 description: Run test targets listed in repository root ya.make (to be created previously)
 inputs:
   build_target:
@@ -60,10 +60,17 @@ outputs:
 runs:
   using: "composite"
   steps:
+    - name: Install Node required for Testmo CLI
+      uses: actions/setup-node@v3
+      with:
+        node-version: 19
+    
     - name: Init
       id: init
       shell: bash
       run: |
+        set -x
+
         export TMP_DIR=$(pwd)/tmp
         export LOG_DIR=$TMP_DIR/logs
         
@@ -86,22 +93,14 @@ runs:
         export log_url="$S3_URL_PREFIX/build_logs/ya_make.log"
         echo "LOG_URL=$log_url" >> $GITHUB_ENV
         echo "log_url=$log_url" >> $GITHUB_OUTPUT
-    
-    - name: prepare
-      shell: bash
-      run: |
-        set -x
+                        
         rm -rf $TMP_DIR $JUNIT_REPORT_XML $JUNIT_REPORT_PARTS $REPORTS_ARTIFACTS_DIR
         mkdir -p $TMP_DIR $OUT_DIR $ARTIFACTS_DIR $TEST_ARTIFACTS_DIR $LOG_DIR $JUNIT_REPORT_PARTS $REPORTS_ARTIFACTS_DIR
+
+
+        # install test mo
+        npm install -g @testmo/testmo-cli
     
-    - name: Install Node required for Testmo CLI
-      uses: actions/setup-node@v3
-      with:
-        node-version: 19
-    
-    - name: Install Testmo CLI
-      shell: bash
-      run: npm install -g @testmo/testmo-cli
 
     - name: Upload tests result to testmo
       id: th
@@ -166,10 +165,7 @@ runs:
         echo "runid=${RUN_ID}" >> $GITHUB_OUTPUT
         echo "TEST_HISTORY_URL=${TESTMO_URL}/automation/runs/view/${RUN_ID}" >> $GITHUB_ENV
 
-    - name: Print test history link
-      shell: bash
-      if: inputs.testman_token && inputs.run_tests
-      run: |
+        # Print test history link
         echo "10 [Test history](${TEST_HISTORY_URL})" >> $SUMMARY_LINKS
 
     - name: set environment variables required by some tests
@@ -296,17 +292,15 @@ runs:
           echo "Build successful." | .github/scripts/tests/comment-pr.py --ok
         fi
 
-    - name: archive unitest reports (orig)
-      if: inputs.run_tests
-      shell: bash
-      run: |
-        gzip -c $JUNIT_REPORT_XML > $REPORTS_ARTIFACTS_DIR/orig_junit.xml.gz
-
-    - name: postprocess junit report
+    - name: process reports
       if: inputs.run_tests
       shell: bash
       run: |
         set -x
+        # archive unitest reports (orig) 
+        gzip -c $JUNIT_REPORT_XML > $REPORTS_ARTIFACTS_DIR/orig_junit.xml.gz
+
+        # postprocess junit report
         .github/scripts/tests/transform-ya-junit.py -i \
           -m .github/config/muted_ya.txt \
           --ya-out "$OUT_DIR" \
@@ -317,6 +311,9 @@ runs:
           "$JUNIT_REPORT_XML"
     
         .github/scripts/tests/split-junit.py -o "$JUNIT_REPORT_PARTS" "$JUNIT_REPORT_XML"
+
+        # archive unitest reports (transformed)
+        tar -C $JUNIT_REPORT_PARTS/.. -czf $REPORTS_ARTIFACTS_DIR/junit_parts.xml.tar.gz $(basename $JUNIT_REPORT_PARTS)
     
     - name: Test history upload results to YDB
       if: inputs.run_tests
@@ -339,12 +336,6 @@ runs:
         echo "GITHUB_REF_NAME=${GITHUB_REF_NAME}"
         
         result=`.github/scripts/upload_tests_results.py --test-results-file ${JUNIT_REPORT_XML} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull ${PR_NUMBER} --job-name ${JOB_NAME} --job-id ${JOB_ID} --branch ${GITHUB_REF_NAME}`
-
-    - name: archive unitest reports (transformed)
-      if: inputs.run_tests
-      shell: bash
-      run: |
-        tar -C $JUNIT_REPORT_PARTS/.. -czf $REPORTS_ARTIFACTS_DIR/junit_parts.xml.tar.gz $(basename $JUNIT_REPORT_PARTS)
 
     - name: Unit test history upload results
       if: inputs.testman_token && inputs.run_tests

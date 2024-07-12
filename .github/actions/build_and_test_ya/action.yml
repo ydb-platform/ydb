@@ -14,9 +14,6 @@ inputs:
     type: boolean
     default: true
     description: "run tests"
-  run_tests_if_build_fails:  # TODO: not used, remove it
-    default: "true"
-    description: "run tests if build fails"
   test_threads:
     type: string
     default: 28
@@ -94,7 +91,7 @@ runs:
       if: inputs.increment == 'true'
       uses: ./.github/actions/graph_compare
  
-    - name: Change target in case of incremental (tests)
+    - name: Change target in case of incremental
       id: target_choice
       shell: bash
       run: |
@@ -104,7 +101,7 @@ runs:
           echo "target=${{ inputs.build_target }}" >> $GITHUB_OUTPUT
         fi
 
-    - name: Run tests
+    - name: Run build and tests
       id: build
       uses: ./.github/actions/test_ya
       with:

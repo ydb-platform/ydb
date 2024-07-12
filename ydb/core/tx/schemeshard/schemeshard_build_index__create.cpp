@@ -219,11 +219,9 @@ private:
             switch (index.type_case()) {
             case Ydb::Table::TableIndex::TypeCase::kGlobalIndex:
                 buildInfo->IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobal;
-                buildInfo->ImplTableDescriptions.resize(1);
                 break;
             case Ydb::Table::TableIndex::TypeCase::kGlobalAsyncIndex:
                 buildInfo->IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync;
-                buildInfo->ImplTableDescriptions.resize(1);
                 break;
             case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
                 explain = "unsupported index type to build";

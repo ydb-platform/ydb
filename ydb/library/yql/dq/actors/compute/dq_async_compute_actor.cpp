@@ -294,7 +294,6 @@ private:
             html << "DstStageId: " << info.DstStageId << "<br />";
             html << "HasPeer: " << info.HasPeer << "<br />";
             html << "Finished: " << info.Finished << "<br />";
-            html << "EarlyFinish: " << info.EarlyFinish << "<br />";
             html << "PopStarted: " << info.PopStarted << "<br />";
             html << "IsTransformOutput: " << info.IsTransformOutput << "<br />";
             html << "EWatermarksMode: " << NDqProto::EWatermarksMode_Name(info.WatermarksMode) << "<br />";

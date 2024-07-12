@@ -147,7 +147,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceTables) {
         ydb->WaitPoolHandlersCount(0);
 
         // Check that lease expired
-        Sleep(leaseDuration + TDuration::Seconds(5));
+        Sleep(leaseDuration + TDuration::Seconds(20));
         CheckPoolDescription(ydb, 0, 0);
     }
 

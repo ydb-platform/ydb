@@ -41,10 +41,7 @@ def select_positive(
 
     assert result.returncode == 0, result.output
 
-    assert_data_outs_equal(test_case.data_out, result.data_out_with_types), (
-        test_case.data_out,
-        result.data_out_with_types,
-    )
+    assert_data_outs_equal(test_case.data_out, result.data_out_with_types)
 
     if test_case.check_output_schema:
         assert_schemas_equal(test_case.schema, result.schema)
@@ -67,7 +64,10 @@ def select_missing_database(
         generic_settings=test_case.generic_settings,
     )
 
-    assert test_case.database.missing_database_msg() in result.output, result.output
+    expected_msg = test_case.database.missing_database_msg()
+    err = f'Looked for "{expected_msg}" in "{result.output}"'
+
+    assert expected_msg in result.output, err
 
 
 def select_missing_table(
@@ -87,4 +87,7 @@ def select_missing_table(
         generic_settings=test_case.generic_settings,
     )
 
-    assert test_case.database.missing_table_msg() in result.output, result.output
+    expected_msg = test_case.database.missing_table_msg()
+    err = f'Looked for "{expected_msg}" in "{result.output}"'
+
+    assert expected_msg in result.output, err

@@ -11,13 +11,13 @@ def is_json(value) -> bool:
 
     try:
         json.loads(value)
-    except ValueError as e:
+    except ValueError:
         return False
     return True
 
 
 def jsons_are_equal(lhs: str, rhs: str) -> bool:
-    return json.dumps(json.loads(lhs), sort_keys=True) == json.dumps(json.loads(rhs), sort_keys=True)
+    return json.loads(lhs) == json.loads(rhs)
 
 
 def assert_rows_equal(expected: List, actual: List):

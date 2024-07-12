@@ -45,7 +45,7 @@ class OneTimeWaiter:
         self.__launched = True
 
 
-OneTimeWaiter().wait()
+one_time_waiter = OneTimeWaiter()
 
 
 @pytest.mark.parametrize("runner_type", runner_types)
@@ -57,6 +57,9 @@ def test_select_positive(
     runner_type: str,
     test_case: select_positive_common.TestCase,
 ):
+    # Let MySQL initialize
+    one_time_waiter.wait()
+
     runner = configure_runner(runner_type=runner_type, settings=settings)
     scenario.select_positive(
         settings=settings,
@@ -75,6 +78,9 @@ def test_select_datetime(
     runner_type: str,
     test_case: select_positive_common.TestCase,
 ):
+    # Let MySQL initialize
+    one_time_waiter.wait()
+
     runner = configure_runner(runner_type=runner_type, settings=settings)
     scenario.select_positive(
         settings=settings,
@@ -95,6 +101,9 @@ def test_select_missing_database(
     runner_type: str,
     test_case: select_missing_database.TestCase,
 ):
+    # Let MySQL initialize
+    one_time_waiter.wait()
+
     runner = configure_runner(runner_type=runner_type, settings=settings)
     scenario.select_missing_database(
         settings=settings,
@@ -115,6 +124,9 @@ def test_select_missing_table(
     runner_type: str,
     test_case: select_missing_table.TestCase,
 ):
+    # Let MySQL initialize
+    one_time_waiter.wait()
+
     runner = configure_runner(runner_type=runner_type, settings=settings)
     scenario.select_missing_table(
         test_name=request.node.name,

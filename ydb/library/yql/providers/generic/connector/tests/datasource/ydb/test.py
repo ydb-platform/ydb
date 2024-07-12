@@ -105,6 +105,9 @@ def test_select_missing_table(
     runner_type: str,
     test_case: select_missing_table.TestCase,
 ):
+    # Let YDB container initialize tables
+    one_time_waiter.wait()
+
     runner = configure_runner(runner_type=runner_type, settings=settings)
     scenario.select_missing_table(
         test_name=request.node.name,

@@ -174,23 +174,17 @@ class DockerComposeHelper:
 
         LOGGER.debug("calling command: " + " ".join(cmd))
 
-        passed = False
-        err = None
+        err = RuntimeError("docker-compose error: timed out to check cmd output")  # default error value
         start = datetime.now()
-        # timeout = 60
         timeout = 20
 
-        while (datetime.now() - start).total_seconds() < timeout and not passed:
+        while (datetime.now() - start).total_seconds() < timeout:
             try:
                 subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf8')
-                passed = True
+                return
             except subprocess.CalledProcessError as e:
                 LOGGER.error(f"called process error: {e}")
                 err = RuntimeError(f"docker-compose error: {e.output} (code {e.returncode})")
                 time.sleep(5)
 
-        if not passed:
-            if err is not None:
-                raise err
-            else:
-                raise RuntimeError("docker-compose error: timed out to check cmd output")
+        raise err

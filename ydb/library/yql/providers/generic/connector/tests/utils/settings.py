@@ -86,7 +86,7 @@ class Settings:
                     data_sources[data_source_kind] = cls.ClickHouse(
                         cluster_name='clickhouse_integration_test',
                         host_external='0.0.0.0',
-                        # This hack is due to https://st.yandex-team.ru/YQ-3003.
+                        # This hack is due to YQ-3003.
                         # Previously we used container names instead of container ips:
                         # host_internal=docker_compose_file['services']['clickhouse']['container_name'],
                         host_internal=endpoint_determiner.get_internal_ip('clickhouse'),
@@ -102,7 +102,7 @@ class Settings:
                     data_sources[data_source_kind] = cls.MySQL(
                         cluster_name='mysql_integration_test',
                         host_external='0.0.0.0',
-                        # This hack is due to https://st.yandex-team.ru/YQ-3003.
+                        # This hack is due to YQ-3003.
                         # Previously we used container names instead of container ips:
                         # host_internal=docker_compose_file['services']['mysql']['container_name'],
                         host_internal=endpoint_determiner.get_internal_ip('mysql'),
@@ -116,7 +116,7 @@ class Settings:
                     data_sources[data_source_kind] = cls.PostgreSQL(
                         cluster_name='postgresql_integration_test',
                         host_external='0.0.0.0',
-                        # This hack is due to https://st.yandex-team.ru/YQ-3003.
+                        # This hack is due to YQ-3003.
                         # Previously we used container names instead of container ips:
                         # host_internal=docker_compose_file['services']['postgresql']['container_name'],
                         host_internal=endpoint_determiner.get_internal_ip('postgresql'),
@@ -182,7 +182,7 @@ class GenericSettings:
     @dataclass
     class MySQLCluster:
         def __hash__(self) -> int:
-            return hash(self.database) 
+            return hash(self.database)
 
         database: str
 

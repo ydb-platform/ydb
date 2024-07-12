@@ -15,13 +15,14 @@ class BaseTestCase:
     name_: str
     data_source_kind: EDataSourceKind.ValueType
     pragmas: Dict[str, str]
-    protocol: EProtocol 
+    protocol: EProtocol
 
     @property
     def name(self) -> str:
         match self.data_source_kind:
             case EDataSourceKind.CLICKHOUSE:
-                # We check both protocols only for ClickHouse
+                # ClickHouse has two kinds of network protocols: NATIVE and HTTP,
+                # so we append protocol name to the test case name
                 return f'{self.name_}_{EProtocol.Name(self.protocol)}'
             case EDataSourceKind.MYSQL:
                 return self.name_
@@ -51,16 +52,16 @@ class BaseTestCase:
     @functools.cached_property
     def table_name(self) -> str:
         '''
-        For some database we cannot use test case name as table name because of special symbols,
-        so we provide a random table name instead were necessary.
+        For some kinds of RDBMS we cannot use test case name as table name because of special symbols,
+        so we provide a random table name instead where necessary.
         '''
         match self.data_source_kind:
             case EDataSourceKind.CLICKHOUSE:
-                return 't' + hashlib.sha256(str(random.randint(0, 65536)).encode('ascii')).hexdigest()[:8]
+                return 't' + make_random_string(8)
             case EDataSourceKind.MYSQL:
                 return self.name
             case EDataSourceKind.POSTGRESQL:
-                return 't' + hashlib.sha256(str(random.randint(0, 65536)).encode('ascii')).hexdigest()[:8]
+                return 't' + make_random_string(8)
             case EDataSourceKind.YDB:
                 return self.name
             case _:
@@ -100,3 +101,7 @@ class BaseTestCase:
                 )
             case _:
                 raise Exception(f'invalid data source: {self.data_source_kind}')
+
+
+def make_random_string(length: int) -> str:
+    return hashlib.sha256(str(random.randint(0, 65536)).encode('ascii')).hexdigest()[:length]

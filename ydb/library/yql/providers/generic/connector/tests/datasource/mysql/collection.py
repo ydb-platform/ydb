@@ -34,4 +34,4 @@ class Collection(object):
         if key not in self._test_cases:
             raise ValueError(f'no such test: {key}')
 
-        return map(lambda tc: tc.name, self._test_cases[key])
+        return [tc.name for tc in self._test_cases[key]]

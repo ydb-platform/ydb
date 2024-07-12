@@ -119,16 +119,16 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
         implTableDesc.MutablePartitionConfig()->SetShadowData(true);
 
-        result.push_back(CreateInitializeBuildIndexImplTable(NextPartId(opId, result), outTx));
+        return CreateInitializeBuildIndexImplTable(NextPartId(opId, result), outTx);
     };
 
     if (indexDesc.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-        createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexDesc.GetIndexImplTableDescriptions(0)));
-        createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexDesc.GetIndexImplTableDescriptions(1)));
+        result.push_back(createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexDesc.GetIndexImplTableDescriptions(0))));
+        result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexDesc.GetIndexImplTableDescriptions(1))));
     } else {
         NKikimrSchemeOp::TTableDescription implTableDesc = CalcImplTableDesc(tableInfo, implTableColumns, indexDesc.GetIndexImplTableDescriptions(0));
         implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
-        createIndexImplTable(std::move(implTableDesc));
+        result.push_back(createIndexImplTable(std::move(implTableDesc)));
     }
 
     return result;

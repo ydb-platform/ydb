@@ -247,7 +247,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
 
             *scheme.MutableCreateTable() = implTableDesc;
 
-            return result.push_back(CreateNewTable(NextPartId(nextId, result), scheme));    
+            return CreateNewTable(NextPartId(nextId, result), scheme);    
         };
 
         const auto& implTableColumns = indexes.at(indexDescription.GetName());
@@ -259,8 +259,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 userPostingDesc = indexDescription.GetIndexImplTableDescriptions(1);
             }
                 
-            createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(baseTableDescription.GetPartitionConfig(), userLevelDesc));
-            createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), implTableColumns, userPostingDesc));
+            result.push_back(createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(baseTableDescription.GetPartitionConfig(), userLevelDesc)));
+            result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), implTableColumns, userPostingDesc)));
         } else {
             NKikimrSchemeOp::TTableDescription userIndexDesc;
             if (indexDescription.IndexImplTableDescriptionsSize()) {
@@ -268,7 +268,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
             }
 
-            createIndexImplTable(CalcImplTableDesc(baseTableDescription, implTableColumns, userIndexDesc));
+            result.push_back(createIndexImplTable(CalcImplTableDesc(baseTableDescription, implTableColumns, userIndexDesc)));
         }
     }
 

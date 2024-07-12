@@ -722,13 +722,12 @@ table_index: INDEX an_id table_index_type
     ON LPAREN an_id_schema (COMMA an_id_schema)* RPAREN
     (COVER LPAREN an_id_schema (COMMA an_id_schema)* RPAREN)?;
 
-table_index_type:
-      global_index
-    | local_index
-;
+table_index_type: (global_index | local_index) (USING index_subtype)?;
 
 global_index: GLOBAL UNIQUE? (SYNC | ASYNC)?;
 local_index: LOCAL;
+
+index_subtype: VECTOR_KMEANS_TREE;
 
 changefeed: CHANGEFEED an_id WITH LPAREN changefeed_settings RPAREN;
 changefeed_settings: changefeed_settings_entry (COMMA changefeed_settings_entry)*;
@@ -1965,6 +1964,7 @@ USING: U S I N G;
 VACUUM: V A C U U M;
 VALUES: V A L U E S;
 VARIANT: V A R I A N T;
+VECTOR_KMEANS_TREE: V E C T O R '_' K M E A N S '_' T R E E;
 VIEW: V I E W;
 VIRTUAL: V I R T U A L;
 WHEN: W H E N;

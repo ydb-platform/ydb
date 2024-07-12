@@ -630,10 +630,11 @@ bool PureColumnOrNamedListStr(const TRule_pure_column_or_named_list& node, TTran
 bool CreateTableIndex(const TRule_table_index& node, TTranslation& ctx, TVector<TIndexDescription>& indexes) {
     indexes.emplace_back(IdEx(node.GetRule_an_id2(), ctx));
 
-    const auto& indexType = node.GetRule_table_index_type3();
+    const auto& indexType = node.GetRule_table_index_type3().GetBlock1();
     switch (indexType.Alt_case()) {
-        case TRule_table_index_type::kAltTableIndexType1: {
-            auto globalIndex = indexType.GetAlt_table_index_type1().GetRule_global_index1();
+        // "GLOBAL"
+        case TRule_table_index_type_TBlock1::kAlt1: {
+            auto globalIndex = indexType.GetAlt1().GetRule_global_index1();
             bool uniqIndex = false;
             if (globalIndex.HasBlock2()) {
                 uniqIndex = true;
@@ -658,11 +659,26 @@ bool CreateTableIndex(const TRule_table_index& node, TTranslation& ctx, TVector<
             }
         }
         break;
-        case TRule_table_index_type::kAltTableIndexType2:
+        // "LOCAL"
+        case TRule_table_index_type_TBlock1::kAlt2:
             ctx.AltNotImplemented("local", indexType);
             return false;
-        case TRule_table_index_type::ALT_NOT_SET:
+        case TRule_table_index_type_TBlock1::ALT_NOT_SET:
             Y_ABORT("You should change implementation according to grammar changes");
+    }
+
+    if (node.GetRule_table_index_type3().HasBlock2()) {
+        const TString subType = to_lower(ctx.Token(node.GetRule_table_index_type3().GetBlock2().GetRule_index_subtype2().GetToken1())) ;
+        if (subType == "vector_kmeans_tree") {
+            if (indexes.back().Type != TIndexDescription::EType::GlobalSync) {
+                ctx.Error() << "VECTOR_KMEANS_TREE index can only be GLOBAL [SYNC]";
+                return false;
+            }
+
+            indexes.back().Type = TIndexDescription::EType::GlobalVectorKmeansTree;
+        } else {
+            Y_ABORT("You should change implementation according to grammar changes");
+        }
     }
 
     if (node.HasBlock4()) {

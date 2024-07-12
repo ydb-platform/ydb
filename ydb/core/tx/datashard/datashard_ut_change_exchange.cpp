@@ -3600,6 +3600,94 @@ Y_UNIT_TEST_SUITE(Cdc) {
         MustNotLoseSchemaSnapshot(true);
     }
 
+    Y_UNIT_TEST(ResolvedTimestampsContinueAfterMerge) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        SetSplitMergePartCountLimit(&runtime, -1);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithResolvedTimestamps(TDuration::Seconds(3), Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        Cerr << "... prepare" << Endl;
+        {
+            WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+                R"({"resolved":"***"})",
+            });
+
+            auto tabletIds = GetTableShards(server, edgeActor, "/Root/Table");
+            UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
+
+            WaitTxNotification(server, edgeActor, AsyncSplitTable(server, edgeActor, "/Root/Table", tabletIds.at(0), 2));
+            WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+                R"({"resolved":"***"})",
+                R"({"resolved":"***"})",
+            });
+        }
+
+        auto initialTabletIds = GetTableShards(server, edgeActor, "/Root/Table");
+        UNIT_ASSERT_VALUES_EQUAL(initialTabletIds.size(), 2);
+
+        std::vector<std::unique_ptr<IEventHandle>> blockedSplitRequests;
+        auto blockSplitRequests = runtime.AddObserver<TEvPersQueue::TEvRequest>([&](auto& ev) {
+            if (ev->Get()->Record.GetPartitionRequest().HasCmdSplitMessageGroup()) {
+                blockedSplitRequests.emplace_back(ev.Release());
+            }
+        });
+
+        Cerr << "... merge table" << Endl;
+        const auto mergeTxId = AsyncMergeTable(server, edgeActor, "/Root/Table", initialTabletIds);
+        WaitFor(runtime, [&]{ return blockedSplitRequests.size() == initialTabletIds.size(); }, "blocked split requests");
+        blockSplitRequests.Remove();
+
+        std::vector<std::unique_ptr<IEventHandle>> blockedRegisterRequests;
+        auto blockRegisterRequests = runtime.AddObserver<TEvPersQueue::TEvRequest>([&](auto& ev) {
+            if (ev->Get()->Record.GetPartitionRequest().HasCmdRegisterMessageGroup()) {
+                blockedRegisterRequests.emplace_back(ev.Release());
+            }
+        });
+
+        ui32 splitResponses = 0;
+        auto countSplitResponses = runtime.AddObserver<TEvPersQueue::TEvResponse>([&](auto& ev) {
+            ++splitResponses;
+        });
+
+        Cerr << "... release split requests" << Endl;
+        for (auto& ev : std::exchange(blockedSplitRequests, {})) {
+            runtime.Send(ev.release(), 0, true);
+            WaitFor(runtime, [prev = splitResponses, &splitResponses]{ return splitResponses > prev; }, "split response");
+        }
+
+        Cerr << "... reboot pq tablet" << Endl;
+        RebootTablet(runtime, ResolvePqTablet(runtime, edgeActor, "/Root/Table/Stream", 0), edgeActor);
+        countSplitResponses.Remove();
+
+        Cerr << "... release register requests" << Endl;
+        blockRegisterRequests.Remove();
+        for (auto& ev : std::exchange(blockedRegisterRequests, {})) {
+            runtime.Send(ev.release(), 0, true);
+        }
+
+        Cerr << "... wait for merge tx notification" << Endl;
+        WaitTxNotification(server, edgeActor, mergeTxId);
+
+        Cerr << "... wait for final heartbeat" << Endl;
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"resolved":"***"})",
+            R"({"resolved":"***"})",
+            R"({"resolved":"***"})",
+        });
+    }
+
 } // Cdc
 
 } // NKikimr

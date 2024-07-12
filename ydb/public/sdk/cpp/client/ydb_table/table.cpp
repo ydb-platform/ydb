@@ -2215,7 +2215,7 @@ TIndexDescription::TIndexDescription(
     EIndexType type,
     const TVector<TString>& indexColumns,
     const TVector<TString>& dataColumns,
-    const TGlobalIndexSettings& settings
+    const TVector<TGlobalIndexSettings>& settings
 )   : IndexName_(name)
     , IndexType_(type)
     , IndexColumns_(indexColumns)
@@ -2227,7 +2227,7 @@ TIndexDescription::TIndexDescription(
     const TString& name,
     const TVector<TString>& indexColumns,
     const TVector<TString>& dataColumns,
-    const TGlobalIndexSettings& settings
+    const TVector<TGlobalIndexSettings>& settings
 )   : TIndexDescription(name, EIndexType::GlobalSync, indexColumns, dataColumns, settings)
 {}
 
@@ -2297,7 +2297,7 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
     EIndexType type;
     TVector<TString> indexColumns;
     TVector<TString> dataColumns;
-    TGlobalIndexSettings globalIndexSettings;
+    TVector<TGlobalIndexSettings> globalIndexSettings;
 
     indexColumns.assign(proto.index_columns().begin(), proto.index_columns().end());
     dataColumns.assign(proto.data_columns().begin(), proto.data_columns().end());
@@ -2305,18 +2305,24 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
     switch (proto.type_case()) {
     case TProto::kGlobalIndex:
         type = EIndexType::GlobalSync;
-        globalIndexSettings = TGlobalIndexSettings::FromProto(proto.global_index().settings());
+        globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(proto.global_index().settings()));
         break;
     case TProto::kGlobalAsyncIndex:
         type = EIndexType::GlobalAsync;
-        globalIndexSettings = TGlobalIndexSettings::FromProto(proto.global_async_index().settings());
+        globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(proto.global_async_index().settings()));
         break;
     case TProto::kGlobalUniqueIndex:
         type = EIndexType::GlobalUnique;
-        globalIndexSettings = TGlobalIndexSettings::FromProto(proto.global_unique_index().settings());
+        globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(proto.global_unique_index().settings()));
+        break;
+    case TProto::kGlobalVectorKmeansTreeIndex:
+        type = EIndexType::GlobalVectorKMeansTree;
+        globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(proto.global_vector_kmeans_tree_index().level_table_settings()));
+        globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(proto.global_vector_kmeans_tree_index().posting_table_settings()));
         break;
     default: // fallback to global sync
         type = EIndexType::GlobalSync;
+        globalIndexSettings.resize(1);
         break;
     }
 
@@ -2337,18 +2343,33 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
     *proto.mutable_data_columns() = {DataColumns_.begin(), DataColumns_.end()};
 
     switch (IndexType_) {
-    case EIndexType::GlobalSync:
-        GlobalIndexSettings_.SerializeTo(*proto.mutable_global_index()->mutable_settings());
+    case EIndexType::GlobalSync: {
+        auto& settings = *proto.mutable_global_index()->mutable_settings();
+        if (GlobalIndexSettings_.size() == 1)
+            GlobalIndexSettings_[0].SerializeTo(settings);
         break;
-    case EIndexType::GlobalAsync:
-        GlobalIndexSettings_.SerializeTo(*proto.mutable_global_async_index()->mutable_settings());
+    }
+    case EIndexType::GlobalAsync: {
+        auto& settings = *proto.mutable_global_async_index()->mutable_settings();
+        if (GlobalIndexSettings_.size() == 1)
+            GlobalIndexSettings_[0].SerializeTo(settings);
         break;
-    case EIndexType::GlobalUnique:
-        GlobalIndexSettings_.SerializeTo(*proto.mutable_global_unique_index()->mutable_settings());
+    }
+    case EIndexType::GlobalUnique: {
+        auto& settings = *proto.mutable_global_unique_index()->mutable_settings();
+        if (GlobalIndexSettings_.size() == 1)
+            GlobalIndexSettings_[0].SerializeTo(settings);
         break;
-    case EIndexType::GlobalVectorKMeansTree:
-        *proto.mutable_global_vector_kmeans_tree_index() = Ydb::Table::GlobalVectorKMeansTreeIndex();
+    }
+    case EIndexType::GlobalVectorKMeansTree: {
+        auto& level_settings = *proto.mutable_global_vector_kmeans_tree_index()->mutable_level_table_settings();
+        auto& posting_settings = *proto.mutable_global_vector_kmeans_tree_index()->mutable_posting_table_settings();
+        if (GlobalIndexSettings_.size() == 2) {
+            GlobalIndexSettings_[0].SerializeTo(level_settings);
+            GlobalIndexSettings_[1].SerializeTo(posting_settings);
+        }
         break;
+    }
     case EIndexType::Unknown:
         break;
     }

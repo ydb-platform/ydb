@@ -202,14 +202,14 @@ public:
         EIndexType type,
         const TVector<TString>& indexColumns,
         const TVector<TString>& dataColumns = {},
-        const TGlobalIndexSettings& settings = {}
+        const TVector<TGlobalIndexSettings>& settings = {}
     );
 
     TIndexDescription(
         const TString& name,
         const TVector<TString>& indexColumns,
         const TVector<TString>& dataColumns = {},
-        const TGlobalIndexSettings& settings = {}
+        const TVector<TGlobalIndexSettings>& settings = {}
     );
 
     const TString& GetIndexName() const;
@@ -234,7 +234,7 @@ private:
     EIndexType IndexType_;
     TVector<TString> IndexColumns_;
     TVector<TString> DataColumns_;
-    TGlobalIndexSettings GlobalIndexSettings_;
+    TVector<TGlobalIndexSettings> GlobalIndexSettings_;
     ui64 SizeBytes = 0;
 };
 

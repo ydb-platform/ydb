@@ -796,12 +796,13 @@ public:
             const bool initial = NYql::HasSetting(publish.Settings().Ref(), EYtSettingType::Initial);
 
             std::unordered_map<EYtSettingType, TString> strOpts;
-            TVector<TString> securityTags;
+            TMaybe<TVector<TString>> securityTags = Nothing();
             for (const auto& setting : publish.Settings().Ref().Children()) {
                 if (FromString<EYtSettingType>(setting->Head().Content()) ==  EYtSettingType::SecurityTags) {
-                    securityTags.reserve(setting->ChildrenSize() - 1);
+                    securityTags = TVector<TString>();
+                    securityTags->reserve(setting->ChildrenSize() - 1);
                     for (size_t pos = 1; pos < setting->ChildrenSize(); pos++) {
-                        securityTags.emplace_back(setting->ChildRef(pos)->Content());
+                        securityTags->emplace_back(setting->ChildRef(pos)->Content());
                     }
                     continue;
                 }
@@ -2026,7 +2027,7 @@ private:
         const TString& srcColumnGroups,
         const bool combineChunks,
         const std::unordered_map<EYtSettingType, TString>& strOpts,
-        const TVector<TString> securityTags)
+        const TMaybe<TVector<TString>> securityTags)
     {
         TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config());
         auto cluster = execCtx->Cluster_;
@@ -2167,13 +2168,16 @@ private:
             }
         }
 
-        {
-            auto securityTagsNode = NYT::TNode::CreateList();
-            auto &securityTagsNodeList = securityTagsNode.AsList();
-            for (size_t pos = 0; pos < securityTags.size(); pos++) {
-                securityTagsNodeList.emplace_back(securityTags[pos]);
+        TMaybe<NYT::TNode> securityTagsNode = Nothing();
+        if (securityTags) {
+            securityTagsNode = NYT::TNode::CreateList();
+            auto &securityTagsNodeList = securityTagsNode->AsList();
+            for (size_t pos = 0; pos < securityTags->size(); pos++) {
+                securityTagsNodeList.emplace_back((*securityTags)[pos]);
             }
-            yqlAttrs[SecurityTagsName] = securityTagsNode;
+            if (!(EYtWriteMode::Append == mode && !appendToSorted)) {
+                yqlAttrs[SecurityTagsName] = *securityTagsNode;
+            }
         }
 
         const auto userAttrsIt = strOpts.find(EYtSettingType::UserAttrs);
@@ -2230,7 +2234,7 @@ private:
             res = cacheCheck.Apply([mode, srcPaths, execCtx, rowSpec, forceTransform,
                                     appendToSorted, initial, entry, dstPath, dstEpoch, yqlAttrs, combineChunks,
                                     dstCompressionCodec, dstErasureCodec, dstReplicationFactor, dstMedia, dstPrimaryMedium,
-                                    nativeYtTypeCompatibility, publishTx, cluster,
+                                    nativeYtTypeCompatibility, publishTx, cluster, securityTagsNode,
                                     commitCheckpoint, columnGroupsSpec = std::move(columnGroupsSpec)] (const auto& f) mutable
             {
                 if (f.GetValue()) {
@@ -2264,9 +2268,14 @@ private:
                     mergeSpec.AddInput(path);
                 }
 
+                NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc();
+
                 auto ytDst = TRichYPath(dstPath);
                 if (EYtWriteMode::Append == mode && !appendToSorted) {
                     ytDst.Append(true);
+                    if (securityTagsNode) {
+                        spec["additional_security_tags"] = *securityTagsNode;
+                    }
                 } else {
                     NYT::TNode fullSpecYson;
                     rowSpec->FillCodecNode(fullSpecYson);
@@ -2312,7 +2321,6 @@ private:
                     mergeSpec.Mode(MM_ORDERED);
                 }
 
-                NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc();
                 EYtOpProps flags = EYtOpProp::PublishedAutoMerge;
                 if (combineChunks) {
                     flags |= EYtOpProp::PublishedChunkCombine;

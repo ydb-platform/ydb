@@ -63,9 +63,7 @@ public:
  */
 class TArrowInputConverter {
 protected:
-    IWorker* Worker_;
     const THolderFactory& Factory_;
-    const NYT::TNode& Schema_;
     TVector<ui32> DatumToMemberIDMap_;
 
 public:
@@ -74,16 +72,21 @@ public:
         ui32 index,
         IWorker* worker
     )
-        : Worker_(worker)
-        , Factory_(Worker_->GetGraph().GetHolderFactory())
-        , Schema_(inputSpec.GetSchema(index))
+        : Factory_(worker->GetGraph().GetHolderFactory())
     {
-        const auto* type = Worker_->GetInputType(index, true);
+        const NYT::TNode& inputSchema = inputSpec.GetSchema(index);
+        // Deduce the schema from the input MKQL type, if no is
+        // provided by <inputSpec>.
+        const NYT::TNode& schema = inputSchema.IsEntity()
+                                 ? worker->MakeInputSchema(index)
+                                 : inputSchema;
+
+        const auto* type = worker->GetInputType(index, true);
 
         Y_ENSURE(type->IsStruct());
-        Y_ENSURE(Schema_.ChildAsString(0) == "StructType");
+        Y_ENSURE(schema.ChildAsString(0) == "StructType");
 
-        const auto& members = Schema_.ChildAsList(1);
+        const auto& members = schema.ChildAsList(1);
         DatumToMemberIDMap_.resize(members.size());
 
         for (size_t i = 0; i < DatumToMemberIDMap_.size(); i++) {
@@ -116,9 +119,7 @@ public:
  */
 class TArrowOutputConverter {
 protected:
-    IWorker* Worker_;
     const THolderFactory& Factory_;
-    const NYT::TNode& Schema_;
     TVector<ui32> DatumToMemberIDMap_;
     THolder<arrow::compute::ExecBatch> Batch_;
 
@@ -127,20 +128,25 @@ public:
         const TArrowOutputSpec& outputSpec,
         IWorker* worker
     )
-        : Worker_(worker)
-        , Factory_(worker->GetGraph().GetHolderFactory())
-        , Schema_(outputSpec.GetSchema())
+        : Factory_(worker->GetGraph().GetHolderFactory())
     {
         Batch_.Reset(new arrow::compute::ExecBatch);
 
-        const auto* type = Worker_->GetOutputType();
+        const NYT::TNode& outputSchema = outputSpec.GetSchema();
+        // Deduce the schema from the output MKQL type, if no is
+        // provided by <outputSpec>.
+        const NYT::TNode& schema = outputSchema.IsEntity()
+                                 ? worker->MakeOutputSchema()
+                                 : outputSchema;
+
+        const auto* type = worker->GetOutputType();
 
         Y_ENSURE(type->IsStruct());
-        Y_ENSURE(Schema_.ChildAsString(0) == "StructType");
+        Y_ENSURE(schema.ChildAsString(0) == "StructType");
 
         const auto* stype = AS_TYPE(NKikimr::NMiniKQL::TStructType, type);
 
-        const auto& members = Schema_.ChildAsList(1);
+        const auto& members = schema.ChildAsList(1);
         DatumToMemberIDMap_.resize(members.size());
 
         for (size_t i = 0; i < DatumToMemberIDMap_.size(); i++) {

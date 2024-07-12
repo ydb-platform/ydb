@@ -12,6 +12,12 @@ PEERDIR(
     yt/yt/core
 )
 
+IF(ARCH_X86_64)
+    PEERDIR(
+        yt/yt/library/ytprof
+    )
+ENDIF()
+
 END()
 
 

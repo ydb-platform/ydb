@@ -6,6 +6,10 @@ namespace NYT::NBacktrace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#ifndef _x86_64_
+#error Unsupported platform
+#endif
+
 struct TFramePointerCursorContext
 {
     ui64 Rip;

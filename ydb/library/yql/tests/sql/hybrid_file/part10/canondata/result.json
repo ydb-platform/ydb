@@ -1947,9 +1947,9 @@
     ],
     "test.test[pg-aggregate_factory-default.txt-Debug]": [
         {
-            "checksum": "1cd8dc73d170e20224adf081d5cced0d",
-            "size": 2931,
-            "uri": "https://{canondata_backend}/1924537/ed5c3cfadad0d4915690e6595935fd0ac4b575d5/resource.tar.gz#test.test_pg-aggregate_factory-default.txt-Debug_/opt.yql_patched"
+            "checksum": "01d2651f672dfd02beb5bfe13da38ea9",
+            "size": 3116,
+            "uri": "https://{canondata_backend}/1773845/6921a43b8331634020d1aa346b91c56ad87a3ae0/resource.tar.gz#test.test_pg-aggregate_factory-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-aggregate_factory-default.txt-Plan]": [

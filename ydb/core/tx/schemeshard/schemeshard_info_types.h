@@ -3063,6 +3063,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         indexInfo->IndexName = row.template GetValue<Schema::IndexBuild::IndexName>();
         indexInfo->IndexType = row.template GetValue<Schema::IndexBuild::IndexType>();
 
+        // TODO load indexInfo->ImplTableDescriptions
+
         indexInfo->State = TIndexBuildInfo::EState(
             row.template GetValue<Schema::IndexBuild::State>());
         indexInfo->Issue =

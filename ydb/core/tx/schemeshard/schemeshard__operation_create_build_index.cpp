@@ -123,10 +123,21 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     };
 
     if (indexDesc.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-        result.push_back(createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexDesc.GetIndexImplTableDescriptions(0))));
-        result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexDesc.GetIndexImplTableDescriptions(1))));
+        NKikimrSchemeOp::TTableDescription indexLevelTableDesc, indexPostingTableDesc;
+        // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS
+        if (indexDesc.IndexImplTableDescriptionsSize() == 2) {
+            indexLevelTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
+            indexPostingTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
+        }
+        result.push_back(createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexLevelTableDesc)));
+        result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc)));
     } else {
-        NKikimrSchemeOp::TTableDescription implTableDesc = CalcImplTableDesc(tableInfo, implTableColumns, indexDesc.GetIndexImplTableDescriptions(0));
+        NKikimrSchemeOp::TTableDescription indexTableDesc;
+        // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS
+        if (indexDesc.IndexImplTableDescriptionsSize() == 1) {
+            indexTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
+        }
+        NKikimrSchemeOp::TTableDescription implTableDesc = CalcImplTableDesc(tableInfo, implTableColumns, indexTableDesc);
         implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
         result.push_back(createIndexImplTable(std::move(implTableDesc)));
     }

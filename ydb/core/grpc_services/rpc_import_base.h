@@ -43,7 +43,7 @@ struct TImportConv {
         }
 
         if (import.HasStartTime()) {
-            *operation.mutable_start_time() = import.GetStartTime();
+            *operation.mutable_create_time() = import.GetStartTime();
         }
         if (import.HasEndTime()) {
             *operation.mutable_end_time() = import.GetEndTime();

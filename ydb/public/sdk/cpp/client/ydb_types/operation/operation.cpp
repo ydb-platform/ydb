@@ -17,7 +17,7 @@ public:
         : Id_(operation.id(), true /* allowEmpty */)
         , Status_(std::move(status))
         , Ready_(operation.ready())
-        , StartTime_(ProtoTimestampToInstant(operation.start_time()))
+        , CreateTime_(ProtoTimestampToInstant(operation.create_time()))
         , EndTime_(ProtoTimestampToInstant(operation.end_time()))
         , CreatedBy_(operation.created_by())
         , Operation_(std::move(operation))
@@ -36,8 +36,8 @@ public:
         return Status_;
     }
 
-    TInstant StartTime() const {
-        return StartTime_;
+    TInstant CreateTime() const {
+        return CreateTime_;
     }
 
     TInstant EndTime() const {
@@ -56,7 +56,7 @@ private:
     const TOperationId Id_;
     const TStatus Status_;
     const bool Ready_;
-    const TInstant StartTime_;
+    const TInstant CreateTime_;
     const TInstant EndTime_;
     const TString CreatedBy_;
     const Ydb::Operations::Operation Operation_;
@@ -82,8 +82,8 @@ const TStatus& TOperation::Status() const {
     return Impl_->Status();
 }
 
-TInstant TOperation::StartTime() const {
-    return Impl_->StartTime();
+TInstant TOperation::CreateTime() const {
+    return Impl_->CreateTime();
 }
 
 TInstant TOperation::EndTime() const {

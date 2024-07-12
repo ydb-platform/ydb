@@ -32,7 +32,7 @@ public:
     const TOperationId& Id() const;
     bool Ready() const;
     const TStatus& Status() const;
-    TInstant StartTime() const;
+    TInstant CreateTime() const;
     TInstant EndTime() const;
     const TString& CreatedBy() const;
 

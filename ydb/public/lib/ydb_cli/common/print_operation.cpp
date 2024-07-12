@@ -41,8 +41,8 @@ namespace {
             freeText << "Created by: " << operation.CreatedBy() << Endl;
         }
 
-        if (operation.StartTime() != TInstant::Zero()) {
-            freeText << "Start time: " << operation.StartTime().ToStringUpToSeconds() << Endl;
+        if (operation.CreateTime() != TInstant::Zero()) {
+            freeText << "Create time: " << operation.CreateTime().ToStringUpToSeconds() << Endl;
         }
 
         if (operation.EndTime() != TInstant::Zero()) {
@@ -130,8 +130,8 @@ namespace {
             freeText << "Created by: " << operation.CreatedBy() << Endl;
         }
 
-        if (operation.StartTime() != TInstant::Zero()) {
-            freeText << "Start time: " << operation.StartTime().ToStringUpToSeconds() << Endl;
+        if (operation.CreateTime() != TInstant::Zero()) {
+            freeText << "Create time: " << operation.CreateTime().ToStringUpToSeconds() << Endl;
         }
 
         if (operation.EndTime() != TInstant::Zero()) {
@@ -196,8 +196,8 @@ namespace {
             freeText << "Created by: " << operation.CreatedBy() << Endl;
         }
 
-        if (operation.StartTime() != TInstant::Zero()) {
-            freeText << "Start time: " << operation.StartTime().ToStringUpToSeconds() << Endl;
+        if (operation.CreateTime() != TInstant::Zero()) {
+            freeText << "Create time: " << operation.CreateTime().ToStringUpToSeconds() << Endl;
         }
 
         if (operation.EndTime() != TInstant::Zero()) {

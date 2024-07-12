@@ -116,7 +116,7 @@ protected:
         : TClientCommand(cmd, {}, description)
         , RunConfig(AppConfig)
     {
-        RunConfig.ConfigsDispatcherInitInfo.DebugInfo = {};
+        RunConfig.ConfigsDispatcherInitInfo.DebugInfo = NConfig::TDebugInfo{};
     }
 
     virtual void Config(TConfig& config) override {

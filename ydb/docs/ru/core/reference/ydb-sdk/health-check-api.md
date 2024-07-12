@@ -104,7 +104,7 @@ message IssueLog {
 }
 ```
 
-#### Описание полей в ответе {#fields-description}
+#### Описание полей в ответе {#fields-Описание}
 
 | Поле | Описание |
 |:----|:----|
@@ -154,61 +154,206 @@ message IssueLog {
 | `ORANGE` | Серьезная проблема, мы в шаге от потери доступности. Может потребоваться обслуживание. |
 | `RED` | Компонент неисправен или недоступен. |
 
-## Возможные проблемы {#problems}
+## Возможные проблемы {#issues}
 
-| Сообщение | Описание |
-|:----|:----|
-| **DATABASE** ||
-| `Database has multiple issues`</br>`Database has compute issues`</br>`Database has storage issues` | Зависит от нижележащих слоев `COMPUTE` и `STORAGE`. Это самый общий статус базы данных. |
-| **STORAGE** ||
-| `There are no storage pools` | Пулы хранения не настроены. |
-| `Storage degraded`</br>`Storage has no redundancy`</br>`Storage failed` | Зависит от нижележащего слоя `STORAGE_POOLS`. |
-| `System tablet BSC didn't provide information` | Информация о сторадже не доступна. |
-| `Storage usage over 75%` <br>`Storage usage over 85%` <br>`Storage usage over 90%` | Необходимо увеличить дисковое пространство. |
-| **STORAGE_POOL** ||
-| `Pool degraded` <br>`Pool has no redundancy` <br>`Pool failed` | Зависит от нижележащего слоя `STORAGE_GROUP`. |
-| **STORAGE_GROUP** ||
-| `Group has no vslots` | Эта ошибка не ожидается. Внутренняя ошибка. |
-| `Group degraded` | В группе недоступно допустимое число дисков. |
-| `Group has no redundancy` | Группа хранения потеряла избыточность. Еще один сбой в работе диска может привести к потере группы. |
-| `Group failed` | Группа хранения потеряла целостность. Данные не доступны. |
-|| `HealthCheck` проверяет различные параметры (режим отказоустойчивости, количество отказавших дисков, статус дисков и т. д.) и в зависимости от этого устанавливает соответствующий статус у группы. |
-| **VDISK** ||
-| `System tablet BSC didn't provide known status` | Эта ошибка не ожидается. Внутренняя ошибка. |
-| `VDisk is not available` | Отсутствует виртуальный диск. |
-| `VDisk is being initialized` | Инициализация виртуального диска в процессе. |
-| `Replication in progress` | Диск в процессе репликации, но может принимать запросы. |
-| `VDisk have space issue` | Зависит от нижележащего слоя `PDISK`. |
-| **PDISK** ||
-| `Unknown PDisk state` | `HealthCheck` не может разобрать состояние PDisk. Внутренняя ошибка. |
-| `PDisk state is ...` | Cообщает состояние физического диска. |
-| `Available size is less than 12%` <br>`Available size is less than 9%` <br>`Available size is less than 6%` | Заканчивается свободное место на физическом диске. |
-| `PDisk is not available` | Отсутствует физический диск. |
-| **STORAGE_NODE** ||
-| `Storage node is not available` | Отсутствует нода с дисками. |
-| **COMPUTE** ||
-| `There are no compute nodes` | В базе нет нод для запуска таблеток. </br>Невозможно определить уровень `COMPUTE_NODE` ниже. |
-| `Compute has issues with system tablets` | Зависит от нижележащего слоя `SYSTEM_TABLET`. |
-| `Some nodes are restarting too often` | Зависит от нижележащего слоя `NODE_UPTIME`. |
-| `Compute is overloaded` | Зависит от нижележащего слоя `COMPUTE_POOL`. |
-| `Compute quota usage` | Зависит от нижележащего слоя `COMPUTE_QUOTA`. |
-| `Compute has issues with tablets` | Зависит от нижележащего слоя `TABLET`. |
-| **COMPUTE_QUOTA** ||
-| `Paths quota usage is over than 90%` <br>`Paths quota usage is over than 99%` <br>`Paths quota exhausted` </br>`Shards quota usage is over than 90%` <br>`Shards quota usage is over than 99%` <br>`Shards quota exhausted` | Квоты исчерпаны. |
-| **SYSTEM_TABLET** ||
-| `System tablet is unresponsive ` <br>`System tablet response time over 1000ms` <br>`System tablet response time over 5000ms` | Системная таблетка не отвечает или отвечает долго |
-| **TABLET** ||
-| `Tablets are restarting too often` | Таблетки слишком часто перезапускаются. |
-| `Tablets are dead` <br>`Followers are dead` | Таблетки не запущены (или не могут быть запущены). |
-| **LOAD_AVERAGE** ||
-| `LoadAverage above 100%` | ([Load](https://en.wikipedia.org/wiki/Load_(computing))) Физический хост перегружен. </br>Это указывает на то, что система работает на пределе, скорее всего из-за большого количества процессов, ожидающих операций ввода-вывода. </br></br>Информация о нагрузке: </br>Источник: </br>`/proc/loadavg` </br>Информация о логических ядрах </br></br>Количество логических ядер: </br>Основной источник: </br>`/sys/fs/cgroup/cpu.max` </br></br>Дополнительный источник: </br>`/sys/fs/cgroup/cpu/cpu.cfs_quota_us` </br>`/sys/fs/cgroup/cpu/cpu.cfs_period_us` </br>Количество ядер вычисляется путем деления квоты на период (quota / period) |
-| **COMPUTE_POOL** ||
-| `Pool usage is over than 90%` <br>`Pool usage is over than 95%` <br>`Pool usage is over than 99%` | один из CPU пулов перегружен. |
-| **NODE_UPTIME** ||
-| `The number of node restarts has increased` | Количество рестартов ноды превысило порог. По-умолчанию, это 10 рестартов в час. |
-| `Node is restarting too often` | Узлы слишком часто перезапускаются. По-умолчанию, это 30 рестартов в час. |
-| **NODES_TIME_DIFFERENCE** ||
-| `Node is ... ms behind peer [id]` <br>`Node is ... ms ahead of peer [id]` | Расхождение времени на узлах, что может приводить к возможным проблемам с координацией распределённых транзакций. Начинает появляться с расхождения в 5ms|
+### DATABASE
+
+#### Database has multiple issues, Database has compute issues, Database has storage issues
+
+**Описание:** Зависит от нижележащих слоев `COMPUTE` и `STORAGE`. Это самый общий статус базы данных.
+
+### STORAGE
+
+#### There are no storage pools
+
+**Описание:** Нет информации о пулах хранения. Скорее всего, пулы хранения не настроены.
+
+#### Storage degraded, Storage has no redundancy, Storage failed
+
+**Описание:** Зависит от нижележащего слоя `STORAGE_POOLS`.
+
+#### System tablet BSC didn't provide information
+
+**Описание:** Информация о сторадже не доступна.
+
+#### Storage usage over 75%, Storage usage over 85%, Storage usage over 90%
+
+**Описание:** Необходимо увеличить дисковое пространство.
+
+### STORAGE_POOL
+
+#### Pool degraded, Pool has no redundancy, Pool failed
+
+**Описание:** Зависит от нижележащего слоя `STORAGE_GROUP`.
+
+### STORAGE_GROUP
+
+#### Group has no vslots
+
+**Описание:** Эта ошибка не ожидается. Внутренняя ошибка.
+
+#### Group degraded
+
+**Описание:** В группе недоступно допустимое число дисков.
+**Логика работы:** `HealthCheck` проверяет различные параметры (режим отказоустойчивости, количество отказавших дисков, статус дисков и т. д.) и в зависимости от этого устанавливает соответствующий статус у группы.
+**Действия при срабатывании:** В [YDB Embedded UI](../embedded-ui/ydb-monitoring.md) перейти на страницу базы данных, выбрать вкладку `Storage`, установить фильтры `Groups` и `Degraded`, по известному `id` группы проверить доступность нод и дисков на нодах.
+
+#### Group has no redundancy
+
+**Описание:** Группа хранения потеряла избыточность. Еще один сбой в работе диска может привести к потере группы.
+**Логика работы:** `HealthCheck` проверяет различные параметры (режим отказоустойчивости, количество отказавших дисков, статус дисков и т. д.) и в зависимости от этого устанавливает соответствующий статус у группы.
+**Действия при срабатывании:** В [YDB Embedded UI](../embedded-ui/ydb-monitoring.md) перейти на страницу базы данных, выбрать вкладку `Storage`, установить фильтры `Groups` и `Degraded`, по известному `id` группы проверить доступность нод и дисков на нодах.
+
+#### Group failed
+
+**Описание:** Группа хранения потеряла целостность и неработоспособна. Данные не доступны.
+**Логика работы:** `HealthCheck` проверяет различные параметры (режим отказоустойчивости, количество отказавших дисков, статус дисков и т. д.) и в зависимости от этого устанавливает соответствующий статус у группы.
+**Действия при срабатывании:** В [YDB Embedded UI](../embedded-ui/ydb-monitoring.md) перейти на страницу базы данных, выбрать вкладку `Storage`, установить фильтры `Groups` и `Degraded`, по известному `id` группы проверить доступность нод и дисков на нодах.
+
+### VDISK
+
+#### System tablet BSC didn't provide known status
+
+**Описание:** Эта ошибка не ожидается. Внутренняя ошибка.
+
+#### VDisk is not available
+
+**Описание:** Отсутствует виртуальный диск.
+**Действия при срабатывании:** В [YDB Embedded UI](../embedded-ui/ydb-monitoring.md) перейти на страницу базы данных, выбрать вкладку `Storage`, установить фильтры `Groups` и `Degraded`. По связанному issue `STORAGE_GROUP` можно узнать `id` группы. Навести на нужный vdisk - будет видно на какой ноде проблема. Посмотреть доступность нод и дисков на нодах.
+
+#### VDisk is being initialized
+
+**Описание:** Инициализация виртуального диска в процессе.
+**Действия при срабатывании:** В [YDB Embedded UI](../embedded-ui/ydb-monitoring.md) перейти на страницу базы данных, выбрать вкладку `Storage`, установить фильтры `Groups` и `Degraded`. По связанному issue `STORAGE_GROUP` можно узнать `id` группы. Навести на нужный vdisk - будет видно на какой ноде проблема. Посмотреть доступность нод и дисков на нодах.
+
+#### Replication in progress
+
+**Описание:** Диск в процессе репликации, но может принимать запросы.
+**Действия при срабатывании:** В [YDB Embedded UI](../embedded-ui/ydb-monitoring.md) перейти на страницу базы данных, выбрать вкладку `Storage`, установить фильтры `Groups` и `Degraded`. По связанному issue `STORAGE_GROUP` можно узнать `id` группы. Навести на нужный vdisk - будет видно на какой ноде проблема. Посмотреть доступность нод и дисков на нодах.
+
+#### VDisk have space issue
+
+**Описание:** Зависит от нижележащего слоя `PDISK`.
+
+### PDISK
+
+#### Unknown PDisk state
+
+**Описание:** `HealthCheck` не может разобрать состояние PDisk. Внутренняя ошибка.
+
+#### PDisk state is ...
+
+**Описание:** Cообщает состояние физического диска.
+**Действия при срабатывании:** В [YDB Embedded UI](../embedded-ui/ydb-monitoring.md) перейти на страницу базы данных, выбрать вкладку `Storage`, установить фильтры `Nodes` и `Degraded`, по известному `id` ноды и pdisk-а посмотреть доступность нод и дисков на нодах.
+
+#### Available size is less than 12%, Available size is less than 9%, Available size is less than 6%
+
+**Описание:** Заканчивается свободное место на физическом диске.
+**Действия при срабатывании:** В [YDB Embedded UI](../embedded-ui/ydb-monitoring.md) перейти на страницу базы данных, выбрать вкладку `Storage`, установить фильтры `Nodes` и `Out of Space`, по известному `id` ноды и pdisk-а просмотреть доступное место.
+
+#### PDisk is not available
+
+**Описание:** Отсутствует физический диск.
+**Действия при срабатывании:** В [YDB Embedded UI](../embedded-ui/ydb-monitoring.md) перейти на страницу базы данных, выбрать вкладку `Storage`, установить фильтры `Nodes` и `Degraded`, по известному `id` ноды и pdisk-а посмотреть доступность нод и дисков на нодах.
+
+### STORAGE_NODE
+
+#### Storage node is not available
+
+**Описание:** Отсутствует стораджовая нода. Это информация помогает при диагности верхнего слоя `PDISK`
+
+### COMPUTE
+
+#### There are no compute nodes
+
+**Описание:** В базе нет нод для запуска таблеток. Невозможно определить уровень `COMPUTE_NODE` ниже.
+
+#### Compute has issues with system tablets
+
+**Описание:** Зависит от нижележащего слоя ``SYSTEM_TABLET`.
+
+#### Some nodes are restarting too often
+
+**Описание:** Зависит от нижележащего слоя `NODE_UPTIME`.
+
+#### Compute is overloaded
+
+**Описание:** Зависит от нижележащего слоя `COMPUTE_POOL`.
+
+#### Compute quota usage
+
+**Описание:** Зависит от нижележащего слоя `COMPUTE_QUOTA`.
+
+#### Compute has issues with tablets
+
+**Описание:** Зависит от нижележащего слоя `TABLET`.
+
+### COMPUTE_QUOTA
+
+#### Paths quota usage is over than 90%, Paths quota usage is over than 99%, Paths quota exhausted, Shards quota usage is over than 90%, Shards quota usage is over than 99%, Shards quota exhausted
+
+**Описание:** Квоты исчерпаны.
+**Действия при срабатывании:** Проверить количество объектов (таблицы, топики) в базе, удалить лишние.
+
+### SYSTEM_TABLET
+
+#### System tablet is unresponsive, System tablet response time over 1000ms, System tablet response time over 5000ms
+
+**Описание:** Системная таблетка не отвечает или отвечает долго.
+**Действия при срабатывании:** В [YDB Embedded UI](../embedded-ui/ydb-monitoring.md) на вкладке `Storage` выставить фильтр `Nodes`. Проверить `Uptime` нод и их статус. Если `Uptime` небольшой, проверить по логам причины рестарта нод.
+
+### TABLET
+
+#### Tablets are restarting too often
+
+**Описание:** Таблетки слишком часто перезапускаются.
+**Действия при срабатывании:** В [YDB Embedded UI](../embedded-ui/ydb-monitoring.md) перейти на вкладку `Nodes`. Проверить `Uptime` нод и их статус. Если `Uptime` небольшой, проверить по логам причины рестарта нод.
+
+#### Tablets are dead, Followers are dead
+
+**Описание:** Таблетки не запущены (или не могут быть запущены).
+**Действия при срабатывании:** В [YDB Embedded UI](../embedded-ui/ydb-monitoring.md) перейти на вкладку `Nodes`. Проверить `Uptime` нод и их статус. Если `Uptime` небольшой, проверить по логам причины рестарта нод.
+
+### LOAD_AVERAGE
+
+#### LoadAverage above 100%
+
+**Описание:** ([Load](https://en.wikipedia.org/wiki/Load_(computing))) Физический хост перегружен Это указывает на то, что система работает на пределе, скорее всего из-за большого количества процессов, ожидающих операций ввода-вывода.
+**Логика работы:**
+Информация о нагрузке:
+  Источник: `/proc/loadavg` Информация о логических ядрах
+Мы используем первое число из трех — среднюю нагрузку за последнюю минуту.
+Количество логических ядер:
+  Основной источник: `/sys/fs/cgroup/cpu.max`
+  Дополнительный источник: `/sys/fs/cgroup/cpu/cpu.cfs_quota_us`, `/sys/fs/cgroup/cpu/cpu.cfs_period_us`
+Количество ядер вычисляется путем деления квоты на период (quota / period).
+**Действия при срабатывании:** Проверить загруженность нод по CPU.
+
+### COMPUTE_POOL
+
+#### Pool usage is over than 90%, Pool usage is over than 95%, Pool usage is over than 99%
+
+**Описание:** Один из CPU пулов перегружен.
+**Действия при срабатывании:** Добавить ядер в конфигурацию акторной системы соответствующего CPU пула
+
+### NODE_UPTIME
+
+#### The number of node restarts has increased
+
+**Описание:** Количество рестартов ноды превысило порог. По-умолчанию, это 10 рестартов в час.
+**Действия при срабатывании:** Проверить причины рестарта процесса по логам.
+
+#### Node is restarting too often
+
+**Описание:** Узлы слишком часто перезапускаются. По-умолчанию, это 30 рестартов в час.
+**Действия при срабатывании:** Проверить причины рестарта процесса по логам.
+
+### NODES_TIME_DIFFERENCE
+
+#### Node is ... ms behind peer [id], Node is ... ms ahead of peer [id]
+
+**Описание:** Расхождение времени на узлах, что может приводить к возможным проблемам с координацией распределённых транзакций. Начинает появляться с расхождения в 5ms.
+**Действия при срабатывании:** Проверить расхождение системного времени между нодами перечисленными в алерте, проверить работу процесса синхронизации времени.
 
 ## Примеры ответа {#examples}
 

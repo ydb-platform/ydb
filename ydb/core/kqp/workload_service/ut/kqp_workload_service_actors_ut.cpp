@@ -142,7 +142,6 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceActors) {
         const ui32 nodeCount = 5;
         auto ydb = TYdbSetupSettings()
             .NodeCount(nodeCount)
-            .NeedStatsCollectors(false)
             .Create();
 
         auto response = FetchCpuInfo(ydb);

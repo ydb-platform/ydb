@@ -191,7 +191,6 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
 
     Y_UNIT_TEST(TestCpuLoadThreshold) {
         auto ydb = TYdbSetupSettings()
-            .NeedStatsCollectors(false)
             .DatabaseLoadCpuThreshold(90)
             .QueryCancelAfter(TDuration::Seconds(10))
             .Create();
@@ -206,7 +205,6 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
 
     Y_UNIT_TEST(TestCpuLoadThresholdRefresh) {
         auto ydb = TYdbSetupSettings()
-            .NeedStatsCollectors(false)
             .DatabaseLoadCpuThreshold(90)
             .Create();
 

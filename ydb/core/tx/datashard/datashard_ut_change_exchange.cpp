@@ -3491,7 +3491,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
 
         ui32 splitResponses = 0;
-        auto countSplitResponses = runtime.AddObserver<TEvPersQueue::TEvResponse>([&](auto& ev) {
+        auto countSplitResponses = runtime.AddObserver<TEvPersQueue::TEvResponse>([&](auto&) {
             ++splitResponses;
         });
 

@@ -4,16 +4,19 @@ option java_package = "ru.yandex.kikimr.proto";
 message TMemoryControllerConfig {
     optional uint64 HardLimitBytes = 1 [default = 536870912];
 
-    optional uint32 SoftLimitPercent = 2 [default = 75];
+    optional float SoftLimitPercent = 2 [default = 75];
     optional uint64 SoftLimitBytes = 3;
 
-    optional uint32 SharedCacheMinPercent = 4 [default = 20];
-    optional uint32 SharedCacheMinBytes = 5;
-    optional uint32 SharedCacheMaxPercent = 6 [default = 50];
-    optional uint32 SharedCacheMaxBytes = 7;
+    optional float TargetUtilizationPercent = 4 [default = 50];
+    optional uint64 TargetUtilizationBytes = 5;
 
-    optional uint32 MemTableMinPercent = 8 [default = 5];
-    optional uint32 MemTableMinBytes = 9;
-    optional uint32 MemTableMaxPercent = 10 [default = 10];
-    optional uint32 MemTableMaxBytes = 11;
+    optional float SharedCacheMinPercent = 100 [default = 20];
+    optional uint64 SharedCacheMinBytes = 101;
+    optional float SharedCacheMaxPercent = 102 [default = 50];
+    optional uint64 SharedCacheMaxBytes = 103;
+
+    optional float MemTableMinPercent = 104 [default = 1];
+    optional uint64 MemTableMinBytes = 105;
+    optional float MemTableMaxPercent = 106 [default = 3];
+    optional uint64 MemTableMaxBytes = 107;
 }

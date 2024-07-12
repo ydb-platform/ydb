@@ -105,9 +105,9 @@ struct TConsumerCounters {
 };
 
 struct TConsumerConfig {
-    std::optional<ui32> MinPercent;
+    std::optional<float> MinPercent;
     std::optional<ui64> MinBytes;
-    std::optional<ui32> MaxPercent;
+    std::optional<float> MaxPercent;
     std::optional<ui64> MaxBytes;
     bool CanZeroLimit = false;
 };
@@ -161,6 +161,7 @@ private:
 
         ui64 hardLimitBytes = GetHardLimitBytes(memoryUsage);
         ui64 softLimitBytes = GetSoftLimitBytes(hardLimitBytes);
+        ui64 targetUtilizationBytes = GetTargetUtilizationBytes(hardLimitBytes);
 
         auto consumers = Consumers.GetConsumersSnapshot();
         TVector<TConsumerLimitBounds> consumersLimitBounds;
@@ -175,8 +176,8 @@ private:
         }
         // allocatedMemory = externalConsumption + consumersConsumption
         ui64 externalConsumption = allocatedMemory - Min(allocatedMemory, consumersConsumption);
-        // targetConsumersConsumption + externalConsumption <= softLimitBytes
-        ui64 targetConsumersConsumption = softLimitBytes - Min(softLimitBytes, externalConsumption);
+        // targetConsumersConsumption + externalConsumption = targetUtilizationBytes
+        ui64 targetConsumersConsumption = targetUtilizationBytes - Min(targetUtilizationBytes, externalConsumption);
         targetConsumersConsumption = Max(targetConsumersConsumption, consumersLimitBoundsTotal.MinBytes);
         targetConsumersConsumption = Min(targetConsumersConsumption, consumersLimitBoundsTotal.MaxBytes);
 
@@ -185,13 +186,14 @@ private:
 
         LOG_DEBUG_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Periodic memory stats"
             << " AnonRss: " << (memoryUsage ? memoryUsage->AnonRss : 0) << " CGroupLimit: " << (memoryUsage ? memoryUsage->CGroupLimit : 0)
-            << " HardLimitBytes: " << hardLimitBytes << " SoftLimitBytes: " << softLimitBytes 
+            << " HardLimitBytes: " << hardLimitBytes << " SoftLimitBytes: " << softLimitBytes << " TargetUtilizationBytes: " << targetUtilizationBytes
             << " AllocatedMemory: " << allocatedMemory << " ExternalConsumption: " << externalConsumption
             << " ConsumersConsumption: " << consumersConsumption << " TargetConsumersConsumption: " << targetConsumersConsumption);
         Counters->GetCounter("Stats/AnonRss")->Set(memoryUsage ? memoryUsage->AnonRss : 0);
         Counters->GetCounter("Stats/CGroupLimit")->Set(memoryUsage ? memoryUsage->CGroupLimit : 0);
         Counters->GetCounter("Stats/HardLimitBytes")->Set(hardLimitBytes);
         Counters->GetCounter("Stats/SoftLimitBytes")->Set(softLimitBytes);
+        Counters->GetCounter("Stats/TargetUtilizationBytes")->Set(targetUtilizationBytes);
         Counters->GetCounter("Stats/AllocatedMemory")->Set(allocatedMemory);
         Counters->GetCounter("Stats/ExternalConsumption")->Set(externalConsumption);
         Counters->GetCounter("Stats/ConsumersConsumption")->Set(consumersConsumption);
@@ -356,8 +358,18 @@ private:
         return GetPercent(hardLimitBytes, Config.GetSoftLimitPercent());
     }
 
-    ui64 GetPercent(ui32 percent, ui64 value) const {
-        return value * percent / 100;
+    ui64 GetTargetUtilizationBytes(ui64 hardLimitBytes) const {
+        if (Config.HasTargetUtilizationPercent() && Config.HasTargetUtilizationBytes()) {
+            return Min(GetPercent(hardLimitBytes, Config.GetTargetUtilizationPercent()), Config.GetTargetUtilizationBytes());
+        }
+        if (Config.HasTargetUtilizationBytes()) {
+            return Config.GetTargetUtilizationBytes();
+        }
+        return GetPercent(hardLimitBytes, Config.GetTargetUtilizationPercent());
+    }
+
+    ui64 GetPercent(float percent, ui64 value) const {
+        return static_cast<ui64>(static_cast<double>(value) * percent / 100);
     }
 
 private:

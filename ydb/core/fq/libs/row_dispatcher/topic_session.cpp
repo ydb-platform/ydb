@@ -35,7 +35,7 @@
 
 #include <ydb/core/fq/libs/row_dispatcher/predicate_builder.h>
 
-
+#include <ydb/library/yql/public/purecalc/purecalc.h>
 
 namespace NFq {
 
@@ -120,7 +120,7 @@ public:
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory);
 
     void Bootstrap();
-    TVector<TString> GetColumns();
+    TVector<TString> GetVector(const google::protobuf::RepeatedPtrField<TString>& value);
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const;
     NYdb::NTopic::TTopicClient& GetTopicClient();
     NYdb::NTopic::TReadSessionSettings GetReadSessionSettings() const;
@@ -166,10 +166,10 @@ private:
 
 };
 
-TVector<TString> TTopicSession::GetColumns() {
+TVector<TString> TTopicSession::GetVector(const google::protobuf::RepeatedPtrField<TString>& value) {
     TVector<TString> result;
-    for (const auto& fieldName : SourceParams.GetColumns()) {
-        result.push_back(fieldName);
+    for (const auto& v : value) {
+        result.push_back(v);
     }
     return result;
 }
@@ -186,7 +186,7 @@ TTopicSession::TTopicSession(
     , BufferSize(16_MB)
     , LogPrefix("TopicSession: ")
    // , StartingMessageTimestamp(TInstant::MilliSeconds(TInstant::Now().MilliSeconds())) // this field is serialized as milliseconds, so drop microseconds part to be consistent with storage
-    , Parser(NewJsonParser(GetColumns(), [&](const NYql::NUdf::TUnboxedValue* json){
+    , Parser(NewJsonParser(GetVector(sourceParams.GetColumns()), [&](const NYql::NUdf::TUnboxedValue* json){
             DataParsed(json);
         }))
 {
@@ -519,34 +519,35 @@ void TTopicSession::Handle(TEvRowDispatcher::TEvSessionAddConsumer::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvSessionAddConsumer: " << ev->Get()->ConsumerActorId);
     LOG_ROW_DISPATCHER_DEBUG("TEvSessionAddConsumer: offset " << ev->Get()->Offset);
     LOG_ROW_DISPATCHER_DEBUG("TEvSessionAddConsumer: StartingMessageTimestampMs " << ev->Get()->StartingMessageTimestampMs);
-    auto& newConsumer = Consumers[ev->Get()->ConsumerActorId];
+    auto& newConsumer = Consumers[ev->Get()->ConsumerActorId]; // TODO : mv to try
+    newConsumer.Offset = ev->Get()->Offset;
+    newConsumer.StartingMessageTimestamp = TInstant::MilliSeconds(ev->Get()->StartingMessageTimestampMs);
 
     TString predicate;
     try {
         predicate = FormatWhere(ev->Get()->SourceParams.GetPredicate());
         LOG_ROW_DISPATCHER_DEBUG("predicate " << predicate);
+    
+        newConsumer.Filter = NewJsonFilter(
+            GetVector(ev->Get()->SourceParams.GetColumns()),
+            GetVector(ev->Get()->SourceParams.GetColumnTypes()),
+            predicate,
+            [&, actorId = ev->Get()->ConsumerActorId](const TString& json){
+                auto& consumer = Consumers[actorId];
+                consumer.Buffer.push(json);
+                LOG_ROW_DISPATCHER_DEBUG("JsonFilter data: " << json);
+                SendData();
+            });
+
+        LOG_ROW_DISPATCHER_DEBUG("Consumers size " << Consumers.size());
+        GetReadSession();
+        SubscribeOnNextEvent();
+    } catch (NYql::NPureCalc::TCompileError& e) {
+        LOG_ROW_DISPATCHER_DEBUG("CompileError: sql: " << e.GetYql() << ", error: " << e.GetIssues());
+        throw;
     } catch (const yexception &ex) {
         LOG_ROW_DISPATCHER_DEBUG("FormatWhere failed: "  << ex.what());
-        // TODO
     }
-
-    newConsumer.Offset = ev->Get()->Offset;
-    newConsumer.StartingMessageTimestamp = TInstant::MilliSeconds(ev->Get()->StartingMessageTimestampMs);
-    newConsumer.Filter = NewJsonFilter(
-        GetColumns(),
-        predicate,
-        [&, actorId = ev->Get()->ConsumerActorId](const TString& json){
-            auto& consumer = Consumers[actorId];
-            consumer.Buffer.push(json);
-            SendData();
-        });
-
-    LOG_ROW_DISPATCHER_DEBUG("Consumers size " << Consumers.size());
-
-    // LOG_ROW_DISPATCHER_DEBUG("TEvSessionAddConsumer: CloseSession ");
-    // CloseSession(); // TODO
-    GetReadSession();
-    SubscribeOnNextEvent();
 }
 
 void TTopicSession::Handle(TEvRowDispatcher::TEvSessionDeleteConsumer::TPtr& ev) {

@@ -134,7 +134,7 @@ public:
 
         YQL_CLOG(DEBUG, ProviderPq) << "HandleDqTopicSource" ;
 
-        if (!EnsureArgsCount(input.Ref(), 5, ctx)) {
+        if (!EnsureArgsCount(input.Ref(), 6, ctx)) {
             YQL_CLOG(DEBUG, ProviderPq) << "HandleDqTopicSource Error1" ;
             return TStatus::Error;
         }

@@ -121,16 +121,47 @@ public:
                 .Done());
 
             const auto token = "cluster:default_" + clusterName;
-            auto columns = pqReadTopic.Columns().Ptr();
-            if (!columns->IsList()) {
-                const auto pos = columns->Pos();
-                const auto& items = rowType->GetItems();
-                TExprNode::TListType cols;
-                cols.reserve(items.size());
-                std::transform(items.cbegin(), items.cend(), std::back_inserter(cols), [&](const TItemExprType* item) { return ctx.NewAtom(pos, item->GetName()); });
-                columns = ctx.NewList(pos, std::move(cols));
-            }
+            // auto columns = pqReadTopic.Columns().Ptr();
+            // if (!columns->IsList()) {
+            //     const auto pos = columns->Pos();
+            //     const auto& items = rowType->GetItems();
+            //     TExprNode::TListType cols;
+            //     cols.reserve(items.size());
+            //     std::transform(items.cbegin(), items.cend(), std::back_inserter(cols),
+            //         [&](const TItemExprType* item) {
+            //             const TTypeAnnotationNode* type =  item->GetItemType();
+            //             YQL_CLOG(DEBUG, ProviderPq) << "type type " << FormatType(type);
+            //             return ctx.NewAtom(pos, item->GetName());
+            //         });
+            //     columns = ctx.NewList(pos, std::move(cols));
+            // }
 
+            // const auto& typeItems = rowType->GetItems();
+            // YQL_CLOG(DEBUG, ProviderPq) << "size " << items.size();
+            // for (const auto item : items) {
+            //     const TTypeAnnotationNode* type =  item->GetItemType();
+            //     YQL_CLOG(DEBUG, ProviderPq) << item->GetName() << ": " << "type type2 " << FormatType(type);
+            // }
+
+            auto rowSchema = pqReadTopic.Topic().RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+            TExprNode::TListType colTypes;
+            const auto& typeItems = rowSchema->GetItems();
+            colTypes.reserve(typeItems.size());
+            const auto pos = read->Pos(); // TODO
+            std::transform(typeItems.cbegin(), typeItems.cend(), std::back_inserter(colTypes),
+                [&](const TItemExprType* item) {
+                    return ctx.NewAtom(pos, FormatType(item->GetItemType()));
+                });
+            auto columnTypes = ctx.NewList(pos, std::move(colTypes));
+            
+            TExprNode::TListType colNames;
+            colNames.reserve(typeItems.size());
+            std::transform(typeItems.cbegin(), typeItems.cend(), std::back_inserter(colNames),
+                [&](const TItemExprType* item) {
+                    return ctx.NewAtom(pos, item->GetName());
+                });
+            auto columnNames = ctx.NewList(pos, std::move(colNames));
+    
             auto row = Build<TCoArgument>(ctx, read->Pos())
                 .Name("row")
                 .Done();
@@ -145,12 +176,13 @@ public:
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TDqPqTopicSource>()
                     .Topic(pqReadTopic.Topic())
-                    .Columns(std::move(columns))
+                    .Columns(std::move(columnNames))    // TODO
                     .Settings(BuildTopicReadSettings(clusterName, dqSettings, read->Pos(), format, ctx))
                     .Token<TCoSecureParam>()
                         .Name().Build(token)
                         .Build()
                     .FilterPredicate(emptyPredicate)
+                    .ColumnTypes(std::move(columnTypes))
                     .Build()
                 .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
                 .DataSource(pqReadTopic.DataSource().Cast<TCoDataSource>())
@@ -437,6 +469,10 @@ public:
 
                 for (const auto& column : topicSource.Columns().Cast<TCoAtomList>()) {
                     srcDesc.AddColumns(column.StringValue());
+                }
+
+                for (const auto& columnTypes : topicSource.ColumnTypes().Cast<TCoAtomList>()) {
+                    srcDesc.AddColumnTypes(columnTypes.StringValue());
                 }
             
                 if (auto predicate = topicSource.FilterPredicate(); !IsEmptyFilterPredicate(predicate)) {

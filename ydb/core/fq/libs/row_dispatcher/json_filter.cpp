@@ -243,6 +243,7 @@ namespace NFq {
 class TJsonFilter::TImpl {
 public:
     TImpl(const TVector<TString>& columns,
+        const TVector<TString>& types,
         const TString& whereFilter,
         TCallback callback)
         : LogPrefix("JsonFilter: ") {
@@ -253,7 +254,7 @@ public:
             Program = factory->MakePushStreamProgram(
                 TFilterInputSpec(MakeSchema(columns)),
                 TFilterOutputSpec(MakeSchema({"data"})),
-                GenerateSql(columns, whereFilter),
+                GenerateSql(columns, types, whereFilter),
                 NYql::NPureCalc::ETranslationMode::SQL
             );
             LOG_ROW_DISPATCHER_DEBUG("Program created");
@@ -273,22 +274,28 @@ public:
 
             InputConsumer->OnObject(value);
         } catch (const yexception& ex) {
-            LOG_ROW_DISPATCHER_DEBUG("Push error");
+            LOG_ROW_DISPATCHER_DEBUG("Push error"); // TODO : how to get error
         }
     }
 
 private:
-    TString GenerateSql(const TVector<TString>& columns, const TString& whereFilter) {
+    TString GenerateSql(const TVector<TString>& columnNames, const TVector<TString>& columnTypes, const TString& whereFilter) {
         TStringStream str;
-        str << "\n$fields = SELECT ";
-        for (auto it = columns.begin(); it != columns.end(); ++it) {
-            str << *it << ((it != columns.end() - 1) ? "," : "");
+        str << "$fields = SELECT ";
+        Y_ABORT_UNLESS(columnNames.size() == columnTypes.size());
+
+        for (size_t i = 0; i < columnNames.size(); ++i) {
+            str << "CAST(" << columnNames[i] << " as " << columnTypes[i] << ") as " << columnNames[i] << ((i != columnNames.size() - 1) ? "," : "");
+            //str <<  columnNames[i] << ((i != columnNames.size() - 1) ? "," : "");
         }
-        str << " FROM Input " + whereFilter + ";";
-        str << "\nSELECT Unwrap(Json::SerializeJson(Yson::From(TableRow()))) as data FROM $fields";
-        LOG_ROW_DISPATCHER_DEBUG("GenerateSql " << str.Str());
+        str << " FROM Input;\n";
+        str << "$filtered = SELECT * FROM $fields " << whereFilter << ";\n";
+
+        str << "SELECT Unwrap(Json::SerializeJson(Yson::From(TableRow()))) as data FROM $filtered";
+        LOG_ROW_DISPATCHER_DEBUG("Generated sql: " << str.Str());
         return str.Str();
     }
+         //   str << "CAST(" << columnNames[i] << " as " << columnTypes[i] << ") as " << columnNames[i] << ((i != columnNames.size() - 1) ? "," : "");
 
 private:
     THolder<NYql::NPureCalc::TPushStreamProgram<TFilterInputSpec, TFilterOutputSpec>> Program;
@@ -298,9 +305,10 @@ private:
 
 TJsonFilter::TJsonFilter(
     const TVector<TString>& columns,
+    const TVector<TString>& types,
     const TString& whereFilter,
     TCallback callback)
-    : Impl(std::make_unique<TJsonFilter::TImpl>(columns, whereFilter, callback)) { 
+    : Impl(std::make_unique<TJsonFilter::TImpl>(columns, types, whereFilter, callback)) { 
 }
 
 TJsonFilter::~TJsonFilter() {
@@ -312,9 +320,10 @@ void TJsonFilter::Push(const NYql::NUdf::TUnboxedValue* value) {
 
 std::unique_ptr<TJsonFilter> NewJsonFilter(
     const TVector<TString>& columns,
+    const TVector<TString>& types,
     const TString& whereFilter,
     TCallback callback) {
-    return std::unique_ptr<TJsonFilter>(new TJsonFilter(columns, whereFilter, callback));
+    return std::unique_ptr<TJsonFilter>(new TJsonFilter(columns, types, whereFilter, callback));
 }
 
 } // namespace NFq

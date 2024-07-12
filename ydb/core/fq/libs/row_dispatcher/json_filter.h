@@ -8,7 +8,11 @@ public:
     using TCallback = std::function<void(const TString&)>;
     
 public:
-    TJsonFilter(const TVector<TString>& columns, const TString& whereFilter, TCallback callback);
+    TJsonFilter(
+        const TVector<TString>& columns, 
+        const TVector<TString>& types,
+        const TString& whereFilter,
+        TCallback callback);
     ~TJsonFilter();
     void Push(const NYql::NUdf::TUnboxedValue* value);
 
@@ -19,6 +23,7 @@ private:
 
 std::unique_ptr<TJsonFilter> NewJsonFilter(
     const TVector<TString>& columns,
+    const TVector<TString>& types,
     const TString& whereFilter,
     TJsonFilter::TCallback callback);
 

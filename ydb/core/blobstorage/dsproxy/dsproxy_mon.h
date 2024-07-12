@@ -26,6 +26,10 @@ enum class ERequestType {
     Discover,
     Range,
     Patch,
+    CollectGarbage,
+    Status,
+    Assimilate,
+    Block,
 };
 
 struct TRequestMonGroup {
@@ -188,6 +192,10 @@ protected:
     TRequestMonGroup DiscoverGroup;
     TRequestMonGroup RangeGroup;
     TRequestMonGroup PatchGroup;
+    TRequestMonGroup CollectGarbageGroup;
+    TRequestMonGroup StatusGroup;
+    TRequestMonGroup AssimilateGroup;
+    TRequestMonGroup BlockGroup;
 
 public:
     TBlobStorageGroupProxyTimeStats TimeStats;
@@ -256,6 +264,10 @@ public:
             case ERequestType::Discover: return DiscoverGroup;
             case ERequestType::Range: return RangeGroup;
             case ERequestType::Patch: return PatchGroup;
+            case ERequestType::CollectGarbage: return CollectGarbageGroup;
+            case ERequestType::Status: return StatusGroup;
+            case ERequestType::Assimilate: return AssimilateGroup;
+            case ERequestType::Block: return BlockGroup;
         }
         Y_ABORT();
     }
@@ -264,7 +276,6 @@ public:
     void CountEvent(ERequestType request, const T &ev) {
         GetRequestMonGroup(request).CountEvent(ev);
     }
-
 
     TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
             const TIntrusivePtr<::NMonitoring::TDynamicCounters>& percentileCounters,

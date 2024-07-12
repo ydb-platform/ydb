@@ -78,14 +78,14 @@ public:
         , Factory_(Worker_->GetGraph().GetHolderFactory())
         , Schema_(inputSpec.GetSchema(index))
     {
-        DatumToMemberIDMap_.resize(Schema_.Size());
-
         const auto* type = Worker_->GetInputType(index, true);
 
         Y_ENSURE(type->IsStruct());
         Y_ENSURE(Schema_.ChildAsString(0) == "StructType");
 
         const auto& members = Schema_.ChildAsList(1);
+        DatumToMemberIDMap_.resize(members.size());
+
         for (size_t i = 0; i < DatumToMemberIDMap_.size(); i++) {
             const auto& name = members[i].ChildAsString(0);
             const auto& memberIndex = type->FindMemberIndex(name);
@@ -132,7 +132,6 @@ public:
         , Schema_(outputSpec.GetSchema())
     {
         Batch_.Reset(new arrow::compute::ExecBatch);
-        DatumToMemberIDMap_.resize(Schema_.Size());
 
         const auto* type = Worker_->GetOutputType();
 
@@ -142,6 +141,8 @@ public:
         const auto* stype = AS_TYPE(NKikimr::NMiniKQL::TStructType, type);
 
         const auto& members = Schema_.ChildAsList(1);
+        DatumToMemberIDMap_.resize(members.size());
+
         for (size_t i = 0; i < DatumToMemberIDMap_.size(); i++) {
             const auto& name = members[i].ChildAsString(0);
             const auto& memberIndex = stype->FindMemberIndex(name);

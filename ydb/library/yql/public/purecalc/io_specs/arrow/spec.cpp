@@ -65,6 +65,7 @@ class TArrowInputConverter {
 protected:
     const THolderFactory& Factory_;
     TVector<ui32> DatumToMemberIDMap_;
+    size_t BatchLengthID_;
 
 public:
     explicit TArrowInputConverter(
@@ -95,6 +96,9 @@ public:
             Y_ENSURE(memberIndex);
             DatumToMemberIDMap_[i] = *memberIndex;
         }
+        const auto& batchLengthID = type->FindMemberIndex("_yql_block_length");
+        Y_ENSURE(batchLengthID);
+        BatchLengthID_ = *batchLengthID;
     }
 
     void DoConvert(arrow::compute::ExecBatch* batch, TUnboxedValue& result) {
@@ -107,9 +111,8 @@ public:
             const ui32 id = DatumToMemberIDMap_[i];
             datums[id] = Factory_.CreateArrowBlock(std::move(batch->values[i]));
         }
-
         arrow::Datum length(std::make_shared<arrow::UInt64Scalar>(batch->length));
-        datums[nvalues] = Factory_.CreateArrowBlock(std::move(length));
+        datums[BatchLengthID_] = Factory_.CreateArrowBlock(std::move(length));
     }
 };
 
@@ -122,6 +125,7 @@ protected:
     const THolderFactory& Factory_;
     TVector<ui32> DatumToMemberIDMap_;
     THolder<arrow::compute::ExecBatch> Batch_;
+    size_t BatchLengthID_;
 
 public:
     explicit TArrowOutputConverter(
@@ -155,13 +159,16 @@ public:
             Y_ENSURE(memberIndex);
             DatumToMemberIDMap_[i] = *memberIndex;
         }
+        const auto& batchLengthID = stype->FindMemberIndex("_yql_block_length");
+        Y_ENSURE(batchLengthID);
+        BatchLengthID_ = *batchLengthID;
     }
 
     OutputItemType DoConvert(TUnboxedValue value) {
         OutputItemType batch = Batch_.Get();
         size_t nvalues = DatumToMemberIDMap_.size();
 
-        const auto& sizeDatum = TArrowBlock::From(value.GetElement(nvalues)).GetDatum();
+        const auto& sizeDatum = TArrowBlock::From(value.GetElement(BatchLengthID_)).GetDatum();
         Y_ENSURE(sizeDatum.is_scalar());
         const auto& sizeScalar = sizeDatum.scalar();
         const auto& sizeData = arrow::internal::checked_cast<const arrow::UInt64Scalar&>(*sizeScalar);

@@ -39,17 +39,18 @@ bool SplitDate32(i32 value, i32& year, ui32& month, ui32& day);
 bool SplitDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec);
 bool SplitTimestamp(ui64 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec, ui32& usec);
 bool SplitInterval(i64 value, bool& sign, ui32& day, ui32& hour, ui32& min, ui32& sec, ui32& usec);
+
 void FullSplitDate32(i32 date, i32& year, ui32& month, ui32& day,
+        ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek);
+void FullSplitTzDate32(i32 date, i32& year, ui32& month, ui32& day,
         ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId);
 
 bool SplitTzDate(ui16 value, ui32& year, ui32& month, ui32& day, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId);
-bool SplitTzDate32(i32 value, i32& year, ui32& month, ui32& day, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId);
 bool SplitTzDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId);
 
 bool MakeTzDatetime(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec, ui32& value, ui16 tzId);
 bool SplitTzDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec, ui16 tzId);
 bool EnrichDate(ui16 date, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek);
-bool EnrichDate32(i32 date, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek);
 bool GetTimezoneShift(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec, ui16 tzId, i32& value);
 
 ui16 InitTimezones();
@@ -61,6 +62,7 @@ TStringBuf GetTimezoneIANAName(ui16 id);
 std::vector<ui16> GetTzBlackList();
 
 void ToLocalTime(ui32 utcSeconds, ui16 tzId, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec);
+void ToLocalTime64(i64 utcSeconds, ui16 tzId, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec);
 ui32 FromLocalTime(ui16 tzId, ui32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec);
 
 void SerializeTzDate(ui16 date, ui16 tzId, IOutputStream& out);

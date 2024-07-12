@@ -4,19 +4,34 @@
 
 namespace NYql::DateTime {
 
-void TTM64Storage::FromDate32(i32 value, ui16 tzId) {
+void TTM64Storage::FromDate32(i32 value) {
     i32 year;
     ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
 
     NKikimr::NMiniKQL::FullSplitDate32(
-            value, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
+            value, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
 
-    TimezoneId = tzId;
-
+    TimezoneId = 0;
     Year = year;
     Month = month;
     Day = day;
+    DayOfYear = dayOfYear;
+    WeekOfYear = weekOfYear;
+    WeekOfYearIso8601 = weekOfYearIso8601;
+    DayOfWeek = dayOfWeek;
+}
 
+void TTM64Storage::FromTzDate32(i32 value, ui16 tzId) {
+    i32 year;
+    ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
+
+    NKikimr::NMiniKQL::FullSplitTzDate32(
+            value, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
+
+    TimezoneId = tzId;
+    Year = year;
+    Month = month;
+    Day = day;
     DayOfYear = dayOfYear;
     WeekOfYear = weekOfYear;
     WeekOfYearIso8601 = weekOfYearIso8601;

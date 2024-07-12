@@ -1,4 +1,4 @@
 /* syntax version 1 */
 select
-    DateTime::MakeDate32(DateTime::Split64(d)) as d
+    DateTime::MakeDate32(DateTime::Split(d)) as d
 from Input;

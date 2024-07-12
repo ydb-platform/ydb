@@ -1,9 +1,6 @@
 #pragma once
 
-// #include <ydb/library/yql/public/udf/tz/udf_tz.h>
-
 #include <util/datetime/base.h>
-// #include <util/string/printf.h>
 
 namespace NYql::DateTime {
 
@@ -41,7 +38,9 @@ struct TTM64Storage {
     }
 
     // TODO add to UDF ABI interface
-    void FromDate32(i32 value, ui16 tzId = 0);
+    void FromDate32(i32 value);
+    void FromTzDate32(i32 value, ui16 tzId);
+
     i32 ToDate32() const; // TODO add arg "local"?
 };
 

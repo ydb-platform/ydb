@@ -13,7 +13,6 @@ using namespace NUdf;
 using namespace NYql::DateTime;
 
 extern const char SplitName[] = "Split";
-extern const char Split64Name[] = "Split64";
 extern const char ToSecondsName[] = "ToSeconds";
 extern const char ToMillisecondsName[] = "ToMilliseconds";
 extern const char ToMicrosecondsName[] = "ToMicroseconds";
@@ -589,7 +588,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         const TSourcePosition Pos_;
 
     public:
-        explicit TSplitBase(TSourcePosition pos)
+        explicit TSplit(TSourcePosition pos)
             : Pos_(pos)
         {}
 
@@ -635,7 +634,11 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
                 }
             } else {
                 builder.Args()->Add<TUserDataType>().Flags(ICallablePayload::TArgumentFlags::AutoMap);
-                builder.Returns(builder.Resource(TStringRef(ResourceName, ResourceSize - 1)));
+                if constexpr (NUdf::TDataType<TUserDataType>::Features & NYql::NUdf::BigDateType) {
+                    builder.Returns(builder.Resource(TM64ResourceName));
+                } else {
+                    builder.Returns(builder.Resource(TMResourceName));
+                }
                 
                 if (!typesOnly) {
                     builder.Implementation(
@@ -646,12 +649,6 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
             return true;
         }
     };
-
-    template <typename TUserDataType>
-    using TSplit = TSplitBase<TMResourceName, sizeof(TMResourceName), TUserDataType>;
-
-    template <typename TUserDataType>
-    using TSplit64 = TSplitBase<TM64ResourceName, sizeof(TM64ResourceName), TUserDataType>;
 
     template <>
     void TSplitKernelExec<TDate>::Split(TBlockItem arg, TTMStorage &storage, const IValueBuilder& builder) {
@@ -702,7 +699,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     }
 
     template <>
-    TUnboxedValue TSplit64<TDate32>::Run(
+    TUnboxedValue TSplit<TDate32>::Run(
         const IValueBuilder*,
         const TUnboxedValuePod* args) const
     {
@@ -766,6 +763,23 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
             TUnboxedValuePod result(0);
             auto& storage = Reference(result);
             storage.FromDate(builder, args[0].Get<ui16>(), args[0].GetTimezoneId());
+            return result;
+        } catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+        }
+    }
+
+    template <>
+    TUnboxedValue TSplit<TTzDate32>::Run(
+        const IValueBuilder*,
+        const TUnboxedValuePod* args) const
+    {
+        try {
+            EMPTY_RESULT_ON_EMPTY_ARG(0);
+
+            TUnboxedValuePod result(0);
+            auto& storage = Reference64(result);
+            storage.FromTzDate32(args[0].Get<i32>(), args[0].GetTimezoneId());
             return result;
         } catch (const std::exception& e) {
             UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
@@ -2216,8 +2230,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
             TTimestamp,
             TTzDate,
             TTzDatetime,
-            TTzTimestamp>,
-        TUserDataTypeFuncFactory<true, Split64Name, TSplit64,
+            TTzTimestamp,
             TDate32>, // TODO add others
 
         TMakeDate,

@@ -8,6 +8,10 @@
 #include <util/stream/format.h>
 #include <util/stream/str.h>
 
+#include <contrib/libs/cctz/include/cctz/civil_time.h>
+#include <contrib/libs/cctz/include/cctz/time_zone.h>
+#include <inttypes.h>
+
 extern "C" {
 #include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/datatype/timestamp.h>
 #include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/utils/datetime.h>
@@ -49,6 +53,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT(strDate32.HasValue());
             UNIT_ASSERT_VALUES_EQUAL(strDate16.AsStringRef(), strDate32.AsStringRef());
 
+            /*
             ui32 dayOfYear16, weekOfYear16, weekOfYearIso8601_16, dayOfWeek16;
             ui32 dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
             EnrichDate(value16, dayOfYear16, weekOfYear16, weekOfYearIso8601_16, dayOfWeek16);
@@ -57,6 +62,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(weekOfYear16, weekOfYear);
             UNIT_ASSERT_VALUES_EQUAL(weekOfYearIso8601_16, weekOfYearIso8601);
             UNIT_ASSERT_VALUES_EQUAL(dayOfWeek16, dayOfWeek);
+            */
         }
     }
 
@@ -69,7 +75,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             i32 year;
             ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
 
-            FullSplitDate32(date, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, 0);
+            FullSplitDate32(date, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
             UNIT_ASSERT_VALUES_EQUAL(year16, year);
             UNIT_ASSERT_VALUES_EQUAL(month16, month);
             UNIT_ASSERT_VALUES_EQUAL(day16, day);
@@ -99,11 +105,82 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             << Endl;
     }
 
+    Y_UNIT_TEST(cctz) {
+        Cerr << "year min " << std::numeric_limits<std::int_least64_t>::min()
+            << " max " << std::numeric_limits<std::int_least64_t>::max()
+            << Endl;
+
+        /*
+        cctz::time_zone tz;
+        cctz::load_time_zone("Africa/Lagos", &tz);
+        i64 utcSeconds = 0;
+        auto cs = cctz::convert(std::chrono::system_clock::from_time_t(utcSeconds), tz);
+        Cerr << "\ncctz " << utcSeconds << "\n"
+            << cs.year() << "-" << cs.month() << "-" << cs.day() << "T" << cs.hour() << ":" << cs.minute() << ":" << cs.second() << " tz " << tz << Endl;
+    */
+    }
+
+    Y_UNIT_TEST(LocalTime) {
+        i64 utcSeconds = -2208988800;
+        ui16 tzId = 333;
+        ui32 year, month, day, hour, min, sec;
+        ToLocalTime64(utcSeconds, tzId, year, month, day, hour, min, sec);
+        Cerr << "\nToLocalTime64 " << utcSeconds << '\n'
+            << year << "-" << month << "-" << day << "T" << hour << ":" << min << ":" << sec << " tz " << tzId
+            << Endl << Endl;
+
+        utcSeconds = -2208988800;
+        tzId = 1;
+        ToLocalTime64(utcSeconds, tzId, year, month, day, hour, min, sec);
+        Cerr << "\nToLocalTime64 " << utcSeconds << '\n'
+            << year << "-" << month << "-" << day << "T" << hour << ":" << min << ":" << sec << " tz " << tzId
+            << Endl << Endl;
+
+        utcSeconds = -62135596800l;
+        tzId = 0;
+        ToLocalTime64(utcSeconds, tzId, year, month, day, hour, min, sec);
+        Cerr << "\nToLocalTime64 " << utcSeconds << '\n'
+            << year << "-" << month << "-" << day << "T" << hour << ":" << min << ":" << sec << " tz " << tzId
+            << Endl << Endl;
+        tzId = 1;
+        ToLocalTime64(utcSeconds, tzId, year, month, day, hour, min, sec);
+        Cerr << "\nToLocalTime64 " << utcSeconds << '\n'
+            << year << "-" << month << "-" << day << "T" << hour << ":" << min << ":" << sec << " tz " << tzId
+            << Endl << Endl;
+        tzId = 333; // azores, -1
+        ToLocalTime64(utcSeconds, tzId, year, month, day, hour, min, sec);
+        Cerr << "\nToLocalTime64 " << utcSeconds << '\n'
+            << year << "-" << month << "-" << day << "T" << hour << ":" << min << ":" << sec << " tz " << tzId
+            << Endl << Endl;
+        tzId = 33; // lagos, +1
+        ToLocalTime64(utcSeconds, tzId, year, month, day, hour, min, sec);
+        Cerr << "\nToLocalTime64 " << utcSeconds << '\n'
+            << year << "-" << month << "-" << day << "T" << hour << ":" << min << ":" << sec << " tz " << tzId
+            << Endl << Endl;
+
+        utcSeconds = 86400;
+        tzId = 0;
+        ToLocalTime64(utcSeconds, tzId, year, month, day, hour, min, sec);
+        Cerr << "\nToLocalTime64 " << utcSeconds << '\n'
+            << year << "-" << month << "-" << day << "T" << hour << ":" << min << ":" << sec << " tz " << tzId
+            << Endl << Endl;
+        tzId = 333; // azores, -1
+        ToLocalTime64(utcSeconds, tzId, year, month, day, hour, min, sec);
+        Cerr << "\nToLocalTime64 " << utcSeconds << '\n'
+            << year << "-" << month << "-" << day << "T" << hour << ":" << min << ":" << sec << " tz " << tzId
+            << Endl << Endl;
+        tzId = 33; // lagos, +1
+        ToLocalTime64(utcSeconds, tzId, year, month, day, hour, min, sec);
+        Cerr << "\nToLocalTime64 " << utcSeconds << '\n'
+            << year << "-" << month << "-" << day << "T" << hour << ":" << min << ":" << sec << " tz " << tzId
+            << Endl << Endl;
+    }
+
     Y_UNIT_TEST(FullSplitDate32CornerCases) {
             i32 year;
             ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
 
-            FullSplitDate32(NYql::NUdf::MIN_DATE32, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, 0);
+            FullSplitDate32(NYql::NUdf::MIN_DATE32, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
             UNIT_ASSERT_VALUES_EQUAL(NYql::NUdf::MIN_YEAR32, year);
             UNIT_ASSERT_VALUES_EQUAL(1, month);
             UNIT_ASSERT_VALUES_EQUAL(1, day);
@@ -112,7 +189,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(1, weekOfYear);
             UNIT_ASSERT_VALUES_EQUAL(52, weekOfYearIso8601);
 
-            FullSplitDate32(NYql::NUdf::MAX_DATE32, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, 0);
+            FullSplitDate32(NYql::NUdf::MAX_DATE32, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
             UNIT_ASSERT_VALUES_EQUAL(NYql::NUdf::MAX_YEAR32 - 1, year);
             UNIT_ASSERT_VALUES_EQUAL(12, month);
             UNIT_ASSERT_VALUES_EQUAL(31, day);
@@ -122,7 +199,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(52, weekOfYearIso8601);
 
             // -4713-11-24
-            FullSplitDate32(DATETIME_MIN_JULIAN - UNIX_EPOCH_JDATE, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, 0);
+            FullSplitDate32(DATETIME_MIN_JULIAN - UNIX_EPOCH_JDATE, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
             UNIT_ASSERT_VALUES_EQUAL(JULIAN_MINYEAR - 1, year);
             UNIT_ASSERT_VALUES_EQUAL(JULIAN_MINMONTH, month);
             UNIT_ASSERT_VALUES_EQUAL(JULIAN_MINDAY, day);
@@ -132,7 +209,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(48, weekOfYearIso8601);
 
             // 0001-01-01
-            FullSplitDate32(-719162, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, 0);
+            FullSplitDate32(-719162, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
             UNIT_ASSERT_VALUES_EQUAL(1, year);
             UNIT_ASSERT_VALUES_EQUAL(1, month);
             UNIT_ASSERT_VALUES_EQUAL(1, day);
@@ -141,7 +218,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(1, weekOfYear);
             UNIT_ASSERT_VALUES_EQUAL(1, weekOfYearIso8601);
 
-            FullSplitDate32(0, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, 0);
+            FullSplitDate32(0, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
             UNIT_ASSERT_VALUES_EQUAL(1970, year);
             UNIT_ASSERT_VALUES_EQUAL(1, month);
             UNIT_ASSERT_VALUES_EQUAL(1, day);
@@ -150,7 +227,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(1, weekOfYear);
             UNIT_ASSERT_VALUES_EQUAL(1, weekOfYearIso8601);
 
-            FullSplitDate32(-1, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, 0);
+            FullSplitDate32(-1, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
             UNIT_ASSERT_VALUES_EQUAL(1969, year);
             UNIT_ASSERT_VALUES_EQUAL(12, month);
             UNIT_ASSERT_VALUES_EQUAL(31, day);
@@ -188,7 +265,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             ui32 dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
             i32 y;
             ui32 m, d;
-            FullSplitDate32(date32, y, m, d, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, 0);
+            FullSplitDate32(date32, y, m, d, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
             UNIT_ASSERT_VALUES_EQUAL(dayOfWeek % 7, j2day(value));
 
             if (date32 == NUdf::MAX_DATE32) {

@@ -332,7 +332,7 @@ private:
         return request->Promise;
     }
 
-    static i64 GetDeltaAvailable(TInstant current, TInstant lastUpdated, TDuration period, double limit)
+    static i64 GetDeltaAvailable(TInstant current, TInstant lastUpdated, double limit)
     {
         auto timePassed = current - lastUpdated;
 
@@ -375,7 +375,7 @@ private:
                 Available_ = maxAvailable;
                 LastUpdated_ = now;
             } else {
-                auto deltaAvailable = GetDeltaAvailable(now, lastUpdated, period, *limit);
+                auto deltaAvailable = GetDeltaAvailable(now, lastUpdated, *limit);
 
                 auto newAvailable = ClampingAdd(Available_.load(), deltaAvailable, maxAvailable);
                 YT_VERIFY(newAvailable <= maxAvailable);
@@ -423,7 +423,7 @@ private:
         auto current = GetInstant();
         auto lastUpdated = LastUpdated_.load();
 
-        auto deltaAvailable = GetDeltaAvailable(current, lastUpdated, period, limit);
+        auto deltaAvailable = GetDeltaAvailable(current, lastUpdated, limit);
 
         if (deltaAvailable == 0) {
             return;

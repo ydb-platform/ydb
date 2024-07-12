@@ -577,11 +577,6 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     setup->CpuManager = CreateCpuManagerConfig(systemConfig, appData);
     setup->MonitorStuckActors = systemConfig.GetMonitorStuckActors();
 
-    for (ui32 poolId = 0; poolId != setup->GetExecutorsCount(); ++poolId) {
-        const auto &execConfig = systemConfig.GetExecutor(poolId);
-        setup->Executors[poolId] = CreateExecutorPool(execConfig, poolId);
-    }
-
     auto schedulerConfig = CreateSchedulerConfig(systemConfig.GetScheduler());
     schedulerConfig.MonCounters = GetServiceCounters(counters, "utils");
     setup->Scheduler.Reset(CreateSchedulerThread(schedulerConfig));

@@ -22,7 +22,7 @@ public:
 
 private:
     TStatus HandleWriteToShard(TExprBase input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(input.Ref(), 4, 5, ctx)) {
+        if (!EnsureMinMaxArgsCount(input.Ref(), 4, ctx)) {
             return TStatus::Error;
         }
         TSoWriteToShard write = input.Cast<TSoWriteToShard>();

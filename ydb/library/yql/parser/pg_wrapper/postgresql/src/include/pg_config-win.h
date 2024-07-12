@@ -179,3 +179,5 @@
 
 #define BLCKSZ 8192
 
+#undef HAVE_POSIX_FALLOCATE
+

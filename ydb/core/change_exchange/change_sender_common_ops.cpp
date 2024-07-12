@@ -351,7 +351,7 @@ bool TBaseChangeSender::AddBroadcastPartition(ui64 order, ui64 partitionId) {
     Y_ABORT_UNLESS(it != Broadcasting.end());
 
     auto& broadcast = it->second;
-    if (broadcast.Partitions.contains(partitionId)) {
+    if (broadcast.CompletedPartitions.contains(partitionId)) {
         return false;
     }
 

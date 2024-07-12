@@ -48,7 +48,8 @@ namespace NKikimr {
     bool HugeHeapDefragmentationRequired(
             const TOutOfSpaceState& oos,
             ui32 hugeCanBeFreedChunks,
-            ui32 hugeTotalChunks) {
+            ui32 hugeTotalChunks,
+            double defaultPercent) {
 
         if (hugeCanBeFreedChunks < 10)
             return false;
@@ -56,11 +57,11 @@ namespace NKikimr {
         double percentOfGarbage = static_cast<double>(hugeCanBeFreedChunks) / hugeTotalChunks;
 
         if (oos.GetLocalColor() > TSpaceColor::CYAN) {
-            return percentOfGarbage >= 0.02;
+            return percentOfGarbage >= Min(0.02, defaultPercent);
         } else if (oos.GetLocalColor() > TSpaceColor::GREEN) {
-            return percentOfGarbage >= 0.15;
+            return percentOfGarbage >= Min(0.15, defaultPercent);
         } else {
-            return percentOfGarbage >= 0.30;
+            return percentOfGarbage >= Min(0.30, defaultPercent);
         }
     }
 
@@ -113,7 +114,8 @@ namespace NKikimr {
                     const auto& oos = DCtx->VCtx->GetOutOfSpaceState();
                     Y_ABORT_UNLESS(usefulChunks <= totalChunks);
                     const ui32 canBeFreedChunks = totalChunks - usefulChunks;
-                    if (HugeHeapDefragmentationRequired(oos, canBeFreedChunks, totalChunks)) {
+                    double defaultPercent = DCtx->VCtx->DefaultHugeGarbagePerMille / 1000.0;
+                    if (HugeHeapDefragmentationRequired(oos, canBeFreedChunks, totalChunks, defaultPercent)) {
                         TChunksToDefrag chunksToDefrag = calcStat.GetChunksToDefrag(DCtx->MaxChunksToDefrag);
                         Y_ABORT_UNLESS(chunksToDefrag);
                         STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD03, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),

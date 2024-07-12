@@ -19,7 +19,7 @@ class TBlobStorageGroupStatusRequest : public TBlobStorageGroupRequestActor {
     std::optional<float> ApproximateFreeSpaceShare;
 
     void Handle(TEvBlobStorage::TEvVStatusResult::TPtr &ev) {
-        ProcessReplyFromQueue(ev);
+        ProcessReplyFromQueue(ev->Get());
         const NKikimrBlobStorage::TEvVStatusResult& record = ev->Get()->Record;
         Y_ABORT_UNLESS(record.HasStatus());
         const NKikimrProto::EReplyStatus status = record.GetStatus();

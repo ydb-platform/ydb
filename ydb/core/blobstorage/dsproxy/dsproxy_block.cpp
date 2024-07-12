@@ -22,7 +22,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
     TGroupQuorumTracker QuorumTracker;
 
     void Handle(TEvBlobStorage::TEvVBlockResult::TPtr &ev) {
-        ProcessReplyFromQueue(ev);
+        ProcessReplyFromQueue(ev->Get());
         const NKikimrBlobStorage::TEvVBlockResult &record = ev->Get()->Record;
         Y_ABORT_UNLESS(record.HasStatus());
         const NKikimrProto::EReplyStatus status = record.GetStatus();
@@ -47,7 +47,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
     }
 
     void Handle(TEvBlobStorage::TEvVStatusResult::TPtr &ev) {
-        ProcessReplyFromQueue(ev);
+        ProcessReplyFromQueue(ev->Get());
         const auto& record = ev->Get()->Record;
         if (record.HasStatus() && record.HasVDiskID()) {
             Process(record.GetStatus(), VDiskIDFromVDiskID(record.GetVDiskID()), record.HasIncarnationGuid()

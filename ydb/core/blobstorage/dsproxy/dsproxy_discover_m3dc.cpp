@@ -525,7 +525,6 @@ public:
         for (auto& msg : Msgs) {
             A_LOG_DEBUG_S("DSPDM07", "sending TEvVGet# " << msg->ToString());
 
-            CountEvent(*msg);
             SendToQueue(std::move(msg), 0);
             ++RequestsInFlight;
         }
@@ -533,8 +532,7 @@ public:
     }
 
     void Handle(TEvBlobStorage::TEvVGetResult::TPtr& ev) {
-        ProcessReplyFromQueue(ev);
-        CountEvent(*ev->Get());
+        ProcessReplyFromQueue(ev->Get());
 
         Y_ABORT_UNLESS(RequestsInFlight > 0);
         --RequestsInFlight;
@@ -684,7 +682,7 @@ public:
     }
 
     void Handle(TEvBlobStorage::TEvVGetBlockResult::TPtr& ev) {
-        ProcessReplyFromQueue(ev);
+        ProcessReplyFromQueue(ev->Get());
         Y_ABORT_UNLESS(RequestsInFlight > 0);
         --RequestsInFlight;
 

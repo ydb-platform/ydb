@@ -354,111 +354,113 @@ namespace NKikimr {
         return Info->GetActorId(shortId);
     }
 
-    bool TBlobStorageGroupRequestActor::ProcessEvent(TAutoPtr<IEventHandle>& ev, bool suppressCommonErrors) {
-        auto checkForTermErrors = [&](auto& ev, bool suppressCommonErrors) {
-            auto& record = ev->Get()->Record;
+    bool TBlobStorageGroupRequestActor::CheckForTermErrors(bool suppressCommonErrors, const NProtoBuf::Message& record,
+            ui32 type, NKikimrProto::EReplyStatus status, TVDiskID vdiskId, const NKikimrBlobStorage::TGroupInfo *group,
+            bool& setErrorAndPostpone, bool& setRaceToError) {
+        if (status == NKikimrProto::NOTREADY) { // special case from BS_QUEUE -- when connection is not yet established
+            setErrorAndPostpone = true;
+            return true; // event has been processed early
+        }
 
-            if (!record.HasStatus()) {
-                return false; // we do not consider messages with missing status/vdisk fields
-            }
-
-            NKikimrProto::EReplyStatus status = record.GetStatus(); // obtain status from the reply
-
-            if (status == NKikimrProto::NOTREADY) { // special case from BS_QUEUE -- when connection is not yet established
-                record.SetStatus(NKikimrProto::ERROR); // rewrite this status as error for processing
-                PostponedQ.emplace_back(ev.Release());
-                CheckPostponedQueue();
-                return true; // event has been processed early
-            }
-
-            if (!record.HasVDiskID()) {
-                return false; // bad reply?
-            }
-
-            auto done = [&](NKikimrProto::EReplyStatus status, const TString& message) {
-                ErrorReason = message;
-                A_LOG_LOG_S(true, PriorityForStatusResult(status), "DSP10", "Query failed " << message);
-                ReplyAndDie(status);
-                return true;
-            };
-
-            // sanity check for matching group id
-            const TVDiskID& vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
-            if (vdiskId.GroupID != Info->GroupID) {
-                return done(NKikimrProto::ERROR, TStringBuilder() << "incorrect VDiskId# " << vdiskId << " GroupId# "
-                    << Info->GroupID);
-            }
-
-            // sanity check for correct VDisk generation ??? possible race
-            using TEvent = std::decay_t<decltype(*ev->Get())>;
-
-            Y_VERIFY_S(status == NKikimrProto::RACE || vdiskId.GroupGeneration <= Info->GroupGeneration ||
-                TEvent::EventType == TEvBlobStorage::EvVStatusResult || TEvent::EventType == TEvBlobStorage::EvVAssimilateResult,
-                "status# " << NKikimrProto::EReplyStatus_Name(status) << " vdiskId.GroupGeneration# " << vdiskId.GroupGeneration
-                << " Info->GroupGeneration# " << Info->GroupGeneration << " Response# " << ev->Get()->ToString());
-
-            if (status != NKikimrProto::RACE && status != NKikimrProto::BLOCKED && status != NKikimrProto::DEADLINE) {
-                return false; // these statuses are non-terminal
-            } else if (status != NKikimrProto::RACE) {
-                if (suppressCommonErrors) {
-                    return false; // these errors will be handled in host code
-                }
-                // this status is terminal and we have nothing to do about it
-                return done(status, TStringBuilder() << "status# " << NKikimrProto::EReplyStatus_Name(status) << " from# "
-                    << vdiskId.ToString());
-            }
-
-            A_LOG_INFO_S("DSP99", "Handing RACE response from " << vdiskId << " GroupGeneration# " << Info->GroupGeneration
-                << " Response# " << SingleLineProto(record));
-
-            // process the RACE status
-            const TActorId& nodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
-            if (vdiskId.GroupGeneration < Info->GroupGeneration) { // vdisk is older than our group
-                RacingDomains |= {&Info->GetTopology(), vdiskId};
-                if (RacingDomains.GetNumSetItems() <= 1) {
-                    record.SetStatus(NKikimrProto::ERROR);
-                    auto adjustStatus = [](auto *v) {
-                        for (int i = 0; i < v->size(); ++i) {
-                            auto *p = v->Mutable(i);
-                            if (p->GetStatus() == NKikimrProto::RACE) {
-                                p->SetStatus(NKikimrProto::ERROR);
-                            }
-                        }
-                    };
-                    if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvVGetResult>) {
-                        adjustStatus(record.MutableResult());
-                    } else if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvVMultiPutResult>) {
-                        adjustStatus(record.MutableItems());
-                    }
-                    return false;
-                }
-            } else if (Info->GroupGeneration < vdiskId.GroupGeneration) { // our config is older that vdisk's one
-                std::optional<NKikimrBlobStorage::TGroupInfo> group;
-                if (record.HasRecentGroup()) {
-                    group = record.GetRecentGroup();
-                    if (group->GetGroupID() != Info->GroupID.GetRawId() || group->GetGroupGeneration() != vdiskId.GroupGeneration) {
-                        return done(NKikimrProto::ERROR, "incorrect RecentGroup for RACE response");
-                    }
-                }
-                Send(nodeWardenId, new TEvBlobStorage::TEvUpdateGroupInfo(vdiskId.GroupID, vdiskId.GroupGeneration,
-                    std::move(group)));
-            }
-
-            // make NodeWarden restart the query just after proxy reconfiguration
-            Y_DEBUG_ABORT_UNLESS(RestartCounter < 100);
-            auto q = RestartQuery(RestartCounter + 1);
-            if (q->Type() != TEvBlobStorage::EvBunchOfEvents) {
-                SetExecutionRelay(*q, std::exchange(ExecutionRelay, {}));
-            }
-            ++*Mon->NodeMon->RestartHisto[Min<size_t>(Mon->NodeMon->RestartHisto.size() - 1, RestartCounter)];
-            const TActorId& proxyId = MakeBlobStorageProxyID(Info->GroupID);
-            TActivationContext::Send(new IEventHandle(nodeWardenId, Source, q.release(), 0, Cookie, &proxyId, Span.GetTraceId()));
-            PassAway();
+        auto done = [&](NKikimrProto::EReplyStatus status, const TString& message) {
+            ErrorReason = message;
+            A_LOG_LOG_S(true, PriorityForStatusResult(status), "DSP10", "Query failed " << message);
+            ReplyAndDie(status);
             return true;
         };
 
-        switch (ev->GetTypeRewrite()) {
-#define CHECK(T) case TEvBlobStorage::T::EventType: return checkForTermErrors(reinterpret_cast<TEvBlobStorage::T::TPtr&>(ev), suppressCommonErrors)
+        // sanity check for matching group id
+        if (vdiskId.GroupID != Info->GroupID) {
+            return done(NKikimrProto::ERROR, TStringBuilder() << "incorrect VDiskId# " << vdiskId << " GroupId# "
+                << Info->GroupID);
+        }
+
+        // sanity check for correct VDisk generation ??? possible race
+        Y_VERIFY_S(status == NKikimrProto::RACE || vdiskId.GroupGeneration <= Info->GroupGeneration ||
+            type == TEvBlobStorage::EvVStatusResult || type == TEvBlobStorage::EvVAssimilateResult,
+            "status# " << NKikimrProto::EReplyStatus_Name(status) << " vdiskId.GroupGeneration# " << vdiskId.GroupGeneration
+            << " Info->GroupGeneration# " << Info->GroupGeneration << " Response# " << SingleLineProto(record));
+
+        if (status != NKikimrProto::RACE && status != NKikimrProto::BLOCKED && status != NKikimrProto::DEADLINE) {
+            return false; // these statuses are non-terminal
+        } else if (status != NKikimrProto::RACE) {
+            if (suppressCommonErrors) {
+                return false; // these errors will be handled in host code
+            }
+            // this status is terminal and we have nothing to do about it
+            return done(status, TStringBuilder() << "status# " << NKikimrProto::EReplyStatus_Name(status) << " from# "
+                << vdiskId.ToString());
+        }
+
+        A_LOG_INFO_S("DSP99", "Handing RACE response from " << vdiskId << " GroupGeneration# " << Info->GroupGeneration
+            << " Response# " << SingleLineProto(record));
+
+        // process the RACE status
+        const TActorId& nodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
+        if (vdiskId.GroupGeneration < Info->GroupGeneration) { // vdisk is older than our group
+            RacingDomains |= {&Info->GetTopology(), vdiskId};
+            if (RacingDomains.GetNumSetItems() <= 1) {
+                setRaceToError = true;
+                return false;
+            }
+        } else if (Info->GroupGeneration < vdiskId.GroupGeneration) { // our config is older that vdisk's one
+            if (group && (group->GetGroupID() != Info->GroupID.GetRawId() || group->GetGroupGeneration() != vdiskId.GroupGeneration)) {
+                return done(NKikimrProto::ERROR, "incorrect RecentGroup for RACE response");
+            }
+            Send(nodeWardenId, new TEvBlobStorage::TEvUpdateGroupInfo(vdiskId.GroupID, vdiskId.GroupGeneration,
+                group ? std::make_optional(*group) : std::nullopt));
+        }
+
+        // make NodeWarden restart the query just after proxy reconfiguration
+        Y_DEBUG_ABORT_UNLESS(RestartCounter < 100);
+        auto q = RestartQuery(RestartCounter + 1);
+        if (q->Type() != TEvBlobStorage::EvBunchOfEvents) {
+            SetExecutionRelay(*q, std::exchange(ExecutionRelay, {}));
+        }
+        ++*Mon->NodeMon->RestartHisto[Min<size_t>(Mon->NodeMon->RestartHisto.size() - 1, RestartCounter)];
+        const TActorId& proxyId = MakeBlobStorageProxyID(Info->GroupID);
+        TActivationContext::Send(new IEventHandle(nodeWardenId, Source, q.release(), 0, Cookie, &proxyId, Span.GetTraceId()));
+        PassAway();
+        return true;
+    }
+
+    bool TBlobStorageGroupRequestActor::ProcessEvent(TAutoPtr<IEventHandle>& ev, bool suppressCommonErrors) {
+        auto processEventKind = [&](auto& record, ui32 type) {
+            if (!record.HasStatus() || !record.HasVDiskID()) { // some mandatory fields are missing
+                return false;
+            }
+            bool setErrorAndPostpone = false;
+            bool setRaceToError = false;
+            const bool result = CheckForTermErrors(suppressCommonErrors, record, type, record.GetStatus(),
+                VDiskIDFromVDiskID(record.GetVDiskID()), record.HasRecentGroup() ? &record.GetRecentGroup() : nullptr,
+                setErrorAndPostpone, setRaceToError);
+            if (setErrorAndPostpone) {
+                record.SetStatus(NKikimrProto::ERROR);
+                PostponedQ.emplace_back(ev.Release());
+                CheckPostponedQueue();
+            }
+            if (setRaceToError) {
+                record.SetStatus(NKikimrProto::ERROR);
+                auto adjustStatus = [](auto *v) {
+                    for (int i = 0; i < v->size(); ++i) {
+                        auto *p = v->Mutable(i);
+                        if (p->GetStatus() == NKikimrProto::RACE) {
+                            p->SetStatus(NKikimrProto::ERROR);
+                        }
+                    }
+                };
+                using TRecord = std::decay_t<decltype(record)>;
+                if constexpr (std::is_same_v<TRecord, NKikimrBlobStorage::TEvVGetResult>) {
+                    adjustStatus(record.MutableResult());
+                } else if constexpr (std::is_same_v<TRecord, NKikimrBlobStorage::TEvVMultiPutResult>) {
+                    adjustStatus(record.MutableItems());
+                }
+            }
+            return result;
+        };
+
+        switch (const ui32 type = ev->GetTypeRewrite()) {
+#define CHECK(T) case TEvBlobStorage::T::EventType: return processEventKind(ev->Get<TEvBlobStorage::T>()->Record, type);
             CHECK(TEvVPutResult);
             CHECK(TEvVMultiPutResult);
             CHECK(TEvVGetResult);
@@ -499,37 +501,29 @@ namespace NKikimr {
         return false;
     }
 
-    void TBlobStorageGroupRequestActor::SendToQueues(TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &vGets, bool timeStatsEnabled) {
-        for (auto& request : vGets) {
-            const ui64 messageCookie = request->Record.GetCookie();
-            CountEvent(*request);
-            SendToQueue(std::move(request), messageCookie, timeStatsEnabled);
-        }
+    TLogoBlobID TBlobStorageGroupRequestActor::GetBlobId(TEvBlobStorage::TEvVPut &ev) {
+        Y_ABORT_UNLESS(ev.Record.HasBlobID());
+        return LogoBlobIDFromLogoBlobID(ev.Record.GetBlobID());
     }
 
-    TLogoBlobID TBlobStorageGroupRequestActor::GetBlobId(std::unique_ptr<TEvBlobStorage::TEvVPut> &ev) {
-        Y_ABORT_UNLESS(ev->Record.HasBlobID());
-        return LogoBlobIDFromLogoBlobID(ev->Record.GetBlobID());
+    TLogoBlobID TBlobStorageGroupRequestActor::GetBlobId(TEvBlobStorage::TEvVMultiPut &ev) {
+        Y_ABORT_UNLESS(ev.Record.ItemsSize());
+        return LogoBlobIDFromLogoBlobID(ev.Record.GetItems(0).GetBlobID());
     }
 
-    TLogoBlobID TBlobStorageGroupRequestActor::GetBlobId(std::unique_ptr<TEvBlobStorage::TEvVMultiPut> &ev) {
-        Y_ABORT_UNLESS(ev->Record.ItemsSize());
-        return LogoBlobIDFromLogoBlobID(ev->Record.GetItems(0).GetBlobID());
+    TLogoBlobID TBlobStorageGroupRequestActor::GetBlobId(TEvBlobStorage::TEvVMovedPatch &ev) {
+        Y_ABORT_UNLESS(ev.Record.HasPatchedBlobId());
+        return LogoBlobIDFromLogoBlobID(ev.Record.GetPatchedBlobId());
     }
 
-    TLogoBlobID TBlobStorageGroupRequestActor::GetBlobId(std::unique_ptr<TEvBlobStorage::TEvVMovedPatch> &ev) {
-        Y_ABORT_UNLESS(ev->Record.HasPatchedBlobId());
-        return LogoBlobIDFromLogoBlobID(ev->Record.GetPatchedBlobId());
+    TLogoBlobID TBlobStorageGroupRequestActor::GetBlobId(TEvBlobStorage::TEvVPatchStart &ev) {
+        Y_ABORT_UNLESS(ev.Record.HasOriginalBlobId());
+        return LogoBlobIDFromLogoBlobID(ev.Record.GetOriginalBlobId());
     }
 
-    TLogoBlobID TBlobStorageGroupRequestActor::GetBlobId(std::unique_ptr<TEvBlobStorage::TEvVPatchStart> &ev) {
-        Y_ABORT_UNLESS(ev->Record.HasOriginalBlobId());
-        return LogoBlobIDFromLogoBlobID(ev->Record.GetOriginalBlobId());
-    }
-
-    TLogoBlobID TBlobStorageGroupRequestActor::GetBlobId(std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> &ev) {
-        Y_ABORT_UNLESS(ev->Record.HasPatchedPartBlobId());
-        return LogoBlobIDFromLogoBlobID(ev->Record.GetPatchedPartBlobId());
+    TLogoBlobID TBlobStorageGroupRequestActor::GetBlobId(TEvBlobStorage::TEvVPatchDiff &ev) {
+        Y_ABORT_UNLESS(ev.Record.HasPatchedPartBlobId());
+        return LogoBlobIDFromLogoBlobID(ev.Record.GetPatchedPartBlobId());
     }
 
     void TBlobStorageGroupRequestActor::SendToProxy(std::unique_ptr<IEventBase> event, ui64 cookie, NWilson::TTraceId traceId) {
@@ -653,5 +647,93 @@ namespace NKikimr {
             }
         }
     }
+
+    void TBlobStorageGroupRequestActor::CountPut(ui32 bufferBytes) {
+        ++GeneratedSubrequests;
+        GeneratedSubrequestBytes += bufferBytes;
+    }
+
+    void TBlobStorageGroupRequestActor::CountEvent(IEventBase *ev, ui32 type) const {
+        Mon->CountEvent(GetRequestType(), ev, type);
+    }
+
+    void TBlobStorageGroupRequestActor::SendToQueue(std::unique_ptr<IEventBase> event, ui64 cookie, bool timeStatsEnabled) {
+        const ui32 type = event->Type();
+
+        CountEvent(event.get(), type);
+
+        TVDiskID vdiskId;
+        NKikimrBlobStorage::EVDiskQueueId queueId;
+
+        auto preprocess = [&](auto& ev) {
+            Y_DEBUG_ABORT_UNLESS(ev.Record.HasVDiskID());
+            vdiskId = VDiskIDFromVDiskID(ev.Record.GetVDiskID());
+
+            using T = std::decay_t<decltype(ev)>;
+
+            if constexpr (!std::is_same_v<T, TEvBlobStorage::TEvVGetBlock> &&
+                    !std::is_same_v<T, TEvBlobStorage::TEvVBlock> &&
+                    !std::is_same_v<T, TEvBlobStorage::TEvVStatus> &&
+                    !std::is_same_v<T, TEvBlobStorage::TEvVCollectGarbage> &&
+                    !std::is_same_v<T, TEvBlobStorage::TEvVAssimilate> &&
+                    !std::is_same_v<T, TEvBlobStorage::TEvVGetBarrier>) {
+                const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
+                ev.Record.MutableTimestamps()->SetSentByDSProxyUs(GetCycleCountFast() / cyclesPerUs);
+            }
+
+            if constexpr (!std::is_same_v<T, TEvBlobStorage::TEvVStatus> &&
+                    !std::is_same_v<T, TEvBlobStorage::TEvVAssimilate>) {
+                ev.MessageRelevanceTracker = MessageRelevanceTracker;
+                ui64 cost;
+                if constexpr (std::is_same_v<T, TEvBlobStorage::TEvVMultiPut>) {
+                    bool internalQueue;
+                    cost = CostModel->GetCost(ev, &internalQueue);
+                } else {
+                    cost = CostModel->GetCost(ev);
+                }
+                *PoolCounters->DSProxyDiskCostCounter += cost;
+
+                LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::BS_REQUEST_COST,
+                    "DSProxy Request Type# " << TypeName<T>() << " Cost# " << cost);
+            }
+
+            if constexpr (std::is_same_v<T, TEvBlobStorage::TEvVPut> ||
+                    std::is_same_v<T, TEvBlobStorage::TEvVMultiPut> ||
+                    std::is_same_v<T, TEvBlobStorage::TEvVPatchDiff> ||
+                    std::is_same_v<T, TEvBlobStorage::TEvVMovedPatch> ||
+                    std::is_same_v<T, TEvBlobStorage::TEvVPatchStart>) {
+                const TLogoBlobID id = GetBlobId(ev);
+                LWTRACK(DSProxyPutVPutIsSent, ev.Orbit, Info->GetFailDomainOrderNumber(vdiskId), Info->GroupID.GetRawId(),
+                    id.Channel(), id.PartId(), id.ToString(), id.BlobSize());
+            }
+
+            if (timeStatsEnabled) {
+                if constexpr (!std::is_same_v<T, TEvBlobStorage::TEvVStatus> &&
+                        !std::is_same_v<T, TEvBlobStorage::TEvVAssimilate>) {
+                    const TInstant now = TAppData::TimeProvider->Now();
+                    ev.Record.MutableMsgQoS()->MutableExecTimeStats()->SetSubmitTimestamp(now.GetValue());
+                }
+            }
+
+            queueId = TGroupQueues::TVDisk::TQueues::VDiskQueueId(ev);
+        };
+
+        switch (type) {
+#define XX(T) case T::EventType: preprocess(static_cast<T&>(*event)); break;
+            DSPROXY_ENUM_DISK_EVENTS(XX)
+#undef XX
+        }
+
+        GroupQueues->Send(*this, Info->GetTopology(), std::move(event), cookie, Span.GetTraceId(), vdiskId, queueId);
+        ++RequestsInFlight;
+    }
+
+    void TBlobStorageGroupRequestActor::ProcessReplyFromQueue(IEventBase *ev) {
+        Y_ABORT_UNLESS(RequestsInFlight);
+        --RequestsInFlight;
+        CountEvent(ev, ev->Type());
+        CheckPostponedQueue();
+    }
+
 
 } // NKikimr

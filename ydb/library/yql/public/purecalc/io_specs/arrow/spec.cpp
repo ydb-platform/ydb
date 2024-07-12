@@ -95,7 +95,7 @@ public:
     }
 
     void DoConvert(arrow::compute::ExecBatch* batch, TUnboxedValue& result) {
-        size_t nvalues = Schema_.Size();
+        size_t nvalues = DatumToMemberIDMap_.size();
         Y_ENSURE(nvalues == static_cast<size_t>(batch->num_values()));
 
         TUnboxedValue* datums = nullptr;
@@ -153,7 +153,7 @@ public:
 
     OutputItemType DoConvert(TUnboxedValue value) {
         OutputItemType batch = Batch_.Get();
-        size_t nvalues = Schema_.Size();
+        size_t nvalues = DatumToMemberIDMap_.size();
 
         const auto& sizeDatum = TArrowBlock::From(value.GetElement(nvalues)).GetDatum();
         Y_ENSURE(sizeDatum.is_scalar());

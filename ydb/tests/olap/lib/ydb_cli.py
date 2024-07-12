@@ -75,10 +75,12 @@ class YdbCliHelper:
                 '--executer', 'generic',
                 '--include', str(query_num),
                 '--iterations', str(iterations),
-                '--query-settings', "PRAGMA ydb.HashJoinMode='grace';" + get_external_param('query-prefix', ''),
                 '--plan', plan_path,
                 '--verbose'
             ]
+            query_preffix = get_external_param('query-prefix', '')
+            if query_preffix:
+                cmd += ['--query-settings', query_preffix]
             err = None
             try:
                 exec: yatest.common.process._Execution = yatest.common.process.execute(cmd, wait=False, check_exit_code=False)

@@ -10,13 +10,13 @@ namespace NKikimr {
 namespace NBalancing {
     IActor* CreateSenderActor(
         TActorId notifyId,
-        TQueue<TPartInfo> parts,
+        TConstArrayRef<TPartInfo> parts,
         TQueueActorMapPtr queueActorMapPtr,
         std::shared_ptr<TBalancingCtx> ctx
     );
     IActor* CreateDeleterActor(
         TActorId notifyId,
-        TQueue<TLogoBlobID> parts,
+        TConstArrayRef<TLogoBlobID> parts,
         TQueueActorMapPtr queueActorMapPtr,
         std::shared_ptr<TBalancingCtx> ctx
     );

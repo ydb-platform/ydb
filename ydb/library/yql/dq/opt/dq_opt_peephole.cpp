@@ -447,10 +447,10 @@ NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExpr
     auto list1 = joinDict.LeftInput().Ptr();
     auto list2 = joinDict.RightInput().Ptr();
 
-    if (list1->IsCallable("Iterator"))
+    if (list1->IsCallable(TCoIterator::CallableName()))
         list1 = list1->HeadPtr();
 
-    if (list2->IsCallable("Iterator"))
+    if (list2->IsCallable(TCoIterator::CallableName()))
         list2 = list2->HeadPtr();
 
     const auto lUnique = list1->GetConstraint<TUniqueConstraintNode>();
@@ -469,11 +469,8 @@ NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExpr
         flags.emplace_back(ctx.NewAtom(node.Pos(), "RightUnique", TNodeFlags::Default));
 
     if (badKey) {
-        if (filter) {
-            return Build<TCoList>(ctx, node.Pos())
-                .ListType(ExpandType(node.Pos(), *node.Ref().GetTypeAnn(), ctx))
-                .Done();
-        }
+        if (filter)
+            return TExprBase(ctx.NewCallable(node.Pos(), "EmptyIterator", {ExpandType(node.Pos(), *node.Ref().GetTypeAnn(), ctx)}));
 
         lKeys.clear();
         rKeys.clear();

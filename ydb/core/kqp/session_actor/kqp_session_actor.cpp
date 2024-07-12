@@ -2069,8 +2069,15 @@ public:
             }
             CleanupCtx->Final = isFinal;
             CleanupCtx->IsWaitingForWorkloadServiceCleanup = true;
+
+            const auto& stats = QueryState->QueryStats;
+            auto event = std::make_unique<NWorkload::TEvCleanupRequest>(
+                QueryState->Database, SessionId, QueryState->UserRequestContext->PoolId,
+                TDuration::MicroSeconds(stats.DurationUs), TDuration::MicroSeconds(stats.WorkerCpuTimeUs)
+            );
+
             auto forwardId = MakeKqpWorkloadServiceId(SelfId().NodeId());
-            Send(new IEventHandle(*QueryState->PoolHandlerActor, SelfId(), new NWorkload::TEvCleanupRequest(QueryState->Database, SessionId, QueryState->UserRequestContext->PoolId), IEventHandle::FlagForwardOnNondelivery, 0, &forwardId));
+            Send(new IEventHandle(*QueryState->PoolHandlerActor, SelfId(), event.release(), IEventHandle::FlagForwardOnNondelivery, 0, &forwardId));
             QueryState->PoolHandlerActor = Nothing();
         }
 

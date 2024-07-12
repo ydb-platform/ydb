@@ -17,6 +17,27 @@ using namespace NLogging;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
+bool WillOverflowMul(i64 lhs, i64 rhs)
+{
+    i64 result;
+    return __builtin_mul_overflow(lhs, rhs, &result);
+}
+
+i64 ClampingAdd(i64 lhs, i64 rhs, i64 max)
+{
+    i64 result;
+    if (__builtin_add_overflow(lhs, rhs, &result) || result > max) {
+        return max;
+    }
+    return result;
+}
+
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
 DECLARE_REFCOUNTED_STRUCT(TThrottlerRequest)
 
 struct TThrottlerRequest
@@ -315,9 +336,15 @@ private:
     {
         auto timePassed = current - lastUpdated;
 
-        if (limit * period.SecondsFloat() > 1) {
-            // Preventing arithmetic overflows by reducing time interval.
-            timePassed = std::min(period, timePassed);
+        if (limit > 1) {
+            constexpr auto maxRepresentableMilliSeconds = static_cast<double>(TDuration::Max().MilliSeconds());
+            auto maxValidMilliSecondsPassed = maxRepresentableMilliSeconds / limit;
+
+            if (timePassed.MilliSeconds() > maxValidMilliSecondsPassed) {
+                // NB(coteeq): Actual timePassed will overflow multiplication below,
+                // so we have nothing better than to just shrink this duration.
+                timePassed = TDuration::MilliSeconds(maxValidMilliSecondsPassed);
+            }
         }
 
         auto deltaAvailable = static_cast<i64>(timePassed.MilliSeconds() * limit / 1000);
@@ -340,8 +367,9 @@ private:
         TDelayedExecutor::CancelAndClear(UpdateCookie_);
         auto now = GetInstant();
         if (limit && *limit > 0) {
+            YT_VERIFY(!WillOverflowMul(period.MilliSeconds(), *limit));
             auto lastUpdated = LastUpdated_.load();
-            auto maxAvailable = static_cast<i64>(Period_.load().SecondsFloat()) * *limit;
+            auto maxAvailable = period.MilliSeconds() * *limit / 1000;
 
             if (lastUpdated == TInstant::Zero()) {
                 Available_ = maxAvailable;
@@ -349,10 +377,10 @@ private:
             } else {
                 auto deltaAvailable = GetDeltaAvailable(now, lastUpdated, period, *limit);
 
-                auto newAvailable = Available_.load() + deltaAvailable;
-                if (newAvailable > maxAvailable) {
+                auto newAvailable = ClampingAdd(Available_.load(), deltaAvailable, maxAvailable);
+                YT_VERIFY(newAvailable <= maxAvailable);
+                if (newAvailable == maxAvailable) {
                     LastUpdated_ = now;
-                    newAvailable = maxAvailable;
                 } else {
                     LastUpdated_ = lastUpdated + TDuration::MilliSeconds(deltaAvailable * 1000 / *limit);
                     // Just in case.
@@ -408,10 +436,7 @@ private:
             auto throughputPerPeriod = static_cast<i64>(period.SecondsFloat() * limit);
 
             while (true) {
-                auto newAvailable = available + deltaAvailable;
-                if (newAvailable > throughputPerPeriod) {
-                    newAvailable = throughputPerPeriod;
-                }
+                auto newAvailable = ClampingAdd(available, deltaAvailable, /*max*/ throughputPerPeriod);
                 if (Available_.compare_exchange_weak(available, newAvailable)) {
                     break;
                 }

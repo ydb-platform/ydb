@@ -244,24 +244,25 @@ runs:
         echo "GITHUB_REF_NAME=${GITHUB_REF_NAME}"
 
         case $GITHUB_EVENT_NAME in
-          workflow_dispatch)
-            TESTMO_RUN_NAME="${{ github.run_id }} manual"
-            ;;
-          pull_request | pull_request_target)
-            TESTMO_RUN_NAME="${{ github.run_id }} PR #${PR_NUMBER}"
-            ;;
-          schedule)
-            TESTMO_RUN_NAME="${{ github.run_id }} schedule"
-            ;;
-          push)
-            TESTMO_RUN_NAME="${{ github.run_id }} POST"
-            ;;
-          *)
-            TESTMO_RUN_NAME="${{ github.run_id }}"
-            ;;
+            workflow_dispatch)
+              TESTMO_RUN_NAME=${{ github.run_id }} manual
+              ;;
+            pull_request | pull_request_target)
+              TESTMO_RUN_NAME=${{ github.run_id }} PR #${PR_NUMBER}
+              ;;
+            schedule)
+              TESTMO_RUN_NAME=${{ github.run_id }} schedule
+              ;;
+            push)
+              TESTMO_RUN_NAME=${{ github.run_id }} POST
+              ;;
+            *)
+              TESTMO_RUN_NAME=${{ github.run_id }}
+              ;;
         esac
         
-        result=`.github/scripts/upload_tests_results.py --test-results-file ${JUNIT_REPORT_XML} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull ${TESTMO_RUN_NAME} --job-name ${JOB_NAME} --job-id ${JOB_ID} --branch ${GITHUB_REF_NAME}`
+        FLAGS=(--pull="$TESTMO_RUN_NAME")
+        result=`.github/scripts/upload_tests_results.py --test-results-file ${JUNIT_REPORT_XML} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} "${FLAGS[@]}" --job-name ${JOB_NAME} --job-id ${JOB_ID} --branch ${GITHUB_REF_NAME}`
 
     
   - name: Unit test history upload results

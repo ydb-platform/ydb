@@ -74,12 +74,16 @@ struct TYdbSetupSettings {
     FLUENT_SETTING_DEFAULT(i32, QueueSize, -1);
     FLUENT_SETTING_DEFAULT(TDuration, QueryCancelAfter, FUTURE_WAIT_TIMEOUT);
     FLUENT_SETTING_DEFAULT(double, QueryMemoryLimitPercentPerNode, -1);
+    FLUENT_SETTING_DEFAULT(double, DatabaseLoadCpuThreshold, -1);
 
     TIntrusivePtr<IYdbSetup> Create() const;
 };
 
 class IYdbSetup : public TThrRefBase {
 public:
+    // Cluster helpers
+    virtual void UpdateNodeCpuInfo(double usage, ui32 threads, ui64 nodeIndex = 0) = 0;
+
     // Scheme queries helpers
     virtual NYdb::NScheme::TSchemeClient GetSchemeClient() const = 0;
     virtual void ExecuteSchemeQuery(const TString& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS, const TString& expectedMessage = "") const = 0;

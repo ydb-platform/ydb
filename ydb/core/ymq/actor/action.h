@@ -365,9 +365,6 @@ protected:
 
 private:
     void AuditLogEntryImpl(const TString& requestId, const TError* error = nullptr) {
-        if (!error && response.HasError()) {
-            error = &response.GetError();
-        }
         static const TString EmptyValue = "{none}";
         AUDIT_LOG(
             AUDIT_PART("component", TString("ymq"))

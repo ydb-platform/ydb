@@ -102,6 +102,11 @@ void InferStatisticsForKqpTable(const TExprNode::TPtr& input, TTypeAnnotationCon
     if (kqpCtx.Config->OverrideStatistics.Get()) {
         stats = OverrideStatistics(*stats, path.Value(), *kqpCtx.Config->OverrideStatistics.Get());
     }
+    if (stats->ColumnStatistics) {
+        for (const auto& [columnName, metaData]: tableData.Metadata->Columns) {
+            stats->ColumnStatistics->Data[columnName].Type = metaData.Type;
+        }
+    }
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for table: " << path.Value() << ", nrows: " << stats->Nrows << ", nattrs: " << stats->Ncols << ", byteSize: " << stats->ByteSize << ", nKeyColumns: " << stats->KeyColumns->Data.size();
 

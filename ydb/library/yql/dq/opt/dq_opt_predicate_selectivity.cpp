@@ -33,6 +33,9 @@ namespace {
         } else if (input.Ptr()->IsCallable("FromPg")) {
             auto child = TExprBase(input.Ptr()->ChildRef(0));
             return IsAttribute(child, attributeName);
+        } else if (auto exists = input.Maybe<TCoExists>()) {
+            auto child = TExprBase(input.Ptr()->ChildRef(0));
+            return IsAttribute(child, attributeName);
         }
 
         return false;
@@ -182,6 +185,22 @@ namespace {
     }
 }
 
+template<typename T>
+TExprNode::TPtr FindNode(const TExprBase& input) {
+    for (const auto& child : input.Ptr()->Children()) {
+        if (TExprBase(child).Maybe<T>()) {
+            return child;
+        }
+
+        auto tmp = FindNode<T>(TExprBase(child));
+        if (tmp != nullptr) {
+            return tmp;
+        }
+    }
+
+    return nullptr;
+}
+
 /**
  * Compute the selectivity of a predicate given statistics about the input it operates on
  */
@@ -198,12 +217,13 @@ double NYql::NDq::ComputePredicateSelectivity(const TExprBase& input, const std:
         result = ComputePredicateSelectivity(coalesce.Cast().Predicate(), stats);
     }
 
-    else if (input.Ptr()->IsCallable("FromPg")) {
-        auto child = TExprBase(input.Ptr()->ChildRef(0));
-        result = ComputePredicateSelectivity(child, stats);
-    }
-
-    else if (input.Ptr()->IsCallable("Exists")) {
+    else if (
+        input.Ptr()->IsCallable("FromPg") ||
+        input.Ptr()->IsCallable("Exists") ||
+        input.Ptr()->IsCallable("AssumeStrict") ||
+        input.Ptr()->IsCallable("Apply") ||
+        input.Ptr()->IsCallable("Udf")
+    ) {
         auto child = TExprBase(input.Ptr()->ChildRef(0));
         result = ComputePredicateSelectivity(child, stats);
     }
@@ -309,6 +329,39 @@ double NYql::NDq::ComputePredicateSelectivity(const TExprBase& input, const std:
 
             }
         }
+    }
+
+    else if (input.Maybe<TCoAtom>()) {
+        auto atom = input.Cast<TCoAtom>();
+        // regexp
+        if (atom.StringValue().StartsWith("Re2")) {
+            return 0.5;
+        }
+    }
+
+    else if (auto maybeIfExpr = input.Maybe<TCoIf>()) {
+        auto ifExpr = maybeIfExpr.Cast();
+        
+        // attr in ('a', 'b', 'c' ...)
+        if (ifExpr.Predicate().Maybe<TCoExists>() && ifExpr.ThenValue().Maybe<TCoJust>() && ifExpr.ElseValue().Maybe<TCoNothing>()) {
+            auto list = FindNode<TExprList>(ifExpr.ThenValue());
+
+            if (list == nullptr) {
+                return result;
+            }
+
+            result = 0.0;
+            for (const auto& child: list->Children()) {
+                TExprBase lhs = ifExpr.Predicate();
+                TExprBase rhs = TExprBase(child);
+                result += ComputeEqualitySelectivity(lhs, rhs, stats);
+            }
+        }
+    }
+    
+    else {
+        auto dumped = input.Raw()->Dump();
+        YQL_CLOG(WARN, CoreDq) << "ComputePredicateSelectivity NOT FOUND : " << dumped;
     }
 
     return result;

@@ -42,6 +42,9 @@ protected:
         EState State = EState::Pending;
         bool Started = false;  // after TEvContinueRequest success
         bool CleanupRequired = false;
+        bool UsedCpuQuota = false;
+        TDuration Duration;
+        TDuration CpuConsumed;
     };
 
 public:
@@ -54,7 +57,6 @@ public:
         , QueueSizeLimit(GetMaxQueueSize(poolConfig))
         , InFlightLimit(GetMaxInFlight(poolConfig))
         , PoolConfig(poolConfig)
-        , CancelAfter(poolConfig.QueryCancelAfter)
     {
         RegisterCounters();
     }
@@ -118,8 +120,8 @@ private:
         }
 
         LOG_D("Received new request, worker id: " << workerActorId << ", session id: " << sessionId);
-        if (CancelAfter) {
-            this->Schedule(CancelAfter, new TEvPrivate::TEvCancelRequest(sessionId));
+        if (auto cancelAfter = PoolConfig.QueryCancelAfter) {
+            this->Schedule(cancelAfter, new TEvPrivate::TEvCancelRequest(sessionId));
         }
 
         TRequest* request = &LocalSessions.insert({sessionId, TRequest(workerActorId, sessionId)}).first->second;
@@ -146,8 +148,10 @@ private:
             return;
         }
         request->State = TRequest::EState::Finishing;
+        request->Duration = ev->Get()->Duration;
+        request->CpuConsumed = ev->Get()->CpuConsumed;
 
-        LOG_D("Received cleanup request, worker id: " << workerActorId << ", session id: " << sessionId);
+        LOG_D("Received cleanup request, worker id: " << workerActorId << ", session id: " << sessionId << ", duration: " << request->Duration << ", cpu consumed: " << request->CpuConsumed);
         OnCleanupRequest(request);
     }
 
@@ -213,7 +217,7 @@ public:
                 ContinueError->Inc();
                 LOG_W("Reply continue error " << status << " to " << request->WorkerActorId << ", session id: " << request->SessionId << ", issues: " << issues.ToOneLineString());
             }
-            RemoveRequest(request->SessionId);
+            RemoveRequest(request);
         }
 
         LocalDelayedRequests->Dec();
@@ -246,7 +250,7 @@ public:
             ReplyCleanup(request, status, issues);
         }
 
-        RemoveRequest(request->SessionId);
+        RemoveRequest(request);
     }
 
 protected:
@@ -273,9 +277,13 @@ protected:
         return nullptr;
     }
 
-    void RemoveRequest(const TString& sessionId) {
-        LocalSessions.erase(sessionId);
-        this->Send(MakeKqpWorkloadServiceId(this->SelfId().NodeId()), new TEvPrivate::TEvFinishRequestInPool(Database, PoolId));
+    void RemoveRequest(TRequest* request) {
+        auto event = std::make_unique<TEvPrivate::TEvFinishRequestInPool>(
+            Database, PoolId, request->Duration, request->CpuConsumed, request->UsedCpuQuota
+        );
+        this->Send(MakeKqpWorkloadServiceId(this->SelfId().NodeId()), event.release());
+
+        LocalSessions.erase(request->SessionId);
         if (StopHandler && LocalSessions.empty()) {
             LOG_I("All requests finished, stop handler");
             PassAway();
@@ -291,10 +299,17 @@ protected:
     }
 
     TMaybe<TInstant> GetWaitDeadline(TInstant startTime) const {
-        if (!CancelAfter) {
+        if (auto cancelAfter = PoolConfig.QueryCancelAfter) {
+            return startTime + cancelAfter;
+        }
+        return Nothing();
+    }
+
+    TMaybe<double> GetLoadCpuThreshold() const {
+        if (PoolConfig.DatabaseLoadCpuThreshold == -1) {
             return Nothing();
         }
-        return startTime + CancelAfter;
+        return PoolConfig.DatabaseLoadCpuThreshold;
     }
 
     TString LogPrefix() const {
@@ -349,7 +364,6 @@ private:
         LOG_D("Pool config has changed, queue size: " << poolConfig.QueueSize << ", in flight limit: " << poolConfig.ConcurrentQueryLimit);
 
         PoolConfig = poolConfig;
-        CancelAfter = poolConfig.QueryCancelAfter;
         QueueSizeLimit = GetMaxQueueSize(poolConfig);
         InFlightLimit = GetMaxInFlight(poolConfig);
         RefreshState(true);
@@ -398,7 +412,6 @@ protected:
 
 private:
     NResourcePool::TPoolSettings PoolConfig;
-    TDuration CancelAfter;
 
     // Scheme board settings
     std::unique_ptr<TPathId> WatchPathId;
@@ -436,7 +449,7 @@ public:
 
 protected:
     bool ShouldResign() const override {
-        return 0 < InFlightLimit && InFlightLimit < std::numeric_limits<ui64>::max();
+        return 0 < InFlightLimit && (InFlightLimit < std::numeric_limits<ui64>::max() || GetLoadCpuThreshold());
     }
 
     void OnScheduleRequest(TRequest* request) override {
@@ -452,6 +465,11 @@ protected:
 class TFifoPoolHandlerActor : public TPoolHandlerActorBase<TFifoPoolHandlerActor> {
     using TBase = TPoolHandlerActorBase<TFifoPoolHandlerActor>;
 
+    enum class EStartRequestCase {
+        Pending,
+        Delayed
+    };
+
     static constexpr ui64 MAX_PENDING_REQUESTS = 1000;
 
 public:
@@ -466,6 +484,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             sFunc(TEvents::TEvWakeup, HandleRefreshState);
             sFunc(TEvPrivate::TEvRefreshPoolState, HandleExternalRefreshState);
+            hFunc(TEvPrivate::TEvCpuQuotaResponse, Handle);
 
             hFunc(TEvPrivate::TEvTablesCreationFinished, Handle);
             hFunc(TEvPrivate::TEvRefreshPoolStateResponse, Handle);
@@ -486,7 +505,7 @@ public:
 
 protected:
     bool ShouldResign() const override {
-        return InFlightLimit == 0 || InFlightLimit == std::numeric_limits<ui64>::max();
+        return InFlightLimit == 0 || (InFlightLimit == std::numeric_limits<ui64>::max() && !GetLoadCpuThreshold());
     }
 
     void OnScheduleRequest(TRequest* request) override {
@@ -594,7 +613,7 @@ private:
         RemoveFinishedRequests();
 
         size_t delayedRequestsCount = DelayedRequests.size();
-        DoStartPendingRequest();
+        DoStartPendingRequest(GetLoadCpuThreshold());
 
         if (GlobalState.DelayedRequests + PendingRequests.size() > QueueSizeLimit) {
             RemoveBackRequests(PendingRequests, std::min(GlobalState.DelayedRequests + PendingRequests.size() - QueueSizeLimit, PendingRequests.size()), [this](TRequest* request) {
@@ -611,7 +630,7 @@ private:
         }
 
         DoDelayRequest();
-        DoStartDelayedRequest();
+        DoStartDelayedRequest(GetLoadCpuThreshold());
         RefreshState();
     };
 
@@ -633,9 +652,43 @@ private:
         GlobalDelayedRequests->Inc();
         LOG_D("succefully delayed request, session id: " << ev->Get()->SessionId);
 
-        DoStartDelayedRequest();
+        DoStartDelayedRequest(GetLoadCpuThreshold());
         RefreshState();
     };
+
+    void Handle(TEvPrivate::TEvCpuQuotaResponse::TPtr& ev) {
+        RunningOperation = false;
+
+        if (!ev->Get()->QuotaAccepted) {
+            LOG_D("Skipped request start due to load cpu threshold");
+            if (static_cast<EStartRequestCase>(ev->Cookie) == EStartRequestCase::Pending) {
+                ForEachUnfinished(DelayedRequests.begin(), DelayedRequests.end(), [this](TRequest* request) {
+                    AddFinishedRequest(request->SessionId);
+                    ReplyContinue(request, Ydb::StatusIds::OVERLOADED, TStringBuilder() << "Too many pending requests for pool " << PoolId);
+                });
+            }
+            RefreshState();
+            return;
+        }
+
+        RemoveFinishedRequests();
+        switch (static_cast<EStartRequestCase>(ev->Cookie)) {
+            case EStartRequestCase::Pending:
+                if (!RunningOperation && !DelayedRequests.empty()) {
+                    RunningOperation = true;
+                    const TString& sessionId = DelayedRequests.front();
+                    this->Register(CreateStartRequestActor(this->SelfId(), Database, PoolId, sessionId, LEASE_DURATION, CountersSubgroup));
+                    GetRequest(sessionId)->CleanupRequired = true;
+                }
+                break;
+
+            case EStartRequestCase::Delayed:
+                DoStartDelayedRequest(Nothing());
+                break;
+        }
+
+        RefreshState();
+    }
 
     void Handle(TEvPrivate::TEvStartRequestResponse::TPtr& ev) {
         RunningOperation = false;
@@ -668,6 +721,7 @@ private:
         while (!DelayedRequests.empty() && !requestFound) {
             ForUnfinished(DelayedRequests.front(), [this, sessionId, &requestFound](TRequest* request) {
                 if (request->SessionId == sessionId) {
+                    request->UsedCpuQuota = !!GetLoadCpuThreshold();
                     requestFound = true;
                     GlobalState.RunningRequests++;
                     GlobalInFly->Inc();
@@ -706,7 +760,7 @@ private:
     };
 
 private:
-    void DoStartPendingRequest() {
+    void DoStartPendingRequest(TMaybe<double> loadCpuThreshold) {
         RemoveFinishedRequests();
         if (RunningOperation) {
             return;
@@ -715,13 +769,17 @@ private:
         if (!PendingRequests.empty() && QueueSizeLimit == 0 && GlobalState.RunningRequests < InFlightLimit) {
             RunningOperation = true;
             const TString& sessionId = PopPendingRequest();
-            this->Register(CreateStartRequestActor(this->SelfId(), Database, PoolId, sessionId, LEASE_DURATION, CountersSubgroup));
             DelayedRequests.emplace_front(sessionId);
-            GetRequest(sessionId)->CleanupRequired = true;
+            if (loadCpuThreshold) {
+                RequestCpuQuota(*loadCpuThreshold, EStartRequestCase::Pending);
+            } else {
+                this->Register(CreateStartRequestActor(this->SelfId(), Database, PoolId, sessionId, LEASE_DURATION, CountersSubgroup));
+                GetRequest(sessionId)->CleanupRequired = true;
+            }
         }
     }
 
-    void DoStartDelayedRequest() {
+    void DoStartDelayedRequest(TMaybe<double> loadCpuThreshold) {
         RemoveFinishedRequests();
         if (RunningOperation) {
             return;
@@ -729,7 +787,11 @@ private:
 
         if ((!DelayedRequests.empty() || GlobalState.DelayedRequests) && GlobalState.RunningRequests < InFlightLimit) {
             RunningOperation = true;
-            this->Register(CreateStartRequestActor(this->SelfId(), Database, PoolId, std::nullopt, LEASE_DURATION, CountersSubgroup));
+            if (loadCpuThreshold) {
+                RequestCpuQuota(*loadCpuThreshold, EStartRequestCase::Delayed);
+            } else {
+                this->Register(CreateStartRequestActor(this->SelfId(), Database, PoolId, std::nullopt, LEASE_DURATION, CountersSubgroup));
+            }
         }
     }
 
@@ -768,6 +830,10 @@ private:
         }
         RefreshScheduled = true;
         this->Schedule(LEASE_DURATION / 2, new TEvents::TEvWakeup());
+    }
+
+    void RequestCpuQuota(double loadCpuThreshold, EStartRequestCase requestCase) const {
+        this->Send(MakeKqpWorkloadServiceId(this->SelfId().NodeId()), new TEvPrivate::TEvCpuQuotaRequest(loadCpuThreshold / 100.0), 0, static_cast<ui64>(requestCase));
     }
 
 private:
@@ -859,7 +925,7 @@ private:
 }  // anonymous namespace
 
 IActor* CreatePoolHandlerActor(const TString& database, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, NMonitoring::TDynamicCounterPtr counters) {
-    if (poolConfig.ConcurrentQueryLimit <= 0) {
+    if (poolConfig.ConcurrentQueryLimit == 0 || (poolConfig.ConcurrentQueryLimit == -1 && poolConfig.DatabaseLoadCpuThreshold == -1.0)) {
         return new TUnlimitedPoolHandlerActor(database, poolId, poolConfig, counters);
     }
     return new TFifoPoolHandlerActor(database, poolId, poolConfig, counters);

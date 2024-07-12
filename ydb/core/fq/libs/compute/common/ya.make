@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    cpu_quota_manager.cpp
     pinger.cpp
     run_actor_params.cpp
     utils.cpp

@@ -7,6 +7,8 @@ SRCS(
 PEERDIR(
     ydb/core/cms/console
 
+    ydb/core/fq/libs/compute/common
+
     ydb/core/kqp/workload_service/actors
 )
 

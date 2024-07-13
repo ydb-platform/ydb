@@ -60,7 +60,9 @@ void TTypeAnnotationContext::Reset() {
 
 TString TColumnOrder::Find(const TString& name) const {
     auto it = GeneratedToOriginal.find(name);
-    YQL_ENSURE(it != GeneratedToOriginal.end());
+    if (it == GeneratedToOriginal.end()) {
+        return name;
+    }
     return it->second;
 }
 

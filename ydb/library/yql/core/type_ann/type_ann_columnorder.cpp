@@ -63,9 +63,14 @@ IGraphTransformer::TStatus OrderForPgSetItem(const TExprNode::TPtr& node, TExprN
             else {
                 YQL_ENSURE(col->Head().IsList());
                 for (const auto& x : col->Head().Children()) {
-                    auto alias = TString(x->Content());
-                    YQL_ENSURE(!alias.empty());
-                    columnOrder.AddColumn(alias);
+                    if (x->IsList()) {
+                        YQL_ENSURE(!x->Head().Content().empty());
+                        columnOrder.AddColumn(TString(x->Head().Content()));
+                    } else {
+                        auto alias = TString(x->Content());
+                        YQL_ENSURE(!alias.empty());
+                        columnOrder.AddColumn(alias);
+                    }
                 }
             }
         }

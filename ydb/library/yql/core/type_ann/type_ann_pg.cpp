@@ -345,9 +345,8 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
             resultColumnOrder.ConstructInPlace();
             TVector<const TItemExprType*> items;
             for (size_t i = 0; i < proc.OutputArgTypes.size(); ++i) {
-                resultColumnOrder->AddColumn(proc.OutputArgNames[i]);
                 items.push_back(ctx.Expr.MakeType<TItemExprType>(
-                    proc.OutputArgNames[i], 
+                    resultColumnOrder->AddColumn(proc.OutputArgNames[i]), 
                     ctx.Expr.MakeType<TPgExprType>(proc.OutputArgTypes[i])));
             }
 
@@ -1027,7 +1026,8 @@ IGraphTransformer::TStatus PgResultItemWrapper(const TExprNode::TPtr& input, TEx
 
     if (input->Head().IsList()) {
         for (const auto& x : input->Head().Children()) {
-            if (!EnsureAtom(*x, ctx.Expr)) {
+            if (!x->IsList() && !x->IsAtom()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), TStringBuilder() << "Expected atom or list, but got: " << x->Type()));
                 return IGraphTransformer::TStatus::Error;
             }
         }
@@ -2121,7 +2121,9 @@ IGraphTransformer::TStatus RebuildLambdaColumns(const TExprNode::TPtr& root, con
 
     return OptimizeExpr(root, newRoot, [&](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
         if (node->IsCallable("PgStar")) {
+            TVector<std::pair<TString, TString>> aliased;
             TExprNode::TListType orderAtoms;
+            TColumnOrder localOrder;
             THashSet<TString> usedFromUsing;
             for (ui32 priority : { TInput::Projection, TInput::Current, TInput::External }) {
                 for (const auto& x : inputs) {
@@ -2143,10 +2145,12 @@ IGraphTransformer::TStatus RebuildLambdaColumns(const TExprNode::TPtr& root, con
                                 }
                                 if (usedInUsing.contains(lcase)) {
                                     usedFromUsing.emplace(lcase);
-                                    orderAtoms.push_back(ctx.Expr.NewAtom(node->Pos(), usedInUsing[lcase]));
+                                    aliased.emplace_back(usedInUsing[lcase], x.Alias);
+                                    //orderAtoms.push_back(ctx.Expr.NewAtom(node->Pos(), NTypeAnnImpl::MakeAliasedColumn(x.Alias, usedInUsing[lcase])));
                                 } else {
-                                    orderAtoms.push_back(ctx.Expr.NewAtom(node->Pos(),
-                                        NTypeAnnImpl::MakeAliasedColumn(hasExternalInput ? x.Alias : "", item->GetName())));
+                                    aliased.emplace_back(item->GetName(), x.Alias);
+                                    //orderAtoms.push_back(ctx.Expr.NewAtom(node->Pos(),
+                                        //NTypeAnnImpl::MakeAliasedColumn(x.Alias, item->GetName())));
                                 }
                             }
                         }
@@ -2161,15 +2165,23 @@ IGraphTransformer::TStatus RebuildLambdaColumns(const TExprNode::TPtr& root, con
                                 }
                                 if (usedInUsing.contains(lcase)) {
                                     usedFromUsing.emplace(lcase);
-                                    orderAtoms.push_back(ctx.Expr.NewAtom(node->Pos(), usedInUsing[lcase]));
+                                    aliased.emplace_back(usedInUsing[lcase], x.Alias);
+                                    //orderAtoms.push_back(ctx.Expr.NewAtom(node->Pos(), NTypeAnnImpl::MakeAliasedColumn(x.Alias, usedInUsing[lcase])));
                                 } else {
-                                    orderAtoms.push_back(ctx.Expr.NewAtom(node->Pos(),
-                                        NTypeAnnImpl::MakeAliasedColumn(hasExternalInput ? x.Alias : "", o)));
+                                    aliased.emplace_back(x.Alias, o);
+                                    //orderAtoms.push_back(ctx.Expr.NewAtom(node->Pos(),
+                                        //NTypeAnnImpl::MakeAliasedColumn(x.Alias, o)));
                                 }
                             }
                         }
                     }
                 }
+            }
+
+            for (auto& [alias, name] : aliased) {
+                auto aliasedAtom = ctx.Expr.NewAtom(node->Pos(), NTypeAnnImpl::MakeAliasedColumn(alias, name));
+                auto originalAtom = ctx.Expr.NewAtom(node->Pos(), name);
+                orderAtoms.emplace_back(ctx.Expr.NewList(node->Pos(), {originalAtom, aliasedAtom}));
             }
 
             if (expandedColumns) {
@@ -3640,15 +3652,32 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                 }
                             } else {
                                 // star or qualified star
+                                TColumnOrder localOrder;
+                                TColumnOrder aliasClashes;
+                                THashMap<TString, TString> withRemovedAlias;
+                                for (auto& e: column->Head().Children()) {
+                                    if (e->IsAtom()) {
+                                        localOrder.AddColumn(TString(e->Content()));
+                                    } else {
+                                        localOrder.AddColumn(TString(e->HeadPtr()->Content()));
+                                        withRemovedAlias[aliasClashes.AddColumn(TString(e->TailPtr()->Content()))] = e->HeadPtr()->Content();
+                                    }
+                                }
                                 for (const auto& item : column->Tail().GetTypeAnn()->Cast<TStructExprType>()->GetItems()) {
-                                    auto itemRef = hasExtTypes ? item : RemoveAlias(item, ctx.Expr);
+                                    auto name = TString(item->GetName());
+                                    if (auto it = withRemovedAlias.FindPtr(name)) {
+                                        name = withRemovedAlias[name];
+                                    }
+                                    auto rightName = localOrder.Find(name);
+
+                                    auto itemRef = ctx.Expr.MakeType<TItemExprType>(rightName, item->GetItemType());
+
                                     if (hasEmitPgStar) {
-                                        const auto& name = itemRef->GetName();
-                                        if (!outputItemIndex.contains(name)) {
-                                            outputItemIndex.emplace(name, outputItems.size());
+                                        if (!outputItemIndex.contains(rightName)) {
+                                            outputItemIndex.emplace(rightName, outputItems.size());
                                             outputItems.emplace_back();
                                         }
-                                        outputItems[outputItemIndex[name]] = itemRef;
+                                        outputItems[outputItemIndex[rightName]] = itemRef;
                                     } else {
                                         if (isUsing) {
                                             auto lcase = to_lower(TString(itemRef->GetName()));

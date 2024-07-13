@@ -2036,11 +2036,19 @@ TExprNode::TPtr BuildProjectionLambda(TPositionHandle pos, const TExprNode::TPtr
                     } else {
                         auto type = x->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
                         Y_ENSURE(type);
+                        TColumnOrder localOrder;
+                        for (auto& c: x->Child(0)->Children()) {
+                            if (c->IsAtom()) {
+                                localOrder.AddColumn(TString(c->Content()));
+                            } else {
+                                localOrder.AddColumn(TString(c->HeadPtr()->Content()));
+                            }
+                        }
 
                         for (const auto& item : type->GetItems()) {
                             TStringBuf column = item->GetName();
                             auto columnName = subLink ? column : NTypeAnnImpl::RemoveAlias(column);
-                            auto rightColumnName = order.AddColumn(TString(columnName));
+                            auto rightColumnName = order.AddColumn(localOrder.Find(TString(columnName)));
 
                             auto listBuilder = parent.List(index++);
                             if (auto* columnNode = overrideColumns.FindPtr(columnName)) {

@@ -286,6 +286,128 @@ public:
     }
 };
 
+struct TListArrowRef: public NUdf::TBoxedValue {
+    struct TListArrowIterator: public TBoxedValue {
+        TListArrowIterator(const std::shared_ptr<arrow::ArrayData>& arrayData, arrow::ListType::offset_type from, arrow::ListType::offset_type to, IBlockReader& inner)
+            : ArrayData(arrayData)
+            , From(from)
+            , To(to)
+            , Inner(inner)
+        {}
+
+        bool Next(NUdf::TUnboxedValue& value) final {
+            if (From == To) {
+                return false;
+            }
+            auto item = Inner.GetItem(*ArrayData, From++);
+            if (item.IsEmbedded()) {
+                NUdf::TUnboxedValuePod embedded;
+                std::memcpy(embedded.GetRawPtr(), item.GetRawPtr(), sizeof(NYql::NUdf::TUnboxedValuePod));
+                value = embedded;
+            } else if (item.IsBoxed()) {
+                value = NYql::NUdf::TUnboxedValuePod(item.GetBoxed());
+            } else {
+                value = NYql::NUdf::TUnboxedValuePod(TStringValue{item.AsStringRef()});
+            }
+            return true;
+        }
+
+    private:
+        std::shared_ptr<arrow::ArrayData> ArrayData;
+        arrow::ListType::offset_type From;
+        arrow::ListType::offset_type To;
+        IBlockReader& Inner;
+    };
+
+    TListArrowRef(const std::shared_ptr<arrow::ArrayData>& arrayData, arrow::ListType::offset_type from, arrow::ListType::offset_type to, IBlockReader& inner)
+        : ArrayData(arrayData)
+        , From(from)
+        , To(to)
+        , Inner(inner)
+    {}
+
+    bool HasFastListLength() const override {
+        return true;
+    }
+
+    ui64 GetListLength() const override {
+        return To - From;
+    }
+
+    ui64 GetEstimatedListLength() const override {
+        return To - From;
+    }
+
+    NUdf::TUnboxedValue GetListIterator() const override {
+        return NUdf::TUnboxedValuePod(new TListArrowIterator(ArrayData, From, To, Inner));
+    }
+
+private:
+    std::shared_ptr<arrow::ArrayData> ArrayData;
+    arrow::ListType::offset_type From;
+    arrow::ListType::offset_type To;
+    IBlockReader& Inner;
+};
+
+template<bool Nullable>
+class TListBlockReader : public IBlockReader {
+public:
+    TListBlockReader(std::unique_ptr<IBlockReader>&& inner)
+        : Inner(std::move(inner))
+    {}
+
+    TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
+        if constexpr (Nullable) {
+            if (IsNull(data, index)) {
+                return {};
+            }
+        }
+        auto r = data.child_data[0];
+        const arrow::ListType::offset_type* offsets = data.GetValues<arrow::ListType::offset_type>(1);
+        NUdf::IBoxedValuePtr boxed(new TListArrowRef(r, offsets[index], offsets[index + 1], *Inner));
+        return TBlockItem(std::move(boxed));
+    }
+
+    TBlockItem GetScalarItem(const arrow::Scalar& scalar) final {
+        Y_UNUSED(scalar);
+        ythrow yexception() << "GetScalarItem not implemented for list";
+    }
+
+    ui64 GetDataWeight(const arrow::ArrayData& data) const final {
+        if constexpr (Nullable) {
+            return Inner->GetDataWeight(data) * data.length + 1;
+        }
+        return Inner->GetDataWeight(data) * data.length;
+    }
+
+    ui64 GetDataWeight(TBlockItem item) const final {
+        if constexpr (Nullable) {
+            return Inner->GetDataWeight(item) + 1;
+        }
+        return Inner->GetDataWeight(item);
+    }
+
+    ui64 GetDefaultValueWeight() const final {
+        if constexpr (Nullable) {
+            return Inner->GetDefaultValueWeight() + 1;
+        }
+        return Inner->GetDefaultValueWeight();
+    }
+
+    void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const final {
+        Y_UNUSED(data, index, out);
+        ythrow yexception() << "SaveItem not implemented for list";
+    }
+
+    void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const final {
+        Y_UNUSED(scalar, out);
+        ythrow yexception() << "SaveScalarItem not implemented for list";
+    }
+
+private:
+    const std::unique_ptr<IBlockReader> Inner;
+};
+
 template<bool Nullable>
 class TTupleBlockReader final : public TTupleBlockReaderBase<Nullable, TTupleBlockReader<Nullable>> {
 public:
@@ -507,6 +629,14 @@ struct TReaderTraits {
         }
     }
 
+    static std::unique_ptr<TResult> MakeList(bool isOptional, std::unique_ptr<IBlockReader>&& inner) {
+        if (isOptional) {
+            return std::make_unique<TListBlockReader<true>>(std::move(inner));
+        } else {
+            return std::make_unique<TListBlockReader<false>>(std::move(inner));
+        }
+    }
+
     static std::unique_ptr<TResult> MakeResource(bool isOptional) {
         if (isOptional) {
             return std::make_unique<TResource<true>>();
@@ -620,6 +750,11 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
         }
 
         return MakeTupleBlockReaderImpl<TTraits>(isOptional, std::move(children));
+    }
+
+    TListTypeInspector typeList(typeInfoHelper, type);
+    if (typeList) {
+        return TTraits::MakeList(isOptional, std::move(MakeBlockReaderImpl<TTraits>(typeInfoHelper, typeList.GetItemType(), pgBuilder)));
     }
 
     TDataTypeInspector typeData(typeInfoHelper, type);

@@ -483,6 +483,11 @@ struct TYsonBlockReaderTraits {
         }
     }
 
+    static std::unique_ptr<TResult> MakeList(bool isOptional, std::unique_ptr<IYsonBlockReader>&& inner) {
+        Y_UNUSED(isOptional, inner);
+        ythrow yexception() << "Yson reader not implemented for list";
+    }
+
     static std::unique_ptr<TResult> MakeResource(bool isOptional) {
         Y_UNUSED(isOptional);
         ythrow yexception() << "Yson reader not implemented for block resources";

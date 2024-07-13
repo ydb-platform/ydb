@@ -4,6 +4,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>
+#include <ydb/core/tx/columnshard/blobs_action/local/storage.h>
 #include <ydb/core/wrappers/fake_storage.h>
 #include <ydb/core/wrappers/fake_storage_config.h>
 

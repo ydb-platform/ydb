@@ -48,16 +48,16 @@ class YdbCliHelper:
     def workload_run(type: WorkloadType, path: str, query_num: int, iterations: int = 5,
                      timeout: float = 100.) -> YdbCliHelper.WorkloadRunResult:
         def _try_extract_error_message(stderr: str) -> str:
-            begin_str = f'{query_num}:\n'
-            end_str = 'Query text:\n'
+            begin_str = f'{query_num}:'
+            end_str = 'Query text:'
             begin_pos = stderr.find(begin_str)
             if begin_pos < 0:
                 return ''
             begin_pos += len(begin_str)
             end_pos = stderr.find(end_str, begin_pos)
             if end_pos < 0:
-                return stderr[begin_pos:]
-            return stderr[begin_pos:end_pos]
+                return stderr[begin_pos:].strip()
+            return stderr[begin_pos:end_pos].strip()
 
         try:
             if not YdbCluster.wait_ydb_alive(60):

@@ -45,6 +45,7 @@ SRCS(
 
     concurrency/action_queue.cpp
     concurrency/async_barrier.cpp
+    concurrency/async_looper.cpp
     concurrency/async_rw_lock.cpp
     concurrency/async_semaphore.cpp
     concurrency/async_stream_pipe.cpp

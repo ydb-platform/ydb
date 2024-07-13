@@ -70,9 +70,6 @@
                                                                 "Inputs": [
                                                                     {
                                                                         "ExternalPlanNodeId": 4
-                                                                    },
-                                                                    {
-                                                                        "Other": "ConstantExpression"
                                                                     }
                                                                 ],
                                                                 "Name": "FullJoin (JoinDict)"

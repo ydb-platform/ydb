@@ -3685,7 +3685,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                                 usingColumnsAnnotation[lcase] = itemRef->GetItemType();
                                                 outputItems.emplace_back(itemRef);
                                                 repeatedColumnsInUsing.erase(it);
-                                            } else if (usingColumnsAnnotation.contains(lcase)) {
+                                            } else if (hasStar && usingColumnsAnnotation.contains(lcase)) {
                                                 if (usingColumnsAnnotation[lcase] != itemRef->GetItemType()) {
                                                     TStringStream ss;
                                                     ss << "Expected column of same type when USING: got " << *itemRef->GetItemType() << " != " << *usingColumnsAnnotation[itemRef->GetName()];

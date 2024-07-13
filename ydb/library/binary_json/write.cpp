@@ -556,11 +556,7 @@ void DomToJsonIndex(const NUdf::TUnboxedValue& value, TBinaryJsonCallbacks& call
 TMaybe<TBinaryJson> SerializeToBinaryJsonImpl(const TStringBuf json) {
     TMemoryInput input(json.data(), json.size());
     TBinaryJsonCallbacks callbacks(/* throwException */ false);
-    try {
-        if (!ReadJson(&input, &callbacks)) {
-            return Nothing();
-        }
-    } catch (...) {
+    if (!ReadJson(&input, &callbacks)) {
         return Nothing();
     }
     TBinaryJsonSerializer serializer(std::move(callbacks).GetResult());

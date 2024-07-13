@@ -31,7 +31,7 @@ struct TEvAcceleratePut : public TEventLocal<TEvAcceleratePut, TEvBlobStorage::E
 // GET request
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobStorageGroupGetRequest> {
+class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
     TGetImpl GetImpl;
     TRootCause RootCauseTrack;
     NLWTrace::TOrbit Orbit;
@@ -374,22 +374,18 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
         return SendResponseAndDie(std::unique_ptr<TEvBlobStorage::TEvGetResult>(evResult.Release()));
     }
 
-    std::unique_ptr<IEventBase> RestartQuery(ui32 counter) {
+    std::unique_ptr<IEventBase> RestartQuery(ui32 counter) override {
         ++*Mon->NodeMon->RestartIndexRestoreGet;
         return GetImpl.RestartQuery(counter);
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::BS_PROXY_GET_ACTOR;
+    ::NMonitoring::TDynamicCounters::TCounterPtr& GetActiveCounter() const override {
+        return Mon->ActiveGet;
     }
 
-    static constexpr ERequestType RequestType() {
+    ERequestType GetRequestType() const override {
         return ERequestType::Get;
-    }
-
-    static const auto& ActiveCounter(const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon) {
-        return mon->ActiveGet;
     }
 
     TBlobStorageGroupGetRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
@@ -400,7 +396,7 @@ public:
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
                 NKikimrServices::BS_PROXY_GET, ev->IsVerboseNoDataEnabled || ev->CollectDebugInfo,
                 latencyQueueKind, now, storagePoolCounters, ev->RestartCounter, std::move(traceId), "DSProxy.Get", ev,
-                std::move(ev->ExecutionRelay))
+                std::move(ev->ExecutionRelay), NKikimrServices::TActivity::BS_PROXY_GET_ACTOR)
         , GetImpl(info, state, ev, std::move(nodeLayout), LogCtx.RequestPrefix)
         , Orbit(std::move(ev->Orbit))
         , Deadline(ev->Deadline)
@@ -424,7 +420,7 @@ public:
         *Mon->ActiveGetCapacity += bytes;
     }
 
-    void Bootstrap() {
+    void Bootstrap() override {
         A_LOG_INFO_S("BPG01", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
@@ -441,12 +437,11 @@ public:
         TryScheduleGetAcceleration();
 
         Y_ABORT_UNLESS(RequestsSent > ResponsesReceived);
-        Become(&TThis::StateWait);
+        Become(&TBlobStorageGroupGetRequest::StateWait);
         SanityCheck(); // May Die
     }
 
-    friend class TBlobStorageGroupRequestActor<TBlobStorageGroupGetRequest>;
-    void ReplyAndDie(NKikimrProto::EReplyStatus status) {
+    void ReplyAndDie(NKikimrProto::EReplyStatus status) override {
         TAutoPtr<TEvBlobStorage::TEvGetResult> getResult;
         GetImpl.PrepareReply(status, ErrorReason, LogCtx, getResult);
         SendReplyAndDie(getResult);

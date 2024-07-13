@@ -233,7 +233,7 @@ struct TGroupResponseTracker {
 };
 
 
-class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TBlobStorageGroupDiscoverRequest>{
+class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
 
     struct TBlobInfo {
         TLogoBlobID Id;
@@ -303,8 +303,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
         SendResponseAndDie(std::move(result));
     }
 
-    friend class TBlobStorageGroupRequestActor<TBlobStorageGroupDiscoverRequest>;
-    void ReplyAndDie(NKikimrProto::EReplyStatus status) {
+    void ReplyAndDie(NKikimrProto::EReplyStatus status) override {
         std::unique_ptr<TEvBlobStorage::TEvDiscoverResult> result(new TEvBlobStorage::TEvDiscoverResult(status, MinGeneration,
                     BlockedGen));
         result->ErrorReason = ErrorReason;
@@ -604,7 +603,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
 
                         A_LOG_DEBUG_S("BSD10", "Sent EvGet logoBlobId# " << logoBlobId.ToString());
 
-                        Become(&TThis::StateWait);
+                        Become(&TBlobStorageGroupDiscoverRequest::StateWait);
                         return true;
                     } else if (IsGetBlockDone) {
                         std::unique_ptr<TEvBlobStorage::TEvDiscoverResult> result(
@@ -617,7 +616,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
                         PendingResult.reset(new TEvBlobStorage::TEvDiscoverResult(
                                     logoBlobId, MinGeneration, TString(), BlockedGen));
                         A_LOG_DEBUG_S("BSD12", "Pending result is set, Result# " << PendingResult->ToString());
-                        Become(&TThis::StateWait);
+                        Become(&TBlobStorageGroupDiscoverRequest::StateWait);
                         return false;
                     }
                 } else if (blobState & TBlobStorageGroupInfo::EBSF_DISINTEGRATED) {
@@ -856,7 +855,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
         Y_ABORT_UNLESS(TotalRecieved < TotalSent);
     }
 
-    std::unique_ptr<IEventBase> RestartQuery(ui32 counter) {
+    std::unique_ptr<IEventBase> RestartQuery(ui32 counter) override {
         ++*Mon->NodeMon->RestartDiscover;
         auto ev = std::make_unique<TEvBlobStorage::TEvDiscover>(TabletId, MinGeneration, ReadBody, DiscoverBlockedGeneration,
             Deadline, ForceBlockedGeneration, FromLeader);
@@ -865,15 +864,11 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::BS_GROUP_DISCOVER;
+    ::NMonitoring::TDynamicCounters::TCounterPtr& GetActiveCounter() const override {
+        return Mon->ActiveDiscover;
     }
 
-    static const auto& ActiveCounter(const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon) {
-        return mon->ActiveDiscover;
-    }
-
-    static constexpr ERequestType RequestType() {
+    ERequestType GetRequestType() const override {
         return ERequestType::Discover;
     }
 
@@ -884,7 +879,8 @@ public:
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
                 NKikimrServices::BS_PROXY_DISCOVER, true, {}, now, storagePoolCounters, ev->RestartCounter,
-                std::move(traceId), "DSProxy.Discover", ev, std::move(ev->ExecutionRelay))
+                std::move(traceId), "DSProxy.Discover", ev, std::move(ev->ExecutionRelay),
+                NKikimrServices::TActivity::BS_GROUP_DISCOVER)
         , TabletId(ev->TabletId)
         , MinGeneration(ev->MinGeneration)
         , ReadBody(ev->ReadBody)
@@ -897,7 +893,7 @@ public:
         , FromLeader(ev->FromLeader)
     {}
 
-    void Bootstrap() {
+    void Bootstrap() override {
         A_LOG_INFO_S("BSD31", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
@@ -948,7 +944,7 @@ public:
             curVDisk.nextLogoBlobId = from;
         }
 
-        Become(&TThis::StateInit);
+        Become(&TBlobStorageGroupDiscoverRequest::StateInit);
     }
 
     STATEFN(StateInit) {

@@ -52,11 +52,11 @@ void TController::CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& s
         const NOlap::TTabletsByBlob blobs = manager->GetBlobsToDelete();
         for (auto b = blobs.GetIterator(); b.IsValid(); ++b) {
             Cerr << shard.TabletID() << " SHARING_REMOVE_LOCAL:" << b.GetBlobId().ToStringNew() << " FROM " << b.GetTabletId() << Endl;
-            i.second.RemoveSharing(b.GetTabletId(), b.GetBlobId());
+            Y_UNUSED(i.second.RemoveSharing(b.GetTabletId(), b.GetBlobId()));
         }
         for (auto b = blobs.GetIterator(); b.IsValid(); ++b) {
             Cerr << shard.TabletID() << " BORROWED_REMOVE_LOCAL:" << b.GetBlobId().ToStringNew() << " FROM " << b.GetTabletId() << Endl;
-            i.second.RemoveBorrowed(b.GetTabletId(), b.GetBlobId());
+            Y_UNUSED(i.second.RemoveBorrowed(b.GetTabletId(), b.GetBlobId()));
         }
     }
     context.AddCategories(shard.TabletID(), std::move(shardBlobsCategories));

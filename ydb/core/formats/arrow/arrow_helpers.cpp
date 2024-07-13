@@ -895,24 +895,24 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std:
     if (!t->num_rows()) {
         return {};
     }
-    std::set<ui32> splitPositions;
+    std::vector<ui32> positions;
     {
-        const ui32 numRows = t->num_rows();
         for (auto&& i : t->columns()) {
             ui32 pos = 0;
             for (auto&& arr : i->chunks()) {
-                splitPositions.emplace(pos);
+                positions.emplace_back(pos);
                 pos += arr->length();
             }
             AFL_VERIFY(pos == t->num_rows());
         }
-        splitPositions.emplace(numRows);
+        positions.emplace_back(t->num_rows());
     }
+    std::sort(positions.begin(), positions.end());
+    positions.erase(std::unique(positions.begin(), positions.end()), positions.end());
 
     std::vector<std::vector<std::shared_ptr<arrow::Array>>> slicedData;
-    slicedData.resize(splitPositions.size() - 1);
+    slicedData.resize(positions.size() - 1);
     {
-        std::vector<ui32> positions(splitPositions.begin(), splitPositions.end());
         for (auto&& i : t->columns()) {
             for (ui32 idx = 0; idx + 1 < positions.size(); ++idx) {
                 auto slice = i->Slice(positions[idx], positions[idx + 1] - positions[idx]);

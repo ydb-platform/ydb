@@ -1700,13 +1700,8 @@ TExprNode::TPtr MakeDictForJoin(TExprNode::TPtr&& list, bool payload, bool multi
         .Build();
 }
 
-TExprNode::TPtr MakeDictForJoin(bool squeeze, TExprNode::TPtr&& list, bool payload, bool multi, TExprContext& ctx) {
-    if (squeeze)
-        return MakeDictForJoin<true>(std::move(list), payload, multi, ctx);
-    else
-        return MakeDictForJoin<false>(std::move(list), payload, multi, ctx);
-}
-
+template TExprNode::TPtr MakeDictForJoin<true>(TExprNode::TPtr&& list, bool payload, bool multi, TExprContext& ctx);
+template TExprNode::TPtr MakeDictForJoin<false>(TExprNode::TPtr&& list, bool payload, bool multi, TExprContext& ctx);
 
 TExprNode::TPtr MakeCrossJoin(TPositionHandle pos, TExprNode::TPtr left, TExprNode::TPtr right, TExprContext& ctx) {
     return ctx.Builder(pos)

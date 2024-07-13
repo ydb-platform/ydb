@@ -160,8 +160,6 @@ TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNo
 template<bool Squeeze = false>
 TExprNode::TPtr MakeDictForJoin(TExprNode::TPtr&& list, bool payload, bool multi, TExprContext& ctx);
 
-TExprNode::TPtr MakeDictForJoin(bool squeeze, TExprNode::TPtr&& list, bool payload, bool multi, TExprContext& ctx);
-
 TExprNode::TPtr MakeCrossJoin(TPositionHandle pos, TExprNode::TPtr left, TExprNode::TPtr right, TExprContext& ctx);
 
 void GatherAndTerms(const TExprNode::TPtr& predicate, TExprNode::TListType& andTerms, bool& isPg, TExprContext& ctx);

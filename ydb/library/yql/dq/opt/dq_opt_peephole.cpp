@@ -481,85 +481,40 @@ NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExpr
         rightKeys.emplace_back(MakeBool<false>(node.Pos(), ctx));
     }
 
-    const auto lKind = list1->GetTypeAnn()->GetKind();
-    const auto rKind = list2->GetTypeAnn()->GetKind();
-
-    list1 = ctx.WrapByCallableIf(ETypeAnnotationKind::Stream == lKind, TCoToFlow::CallableName(), std::move(list1));
-    list2 = ctx.WrapByCallableIf(ETypeAnnotationKind::Stream == rKind, TCoToFlow::CallableName(), std::move(list2));
+    list1 = ctx.WrapByCallableIf(ETypeAnnotationKind::Flow != list1->GetTypeAnn()->GetKind(), TCoToFlow::CallableName(), std::move(list1));
+    list2 = ctx.WrapByCallableIf(ETypeAnnotationKind::Flow != list2->GetTypeAnn()->GetKind(), TCoToFlow::CallableName(), std::move(list2));
 
     list1 = PrepareListForJoin(std::move(list1), keyTypeItems, leftKeys, {}, payload1, optKey, filter1, ctx);
     list2 = PrepareListForJoin(std::move(list2), keyTypeItems, rightKeys, {}, payload2, optKey, filter2, ctx);
 
-    list1 = MakeDictForJoin(ETypeAnnotationKind::List != lKind, std::move(list1), payload1, multi1, ctx);
-    list2 = MakeDictForJoin(ETypeAnnotationKind::List != rKind, std::move(list2), payload2, multi2, ctx);
+    list1 = MakeDictForJoin<true>(std::move(list1), payload1, multi1, ctx);
+    list2 = MakeDictForJoin<true>(std::move(list2), payload2, multi2, ctx);
 
-    TExprNode::TPtr join;
-    if (ETypeAnnotationKind::List == lKind && ETypeAnnotationKind::List == rKind) {
-        join = Build<TCoToFlow>(ctx, joinDict.Pos())
-            .Input<TCoJoinDict>()
-                .LeftInput(std::move(list1))
-                .RightInput(std::move(list2))
-                .JoinKind(joinDict.JoinType())
-                .Flags().Add(std::move(flags)).Build()
-                .Build()
-            .Done().Ptr();
-    } else if (ETypeAnnotationKind::List != lKind && ETypeAnnotationKind::List == rKind) {
-        join = Build<TCoFlatMap>(ctx, joinDict.Pos())
-            .Input(std::move(list1))
-            .Lambda()
-                .Args({"left"})
-                .Body<TCoJoinDict>()
-                    .LeftInput("left")
-                    .RightInput(std::move(list2))
-                    .JoinKind(joinDict.JoinType())
-                    .Flags().Add(std::move(flags)).Build()
-                    .Build()
-                .Build()
-            .Done().Ptr();
-    } else if (ETypeAnnotationKind::List == lKind && ETypeAnnotationKind::List != rKind) {
-        join = Build<TCoFlatMap>(ctx, joinDict.Pos())
-            .Input(std::move(list2))
-            .Lambda()
-                .Args({"right"})
-                .Body<TCoJoinDict>()
-                    .LeftInput(std::move(list1))
-                    .RightInput("right")
-                    .JoinKind(joinDict.JoinType())
-                    .Flags().Add(std::move(flags)).Build()
-                    .Build()
-                .Build()
-            .Done().Ptr();
-    } else {
-        join = Build<TCoFlatMap>(ctx, joinDict.Pos())
-            .Input(std::move(list1))
-            .Lambda()
-                .Args({"left"})
-                .Body<TCoFlatMap>()
-                    .Input(std::move(list2))
-                    .Lambda()
-                        .Args({"right"})
-                        .Body<TCoJoinDict>()
+    // Join return list of tuple of structs. I.e. if you have tables t1 and t2 with values t1.a, t1.b and t2.c, t2.d,
+    // you will receive List<Tuple<Struct<t1.a, t1.b>, Struct<t2.c, t2.d>>> and this data should be unpacked to
+    // List<Struct<t1.a, t1.b, t2.c, t2.d>>
+    const auto unpackData = UnpackJoinedData(leftRowType, rightRowType, leftTableLabel, rightTableLabel, joinDict.Pos(), ctx);
+
+    return Build<TCoFlatMap>(ctx, joinDict.Pos())
+        .Input(std::move(list1))
+        .Lambda()
+            .Args({"left"})
+            .Body<TCoFlatMap>()
+                .Input(std::move(list2))
+                .Lambda()
+                    .Args({"right"})
+                    .Body<TCoMap>()
+                        .Input<TCoJoinDict>()
                             .LeftInput("left")
                             .RightInput("right")
                             .JoinKind(joinDict.JoinType())
                             .Flags().Add(std::move(flags)).Build()
                             .Build()
+                        .Lambda(unpackData)
                         .Build()
                     .Build()
                 .Build()
-            .Done().Ptr();
-    }
-
-    // Join return list of tuple of structs. I.e. if you have tables t1 and t2 with values t1.a, t1.b and t2.c, t2.d,
-    // you will receive List<Tuple<Struct<t1.a, t1.b>, Struct<t2.c, t2.d>>> and this data should be unpacked to
-    // List<Struct<t1.a, t1.b, t2.c, t2.d>>
-    const auto unpackData = UnpackJoinedData(leftRowType, rightRowType, leftTableLabel, rightTableLabel, join->Pos(), ctx);
-
-    return Build<TCoMap>(ctx, joinDict.Pos())
-        .Input<TCoToFlow>()
-            .Input(std::move(join))
             .Build()
-        .Lambda(unpackData)
         .Done();
 }
 

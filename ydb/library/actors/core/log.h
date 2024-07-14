@@ -48,20 +48,10 @@
 
 #define LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, ...)                                               \
     do {                                                                                                                       \
-        if (IS_CTX_LOG_PRIORITY_ENABLED(actorCtxOrSystem, priority, component, sampleBy)) {                                    \
-            ::NActors::MemLogAdapter(                                                                                          \
-                actorCtxOrSystem, priority, component, __VA_ARGS__);                                                           \
-        }                                                                                                                      \
     } while (0) /**/
 
 #define LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, stream)      \
     do {                                                                                                                       \
-        if (IS_CTX_LOG_PRIORITY_ENABLED(actorCtxOrSystem, priority, component, sampleBy)) {                                    \
-            TStringBuilder logStringBuilder;                                                                                   \
-            logStringBuilder << stream;                                                                                        \
-            ::NActors::MemLogAdapter(                                                                                          \
-                actorCtxOrSystem, priority, component, std::move(logStringBuilder));                                           \
-        }                                                                                                                      \
     } while (0) /**/
 
 #define LOG_LOG(actorCtxOrSystem, priority, component, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, __VA_ARGS__)
@@ -121,16 +111,10 @@
 // Log Throttling
 #define LOG_LOG_THROTTLE(throttler, actorCtxOrSystem, priority, component, ...) \
     do {                                                                        \
-        if ((throttler).Kick()) {                                               \
-            LOG_LOG(actorCtxOrSystem, priority, component, __VA_ARGS__);        \
-        }                                                                       \
     } while (0) /**/
 
 #define LOG_LOG_S_THROTTLE(throttler, actorCtxOrSystem, priority, component, stream) \
     do {                                                                             \
-        if ((throttler).Kick()) {                                                    \
-            LOG_LOG_S(actorCtxOrSystem, priority, component, stream);                \
-        }                                                                            \
     } while (0) /**/
 
 #define TRACE_EVENT(component)                                                                                                         \

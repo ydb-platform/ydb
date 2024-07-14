@@ -289,8 +289,6 @@ private:
 
         auto sz = (size_t)resp->ByteSize();
         if (Writer_) {
-            GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s data# %s peer# %s", this, Name_,
-                makeResponseString().data(), this->Context.peer().c_str());
             StateFunc_ = &TThis::SetFinishDone;
             ResponseSize = sz;
             ResponseStatus = status;
@@ -299,8 +297,6 @@ private:
             Finished_ = true;
             Writer_->Finish(TUniversalResponseRef<TOut>(resp), grpc::Status::OK, GetGRpcTag());
         } else {
-            GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s data# %s peer# %s (enqueued)",
-                this, Name_, makeResponseString().data(), this->Context.peer().c_str());
 
             // because of std::function cannot hold move-only captured object
             // we allocate shared object on heap to avoid message copy
@@ -321,8 +317,6 @@ private:
     void WriteByteDataOk(grpc::ByteBuffer* resp, ui32 status, EStreamCtrl ctrl) {
         auto sz = resp->Length();
         if (Writer_) {
-            GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s data# byteString peer# %s", this, Name_,
-                this->Context.peer().c_str());
             StateFunc_ = &TThis::SetFinishDone;
             ResponseSize = sz;
             ResponseStatus = status;
@@ -330,16 +324,12 @@ private:
             Finished_ = true;
             Writer_->Finish(TUniversalResponseRef<TOut>(resp), grpc::Status::OK, GetGRpcTag());
         } else {
-            GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s data# byteString peer# %s (enqueued)", this, Name_,
-                this->Context.peer().c_str());
 
             // because of std::function cannot hold move-only captured object
             // we allocate shared object on heap to avoid buffer copy
             auto uResp = MakeIntrusive<TUniversalResponse<TOut>>(resp);
             const bool finish = ctrl == EStreamCtrl::FINISH;
             auto cb = [this, uResp = std::move(uResp), sz, status, finish]() {
-                GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s data# byteString peer# %s (pushed to grpc)",
-                    this, Name_, this->Context.peer().c_str());
 
                 StateFunc_ = finish ? &TThis::SetFinishDone : &TThis::NextReply;
 
@@ -367,20 +357,13 @@ private:
         }
 
         if (Writer_) {
-            GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s nodata (%s) peer# %s, grpc status# (%d)", this,
-                Name_, msg.c_str(), this->Context.peer().c_str(), (int)code);
             StateFunc_ = &TThis::SetFinishError;
             TOut resp;
             OnBeforeCall();
             Finished_ = true;
             Writer_->Finish(TUniversalResponseRef<TOut>(&resp), grpc::Status(code, msg, details), GetGRpcTag());
         } else {
-            GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s nodata (%s) peer# %s, grpc status# (%d)"
-                                    " (enqueued)", this, Name_, msg.c_str(), this->Context.peer().c_str(), (int)code);
             auto cb = [this, code, msg, details]() {
-                GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s nodata (%s) peer# %s, grpc status# (%d)"
-                                        " (pushed to grpc)", this, Name_, msg.c_str(),
-                               this->Context.peer().c_str(), (int)code);
                 StateFunc_ = &TThis::SetFinishError;
                 OnBeforeCall();
                 Finished_ = true;
@@ -501,7 +484,6 @@ private:
     bool SetFinishError(bool ok) {
         OnAfterCall();
 
-        GRPC_LOG_DEBUG(Logger_, "[%p] finished request with error Name# %s ok# %s peer# %s", this, Name_,
             ok ? "true" : "false", this->Context.peer().c_str());
         if (!SkipUpdateCountersOnError) {
             DecRequest();

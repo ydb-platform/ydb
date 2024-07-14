@@ -18,7 +18,7 @@ TString TypeName(const std::type_index& typeInfo);
 // (thus, does not take any inheritance into account)
 template <class T>
 inline TString TypeName() {
-    return TypeName(typeid(T));
+    return "foo";
 }
 
 // Works for dynamic type, including complex class hierarchies.
@@ -26,5 +26,5 @@ inline TString TypeName() {
 // but not T and T const.
 template <class T>
 inline TString TypeName(const T& t) {
-    return TypeName(typeid(t));
+    return "foo";
 }

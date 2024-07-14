@@ -139,8 +139,8 @@ struct TCombinerNodes {
     }
 
     void ExtractValues(TComputationContext& ctx, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue** values) const {
-        for (size_t i = 0U, j = 0U; i < ItemNodes.size(); ++i) {
-            keys[i] = std::move(*(values[j++]));
+        for (size_t i = 0U; i < ItemNodes.size(); ++i) {
+            *(values[i]) = std::move(keys[i]);
         }
     }
 
@@ -444,6 +444,7 @@ public:
                 HasRawDataToExtract = false;
                 return ETasteResult::DataExtractionRequired;
             }
+            HasDataForProcessing = false;
             // while restoration we process buckets one by one starting from the first in a queue
             bool isNew = SpilledBuckets.front().InMemoryProcessingState->TasteIt();
             Throat = SpilledBuckets.front().InMemoryProcessingState->Throat;
@@ -648,7 +649,6 @@ private:
         if (HasDataForProcessing) {
             Tongue = bucket.InMemoryProcessingState->Tongue;
             Throat = bucket.InMemoryProcessingState->Throat;
-            HasDataForProcessing = false;
             return false;
         }
         //recover spilled state
@@ -736,7 +736,7 @@ private:
     }
 
     bool IsSwitchToSpillingModeCondition() const {
-        return false;
+        return true;
         // TODO: YQL-18033
         // return !HasMemoryForProcessing();
     }

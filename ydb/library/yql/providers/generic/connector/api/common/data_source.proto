@@ -35,6 +35,7 @@ enum EDataSourceKind {
     MYSQL = 5;
     MS_SQL_SERVER = 6;
     GREENPLUM = 7;
+    ORACLE = 8;
 }
 
 // EProtocol generalizes various kinds of network protocols supported by different databases.
@@ -98,5 +99,6 @@ message TDataSourceInstance {
         TClickhouseDataSourceOptions ch_options = 8;
         TS3DataSourceOptions s3_options = 9;
         TGreenplumDataSourceOptions gp_options = 10;
+        TOracleDataSourceOptions ora_options = 11;
     }
 }

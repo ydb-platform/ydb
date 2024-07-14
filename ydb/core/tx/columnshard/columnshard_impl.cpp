@@ -1075,7 +1075,7 @@ void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs:
             new NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobsFinished(
                 (NOlap::TTabletId)TabletID(), NKikimrColumnShardBlobOperationsProto::TEvDeleteSharedBlobsFinished::DestinationCurrenlyLocked));
         for (auto&& i : ev->Get()->Record.GetBlobIds()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "sharing_in_progress")("blob_id", i)(
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)("event", "sharing_in_progress")("blob_id", i)(
                 "from_tablet", ev->Get()->Record.GetSourceTabletId());
         }
 

@@ -411,6 +411,20 @@ void ToLocalTime(ui32 utcSeconds, ui16 tzId, ui32& year, ui32& month, ui32& day,
     sec = converted.second();
 }
 
+void ToLocalTime64(i64 utcSeconds, ui16 tzId, i32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec) {
+    const auto& tz = Singleton<TTimezones>()->GetZone(tzId);
+    auto converted = cctz::convert(std::chrono::system_clock::from_time_t(utcSeconds), tz);
+    year = converted.year();
+    month = converted.month();
+    day = converted.day();
+    hour = converted.hour();
+    min = converted.minute();
+    sec = converted.second();
+Cerr << "ToLocalTime64(" << utcSeconds << ") " 
+    << year << "-" << month << "-" << day << "T" << hour << ":" << min << ":" << sec
+    << Endl;
+}
+
 /*
 ui32 FromLocalTime(ui16 tzId, ui32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec) {
     const auto& tz = Singleton<TTimezones>()->GetZone(tzId);
@@ -425,19 +439,6 @@ ui32 FromLocalTime(ui16 tzId, ui32 year, ui32 month, ui32 day, ui32 hour, ui32 m
     }
 
     return absoluteSeconds;
-}
-*/
-
-/*
-void ToLocalTime64(i64 utcSeconds, ui16 tzId, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec) {
-    const auto& tz = Singleton<TTimezones>()->GetZone(tzId);
-    auto converted = cctz::convert(std::chrono::system_clock::from_time_t(utcSeconds), tz);
-    year = converted.year();
-    month = converted.month();
-    day = converted.day();
-    hour = converted.hour();
-    min = converted.minute();
-    sec = converted.second();
 }
 
 i64 FromLocalTime64(ui16 tzId, i32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec) {
@@ -879,6 +880,25 @@ public:
         EnrichMonthDay(year, value, month, day);
     }
 
+    void EnrichDayInfo(i32 solarDate, i32 dayOfYear,
+            ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) const
+    {
+        auto cache = -1 + std::upper_bound(YearsCache_.cbegin(), YearsCache_.cend(), solarDate,
+                [](ui32 value, const TYearCache& entry) {
+                    return value < entry.CumulatveDays;
+                });
+        //TODO  dayOfYear = 1 + date;
+        dayOfWeek = 1 + (3 + solarDate) % 7;
+        weekOfYear = (dayOfYear + cache->WeekOffset) / 7;
+        weekOfYearIso8601 = (dayOfYear + cache->Iso8601WeekOffset) / 7;
+        if (weekOfYearIso8601 == 0) {
+            weekOfYearIso8601 = cache->FirstIsoWeek53 ? 53 : 52;
+        } else if (weekOfYearIso8601 == 53 && cache->LastDayOfWeek < 3) {
+                weekOfYearIso8601 = 1;
+        }
+    }
+
+    // TODO return OK/NOK status ?
     void FullSplitDate32(i32 date, i32& year, ui32& month, ui32& day,
             ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) const
     {
@@ -902,13 +922,18 @@ public:
         }
     }
 
-    void FullSplitTzDate32(i32 date, i32& year, ui32& month, ui32& day,
+    bool FullSplitTzDate32(i32 date, i32& year, ui32& month, ui32& day,
             ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId) const
     {
-        if (tzId == 0) {
-            FullSplitDate32(date, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
-            return;
+        if (tzId) {
+            ui32 hour, min, sec;
+            ToLocalTime64(86400ll * date, tzId, year, month, day, hour, min, sec);
+            if (!MakeDate32((year > 0) ? year : year - 1, month, day, date)) {
+                return false;
+            }
         }
+        FullSplitDate32(date, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
+        return true;
     }
 
     bool GetDateOffset(ui32 year, ui32 month, ui32 day, ui16& value) const {

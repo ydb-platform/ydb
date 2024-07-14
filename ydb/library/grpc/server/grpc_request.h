@@ -77,7 +77,6 @@ public:
         AuthState_ = Server_->NeedAuth() ? TAuthState(true) : TAuthState(false);
         Request_ = google::protobuf::Arena::CreateMessage<TIn>(&Arena_);
         Y_ABORT_UNLESS(Request_);
-        GRPC_LOG_DEBUG(Logger_, "[%p] created request Name# %s", this, Name_);
         FinishPromise_ = NThreading::NewPromise<EFinishStatus>();
     }
 
@@ -105,7 +104,6 @@ public:
         AuthState_ = Server_->NeedAuth() ? TAuthState(true) : TAuthState(false);
         Request_ = google::protobuf::Arena::CreateMessage<TIn>(&Arena_);
         Y_ABORT_UNLESS(Request_);
-        GRPC_LOG_DEBUG(Logger_, "[%p] created streaming request Name# %s", this, Name_);
         FinishPromise_ = NThreading::NewPromise<EFinishStatus>();
         StreamAdaptor_ = CreateStreamAdaptor();
     }
@@ -230,12 +228,8 @@ public:
     }
 
     void FinishStreamingOk() override {
-        GRPC_LOG_DEBUG(Logger_, "[%p] finished streaming Name# %s peer# %s (enqueued)", this, Name_,
-                  this->Context.peer().c_str());
         auto cb = [this]() {
             StateFunc_ = &TThis::SetFinishDone;
-            GRPC_LOG_DEBUG(Logger_, "[%p] finished streaming Name# %s peer# %s (pushed to grpc)", this, Name_,
-                      this->Context.peer().c_str());
 
             OnBeforeCall();
             Finished_ = true;
@@ -302,8 +296,6 @@ private:
             // we allocate shared object on heap to avoid message copy
             auto uResp = MakeIntrusive<TUniversalResponse<TOut>>(resp);
             auto cb = [this, uResp = std::move(uResp), sz, status]() {
-                GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s peer# %s (pushed to grpc)",
-                    this, Name_, this->Context.peer().c_str());
                 StateFunc_ = &TThis::NextReply;
                 ResponseSize += sz;
                 ResponseStatus = status;
@@ -387,8 +379,6 @@ private:
             }
             return resp;
         };
-        GRPC_LOG_DEBUG(Logger_, "[%p] received request Name# %s ok# %s data# %s peer# %s", this, Name_,
-            ok ? "true" : "false", makeRequestString().data(), this->Context.peer().c_str());
 
         if (this->Context.c_call() == nullptr) {
             Y_ABORT_UNLESS(!ok);
@@ -397,7 +387,6 @@ private:
         } else if (!(RequestRegistered_ = Server_->RegisterRequestCtx(this))) {
             // Request cannot be registered due to shutdown
             // It's unsafe to continue, so drop this request without processing
-            GRPC_LOG_DEBUG(Logger_, "[%p] dropping request Name# %s due to shutdown", this, Name_);
             this->Context.TryCancel();
             return false;
         }
@@ -427,9 +416,6 @@ private:
             if (maybeToken.empty() || maybeToken[0].empty()) {
                 TString db{maybeDatabase ? maybeDatabase[0] : TStringBuf{}};
                 Counters_->CountRequestsWithoutToken();
-                GRPC_LOG_DEBUG(Logger_, "[%p] received request without user token "
-                    "Name# %s data# %s peer# %s database# %s", this, Name_,
-                    makeRequestString().data(), this->Context.peer().c_str(), db.c_str());
             }
 
             // Handle current request.
@@ -446,8 +432,7 @@ private:
         OnAfterCall();
 
         auto logCb = [this, ok](int left) {
-            GRPC_LOG_DEBUG(Logger_, "[%p] ready for next reply Name# %s ok# %s peer# %s left# %d", this, Name_,
-                ok ? "true" : "false", this->Context.peer().c_str(), left);
+            (void)left;
         };
 
         if (!ok) {
@@ -472,8 +457,6 @@ private:
     bool SetFinishDone(bool ok) {
         OnAfterCall();
 
-        GRPC_LOG_DEBUG(Logger_, "[%p] finished request Name# %s ok# %s peer# %s", this, Name_,
-            ok ? "true" : "false", this->Context.peer().c_str());
         //PrintBackTrace();
         DecRequest();
         Counters_->FinishProcessing(RequestSize, ResponseSize, ok, ResponseStatus,

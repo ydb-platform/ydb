@@ -2145,10 +2145,10 @@ IGraphTransformer::TStatus RebuildLambdaColumns(const TExprNode::TPtr& root, con
                                 }
                                 if (usedInUsing.contains(lcase)) {
                                     usedFromUsing.emplace(lcase);
-                                    aliased.emplace_back(usedInUsing[lcase], x.Alias);
+                                    aliased.emplace_back(x.Alias, usedInUsing[lcase]);
                                     //orderAtoms.push_back(ctx.Expr.NewAtom(node->Pos(), NTypeAnnImpl::MakeAliasedColumn(x.Alias, usedInUsing[lcase])));
                                 } else {
-                                    aliased.emplace_back(item->GetName(), x.Alias);
+                                    aliased.emplace_back(x.Alias, item->GetName());
                                     //orderAtoms.push_back(ctx.Expr.NewAtom(node->Pos(),
                                         //NTypeAnnImpl::MakeAliasedColumn(x.Alias, item->GetName())));
                                 }
@@ -2165,7 +2165,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(const TExprNode::TPtr& root, con
                                 }
                                 if (usedInUsing.contains(lcase)) {
                                     usedFromUsing.emplace(lcase);
-                                    aliased.emplace_back(usedInUsing[lcase], x.Alias);
+                                    aliased.emplace_back(x.Alias, usedInUsing[lcase]);
                                     //orderAtoms.push_back(ctx.Expr.NewAtom(node->Pos(), NTypeAnnImpl::MakeAliasedColumn(x.Alias, usedInUsing[lcase])));
                                 } else {
                                     aliased.emplace_back(x.Alias, o);

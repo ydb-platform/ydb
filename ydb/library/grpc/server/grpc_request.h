@@ -273,14 +273,6 @@ private:
     }
 
     void WriteDataOk(NProtoBuf::Message* resp, ui32 status) {
-        auto makeResponseString = [&] {
-            TString x;
-            TOutProtoPrinter printer;
-            printer.SetSingleLineMode(true);
-            printer.PrintToString(*resp, &x);
-            return x;
-        };
-
         auto sz = (size_t)resp->ByteSize();
         if (Writer_) {
             StateFunc_ = &TThis::SetFinishDone;
@@ -368,18 +360,6 @@ private:
     bool SetRequestDone(bool ok) {
         OnAfterCall();
 
-        auto makeRequestString = [&] {
-            TString resp;
-            if (ok) {
-                TInProtoPrinter printer;
-                printer.SetSingleLineMode(true);
-                printer.PrintToString(*Request_, &resp);
-            } else {
-                resp = "<not ok>";
-            }
-            return resp;
-        };
-
         if (this->Context.c_call() == nullptr) {
             Y_ABORT_UNLESS(!ok);
             // One ref by OnFinishTag, grpc will not call this tag if no request received
@@ -432,6 +412,8 @@ private:
         OnAfterCall();
 
         auto logCb = [this, ok](int left) {
+            (void)this;
+            (void)ok;
             (void)left;
         };
 

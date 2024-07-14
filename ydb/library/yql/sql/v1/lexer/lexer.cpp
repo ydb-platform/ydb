@@ -2,8 +2,8 @@
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/parser/proto_ast/collect_issues/collect_issues.h>
-#include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Lexer.h>
-#include <ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1Lexer.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv4Lexer.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv4Lexer.h>
 
 #if defined(_tsan_enabled_)
 #include <util/system/mutex.h>

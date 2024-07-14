@@ -21,7 +21,7 @@ NO_COMPILER_WARNINGS()
 INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/ya.make.incl)
 
 ADDINCL(
-    GLOBAL contrib/libs/antlr4_cpp_runtime/include
+    GLOBAL contrib/libs/antlr4_cpp_runtime/src
 )
 
 RUN_ANTLR(

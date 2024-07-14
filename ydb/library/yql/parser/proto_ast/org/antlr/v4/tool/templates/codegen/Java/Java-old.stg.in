@@ -28,20 +28,6 @@
  *  THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-javaTypeInitMap ::= [
-	"int":"0",
-	"long":"0",
-	"float":"0.0f",
-	"double":"0.0",
-	"boolean":"false",
-	"byte":"0",
-	"short":"0",
-	"char":"0",
-	default:"null" // anything other than a primitive type is an object
-]
-
-// args must be <object-model-object>, <fields-resulting-in-STs>
-
 ParserFile(file, parser, namedActions, contextSuperClass) ::= <<
 //
 // Generated with: -d64 -lib ./ -language protobuf
@@ -61,9 +47,7 @@ message TToken {
 
 <parser>
 
-message T<file.parser.name>AST {
-    <first(parser.funcs):{r | TRule_<r.currentRule.name> Rule_<r.currentRule.name> = 1;}; separator="">
-}
+
 >>
 
 ListenerFile(file, header, namedActions) ::= <<
@@ -76,7 +60,7 @@ VisitorFile(file, header, namedActions) ::= <<
 >>
 
 fileHeader(grammarFileName, ANTLRVersion) ::= <<
-// Generated from <grammarFileName; format="java-escape"> by ANTLR <ANTLRVersion>
+// Generated from <grammarFileName> by ANTLR <ANTLRVersion>
 >>
 
 Parser(parser, funcs, atn, sempredFuncs, superClass) ::= <<
@@ -141,21 +125,31 @@ message TRule_<currentRule.name> {
     <defineDescr(code)>
     <endif>
 }
-// $ANTLR end "<currentRule.name>"
 >>
 
-CodeBlockForOuterMostAlt(currentOuterMostAltCodeBlock, locals, preamble, ops) ::= <<
+CodeBlockForOuterMostAlt(currentOuterMostAltCodeBlock, locals, preamble, ops, altNum) ::= <<
 // CodeBlockForOuterMostAlt
-<CodeBlockForAlt(currentAltCodeBlock = currentOuterMostAltCodeBlock, ...)>
+message TBlock<elemId> {
+    <ops:{e | <element(e, i)>}; separator="\n">
+
+    string Descr = <length([ops, altNum])>;
+}
+TBlock<elemId> Block<elemId> = <elemId>;
 >>
 
 CodeBlockForAlt(currentAltCodeBlock, locals, preamble, ops) ::= <<
 // CodeBlockForAlt
-<ops:{e | <element(e, i)>}; separator="\n">
+message TBlock<elemId> {
+    <ops:{e | <element(e, i)>}; separator="\n">
+
+    string Descr = <length([ops, altNum])>;
+}
+TBlock<elemId> Block<elemId> = <elemId>;
 >>
 
 element(e, elemId) ::= <<
 <e>
+
 >>
 
 
@@ -180,20 +174,25 @@ TBlock<elemId> Block<elemId> = <elemId>;
 LL1StarBlockSingleAlt(choice, loopExpr, alts, preamble, iteration) ::= <<
 // LL1StarBlockSingleAlt
 <blockDecl()>
-repeated TBlock<elemId> Block<elemId> = <elemId>;
+TBlock<elemId> Block<elemId> = <elemId>;
 >>
 
 LL1PlusBlockSingleAlt(choice, loopExpr, alts, preamble, iteration) ::= <<
 // LL1PlusBlockSingleAlt
 <blockDecl()>
-repeated TBlock<elemId> Block<elemId> = <elemId>;
+TBlock<elemId> Block<elemId> = <elemId>;
 >>
 
 // LL(*) stuff
 
 AltBlock(choice, preamble, alts, error) ::= <<
 // AltBlock
-<blockDecl()>
+message TBlock<elemId> {
+    <alts:{a | <altDecl(a,i)>}; separator="\n">
+    oneof Alt {
+        <alts:{a | TAlt<i> Alt_<choice.enclosingRuleRunction.rule.name><i> = <i>; }; separator="\n">
+    }
+}
 TBlock<elemId> Block<elemId> = <elemId>;
 >>
 
@@ -206,13 +205,13 @@ TBlock<elemId> Block<elemId> = <elemId>;
 StarBlock(choice, alts, sync, iteration) ::= <<
 // StarBlock
 <blockDecl()>
-repeated TBlock<elemId> Block<elemId> = <elemId>;
+TBlock<elemId> Block<elemId> = <elemId>;
 >>
 
 PlusBlock(choice, alts, error) ::= <<
 // PlusBlock
 <blockDecl()>
-repeated TBlock<elemId> Block<elemId> = <elemId>;
+TBlock<elemId> Block<elemId> = <elemId>;
 >>
 
 blockDecl() ::= <<
@@ -362,7 +361,7 @@ ThisRulePropertyRef_parser(r)	 ::= ""
 
 NonLocalAttrRef(s)		 ::= ""
 SetNonLocalAttr(s, rhsChunks)	  ::=
-    ""
+	""
 
 AddToLabelList(a) ::= ""
 
@@ -400,7 +399,7 @@ ListLabelName(label)		  ::= ""
 CaptureNextToken(d) ::= ""
 CaptureNextTokenType(d) ::= ""
 
-StructDecl(struct,ctorAttrs,attrs,getters,dispatchMethods,interfaces,extensionMembers)
+StructDecl(struct,ctorAttrs,attrs,getters,dispatchMethods,interfaces,extensionMembers,signatures)
 	::= <<
 >>
 
@@ -422,7 +421,7 @@ labelref(x) ::= "<if(!x.isLocal)>((<x.ctx.name>)_localctx).<endif><x.escapedName
 ctx(actionChunk) ::= "((<actionChunk.ctx.name>)_localctx)"
 
 // used for left-recursive rules
-recRuleAltPredicate(ruleName,opPrec)  ::= ""
+recRuleAltPredicate(ruleName,opPrec)  ::= "recRuleAltPredicate <ruleName>"
 recRuleSetReturnAction(src,name)	  ::= ""
 recRuleSetStopToken()                 ::= ""
 

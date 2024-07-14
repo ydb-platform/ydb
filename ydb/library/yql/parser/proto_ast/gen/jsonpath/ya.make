@@ -28,7 +28,7 @@ IF (CPP_PROTO)
     NO_COMPILER_WARNINGS()
 
     ADDINCL(
-        GLOBAL contrib/libs/antlr4_cpp_runtime/include
+        GLOBAL contrib/libs/antlr4_cpp_runtime/src
     )
 
     INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/ya.make.incl)

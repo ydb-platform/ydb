@@ -561,16 +561,12 @@ namespace NActors {
 #endif
 
 #define ACTORS_FORMATTED_LOG(mPriority, mComponent) \
-    if (NActors::TlsActivationContext && !IS_LOG_PRIORITY_ENABLED(mPriority, mComponent));\
-        else NActors::TFormattedRecordWriter(\
-            static_cast<::NActors::NLog::EPriority>(mPriority), static_cast<::NActors::NLog::EComponent>(mComponent)\
-            )("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
+    do {                                                                                                             \
+    } while (0) /**/
 
 #define ACTORS_LOG_STREAM(mPriority, mComponent) \
-    if (NActors::TlsActivationContext && !IS_LOG_PRIORITY_ENABLED(mPriority, mComponent));\
-        else NActors::TRecordWriter(\
-            static_cast<::NActors::NLog::EPriority>(mPriority), static_cast<::NActors::NLog::EComponent>(mComponent)\
-            ) << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__ << " :"
+    do {                                                                                                             \
+    } while (0) /**/
 
 #define ALS_TRACE(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_TRACE, component)
 #define ALS_DEBUG(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_DEBUG, component)

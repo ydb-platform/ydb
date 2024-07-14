@@ -14,9 +14,9 @@ where oid::regdictionary in ('irish_stem', 'italian_stem');
 
 /*
 TODO: uncomment after YQL-18708
+*/
 select oid, oid::regnamespace from pg_catalog.pg_namespace
 where oid::regnamespace in ('public', 'information_schema');
-*/
 
 /*
 TODO: uncomment after YQL-18711

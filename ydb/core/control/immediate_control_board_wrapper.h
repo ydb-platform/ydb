@@ -9,6 +9,10 @@ class TControlWrapper {
     friend class TControlBoard;
 
 public:
+    TControlWrapper(TControl* controlPtr) 
+        : Control(controlPtr)
+    {}
+
     TControlWrapper(TAtomicBase defaultValue = 0)
         : Control(new TControl(defaultValue, Min<TAtomicBase>(), Max<TAtomicBase>()))
     {}

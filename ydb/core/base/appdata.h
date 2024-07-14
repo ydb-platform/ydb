@@ -59,89 +59,89 @@ namespace NKikimr {
         #define EXP_SERVICE_SET_VALUE(expService, name, value, prevValue) \
             prevValue = std::exchange((expService).name, value)
 
-        TControlWrapper DataShardControlsDisableByKeyFilter;
-        TControlWrapper DataShardControlsMaxTxInFly;
-        TControlWrapper DataShardControlsMaxTxLagMilliseconds;
-        TControlWrapper DataShardControlsDataTxProfileLogThresholdMs;
-        TControlWrapper DataShardControlsDataTxProfileBufferThresholdMs;
-        TControlWrapper DataShardControlsDataTxProfileBufferSize;
-        TControlWrapper DataShardControlsCanCancelROWithReadSets;
-        TControlWrapper TxLimitControlsPerShardReadSizeLimit;
-        TControlWrapper DataShardControlsCpuUsageReportThreshlodPercent;
-        TControlWrapper DataShardControlsCpuUsageReportIntervalSeconds;
-        TControlWrapper DataShardControlsHighDataSizeReportThreshlodBytes;
-        TControlWrapper DataShardControlsHighDataSizeReportIntervalSeconds;
-        TControlWrapper DataShardControlsBackupReadAheadLo;
-        TControlWrapper DataShardControlsBackupReadAheadHi;
-        TControlWrapper DataShardControlsTtlReadAheadLo;
-        TControlWrapper DataShardControlsTtlReadAheadHi;
-        TControlWrapper DataShardControlsEnableLockedWrites;
-        TControlWrapper DataShardControlsMaxLockedWritesPerKey;
-        TControlWrapper DataShardControlsEnableLeaderLeases;
-        TControlWrapper DataShardControlsMinLeaderLeaseDurationUs;
-        TControlWrapper DataShardControlsChangeRecordDebugPrint;
+        TControlWrapper DataShardControlsDisableByKeyFilter{nullptr};
+        TControlWrapper DataShardControlsMaxTxInFly{nullptr};
+        TControlWrapper DataShardControlsMaxTxLagMilliseconds{nullptr};
+        TControlWrapper DataShardControlsDataTxProfileLogThresholdMs{nullptr};
+        TControlWrapper DataShardControlsDataTxProfileBufferThresholdMs{nullptr};
+        TControlWrapper DataShardControlsDataTxProfileBufferSize{nullptr};
+        TControlWrapper DataShardControlsCanCancelROWithReadSets{nullptr};
+        TControlWrapper TxLimitControlsPerShardReadSizeLimit{nullptr};
+        TControlWrapper DataShardControlsCpuUsageReportThreshlodPercent{nullptr};
+        TControlWrapper DataShardControlsCpuUsageReportIntervalSeconds{nullptr};
+        TControlWrapper DataShardControlsHighDataSizeReportThreshlodBytes{nullptr};
+        TControlWrapper DataShardControlsHighDataSizeReportIntervalSeconds{nullptr};
+        TControlWrapper DataShardControlsBackupReadAheadLo{nullptr};
+        TControlWrapper DataShardControlsBackupReadAheadHi{nullptr};
+        TControlWrapper DataShardControlsTtlReadAheadLo{nullptr};
+        TControlWrapper DataShardControlsTtlReadAheadHi{nullptr};
+        TControlWrapper DataShardControlsEnableLockedWrites{nullptr};
+        TControlWrapper DataShardControlsMaxLockedWritesPerKey{nullptr};
+        TControlWrapper DataShardControlsEnableLeaderLeases{nullptr};
+        TControlWrapper DataShardControlsMinLeaderLeaseDurationUs{nullptr};
+        TControlWrapper DataShardControlsChangeRecordDebugPrint{nullptr};
         
-        TControlWrapper BlobStorageEnablePutBatching;
-        TControlWrapper BlobStorageEnableVPatch;
-        TControlWrapper VDiskControlsEnableLocalSyncLogDataCutting;
-        TControlWrapper VDiskControlsEnableSyncLogChunkCompressionHDD;
-        TControlWrapper VDiskControlsEnableSyncLogChunkCompressionSSD;
-        TControlWrapper VDiskControlsMaxSyncLogChunksInFlightHDD;
-        TControlWrapper VDiskControlsMaxSyncLogChunksInFlightSSD;
+        TControlWrapper BlobStorageEnablePutBatching{nullptr};
+        TControlWrapper BlobStorageEnableVPatch{nullptr};
+        TControlWrapper VDiskControlsEnableLocalSyncLogDataCutting{nullptr};
+        TControlWrapper VDiskControlsEnableSyncLogChunkCompressionHDD{nullptr};
+        TControlWrapper VDiskControlsEnableSyncLogChunkCompressionSSD{nullptr};
+        TControlWrapper VDiskControlsMaxSyncLogChunksInFlightHDD{nullptr};
+        TControlWrapper VDiskControlsMaxSyncLogChunksInFlightSSD{nullptr};
         
-        TControlWrapper VDiskControlsBurstThresholdNsHDD;
-        TControlWrapper VDiskControlsBurstThresholdNsSSD;
-        TControlWrapper VDiskControlsBurstThresholdNsNVME;
-        TControlWrapper VDiskControlsDiskTimeAvailableScaleHDD;
-        TControlWrapper VDiskControlsDiskTimeAvailableScaleSSD;
-        TControlWrapper VDiskControlsDiskTimeAvailableScaleNVME;
+        TControlWrapper VDiskControlsBurstThresholdNsHDD{nullptr};
+        TControlWrapper VDiskControlsBurstThresholdNsSSD{nullptr};
+        TControlWrapper VDiskControlsBurstThresholdNsNVME{nullptr};
+        TControlWrapper VDiskControlsDiskTimeAvailableScaleHDD{nullptr};
+        TControlWrapper VDiskControlsDiskTimeAvailableScaleSSD{nullptr};
+        TControlWrapper VDiskControlsDiskTimeAvailableScaleNVME{nullptr};
         
-        TControlWrapper SchemeShardSplitMergePartCountLimit;
-        TControlWrapper SchemeShardFastSplitSizeThreshold;
-        TControlWrapper SchemeShardFastSplitRowCountThreshold;
-        TControlWrapper SchemeShardFastSplitCpuPercentageThreshold;
+        TControlWrapper SchemeShardSplitMergePartCountLimit{nullptr};
+        TControlWrapper SchemeShardFastSplitSizeThreshold{nullptr};
+        TControlWrapper SchemeShardFastSplitRowCountThreshold{nullptr};
+        TControlWrapper SchemeShardFastSplitCpuPercentageThreshold{nullptr};
         
-        TControlWrapper SchemeShardSplitByLoadEnabled;
-        TControlWrapper SchemeShardSplitByLoadMaxShardsDefault;
-        TControlWrapper SchemeShardMergeByLoadMinUptimeSec;
-        TControlWrapper SchemeShardMergeByLoadMinLowLoadDurationSec;
+        TControlWrapper SchemeShardSplitByLoadEnabled{nullptr};
+        TControlWrapper SchemeShardSplitByLoadMaxShardsDefault{nullptr};
+        TControlWrapper SchemeShardMergeByLoadMinUptimeSec{nullptr};
+        TControlWrapper SchemeShardMergeByLoadMinLowLoadDurationSec{nullptr};
         
-        TControlWrapper SchemeShardControlsForceShardSplitDataSize;
-        TControlWrapper SchemeShardControlsDisableForceShardSplit;
+        TControlWrapper SchemeShardControlsForceShardSplitDataSize{nullptr};
+        TControlWrapper SchemeShardControlsDisableForceShardSplit{nullptr};
         
-        TControlWrapper TCMallocControlsProfileSamplingRate;
-        TControlWrapper TCMallocControlsGuardedSamplingRate;
-        TControlWrapper TCMallocControlsMemoryLimit;
-        TControlWrapper TCMallocControlsPageCacheTargetSize;
-        TControlWrapper TCMallocControlsPageCacheReleaseRate;
+        TControlWrapper TCMallocControlsProfileSamplingRate{nullptr};
+        TControlWrapper TCMallocControlsGuardedSamplingRate{nullptr};
+        TControlWrapper TCMallocControlsMemoryLimit{nullptr};
+        TControlWrapper TCMallocControlsPageCacheTargetSize{nullptr};
+        TControlWrapper TCMallocControlsPageCacheReleaseRate{nullptr};
         
-        TControlWrapper ColumnShardControlsMinBytesToIndex;
-        TControlWrapper ColumnShardControlsMaxBytesToIndex;
-        TControlWrapper ColumnShardControlsInsertTableCommittedSize;
+        TControlWrapper ColumnShardControlsMinBytesToIndex{nullptr};
+        TControlWrapper ColumnShardControlsMaxBytesToIndex{nullptr};
+        TControlWrapper ColumnShardControlsInsertTableCommittedSize{nullptr};
         
-        TControlWrapper ColumnShardControlsIndexGoodBlobSize;
-        TControlWrapper ColumnShardControlsGranuleOverloadBytes;
-        TControlWrapper ColumnShardControlsCompactionDelaySec;
-        TControlWrapper ColumnShardControlsGranuleIndexedPortionsSizeLimit;
-        TControlWrapper ColumnShardControlsGranuleIndexedPortionsCountLimit;
+        TControlWrapper ColumnShardControlsIndexGoodBlobSize{nullptr};
+        TControlWrapper ColumnShardControlsGranuleOverloadBytes{nullptr};
+        TControlWrapper ColumnShardControlsCompactionDelaySec{nullptr};
+        TControlWrapper ColumnShardControlsGranuleIndexedPortionsSizeLimit{nullptr};
+        TControlWrapper ColumnShardControlsGranuleIndexedPortionsCountLimit{nullptr};
         
-        TControlWrapper BlobCacheMaxCacheDataSize;
-        TControlWrapper BlobCacheMaxInFlightDataSize;
+        TControlWrapper BlobCacheMaxCacheDataSize{nullptr};
+        TControlWrapper BlobCacheMaxInFlightDataSize{nullptr};
         
-        TControlWrapper ColumnShardControlsBlobWriteGrouppingEnabled;
-        TControlWrapper ColumnShardControlsCacheDataAfterIndexing;
-        TControlWrapper ColumnShardControlsCacheDataAfterCompaction;
+        TControlWrapper ColumnShardControlsBlobWriteGrouppingEnabled{nullptr};
+        TControlWrapper ColumnShardControlsCacheDataAfterIndexing{nullptr};
+        TControlWrapper ColumnShardControlsCacheDataAfterCompaction{nullptr};
         
-        TControlWrapper CoordinatorControlsEnableLeaderLeases;
-        TControlWrapper CoordinatorControlsMinLeaderLeaseDurationUs;
-        TControlWrapper CoordinatorControlsVolatilePlanLeaseMs;
-        TControlWrapper CoordinatorControlsPlanAheadTimeShiftMs;
+        TControlWrapper CoordinatorControlsEnableLeaderLeases{nullptr};
+        TControlWrapper CoordinatorControlsMinLeaderLeaseDurationUs{nullptr};
+        TControlWrapper CoordinatorControlsVolatilePlanLeaseMs{nullptr};
+        TControlWrapper CoordinatorControlsPlanAheadTimeShiftMs{nullptr};
         
-        TControlWrapper SchemeShardAllowConditionalEraseOperations;
-        TControlWrapper SchemeShardDisablePublicationsOfDropping;
-        TControlWrapper SchemeShardFillAllocatePQ;
-        TControlWrapper SchemeShardAllowDataColumnForIndexTable;
-        TControlWrapper SchemeShardAllowServerlessStorageBilling;
+        TControlWrapper SchemeShardAllowConditionalEraseOperations{nullptr};
+        TControlWrapper SchemeShardDisablePublicationsOfDropping{nullptr};
+        TControlWrapper SchemeShardFillAllocatePQ{nullptr};
+        TControlWrapper SchemeShardAllowDataColumnForIndexTable{nullptr};
+        TControlWrapper SchemeShardAllowServerlessStorageBilling{nullptr};
     };
 
 } // NKikimr

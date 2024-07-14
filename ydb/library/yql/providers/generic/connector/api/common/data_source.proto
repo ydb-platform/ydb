@@ -35,7 +35,6 @@ enum EDataSourceKind {
     MYSQL = 5;
     MS_SQL_SERVER = 6;
     GREENPLUM = 7;
-    ORACLE = 8;
 }
 
 // EProtocol generalizes various kinds of network protocols supported by different databases.
@@ -69,11 +68,6 @@ message TGreenplumDataSourceOptions {
     string schema = 1;
 }
 
-// TOracleDataSourceOptions represents settings specific to Oracle
-message TOracleDataSourceOptions {
-    // Oracle service
-    string service = 1;
-}
 
 // TDataSourceInstance helps to identify the instance of a data source to redirect request to.
 message TDataSourceInstance {
@@ -97,6 +91,5 @@ message TDataSourceInstance {
         TClickhouseDataSourceOptions ch_options = 8;
         TS3DataSourceOptions s3_options = 9;
         TGreenplumDataSourceOptions gp_options = 10;
-        TOracleDataSourceOptions ora_options = 11;
     }
 }

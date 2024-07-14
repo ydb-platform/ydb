@@ -547,6 +547,12 @@ calculate_total_relation_size(Relation rel)
 Datum
 pg_total_relation_size(PG_FUNCTION_ARGS)
 {
+    return (Datum)0;
+}
+
+Datum
+pg_total_relation_size_original(PG_FUNCTION_ARGS)
+{
 	Oid			relOid = PG_GETARG_OID(0);
 	Relation	rel;
 	int64		size;

@@ -668,16 +668,17 @@ bool CreateTableIndex(const TRule_table_index& node, TTranslation& ctx, TVector<
     }
 
     if (node.GetRule_table_index_type3().HasBlock2()) {
-        const TString subType = to_lower(ctx.Token(node.GetRule_table_index_type3().GetBlock2().GetRule_index_subtype2().GetToken1())) ;
-        if (subType == "vector_kmeans_tree") {
+        const TString subType = to_upper(IdEx(node.GetRule_table_index_type3().GetBlock2().GetRule_index_subtype2().GetRule_an_id1(), ctx).Name) ;
+        if (subType == "VECTOR_KMEANS_TREE") {
             if (indexes.back().Type != TIndexDescription::EType::GlobalSync) {
-                ctx.Error() << "VECTOR_KMEANS_TREE index can only be GLOBAL [SYNC]";
+                ctx.Error() << subType << " index can only be GLOBAL [SYNC]";
                 return false;
             }
 
             indexes.back().Type = TIndexDescription::EType::GlobalVectorKmeansTree;
         } else {
-            Y_ABORT("You should change implementation according to grammar changes");
+            ctx.Error() << subType << " index subtype is not supported";
+            return false;
         }
     }
 

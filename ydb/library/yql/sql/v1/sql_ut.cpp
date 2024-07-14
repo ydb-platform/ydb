@@ -76,7 +76,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 "HAVING", "HOP", "INTERSECT", "JSON_EXISTS", "JSON_QUERY", "JSON_VALUE", "LIMIT", "LIST", "LOCAL",
                 "NOT", "OPTIONAL", "PROCESS", "REDUCE", "REPEATABLE", "RESOURCE", "RETURN", "RETURNING", "ROLLUP",
                 "SELECT", "SET", "STREAM", "STRUCT", "SYMMETRIC", "TAGGED", "TUPLE", "UNBOUNDED",
-                "UNION", "VECTOR_KMEANS_TREE", "VARIANT", "WHEN", "WHERE", "WINDOW", "WITHOUT"
+                "UNION", "VARIANT", "WHEN", "WHERE", "WINDOW", "WITHOUT"
             },
             [](const TString& token){
                 TStringBuilder req;
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 "HAVING", "HOP", "INTERSECT", "JSON_EXISTS", "JSON_QUERY", "JSON_VALUE", "LIMIT", "LIST", "LOCAL",
                 "NOT", "NULL", "OPTIONAL", "PROCESS", "REDUCE", "REPEATABLE", "RESOURCE", "RETURN", "RETURNING", "ROLLUP",
                 "SELECT", "SET", "STRUCT", "SYMMETRIC", "TAGGED", "TRUE", "TUPLE", "UNBOUNDED",
-                "UNION", "VECTOR_KMEANS_TREE", "VARIANT", "WHEN", "WHERE", "WINDOW", "WITHOUT"
+                "UNION", "VARIANT", "WHEN", "WHERE", "WINDOW", "WITHOUT"
              },
              [](const TString& token){
                  TStringBuilder req;
@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         auto failed = ValidateTokens({
                 "ANY", "AUTOMAP", "CALLABLE", "COLUMN", "DICT", "ENUM", "ERASE", "FALSE", "FLOW",
                 "GLOBAL", "LIST", "OPTIONAL", "REPEATABLE", "RESOURCE",
-                "SET", "STREAM", "STRUCT", "TAGGED", "TRUE", "TUPLE", "VARIANT", "VECTOR_KMEANS_TREE"
+                "SET", "STREAM", "STRUCT", "TAGGED", "TRUE", "TUPLE", "VARIANT"
             },
             [](const TString& token){
                  TStringBuilder req;
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(TokensAsColumnAlias) {
         auto failed = ValidateTokens({
                  "AUTOMAP", "FALSE",
-                 "GLOBAL", "REPEATABLE", "TRUE", "VECTOR_KMEANS_TREE"
+                 "GLOBAL", "REPEATABLE", "TRUE"
              },
              [](const TString& token){
                  TStringBuilder req;
@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(TokensAsTableName) { //id_table_or_type
         auto failed = ValidateTokens({
                 "ANY", "AUTOMAP", "COLUMN", "ERASE", "FALSE",
-                "GLOBAL", "REPEATABLE", "STREAM", "TRUE", "VECTOR_KMEANS_TREE"
+                "GLOBAL", "REPEATABLE", "STREAM", "TRUE"
             },
             [](const TString& token){
                 TStringBuilder req;
@@ -153,7 +153,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         auto failed = ValidateTokens({
                 "AUTOMAP", "CALLABLE", "DICT", "ENUM","FALSE", "FLOW",
                 "GLOBAL", "LIST", "OPTIONAL", "REPEATABLE", "RESOURCE",
-                "SET", "STRUCT", "TAGGED", "TRUE", "TUPLE", "VARIANT", "VECTOR_KMEANS_TREE"
+                "SET", "STRUCT", "TAGGED", "TRUE", "TUPLE", "VARIANT"
             },
             [](const TString& token){
                  TStringBuilder req;
@@ -168,7 +168,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         auto failed = ValidateTokens({
                 "AUTOMAP", "CALLABLE", "COLUMNS", "DICT", "ENUM", "FALSE", "FLOW",
                 "GLOBAL", "LIST", "OPTIONAL", "REPEATABLE", "RESOURCE",
-                "SCHEMA", "SET", "STRUCT", "TAGGED", "TRUE", "TUPLE", "VARIANT", "VECTOR_KMEANS_TREE"
+                "SCHEMA", "SET", "STRUCT", "TAGGED", "TRUE", "TUPLE", "VARIANT"
             },
             [](const TString& token){
                 TStringBuilder req;
@@ -182,7 +182,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(TokensAsWindow) { //id_window
         auto failed = ValidateTokens({
                 "AUTOMAP", "CALLABLE", "DICT", "ENUM", "FALSE", "FLOW", "GLOBAL", "GROUPS", "LIST", "OPTIONAL",
-                "RANGE", "REPEATABLE", "RESOURCE", "ROWS", "SET", "STRUCT", "TAGGED" ,"TRUE", "TUPLE", "VARIANT", "VECTOR_KMEANS_TREE"
+                "RANGE", "REPEATABLE", "RESOURCE", "ROWS", "SET", "STRUCT", "TAGGED" ,"TRUE", "TUPLE", "VARIANT"
             },
             [](const TString& token){
                 TStringBuilder req;
@@ -201,7 +201,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 "HAVING", "HOP", "INTERSECT", "JSON_EXISTS", "JSON_QUERY", "JSON_VALUE", "LIMIT", "LIST", "LOCAL",
                 "NOT", "OPTIONAL", "PROCESS", "REDUCE", "REPEATABLE", "RESOURCE", "RETURN", "RETURNING", "ROLLUP",
                 "SELECT", "SET", "STREAM", "STRUCT", "SYMMETRIC", "TAGGED", "TUPLE", "UNBOUNDED",
-                "UNION", "VARIANT", "VECTOR_KMEANS_TREE", "WHEN", "WHERE", "WINDOW", "WITHOUT"
+                "UNION", "VARIANT", "WHEN", "WHERE", "WINDOW", "WITHOUT"
             },
             [](const TString& token){
                 TStringBuilder req;
@@ -2498,8 +2498,13 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(AlterTableAddVectorIndex) {
-        const auto result = SqlToYql("USE plato; ALTER TABLE table ADD INDEX idx GLOBAL USING VECTOR_KMEANS_TREE ON (col) COVER (col)");
+        const auto result = SqlToYql("USE plato; ALTER TABLE table ADD INDEX idx GLOBAL USING vector_kmeans_tree ON (col) COVER (col)");
         UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableAddIndexWithUnknownSubtype) {
+        ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx GLOBAL USING unknown ON (col)",
+            "<main>:1:57: Error: UNKNOWN index subtype is not supported\n");
     }
 
     Y_UNIT_TEST(AlterTableAlterIndexSetPartitioningIsCorrect) {

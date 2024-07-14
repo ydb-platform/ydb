@@ -21,6 +21,7 @@ ENDIF()
 RUN_ANTLR4(
     ${sql_grammar}
     -lib .
+    -no-listener
     -o ${antlr_output}
     -Dlanguage=Java
     IN ${sql_grammar} ${antlr_templates}/Java/Java.stg

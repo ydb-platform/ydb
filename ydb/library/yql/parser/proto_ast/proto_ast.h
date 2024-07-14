@@ -3,7 +3,7 @@
 #include <ydb/library/yql/parser/lexer_common/lexer.h>
 
 
-#include <contrib/libs/antlr4_cpp_runtime/include/antlr4-runtime.h>
+#include <contrib/libs/antlr4_cpp_runtime/src/antlr4-runtime.h>
 #include <contrib/libs/antlr3_cpp_runtime/include/antlr3.hpp>
 
 #include <google/protobuf/message.h>
@@ -55,7 +55,7 @@ namespace NProtoAST {
     template <>
     inline void InvalidToken<antlr4::Token>(IOutputStream& err, const antlr4::Token* token) {
         if (token) {
-            if (token->get_input()) {
+            if (token->getInputStream()) {
                 err << " '" << token->getText() << "'";
             } else {
                 err << ABSENCE;
@@ -190,10 +190,10 @@ namespace NProtoAST {
     private:
         TString QueryName;
 
-        typename TLexer::InputStreamType InputStream;
+        antlr4::ANTLRInputStream InputStream;
         TLexer Lexer;
 
-        typename TParser::TokenStreamType TokenStream;
+        antlr4::CommonTokenStream TokenStream;
         TParser Parser;
     };
 
@@ -258,14 +258,18 @@ namespace NProtoAST {
         void CollectTokens(IErrorCollector& errors, const NSQLTranslation::ILexer::TTokenCallback& onNextToken) {
             try {
                 for (;;) {
-                    auto token = src->nextToken();
+                    auto token = Lexer.nextToken();
                     auto type = token->getType();
-                    const bool isEOF = type == TLexer::CommonTokenType::TOKEN_EOF;
+                    const bool isEOF = type == TLexer::EOF;
                     NSQLTranslation::TParsedToken last;
-                    last.Name = isEOF ? "EOF" : getTokenName(type);
+                    if (isEOF) {
+                        last.Name = "EOF";
+                    } else {
+                        last.Name = getTokenName(type);
+                    }
                     last.Content = token->getText();
-                    last.Line = token->get_line();
-                    last.LinePos = token->get_charPositionInLine();
+                    last.Line = token->getLine();
+                    last.LinePos = token->getCharPositionInLine();
                     onNextToken(std::move(last));
                     if (isEOF) {
                         break;
@@ -278,15 +282,12 @@ namespace NProtoAST {
         }
 
     private:
-        const char* getTokenName(size_t type) const {
-            if (type <  Lexer._symbolicNames.size()) {
-                std::string& name = Lexer._symbolicNames[type];
-                if (name.empty()) {
-                    return INVALID_TOKEN_NAME;
-                }
-                return name.c_str();
+        TString getTokenName(size_t type) const {
+            auto res = Lexer.getVocabulary().getDisplayName(type);
+            if (res != std::to_string(type)){
+                return res;
             }
-            return INVALID_TOKEN_NAME;
+            return TString(INVALID_TOKEN_NAME);
         }
 
         TString QueryName;

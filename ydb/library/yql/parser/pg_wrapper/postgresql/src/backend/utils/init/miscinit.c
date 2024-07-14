@@ -1072,6 +1072,7 @@ SerializeClientConnectionInfo(Size maxsize, char *start_address)
 	/* Copy authn_id into the space after the struct */
 	if (serialized.authn_id_len >= 0)
 	{
+		(void)maxsize;
 		Assert(maxsize >= (serialized.authn_id_len + 1));
 		memcpy(start_address,
 			   MyClientConnectionInfo.authn_id,

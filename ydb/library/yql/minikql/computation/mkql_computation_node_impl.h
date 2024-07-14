@@ -873,22 +873,22 @@ public:
 
 private:
     bool HasFastListLength() const override {
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return false;
     }
 
     ui64 GetListLength() const override {
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return 0;
     }
 
     ui64 GetEstimatedListLength() const override {
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return 0;
     }
 
     bool HasListItems() const override {
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return false;
     }
 
@@ -919,22 +919,22 @@ private:
     }
 
     ui64 GetDictLength() const override {
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return 0;
     }
 
     bool HasDictItems() const override {
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return false;
     }
 
     NUdf::TStringRef GetResourceTag() const override {
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return NUdf::TStringRef();
     }
 
     void* GetResource() override {
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return nullptr;
     }
 
@@ -943,40 +943,40 @@ private:
     }
 
     NUdf::TUnboxedValue GetListIterator() const override {
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return {};
     }
 
     NUdf::TUnboxedValue GetDictIterator() const override {
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return {};
     }
 
     NUdf::TUnboxedValue GetKeysIterator() const override {
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return {};
     }
 
     NUdf::TUnboxedValue GetPayloadsIterator() const override {
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return {};
     }
 
     bool Contains(const NUdf::TUnboxedValuePod& key) const override {
         Y_UNUSED(key);
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return false;
     }
 
     NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const override {
         Y_UNUSED(key);
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return NUdf::TUnboxedValuePod();
     }
 
     NUdf::TUnboxedValue GetElement(ui32 index) const override {
         Y_UNUSED(index);
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return {};
     }
 
@@ -990,7 +990,7 @@ private:
     {
         Y_UNUSED(valueBuilder);
         Y_UNUSED(args);
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return {};
     }
 
@@ -1000,96 +1000,96 @@ private:
     }
 
     bool Next(NUdf::TUnboxedValue&) override {
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return false;
     }
 
     bool NextPair(NUdf::TUnboxedValue&, NUdf::TUnboxedValue&) override {
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return false;
     }
 
     ui32 GetVariantIndex() const override {
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return 0;
     }
 
     NUdf::TUnboxedValue GetVariantItem() const override {
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return {};
     }
 
     NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
         Y_UNUSED(result);
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return NUdf::EFetchStatus::Finish;
     }
 
     ui32 GetTraverseCount() const override {
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return 0;
     }
 
     NUdf::TUnboxedValue GetTraverseItem(ui32 index) const override {
         Y_UNUSED(index);
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return {};
     }
 
     NUdf::TUnboxedValue Save() const override {
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return NUdf::TUnboxedValue::Zero();
     }
 
     void Load(const NUdf::TStringRef& state) override {
         Y_UNUSED(state);
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
     }
 
     bool Load2(const NUdf::TUnboxedValue& state) override {
         Y_UNUSED(state);
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return false;
     }
 
     void Push(const NUdf::TUnboxedValuePod& value) override {
         Y_UNUSED(value);
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
     }
 
     bool IsSortedDict() const override {
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return false;
     }
 
     void Unused1() override {
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
     }
 
     void Unused2() override {
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
     }
 
     void Unused3() override {
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
     }
 
     void Unused4() override {
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
     }
 
     void Unused5() override {
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
     }
 
     void Unused6() override {
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
     }
 
     NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* result, ui32 width) override {
         Y_UNUSED(result);
         Y_UNUSED(width);
-        ThrowNotSupported("foo");
+        ThrowNotSupported();
         return NUdf::EFetchStatus::Finish;
     }
 
@@ -1100,7 +1100,8 @@ public:
 
 protected:
     [[noreturn]] void ThrowNotSupported(const char* func) const {
-        ThrowNotSupportedImplForClass(TypeName(*this), func);
+
+        THROW yexception() << "Unsupported access;
     }
 };
 

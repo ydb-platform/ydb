@@ -262,6 +262,19 @@ auto TServiceBase::TMethodDescriptor::SetHandleMethodError(bool value) const -> 
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TServiceBase::TErrorCodeCounter::TErrorCodeCounter(NProfiling::TProfiler profiler)
+    : Profiler_(std::move(profiler))
+{ }
+
+void TServiceBase::TErrorCodeCounter::Increment(TErrorCode code)
+{
+    CodeToCounter_.FindOrInsert(code, [&] {
+        return Profiler_.WithTag("code", ToString(code)).Counter("/code_count");
+    }).first->Increment();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TServiceBase::TMethodPerformanceCounters::TMethodPerformanceCounters(
     const NProfiling::TProfiler& profiler,
     const THistogramConfigPtr& histogramConfig)
@@ -274,7 +287,7 @@ TServiceBase::TMethodPerformanceCounters::TMethodPerformanceCounters(
     , RequestMessageAttachmentSizeCounter(profiler.Counter("/request_message_attachment_bytes"))
     , ResponseMessageBodySizeCounter(profiler.Counter("/response_message_body_bytes"))
     , ResponseMessageAttachmentSizeCounter(profiler.Counter("/response_message_attachment_bytes"))
-    , ErrorCodes(profiler)
+    , ErrorCodeCounter(profiler)
 {
     if (histogramConfig && histogramConfig->CustomBounds) {
         const auto &customBounds = *histogramConfig->CustomBounds;
@@ -1008,8 +1021,8 @@ private:
         MethodPerformanceCounters_->ExecutionTimeCounter.Record(*ExecutionTime_);
         MethodPerformanceCounters_->TotalTimeCounter.Record(*TotalTime_);
         if (!Error_.IsOK()) {
-            if (Service_->EnableErrorCodeCounting.load()) {
-                MethodPerformanceCounters_->ErrorCodes.RegisterCode(Error_.GetNonTrivialCode());
+            if (Service_->EnableErrorCodeCounter_.load()) {
+                MethodPerformanceCounters_->ErrorCodeCounter.Increment(Error_.GetNonTrivialCode());
             } else {
                 MethodPerformanceCounters_->FailedRequestCounter.Increment();
             }
@@ -2601,7 +2614,7 @@ void TServiceBase::DoConfigure(
         EnablePerUserProfiling_.store(config->EnablePerUserProfiling.value_or(configDefaults->EnablePerUserProfiling));
         AuthenticationQueueSizeLimit_.store(config->AuthenticationQueueSizeLimit.value_or(DefaultAuthenticationQueueSizeLimit));
         PendingPayloadsTimeout_.store(config->PendingPayloadsTimeout.value_or(DefaultPendingPayloadsTimeout));
-        EnableErrorCodeCounting.store(config->EnableErrorCodeCounting.value_or(configDefaults->EnableErrorCodeCounting));
+        EnableErrorCodeCounter_.store(config->EnableErrorCodeCounter.value_or(configDefaults->EnableErrorCodeCounter));
 
         DoConfigureHistogramTimer(configDefaults, config);
 

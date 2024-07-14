@@ -63,7 +63,7 @@ class TServiceCommonConfig
 public:
     bool EnablePerUserProfiling;
     THistogramConfigPtr HistogramTimerProfiling;
-    bool EnableErrorCodeCounting;
+    bool EnableErrorCodeCounter;
     ERequestTracingMode TracingMode;
 
     REGISTER_YSON_STRUCT(TServiceCommonConfig);
@@ -97,7 +97,7 @@ class TServiceCommonDynamicConfig
 public:
     std::optional<bool> EnablePerUserProfiling;
     std::optional<THistogramConfigPtr> HistogramTimerProfiling;
-    std::optional<bool> EnableErrorCodeCounting;
+    std::optional<bool> EnableErrorCodeCounter;
     std::optional<ERequestTracingMode> TracingMode;
 
     REGISTER_YSON_STRUCT(TServiceCommonDynamicConfig);
@@ -129,7 +129,7 @@ class TServiceConfig
 {
 public:
     std::optional<bool> EnablePerUserProfiling;
-    std::optional<bool> EnableErrorCodeCounting;
+    std::optional<bool> EnableErrorCodeCounter;
     std::optional<ERequestTracingMode> TracingMode;
     THistogramConfigPtr HistogramTimerProfiling;
     THashMap<TString, TMethodConfigPtr> Methods;

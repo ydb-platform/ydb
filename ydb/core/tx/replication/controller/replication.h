@@ -79,6 +79,7 @@ public:
         virtual void AddWorker(ui64 id) = 0;
         virtual void RemoveWorker(ui64 id) = 0;
         virtual void UpdateLag(ui64 workerId, TDuration lag) = 0;
+        virtual const TMaybe<TDuration> GetLag() const = 0;
 
         virtual void Progress(const TActorContext& ctx) = 0;
         virtual void Shutdown(const TActorContext& ctx) = 0;

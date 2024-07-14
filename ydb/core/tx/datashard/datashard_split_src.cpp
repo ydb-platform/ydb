@@ -238,6 +238,8 @@ class TDataShard::TTxSplitSnapshotComplete : public NTabletFlatExecutor::TTransa
 private:
     TIntrusivePtr<TSplitSnapshotContext> SnapContext;
     bool ChangeExchangeSplit;
+    THashSet<ui64> ActivationList;
+    THashSet<ui64> SplitList;
 
 public:
     TTxSplitSnapshotComplete(TDataShard* ds, TIntrusivePtr<TSplitSnapshotContext> snapContext)
@@ -372,13 +374,11 @@ public:
                     proto->SetTimeoutMs(kv.second.Timeout.MilliSeconds());
                 }
 
-                if (Self->ChangesQueue || tableInfo.HasCdcStreams()) {
+                if (tableInfo.HasAsyncIndexes() || tableInfo.HasCdcStreams()) {
                     snapshot->SetWaitForActivation(true);
-                    Self->ChangeSenderActivator.AddDst(dstTablet);
-                    db.Table<Schema::SrcChangeSenderActivations>().Key(dstTablet).Update();
-
+                    ActivationList.insert(dstTablet);
                     if (tableInfo.HasCdcStreams()) {
-                        Self->ChangeExchangeSplitter.AddDst(dstTablet);
+                        SplitList.insert(dstTablet);
                     }
                 }
 
@@ -397,13 +397,22 @@ public:
             }
         }
 
-        ChangeExchangeSplit = !Self->ChangesQueue && !Self->ChangeExchangeSplitter.Done();
-
         if (needToReadPages) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " BorrowSnapshot is restarting for split OpId " << opId);
             return false;
         } else {
             txc.Env.DropSnapshot(SnapContext);
+
+            for (ui64 dstTabletId : ActivationList) {
+                Self->ChangeSenderActivator.AddDst(dstTabletId);
+                db.Table<Schema::SrcChangeSenderActivations>().Key(dstTabletId).Update();
+            }
+
+            for (ui64 dstTabletId : SplitList) {
+                Self->ChangeExchangeSplitter.AddDst(dstTabletId);
+            }
+
+            ChangeExchangeSplit = !Self->ChangesQueue && !Self->ChangeExchangeSplitter.Done();
 
             Self->State = TShardState::SplitSrcSendingSnapshot;
             Self->PersistSys(db, Schema::Sys_State, Self->State);
@@ -432,14 +441,14 @@ class TDataShard::TTxSplitTransferSnapshotAck : public NTabletFlatExecutor::TTra
 private:
     TEvDataShard::TEvSplitTransferSnapshotAck::TPtr Ev;
     bool AllDstAcksReceived;
-    bool Activate;
+    ui64 ActivateTabletId;
 
 public:
     TTxSplitTransferSnapshotAck(TDataShard* ds, TEvDataShard::TEvSplitTransferSnapshotAck::TPtr& ev)
         : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
         , Ev(ev)
         , AllDstAcksReceived(false)
-        , Activate(false)
+        , ActivateTabletId(0)
     {}
 
     TTxType GetTxType() const override { return TXTYPE_SPLIT_TRANSFER_SNAPSHOT_ACK; }
@@ -463,8 +472,8 @@ public:
         // Remove the row for acked snapshot
         db.Table<Schema::SplitSrcSnapshots>().Key(dstTabletId).Delete();
 
-        if (!Self->ChangesQueue && Self->ChangeExchangeSplitter.Done()) {
-            Activate = !Self->ChangeSenderActivator.Acked(dstTabletId);
+        if (!Self->ChangesQueue && Self->ChangeExchangeSplitter.Done() && !Self->ChangeSenderActivator.Acked(dstTabletId)) {
+            ActivateTabletId = dstTabletId;
         }
 
         return true;
@@ -479,11 +488,8 @@ public:
             }
         }
 
-        if (Activate) {
-            const ui64 dstTabletId = Ev->Get()->Record.GetTabletId();
-            if (!Self->ChangeSenderActivator.Acked(dstTabletId)) {
-                Self->ChangeSenderActivator.DoSend(dstTabletId, ctx);
-            }
+        if (ActivateTabletId) {
+            Self->ChangeSenderActivator.DoSend(ActivateTabletId, ctx);
         }
     }
 };

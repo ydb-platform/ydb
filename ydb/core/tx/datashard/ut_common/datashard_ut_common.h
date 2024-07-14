@@ -662,6 +662,11 @@ ui64 AsyncAlterDropStream(
         const TString& tableName,
         const TString& streamName);
 
+ui64 AsyncAlterDropReplicationConfig(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& tableName);
+
 struct TReadShardedTableState {
     TActorId Sender;
     TActorId Worker;

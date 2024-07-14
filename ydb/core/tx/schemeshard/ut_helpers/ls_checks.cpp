@@ -850,6 +850,14 @@ TCheckFunc StreamAwsRegion(const TString& value) {
     };
 }
 
+TCheckFunc StreamInitialScanProgress(ui32 total, ui32 completed) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        const auto& scanProgress = record.GetPathDescription().GetCdcStreamDescription().GetScanProgress();
+        UNIT_ASSERT_VALUES_EQUAL(total, scanProgress.GetShardsTotal());
+        UNIT_ASSERT_VALUES_EQUAL(completed, scanProgress.GetShardsCompleted());
+    };
+}
+
 TCheckFunc RetentionPeriod(const TDuration& value) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(value.Seconds(), record.GetPathDescription().GetPersQueueGroup()

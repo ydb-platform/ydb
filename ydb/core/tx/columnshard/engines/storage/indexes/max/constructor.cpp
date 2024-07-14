@@ -20,7 +20,7 @@ std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TIndexConstructor::DoCreat
         }
         columnId = columnInfo->GetId();
     }
-    return std::make_shared<TIndexMeta>(indexId, indexName, columnId);
+    return std::make_shared<TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::LocalMetadataStorageId), columnId);
 }
 
 NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {

@@ -75,8 +75,8 @@ protected:
 
 public:
     TBloomIndexMeta() = default;
-    TBloomIndexMeta(const ui32 indexId, const TString& indexName, std::set<ui32>& columnIds, const double fpProbability)
-        : TBase(indexId, indexName, columnIds, NBlobOperations::TGlobal::DefaultStorageId)
+    TBloomIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, std::set<ui32>& columnIds, const double fpProbability)
+        : TBase(indexId, indexName, columnIds, storageId)
         , FalsePositiveProbability(fpProbability) {
         Initialize();
     }

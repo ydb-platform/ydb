@@ -41,8 +41,8 @@ protected:
 
 public:
     TIndexMeta() = default;
-    TIndexMeta(const ui32 indexId, const TString& indexName, const ui32& columnId)
-        : TBase(indexId, indexName, { columnId }, NBlobOperations::TGlobal::LocalMetadataStorageId) {
+    TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const ui32& columnId)
+        : TBase(indexId, indexName, { columnId }, storageId) {
     }
 
     ui32 GetColumnId() const {

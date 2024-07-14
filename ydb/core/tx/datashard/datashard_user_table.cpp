@@ -392,6 +392,8 @@ void TUserTable::AlterSchema() {
     schema.SetPartitionRangeEnd(Range.To.GetBuffer());
     schema.SetPartitionRangeEndIsInclusive(Range.ToInclusive);
 
+    ReplicationConfig.Serialize(*schema.MutableReplicationConfig());
+
     schema.SetName(Name);
     schema.SetPath(Path);
 

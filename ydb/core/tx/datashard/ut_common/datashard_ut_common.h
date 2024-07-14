@@ -670,6 +670,11 @@ ui64 AsyncAlterDropStream(
         const TString& tableName,
         const TString& streamName);
 
+ui64 AsyncAlterDropReplicationConfig(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& tableName);
+
 ui64 AsyncCreateContinuousBackup(
         Tests::TServer::TPtr server,
         const TString& workingDir,

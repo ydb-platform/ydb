@@ -1101,7 +1101,7 @@ public:
 protected:
     [[noreturn]] void ThrowNotSupported(const char* func) const {
 
-        THROW yexception() << "Unsupported access;
+        THROW yexception() << "Unsupported access";
     }
 };
 

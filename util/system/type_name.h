@@ -26,5 +26,6 @@ inline TString TypeName() {
 // but not T and T const.
 template <class T>
 inline TString TypeName(const T& t) {
+    (void)t;
     return "foo";
 }

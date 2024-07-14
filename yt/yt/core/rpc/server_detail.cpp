@@ -56,7 +56,7 @@ TServiceContextBase::TServiceContextBase(
     , Logger(std::move(logger))
     , LogLevel_(logLevel)
 {
-    YT_VERIFY(ParseRequestHeader(RequestMessage_, RequestHeader_.get()));
+    YT_VERIFY(TryParseRequestHeader(RequestMessage_, RequestHeader_.get()));
     Initialize();
 }
 

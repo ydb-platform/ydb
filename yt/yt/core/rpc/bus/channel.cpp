@@ -950,7 +950,7 @@ private:
         void OnStreamingPayloadMessage(TSharedRefArray message)
         {
             NProto::TStreamingPayloadHeader header;
-            if (!ParseStreamingPayloadHeader(message, &header)) {
+            if (!TryParseStreamingPayloadHeader(message, &header)) {
                 YT_LOG_ERROR("Error parsing streaming payload header");
                 return;
             }
@@ -1005,7 +1005,7 @@ private:
         void OnStreamingFeedbackMessage(TSharedRefArray message)
         {
             NProto::TStreamingFeedbackHeader header;
-            if (!ParseStreamingFeedbackHeader(message, &header)) {
+            if (!TryParseStreamingFeedbackHeader(message, &header)) {
                 YT_LOG_ERROR("Error parsing streaming feedback header");
                 return;
             }

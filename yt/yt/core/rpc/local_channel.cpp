@@ -261,7 +261,7 @@ private:
         void OnStreamingPayloadMessage(TSharedRefArray message)
         {
             NProto::TStreamingPayloadHeader header;
-            YT_VERIFY(ParseStreamingPayloadHeader(message, &header));
+            YT_VERIFY(TryParseStreamingPayloadHeader(message, &header));
 
             auto sequenceNumber = header.sequence_number();
             auto attachments = std::vector<TSharedRef>(message.Begin() + 1, message.End());
@@ -293,7 +293,7 @@ private:
         void OnStreamingFeedbackMessage(TSharedRefArray message)
         {
             NProto::TStreamingFeedbackHeader header;
-            YT_VERIFY(ParseStreamingFeedbackHeader(message, &header));
+            YT_VERIFY(TryParseStreamingFeedbackHeader(message, &header));
             auto readPosition = header.read_position();
 
             YT_LOG_DEBUG("Response streaming feedback received (RequestId: %v, ReadPosition: %v)",

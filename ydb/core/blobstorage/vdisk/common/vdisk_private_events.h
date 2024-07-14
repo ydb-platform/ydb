@@ -58,12 +58,14 @@ namespace NKikimr {
         : public TEventLocal<TEvDelLogoBlobDataSyncLogResult, TEvBlobStorage::EvDelLogoBlobDataSyncLogResult>
         , public TEvVResultBase
     {
+        const TLogoBlobID Id;
         const ui64 OrderId;
 
-        TEvDelLogoBlobDataSyncLogResult(ui64 orderId, const TInstant &now,
+        TEvDelLogoBlobDataSyncLogResult(const TLogoBlobID &id, ui64 orderId, const TInstant &now,
                 ::NMonitoring::TDynamicCounters::TCounterPtr counterPtr, NVDiskMon::TLtcHistoPtr histoPtr)
             : TEvVResultBase(now, TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, counterPtr,
                 histoPtr)
+            , Id(id)
             , OrderId(orderId)
         {}
     };

@@ -11,8 +11,7 @@ namespace NKikimr {
 // GET request
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class TBlobStorageGroupIndexRestoreGetRequest
-        : public TBlobStorageGroupRequestActor<TBlobStorageGroupIndexRestoreGetRequest> {
+class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestActor {
     const ui32 QuerySize;
     TArrayHolder<TEvBlobStorage::TEvGet::TQuery> Queries;
     const TInstant Deadline;
@@ -35,7 +34,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
 
     THashMap<TLogoBlobID, std::pair<bool, bool>> KeepFlags;
 
-    void ReplyAndDie(NKikimrProto::EReplyStatus status) {
+    void ReplyAndDie(NKikimrProto::EReplyStatus status) override {
         A_LOG_INFO_S("DSPI14", "ReplyAndDie"
             << " Reply with status# " << NKikimrProto::EReplyStatus_Name(status)
             << " PendingResult# " << (PendingResult ? PendingResult->ToString().data() : "nullptr"));
@@ -54,8 +53,6 @@ class TBlobStorageGroupIndexRestoreGetRequest
         Mon->CountIndexRestoreGetResponseTime(TActivationContext::Now() - StartTime);
         SendResponseAndDie(std::move(PendingResult));
     }
-
-    friend class TBlobStorageGroupRequestActor<TBlobStorageGroupIndexRestoreGetRequest>;
 
     TString DumpBlobStatus() const {
         TStringStream str("{");
@@ -192,7 +189,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
             return;
         }
 
-        Become(&TThis::StateRestore);
+        Become(&TBlobStorageGroupIndexRestoreGetRequest::StateRestore);
 
         A_LOG_DEBUG_S("DSPI13", "OnEnoughVGetResults"
             << " Become StateRestore RestoreQueriesStarted# " << RestoreQueriesStarted);
@@ -244,7 +241,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
         }
     }
 
-    std::unique_ptr<IEventBase> RestartQuery(ui32 counter) {
+    std::unique_ptr<IEventBase> RestartQuery(ui32 counter) override {
         ++*Mon->NodeMon->RestartIndexRestoreGet;
         auto ev = std::make_unique<TEvBlobStorage::TEvGet>(Queries, QuerySize, Deadline, GetHandleClass,
             true /*mustRestoreFirst*/, true /*isIndexOnly*/, std::nullopt /*forceBlockTabletData*/, IsInternal);
@@ -254,15 +251,11 @@ class TBlobStorageGroupIndexRestoreGetRequest
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::BS_PROXY_INDEXRESTOREGET_ACTOR;
+    ::NMonitoring::TDynamicCounters::TCounterPtr& GetActiveCounter() const override {
+        return Mon->ActiveIndexRestoreGet;
     }
 
-    static const auto& ActiveCounter(const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon) {
-        return mon->ActiveIndexRestoreGet;
-    }
-
-    static constexpr ERequestType RequestType() {
+    ERequestType GetRequestType() const override {
         return ERequestType::Get;
     }
 
@@ -273,7 +266,8 @@ public:
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
                 NKikimrServices::BS_PROXY_INDEXRESTOREGET, false, latencyQueueKind, now, storagePoolCounters,
-                ev->RestartCounter, std::move(traceId), "DSProxy.IndexRestoreGet", ev, std::move(ev->ExecutionRelay))
+                ev->RestartCounter, std::move(traceId), "DSProxy.IndexRestoreGet", ev, std::move(ev->ExecutionRelay),
+                NKikimrServices::TActivity::BS_PROXY_INDEXRESTOREGET_ACTOR)
         , QuerySize(ev->QuerySize)
         , Queries(ev->Queries.Release())
         , Deadline(ev->Deadline)
@@ -301,7 +295,7 @@ public:
         Y_ABORT_UNLESS(!ev->PhantomCheck);
     }
 
-    void Bootstrap() {
+    void Bootstrap() override {
         auto makeQueriesList = [this] {
             TStringStream str;
             str << "{";
@@ -372,7 +366,7 @@ public:
             sendQuery();
         }
         Y_ABORT_UNLESS(VGetsInFlight);
-        Become(&TThis::StateWait);
+        Become(&TBlobStorageGroupIndexRestoreGetRequest::StateWait);
     }
 
     STATEFN(StateWait) {

@@ -36,8 +36,12 @@ public:
         for (auto it = categories.GetDirect().GetIterator(); it.IsValid(); ++it) {
             RemoveAction->DeclareRemove(it.GetTabletId(), it.GetBlobId());
         }
+        for (auto it = categories.GetBorrowed().GetIterator(); it.IsValid(); ++it) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_BLOBS)("problem", "borrowed_to_remove")("blob_id", it.GetBlobId())("tablet_id", it.GetTabletId());
+        }
         AFL_VERIFY(categories.GetBorrowed().IsEmpty());
-        AFL_VERIFY(categories.GetSharing().GetSize() == SharingBlobIds.GetSize());
+        AFL_VERIFY(categories.GetSharing().GetSize() == SharingBlobIds.GetSize())("sharing_category", categories.GetSharing().GetSize())(
+                                                            "sharing", SharingBlobIds.GetSize());
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;

@@ -204,6 +204,7 @@ struct TSysCache {
         InitializeDatabase();
         InitializeAuthId();
         InitializeNameNamespaces();
+        InitializeRelNameNamespaces();
         for (auto& item : Items) {
             if (item) {
                 item->FinalizeRangeMaps();
@@ -629,7 +630,7 @@ struct TSysCache {
         cacheItem->PgThreadContextLookup = std::move(threadContextLookup);
     }
 
-    void InitializeNameNamespaces() {
+    void InitializeRelNameNamespaces() {
         TupleDesc tupleDesc = CreateTemplateTupleDesc(Natts_pg_class);
         FillAttr(tupleDesc, Anum_pg_class_oid, OIDOID);
         FillAttr(tupleDesc, Anum_pg_class_relname, NAMEOID);
@@ -689,6 +690,35 @@ struct TSysCache {
             auto key = THeapTupleKey(name, ns, 0, 0);
             lookupMap.emplace(key, h);
         }
+    }
+
+    void InitializeNameNamespaces() {
+        TupleDesc tupleDesc = CreateTemplateTupleDesc(Natts_pg_namespace);
+        FillAttr(tupleDesc, Anum_pg_namespace_oid, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_namespace_nspname, NAMEOID);
+        FillAttr(tupleDesc, Anum_pg_namespace_nspowner, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_namespace_nspacl, ACLITEMARRAYOID);
+        auto& cacheItem = Items[NAMESPACENAME] = std::make_unique<TSysCacheItem>(NsNameHasher, NsNameEquals, tupleDesc);
+        auto& lookupMap = cacheItem->LookupMap;
+
+        NPg::EnumNamespace([&](ui32 oid, const NPg::TNamespaceDesc& desc) {
+            Datum values[Natts_pg_namespace];
+            bool nulls[Natts_pg_namespace];
+            Zero(values);
+            std::fill_n(nulls, Natts_pg_namespace, true);
+            FillDatum(Natts_pg_namespace, values, nulls, Anum_pg_namespace_oid, oid);
+            auto name = MakeFixedString(desc.Name, NAMEDATALEN);
+            FillDatum(Natts_pg_namespace, values, nulls, Anum_pg_namespace_nspname, (Datum)name);
+            FillDatum(Natts_pg_namespace, values, nulls, Anum_pg_namespace_nspowner, (Datum)1);
+            HeapTuple h = heap_form_tuple(tupleDesc, values, nulls);
+            auto row = (Form_pg_namespace)GETSTRUCT(h);
+            Y_ENSURE(row->oid == oid);
+            Y_ENSURE(NameStr(row->nspname) == desc.Name);
+            Y_ENSURE(row->nspowner == 1);
+
+            auto key = THeapTupleKey((Datum)name, 0, 0, 0);
+            lookupMap.emplace(key, h);
+        });
     }
 };
 

@@ -2179,9 +2179,13 @@ IGraphTransformer::TStatus RebuildLambdaColumns(const TExprNode::TPtr& root, con
             }
 
             for (auto& [alias, name] : aliased) {
-                auto aliasedAtom = ctx.Expr.NewAtom(node->Pos(), NTypeAnnImpl::MakeAliasedColumn(alias, name));
-                auto originalAtom = ctx.Expr.NewAtom(node->Pos(), name);
-                orderAtoms.emplace_back(ctx.Expr.NewList(node->Pos(), {originalAtom, aliasedAtom}));
+                if (!hasExternalInput) {
+                    auto aliasedAtom = ctx.Expr.NewAtom(node->Pos(), NTypeAnnImpl::MakeAliasedColumn(alias, name));
+                    auto originalAtom = ctx.Expr.NewAtom(node->Pos(), name);
+                    orderAtoms.emplace_back(ctx.Expr.NewList(node->Pos(), {originalAtom, aliasedAtom}));
+                } else {
+                    orderAtoms.emplace_back(ctx.Expr.NewAtom(node->Pos(), NTypeAnnImpl::MakeAliasedColumn(alias, name)));
+                }
             }
 
             if (expandedColumns) {

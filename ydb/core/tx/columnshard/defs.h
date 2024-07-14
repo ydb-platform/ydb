@@ -1,14 +1,15 @@
 #pragma once
 #include "common/blob.h"
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
-#include <ydb/core/base/blobstorage.h>
-#include <ydb/library/yverify_stream/yverify_stream.h>
-#include <ydb/core/tx/ctor_logger.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/settings.h>
 #include <ydb/core/tx/columnshard/engines/defs.h>
 #include <ydb/core/tx/columnshard/engines/writer/put_status.h>
+#include <ydb/core/tx/ctor_logger.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -52,10 +53,10 @@ struct TLimits {
 
     TLimits();
 
-    void RegisterControls(TControlBoard& icb) {
-        icb.RegisterSharedControl(MinInsertBytes, "ColumnShardControls.MinBytesToIndex");
-        icb.RegisterSharedControl(MaxInsertBytes, "ColumnShardControls.MaxBytesToIndex");
-        icb.RegisterSharedControl(InsertTableSize, "ColumnShardControls.InsertTableCommittedSize");
+    void RegisterControls(TExperimentingService& expService) {
+        EXP_SERVICE_REG_SHARED(expService, ColumnShardControlsMinBytesToIndex, MinInsertBytes);
+        EXP_SERVICE_REG_SHARED(expService, ColumnShardControlsMaxBytesToIndex, MaxInsertBytes);
+        EXP_SERVICE_REG_SHARED(expService, ColumnShardControlsInsertTableCommittedSize, InsertTableSize);
     }
 };
 
@@ -79,12 +80,12 @@ struct TCompactionLimits {
         , GranuleIndexedPortionsCountLimit(TBase::WARNING_INSERTED_PORTIONS_COUNT)
     {}
 
-    void RegisterControls(TControlBoard& icb) {
-        icb.RegisterSharedControl(GoodBlobSize, "ColumnShardControls.IndexGoodBlobSize");
-        icb.RegisterSharedControl(GranuleOverloadSize, "ColumnShardControls.GranuleOverloadBytes");
-        icb.RegisterSharedControl(InGranuleCompactSeconds, "ColumnShardControls.CompactionDelaySec");
-        icb.RegisterSharedControl(GranuleIndexedPortionsSizeLimit, "ColumnShardControls.GranuleIndexedPortionsSizeLimit");
-        icb.RegisterSharedControl(GranuleIndexedPortionsCountLimit, "ColumnShardControls.GranuleIndexedPortionsCountLimit");
+    void RegisterControls(TExperimentingService& expService) {
+        EXP_SERVICE_REG_SHARED(expService, ColumnShardControlsIndexGoodBlobSize, GoodBlobSize);
+        EXP_SERVICE_REG_SHARED(expService, ColumnShardControlsGranuleOverloadBytes, GranuleOverloadSize);
+        EXP_SERVICE_REG_SHARED(expService, ColumnShardControlsCompactionDelaySec, InGranuleCompactSeconds);
+        EXP_SERVICE_REG_SHARED(expService, ColumnShardControlsGranuleIndexedPortionsSizeLimit, GranuleIndexedPortionsSizeLimit);
+        EXP_SERVICE_REG_SHARED(expService, ColumnShardControlsGranuleIndexedPortionsCountLimit, GranuleIndexedPortionsCountLimit);
     }
 
     NOlap::TCompactionLimits Get() const {

@@ -573,7 +573,7 @@ private:
         size_t RetryAttempts = 0;
     };
 
-    bool IcbRegistered = false;
+    bool ExprServiceInitialized = false;
     TControlWrapper EnableLeaderLeases;
     TControlWrapper MinLeaderLeaseDurationUs;
     TControlWrapper VolatilePlanLeaseMs;
@@ -624,7 +624,7 @@ private:
 
     void SendViaSession(const TActorId& sessionId, const TActorId& target, IEventBase* event, ui32 flags, ui64 cookie);
 
-    void IcbRegister();
+    void ExpServiceInitialize();
     bool ReadOnlyLeaseEnabled() override;
     TDuration ReadOnlyLeaseDuration() override;
 

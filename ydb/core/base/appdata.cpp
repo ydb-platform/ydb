@@ -87,6 +87,7 @@ TAppData::TAppData(
     , CompilerSchemeCacheTables(Max<ui64>() / 4)
     , Mon(nullptr)
     , Icb(new TControlBoard())
+    , ExpService(new TExperimentingService())
     , InFlightLimiterRegistry(new NGRpcService::TInFlightLimiterRegistry(Icb))
     , StreamingConfig(Impl->StreamingConfig)
     , PQConfig(Impl->PQConfig)

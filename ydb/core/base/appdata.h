@@ -44,6 +44,106 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NKikimr {
+
+    struct TExperimentingService : public TThrRefBase {
+        #define EXP_SERVICE_REG_SHARED(expService, name, value) \
+            if (!(expService).name.IsDefined()) { \
+                (expService).name = value; \
+            } else { \
+                value = (expService).name; \
+            }
+        
+        #define EXP_SERVICE_REG_LOCAL(expService, name, value) \
+            (expService).name = value;
+        
+        #define EXP_SERVICE_SET_VALUE(expService, name, value, prevValue) \
+            prevValue = std::exchange((expService).name, value)
+
+        TControlWrapper DataShardControlsDisableByKeyFilter;
+        TControlWrapper DataShardControlsMaxTxInFly;
+        TControlWrapper DataShardControlsMaxTxLagMilliseconds;
+        TControlWrapper DataShardControlsDataTxProfileLogThresholdMs;
+        TControlWrapper DataShardControlsDataTxProfileBufferThresholdMs;
+        TControlWrapper DataShardControlsDataTxProfileBufferSize;
+        TControlWrapper DataShardControlsCanCancelROWithReadSets;
+        TControlWrapper TxLimitControlsPerShardReadSizeLimit;
+        TControlWrapper DataShardControlsCpuUsageReportThreshlodPercent;
+        TControlWrapper DataShardControlsCpuUsageReportIntervalSeconds;
+        TControlWrapper DataShardControlsHighDataSizeReportThreshlodBytes;
+        TControlWrapper DataShardControlsHighDataSizeReportIntervalSeconds;
+        TControlWrapper DataShardControlsBackupReadAheadLo;
+        TControlWrapper DataShardControlsBackupReadAheadHi;
+        TControlWrapper DataShardControlsTtlReadAheadLo;
+        TControlWrapper DataShardControlsTtlReadAheadHi;
+        TControlWrapper DataShardControlsEnableLockedWrites;
+        TControlWrapper DataShardControlsMaxLockedWritesPerKey;
+        TControlWrapper DataShardControlsEnableLeaderLeases;
+        TControlWrapper DataShardControlsMinLeaderLeaseDurationUs;
+        TControlWrapper DataShardControlsChangeRecordDebugPrint;
+        
+        TControlWrapper BlobStorageEnablePutBatching;
+        TControlWrapper BlobStorageEnableVPatch;
+        TControlWrapper VDiskControlsEnableLocalSyncLogDataCutting;
+        TControlWrapper VDiskControlsEnableSyncLogChunkCompressionHDD;
+        TControlWrapper VDiskControlsEnableSyncLogChunkCompressionSSD;
+        TControlWrapper VDiskControlsMaxSyncLogChunksInFlightHDD;
+        TControlWrapper VDiskControlsMaxSyncLogChunksInFlightSSD;
+        
+        TControlWrapper VDiskControlsBurstThresholdNsHDD;
+        TControlWrapper VDiskControlsBurstThresholdNsSSD;
+        TControlWrapper VDiskControlsBurstThresholdNsNVME;
+        TControlWrapper VDiskControlsDiskTimeAvailableScaleHDD;
+        TControlWrapper VDiskControlsDiskTimeAvailableScaleSSD;
+        TControlWrapper VDiskControlsDiskTimeAvailableScaleNVME;
+        
+        TControlWrapper SchemeShardSplitMergePartCountLimit;
+        TControlWrapper SchemeShardFastSplitSizeThreshold;
+        TControlWrapper SchemeShardFastSplitRowCountThreshold;
+        TControlWrapper SchemeShardFastSplitCpuPercentageThreshold;
+        
+        TControlWrapper SchemeShardSplitByLoadEnabled;
+        TControlWrapper SchemeShardSplitByLoadMaxShardsDefault;
+        TControlWrapper SchemeShardMergeByLoadMinUptimeSec;
+        TControlWrapper SchemeShardMergeByLoadMinLowLoadDurationSec;
+        
+        TControlWrapper SchemeShardControlsForceShardSplitDataSize;
+        TControlWrapper SchemeShardControlsDisableForceShardSplit;
+        
+        TControlWrapper TCMallocControlsProfileSamplingRate;
+        TControlWrapper TCMallocControlsGuardedSamplingRate;
+        TControlWrapper TCMallocControlsMemoryLimit;
+        TControlWrapper TCMallocControlsPageCacheTargetSize;
+        TControlWrapper TCMallocControlsPageCacheReleaseRate;
+        
+        TControlWrapper ColumnShardControlsMinBytesToIndex;
+        TControlWrapper ColumnShardControlsMaxBytesToIndex;
+        TControlWrapper ColumnShardControlsInsertTableCommittedSize;
+        
+        TControlWrapper ColumnShardControlsIndexGoodBlobSize;
+        TControlWrapper ColumnShardControlsGranuleOverloadBytes;
+        TControlWrapper ColumnShardControlsCompactionDelaySec;
+        TControlWrapper ColumnShardControlsGranuleIndexedPortionsSizeLimit;
+        TControlWrapper ColumnShardControlsGranuleIndexedPortionsCountLimit;
+        
+        TControlWrapper BlobCacheMaxCacheDataSize;
+        TControlWrapper BlobCacheMaxInFlightDataSize;
+        
+        TControlWrapper ColumnShardControlsBlobWriteGrouppingEnabled;
+        TControlWrapper ColumnShardControlsCacheDataAfterIndexing;
+        TControlWrapper ColumnShardControlsCacheDataAfterCompaction;
+        
+        TControlWrapper CoordinatorControlsEnableLeaderLeases;
+        TControlWrapper CoordinatorControlsMinLeaderLeaseDurationUs;
+        TControlWrapper CoordinatorControlsVolatilePlanLeaseMs;
+        TControlWrapper CoordinatorControlsPlanAheadTimeShiftMs;
+        
+        TControlWrapper SchemeShardAllowConditionalEraseOperations;
+        TControlWrapper SchemeShardDisablePublicationsOfDropping;
+        TControlWrapper SchemeShardFillAllocatePQ;
+        TControlWrapper SchemeShardAllowDataColumnForIndexTable;
+        TControlWrapper SchemeShardAllowServerlessStorageBilling;
+    };
+
 } // NKikimr
 
 #if !__PROTOS_WERE_INCLUDED && (\

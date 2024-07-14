@@ -3,14 +3,15 @@
 #include "datashard_locks_db.h"
 #include "probes.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/interconnect_channels.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
-#include <ydb/core/protos/datashard_config.pb.h>
-#include <ydb/core/protos/query_stats.pb.h>
 
 #include <ydb/library/actors/core/monotonic_provider.h>
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -293,38 +294,38 @@ void TDataShard::Die(const TActorContext& ctx) {
 }
 
 void TDataShard::IcbRegister() {
-    if (!IcbRegistered) {
+    if (!ExpServiceInitialized) {
         auto* appData = AppData();
 
-        appData->Icb->RegisterSharedControl(DisableByKeyFilter, "DataShardControls.DisableByKeyFilter");
-        appData->Icb->RegisterSharedControl(MaxTxInFly, "DataShardControls.MaxTxInFly");
-        appData->Icb->RegisterSharedControl(MaxTxLagMilliseconds, "DataShardControls.MaxTxLagMilliseconds");
-        appData->Icb->RegisterSharedControl(DataTxProfileLogThresholdMs, "DataShardControls.DataTxProfile.LogThresholdMs");
-        appData->Icb->RegisterSharedControl(DataTxProfileBufferThresholdMs, "DataShardControls.DataTxProfile.BufferThresholdMs");
-        appData->Icb->RegisterSharedControl(DataTxProfileBufferSize, "DataShardControls.DataTxProfile.BufferSize");
+        EXP_SERVICE_REG_SHARED(*appData->ExpService, DataShardControlsDisableByKeyFilter, DisableByKeyFilter);
+        EXP_SERVICE_REG_SHARED(*appData->ExpService, DataShardControlsMaxTxInFly, MaxTxInFly);
+        EXP_SERVICE_REG_SHARED(*appData->ExpService, DataShardControlsMaxTxLagMilliseconds, MaxTxLagMilliseconds);
+        EXP_SERVICE_REG_SHARED(*appData->ExpService, DataShardControlsDataTxProfileLogThresholdMs, DataTxProfileLogThresholdMs);
+        EXP_SERVICE_REG_SHARED(*appData->ExpService, DataShardControlsDataTxProfileBufferThresholdMs, DataTxProfileBufferThresholdMs);
+        EXP_SERVICE_REG_SHARED(*appData->ExpService, DataShardControlsDataTxProfileBufferSize, DataTxProfileBufferSize);
 
-        appData->Icb->RegisterSharedControl(CanCancelROWithReadSets, "DataShardControls.CanCancelROWithReadSets");
-        appData->Icb->RegisterSharedControl(PerShardReadSizeLimit, "TxLimitControls.PerShardReadSizeLimit");
-        appData->Icb->RegisterSharedControl(CpuUsageReportThreshlodPercent, "DataShardControls.CpuUsageReportThreshlodPercent");
-        appData->Icb->RegisterSharedControl(CpuUsageReportIntervalSeconds, "DataShardControls.CpuUsageReportIntervalSeconds");
-        appData->Icb->RegisterSharedControl(HighDataSizeReportThreshlodBytes, "DataShardControls.HighDataSizeReportThreshlodBytes");
-        appData->Icb->RegisterSharedControl(HighDataSizeReportIntervalSeconds, "DataShardControls.HighDataSizeReportIntervalSeconds");
+        EXP_SERVICE_REG_SHARED(*appData->ExpService, DataShardControlsCanCancelROWithReadSets, CanCancelROWithReadSets);
+        EXP_SERVICE_REG_SHARED(*appData->ExpService, TxLimitControlsPerShardReadSizeLimit, PerShardReadSizeLimit);
+        EXP_SERVICE_REG_SHARED(*appData->ExpService, DataShardControlsCpuUsageReportThreshlodPercent, CpuUsageReportThreshlodPercent);
+        EXP_SERVICE_REG_SHARED(*appData->ExpService, DataShardControlsCpuUsageReportIntervalSeconds, CpuUsageReportIntervalSeconds);
+        EXP_SERVICE_REG_SHARED(*appData->ExpService, DataShardControlsHighDataSizeReportThreshlodBytes, HighDataSizeReportThreshlodBytes);
+        EXP_SERVICE_REG_SHARED(*appData->ExpService, DataShardControlsHighDataSizeReportIntervalSeconds, HighDataSizeReportIntervalSeconds);
 
-        appData->Icb->RegisterSharedControl(BackupReadAheadLo, "DataShardControls.BackupReadAheadLo");
-        appData->Icb->RegisterSharedControl(BackupReadAheadHi, "DataShardControls.BackupReadAheadHi");
+        EXP_SERVICE_REG_SHARED(*appData->ExpService, DataShardControlsBackupReadAheadLo, BackupReadAheadLo);
+        EXP_SERVICE_REG_SHARED(*appData->ExpService, DataShardControlsBackupReadAheadHi, BackupReadAheadHi);
 
-        appData->Icb->RegisterSharedControl(TtlReadAheadLo, "DataShardControls.TtlReadAheadLo");
-        appData->Icb->RegisterSharedControl(TtlReadAheadHi, "DataShardControls.TtlReadAheadHi");
+        EXP_SERVICE_REG_SHARED(*appData->ExpService, DataShardControlsTtlReadAheadLo, TtlReadAheadLo);
+        EXP_SERVICE_REG_SHARED(*appData->ExpService, DataShardControlsTtlReadAheadHi, TtlReadAheadHi);
 
-        appData->Icb->RegisterSharedControl(EnableLockedWrites, "DataShardControls.EnableLockedWrites");
-        appData->Icb->RegisterSharedControl(MaxLockedWritesPerKey, "DataShardControls.MaxLockedWritesPerKey");
+        EXP_SERVICE_REG_SHARED(*appData->ExpService, DataShardControlsEnableLockedWrites, EnableLockedWrites);
+        EXP_SERVICE_REG_SHARED(*appData->ExpService, DataShardControlsMaxLockedWritesPerKey, MaxLockedWritesPerKey);
 
-        appData->Icb->RegisterSharedControl(EnableLeaderLeases, "DataShardControls.EnableLeaderLeases");
-        appData->Icb->RegisterSharedControl(MinLeaderLeaseDurationUs, "DataShardControls.MinLeaderLeaseDurationUs");
+        EXP_SERVICE_REG_SHARED(*appData->ExpService, DataShardControlsEnableLeaderLeases, EnableLeaderLeases);
+        EXP_SERVICE_REG_SHARED(*appData->ExpService, DataShardControlsMinLeaderLeaseDurationUs, MinLeaderLeaseDurationUs);
 
-        appData->Icb->RegisterSharedControl(ChangeRecordDebugPrint, "DataShardControls.ChangeRecordDebugPrint");
-
-        IcbRegistered = true;
+        EXP_SERVICE_REG_SHARED(*appData->ExpService, DataShardControlsChangeRecordDebugPrint, ChangeRecordDebugPrint);
+        
+        ExpServiceInitialized = true;
     }
 }
 

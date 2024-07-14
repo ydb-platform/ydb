@@ -2,10 +2,11 @@
 
 #include <contrib/libs/tcmalloc/tcmalloc/malloc_extension.h>
 
-#include <ydb/library/actors/prof/tag.h>
 #include <library/cpp/cache/cache.h>
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>
+#include <ydb/core/base/appdata.h>
+#include <ydb/library/actors/prof/tag.h>
 
 #include <ydb/core/mon/mon.h>
 
@@ -491,12 +492,12 @@ class TTcMallocMonitor : public IAllocMonitor {
                 0, MaxPageCacheReleaseRate)
         {}
 
-        void Register(TIntrusivePtr<TControlBoard> icb) {
-            icb->RegisterSharedControl(ProfileSamplingRate, "TCMallocControls.ProfileSamplingRate");
-            icb->RegisterSharedControl(GuardedSamplingRate, "TCMallocControls.GuardedSamplingRate");
-            icb->RegisterSharedControl(MemoryLimit, "TCMallocControls.MemoryLimit");
-            icb->RegisterSharedControl(PageCacheTargetSize, "TCMallocControls.PageCacheTargetSize");
-            icb->RegisterSharedControl(PageCacheReleaseRate, "TCMallocControls.PageCacheReleaseRate");
+        void Register(TIntrusivePtr<TExperimentingService> expService) {
+            EXP_SERVICE_REG_SHARED(*expService, TCMallocControlsProfileSamplingRate, ProfileSamplingRate);
+            EXP_SERVICE_REG_SHARED(*expService, TCMallocControlsGuardedSamplingRate, GuardedSamplingRate);
+            EXP_SERVICE_REG_SHARED(*expService, TCMallocControlsMemoryLimit, MemoryLimit);
+            EXP_SERVICE_REG_SHARED(*expService, TCMallocControlsPageCacheTargetSize, PageCacheTargetSize);
+            EXP_SERVICE_REG_SHARED(*expService, TCMallocControlsPageCacheReleaseRate, PageCacheReleaseRate);
         }
     };
     TControls Controls;
@@ -682,8 +683,8 @@ public:
         mon->RegisterActorPage(indexPage, "fragmentation", "Fragmentation", false, actorSystem, actorId);
     }
 
-    void RegisterControls(TIntrusivePtr<TControlBoard> icb) override {
-        Controls.Register(icb);
+    void RegisterControls(TIntrusivePtr<TExperimentingService> expService) override {
+        Controls.Register(expService);
     }
 
     void Update(TDuration interval) override {

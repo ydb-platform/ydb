@@ -85,19 +85,19 @@ struct TSplitSettings {
         , DisableForceShardSplit(0, 0, 1)
     {}
 
-    void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
-        icb->RegisterSharedControl(SplitMergePartCountLimit,        "SchemeShard_SplitMergePartCountLimit");
-        icb->RegisterSharedControl(FastSplitSizeThreshold,          "SchemeShard_FastSplitSizeThreshold");
-        icb->RegisterSharedControl(FastSplitRowCountThreshold,      "SchemeShard_FastSplitRowCountThreshold");
-        icb->RegisterSharedControl(FastSplitCpuPercentageThreshold, "SchemeShard_FastSplitCpuPercentageThreshold");
-
-        icb->RegisterSharedControl(SplitByLoadEnabled,              "SchemeShard_SplitByLoadEnabled");
-        icb->RegisterSharedControl(SplitByLoadMaxShardsDefault,     "SchemeShard_SplitByLoadMaxShardsDefault");
-        icb->RegisterSharedControl(MergeByLoadMinUptimeSec,         "SchemeShard_MergeByLoadMinUptimeSec");
-        icb->RegisterSharedControl(MergeByLoadMinLowLoadDurationSec,"SchemeShard_MergeByLoadMinLowLoadDurationSec");
-
-        icb->RegisterSharedControl(ForceShardSplitDataSize,         "SchemeShardControls.ForceShardSplitDataSize");
-        icb->RegisterSharedControl(DisableForceShardSplit,          "SchemeShardControls.DisableForceShardSplit");
+    void Register(TIntrusivePtr<NKikimr::TExperimentingService>& expService) {
+        EXP_SERVICE_REG_SHARED(*expService, SchemeShardSplitMergePartCountLimit, SplitMergePartCountLimit);
+        EXP_SERVICE_REG_SHARED(*expService, SchemeShardFastSplitSizeThreshold, FastSplitSizeThreshold);
+        EXP_SERVICE_REG_SHARED(*expService, SchemeShardFastSplitRowCountThreshold, FastSplitRowCountThreshold);
+        EXP_SERVICE_REG_SHARED(*expService, SchemeShardFastSplitCpuPercentageThreshold, FastSplitCpuPercentageThreshold);
+        
+        EXP_SERVICE_REG_SHARED(*expService, SchemeShardSplitByLoadEnabled, SplitByLoadEnabled);
+        EXP_SERVICE_REG_SHARED(*expService, SchemeShardSplitByLoadMaxShardsDefault, SplitByLoadMaxShardsDefault);
+        EXP_SERVICE_REG_SHARED(*expService, SchemeShardMergeByLoadMinUptimeSec, MergeByLoadMinUptimeSec);
+        EXP_SERVICE_REG_SHARED(*expService, SchemeShardMergeByLoadMinLowLoadDurationSec, MergeByLoadMinLowLoadDurationSec);
+        
+        EXP_SERVICE_REG_SHARED(*expService, SchemeShardControlsForceShardSplitDataSize, ForceShardSplitDataSize);
+        EXP_SERVICE_REG_SHARED(*expService, SchemeShardControlsDisableForceShardSplit, DisableForceShardSplit);
     }
 
     TForceShardSplitSettings GetForceShardSplitSettings() const {

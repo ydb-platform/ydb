@@ -26,6 +26,10 @@ public:
         return value;
     }
 
+    inline bool IsDefined() {
+        return bool(Control);
+    }
+
     bool IsTheSame(TControlWrapper another) {
         return Control == another.Control;
     }

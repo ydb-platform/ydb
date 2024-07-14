@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/memobserver.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
 
@@ -31,8 +32,8 @@ namespace NKikimr {
             Y_UNUSED(actorId);
         }
 
-        virtual void RegisterControls(TIntrusivePtr<TControlBoard> icb) {
-            Y_UNUSED(icb);
+        virtual void RegisterControls(TIntrusivePtr<TExperimentingService> expService) {
+            Y_UNUSED(expService);
         }
 
         virtual void Update(TDuration interval) = 0;

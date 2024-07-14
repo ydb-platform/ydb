@@ -121,10 +121,10 @@ struct TSettings {
         , CacheDataAfterCompaction(1, 0, 1)
     {}
 
-    void RegisterControls(TControlBoard& icb) {
-        icb.RegisterSharedControl(BlobWriteGrouppingEnabled, "ColumnShardControls.BlobWriteGrouppingEnabled");
-        icb.RegisterSharedControl(CacheDataAfterIndexing, "ColumnShardControls.CacheDataAfterIndexing");
-        icb.RegisterSharedControl(CacheDataAfterCompaction, "ColumnShardControls.CacheDataAfterCompaction");
+    void RegisterControls(TExperimentingService& expService) {
+        EXP_SERVICE_REG_SHARED(expService, ColumnShardControlsBlobWriteGrouppingEnabled, BlobWriteGrouppingEnabled);
+        EXP_SERVICE_REG_SHARED(expService, ColumnShardControlsCacheDataAfterIndexing, CacheDataAfterIndexing);
+        EXP_SERVICE_REG_SHARED(expService, ColumnShardControlsCacheDataAfterCompaction, CacheDataAfterCompaction);
     }
 };
 

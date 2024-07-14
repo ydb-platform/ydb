@@ -466,8 +466,6 @@ private:
 
     bool SetFinishError(bool ok) {
         OnAfterCall();
-
-            ok ? "true" : "false", this->Context.peer().c_str());
         if (!SkipUpdateCountersOnError) {
             DecRequest();
             Counters_->FinishProcessing(RequestSize, ResponseSize, ok, ResponseStatus,

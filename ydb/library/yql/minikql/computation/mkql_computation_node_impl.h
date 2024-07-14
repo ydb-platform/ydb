@@ -1099,7 +1099,7 @@ public:
     }
 
 protected:
-    [[noreturn]] void ThrowNotSupported(const char* func) const {
+    [[noreturn]] void ThrowNotSupported() const {
 
         THROW yexception() << "Unsupported access";
     }

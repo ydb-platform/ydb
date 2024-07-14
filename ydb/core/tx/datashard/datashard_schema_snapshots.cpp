@@ -20,6 +20,7 @@ TSchemaSnapshotManager::TSchemaSnapshotManager(const TDataShard* self)
 
 void TSchemaSnapshotManager::Reset() {
     Snapshots.clear();
+    References.clear();
 }
 
 bool TSchemaSnapshotManager::Load(NIceDb::TNiceDb& db) {
@@ -79,14 +80,16 @@ const TSchemaSnapshot* TSchemaSnapshotManager::FindSnapshot(const TSchemaSnapsho
     return Snapshots.FindPtr(key);
 }
 
-void TSchemaSnapshotManager::RemoveShapshot(NIceDb::TNiceDb& db, const TSchemaSnapshotKey& key) {
+void TSchemaSnapshotManager::RemoveShapshot(NTable::TDatabase& db, const TSchemaSnapshotKey& key) {
     auto it = Snapshots.find(key);
     if (it == Snapshots.end()) {
         return;
     }
 
     Snapshots.erase(it);
-    PersistRemoveSnapshot(db, key);
+
+    NIceDb::TNiceDb nicedb(db);
+    PersistRemoveSnapshot(nicedb, key);
 }
 
 void TSchemaSnapshotManager::RenameSnapshots(NTable::TDatabase& db,
@@ -117,6 +120,10 @@ void TSchemaSnapshotManager::RenameSnapshots(NTable::TDatabase& db,
 
         it = Snapshots.erase(it);
     }
+}
+
+const TSchemaSnapshotManager::TSnapshots& TSchemaSnapshotManager::GetSnapshots() const {
+    return Snapshots;
 }
 
 bool TSchemaSnapshotManager::AcquireReference(const TSchemaSnapshotKey& key) {
@@ -150,6 +157,15 @@ bool TSchemaSnapshotManager::ReleaseReference(const TSchemaSnapshotKey& key) {
     }
 
     return true;
+}
+
+bool TSchemaSnapshotManager::HasReference(const TSchemaSnapshotKey& key) const {
+    auto refIt = References.find(key);
+    if (refIt != References.end()) {
+        return refIt->second;
+    } else {
+        return false;
+    }
 }
 
 void TSchemaSnapshotManager::PersistAddSnapshot(NIceDb::TNiceDb& db, const TSchemaSnapshotKey& key, const TSchemaSnapshot& snapshot) {

@@ -538,15 +538,16 @@ namespace NActors {
         const TString ConditionText;
     public:
 
-        TEnsureFormattedRecordWriter(const TString& conditionText);
+        TEnsureFormattedRecordWriter(const TString& ) {}
 
         template <class TKey, class TValue>
         TEnsureFormattedRecordWriter& operator()(const TKey& pName, const TValue& pValue) {
-            TBase::Write(pName, pValue);
+            (void)pName;
+            (void)pValue;
             return *this;
         }
 
-        ~TEnsureFormattedRecordWriter() noexcept(false);
+        ~TEnsureFormattedRecordWriter() {};
     };
 }
 
@@ -561,12 +562,17 @@ namespace NActors {
 #endif
 
 #define ACTORS_FORMATTED_LOG(mPriority, mComponent) \
-    do {                                                                                                             \
-    } while (0) /**/
+    if (NActors::TlsActivationContext && !IS_LOG_PRIORITY_ENABLED(mPriority, mComponent));\
+        else NActors::TFormattedRecordWriter(\
+            static_cast<::NActors::NLog::EPriority>(mPriority), static_cast<::NActors::NLog::EComponent>(mComponent)\
+            )("", "")
 
 #define ACTORS_LOG_STREAM(mPriority, mComponent) \
-    do {                                                                                                             \
-    } while (0) /**/
+    if (NActors::TlsActivationContext && !IS_LOG_PRIORITY_ENABLED(mPriority, mComponent));\
+        else NActors::TRecordWriter(\
+            static_cast<::NActors::NLog::EPriority>(mPriority), static_cast<::NActors::NLog::EComponent>(mComponent)\
+            ) << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__ << " :"
+
 
 #define ALS_TRACE(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_TRACE, component)
 #define ALS_DEBUG(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_DEBUG, component)

@@ -394,7 +394,7 @@ public:
     bool IsProcessingRequired() const {
         if (InputStatus != EFetchResult::Finish) return true;
 
-        return HasDataForProcessing;
+        return HasRawDataToExtract || HasDataForProcessing;
     }
 
     bool UpdateAndWait() {
@@ -431,11 +431,6 @@ public:
     }
 
     ETasteResult TasteIt() {
-        if (HasDataForProcessing) {
-            // Tongue not used here.
-            Throat = BufferForKeyAndState.data();
-            return ETasteResult::DataExtractionRequired;
-        }
         if (GetMode() == EOperatingMode::InMemory) {
             bool isNew = InMemoryProcessingState.TasteIt();
             Throat = InMemoryProcessingState.Throat;
@@ -443,6 +438,12 @@ public:
             return isNew ? ETasteResult::Init : ETasteResult::Update;
         }
         if (GetMode() == EOperatingMode::ProcessSpilled) {
+            if (HasRawDataToExtract) {
+                // Tongue not used here.
+                Throat = BufferForKeyAndState.data();
+                HasRawDataToExtract = false;
+                return ETasteResult::DataExtractionRequired;
+            }
             // while restoration we process buckets one by one starting from the first in a queue
             bool isNew = SpilledBuckets.front().InMemoryProcessingState->TasteIt();
             Throat = SpilledBuckets.front().InMemoryProcessingState->Throat;
@@ -685,10 +686,8 @@ private:
                     fields[i] = &(BufferForUsedInputItems[j++]);
                 }
             }*/ 
-
-            Throat = BufferForKeyAndState.data();
             
-            HasDataForProcessing = true;
+            HasRawDataToExtract = true;
             return false;
         }
         bucket.BucketState = TSpilledBucket::EBucketState::InMemory;
@@ -751,6 +750,8 @@ private:
     ui64 NextBucketToSpill = 0;
 
     bool HasDataForProcessing = false;
+
+    bool HasRawDataToExtract = false;
 
     TState InMemoryProcessingState;
     const size_t WideFieldsIndex;

@@ -233,19 +233,19 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
 
             std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();
 
-
-            for ( ui64 i = 0; i < BigTableTuples; i++) {
-                tuple[1] = smallDist(rng);
-                tuple[2] = tuple[1];
-                bigTable.AddTuple(tuple, strVals, strSizes);
-            }
-
             smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
 
             for ( ui64 i = 0; i < SmallTableTuples + 1; i++) {
                 tuple[1] = smallDist(rng);
                 tuple[2] = tuple[1];
                 smallTable.AddTuple(tuple, strVals, strSizes);
+            }
+
+
+            for ( ui64 i = 0; i < BigTableTuples; i++) {
+                tuple[1] = smallDist(rng);
+                tuple[2] = tuple[1];
+                bigTable.AddTuple(tuple, strVals, strSizes);
             }
 
             std::chrono::steady_clock::time_point end03 = std::chrono::steady_clock::now();
@@ -263,19 +263,19 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
 
             begin03 = std::chrono::steady_clock::now();
 
-
-            for ( ui64 i = 0; i < BigTableTuples; i++) {
-                tuple[1] = smallDist(rng);
-                tuple[2] = tuple[1];
-                bigTable.AddTuple(tuple, strVals, strSizes);
-            }
-
             smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
 
             for ( ui64 i = 0; i < SmallTableTuples + 1; i++) {
                 tuple[1] = smallDist(rng);
                 tuple[2] = tuple[1];
                 smallTable.AddTuple(tuple, strVals, strSizes);
+            }
+
+
+            for ( ui64 i = 0; i < BigTableTuples; i++) {
+                tuple[1] = smallDist(rng);
+                tuple[2] = tuple[1];
+                bigTable.AddTuple(tuple, strVals, strSizes);
             }
 
             end03 = std::chrono::steady_clock::now();
@@ -410,18 +410,18 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinAnyTest) {
             std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();
 
 
-            for ( ui64 i = 0; i < BigTableTuples; i++) {
-                tuple[1] = i % SmallTableTuples;
-                tuple[2] = tuple[1];
-                bigTable.AddTuple(tuple, strVals, strSizes);
-            }
-
             smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
 
             for ( ui64 i = 0; i < SmallTableTuples + 1; i++) {
                 tuple[1] = i;
                 tuple[2] = tuple[1];
                 smallTable.AddTuple(tuple, strVals, strSizes);
+            }
+
+            for ( ui64 i = 0; i < BigTableTuples; i++) {
+                tuple[1] = i % SmallTableTuples;
+                tuple[2] = tuple[1];
+                bigTable.AddTuple(tuple, strVals, strSizes);
             }
 
             std::chrono::steady_clock::time_point end03 = std::chrono::steady_clock::now();
@@ -546,18 +546,18 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceSelfJoinTest) {
             std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();
 
 
-            for ( ui64 i = 0; i < BigTableTuples; i++) {
-                tuple[1] = i % SmallTableTuples;
-                tuple[2] = tuple[1];
-                bigTable.AddTuple(tuple, strVals, strSizes);
-            }
-
             smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
 
             for ( ui64 i = 0; i < SmallTableTuples + 1; i++) {
                 tuple[1] = i;
                 tuple[2] = tuple[1];
                 smallTable.AddTuple(tuple, strVals, strSizes);
+            }
+
+            for ( ui64 i = 0; i < BigTableTuples; i++) {
+                tuple[1] = i % SmallTableTuples;
+                tuple[2] = tuple[1];
+                bigTable.AddTuple(tuple, strVals, strSizes);
             }
 
             std::chrono::steady_clock::time_point end03 = std::chrono::steady_clock::now();

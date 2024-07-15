@@ -187,7 +187,7 @@ private:
         //        )
         //    ) <= targetConsumersConsumption
 
-        double coefficient = 0; // TODO
+        auto coefficient = BinarySearchCoefficient(consumers, targetConsumersConsumption);
 
         ui64 resultingConsumersConsumption = 0;
         for (const auto& consumer : consumers) {
@@ -233,7 +233,29 @@ private:
         ctx.Schedule(Interval, new TEvents::TEvWakeup());
     }
 
-    void ApplyLimit(TConsumerState consumer, ui64 limitBytes) {
+    double BinarySearchCoefficient(const TVector<TConsumerState>& consumers, ui64 availableMemory) {
+        static const ui32 BinarySearchIterations = 20;
+
+        double left = 0, right = 1;
+        for (ui32 iteration = 0; iteration < BinarySearchIterations; iteration++) {
+            double middle = (left + right) / 2;
+
+            ui64 value = 0;
+            for (const auto& consumer : consumers) {
+                value += Max(consumer.Consumption, consumer.GetLimit(middle));
+            }
+
+            if (value > availableMemory) {
+                right = middle;
+            } else {
+                left = middle;
+            }
+        }
+
+        return left;
+    }
+
+    void ApplyLimit(TConsumerState consumer, ui64 limitBytes) const {
         // TODO: don't send if queued already?
         switch (consumer.Kind) {
             case EConsumerKind::SharedCache:

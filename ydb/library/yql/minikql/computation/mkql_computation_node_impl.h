@@ -872,226 +872,51 @@ public:
     }
 
 private:
-    bool HasFastListLength() const override {
-        ThrowNotSupported(__func__);
-        return false;
-    }
-
-    ui64 GetListLength() const override {
-        ThrowNotSupported(__func__);
-        return 0;
-    }
-
-    ui64 GetEstimatedListLength() const override {
-        ThrowNotSupported(__func__);
-        return 0;
-    }
-
-    bool HasListItems() const override {
-        ThrowNotSupported(__func__);
-        return false;
-    }
-
-    const NUdf::TOpaqueListRepresentation* GetListRepresentation() const override {
-        return nullptr;
-    }
-
-    NUdf::IBoxedValuePtr ReverseListImpl(const NUdf::IValueBuilder& builder) const override {
-        Y_UNUSED(builder);
-        return nullptr;
-    }
-
-    NUdf::IBoxedValuePtr SkipListImpl(const NUdf::IValueBuilder& builder, ui64 count) const override {
-        Y_UNUSED(builder);
-        Y_UNUSED(count);
-        return nullptr;
-    }
-
-    NUdf::IBoxedValuePtr TakeListImpl(const NUdf::IValueBuilder& builder, ui64 count) const override {
-        Y_UNUSED(builder);
-        Y_UNUSED(count);
-        return nullptr;
-    }
-
-    NUdf::IBoxedValuePtr ToIndexDictImpl(const NUdf::IValueBuilder& builder) const override {
-        Y_UNUSED(builder);
-        return nullptr;
-    }
-
-    ui64 GetDictLength() const override {
-        ThrowNotSupported(__func__);
-        return 0;
-    }
-
-    bool HasDictItems() const override {
-        ThrowNotSupported(__func__);
-        return false;
-    }
-
-    NUdf::TStringRef GetResourceTag() const override {
-        ThrowNotSupported(__func__);
-        return NUdf::TStringRef();
-    }
-
-    void* GetResource() override {
-        ThrowNotSupported(__func__);
-        return nullptr;
-    }
-
-    void Apply(NUdf::IApplyContext& applyCtx) const override {
-        Y_UNUSED(applyCtx);
-    }
-
-    NUdf::TUnboxedValue GetListIterator() const override {
-        ThrowNotSupported(__func__);
-        return {};
-    }
-
-    NUdf::TUnboxedValue GetDictIterator() const override {
-        ThrowNotSupported(__func__);
-        return {};
-    }
-
-    NUdf::TUnboxedValue GetKeysIterator() const override {
-        ThrowNotSupported(__func__);
-        return {};
-    }
-
-    NUdf::TUnboxedValue GetPayloadsIterator() const override {
-        ThrowNotSupported(__func__);
-        return {};
-    }
-
-    bool Contains(const NUdf::TUnboxedValuePod& key) const override {
-        Y_UNUSED(key);
-        ThrowNotSupported(__func__);
-        return false;
-    }
-
-    NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const override {
-        Y_UNUSED(key);
-        ThrowNotSupported(__func__);
-        return NUdf::TUnboxedValuePod();
-    }
-
-    NUdf::TUnboxedValue GetElement(ui32 index) const override {
-        Y_UNUSED(index);
-        ThrowNotSupported(__func__);
-        return {};
-    }
-
-    const NUdf::TUnboxedValue* GetElements() const override {
-        return nullptr;
-    }
-
+    bool HasFastListLength() const override;
+    ui64 GetListLength() const override;
+    ui64 GetEstimatedListLength() const override;
+    bool HasListItems() const override;
+    const NUdf::TOpaqueListRepresentation* GetListRepresentation() const override;
+    NUdf::IBoxedValuePtr ReverseListImpl(const NUdf::IValueBuilder& builder) const override;
+    NUdf::IBoxedValuePtr SkipListImpl(const NUdf::IValueBuilder& builder, ui64 count) const override;
+    NUdf::IBoxedValuePtr TakeListImpl(const NUdf::IValueBuilder& builder, ui64 count) const override;
+    NUdf::IBoxedValuePtr ToIndexDictImpl(const NUdf::IValueBuilder& builder) const override;
+    ui64 GetDictLength() const override;
+    bool HasDictItems() const override;
+    NUdf::TStringRef GetResourceTag() const override;
+    void* GetResource() override;
+    void Apply(NUdf::IApplyContext& applyCtx) const override;
+    NUdf::TUnboxedValue GetListIterator() const override ;
+    NUdf::TUnboxedValue GetDictIterator() const override;
+    NUdf::TUnboxedValue GetKeysIterator() const override;
+    NUdf::TUnboxedValue GetPayloadsIterator() const override;
+    bool Contains(const NUdf::TUnboxedValuePod& key) const override;
+    NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const override;
+    NUdf::TUnboxedValue GetElement(ui32 index) const override ;
+    const NUdf::TUnboxedValue* GetElements() const override;
     NUdf::TUnboxedValue Run(
             const NUdf::IValueBuilder* valueBuilder,
-            const NUdf::TUnboxedValuePod* args) const override
-    {
-        Y_UNUSED(valueBuilder);
-        Y_UNUSED(args);
-        ThrowNotSupported(__func__);
-        return {};
-    }
-
-    bool Skip() override {
-        NUdf::TUnboxedValue stub;
-        return Next(stub);
-    }
-
-    bool Next(NUdf::TUnboxedValue&) override {
-        ThrowNotSupported(__func__);
-        return false;
-    }
-
-    bool NextPair(NUdf::TUnboxedValue&, NUdf::TUnboxedValue&) override {
-        ThrowNotSupported(__func__);
-        return false;
-    }
-
-    ui32 GetVariantIndex() const override {
-        ThrowNotSupported(__func__);
-        return 0;
-    }
-
-    NUdf::TUnboxedValue GetVariantItem() const override {
-        ThrowNotSupported(__func__);
-        return {};
-    }
-
-    NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-        Y_UNUSED(result);
-        ThrowNotSupported(__func__);
-        return NUdf::EFetchStatus::Finish;
-    }
-
-    ui32 GetTraverseCount() const override {
-        ThrowNotSupported(__func__);
-        return 0;
-    }
-
-    NUdf::TUnboxedValue GetTraverseItem(ui32 index) const override {
-        Y_UNUSED(index);
-        ThrowNotSupported(__func__);
-        return {};
-    }
-
-    NUdf::TUnboxedValue Save() const override {
-        ThrowNotSupported(__func__);
-        return NUdf::TUnboxedValue::Zero();
-    }
-
-    void Load(const NUdf::TStringRef& state) override {
-        Y_UNUSED(state);
-        ThrowNotSupported(__func__);
-    }
-
-    bool Load2(const NUdf::TUnboxedValue& state) override {
-        Y_UNUSED(state);
-        ThrowNotSupported(__func__);
-        return false;
-    }
-
-    void Push(const NUdf::TUnboxedValuePod& value) override {
-        Y_UNUSED(value);
-        ThrowNotSupported(__func__);
-    }
-
-    bool IsSortedDict() const override {
-        ThrowNotSupported(__func__);
-        return false;
-    }
-
-    void Unused1() override {
-        ThrowNotSupported(__func__);
-    }
-
-    void Unused2() override {
-        ThrowNotSupported(__func__);
-    }
-
-    void Unused3() override {
-        ThrowNotSupported(__func__);
-    }
-
-    void Unused4() override {
-        ThrowNotSupported(__func__);
-    }
-
-    void Unused5() override {
-        ThrowNotSupported(__func__);
-    }
-
-    void Unused6() override {
-        ThrowNotSupported(__func__);
-    }
-
-    NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* result, ui32 width) override {
-        Y_UNUSED(result);
-        Y_UNUSED(width);
-        ThrowNotSupported(__func__);
-        return NUdf::EFetchStatus::Finish;
-    }
+            const NUdf::TUnboxedValuePod* args) const override;
+    bool Skip() override;
+    bool Next(NUdf::TUnboxedValue&) override;
+    bool NextPair(NUdf::TUnboxedValue&, NUdf::TUnboxedValue&) override;
+    ui32 GetVariantIndex() const override;
+    NUdf::TUnboxedValue GetVariantItem() const override;
+    NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override;
+    ui32 GetTraverseCount() const override;
+    NUdf::TUnboxedValue GetTraverseItem(ui32 index) const override;
+    NUdf::TUnboxedValue Save() const override;
+    void Load(const NUdf::TStringRef& state) override;
+    bool Load2(const NUdf::TUnboxedValue& state) override;
+    void Push(const NUdf::TUnboxedValuePod& value) override;
+    bool IsSortedDict() const override;
+    void Unused1() override;
+    void Unused2() override;
+    void Unused3() override;
+    void Unused4() override;
+    void Unused5() override;
+    void Unused6() override;
+    NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* result, ui32 width) override;
 
 protected:
     [[noreturn]] virtual void ThrowNotSupported(const char* func) const = 0;
@@ -1118,7 +943,7 @@ public:
     }
 
 protected:
-    [[noreturn]] void ThrowNotSupported(const char* func) const override {
+    [[noreturn]] void ThrowNotSupported(const char* func) const final {
         ThrowNotSupportedImplForClass(TypeName(*this), func);
     }
 };

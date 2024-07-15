@@ -1,8 +1,4 @@
 import pytest
-from datetime import datetime
-import time
-from typing import Sequence
-
 
 import yatest.common
 
@@ -11,11 +7,11 @@ from ydb.library.yql.providers.generic.connector.tests.utils.docker_compose impo
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger
 from ydb.library.yql.providers.generic.connector.tests.utils.run.runners import runner_types, configure_runner
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
-import ydb.library.yql.providers.generic.connector.tests.utils.scenario.mysql as scenario
 
 from conftest import docker_compose_dir
 from collection import Collection
 
+import ydb.library.yql.providers.generic.connector.tests.utils.scenario.mysql as scenario
 import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_database as select_missing_database
 import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_table as select_missing_table
 import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_positive_common as select_positive_common

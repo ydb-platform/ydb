@@ -129,9 +129,12 @@ void ThrowOnError(const TStatus& status) {
 }
 
 bool HasCharsInString(const TString& str) {
-    for (auto c : str) {
-        if (std::isalpha(c)) {
-            return true;
+    for(TStringBuf q(str), line; q.ReadLine(line);) {
+        line = line.NextTok("--");
+        for (auto c: line) {
+            if (std::isalpha(c)) {
+                return true;
+            }
         }
     }
     return false;
@@ -370,37 +373,104 @@ bool CompareValueImpl(const T& valResult, TStringBuf vExpected) {
     return valResult == valExpected;
 }
 
+template <class T>
+bool CompareValueImplFloat(const T& valResult, TStringBuf vExpected) {
+    T valExpected;
+    if (!TryFromString<T>(vExpected, valExpected)) {
+        Cerr << "cannot parse expected as " << typeid(valResult).name() << "(" << vExpected << ")" << Endl;
+        return false;
+    }
+    if (valExpected == 0) {
+        return valResult == 0;
+    }
+    const auto ratio = valResult / valExpected;
+    return ratio > 0.9999 && ratio < 1.0001;
+}
+
+bool CompareValueImplDatetime(const TInstant& valResult, TStringBuf vExpected, TDuration unit) {
+    TInstant expected;
+    if (!TInstant::TryParseIso8601(vExpected, expected)) {
+        i64 i;
+        if (!TryFromString(vExpected, i)) {
+            Cerr << "cannot parse expected as " << typeid(valResult).name() << "(" << vExpected << ")" << Endl;
+            return false;
+        }
+        expected = TInstant::Zero() + i * unit;
+    }
+    return valResult == expected;
+}
+
+template<class T>
+bool CompareValueImplDatetime64(const T& valResult, TStringBuf vExpected, TDuration unit) {
+    T valExpected;
+    if (!TryFromString<T>(vExpected, valExpected)) {
+        TInstant expected;
+        if (!TInstant::TryParseIso8601(vExpected, expected)) {
+            Cerr << "cannot parse expected as " << typeid(valResult).name() << "(" << vExpected << ")" << Endl;
+            return false;
+        }
+        valExpected = expected.GetValue() / unit.GetValue();
+    }
+    return valResult == valExpected;
+}
+
 bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected) {
-    const auto& vp = v.GetProto();
-    if (vp.has_bool_value()) {
-        return CompareValueImpl<bool>(vp.bool_value(), vExpected);
+    TValueParser vp(v);
+    TTypeParser tp(v.GetType());
+    if (tp.GetKind() == TTypeParser::ETypeKind::Optional) {
+        if (vp.IsNull()) {
+            return vExpected == "";
+        }
+        vp.OpenOptional();
+        tp.OpenOptional();
     }
-    if (vp.has_int32_value()) {
-        return CompareValueImpl<i32>(vp.int32_value(), vExpected);
+    switch (tp.GetPrimitive()) {
+    case EPrimitiveType::Bool:
+        return CompareValueImpl(vp.GetBool(), vExpected);
+    case EPrimitiveType::Int8:
+        return CompareValueImpl(vp.GetInt8(), vExpected);
+    case EPrimitiveType::Uint8:
+        return CompareValueImpl(vp.GetUint8(), vExpected);
+    case EPrimitiveType::Int16:
+        return CompareValueImpl(vp.GetInt16(), vExpected);
+    case EPrimitiveType::Uint16:
+        return CompareValueImpl(vp.GetUint16(), vExpected);
+    case EPrimitiveType::Int32:
+        return CompareValueImpl(vp.GetInt32(), vExpected);
+    case EPrimitiveType::Uint32:
+        return CompareValueImpl(vp.GetUint32(), vExpected);
+    case EPrimitiveType::Int64:
+        return CompareValueImpl(vp.GetInt64(), vExpected);
+    case EPrimitiveType::Uint64:
+        return CompareValueImpl(vp.GetUint64(), vExpected);
+    case EPrimitiveType::Float:
+        return CompareValueImplFloat(vp.GetFloat(), vExpected);
+    case EPrimitiveType::Double:
+        return CompareValueImplFloat(vp.GetDouble(), vExpected);
+    case EPrimitiveType::Date:
+        return CompareValueImplDatetime(vp.GetDate(), vExpected, TDuration::Days(1));
+    case EPrimitiveType::Datetime:
+        return CompareValueImplDatetime(vp.GetDatetime(), vExpected, TDuration::Seconds(1));
+    case EPrimitiveType::Timestamp:
+        return CompareValueImplDatetime(vp.GetTimestamp(), vExpected, TDuration::MicroSeconds(1));
+    case EPrimitiveType::Interval:
+        return CompareValueImpl(vp.GetInterval(), vExpected);
+    case EPrimitiveType::Date32:
+        return CompareValueImplDatetime64(vp.GetDate32(), vExpected, TDuration::Days(1));
+    case EPrimitiveType::Datetime64:
+        return CompareValueImplDatetime64(vp.GetDatetime64(), vExpected, TDuration::Seconds(1));
+    case EPrimitiveType::Timestamp64:
+        return CompareValueImplDatetime64(vp.GetTimestamp64(), vExpected, TDuration::MicroSeconds(1));
+    case EPrimitiveType::Interval64:
+        return CompareValueImpl(vp.GetInterval64(), vExpected);
+    case EPrimitiveType::String:
+        return CompareValueImpl(vp.GetString(), vExpected);
+    case EPrimitiveType::Utf8:
+        return CompareValueImpl(vp.GetUtf8(), vExpected);
+    default:
+        Cerr << "unexpected type for comparision: " << v.GetProto().DebugString() << Endl;
+        return false;
     }
-    if (vp.has_uint32_value()) {
-        return CompareValueImpl<ui32>(vp.uint32_value(), vExpected);
-    }
-    if (vp.has_int64_value()) {
-        return CompareValueImpl<i64>(vp.int64_value(), vExpected);
-    }
-    if (vp.has_uint64_value()) {
-        return CompareValueImpl<ui64>(vp.uint64_value(), vExpected);
-    }
-    if (vp.has_float_value()) {
-        return CompareValueImpl<float>(vp.float_value(), vExpected);
-    }
-    if (vp.has_double_value()) {
-        return CompareValueImpl<double>(vp.double_value(), vExpected);
-    }
-    if (vp.has_text_value()) {
-        return CompareValueImpl<TString>(TString(vp.text_value().data(), vp.text_value().size()), vExpected);
-    }
-    if (vp.has_null_flag_value()) {
-        return vExpected == "";
-    }
-    Cerr << "unexpected type for comparision: " << vp.DebugString() << Endl;
-    return false;
 }
 
 

@@ -2157,10 +2157,13 @@ private:
             }
         }
 
-        if (EYtWriteMode::Append != mode || appendToSorted) {
-            if (strOpts.contains(EYtSettingType::SecurityTags)) {
-                yqlAttrs[SecurityTagsName] = NYT::NodeFromYsonString(strOpts.at(EYtSettingType::SecurityTags));
-            }
+        NYT::TNode securityTagsNode;
+        if (strOpts.contains(EYtSettingType::SecurityTags)) {
+            securityTagsNode = NYT::NodeFromYsonString(strOpts.at(EYtSettingType::SecurityTags));
+        }
+
+        if (EYtWriteMode::Append != mode && !securityTagsNode.IsUndefined()) {
+            yqlAttrs[SecurityTagsName] = securityTagsNode;
         }
 
         const auto userAttrsIt = strOpts.find(EYtSettingType::UserAttrs);
@@ -2219,7 +2222,7 @@ private:
                                     dstCompressionCodec, dstErasureCodec, dstReplicationFactor, dstMedia, dstPrimaryMedium,
                                     nativeYtTypeCompatibility, publishTx, cluster,
                                     commitCheckpoint, columnGroupsSpec = std::move(columnGroupsSpec),
-                                    strOpts = std::move(strOpts)] (const auto& f) mutable
+                                    securityTagsNode] (const auto& f) mutable
             {
                 if (f.GetValue()) {
                     execCtx->QueryCacheItem.Destroy();
@@ -2254,12 +2257,13 @@ private:
 
                 NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc();
 
+                if (EYtWriteMode::Append == mode && !securityTagsNode.IsUndefined()) {
+                    spec["additional_security_tags"] = securityTagsNode;
+                }
+
                 auto ytDst = TRichYPath(dstPath);
                 if (EYtWriteMode::Append == mode && !appendToSorted) {
                     ytDst.Append(true);
-                    if (strOpts.contains(EYtSettingType::SecurityTags)) {
-                        spec["additional_security_tags"] = NYT::NodeFromYsonString(strOpts[EYtSettingType::SecurityTags]);
-                    }
                 } else {
                     NYT::TNode fullSpecYson;
                     rowSpec->FillCodecNode(fullSpecYson);

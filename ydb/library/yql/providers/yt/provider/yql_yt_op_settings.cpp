@@ -873,6 +873,9 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             if (!EnsureTupleSize(*setting, 2, ctx)) {
                 return false;
             }
+            if (!EnsureAtom(setting->Tail(), ctx)) {
+                return false;
+            }
             NYT::TNode securityTagsNode;
             try {
                 securityTagsNode = NYT::NodeFromYsonString(setting->Tail().Content());
@@ -880,6 +883,18 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
                 ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
                     << "Failed to parse Yson: " << e.what()));
                 return false;
+            }
+            if (!securityTagsNode.IsList()) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
+                    << "Expected YSON list of strings"));
+                return false;
+            }
+            for (const auto &child : securityTagsNode.AsList()) {
+                if (!child.IsString()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
+                        << "Expected YSON list of strings"));
+                    return false;
+                }
             }
             return true;
         }

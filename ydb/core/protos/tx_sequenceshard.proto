@@ -22,7 +22,6 @@ message TEvCreateSequence {
         sint64 NextValue = 1;
         bool NextUsed = 2;
     }
-
     NKikimrProto.TPathID PathId = 1;
     uint64 TxId = 2;
     uint64 TxPartId = 3;

@@ -362,15 +362,47 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             const TTableInfo::TColumn& sourceColumn = source->Columns[colId];
 
             if (col.HasDefaultFromSequence()) {
-                if (sourceColumn.PType.GetTypeId() != NScheme::NTypeIds::Int64
-                        && NPg::PgTypeIdFromTypeDesc(sourceColumn.PType.GetTypeDesc()) != INT8OID) {
-                    TString sequenceType = sourceColumn.PType.GetTypeId() == NScheme::NTypeIds::Pg
-                        ? NPg::PgTypeNameFromTypeDesc(NPg::TypeDescFromPgTypeId(INT8OID))
-                        : NScheme::TypeName(NScheme::NTypeIds::Int64);
-                    errStr = Sprintf(
-                        "Sequence value type '%s' must be equal to the column type '%s'", sequenceType.c_str(),
-                        NScheme::TypeName(sourceColumn.PType, sourceColumn.PTypeMod).c_str());
-                    return nullptr;
+                switch (sourceColumn.PType.GetTypeId()) {
+                    case NScheme::NTypeIds::Int8:
+                    case NScheme::NTypeIds::Int16:
+                    case NScheme::NTypeIds::Int32:
+                    case NScheme::NTypeIds::Int64:
+                    case NScheme::NTypeIds::Uint8:
+                    case NScheme::NTypeIds::Uint16:
+                    case NScheme::NTypeIds::Uint32:
+                    case NScheme::NTypeIds::Uint64:
+                    case NScheme::NTypeIds::Float:
+                    case NScheme::NTypeIds::Double:
+                    case NScheme::NTypeIds::String:
+                    case NScheme::NTypeIds::Utf8:
+                        break;
+                    case NScheme::NTypeIds::Pg: {
+                        switch (NPg::PgTypeIdFromTypeDesc(sourceColumn.PType.GetTypeDesc())) {
+                            case INT2OID:
+                            case INT4OID:
+                            case INT8OID:
+                            case FLOAT4OID:
+                            case FLOAT8OID:
+                                break;
+                            default: {
+                                TString sequenceType = NPg::PgTypeNameFromTypeDesc(NPg::TypeDescFromPgTypeId(INT8OID))
+                                TString columnType = NPg::PgTypeNameFromTypeDesc(sourceColumn.PType.GetTypeDesc());
+                                errStr = Sprintf(
+                                    "Column '%s' is of type %s but default expression is of type %s", colName.c_str(), columnType.c_str(), sequenceType.c_str()
+                                );
+                                return nullptr;
+                            }
+                        }
+                        break;
+                    }
+                    default: {
+                        TString sequenceType = NScheme::TypeName(NScheme::NTypeIds::Int64);
+                        TString columnType = NScheme::TypeName(sourceColumn.PType.GetTypeId());
+                        errStr = Sprintf(
+                            "Column '%s' is of type %s but default expression is of type %s", colName.c_str(), columnType.c_str(), sequenceType.c_str()
+                        );
+                        return nullptr;
+                    }
                 }
             }
 

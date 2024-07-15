@@ -250,6 +250,29 @@ public:
 NKikimrSchemeOp::TSequenceDescription FillSequenceDescription(const NKikimrSchemeOp::TSequenceDescription& descr) {
     NKikimrSchemeOp::TSequenceDescription result = descr;
 
+    if (!result.HasDataType()) {
+        result.SetDataType(NKikimrSchemeOp::TSequenceDescription::BIGINT);
+    }
+
+    i64 dataTypeMaxValue, dataTypeMinValue;
+    switch (result.GetDataType()) {
+        case NKikimrSchemeOp::TSequenceDescription::BIGINT: {
+            dataTypeMaxValue = Max<i64>();
+            dataTypeMinValue = Min<i64>();
+            break;
+        }
+        case NKikimrSchemeOp::TSequenceDescription::INTEGER: {
+            dataTypeMaxValue = Max<i32>();
+            dataTypeMinValue = Min<i32>();
+            break;
+        }
+        case NKikimrSchemeOp::TSequenceDescription::SMALLINT: {
+            dataTypeMaxValue = Max<i16>();
+            dataTypeMinValue = Min<i16>();
+            break;
+        }
+    }
+
     i64 increment = 0;
     if (result.HasIncrement()) {
         increment = result.GetIncrement();
@@ -260,10 +283,10 @@ NKikimrSchemeOp::TSequenceDescription FillSequenceDescription(const NKikimrSchem
     result.SetIncrement(increment);
 
     i64 minValue = 1;
-    i64 maxValue = Max<i64>();
+    i64 maxValue = dataTypeMaxValue;
     if (increment < 0) {
         maxValue = -1;
-        minValue = Min<i64>();
+        minValue = dataTypeMinValue;
     }
 
     if (result.HasMaxValue()) {

@@ -307,6 +307,10 @@ bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKiki
                     }
                     break;
                 }
+                case Ydb::Table::ColumnMeta::kEmptyDefault: {
+                    column->SetEmptyDefault(google::protobuf::NullValue());
+                    break;
+                }
                 default: break;
             }
         }
@@ -455,6 +459,10 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
         case NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence: {
             auto* fromSequence = newColumn->mutable_from_sequence();
             fromSequence->set_name(column.GetDefaultFromSequence());
+            break;
+        }
+        case NKikimrSchemeOp::TColumnDescription::kEmptyDefault: {
+            newColumn->set_empty_default(google::protobuf::NullValue());
             break;
         }
         default: break;
@@ -682,6 +690,10 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
             case Ydb::Table::ColumnMeta::kFromSequence: {
                 auto fromSequence = cd->MutableDefaultFromSequence();
                 *fromSequence = column.from_sequence().name();
+                break;
+            }
+            case Ydb::Table::ColumnMeta::kEmptyDefault: {
+                cd->SetEmptyDefault(google::protobuf::NullValue());
                 break;
             }
             default: break;

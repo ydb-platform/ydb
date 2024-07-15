@@ -853,8 +853,7 @@ protected:
     }
 };
 
-[[noreturn]]
-void ThrowNotSupportedImplForClass(const TString& className, const char *func);
+[[noreturn]] void ThrowNotSupportedImpl(const char *file, int line);
 
 template <typename TDerived, typename TBaseExt = NYql::NUdf::IBoxedValue>
 class TComputationValueBase: public TBaseExt
@@ -873,22 +872,22 @@ public:
 
 private:
     bool HasFastListLength() const override {
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return false;
     }
 
     ui64 GetListLength() const override {
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return 0;
     }
 
     ui64 GetEstimatedListLength() const override {
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return 0;
     }
 
     bool HasListItems() const override {
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return false;
     }
 
@@ -919,22 +918,22 @@ private:
     }
 
     ui64 GetDictLength() const override {
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return 0;
     }
 
     bool HasDictItems() const override {
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return false;
     }
 
     NUdf::TStringRef GetResourceTag() const override {
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return NUdf::TStringRef();
     }
 
     void* GetResource() override {
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return nullptr;
     }
 
@@ -943,40 +942,40 @@ private:
     }
 
     NUdf::TUnboxedValue GetListIterator() const override {
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return {};
     }
 
     NUdf::TUnboxedValue GetDictIterator() const override {
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return {};
     }
 
     NUdf::TUnboxedValue GetKeysIterator() const override {
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return {};
     }
 
     NUdf::TUnboxedValue GetPayloadsIterator() const override {
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return {};
     }
 
     bool Contains(const NUdf::TUnboxedValuePod& key) const override {
         Y_UNUSED(key);
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return false;
     }
 
     NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const override {
         Y_UNUSED(key);
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return NUdf::TUnboxedValuePod();
     }
 
     NUdf::TUnboxedValue GetElement(ui32 index) const override {
         Y_UNUSED(index);
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return {};
     }
 
@@ -990,7 +989,7 @@ private:
     {
         Y_UNUSED(valueBuilder);
         Y_UNUSED(args);
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return {};
     }
 
@@ -1000,96 +999,96 @@ private:
     }
 
     bool Next(NUdf::TUnboxedValue&) override {
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return false;
     }
 
     bool NextPair(NUdf::TUnboxedValue&, NUdf::TUnboxedValue&) override {
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return false;
     }
 
     ui32 GetVariantIndex() const override {
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return 0;
     }
 
     NUdf::TUnboxedValue GetVariantItem() const override {
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return {};
     }
 
     NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
         Y_UNUSED(result);
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return NUdf::EFetchStatus::Finish;
     }
 
     ui32 GetTraverseCount() const override {
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return 0;
     }
 
     NUdf::TUnboxedValue GetTraverseItem(ui32 index) const override {
         Y_UNUSED(index);
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return {};
     }
 
     NUdf::TUnboxedValue Save() const override {
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return NUdf::TUnboxedValue::Zero();
     }
 
     void Load(const NUdf::TStringRef& state) override {
         Y_UNUSED(state);
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
     }
 
     bool Load2(const NUdf::TUnboxedValue& state) override {
         Y_UNUSED(state);
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return false;
     }
 
     void Push(const NUdf::TUnboxedValuePod& value) override {
         Y_UNUSED(value);
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
     }
 
     bool IsSortedDict() const override {
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return false;
     }
 
     void Unused1() override {
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
     }
 
     void Unused2() override {
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
     }
 
     void Unused3() override {
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
     }
 
     void Unused4() override {
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
     }
 
     void Unused5() override {
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
     }
 
     void Unused6() override {
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
     }
 
     NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* result, ui32 width) override {
         Y_UNUSED(result);
         Y_UNUSED(width);
-        ThrowNotSupported();
+        ThrowNotSupported(__FILE__, __LINE__);
         return NUdf::EFetchStatus::Finish;
     }
 
@@ -1099,9 +1098,8 @@ public:
     }
 
 protected:
-    [[noreturn]] void ThrowNotSupported() const {
-
-        THROW yexception() << "Unsupported access";
+    [[noreturn]] void ThrowNotSupported(const char *file, int line) const {
+        ThrowNotSupportedImpl(file, line);
     }
 };
 

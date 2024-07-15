@@ -365,7 +365,7 @@ public:
     private:
         // copypaste to resolve -Woverloaded-virtual
         bool Next(NUdf::TUnboxedValue&) override {
-            this->ThrowNotSupported();
+            this->ThrowNotSupported(__FILE__, __LINE__);;
             return false;
         }
 
@@ -781,7 +781,7 @@ public:
     private:
         // copypaste to resolve -Woverloaded-virtual
         bool Next(NUdf::TUnboxedValue&) override {
-            this->ThrowNotSupported();
+            this->ThrowNotSupported(__FILE__, __LINE__);;
             return false;
         }
 

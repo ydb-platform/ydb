@@ -29,10 +29,10 @@ public:
                 if (Current < End) {
                     switch (Mode) {
                     case EDictItems::Payloads:
-                        this->ThrowNotSupported();
+                        this->ThrowNotSupported(__FILE__, __LINE__);;
                         break;
                     case EDictItems::Keys:
-                        this->ThrowNotSupported();
+                        this->ThrowNotSupported(__FILE__, __LINE__);;
                         break;
                     case EDictItems::Both:
                         key = NUdf::TUnboxedValuePod(ui64(Current));
@@ -57,7 +57,7 @@ public:
                         value = NUdf::TUnboxedValuePod(ui64(Current));
                         break;
                     case EDictItems::Both:
-                        this->ThrowNotSupported();
+                        this->ThrowNotSupported(__FILE__, __LINE__);;
                         break;
                     }
 

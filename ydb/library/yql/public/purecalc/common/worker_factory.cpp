@@ -39,6 +39,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     , UserData_(std::move(options.UserData))
     , LLVMSettings_(std::move(options.LLVMSettings))
     , BlockEngineMode_(options.BlockEngineMode)
+    , ExprOutputStream_(options.ExprOutputStream)
     , CountersProvider_(options.CountersProvider_)
     , NativeYtTypeFlags_(options.NativeYtTypeFlags_)
     , DeterministicTimeProviderSeed_(options.DeterministicTimeProviderSeed_)

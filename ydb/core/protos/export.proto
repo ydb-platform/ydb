@@ -20,6 +20,7 @@ message TExport {
         Ydb.Export.ExportToYtSettings ExportToYtSettings = 5;
         Ydb.Export.ExportToS3Settings ExportToS3Settings = 6;
     }
+    optional string UserSID = 10;
 }
 
 message TCreateExportRequest {

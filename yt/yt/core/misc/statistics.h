@@ -49,11 +49,6 @@ void Serialize(const TSummary& summary, NYson::IYsonConsumer* consumer);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Returns the invalid character if the given path is invalid, otherwise returns |nullopt|.
-std::optional<char> CheckStatisticPath(const NYPath::TYPath& path);
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TStatistics
 {
 public:

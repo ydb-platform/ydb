@@ -99,14 +99,6 @@ TEST(TStatistics, AddSample)
         statistics.Merge(CreateStatistics({{"/key", 5}})),
         std::exception);
 
-    EXPECT_THROW(
-        statistics.AddSample("/invalid.key/subkey", 42),
-        std::exception);
-
-    EXPECT_THROW(
-        statistics.AddSample("/invalid key/subkey", 42),
-        std::exception);
-
     statistics.AddSample("/key/subkey/x", 10);
     EXPECT_EQ(20, GetNumericValue(statistics, "/key/subkey/x"));
 
@@ -115,17 +107,6 @@ TEST(TStatistics, AddSample)
 
     EXPECT_EQ(20, GetNumericValue(deserializedStatistics, "/key/subkey/x"));
     EXPECT_EQ(42, GetNumericValue(deserializedStatistics, "/key/sub"));
-}
-
-TEST(TStatistics, InvalidNames) {
-    // For the statistic merge to work correctly, symbols with code points
-    // less than '/' must be forbidden. See YT-22118.
-    TStatistics statistics;
-    for (char c = std::numeric_limits<char>::min(); c < '/'; ++c) {
-        EXPECT_THROW(
-            statistics.AddSample("/key/abc" + TString{c} + "def", 5),
-            std::exception);
-    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

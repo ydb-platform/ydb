@@ -65,11 +65,6 @@ std::pair<typename TSummaryMap::iterator, bool> CheckedEmplaceStatistic(
     const NYPath::TYPath& path,
     Ts&&... args)
 {
-    if (auto c = CheckStatisticPath(path)) {
-        THROW_ERROR_EXCEPTION("Invalid character in a statistic path")
-            << TErrorAttribute("path", path)
-            << TErrorAttribute("invalid_character", *c);
-    }
     auto [conflictType, hint] = IsCompatibleStatistic(existingStatistics, path);
     if (conflictType == EStatisticPathConflictType::Exists) {
         return {hint, false};

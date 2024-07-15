@@ -91,27 +91,6 @@ bool TSummary::operator ==(const TSummary& other) const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace {
-
-bool IsAllowedComponentChar(char c) noexcept
-{
-    return IsAsciiAlnum(c) || c == '_';
-}
-
-} // namespace
-
-std::optional<char> CheckStatisticPath(const NYPath::TYPath& path)
-{
-    for (auto c : path) {
-        if (!IsAllowedComponentChar(c) && c != '/') {
-            return c;
-        }
-    }
-    return {};
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 TSummary& TStatistics::GetSummary(const NYPath::TYPath& path)
 {
     auto [iterator, _] = CheckedEmplaceStatistic(Data_, path, TSummary());

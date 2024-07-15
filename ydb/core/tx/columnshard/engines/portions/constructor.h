@@ -276,7 +276,9 @@ public:
             blobIdxs.emplace(i.GetBlobRange().GetBlobIdxVerified());
         }
         for (auto&& i : Indexes) {
-            blobIdxs.emplace(i.GetBlobRange().GetBlobIdxVerified());
+            if (i.HasBlobRange()) {
+                blobIdxs.emplace(i.GetBlobRangeVerified().GetBlobIdxVerified());
+            }
         }
         if (BlobIds.size()) {
             AFL_VERIFY(BlobIds.size() == blobIdxs.size());

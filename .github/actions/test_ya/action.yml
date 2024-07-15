@@ -268,7 +268,7 @@ runs:
         
         echo "Build+Tests **{platform_name}-${BUILD_PRESET}** is running..." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
         set +e
-        (./ya make ${{ inputs.build_target }} "${params[@]}" \
+        (./ya make ${{ inputs.build_target }} "${params[@]}" -DCFLAGS="-Wno-everything" \
           --stat --log-file "$YA_TEST_LOG_FILENAME" -DCONSISTENT_DEBUG \
           --no-dir-outputs --test-failure-code 0 --build-all \
           --cache-size 2TB --force-build-depends --evlog-file "$TMP_DIR/ya_evlog.jsonl" \

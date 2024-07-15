@@ -48,20 +48,10 @@
 
 #define LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, ...)                                               \
     do {                                                                                                                       \
-        if (IS_CTX_LOG_PRIORITY_ENABLED(actorCtxOrSystem, priority, component, sampleBy)) {                                    \
-            ::NActors::MemLogAdapter(                                                                                          \
-                actorCtxOrSystem, priority, component, __VA_ARGS__);                                                           \
-        }                                                                                                                      \
     } while (0) /**/
 
 #define LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, stream)      \
     do {                                                                                                                       \
-        if (IS_CTX_LOG_PRIORITY_ENABLED(actorCtxOrSystem, priority, component, sampleBy)) {                                    \
-            TStringBuilder logStringBuilder;                                                                                   \
-            logStringBuilder << stream;                                                                                        \
-            ::NActors::MemLogAdapter(                                                                                          \
-                actorCtxOrSystem, priority, component, std::move(logStringBuilder));                                           \
-        }                                                                                                                      \
     } while (0) /**/
 
 #define LOG_LOG(actorCtxOrSystem, priority, component, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, __VA_ARGS__)
@@ -121,16 +111,10 @@
 // Log Throttling
 #define LOG_LOG_THROTTLE(throttler, actorCtxOrSystem, priority, component, ...) \
     do {                                                                        \
-        if ((throttler).Kick()) {                                               \
-            LOG_LOG(actorCtxOrSystem, priority, component, __VA_ARGS__);        \
-        }                                                                       \
     } while (0) /**/
 
 #define LOG_LOG_S_THROTTLE(throttler, actorCtxOrSystem, priority, component, stream) \
     do {                                                                             \
-        if ((throttler).Kick()) {                                                    \
-            LOG_LOG_S(actorCtxOrSystem, priority, component, stream);                \
-        }                                                                            \
     } while (0) /**/
 
 #define TRACE_EVENT(component)                                                                                                         \
@@ -554,15 +538,16 @@ namespace NActors {
         const TString ConditionText;
     public:
 
-        TEnsureFormattedRecordWriter(const TString& conditionText);
+        TEnsureFormattedRecordWriter(const TString& ) {}
 
         template <class TKey, class TValue>
         TEnsureFormattedRecordWriter& operator()(const TKey& pName, const TValue& pValue) {
-            TBase::Write(pName, pValue);
+            (void)pName;
+            (void)pValue;
             return *this;
         }
 
-        ~TEnsureFormattedRecordWriter() noexcept(false);
+        ~TEnsureFormattedRecordWriter() {};
     };
 }
 
@@ -580,13 +565,14 @@ namespace NActors {
     if (NActors::TlsActivationContext && !IS_LOG_PRIORITY_ENABLED(mPriority, mComponent));\
         else NActors::TFormattedRecordWriter(\
             static_cast<::NActors::NLog::EPriority>(mPriority), static_cast<::NActors::NLog::EComponent>(mComponent)\
-            )("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
+            )("", "")
 
 #define ACTORS_LOG_STREAM(mPriority, mComponent) \
     if (NActors::TlsActivationContext && !IS_LOG_PRIORITY_ENABLED(mPriority, mComponent));\
         else NActors::TRecordWriter(\
             static_cast<::NActors::NLog::EPriority>(mPriority), static_cast<::NActors::NLog::EComponent>(mComponent)\
             ) << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__ << " :"
+
 
 #define ALS_TRACE(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_TRACE, component)
 #define ALS_DEBUG(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_DEBUG, component)

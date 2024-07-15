@@ -1,6 +1,9 @@
 #include "portion_storage.h"
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/minsketch/count_min_sketch.h>
 #include <ydb/core/tx/columnshard/engines/scheme/statistics/protos/data.pb.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>
 
 namespace NKikimr::NOlap::NStatistics {
 
@@ -47,6 +50,9 @@ NKikimrColumnShardStatisticsProto::TScalar TPortionStorage::ScalarToProto(const 
             ts->SetUnit(static_cast<const arrow::TimestampType&>(*scalar.type).unit());
             break;
         }
+        case arrow::Type::FIXED_SIZE_BINARY:
+            result.SetBinary(static_cast<const arrow::FixedSizeBinaryScalar&>(scalar).value->ToString());
+            break;
         default:
             AFL_VERIFY(false)("problem", "incorrect type for statistics usage")("type", scalar.type->ToString());
     }
@@ -79,6 +85,11 @@ std::shared_ptr<arrow::Scalar> TPortionStorage::ProtoToScalar(const NKikimrColum
     } else if (proto.HasTimestamp()) {
         arrow::TimeUnit::type unit = arrow::TimeUnit::type(proto.GetTimestamp().GetUnit());
         return std::make_shared<arrow::TimestampScalar>(proto.GetTimestamp().GetValue(), std::make_shared<arrow::TimestampType>(unit));
+    } else if (proto.HasBinary()) {
+        auto buffer = std::make_shared<arrow::Buffer>(std::string(proto.GetBinary()));
+        size_t countMinSketchSize = sizeof(TCountMinSketch) + 256 * 32 * sizeof(ui32);
+        AFL_VERIFY(proto.GetBinary().Size() == countMinSketchSize);
+        return std::make_shared<arrow::FixedSizeBinaryScalar>(buffer, std::make_shared<arrow::FixedSizeBinaryType>(countMinSketchSize));
     }
     AFL_VERIFY(false)("problem", "incorrect statistics proto")("proto", proto.DebugString());
     return nullptr;
@@ -95,7 +106,7 @@ void TPortionStorage::AddScalar(const std::shared_ptr<arrow::Scalar>& scalar) {
     AFL_VERIFY(type == arrow::Type::BOOL ||
         type == arrow::Type::UINT8 || type == arrow::Type::UINT16 || type == arrow::Type::UINT32 || type == arrow::Type::UINT64 ||
         type == arrow::Type::INT8 || type == arrow::Type::INT16 || type == arrow::Type::INT32 || type == arrow::Type::INT64 ||
-        type == arrow::Type::DOUBLE || type == arrow::Type::TIMESTAMP || type == arrow::Type::FLOAT)
+        type == arrow::Type::DOUBLE || type == arrow::Type::TIMESTAMP || type == arrow::Type::FLOAT || type == arrow::Type::FIXED_SIZE_BINARY)
         ("problem", "incorrect_stat_type")("incoming", scalar->type->ToString());
     Data.emplace_back(scalar);
 }

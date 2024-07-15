@@ -7,7 +7,8 @@ namespace NKikimr::NOlap::NStatistics {
 enum class EType {
     Undefined /* "undefined" */,
     Max /* "max" */,
-    Variability /* "variability" */
+    Variability /* "variability" */,
+    CountMinSketch /* "cms" */
 };
 
 class TIdentifier {

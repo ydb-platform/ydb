@@ -133,16 +133,19 @@ struct TCombinerNodes {
     }
 
     void ExtractValues(TComputationContext& ctx, NUdf::TUnboxedValue** values, NUdf::TUnboxedValue* keys) const {
-        for (size_t i = 0U; i < ItemNodes.size(); ++i) {
+        size_t actualExtracted = 0;
+        for (ui32 i = 0U; i < ItemNodes.size(); ++i) {
             if (values[i]) {
-                keys[i] = std::move(*values[i]);
+                keys[i] = *(values[i]);
+                ++actualExtracted;
             }
         }
+        std::cerr << "MISHA actually extracted " << actualExtracted << std::endl;
     }
 
     void ExtractValues(TComputationContext& ctx, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue** values) const {
         for (size_t i = 0, j = 0; i != ItemNodes.size(); ++i) {
-            if (values[i]) {
+            if (IsInputItemNodeUsed(i)) {
                 values[i] = &keys[j++];
             } else {
                 values[i] = nullptr;
@@ -369,13 +372,12 @@ public:
         Skip
     };
     TSpillingSupportState(
-        TMemoryUsageInfo* memInfo, size_t wideFieldsIndex,
+        TMemoryUsageInfo* memInfo,
         const TMultiType* usedInputItemType, const TMultiType* keyAndStateType, ui32 keyWidth, size_t itemNodesSize,
         const THashFunc& hash, const TEqualsFunc& equal, bool allowSpilling, TComputationContext& ctx
     )
         : TBase(memInfo)
         , InMemoryProcessingState(memInfo, keyWidth, keyAndStateType->GetElementsCount() - keyWidth, hash, equal)
-        , WideFieldsIndex(wideFieldsIndex)
         , UsedInputItemType(usedInputItemType)
         , KeyAndStateType(keyAndStateType)
         , KeyWidth(keyWidth)
@@ -420,6 +422,15 @@ public:
                 if (!HasMemoryForProcessing() && InputStatus != EFetchResult::Finish && TryToReduceMemoryAndWait()) return true;
 
                 if (BufferForUsedInputItems.size()) {
+                    size_t actualSize = 0;
+                    for (size_t i = 0; i < BufferForUsedInputItems.size(); ++i) {
+                        if (!BufferForUsedInputItems[i].HasValue()) break;
+                        ++actualSize;
+                    }
+                    BufferForUsedInputItems.resize(actualSize);
+
+                    std::cerr << "MISHA actual size: " << actualSize << std::endl;
+
                     auto& bucket = SpilledBuckets[BufferForUsedInputItemsBucketId];
                     if (bucket.AsyncWriteOperation.has_value()) return true;
 
@@ -456,6 +467,7 @@ public:
             bool isNew = SpilledBuckets.front().InMemoryProcessingState->TasteIt();
             Throat = SpilledBuckets.front().InMemoryProcessingState->Throat;
             Tongue = SpilledBuckets.front().InMemoryProcessingState->Tongue;
+            BufferForUsedInputItems.resize(0);
             return isNew ? ETasteResult::Init : ETasteResult::Update;
         }
 
@@ -639,7 +651,6 @@ private:
         if (HasDataForProcessing) {
             Tongue = bucket.InMemoryProcessingState->Tongue;
             Throat = bucket.InMemoryProcessingState->Throat;
-            BufferForUsedInputItems.resize(0);
             return false;
         }
         //recover spilled state
@@ -677,6 +688,8 @@ private:
                     fields[i] = &(BufferForUsedInputItems[j++]);
                 }
             }*/ 
+
+            Tongue = nullptr;
             
             HasRawDataToExtract = true;
             return false;
@@ -745,7 +758,6 @@ private:
     bool HasRawDataToExtract = false;
 
     TState InMemoryProcessingState;
-    const size_t WideFieldsIndex;
     const TMultiType* const UsedInputItemType;
     const TMultiType* const KeyAndStateType;
     const size_t KeyWidth;
@@ -1285,7 +1297,8 @@ public:
                 }
 
                 if (ptr->IsProcessingRequired()) {
-                    Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
+                    if (ptr->Tongue)
+                        Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
 
                     switch(ptr->TasteIt()) {
                         case TSpillingSupportState::ETasteResult::Init:
@@ -1302,8 +1315,6 @@ public:
                             break;
                         case TSpillingSupportState::ETasteResult::DataExtractionRequired:
                             std::cerr << "MISHA: DataExtractionRequired" << std::endl;
-                            for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i)
-                                fields[i] = Nodes.GetUsedInputItemNodePtrOrNull(ctx, i);
                             Nodes.ExtractValues(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Throat), fields);
                             break;
 
@@ -1586,7 +1597,7 @@ public:
 #endif
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
-        state = ctx.HolderFactory.Create<TSpillingSupportState>(WideFieldsIndex,
+        state = ctx.HolderFactory.Create<TSpillingSupportState>(
             UsedInputItemType, KeyAndStateType,
             Nodes.KeyNodes.size(),
             Nodes.ItemNodes.size(),

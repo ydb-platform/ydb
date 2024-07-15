@@ -19,7 +19,7 @@ public:
     TScanAggregations(const TString& moduleId)
         : TBase(moduleId)
         , ResultsReady(std::make_shared<NOlap::TMemoryAggregation>(moduleId, "InFlight/Results/Ready"))
-        , RequestedResourcesMemory(std::make_shared<NOlap::TMemoryAggregation>(moduleId, "InFlight/RequestedResources/Bytes"))
+        , RequestedResourcesMemory(std::make_shared<NOlap::TMemoryAggregation>(moduleId, "InFlight/Resources/Requested"))
         , ScanDuration(TBase::GetValueAutoAggregationsClient("ScanDuration"))
         , BlobsWaitingDuration(TBase::GetValueAutoAggregationsClient("BlobsWaitingDuration"))
     {

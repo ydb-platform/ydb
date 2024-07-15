@@ -33,6 +33,6 @@ SRCS(
     ../ut_ycsb.cpp
 )
 
-REQUIREMENTS(ram:32)
+REQUIREMENTS(ram:6)
 
 END()

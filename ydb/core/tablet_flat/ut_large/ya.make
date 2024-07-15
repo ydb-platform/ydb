@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/core/tablet_flat)
 
-REQUIREMENTS(ram:32)
+REQUIREMENTS(ram:6)
 
 IF (WITH_VALGRIND)
     TIMEOUT(2400)

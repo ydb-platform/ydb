@@ -18,7 +18,7 @@ IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     TAG(ya:fat)
     REQUIREMENTS(
-        ram:32
+        ram:6
         cpu:4
     )
     SPLIT_FACTOR(20)

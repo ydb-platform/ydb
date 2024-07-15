@@ -36,6 +36,6 @@ SRCS(
     datashard_ut_incremental_backup.cpp
 )
 
-REQUIREMENTS(ram:32)
+REQUIREMENTS(ram:6)
 
 END()

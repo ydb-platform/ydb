@@ -11,7 +11,7 @@ TIMEOUT(600)
 
 REQUIREMENTS(
     cpu:4
-    ram:32
+    ram:6
 )
 SIZE(MEDIUM)
 

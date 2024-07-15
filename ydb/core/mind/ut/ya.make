@@ -9,7 +9,7 @@ IF (SANITIZER_TYPE  == "thread" OR WITH_VALGRIND)
     SPLIT_FACTOR(80)
     REQUIREMENTS(
         cpu:4
-        ram:32
+        ram:6
     )
 ELSE()
     SPLIT_FACTOR(80)

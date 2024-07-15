@@ -33,6 +33,6 @@ SRCS(
     range_treap_ut.cpp
 )
 
-REQUIREMENTS(ram:32)
+REQUIREMENTS(ram:6)
 
 END()

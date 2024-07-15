@@ -4,7 +4,7 @@ UNITTEST()
     TIMEOUT(600)
 
     REQUIREMENTS(
-        ram:32
+        ram:6
     )
 
     SRCS(

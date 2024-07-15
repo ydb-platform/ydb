@@ -18,7 +18,7 @@ ENDIF()
 
 REQUIREMENTS(
     cpu:4
-    ram:32
+    ram:6
 )
 
 DEPENDS(

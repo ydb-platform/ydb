@@ -33,6 +33,6 @@ SRCS(
     datashard_ut_minstep.cpp
 )
 
-REQUIREMENTS(ram:32)
+REQUIREMENTS(ram:6)
 
 END()

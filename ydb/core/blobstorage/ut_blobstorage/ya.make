@@ -52,7 +52,7 @@ PEERDIR(
     ydb/core/blobstorage/vdisk/scrub
 )
 
-REQUIREMENTS(ram:32)
+REQUIREMENTS(ram:6)
 
 END()
 

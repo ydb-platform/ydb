@@ -33,6 +33,6 @@ SRCS(
     datashard_ut_object_storage_listing.cpp
 )
 
-REQUIREMENTS(ram:32)
+REQUIREMENTS(ram:6)
 
 END()

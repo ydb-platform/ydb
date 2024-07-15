@@ -34,6 +34,6 @@ SRCS(
     datashard_ut_sequence.cpp
 )
 
-REQUIREMENTS(ram:32)
+REQUIREMENTS(ram:6)
 
 END()

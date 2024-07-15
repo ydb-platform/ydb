@@ -11,7 +11,7 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-REQUIREMENTS(ram:32)
+REQUIREMENTS(ram:6)
 
 OWNER(g:yql)
 

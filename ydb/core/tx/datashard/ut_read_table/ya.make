@@ -33,6 +33,6 @@ SRCS(
     datashard_ut_read_table.cpp
 )
 
-REQUIREMENTS(ram:32)
+REQUIREMENTS(ram:6)
 
 END()

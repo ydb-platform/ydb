@@ -24,8 +24,8 @@ PEERDIR(
 )
 
 REQUIREMENTS(
-    ram:32
-    ram:32
+    ram:6
+    ram:6
     ram_disk:1
 )
 
@@ -40,6 +40,6 @@ IF (OS_DARWIN)
     TAG(ya:fat ya:force_sandbox ya:exotic_platform)
 ENDIF()
 
-REQUIREMENTS(ram:32)
+REQUIREMENTS(ram:6)
 
 END()

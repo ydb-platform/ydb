@@ -36,6 +36,6 @@ SRCS(
     datashard_ut_change_exchange.cpp
 )
 
-REQUIREMENTS(ram:32)
+REQUIREMENTS(ram:6)
 
 END()

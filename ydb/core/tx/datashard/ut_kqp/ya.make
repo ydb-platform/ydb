@@ -34,6 +34,6 @@ SRCS(
     datashard_ut_kqp_stream_lookup.cpp
 )
 
-REQUIREMENTS(ram:32)
+REQUIREMENTS(ram:6)
 
 END()

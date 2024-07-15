@@ -38,7 +38,7 @@ PEERDIR(
 NO_CHECK_IMPORTS()
 
 REQUIREMENTS(
-    ram:32
+    ram:6
 )
 
 IF (SANITIZER_TYPE == "memory")

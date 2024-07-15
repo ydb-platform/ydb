@@ -9,7 +9,7 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-REQUIREMENTS(ram:32)
+REQUIREMENTS(ram:6)
 
 SRCS(
     packed_tuple_ut.cpp

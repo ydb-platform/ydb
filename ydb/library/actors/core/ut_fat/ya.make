@@ -8,7 +8,7 @@ IF (SANITIZER_TYPE)
     TAG(ya:fat)
     SPLIT_FACTOR(20)
     REQUIREMENTS(
-        ram:32
+        ram:6
     )
 ELSE()
     SIZE(LARGE)

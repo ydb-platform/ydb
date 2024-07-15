@@ -45,6 +45,7 @@ int Main(int argc, const char *argv[])
     opts.AddLongOption("pt", "use PG syntax for test query").NoArgument();
     opts.AddLongOption("udfs-dir", "directory with UDFs").StoreResult(&udfsDir).DefaultValue("");
     opts.AddLongOption("llvm-settings", "LLVM settings").StoreResult(&LLVMSettings).DefaultValue("");
+    opts.AddLongOption("print-expr", "print rebuild AST before execution").NoArgument();
     opts.SetFreeArgsMax(0);
     TOptsParseResult res(&opts, argc, argv);
 
@@ -52,6 +53,11 @@ int Main(int argc, const char *argv[])
     factoryOptions.SetUDFsDir(udfsDir);
     factoryOptions.SetLLVMSettings(LLVMSettings);
     factoryOptions.SetBlockEngineSettings(blockEngineSettings);
+
+    if (res.Has("print-expr")) {
+        factoryOptions.SetExprOutputStream(&Cout);
+    }
+
     auto factory = MakeProgramFactory(factoryOptions);
 
     NYT::TNode members{NYT::TNode::CreateList()};

@@ -40,9 +40,19 @@ bool SplitDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, u
 bool SplitTimestamp(ui64 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec, ui32& usec);
 bool SplitInterval(i64 value, bool& sign, ui32& day, ui32& hour, ui32& min, ui32& sec, ui32& usec);
 
-void FullSplitDate32(i32 date, i32& year, ui32& month, ui32& day,
+void SplitDate32(i32 date, i32& year, ui32& month, ui32& day,
         ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek);
-void FullSplitTzDate32(i32 date, i32& year, ui32& month, ui32& day,
+void SplitTzDate32(i32 date, i32& year, ui32& month, ui32& day,
+        ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId);
+
+void SplitDatetime64(i64 value, i32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec,
+        ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek);
+void SplitTzDatetime64(i64 value, i32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec,
+        ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId);
+
+void SplitTimestamp64(i64 value, i32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec, ui32& usec,
+        ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek);
+void SplitTzTimestamp64(i64 value, i32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec, ui32& usec,
         ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId);
 
 bool SplitTzDate(ui16 value, ui32& year, ui32& month, ui32& day, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId);

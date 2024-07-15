@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
         }
     }
 
-    Y_UNIT_TEST(FullSplitDate16vs32) {
+    Y_UNIT_TEST(SplitDate16vs32) {
         for (ui16 date = 0; date < NUdf::MAX_DATE; ++date) {
             ui32 year16, month16, day16, dayOfYear16, weekOfYear16, weekOfYearIso8601_16, dayOfWeek16;
             SplitDate(date, year16, month16, day16);
@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             i32 year;
             ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
 
-            FullSplitDate32(date, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
+            SplitDate32(date, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
             UNIT_ASSERT_VALUES_EQUAL(year16, year);
             UNIT_ASSERT_VALUES_EQUAL(month16, month);
             UNIT_ASSERT_VALUES_EQUAL(day16, day);
@@ -120,15 +120,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
     */
     }
 
-    Y_UNIT_TEST(FullSplitTzDate32_Bissau) {
+    Y_UNIT_TEST(SplitTzDate32_Bissau) {
             i32 year;
             ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
             ui16 tzId = 11;
 
             // TODO failed due to historical ofssets
-            FullSplitTzDate32(NYql::NUdf::MIN_DATE32, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
+            SplitTzDate32(NYql::NUdf::MIN_DATE32, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
 
-            FullSplitTzDate32(NYql::NUdf::MAX_DATE32, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
+            SplitTzDate32(NYql::NUdf::MAX_DATE32, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
             UNIT_ASSERT_VALUES_EQUAL(NYql::NUdf::MAX_YEAR32 - 1, year);
             UNIT_ASSERT_VALUES_EQUAL(12, month);
             UNIT_ASSERT_VALUES_EQUAL(31, day);
@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(52, weekOfYearIso8601);
 
             // -4713-11-23
-            FullSplitTzDate32(DATETIME_MIN_JULIAN - UNIX_EPOCH_JDATE, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
+            SplitTzDate32(DATETIME_MIN_JULIAN - UNIX_EPOCH_JDATE, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
             UNIT_ASSERT_VALUES_EQUAL(JULIAN_MINYEAR - 1, year);
             UNIT_ASSERT_VALUES_EQUAL(JULIAN_MINMONTH, month);
             UNIT_ASSERT_VALUES_EQUAL(JULIAN_MINDAY - 1, day);
@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(47, weekOfYearIso8601);
 
             // 0001-01-01
-            FullSplitTzDate32(-719162, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
+            SplitTzDate32(-719162, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
             UNIT_ASSERT_VALUES_EQUAL(-1, year);
             UNIT_ASSERT_VALUES_EQUAL(12, month);
             UNIT_ASSERT_VALUES_EQUAL(31, day);
@@ -157,7 +157,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(53, weekOfYear);
             UNIT_ASSERT_VALUES_EQUAL(52, weekOfYearIso8601);
 
-            FullSplitTzDate32(0, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
+            SplitTzDate32(0, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
             UNIT_ASSERT_VALUES_EQUAL(1969, year);
             UNIT_ASSERT_VALUES_EQUAL(12, month);
             UNIT_ASSERT_VALUES_EQUAL(31, day);
@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(53, weekOfYear);
             UNIT_ASSERT_VALUES_EQUAL(1, weekOfYearIso8601);
 
-            FullSplitTzDate32(-1, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
+            SplitTzDate32(-1, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
             UNIT_ASSERT_VALUES_EQUAL(1969, year);
             UNIT_ASSERT_VALUES_EQUAL(12, month);
             UNIT_ASSERT_VALUES_EQUAL(30, day);
@@ -176,12 +176,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(1, weekOfYearIso8601);
     }
 
-    Y_UNIT_TEST(FullSplitTzDate32_Zero) {
+    Y_UNIT_TEST(SplitTzDate32_Zero) {
             i32 year;
             ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
             ui16 tzId = 0;
 
-            FullSplitTzDate32(NYql::NUdf::MIN_DATE32, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
+            SplitTzDate32(NYql::NUdf::MIN_DATE32, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
             UNIT_ASSERT_VALUES_EQUAL(NYql::NUdf::MIN_YEAR32, year);
             UNIT_ASSERT_VALUES_EQUAL(1, month);
             UNIT_ASSERT_VALUES_EQUAL(1, day);
@@ -190,7 +190,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(1, weekOfYear);
             UNIT_ASSERT_VALUES_EQUAL(52, weekOfYearIso8601);
 
-            FullSplitTzDate32(NYql::NUdf::MAX_DATE32, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
+            SplitTzDate32(NYql::NUdf::MAX_DATE32, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
             UNIT_ASSERT_VALUES_EQUAL(NYql::NUdf::MAX_YEAR32 - 1, year);
             UNIT_ASSERT_VALUES_EQUAL(12, month);
             UNIT_ASSERT_VALUES_EQUAL(31, day);
@@ -200,7 +200,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(52, weekOfYearIso8601);
 
             // -4713-11-24
-            FullSplitTzDate32(DATETIME_MIN_JULIAN - UNIX_EPOCH_JDATE, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
+            SplitTzDate32(DATETIME_MIN_JULIAN - UNIX_EPOCH_JDATE, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
             UNIT_ASSERT_VALUES_EQUAL(JULIAN_MINYEAR - 1, year);
             UNIT_ASSERT_VALUES_EQUAL(JULIAN_MINMONTH, month);
             UNIT_ASSERT_VALUES_EQUAL(JULIAN_MINDAY, day);
@@ -210,7 +210,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(48, weekOfYearIso8601);
 
             // 0001-01-01
-            FullSplitTzDate32(-719162, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
+            SplitTzDate32(-719162, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
             UNIT_ASSERT_VALUES_EQUAL(1, year);
             UNIT_ASSERT_VALUES_EQUAL(1, month);
             UNIT_ASSERT_VALUES_EQUAL(1, day);
@@ -219,7 +219,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(1, weekOfYear);
             UNIT_ASSERT_VALUES_EQUAL(1, weekOfYearIso8601);
 
-            FullSplitTzDate32(0, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
+            SplitTzDate32(0, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
             UNIT_ASSERT_VALUES_EQUAL(1970, year);
             UNIT_ASSERT_VALUES_EQUAL(1, month);
             UNIT_ASSERT_VALUES_EQUAL(1, day);
@@ -228,7 +228,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(1, weekOfYear);
             UNIT_ASSERT_VALUES_EQUAL(1, weekOfYearIso8601);
 
-            FullSplitTzDate32(-1, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
+            SplitTzDate32(-1, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
             UNIT_ASSERT_VALUES_EQUAL(1969, year);
             UNIT_ASSERT_VALUES_EQUAL(12, month);
             UNIT_ASSERT_VALUES_EQUAL(31, day);
@@ -238,12 +238,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(1, weekOfYearIso8601);
     }
 
-    Y_UNIT_TEST(FullSplitTzDate32_Moscow) {
+    Y_UNIT_TEST(SplitTzDate32_Moscow) {
             i32 year;
             ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
             ui16 tzId = 1;
 
-            FullSplitTzDate32(NYql::NUdf::MIN_DATE32, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
+            SplitTzDate32(NYql::NUdf::MIN_DATE32, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
             UNIT_ASSERT_VALUES_EQUAL(NYql::NUdf::MIN_YEAR32, year);
             UNIT_ASSERT_VALUES_EQUAL(1, month);
             UNIT_ASSERT_VALUES_EQUAL(1, day);
@@ -252,7 +252,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(1, weekOfYear);
             UNIT_ASSERT_VALUES_EQUAL(52, weekOfYearIso8601);
 
-            FullSplitTzDate32(NYql::NUdf::MAX_DATE32, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
+            SplitTzDate32(NYql::NUdf::MAX_DATE32, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
             UNIT_ASSERT_VALUES_EQUAL(NYql::NUdf::MAX_YEAR32 - 1, year);
             UNIT_ASSERT_VALUES_EQUAL(12, month);
             UNIT_ASSERT_VALUES_EQUAL(31, day);
@@ -262,7 +262,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(52, weekOfYearIso8601);
 
             // -4713-11-24
-            FullSplitTzDate32(DATETIME_MIN_JULIAN - UNIX_EPOCH_JDATE, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
+            SplitTzDate32(DATETIME_MIN_JULIAN - UNIX_EPOCH_JDATE, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
             UNIT_ASSERT_VALUES_EQUAL(JULIAN_MINYEAR - 1, year);
             UNIT_ASSERT_VALUES_EQUAL(JULIAN_MINMONTH, month);
             UNIT_ASSERT_VALUES_EQUAL(JULIAN_MINDAY, day);
@@ -272,7 +272,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(48, weekOfYearIso8601);
 
             // 0001-01-01
-            FullSplitTzDate32(-719162, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
+            SplitTzDate32(-719162, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
             UNIT_ASSERT_VALUES_EQUAL(1, year);
             UNIT_ASSERT_VALUES_EQUAL(1, month);
             UNIT_ASSERT_VALUES_EQUAL(1, day);
@@ -281,7 +281,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(1, weekOfYear);
             UNIT_ASSERT_VALUES_EQUAL(1, weekOfYearIso8601);
 
-            FullSplitTzDate32(0, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
+            SplitTzDate32(0, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
             UNIT_ASSERT_VALUES_EQUAL(1970, year);
             UNIT_ASSERT_VALUES_EQUAL(1, month);
             UNIT_ASSERT_VALUES_EQUAL(1, day);
@@ -290,7 +290,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(1, weekOfYear);
             UNIT_ASSERT_VALUES_EQUAL(1, weekOfYearIso8601);
 
-            FullSplitTzDate32(-1, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
+            SplitTzDate32(-1, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
             UNIT_ASSERT_VALUES_EQUAL(1969, year);
             UNIT_ASSERT_VALUES_EQUAL(12, month);
             UNIT_ASSERT_VALUES_EQUAL(31, day);
@@ -300,11 +300,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(1, weekOfYearIso8601);
     }
 
-    Y_UNIT_TEST(FullSplitDate32CornerCases) {
+    Y_UNIT_TEST(SplitDate32CornerCases) {
             i32 year;
             ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
 
-            FullSplitDate32(NYql::NUdf::MIN_DATE32, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
+            SplitDate32(NYql::NUdf::MIN_DATE32, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
             UNIT_ASSERT_VALUES_EQUAL(NYql::NUdf::MIN_YEAR32, year);
             UNIT_ASSERT_VALUES_EQUAL(1, month);
             UNIT_ASSERT_VALUES_EQUAL(1, day);
@@ -313,7 +313,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(1, weekOfYear);
             UNIT_ASSERT_VALUES_EQUAL(52, weekOfYearIso8601);
 
-            FullSplitDate32(NYql::NUdf::MAX_DATE32, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
+            SplitDate32(NYql::NUdf::MAX_DATE32, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
             UNIT_ASSERT_VALUES_EQUAL(NYql::NUdf::MAX_YEAR32 - 1, year);
             UNIT_ASSERT_VALUES_EQUAL(12, month);
             UNIT_ASSERT_VALUES_EQUAL(31, day);
@@ -323,7 +323,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(52, weekOfYearIso8601);
 
             // -4713-11-24
-            FullSplitDate32(DATETIME_MIN_JULIAN - UNIX_EPOCH_JDATE, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
+            SplitDate32(DATETIME_MIN_JULIAN - UNIX_EPOCH_JDATE, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
             UNIT_ASSERT_VALUES_EQUAL(JULIAN_MINYEAR - 1, year);
             UNIT_ASSERT_VALUES_EQUAL(JULIAN_MINMONTH, month);
             UNIT_ASSERT_VALUES_EQUAL(JULIAN_MINDAY, day);
@@ -333,7 +333,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(48, weekOfYearIso8601);
 
             // 0001-01-01
-            FullSplitDate32(-719162, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
+            SplitDate32(-719162, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
             UNIT_ASSERT_VALUES_EQUAL(1, year);
             UNIT_ASSERT_VALUES_EQUAL(1, month);
             UNIT_ASSERT_VALUES_EQUAL(1, day);
@@ -342,7 +342,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(1, weekOfYear);
             UNIT_ASSERT_VALUES_EQUAL(1, weekOfYearIso8601);
 
-            FullSplitDate32(0, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
+            SplitDate32(0, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
             UNIT_ASSERT_VALUES_EQUAL(1970, year);
             UNIT_ASSERT_VALUES_EQUAL(1, month);
             UNIT_ASSERT_VALUES_EQUAL(1, day);
@@ -351,7 +351,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_VALUES_EQUAL(1, weekOfYear);
             UNIT_ASSERT_VALUES_EQUAL(1, weekOfYearIso8601);
 
-            FullSplitDate32(-1, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
+            SplitDate32(-1, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
             UNIT_ASSERT_VALUES_EQUAL(1969, year);
             UNIT_ASSERT_VALUES_EQUAL(12, month);
             UNIT_ASSERT_VALUES_EQUAL(31, day);
@@ -389,7 +389,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             ui32 dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
             i32 y;
             ui32 m, d;
-            FullSplitDate32(date32, y, m, d, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
+            SplitDate32(date32, y, m, d, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
             UNIT_ASSERT_VALUES_EQUAL(dayOfWeek % 7, j2day(value));
 
             if (date32 == NUdf::MAX_DATE32) {

@@ -734,6 +734,23 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     }
 
     template <>
+    TUnboxedValue TSplit<TDatetime64>::Run(
+        const IValueBuilder*,
+        const TUnboxedValuePod* args) const
+    {
+        try {
+            EMPTY_RESULT_ON_EMPTY_ARG(0);
+
+            TUnboxedValuePod result(0);
+            auto& storage = Reference64(result);
+            storage.FromDatetime64(args[0].Get<i64>());
+            return result;
+        } catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+        }
+    }
+
+    template <>
     TUnboxedValue TSplit<TTimestamp>::Run(
         const IValueBuilder* valueBuilder,
         const TUnboxedValuePod* args) const
@@ -745,6 +762,23 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
             TUnboxedValuePod result(0);
             auto& storage = Reference(result);
             storage.FromTimestamp(builder, args[0].Get<ui64>());
+            return result;
+        } catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+        }
+    }
+
+    template <>
+    TUnboxedValue TSplit<TTimestamp64>::Run(
+        const IValueBuilder*,
+        const TUnboxedValuePod* args) const
+    {
+        try {
+            EMPTY_RESULT_ON_EMPTY_ARG(0);
+
+            TUnboxedValuePod result(0);
+            auto& storage = Reference64(result);
+            storage.FromTimestamp64(args[0].Get<i64>());
             return result;
         } catch (const std::exception& e) {
             UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());

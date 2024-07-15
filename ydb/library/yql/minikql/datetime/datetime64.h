@@ -41,6 +41,12 @@ struct TTM64Storage {
     void FromDate32(i32 value);
     void FromTzDate32(i32 value, ui16 tzId);
 
+    void FromDatetime64(i64 value);
+    void FromTzDatetime64(i64 value, ui16 tzId);
+
+    void FromTimestamp64(i64 value);
+    void FromTzTimestamp64(i64 value, ui16 tzId);
+
     i32 ToDate32() const; // TODO add arg "local"?
 };
 

@@ -82,7 +82,7 @@ public:
 
     void Bootstrap();
 
-    static constexpr char ActorName[] = "YQ_RD_COORDINATOR";
+    static constexpr char ActorName[] = "YQ_LEADER_EL";
 
 
     void Handle(NFq::TEvents::TEvSchemaCreated::TPtr& ev);
@@ -98,7 +98,6 @@ public:
         hFunc(TEvPrivate::TEvCreateSemaphoreResult, Handle);
         hFunc(TEvPrivate::TEvAcquireSemaphoreResult, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, Handle);
-
     })
 
 private:

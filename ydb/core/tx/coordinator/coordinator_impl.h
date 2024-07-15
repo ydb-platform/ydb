@@ -573,7 +573,7 @@ private:
         size_t RetryAttempts = 0;
     };
 
-    bool ExprServiceInitialized = false;
+    bool ExpServiceInitialized = false;
     TControlWrapper EnableLeaderLeases;
     TControlWrapper MinLeaderLeaseDurationUs;
     TControlWrapper VolatilePlanLeaseMs;

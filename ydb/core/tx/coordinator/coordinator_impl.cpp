@@ -503,12 +503,12 @@ void TTxCoordinator::SendViaSession(const TActorId& sessionId, const TActorId& t
 }
 
 void TTxCoordinator::ExpServiceInitialize() {
-    if (!ExprServiceInitialized) {
+    if (!ExpServiceInitialized) {
         EXP_SERVICE_REG_SHARED(*AppData()->ExpService, CoordinatorControlsEnableLeaderLeases, EnableLeaderLeases);
         EXP_SERVICE_REG_SHARED(*AppData()->ExpService, CoordinatorControlsMinLeaderLeaseDurationUs, MinLeaderLeaseDurationUs);
         EXP_SERVICE_REG_SHARED(*AppData()->ExpService, CoordinatorControlsVolatilePlanLeaseMs, VolatilePlanLeaseMs);
         EXP_SERVICE_REG_SHARED(*AppData()->ExpService, CoordinatorControlsPlanAheadTimeShiftMs, PlanAheadTimeShiftMs);
-        ExprServiceInitialized = true;
+        ExpServiceInitialized = true;
     }
 }
 

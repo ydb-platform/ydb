@@ -134,13 +134,19 @@ struct TCombinerNodes {
 
     void ExtractValues(TComputationContext& ctx, NUdf::TUnboxedValue** values, NUdf::TUnboxedValue* keys) const {
         for (size_t i = 0U; i < ItemNodes.size(); ++i) {
-            keys[i] = std::move(*(values[i]));
+            if (values[i]) {
+                keys[i] = std::move(*values[i]);
+            }
         }
     }
 
     void ExtractValues(TComputationContext& ctx, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue** values) const {
-        for (size_t i = 0U; i < ItemNodes.size(); ++i) {
-            values[i] = &keys[i];
+        for (size_t i = 0, j = 0; i != ItemNodes.size(); ++i) {
+            if (values[i]) {
+                values[i] = &keys[j++];
+            } else {
+                values[i] = nullptr;
+            }
         }
     }
 
@@ -498,25 +504,6 @@ private:
         BufferForKeyAndState.resize(0);
     }
 
-    // Copies data from WideFields to local and tries to spill it using suitable bucket.
-    // if the bucket is already busy, then the buffer will wait for the next iteration.
-    void TryToSpillRawData(TSpilledBucket& bucket, size_t bucketId) {
-        auto **fields = Ctx.WideFields.data() + WideFieldsIndex;
-        MKQL_ENSURE(BufferForUsedInputItems.empty(), "Internal logic error");
-
-        for (size_t i = 0; i < ItemNodesSize; ++i) {
-            if (fields[i]) {
-                BufferForUsedInputItems.push_back(*fields[i]);
-            }
-        }
-        if (bucket.AsyncWriteOperation.has_value()) {
-            BufferForUsedInputItemsBucketId = bucketId;
-            return;
-        }
-        bucket.AsyncWriteOperation = bucket.SpilledData->WriteWideItem(BufferForUsedInputItems);
-        BufferForUsedInputItems.resize(0);
-    }
-
     bool FlushSpillingBuffersAndWait() {
         UpdateSpillingBuckets();
 
@@ -652,6 +639,7 @@ private:
         if (HasDataForProcessing) {
             Tongue = bucket.InMemoryProcessingState->Tongue;
             Throat = bucket.InMemoryProcessingState->Throat;
+            BufferForUsedInputItems.resize(0);
             return false;
         }
         //recover spilled state
@@ -767,7 +755,7 @@ private:
     bool RecoverState; //sub mode for ProcessSpilledData
 
     TAsyncReadOperation AsyncReadOperation = std::nullopt;
-    static constexpr size_t SpilledBucketCount = 128;
+    static constexpr size_t SpilledBucketCount = 1;
     std::deque<TSpilledBucket> SpilledBuckets;
     ui64 BufferForUsedInputItemsBucketId;
     TUnboxedValueVector BufferForUsedInputItems;
@@ -1314,6 +1302,8 @@ public:
                             break;
                         case TSpillingSupportState::ETasteResult::DataExtractionRequired:
                             std::cerr << "MISHA: DataExtractionRequired" << std::endl;
+                            for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i)
+                                fields[i] = Nodes.GetUsedInputItemNodePtrOrNull(ctx, i);
                             Nodes.ExtractValues(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Throat), fields);
                             break;
 

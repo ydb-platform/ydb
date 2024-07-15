@@ -856,19 +856,19 @@ protected:
 [[noreturn]]
 void ThrowNotSupportedImplForClass(const TString& className, const char *func);
 
-template <typename TDerived, typename TBaseExt = NYql::NUdf::IBoxedValue>
-class TComputationValueBase: public TBaseExt
+template <typename TBaseExt = NYql::NUdf::IBoxedValue>
+class TComputationValueBaseNotSupportedStub: public TBaseExt
 {
 private:
     using TBase = TBaseExt;
 public:
     template <typename... Args>
-    TComputationValueBase(Args&&... args)
+    TComputationValueBaseNotSupportedStub(Args&&... args)
         : TBase(std::forward<Args>(args)...)
     {
     }
 
-    ~TComputationValueBase() {
+    ~TComputationValueBaseNotSupportedStub() {
     }
 
 private:
@@ -1093,13 +1093,32 @@ private:
         return NUdf::EFetchStatus::Finish;
     }
 
+protected:
+    [[noreturn]] virtual void ThrowNotSupported(const char* func) const = 0;
+};
+
+
+template <typename TDerived, typename TBaseExt = NYql::NUdf::IBoxedValue>
+class TComputationValueBase: public TComputationValueBaseNotSupportedStub<TBaseExt>
+{
+private:
+    using TBase = TComputationValueBaseNotSupportedStub<TBaseExt>;
 public:
+    template <typename... Args>
+    TComputationValueBase(Args&&... args)
+        : TBase(std::forward<Args>(args)...)
+    {
+    }
+
+    ~TComputationValueBase() {
+    }
+
     TString DebugString() const {
         return TypeName<TDerived>();
     }
 
 protected:
-    [[noreturn]] void ThrowNotSupported(const char* func) const {
+    [[noreturn]] void ThrowNotSupported(const char* func) const override {
         ThrowNotSupportedImplForClass(TypeName(*this), func);
     }
 };

@@ -6,7 +6,7 @@
 
 {% include [x](../_includes/select/combining_queries.md) %}
 
-## Supported constructs in SELECT
+## Clauses supported in SELECT
 
 * [FROM](from.md)
 * [FROM AS_TABLE](from_as_table.md)

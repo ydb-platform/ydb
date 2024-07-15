@@ -361,9 +361,10 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         bool table2HasKeyStringColumns = (JoinTable2->NumberOfKeyStringColumns != 0);
         bool table1HasKeyIColumns = (JoinTable1->NumberOfKeyIColumns != 0);
         bool table2HasKeyIColumns = (JoinTable2->NumberOfKeyIColumns != 0);
+        bool swapTables = tuplesNum2 > tuplesNum1;
 
 
-        if (tuplesNum2 > tuplesNum1) {
+        if (swapTables) {
             std::swap(bucket1, bucket2);
             std::swap(headerSize1, headerSize2);
             std::swap(nullsSize1, nullsSize2);
@@ -505,12 +506,8 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
 
                 tuplesFound++;
                 JoinTuplesIds joinIds;
-                joinIds.id1 = tuple1Idx;
-                joinIds.id2 = tuple2Idx;
-                if (JoinTable2->TableBucketsStats[bucket].TuplesNum > JoinTable1->TableBucketsStats[bucket].TuplesNum)
-                {
-                    std::swap(joinIds.id1, joinIds.id2);
-                }
+                joinIds.id1 = swapTables ? tuple2Idx : tuple1Idx;
+                joinIds.id2 = swapTables ? tuple1Idx : tuple2Idx;
                 joinResults.emplace_back(joinIds);
             }
         }

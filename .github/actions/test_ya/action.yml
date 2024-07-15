@@ -198,16 +198,16 @@ runs:
             params+=(--build "debug")
             ;;
           relwithdebinfo)
-            params+=(--build "relwithdebinfo")
+            params+=(--build "relwithdebinfo" -DUSE_EAT_MY_DATA)
             ;;
           release)  
-            params+=(--build "release")
+            params+=(--build "release" -DUSE_EAT_MY_DATA)
             ;;
           release-clang14)
             params+=(--build "release")
             params+=(--target-platform="CLANG14-LINUX-X86_64")
             params+=(-DLLD_VERSION=16)
-            params+=(-DSTRIP)
+            params+=(-DSTRIP -DUSE_EAT_MY_DATA)
             ;;
           release-asan)
             params+=(

@@ -34,7 +34,6 @@ private:
     const TActorId ParentTablet;
     const ui32 Partition;
     const NKikimrPQ::TOffloadConfig Config;
-    const TPathId DstPathId;
 
     mutable TMaybe<TString> LogPrefix;
     TActorId Worker;
@@ -60,14 +59,27 @@ public:
         : ParentTablet(parentTablet)
         , Partition(partition)
         , Config(config)
-        , DstPathId(PathIdFromPathId(config.GetIncrementalBackup().GetDstPathId()))
     {}
+
+    auto CreateReaderFactory() {
+        return [=]() -> IActor* {
+            return NBackup::NImpl::CreateLocalPartitionReader(ParentTablet, Partition);
+        };
+    }
+
+    auto CreateWriterFactory() {
+        return [=]() -> IActor* {
+            return NBackup::NImpl::CreateLocalTableWriter(
+                    PathIdFromPathId(Config.GetIncrementalBackup().GetDstPathId()));
+        };
+    }
 
     void Bootstrap() {
         auto* workerActor = CreateWorker(
             SelfId(),
-            [=]() -> IActor* { return NBackup::NImpl::CreateLocalPartitionReader(ParentTablet, Partition); },
-            [=]() -> IActor* { return NBackup::NImpl::CreateLocalTableWriter(DstPathId); });
+            CreateReaderFactory(),
+            CreateWriterFactory());
+
         Worker = TActivationContext::Register(workerActor);
 
         Become(&TOffloadActor::StateWork);

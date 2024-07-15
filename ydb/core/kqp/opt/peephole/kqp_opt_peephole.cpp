@@ -215,6 +215,39 @@ private:
     const TKikimrConfiguration::TPtr Config;
 };
 
+// Sort stages in topological order by their inputs, so that we optimize the ones without inputs first.
+TVector<TDqPhyStage> TopSortStages(const TDqPhyStageList& stages) {
+    TVector<TDqPhyStage> topSortedStages;
+    topSortedStages.reserve(stages.Size());
+    std::function<void(const TDqPhyStage&)> topSort;
+    THashSet<ui64 /*uniqueId*/> visitedStages;
+
+    // Assume there is no cycles.
+    topSort = [&](const TDqPhyStage& stage) {
+        if (visitedStages.contains(stage.Ref().UniqueId())) {
+            return;
+        }
+
+        for (const auto& input : stage.Inputs()) {
+            if (auto connection = input.Maybe<TDqConnection>()) {
+                // NOTE: somehow `Output()` is actually an input.
+                if (auto phyStage = connection.Cast().Output().Stage().Maybe<TDqPhyStage>()) {
+                    topSort(phyStage.Cast());
+                }
+            }
+        }
+
+        visitedStages.insert(stage.Ref().UniqueId());
+        topSortedStages.push_back(stage);
+    };
+
+    for (const auto& stage : stages) {
+        topSort(stage);
+    }
+
+    return topSortedStages;
+}
+
 // TODO: copy-paste from https://github.com/ydb-platform/ydb/blob/122f053354c5df4fc559bf06fe0302f92d813032/ydb/library/yql/dq/opt/dq_opt_build.cpp#L444
 bool IsCompatibleWithBlocks(TPositionHandle pos, const TStructExprType& type, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
     TVector<const TTypeAnnotationNode*> types;
@@ -300,40 +333,10 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
     IGraphTransformer& typeAnnTransformer, TTypeAnnotationContext& typesCtx, THashSet<ui64>& optimizedStages,
     TKikimrConfiguration::TPtr config, bool withFinalStageRules, TSet<TString> disabledOpts)
 {
-    // Sort stages in topological order by their inputs, so that we optimize the ones without inputs first.
-    TVector<TDqPhyStage> topSortedStages;
-    topSortedStages.reserve(tx.Stages().Size());
-    {
-        std::function<void(const TDqPhyStage&)> topSort;
-        THashSet<ui64 /*uniqueId*/> visitedStages;
-
-        // Assume there is no cycles.
-        topSort = [&](const TDqPhyStage& stage) {
-            if (visitedStages.contains(stage.Ref().UniqueId())) {
-                return;
-            }
-
-            for (const auto& input : stage.Inputs()) {
-                if (auto connection = input.Maybe<TDqConnection>()) {
-                    // NOTE: somehow `Output()` is actually an input.
-                    if (auto phyStage = connection.Cast().Output().Stage().Maybe<TDqPhyStage>()) {
-                        topSort(phyStage.Cast());
-                    }
-                }
-            }
-
-            visitedStages.insert(stage.Ref().UniqueId());
-            topSortedStages.push_back(stage);
-        };
-
-        for (const auto& stage : tx.Stages()) {
-            topSort(stage);
-        }
-    }
-
     THashMap<ui64 /*stage uid*/, TKqpProgram> programs;
     THashMap<TString, TKqpParamBinding> nonDetParamBindings;
 
+    const auto topSortedStages = TopSortStages(tx.Stages());
     for (const auto& stage : topSortedStages) {
         YQL_ENSURE(!optimizedStages.contains(stage.Ref().UniqueId()));
 
@@ -349,7 +352,6 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
 
             YQL_ENSURE(stage.Inputs().Size() == stage.Program().Args().Size());
 
-            bool needRebuild = false;
             for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
                 auto oldArg = stage.Program().Args().Arg(i);
                 auto newArg = TCoArgument(ctx.NewArgument(oldArg.Pos(), oldArg.Name()));
@@ -359,8 +361,6 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                 if (auto connection = stage.Inputs().Item(i).Maybe<TDqConnection>(); connection &&
                     CanPropagateWideBlockThroughChannel(connection.Cast().Output(), programs, TDqStageSettings::Parse(stage), ctx, typesCtx))
                 {
-                    needRebuild = true;
-
                     TExprNode::TPtr newArgNode = ctx.Builder(oldArg.Pos())
                         .Callable("FromFlow")
                             .Callable(0, "WideFromBlocks")
@@ -412,12 +412,11 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                 }
             }
 
-            if (needRebuild) {
-                lambda = Build<TCoLambda>(ctx, lambda.Pos())
-                    .Args(newArgs)
-                    .Body(ctx.ReplaceNodes(stage.Program().Body().Ptr(), argsMap))
-                .Done();
-            }
+            // Rebuild lambda with new arguments.
+            lambda = Build<TCoLambda>(ctx, lambda.Pos())
+                .Args(newArgs)
+                .Body(ctx.ReplaceNodes(stage.Program().Body().Ptr(), argsMap))
+            .Done();
         } else {
             for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
                 auto oldArg = stage.Program().Args().Arg(i);

@@ -167,6 +167,11 @@ int TTestChannel::GetInflightRequestCount()
     return 0;
 }
 
+IMemoryUsageTrackerPtr TTestChannel::GetChannelMemoryTracker()
+{
+    return GetNullMemoryUsageTracker();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TTestBus::TTestBus(TString address)

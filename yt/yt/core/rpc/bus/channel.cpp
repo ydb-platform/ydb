@@ -150,6 +150,11 @@ public:
         return requestCount;
     }
 
+    IMemoryUsageTrackerPtr GetChannelMemoryTracker() override
+    {
+        return MemoryUsageTracker_;
+    }
+
 private:
     class TSession;
     using TSessionPtr = TIntrusivePtr<TSession>;

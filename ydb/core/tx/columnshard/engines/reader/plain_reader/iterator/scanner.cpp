@@ -97,6 +97,11 @@ TConclusionStatus TScanHead::Start() {
 TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<TSpecialReadContext>& context)
     : Context(context)
 {
+    
+    if (HasAppData() && AppDataVerified().ColumnShardConfig.HasMaxInFlightMemoryOnRequest()) {
+        MaxInFlightMemory = AppDataVerified().ColumnShardConfig.GetMaxInFlightMemoryOnRequest();
+    }
+
     if (!HasAppData() || !AppDataVerified().ColumnShardConfig.HasMaxInFlightIntervalsOnRequest()) {
         MaxInFlight = 256;
     } else {
@@ -239,7 +244,7 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
     if (AbortFlag) {
         return false;
     }
-    while (BorderPoints.size() && (FetchingIntervals.size() < InFlightLimit || BorderPoints.begin()->second.GetStartSources().empty())) {
+    while (BorderPoints.size() && ((FetchingIntervals.size() < InFlightLimit && Context->GetCommonContext()->GetCounters().GetRequestedMemoryBytes() < MaxInFlightMemory) || BorderPoints.begin()->second.GetStartSources().empty())) {
         auto firstBorderPointInfo = std::move(BorderPoints.begin()->second);
         CurrentState.OnStartPoint(firstBorderPointInfo);
 

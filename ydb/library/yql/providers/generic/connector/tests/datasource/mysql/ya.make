@@ -3,14 +3,14 @@ PY3TEST()
 NO_CHECK_IMPORTS()
 
 DATA(
-    arcadia/ydb/library/yql/providers/generic/connector/tests/datasource/ydb/docker-compose.yml
+    arcadia/ydb/library/yql/providers/generic/connector/tests/datasource/mysql/docker-compose.yml
 )
 
 DATA(
     arcadia/ydb/library/yql/providers/generic/connector/tests/fq-connector-go
 )
 
-ENV(COMPOSE_PROJECT_NAME=ydb)
+ENV(COMPOSE_PROJECT_NAME=mysql)
 
 IF (AUTOCHECK)
     # YQ-3351: enabling python style checks only for opensource
@@ -51,9 +51,10 @@ IF (OPENSOURCE)
 ENDIF()
 
 TEST_SRCS(
-    select_positive.py
     collection.py
     conftest.py
+    select_datetime.py
+    select_positive.py
     test.py
 )
 

@@ -374,17 +374,13 @@ bool CompareValueImpl(const T& valResult, TStringBuf vExpected) {
 }
 
 template <class T>
-bool CompareValueImplFloat(const T& valResult, TStringBuf vExpected) {
+bool CompareValueImplFloat(const T& valResult, TStringBuf vExpected, const double floatPrecesion) {
     T valExpected;
     if (!TryFromString<T>(vExpected, valExpected)) {
         Cerr << "cannot parse expected as " << typeid(valResult).name() << "(" << vExpected << ")" << Endl;
         return false;
     }
-    if (valExpected == 0) {
-        return valResult == 0;
-    }
-    const auto ratio = valResult / valExpected;
-    return ratio > 0.9999 && ratio < 1.0001;
+    return valResult > (1 - floatPrecesion) * valExpected && valResult < (1 + floatPrecesion) * valExpected;
 }
 
 bool CompareValueImplDatetime(const TInstant& valResult, TStringBuf vExpected, TDuration unit) {
@@ -414,7 +410,7 @@ bool CompareValueImplDatetime64(const T& valResult, TStringBuf vExpected, TDurat
     return valResult == valExpected;
 }
 
-bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected) {
+bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected, double floatPrecession) {
     TValueParser vp(v);
     TTypeParser tp(v.GetType());
     if (tp.GetKind() == TTypeParser::ETypeKind::Optional) {
@@ -444,9 +440,9 @@ bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected) {
     case EPrimitiveType::Uint64:
         return CompareValueImpl(vp.GetUint64(), vExpected);
     case EPrimitiveType::Float:
-        return CompareValueImplFloat(vp.GetFloat(), vExpected);
+        return CompareValueImplFloat(vp.GetFloat(), vExpected, floatPrecession);
     case EPrimitiveType::Double:
-        return CompareValueImplFloat(vp.GetDouble(), vExpected);
+        return CompareValueImplFloat(vp.GetDouble(), vExpected, floatPrecession);
     case EPrimitiveType::Date:
         return CompareValueImplDatetime(vp.GetDate(), vExpected, TDuration::Days(1));
     case EPrimitiveType::Datetime:
@@ -475,6 +471,7 @@ bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected) {
 
 
 bool TQueryResultInfo::IsExpected(std::string_view expected) const {
+    constexpr double floatPrecesion = 0.0001;
     if (expected.empty()) {
         return true;
     }
@@ -522,7 +519,7 @@ bool TQueryResultInfo::IsExpected(std::string_view expected) const {
                 return false;
             }
             TStringBuf cItem = splitter.Consume();
-            if (!CompareValue(resultValue, cItem)) {
+            if (!CompareValue(resultValue, cItem, floatPrecesion)) {
                 Cerr << "has diff: " << resultValue.GetProto().DebugString() << ";EXPECTED:" << cItem << Endl;
                 return false;
             }

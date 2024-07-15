@@ -856,11 +856,11 @@ protected:
 [[noreturn]]
 void ThrowNotSupportedImplForClass(const TString& className, const char *func);
 
-template <typename TDerived, typename TBaseExt = NYql::NUdf::IBoxedValue>
-class TComputationValueBase: public TBaseExt
+template <typename TDerived>
+class TComputationValueBase: public NYql::NUdf::IBoxedValue
 {
 private:
-    using TBase = TBaseExt;
+    using TBase = NYql::NUdf::IBoxedValue;
 public:
     template <typename... Args>
     TComputationValueBase(Args&&... args)
@@ -1104,11 +1104,11 @@ protected:
     }
 };
 
-template <typename TDerived, typename TBaseExt, EMemorySubPool MemoryPool>
-class TComputationValueImpl: public TComputationValueBase<TDerived, TBaseExt>,
+template <typename TDerived, EMemorySubPool MemoryPool>
+class TComputationValueImpl: public TComputationValueBase<TDerived>,
     public TWithMiniKQLAlloc<MemoryPool> {
 private:
-    using TBase = TComputationValueBase<TDerived, TBaseExt>;
+    using TBase = TComputationValueBase<TDerived>;
 protected:
     inline TMemoryUsageInfo* GetMemInfo() const {
 #ifndef NDEBUG
@@ -1144,18 +1144,18 @@ private:
 #endif
 };
 
-template <typename TDerived, typename TBaseExt = NUdf::IBoxedValue>
-class TTemporaryComputationValue: public TComputationValueImpl<TDerived, TBaseExt, EMemorySubPool::Temporary> {
+template <typename TDerived>
+class TTemporaryComputationValue: public TComputationValueImpl<TDerived, EMemorySubPool::Temporary> {
 private:
-    using TBase = TComputationValueImpl<TDerived, TBaseExt, EMemorySubPool::Temporary>;
+    using TBase = TComputationValueImpl<TDerived, EMemorySubPool::Temporary>;
 public:
     using TBase::TBase;
 };
 
-template <typename TDerived, typename TBaseExt = NUdf::IBoxedValue>
-class TComputationValue: public TComputationValueImpl<TDerived, TBaseExt, EMemorySubPool::Default> {
+template <typename TDerived>
+class TComputationValue: public TComputationValueImpl<TDerived, EMemorySubPool::Default> {
 private:
-    using TBase = TComputationValueImpl<TDerived, TBaseExt, EMemorySubPool::Default>;
+    using TBase = TComputationValueImpl<TDerived, EMemorySubPool::Default>;
 public:
     using TBase::TBase;
 };

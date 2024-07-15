@@ -16,7 +16,7 @@ namespace {
 using namespace NActors;
 using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
 
-struct TMemoryConsumerSnapshot {
+struct TConsumerSnapshot {
     EConsumerKind Kind;
     ui64 Consumption;
 };
@@ -52,7 +52,7 @@ public:
         Consumption = value;
     }
 
-    TMemoryConsumerSnapshot GetSnapshot() {
+    TConsumerSnapshot GetConsumerSnapshot() {
         TGuard<TMutex> guard(Mutex);
         return {Kind, Consumption};
     }
@@ -76,15 +76,15 @@ public:
         return inserted.first->second;
     }
 
-    TVector<TMemoryConsumerSnapshot> GetConsumersSnapshot() const {
+    TVector<TConsumerSnapshot> GetConsumersSnapshot() const {
         TGuard<TMutex> guard(Mutex);
         
-        TVector<TMemoryConsumerSnapshot> result(::Reserve(Consumers.size()));
+        TVector<TConsumerSnapshot> result(::Reserve(Consumers.size()));
 
-        // Note: don't care about destroyed consumers as they are possible only during process stopping
+        // Note: don't care about destroyed consumers as that is possible only during process stopping
 
         for (const auto& consumer : Consumers) {
-            result.push_back(consumer.second->GetSnapshot());
+            result.push_back(consumer.second->GetConsumerSnapshot());
         }
 
         return result;
@@ -95,15 +95,6 @@ private:
     TMap<EConsumerKind, TIntrusivePtr<TMemoryConsumer>> Consumers;
 };
 
-struct TConsumerCounters {
-    TCounterPtr Consumption;
-    TCounterPtr LimitBytes;
-    TCounterPtr LimitMinPercent;
-    TCounterPtr LimitMaxPercent;
-    TCounterPtr LimitMinBytes;
-    TCounterPtr LimitMaxBytes;
-};
-
 struct TConsumerConfig {
     std::optional<float> MinPercent;
     std::optional<ui64> MinBytes;
@@ -112,9 +103,21 @@ struct TConsumerConfig {
     bool CanZeroLimit = false;
 };
 
-struct TConsumerLimitBounds {
+struct TConsumerState : TConsumerSnapshot {
+    TConsumerConfig Config;
     ui64 MinBytes = 0;
     ui64 MaxBytes = 0;
+
+    ui64 GetLimit(double coefficient) const {
+        return static_cast<ui64>(MinBytes + coefficient * (MaxBytes - MinBytes));
+    }
+};
+
+struct TConsumerCounters {
+    TCounterPtr Consumption;
+    TCounterPtr LimitBytes;
+    TCounterPtr LimitMinBytes;
+    TCounterPtr LimitMaxBytes;
 };
 
 class TMemoryController : public TActorBootstrapped<TMemoryController> {
@@ -163,64 +166,66 @@ private:
         ui64 softLimitBytes = GetSoftLimitBytes(hardLimitBytes);
         ui64 targetUtilizationBytes = GetTargetUtilizationBytes(hardLimitBytes);
 
-        auto consumers = Consumers.GetConsumersSnapshot();
-        TVector<TConsumerLimitBounds> consumersLimitBounds;
-        TConsumerLimitBounds consumersLimitBoundsTotal;
+        auto consumers_ = Consumers.GetConsumersSnapshot();
+        TVector<TConsumerState> consumers(::Reserve(consumers_.size()));
         ui64 consumersConsumption = 0;
-        for (const auto& consumer : consumers) {
-            auto bounds = GetConsumerLimitBounds(consumer.Kind, softLimitBytes);
-            consumersLimitBounds.push_back(bounds);
-            consumersLimitBoundsTotal.MinBytes += bounds.MinBytes;
-            consumersLimitBoundsTotal.MaxBytes += bounds.MaxBytes;
+        for (auto& consumer : consumers) {
             consumersConsumption += consumer.Consumption;
+            consumers.push_back(GetConsumerState(consumer, hardLimitBytes));
         }
-        // allocatedMemory = externalConsumption + consumersConsumption
-        ui64 externalConsumption = allocatedMemory - Min(allocatedMemory, consumersConsumption);
-        // targetConsumersConsumption + externalConsumption = targetUtilizationBytes
-        ui64 targetConsumersConsumption = targetUtilizationBytes - Min(targetUtilizationBytes, externalConsumption);
-        targetConsumersConsumption = Max(targetConsumersConsumption, consumersLimitBoundsTotal.MinBytes);
-        targetConsumersConsumption = Min(targetConsumersConsumption, consumersLimitBoundsTotal.MaxBytes);
 
-        double coefficient = static_cast<double>(targetConsumersConsumption - consumersLimitBoundsTotal.MinBytes) 
-            / Max<ui64>(1, consumersLimitBoundsTotal.MaxBytes - consumersLimitBoundsTotal.MinBytes);
+        // allocatedMemory = externalConsumption + consumersConsumption
+        ui64 externalConsumption = SafeDiff(allocatedMemory, consumersConsumption);
+        // targetConsumersConsumption + externalConsumption = targetUtilizationBytes
+        ui64 targetConsumersConsumption = SafeDiff(targetUtilizationBytes, externalConsumption);
+
+        // want to find maximum possible coefficient in range [0..1] so that
+        // Sum(
+        //     Max(
+        //         consumers[i].Consumption, 
+        //         consumers[i].MinBytes + coefficient * (consumers[i].MaxBytes - consumers[i].MinBytes
+        //        )
+        //    ) <= targetConsumersConsumption
+
+        double coefficient = 0; // TODO
+
+        ui64 resultingConsumersConsumption = 0;
+        for (const auto& consumer : consumers) {
+            resultingConsumersConsumption += Max(consumer.Consumption, consumer.GetLimit(coefficient));
+        }
 
         LOG_DEBUG_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Periodic memory stats"
-            << " AnonRss: " << (memoryUsage ? memoryUsage->AnonRss : 0) << " CGroupLimit: " << (memoryUsage ? memoryUsage->CGroupLimit : 0)
+            << " AnonRss: " << (memoryUsage ? memoryUsage->AnonRss : 0) << " CGroupLimit: " << (memoryUsage ? memoryUsage->CGroupLimit : 0) << " AllocatedMemory: " << allocatedMemory
             << " HardLimitBytes: " << hardLimitBytes << " SoftLimitBytes: " << softLimitBytes << " TargetUtilizationBytes: " << targetUtilizationBytes
-            << " AllocatedMemory: " << allocatedMemory << " ExternalConsumption: " << externalConsumption
-            << " ConsumersConsumption: " << consumersConsumption << " TargetConsumersConsumption: " << targetConsumersConsumption);
+            << " ConsumersConsumption: " << consumersConsumption << " ExternalConsumption: " << externalConsumption 
+            << " TargetConsumersConsumption: " << targetConsumersConsumption << " ResultingConsumersConsumption: " << resultingConsumersConsumption
+            << " Coefficient: " << coefficient);
         Counters->GetCounter("Stats/AnonRss")->Set(memoryUsage ? memoryUsage->AnonRss : 0);
         Counters->GetCounter("Stats/CGroupLimit")->Set(memoryUsage ? memoryUsage->CGroupLimit : 0);
+        Counters->GetCounter("Stats/AllocatedMemory")->Set(allocatedMemory);
         Counters->GetCounter("Stats/HardLimitBytes")->Set(hardLimitBytes);
         Counters->GetCounter("Stats/SoftLimitBytes")->Set(softLimitBytes);
         Counters->GetCounter("Stats/TargetUtilizationBytes")->Set(targetUtilizationBytes);
-        Counters->GetCounter("Stats/AllocatedMemory")->Set(allocatedMemory);
-        Counters->GetCounter("Stats/ExternalConsumption")->Set(externalConsumption);
         Counters->GetCounter("Stats/ConsumersConsumption")->Set(consumersConsumption);
+        Counters->GetCounter("Stats/ExternalConsumption")->Set(externalConsumption);
         Counters->GetCounter("Stats/TargetConsumersConsumption")->Set(targetConsumersConsumption);
+        Counters->GetCounter("Stats/ResultingConsumersConsumption")->Set(resultingConsumersConsumption);
+        Counters->GetCounter("Stats/Coefficient")->Set(coefficient);
 
-        for (auto index : xrange(consumers.size())) {
-            auto& consumer = consumers[index];
-            auto config = GetConsumerConfig(consumer.Kind);
-            auto& bounds = consumersLimitBounds[index];
-            auto& counters = GetConsumerCounters(consumer.Kind);
-
-            ui64 limitBytes = bounds.MinBytes + static_cast<ui64>((bounds.MaxBytes - bounds.MinBytes) * coefficient);
-            if (targetConsumersConsumption + externalConsumption > softLimitBytes && config.CanZeroLimit) {
-                limitBytes -= Min(limitBytes, targetConsumersConsumption + externalConsumption - softLimitBytes);
+        for (const auto& consumer : consumers) {
+            ui64 limitBytes = consumer.GetLimit(coefficient);
+            if (resultingConsumersConsumption + externalConsumption > softLimitBytes && consumer.Config.CanZeroLimit) {
+                limitBytes = SafeDiff(limitBytes, resultingConsumersConsumption + externalConsumption - softLimitBytes);
             } 
 
-            LOG_DEBUG_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Consumer " << consumer.Kind 
+            LOG_DEBUG_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Consumer " << consumer.Kind << " state "
                 << " Consumption: " << consumer.Consumption << " LimitBytes: " << limitBytes
-                << " MinPercent: " << config.MinPercent << " MinBytes: " << config.MinBytes 
-                << " MaxPercent: " << config.MaxPercent << " MaxBytes: " << config.MaxBytes
-                << " MinBound: " << bounds.MinBytes << " MaxBound: " << bounds.MaxBytes);
+                << " MinBytes: " << consumer.MinBytes << " MaxBytes: " << consumer.MaxBytes);
+            auto& counters = GetConsumerCounters(consumer.Kind);
             counters.Consumption->Set(consumer.Consumption);
             counters.LimitBytes->Set(limitBytes);
-            counters.LimitMinPercent->Set(config.MinPercent.value_or(0));
-            counters.LimitMinBytes->Set(config.MinBytes.value_or(0));
-            counters.LimitMaxPercent->Set(config.MaxPercent.value_or(0));
-            counters.LimitMaxBytes->Set(config.MaxBytes.value_or(0));
+            counters.LimitMinBytes->Set(consumer.MinBytes);
+            counters.LimitMaxBytes->Set(consumer.MaxBytes);
 
             ApplyLimit(consumer, limitBytes);
         }
@@ -228,7 +233,7 @@ private:
         ctx.Schedule(Interval, new TEvents::TEvWakeup());
     }
 
-    void ApplyLimit(TMemoryConsumerSnapshot consumer, ui64 limitBytes) {
+    void ApplyLimit(TConsumerState consumer, ui64 limitBytes) {
         // TODO: don't send if queued already?
         switch (consumer.Kind) {
             case EConsumerKind::SharedCache:
@@ -251,15 +256,13 @@ private:
         return ConsumerCounters.emplace(consumer, TConsumerCounters{
             Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/Consumption"),
             Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/LimitBytes"),
-            Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/LimitMinPercent"),
-            Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/LimitMaxPercent"),
             Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/LimitMinBytes"),
             Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/LimitMaxBytes"),
         }).first->second;
     }
 
-    TConsumerLimitBounds GetConsumerLimitBounds(EConsumerKind consumer, ui64 availableMemory) const {
-        auto config = GetConsumerConfig(consumer);
+    TConsumerState GetConsumerState(const TConsumerSnapshot& consumer, ui64 availableMemory) const {
+        auto config = GetConsumerConfig(consumer.Kind);
         
         std::optional<ui64> minBytes;
         std::optional<ui64> maxBytes;
@@ -287,7 +290,8 @@ private:
             minBytes = maxBytes;
         }
 
-        TConsumerLimitBounds result(minBytes.value_or(0), maxBytes.value_or(0));
+        TConsumerState result{consumer, config, minBytes.value_or(0), maxBytes.value_or(0)};
+
         if (result.MinBytes > result.MaxBytes) {
             result.MinBytes = result.MaxBytes;
         }
@@ -370,6 +374,10 @@ private:
 
     ui64 GetPercent(float percent, ui64 value) const {
         return static_cast<ui64>(static_cast<double>(value) * percent / 100);
+    }
+
+    static ui64 SafeDiff(ui64 a, ui64 b) {
+        return a - Min(a, b);
     }
 
 private:

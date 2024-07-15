@@ -21,31 +21,37 @@ using NYql::TIssues;
 
 namespace {
 
-struct TEvOnChangedResult : NActors::TEventLocal<TEvOnChangedResult, TEventIds::EvEndpointResponse> {
-    bool Result;
+struct TEvPrivate {
+    // Event ids
+    enum EEv : ui32 {
+        EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+        EvOnChangedResult = EvBegin,
+        EvCreateSessionResult,
+        EvDescribeSemaphoreResult,
+        EvEnd
+    };
 
-    explicit TEvOnChangedResult(bool result)
-        : Result(result)
-    {}
+    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
+
+    struct TEvOnChangedResult : NActors::TEventLocal<TEvOnChangedResult, EvOnChangedResult> {
+        bool Result;
+        explicit TEvOnChangedResult(bool result)
+            : Result(result) {}
+    };
+
+    struct TEvCreateSessionResult : NActors::TEventLocal<TEvCreateSessionResult, EvCreateSessionResult> {
+        NYdb::NCoordination::TSessionResult Result;
+        explicit TEvCreateSessionResult(NYdb::NCoordination::TSessionResult result)
+            : Result(std::move(result)) {}
+    };
+
+    struct TEvDescribeSemaphoreResult : NActors::TEventLocal<TEvDescribeSemaphoreResult, EvDescribeSemaphoreResult> {
+        NYdb::NCoordination::TDescribeSemaphoreResult Result;
+        explicit TEvDescribeSemaphoreResult(NYdb::NCoordination::TDescribeSemaphoreResult result)
+            : Result(std::move(result)) {}
+    };
 };
 
-
-struct TEvCreateSessionResult : NActors::TEventLocal<TEvCreateSessionResult, TEvRowDispatcher::EvCreateSemaphoreResult> {
-    NYdb::NCoordination::TSessionResult Result;
-
-    explicit TEvCreateSessionResult(NYdb::NCoordination::TSessionResult result)
-        : Result(std::move(result))
-    {}
-};
-
-
-struct TEvDescribeSemaphoreResult : NActors::TEventLocal<TEvDescribeSemaphoreResult, TEventIds::EvSchemaDeleted> {  // TODO
-    NYdb::NCoordination::TDescribeSemaphoreResult Result;
-
-    explicit TEvDescribeSemaphoreResult(NYdb::NCoordination::TDescribeSemaphoreResult result)
-        : Result(std::move(result))
-    {}
-};
 ////////////////////////////////////////////////////////////////////////////////
 
 class TLeaderDetector : public TActorBootstrapped<TLeaderDetector> {
@@ -71,16 +77,16 @@ public:
     static constexpr char ActorName[] = "YQ_RD_COORDINATOR";
 
 
-    void Handle(NFq::TEvCreateSessionResult::TPtr& ev);
-    void Handle(NFq::TEvDescribeSemaphoreResult::TPtr& ev);
-    void Handle(NFq::TEvOnChangedResult::TPtr& ev);
+    void Handle(TEvPrivate::TEvCreateSessionResult::TPtr& ev);
+    void Handle(TEvPrivate::TEvDescribeSemaphoreResult::TPtr& ev);
+    void Handle(TEvPrivate::TEvOnChangedResult::TPtr& ev);
     void Handle(NActors::TEvents::TEvWakeup::TPtr&);
 
     STRICT_STFUNC(
         StateFunc, {
-        hFunc(NFq::TEvCreateSessionResult, Handle);
-        hFunc(NFq::TEvDescribeSemaphoreResult, Handle);
-        hFunc(NFq::TEvOnChangedResult, Handle);
+        hFunc(TEvPrivate::TEvCreateSessionResult, Handle);
+        hFunc(TEvPrivate::TEvDescribeSemaphoreResult, Handle);
+        hFunc(TEvPrivate::TEvOnChangedResult, Handle);
         hFunc(NActors::TEvents::TEvWakeup, Handle);
 
     })
@@ -105,7 +111,7 @@ TLeaderDetector::TLeaderDetector(
 
 void TLeaderDetector::Bootstrap() {
     Become(&TLeaderDetector::StateFunc);
-    LOG_ROW_DISPATCHER_DEBUG("9 Successfully bootstrapped coordinator, id " << SelfId());
+    LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped coordinator, id " << SelfId());
 
     StartSession();
 }
@@ -114,7 +120,7 @@ void TLeaderDetector::StartSession() {
     YdbConnection->CoordinationClient
         .StartSession(CoordinationNodePath)
         .Subscribe([actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NYdb::NCoordination::TAsyncSessionResult& future) {
-                actorSystem->Send(actorId, new TEvCreateSessionResult(future.GetValue()));
+                actorSystem->Send(actorId, new TEvPrivate::TEvCreateSessionResult(future.GetValue()));
             });
 }
 
@@ -130,26 +136,26 @@ void TLeaderDetector::DescribeSemaphore() {
             .WatchOwners()
             .IncludeOwners()
             .OnChanged([actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](bool isChanged) {
-                actorSystem->Send(actorId, new TEvOnChangedResult(isChanged));
+                actorSystem->Send(actorId, new TEvPrivate::TEvOnChangedResult(isChanged));
             }))
         .Subscribe(
             [actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NYdb::NCoordination::TAsyncDescribeSemaphoreResult& future) {
-                actorSystem->Send(actorId, new TEvDescribeSemaphoreResult(future.GetValue()));
+                actorSystem->Send(actorId, new TEvPrivate::TEvDescribeSemaphoreResult(future.GetValue()));
             });
 }
 
-void TLeaderDetector::Handle(NFq::TEvCreateSessionResult::TPtr& ev) {
+void TLeaderDetector::Handle(TEvPrivate::TEvCreateSessionResult::TPtr& ev) {
     if (!ev->Get()->Result.IsSuccess()) {
-        LOG_ROW_DISPATCHER_DEBUG("9 StartSession fail, " << ev->Get()->Result.GetIssues());
+        LOG_ROW_DISPATCHER_DEBUG("StartSession fail, " << ev->Get()->Result.GetIssues());
         Schedule(TDuration::Seconds(3), new NActors::TEvents::TEvWakeup());
         return;
     }
     Session =  ev->Get()->Result.GetResult();
-    LOG_ROW_DISPATCHER_DEBUG("9 Session successfully created");
+    LOG_ROW_DISPATCHER_DEBUG("Session successfully created");
     DescribeSemaphore(); 
 }
 
-void TLeaderDetector::Handle(NFq::TEvDescribeSemaphoreResult::TPtr& ev) {
+void TLeaderDetector::Handle(TEvPrivate::TEvDescribeSemaphoreResult::TPtr& ev) {
     if (!ev->Get()->Result.IsSuccess()) {
         LOG_ROW_DISPATCHER_DEBUG("9 Semaphore describe fail, " <<  ev->Get()->Result.GetIssues());
         HasSubcription = false;
@@ -159,17 +165,17 @@ void TLeaderDetector::Handle(NFq::TEvDescribeSemaphoreResult::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("9 Semaphore successfully described:");
 
     const NYdb::NCoordination::TSemaphoreDescription& description = ev->Get()->Result.GetResult();
-    LOG_ROW_DISPATCHER_DEBUG("9     name " << description.GetName());
-    LOG_ROW_DISPATCHER_DEBUG("9     data " << description.GetData());
-    LOG_ROW_DISPATCHER_DEBUG("9     count " << description.GetCount());
-    LOG_ROW_DISPATCHER_DEBUG("9     limit " << description.GetLimit());
+    LOG_ROW_DISPATCHER_DEBUG("     name " << description.GetName());
+    LOG_ROW_DISPATCHER_DEBUG("     data " << description.GetData());
+    LOG_ROW_DISPATCHER_DEBUG("     count " << description.GetCount());
+    LOG_ROW_DISPATCHER_DEBUG("     limit " << description.GetLimit());
 
     for (const auto& owner : description.GetOwners()) {
-        LOG_ROW_DISPATCHER_DEBUG("9     owner info count " << owner.GetCount());
-        LOG_ROW_DISPATCHER_DEBUG("9     owner info data " << owner.GetData());
+        LOG_ROW_DISPATCHER_DEBUG("     owner info count " << owner.GetCount());
+        LOG_ROW_DISPATCHER_DEBUG("     owner info data " << owner.GetData());
     }
     if (description.GetOwners().empty()) {
-        LOG_ROW_DISPATCHER_DEBUG("9 Empty owners !!! ");
+        LOG_ROW_DISPATCHER_DEBUG(" Empty owners !!! ");
         return;
     }
     Y_ABORT_UNLESS(description.GetOwners().size() == 1, "To many owners");
@@ -188,8 +194,8 @@ void TLeaderDetector::Handle(NFq::TEvDescribeSemaphoreResult::TPtr& ev) {
     LeaderActorId = id;
 }
 
-void TLeaderDetector::Handle(NFq::TEvOnChangedResult::TPtr& ev) {
-    LOG_ROW_DISPATCHER_DEBUG("9 Semaphore changed,  " << ev->Get()->Result);
+void TLeaderDetector::Handle(TEvPrivate::TEvOnChangedResult::TPtr& ev) {
+    LOG_ROW_DISPATCHER_DEBUG("Semaphore changed,  " << ev->Get()->Result);
 
     // TODO: false?
     

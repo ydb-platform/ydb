@@ -177,17 +177,11 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvRowDispatcherRequest::TPtr
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvStartSession, topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
         " partitionId " << ev->Get()->Record.GetPartitionId());
-    
-    for (const auto& fieldName : ev->Get()->Record.GetSource().GetColumns()) {
-        LOG_ROW_DISPATCHER_DEBUG("    fieldName "<< fieldName);
-    }
 
     TMaybe<ui64> readOffset;
     if (ev->Get()->Record.HasOffset()) {
         readOffset = ev->Get()->Record.GetOffset();
-        LOG_ROW_DISPATCHER_DEBUG("readOffset " << readOffset);
     }
-
 
     SessionKey key{ev->Get()->Record.GetSource().GetTopicPath(), ev->Get()->Record.GetPartitionId()};
     LOG_ROW_DISPATCHER_DEBUG("Sessions count " << Sessions.size());

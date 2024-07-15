@@ -24,28 +24,35 @@ using NYql::TIssues;
 namespace {
 
 
-struct TEvCreateSemaphoreResult : NActors::TEventLocal<TEvCreateSemaphoreResult, TEventIds::EvDeleteRateLimiterResourceResponse> {
-    NYdb::NCoordination::TResult<void> Result;
+struct TEvPrivate {
+    // Event ids
+    enum EEv : ui32 {
+        EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+        EvCreateSemaphoreResult = EvBegin,
+        EvCreateSessionResult,
+        EvAcquireSemaphoreResult,
+        EvEnd
+    };
 
-    explicit TEvCreateSemaphoreResult(NYdb::NCoordination::TResult<void> result)
-        : Result(std::move(result))
-    {}
-};
+    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
 
-struct TEvCreateSessionResult : NActors::TEventLocal<TEvCreateSessionResult, TEvRowDispatcher::EvCreateSemaphoreResult> {
-    NYdb::NCoordination::TSessionResult Result;
+    // Events
+    struct TEvCreateSemaphoreResult : NActors::TEventLocal<TEvCreateSemaphoreResult, EvCreateSemaphoreResult> {
+        NYdb::NCoordination::TResult<void> Result;
+        explicit TEvCreateSemaphoreResult(NYdb::NCoordination::TResult<void> result)
+            : Result(std::move(result)) {}
+    };
+    struct TEvCreateSessionResult : NActors::TEventLocal<TEvCreateSessionResult, EvCreateSessionResult> {
+        NYdb::NCoordination::TSessionResult Result;
+        explicit TEvCreateSessionResult(NYdb::NCoordination::TSessionResult result)
+            : Result(std::move(result)) {}
+    };
 
-    explicit TEvCreateSessionResult(NYdb::NCoordination::TSessionResult result)
-        : Result(std::move(result))
-    {}
-};
-
-struct TEvAcquireSemaphoreResult : NActors::TEventLocal<TEvAcquireSemaphoreResult, TEventIds::EvSchemaUpdated> { // TODO
-    NYdb::NCoordination::TResult<bool> Result;
-
-    explicit TEvAcquireSemaphoreResult(NYdb::NCoordination::TResult<bool> result)
-        : Result(std::move(result))
-    {}
+    struct TEvAcquireSemaphoreResult : NActors::TEventLocal<TEvAcquireSemaphoreResult, EvAcquireSemaphoreResult> {
+        NYdb::NCoordination::TResult<bool> Result;
+        explicit TEvAcquireSemaphoreResult(NYdb::NCoordination::TResult<bool> result)
+            : Result(std::move(result)) {}
+    };
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -58,7 +65,7 @@ class TLeaderElection: public TActorBootstrapped<TLeaderElection> {
     TYdbConnectionPtr YdbConnection;
     TString CoordinationNodePath;
     TMaybe<NYdb::NCoordination::TSession> Session;
-    TActorId CoordinatorId;
+    TActorId ParentId;
     const TString LogPrefix;
 
     struct NodeInfo {
@@ -68,7 +75,7 @@ class TLeaderElection: public TActorBootstrapped<TLeaderElection> {
 
 public:
     TLeaderElection(
-        NActors::TActorId coordinatorId,
+        NActors::TActorId parentId,
         const NConfig::TRowDispatcherCoordinatorConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const TYqSharedResources::TPtr& yqSharedResources);
@@ -79,17 +86,17 @@ public:
 
 
     void Handle(NFq::TEvents::TEvSchemaCreated::TPtr& ev);
-    void Handle(NFq::TEvCreateSessionResult::TPtr& ev);
-    void Handle(NFq::TEvCreateSemaphoreResult::TPtr& ev);
-    void Handle(NFq::TEvAcquireSemaphoreResult::TPtr& ev);
+    void Handle(TEvPrivate::TEvCreateSessionResult::TPtr& ev);
+    void Handle(TEvPrivate::TEvCreateSemaphoreResult::TPtr& ev);
+    void Handle(TEvPrivate::TEvAcquireSemaphoreResult::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev);
 
     STRICT_STFUNC(
         StateFunc, {
         hFunc(NFq::TEvents::TEvSchemaCreated, Handle);
-        hFunc(NFq::TEvCreateSessionResult, Handle);
-        hFunc(NFq::TEvCreateSemaphoreResult, Handle);
-        hFunc(NFq::TEvAcquireSemaphoreResult, Handle);
+        hFunc(TEvPrivate::TEvCreateSessionResult, Handle);
+        hFunc(TEvPrivate::TEvCreateSemaphoreResult, Handle);
+        hFunc(TEvPrivate::TEvAcquireSemaphoreResult, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, Handle);
 
     })
@@ -101,7 +108,7 @@ private:
 };
 
 TLeaderElection::TLeaderElection(
-    NActors::TActorId coordinatorId,
+    NActors::TActorId parentId,
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources)
@@ -110,7 +117,7 @@ TLeaderElection::TLeaderElection(
     , YqSharedResources(yqSharedResources)
     , YdbConnection(NewYdbConnection(config.GetStorage(), credentialsProviderFactory, yqSharedResources->UserSpaceYdbDriver))
     , CoordinationNodePath(JoinPath(YdbConnection->TablePathPrefix, Config.GetNodePath()))
-    , CoordinatorId(coordinatorId)
+    , ParentId(parentId)
     , LogPrefix("TLeaderElection: ") {
 }
 
@@ -159,14 +166,14 @@ void TLeaderElection::CreateSemaphore() {
     Session->CreateSemaphore("my-semaphore", 1, "my-data")
         .Subscribe(
         [actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NYdb::NCoordination::TAsyncResult<void>& future) {
-            actorSystem->Send(actorId, new TEvCreateSemaphoreResult(future.GetValue()));
+            actorSystem->Send(actorId, new TEvPrivate::TEvCreateSemaphoreResult(future.GetValue()));
         }); 
 }
 
 void TLeaderElection::AcquireSemaphore() {
 
     NActorsProto::TActorId protoId;
-    ActorIdToProto(CoordinatorId, &protoId);
+    ActorIdToProto(ParentId, &protoId);
     TString strActorId;
     if (!protoId.SerializeToString(&strActorId)) {
         Y_ABORT("SerializeToString");
@@ -177,54 +184,54 @@ void TLeaderElection::AcquireSemaphore() {
         NYdb::NCoordination::TAcquireSemaphoreSettings().Count(1).Data(strActorId))
         .Subscribe(
             [actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NYdb::NCoordination::TAsyncResult<bool>& future) {
-                actorSystem->Send(actorId, new TEvAcquireSemaphoreResult(future.GetValue()));
+                actorSystem->Send(actorId, new TEvPrivate::TEvAcquireSemaphoreResult(future.GetValue()));
             });
 }
 
 void TLeaderElection::Handle(NFq::TEvents::TEvSchemaCreated::TPtr& ev) {
     if (!IsTableCreated(ev->Get()->Result)) {
-        LOG_ROW_DISPATCHER_DEBUG("TLeaderElection: Schema created error " << ev->Get()->Result.GetIssues());
+        LOG_ROW_DISPATCHER_DEBUG("Schema created error " << ev->Get()->Result.GetIssues());
         return;
     }
-    LOG_ROW_DISPATCHER_DEBUG("TLeaderElection: Coordination node successfully created");
+    LOG_ROW_DISPATCHER_DEBUG("Coordination node successfully created");
     
     YdbConnection->CoordinationClient
         .StartSession(CoordinationNodePath)
         .Subscribe([actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NYdb::NCoordination::TAsyncSessionResult& future) {
-                actorSystem->Send(actorId, new TEvCreateSessionResult(future.GetValue()));
+                actorSystem->Send(actorId, new TEvPrivate::TEvCreateSessionResult(future.GetValue()));
             });
 }
 
-void TLeaderElection::Handle(NFq::TEvCreateSessionResult::TPtr& ev) {
+void TLeaderElection::Handle(TEvPrivate::TEvCreateSessionResult::TPtr& ev) {
     if (!ev->Get()->Result.IsSuccess()) {
-        LOG_ROW_DISPATCHER_DEBUG("TLeaderElection: StartSession fail, " << ev->Get()->Result.GetIssues());
+        LOG_ROW_DISPATCHER_DEBUG("StartSession fail, " << ev->Get()->Result.GetIssues());
         return;
     }
     Session =  ev->Get()->Result.GetResult();
-    LOG_ROW_DISPATCHER_DEBUG("TLeaderElection: Session successfully created");
+    LOG_ROW_DISPATCHER_DEBUG("Session successfully created");
     CreateSemaphore();
 }
 
-void TLeaderElection::Handle(NFq::TEvCreateSemaphoreResult::TPtr& ev) {
+void TLeaderElection::Handle(TEvPrivate::TEvCreateSemaphoreResult::TPtr& ev) {
     if (!IsTableCreated(ev->Get()->Result)) {
-        LOG_ROW_DISPATCHER_DEBUG("TLeaderElection: Semaphore creating error " << ev->Get()->Result.GetIssues());
+        LOG_ROW_DISPATCHER_DEBUG("Semaphore creating error " << ev->Get()->Result.GetIssues());
         return;
     }
-    LOG_ROW_DISPATCHER_DEBUG("TLeaderElection: Semaphore successfully created");
+    LOG_ROW_DISPATCHER_DEBUG("Semaphore successfully created");
     AcquireSemaphore();
 }
 
-void TLeaderElection::Handle(NFq::TEvAcquireSemaphoreResult::TPtr& ev) {
+void TLeaderElection::Handle(TEvPrivate::TEvAcquireSemaphoreResult::TPtr& ev) {
     if (!ev->Get()->Result.IsSuccess()) {
-        LOG_ROW_DISPATCHER_DEBUG("TLeaderElection: Acquired fail " << ev->Get()->Result.GetIssues());
+        LOG_ROW_DISPATCHER_DEBUG("Acquired fail " << ev->Get()->Result.GetIssues());
         return;
     }
-    LOG_ROW_DISPATCHER_DEBUG("TLeaderElection: Semaphore successfully acquired");
+    LOG_ROW_DISPATCHER_DEBUG("Semaphore successfully acquired");
 }
 
 void TLeaderElection::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
-    LOG_ROW_DISPATCHER_DEBUG("TLeaderElection: TEvCoordinatorChanged ");
-    Send(CoordinatorId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(ev->Get()->CoordinatorActorId));
+    LOG_ROW_DISPATCHER_DEBUG("TEvCoordinatorChanged ");
+    Send(ParentId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(ev->Get()->CoordinatorActorId));
 }
 
 } // namespace

@@ -156,7 +156,6 @@ class TestRecovery(TestYdsBase):
         self.write_stream([f'{{"time" = {i};}}' for i in range(100, 115, 2)])
 
         kikimr.compute_plane.wait_completed_checkpoints(query_id, self.kikimr.compute_plane.get_completed_checkpoints(query_id) + 1)
-        time.sleep(30)
         # restart node with CA
         node_to_restart = None
         for node_index in kikimr.control_plane.kikimr_cluster.nodes:

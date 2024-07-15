@@ -11,9 +11,13 @@
 using namespace NActors;
 using namespace NKikimr::NReplication::NService;
 
+namespace {
+
 constexpr static char OFFLOAD_ACTOR_CLIENT_ID[] = "__OFFLOAD_ACTOR__";
 constexpr static ui64 READ_TIMEOUT_MS = 1000;
 constexpr static ui64 READ_LIMIT_BYTES = 1_MB;
+
+} // anonymous namespace
 
 namespace NKikimr::NBackup::NImpl {
 

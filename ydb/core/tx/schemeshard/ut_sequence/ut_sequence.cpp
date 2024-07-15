@@ -655,7 +655,7 @@ Y_UNIT_TEST_SUITE(TSequence) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        auto table1 = DescribePath(runtime, "/MyRoot/Table1")
+        table1 = DescribePath(runtime, "/MyRoot/Table1")
             .GetPathDescription()
             .GetTable();
 

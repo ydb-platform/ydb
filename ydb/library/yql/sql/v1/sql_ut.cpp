@@ -2492,19 +2492,37 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table SET (AUTO_PARTITIONING_BY_SIZE = DISABLED)").IsOk());
     }
 
+    Y_UNIT_TEST(AlterTableAddIndexLocalIsNotSupported) {
+        ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx GLOBAL WITH (a=b) ON (col)",
+            "<main>:1:40: Error: with: alternative is not implemented yet: 723:20: global_index\n");
+    }
+
     Y_UNIT_TEST(AlterTableAddIndexWithIsNotSupported) {
-        ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx LOCAL WITH (a=b, c=d, e=f) ON (col)",
+        ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx LOCAL ON (col)",
             "<main>:1:40: Error: local: alternative is not implemented yet: 723:35: local_index\n");
     }
 
-    Y_UNIT_TEST(AlterTableAddVectorIndex) {
-        const auto result = SqlToYql("USE plato; ALTER TABLE table ADD INDEX idx GLOBAL USING vector_kmeans_tree ON (col) COVER (col)");
+    Y_UNIT_TEST(AlterTableAddIndexVector) {
+        const auto result = SqlToYql(R"(USE plato; 
+            ALTER TABLE table ADD INDEX idx 
+                GLOBAL USING vector_kmeans_tree 
+                WITH (distance=cosine, vector_type=float, vector_dimension=1024) 
+                ON (col) COVER (col))");
         UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
     }
 
-    Y_UNIT_TEST(AlterTableAddIndexWithUnknownSubtype) {
+    Y_UNIT_TEST(AlterTableAddIndexUnknownSubtype) {
         ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx GLOBAL USING unknown ON (col)",
             "<main>:1:57: Error: UNKNOWN index subtype is not supported\n");
+    }
+
+    Y_UNIT_TEST(AlterTableAddIndexMissedParameter) {
+        ExpectFailWithError(R"(USE plato; 
+            ALTER TABLE table ADD INDEX idx 
+                GLOBAL USING vector_kmeans_tree 
+                WITH (distance=cosine, vector_type=float) 
+                ON (col))",
+            "<main>:4:52: Error: vector_dimension should be set\n");
     }
 
     Y_UNIT_TEST(AlterTableAlterIndexSetPartitioningIsCorrect) {

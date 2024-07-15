@@ -1,4 +1,6 @@
+#include "dbg_printer.h"
 #include "grpc_request.h"
+#include <ydb/library/protobuf_printer/security_printer.h>
 
 namespace NYdbGrpc {
 
@@ -55,5 +57,7 @@ private:
 IStreamAdaptor::TPtr CreateStreamAdaptor() {
     return std::make_unique<TStreamAdaptor>();
 }
+
+template TString MakeDbgMessageString<google::protobuf::TextFormat::Printer>(const NProtoBuf::Message& message, bool ok);
 
 } // namespace NYdbGrpc

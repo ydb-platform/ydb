@@ -37,6 +37,9 @@ public:
 
 IStreamAdaptor::TPtr CreateStreamAdaptor();
 
+template<typename TProtoPrinter>
+TString MakeDbgMessageString(const NProtoBuf::Message& message, bool ok);
+
 ///////////////////////////////////////////////////////////////////////////////
 template<typename TIn, typename TOut, typename TService, typename TInProtoPrinter, typename TOutProtoPrinter>
 class TGRpcRequestImpl
@@ -279,18 +282,10 @@ private:
     }
 
     void WriteDataOk(NProtoBuf::Message* resp, ui32 status) {
-        auto makeResponseString = [&] {
-            TString x;
-            TOutProtoPrinter printer;
-            printer.SetSingleLineMode(true);
-            printer.PrintToString(*resp, &x);
-            return x;
-        };
-
         auto sz = (size_t)resp->ByteSize();
         if (Writer_) {
             GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s data# %s peer# %s", this, Name_,
-                makeResponseString().data(), this->Context.peer().c_str());
+                MakeDbgMessageString<TOutProtoPrinter>(*resp, true).data(), this->Context.peer().c_str());
             StateFunc_ = &TThis::SetFinishDone;
             ResponseSize = sz;
             ResponseStatus = status;
@@ -300,7 +295,7 @@ private:
             Writer_->Finish(TUniversalResponseRef<TOut>(resp), grpc::Status::OK, GetGRpcTag());
         } else {
             GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s data# %s peer# %s (enqueued)",
-                this, Name_, makeResponseString().data(), this->Context.peer().c_str());
+                this, Name_, MakeDbgMessageString<TOutProtoPrinter>(*resp, true).data(), this->Context.peer().c_str());
 
             // because of std::function cannot hold move-only captured object
             // we allocate shared object on heap to avoid message copy
@@ -393,19 +388,8 @@ private:
     bool SetRequestDone(bool ok) {
         OnAfterCall();
 
-        auto makeRequestString = [&] {
-            TString resp;
-            if (ok) {
-                TInProtoPrinter printer;
-                printer.SetSingleLineMode(true);
-                printer.PrintToString(*Request_, &resp);
-            } else {
-                resp = "<not ok>";
-            }
-            return resp;
-        };
         GRPC_LOG_DEBUG(Logger_, "[%p] received request Name# %s ok# %s data# %s peer# %s", this, Name_,
-            ok ? "true" : "false", makeRequestString().data(), this->Context.peer().c_str());
+            ok ? "true" : "false", MakeDbgMessageString<TInProtoPrinter>(*Request_, ok).data(), this->Context.peer().c_str());
 
         if (this->Context.c_call() == nullptr) {
             Y_ABORT_UNLESS(!ok);
@@ -446,7 +430,7 @@ private:
                 Counters_->CountRequestsWithoutToken();
                 GRPC_LOG_DEBUG(Logger_, "[%p] received request without user token "
                     "Name# %s data# %s peer# %s database# %s", this, Name_,
-                    makeRequestString().data(), this->Context.peer().c_str(), db.c_str());
+                    MakeDbgMessageString<TInProtoPrinter>(*Request_, ok).data(), this->Context.peer().c_str(), db.c_str());
             }
 
             // Handle current request.

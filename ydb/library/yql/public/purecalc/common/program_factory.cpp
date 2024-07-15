@@ -10,6 +10,7 @@ using namespace NYql::NPureCalc;
 
 TProgramFactory::TProgramFactory(const TProgramFactoryOptions& options)
     : Options_(options)
+    , ExprOutputStream_(Options_.ExprOutputStream)
     , CountersProvider_(nullptr)
 {
     EnsureLoggingInitialized();

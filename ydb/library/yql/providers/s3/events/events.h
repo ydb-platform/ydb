@@ -172,14 +172,15 @@ struct TEvS3Provider {
     };
 
     struct TEvNextBlock : public NActors::TEventLocal<TEvNextBlock, EvNextBlock> {
-        TEvNextBlock(NDB::Block& block, size_t pathInd, ui64 ingressDelta, TDuration cpuTimeDelta)
-            : PathIndex(pathInd), IngressDelta(ingressDelta), CpuTimeDelta(cpuTimeDelta) {
+        TEvNextBlock(NDB::Block& block, size_t pathInd, ui64 ingressDelta, TDuration cpuTimeDelta, ui64 ingressDecompressedDelta = 0)
+            : PathIndex(pathInd), IngressDelta(ingressDelta), CpuTimeDelta(cpuTimeDelta), IngressDecompressedDelta(ingressDecompressedDelta) {
             Block.swap(block);
         }
         NDB::Block Block;
         const size_t PathIndex;
         const ui64 IngressDelta;
         const TDuration CpuTimeDelta;
+        const ui64 IngressDecompressedDelta;
     };
 
     struct TEvNextRecordBatch : public NActors::TEventLocal<TEvNextRecordBatch, EvNextRecordBatch> {

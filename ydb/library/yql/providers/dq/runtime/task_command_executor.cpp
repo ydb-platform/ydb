@@ -46,6 +46,7 @@ template<typename T>
 void ToProto(T& proto, const NDq::TDqAsyncStats& stats)
 {
     proto.SetBytes(stats.Bytes);
+    proto.SetDecompressedBytes(stats.DecompressedBytes);
     proto.SetRows(stats.Rows);
     proto.SetChunks(stats.Chunks);
     proto.SetSplits(stats.Splits);

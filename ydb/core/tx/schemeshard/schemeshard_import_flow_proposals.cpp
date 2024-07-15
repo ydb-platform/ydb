@@ -52,48 +52,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
             case Ydb::Table::ColumnMeta::kFromSequence: {
                 const auto& fromSequence = column.from_sequence();
 
-                auto seqDesc = indexedTable->MutableSequenceDescription()->Add();
-                seqDesc->SetName(fromSequence.name());
-                if (fromSequence.has_min_value()) {
-                    seqDesc->SetMinValue(fromSequence.min_value());
-                }
-                if (fromSequence.has_max_value()) {
-                    seqDesc->SetMaxValue(fromSequence.max_value());
-                }
-                if (fromSequence.has_start_value()) {
-                    seqDesc->SetStartValue(fromSequence.start_value());
-                }
-                if (fromSequence.has_cache()) {
-                    seqDesc->SetCache(fromSequence.cache());
-                }
-                if (fromSequence.has_increment()) {
-                    seqDesc->SetIncrement(fromSequence.increment());
-                }
-                if (fromSequence.has_cycle()) {
-                    seqDesc->SetCycle(fromSequence.cycle());
-                }
-                if (fromSequence.has_set_val()) {
-                    auto* setVal = seqDesc->MutableSetVal();
-                    setVal->SetNextUsed(fromSequence.set_val().next_used());
-                    setVal->SetNextValue(fromSequence.set_val().next_value());
-                }
-                if (fromSequence.has_data_type()) {
-                    switch (fromSequence.data_type()) {
-                        case Ydb::Table::SequenceDescription::DATA_TYPE_BIGINT: {
-                            seqDesc->SetDataType(NKikimrSchemeOp::TSequenceDescription::BIGINT);
-                            break;
-                        }
-                        case Ydb::Table::SequenceDescription::DATA_TYPE_INTEGER: {
-                            seqDesc->SetDataType(NKikimrSchemeOp::TSequenceDescription::INTEGER);
-                            break;
-                        }
-                        case Ydb::Table::SequenceDescription::DATA_TYPE_SMALLINT: {
-                            seqDesc->SetDataType(NKikimrSchemeOp::TSequenceDescription::SMALLINT);
-                            break;
-                        }
-                        default: break;
-                    }
-                }
+                auto* seqDesc = indexedTable->MutableSequenceDescription()->Add();
+                FillSequenceDescription(*seqDesc, fromSequence, status, error);
 
                 break;
             }

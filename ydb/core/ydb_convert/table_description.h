@@ -133,8 +133,9 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
 void FillSequenceDescription(Ydb::Table::CreateTableRequest& out,
     const NKikimrSchemeOp::TTableDescription& in);
 
-// out
-void FillSequenceDescription(Ydb::Table::CreateTableRequest& out,
-    const NKikimrSchemeOp::TTableDescription& in);
+// in
+bool FillSequenceDescription(
+    NKikimrSchemeOp::TSequenceDescription& out, const Ydb::Table::SequenceDescription& in, 
+    Ydb::StatusIds::StatusCode& status, TString& error);
 
 } // namespace NKikimr

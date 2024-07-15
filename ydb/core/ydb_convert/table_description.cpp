@@ -1492,17 +1492,18 @@ void FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrS
                     setVal->set_next_value(sequenceDescription.GetSetVal().GetNextValue());
                 }
                 if (sequenceDescription.HasDataType()) {
+                    auto* dataType = fromSequence->mutable_data_type();
                     switch (sequenceDescription.GetDataType()) {
                         case NKikimrSchemeOp::TSequenceDescription::BIGINT: {
-                            fromSequence->set_data_type(Ydb::Table::SequenceDescription::DATA_TYPE_BIGINT);
+                            dataType->set_type_id(Ydb::Type::INT64);
                             break;
                         }
                         case NKikimrSchemeOp::TSequenceDescription::INTEGER: {
-                            fromSequence->set_data_type(Ydb::Table::SequenceDescription::DATA_TYPE_INTEGER);
+                            dataType->set_type_id(Ydb::Type::INT32);
                             break;
                         }
                         case NKikimrSchemeOp::TSequenceDescription::SMALLINT: {
-                            fromSequence->set_data_type(Ydb::Table::SequenceDescription::DATA_TYPE_SMALLINT);
+                            dataType->set_type_id(Ydb::Type::INT16);
                             break;
                         }
                         default: break;
@@ -1516,6 +1517,72 @@ void FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrS
             default: break;
         }
     }
+}
+
+bool FillSequenceDescription(NKikimrSchemeOp::TSequenceDescription& out, const Ydb::Table::SequenceDescription& in, Ydb::StatusIds::StatusCode& status, TString& error) {
+    out.SetName(in.name());
+    if (in.has_min_value()) {
+        out.SetMinValue(in.min_value());
+    }
+    if (in.has_max_value()) {
+        out.SetMaxValue(in.max_value());
+    }
+    if (in.has_start_value()) {
+        out.SetStartValue(in.start_value());
+    }
+    if (in.has_cache()) {
+        out.SetCache(in.cache());
+    }
+    if (in.has_increment()) {
+        out.SetIncrement(in.increment());
+    }
+    if (in.has_cycle()) {
+        out.SetCycle(in.cycle());
+    }
+    if (in.has_set_val()) {
+        auto* setVal = out.MutableSetVal();
+        setVal->SetNextUsed(in.set_val().next_used());
+        setVal->SetNextValue(in.set_val().next_value());
+    }
+    if (in.has_data_type()) {
+        NScheme::TTypeInfo typeInfo;
+        TString typeMod;
+        if (!ExtractColumnTypeInfo(typeInfo, typeMod, in.data_type(), status, error)) {
+            return false;
+        }
+
+        switch (typeInfo.GetTypeId()) {
+            case NScheme::NTypeIds::Int16: {
+                out.SetDataType(NKikimrSchemeOp::TSequenceDescription::SMALLINT);
+                break;
+            }
+            case NScheme::NTypeIds::Int32: {
+                out.SetDataType(NKikimrSchemeOp::TSequenceDescription::INTEGER);
+                break;
+            }
+            case NScheme::NTypeIds::Int64: {
+                out.SetDataType(NKikimrSchemeOp::TSequenceDescription::BIGINT);
+                break;
+            }
+            case NScheme::NTypeIds::Pg: {
+                TString sequenceType = NPg::PgTypeNameFromTypeDesc(typeInfo.GetTypeDesc());
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = Sprintf(
+                    "Invalid type name %s for sequence", sequenceType.c_str()
+                );
+                return false;
+            }
+            default: {
+                TString sequenceType = NScheme::TypeName(typeInfo.GetTypeId());
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = Sprintf(
+                    "Invalid type name %s for sequence", sequenceType.c_str()
+                );
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 } // namespace NKikimr

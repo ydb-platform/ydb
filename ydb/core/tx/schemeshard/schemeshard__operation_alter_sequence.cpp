@@ -240,31 +240,27 @@ std::optional<NKikimrSchemeOp::TSequenceDescription> GetAlterSequenceDescription
     }
 
     i64 dataTypeMaxValue, dataTypeMinValue;
-    TString dataTypeStr = "";
     switch (dataType) {
         case NKikimrSchemeOp::TSequenceDescription::BIGINT: {
             dataTypeMaxValue = Max<i64>();
             dataTypeMinValue = Min<i64>();
-            dataTypeStr = "bigint";
             break;
         }
         case NKikimrSchemeOp::TSequenceDescription::INTEGER: {
             dataTypeMaxValue = Max<i32>();
             dataTypeMinValue = Min<i32>();
-            dataTypeStr = "integer";
             break;
         }
         case NKikimrSchemeOp::TSequenceDescription::SMALLINT: {
             dataTypeMaxValue = Max<i16>();
             dataTypeMinValue = Min<i16>();
-            dataTypeStr = "smallint";
             break;
         }
     }
 
     if (maxValue != Max<i16>() && maxValue != Max<i32>() && maxValue != Max<i64>()) {
         if (maxValue > dataTypeMaxValue) {
-            errStr = Sprintf("MAXVALUE (%ld) is out of range for sequence data type %s", maxValue, dataTypeStr.data());
+            errStr = Sprintf("MAXVALUE (%ld) is out of range for sequence", maxValue);
             status = NKikimrScheme::StatusInvalidParameter;
             return std::nullopt;
         }
@@ -274,7 +270,7 @@ std::optional<NKikimrSchemeOp::TSequenceDescription> GetAlterSequenceDescription
 
     if (minValue != Min<i16>() && minValue != Min<i32>() && minValue != Min<i64>()) {
         if (minValue < dataTypeMinValue) {
-            errStr = Sprintf("MINVALUE (%ld) is out of range for sequence data type %s", minValue, dataTypeStr.data());
+            errStr = Sprintf("MINVALUE (%ld) is out of range for sequence", minValue);
             status = NKikimrScheme::StatusInvalidParameter;
             return std::nullopt;
         }
@@ -290,13 +286,13 @@ std::optional<NKikimrSchemeOp::TSequenceDescription> GetAlterSequenceDescription
     }
 
     if (maxValue > dataTypeMaxValue) {
-        errStr = Sprintf("MAXVALUE (%ld) is out of range for sequence data type %s", maxValue, dataTypeStr.data());
+        errStr = Sprintf("MAXVALUE (%ld) is out of range for sequence", maxValue);
         status = NKikimrScheme::StatusInvalidParameter;
         return std::nullopt;
     }
 
     if (minValue < dataTypeMinValue) {
-        errStr = Sprintf("MINVALUE (%ld) is out of range for sequence data type %s", minValue, dataTypeStr.data());
+        errStr = Sprintf("MINVALUE (%ld) is out of range for sequence", minValue);
         status = NKikimrScheme::StatusInvalidParameter;
         return std::nullopt;
     }

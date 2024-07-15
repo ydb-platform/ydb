@@ -385,8 +385,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                             case FLOAT8OID:
                                 break;
                             default: {
-                                TString sequenceType = NPg::PgTypeNameFromTypeDesc(NPg::TypeDescFromPgTypeId(INT8OID))
                                 TString columnType = NPg::PgTypeNameFromTypeDesc(sourceColumn.PType.GetTypeDesc());
+                                TString sequenceType = NPg::PgTypeNameFromTypeDesc(NPg::TypeDescFromPgTypeId(INT8OID));
                                 errStr = Sprintf(
                                     "Column '%s' is of type %s but default expression is of type %s", colName.c_str(), columnType.c_str(), sequenceType.c_str()
                                 );
@@ -396,8 +396,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                         break;
                     }
                     default: {
-                        TString sequenceType = NScheme::TypeName(NScheme::NTypeIds::Int64);
                         TString columnType = NScheme::TypeName(sourceColumn.PType.GetTypeId());
+                        TString sequenceType = NScheme::TypeName(NScheme::NTypeIds::Int64);
                         errStr = Sprintf(
                             "Column '%s' is of type %s but default expression is of type %s", colName.c_str(), columnType.c_str(), sequenceType.c_str()
                         );

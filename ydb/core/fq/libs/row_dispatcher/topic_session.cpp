@@ -527,7 +527,7 @@ void TTopicSession::Handle(TEvRowDispatcher::TEvSessionAddConsumer::TPtr& ev) {
     try {
         predicate = FormatWhere(ev->Get()->SourceParams.GetPredicate());
         LOG_ROW_DISPATCHER_DEBUG("predicate " << predicate);
-    
+
         newConsumer.Filter = NewJsonFilter(
             GetVector(ev->Get()->SourceParams.GetColumns()),
             GetVector(ev->Get()->SourceParams.GetColumnTypes()),

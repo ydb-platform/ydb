@@ -51,8 +51,6 @@ public:
     }
 
     void OnObject(const NYql::NUdf::TUnboxedValue* value) override {
-        LOG_ROW_DISPATCHER_DEBUG("TFilterInputConsumer::OnObject: ");
-
         with_lock (Worker->GetScopedAlloc()) {
             auto& holderFactory = Worker->GetGraph().GetHolderFactory();
             NYql::NUdf::TUnboxedValue* items = nullptr;
@@ -69,9 +67,7 @@ public:
                 std::memcpy(str.Data(), strRef.Data(), strRef.Size());
                 items[i] = NYql::NUdf::TUnboxedValuePod(std::move(str));
             }
-            LOG_ROW_DISPATCHER_DEBUG("Push ");
             Worker->Push(std::move(result));
-            LOG_ROW_DISPATCHER_DEBUG("Push end");
         }
     }
 

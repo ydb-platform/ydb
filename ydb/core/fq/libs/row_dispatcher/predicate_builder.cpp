@@ -33,6 +33,10 @@ TString FormatValue(/*formatter SQLFormatter, args []any,*/ Ydb::TypedValue valu
 		return ToString(value.value().float_value());
 	case Ydb::Value::kDoubleValue:
 		return ToString(value.value().double_value());
+	case Ydb::Value::kBytesValue:
+		return "\"" + ToString(value.value().bytes_value()) + "\"";
+	case Ydb::Value::kTextValue:
+		return "\"" + ToString(value.value().text_value()) + "\"";
 	default:
         ythrow yexception() << "ErrUnimplementedTypedValue";
 	}
@@ -148,7 +152,7 @@ TString FormatPredicate(const NYql::NPq::NProto::TPredicate& predicate, bool /*t
 TString FormatWhere(const NYql::NPq::NProto::TPredicate& predicate) {
     auto stream = FormatPredicate(predicate, true);
 	if (stream.empty()) {
-		ythrow yexception() << "Empty predicate";
+		return "";
 	}
     return "WHERE " + stream;
 }

@@ -3,6 +3,7 @@
 #include <ydb/core/protos/config.pb.h>
 
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <ydb/library/yql/providers/yt/provider/yql_yt_gateway.h>
 
 #include <ydb/public/lib/ydb_cli/common/formats.h>
 
@@ -12,14 +13,20 @@ namespace NKqpRun {
 constexpr char YQL_TOKEN_VARIABLE[] = "YQL_TOKEN";
 
 struct TYdbSetupSettings {
+    ui32 NodeCount = 1;
     TString DomainName = "Root";
+    TDuration InitializationTimeout = TDuration::Seconds(10);
 
+    bool MonitoringEnabled = false;
+    ui16 MonitoringPortOffset = 0;
     bool TraceOptEnabled = false;
-    TMaybe<TString> LogOutputFile;
+    TString LogOutputFile;
 
     TString YqlToken;
     TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
     NKikimrConfig::TAppConfig AppConfig;
+
+    ui64 InFlightLimit = 0;
 };
 
 
@@ -34,12 +41,14 @@ struct TRunnerOptions {
     enum class EResultOutputFormat {
         RowsJson,  // Rows in json format
         FullJson,  // Columns, rows and types in json format
+        FullProto,  // Columns, rows and types in proto string format
     };
 
-    IOutputStream* ResultOutput = &Cout;
+    IOutputStream* ResultOutput = nullptr;
     IOutputStream* SchemeQueryAstOutput = nullptr;
     IOutputStream* ScriptQueryAstOutput = nullptr;
     IOutputStream* ScriptQueryPlanOutput = nullptr;
+    TString InProgressStatisticsOutputFile;
 
     EResultOutputFormat ResultOutputFormat = EResultOutputFormat::RowsJson;
     NYdb::NConsoleClient::EOutputFormat PlanOutputFormat = NYdb::NConsoleClient::EOutputFormat::Default;

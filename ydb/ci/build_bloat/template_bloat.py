@@ -7,6 +7,44 @@ import sys
 
 THRESHHOLD_TO_SHOW_ON_TREE_VIEW = 1024*10 
 
+def remove_brackets(name, b1, b2):
+    inside_template = 0
+    final_name = ""
+    for c in name:
+        if c == b1:
+            inside_template += 1
+            if inside_template == 1:
+                final_name += c
+        elif c == b2:
+            inside_template -= 1
+            if inside_template == 0:
+                final_name += c
+        else:
+            if inside_template:
+                continue
+            final_name += c
+    return final_name
+
+def get_aggregation_key(name):
+    final_name = name
+    # remove member function specifiers
+    final_name = final_name.removesuffix(" const")
+    final_name = final_name.removesuffix(" &&")
+
+    # remove thunks
+    final_name = final_name.removeprefix("non-virtual thunk to ") 
+    
+    # remove spaces and brackets
+    final_name = final_name.replace("(anonymous namespace)", "[anonymous_namespace]")
+    
+    # remove all inside brackets
+    final_name = remove_brackets(final_name, "<", ">")
+    final_name = remove_brackets(final_name, "(", ")")
+    if " " in final_name:
+        # it works not perfect but ok
+        final_name = final_name.rsplit(" ")[1]
+    return final_name
+
 class Walker:
     def __init__(self):
         self.stats = {}
@@ -21,21 +59,7 @@ class Walker:
         if node["type"] != "fn":
             return
         name = node["name"]
-        inside_template = 0
-        final_name = ""
-        for c in name:
-            if c == '<':
-                inside_template += 1
-                if inside_template == 1:
-                    final_name += c
-            elif c == '>':
-                inside_template -= 1
-                if inside_template == 0:
-                    final_name += c
-            else:
-                if inside_template:
-                    continue
-                final_name += c
+        final_name = get_aggregation_key(name)
         if final_name not in self.stats:
             self.stats[final_name] = [0,0,set(),None,None,None]
         p = self.stats[final_name]
@@ -115,7 +139,6 @@ def build_tree(items):
             continue
 
         # use braces only for args
-        name = name.replace("(anonymous namespace)", "[anonymous namespace]")
         total_size += size
 
         if '(' in name:

@@ -11,6 +11,7 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
@@ -88,8 +89,7 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
         default:
-            Y_VERIFY_S(false, "Unhandled event type: " << ev->GetTypeRewrite()
-                        << " event: " << ev->ToString());
+            LOG_W("Unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
         }
     }
 };

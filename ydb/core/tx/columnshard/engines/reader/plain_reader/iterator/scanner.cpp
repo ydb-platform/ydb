@@ -98,14 +98,14 @@ TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const s
     : Context(context)
 {
     
-    if (HasAppData() && AppDataVerified().ColumnShardConfig.HasMaxInFlightMemoryOnRequest()) {
-        MaxInFlightMemory = AppDataVerified().ColumnShardConfig.GetMaxInFlightMemoryOnRequest();
-    }
+    if (HasAppData()) {
+        if (AppDataVerified().ColumnShardConfig.HasMaxInFlightMemoryOnRequest()) {
+            MaxInFlightMemory = AppDataVerified().ColumnShardConfig.GetMaxInFlightMemoryOnRequest();
+        }
 
-    if (!HasAppData() || !AppDataVerified().ColumnShardConfig.HasMaxInFlightIntervalsOnRequest()) {
-        MaxInFlight = 256;
-    } else {
-        MaxInFlight = AppDataVerified().ColumnShardConfig.GetMaxInFlightIntervalsOnRequest();
+        if (AppDataVerified().ColumnShardConfig.HasMaxInFlightIntervalsOnRequest()) {
+            MaxInFlight = AppDataVerified().ColumnShardConfig.GetMaxInFlightIntervalsOnRequest();
+        }
     }
 
     if (Context->GetReadMetadata()->Limit) {

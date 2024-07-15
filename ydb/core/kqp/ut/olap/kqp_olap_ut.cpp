@@ -2485,7 +2485,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto client = kikimr.GetQueryClient();
-        { 
+        {
             auto prepareResult = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/ColumnShard` (a, b, c) VALUES
                     (1u, 1, 5),
@@ -2515,7 +2515,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("return (FromFlow (NarrowMap (WideFromBlocks"), plan.QueryStats->Getquery_ast());
                     break;
                 case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO:
-                    UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("return (FromFlow (ExpandMap (NarrowMap (WideFromBlocks"), plan.QueryStats->Getquery_ast());
+                    UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("return (FromFlow (WideFromBlocks"), plan.QueryStats->Getquery_ast());
                     break;
                 case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE:
                     UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("return (FromFlow (WideMap"), plan.QueryStats->Getquery_ast());
@@ -2523,7 +2523,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             }
         }
 
-        { 
+        {
             auto it = client.StreamExecuteQuery(R"(
                 SELECT
                     b, COUNT(*), SUM(a)

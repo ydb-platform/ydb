@@ -72,16 +72,35 @@ runs:
         set -x
 
         export TMP_DIR=$(pwd)/tmp
-        export LOG_DIR=$TMP_DIR/logs
-        
+        rm -rf $TMP_DIR
+        mkdir -p $TMP_DIR
         echo "TMP_DIR=$TMP_DIR" >> $GITHUB_ENV
+
+        export LOG_DIR=$TMP_DIR/logs
         echo "LOG_DIR=$LOG_DIR" >> $GITHUB_ENV
-        echo "OUT_DIR=$TMP_DIR/out" >> $GITHUB_ENV
-        echo "ARTIFACTS_DIR=$TMP_DIR/artifacts" >> $GITHUB_ENV
-        echo "TEST_ARTIFACTS_DIR=$TMP_DIR/test_artifacts" >> $GITHUB_ENV
-        echo "REPORTS_ARTIFACTS_DIR=$TMP_DIR/artifacts/test_reports" >> $GITHUB_ENV
+        mkdir -p $LOG_DIR
+
+        export OUT_DIR=$TMP_DIR/out
+        echo "OUT_DIR=$OUT_DIR" >> $GITHUB_ENV
+        mkdir -p $OUT_DIR
+
+        export ARTIFACTS_DIR=$TMP_DIR/artifacts
+        echo "ARTIFACTS_DIR=$ARTIFACTS_DIR" >> $GITHUB_ENV
+        mkdir -p $ARTIFACTS_DIR
+
+        export TEST_ARTIFACTS_DIR=$TMP_DIR/test_artifacts
+        echo "TEST_ARTIFACTS_DIR=$TEST_ARTIFACTS_DIR" >> $GITHUB_ENV
+        mkdir -p $TEST_ARTIFACTS_DIR
+
+        export REPORTS_ARTIFACTS_DIR=$TMP_DIR/artifacts/test_reports
+        echo "REPORTS_ARTIFACTS_DIR=$REPORTS_ARTIFACTS_DIR" >> $GITHUB_ENV
+        mkdir -p $REPORTS_ARTIFACTS_DIR
+
+        export JUNIT_REPORT_PARTS=$TMP_DIR/junit-split
+        echo "JUNIT_REPORT_PARTS=$JUNIT_REPORT_PARTS" >> $GITHUB_ENV
+        mkdir -p $JUNIT_REPORT_PARTS
+
         echo "JUNIT_REPORT_XML=$TMP_DIR/junit.xml" >> $GITHUB_ENV
-        echo "JUNIT_REPORT_PARTS=$TMP_DIR/junit-split" >> $GITHUB_ENV
         echo "TESTMO_URL=${{ inputs.testman_url }}" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$(mktemp)" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
@@ -93,10 +112,6 @@ runs:
         export log_url="$S3_URL_PREFIX/build_logs/ya_make.log"
         echo "LOG_URL=$log_url" >> $GITHUB_ENV
         echo "log_url=$log_url" >> $GITHUB_OUTPUT
-                        
-        rm -rf $TMP_DIR $JUNIT_REPORT_XML $JUNIT_REPORT_PARTS $REPORTS_ARTIFACTS_DIR
-        mkdir -p $TMP_DIR $OUT_DIR $ARTIFACTS_DIR $TEST_ARTIFACTS_DIR $LOG_DIR $JUNIT_REPORT_PARTS $REPORTS_ARTIFACTS_DIR
-
 
         # install test mo
         npm install -g @testmo/testmo-cli

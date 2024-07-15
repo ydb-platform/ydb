@@ -82,8 +82,8 @@ TQueryInfoList TClickbenchWorkloadGenerator::GetWorkload(int type) {
             queries.emplace_back(fInput.ReadAll());
         }
     } else {
-        const auto resuurceName = Params.IsDeterministic() ? "queries-deterministic.sql" : "click_bench_queries.sql";
-        queries = StringSplitter(NResource::Find(resuurceName)).Split(';').ToList<TString>();
+        const auto resourceName = Params.IsCheckCannonical() ? "queries-deterministic.sql" : "click_bench_queries.sql";
+        queries = StringSplitter(NResource::Find(resourceName)).Split(';').ToList<TString>();
     }
     auto strVariables = StringSplitter(Params.GetExternalVariablesString()).Split(';').SkipEmpty().ToList<TString>();
     TVector<TExternalVariable> vars;
@@ -131,18 +131,13 @@ TMap<ui32, TString> TClickbenchWorkloadGenerator::LoadExternalResults() const {
             TFileInput fInput(Params.GetExternalResultsDir() / i);
             result.emplace(qId, fInput.ReadAll());
         }
-    } else if (Params.IsDeterministic()) {
-        NResource::TResources resources;
-        const TStringBuf prefix("click_bench_canonical/q");
-        NResource::FindMatch(prefix, &resources);
-        for (const auto& res: resources) {
-            TStringBuf sb(res.Key);
-            Y_ABORT_UNLESS(sb.EndsWith(".result"));
-            sb.Skip(prefix.length());
-            sb.Chop(7);
-            ui32 qId;
-            Y_ABORT_UNLESS(TryFromString<ui32>(sb, qId));
-            result.emplace(qId, res.Data);
+    } else if (Params.IsCheckCannonical()) {
+        for(ui32 qId = 0; qId < 43; ++qId) {
+            const auto key = "click_bench_canonical/q" + ToString(qId) + ".result";
+            if (!NResource::Has(key)) {
+                continue;
+            }
+            result.emplace(qId, NResource::Find(key));
         }
     }
     return result;
@@ -167,8 +162,8 @@ void TClickbenchWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EC
         opts.AddLongOption('q', "ext-query", "String with external queries. Separated by ';'")
             .DefaultValue("")
             .StoreResult(&ExternalQueries);
-        opts.AddLongOption('d', "deterministic", "Use deterministic queries and check results")
-            .NoArgument().StoreTrue(&DeterministicFlag);
+        opts.AddLongOption('c', "check-cannonical", "Use deterministic queries and check results with cannonical ones.")
+            .NoArgument().StoreTrue(&CheckCannonicalFlag);
         break;
     default:
         break;

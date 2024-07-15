@@ -7,7 +7,7 @@ inputs:
   build_preset:
     required: true
     default: "relwithdebinfo"
-    description: "relwithdebinfo, release-asan, release-tsan"
+    description: "debug, relwithdebinfo, release-asan, release-tsan, release, release-cmake14"
   bazel_remote_uri:
     required: false
     description: "bazel-remote endpoint"
@@ -21,7 +21,13 @@ inputs:
     required: false
     default: "8"
     description: "link threads count"
-
+outputs:
+  success:
+    value: ${{ steps.build.outputs.status }}
+    description: "build success"
+  log_url:
+    value: ${{ steps.init.outputs.log_url }}
+    description: "build log url"
 runs:
   using: "composite"
   steps:
@@ -34,10 +40,15 @@ runs:
         echo "SHELLOPTS=xtrace" >> $GITHUB_ENV
         export TMP_DIR=$(pwd)/tmp_build
         echo "TMP_DIR=$TMP_DIR" >> $GITHUB_ENV
+        
+        export log_url="$S3_URL_PREFIX/build_logs/ya_make.log"
+        
         rm -rf $TMP_DIR && mkdir $TMP_DIR
         
         echo "BUILD_PRESET=$build_preset" >> $GITHUB_ENV
         echo "GITHUB_TOKEN=${{ github.token }}" >> $GITHUB_ENV
+        echo "LOG_URL=$log_url" >> $GITHUB_ENV
+        echo "log_url=$log_url" >> $GITHUB_OUTPUT
 
     - name: build
       id: build
@@ -66,6 +77,14 @@ runs:
             ;;
           relwithdebinfo)
             build_type=relwithdebinfo
+            ;;
+          release)
+            build_type=release
+            ;;
+          release-clang14)
+            build_type=release
+            extra_params+=(--target-platform="CLANG14-LINUX-X86_64")
+            extra_params+=(-DLLD_VERSION=16)
             ;;
           release-asan)
             build_type=release
@@ -99,7 +118,7 @@ runs:
         ./ya make -k --build "${build_type}" --force-build-depends -D'BUILD_LANGUAGES=CPP PY3 PY2 GO' -T --stat -DCONSISTENT_DEBUG \
           --log-file "$TMP_DIR/ya_log.txt" --evlog-file "$TMP_DIR/ya_evlog.jsonl" \
           --cache-size 512G --link-threads "${{ inputs.link_threads }}" \
-          "${extra_params[@]}" |& tee $TMP_DIR/ya_make.log || (
+          "${extra_params[@]}" |& tee $TMP_DIR/ya_make.log && echo "status=true" >> $GITHUB_OUTPUT || (
               RC=$?
               echo "::debug::ya make RC=$RC"
               echo "status=failed" >> $GITHUB_OUTPUT
@@ -118,10 +137,8 @@ runs:
       if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
       shell: bash
       run: |
-        log_url="$S3_URL_PREFIX/build_logs/ya_make.log"
-
         if [ "${{ steps.build.outputs.status }}" == "failed" ]; then
-          echo "Build failed. see the [build logs]($log_url)." | .github/scripts/tests/comment-pr.py --fail
+          echo "Build failed. see the [build logs]($LOG_URL)." | .github/scripts/tests/comment-pr.py --fail
         else
           echo "Build successful." | .github/scripts/tests/comment-pr.py --ok
         fi

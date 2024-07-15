@@ -140,6 +140,14 @@ bool TInsertionSummary::EraseAborted(const TWriteId writeId) {
     return true;
 }
 
+bool TInsertionSummary::HasAborted(const TWriteId writeId) {
+    auto it = Aborted.find(writeId);
+    if (it == Aborted.end()) {
+        return false;
+    }
+    return true;
+}
+
 bool TInsertionSummary::EraseCommitted(const TInsertedData& data) {
     TPathInfo* pathInfo = GetPathInfoOptional(data.PathId);
     if (!pathInfo) {
@@ -153,6 +161,14 @@ bool TInsertionSummary::EraseCommitted(const TInsertedData& data) {
     } else {
         return true;
     }
+}
+
+bool TInsertionSummary::HasCommitted(const TInsertedData& data) {
+    TPathInfo* pathInfo = GetPathInfoOptional(data.PathId);
+    if (!pathInfo) {
+        return false;
+    }
+    return pathInfo->HasCommitted(data);
 }
 
 const NKikimr::NOlap::TInsertedData* TInsertionSummary::AddAborted(TInsertedData&& data, const bool load /*= false*/) {

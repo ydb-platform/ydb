@@ -33,5 +33,11 @@ public:
     TString DebugString() const;
 };
 
-
 }
+
+template<>
+struct ::THash<NKikimr::NOlap::TChunkAddress> {
+    inline ui64 operator()(const NKikimr::NOlap::TChunkAddress& a) const {
+        return ((ui64)a.GetEntityId()) << 16 + a.GetChunkIdx();
+    }
+};

@@ -1,5 +1,8 @@
 #pragma once
 #include "defs.h"
+
+#include "vdisk_performance_params.h"
+
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/vdisk/repl/repl_quoter.h>
 #include <ydb/core/base/blobstorage.h>
@@ -210,6 +213,10 @@ namespace NKikimr {
         bool EnableVDiskCooldownTimeout;
         TControlWrapper EnableVPatch = true;
 
+        ///////////// COST METRICS SETTINGS ////////////////
+        bool UseCostTracker = true;
+        TCostMetricsParametersByMedia CostMetricsParametersByMedia;
+
         ///////////// FEATURE FLAGS ////////////////////////
         NKikimrConfig::TFeatureFlags FeatureFlags;
 
@@ -228,6 +235,7 @@ namespace NKikimr {
     class TAllVDiskKinds : public TThrRefBase {
     public:
         TAllVDiskKinds(const TString &prototext = TString());
+        TAllVDiskKinds(const NKikimrBlobStorage::TAllVDiskKinds &proto);
         TIntrusivePtr<TVDiskConfig> MakeVDiskConfig(const TVDiskConfig::TBaseInfo &baseInfo);
         void Merge(const NKikimrBlobStorage::TAllVDiskKinds &allVDiskKinds);
 

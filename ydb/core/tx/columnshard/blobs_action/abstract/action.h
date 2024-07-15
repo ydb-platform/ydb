@@ -22,13 +22,13 @@ public:
 
     }
 
-    const std::shared_ptr<IBlobsDeclareRemovingAction>& GetRemoving(const TString& consumerId) {
+    const std::shared_ptr<IBlobsDeclareRemovingAction>& GetRemoving(const NBlobOperations::EConsumer consumerId) {
         if (!Removing) {
             Removing = Storage->StartDeclareRemovingAction(consumerId);
         }
         return Removing;
     }
-    const std::shared_ptr<IBlobsWritingAction>& GetWriting(const TString& consumerId) {
+    const std::shared_ptr<IBlobsWritingAction>& GetWriting(const NBlobOperations::EConsumer consumerId) {
         if (!Writing) {
             Writing = Storage->StartWritingAction(consumerId);
         }
@@ -37,7 +37,7 @@ public:
     const std::shared_ptr<IBlobsWritingAction>& GetWritingOptional() const {
         return Writing;
     }
-    const std::shared_ptr<IBlobsReadingAction>& GetReading(const TString& consumerId) {
+    const std::shared_ptr<IBlobsReadingAction>& GetReading(const NBlobOperations::EConsumer consumerId) {
         if (!Reading) {
             Reading = Storage->StartReadingAction(consumerId);
         }
@@ -55,9 +55,9 @@ public:
         return !!Writing;
     }
 
-    void OnExecuteTxAfterAction(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
+    void OnExecuteTxAfterAction(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
         if (Removing) {
-            Removing->OnExecuteTxAfterRemoving(self, dbBlobs, blobsWroteSuccessfully);
+            Removing->OnExecuteTxAfterRemoving(dbBlobs, blobsWroteSuccessfully);
         }
         if (Writing) {
             Writing->OnExecuteTxAfterWrite(self, dbBlobs, blobsWroteSuccessfully);
@@ -66,7 +66,7 @@ public:
 
     void OnCompleteTxAfterAction(NColumnShard::TColumnShard& self, const bool blobsWroteSuccessfully) {
         if (Removing) {
-            Removing->OnCompleteTxAfterRemoving(self, blobsWroteSuccessfully);
+            Removing->OnCompleteTxAfterRemoving(blobsWroteSuccessfully);
         }
         if (Writing) {
             Writing->OnCompleteTxAfterWrite(self, blobsWroteSuccessfully);
@@ -78,7 +78,7 @@ class TBlobsAction {
 private:
     std::shared_ptr<IStoragesManager> Storages;
     THashMap<TString, TStorageAction> StorageActions;
-    const TString ConsumerId;
+    const NBlobOperations::EConsumer ConsumerId;
 
     TStorageAction& GetStorageAction(const TString& storageId) {
         auto it = StorageActions.find(storageId);
@@ -88,11 +88,19 @@ private:
         return it->second;
     }
 public:
-    explicit TBlobsAction(std::shared_ptr<IStoragesManager> storages, const TString& consumerId)
+    explicit TBlobsAction(std::shared_ptr<IStoragesManager> storages, const NBlobOperations::EConsumer consumerId)
         : Storages(storages)
         , ConsumerId(consumerId)
     {
 
+    }
+
+    TString GetStorageIds() const {
+        TStringBuilder sb;
+        for (auto&& i : StorageActions) {
+            sb << i.first << ",";
+        }
+        return sb;
     }
 
     ui32 GetWritingBlobsCount() const {
@@ -135,16 +143,22 @@ public:
         return result;
     }
 
-    bool NeedDraftWritingTransaction() const {
+    [[nodiscard]] TConclusion<bool> NeedDraftWritingTransaction() const {
+        bool hasWriting = false;
         for (auto&& i : GetWritingActions()) {
             if (i->NeedDraftTransaction()) {
                 return true;
             }
+            hasWriting = true;
         }
-        return false;
+        if (hasWriting) {
+            return false;
+        } else {
+            return TConclusionStatus::Fail("has not writings");
+        }
     }
 
-    void OnExecuteTxAfterAction(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
+    void OnExecuteTxAfterAction(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
         for (auto&& i : StorageActions) {
             i.second.OnExecuteTxAfterAction(self, dbBlobs, blobsWroteSuccessfully);
         }
@@ -160,19 +174,13 @@ public:
         return GetStorageAction(storageId).GetRemoving(ConsumerId);
     }
 
-    std::shared_ptr<IBlobsDeclareRemovingAction> GetRemoving(const TPortionInfo& portionInfo);
-
     std::shared_ptr<IBlobsWritingAction> GetWriting(const TString& storageId) {
         return GetStorageAction(storageId).GetWriting(ConsumerId);
     }
 
-    std::shared_ptr<IBlobsWritingAction> GetWriting(const TPortionInfo& portionInfo);
-
     std::shared_ptr<IBlobsReadingAction> GetReading(const TString& storageId) {
         return GetStorageAction(storageId).GetReading(ConsumerId);
     }
-
-    std::shared_ptr<IBlobsReadingAction> GetReading(const TPortionInfo& portionInfo);
 
 };
 

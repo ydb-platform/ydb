@@ -1,6 +1,6 @@
 #include "filter.h"
 #include "defs.h"
-#include "reader/read_metadata.h"
+#include "scheme/abstract/index_info.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/custom_registry.h>
@@ -82,8 +82,8 @@ public:
 template <class TGetter, class TData>
 NArrow::TColumnFilter MakeSnapshotFilterImpl(const std::shared_ptr<TData>& batch, const TSnapshot& snapshot) {
     Y_ABORT_UNLESS(batch);
-    auto steps = batch->GetColumnByName(TIndexInfo::SPEC_COL_PLAN_STEP);
-    auto ids = batch->GetColumnByName(TIndexInfo::SPEC_COL_TX_ID);
+    auto steps = batch->GetColumnByName(IIndexInfo::SPEC_COL_PLAN_STEP);
+    auto ids = batch->GetColumnByName(IIndexInfo::SPEC_COL_TX_ID);
     NArrow::TColumnFilter result = NArrow::TColumnFilter::BuildAllowFilter();
     TGetter getter(steps, ids, snapshot);
     result.Reset(steps->length(), std::move(getter));
@@ -121,20 +121,6 @@ public:
 NArrow::TColumnFilter MakeSnapshotFilter(const std::shared_ptr<arrow::RecordBatch>& batch,
                                      const TSnapshot& snapshot) {
     return MakeSnapshotFilterImpl<TSnapshotGetter>(batch, snapshot);
-}
-
-NArrow::TColumnFilter FilterPortion(const std::shared_ptr<arrow::Table>& portion, const TReadMetadata& readMetadata, const bool useSnapshotFilter) {
-    Y_ABORT_UNLESS(portion);
-    NArrow::TColumnFilter result = readMetadata.GetPKRangesFilter().BuildFilter(portion);
-    if (readMetadata.GetSnapshot().GetPlanStep() && useSnapshotFilter) {
-        result = result.And(MakeSnapshotFilter(portion, readMetadata.GetSnapshot()));
-    }
-
-    return result;
-}
-
-NArrow::TColumnFilter FilterNotIndexed(const std::shared_ptr<arrow::Table>& batch, const TReadMetadata& readMetadata) {
-    return readMetadata.GetPKRangesFilter().BuildFilter(batch);
 }
 
 }

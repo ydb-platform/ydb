@@ -9,7 +9,6 @@
 #include <ydb/core/formats/arrow/converter.h>
 #include <ydb/core/io_formats/arrow/csv_arrow.h>
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
@@ -29,6 +28,8 @@
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 
 #include <util/string/join.h>
 #include <util/string/vector.h>
@@ -40,15 +41,12 @@ class TUploadCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
     NMonitoring::TDynamicCounters::TCounterPtr RequestsCount;
-    NMonitoring::TDynamicCounters::TCounterPtr RepliesCount;
     NMonitoring::THistogramPtr ReplyDuration;
 
     NMonitoring::TDynamicCounters::TCounterPtr RowsCount;
     NMonitoring::THistogramPtr PackageSize;
 
-    NMonitoring::TDynamicCounters::TCounterPtr FailsCount;
-    NMonitoring::THistogramPtr FailDuration;
-
+    THashMap<TString, NMonitoring::TDynamicCounters::TCounterPtr> CodesCount;
 public:
     TUploadCounters();
 
@@ -58,15 +56,7 @@ public:
         PackageSize->Collect(rowsCount);
     }
 
-    void OnReply( const TDuration d) const {
-        RepliesCount->Add(1);
-        ReplyDuration->Collect(d.MilliSeconds());
-    }
-
-    void OnFail(const TDuration d) const {
-        FailsCount->Add(1);
-        FailDuration->Collect(d.MilliSeconds());
-    }
+    void OnReply(const TDuration d, const ::Ydb::StatusIds::StatusCode code) const;
 };
 
 
@@ -208,18 +198,21 @@ protected:
     std::shared_ptr<arrow::RecordBatch> Batch;
     float RuCost = 0.0;
 
+    NWilson::TSpan Span;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return DerivedActivityType;
     }
 
-    explicit TUploadRowsBase(TDuration timeout = TDuration::Max(), bool diskQuotaExceeded = false)
+    explicit TUploadRowsBase(TDuration timeout = TDuration::Max(), bool diskQuotaExceeded = false, NWilson::TSpan span = {})
         : TBase()
         , SchemeCache(MakeSchemeCacheID())
         , LeaderPipeCache(MakePipePeNodeCacheID(false))
         , Timeout((timeout && timeout <= DEFAULT_TIMEOUT) ? timeout : DEFAULT_TIMEOUT)
         , Status(Ydb::StatusIds::SUCCESS)
         , DiskQuotaExceeded(diskQuotaExceeded)
+        , Span(std::move(span))
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx) {
@@ -232,10 +225,10 @@ public:
         for (auto& pr : ShardUploadRetryStates) {
             if (pr.second.SentOverloadSeqNo) {
                 auto* msg = new TEvDataShard::TEvOverloadUnsubscribe(pr.second.SentOverloadSeqNo);
-                ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(msg, pr.first, false));
+                ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(msg, pr.first, false), 0, 0, Span.GetTraceId());
             }
         }
-        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
+        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0), 0, 0, Span.GetTraceId());
         if (TimeoutTimerActorId) {
             ctx.Send(TimeoutTimerActorId, new TEvents::TEvPoisonPill());
         }
@@ -261,8 +254,9 @@ protected:
     {
         NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, NotNullColumns);
         batchBuilder.Reserve(rows.size()); // TODO: ReserveData()
-        if (!batchBuilder.Start(YdbSchema)) {
-            errorMessage = "Cannot make Arrow batch from rows";
+        const auto startStatus = batchBuilder.Start(YdbSchema);
+        if (!startStatus.ok()) {
+            errorMessage = "Cannot make Arrow batch from rows: " + startStatus.ToString();
             return {};
         }
 
@@ -330,6 +324,7 @@ private:
 private:
     void Handle(TEvents::TEvPoison::TPtr&, const TActorContext& ctx) {
         OnBeforePoison(ctx);
+        Span.EndError("poison");
         Die(ctx);
     }
 
@@ -352,7 +347,11 @@ private:
     static bool SameDstType(NScheme::TTypeInfo type1, NScheme::TTypeInfo type2, bool allowConvert) {
         bool res = (type1 == type2);
         if (!res && allowConvert) {
-            res = (NArrow::GetArrowType(type1)->id() == NArrow::GetArrowType(type2)->id());
+            auto arrowType1 = NArrow::GetArrowType(type1);
+            auto arrowType2 = NArrow::GetArrowType(type2);
+            if (arrowType1.ok() && arrowType2.ok()) {
+                res = (arrowType1.ValueUnsafe()->id() == arrowType2.ValueUnsafe()->id());
+            }
         }
         return res;
     }
@@ -595,7 +594,7 @@ private:
         entry.SyncVersion = true;
         entry.ShowPrivatePath = AllowWriteToPrivateTable;
         request->ResultSet.emplace_back(entry);
-        ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
+        ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request), 0, 0, Span.GetTraceId());
 
         TimeoutTimerActorId = CreateLongTimer(ctx, Timeout,
             new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup()));
@@ -683,15 +682,19 @@ private:
                         return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << errorMessage, ctx);
                     }
                     if (!ColumnsToConvertInplace.empty()) {
-                        Batch = NArrow::InplaceConvertColumns(Batch, ColumnsToConvertInplace);
+                        auto convertResult = NArrow::InplaceConvertColumns(Batch, ColumnsToConvertInplace);
+                        if (!convertResult.ok()) {
+                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << "Cannot convert arrow batch inplace:" << convertResult.status().ToString(), ctx);
+                        }
+                        Batch = *convertResult;
                     }
                     // Explicit types conversion
                     if (!ColumnsToConvert.empty()) {
-                        Batch = NArrow::ConvertColumns(Batch, ColumnsToConvert);
-                        if (!Batch) {
-                            errorMessage = "Cannot upsert arrow batch: one of data types has no conversion";
-                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << errorMessage, ctx);
+                        auto convertResult = NArrow::ConvertColumns(Batch, ColumnsToConvert);
+                        if (!convertResult.ok()) {
+                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << "Cannot convert arrow batch:" << convertResult.status().ToString(), ctx);
                         }
+                        Batch = *convertResult;
                     }
                 } else {
                     // TUploadColumnsRPCPublic::ExtractBatch() - NOT converted JsonDocument, DynNumbers, ...
@@ -743,7 +746,7 @@ private:
         // Begin Long Tx for writing a batch into OLAP table
         TActorId longTxServiceId = NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId());
         NKikimrLongTxService::TEvBeginTx::EMode mode = NKikimrLongTxService::TEvBeginTx::MODE_WRITE_ONLY;
-        ctx.Send(longTxServiceId, new NLongTxService::TEvLongTxService::TEvBeginTx(GetDatabase(), mode));
+        ctx.Send(longTxServiceId, new NLongTxService::TEvLongTxService::TEvBeginTx(GetDatabase(), mode), 0, 0, Span.GetTraceId());
         TBase::Become(&TThis::StateWaitBeginLongTx);
     }
 
@@ -861,7 +864,7 @@ private:
             LogPrefix() << "rolling back LongTx '" << LongTxId.ToString() << "'");
 
         TActorId longTxServiceId = NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId());
-        ctx.Send(longTxServiceId, new NLongTxService::TEvLongTxService::TEvRollbackTx(LongTxId));
+        ctx.Send(longTxServiceId, new NLongTxService::TEvLongTxService::TEvRollbackTx(LongTxId), 0, 0, Span.GetTraceId());
     }
 
     STFUNC(StateWaitWriteBatchResult) {
@@ -887,7 +890,7 @@ private:
 
     void CommitLongTx(const TActorContext& ctx) {
         TActorId longTxServiceId = NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId());
-        ctx.Send(longTxServiceId, new NLongTxService::TEvLongTxService::TEvCommitTx(LongTxId));
+        ctx.Send(longTxServiceId, new NLongTxService::TEvLongTxService::TEvCommitTx(LongTxId), 0, 0, Span.GetTraceId());
         TBase::Become(&TThis::StateWaitCommitLongTx);
     }
 
@@ -966,7 +969,7 @@ private:
         request->ResultSet.emplace_back(std::move(keyRange));
 
         TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq(new TEvTxProxySchemeCache::TEvResolveKeySet(request));
-        ctx.Send(SchemeCache, resolveReq.Release());
+        ctx.Send(SchemeCache, resolveReq.Release(), 0, 0, Span.GetTraceId());
 
         TBase::Become(&TThis::StateWaitResolveShards);
     }
@@ -1027,7 +1030,7 @@ private:
         ev->Record.SetOverloadSubscribe(seqNo);
         state->SentOverloadSeqNo = seqNo;
 
-        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery);
+        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
     }
 
     void MakeShardRequests(const NActors::TActorContext& ctx) {
@@ -1109,7 +1112,7 @@ private:
             ev->Record.SetOverloadSubscribe(seqNo);
             uploadRetryStates[idx]->SentOverloadSeqNo = seqNo;
 
-            ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery);
+            ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
 
             auto res = ShardRepliesLeft.insert(shardId);
             if (!res.second) {
@@ -1120,7 +1123,7 @@ private:
         TBase::Become(&TThis::StateWaitResults);
 
         // Sanity check: don't break when we don't have any shards for some reason
-        ReplyIfDone(ctx);
+        return ReplyIfDone(ctx);
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
@@ -1129,16 +1132,16 @@ private:
 
         ShardRepliesLeft.clear();
 
-        ReplyIfDone(ctx);
+        return ReplyIfDone(ctx);
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx) {
-        ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()));
+        ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()), 0, 0, Span.GetTraceId());
 
         SetError(Ydb::StatusIds::UNAVAILABLE, Sprintf("Failed to connect to shard %" PRIu64, ev->Get()->TabletId));
         ShardRepliesLeft.erase(ev->Get()->TabletId);
 
-        ReplyIfDone(ctx);
+        return ReplyIfDone(ctx);
     }
 
     STFUNC(StateWaitResults) {
@@ -1170,7 +1173,7 @@ private:
             switch (shardResponse.GetStatus()) {
             case NKikimrTxDataShard::TError::WRONG_SHARD_STATE:
             case NKikimrTxDataShard::TError::SHARD_IS_BLOCKED:
-                ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()));
+                ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()), 0, 0, Span.GetTraceId());
                 status = Ydb::StatusIds::OVERLOADED;
                 break;
             case NKikimrTxDataShard::TError::DISK_SPACE_EXHAUSTED:
@@ -1203,12 +1206,12 @@ private:
         }
 
         // Notify the cache that we are done with the pipe
-        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(shardId));
+        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(shardId), 0, 0, Span.GetTraceId());
 
         ShardRepliesLeft.erase(shardId);
         ShardUploadRetryStates.erase(shardId);
 
-        ReplyIfDone(ctx);
+        return ReplyIfDone(ctx);
     }
 
     void Handle(TEvDataShard::TEvOverloadReady::TPtr& ev, const TActorContext& ctx) {
@@ -1242,7 +1245,7 @@ private:
             RaiseIssue(NYql::TIssue(ErrorMessage));
         }
 
-        ReplyWithResult(Status, ctx);
+        return ReplyWithResult(Status, ctx);
     }
 
     void ReplyWithError(::Ydb::StatusIds::StatusCode status, const TString& message, const TActorContext& ctx) {
@@ -1251,11 +1254,11 @@ private:
         SetError(status, message);
 
         Y_DEBUG_ABORT_UNLESS(ShardRepliesLeft.empty());
-        ReplyIfDone(ctx);
+        return ReplyIfDone(ctx);
     }
 
     void ReplyWithResult(::Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {
-        UploadCounters.OnReply(TAppData::TimeProvider->Now() - StartTime);
+        UploadCounters.OnReply(TAppData::TimeProvider->Now() - StartTime, status);
         SendResult(ctx, status);
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, LogPrefix() << "completed with status " << status);
@@ -1266,6 +1269,7 @@ private:
             Y_DEBUG_ABORT_UNLESS(status != ::Ydb::StatusIds::SUCCESS);
             RollbackLongTx(ctx);
         }
+        Span.EndOk();
 
         Die(ctx);
     }

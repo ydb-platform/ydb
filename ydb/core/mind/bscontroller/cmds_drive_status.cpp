@@ -85,7 +85,7 @@ namespace NKikimr::NBsController {
                 item->SetPath(pdiskInfo.Path);
                 item->SetStatus(pdiskInfo.Status);
                 item->SetPDiskId(pdiskId.PDiskId);
-                item->SetSerial(pdiskInfo.ExpectedSerial);
+                //item->SetSerial(pdiskInfo.ExpectedSerial);
                 item->SetStatusChangeTimestamp(pdiskInfo.StatusTimestamp.GetValue());
             }
             return true;

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+
 #include <util/system/defaults.h>
 #include <util/system/hp_timer.h>
 #include <util/system/platform.h>

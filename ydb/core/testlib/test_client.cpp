@@ -46,6 +46,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/immediate_controls_configurator.h>
+#include <ydb/core/cms/console/jaeger_tracing_configurator.h>
 #include <ydb/core/formats/clickhouse_block.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/security/ldap_auth_provider.h>
@@ -192,6 +193,8 @@ namespace Tests {
         app.SetAwsRegion(Settings->AwsRegion);
         app.CompactionConfig = Settings->CompactionConfig;
         app.FeatureFlags = Settings->FeatureFlags;
+        app.ImmediateControlsConfig = Settings->Controls;
+        app.InitIcb(StaticNodes() + DynamicNodes());
 
         Runtime = MakeHolder<TTestBasicRuntime>(StaticNodes() + DynamicNodes(), Settings->UseRealThreads);
 
@@ -275,12 +278,7 @@ namespace Tests {
         //
         for (ui32 nodeIdx = 0; nodeIdx < StaticNodes(); ++nodeIdx) {
             SetupDomainLocalService(nodeIdx);
-            SetupConfigurators(nodeIdx);
             SetupProxies(nodeIdx);
-        }
-
-        for (ui32 nodeIdx = StaticNodes(); nodeIdx < StaticNodes() + DynamicNodes(); ++nodeIdx) {
-            SetupConfigurators(nodeIdx);
         }
 
         CreateBootstrapTablets();
@@ -311,13 +309,18 @@ namespace Tests {
         grpcRequestProxies.reserve(proxyCount);
 
         auto& appData = Runtime->GetAppData();
+        NJaegerTracing::TSamplingThrottlingConfigurator tracingConfigurator(appData.TimeProvider, appData.RandomProvider);
 
         for (size_t i = 0; i < proxyCount; ++i) {
-            auto grpcRequestProxy = NGRpcService::CreateGRpcRequestProxy(*Settings->AppConfig, appData.Icb);
+            auto grpcRequestProxy = NGRpcService::CreateGRpcRequestProxy(*Settings->AppConfig, tracingConfigurator.GetControl());
             auto grpcRequestProxyId = system->Register(grpcRequestProxy, TMailboxType::ReadAsFilled);
             system->RegisterLocalService(NGRpcService::CreateGRpcRequestProxyId(), grpcRequestProxyId);
             grpcRequestProxies.push_back(grpcRequestProxyId);
         }
+
+        system->Register(
+            NConsole::CreateJaegerTracingConfigurator(std::move(tracingConfigurator), Settings->AppConfig->GetTracingConfig())
+        );
 
         auto grpcMon = system->Register(NGRpcService::CreateGrpcMonService(), TMailboxType::ReadAsFilled);
         system->RegisterLocalService(NGRpcService::GrpcMonServiceId(), grpcMon);

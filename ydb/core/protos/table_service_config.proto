@@ -273,4 +273,7 @@ message TTableServiceConfig {
 
     optional uint64 ExtractPredicateRangesLimit = 54 [default = 10000];
     optional bool EnableOlapSink = 55 [default = false];
+
+    optional uint64 IdxLookupJoinPointsLimit = 58 [default = 1];
+    optional bool OldLookupJoinBehaviour = 59 [default = true]; 
 };

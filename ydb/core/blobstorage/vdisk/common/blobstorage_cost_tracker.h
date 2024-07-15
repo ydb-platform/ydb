@@ -5,9 +5,13 @@
 #include "vdisk_events.h"
 #include "vdisk_handle_class.h"
 #include "vdisk_mongroups.h"
+#include "vdisk_performance_params.h"
 
+#include <library/cpp/bucket_quoter/bucket_quoter.h>
 #include <util/system/compiler.h>
+#include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/util/light.h>
 
 namespace NKikimr {
 
@@ -49,6 +53,8 @@ public:
 
     virtual ~TBsCostModelBase() = default;
 
+    friend class TBsCostTracker;
+
 protected:
     NPDisk::EDeviceType DeviceType = NPDisk::DEVICE_TYPE_UNKNOWN;
 
@@ -64,6 +70,7 @@ protected:
     ui64 PDiskWriteBlockSize = 4ull * 1'000'000; // 4MB
 
     static const TDiskOperationCostEstimator HDDEstimator;
+    static const TDiskOperationCostEstimator SSDEstimator;
     static const TDiskOperationCostEstimator NVMEEstimator;
 
 private:
@@ -101,6 +108,9 @@ protected:
             case NPDisk::DEVICE_TYPE_ROT: {
                 return HDDEstimator.Write(chunkSize);
             }
+            case NPDisk::DEVICE_TYPE_SSD: {
+                return SSDEstimator.Write(chunkSize);
+            }
             case NPDisk::DEVICE_TYPE_NVME: {
                 return NVMEEstimator.Write(chunkSize);
             }
@@ -116,6 +126,9 @@ protected:
         switch (DeviceType) {
             case NPDisk::DEVICE_TYPE_ROT: {
                 return HDDEstimator.HugeWrite(chunkSize);
+            }
+            case NPDisk::DEVICE_TYPE_SSD: {
+                return SSDEstimator.HugeWrite(chunkSize);
             }
             case NPDisk::DEVICE_TYPE_NVME: {
                 return NVMEEstimator.HugeWrite(chunkSize);
@@ -133,6 +146,9 @@ protected:
         switch (DeviceType) {
             case NPDisk::DEVICE_TYPE_ROT: {
                 return HDDEstimator.Read(chunkSize);
+            }
+            case NPDisk::DEVICE_TYPE_SSD: {
+                return SSDEstimator.Read(chunkSize);
             }
             case NPDisk::DEVICE_TYPE_NVME: {
                 return NVMEEstimator.Read(chunkSize);
@@ -264,6 +280,29 @@ public:
     }
 };
 
+struct TFailTimer {
+    using TTime = TInstant;
+    static TTime Now() {
+        Y_FAIL();
+    }
+};
+
+template<class TBackupTimer = TFailTimer>
+struct TAppDataTimerMs {
+    using TTime = TInstant;
+    static constexpr ui64 Resolution = 1000ull; // milliseconds
+    static TTime Now() {
+        if (NKikimr::TAppData::TimeProvider) {
+            return NKikimr::TAppData::TimeProvider->Now();
+        } else {
+            return TBackupTimer::Now();
+        }
+    }
+    static ui64 Duration(TTime from, TTime to) {
+        return (to - from).MilliSeconds();
+    }
+};
+
 using TBsCostModelErasureNone = TBsCostModelBase;
 class TBsCostModelMirror3dc;
 class TBsCostModel4Plus2Block;
@@ -276,9 +315,22 @@ private:
     TIntrusivePtr<::NMonitoring::TDynamicCounters> CostCounters;
     std::shared_ptr<NMonGroup::TCostTrackerGroup> MonGroup;
 
+    ::NMonitoring::TDynamicCounters::TCounterPtr DiskTimeAvailableCtr;
+
+    TAtomic BucketCapacity = 1'000'000'000;  // 10^9 nsec
+    TAtomic DiskTimeAvailable = 1'000'000'000;
+    TBucketQuoter<i64, TSpinLock, TAppDataTimerMs<TInstantTimerMs>> Bucket;
+    TLight BurstDetector;
+    std::atomic<ui64> SeqnoBurstDetector = 0;
+    static constexpr ui32 ConcurrentHugeRequestsAllowed = 3;
+
+    TMemorizableControlWrapper BurstThresholdNs;
+    TMemorizableControlWrapper DiskTimeAvailableScale;
+
 public:
     TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::EDeviceType diskType,
-            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
+            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
+            const TCostMetricsParameters& costMetricsParameters);
 
     template<class TEv>
     ui64 GetCost(const TEv& ev) const {
@@ -291,9 +343,6 @@ public:
         return cost;
     }
 
-    /// SETTINGS
-    void UpdateFromVDiskSettings(NKikimrBlobStorage::TVDiskCostSettings &settings) const;
-
 public:
     void UpdateCostModel(const TCostModel& costModel) {
         if (CostModel) {
@@ -301,38 +350,72 @@ public:
         }
     }
 
+    void CountRequest(ui64 cost) {
+        AtomicSet(BucketCapacity, GetDiskTimeAvailableScale() * BurstThresholdNs.Update(TAppData::TimeProvider->Now()));
+        Bucket.UseAndFill(cost);
+        BurstDetector.Set(!Bucket.IsAvail(), SeqnoBurstDetector.fetch_add(1));
+    }
+
+    void SetTimeAvailable(ui64 diskTimeAvailableNSec) {
+        ui64 diskTimeAvailable = diskTimeAvailableNSec * GetDiskTimeAvailableScale();
+
+        AtomicSet(DiskTimeAvailable, diskTimeAvailable);
+        *DiskTimeAvailableCtr = diskTimeAvailable;
+    }
+
 public:
     template<class TEvent>
     void CountUserRequest(const TEvent& ev) {
-        MonGroup->UserDiskCost() += GetCost(ev);
+        ui64 cost = GetCost(ev);
+        MonGroup->UserDiskCost() += cost;
+        CountRequest(cost);
     }
 
     void CountUserCost(ui64 cost) {
         MonGroup->UserDiskCost() += cost;
+        CountRequest(cost);
     }
 
     template<class TEvent>
     void CountCompactionRequest(const TEvent& ev) {
-        MonGroup->CompactionDiskCost() += GetCost(ev);
+        ui64 cost = GetCost(ev);
+        MonGroup->CompactionDiskCost() += cost;
+        CountRequest(cost);
     }
 
     template<class TEvent>
     void CountScrubRequest(const TEvent& ev) {
-        MonGroup->UserDiskCost() += GetCost(ev);
+        ui64 cost = GetCost(ev);
+        MonGroup->UserDiskCost() += cost;
+        CountRequest(cost);
     }
 
     template<class TEvent>
     void CountDefragRequest(const TEvent& ev) {
-        MonGroup->DefragDiskCost() += GetCost(ev);
+        ui64 cost = GetCost(ev);
+        MonGroup->DefragDiskCost() += cost;
+        CountRequest(cost);
     }
 
     template<class TEvent>
     void CountInternalRequest(const TEvent& ev) {
-        MonGroup->InternalDiskCost() += GetCost(ev);
+        ui64 cost = GetCost(ev);
+        MonGroup->InternalDiskCost() += cost;
+        CountRequest(cost);
     }
 
     void CountInternalCost(ui64 cost) {
         MonGroup->InternalDiskCost() += cost;
+        CountRequest(cost);
+    }
+
+    void CountPDiskResponse() {
+        BurstDetector.Set(!Bucket.IsAvail(), SeqnoBurstDetector.fetch_add(1));
+    }
+
+private:
+    float GetDiskTimeAvailableScale() {
+        return 0.001 * DiskTimeAvailableScale.Update(TAppData::TimeProvider->Now());
     }
 };
 

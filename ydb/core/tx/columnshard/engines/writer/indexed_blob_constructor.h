@@ -5,6 +5,7 @@
 
 #include <ydb/core/tx/data_events/write_data.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/write.h>
+#include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
 #include <ydb/core/tx/columnshard/counters/common/object_counter.h>
 #include <ydb/core/tx/columnshard/engines/portion_info.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
@@ -57,7 +58,7 @@ public:
     bool AddData(TWideSerializedBatch& batch) {
         if (BlobData.size() + batch.GetSplittedBlobs().GetSize() < 8 * 1024 * 1024) {
             Ranges.emplace_back(&batch);
-            batch.SetRange(TBlobRange(TUnifiedBlobId(0, 0, 0, 0, BlobData.size() + batch.GetSplittedBlobs().GetSize()), BlobData.size(), batch.GetSplittedBlobs().GetSize()));
+            batch.SetRange(TBlobRange(TUnifiedBlobId(0, 0, 0, 0, 0, 0, BlobData.size() + batch.GetSplittedBlobs().GetSize()), BlobData.size(), batch.GetSplittedBlobs().GetSize()));
             BlobData += batch.GetSplittedBlobs().GetData();
             return true;
         } else {
@@ -134,9 +135,9 @@ public:
                 for (auto&& s : Aggregations[i]->GetSplittedBlobs()) {
                     if (--linksCount[s.GetRange().BlobId] == 0) {
                         if (!DeclareRemoveAction) {
-                            DeclareRemoveAction = bOperator->StartDeclareRemovingAction("WRITING_BUFFER");
+                            DeclareRemoveAction = bOperator->StartDeclareRemovingAction(NBlobOperations::EConsumer::WRITING_BUFFER);
                         }
-                        DeclareRemoveAction->DeclareRemove(s.GetRange().BlobId);
+                        DeclareRemoveAction->DeclareRemove(bOperator->GetSelfTabletId(), s.GetRange().BlobId);
                     }
                 }
                 Aggregations.erase(Aggregations.begin() + i);

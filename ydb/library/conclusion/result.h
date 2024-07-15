@@ -30,11 +30,13 @@ public:
         Y_ABORT_UNLESS(IsFail());
     }
 
-    TConclusion(TResult&& result)
+    template <class TResultArg>
+    TConclusion(TResultArg&& result)
         : Result(std::move(result)) {
     }
 
-    TConclusion(const TResult& result)
+    template <class TResultArg>
+    TConclusion(const TResultArg& result)
         : Result(result) {
     }
 
@@ -78,8 +80,8 @@ public:
         return IsFail();
     }
 
-    explicit operator bool() const {
-        return IsSuccess();
+    operator TConclusionStatus() const {
+        return GetError();
     }
 
     const TString& GetErrorMessage() const {

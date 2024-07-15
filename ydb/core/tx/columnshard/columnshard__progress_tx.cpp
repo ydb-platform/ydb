@@ -18,6 +18,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "execute");
         Y_ABORT_UNLESS(Self->ProgressTxInFlight);
+        Self->TabletCounters->Simple()[COUNTER_TX_COMPLETE_LAG].Set(Self->GetTxCompleteLag().MilliSeconds());
 
         size_t removedCount = Self->ProgressTxController->CleanExpiredTxs(txc);
         if (removedCount > 0) {
@@ -29,6 +30,7 @@ public:
         // Process a single transaction at the front of the queue
         auto plannedItem = Self->ProgressTxController->StartPlannedTx();
         if (!!plannedItem) {
+            PlannedQueueItem.emplace(plannedItem->PlanStep, plannedItem->TxId);
             ui64 step = plannedItem->PlanStep;
             ui64 txId = plannedItem->TxId;
 
@@ -50,12 +52,16 @@ public:
         if (TxOperator) {
             TxOperator->Complete(*Self, ctx);
         }
+        if (PlannedQueueItem) {
+            Self->GetProgressTxController().CompleteRunningTx(*PlannedQueueItem);
+        }
         Self->SetupIndexation();
     }
 
 private:
     TTxController::ITransactionOperatior::TPtr TxOperator;
     const ui32 TabletTxNo;
+    std::optional<TTxController::TPlanQueueItem> PlannedQueueItem;
 };
 
 void TColumnShard::EnqueueProgressTx(const TActorContext& ctx) {

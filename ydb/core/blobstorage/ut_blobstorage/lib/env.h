@@ -23,6 +23,10 @@ struct TEnvironmentSetup {
     std::set<TActorId> CommencedReplication;
     std::unordered_map<ui32, TString> Cache;
 
+    using TIcbControlKey = std::pair<ui32, TString>;  // { nodeId, name }
+
+    std::unordered_map<TIcbControlKey, TControlWrapper> IcbControls;
+
     struct TSettings {
         const ui32 NodeCount = 9;
         const bool VDiskReplPausedAtStart = false;
@@ -38,6 +42,9 @@ struct TEnvironmentSetup {
         const bool SetupHive = false;
         const bool SuppressCompatibilityCheck = false;
         const TFeatureFlags FeatureFlags;
+        const NPDisk::EDeviceType DiskType = NPDisk::EDeviceType::DEVICE_TYPE_NVME;
+        const ui64 BurstThresholdNs = 0;
+        const float DiskTimeAvailableScale = 1;
     };
 
     const TSettings Settings;
@@ -55,7 +62,8 @@ struct TEnvironmentSetup {
             const auto key = std::make_pair(nodeId, pdiskId);
             TIntrusivePtr<TPDiskMockState>& state = Env.PDiskMockStates[key];
             if (!state) {
-                state.Reset(new TPDiskMockState(nodeId, pdiskId, cfg->PDiskGuid, ui64(10) << 40, cfg->ChunkSize));
+                state.Reset(new TPDiskMockState(nodeId, pdiskId, cfg->PDiskGuid, ui64(10) << 40, cfg->ChunkSize,
+                        Env.Settings.DiskType));
             }
             const TActorId& actorId = ctx.Register(CreatePDiskMockActor(state), TMailboxType::HTSwap, poolId);
             const TActorId& serviceId = MakeBlobStoragePDiskID(nodeId, pdiskId);
@@ -321,6 +329,26 @@ struct TEnvironmentSetup {
                     config->CacheAccessor = std::make_unique<TAccessor>(Cache[nodeId]);
                 }
                 config->FeatureFlags = Settings.FeatureFlags;
+
+                TAppData* appData = Runtime->GetNode(nodeId)->AppData.get();
+
+#define ADD_ICB_CONTROL(controlName, defaultVal, minVal, maxVal, currentValue) {        \
+                    TControlWrapper control(defaultVal, minVal, maxVal);                \
+                    appData->Icb->RegisterSharedControl(control, controlName);          \
+                    control = currentValue;                                             \
+                    IcbControls.insert({{nodeId, controlName}, std::move(control)});    \
+                }
+
+                if (Settings.BurstThresholdNs) {
+                    ADD_ICB_CONTROL("VDiskControls.BurstThresholdNsHDD", 200'000'000, 1, 1'000'000'000'000, Settings.BurstThresholdNs);
+                    ADD_ICB_CONTROL("VDiskControls.BurstThresholdNsSSD", 50'000'000,  1, 1'000'000'000'000, Settings.BurstThresholdNs);
+                    ADD_ICB_CONTROL("VDiskControls.BurstThresholdNsNVME", 32'000'000,  1, 1'000'000'000'000, Settings.BurstThresholdNs);
+                }
+                ADD_ICB_CONTROL("VDiskControls.DiskTimeAvailableScaleHDD", 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
+                ADD_ICB_CONTROL("VDiskControls.DiskTimeAvailableScaleSSD", 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
+                ADD_ICB_CONTROL("VDiskControls.DiskTimeAvailableScaleNVME", 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
+#undef ADD_ICB_CONTROL
+
                 warden.reset(CreateBSNodeWarden(config));
             }
 
@@ -815,6 +843,46 @@ struct TEnvironmentSetup {
     template<typename TResult, typename TQuery, typename... TArgs>
     std::unique_ptr<TResult> SyncQuery(const TActorId& actorId, TArgs&&... args) {
         return SyncQueryFactory<TResult>(actorId, [&] { return std::make_unique<TQuery>(args...); });
+    }
+
+    ui64 AggregateVDiskCounters(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
+            const std::vector<ui32>& pdiskLayout, TString subsystem, TString counter, bool derivative = false) {
+        ui64 ctr = 0;
+
+        for (ui32 nodeId = 1; nodeId <= nodesCount; ++nodeId) {
+            auto* appData = Runtime->GetNode(nodeId)->AppData.get();
+            for (ui32 i = 0; i < groupSize; ++i) {
+                TStringStream ss;
+                ss << LeftPad(i, 2, '0');
+                TString orderNumber = ss.Str();
+                ss.Clear();
+                ss << LeftPad(pdiskLayout[i], 9, '0');
+                TString pdisk = ss.Str();
+                ctr += GetServiceCounters(appData->Counters, "vdisks")->
+                        GetSubgroup("storagePool", storagePool)->
+                        GetSubgroup("group", std::to_string(groupId))->
+                        GetSubgroup("orderNumber", orderNumber)->
+                        GetSubgroup("pdisk", pdisk)->
+                        GetSubgroup("media", "rot")->
+                        GetSubgroup("subsystem", subsystem)->
+                        GetCounter(counter, derivative)->Val();
+            }
+        }
+        return ctr;
+    };
+
+    void SetIcbControl(ui32 nodeId, TString controlName, ui64 value) {
+        if (nodeId == 0) {
+            for (nodeId = 1; nodeId <= Settings.NodeCount; ++nodeId) {
+                auto it = IcbControls.find({nodeId, controlName});
+                Y_ABORT_UNLESS(it != IcbControls.end());
+                it->second = value;
+            }
+        } else {
+            auto it = IcbControls.find({nodeId, controlName});
+            Y_ABORT_UNLESS(it != IcbControls.end());
+            it->second = value;
+        }
     }
 
 };

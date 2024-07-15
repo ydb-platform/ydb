@@ -19,9 +19,11 @@ TResourcesGuard::~TResourcesGuard() {
         return;
     }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "free_resources")("task_id", TaskId)("external_task_id", ExternalTaskId)("mem", Memory)("cpu", Cpu);
-    auto ev = std::make_unique<IEventHandle>(NKikimr::NResourceBroker::MakeResourceBrokerID(), Sender, new NKikimr::NResourceBroker::TEvResourceBroker::TEvFinishTask(TaskId));
-    NActors::TActorContext::AsActorContext().Send(std::move(ev));
-    Context.GetCounters()->GetBytesAllocated()->Remove(Memory);
+    if (TaskId) {
+        auto ev = std::make_unique<IEventHandle>(NKikimr::NResourceBroker::MakeResourceBrokerID(), Sender, new NKikimr::NResourceBroker::TEvResourceBroker::TEvFinishTask(TaskId));
+        NActors::TActorContext::AsActorContext().Send(std::move(ev));
+        Context.GetCounters()->GetBytesAllocated()->Remove(Memory);
+    }
 }
 
 TResourcesGuard::TResourcesGuard(const ui64 taskId, const TString& externalTaskId, const ITask& task, const NActors::TActorId& sender, const TTaskContext& context)
@@ -31,18 +33,24 @@ TResourcesGuard::TResourcesGuard(const ui64 taskId, const TString& externalTaskI
     , Memory(task.GetMemoryAllocation())
     , Cpu(task.GetCPUAllocation())
     , Context(context)
+    , Priority(task.GetPriority())
 {
+    AFL_VERIFY(taskId || (!Memory && !Cpu));
     Context.GetCounters()->GetBytesAllocated()->Add(Memory);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "allocate_resources")("external_task_id", ExternalTaskId)("task_id", TaskId)("mem", Memory)("cpu", Cpu);
 }
 
 void TResourcesGuard::Update(const ui64 memNew) {
+    if (!TaskId) {
+        return;
+    }
+    AFL_VERIFY(Memory);
     Context.GetCounters()->GetBytesAllocated()->Remove(Memory);
     AFL_VERIFY(NActors::TlsActivationContext);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "update_resources")("task_id", TaskId)("external_task_id", ExternalTaskId)("mem", memNew)("cpu", Cpu)("mem_old", Memory);
     Memory = memNew;
     auto ev = std::make_unique<IEventHandle>(NKikimr::NResourceBroker::MakeResourceBrokerID(), Sender, new NKikimr::NResourceBroker::TEvResourceBroker::TEvUpdateTask(TaskId, {{Cpu, Memory}},
-        Context.GetTypeName(), 1000));
+        Context.GetTypeName(), Priority));
     NActors::TActorContext::AsActorContext().Send(std::move(ev));
     Context.GetCounters()->GetBytesAllocated()->Add(Memory);
 }

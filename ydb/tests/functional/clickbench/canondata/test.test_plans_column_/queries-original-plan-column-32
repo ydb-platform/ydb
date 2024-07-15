@@ -134,6 +134,104 @@
                     }
                 ]
             },
+            "SimplifiedPlan": {
+                "Node Type": "Query",
+                "PlanNodeId": 0,
+                "PlanNodeType": "Query",
+                "Plans": [
+                    {
+                        "Node Type": "ResultSet",
+                        "PlanNodeId": 1,
+                        "PlanNodeType": "ResultSet",
+                        "Plans": [
+                            {
+                                "Node Type": "Limit",
+                                "Operators": [
+                                    {
+                                        "Limit": "10",
+                                        "Name": "Limit"
+                                    }
+                                ],
+                                "PlanNodeId": 2,
+                                "Plans": [
+                                    {
+                                        "Node Type": "TopSort",
+                                        "Operators": [
+                                            {
+                                                "Limit": "10",
+                                                "Name": "TopSort",
+                                                "TopSortBy": "argument.Count0"
+                                            }
+                                        ],
+                                        "PlanNodeId": 4,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "Aggregate",
+                                                "Operators": [
+                                                    {
+                                                        "Aggregation": "{_yql_agg_1: SUM(state._yql_agg_1,1),_yql_agg_2: SUM(item.IsRefresh,state._yql_agg_2)}",
+                                                        "GroupBy": "",
+                                                        "Name": "Aggregate"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 6,
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "TableFullScan",
+                                                        "Operators": [
+                                                            {
+                                                                "Name": "TableFullScan",
+                                                                "ReadColumns": [
+                                                                    "ClientIP",
+                                                                    "IsRefresh",
+                                                                    "ResolutionWidth",
+                                                                    "WatchID"
+                                                                ],
+                                                                "ReadRanges": [
+                                                                    "EventTime (-\u221e, +\u221e)",
+                                                                    "CounterID (-\u221e, +\u221e)",
+                                                                    "EventDate (-\u221e, +\u221e)",
+                                                                    "UserID (-\u221e, +\u221e)",
+                                                                    "WatchID (-\u221e, +\u221e)"
+                                                                ],
+                                                                "SsaProgram": {
+                                                                    "Command": [
+                                                                        {
+                                                                            "Projection": {
+                                                                                "Columns": [
+                                                                                    {
+                                                                                        "Id": 8
+                                                                                    },
+                                                                                    {
+                                                                                        "Id": 16
+                                                                                    },
+                                                                                    {
+                                                                                        "Id": 21
+                                                                                    },
+                                                                                    {
+                                                                                        "Id": 1
+                                                                                    }
+                                                                                ]
+                                                                            }
+                                                                        }
+                                                                    ],
+                                                                    "Version": 4
+                                                                },
+                                                                "Table": "clickbench/plans/column/hits"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 7
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
             "tables": [
                 {
                     "name": "/local/clickbench/plans/column/hits",

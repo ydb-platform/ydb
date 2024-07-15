@@ -691,6 +691,16 @@ Y_UNIT_TEST_SUITE(TOlap) {
         UNIT_ASSERT(shardId);
         UNIT_ASSERT(pathId);
         UNIT_ASSERT(planStep);
+        {
+            auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/OlapStore/ColumnTable", true, true);
+            Cerr << description.DebugString() << Endl;
+            auto& tabletStats = description.GetPathDescription().GetTableStats();
+
+            UNIT_ASSERT(description.GetPathDescription().HasTableStats());
+            UNIT_ASSERT_EQUAL(tabletStats.GetRowCount(), 0);
+            UNIT_ASSERT_EQUAL(tabletStats.GetDataSize(), 0);
+        }
+
 
         ui32 rowsInBatch = 100000;
 

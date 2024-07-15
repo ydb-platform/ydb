@@ -90,6 +90,7 @@ namespace NYql {
             TVector<THashSet<TString>> UsedColumns_;
             TString LLVMSettings_;
             EBlockEngineMode BlockEngineMode_;
+            IOutputStream* ExprOutputStream_;
             NKikimr::NUdf::ICountersProvider* CountersProvider_;
             ui64 NativeYtTypeFlags_;
             TMaybe<ui64> DeterministicTimeProviderSeed_;

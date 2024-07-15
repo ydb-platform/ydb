@@ -1,11 +1,12 @@
 #pragma once
 
 #include "library/cpp/string_utils/base64/base64.h"
-#include "ydb/core/scheme/scheme_tabledefs.h"
-#include "ydb/core/engine/mkql_engine_flat.h"
-#include "ydb/library/actors/core/log.h"
-#include "ydb/library/services/services.pb.h"
-#include "ydb/library/actors/core/actor.h"
+#include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/engine/mkql_engine_flat.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/library/actors/core/actor.h>
 #include <openssl/sha.h>
 #include <sstream>
 
@@ -46,14 +47,20 @@ inline void WriteTableRange(const NKikimr::TTableRange &range, std::stringstream
     }
 }
 
-inline void LogIntegrityTrails(const NActors::TActorContext& ctx, const NMiniKQL::IEngineFlat::TValidationInfo& keys) {
+inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64 tabletId, const ui64 txId, const NMiniKQL::IEngineFlat::TValidationInfo& keys) {
     if (keys.HasWrites()) {
         const int batchSize = 10;
 
         auto logKeyOp = [&](const TVector<NMiniKQL::IEngineFlat::TValidatedKey>& keys, size_t offset) -> std::string {
             std::stringstream ss;
 
+            ss << "TabletId# " << tabletId << " TxId# " << txId << " ";
+
             for (size_t i = offset, j = 0; i < keys.size() && j < batchSize; i++, j++) {
+                if (j > 0) {
+                    ss << ", ";
+                }
+
                 auto& keyDef = keys[i].Key;
                 auto& range = keyDef->Range;
                 TString rowOp;
@@ -76,8 +83,8 @@ inline void LogIntegrityTrails(const NActors::TActorContext& ctx, const NMiniKQL
                 }
                 ss << "op# " << rowOp << " key# ";
                 WriteTableRange(range, ss);
-                ss << ", ";
             }
+            
             return ss.str();
         };
 
@@ -85,5 +92,9 @@ inline void LogIntegrityTrails(const NActors::TActorContext& ctx, const NMiniKQL
             LOG_DEBUG_S(ctx, NKikimrServices::DATA_INTEGRITY, logKeyOp(keys.Keys, i));
         }
     }
+}
+
+inline void LogIntegrityTrailsFinish(const NActors::TActorContext& ctx, const ui64 tabletId, const ui64 txId, const NKikimrTxDataShard::TEvProposeTransactionResult::EStatus status) {
+    LOG_DEBUG_S(ctx, NKikimrServices::DATA_INTEGRITY, "TabletId# " << tabletId << " finished TxId# " << txId << " Status# " << status);
 }
 }

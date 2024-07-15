@@ -57,6 +57,8 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
 
+        runtime.SetLogPriority(NKikimrServices::DATA_INTEGRITY, NActors::NLog::EPriority::PRI_DEBUG);
+
         auto sender = runtime.AllocateEdgeActor();
 
         InitRoot(server, sender);

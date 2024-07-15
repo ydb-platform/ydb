@@ -2,7 +2,6 @@
 #include "probes.h"
 #include "operation.h"
 #include "datashard_write_operation.h"
-#include "datashard_integrity_trails.h"
 
 #include <ydb/library/wilson_ids/wilson.h>
 
@@ -160,12 +159,6 @@ void TDataShard::TTxWrite::Complete(const TActorContext& ctx) {
     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxWrite complete: at tablet# " << Self->TabletID());
 
     if (Op) {
-        TWriteOperation* writeOp = TWriteOperation::TryCastWriteOperation(Op);
-
-        const NMiniKQL::IEngineFlat::TValidationInfo& keys = writeOp->GetKeysInfo();
-
-        LogIntegrityTrails(ctx, keys);
-
         Y_ABORT_UNLESS(!Op->GetExecutionPlan().empty());
         if (!CompleteList.empty()) {
             auto commitTime = AppData()->TimeProvider->Now() - CommitStart;

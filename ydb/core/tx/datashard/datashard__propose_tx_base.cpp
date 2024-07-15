@@ -2,7 +2,6 @@
 #include "datashard_failpoints.h"
 #include "operation.h"
 #include "probes.h"
-#include "datashard_integrity_trails.h"
 
 #include <ydb/core/util/pb.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -162,12 +161,6 @@ void TDataShard::TTxProposeTransactionBase::Complete(const TActorContext &ctx) {
                 "TTxProposeTransactionBase::Complete at " << Self->TabletID());
 
     if (Op) {
-        //TActiveTransaction* writeOp = dynamic_cast<TActiveTransaction*>(Op.Get());
-
-        //const NMiniKQL::IEngineFlat::TValidationInfo& keys = writeOp->GetKeysInfo();
-
-        //LogIntegrityTrails(ctx, keys);
-
         Y_ABORT_UNLESS(!Op->GetExecutionPlan().empty());
         if (!CompleteList.empty()) {
             auto commitTime = AppData()->TimeProvider->Now() - CommitStart;

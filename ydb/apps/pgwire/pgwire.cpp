@@ -16,6 +16,8 @@
 
 namespace NPGW {
 
+// sample change
+
 std::atomic<bool> TPgWire::Quit;
 
 void TPgWire::OnTerminate(int) {

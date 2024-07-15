@@ -615,7 +615,7 @@ Y_UNIT_TEST_SUITE(TSequence) {
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table2"
             Columns { Name: "key" DefaultFromSequence: "/MyRoot/seq2" }
-            Columns { Name: "value1" EmptyDefault: Null }
+            Columns { Name: "value1" EmptyDefault: NULL_VALUE }
         )");
         env.TestWaitNotification(runtime, txId);
 
@@ -651,7 +651,7 @@ Y_UNIT_TEST_SUITE(TSequence) {
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table1"
-            Columns { Name: "key" EmptyDefault: Null }
+            Columns { Name: "key" EmptyDefault: NULL_VALUE }
         )");
         env.TestWaitNotification(runtime, txId);
 

@@ -33,7 +33,7 @@ bool TRetryLimiter::UpdateOnRetry(const TInstant& lastSeenAt, const TRetryPolicy
     if (RetryRate >= policy.RetryCount) {
         shouldRetry = false;
         LastError = TStringBuilder() << "failure rate " << RetryRate << " exceeds limit of "  << policy.RetryCount;
-    } else if (RetryCount >= policy.RetryLimit) {
+    } else if (policy.RetryLimit && RetryCount >= policy.RetryLimit) {
         shouldRetry = false;
         LastError = TStringBuilder() << "retry count reached limit of "  << policy.RetryLimit;
     }

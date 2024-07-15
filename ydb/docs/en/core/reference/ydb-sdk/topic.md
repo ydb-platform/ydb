@@ -200,7 +200,7 @@ When you update a topic, you must specify the topic path and the parameters to b
 
 - Python
 
-  Example of updating topic's list of supported codecs and a minimum number of partitions:
+  Example of updating a topic's list of supported codecs and minimum number of partitions:
 
   ```python
   driver.topic_client.create_topic(topic_path,

@@ -226,6 +226,9 @@ private:
             case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
                 explain = "unsupported index type to build";
                 return false;
+            case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex:
+                explain = "unsupported vector index type to build";
+                return false;
             case Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET:
                 explain = "invalid or unset index type";
                 return false;
@@ -236,7 +239,7 @@ private:
             buildInfo->DataColumns.assign(index.data_columns().begin(), index.data_columns().end());
 
             Ydb::StatusIds::StatusCode status;
-            if (!FillIndexTablePartitioning(buildInfo->ImplTableDescription, index, status, explain)) {
+            if (!FillIndexTablePartitioning(buildInfo->ImplTableDescriptions, index, status, explain)) {
                 return false;
             } 
         }

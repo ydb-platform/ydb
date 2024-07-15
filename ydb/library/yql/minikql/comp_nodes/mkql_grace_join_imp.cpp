@@ -405,36 +405,36 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         };
 
         if (initHashTable) {
-        ui32 tuple2Idx = 0;
-        auto it2 = bucket2->KeyIntVals.begin();
-        for (ui64 keysValSize = headerSize2; it2 != bucket2->KeyIntVals.end(); it2 += keysValSize, ++tuple2Idx) {
-            if ( table2HasKeyStringColumns || table2HasKeyIColumns) {
-                keysValSize = headerSize2 + *(it2 + headerSize2 - 1) ;
+            ui32 tuple2Idx = 0;
+            auto it2 = bucket2->KeyIntVals.begin();
+            for (ui64 keysValSize = headerSize2; it2 != bucket2->KeyIntVals.end(); it2 += keysValSize, ++tuple2Idx) {
+                if ( table2HasKeyStringColumns || table2HasKeyIColumns) {
+                    keysValSize = headerSize2 + *(it2 + headerSize2 - 1) ;
+                }
+
+                ui64 hash = *it2;
+                ui64 * nullsPtr = it2+1;
+                if (HasBitSet(nullsPtr, 1))
+                    continue;
+
+                auto slotIt = firstSlot(hash);
+
+                for (; *slotIt != 0; slotIt = nextSlot(slotIt))
+                {
+                }
+
+                if (keysValSize <= slotSize - 1)
+                {
+                    std::copy_n(it2, keysValSize, slotIt);
+                }
+                else
+                {
+                    std::copy_n(it2, headerSize2, slotIt);
+
+                    *(slotIt + headerSize2) = it2 + headerSize2 - bucket2->KeyIntVals.begin();
+                }
+                slotIt[slotSize - 1] = tuple2Idx;
             }
-
-            ui64 hash = *it2;
-            ui64 * nullsPtr = it2+1;
-            if (HasBitSet(nullsPtr, 1))
-                continue;
-
-            auto slotIt = firstSlot(hash);
-
-            for (; *slotIt != 0; slotIt = nextSlot(slotIt))
-            {
-            }
-
-            if (keysValSize <= slotSize - 1)
-            {
-                std::copy_n(it2, keysValSize, slotIt);
-            }
-            else
-            {
-                std::copy_n(it2, headerSize2, slotIt);
-
-                *(slotIt + headerSize2) = it2 + headerSize2 - bucket2->KeyIntVals.begin();
-            }
-            slotIt[slotSize - 1] = tuple2Idx;
-        }
         }
 
 

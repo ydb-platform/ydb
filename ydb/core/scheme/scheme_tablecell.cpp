@@ -278,10 +278,12 @@ bool TSerializedCellVec::UnsafeAppendCells(TConstArrayRef<TCell> cells, TString&
     ui16 cellCount = ReadUnaligned<ui16>(buf);
     cellCount += cells.size();
 
-    const ui64 addSize = std::accumulate(
-        std::begin(cells), std::end(cells), 0ul, [](const auto& acc, const auto& cell){ return acc + cell.Size(); });
+    size_t newSize = serializedCellVec.size();
 
-    serializedCellVec.ReserveAndResize(serializedCellVec.size() + sizeof(ui32) * cells.size() + addSize);
+    for (auto& cell : cells)
+        newSize += sizeof(TCellHeader) + cell.Size();
+
+    serializedCellVec.ReserveAndResize(newSize);
 
     char* mutableBuf = serializedCellVec.Detach();
     char* oldBufEnd = mutableBuf + (bufEnd - buf);

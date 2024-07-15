@@ -104,7 +104,10 @@ TExecFunc arrow_pg_try_advisory_xact_lock_shared_int4() { return MakeIndirectExe
 TExecFunc arrow_pg_try_advisory_xact_lock_shared_int8() { return MakeIndirectExec<true, true>(&pg_try_advisory_xact_lock_shared_int8); }
 TExecFunc arrow_replace_text() { return MakeIndirectExec<true, false>(&replace_text); }
 TExecFunc arrow_split_part() { return MakeIndirectExec<true, false>(&split_part); }
+TExecFunc arrow_string_agg_combine() { return MakeIndirectExec<false, true>(&string_agg_combine); }
+TExecFunc arrow_string_agg_deserialize() { return MakeIndirectExec<true, true>(&string_agg_deserialize); }
 TExecFunc arrow_string_agg_finalfn() { return MakeIndirectExec<false, false>(&string_agg_finalfn); }
+TExecFunc arrow_string_agg_serialize() { return MakeIndirectExec<true, false>(&string_agg_serialize); }
 TExecFunc arrow_string_agg_transfn() { return MakeIndirectExec<false, true>(&string_agg_transfn); }
 TExecFunc arrow_text_concat() { return MakeIndirectExec<false, false>(&text_concat); }
 TExecFunc arrow_text_concat_ws() { return MakeIndirectExec<false, false>(&text_concat_ws); }

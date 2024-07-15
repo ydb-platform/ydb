@@ -3,7 +3,7 @@
  * backup_manifest.c
  *	  code for generating and sending a backup manifest
  *
- * Portions Copyright (c) 2010-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2010-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/backup/backup_manifest.c
@@ -21,7 +21,7 @@
 #include "utils/builtins.h"
 #include "utils/json.h"
 
-static void AppendStringToManifest(backup_manifest_info *manifest, char *s);
+static void AppendStringToManifest(backup_manifest_info *manifest, const char *s);
 
 /*
  * Does the user want a backup manifest?
@@ -349,7 +349,7 @@ SendBackupManifest(backup_manifest_info *manifest, bbsink *sink)
 	 * We've written all the data to the manifest file.  Rewind the file so
 	 * that we can read it all back.
 	 */
-	if (BufFileSeek(manifest->buffile, 0, 0L, SEEK_SET))
+	if (BufFileSeek(manifest->buffile, 0, 0, SEEK_SET))
 		ereport(ERROR,
 				(errcode_for_file_access(),
 				 errmsg("could not rewind temporary file")));
@@ -362,17 +362,10 @@ SendBackupManifest(backup_manifest_info *manifest, bbsink *sink)
 	while (manifest_bytes_done < manifest->manifest_size)
 	{
 		size_t		bytes_to_read;
-		size_t		rc;
 
 		bytes_to_read = Min(sink->bbs_buffer_length,
 							manifest->manifest_size - manifest_bytes_done);
-		rc = BufFileRead(manifest->buffile, sink->bbs_buffer,
-						 bytes_to_read);
-		if (rc != bytes_to_read)
-			ereport(ERROR,
-					(errcode_for_file_access(),
-					 errmsg("could not read from temporary file: read only %zu of %zu bytes",
-							rc, bytes_to_read)));
+		BufFileReadExact(manifest->buffile, sink->bbs_buffer, bytes_to_read);
 		bbsink_manifest_contents(sink, bytes_to_read);
 		manifest_bytes_done += bytes_to_read;
 	}
@@ -386,7 +379,7 @@ SendBackupManifest(backup_manifest_info *manifest, bbsink *sink)
  * Append a cstring to the manifest.
  */
 static void
-AppendStringToManifest(backup_manifest_info *manifest, char *s)
+AppendStringToManifest(backup_manifest_info *manifest, const char *s)
 {
 	int			len = strlen(s);
 

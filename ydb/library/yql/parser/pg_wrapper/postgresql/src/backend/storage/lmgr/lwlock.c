@@ -20,7 +20,7 @@
  * appropriate value for a free lock.  The meaning of the variable is up to
  * the caller, the lightweight lock code just assigns and compares it.
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -108,6 +108,9 @@ extern __thread slock_t *ShmemLock;
 /* Must be greater than MAX_BACKENDS - which is 2^23-1, so we're fine. */
 #define LW_SHARED_MASK				((uint32) ((1 << 24)-1))
 
+StaticAssertDecl(LW_VAL_EXCLUSIVE > (uint32) MAX_BACKENDS,
+				 "MAX_BACKENDS too big for lwlock.c");
+
 /*
  * There are three sorts of LWLock "tranches":
  *
@@ -183,6 +186,10 @@ static const char *const BuiltinTrancheNames[] = {
 	"PgStatsHash",
 	/* LWTRANCHE_PGSTATS_DATA: */
 	"PgStatsData",
+	/* LWTRANCHE_LAUNCHER_DSA: */
+	"LogicalRepLauncherDSA",
+	/* LWTRANCHE_LAUNCHER_HASH: */
+	"LogicalRepLauncherHash",
 };
 
 StaticAssertDecl(lengthof(BuiltinTrancheNames) ==
@@ -466,12 +473,6 @@ LWLockShmemSize(void)
 void
 CreateLWLocks(void)
 {
-	StaticAssertStmt(LW_VAL_EXCLUSIVE > (uint32) MAX_BACKENDS,
-					 "MAX_BACKENDS too big for lwlock.c");
-
-	StaticAssertStmt(sizeof(LWLock) <= LWLOCK_PADDED_SIZE,
-					 "Miscalculated LWLock padding");
-
 	if (!IsUnderPostmaster)
 	{
 		Size		spaceLocks = LWLockShmemSize();
@@ -668,13 +669,8 @@ LWLockRegisterTranche(int tranche_id, const char *tranche_name)
 				MemoryContextAllocZero(TopMemoryContext,
 									   newalloc * sizeof(char *));
 		else
-		{
-			LWLockTrancheNames = (const char **)
-				repalloc(LWLockTrancheNames, newalloc * sizeof(char *));
-			memset(LWLockTrancheNames + LWLockTrancheNamesAllocated,
-				   0,
-				   (newalloc - LWLockTrancheNamesAllocated) * sizeof(char *));
-		}
+			LWLockTrancheNames =
+				repalloc0_array(LWLockTrancheNames, const char *, LWLockTrancheNamesAllocated, newalloc);
 		LWLockTrancheNamesAllocated = newalloc;
 	}
 
@@ -816,7 +812,7 @@ LWLockAttemptLock(LWLock *lock, LWLockMode mode)
 {
 	uint32		old_state;
 
-	AssertArg(mode == LW_EXCLUSIVE || mode == LW_SHARED);
+	Assert(mode == LW_EXCLUSIVE || mode == LW_SHARED);
 
 	/*
 	 * Read once outside the loop, later iterations will get the newer value
@@ -1122,9 +1118,9 @@ LWLockDequeueSelf(LWLock *lock)
 	LWLockWaitListLock(lock);
 
 	/*
-	 * Remove ourselves from the waitlist, unless we've already been
-	 * removed. The removal happens with the wait list lock held, so there's
-	 * no race in this check.
+	 * Remove ourselves from the waitlist, unless we've already been removed.
+	 * The removal happens with the wait list lock held, so there's no race in
+	 * this check.
 	 */
 	on_waitlist = MyProc->lwWaiting == LW_WS_WAITING;
 	if (on_waitlist)
@@ -1207,7 +1203,7 @@ LWLockAcquire(LWLock *lock, LWLockMode mode)
 	lwstats = get_lwlock_stats_entry(lock);
 #endif
 
-	AssertArg(mode == LW_SHARED || mode == LW_EXCLUSIVE);
+	Assert(mode == LW_SHARED || mode == LW_EXCLUSIVE);
 
 	PRINT_LWDEBUG("LWLockAcquire", lock, mode);
 
@@ -1371,7 +1367,7 @@ LWLockConditionalAcquire(LWLock *lock, LWLockMode mode)
 {
 	bool		mustwait;
 
-	AssertArg(mode == LW_SHARED || mode == LW_EXCLUSIVE);
+	Assert(mode == LW_SHARED || mode == LW_EXCLUSIVE);
 
 	PRINT_LWDEBUG("LWLockConditionalAcquire", lock, mode);
 
@@ -1920,13 +1916,13 @@ LWLockReleaseAll(void)
  * This is meant as debug support only.
  */
 bool
-LWLockHeldByMe(LWLock *l)
+LWLockHeldByMe(LWLock *lock)
 {
 	int			i;
 
 	for (i = 0; i < num_held_lwlocks; i++)
 	{
-		if (held_lwlocks[i].lock == l)
+		if (held_lwlocks[i].lock == lock)
 			return true;
 	}
 	return false;
@@ -1938,14 +1934,14 @@ LWLockHeldByMe(LWLock *l)
  * This is meant as debug support only.
  */
 bool
-LWLockAnyHeldByMe(LWLock *l, int nlocks, size_t stride)
+LWLockAnyHeldByMe(LWLock *lock, int nlocks, size_t stride)
 {
 	char	   *held_lock_addr;
 	char	   *begin;
 	char	   *end;
 	int			i;
 
-	begin = (char *) l;
+	begin = (char *) lock;
 	end = begin + nlocks * stride;
 	for (i = 0; i < num_held_lwlocks; i++)
 	{
@@ -1964,13 +1960,13 @@ LWLockAnyHeldByMe(LWLock *l, int nlocks, size_t stride)
  * This is meant as debug support only.
  */
 bool
-LWLockHeldByMeInMode(LWLock *l, LWLockMode mode)
+LWLockHeldByMeInMode(LWLock *lock, LWLockMode mode)
 {
 	int			i;
 
 	for (i = 0; i < num_held_lwlocks; i++)
 	{
-		if (held_lwlocks[i].lock == l && held_lwlocks[i].mode == mode)
+		if (held_lwlocks[i].lock == lock && held_lwlocks[i].mode == mode)
 			return true;
 	}
 	return false;

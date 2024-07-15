@@ -38,7 +38,7 @@
  * by re-setting the page's page_dirty flag.
  *
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/backend/access/transam/slru.c
@@ -809,7 +809,7 @@ SlruPhysicalWritePage(SlruCtl ctl, int pageno, int slotno, SlruWriteAll fdata)
 	}
 
 	/*
-	 * During a WriteAll, we may already have the desired file open.
+	 * During a SimpleLruWriteAll, we may already have the desired file open.
 	 */
 	if (fdata)
 	{
@@ -864,7 +864,7 @@ SlruPhysicalWritePage(SlruCtl ctl, int pageno, int slotno, SlruWriteAll fdata)
 			else
 			{
 				/*
-				 * In the unlikely event that we exceed MAX_FLUSH_BUFFERS,
+				 * In the unlikely event that we exceed MAX_WRITEALL_BUFFERS,
 				 * fall back to treating it as a standalone write.
 				 */
 				fdata = NULL;
@@ -1240,7 +1240,7 @@ SimpleLruTruncate(SlruCtl ctl, int cutoffPage)
 	 */
 	LWLockAcquire(shared->ControlLock, LW_EXCLUSIVE);
 
-restart:;
+restart:
 
 	/*
 	 * While we are holding the lock, make an important safety check: the
@@ -1478,7 +1478,7 @@ SlruPagePrecedesTestOffset(SlruCtl ctl, int per_page, uint32 offset)
  *
  * This assumes every uint32 >= FirstNormalTransactionId is a valid key.  It
  * assumes each value occupies a contiguous, fixed-size region of SLRU bytes.
- * (MultiXactMemberCtl separates flags from XIDs.  AsyncCtl has
+ * (MultiXactMemberCtl separates flags from XIDs.  NotifyCtl has
  * variable-length entries, no keys, and no random access.  These unit tests
  * do not apply to them.)
  */

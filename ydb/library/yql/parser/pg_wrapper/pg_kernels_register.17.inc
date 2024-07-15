@@ -167,3 +167,6 @@ RegisterExec(4567, arrow_pg_event_trigger_table_rewrite_reason());
 RegisterExec(5050, arrow_btvarstrequalimage());
 RegisterExec(6163, arrow_bytea_bit_count());
 RegisterExec(6198, arrow_unistr());
+RegisterExec(6299, arrow_string_agg_combine());
+RegisterExec(6300, arrow_string_agg_serialize());
+RegisterExec(6301, arrow_string_agg_deserialize());

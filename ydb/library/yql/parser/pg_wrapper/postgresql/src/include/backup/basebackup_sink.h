@@ -17,7 +17,7 @@
  * single task e.g. command progress reporting, throttling, or
  * communication with the client.
  *
- * Portions Copyright (c) 2010-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2010-2023, PostgreSQL Global Development Group
  *
  * src/include/backup/basebackup_sink.h
  *
@@ -26,7 +26,7 @@
 #ifndef BASEBACKUP_SINK_H
 #define BASEBACKUP_SINK_H
 
-#include "access/xlog_internal.h"
+#include "access/xlogdefs.h"
 #include "common/compression.h"
 #include "nodes/pg_list.h"
 

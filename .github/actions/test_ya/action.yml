@@ -202,6 +202,7 @@ runs:
           ${test_size[@]/#/--test-size=} ${test_type[@]/#/--test-type=}
           --stat
           --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
+          -DUSE_EAT_MY_DATA
         )
         
         case "$BUILD_PRESET" in
@@ -223,19 +224,19 @@ runs:
           release-asan)
             params+=(
               --build "release" --sanitize="address"
-              -DSKIP_JUNK -DUSE_EAT_MY_DATA -DDEBUGINFO_LINES_ONLY
+              -DDEBUGINFO_LINES_ONLY
             )
             ;;
           release-tsan)
             params+=(
               --build "release" --sanitize="thread"
-              -DSKIP_JUNK -DUSE_EAT_MY_DATA -DDEBUGINFO_LINES_ONLY
+              -DDEBUGINFO_LINES_ONLY
             )
             ;;
           release-msan)
             params+=(
               --build "release" --sanitize="memory"
-              -DSKIP_JUNK -DUSE_EAT_MY_DATA -DDEBUGINFO_LINES_ONLY
+              -DDEBUGINFO_LINES_ONLY
             )
             ;;
           *)

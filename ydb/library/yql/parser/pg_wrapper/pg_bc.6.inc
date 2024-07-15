@@ -49,6 +49,8 @@ LLVM_BC(
     arrow_dcot
     arrow_dcotd
     arrow_degrees
+    arrow_derf
+    arrow_derfc
     arrow_dexp
     arrow_dfloor
     arrow_dlog1
@@ -58,6 +60,7 @@ LLVM_BC(
     arrow_dpi
     arrow_dpow
     arrow_drandom
+    arrow_drandom_normal
     arrow_dround
     arrow_dsign
     arrow_dsin
@@ -198,6 +201,7 @@ LLVM_BC(
     arrow_pg_stat_get_backend_dbid
     arrow_pg_stat_get_backend_pid
     arrow_pg_stat_get_backend_start
+    arrow_pg_stat_get_backend_subxact
     arrow_pg_stat_get_backend_userid
     arrow_pg_stat_get_backend_wait_event
     arrow_pg_stat_get_backend_wait_event_type
@@ -225,6 +229,7 @@ LLVM_BC(
     arrow_pg_stat_get_db_conflict_all
     arrow_pg_stat_get_db_conflict_bufferpin
     arrow_pg_stat_get_db_conflict_lock
+    arrow_pg_stat_get_db_conflict_logicalslot
     arrow_pg_stat_get_db_conflict_snapshot
     arrow_pg_stat_get_db_conflict_startup_deadlock
     arrow_pg_stat_get_db_conflict_tablespace
@@ -255,6 +260,7 @@ LLVM_BC(
     arrow_pg_stat_get_last_autoanalyze_time
     arrow_pg_stat_get_last_autovacuum_time
     arrow_pg_stat_get_last_vacuum_time
+    arrow_pg_stat_get_lastscan
     arrow_pg_stat_get_live_tuples
     arrow_pg_stat_get_mod_since_analyze
     arrow_pg_stat_get_numscans
@@ -265,6 +271,7 @@ LLVM_BC(
     arrow_pg_stat_get_tuples_fetched
     arrow_pg_stat_get_tuples_hot_updated
     arrow_pg_stat_get_tuples_inserted
+    arrow_pg_stat_get_tuples_newpage_updated
     arrow_pg_stat_get_tuples_returned
     arrow_pg_stat_get_tuples_updated
     arrow_pg_stat_get_vacuum_count
@@ -279,6 +286,7 @@ LLVM_BC(
     arrow_pg_stat_get_xact_tuples_fetched
     arrow_pg_stat_get_xact_tuples_hot_updated
     arrow_pg_stat_get_xact_tuples_inserted
+    arrow_pg_stat_get_xact_tuples_newpage_updated
     arrow_pg_stat_get_xact_tuples_returned
     arrow_pg_stat_get_xact_tuples_updated
     arrow_pg_stat_have_stats

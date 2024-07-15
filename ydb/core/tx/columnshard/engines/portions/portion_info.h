@@ -197,6 +197,16 @@ public:
         SetRemoveSnapshot(TSnapshot(planStep, txId));
     }
 
+    std::vector<TString> GetIndexInplaceData(const ui32 indexId) const {
+        std::vector<TString> result;
+        for (auto&& i : Indexes) {
+            if (i.GetEntityId() == indexId) {
+                result.emplace_back(i.GetBlobDataVerified());
+            }
+        }
+        return result;
+    }
+
     void InitRuntimeFeature(const ERuntimeFeature feature, const bool activity) {
         if (activity) {
             AddRuntimeFeature(feature);
@@ -239,8 +249,7 @@ public:
 
     void ReorderChunks();
 
-    THashMap<TString, THashMap<TUnifiedBlobId, std::vector<std::shared_ptr<IPortionDataChunk>>>> RestoreEntityChunks(NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const;
-    THashMap<TString, THashMap<TUnifiedBlobId, std::vector<TEntityChunk>>> GetEntityChunks(const TIndexInfo & info) const;
+    THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> RestoreEntityChunks(NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const;
 
     const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
         return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
@@ -384,20 +393,6 @@ public:
             }
         }
         return nullptr;
-    }
-
-    std::optional<TEntityChunk> GetEntityRecord(const TChunkAddress& address) const {
-        for (auto&& c : GetRecords()) {
-            if (c.GetAddress() == address) {
-                return TEntityChunk(c.GetAddress(), c.GetMeta().GetNumRows(), c.GetMeta().GetRawBytes(), c.GetBlobRange());
-            }
-        }
-        for (auto&& c : GetIndexes()) {
-            if (c.GetAddress() == address) {
-                return TEntityChunk(c.GetAddress(), c.GetRecordsCount(), c.GetRawBytes(), c.GetBlobRange());
-            }
-        }
-        return {};
     }
 
     bool HasEntityAddress(const TChunkAddress& address) const {
@@ -591,7 +586,7 @@ public:
     ui64 GetIndexBlobBytes() const noexcept {
         ui64 sum = 0;
         for (const auto& rec : Indexes) {
-            sum += rec.GetBlobRange().Size;
+            sum += rec.GetDataSize();
         }
         return sum;
     }

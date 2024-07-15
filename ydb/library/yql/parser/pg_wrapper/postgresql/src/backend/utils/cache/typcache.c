@@ -31,7 +31,7 @@
  * constraint changes are also tracked properly.
  *
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -385,7 +385,7 @@ lookup_type_cache_original(Oid type_id, int flags)
 
 	/* Try to look up an existing entry */
 	typentry = (TypeCacheEntry *) hash_search(TypeCacheHash,
-											  (void *) &type_id,
+											  &type_id,
 											  HASH_FIND, NULL);
 	if (typentry == NULL)
 	{
@@ -413,7 +413,7 @@ lookup_type_cache_original(Oid type_id, int flags)
 
 		/* Now make the typcache entry */
 		typentry = (TypeCacheEntry *) hash_search(TypeCacheHash,
-												  (void *) &type_id,
+												  &type_id,
 												  HASH_ENTER, &found);
 		Assert(!found);			/* it wasn't there a moment ago */
 
@@ -1725,7 +1725,8 @@ ensure_record_cache_typmod_slot_exists(int32 typmod)
 	if (RecordCacheArray == NULL)
 	{
 		RecordCacheArray = (RecordCacheArrayEntry *)
-			MemoryContextAllocZero(CacheMemoryContext, 64 * sizeof(RecordCacheArrayEntry));
+			MemoryContextAllocZero(CacheMemoryContext,
+								   64 * sizeof(RecordCacheArrayEntry));
 		RecordCacheArrayLen = 64;
 	}
 
@@ -1733,11 +1734,10 @@ ensure_record_cache_typmod_slot_exists(int32 typmod)
 	{
 		int32		newlen = pg_nextpower2_32(typmod + 1);
 
-		RecordCacheArray = (RecordCacheArrayEntry *)
-			repalloc(RecordCacheArray,
-					 newlen * sizeof(RecordCacheArrayEntry));
-		memset(RecordCacheArray + RecordCacheArrayLen, 0,
-			   (newlen - RecordCacheArrayLen) * sizeof(RecordCacheArrayEntry));
+		RecordCacheArray = repalloc0_array(RecordCacheArray,
+										   RecordCacheArrayEntry,
+										   RecordCacheArrayLen,
+										   newlen);
 		RecordCacheArrayLen = newlen;
 	}
 }
@@ -1996,7 +1996,7 @@ assign_record_type_typmod(TupleDesc tupDesc)
 	 * the allocations succeed before we create the new entry.
 	 */
 	recentry = (RecordCacheEntry *) hash_search(RecordCacheHash,
-												(void *) &tupDesc,
+												&tupDesc,
 												HASH_FIND, &found);
 	if (found && recentry->tupdesc != NULL)
 	{
@@ -2034,7 +2034,7 @@ assign_record_type_typmod(TupleDesc tupDesc)
 
 	/* Fully initialized; create the hash table entry */
 	recentry = (RecordCacheEntry *) hash_search(RecordCacheHash,
-												(void *) &tupDesc,
+												&tupDesc,
 												HASH_ENTER, NULL);
 	recentry->tupdesc = entDesc;
 

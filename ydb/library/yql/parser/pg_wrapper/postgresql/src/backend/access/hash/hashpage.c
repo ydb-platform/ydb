@@ -3,7 +3,7 @@
  * hashpage.c
  *	  Hash table page management code for the Postgres hash access method
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -206,14 +206,14 @@ _hash_getnewbuf(Relation rel, BlockNumber blkno, ForkNumber forkNum)
 		elog(ERROR, "access to noncontiguous page in hash index \"%s\"",
 			 RelationGetRelationName(rel));
 
-	/* smgr insists we use P_NEW to extend the relation */
+	/* smgr insists we explicitly extend the relation */
 	if (blkno == nblocks)
 	{
-		buf = ReadBufferExtended(rel, forkNum, P_NEW, RBM_NORMAL, NULL);
+		buf = ExtendBufferedRel(BMR_REL(rel), forkNum, NULL,
+								EB_LOCK_FIRST | EB_SKIP_EXTENSION_LOCK);
 		if (BufferGetBlockNumber(buf) != blkno)
 			elog(ERROR, "unexpected hash relation size: %u, should be %u",
 				 BufferGetBlockNumber(buf), blkno);
-		LockBuffer(buf, HASH_WRITE);
 	}
 	else
 	{
@@ -428,7 +428,7 @@ _hash_init(Relation rel, double num_tuples, ForkNumber forkNum)
 		MarkBufferDirty(buf);
 
 		if (use_wal)
-			log_newpage(&rel->rd_node,
+			log_newpage(&rel->rd_locator,
 						forkNum,
 						blkno,
 						BufferGetPage(buf),
@@ -992,7 +992,7 @@ static bool
 _hash_alloc_buckets(Relation rel, BlockNumber firstblock, uint32 nblocks)
 {
 	BlockNumber lastblock;
-	PGAlignedBlock zerobuf;
+	PGIOAlignedBlock zerobuf;
 	Page		page;
 	HashPageOpaque ovflopaque;
 
@@ -1023,7 +1023,7 @@ _hash_alloc_buckets(Relation rel, BlockNumber firstblock, uint32 nblocks)
 	ovflopaque->hasho_page_id = HASHO_PAGE_ID;
 
 	if (RelationNeedsWAL(rel))
-		log_newpage(&rel->rd_node,
+		log_newpage(&rel->rd_locator,
 					MAIN_FORKNUM,
 					lastblock,
 					zerobuf.data,

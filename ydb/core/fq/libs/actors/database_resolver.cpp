@@ -319,7 +319,7 @@ public:
             // There are two kinds of managed YDBs: serverless and dedicated.
             // While working with dedicated databases, we have to use underlay network.
             // That's why we add `u-` prefix to database fqdn.
-            if (databaseInfo.GetMap().contains("dedicatedDatabase")) {
+            if (databaseInfo.GetMap().contains("storageConfig")) {
                 endpoint = "u-" + endpoint;
                 host = "u-" + host;
             }
@@ -335,7 +335,7 @@ public:
         {
             auto ret = ydbParser(databaseInfo, mdbEndpointGenerator, useTls, protocol);
             // TODO: Take explicit field from MVP
-            bool isDedicatedDb  = databaseInfo.GetMap().contains("dedicatedDatabase");
+            bool isDedicatedDb  = databaseInfo.GetMap().contains("storageConfig");
             if (!isDedicatedDb && ret.Endpoint.StartsWith("ydb.")) {
                 // Replace "ydb." -> "yds."
                 ret.Endpoint[2] = 's';

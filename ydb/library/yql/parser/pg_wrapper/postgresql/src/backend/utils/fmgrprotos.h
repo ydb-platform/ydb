@@ -3,7 +3,7 @@
  * fmgrprotos.h
  *    Prototypes for built-in functions.
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -1939,9 +1939,9 @@ extern Datum numeric_sortsupport(PG_FUNCTION_ARGS);
 extern Datum gist_poly_distance(PG_FUNCTION_ARGS);
 extern Datum dist_cpoint(PG_FUNCTION_ARGS);
 extern Datum dist_polyp(PG_FUNCTION_ARGS);
-extern Datum pg_read_file_v2(PG_FUNCTION_ARGS);
+extern Datum pg_read_file_off_len_missing(PG_FUNCTION_ARGS);
 extern Datum show_config_by_name_missing_ok(PG_FUNCTION_ARGS);
-extern Datum pg_read_binary_file(PG_FUNCTION_ARGS);
+extern Datum pg_read_binary_file_off_len_missing(PG_FUNCTION_ARGS);
 extern Datum pg_notification_queue_usage(PG_FUNCTION_ARGS);
 extern Datum pg_ls_dir(PG_FUNCTION_ARGS);
 extern Datum row_security_active(PG_FUNCTION_ARGS);
@@ -2745,6 +2745,7 @@ extern Datum pg_replication_origin_progress(PG_FUNCTION_ARGS);
 extern Datum pg_show_replication_origin_status(PG_FUNCTION_ARGS);
 extern Datum jsonb_subscript_handler(PG_FUNCTION_ARGS);
 extern Datum numeric_pg_lsn(PG_FUNCTION_ARGS);
+extern Datum pg_stat_get_backend_subxact(PG_FUNCTION_ARGS);
 extern Datum pg_stat_get_subscription(PG_FUNCTION_ARGS);
 extern Datum pg_get_publication_tables(PG_FUNCTION_ARGS);
 extern Datum pg_get_replica_identity_index(PG_FUNCTION_ARGS);
@@ -2788,6 +2789,20 @@ extern Datum extract_interval(PG_FUNCTION_ARGS);
 extern Datum has_parameter_privilege_name_name(PG_FUNCTION_ARGS);
 extern Datum has_parameter_privilege_id_name(PG_FUNCTION_ARGS);
 extern Datum has_parameter_privilege_name(PG_FUNCTION_ARGS);
+extern Datum pg_read_file_all_missing(PG_FUNCTION_ARGS);
+extern Datum pg_read_binary_file_all_missing(PG_FUNCTION_ARGS);
+extern Datum pg_input_is_valid(PG_FUNCTION_ARGS);
+extern Datum pg_input_error_info(PG_FUNCTION_ARGS);
+extern Datum drandom_normal(PG_FUNCTION_ARGS);
+extern Datum pg_split_walfile_name(PG_FUNCTION_ARGS);
+extern Datum pg_stat_get_io(PG_FUNCTION_ARGS);
+extern Datum array_shuffle(PG_FUNCTION_ARGS);
+extern Datum array_sample(PG_FUNCTION_ARGS);
+extern Datum pg_stat_get_tuples_newpage_updated(PG_FUNCTION_ARGS);
+extern Datum pg_stat_get_xact_tuples_newpage_updated(PG_FUNCTION_ARGS);
+extern Datum derf(PG_FUNCTION_ARGS);
+extern Datum derfc(PG_FUNCTION_ARGS);
+extern Datum timestamptz_pl_interval_at_zone(PG_FUNCTION_ARGS);
 extern Datum pg_get_wal_resource_managers(PG_FUNCTION_ARGS);
 extern Datum multirange_agg_transfn(PG_FUNCTION_ARGS);
 extern Datum pg_stat_have_stats(PG_FUNCTION_ARGS);
@@ -2825,5 +2840,32 @@ extern Datum regexp_substr(PG_FUNCTION_ARGS);
 extern Datum pg_ls_logicalsnapdir(PG_FUNCTION_ARGS);
 extern Datum pg_ls_logicalmapdir(PG_FUNCTION_ARGS);
 extern Datum pg_ls_replslotdir(PG_FUNCTION_ARGS);
+extern Datum timestamptz_mi_interval_at_zone(PG_FUNCTION_ARGS);
+extern Datum generate_series_timestamptz_at_zone(PG_FUNCTION_ARGS);
+extern Datum json_agg_strict_transfn(PG_FUNCTION_ARGS);
+extern Datum json_object_agg_strict_transfn(PG_FUNCTION_ARGS);
+extern Datum json_object_agg_unique_transfn(PG_FUNCTION_ARGS);
+extern Datum json_object_agg_unique_strict_transfn(PG_FUNCTION_ARGS);
+extern Datum jsonb_agg_strict_transfn(PG_FUNCTION_ARGS);
+extern Datum jsonb_object_agg_strict_transfn(PG_FUNCTION_ARGS);
+extern Datum jsonb_object_agg_unique_transfn(PG_FUNCTION_ARGS);
+extern Datum jsonb_object_agg_unique_strict_transfn(PG_FUNCTION_ARGS);
+extern Datum any_value_transfn(PG_FUNCTION_ARGS);
+extern Datum array_agg_combine(PG_FUNCTION_ARGS);
+extern Datum array_agg_serialize(PG_FUNCTION_ARGS);
+extern Datum array_agg_deserialize(PG_FUNCTION_ARGS);
+extern Datum array_agg_array_combine(PG_FUNCTION_ARGS);
+extern Datum array_agg_array_serialize(PG_FUNCTION_ARGS);
+extern Datum array_agg_array_deserialize(PG_FUNCTION_ARGS);
+extern Datum string_agg_combine(PG_FUNCTION_ARGS);
+extern Datum string_agg_serialize(PG_FUNCTION_ARGS);
+extern Datum string_agg_deserialize(PG_FUNCTION_ARGS);
+extern Datum pg_log_standby_snapshot(PG_FUNCTION_ARGS);
+extern Datum window_percent_rank_support(PG_FUNCTION_ARGS);
+extern Datum window_cume_dist_support(PG_FUNCTION_ARGS);
+extern Datum window_ntile_support(PG_FUNCTION_ARGS);
+extern Datum pg_stat_get_db_conflict_logicalslot(PG_FUNCTION_ARGS);
+extern Datum pg_stat_get_lastscan(PG_FUNCTION_ARGS);
+extern Datum system_user(PG_FUNCTION_ARGS);
 
 #endif							/* FMGRPROTOS_H */

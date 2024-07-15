@@ -3,7 +3,7 @@
  * postmaster.h
  *	  Exports from postmaster/postmaster.c.
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/postmaster/postmaster.h
@@ -15,7 +15,8 @@
 
 /* GUC options */
 extern __thread PGDLLIMPORT bool EnableSSL;
-extern __thread PGDLLIMPORT int ReservedBackends;
+extern __thread PGDLLIMPORT int SuperuserReservedConnections;
+extern __thread PGDLLIMPORT int ReservedConnections;
 extern __thread PGDLLIMPORT int PostPortNumber;
 extern __thread PGDLLIMPORT int Unix_socket_permissions;
 extern __thread PGDLLIMPORT char *Unix_socket_group;
@@ -30,6 +31,8 @@ extern __thread PGDLLIMPORT bool enable_bonjour;
 extern __thread PGDLLIMPORT char *bonjour_name;
 extern __thread PGDLLIMPORT bool restart_after_crash;
 extern __thread PGDLLIMPORT bool remove_temp_files_after_crash;
+extern __thread PGDLLIMPORT bool send_abort_for_crash;
+extern __thread PGDLLIMPORT bool send_abort_for_kill;
 
 #ifdef WIN32
 extern PGDLLIMPORT HANDLE PostmasterHandle;

@@ -3,7 +3,7 @@
  * nodeIncrementalSort.c
  *	  Routines to handle incremental sorting of relations.
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -69,7 +69,7 @@
  *	the entire result set is available.
  *
  *	The hybrid mode approach allows us to optimize for both very small
- *	groups (where the overhead of a new tuplesort is high) and very	large
+ *	groups (where the overhead of a new tuplesort is high) and very large
  *	groups (where we can lower cost by not having to sort on already sorted
  *	columns), albeit at some extra cost while switching between modes.
  *
@@ -1007,9 +1007,9 @@ ExecInitIncrementalSort(IncrementalSort *node, EState *estate, int eflags)
 	if (incrsortstate->ss.ps.instrument != NULL)
 	{
 		IncrementalSortGroupInfo *fullsortGroupInfo =
-		&incrsortstate->incsort_info.fullsortGroupInfo;
+			&incrsortstate->incsort_info.fullsortGroupInfo;
 		IncrementalSortGroupInfo *prefixsortGroupInfo =
-		&incrsortstate->incsort_info.prefixsortGroupInfo;
+			&incrsortstate->incsort_info.prefixsortGroupInfo;
 
 		fullsortGroupInfo->groupCount = 0;
 		fullsortGroupInfo->maxDiskSpaceUsed = 0;

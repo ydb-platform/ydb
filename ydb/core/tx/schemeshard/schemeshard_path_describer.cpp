@@ -131,10 +131,16 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
         auto indexInfo = Self->Indexes.at(pathId);
 
         switch (indexInfo->Type) {
-        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
-            return TPathElement::EPathSubType::EPathSubTypeAsyncIndexImplTable;
-        default:
-            return TPathElement::EPathSubType::EPathSubTypeSyncIndexImplTable;
+            case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+                return TPathElement::EPathSubType::EPathSubTypeAsyncIndexImplTable;
+            case NKikimrSchemeOp::EIndexTypeGlobal:
+            case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                return TPathElement::EPathSubType::EPathSubTypeSyncIndexImplTable;
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+                return TPathElement::EPathSubType::EPathSubTypeVectorKmeansTreeIndexImplTable;
+            default:
+                Y_DEBUG_ABORT("%s", (TStringBuilder() << "unexpected indexInfo->Type# " << indexInfo->Type).data());
+                return TPathElement::EPathSubType::EPathSubTypeEmpty;
         }
     } else if (parentPath.IsCdcStream()) {
         return TPathElement::EPathSubType::EPathSubTypeStreamImpl;
@@ -1240,22 +1246,44 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
 
     auto* indexPath = PathsById.FindPtr(pathId);
     Y_ABORT_UNLESS(indexPath);
-    Y_ABORT_UNLESS((*indexPath)->GetChildren().size() == 1);
-    const auto& indexImplTablePathId = (*indexPath)->GetChildren().begin()->second;
+    const ui8 expectedIndexImplTableCount = indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree ? 2 : 1;
+    Y_ABORT_UNLESS((*indexPath)->GetChildren().size() == expectedIndexImplTableCount);
 
-    auto* tableInfo = Tables.FindPtr(indexImplTablePathId);
-    Y_ABORT_UNLESS(tableInfo);
+    ui64 dataSize = 0;
+    for (const auto& indexImplTablePathId : (*indexPath)->GetChildren()) {
+        auto* tableInfo = Tables.FindPtr(indexImplTablePathId.second);
+        Y_ABORT_UNLESS(tableInfo);
 
-    const auto& tableStats = (*tableInfo)->GetStats().Aggregated;
-    entry.SetDataSize(tableStats.DataSize + tableStats.IndexSize);
+        const auto& tableStats = (*tableInfo)->GetStats().Aggregated;
+        dataSize += tableStats.DataSize + tableStats.IndexSize;
 
-    auto* tableDescription = entry.AddIndexImplTableDescriptions();
-    if (fillConfig) {
-        FillPartitionConfig((*tableInfo)->PartitionConfig(), *tableDescription->MutablePartitionConfig());
+        auto* tableDescription = entry.AddIndexImplTableDescriptions();
+        if (fillConfig) {
+            FillPartitionConfig((*tableInfo)->PartitionConfig(), *tableDescription->MutablePartitionConfig());
+        }
+        if (fillBoundaries) {
+            FillTableBoundaries(*tableInfo, *tableDescription->MutableSplitBoundary());
+        }
     }
-    if (fillBoundaries) {
-        FillTableBoundaries(*tableInfo, *tableDescription->MutableSplitBoundary());
+    entry.SetDataSize(dataSize);
+
+    if (indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+        if (const auto* vectorIndexKmeansTreeDescription = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(&indexInfo->SpecializedIndexDescription)) {
+            const auto& indexInfoSettings = vectorIndexKmeansTreeDescription->GetSettings(); 
+            auto entrySettings = entry.MutableVectorIndexKmeansTreeDescription()->MutableSettings();
+            if (indexInfoSettings.has_distance())
+                entrySettings->set_distance(indexInfoSettings.distance());
+            else if (indexInfoSettings.has_similarity())
+                entrySettings->set_similarity(indexInfoSettings.similarity());
+            else
+                Y_FAIL_S("Either distance or similarity should be set in index settings: " << indexInfoSettings);
+            entrySettings->set_vector_type(indexInfoSettings.vector_type());
+            entrySettings->set_vector_dimension(indexInfoSettings.vector_dimension());
+        } else {
+            Y_FAIL_S("SpecializedIndexDescription should be set");
+        }
     }
+    
 }
 
 void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,

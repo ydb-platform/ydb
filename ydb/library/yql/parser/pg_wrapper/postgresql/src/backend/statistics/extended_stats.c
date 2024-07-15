@@ -6,7 +6,7 @@
  * Generic code supporting statistics objects created via CREATE STATISTICS.
  *
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -83,7 +83,7 @@ static void statext_store(Oid statOid, bool inh,
 						  MVNDistinct *ndistinct, MVDependencies *dependencies,
 						  MCVList *mcv, Datum exprs, VacAttrStats **stats);
 static int	statext_compute_stattarget(int stattarget,
-									   int natts, VacAttrStats **stats);
+									   int nattrs, VacAttrStats **stats);
 
 /* Information needed to analyze a single simple expression. */
 typedef struct AnlExprData
@@ -99,7 +99,7 @@ static Datum serialize_expr_stats(AnlExprData *exprdata, int nexprs);
 static Datum expr_fetch_func(VacAttrStatsP stats, int rownum, bool *isNull);
 static AnlExprData *build_expr_data(List *exprs, int stattarget);
 
-static StatsBuildData *make_build_data(Relation onerel, StatExtEntry *stat,
+static StatsBuildData *make_build_data(Relation rel, StatExtEntry *stat,
 									   int numrows, HeapTuple *rows,
 									   VacAttrStats **stats, int stattarget);
 
@@ -465,9 +465,8 @@ fetch_statentries_for_relation(Relation pg_statext, Oid relid)
 		}
 
 		/* decode the stxkind char array into a list of chars */
-		datum = SysCacheGetAttr(STATEXTOID, htup,
-								Anum_pg_statistic_ext_stxkind, &isnull);
-		Assert(!isnull);
+		datum = SysCacheGetAttrNotNull(STATEXTOID, htup,
+									   Anum_pg_statistic_ext_stxkind);
 		arr = DatumGetArrayTypeP(datum);
 		if (ARR_NDIM(arr) != 1 ||
 			ARR_HASNULL(arr) ||
@@ -1129,7 +1128,7 @@ build_sorted_items(StatsBuildData *data, int *nitems,
 	}
 
 	/* do the sort, using the multi-sort */
-	qsort_interruptible((void *) items, nrows, sizeof(SortItem),
+	qsort_interruptible(items, nrows, sizeof(SortItem),
 						multi_sort_compare, mss);
 
 	return items;
@@ -1598,6 +1597,7 @@ statext_is_compatible_clause(PlannerInfo *root, Node *clause, Index relid,
 							 Bitmapset **attnums, List **exprs)
 {
 	RangeTblEntry *rte = root->simple_rte_array[relid];
+	RelOptInfo *rel = root->simple_rel_array[relid];
 	RestrictInfo *rinfo;
 	int			clause_relid;
 	Oid			userid;
@@ -1646,10 +1646,9 @@ statext_is_compatible_clause(PlannerInfo *root, Node *clause, Index relid,
 		return false;
 
 	/*
-	 * Check that the user has permission to read all required attributes. Use
-	 * checkAsUser if it's set, in case we're accessing the table via a view.
+	 * Check that the user has permission to read all required attributes.
 	 */
-	userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
+	userid = OidIsValid(rel->userid) ? rel->userid : GetUserId();
 
 	/* Table-level SELECT privilege is sufficient for all columns */
 	if (pg_class_aclcheck(rte->relid, userid, ACL_SELECT) != ACLCHECK_OK)
@@ -2238,8 +2237,8 @@ compute_expr_stats(Relation onerel, double totalrows,
 		if (tcnt > 0)
 		{
 			AttributeOpts *aopt =
-			get_attribute_options(stats->attr->attrelid,
-								  stats->attr->attnum);
+				get_attribute_options(stats->attr->attrelid,
+									  stats->attr->attnum);
 
 			stats->exprvals = exprvals;
 			stats->exprnulls = exprnulls;
@@ -2398,10 +2397,7 @@ serialize_expr_stats(AnlExprData *exprdata, int nexprs)
 
 				for (n = 0; n < nnum; n++)
 					numdatums[n] = Float4GetDatum(stats->stanumbers[k][n]);
-				/* XXX knows more than it should about type float4: */
-				arry = construct_array(numdatums, nnum,
-									   FLOAT4OID,
-									   sizeof(float4), true, TYPALIGN_INT);
+				arry = construct_array_builtin(numdatums, nnum, FLOAT4OID);
 				values[i++] = PointerGetDatum(arry);	/* stanumbersN */
 			}
 			else

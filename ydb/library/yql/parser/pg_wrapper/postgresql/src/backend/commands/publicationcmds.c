@@ -3,7 +3,7 @@
  * publicationcmds.c
  *		publication manipulation
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -24,6 +24,7 @@
 #include "catalog/objectaccess.h"
 #include "catalog/objectaddress.h"
 #include "catalog/partition.h"
+#include "catalog/pg_database.h"
 #include "catalog/pg_inherits.h"
 #include "catalog/pg_namespace.h"
 #include "catalog/pg_proc.h"
@@ -107,7 +108,7 @@ parse_publication_options(ParseState *pstate,
 		{
 			char	   *publish;
 			List	   *publish_list;
-			ListCell   *lc;
+			ListCell   *lc2;
 
 			if (*publish_given)
 				errorConflictingDefElem(defel, pstate);
@@ -131,9 +132,9 @@ parse_publication_options(ParseState *pstate,
 								"publish")));
 
 			/* Process the option list. */
-			foreach(lc, publish_list)
+			foreach(lc2, publish_list)
 			{
-				char	   *publish_opt = (char *) lfirst(lc);
+				char	   *publish_opt = (char *) lfirst(lc2);
 
 				if (strcmp(publish_opt, "insert") == 0)
 					pubactions->pubinsert = true;
@@ -748,7 +749,7 @@ CreatePublication(ParseState *pstate, CreatePublicationStmt *stmt)
 	List	   *schemaidlist = NIL;
 
 	/* must have CREATE privilege on database */
-	aclresult = pg_database_aclcheck(MyDatabaseId, GetUserId(), ACL_CREATE);
+	aclresult = object_aclcheck(DatabaseRelationId, MyDatabaseId, GetUserId(), ACL_CREATE);
 	if (aclresult != ACLCHECK_OK)
 		aclcheck_error(aclresult, OBJECT_DATABASE,
 					   get_database_name(MyDatabaseId));
@@ -830,7 +831,7 @@ CreatePublication(ParseState *pstate, CreatePublicationStmt *stmt)
 					errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 					errmsg("must be superuser to create FOR TABLES IN SCHEMA publication"));
 
-		if (list_length(relations) > 0)
+		if (relations != NIL)
 		{
 			List	   *rels;
 
@@ -846,7 +847,7 @@ CreatePublication(ParseState *pstate, CreatePublicationStmt *stmt)
 			CloseTableList(rels);
 		}
 
-		if (list_length(schemaidlist) > 0)
+		if (schemaidlist != NIL)
 		{
 			/*
 			 * Schema lock is held until the publication is created to prevent
@@ -1394,7 +1395,7 @@ AlterPublication(ParseState *pstate, AlterPublicationStmt *stmt)
 	pubform = (Form_pg_publication) GETSTRUCT(tup);
 
 	/* must be owner */
-	if (!pg_publication_ownercheck(pubform->oid, GetUserId()))
+	if (!object_ownercheck(PublicationRelationId, pubform->oid, GetUserId()))
 		aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_PUBLICATION,
 					   stmt->pubname);
 
@@ -1764,7 +1765,7 @@ PublicationAddTables(Oid pubid, List *rels, bool if_not_exists,
 		ObjectAddress obj;
 
 		/* Must be owner of the table or superuser. */
-		if (!pg_class_ownercheck(RelationGetRelid(rel), GetUserId()))
+		if (!object_ownercheck(RelationRelationId, RelationGetRelid(rel), GetUserId()))
 			aclcheck_error(ACLCHECK_NOT_OWNER, get_relkind_objtype(rel->rd_rel->relkind),
 						   RelationGetRelationName(rel));
 
@@ -1905,15 +1906,15 @@ AlterPublicationOwner_internal(Relation rel, HeapTuple tup, Oid newOwnerId)
 		AclResult	aclresult;
 
 		/* Must be owner */
-		if (!pg_publication_ownercheck(form->oid, GetUserId()))
+		if (!object_ownercheck(PublicationRelationId, form->oid, GetUserId()))
 			aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_PUBLICATION,
 						   NameStr(form->pubname));
 
 		/* Must be able to become new owner */
-		check_is_member_of_role(GetUserId(), newOwnerId);
+		check_can_set_role(GetUserId(), newOwnerId);
 
 		/* New owner must have CREATE privilege on database */
-		aclresult = pg_database_aclcheck(MyDatabaseId, newOwnerId, ACL_CREATE);
+		aclresult = object_aclcheck(DatabaseRelationId, MyDatabaseId, newOwnerId, ACL_CREATE);
 		if (aclresult != ACLCHECK_OK)
 			aclcheck_error(aclresult, OBJECT_DATABASE,
 						   get_database_name(MyDatabaseId));

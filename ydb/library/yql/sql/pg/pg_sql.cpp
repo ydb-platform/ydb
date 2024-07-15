@@ -1,24 +1,4 @@
-#include "util/charset/utf8.h"
-#include "utils.h"
-#include "ydb/public/api/protos/ydb_value.pb.h"
-#include <ydb/library/yql/sql/settings/partitioning.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/config.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/raw_parser.h>
-#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/catalog/pg_type_d.h>
-#include <ydb/library/yql/parser/pg_catalog/catalog.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/core/issue/yql_issue.h>
-#include <ydb/library/yql/core/yql_callable_names.h>
-#include <ydb/library/yql/parser/pg_catalog/catalog.h>
-#include <ydb/library/yql/utils/log/log_level.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <util/string/builder.h>
-#include <util/string/cast.h>
-#include <util/generic/scope.h>
-#include <util/generic/stack.h>
-#include <util/generic/hash_set.h>
+#include "../../parser/pg_wrapper/pg_compat.h"
 
 #ifdef _WIN32
 #define __restrict
@@ -45,6 +25,28 @@ extern "C" {
 #undef NOTICE
 }
 
+#include "util/charset/utf8.h"
+#include "utils.h"
+#include "ydb/public/api/protos/ydb_value.pb.h"
+#include <ydb/library/yql/sql/settings/partitioning.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/config.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/raw_parser.h>
+#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/catalog/pg_type_d.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/core/issue/yql_issue.h>
+#include <ydb/library/yql/core/yql_callable_names.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <ydb/library/yql/utils/log/log_level.h>
+#include <ydb/library/yql/utils/log/log.h>
+#include <util/string/builder.h>
+#include <util/string/cast.h>
+#include <util/generic/scope.h>
+#include <util/generic/stack.h>
+#include <util/generic/hash_set.h>
+
 constexpr auto PREPARED_PARAM_PREFIX =  "$p";
 constexpr auto AUTO_PARAM_PREFIX =  "a";
 constexpr auto DEFAULT_PARAM_TYPE = "unknown";
@@ -69,26 +71,26 @@ int NodeTag(const Node* node) {
     return nodeTag(node);
 }
 
-int NodeTag(const A_Const::ValUnion& val) {
+int NodeTag(const ValUnion& val) {
     return NodeTag(&val.node);
 }
 
-int IntVal(const A_Const::ValUnion& val) {
+int IntVal(const ValUnion& val) {
     Y_ENSURE(val.node.type == T_Integer);
     return intVal(&val.node);
 }
 
-bool BoolVal(const A_Const::ValUnion& val) {
+bool BoolVal(const ValUnion& val) {
     Y_ENSURE(val.node.type == T_Boolean);
     return boolVal(&val.node);
 }
 
-const char* StrFloatVal(const A_Const::ValUnion& val) {
+const char* StrFloatVal(const ValUnion& val) {
     Y_ENSURE(val.node.type == T_Float);
     return strVal(&val.node);
 }
 
-const char* StrVal(const A_Const::ValUnion& val) {
+const char* StrVal(const ValUnion& val) {
     Y_ENSURE(val.node.type == T_String || val.node.type == T_BitString);
     return strVal(&val.node);
 }
@@ -113,7 +115,7 @@ const char* StrVal(const Node* node) {
     return strVal(node);
 }
 
-bool ValueAsString(const A_Const::ValUnion& val, bool isNull, TString& ret) {
+bool ValueAsString(const ValUnion& val, bool isNull, TString& ret) {
     if (isNull) {
         ret = "NULL";
         return true;
@@ -2841,7 +2843,6 @@ public:
 
         for (int i = 0; i < ListLength(value->options); ++i) {
             auto rawNode = ListNodeNth(value->options, i);
-
             switch (NodeTag(rawNode)) {
                 case T_DefElem: {
                     const auto* defElem = CAST_NODE(DefElem, rawNode);
@@ -2912,6 +2913,10 @@ public:
                 case AT_ColumnDefault: { /* ALTER COLUMN DEFAULT */
                     const auto* def = cmd->def;
                     const auto* colName = cmd->name;
+                    if (def == nullptr) {
+                        alterColumns.push_back(QL(QAX(colName), QL(QA("setDefault"), QL(QA("Null")))));
+                        break;
+                    }
                     switch (NodeTag(def)) {
                         case T_FuncCall: {
                             const auto* newDefault = CAST_NODE(FuncCall, def);

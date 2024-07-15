@@ -5,7 +5,7 @@
  *	  Planning is complete, we just need to convert the selected
  *	  Path into a Plan.
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -311,7 +311,7 @@ static ModifyTable *make_modifytable(PlannerInfo *root, Plan *subplan,
 									 List *updateColnosLists,
 									 List *withCheckOptionLists, List *returningLists,
 									 List *rowMarks, OnConflictExpr *onconflict,
-									 List *mergeActionList, int epqParam);
+									 List *mergeActionLists, int epqParam);
 static GatherMerge *create_gather_merge_plan(PlannerInfo *root,
 											 GatherMergePath *best_path);
 
@@ -1397,8 +1397,7 @@ create_append_plan(PlannerInfo *root, AppendPath *best_path, int flags)
 	 */
 	if (tlist_was_changed && (flags & (CP_EXACT_TLIST | CP_SMALL_TLIST)))
 	{
-		tlist = list_truncate(list_copy(plan->plan.targetlist),
-							  orig_tlist_length);
+		tlist = list_copy_head(plan->plan.targetlist, orig_tlist_length);
 		return inject_projection_plan((Plan *) plan, tlist,
 									  plan->plan.parallel_safe);
 	}
@@ -1530,16 +1529,8 @@ create_merge_append_plan(PlannerInfo *root, MergeAppendPath *best_path,
 
 		prunequal = extract_actual_clauses(rel->baserestrictinfo, false);
 
-		if (best_path->path.param_info)
-		{
-			List	   *prmquals = best_path->path.param_info->ppi_clauses;
-
-			prmquals = extract_actual_clauses(prmquals, false);
-			prmquals = (List *) replace_nestloop_params(root,
-														(Node *) prmquals);
-
-			prunequal = list_concat(prunequal, prmquals);
-		}
+		/* We don't currently generate any parameterized MergeAppend paths */
+		Assert(best_path->path.param_info == NULL);
 
 		if (prunequal != NIL)
 			partpruneinfo = make_partition_pruneinfo(root, rel,
@@ -1557,7 +1548,7 @@ create_merge_append_plan(PlannerInfo *root, MergeAppendPath *best_path,
 	 */
 	if (tlist_was_changed && (flags & (CP_EXACT_TLIST | CP_SMALL_TLIST)))
 	{
-		tlist = list_truncate(list_copy(plan->targetlist), orig_tlist_length);
+		tlist = list_copy_head(plan->targetlist, orig_tlist_length);
 		return inject_projection_plan(plan, tlist, plan->parallel_safe);
 	}
 	else
@@ -2403,7 +2394,7 @@ create_groupingsets_plan(PlannerInfo *root, GroupingSetsPath *best_path)
 	 * sizing.
 	 */
 	maxref = 0;
-	foreach(lc, root->parse->groupClause)
+	foreach(lc, root->processed_groupClause)
 	{
 		SortGroupClause *gc = (SortGroupClause *) lfirst(lc);
 
@@ -2414,7 +2405,7 @@ create_groupingsets_plan(PlannerInfo *root, GroupingSetsPath *best_path)
 	grouping_map = (AttrNumber *) palloc0((maxref + 1) * sizeof(AttrNumber));
 
 	/* Now look up the column numbers in the child's tlist */
-	foreach(lc, root->parse->groupClause)
+	foreach(lc, root->processed_groupClause)
 	{
 		SortGroupClause *gc = (SortGroupClause *) lfirst(lc);
 		TargetEntry *tle = get_sortgroupclause_tle(gc, subplan->targetlist);
@@ -2463,7 +2454,7 @@ create_groupingsets_plan(PlannerInfo *root, GroupingSetsPath *best_path)
 
 			if (rollup->is_hashed)
 				strat = AGG_HASHED;
-			else if (list_length(linitial(rollup->gsets)) == 0)
+			else if (linitial(rollup->gsets) == NIL)
 				strat = AGG_PLAIN;
 			else
 				strat = AGG_SORTED;
@@ -3016,6 +3007,9 @@ create_indexscan_plan(PlannerInfo *root,
 	/* it should be a base rel... */
 	Assert(baserelid > 0);
 	Assert(best_path->path.parent->rtekind == RTE_RELATION);
+	/* check the scan direction is valid */
+	Assert(best_path->indexscandir == ForwardScanDirection ||
+		   best_path->indexscandir == BackwardScanDirection);
 
 	/*
 	 * Extract the index qual expressions (stripped of RestrictInfos) from the
@@ -4149,18 +4143,29 @@ create_foreignscan_plan(PlannerInfo *root, ForeignPath *best_path,
 	/* Copy cost data from Path to Plan; no need to make FDW do this */
 	copy_generic_path_info(&scan_plan->scan.plan, &best_path->path);
 
+	/* Copy user OID to access as; likewise no need to make FDW do this */
+	scan_plan->checkAsUser = rel->userid;
+
 	/* Copy foreign server OID; likewise, no need to make FDW do this */
 	scan_plan->fs_server = rel->serverid;
 
 	/*
 	 * Likewise, copy the relids that are represented by this foreign scan. An
-	 * upper rel doesn't have relids set, but it covers all the base relations
-	 * participating in the underlying scan, so use root's all_baserels.
+	 * upper rel doesn't have relids set, but it covers all the relations
+	 * participating in the underlying scan/join, so use root->all_query_rels.
 	 */
 	if (rel->reloptkind == RELOPT_UPPER_REL)
-		scan_plan->fs_relids = root->all_baserels;
+		scan_plan->fs_relids = root->all_query_rels;
 	else
 		scan_plan->fs_relids = best_path->path.parent->relids;
+
+	/*
+	 * Join relid sets include relevant outer joins, but FDWs may need to know
+	 * which are the included base rels.  That's a bit tedious to get without
+	 * access to the plan-time data structures, so compute it here.
+	 */
+	scan_plan->fs_base_relids = bms_difference(scan_plan->fs_relids,
+											   root->outer_join_rels);
 
 	/*
 	 * If this is a foreign join, and to make it valid to push down we had to
@@ -4916,13 +4921,8 @@ replace_nestloop_params_mutator(Node *node, PlannerInfo *root)
 		/* Upper-level PlaceHolderVars should be long gone at this point */
 		Assert(phv->phlevelsup == 0);
 
-		/*
-		 * Check whether we need to replace the PHV.  We use bms_overlap as a
-		 * cheap/quick test to see if the PHV might be evaluated in the outer
-		 * rels, and then grab its PlaceHolderInfo to tell for sure.
-		 */
-		if (!bms_overlap(phv->phrels, root->curOuterRels) ||
-			!bms_is_subset(find_placeholder_info(root, phv, false)->ph_eval_at,
+		/* Check whether we need to replace the PHV */
+		if (!bms_is_subset(find_placeholder_info(root, phv)->ph_eval_at,
 						   root->curOuterRels))
 		{
 			/*
@@ -5800,14 +5800,16 @@ make_foreignscan(List *qptlist,
 	node->operation = CMD_SELECT;
 	node->resultRelation = 0;
 
-	/* fs_server will be filled in by create_foreignscan_plan */
+	/* checkAsUser, fs_server will be filled in by create_foreignscan_plan */
+	node->checkAsUser = InvalidOid;
 	node->fs_server = InvalidOid;
 	node->fdw_exprs = fdw_exprs;
 	node->fdw_private = fdw_private;
 	node->fdw_scan_tlist = fdw_scan_tlist;
 	node->fdw_recheck_quals = fdw_recheck_quals;
-	/* fs_relids will be filled in by create_foreignscan_plan */
+	/* fs_relids, fs_base_relids will be filled by create_foreignscan_plan */
 	node->fs_relids = NULL;
+	node->fs_base_relids = NULL;
 	/* fsSystemCol will be filled in by create_foreignscan_plan */
 	node->fsSystemCol = false;
 
@@ -6201,10 +6203,7 @@ prepare_sort_from_pathkeys(Plan *lefttree, List *pathkeys,
 			 * the pathkey's EquivalenceClass.  For now, we take the first
 			 * tlist item found in the EC. If there's no match, we'll generate
 			 * a resjunk entry using the first EC member that is an expression
-			 * in the input's vars.  (The non-const restriction only matters
-			 * if the EC is below_outer_join; but if it isn't, it won't
-			 * contain consts anyway, else we'd have discarded the pathkey as
-			 * redundant.)
+			 * in the input's vars.
 			 *
 			 * XXX if we have a choice, is there any way of figuring out which
 			 * might be cheapest to execute?  (For example, int4lt is likely
@@ -7084,36 +7083,34 @@ make_modifytable(PlannerInfo *root, Plan *subplan,
 			RelOptInfo *resultRel = root->simple_rel_array[rti];
 
 			fdwroutine = resultRel->fdwroutine;
-
-			/*
-			 * MERGE is not currently supported for foreign tables and we
-			 * already checked when the table mentioned in the query is
-			 * foreign; but we can still get here if a partitioned table has a
-			 * foreign table as partition.  Disallow that now, to avoid an
-			 * uglier error message later.
-			 */
-			if (operation == CMD_MERGE && fdwroutine != NULL)
-			{
-				RangeTblEntry *rte = root->simple_rte_array[rti];
-
-				ereport(ERROR,
-						errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						errmsg("cannot execute MERGE on relation \"%s\"",
-							   get_rel_name(rte->relid)),
-						errdetail_relkind_not_supported(rte->relkind));
-			}
-
 		}
 		else
 		{
 			RangeTblEntry *rte = planner_rt_fetch(rti, root);
 
-			Assert(rte->rtekind == RTE_RELATION);
-			Assert(operation != CMD_MERGE);
-			if (rte->relkind == RELKIND_FOREIGN_TABLE)
+			if (rte->rtekind == RTE_RELATION &&
+				rte->relkind == RELKIND_FOREIGN_TABLE)
 				fdwroutine = GetFdwRoutineByRelId(rte->relid);
 			else
 				fdwroutine = NULL;
+		}
+
+		/*
+		 * MERGE is not currently supported for foreign tables.  We already
+		 * checked that when the table mentioned in the query is foreign; but
+		 * we can still get here if a partitioned table has a foreign table as
+		 * partition.  Disallow that now, to avoid an uglier error message
+		 * later.
+		 */
+		if (operation == CMD_MERGE && fdwroutine != NULL)
+		{
+			RangeTblEntry *rte = planner_rt_fetch(rti, root);
+
+			ereport(ERROR,
+					errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					errmsg("cannot execute MERGE on relation \"%s\"",
+						   get_rel_name(rte->relid)),
+					errdetail_relkind_not_supported(rte->relkind));
 		}
 
 		/*

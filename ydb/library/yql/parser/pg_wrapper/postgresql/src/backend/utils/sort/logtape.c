@@ -66,7 +66,7 @@
  * There will always be the same number of runs as input tapes, and the same
  * number of input tapes as participants (worker Tuplesortstates).
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -220,7 +220,7 @@ struct LogicalTapeSet
 };
 
 static LogicalTape *ltsCreateTape(LogicalTapeSet *lts);
-static void ltsWriteBlock(LogicalTapeSet *lts, long blocknum, void *buffer);
+static void ltsWriteBlock(LogicalTapeSet *lts, long blocknum, const void *buffer);
 static void ltsReadBlock(LogicalTapeSet *lts, long blocknum, void *buffer);
 static long ltsGetBlock(LogicalTapeSet *lts, LogicalTape *lt);
 static long ltsGetFreeBlock(LogicalTapeSet *lts);
@@ -235,7 +235,7 @@ static void ltsInitReadBuffer(LogicalTape *lt);
  * No need for an error return convention; we ereport() on any error.
  */
 static void
-ltsWriteBlock(LogicalTapeSet *lts, long blocknum, void *buffer)
+ltsWriteBlock(LogicalTapeSet *lts, long blocknum, const void *buffer)
 {
 	/*
 	 * BufFile does not support "holes", so if we're about to write a block
@@ -252,7 +252,7 @@ ltsWriteBlock(LogicalTapeSet *lts, long blocknum, void *buffer)
 	 */
 	while (blocknum > lts->nBlocksWritten)
 	{
-		PGAlignedBlock zerobuf;
+		PGIOAlignedBlock zerobuf;
 
 		MemSet(zerobuf.data, 0, sizeof(zerobuf));
 
@@ -281,19 +281,12 @@ ltsWriteBlock(LogicalTapeSet *lts, long blocknum, void *buffer)
 static void
 ltsReadBlock(LogicalTapeSet *lts, long blocknum, void *buffer)
 {
-	size_t		nread;
-
 	if (BufFileSeekBlock(lts->pfile, blocknum) != 0)
 		ereport(ERROR,
 				(errcode_for_file_access(),
 				 errmsg("could not seek to block %ld of temporary file",
 						blocknum)));
-	nread = BufFileRead(lts->pfile, buffer, BLCKSZ);
-	if (nread != BLCKSZ)
-		ereport(ERROR,
-				(errcode_for_file_access(),
-				 errmsg("could not read block %ld of temporary file: read only %zu of %zu bytes",
-						blocknum, nread, (size_t) BLCKSZ)));
+	BufFileReadExact(lts->pfile, buffer, BLCKSZ);
 }
 
 /*
@@ -319,7 +312,7 @@ ltsReadFillBuffer(LogicalTape *lt)
 		datablocknum += lt->offsetBlockNumber;
 
 		/* Read the block */
-		ltsReadBlock(lt->tapeSet, datablocknum, (void *) thisbuf);
+		ltsReadBlock(lt->tapeSet, datablocknum, thisbuf);
 		if (!lt->frozen)
 			ltsReleaseBlock(lt->tapeSet, datablocknum);
 		lt->curBlockNumber = lt->nextBlockNumber;
@@ -765,7 +758,7 @@ LogicalTapeSetForgetFreeSpace(LogicalTapeSet *lts)
  * There are no error returns; we ereport() on failure.
  */
 void
-LogicalTapeWrite(LogicalTape *lt, void *ptr, size_t size)
+LogicalTapeWrite(LogicalTape *lt, const void *ptr, size_t size)
 {
 	LogicalTapeSet *lts = lt->tapeSet;
 	size_t		nthistime;
@@ -812,7 +805,7 @@ LogicalTapeWrite(LogicalTape *lt, void *ptr, size_t size)
 
 			/* set the next-pointer and dump the current block. */
 			TapeBlockGetTrailer(lt->buffer)->next = nextBlockNumber;
-			ltsWriteBlock(lt->tapeSet, lt->curBlockNumber, (void *) lt->buffer);
+			ltsWriteBlock(lt->tapeSet, lt->curBlockNumber, lt->buffer);
 
 			/* initialize the prev-pointer of the next block */
 			TapeBlockGetTrailer(lt->buffer)->prev = lt->curBlockNumber;
@@ -832,7 +825,7 @@ LogicalTapeWrite(LogicalTape *lt, void *ptr, size_t size)
 		lt->pos += nthistime;
 		if (lt->nbytes < lt->pos)
 			lt->nbytes = lt->pos;
-		ptr = (void *) ((char *) ptr + nthistime);
+		ptr = (const char *) ptr + nthistime;
 		size -= nthistime;
 	}
 }
@@ -894,7 +887,7 @@ LogicalTapeRewindForRead(LogicalTape *lt, size_t buffer_size)
 									  lt->buffer_size - lt->nbytes);
 
 			TapeBlockSetNBytes(lt->buffer, lt->nbytes);
-			ltsWriteBlock(lt->tapeSet, lt->curBlockNumber, (void *) lt->buffer);
+			ltsWriteBlock(lt->tapeSet, lt->curBlockNumber, lt->buffer);
 		}
 		lt->writing = false;
 	}
@@ -959,7 +952,7 @@ LogicalTapeRead(LogicalTape *lt, void *ptr, size_t size)
 		memcpy(ptr, lt->buffer + lt->pos, nthistime);
 
 		lt->pos += nthistime;
-		ptr = (void *) ((char *) ptr + nthistime);
+		ptr = (char *) ptr + nthistime;
 		size -= nthistime;
 		nread += nthistime;
 	}
@@ -1010,7 +1003,7 @@ LogicalTapeFreeze(LogicalTape *lt, TapeShare *share)
 								  lt->buffer_size - lt->nbytes);
 
 		TapeBlockSetNBytes(lt->buffer, lt->nbytes);
-		ltsWriteBlock(lt->tapeSet, lt->curBlockNumber, (void *) lt->buffer);
+		ltsWriteBlock(lt->tapeSet, lt->curBlockNumber, lt->buffer);
 	}
 	lt->writing = false;
 	lt->frozen = true;
@@ -1037,7 +1030,7 @@ LogicalTapeFreeze(LogicalTape *lt, TapeShare *share)
 
 	if (lt->firstBlockNumber == -1L)
 		lt->nextBlockNumber = -1L;
-	ltsReadBlock(lt->tapeSet, lt->curBlockNumber, (void *) lt->buffer);
+	ltsReadBlock(lt->tapeSet, lt->curBlockNumber, lt->buffer);
 	if (TapeBlockIsLast(lt->buffer))
 		lt->nextBlockNumber = -1L;
 	else
@@ -1104,7 +1097,7 @@ LogicalTapeBackspace(LogicalTape *lt, size_t size)
 			return seekpos;
 		}
 
-		ltsReadBlock(lt->tapeSet, prev, (void *) lt->buffer);
+		ltsReadBlock(lt->tapeSet, prev, lt->buffer);
 
 		if (TapeBlockGetTrailer(lt->buffer)->next != lt->curBlockNumber)
 			elog(ERROR, "broken tape, next of block %ld is %ld, expected %ld",
@@ -1148,7 +1141,7 @@ LogicalTapeSeek(LogicalTape *lt, long blocknum, int offset)
 
 	if (blocknum != lt->curBlockNumber)
 	{
-		ltsReadBlock(lt->tapeSet, blocknum, (void *) lt->buffer);
+		ltsReadBlock(lt->tapeSet, blocknum, lt->buffer);
 		lt->curBlockNumber = blocknum;
 		lt->nbytes = TapeBlockPayloadSize;
 		lt->nextBlockNumber = TapeBlockGetTrailer(lt->buffer)->next;

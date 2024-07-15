@@ -1,11 +1,5 @@
 #include "pg_compat.h"
 
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/parser/pg_catalog/catalog.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/context.h>
-#include <ydb/library/yql/parser/pg_wrapper/memory_context.h>
-#include <ydb/library/yql/parser/pg_wrapper/pg_catalog_consts.h>
-
 #define SortBy PG_SortBy
 #define TypeName PG_TypeName
 
@@ -38,6 +32,12 @@ extern "C" {
 #undef fopen
 #undef bind
 #undef locale_t
+
+#include <ydb/library/yql/minikql/mkql_alloc.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/context.h>
+#include <ydb/library/yql/parser/pg_wrapper/memory_context.h>
+#include <ydb/library/yql/parser/pg_wrapper/pg_catalog_consts.h>
 
 #include "arena_ctx.h"
 #include "utils.h"

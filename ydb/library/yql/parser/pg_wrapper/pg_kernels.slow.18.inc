@@ -124,3 +124,4 @@ TExecFunc arrow_spg_quad_inner_consistent() { return MakeIndirectExec<true, true
 TExecFunc arrow_spg_quad_leaf_consistent() { return MakeIndirectExec<true, true>(&spg_quad_leaf_consistent); }
 TExecFunc arrow_spg_quad_picksplit() { return MakeIndirectExec<true, true>(&spg_quad_picksplit); }
 TExecFunc arrow_spghandler() { return MakeIndirectExec<true, true>(&spghandler); }
+TExecFunc arrow_system_user() { return MakeIndirectExec<true, false>(&system_user); }

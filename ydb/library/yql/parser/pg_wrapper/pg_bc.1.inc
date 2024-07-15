@@ -151,7 +151,10 @@ LLVM_BC(
     arrow_timetz_zone
     arrow_timetztypmodin
     arrow_timetztypmodout
+    arrow_window_cume_dist_support
     arrow_window_dense_rank_support
+    arrow_window_ntile_support
+    arrow_window_percent_rank_support
     arrow_window_rank_support
     arrow_window_row_number_support
 )

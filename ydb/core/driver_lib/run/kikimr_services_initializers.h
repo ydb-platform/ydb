@@ -3,6 +3,7 @@
 #include "factories.h"
 #include "service_initializer.h"
 
+#include <ydb/core/memory_controller/memory_controller.h>
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/statestorage.h>
@@ -373,9 +374,10 @@ public:
 };
 
 class TMemoryControllerInitializer : public IKikimrServicesInitializer {
-    TIntrusivePtr<NMemory::IMemoryConsumers> MemoryConsumers;
+    TIntrusivePtr<NMemory::TMemoryConsumersCollection> MemoryConsumersCollection;
+    TIntrusiveConstPtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
 public:
-    TMemoryControllerInitializer(const TKikimrRunConfig& runConfig, TIntrusivePtr<NMemory::IMemoryConsumers> memoryConsumers);
+    TMemoryControllerInitializer(const TKikimrRunConfig& runConfig, TIntrusivePtr<NMemory::TMemoryConsumersCollection> memoryConsumersCollection, TIntrusiveConstPtr<NMemory::IProcessMemoryInfoProvider> processMemoryInfoProvider);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };

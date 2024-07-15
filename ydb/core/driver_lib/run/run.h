@@ -3,6 +3,7 @@
 #include "factories.h"
 #include "service_initializer.h"
 
+#include <ydb/core/memory_controller/memory_controller.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/log_settings.h>
 #include <ydb/library/actors/interconnect/poller_tcp.h>
@@ -59,7 +60,8 @@ protected:
     std::shared_ptr<TLogBackend> LogBackend;
     TAutoPtr<TActorSystem> ActorSystem;
 
-    TIntrusivePtr<NMemory::IMemoryConsumers> MemoryConsumers;
+    TIntrusivePtr<NMemory::TMemoryConsumersCollection> MemoryConsumersCollection;
+    TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
 
     TKikimrRunner(std::shared_ptr<TModuleFactories> factories = {});
 

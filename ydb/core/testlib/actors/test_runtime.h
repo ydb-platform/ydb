@@ -37,7 +37,7 @@ namespace NActors {
             ~TNodeData();
             ui64 GetLoggerPoolId() const override;
             THolder<NActors::TMon> Mon;
-            TIntrusivePtr<NKikimr::NMemory::IMemoryConsumers> MemoryConsumers = NKikimr::NMemory::CreateMemoryConsumers();
+            TIntrusivePtr<NKikimr::NMemory::TMemoryConsumersCollection> MemoryConsumersCollection = MakeIntrusive<NKikimr::NMemory::TMemoryConsumersCollection>();
         };
 
         struct TNodeFactory: public INodeFactory {
@@ -88,10 +88,10 @@ namespace NActors {
             return f.ExtractValue();
         }
 
-        TIntrusivePtr<NKikimr::NMemory::IMemoryConsumers> GetMemoryConsumers(ui32 nodeIndex = 0) {
+        TIntrusivePtr<NKikimr::NMemory::TMemoryConsumersCollection> GetMemoryConsumersCollection(ui32 nodeIndex = 0) {
             TGuard<TMutex> guard(Mutex);
             auto node = GetNodeById(GetNodeId(nodeIndex));
-            return node->MemoryConsumers;
+            return node->MemoryConsumersCollection;
         }
 
         void SendToPipe(ui64 tabletId, const TActorId& sender, IEventBase* payload, ui32 nodeIndex = 0,

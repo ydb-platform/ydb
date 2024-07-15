@@ -1,3 +1,4 @@
+#include "memory_controller.h"
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -11,89 +12,28 @@
 
 namespace NKikimr::NMemory {
 
+TProcessMemoryInfo TProcessMemoryInfoProvider::IProcessMemoryInfoProvider::Get() const {
+    std::optional<TMemoryUsage> memoryUsage = TAllocState::TryGetMemoryUsage();
+
+    TProcessMemoryInfo result{
+        TAllocState::GetAllocatedMemoryEstimate(),
+        {}, {}
+    };
+
+    if (memoryUsage) {
+        result.AnonRss.emplace(memoryUsage->AnonRss);
+    }
+    if (memoryUsage && memoryUsage->CGroupLimit) {
+        result.CGroupLimit.emplace(memoryUsage->CGroupLimit);
+    }
+
+    return result;
+}
+
 namespace {
 
 using namespace NActors;
 using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
-
-struct TConsumerSnapshot {
-    EConsumerKind Kind;
-    ui64 Consumption;
-};
-
-class TMemoryConsumer : public IMemoryConsumer {
-public:
-    TMemoryConsumer(EConsumerKind kind)
-        : Kind(kind) 
-    {
-    }
-
-    EConsumerKind GetKind() const {
-        return Kind;
-    }
-
-    ui64 GetLimit() const override {
-        TGuard<TMutex> guard(Mutex);
-        return Limit;
-    }
-
-    void SetLimit(ui64 value) {
-        TGuard<TMutex> guard(Mutex);
-        Limit = value;
-    }
-
-    ui64 GetConsumption() const {
-        TGuard<TMutex> guard(Mutex);
-        return Consumption;
-    }
-
-    void SetConsumption(ui64 value) override {
-        TGuard<TMutex> guard(Mutex);
-        Consumption = value;
-    }
-
-    TConsumerSnapshot GetConsumerSnapshot() {
-        TGuard<TMutex> guard(Mutex);
-        return {Kind, Consumption};
-    }
-
-private:
-    TMutex Mutex;
-    const EConsumerKind Kind;
-    ui64 Consumption = 0;
-    ui64 Limit = 0;
-};
-
-class TMemoryConsumers : public IMemoryConsumers {
-public:
-    TIntrusivePtr<IMemoryConsumer> Register(EConsumerKind consumer) {
-        TGuard<TMutex> guard(Mutex);
-
-        auto inserted = Consumers.emplace(consumer, MakeIntrusive<TMemoryConsumer>(consumer));
-
-        Y_ABORT_UNLESS(inserted.second, "Consumers should be unique");
-
-        return inserted.first->second;
-    }
-
-    TVector<TConsumerSnapshot> GetConsumersSnapshot() const {
-        TGuard<TMutex> guard(Mutex);
-        
-        TVector<TConsumerSnapshot> result(::Reserve(Consumers.size()));
-
-        // Note: don't care about destroyed consumers as that is possible only during process stopping
-
-        for (const auto& consumer : Consumers) {
-            result.push_back(consumer.second->GetConsumerSnapshot());
-        }
-
-        return result;
-    }
-
-private:
-    TMutex Mutex;
-    TMap<EConsumerKind, TIntrusivePtr<TMemoryConsumer>> Consumers;
-};
 
 struct TConsumerConfig {
     std::optional<float> MinPercent;
@@ -103,10 +43,21 @@ struct TConsumerConfig {
     bool CanZeroLimit = false;
 };
 
-struct TConsumerState : TConsumerSnapshot {
+struct TConsumerState {
+    TIntrusivePtr<TMemoryConsumer> Consumer_;
+    EMemoryConsumerKind Kind;
+    ui64 Consumption;
     TConsumerConfig Config;
     ui64 MinBytes = 0;
     ui64 MaxBytes = 0;
+
+    TConsumerState(TIntrusivePtr<TMemoryConsumer> consumer, TConsumerConfig config)
+        : Consumer_(std::move(consumer))
+        , Kind(Consumer_->GetKind())
+        , Consumption(Consumer_->GetConsumption())
+        , Config(config)
+    {
+    }
 
     ui64 GetLimit(double coefficient) const {
         return static_cast<ui64>(MinBytes + coefficient * (MaxBytes - MinBytes));
@@ -126,10 +77,15 @@ public:
         return NKikimrServices::TActivity::MEMORY_CONTROLLER;
     }
 
-    TMemoryController(TDuration interval, TIntrusivePtr<IMemoryConsumers> consumers, NKikimrConfig::TMemoryControllerConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
+    TMemoryController(
+            TDuration interval,
+            TIntrusivePtr<TMemoryConsumersCollection> consumersCollection,
+            TIntrusiveConstPtr<IProcessMemoryInfoProvider> processMemoryInfoProvider,
+            const NKikimrConfig::TMemoryControllerConfig& config,
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
         : Interval(interval)
-        , Consumers_(std::move(consumers))
-        , Consumers(dynamic_cast<TMemoryConsumers&>(*Consumers_))
+        , ConsumersCollection(std::move(consumersCollection))
+        , ProcessMemoryInfoProvider(std::move(processMemoryInfoProvider))
         , Config(config)
         , Counters(counters)
     {}
@@ -159,23 +115,23 @@ private:
     }
 
     void HandleWakeup(const TActorContext& ctx) noexcept {
-        std::optional<TMemoryUsage> memoryUsage = TAllocState::TryGetMemoryUsage();
-        auto allocatedMemory = TAllocState::GetAllocatedMemoryEstimate();
+        auto processMemoryInfo = ProcessMemoryInfoProvider->Get();
 
-        ui64 hardLimitBytes = GetHardLimitBytes(memoryUsage);
+        ui64 hardLimitBytes = GetHardLimitBytes(processMemoryInfo);
         ui64 softLimitBytes = GetSoftLimitBytes(hardLimitBytes);
         ui64 targetUtilizationBytes = GetTargetUtilizationBytes(hardLimitBytes);
 
-        auto consumers_ = Consumers.GetConsumersSnapshot();
+        auto consumers_ = ConsumersCollection->GetConsumers();
         TVector<TConsumerState> consumers(::Reserve(consumers_.size()));
         ui64 consumersConsumption = 0;
-        for (auto& consumer : consumers) {
-            consumersConsumption += consumer.Consumption;
-            consumers.push_back(GetConsumerState(consumer, hardLimitBytes));
+        for (auto& consumer : consumers_) {
+            consumers.push_back(BuildConsumerState(std::move(consumer), hardLimitBytes));
+            consumersConsumption += consumers.back().Consumption;
         }
+        consumers_.clear();
 
         // allocatedMemory = externalConsumption + consumersConsumption
-        ui64 externalConsumption = SafeDiff(allocatedMemory, consumersConsumption);
+        ui64 externalConsumption = SafeDiff(processMemoryInfo.AllocatedMemory, consumersConsumption);
         // targetConsumersConsumption + externalConsumption = targetUtilizationBytes
         ui64 targetConsumersConsumption = SafeDiff(targetUtilizationBytes, externalConsumption);
 
@@ -195,14 +151,14 @@ private:
         }
 
         LOG_DEBUG_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Periodic memory stats"
-            << " AnonRss: " << (memoryUsage ? memoryUsage->AnonRss : 0) << " CGroupLimit: " << (memoryUsage ? memoryUsage->CGroupLimit : 0) << " AllocatedMemory: " << allocatedMemory
+            << " AnonRss: " << processMemoryInfo.AnonRss << " CGroupLimit: " << processMemoryInfo.CGroupLimit << " AllocatedMemory: " << processMemoryInfo.AllocatedMemory
             << " HardLimitBytes: " << hardLimitBytes << " SoftLimitBytes: " << softLimitBytes << " TargetUtilizationBytes: " << targetUtilizationBytes
             << " ConsumersConsumption: " << consumersConsumption << " ExternalConsumption: " << externalConsumption 
             << " TargetConsumersConsumption: " << targetConsumersConsumption << " ResultingConsumersConsumption: " << resultingConsumersConsumption
             << " Coefficient: " << coefficient);
-        Counters->GetCounter("Stats/AnonRss")->Set(memoryUsage ? memoryUsage->AnonRss : 0);
-        Counters->GetCounter("Stats/CGroupLimit")->Set(memoryUsage ? memoryUsage->CGroupLimit : 0);
-        Counters->GetCounter("Stats/AllocatedMemory")->Set(allocatedMemory);
+        Counters->GetCounter("Stats/AnonRss")->Set(processMemoryInfo.AnonRss.value_or(0));
+        Counters->GetCounter("Stats/CGroupLimit")->Set(processMemoryInfo.CGroupLimit.value_or(0));
+        Counters->GetCounter("Stats/AllocatedMemory")->Set(processMemoryInfo.AllocatedMemory);
         Counters->GetCounter("Stats/HardLimitBytes")->Set(hardLimitBytes);
         Counters->GetCounter("Stats/SoftLimitBytes")->Set(softLimitBytes);
         Counters->GetCounter("Stats/TargetUtilizationBytes")->Set(targetUtilizationBytes);
@@ -255,13 +211,14 @@ private:
         return left;
     }
 
-    void ApplyLimit(TConsumerState consumer, ui64 limitBytes) const {
+    void ApplyLimit(const TConsumerState& consumer, ui64 limitBytes) const {
+        consumer.Consumer_->SetLimit(limitBytes);
         // TODO: don't send if queued already?
         switch (consumer.Kind) {
-            case EConsumerKind::SharedCache:
+            case EMemoryConsumerKind::SharedCache:
                 Send(MakeSharedPageCacheId(), new TEvMemoryLimit(limitBytes));
                 break;
-            case EConsumerKind::MemTable:
+            case EMemoryConsumerKind::MemTable:
                 // TODO
                 break;
             default:
@@ -269,7 +226,7 @@ private:
         }
     }
 
-    TConsumerCounters& GetConsumerCounters(EConsumerKind consumer) {
+    TConsumerCounters& GetConsumerCounters(EMemoryConsumerKind consumer) {
         auto it = ConsumerCounters.FindPtr(consumer);
         if (it) {
             return *it;
@@ -283,8 +240,8 @@ private:
         }).first->second;
     }
 
-    TConsumerState GetConsumerState(const TConsumerSnapshot& consumer, ui64 availableMemory) const {
-        auto config = GetConsumerConfig(consumer.Kind);
+    TConsumerState BuildConsumerState(TIntrusivePtr<TMemoryConsumer>&& consumer, ui64 availableMemory) const {
+        auto config = GetConsumerConfig(consumer->GetKind());
         
         std::optional<ui64> minBytes;
         std::optional<ui64> maxBytes;
@@ -312,8 +269,10 @@ private:
             minBytes = maxBytes;
         }
 
-        TConsumerState result{consumer, config, minBytes.value_or(0), maxBytes.value_or(0)};
+        TConsumerState result(std::move(consumer), config);
 
+        result.MinBytes = minBytes.value_or(0);
+        result.MaxBytes = maxBytes.value_or(0);
         if (result.MinBytes > result.MaxBytes) {
             result.MinBytes = result.MaxBytes;
         }
@@ -321,11 +280,11 @@ private:
         return result;
     }
 
-    TConsumerConfig GetConsumerConfig(EConsumerKind consumer) const {
+    TConsumerConfig GetConsumerConfig(EMemoryConsumerKind consumer) const {
         TConsumerConfig result;
 
         switch (consumer) {
-            case EConsumerKind::SharedCache: {
+            case EMemoryConsumerKind::SharedCache: {
                 if (Config.HasSharedCacheMinPercent() || Config.GetSharedCacheMinPercent()) {
                     result.MinPercent = Config.GetSharedCacheMinPercent();
                 }
@@ -341,7 +300,7 @@ private:
                 result.CanZeroLimit = true;
                 break;
             }
-            case EConsumerKind::MemTable: {
+            case EMemoryConsumerKind::MemTable: {
                 if (Config.HasMemTableMinPercent() || Config.GetMemTableMinPercent()) {
                     result.MinPercent = Config.GetMemTableMinPercent();
                 }
@@ -363,12 +322,12 @@ private:
         return result;
     }
 
-    ui64 GetHardLimitBytes(std::optional<TMemoryUsage> memoryUsage) const {
+    ui64 GetHardLimitBytes(const TProcessMemoryInfo& info) const {
         if (Config.HasHardLimitBytes()) {
             return Config.GetHardLimitBytes();
         }
-        if (memoryUsage && memoryUsage->CGroupLimit) {
-            return memoryUsage->CGroupLimit;
+        if (info.CGroupLimit.has_value()) {
+            return info.CGroupLimit.value();
         }
         // TODO: get total RAM
         return Config.GetHardLimitBytes();
@@ -404,21 +363,26 @@ private:
 
 private:
     const TDuration Interval;
-    const TIntrusivePtr<IMemoryConsumers> Consumers_;
-    const TMemoryConsumers& Consumers;
+    const TIntrusivePtr<TMemoryConsumersCollection> ConsumersCollection;
+    const TIntrusiveConstPtr<IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
     NKikimrConfig::TMemoryControllerConfig Config;
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
-    TMap<EConsumerKind, TConsumerCounters> ConsumerCounters;
+    TMap<EMemoryConsumerKind, TConsumerCounters> ConsumerCounters;
 };
 
 }
 
-TIntrusivePtr<IMemoryConsumers> CreateMemoryConsumers() {
-    return MakeIntrusive<TMemoryConsumers>();
-}
-
-IActor* CreateMemoryController(TDuration interval, TIntrusivePtr<IMemoryConsumers> consumers, NKikimrConfig::TMemoryControllerConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
-    return new TMemoryController(interval, consumers, config,
+IActor* CreateMemoryController(
+        TDuration interval,
+        TIntrusivePtr<TMemoryConsumersCollection> consumersCollection,
+        TIntrusiveConstPtr<IProcessMemoryInfoProvider> processMemoryInfoProvider,
+        const NKikimrConfig::TMemoryControllerConfig& config, 
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
+    return new TMemoryController(
+        interval,
+        std::move(consumersCollection),
+        std::move(processMemoryInfoProvider),
+        config,
         GetServiceCounters(counters, "utils")->GetSubgroup("component", "memory_controller"));
 }
 

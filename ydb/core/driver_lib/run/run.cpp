@@ -399,8 +399,9 @@ public:
 TKikimrRunner::TKikimrRunner(std::shared_ptr<TModuleFactories> factories)
     : ModuleFactories(std::move(factories))
     , Counters(MakeIntrusive<::NMonitoring::TDynamicCounters>())
-    , PollerThreads(new NInterconnect::TPollerThreads)
-    , MemoryConsumers(NMemory::CreateMemoryConsumers())
+    , PollerThreads(MakeIntrusive<NInterconnect::TPollerThreads>())
+    , MemoryConsumersCollection(MakeIntrusive<NMemory::TMemoryConsumersCollection>())
+    , ProcessMemoryInfoProvider(MakeIntrusive<NMemory::TProcessMemoryInfoProvider>())
 {
 }
 
@@ -1429,8 +1430,8 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TLocalServiceInitializer(runConfig));
     }
     if (serviceMask.EnableSharedCache) {
-        MemoryConsumers->Register(NMemory::EConsumerKind::MemTable); // TODO
-        sil->AddServiceInitializer(new TSharedCacheInitializer(runConfig, MemoryConsumers->Register(NMemory::EConsumerKind::SharedCache)));
+        MemoryConsumersCollection->Register(NMemory::EMemoryConsumerKind::MemTable); // TODO
+        sil->AddServiceInitializer(new TSharedCacheInitializer(runConfig, MemoryConsumersCollection->Register(NMemory::EMemoryConsumerKind::SharedCache)));
     }
     if (serviceMask.EnableBlobCache) {
         sil->AddServiceInitializer(new TBlobCacheInitializer(runConfig));
@@ -1539,7 +1540,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
 #endif
 
-    sil->AddServiceInitializer(new TMemoryControllerInitializer(runConfig, MemoryConsumers));
+    sil->AddServiceInitializer(new TMemoryControllerInitializer(runConfig, MemoryConsumersCollection, ProcessMemoryInfoProvider));
 
     if (serviceMask.EnableKqp) {
         sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories, *this));

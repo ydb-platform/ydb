@@ -1,22 +1,12 @@
 #pragma once
 
-#include "defs.h"
 #include <ydb/core/base/events.h>
 
 namespace NKikimr::NMemory {
 
-enum class EConsumerKind {
-    SharedCache,
-    MemTable,
-};
-
 struct IMemoryConsumer : public TThrRefBase {
-    virtual ui64 GetLimit() const = 0;
+    virtual ui64 GetLimit() const = 0; // TODO: initial limit?
     virtual void SetConsumption(ui64 value) = 0;
-};
-
-struct IMemoryConsumers : public TThrRefBase {
-    virtual TIntrusivePtr<IMemoryConsumer> Register(EConsumerKind consumer) = 0;
 };
 
 enum EEvMemory {

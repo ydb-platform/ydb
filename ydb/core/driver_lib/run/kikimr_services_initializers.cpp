@@ -2105,9 +2105,10 @@ void TMemoryTrackerInitializer::InitializeServices(
     );
 }
 
-TMemoryControllerInitializer::TMemoryControllerInitializer(const TKikimrRunConfig& runConfig, TIntrusivePtr<NMemory::IMemoryConsumers> memoryConsumers)
+TMemoryControllerInitializer::TMemoryControllerInitializer(const TKikimrRunConfig& runConfig, TIntrusivePtr<NMemory::TMemoryConsumersCollection> memoryConsumersCollection, TIntrusiveConstPtr<NMemory::IProcessMemoryInfoProvider> processMemoryInfoProvider)
     : IKikimrServicesInitializer(runConfig)
-    , MemoryConsumers(std::move(memoryConsumers))
+    , MemoryConsumersCollection(std::move(memoryConsumersCollection))
+    , ProcessMemoryInfoProvider(std::move(processMemoryInfoProvider))
 {}
 
 void TMemoryControllerInitializer::InitializeServices(
@@ -2115,7 +2116,7 @@ void TMemoryControllerInitializer::InitializeServices(
     const NKikimr::TAppData* appData)
 {
     auto config = appData->MemoryControllerConfig;
-    auto* actor = NMemory::CreateMemoryController(TDuration::Seconds(1), MemoryConsumers, appData->Counters);
+    auto* actor = NMemory::CreateMemoryController(TDuration::Seconds(1), MemoryConsumersCollection, ProcessMemoryInfoProvider, config, appData->Counters);
     setup->LocalServices.emplace_back(
         TActorId(),
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->BatchPoolId)

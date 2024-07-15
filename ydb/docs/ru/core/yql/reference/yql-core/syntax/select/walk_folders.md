@@ -220,4 +220,3 @@ $walkFoldersRes = SELECT * FROM WalkFolders(`initial_folder`, $initialState, $di
 $_, $paths = Unwrap($walkFoldersRes);
 select $paths;
 ```
-

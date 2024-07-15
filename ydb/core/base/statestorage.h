@@ -9,6 +9,8 @@
 #include <util/generic/map.h>
 
 namespace NKikimr {
+// sample
+
 
 struct TEvStateStorage {
     enum EEv {

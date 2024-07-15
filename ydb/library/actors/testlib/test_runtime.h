@@ -302,7 +302,7 @@ namespace NActors {
         void EnableScheduleForActor(const TActorId& actorId, bool allow = true);
         bool IsScheduleForActorEnabled(const TActorId& actorId) const;
         TIntrusivePtr<NMonitoring::TDynamicCounters> GetDynamicCounters(ui32 nodeIndex = 0);
-        void SetupMonitoring(ui16 monitoringPortOffset = 0, bool monitoringTypeAsync = false);
+        void SetupMonitoring(ui16 monitoringPortOffset = 0, bool monitoringTypeAsync = false, bool needStatsCollectors = true);
 
         using TEventObserverCollection = std::list<std::function<void(TAutoPtr<IEventHandle>& event)>>;
         class TEventObserverHolder {
@@ -618,8 +618,8 @@ namespace NActors {
 
         THolder<TActorSystemSetup> MakeActorSystemSetup(ui32 nodeIndex, TNodeDataBase* node);
         THolder<TActorSystem> MakeActorSystem(ui32 nodeIndex, TNodeDataBase* node);
-        virtual void InitActorSystemSetup(TActorSystemSetup& setup) {
-            Y_UNUSED(setup);
+        virtual void InitActorSystemSetup(TActorSystemSetup& setup, TNodeDataBase* node) {
+            Y_UNUSED(setup, node);
         }
 
    private:
@@ -665,6 +665,7 @@ namespace NActors {
         bool NeedMonitoring;
         ui16 MonitoringPortOffset = 0;
         bool MonitoringTypeAsync = false;
+        bool NeedStatsCollectors = true;
 
         TIntrusivePtr<IRandomProvider> RandomProvider;
         TIntrusivePtr<ITimeProvider> TimeProvider;
@@ -703,6 +704,7 @@ namespace NActors {
             THolder<IExecutorPool> SchedulerPool;
             TVector<IExecutorPool*> ExecutorPools;
             THolder<TExecutorThread> ExecutorThread;
+            std::unique_ptr<IHarmonizer> Harmonizer;
         };
 
         struct INodeFactory {

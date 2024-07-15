@@ -111,7 +111,7 @@ namespace NActors {
     private:
         void Initialize() override;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> GetCountersForComponent(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const char* component) override;
-        void InitActorSystemSetup(TActorSystemSetup& setup) override;
+        void InitActorSystemSetup(TActorSystemSetup& setup, TNodeDataBase* node) override;
 
         TNodeData* GetNodeById(size_t idx) override {
             return static_cast<TNodeData*>(TTestActorRuntimeBase::GetNodeById(idx));

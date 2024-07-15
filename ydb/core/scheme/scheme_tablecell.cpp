@@ -258,6 +258,41 @@ bool TSerializedCellVec::DoTryParse(const TString& data) {
     return TryDeserializeCellVec(data, Buf, Cells);
 }
 
+bool TSerializedCellVec::UnsafeAppendCells(TConstArrayRef<TCell> cells, TString& serializedCellVec) {
+    if (Y_UNLIKELY(cells.size() == 0)) {
+        return true;
+    }
+
+    if (!serializedCellVec) {
+        TSerializedCellVec::Serialize(serializedCellVec, cells);
+        return true;
+    }
+
+    const char* buf = serializedCellVec.data();
+    const char* bufEnd = serializedCellVec.data() + serializedCellVec.size();
+
+    if (Y_UNLIKELY(bufEnd - buf < static_cast<ptrdiff_t>(sizeof(ui16)))) {
+        return false;
+    }
+
+    ui16 cellCount = ReadUnaligned<ui16>(buf);
+    cellCount += cells.size();
+
+    const ui64 addSize = std::accumulate(
+        std::begin(cells), std::end(cells), 0ul, [](const auto& acc, const auto& cell){ return acc + cell.Size(); });
+
+    serializedCellVec.ReserveAndResize(serializedCellVec.size() + sizeof(ui32) * cells.size() + addSize);
+
+    char* mutableBuf = serializedCellVec.Detach();
+    char* oldBufEnd = mutableBuf + (bufEnd - buf);
+
+    WriteUnaligned<ui16>(mutableBuf, cellCount);
+
+    SerializeCellVecBody(cells, oldBufEnd, nullptr);
+
+    return true;
+}
+
 TSerializedCellMatrix::TSerializedCellMatrix(TConstArrayRef<TCell> cells, ui32 rowCount, ui16 colCount)
     : RowCount(rowCount), ColCount(colCount)
 {

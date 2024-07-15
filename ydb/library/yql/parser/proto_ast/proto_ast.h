@@ -262,11 +262,7 @@ namespace NProtoAST {
                     auto type = token->getType();
                     const bool isEOF = type == TLexer::EOF;
                     NSQLTranslation::TParsedToken last;
-                    if (isEOF) {
-                        last.Name = "EOF";
-                    } else {
-                        last.Name = getTokenName(type);
-                    }
+                    last.Name = getTokenName(type);
                     last.Content = token->getText();
                     last.Line = token->getLine();
                     last.LinePos = token->getCharPositionInLine();
@@ -283,9 +279,9 @@ namespace NProtoAST {
 
     private:
         TString getTokenName(size_t type) const {
-            auto res = Lexer.getVocabulary().getDisplayName(type);
-            if (res != std::to_string(type)){
-                return res;
+            auto res = Lexer.getVocabulary().getSymbolicName(type);
+            if (res != ""){
+                return TString(res);
             }
             return TString(INVALID_TOKEN_NAME);
         }

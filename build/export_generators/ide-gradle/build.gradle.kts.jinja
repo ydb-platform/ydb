@@ -9,7 +9,7 @@ plugins {
 {%- for library in target.consumer if library.classpath -%}
 {# error prone plugin configuration #}
 {%-     if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) and "contrib/java/com/google/errorprone/error_prone_annotations/" in library.jar -%}
-    
+
     id("net.ltgt.errorprone") version "{{ errorprone_plugin_version }}"
 
 {%-     endif -%}
@@ -85,6 +85,13 @@ tasks.withType<Javadoc> {
 }
 {% endif %}
 
+{%- if (target.javac.flags is defined) and (target.javac.flags|length) %}
+tasks.withType<JavaCompile> {
+{%- for javac_flag in target.javac.flags %}
+    options.compilerArgs.add("{{ javac_flag }}")
+{%- endfor %}
+}
+{%- endif %}
 
 val bucketUsername: String by project
 val bucketPassword: String by project

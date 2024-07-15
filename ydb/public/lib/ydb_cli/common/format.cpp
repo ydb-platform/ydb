@@ -98,7 +98,8 @@ void TCommandWithFormat::AddDeprecatedJsonOption(TClientCommand::TConfig& config
 }
 
 void TCommandWithFormat::AddInputFormats(TClientCommand::TConfig& config, 
-                                         const TVector<EOutputFormat>& allowedFormats, EOutputFormat defaultFormat) {
+                                         const TVector<EOutputFormat>& allowedFormats, EOutputFormat defaultFormat,
+                                         const TString& optionName) {
     TStringStream description;
     description << "Input format. Available options: ";
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
@@ -112,13 +113,13 @@ void TCommandWithFormat::AddInputFormats(TClientCommand::TConfig& config,
             << "\n    " << findResult->second;
     }
     description << "\nDefault: " << colors.CyanColor() << "\"" << defaultFormat << "\"" << colors.OldColor() << ".";
-    config.Opts->AddLongOption("input-format", description.Str())
+    config.Opts->AddLongOption(optionName, description.Str())
         .RequiredArgument("STRING").StoreResult(&InputFormat);
     AllowedInputFormats = allowedFormats;
 }
 
 void TCommandWithFormat::AddStdinFormats(TClientCommand::TConfig &config, const TVector<EOutputFormat>& allowedStdinFormats,
-                                         const TVector<EOutputFormat>& allowedFramingFormats) {
+                                         const TVector<EOutputFormat>& allowedFramingFormats, const TString& optionName) {
     TStringStream description;
     description << "Stdin parameters format and framing. Specify this option twice to select both.\n"
                 << "1. Parameters format. Available options: ";
@@ -140,7 +141,7 @@ void TCommandWithFormat::AddStdinFormats(TClientCommand::TConfig &config, const 
                     << "\n    " << findResult->second;
     }
     description << "\nDefault: " << colors.CyanColor() << "\"no-framing\"" << colors.OldColor() << ".";
-    config.Opts->AddLongOption("stdin-format", description.Str())
+    config.Opts->AddLongOption(optionName, description.Str())
             .RequiredArgument("STRING").AppendTo(&StdinFormats);
     AllowedStdinFormats = allowedStdinFormats;
     AllowedFramingFormats = allowedFramingFormats;

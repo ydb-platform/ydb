@@ -29,9 +29,11 @@ protected:
 class TCommandWithFormat {
 protected:
     void AddInputFormats(TClientCommand::TConfig& config, 
-                         const TVector<EOutputFormat>& allowedFormats, EOutputFormat defaultFormat = EOutputFormat::JsonUnicode);
+                         const TVector<EOutputFormat>& allowedFormats,
+                         EOutputFormat defaultFormat = EOutputFormat::JsonUnicode,
+                         const TString& optionName = "input-format");
     void AddStdinFormats(TClientCommand::TConfig& config, const TVector<EOutputFormat>& allowedStdinFormats, 
-                         const TVector<EOutputFormat>& allowedFramingFormats);
+                         const TVector<EOutputFormat>& allowedFramingFormats, const TString& optionName = "stdin-format");
     void AddFormats(TClientCommand::TConfig& config, 
                          const TVector<EOutputFormat>& allowedFormats, EOutputFormat defaultFormat = EOutputFormat::Pretty);
     void AddMessagingFormats(TClientCommand::TConfig& config, const TVector<EMessagingFormat>& allowedFormats);

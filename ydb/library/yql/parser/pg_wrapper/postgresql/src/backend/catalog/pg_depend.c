@@ -3,7 +3,7 @@
  * pg_depend.c
  *	  routines to support manipulation of the pg_depend relation
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -947,7 +947,7 @@ getIdentitySequence(Oid relid, AttrNumber attnum, bool missing_ok)
 
 	if (list_length(seqlist) > 1)
 		elog(ERROR, "more than one owned sequence found");
-	else if (list_length(seqlist) < 1)
+	else if (seqlist == NIL)
 	{
 		if (missing_ok)
 			return InvalidOid;

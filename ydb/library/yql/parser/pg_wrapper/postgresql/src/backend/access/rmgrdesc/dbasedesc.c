@@ -3,7 +3,7 @@
  * dbasedesc.c
  *	  rmgr descriptor routines for commands/dbcommands.c
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -27,7 +27,7 @@ dbase_desc(StringInfo buf, XLogReaderState *record)
 	if (info == XLOG_DBASE_CREATE_FILE_COPY)
 	{
 		xl_dbase_create_file_copy_rec *xlrec =
-		(xl_dbase_create_file_copy_rec *) rec;
+			(xl_dbase_create_file_copy_rec *) rec;
 
 		appendStringInfo(buf, "copy dir %u/%u to %u/%u",
 						 xlrec->src_tablespace_id, xlrec->src_db_id,
@@ -36,7 +36,7 @@ dbase_desc(StringInfo buf, XLogReaderState *record)
 	else if (info == XLOG_DBASE_CREATE_WAL_LOG)
 	{
 		xl_dbase_create_wal_log_rec *xlrec =
-		(xl_dbase_create_wal_log_rec *) rec;
+			(xl_dbase_create_wal_log_rec *) rec;
 
 		appendStringInfo(buf, "create dir %u/%u",
 						 xlrec->tablespace_id, xlrec->db_id);

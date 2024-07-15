@@ -3,7 +3,7 @@
  * globals.c
  *	  global variable declarations
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -133,13 +133,16 @@ __thread int			max_parallel_maintenance_workers = 2;
  * MaxBackends is computed by PostmasterMain after modules have had a chance to
  * register background workers.
  */
-__thread int			NBuffers = 1000;
-__thread int			MaxConnections = 90;
+__thread int			NBuffers = 16384;
+__thread int			MaxConnections = 100;
 __thread int			max_worker_processes = 8;
 __thread int			max_parallel_workers = 8;
 __thread int			MaxBackends = 0;
 
-__thread int			VacuumCostPageHit = 1;	/* GUC parameters for vacuum */
+/* GUC parameters for vacuum */
+__thread int			VacuumBufferUsageLimit = 256;
+
+__thread int			VacuumCostPageHit = 1;
 __thread int			VacuumCostPageMiss = 2;
 __thread int			VacuumCostPageDirty = 20;
 __thread int			VacuumCostLimit = 200;

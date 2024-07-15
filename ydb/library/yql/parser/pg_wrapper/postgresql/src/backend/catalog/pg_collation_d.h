@@ -3,7 +3,7 @@
  * pg_collation_d.h
  *    Macro definitions for pg_collation
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -32,9 +32,10 @@
 #define Anum_pg_collation_collcollate 8
 #define Anum_pg_collation_collctype 9
 #define Anum_pg_collation_colliculocale 10
-#define Anum_pg_collation_collversion 11
+#define Anum_pg_collation_collicurules 11
+#define Anum_pg_collation_collversion 12
 
-#define Natts_pg_collation 11
+#define Natts_pg_collation 12
 
 
 #define COLLPROVIDER_DEFAULT	'd'

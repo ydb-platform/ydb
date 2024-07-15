@@ -118,7 +118,9 @@ ALTER TABLE pg_authid ADD UNIQUE USING INDEX pg_authid_rolname_index;
 
 ALTER TABLE pg_authid ADD PRIMARY KEY USING INDEX pg_authid_oid_index;
 
-ALTER TABLE pg_auth_members ADD PRIMARY KEY USING INDEX pg_auth_members_role_member_index;
+ALTER TABLE pg_auth_members ADD PRIMARY KEY USING INDEX pg_auth_members_oid_index;
+
+ALTER TABLE pg_auth_members ADD UNIQUE USING INDEX pg_auth_members_role_member_index;
 
 ALTER TABLE pg_auth_members ADD UNIQUE USING INDEX pg_auth_members_member_role_index;
 

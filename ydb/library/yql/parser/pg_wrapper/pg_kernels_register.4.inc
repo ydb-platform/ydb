@@ -147,3 +147,7 @@ RegisterExec(4401, arrow_range_intersect_agg_transfn());
 RegisterExec(6168, arrow_pg_xact_commit_timestamp_origin());
 RegisterExec(6179, arrow_array_subscript_handler());
 RegisterExec(6180, arrow_raw_array_subscript_handler());
+RegisterExec(6283, arrow_jsonb_agg_strict_transfn());
+RegisterExec(6285, arrow_jsonb_object_agg_strict_transfn());
+RegisterExec(6286, arrow_jsonb_object_agg_unique_transfn());
+RegisterExec(6287, arrow_jsonb_object_agg_unique_strict_transfn());

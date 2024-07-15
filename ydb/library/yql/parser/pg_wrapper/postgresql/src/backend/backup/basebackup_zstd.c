@@ -3,7 +3,7 @@
  * basebackup_zstd.c
  *	  Basebackup sink implementing zstd compression.
  *
- * Portions Copyright (c) 2010-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2010-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/backup/basebackup_zstd.c
@@ -116,6 +116,18 @@ bbsink_zstd_begin_backup(bbsink *sink)
 					errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					errmsg("could not set compression worker count to %d: %s",
 						   compress->workers, ZSTD_getErrorName(ret)));
+	}
+
+	if ((compress->options & PG_COMPRESSION_OPTION_LONG_DISTANCE) != 0)
+	{
+		ret = ZSTD_CCtx_setParameter(mysink->cctx,
+									 ZSTD_c_enableLongDistanceMatching,
+									 compress->long_distance);
+		if (ZSTD_isError(ret))
+			ereport(ERROR,
+					errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					errmsg("could not enable long-distance mode: %s",
+						   ZSTD_getErrorName(ret)));
 	}
 
 	/*

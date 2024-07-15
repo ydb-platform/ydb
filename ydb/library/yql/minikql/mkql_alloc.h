@@ -155,7 +155,7 @@ struct TMkqlPAllocHeader {
     } U;
 
     size_t Size;
-    void* Self; // should be placed right before pointer to allocated area, see GetMemoryChunkContext
+    ui64 Self; // should be placed right before pointer to allocated area, see GetMemoryChunkContext
 };
 
 static_assert(sizeof(TMkqlPAllocHeader) == 

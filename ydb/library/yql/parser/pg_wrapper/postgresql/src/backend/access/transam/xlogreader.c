@@ -3,7 +3,7 @@
  * xlogreader.c
  *		Generic XLog reading facility
  *
- * Portions Copyright (c) 2013-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2013-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *		src/backend/access/transam/xlogreader.c
@@ -47,7 +47,7 @@ static void allocate_recordbuf(XLogReaderState *state, uint32 reclength);
 static int	ReadPageInternal(XLogReaderState *state, XLogRecPtr pageptr,
 							 int reqLen);
 static void XLogReaderInvalReadState(XLogReaderState *state);
-static XLogPageReadResult XLogDecodeNextRecord(XLogReaderState *state, bool non_blocking);
+static XLogPageReadResult XLogDecodeNextRecord(XLogReaderState *state, bool nonblocking);
 static bool ValidXLogRecordHeader(XLogReaderState *state, XLogRecPtr RecPtr,
 								  XLogRecPtr PrevRecPtr, XLogRecord *record, bool randAccess);
 static bool ValidXLogRecord(XLogReaderState *state, XLogRecord *record,
@@ -251,7 +251,7 @@ XLogRecPtr
 XLogReleasePreviousRecord(XLogReaderState *state)
 {
 	DecodedXLogRecord *record;
-	XLogRecPtr		next_lsn;
+	XLogRecPtr	next_lsn;
 
 	if (!state->record)
 		return InvalidXLogRecPtr;
@@ -575,10 +575,11 @@ XLogDecodeNextRecord(XLogReaderState *state, bool nonblocking)
 		/*
 		 * Caller supplied a position to start at.
 		 *
-		 * In this case, NextRecPtr should already be pointing to a valid
-		 * record starting position.
+		 * In this case, NextRecPtr should already be pointing either to a
+		 * valid record starting position or alternatively to the beginning of
+		 * a page. See the header comments for XLogBeginRead.
 		 */
-		Assert(XRecOffIsValid(RecPtr));
+		Assert(RecPtr % XLOG_BLCKSZ == 0 || XRecOffIsValid(RecPtr));
 		randAccess = true;
 	}
 
@@ -617,8 +618,9 @@ restart:
 	}
 	else if (targetRecOff < pageHeaderSize)
 	{
-		report_invalid_record(state, "invalid record offset at %X/%X",
-							  LSN_FORMAT_ARGS(RecPtr));
+		report_invalid_record(state, "invalid record offset at %X/%X: expected at least %u, got %u",
+							  LSN_FORMAT_ARGS(RecPtr),
+							  pageHeaderSize, targetRecOff);
 		goto err;
 	}
 
@@ -666,7 +668,7 @@ restart:
 		if (total_len < SizeOfXLogRecord)
 		{
 			report_invalid_record(state,
-								  "invalid record length at %X/%X: wanted %u, got %u",
+								  "invalid record length at %X/%X: expected at least %u, got %u",
 								  LSN_FORMAT_ARGS(RecPtr),
 								  (uint32) SizeOfXLogRecord, total_len);
 			goto err;
@@ -1131,7 +1133,7 @@ ValidXLogRecordHeader(XLogReaderState *state, XLogRecPtr RecPtr,
 	if (record->xl_tot_len < SizeOfXLogRecord)
 	{
 		report_invalid_record(state,
-							  "invalid record length at %X/%X: wanted %u, got %u",
+							  "invalid record length at %X/%X: expected at least %u, got %u",
 							  LSN_FORMAT_ARGS(RecPtr),
 							  (uint32) SizeOfXLogRecord, record->xl_tot_len);
 		return false;
@@ -1224,7 +1226,6 @@ bool
 XLogReaderValidatePageHeader(XLogReaderState *state, XLogRecPtr recptr,
 							 char *phdr)
 {
-	XLogRecPtr	recaddr;
 	XLogSegNo	segno;
 	int32		offset;
 	XLogPageHeader hdr = (XLogPageHeader) phdr;
@@ -1234,8 +1235,6 @@ XLogReaderValidatePageHeader(XLogReaderState *state, XLogRecPtr recptr,
 	XLByteToSeg(recptr, segno, state->segcxt.ws_segsize);
 	offset = XLogSegmentOffset(recptr, state->segcxt.ws_segsize);
 
-	XLogSegNoOffsetToRecPtr(segno, offset, state->segcxt.ws_segsize, recaddr);
-
 	if (hdr->xlp_magic != XLOG_PAGE_MAGIC)
 	{
 		char		fname[MAXFNAMELEN];
@@ -1243,9 +1242,10 @@ XLogReaderValidatePageHeader(XLogReaderState *state, XLogRecPtr recptr,
 		XLogFileName(fname, state->seg.ws_tli, segno, state->segcxt.ws_segsize);
 
 		report_invalid_record(state,
-							  "invalid magic number %04X in log segment %s, offset %u",
+							  "invalid magic number %04X in WAL segment %s, LSN %X/%X, offset %u",
 							  hdr->xlp_magic,
 							  fname,
+							  LSN_FORMAT_ARGS(recptr),
 							  offset);
 		return false;
 	}
@@ -1257,9 +1257,10 @@ XLogReaderValidatePageHeader(XLogReaderState *state, XLogRecPtr recptr,
 		XLogFileName(fname, state->seg.ws_tli, segno, state->segcxt.ws_segsize);
 
 		report_invalid_record(state,
-							  "invalid info bits %04X in log segment %s, offset %u",
+							  "invalid info bits %04X in WAL segment %s, LSN %X/%X, offset %u",
 							  hdr->xlp_info,
 							  fname,
+							  LSN_FORMAT_ARGS(recptr),
 							  offset);
 		return false;
 	}
@@ -1298,9 +1299,10 @@ XLogReaderValidatePageHeader(XLogReaderState *state, XLogRecPtr recptr,
 
 		/* hmm, first page of file doesn't have a long header? */
 		report_invalid_record(state,
-							  "invalid info bits %04X in log segment %s, offset %u",
+							  "invalid info bits %04X in WAL segment %s, LSN %X/%X, offset %u",
 							  hdr->xlp_info,
 							  fname,
+							  LSN_FORMAT_ARGS(recptr),
 							  offset);
 		return false;
 	}
@@ -1310,16 +1312,17 @@ XLogReaderValidatePageHeader(XLogReaderState *state, XLogRecPtr recptr,
 	 * check typically fails when an old WAL segment is recycled, and hasn't
 	 * yet been overwritten with new data yet.
 	 */
-	if (hdr->xlp_pageaddr != recaddr)
+	if (hdr->xlp_pageaddr != recptr)
 	{
 		char		fname[MAXFNAMELEN];
 
 		XLogFileName(fname, state->seg.ws_tli, segno, state->segcxt.ws_segsize);
 
 		report_invalid_record(state,
-							  "unexpected pageaddr %X/%X in log segment %s, offset %u",
+							  "unexpected pageaddr %X/%X in WAL segment %s, LSN %X/%X, offset %u",
 							  LSN_FORMAT_ARGS(hdr->xlp_pageaddr),
 							  fname,
+							  LSN_FORMAT_ARGS(recptr),
 							  offset);
 		return false;
 	}
@@ -1342,10 +1345,11 @@ XLogReaderValidatePageHeader(XLogReaderState *state, XLogRecPtr recptr,
 			XLogFileName(fname, state->seg.ws_tli, segno, state->segcxt.ws_segsize);
 
 			report_invalid_record(state,
-								  "out-of-sequence timeline ID %u (after %u) in log segment %s, offset %u",
+								  "out-of-sequence timeline ID %u (after %u) in WAL segment %s, LSN %X/%X, offset %u",
 								  hdr->xlp_tli,
 								  state->latestPageTLI,
 								  fname,
+								  LSN_FORMAT_ARGS(recptr),
 								  offset);
 			return false;
 		}
@@ -1487,7 +1491,7 @@ err:
 }
 
 /*
- * Helper function to ease writing of XLogRoutine->page_read callbacks.
+ * Helper function to ease writing of XLogReaderRoutine->page_read callbacks.
  * If this function is used, caller must supply a segment_open callback in
  * 'state', as that is used here.
  *
@@ -1524,7 +1528,7 @@ WALRead(XLogReaderState *state,
 		/*
 		 * If the data we want is not in a segment we have open, close what we
 		 * have (if anything) and open the next one, using the caller's
-		 * provided openSegment callback.
+		 * provided segment_open callback.
 		 */
 		if (state->seg.ws_file < 0 ||
 			!XLByteInSeg(recptr, state->seg.ws_segno, state->segcxt.ws_segsize) ||
@@ -1682,7 +1686,7 @@ DecodeXLogRecord(XLogReaderState *state,
 	char	   *out;
 	uint32		remaining;
 	uint32		datatotal;
-	RelFileNode *rnode = NULL;
+	RelFileLocator *rlocator = NULL;
 	uint8		block_id;
 
 	decoded->header = *record;
@@ -1867,12 +1871,12 @@ DecodeXLogRecord(XLogReaderState *state,
 			}
 			if (!(fork_flags & BKPBLOCK_SAME_REL))
 			{
-				COPY_HEADER_FIELD(&blk->rnode, sizeof(RelFileNode));
-				rnode = &blk->rnode;
+				COPY_HEADER_FIELD(&blk->rlocator, sizeof(RelFileLocator));
+				rlocator = &blk->rlocator;
 			}
 			else
 			{
-				if (rnode == NULL)
+				if (rlocator == NULL)
 				{
 					report_invalid_record(state,
 										  "BKPBLOCK_SAME_REL set but no previous rel at %X/%X",
@@ -1880,7 +1884,7 @@ DecodeXLogRecord(XLogReaderState *state,
 					goto err;
 				}
 
-				blk->rnode = *rnode;
+				blk->rlocator = *rlocator;
 			}
 			COPY_HEADER_FIELD(&blk->blkno, sizeof(BlockNumber));
 		}
@@ -1970,10 +1974,11 @@ err:
  */
 void
 XLogRecGetBlockTag(XLogReaderState *record, uint8 block_id,
-				   RelFileNode *rnode, ForkNumber *forknum, BlockNumber *blknum)
+				   RelFileLocator *rlocator, ForkNumber *forknum,
+				   BlockNumber *blknum)
 {
-	if (!XLogRecGetBlockTagExtended(record, block_id, rnode, forknum, blknum,
-									NULL))
+	if (!XLogRecGetBlockTagExtended(record, block_id, rlocator, forknum,
+									blknum, NULL))
 	{
 #ifndef FRONTEND
 		elog(ERROR, "could not locate backup block with ID %d in WAL record",
@@ -1989,13 +1994,13 @@ XLogRecGetBlockTag(XLogReaderState *record, uint8 block_id,
  * Returns information about the block that a block reference refers to,
  * optionally including the buffer that the block may already be in.
  *
- * If the WAL record contains a block reference with the given ID, *rnode,
+ * If the WAL record contains a block reference with the given ID, *rlocator,
  * *forknum, *blknum and *prefetch_buffer are filled in (if not NULL), and
  * returns true.  Otherwise returns false.
  */
 bool
 XLogRecGetBlockTagExtended(XLogReaderState *record, uint8 block_id,
-						   RelFileNode *rnode, ForkNumber *forknum,
+						   RelFileLocator *rlocator, ForkNumber *forknum,
 						   BlockNumber *blknum,
 						   Buffer *prefetch_buffer)
 {
@@ -2005,8 +2010,8 @@ XLogRecGetBlockTagExtended(XLogReaderState *record, uint8 block_id,
 		return false;
 
 	bkpb = &record->record->blocks[block_id];
-	if (rnode)
-		*rnode = bkpb->rnode;
+	if (rlocator)
+		*rlocator = bkpb->rlocator;
 	if (forknum)
 		*forknum = bkpb->forknum;
 	if (blknum)

@@ -12,7 +12,7 @@
  * identifying statement boundaries in multi-statement source strings.
  *
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/nodes/parsenodes.h
@@ -22,6 +22,7 @@
 #ifndef PARSENODES_H
 #define PARSENODES_H
 
+#include "common/relpath.h"
 #include "nodes/bitmapset.h"
 #include "nodes/lockoptions.h"
 #include "nodes/primnodes.h"
@@ -72,12 +73,12 @@ typedef enum SetQuantifier
 
 /*
  * Grantable rights are encoded so that we can OR them together in a bitmask.
- * The present representation of AclItem limits us to 16 distinct rights,
- * even though AclMode is defined as uint32.  See utils/acl.h.
+ * The present representation of AclItem limits us to 32 distinct rights,
+ * even though AclMode is defined as uint64.  See utils/acl.h.
  *
  * Caution: changing these codes breaks stored ACLs, hence forces initdb.
  */
-typedef uint32 AclMode;			/* a bitmask of privilege bits */
+typedef uint64 AclMode;			/* a bitmask of privilege bits */
 
 #define ACL_INSERT		(1<<0)	/* for relations */
 #define ACL_SELECT		(1<<1)
@@ -87,8 +88,7 @@ typedef uint32 AclMode;			/* a bitmask of privilege bits */
 #define ACL_REFERENCES	(1<<5)
 #define ACL_TRIGGER		(1<<6)
 #define ACL_EXECUTE		(1<<7)	/* for functions */
-#define ACL_USAGE		(1<<8)	/* for languages, namespaces, FDWs, and
-								 * servers */
+#define ACL_USAGE		(1<<8)	/* for various object types */
 #define ACL_CREATE		(1<<9)	/* for namespaces and databases */
 #define ACL_CREATE_TEMP (1<<10) /* for databases */
 #define ACL_CONNECT		(1<<11) /* for databases */
@@ -114,6 +114,11 @@ typedef uint32 AclMode;			/* a bitmask of privilege bits */
  *
  *	  Planning converts a Query tree into a Plan tree headed by a PlannedStmt
  *	  node --- the Query structure is not used by the executor.
+ *
+ *	  All the fields ignored for the query jumbling are not semantically
+ *	  significant (such as alias names), as is ignored anything that can
+ *	  be deduced from child nodes (else we'd just be double-hashing that
+ *	  piece of information).
  */
 typedef struct Query
 {
@@ -121,41 +126,69 @@ typedef struct Query
 
 	CmdType		commandType;	/* select|insert|update|delete|merge|utility */
 
-	QuerySource querySource;	/* where did I come from? */
+	/* where did I come from? */
+	QuerySource querySource pg_node_attr(query_jumble_ignore);
 
-	uint64		queryId;		/* query identifier (can be set by plugins) */
+	/*
+	 * query identifier (can be set by plugins); ignored for equal, as it
+	 * might not be set; also not stored.  This is the result of the query
+	 * jumble, hence ignored.
+	 */
+	uint64		queryId pg_node_attr(equal_ignore, query_jumble_ignore, read_write_ignore, read_as(0));
 
-	bool		canSetTag;		/* do I set the command result tag? */
+	/* do I set the command result tag? */
+	bool		canSetTag pg_node_attr(query_jumble_ignore);
 
 	Node	   *utilityStmt;	/* non-null if commandType == CMD_UTILITY */
 
-	int			resultRelation; /* rtable index of target relation for
-								 * INSERT/UPDATE/DELETE/MERGE; 0 for SELECT */
+	/*
+	 * rtable index of target relation for INSERT/UPDATE/DELETE/MERGE; 0 for
+	 * SELECT.  This is ignored in the query jumble as unrelated to the
+	 * compilation of the query ID.
+	 */
+	int			resultRelation pg_node_attr(query_jumble_ignore);
 
-	bool		hasAggs;		/* has aggregates in tlist or havingQual */
-	bool		hasWindowFuncs; /* has window functions in tlist */
-	bool		hasTargetSRFs;	/* has set-returning functions in tlist */
-	bool		hasSubLinks;	/* has subquery SubLink */
-	bool		hasDistinctOn;	/* distinctClause is from DISTINCT ON */
-	bool		hasRecursive;	/* WITH RECURSIVE was specified */
-	bool		hasModifyingCTE;	/* has INSERT/UPDATE/DELETE in WITH */
-	bool		hasForUpdate;	/* FOR [KEY] UPDATE/SHARE was specified */
-	bool		hasRowSecurity; /* rewriter has applied some RLS policy */
-
-	bool		isReturn;		/* is a RETURN statement */
+	/* has aggregates in tlist or havingQual */
+	bool		hasAggs pg_node_attr(query_jumble_ignore);
+	/* has window functions in tlist */
+	bool		hasWindowFuncs pg_node_attr(query_jumble_ignore);
+	/* has set-returning functions in tlist */
+	bool		hasTargetSRFs pg_node_attr(query_jumble_ignore);
+	/* has subquery SubLink */
+	bool		hasSubLinks pg_node_attr(query_jumble_ignore);
+	/* distinctClause is from DISTINCT ON */
+	bool		hasDistinctOn pg_node_attr(query_jumble_ignore);
+	/* WITH RECURSIVE was specified */
+	bool		hasRecursive pg_node_attr(query_jumble_ignore);
+	/* has INSERT/UPDATE/DELETE in WITH */
+	bool		hasModifyingCTE pg_node_attr(query_jumble_ignore);
+	/* FOR [KEY] UPDATE/SHARE was specified */
+	bool		hasForUpdate pg_node_attr(query_jumble_ignore);
+	/* rewriter has applied some RLS policy */
+	bool		hasRowSecurity pg_node_attr(query_jumble_ignore);
+	/* is a RETURN statement */
+	bool		isReturn pg_node_attr(query_jumble_ignore);
 
 	List	   *cteList;		/* WITH list (of CommonTableExpr's) */
 
 	List	   *rtable;			/* list of range table entries */
+
+	/*
+	 * list of RTEPermissionInfo nodes for the rtable entries having
+	 * perminfoindex > 0
+	 */
+	List	   *rteperminfos pg_node_attr(query_jumble_ignore);
 	FromExpr   *jointree;		/* table join tree (FROM and WHERE clauses);
 								 * also USING clause for MERGE */
 
 	List	   *mergeActionList;	/* list of actions for MERGE (only) */
-	bool		mergeUseOuterJoin;	/* whether to use outer join */
+	/* whether to use outer join */
+	bool		mergeUseOuterJoin pg_node_attr(query_jumble_ignore);
 
 	List	   *targetList;		/* target list (of TargetEntry) */
 
-	OverridingKind override;	/* OVERRIDING clause */
+	/* OVERRIDING clause */
+	OverridingKind override pg_node_attr(query_jumble_ignore);
 
 	OnConflictExpr *onConflict; /* ON CONFLICT DO [NOTHING | UPDATE] */
 
@@ -183,11 +216,14 @@ typedef struct Query
 	Node	   *setOperations;	/* set-operation tree if this is top level of
 								 * a UNION/INTERSECT/EXCEPT query */
 
-	List	   *constraintDeps; /* a list of pg_constraint OIDs that the query
-								 * depends on to be semantically valid */
+	/*
+	 * A list of pg_constraint OIDs that the query depends on to be
+	 * semantically valid
+	 */
+	List	   *constraintDeps pg_node_attr(query_jumble_ignore);
 
-	List	   *withCheckOptions;	/* a list of WithCheckOption's (added
-									 * during rewrite) */
+	/* a list of WithCheckOption's (added during rewrite) */
+	List	   *withCheckOptions pg_node_attr(query_jumble_ignore);
 
 	/*
 	 * The following two fields identify the portion of the source text string
@@ -195,8 +231,10 @@ typedef struct Query
 	 * Queries, not in sub-queries.  When not set, they might both be zero, or
 	 * both be -1 meaning "unknown".
 	 */
-	int			stmt_location;	/* start location, or -1 if unknown */
-	int			stmt_len;		/* length in bytes; 0 means "rest of string" */
+	/* start location, or -1 if unknown */
+	int			stmt_location;
+	/* length in bytes; 0 means "rest of string" */
+	int			stmt_len pg_node_attr(query_jumble_ignore);
 } Query;
 
 
@@ -287,6 +325,8 @@ typedef enum A_Expr_Kind
 
 typedef struct A_Expr
 {
+	pg_node_attr(custom_read_write)
+
 	NodeTag		type;
 	A_Expr_Kind kind;			/* see above */
 	List	   *name;			/* possibly-qualified name of operator */
@@ -297,24 +337,26 @@ typedef struct A_Expr
 
 /*
  * A_Const - a literal constant
+ *
+ * Value nodes are inline for performance.  You can treat 'val' as a node,
+ * as in IsA(&val, Integer).  'val' is not valid if isnull is true.
  */
+union ValUnion
+{
+	Node		node;
+	Integer		ival;
+	Float		fval;
+	Boolean		boolval;
+	String		sval;
+	BitString	bsval;
+};
+
 typedef struct A_Const
 {
-	NodeTag		type;
+	pg_node_attr(custom_copy_equal, custom_read_write, custom_query_jumble)
 
-	/*
-	 * Value nodes are inline for performance.  You can treat 'val' as a node,
-	 * as in IsA(&val, Integer).  'val' is not valid if isnull is true.
-	 */
-	union ValUnion
-	{
-		Node		node;
-		Integer		ival;
-		Float		fval;
-		Boolean		boolval;
-		String		sval;
-		BitString	bsval;
-	}			val;
+	NodeTag		type;
+	union ValUnion val;
 	bool		isnull;			/* SQL NULL constant */
 	int			location;		/* token location, or -1 if unknown */
 } A_Const;
@@ -683,6 +725,7 @@ typedef struct ColumnDef
 	bool		is_not_null;	/* NOT NULL constraint specified? */
 	bool		is_from_type;	/* column definition came from table type */
 	char		storage;		/* attstorage setting, or 0 for default */
+	char	   *storage_name;	/* attstorage setting name or NULL for default */
 	Node	   *raw_default;	/* default value (untransformed parse tree) */
 	Node	   *cooked_default; /* default value (transformed expr tree) */
 	char		identity;		/* attidentity setting */
@@ -796,6 +839,7 @@ typedef struct XmlSerialize
 	XmlOptionType xmloption;	/* DOCUMENT or CONTENT */
 	Node	   *expr;
 	TypeName   *typeName;
+	bool		indent;			/* [NO] INDENT */
 	int			location;		/* token location, or -1 if unknown */
 } XmlSerialize;
 
@@ -817,6 +861,13 @@ typedef struct PartitionElem
 	int			location;		/* token location, or -1 if unknown */
 } PartitionElem;
 
+typedef enum PartitionStrategy
+{
+	PARTITION_STRATEGY_LIST = 'l',
+	PARTITION_STRATEGY_RANGE = 'r',
+	PARTITION_STRATEGY_HASH = 'h'
+} PartitionStrategy;
+
 /*
  * PartitionSpec - parse-time representation of a partition key specification
  *
@@ -825,16 +876,10 @@ typedef struct PartitionElem
 typedef struct PartitionSpec
 {
 	NodeTag		type;
-	char	   *strategy;		/* partitioning strategy ('hash', 'list' or
-								 * 'range') */
+	PartitionStrategy strategy;
 	List	   *partParams;		/* List of PartitionElems */
 	int			location;		/* token location, or -1 if unknown */
 } PartitionSpec;
-
-/* Internal codes for partitioning strategies */
-#define PARTITION_STRATEGY_HASH		'h'
-#define PARTITION_STRATEGY_LIST		'l'
-#define PARTITION_STRATEGY_RANGE	'r'
 
 /*
  * PartitionBoundSpec - a partition bound specification
@@ -955,30 +1000,6 @@ typedef struct PartitionCmd
  *	  control visibility.  But it is needed by ruleutils.c to determine
  *	  whether RTEs should be shown in decompiled queries.
  *
- *	  requiredPerms and checkAsUser specify run-time access permissions
- *	  checks to be performed at query startup.  The user must have *all*
- *	  of the permissions that are OR'd together in requiredPerms (zero
- *	  indicates no permissions checking).  If checkAsUser is not zero,
- *	  then do the permissions checks using the access rights of that user,
- *	  not the current effective user ID.  (This allows rules to act as
- *	  setuid gateways.)  Permissions checks only apply to RELATION RTEs.
- *
- *	  For SELECT/INSERT/UPDATE permissions, if the user doesn't have
- *	  table-wide permissions then it is sufficient to have the permissions
- *	  on all columns identified in selectedCols (for SELECT) and/or
- *	  insertedCols and/or updatedCols (INSERT with ON CONFLICT DO UPDATE may
- *	  have all 3).  selectedCols, insertedCols and updatedCols are bitmapsets,
- *	  which cannot have negative integer members, so we subtract
- *	  FirstLowInvalidHeapAttributeNumber from column numbers before storing
- *	  them in these fields.  A whole-row Var reference is represented by
- *	  setting the bit for InvalidAttrNumber.
- *
- *	  updatedCols is also used in some other places, for example, to determine
- *	  which triggers to fire and in FDWs to know which changed columns they
- *	  need to ship off.
- *
- *	  extraUpdatedCols is no longer used or maintained; it's always empty.
- *
  *	  securityQuals is a list of security barrier quals (boolean expressions),
  *	  to be tested in the listed order before returning a row from the
  *	  relation.  It is always NIL in parser output.  Entries are added by the
@@ -1004,6 +1025,8 @@ typedef enum RTEKind
 
 typedef struct RangeTblEntry
 {
+	pg_node_attr(custom_read_write, custom_query_jumble)
+
 	NodeTag		type;
 
 	RTEKind		rtekind;		/* see above */
@@ -1017,11 +1040,6 @@ typedef struct RangeTblEntry
 	/*
 	 * Fields valid for a plain relation RTE (else zero):
 	 *
-	 * As a special case, RTE_NAMEDTUPLESTORE can also set relid to indicate
-	 * that the tuple format of the tuplestore is the same as the referenced
-	 * relation.  This allows plans referencing AFTER trigger transition
-	 * tables to be invalidated if the underlying table is altered.
-	 *
 	 * rellockmode is really LOCKMODE, but it's declared int to avoid having
 	 * to include lock-related headers here.  It must be RowExclusiveLock if
 	 * the RTE is an INSERT/UPDATE/DELETE/MERGE target, else RowShareLock if
@@ -1032,11 +1050,29 @@ typedef struct RangeTblEntry
 	 * current query; this happens if a DO ALSO rule simply scans the original
 	 * target table.  We leave such RTEs with their original lockmode so as to
 	 * avoid getting an additional, lesser lock.
+	 *
+	 * perminfoindex is 1-based index of the RTEPermissionInfo belonging to
+	 * this RTE in the containing struct's list of same; 0 if permissions need
+	 * not be checked for this RTE.
+	 *
+	 * As a special case, relid, relkind, rellockmode, and perminfoindex can
+	 * also be set (nonzero) in an RTE_SUBQUERY RTE.  This occurs when we
+	 * convert an RTE_RELATION RTE naming a view into an RTE_SUBQUERY
+	 * containing the view's query.  We still need to perform run-time locking
+	 * and permission checks on the view, even though it's not directly used
+	 * in the query anymore, and the most expedient way to do that is to
+	 * retain these fields from the old state of the RTE.
+	 *
+	 * As a special case, RTE_NAMEDTUPLESTORE can also set relid to indicate
+	 * that the tuple format of the tuplestore is the same as the referenced
+	 * relation.  This allows plans referencing AFTER trigger transition
+	 * tables to be invalidated if the underlying table is altered.
 	 */
 	Oid			relid;			/* OID of the relation */
 	char		relkind;		/* relation kind (see pg_class.relkind) */
 	int			rellockmode;	/* lock level that query requires on the rel */
 	struct TableSampleClause *tablesample;	/* sampling info, or NULL */
+	Index		perminfoindex;
 
 	/*
 	 * Fields valid for a subquery RTE (else NULL):
@@ -1059,6 +1095,14 @@ typedef struct RangeTblEntry
 	 * and are never referenced from elsewhere in the query (that is, join
 	 * alias Vars are generated only for merged columns).  We keep these
 	 * entries only because they're needed in expandRTE() and similar code.
+	 *
+	 * Vars appearing within joinaliasvars are marked with varnullingrels sets
+	 * that describe the nulling effects of this join and lower ones.  This is
+	 * essential for FULL JOIN cases, because the COALESCE expression only
+	 * describes the semantics correctly if its inputs have been nulled by the
+	 * join.  For other cases, it allows expandRTE() to generate a valid
+	 * representation of the join's output without consulting additional
+	 * parser state.
 	 *
 	 * Within a Query loaded from a stored rule, it is possible for non-merged
 	 * joinaliasvars items to be null pointers, which are placeholders for
@@ -1156,14 +1200,54 @@ typedef struct RangeTblEntry
 	bool		lateral;		/* subquery, function, or values is LATERAL? */
 	bool		inh;			/* inheritance requested? */
 	bool		inFromCl;		/* present in FROM clause? */
+	List	   *securityQuals;	/* security barrier quals to apply, if any */
+} RangeTblEntry;
+
+/*
+ * RTEPermissionInfo
+ * 		Per-relation information for permission checking. Added to the Query
+ * 		node by the parser when adding the corresponding RTE to the query
+ * 		range table and subsequently editorialized on by the rewriter if
+ * 		needed after rule expansion.
+ *
+ * Only the relations directly mentioned in the query are checked for
+ * access permissions by the core executor, so only their RTEPermissionInfos
+ * are present in the Query.  However, extensions may want to check inheritance
+ * children too, depending on the value of rte->inh, so it's copied in 'inh'
+ * for their perusal.
+ *
+ * requiredPerms and checkAsUser specify run-time access permissions checks
+ * to be performed at query startup.  The user must have *all* of the
+ * permissions that are OR'd together in requiredPerms (never 0!).  If
+ * checkAsUser is not zero, then do the permissions checks using the access
+ * rights of that user, not the current effective user ID.  (This allows rules
+ * to act as setuid gateways.)
+ *
+ * For SELECT/INSERT/UPDATE permissions, if the user doesn't have table-wide
+ * permissions then it is sufficient to have the permissions on all columns
+ * identified in selectedCols (for SELECT) and/or insertedCols and/or
+ * updatedCols (INSERT with ON CONFLICT DO UPDATE may have all 3).
+ * selectedCols, insertedCols and updatedCols are bitmapsets, which cannot have
+ * negative integer members, so we subtract FirstLowInvalidHeapAttributeNumber
+ * from column numbers before storing them in these fields.  A whole-row Var
+ * reference is represented by setting the bit for InvalidAttrNumber.
+ *
+ * updatedCols is also used in some other places, for example, to determine
+ * which triggers to fire and in FDWs to know which changed columns they need
+ * to ship off.
+ */
+typedef struct RTEPermissionInfo
+{
+	NodeTag		type;
+
+	Oid			relid;			/* relation OID */
+	bool		inh;			/* separately check inheritance children? */
 	AclMode		requiredPerms;	/* bitmask of required access permissions */
 	Oid			checkAsUser;	/* if valid, check access as this role */
 	Bitmapset  *selectedCols;	/* columns needing SELECT permission */
 	Bitmapset  *insertedCols;	/* columns needing INSERT permission */
 	Bitmapset  *updatedCols;	/* columns needing UPDATE permission */
-	Bitmapset  *extraUpdatedCols;	/* generated columns being updated */
-	List	   *securityQuals;	/* security barrier quals to apply, if any */
-} RangeTblEntry;
+} RTEPermissionInfo;
 
 /*
  * RangeTblFunction -
@@ -1180,20 +1264,29 @@ typedef struct RangeTblEntry
  * time.  We do however remember how many columns we thought the type had
  * (including dropped columns!), so that we can successfully ignore any
  * columns added after the query was parsed.
+ *
+ * The query jumbling only needs to track the function expression.
  */
 typedef struct RangeTblFunction
 {
 	NodeTag		type;
 
 	Node	   *funcexpr;		/* expression tree for func call */
-	int			funccolcount;	/* number of columns it contributes to RTE */
+	/* number of columns it contributes to RTE */
+	int			funccolcount pg_node_attr(query_jumble_ignore);
 	/* These fields record the contents of a column definition list, if any: */
-	List	   *funccolnames;	/* column names (list of String) */
-	List	   *funccoltypes;	/* OID list of column type OIDs */
-	List	   *funccoltypmods; /* integer list of column typmods */
-	List	   *funccolcollations;	/* OID list of column collation OIDs */
+	/* column names (list of String) */
+	List	   *funccolnames pg_node_attr(query_jumble_ignore);
+	/* OID list of column type OIDs */
+	List	   *funccoltypes pg_node_attr(query_jumble_ignore);
+	/* integer list of column typmods */
+	List	   *funccoltypmods pg_node_attr(query_jumble_ignore);
+	/* OID list of column collation OIDs */
+	List	   *funccolcollations pg_node_attr(query_jumble_ignore);
+
 	/* This is set during planning for use by the executor: */
-	Bitmapset  *funcparams;		/* PARAM_EXEC Param IDs affecting this func */
+	/* PARAM_EXEC Param IDs affecting this func */
+	Bitmapset  *funcparams pg_node_attr(query_jumble_ignore);
 } RangeTblFunction;
 
 /*
@@ -1300,7 +1393,8 @@ typedef struct SortGroupClause
 	Oid			eqop;			/* the equality operator ('=' op) */
 	Oid			sortop;			/* the ordering operator ('<' op), or 0 */
 	bool		nulls_first;	/* do NULLs come before normal values? */
-	bool		hashable;		/* can eqop be implemented by hashing? */
+	/* can eqop be implemented by hashing? */
+	bool		hashable pg_node_attr(query_jumble_ignore);
 } SortGroupClause;
 
 /*
@@ -1365,7 +1459,7 @@ typedef enum GroupingSetKind
 typedef struct GroupingSet
 {
 	NodeTag		type;
-	GroupingSetKind kind;
+	GroupingSetKind kind pg_node_attr(query_jumble_ignore);
 	List	   *content;
 	int			location;
 } GroupingSet;
@@ -1386,25 +1480,38 @@ typedef struct GroupingSet
  * When refname isn't null, the partitionClause is always copied from there;
  * the orderClause might or might not be copied (see copiedOrder); the framing
  * options are never copied, per spec.
+ *
+ * The information relevant for the query jumbling is the partition clause
+ * type and its bounds.
  */
 typedef struct WindowClause
 {
 	NodeTag		type;
-	char	   *name;			/* window name (NULL in an OVER clause) */
-	char	   *refname;		/* referenced window name, if any */
+	/* window name (NULL in an OVER clause) */
+	char	   *name pg_node_attr(query_jumble_ignore);
+	/* referenced window name, if any */
+	char	   *refname pg_node_attr(query_jumble_ignore);
 	List	   *partitionClause;	/* PARTITION BY list */
-	List	   *orderClause;	/* ORDER BY list */
+	/* ORDER BY list */
+	List	   *orderClause;
 	int			frameOptions;	/* frame_clause options, see WindowDef */
 	Node	   *startOffset;	/* expression for starting bound, if any */
 	Node	   *endOffset;		/* expression for ending bound, if any */
-	List	   *runCondition;	/* qual to help short-circuit execution */
-	Oid			startInRangeFunc;	/* in_range function for startOffset */
-	Oid			endInRangeFunc; /* in_range function for endOffset */
-	Oid			inRangeColl;	/* collation for in_range tests */
-	bool		inRangeAsc;		/* use ASC sort order for in_range tests? */
-	bool		inRangeNullsFirst;	/* nulls sort first for in_range tests? */
+	/* qual to help short-circuit execution */
+	List	   *runCondition pg_node_attr(query_jumble_ignore);
+	/* in_range function for startOffset */
+	Oid			startInRangeFunc pg_node_attr(query_jumble_ignore);
+	/* in_range function for endOffset */
+	Oid			endInRangeFunc pg_node_attr(query_jumble_ignore);
+	/* collation for in_range tests */
+	Oid			inRangeColl pg_node_attr(query_jumble_ignore);
+	/* use ASC sort order for in_range tests? */
+	bool		inRangeAsc pg_node_attr(query_jumble_ignore);
+	/* nulls sort first for in_range tests? */
+	bool		inRangeNullsFirst pg_node_attr(query_jumble_ignore);
 	Index		winref;			/* ID referenced by window functions */
-	bool		copiedOrder;	/* did we copy orderClause from refname? */
+	/* did we copy orderClause from refname? */
+	bool		copiedOrder pg_node_attr(query_jumble_ignore);
 } WindowClause;
 
 /*
@@ -1514,22 +1621,37 @@ typedef struct CTECycleClause
 typedef struct CommonTableExpr
 {
 	NodeTag		type;
-	char	   *ctename;		/* query name (never qualified) */
-	List	   *aliascolnames;	/* optional list of column names */
+
+	/*
+	 * Query name (never qualified).  The string name is included in the query
+	 * jumbling because RTE_CTE RTEs need it.
+	 */
+	char	   *ctename;
+	/* optional list of column names */
+	List	   *aliascolnames pg_node_attr(query_jumble_ignore);
 	CTEMaterialize ctematerialized; /* is this an optimization fence? */
 	/* SelectStmt/InsertStmt/etc before parse analysis, Query afterwards: */
 	Node	   *ctequery;		/* the CTE's subquery */
-	CTESearchClause *search_clause;
-	CTECycleClause *cycle_clause;
+	CTESearchClause *search_clause pg_node_attr(query_jumble_ignore);
+	CTECycleClause *cycle_clause pg_node_attr(query_jumble_ignore);
 	int			location;		/* token location, or -1 if unknown */
 	/* These fields are set during parse analysis: */
-	bool		cterecursive;	/* is this CTE actually recursive? */
-	int			cterefcount;	/* number of RTEs referencing this CTE
-								 * (excluding internal self-references) */
-	List	   *ctecolnames;	/* list of output column names */
-	List	   *ctecoltypes;	/* OID list of output column type OIDs */
-	List	   *ctecoltypmods;	/* integer list of output column typmods */
-	List	   *ctecolcollations;	/* OID list of column collation OIDs */
+	/* is this CTE actually recursive? */
+	bool		cterecursive pg_node_attr(query_jumble_ignore);
+
+	/*
+	 * Number of RTEs referencing this CTE (excluding internal
+	 * self-references), irrelevant for query jumbling.
+	 */
+	int			cterefcount pg_node_attr(query_jumble_ignore);
+	/* list of output column names */
+	List	   *ctecolnames pg_node_attr(query_jumble_ignore);
+	/* OID list of output column type OIDs */
+	List	   *ctecoltypes pg_node_attr(query_jumble_ignore);
+	/* integer list of output column typmods */
+	List	   *ctecoltypmods pg_node_attr(query_jumble_ignore);
+	/* OID list of column collation OIDs */
+	List	   *ctecolcollations pg_node_attr(query_jumble_ignore);
 } CommonTableExpr;
 
 /* Convenience macro to get the output tlist of a CTE's query */
@@ -1566,10 +1688,12 @@ typedef struct MergeAction
 	NodeTag		type;
 	bool		matched;		/* true=MATCHED, false=NOT MATCHED */
 	CmdType		commandType;	/* INSERT/UPDATE/DELETE/DO NOTHING */
-	OverridingKind override;	/* OVERRIDING clause */
+	/* OVERRIDING clause */
+	OverridingKind override pg_node_attr(query_jumble_ignore);
 	Node	   *qual;			/* transformed WHEN conditions */
 	List	   *targetList;		/* the target list (of TargetEntry) */
-	List	   *updateColnos;	/* target attribute numbers of an UPDATE */
+	/* target attribute numbers of an UPDATE */
+	List	   *updateColnos pg_node_attr(query_jumble_ignore);
 } MergeAction;
 
 /*
@@ -1588,6 +1712,113 @@ typedef struct TriggerTransition
 	bool		isTable;
 } TriggerTransition;
 
+/* Nodes for SQL/JSON support */
+
+/*
+ * JsonOutput -
+ *		representation of JSON output clause (RETURNING type [FORMAT format])
+ */
+typedef struct JsonOutput
+{
+	NodeTag		type;
+	TypeName   *typeName;		/* RETURNING type name, if specified */
+	JsonReturning *returning;	/* RETURNING FORMAT clause and type Oids */
+} JsonOutput;
+
+/*
+ * JsonKeyValue -
+ *		untransformed representation of JSON object key-value pair for
+ *		JSON_OBJECT() and JSON_OBJECTAGG()
+ */
+typedef struct JsonKeyValue
+{
+	NodeTag		type;
+	Expr	   *key;			/* key expression */
+	JsonValueExpr *value;		/* JSON value expression */
+} JsonKeyValue;
+
+/*
+ * JsonObjectConstructor -
+ *		untransformed representation of JSON_OBJECT() constructor
+ */
+typedef struct JsonObjectConstructor
+{
+	NodeTag		type;
+	List	   *exprs;			/* list of JsonKeyValue pairs */
+	JsonOutput *output;			/* RETURNING clause, if specified  */
+	bool		absent_on_null; /* skip NULL values? */
+	bool		unique;			/* check key uniqueness? */
+	int			location;		/* token location, or -1 if unknown */
+} JsonObjectConstructor;
+
+/*
+ * JsonArrayConstructor -
+ *		untransformed representation of JSON_ARRAY(element,...) constructor
+ */
+typedef struct JsonArrayConstructor
+{
+	NodeTag		type;
+	List	   *exprs;			/* list of JsonValueExpr elements */
+	JsonOutput *output;			/* RETURNING clause, if specified  */
+	bool		absent_on_null; /* skip NULL elements? */
+	int			location;		/* token location, or -1 if unknown */
+} JsonArrayConstructor;
+
+/*
+ * JsonArrayQueryConstructor -
+ *		untransformed representation of JSON_ARRAY(subquery) constructor
+ */
+typedef struct JsonArrayQueryConstructor
+{
+	NodeTag		type;
+	Node	   *query;			/* subquery */
+	JsonOutput *output;			/* RETURNING clause, if specified  */
+	JsonFormat *format;			/* FORMAT clause for subquery, if specified */
+	bool		absent_on_null; /* skip NULL elements? */
+	int			location;		/* token location, or -1 if unknown */
+} JsonArrayQueryConstructor;
+
+/*
+ * JsonAggConstructor -
+ *		common fields of untransformed representation of
+ *		JSON_ARRAYAGG() and JSON_OBJECTAGG()
+ */
+typedef struct JsonAggConstructor
+{
+	NodeTag		type;
+	JsonOutput *output;			/* RETURNING clause, if any */
+	Node	   *agg_filter;		/* FILTER clause, if any */
+	List	   *agg_order;		/* ORDER BY clause, if any */
+	struct WindowDef *over;		/* OVER clause, if any */
+	int			location;		/* token location, or -1 if unknown */
+} JsonAggConstructor;
+
+/*
+ * JsonObjectAgg -
+ *		untransformed representation of JSON_OBJECTAGG()
+ */
+typedef struct JsonObjectAgg
+{
+	NodeTag		type;
+	JsonAggConstructor *constructor;	/* common fields */
+	JsonKeyValue *arg;			/* object key-value pair */
+	bool		absent_on_null; /* skip NULL values? */
+	bool		unique;			/* check key uniqueness? */
+} JsonObjectAgg;
+
+/*
+ * JsonArrayAgg -
+ *		untransformed representation of JSON_ARRAYAGG()
+ */
+typedef struct JsonArrayAgg
+{
+	NodeTag		type;
+	JsonAggConstructor *constructor;	/* common fields */
+	JsonValueExpr *arg;			/* array element expression */
+	bool		absent_on_null; /* skip NULL elements? */
+} JsonArrayAgg;
+
+
 /*****************************************************************************
  *		Raw Grammar Output Statements
  *****************************************************************************/
@@ -1603,9 +1834,14 @@ typedef struct TriggerTransition
  *
  * stmt_location/stmt_len identify the portion of the source text string
  * containing this raw statement (useful for multi-statement strings).
+ *
+ * This is irrelevant for query jumbling, as this is not used in parsed
+ * queries.
  */
 typedef struct RawStmt
 {
+	pg_node_attr(no_query_jumble)
+
 	NodeTag		type;
 	Node	   *stmt;			/* raw parse tree */
 	int			stmt_location;	/* start location, or -1 if unknown */
@@ -1778,11 +2014,15 @@ typedef struct SetOperationStmt
 	Node	   *rarg;			/* right child */
 	/* Eventually add fields for CORRESPONDING spec here */
 
-	/* Fields derived during parse analysis: */
-	List	   *colTypes;		/* OID list of output column type OIDs */
-	List	   *colTypmods;		/* integer list of output column typmods */
-	List	   *colCollations;	/* OID list of output column collation OIDs */
-	List	   *groupClauses;	/* a list of SortGroupClause's */
+	/* Fields derived during parse analysis (irrelevant for query jumbling): */
+	/* OID list of output column type OIDs */
+	List	   *colTypes pg_node_attr(query_jumble_ignore);
+	/* integer list of output column typmods */
+	List	   *colTypmods pg_node_attr(query_jumble_ignore);
+	/* OID list of output column collation OIDs */
+	List	   *colCollations pg_node_attr(query_jumble_ignore);
+	/* a list of SortGroupClause's */
+	List	   *groupClauses pg_node_attr(query_jumble_ignore);
 	/* groupClauses is NIL if UNION ALL, but must be set otherwise */
 } SetOperationStmt;
 
@@ -1931,7 +2171,6 @@ typedef struct AlterTableStmt
 typedef enum AlterTableType
 {
 	AT_AddColumn,				/* add column */
-	AT_AddColumnRecurse,		/* internal to commands/tablecmds.c */
 	AT_AddColumnToView,			/* implicitly via CREATE OR REPLACE VIEW */
 	AT_ColumnDefault,			/* alter column default */
 	AT_CookedColumnDefault,		/* add a pre-cooked column default */
@@ -1945,19 +2184,15 @@ typedef enum AlterTableType
 	AT_SetStorage,				/* alter column set storage */
 	AT_SetCompression,			/* alter column set compression */
 	AT_DropColumn,				/* drop column */
-	AT_DropColumnRecurse,		/* internal to commands/tablecmds.c */
 	AT_AddIndex,				/* add index */
 	AT_ReAddIndex,				/* internal to commands/tablecmds.c */
 	AT_AddConstraint,			/* add constraint */
-	AT_AddConstraintRecurse,	/* internal to commands/tablecmds.c */
 	AT_ReAddConstraint,			/* internal to commands/tablecmds.c */
 	AT_ReAddDomainConstraint,	/* internal to commands/tablecmds.c */
 	AT_AlterConstraint,			/* alter constraint */
 	AT_ValidateConstraint,		/* validate constraint */
-	AT_ValidateConstraintRecurse,	/* internal to commands/tablecmds.c */
 	AT_AddIndexConstraint,		/* add constraint using existing index */
 	AT_DropConstraint,			/* drop constraint */
-	AT_DropConstraintRecurse,	/* internal to commands/tablecmds.c */
 	AT_ReAddComment,			/* internal to commands/tablecmds.c */
 	AT_AlterColumnType,			/* alter column type */
 	AT_AlterColumnGenericOptions,	/* alter column OPTIONS (...) */
@@ -2146,7 +2381,7 @@ typedef struct GrantRoleStmt
 	List	   *granted_roles;	/* list of roles to be granted/revoked */
 	List	   *grantee_roles;	/* list of member roles to add/delete */
 	bool		is_grant;		/* true = GRANT, false = REVOKE */
-	bool		admin_opt;		/* with admin option */
+	List	   *opt;			/* options e.g. WITH GRANT OPTION */
 	RoleSpec   *grantor;		/* set grantor to other than current role */
 	DropBehavior behavior;		/* drop behavior (for REVOKE) */
 } GrantRoleStmt;
@@ -2314,6 +2549,8 @@ typedef enum ConstrType			/* types of constraints */
 
 typedef struct Constraint
 {
+	pg_node_attr(custom_read_write)
+
 	NodeTag		type;
 	ConstrType	contype;		/* see above */
 
@@ -2954,10 +3191,10 @@ typedef struct IndexStmt
 	List	   *excludeOpNames; /* exclusion operator names, or NIL if none */
 	char	   *idxcomment;		/* comment to apply to index, or NULL */
 	Oid			indexOid;		/* OID of an existing index, if any */
-	Oid			oldNode;		/* relfilenode of existing storage, if any */
-	SubTransactionId oldCreateSubid;	/* rd_createSubid of oldNode */
-	SubTransactionId oldFirstRelfilenodeSubid;	/* rd_firstRelfilenodeSubid of
-												 * oldNode */
+	RelFileNumber oldNumber;	/* relfilenumber of existing storage, if any */
+	SubTransactionId oldCreateSubid;	/* rd_createSubid of oldNumber */
+	SubTransactionId oldFirstRelfilelocatorSubid;	/* rd_firstRelfilelocatorSubid
+													 * of oldNumber */
 	bool		unique;			/* is index unique? */
 	bool		nulls_not_distinct; /* null treatment for UNIQUE constraints */
 	bool		primary;		/* is index a primary key? */
@@ -3073,6 +3310,8 @@ typedef struct DoStmt
 
 typedef struct InlineCodeBlock
 {
+	pg_node_attr(nodetag_only)	/* this is not a member of parse trees */
+
 	NodeTag		type;
 	char	   *source_text;	/* source text of anonymous code block */
 	Oid			langOid;		/* OID of selected language */
@@ -3087,18 +3326,24 @@ typedef struct InlineCodeBlock
  * list contains copies of the expressions for all output arguments, in the
  * order of the procedure's declared arguments.  (outargs is never evaluated,
  * but is useful to the caller as a reference for what to assign to.)
+ * The transformed call state is not relevant in the query jumbling, only the
+ * function call is.
  * ----------------------
  */
 typedef struct CallStmt
 {
 	NodeTag		type;
 	FuncCall   *funccall;		/* from the parser */
-	FuncExpr   *funcexpr;		/* transformed call, with only input args */
-	List	   *outargs;		/* transformed output-argument expressions */
+	/* transformed call, with only input args */
+	FuncExpr   *funcexpr pg_node_attr(query_jumble_ignore);
+	/* transformed output-argument expressions */
+	List	   *outargs pg_node_attr(query_jumble_ignore);
 } CallStmt;
 
 typedef struct CallContext
 {
+	pg_node_attr(nodetag_only)	/* this is not a member of parse trees */
+
 	NodeTag		type;
 	bool		atomic;
 } CallContext;

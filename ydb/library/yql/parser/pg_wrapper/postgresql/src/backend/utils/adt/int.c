@@ -3,7 +3,7 @@
  * int.c
  *	  Functions for the built-in integer types (except int8).
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -64,7 +64,7 @@ int2in(PG_FUNCTION_ARGS)
 {
 	char	   *num = PG_GETARG_CSTRING(0);
 
-	PG_RETURN_INT16(pg_strtoint16(num));
+	PG_RETURN_INT16(pg_strtoint16_safe(num, fcinfo->context));
 }
 
 /*
@@ -141,6 +141,7 @@ Datum
 int2vectorin(PG_FUNCTION_ARGS)
 {
 	char	   *intString = PG_GETARG_CSTRING(0);
+	Node	   *escontext = fcinfo->context;
 	int2vector *result;
 	int			nalloc;
 	int			n;
@@ -168,19 +169,19 @@ int2vectorin(PG_FUNCTION_ARGS)
 		l = strtol(intString, &endp, 10);
 
 		if (intString == endp)
-			ereport(ERROR,
+			ereturn(escontext, (Datum) 0,
 					(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
 					 errmsg("invalid input syntax for type %s: \"%s\"",
 							"smallint", intString)));
 
 		if (errno == ERANGE || l < SHRT_MIN || l > SHRT_MAX)
-			ereport(ERROR,
+			ereturn(escontext, (Datum) 0,
 					(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
 					 errmsg("value \"%s\" is out of range for type %s", intString,
 							"smallint")));
 
 		if (*endp && *endp != ' ')
-			ereport(ERROR,
+			ereturn(escontext, (Datum) 0,
 					(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
 					 errmsg("invalid input syntax for type %s: \"%s\"",
 							"smallint", intString)));
@@ -287,7 +288,7 @@ int4in(PG_FUNCTION_ARGS)
 {
 	char	   *num = PG_GETARG_CSTRING(0);
 
-	PG_RETURN_INT32(pg_strtoint32(num));
+	PG_RETURN_INT32(pg_strtoint32_safe(num, fcinfo->context));
 }
 
 /*

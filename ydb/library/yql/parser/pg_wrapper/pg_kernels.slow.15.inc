@@ -1,3 +1,4 @@
+TExecFunc arrow_any_value_transfn() { return MakeIndirectExec<true, true>(&any_value_transfn); }
 TExecFunc arrow_brin_bloom_add_value() { return MakeIndirectExec<true, true>(&brin_bloom_add_value); }
 TExecFunc arrow_brin_bloom_consistent() { return MakeIndirectExec<true, true>(&brin_bloom_consistent); }
 TExecFunc arrow_brin_bloom_opcinfo() { return MakeIndirectExec<true, true>(&brin_bloom_opcinfo); }
@@ -163,6 +164,8 @@ TExecFunc arrow_pg_column_is_updatable() { return MakeIndirectExec<true, true>(&
 TExecFunc arrow_pg_current_logfile() { return MakeIndirectExec<false, false>(&pg_current_logfile); }
 TExecFunc arrow_pg_current_logfile_1arg() { return MakeIndirectExec<false, false>(&pg_current_logfile_1arg); }
 TExecFunc arrow_pg_get_replica_identity_index() { return MakeIndirectExec<true, true>(&pg_get_replica_identity_index); }
+TExecFunc arrow_pg_input_error_info() { return MakeIndirectExec<true, false>(&pg_input_error_info); }
+TExecFunc arrow_pg_input_is_valid() { return MakeIndirectExec<true, true>(&pg_input_is_valid); }
 TExecFunc arrow_pg_num_nonnulls() { return MakeIndirectExec<false, true>(&pg_num_nonnulls); }
 TExecFunc arrow_pg_num_nulls() { return MakeIndirectExec<false, true>(&pg_num_nulls); }
 TExecFunc arrow_pg_relation_is_updatable() { return MakeIndirectExec<true, true>(&pg_relation_is_updatable); }

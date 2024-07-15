@@ -80,7 +80,7 @@
  *
  * repl_gram.y				- Parser for the replication commands
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -94,6 +94,7 @@
 
 #include "access/xlogdefs.h"
 #include "nodes/makefuncs.h"
+#include "nodes/parsenodes.h"
 #include "nodes/replnodes.h"
 #include "replication/walsender.h"
 #include "replication/walsender_private.h"
@@ -106,16 +107,13 @@ __thread Node *replication_parse_result;
 /*
  * Bison doesn't allocate anything that needs to live across parser calls,
  * so we can easily have it use palloc instead of malloc.  This prevents
- * memory leaks if we error out during parsing.  Note this only works with
- * bison >= 2.0.  However, in bison 1.875 the default is to use alloca()
- * if possible, so there's not really much problem anyhow, at least if
- * you're building with gcc.
+ * memory leaks if we error out during parsing.
  */
 #define YYMALLOC palloc
 #define YYFREE   pfree
 
 
-#line 119 "repl_gram.c"
+#line 117 "repl_gram.c"
 
 # ifndef YY_CAST
 #  ifdef __cplusplus
@@ -138,79 +136,7 @@ __thread Node *replication_parse_result;
 #  endif
 # endif
 
-
-/* Debug traces.  */
-#ifndef YYDEBUG
-# define YYDEBUG 0
-#endif
-#if YYDEBUG
-extern int replication_yydebug;
-#endif
-
-/* Token kinds.  */
-#ifndef YYTOKENTYPE
-# define YYTOKENTYPE
-  enum yytokentype
-  {
-    YYEMPTY = -2,
-    YYEOF = 0,                     /* "end of file"  */
-    YYerror = 256,                 /* error  */
-    YYUNDEF = 257,                 /* "invalid token"  */
-    SCONST = 258,                  /* SCONST  */
-    IDENT = 259,                   /* IDENT  */
-    UCONST = 260,                  /* UCONST  */
-    RECPTR = 261,                  /* RECPTR  */
-    K_BASE_BACKUP = 262,           /* K_BASE_BACKUP  */
-    K_IDENTIFY_SYSTEM = 263,       /* K_IDENTIFY_SYSTEM  */
-    K_READ_REPLICATION_SLOT = 264, /* K_READ_REPLICATION_SLOT  */
-    K_SHOW = 265,                  /* K_SHOW  */
-    K_START_REPLICATION = 266,     /* K_START_REPLICATION  */
-    K_CREATE_REPLICATION_SLOT = 267, /* K_CREATE_REPLICATION_SLOT  */
-    K_DROP_REPLICATION_SLOT = 268, /* K_DROP_REPLICATION_SLOT  */
-    K_TIMELINE_HISTORY = 269,      /* K_TIMELINE_HISTORY  */
-    K_WAIT = 270,                  /* K_WAIT  */
-    K_TIMELINE = 271,              /* K_TIMELINE  */
-    K_PHYSICAL = 272,              /* K_PHYSICAL  */
-    K_LOGICAL = 273,               /* K_LOGICAL  */
-    K_SLOT = 274,                  /* K_SLOT  */
-    K_RESERVE_WAL = 275,           /* K_RESERVE_WAL  */
-    K_TEMPORARY = 276,             /* K_TEMPORARY  */
-    K_TWO_PHASE = 277,             /* K_TWO_PHASE  */
-    K_EXPORT_SNAPSHOT = 278,       /* K_EXPORT_SNAPSHOT  */
-    K_NOEXPORT_SNAPSHOT = 279,     /* K_NOEXPORT_SNAPSHOT  */
-    K_USE_SNAPSHOT = 280           /* K_USE_SNAPSHOT  */
-  };
-  typedef enum yytokentype yytoken_kind_t;
-#endif
-
-/* Value type.  */
-#if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
-union YYSTYPE
-{
-#line 46 "repl_gram.y"
-
-	char	   *str;
-	bool		boolval;
-	uint32		uintval;
-	XLogRecPtr	recptr;
-	Node	   *node;
-	List	   *list;
-	DefElem	   *defelt;
-
-#line 201 "repl_gram.c"
-
-};
-typedef union YYSTYPE YYSTYPE;
-# define YYSTYPE_IS_TRIVIAL 1
-# define YYSTYPE_IS_DECLARED 1
-#endif
-
-
-extern __thread YYSTYPE replication_yylval;
-
-int replication_yyparse (void);
-
-
+#include "repl_gram.h"
 /* Symbol kind.  */
 enum yysymbol_kind_t
 {
@@ -656,14 +582,14 @@ static const yytype_int8 yytranslate[] =
   /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_int16 yyrline[] =
 {
-       0,    99,    99,   105,   106,   110,   111,   112,   113,   114,
-     115,   116,   117,   118,   125,   135,   147,   154,   155,   163,
-     169,   178,   189,   203,   204,   208,   211,   215,   220,   225,
-     230,   235,   244,   252,   266,   281,   296,   313,   314,   318,
-     319,   323,   326,   330,   338,   343,   344,   348,   352,   359,
-     366,   367,   371,   373,   378,   382,   386,   390,   397,   398,
-     399,   400,   401,   402,   403,   404,   405,   406,   407,   408,
-     409,   410,   411,   412,   413,   414,   415
+       0,    97,    97,   103,   104,   108,   109,   110,   111,   112,
+     113,   114,   115,   116,   123,   133,   145,   152,   153,   161,
+     167,   176,   187,   201,   202,   206,   209,   213,   218,   223,
+     228,   233,   242,   250,   264,   279,   294,   311,   312,   316,
+     317,   321,   324,   328,   336,   341,   342,   346,   350,   357,
+     364,   365,   369,   371,   376,   380,   384,   388,   395,   396,
+     397,   398,   399,   400,   401,   402,   403,   404,   405,   406,
+     407,   408,   409,   410,   411,   412,   413
 };
 #endif
 
@@ -1309,74 +1235,74 @@ yyreduce:
   switch (yyn)
     {
   case 2: /* firstcmd: command opt_semicolon  */
-#line 100 "repl_gram.y"
+#line 98 "repl_gram.y"
                                 {
 					replication_parse_result = (yyvsp[-1].node);
 				}
-#line 1317 "repl_gram.c"
+#line 1243 "repl_gram.c"
     break;
 
   case 14: /* identify_system: K_IDENTIFY_SYSTEM  */
-#line 126 "repl_gram.y"
+#line 124 "repl_gram.y"
                                 {
 					(yyval.node) = (Node *) makeNode(IdentifySystemCmd);
 				}
-#line 1325 "repl_gram.c"
+#line 1251 "repl_gram.c"
     break;
 
   case 15: /* read_replication_slot: K_READ_REPLICATION_SLOT var_name  */
-#line 136 "repl_gram.y"
+#line 134 "repl_gram.y"
                                 {
 					ReadReplicationSlotCmd *n = makeNode(ReadReplicationSlotCmd);
 					n->slotname = (yyvsp[0].str);
 					(yyval.node) = (Node *) n;
 				}
-#line 1335 "repl_gram.c"
+#line 1261 "repl_gram.c"
     break;
 
   case 16: /* show: K_SHOW var_name  */
-#line 148 "repl_gram.y"
+#line 146 "repl_gram.y"
                                 {
 					VariableShowStmt *n = makeNode(VariableShowStmt);
 					n->name = (yyvsp[0].str);
 					(yyval.node) = (Node *) n;
 				}
-#line 1345 "repl_gram.c"
+#line 1271 "repl_gram.c"
     break;
 
   case 17: /* var_name: IDENT  */
-#line 154 "repl_gram.y"
+#line 152 "repl_gram.y"
                         { (yyval.str) = (yyvsp[0].str); }
-#line 1351 "repl_gram.c"
+#line 1277 "repl_gram.c"
     break;
 
   case 18: /* var_name: var_name '.' IDENT  */
-#line 156 "repl_gram.y"
+#line 154 "repl_gram.y"
                                 { (yyval.str) = psprintf("%s.%s", (yyvsp[-2].str), (yyvsp[0].str)); }
-#line 1357 "repl_gram.c"
+#line 1283 "repl_gram.c"
     break;
 
   case 19: /* base_backup: K_BASE_BACKUP '(' generic_option_list ')'  */
-#line 164 "repl_gram.y"
+#line 162 "repl_gram.y"
                                 {
 					BaseBackupCmd *cmd = makeNode(BaseBackupCmd);
 					cmd->options = (yyvsp[-1].list);
 					(yyval.node) = (Node *) cmd;
 				}
-#line 1367 "repl_gram.c"
+#line 1293 "repl_gram.c"
     break;
 
   case 20: /* base_backup: K_BASE_BACKUP  */
-#line 170 "repl_gram.y"
+#line 168 "repl_gram.y"
                                 {
 					BaseBackupCmd *cmd = makeNode(BaseBackupCmd);
 					(yyval.node) = (Node *) cmd;
 				}
-#line 1376 "repl_gram.c"
+#line 1302 "repl_gram.c"
     break;
 
   case 21: /* create_replication_slot: K_CREATE_REPLICATION_SLOT IDENT opt_temporary K_PHYSICAL create_slot_options  */
-#line 179 "repl_gram.y"
+#line 177 "repl_gram.y"
                                 {
 					CreateReplicationSlotCmd *cmd;
 					cmd = makeNode(CreateReplicationSlotCmd);
@@ -1386,11 +1312,11 @@ yyreduce:
 					cmd->options = (yyvsp[0].list);
 					(yyval.node) = (Node *) cmd;
 				}
-#line 1390 "repl_gram.c"
+#line 1316 "repl_gram.c"
     break;
 
   case 22: /* create_replication_slot: K_CREATE_REPLICATION_SLOT IDENT opt_temporary K_LOGICAL IDENT create_slot_options  */
-#line 190 "repl_gram.y"
+#line 188 "repl_gram.y"
                                 {
 					CreateReplicationSlotCmd *cmd;
 					cmd = makeNode(CreateReplicationSlotCmd);
@@ -1401,80 +1327,80 @@ yyreduce:
 					cmd->options = (yyvsp[0].list);
 					(yyval.node) = (Node *) cmd;
 				}
-#line 1405 "repl_gram.c"
+#line 1331 "repl_gram.c"
     break;
 
   case 23: /* create_slot_options: '(' generic_option_list ')'  */
-#line 203 "repl_gram.y"
+#line 201 "repl_gram.y"
                                                                         { (yyval.list) = (yyvsp[-1].list); }
-#line 1411 "repl_gram.c"
+#line 1337 "repl_gram.c"
     break;
 
   case 24: /* create_slot_options: create_slot_legacy_opt_list  */
-#line 204 "repl_gram.y"
+#line 202 "repl_gram.y"
                                                                 { (yyval.list) = (yyvsp[0].list); }
-#line 1417 "repl_gram.c"
+#line 1343 "repl_gram.c"
     break;
 
   case 25: /* create_slot_legacy_opt_list: create_slot_legacy_opt_list create_slot_legacy_opt  */
-#line 209 "repl_gram.y"
+#line 207 "repl_gram.y"
                                 { (yyval.list) = lappend((yyvsp[-1].list), (yyvsp[0].defelt)); }
-#line 1423 "repl_gram.c"
+#line 1349 "repl_gram.c"
     break;
 
   case 26: /* create_slot_legacy_opt_list: %empty  */
-#line 211 "repl_gram.y"
+#line 209 "repl_gram.y"
                                 { (yyval.list) = NIL; }
-#line 1429 "repl_gram.c"
+#line 1355 "repl_gram.c"
     break;
 
   case 27: /* create_slot_legacy_opt: K_EXPORT_SNAPSHOT  */
-#line 216 "repl_gram.y"
+#line 214 "repl_gram.y"
                                 {
 				  (yyval.defelt) = makeDefElem("snapshot",
 								   (Node *) makeString("export"), -1);
 				}
-#line 1438 "repl_gram.c"
+#line 1364 "repl_gram.c"
     break;
 
   case 28: /* create_slot_legacy_opt: K_NOEXPORT_SNAPSHOT  */
-#line 221 "repl_gram.y"
+#line 219 "repl_gram.y"
                                 {
 				  (yyval.defelt) = makeDefElem("snapshot",
 								   (Node *) makeString("nothing"), -1);
 				}
-#line 1447 "repl_gram.c"
+#line 1373 "repl_gram.c"
     break;
 
   case 29: /* create_slot_legacy_opt: K_USE_SNAPSHOT  */
-#line 226 "repl_gram.y"
+#line 224 "repl_gram.y"
                                 {
 				  (yyval.defelt) = makeDefElem("snapshot",
 								   (Node *) makeString("use"), -1);
 				}
-#line 1456 "repl_gram.c"
+#line 1382 "repl_gram.c"
     break;
 
   case 30: /* create_slot_legacy_opt: K_RESERVE_WAL  */
-#line 231 "repl_gram.y"
+#line 229 "repl_gram.y"
                                 {
 				  (yyval.defelt) = makeDefElem("reserve_wal",
 								   (Node *) makeBoolean(true), -1);
 				}
-#line 1465 "repl_gram.c"
+#line 1391 "repl_gram.c"
     break;
 
   case 31: /* create_slot_legacy_opt: K_TWO_PHASE  */
-#line 236 "repl_gram.y"
+#line 234 "repl_gram.y"
                                 {
 				  (yyval.defelt) = makeDefElem("two_phase",
 								   (Node *) makeBoolean(true), -1);
 				}
-#line 1474 "repl_gram.c"
+#line 1400 "repl_gram.c"
     break;
 
   case 32: /* drop_replication_slot: K_DROP_REPLICATION_SLOT IDENT  */
-#line 245 "repl_gram.y"
+#line 243 "repl_gram.y"
                                 {
 					DropReplicationSlotCmd *cmd;
 					cmd = makeNode(DropReplicationSlotCmd);
@@ -1482,11 +1408,11 @@ yyreduce:
 					cmd->wait = false;
 					(yyval.node) = (Node *) cmd;
 				}
-#line 1486 "repl_gram.c"
+#line 1412 "repl_gram.c"
     break;
 
   case 33: /* drop_replication_slot: K_DROP_REPLICATION_SLOT IDENT K_WAIT  */
-#line 253 "repl_gram.y"
+#line 251 "repl_gram.y"
                                 {
 					DropReplicationSlotCmd *cmd;
 					cmd = makeNode(DropReplicationSlotCmd);
@@ -1494,11 +1420,11 @@ yyreduce:
 					cmd->wait = true;
 					(yyval.node) = (Node *) cmd;
 				}
-#line 1498 "repl_gram.c"
+#line 1424 "repl_gram.c"
     break;
 
   case 34: /* start_replication: K_START_REPLICATION opt_slot opt_physical RECPTR opt_timeline  */
-#line 267 "repl_gram.y"
+#line 265 "repl_gram.y"
                                 {
 					StartReplicationCmd *cmd;
 
@@ -1509,11 +1435,11 @@ yyreduce:
 					cmd->timeline = (yyvsp[0].uintval);
 					(yyval.node) = (Node *) cmd;
 				}
-#line 1513 "repl_gram.c"
+#line 1439 "repl_gram.c"
     break;
 
   case 35: /* start_logical_replication: K_START_REPLICATION K_SLOT IDENT K_LOGICAL RECPTR plugin_options  */
-#line 282 "repl_gram.y"
+#line 280 "repl_gram.y"
                                 {
 					StartReplicationCmd *cmd;
 					cmd = makeNode(StartReplicationCmd);
@@ -1523,11 +1449,11 @@ yyreduce:
 					cmd->options = (yyvsp[0].list);
 					(yyval.node) = (Node *) cmd;
 				}
-#line 1527 "repl_gram.c"
+#line 1453 "repl_gram.c"
     break;
 
   case 36: /* timeline_history: K_TIMELINE_HISTORY UCONST  */
-#line 297 "repl_gram.y"
+#line 295 "repl_gram.y"
                                 {
 					TimeLineHistoryCmd *cmd;
 
@@ -1541,35 +1467,35 @@ yyreduce:
 
 					(yyval.node) = (Node *) cmd;
 				}
-#line 1545 "repl_gram.c"
+#line 1471 "repl_gram.c"
     break;
 
   case 39: /* opt_temporary: K_TEMPORARY  */
-#line 318 "repl_gram.y"
+#line 316 "repl_gram.y"
                                                                                 { (yyval.boolval) = true; }
-#line 1551 "repl_gram.c"
+#line 1477 "repl_gram.c"
     break;
 
   case 40: /* opt_temporary: %empty  */
-#line 319 "repl_gram.y"
+#line 317 "repl_gram.y"
                                                                         { (yyval.boolval) = false; }
-#line 1557 "repl_gram.c"
+#line 1483 "repl_gram.c"
     break;
 
   case 41: /* opt_slot: K_SLOT IDENT  */
-#line 324 "repl_gram.y"
+#line 322 "repl_gram.y"
                                 { (yyval.str) = (yyvsp[0].str); }
-#line 1563 "repl_gram.c"
+#line 1489 "repl_gram.c"
     break;
 
   case 42: /* opt_slot: %empty  */
-#line 326 "repl_gram.y"
+#line 324 "repl_gram.y"
                                 { (yyval.str) = NULL; }
-#line 1569 "repl_gram.c"
+#line 1495 "repl_gram.c"
     break;
 
   case 43: /* opt_timeline: K_TIMELINE UCONST  */
-#line 331 "repl_gram.y"
+#line 329 "repl_gram.y"
                                 {
 					if ((yyvsp[0].uintval) <= 0)
 						ereport(ERROR,
@@ -1577,223 +1503,223 @@ yyreduce:
 								 errmsg("invalid timeline %u", (yyvsp[0].uintval))));
 					(yyval.uintval) = (yyvsp[0].uintval);
 				}
-#line 1581 "repl_gram.c"
+#line 1507 "repl_gram.c"
     break;
 
   case 44: /* opt_timeline: %empty  */
-#line 338 "repl_gram.y"
+#line 336 "repl_gram.y"
                                                                 { (yyval.uintval) = 0; }
-#line 1587 "repl_gram.c"
+#line 1513 "repl_gram.c"
     break;
 
   case 45: /* plugin_options: '(' plugin_opt_list ')'  */
-#line 343 "repl_gram.y"
+#line 341 "repl_gram.y"
                                                                 { (yyval.list) = (yyvsp[-1].list); }
-#line 1593 "repl_gram.c"
+#line 1519 "repl_gram.c"
     break;
 
   case 46: /* plugin_options: %empty  */
-#line 344 "repl_gram.y"
+#line 342 "repl_gram.y"
                                                                         { (yyval.list) = NIL; }
-#line 1599 "repl_gram.c"
+#line 1525 "repl_gram.c"
     break;
 
   case 47: /* plugin_opt_list: plugin_opt_elem  */
-#line 349 "repl_gram.y"
+#line 347 "repl_gram.y"
                                 {
 					(yyval.list) = list_make1((yyvsp[0].defelt));
 				}
-#line 1607 "repl_gram.c"
+#line 1533 "repl_gram.c"
     break;
 
   case 48: /* plugin_opt_list: plugin_opt_list ',' plugin_opt_elem  */
-#line 353 "repl_gram.y"
+#line 351 "repl_gram.y"
                                 {
 					(yyval.list) = lappend((yyvsp[-2].list), (yyvsp[0].defelt));
 				}
-#line 1615 "repl_gram.c"
+#line 1541 "repl_gram.c"
     break;
 
   case 49: /* plugin_opt_elem: IDENT plugin_opt_arg  */
-#line 360 "repl_gram.y"
+#line 358 "repl_gram.y"
                                 {
 					(yyval.defelt) = makeDefElem((yyvsp[-1].str), (yyvsp[0].node), -1);
 				}
-#line 1623 "repl_gram.c"
+#line 1549 "repl_gram.c"
     break;
 
   case 50: /* plugin_opt_arg: SCONST  */
-#line 366 "repl_gram.y"
+#line 364 "repl_gram.y"
                                                                                 { (yyval.node) = (Node *) makeString((yyvsp[0].str)); }
-#line 1629 "repl_gram.c"
+#line 1555 "repl_gram.c"
     break;
 
   case 51: /* plugin_opt_arg: %empty  */
-#line 367 "repl_gram.y"
+#line 365 "repl_gram.y"
                                                                         { (yyval.node) = NULL; }
-#line 1635 "repl_gram.c"
+#line 1561 "repl_gram.c"
     break;
 
   case 52: /* generic_option_list: generic_option_list ',' generic_option  */
-#line 372 "repl_gram.y"
+#line 370 "repl_gram.y"
                                 { (yyval.list) = lappend((yyvsp[-2].list), (yyvsp[0].defelt)); }
-#line 1641 "repl_gram.c"
+#line 1567 "repl_gram.c"
     break;
 
   case 53: /* generic_option_list: generic_option  */
-#line 374 "repl_gram.y"
+#line 372 "repl_gram.y"
                                 { (yyval.list) = list_make1((yyvsp[0].defelt)); }
-#line 1647 "repl_gram.c"
+#line 1573 "repl_gram.c"
     break;
 
   case 54: /* generic_option: ident_or_keyword  */
-#line 379 "repl_gram.y"
+#line 377 "repl_gram.y"
                                 {
 					(yyval.defelt) = makeDefElem((yyvsp[0].str), NULL, -1);
 				}
-#line 1655 "repl_gram.c"
+#line 1581 "repl_gram.c"
     break;
 
   case 55: /* generic_option: ident_or_keyword IDENT  */
-#line 383 "repl_gram.y"
+#line 381 "repl_gram.y"
                                 {
 					(yyval.defelt) = makeDefElem((yyvsp[-1].str), (Node *) makeString((yyvsp[0].str)), -1);
 				}
-#line 1663 "repl_gram.c"
+#line 1589 "repl_gram.c"
     break;
 
   case 56: /* generic_option: ident_or_keyword SCONST  */
-#line 387 "repl_gram.y"
+#line 385 "repl_gram.y"
                                 {
 					(yyval.defelt) = makeDefElem((yyvsp[-1].str), (Node *) makeString((yyvsp[0].str)), -1);
 				}
-#line 1671 "repl_gram.c"
+#line 1597 "repl_gram.c"
     break;
 
   case 57: /* generic_option: ident_or_keyword UCONST  */
-#line 391 "repl_gram.y"
+#line 389 "repl_gram.y"
                                 {
 					(yyval.defelt) = makeDefElem((yyvsp[-1].str), (Node *) makeInteger((yyvsp[0].uintval)), -1);
 				}
-#line 1679 "repl_gram.c"
+#line 1605 "repl_gram.c"
     break;
 
   case 58: /* ident_or_keyword: IDENT  */
-#line 397 "repl_gram.y"
+#line 395 "repl_gram.y"
                                                                                 { (yyval.str) = (yyvsp[0].str); }
-#line 1685 "repl_gram.c"
+#line 1611 "repl_gram.c"
     break;
 
   case 59: /* ident_or_keyword: K_BASE_BACKUP  */
-#line 398 "repl_gram.y"
+#line 396 "repl_gram.y"
                                                                         { (yyval.str) = "base_backup"; }
-#line 1691 "repl_gram.c"
+#line 1617 "repl_gram.c"
     break;
 
   case 60: /* ident_or_keyword: K_IDENTIFY_SYSTEM  */
-#line 399 "repl_gram.y"
+#line 397 "repl_gram.y"
                                                                         { (yyval.str) = "identify_system"; }
-#line 1697 "repl_gram.c"
+#line 1623 "repl_gram.c"
     break;
 
   case 61: /* ident_or_keyword: K_SHOW  */
-#line 400 "repl_gram.y"
+#line 398 "repl_gram.y"
                                                                                 { (yyval.str) = "show"; }
-#line 1703 "repl_gram.c"
+#line 1629 "repl_gram.c"
     break;
 
   case 62: /* ident_or_keyword: K_START_REPLICATION  */
-#line 401 "repl_gram.y"
+#line 399 "repl_gram.y"
                                                                 { (yyval.str) = "start_replication"; }
-#line 1709 "repl_gram.c"
+#line 1635 "repl_gram.c"
     break;
 
   case 63: /* ident_or_keyword: K_CREATE_REPLICATION_SLOT  */
-#line 402 "repl_gram.y"
+#line 400 "repl_gram.y"
                                                         { (yyval.str) = "create_replication_slot"; }
-#line 1715 "repl_gram.c"
+#line 1641 "repl_gram.c"
     break;
 
   case 64: /* ident_or_keyword: K_DROP_REPLICATION_SLOT  */
-#line 403 "repl_gram.y"
+#line 401 "repl_gram.y"
                                                                 { (yyval.str) = "drop_replication_slot"; }
-#line 1721 "repl_gram.c"
+#line 1647 "repl_gram.c"
     break;
 
   case 65: /* ident_or_keyword: K_TIMELINE_HISTORY  */
-#line 404 "repl_gram.y"
+#line 402 "repl_gram.y"
                                                                 { (yyval.str) = "timeline_history"; }
-#line 1727 "repl_gram.c"
+#line 1653 "repl_gram.c"
     break;
 
   case 66: /* ident_or_keyword: K_WAIT  */
-#line 405 "repl_gram.y"
+#line 403 "repl_gram.y"
                                                                                 { (yyval.str) = "wait"; }
-#line 1733 "repl_gram.c"
+#line 1659 "repl_gram.c"
     break;
 
   case 67: /* ident_or_keyword: K_TIMELINE  */
-#line 406 "repl_gram.y"
+#line 404 "repl_gram.y"
                                                                         { (yyval.str) = "timeline"; }
-#line 1739 "repl_gram.c"
+#line 1665 "repl_gram.c"
     break;
 
   case 68: /* ident_or_keyword: K_PHYSICAL  */
-#line 407 "repl_gram.y"
+#line 405 "repl_gram.y"
                                                                         { (yyval.str) = "physical"; }
-#line 1745 "repl_gram.c"
+#line 1671 "repl_gram.c"
     break;
 
   case 69: /* ident_or_keyword: K_LOGICAL  */
-#line 408 "repl_gram.y"
+#line 406 "repl_gram.y"
                                                                                 { (yyval.str) = "logical"; }
-#line 1751 "repl_gram.c"
+#line 1677 "repl_gram.c"
     break;
 
   case 70: /* ident_or_keyword: K_SLOT  */
-#line 409 "repl_gram.y"
+#line 407 "repl_gram.y"
                                                                                 { (yyval.str) = "slot"; }
-#line 1757 "repl_gram.c"
+#line 1683 "repl_gram.c"
     break;
 
   case 71: /* ident_or_keyword: K_RESERVE_WAL  */
-#line 410 "repl_gram.y"
+#line 408 "repl_gram.y"
                                                                         { (yyval.str) = "reserve_wal"; }
-#line 1763 "repl_gram.c"
+#line 1689 "repl_gram.c"
     break;
 
   case 72: /* ident_or_keyword: K_TEMPORARY  */
-#line 411 "repl_gram.y"
+#line 409 "repl_gram.y"
                                                                         { (yyval.str) = "temporary"; }
-#line 1769 "repl_gram.c"
+#line 1695 "repl_gram.c"
     break;
 
   case 73: /* ident_or_keyword: K_TWO_PHASE  */
-#line 412 "repl_gram.y"
+#line 410 "repl_gram.y"
                                                                         { (yyval.str) = "two_phase"; }
-#line 1775 "repl_gram.c"
+#line 1701 "repl_gram.c"
     break;
 
   case 74: /* ident_or_keyword: K_EXPORT_SNAPSHOT  */
-#line 413 "repl_gram.y"
+#line 411 "repl_gram.y"
                                                                         { (yyval.str) = "export_snapshot"; }
-#line 1781 "repl_gram.c"
+#line 1707 "repl_gram.c"
     break;
 
   case 75: /* ident_or_keyword: K_NOEXPORT_SNAPSHOT  */
-#line 414 "repl_gram.y"
+#line 412 "repl_gram.y"
                                                                 { (yyval.str) = "noexport_snapshot"; }
-#line 1787 "repl_gram.c"
+#line 1713 "repl_gram.c"
     break;
 
   case 76: /* ident_or_keyword: K_USE_SNAPSHOT  */
-#line 415 "repl_gram.y"
+#line 413 "repl_gram.y"
                                                                         { (yyval.str) = "use_snapshot"; }
-#line 1793 "repl_gram.c"
+#line 1719 "repl_gram.c"
     break;
 
 
-#line 1797 "repl_gram.c"
+#line 1723 "repl_gram.c"
 
       default: break;
     }
@@ -1987,7 +1913,5 @@ yyreturn:
   return yyresult;
 }
 
-#line 418 "repl_gram.y"
+#line 416 "repl_gram.y"
 
-
-#include "repl_scanner.c"

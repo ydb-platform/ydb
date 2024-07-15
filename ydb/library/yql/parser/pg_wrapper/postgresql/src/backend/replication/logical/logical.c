@@ -2,7 +2,7 @@
  * logical.c
  *	   PostgreSQL logical decoding coordination
  *
- * Copyright (c) 2012-2022, PostgreSQL Global Development Group
+ * Copyright (c) 2012-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/replication/logical/logical.c
@@ -93,6 +93,11 @@ static void stream_message_cb_wrapper(ReorderBuffer *cache, ReorderBufferTXN *tx
 static void stream_truncate_cb_wrapper(ReorderBuffer *cache, ReorderBufferTXN *txn,
 									   int nrelations, Relation relations[], ReorderBufferChange *change);
 
+/* callback to update txn's progress */
+static void update_progress_txn_cb_wrapper(ReorderBuffer *cache,
+										   ReorderBufferTXN *txn,
+										   XLogRecPtr lsn);
+
 static void LoadOutputPlugin(OutputPluginCallbacks *callbacks, const char *plugin);
 
 /*
@@ -119,23 +124,21 @@ CheckLogicalDecodingRequirements(void)
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("logical decoding requires a database connection")));
 
-	/* ----
-	 * TODO: We got to change that someday soon...
-	 *
-	 * There's basically three things missing to allow this:
-	 * 1) We need to be able to correctly and quickly identify the timeline a
-	 *	  LSN belongs to
-	 * 2) We need to force hot_standby_feedback to be enabled at all times so
-	 *	  the primary cannot remove rows we need.
-	 * 3) support dropping replication slots referring to a database, in
-	 *	  dbase_redo. There can't be any active ones due to HS recovery
-	 *	  conflicts, so that should be relatively easy.
-	 * ----
-	 */
 	if (RecoveryInProgress())
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("logical decoding cannot be used while in recovery")));
+	{
+		/*
+		 * This check may have race conditions, but whenever
+		 * XLOG_PARAMETER_CHANGE indicates that wal_level has changed, we
+		 * verify that there are no existing logical replication slots. And to
+		 * avoid races around creating a new slot,
+		 * CheckLogicalDecodingRequirements() is called once before creating
+		 * the slot, and once when logical decoding is initially starting up.
+		 */
+		if (GetActiveWalLevelOnStandby() < WAL_LEVEL_LOGICAL)
+			ereport(ERROR,
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					 errmsg("logical decoding on standby requires wal_level >= logical on the primary")));
+	}
 }
 
 /*
@@ -278,6 +281,12 @@ StartupDecodingContext(List *output_plugin_options,
 	ctx->reorder->commit_prepared = commit_prepared_cb_wrapper;
 	ctx->reorder->rollback_prepared = rollback_prepared_cb_wrapper;
 
+	/*
+	 * Callback to support updating progress during sending data of a
+	 * transaction (and its subtransactions) to the output plugin.
+	 */
+	ctx->reorder->update_progress_txn = update_progress_txn_cb_wrapper;
+
 	ctx->out = makeStringInfo();
 	ctx->prepare_write = prepare_write;
 	ctx->write = do_write;
@@ -330,6 +339,12 @@ CreateInitDecodingContext(const char *plugin,
 	NameData	plugin_name;
 	LogicalDecodingContext *ctx;
 	MemoryContext old_context;
+
+	/*
+	 * On a standby, this check is also required while creating the slot.
+	 * Check the comments in the function.
+	 */
+	CheckLogicalDecodingRequirements();
 
 	/* shorter lines... */
 	slot = MyReplicationSlot;
@@ -506,6 +521,29 @@ CreateDecodingContext(XLogRecPtr start_lsn,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("replication slot \"%s\" was not created in this database",
 						NameStr(slot->data.name))));
+
+	/*
+	 * Check if slot has been invalidated due to max_slot_wal_keep_size. Avoid
+	 * "cannot get changes" wording in this errmsg because that'd be
+	 * confusingly ambiguous about no changes being available when called from
+	 * pg_logical_slot_get_changes_guts().
+	 */
+	if (MyReplicationSlot->data.invalidated == RS_INVAL_WAL_REMOVED)
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("can no longer get changes from replication slot \"%s\"",
+						NameStr(MyReplicationSlot->data.name)),
+				 errdetail("This slot has been invalidated because it exceeded the maximum reserved size.")));
+
+	if (MyReplicationSlot->data.invalidated != RS_INVAL_NONE)
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("can no longer get changes from replication slot \"%s\"",
+						NameStr(MyReplicationSlot->data.name)),
+				 errdetail("This slot has been invalidated because it was conflicting with recovery.")));
+
+	Assert(MyReplicationSlot->data.invalidated == RS_INVAL_NONE);
+	Assert(MyReplicationSlot->data.restart_lsn != InvalidXLogRecPtr);
 
 	if (start_lsn == InvalidXLogRecPtr)
 	{
@@ -1579,6 +1617,45 @@ stream_truncate_cb_wrapper(ReorderBuffer *cache, ReorderBufferTXN *txn,
 	ctx->end_xact = false;
 
 	ctx->callbacks.stream_truncate_cb(ctx, txn, nrelations, relations, change);
+
+	/* Pop the error context stack */
+	error_context_stack = errcallback.previous;
+}
+
+static void
+update_progress_txn_cb_wrapper(ReorderBuffer *cache, ReorderBufferTXN *txn,
+							   XLogRecPtr lsn)
+{
+	LogicalDecodingContext *ctx = cache->private_data;
+	LogicalErrorCallbackState state;
+	ErrorContextCallback errcallback;
+
+	Assert(!ctx->fast_forward);
+
+	/* Push callback + info on the error context stack */
+	state.ctx = ctx;
+	state.callback_name = "update_progress_txn";
+	state.report_location = lsn;
+	errcallback.callback = output_plugin_error_callback;
+	errcallback.arg = (void *) &state;
+	errcallback.previous = error_context_stack;
+	error_context_stack = &errcallback;
+
+	/* set output state */
+	ctx->accept_writes = false;
+	ctx->write_xid = txn->xid;
+
+	/*
+	 * Report this change's lsn so replies from clients can give an up-to-date
+	 * answer. This won't ever be enough (and shouldn't be!) to confirm
+	 * receipt of this transaction, but it might allow another transaction's
+	 * commit to be confirmed with one message.
+	 */
+	ctx->write_location = lsn;
+
+	ctx->end_xact = false;
+
+	OutputPluginUpdateProgress(ctx, false);
 
 	/* Pop the error context stack */
 	error_context_stack = errcallback.previous;

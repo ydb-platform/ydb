@@ -698,6 +698,16 @@ auto MakePgAgg_min_2245() {
                      false, false, false, false
                      >(&bpchar_smaller, &bpchar_smaller, nullptr, nullptr, nullptr);
 }
+auto MakePgAgg_array_agg_2335() {
+    return TGenericAgg<
+                     TPgIndirectFunc, false, TDefaultArgsPolicy,
+                     TPgIndirectFunc, false, TDefaultArgsPolicy,
+                     true, TPgIndirectFunc, TDefaultArgsPolicy,
+                     true, TPgIndirectFunc, TDefaultArgsPolicy,
+                     true, TPgIndirectFunc, false, TDefaultArgsPolicy,
+                     true, false, false, false
+                     >(&array_agg_transfn, &array_agg_combine, &array_agg_serialize, &array_agg_deserialize, &array_agg_finalfn);
+}
 auto MakePgAgg_bool_and_2517() {
     return TGenericAgg<
                      TPgIndirectFunc, true, TDefaultArgsPolicy,
@@ -1138,6 +1148,26 @@ auto MakePgAgg_min_3527() {
                      true, true, true, false
                      >(&enum_smaller, &enum_smaller, nullptr, nullptr, nullptr);
 }
+auto MakePgAgg_string_agg_3538() {
+    return TGenericAgg<
+                     TPgIndirectFunc, false, TDefaultArgsPolicy,
+                     TPgIndirectFunc, false, TDefaultArgsPolicy,
+                     true, TPgIndirectFunc, TDefaultArgsPolicy,
+                     true, TPgIndirectFunc, TDefaultArgsPolicy,
+                     true, TPgIndirectFunc, false, TDefaultArgsPolicy,
+                     true, false, false, false
+                     >(&string_agg_transfn, &string_agg_combine, &string_agg_serialize, &string_agg_deserialize, &string_agg_finalfn);
+}
+auto MakePgAgg_string_agg_3545() {
+    return TGenericAgg<
+                     TPgIndirectFunc, false, TDefaultArgsPolicy,
+                     TPgIndirectFunc, false, TDefaultArgsPolicy,
+                     true, TPgIndirectFunc, TDefaultArgsPolicy,
+                     true, TPgIndirectFunc, TDefaultArgsPolicy,
+                     true, TPgIndirectFunc, false, TDefaultArgsPolicy,
+                     true, false, false, false
+                     >(&bytea_string_agg_transfn, &string_agg_combine, &string_agg_serialize, &string_agg_deserialize, &bytea_string_agg_finalfn);
+}
 auto MakePgAgg_max_3564() {
     return TGenericAgg<
                      TPgIndirectFunc, true, TDefaultArgsPolicy,
@@ -1157,6 +1187,16 @@ auto MakePgAgg_min_3565() {
                      false, TPgIndirectFunc, false, TDefaultArgsPolicy,
                      false, false, false, false
                      >(&network_smaller, &network_smaller, nullptr, nullptr, nullptr);
+}
+auto MakePgAgg_array_agg_4053() {
+    return TGenericAgg<
+                     TPgIndirectFunc, false, TDefaultArgsPolicy,
+                     TPgIndirectFunc, false, TDefaultArgsPolicy,
+                     true, TPgIndirectFunc, TDefaultArgsPolicy,
+                     true, TPgIndirectFunc, TDefaultArgsPolicy,
+                     true, TPgIndirectFunc, false, TDefaultArgsPolicy,
+                     true, false, false, false
+                     >(&array_agg_array_transfn, &array_agg_array_combine, &array_agg_array_serialize, &array_agg_array_deserialize, &array_agg_array_finalfn);
 }
 auto MakePgAgg_max_4189() {
     return TGenericAgg<
@@ -1257,4 +1297,14 @@ auto MakePgAgg_bit_xor_6167() {
                      false, TPgIndirectFunc, false, TDefaultArgsPolicy,
                      false, false, false, false
                      >(&bitxor, &bitxor, nullptr, nullptr, nullptr);
+}
+auto MakePgAgg_any_value_6291() {
+    return TGenericAgg<
+                     TPgIndirectFunc, true, TDefaultArgsPolicy,
+                     TPgIndirectFunc, true, TDefaultArgsPolicy,
+                     false, TPgIndirectFunc, TDefaultArgsPolicy,
+                     false, TPgIndirectFunc, TDefaultArgsPolicy,
+                     false, TPgIndirectFunc, false, TDefaultArgsPolicy,
+                     true, true, true, false
+                     >(&any_value_transfn, &any_value_transfn, nullptr, nullptr, nullptr);
 }

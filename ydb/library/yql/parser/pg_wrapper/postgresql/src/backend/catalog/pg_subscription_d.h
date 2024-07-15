@@ -3,7 +3,7 @@
  * pg_subscription_d.h
  *    Macro definitions for pg_subscription
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -35,12 +35,15 @@
 #define Anum_pg_subscription_substream 8
 #define Anum_pg_subscription_subtwophasestate 9
 #define Anum_pg_subscription_subdisableonerr 10
-#define Anum_pg_subscription_subconninfo 11
-#define Anum_pg_subscription_subslotname 12
-#define Anum_pg_subscription_subsynccommit 13
-#define Anum_pg_subscription_subpublications 14
+#define Anum_pg_subscription_subpasswordrequired 11
+#define Anum_pg_subscription_subrunasowner 12
+#define Anum_pg_subscription_subconninfo 13
+#define Anum_pg_subscription_subslotname 14
+#define Anum_pg_subscription_subsynccommit 15
+#define Anum_pg_subscription_subpublications 16
+#define Anum_pg_subscription_suborigin 17
 
-#define Natts_pg_subscription 14
+#define Natts_pg_subscription 17
 
 
 #endif							/* PG_SUBSCRIPTION_D_H */

@@ -305,6 +305,7 @@ public:
     void InitResources(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& g) {
         AFL_VERIFY(!Allocated);
         AFL_VERIFY(g->GetMemory() == Volume)("volume", Volume)("allocated", g->GetMemory());
+        Allocated = g;
     }
 
     ~TReaderResourcesGuard() {

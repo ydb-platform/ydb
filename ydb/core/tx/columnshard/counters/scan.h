@@ -292,7 +292,9 @@ private:
 public:
     TReaderResourcesGuard(const ui64 volume, const std::shared_ptr<TAtomicCounter>& requested, const std::shared_ptr<NOlap::TMemoryAggregation>& signalWatcher)
         : Requested(requested)
-        , Volume(volume) {
+        , SignalCounter(signalWatcher)
+        , Volume(volume)
+    {
         AFL_VERIFY(Requested);
         Requested->Add(Volume);
         SignalCounter->AddBytes(volume);

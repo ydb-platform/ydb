@@ -1470,6 +1470,7 @@ message THiveConfig {
     optional double MinGroupUsageToBalance = 72 [default = 0.1];
     optional uint64 StorageBalancerInflight = 73 [default = 1];
     optional bool EnableDestroyOperations = 74 [default = false];
+    optional double NodeUsageRangeToKick = 75 [default = 0.2];
 }
 
 message TBlobCacheConfig {

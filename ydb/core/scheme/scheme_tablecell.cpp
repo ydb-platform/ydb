@@ -270,8 +270,9 @@ bool TSerializedCellVec::UnsafeAppendCells(TConstArrayRef<TCell> cells, TString&
 
     const char* buf = serializedCellVec.data();
     const char* bufEnd = serializedCellVec.data() + serializedCellVec.size();
+    const size_t bufSize = bufEnd - buf;
 
-    if (Y_UNLIKELY(bufEnd - buf < static_cast<ptrdiff_t>(sizeof(ui16)))) {
+    if (Y_UNLIKELY(bufSize < static_cast<ptrdiff_t>(sizeof(ui16)))) {
         return false;
     }
 
@@ -280,13 +281,14 @@ bool TSerializedCellVec::UnsafeAppendCells(TConstArrayRef<TCell> cells, TString&
 
     size_t newSize = serializedCellVec.size();
 
-    for (auto& cell : cells)
+    for (auto& cell : cells) {
         newSize += sizeof(TCellHeader) + cell.Size();
+    }
 
     serializedCellVec.ReserveAndResize(newSize);
 
     char* mutableBuf = serializedCellVec.Detach();
-    char* oldBufEnd = mutableBuf + (bufEnd - buf);
+    char* oldBufEnd = mutableBuf + bufSize;
 
     WriteUnaligned<ui16>(mutableBuf, cellCount);
 

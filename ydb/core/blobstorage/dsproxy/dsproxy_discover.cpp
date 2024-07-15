@@ -312,7 +312,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
     }
 
     void Handle(TEvBlobStorage::TEvVGetBlockResult::TPtr &ev) {
-        ProcessReplyFromQueue(ev);
+        ProcessReplyFromQueue(ev->Get());
 
         TotalRecieved++;
         NKikimrBlobStorage::TEvVGetBlockResult &record = ev->Get()->Record;
@@ -354,8 +354,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
     }
 
     void HandleIgnore(TEvBlobStorage::TEvVGetResult::TPtr &ev) {
-        ProcessReplyFromQueue(ev);
-        CountEvent(*ev->Get());
+        ProcessReplyFromQueue(ev->Get());
 
         TotalRecieved++;
         NKikimrBlobStorage::TEvVGetResult &record = ev->Get()->Record;
@@ -371,8 +370,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
     }
 
     void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev) {
-        ProcessReplyFromQueue(ev);
-        CountEvent(*ev->Get());
+        ProcessReplyFromQueue(ev->Get());
 
         TotalRecieved++;
         NKikimrBlobStorage::TEvVGetResult &record = ev->Get()->Record;
@@ -708,7 +706,6 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
                         << " node# " << vdisk.NodeId()
                         << " msg# " << msg->ToString()
                         << " cookie# " << cookie);
-                    CountEvent(*msg);
                     SendToQueue(std::move(msg), cookie);
                     TotalSent++;
 
@@ -934,7 +931,6 @@ public:
                 << " msg# " << msg->ToString()
                 << " cookie# " << cookie
                 << " ForceBlockedGeneration# " << msg->Record.GetForceBlockedGeneration());
-            CountEvent(*msg);
             SendToQueue(std::move(msg), cookie);
             TotalSent++;
 

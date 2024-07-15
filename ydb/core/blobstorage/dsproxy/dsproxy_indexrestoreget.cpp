@@ -75,8 +75,7 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
     }
 
     void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev) {
-        ProcessReplyFromQueue(ev);
-        CountEvent(*ev->Get());
+        ProcessReplyFromQueue(ev->Get());
 
         const NKikimrBlobStorage::TEvVGetResult &record = ev->Get()->Record;
 
@@ -324,7 +323,6 @@ public:
             auto sendQuery = [&] {
                 if (vget) {
                     const ui64 cookie = TVDiskIdShort(vd).GetRaw();
-                    CountEvent(*vget);
                     SendToQueue(std::move(vget), cookie);
                     vget.reset();
                     ++VGetsInFlight;

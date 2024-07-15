@@ -33,7 +33,7 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
     ui32 ResponsesReceived = 0;
 
     void Handle(TEvBlobStorage::TEvVCollectGarbageResult::TPtr &ev) {
-        ProcessReplyFromQueue(ev);
+        ProcessReplyFromQueue(ev->Get());
         ResponsesReceived++;
         const NKikimrBlobStorage::TEvVCollectGarbageResult &record = ev->Get()->Record;
         Y_ABORT_UNLESS(record.HasStatus());
@@ -49,7 +49,7 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
     }
 
     void Handle(TEvBlobStorage::TEvVStatusResult::TPtr &ev) {
-        ProcessReplyFromQueue(ev);
+        ProcessReplyFromQueue(ev->Get());
         ResponsesReceived++;
         const auto& record = ev->Get()->Record;
         if (record.HasStatus() && record.HasVDiskID()) {

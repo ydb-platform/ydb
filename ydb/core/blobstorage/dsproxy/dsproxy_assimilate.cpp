@@ -327,7 +327,7 @@ public:
     }
 
     void Handle(TEvBlobStorage::TEvVAssimilateResult::TPtr ev) {
-        ProcessReplyFromQueue(ev);
+        ProcessReplyFromQueue(ev->Get());
 
         const auto& record = ev->Get()->Record;
         const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());

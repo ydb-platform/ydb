@@ -419,7 +419,10 @@ public:
                         (VDiskId, VDisks[subgroupIdx]));
             }
         }
-        SendToQueues(events, false);
+        for (auto& ev : events) {
+            const ui64 cookie = ev->Record.GetCookie();
+            SendToQueue(std::move(ev), cookie);
+        }
     }
 
     bool WithXorDiffs() const {
@@ -496,7 +499,10 @@ public:
                     (WaitedXorDiffs, waitedXorDiffs));
             events.push_back(std::move(ev));
         }
-        SendToQueues(events, false);
+        for (auto& ev : events) {
+            const ui64 cookie = ev->Record.GetCookie();
+            SendToQueue(std::move(ev), cookie);
+        }
         SendStopDiffs();
         ReceivedResponseFlags.assign(VDisks.size(), false);
     }
@@ -546,7 +552,10 @@ public:
             auto &diff = Diffs[diffIdx];
             events.back()->AddDiff(diff.Offset, diff.Buffer);
         }
-        SendToQueues(events, false);
+        for (auto& ev : events) {
+            const ui64 cookie = ev->Record.GetCookie();
+            SendToQueue(std::move(ev), cookie);
+        }
     }
 
     void StartNaivePatch() {
@@ -596,7 +605,10 @@ public:
         PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA08, "Start VPatch strategy",
                 (SentStarts, SentStarts));
 
-        SendToQueues(events, false);
+        for (auto& ev : events) {
+            const ui64 cookie = ev->Record.GetCookie();
+            SendToQueue(std::move(ev), cookie);
+        }
     }
 
     bool FindHandoffs(const TStackVec<TStackVec<ui32, TypicalHandoffCount>, TypicalPartsInBlob>& handoffForParts,

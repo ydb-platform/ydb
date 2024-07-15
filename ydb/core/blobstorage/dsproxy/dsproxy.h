@@ -141,26 +141,46 @@ NActors::NLog::EPriority PriorityForStatusOutbound(NKikimrProto::EReplyStatus st
 NActors::NLog::EPriority PriorityForStatusResult(NKikimrProto::EReplyStatus status);
 NActors::NLog::EPriority PriorityForStatusInbound(NKikimrProto::EReplyStatus status);
 
+#define DSPROXY_ENUM_EVENTS(XX) \
+    XX(TEvBlobStorage::TEvPut) \
+    XX(TEvBlobStorage::TEvGet) \
+    XX(TEvBlobStorage::TEvBlock) \
+    XX(TEvBlobStorage::TEvDiscover) \
+    XX(TEvBlobStorage::TEvRange) \
+    XX(TEvBlobStorage::TEvCollectGarbage) \
+    XX(TEvBlobStorage::TEvStatus) \
+    XX(TEvBlobStorage::TEvPatch) \
+    XX(TEvBlobStorage::TEvAssimilate) \
+//
+
+#define DSPROXY_ENUM_DISK_EVENTS(XX) \
+    XX(TEvBlobStorage::TEvVMovedPatch) \
+    XX(TEvBlobStorage::TEvVPatchStart) \
+    XX(TEvBlobStorage::TEvVPatchDiff) \
+    XX(TEvBlobStorage::TEvVPatchXorDiff) \
+    XX(TEvBlobStorage::TEvVPut) \
+    XX(TEvBlobStorage::TEvVMultiPut) \
+    XX(TEvBlobStorage::TEvVGet) \
+    XX(TEvBlobStorage::TEvVBlock) \
+    XX(TEvBlobStorage::TEvVGetBlock) \
+    XX(TEvBlobStorage::TEvVCollectGarbage) \
+    XX(TEvBlobStorage::TEvVGetBarrier) \
+    XX(TEvBlobStorage::TEvVStatus) \
+    XX(TEvBlobStorage::TEvVAssimilate) \
+//
+
 inline void SetExecutionRelay(IEventBase& ev, std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay) {
     switch (const ui32 type = ev.Type()) {
 #define XX(T) \
-        case TEvBlobStorage::Ev##T: \
-            static_cast<TEvBlobStorage::TEv##T&>(ev).ExecutionRelay = std::move(executionRelay); \
+        case T::EventType: \
+            static_cast<T&>(ev).ExecutionRelay = std::move(executionRelay); \
             break; \
-        case TEvBlobStorage::Ev##T##Result: \
-            static_cast<TEvBlobStorage::TEv##T##Result&>(ev).ExecutionRelay = std::move(executionRelay); \
+        case T##Result::EventType: \
+            static_cast<T##Result&>(ev).ExecutionRelay = std::move(executionRelay); \
             break; \
         //
 
-        XX(Put)
-        XX(Get)
-        XX(Block)
-        XX(Discover)
-        XX(Range)
-        XX(CollectGarbage)
-        XX(Status)
-        XX(Patch)
-        XX(Assimilate)
+        DSPROXY_ENUM_EVENTS(XX)
 #undef XX
 
         default:
@@ -220,96 +240,26 @@ public:
 
     void BootstrapImpl();
 
-    template<typename T>
-    void CountEvent(const T &ev) const {
-        ERequestType request = GetRequestType();
-        Mon->CountEvent(request, ev);
-    }
+    void CountEvent(IEventBase *ev, ui32 type) const;
+
+    void CountPut(ui32 bufferBytes);
 
     TActorId GetVDiskActorId(const TVDiskIdShort &shortId) const;
 
+    bool CheckForTermErrors(bool suppressCommonErrors, const NProtoBuf::Message& record, ui32 type,
+        NKikimrProto::EReplyStatus status, TVDiskID vdiskId, const NKikimrBlobStorage::TGroupInfo *group,
+        bool& setErrorAndPostpone, bool& setRaceToError);
     bool ProcessEvent(TAutoPtr<IEventHandle>& ev, bool suppressCommonErrors = false);
 
-    template<typename TEv>
-    void CountPut(const std::unique_ptr<TEv>& ev) {
-        ++GeneratedSubrequests;
-        GeneratedSubrequestBytes += ev->GetBufferBytes();
-    }
+    void SendToQueue(std::unique_ptr<IEventBase> event, ui64 cookie, bool timeStatsEnabled = false);
 
-    template<typename TEv>
-    void CountPuts(const TDeque<std::unique_ptr<TEv>>& q) {
-        for (const auto& item : q) {
-            CountPut(item);
-        }
-    }
+    void ProcessReplyFromQueue(IEventBase *ev);
 
-    template<typename... TOptions>
-    void CountPuts(const TDeque<std::variant<TOptions...>>& q) {
-        for (const auto& item : q) {
-            std::visit([&](auto& item) { CountPut(item); }, item);
-        }
-    }
-
-    template<typename T>
-    void SendToQueue(std::unique_ptr<T> event, ui64 cookie, bool timeStatsEnabled = false) {
-        if constexpr (
-            !std::is_same_v<T, TEvBlobStorage::TEvVGetBlock>
-            && !std::is_same_v<T, TEvBlobStorage::TEvVBlock>
-            && !std::is_same_v<T, TEvBlobStorage::TEvVStatus>
-            && !std::is_same_v<T, TEvBlobStorage::TEvVCollectGarbage>
-            && !std::is_same_v<T, TEvBlobStorage::TEvVAssimilate>
-        ) {
-            const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
-            event->Record.MutableTimestamps()->SetSentByDSProxyUs(GetCycleCountFast() / cyclesPerUs);
-        }
-
-        if constexpr (!std::is_same_v<T, TEvBlobStorage::TEvVStatus> && !std::is_same_v<T, TEvBlobStorage::TEvVAssimilate>) {
-            event->MessageRelevanceTracker = MessageRelevanceTracker;
-            ui64 cost;
-            if constexpr (std::is_same_v<T, TEvBlobStorage::TEvVMultiPut>) {
-                bool internalQueue;
-                cost = CostModel->GetCost(*event, &internalQueue);
-            } else {
-                cost = CostModel->GetCost(*event);
-            }
-            *PoolCounters->DSProxyDiskCostCounter += cost;
-
-            LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::BS_REQUEST_COST,
-                    "DSProxy Request Type# " << TypeName(*event) << " Cost# " << cost);
-        }
-
-        const TActorId queueId = GroupQueues->Send(*this, Info->GetTopology(), std::move(event), cookie, Span.GetTraceId(),
-            timeStatsEnabled);
-        ++RequestsInFlight;
-    }
-
-    void SendToQueues(TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &vGets, bool timeStatsEnabled);
-
-    template<typename TEvent>
-    void SendToQueues(TDeque<std::unique_ptr<TEvent>> &events, bool timeStatsEnabled) {
-        for (auto& request : events) {
-            ui64 messageCookie = request->Record.GetCookie();
-            CountEvent(*request);
-            TLogoBlobID id = GetBlobId(request);
-            TVDiskID vDiskId = VDiskIDFromVDiskID(request->Record.GetVDiskID());
-            LWTRACK(DSProxyPutVPutIsSent, request->Orbit, Info->GetFailDomainOrderNumber(vDiskId),
-                    Info->GroupID.GetRawId(), id.Channel(), id.PartId(), id.ToString(), id.BlobSize());
-            SendToQueue(std::move(request), messageCookie, timeStatsEnabled);
-        }
-    }
-
-    template<typename TPtr>
-    void ProcessReplyFromQueue(const TPtr& /*ev*/) {
-        Y_ABORT_UNLESS(RequestsInFlight);
-        --RequestsInFlight;
-        CheckPostponedQueue();
-    }
-
-    TLogoBlobID GetBlobId(std::unique_ptr<TEvBlobStorage::TEvVPut> &ev);
-    TLogoBlobID GetBlobId(std::unique_ptr<TEvBlobStorage::TEvVMultiPut> &ev);
-    TLogoBlobID GetBlobId(std::unique_ptr<TEvBlobStorage::TEvVMovedPatch> &ev);
-    TLogoBlobID GetBlobId(std::unique_ptr<TEvBlobStorage::TEvVPatchStart> &ev);
-    TLogoBlobID GetBlobId(std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> &ev);
+    static TLogoBlobID GetBlobId(TEvBlobStorage::TEvVPut& ev);
+    static TLogoBlobID GetBlobId(TEvBlobStorage::TEvVMultiPut& ev);
+    static TLogoBlobID GetBlobId(TEvBlobStorage::TEvVMovedPatch& ev);
+    static TLogoBlobID GetBlobId(TEvBlobStorage::TEvVPatchStart& ev);
+    static TLogoBlobID GetBlobId(TEvBlobStorage::TEvVPatchDiff& ev);
 
     void SendToProxy(std::unique_ptr<IEventBase> event, ui64 cookie = 0, NWilson::TTraceId traceId = {});
     void SendResponseAndDie(std::unique_ptr<IEventBase>&& ev, TBlobStorageGroupProxyTimeStats *timeStats, TActorId source, ui64 cookie);

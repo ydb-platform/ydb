@@ -62,7 +62,6 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
         msg->Record.SetSuppressBarrierCheck(true);
 
         // trace message and send it to queue
-        CountEvent(*msg);
         SendToQueue(std::move(msg), 0);
 
         // add pending count
@@ -70,8 +69,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
     }
 
     void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev) {
-        ProcessReplyFromQueue(ev);
-        CountEvent(*ev->Get());
+        ProcessReplyFromQueue(ev->Get());
 
         const auto& record = ev->Get()->Record;
         Y_ABORT_UNLESS(record.HasStatus());

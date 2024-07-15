@@ -165,7 +165,7 @@ public:
     }
 
     void Handle(TEvBlobStorage::TEvVGetResult::TPtr ev) {
-        ProcessReplyFromQueue(ev);
+        ProcessReplyFromQueue(ev->Get());
         auto& record = ev->Get()->Record;
         if (!record.HasStatus() || !record.HasVDiskID()) {
             return ReplyAndDie(NKikimrProto::ERROR, "incorrect TEvVGetResult from VDisk");

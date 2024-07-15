@@ -103,7 +103,9 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> &vPuts) {
         ReportBytes(GetImpl.GrabBytesToReport());
         RequestsSent += vGets.size() + vPuts.size();
-        CountPuts(vPuts);
+        for (const auto& vPut : vPuts) {
+            CountPut(vPut->GetBufferBytes());
+        }
         if (vPuts.size()) {
             if (!IsPutStarted) {
                 IsPutStarted = true;
@@ -136,8 +138,14 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
             }
             DiskCounters[orderNumber].Sent++;
         }
-        SendToQueues(vGets, false);
-        SendToQueues(vPuts, false);
+        for (auto& ev : vGets) {
+            const ui64 cookie = ev->Record.GetCookie();
+            SendToQueue(std::move(ev), cookie);
+        }
+        for (auto& ev : vPuts) {
+            const ui64 cookie = ev->Record.GetCookie();
+            SendToQueue(std::move(ev), cookie);
+        }
     }
 
     ui32 CountDisksWithActiveRequests() {
@@ -161,8 +169,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
     }
 
     void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev) {
-        ProcessReplyFromQueue(ev);
-        CountEvent(*ev->Get());
+        ProcessReplyFromQueue(ev->Get());
 
         const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
         ev->Get()->Record.MutableTimestamps()->SetReceivedByDSProxyUs(GetCycleCountFast() / cyclesPerUs);
@@ -251,7 +258,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
     }
 
     void Handle(TEvBlobStorage::TEvVPutResult::TPtr &ev) {
-        ProcessReplyFromQueue(ev);
+        ProcessReplyFromQueue(ev->Get());
         HandleVPutResult(ev);
     }
 

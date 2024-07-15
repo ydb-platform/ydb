@@ -115,7 +115,9 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
 
         // Count them properly.
         UpdatePengingVDiskResponseCount(events);
-        CountPuts(events);
+        for (const auto& ev : events) {
+            CountPut(std::visit([](const auto& item) { return item->GetBufferBytes(); }, ev));
+        }
 
         // Update metrics for acceleration.
         if (accelerate) {
@@ -202,7 +204,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
     void Handle(TEvBlobStorage::TEvVStatusResult::TPtr& ev) {
         A_LOG_INFO_S("BPP16", "received TEvVStatusResult " << ev->Get()->ToString());
 
-        ProcessReplyFromQueue(ev);
+        ProcessReplyFromQueue(ev->Get());
         ++StatusResultMsgsReceived;
 
         auto& record = ev->Get()->Record;
@@ -229,7 +231,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         A_LOG_LOG_S(false, ev->Get()->Record.GetStatus() == NKikimrProto::OK ? NLog::PRI_DEBUG : NLog::PRI_INFO,
             "BPP01", "received " << ev->Get()->ToString() << " from# " << VDiskIDFromVDiskID(ev->Get()->Record.GetVDiskID()));
 
-        ProcessReplyFromQueue(ev);
+        ProcessReplyFromQueue(ev->Get());
         ResponsesReceived++;
 
         const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
@@ -288,7 +290,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
     }
 
     void Handle(TEvBlobStorage::TEvVMultiPutResult::TPtr &ev) {
-        ProcessReplyFromQueue(ev);
+        ProcessReplyFromQueue(ev->Get());
         ResponsesReceived++;
 
         const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;

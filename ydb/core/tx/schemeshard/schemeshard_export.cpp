@@ -91,6 +91,10 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
         *exprt.MutableEndTime() = SecondsToProtoTimeStamp(exportInfo->EndTime.Seconds());
     }
 
+    if (exportInfo->UserSID) {
+        exprt.SetUserSID(*exportInfo->UserSID);
+    }
+
     switch (exportInfo->State) {
     case TExportInfo::EState::CreateExportDir:
     case TExportInfo::EState::CopyTables:

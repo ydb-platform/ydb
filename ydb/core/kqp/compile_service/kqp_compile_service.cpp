@@ -523,11 +523,6 @@ private:
         bool enableCreateTableAs = TableServiceConfig.GetEnableCreateTableAs();
         auto blockChannelsMode = TableServiceConfig.GetBlockChannelsMode();
 
-        bool enableAstCache = TableServiceConfig.GetEnableAstCache();
-        bool enableImplicitQueryParameterTypes = TableServiceConfig.GetEnableImplicitQueryParameterTypes();
-        bool enablePgConstsToParams = TableServiceConfig.GetEnablePgConstsToParams();
-        bool enablePerStatementQueryExecution = TableServiceConfig.GetEnablePerStatementQueryExecution();
-
         auto mkqlHeavyLimit = TableServiceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit();
 
         bool enableQueryServiceSpilling = TableServiceConfig.GetEnableQueryServiceSpilling();
@@ -558,11 +553,7 @@ private:
             TableServiceConfig.GetIdxLookupJoinPointsLimit() != idxLookupPointsLimit ||
             TableServiceConfig.GetEnableQueryServiceSpilling() != enableQueryServiceSpilling ||
             TableServiceConfig.GetDefaultCostBasedOptimizationLevel() != defaultCostBasedOptimizationLevel ||
-            TableServiceConfig.GetEnableConstantFolding() != enableConstantFolding ||
-            TableServiceConfig.GetEnableAstCache() != enableAstCache ||
-            TableServiceConfig.GetEnableImplicitQueryParameterTypes() != enableImplicitQueryParameterTypes ||
-            TableServiceConfig.GetEnablePgConstsToParams() != enablePgConstsToParams ||
-            TableServiceConfig.GetEnablePerStatementQueryExecution() != enablePerStatementQueryExecution) {
+            TableServiceConfig.GetEnableConstantFolding() != enableConstantFolding) {
 
             QueryCache.Clear();
 

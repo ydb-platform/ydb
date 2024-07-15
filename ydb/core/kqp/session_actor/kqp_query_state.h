@@ -67,7 +67,8 @@ public:
         , StartedAt(startedAt)
     {
         RequestEv.reset(ev->Release().Release());
-        if (tableServiceConfig.GetEnableImplicitQueryParameterTypes() && !RequestEv->GetYdbParameters().empty()) {
+
+        if (AppData()->FeatureFlags.GetEnableImplicitQueryParameterTypes() && !RequestEv->GetYdbParameters().empty()) {
             QueryParameterTypes = std::make_shared<std::map<TString, Ydb::Type>>();
             for (const auto& [name, typedValue] : RequestEv->GetYdbParameters()) {
                 QueryParameterTypes->insert({name, typedValue.Gettype()});

@@ -103,12 +103,8 @@ Y_UNIT_TEST_SUITE(KqpParams) {
     }
 
     Y_UNIT_TEST(ImplicitParameterTypes) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetKqpSettings({NKikimrKqp::TKqpSetting()});
-        TKikimrRunner kikimr(serverSettings);
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableImplicitQueryParameterTypes(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -131,12 +127,8 @@ Y_UNIT_TEST_SUITE(KqpParams) {
 
     Y_UNIT_TEST(CheckQueryCacheForPreparedQuery) {
         // All params are declared in the text
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetKqpSettings({NKikimrKqp::TKqpSetting()});
-        TKikimrRunner kikimr(serverSettings);
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableImplicitQueryParameterTypes(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -172,12 +164,8 @@ Y_UNIT_TEST_SUITE(KqpParams) {
 
     Y_UNIT_TEST(CheckQueryCacheForUnpreparedQuery) {
         // Some params are declared in text, some by user
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetKqpSettings({NKikimrKqp::TKqpSetting()});
-        TKikimrRunner kikimr(serverSettings);
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableImplicitQueryParameterTypes(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -296,12 +284,8 @@ Y_UNIT_TEST_SUITE(KqpParams) {
 
     Y_UNIT_TEST(CheckQueryCacheForExecuteAndPreparedQueries) {
         // All params are declared in the text
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetKqpSettings({NKikimrKqp::TKqpSetting()});
-        TKikimrRunner kikimr(serverSettings);
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableImplicitQueryParameterTypes(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -509,12 +493,8 @@ Y_UNIT_TEST_SUITE(KqpParams) {
     }
 
     Y_UNIT_TEST(ImplicitSameParameterTypesQueryCacheCheck) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetKqpSettings({NKikimrKqp::TKqpSetting()});
-        TKikimrRunner kikimr(serverSettings);
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableImplicitQueryParameterTypes(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -539,12 +519,8 @@ Y_UNIT_TEST_SUITE(KqpParams) {
     }
 
     Y_UNIT_TEST(ImplicitDifferentParameterTypesQueryCacheCheck) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetKqpSettings({NKikimrKqp::TKqpSetting()});
-        TKikimrRunner kikimr(serverSettings);
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableImplicitQueryParameterTypes(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

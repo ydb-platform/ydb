@@ -12,6 +12,7 @@
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <ydb/library/yql/providers/common/pushdown/collection.h>
+#include <ydb/library/yql/providers/common/pushdown/physical_opt.h>
 #include <ydb/library/yql/providers/common/pushdown/predicate_node.h>
 
 namespace NYql {
@@ -247,7 +248,7 @@ public:
             return node;
         }
         
-        auto newFilterLambda = MakePushdownPredicate(flatmap.Lambda(), ctx, node.Pos());
+        auto newFilterLambda = MakePushdownPredicate(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
         if (!newFilterLambda) {
              YQL_CLOG(TRACE, ProviderPq) << "MakePushdownPredicate failed";
             return node;
@@ -289,7 +290,7 @@ public:
             return node;
         }
         
-        auto newFilterLambda = MakePushdownPredicate(flatmap.Lambda(), ctx, node.Pos());
+        auto newFilterLambda = NPushdown::MakePushdownPredicate(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
         if (!newFilterLambda) {
             YQL_CLOG(TRACE, ProviderPq) << "MakePushdownPredicate failed";
             return node;
@@ -305,63 +306,6 @@ public:
                     .Build()
                 .Build()
             .Done();
-    }
-
-    static NPushdown::TPredicateNode SplitForPartialPushdown(const NPushdown::TPredicateNode& predicateTree,
-                                                            TExprContext& ctx, TPositionHandle pos) {
-        if (predicateTree.CanBePushed) {
-            return predicateTree;
-        }
-
-        if (predicateTree.Op != NPushdown::EBoolOp::And) {
-            return NPushdown::TPredicateNode(); // Not valid, => return the same node from optimizer
-        }
-
-        std::vector<NPushdown::TPredicateNode> pushable;
-        for (auto& predicate : predicateTree.Children) {
-            if (predicate.CanBePushed) {
-                pushable.emplace_back(predicate);
-            }
-        }
-        NPushdown::TPredicateNode predicateToPush;
-        predicateToPush.SetPredicates(pushable, ctx, pos);
-        return predicateToPush;
-    }
-
-    TMaybeNode<TCoLambda> MakePushdownPredicate(const TCoLambda& lambda, TExprContext& ctx, const TPositionHandle& pos) const {
-        auto lambdaArg = lambda.Args().Arg(0).Ptr();
-
-        YQL_CLOG(DEBUG, ProviderPq) << "Push filter. Initial filter lambda: " << NCommon::ExprToPrettyString(ctx, lambda.Ref());
-
-        auto maybeOptionalIf = lambda.Body().Maybe<TCoOptionalIf>();
-        if (!maybeOptionalIf.IsValid()) { // Nothing to push
-            YQL_CLOG(DEBUG, ProviderPq) << "Nothing to push";
-            return {};
-        }
-
-        TCoOptionalIf optionalIf = maybeOptionalIf.Cast();
-        NPushdown::TPredicateNode predicateTree(optionalIf.Predicate());
-        NPushdown::CollectPredicates(optionalIf.Predicate(), predicateTree, lambdaArg.Get(), TExprBase(lambdaArg), TPushdownSettings());
-        YQL_ENSURE(predicateTree.IsValid(), "Collected filter predicates are invalid");
-
-        NPushdown::TPredicateNode predicateToPush = SplitForPartialPushdown(predicateTree, ctx, pos);
-        if (!predicateToPush.IsValid()) {
-            YQL_CLOG(DEBUG, ProviderPq) << "SplitForPartialPushdown failed" ;
-            return {};
-        }
-
-        // clang-format off
-        auto newFilterLambda = Build<TCoLambda>(ctx, pos)
-            .Args({"filter_row"})
-            .Body<TExprApplier>()
-                .Apply(predicateToPush.ExprNode.Cast())
-                .With(TExprBase(lambdaArg), "filter_row")
-                .Build()
-            .Done();
-        // clang-format on
-
-        YQL_CLOG(INFO, ProviderGeneric) << "Push filter lambda: " << NCommon::ExprToPrettyString(ctx, *newFilterLambda.Ptr());
-        return newFilterLambda;
     }
 
 private:

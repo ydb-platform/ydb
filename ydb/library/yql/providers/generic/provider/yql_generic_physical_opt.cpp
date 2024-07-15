@@ -8,6 +8,7 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/pushdown/collection.h>
+#include <ydb/library/yql/providers/common/pushdown/physical_opt.h>
 #include <ydb/library/yql/providers/common/pushdown/predicate_node.h>
 #include <ydb/library/yql/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
@@ -105,62 +106,6 @@ namespace NYql {
                 return node;
             }
 
-            static NPushdown::TPredicateNode SplitForPartialPushdown(const NPushdown::TPredicateNode& predicateTree,
-                                                                     TExprContext& ctx, TPositionHandle pos)
-            {
-                if (predicateTree.CanBePushed) {
-                    return predicateTree;
-                }
-
-                if (predicateTree.Op != NPushdown::EBoolOp::And) {
-                    return NPushdown::TPredicateNode(); // Not valid, => return the same node from optimizer
-                }
-
-                std::vector<NPushdown::TPredicateNode> pushable;
-                for (auto& predicate : predicateTree.Children) {
-                    if (predicate.CanBePushed) {
-                        pushable.emplace_back(predicate);
-                    }
-                }
-                NPushdown::TPredicateNode predicateToPush;
-                predicateToPush.SetPredicates(pushable, ctx, pos);
-                return predicateToPush;
-            }
-
-            TMaybeNode<TCoLambda> MakePushdownPredicate(const TCoLambda& lambda, TExprContext& ctx, const TPositionHandle& pos) const {
-                auto lambdaArg = lambda.Args().Arg(0).Ptr();
-
-                YQL_CLOG(TRACE, ProviderGeneric) << "Push filter. Initial filter lambda: " << NCommon::ExprToPrettyString(ctx, lambda.Ref());
-
-                auto maybeOptionalIf = lambda.Body().Maybe<TCoOptionalIf>();
-                if (!maybeOptionalIf.IsValid()) { // Nothing to push
-                    return {};
-                }
-
-                TCoOptionalIf optionalIf = maybeOptionalIf.Cast();
-                NPushdown::TPredicateNode predicateTree(optionalIf.Predicate());
-                NPushdown::CollectPredicates(optionalIf.Predicate(), predicateTree, lambdaArg.Get(), TExprBase(lambdaArg), TPushdownSettings());
-                YQL_ENSURE(predicateTree.IsValid(), "Collected filter predicates are invalid");
-
-                NPushdown::TPredicateNode predicateToPush = SplitForPartialPushdown(predicateTree, ctx, pos);
-                if (!predicateToPush.IsValid()) {
-                    return {};
-                }
-
-                // clang-format off
-                auto newFilterLambda = Build<TCoLambda>(ctx, pos)
-                    .Args({"filter_row"})
-                    .Body<TExprApplier>()
-                        .Apply(predicateToPush.ExprNode.Cast())
-                        .With(TExprBase(lambdaArg), "filter_row")
-                        .Build()
-                    .Done();
-                // clang-format on
-
-                YQL_CLOG(INFO, ProviderGeneric) << "Push filter lambda: " << NCommon::ExprToPrettyString(ctx, *newFilterLambda.Ptr());
-                return newFilterLambda;
-            }
-
             TMaybeNode<TExprBase> PushFilterToReadTable(TExprBase node, TExprContext& ctx) const {
                 if (!State_->Configuration->UsePredicatePushdown.Get().GetOrElse(TGenericSettings::TDefault::UsePredicatePushdown)) {
                     return node;
@@ -182,7 +127,7 @@ namespace NYql {
                     return node;
                 }
 
-                auto newFilterLambda = MakePushdownPredicate(flatmap.Lambda(), ctx, node.Pos());
+                auto newFilterLambda = NPushdown::MakePushdownPredicate(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
                 if (!newFilterLambda) {
                     return node;
                 }
@@ -223,7 +168,7 @@ namespace NYql {
                     return node;
                 }
 
-                auto newFilterLambda = MakePushdownPredicate(flatmap.Lambda(), ctx, node.Pos());
+                auto newFilterLambda = NPushdown::MakePushdownPredicate(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
                 if (!newFilterLambda) {
                     return node;
                 }

@@ -132,11 +132,7 @@ public:
     }
 
     TStatus HandleDqTopicSource(TExprBase input, TExprContext& ctx) {
-
-        YQL_CLOG(DEBUG, ProviderPq) << "HandleDqTopicSource" ;
-
         if (!EnsureArgsCount(input.Ref(), 6, ctx)) {
-            YQL_CLOG(DEBUG, ProviderPq) << "HandleDqTopicSource Error1" ;
             return TStatus::Error;
         }
 
@@ -144,7 +140,6 @@ public:
         TPqTopic topic = topicSource.Topic();
 
         if (!EnsureCallable(topic.Ref(), ctx)) {
-            YQL_CLOG(DEBUG, ProviderPq) << "HandleDqTopicSource Error2" ;
             return TStatus::Error;
         }
 
@@ -153,7 +148,6 @@ public:
         const auto* meta = State_->FindTopicMeta(cluster, topicPath);
         if (!meta) {
             ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Unknown topic `" << cluster << "`.`" << topicPath << "`"));
-            YQL_CLOG(DEBUG, ProviderPq) << "HandleDqTopicSource Error3" ;
             return TStatus::Error;
         }
 

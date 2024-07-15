@@ -4,6 +4,7 @@ SRCS(
     collection.cpp
     predicate_node.cpp
     settings.cpp
+    type_ann.cpp
 )
 
 PEERDIR(

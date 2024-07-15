@@ -5,6 +5,7 @@
 
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/common/pushdown/type_ann.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
 
@@ -160,7 +161,7 @@ public:
         auto rowSchema = topic.RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
         YQL_CLOG(DEBUG, ProviderGeneric) << "struct column order " << rowSchema->ToString();
 
-        const TStatus filterAnnotationStatus = AnnotateFilterPredicate(input.Ptr(), TDqPqTopicSource::idx_FilterPredicate, rowSchema, ctx);
+        const TStatus filterAnnotationStatus = NYql::NPushdown::AnnotateFilterPredicate(input.Ptr(), TDqPqTopicSource::idx_FilterPredicate, rowSchema, ctx);
         if (filterAnnotationStatus != TStatus::Ok) {
             return filterAnnotationStatus;
         }
@@ -268,43 +269,6 @@ public:
         }
 
         input->SetTypeAnn(ctx.MakeType<TDataExprType>(descriptor->Type));
-        return TStatus::Ok;
-    }
-
-    TStatus AnnotateFilterPredicate(const TExprNode::TPtr& input, size_t childIndex, const TStructExprType* itemType, TExprContext& ctx) {
-        
-        YQL_CLOG(DEBUG, ProviderPq) << "AnnotateFilterPredicate" ;
-        if (childIndex >= input->ChildrenSize()) {
-            YQL_CLOG(DEBUG, ProviderPq) << "AnnotateFilterPredicate Error1" ;
-            return TStatus::Error;
-        }
-
-        auto& filterLambda = input->ChildRef(childIndex);
-        if (!EnsureLambda(*filterLambda, ctx)) {
-            YQL_CLOG(DEBUG, ProviderPq) << "AnnotateFilterPredicate Error2" ;
-
-            return TStatus::Error;
-        }
-
-        if (!UpdateLambdaAllArgumentsTypes(filterLambda, {itemType}, ctx)) {
-            YQL_CLOG(DEBUG, ProviderPq) << "AnnotateFilterPredicate Error3" ;
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        if (const auto* filterLambdaType = filterLambda->GetTypeAnn()) {
-            if (filterLambdaType->GetKind() != ETypeAnnotationKind::Data) {
-                YQL_CLOG(DEBUG, ProviderPq) << "AnnotateFilterPredicate Error4" ;
-                return IGraphTransformer::TStatus::Error;
-            }
-            const TDataExprType* dataExprType = static_cast<const TDataExprType*>(filterLambdaType);
-            if (dataExprType->GetSlot() != EDataSlot::Bool) {
-                YQL_CLOG(DEBUG, ProviderPq) << "AnnotateFilterPredicate Error5" ;
-                return IGraphTransformer::TStatus::Error;
-            }
-        } else {
-            YQL_CLOG(DEBUG, ProviderPq) << "AnnotateFilterPredicate Repeat" ;
-            return IGraphTransformer::TStatus::Repeat;
-        }
         return TStatus::Ok;
     }
 

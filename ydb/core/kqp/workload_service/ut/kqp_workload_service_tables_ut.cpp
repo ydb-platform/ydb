@@ -133,21 +133,22 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceTables) {
     Y_UNIT_TEST(TestLeaseExpiration) {
         auto ydb = TYdbSetupSettings()
             .ConcurrentQueryLimit(1)
+            .QueryCancelAfter(TDuration::Zero())
             .Create();
 
         // Create tables
-        TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query));
+        auto hangingRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().HangUpDuringExecution(true));
+        ydb->WaitQueryExecution(hangingRequest);
 
-        const TDuration leaseDuration = TDuration::Seconds(10);
-        StartRequest(ydb, "test_session", leaseDuration);
-        DelayRequest(ydb, "test_session",  leaseDuration);
-        CheckPoolDescription(ydb, 1, 1, leaseDuration);
+        auto delayedRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().ExecutionExpected(false));
+        ydb->WaitPoolState({.DelayedRequests = 1, .RunningRequests = 1});
 
         ydb->StopWorkloadService();
         ydb->WaitPoolHandlersCount(0);
 
         // Check that lease expired
-        Sleep(leaseDuration + TDuration::Seconds(20));
+        const TDuration leaseDuration = TDuration::Seconds(30);  // Same as pool_handlers_acors.cpp:LEASE_DURATION
+        Sleep(leaseDuration + TDuration::Seconds(5));  // 5s for last pool refresh request
         CheckPoolDescription(ydb, 0, 0);
     }
 

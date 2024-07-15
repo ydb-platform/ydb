@@ -10,6 +10,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <stdlib.h>
+#include <random>
 
 #include <util/system/compiler.h>
 #include <util/stream/null.h>
@@ -36,9 +37,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinMemTest) {
     ui64 *buckets[NBuckets];
     ui64 tuplesPos[NBuckets];
 
+    std::mt19937_64 rng;
+    std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
+
     for (ui64 i = 0; i < TupleSize; i++)
     {
-        bigTuple[i] = std::rand() / (RAND_MAX / 10000);
+        bigTuple[i] = dist(rng);
     }
 
     ui64 bucket = 0;
@@ -90,10 +94,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinMemTest) {
 
     std::chrono::steady_clock::time_point begin02 = std::chrono::steady_clock::now();
 
+    std::uniform_int_distribution<ui64> bucketDist(0, NBuckets - 1);
     for (ui64 i = 0; i < NTuples; i++)
     {
         bucket = i % NBuckets;
-//        bucket = std::rand() / ( RAND_MAX / (NBuckets-1));
+//        bucket = bucketDist(rng);
         std::vector<ui64> &curr_vec = vec_buckets[bucket];
         curr_vec.insert(curr_vec.end(), bigTuple, bigTuple + TupleSize);
     }
@@ -112,7 +117,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinMemTest) {
     {
 
         bucket = i % NBuckets;
-//        bucket = std::rand() / ( RAND_MAX / (NBuckets-1));
+//        bucket = bucketDist(rng);
 
         ui64 * dst = buckets[bucket] + tuplesPos[bucket];
         std::memcpy(dst, bigTuple, TupleSize*sizeof(ui64));
@@ -136,7 +141,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinMemTest) {
 
     for (ui64 i = 0; i < NTuples; i++)
     {
-        bucket = std::rand() / ( RAND_MAX / (NBuckets-1));
+        bucket = bucketDist(rng);
 
         ui64 * dst = buckets[bucket] + tuplesPos[bucket];
 
@@ -208,8 +213,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
 
             ui64 bigTuple[TupleSize];
 
+            std::mt19937_64 rng; // deterministic PRNG
+
+            std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
+
             for (ui64 i = 0; i < TupleSize; i++) {
-                bigTuple[i] = std::rand() / ( RAND_MAX / 10000 );
+                bigTuple[i] = dist(rng);
             }
 
             ui64 milliseconds = 0;
@@ -220,11 +229,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
             const ui64 SmallTableTuples = 150000;
             const ui64 BigTupleSize = 40;
 
+            std::uniform_int_distribution<ui64> smallDist(0, SmallTableTuples - 1);
+
             std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();
 
 
             for ( ui64 i = 0; i < BigTableTuples; i++) {
-                tuple[1] = std::rand() % SmallTableTuples;
+                tuple[1] = smallDist(rng);
                 tuple[2] = tuple[1];
                 bigTable.AddTuple(tuple, strVals, strSizes);
             }
@@ -232,7 +243,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
             smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
 
             for ( ui64 i = 0; i < SmallTableTuples + 1; i++) {
-                tuple[1] = std::rand() % SmallTableTuples;
+                tuple[1] = smallDist(rng);
                 tuple[2] = tuple[1];
                 smallTable.AddTuple(tuple, strVals, strSizes);
             }
@@ -254,7 +265,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
 
 
             for ( ui64 i = 0; i < BigTableTuples; i++) {
-                tuple[1] = std::rand() % SmallTableTuples;
+                tuple[1] = smallDist(rng);
                 tuple[2] = tuple[1];
                 bigTable.AddTuple(tuple, strVals, strSizes);
             }
@@ -262,7 +273,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
             smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
 
             for ( ui64 i = 0; i < SmallTableTuples + 1; i++) {
-                tuple[1] = std::rand() % SmallTableTuples;
+                tuple[1] = smallDist(rng);
                 tuple[2] = tuple[1];
                 smallTable.AddTuple(tuple, strVals, strSizes);
             }
@@ -373,6 +384,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinAnyTest) {
             GraceJoin::TTable smallTable(1,1,1,1,0,0,1, nullptr, true);
             GraceJoin::TTable joinTable (1,1,1,1,0,0,1, nullptr, true);
 
+            std::mt19937_64 rng;
+            std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
+
             std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
             const ui64 TupleSize = 1024;
@@ -380,7 +394,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinAnyTest) {
             ui64 bigTuple[TupleSize];
 
             for (ui64 i = 0; i < TupleSize; i++) {
-                bigTuple[i] = std::rand() / ( RAND_MAX / 10000 );
+                bigTuple[i] = dist(rng);
             }
 
             ui64 milliseconds = 0;
@@ -390,6 +404,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinAnyTest) {
             const ui64 BigTableTuples = 600000;
             const ui64 SmallTableTuples = 150000;
             const ui64 BigTupleSize = 40;
+
+            std::uniform_int_distribution<ui64> smallDist(0, SmallTableTuples - 1);
 
             std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();
 
@@ -512,8 +528,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceSelfJoinTest) {
 
             ui64 bigTuple[TupleSize];
 
+            std::mt19937_64 rng;
+            std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
+
             for (ui64 i = 0; i < TupleSize; i++) {
-                bigTuple[i] = std::rand() / ( RAND_MAX / 10000 );
+                bigTuple[i] = dist(rng);
             }
 
             ui64 milliseconds = 0;

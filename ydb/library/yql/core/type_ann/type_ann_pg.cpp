@@ -2146,11 +2146,8 @@ IGraphTransformer::TStatus RebuildLambdaColumns(const TExprNode::TPtr& root, con
                                 if (usedInUsing.contains(lcase)) {
                                     usedFromUsing.emplace(lcase);
                                     aliased.emplace_back(x.Alias, usedInUsing[lcase]);
-                                    //orderAtoms.push_back(ctx.Expr.NewAtom(node->Pos(), NTypeAnnImpl::MakeAliasedColumn(x.Alias, usedInUsing[lcase])));
                                 } else {
                                     aliased.emplace_back(x.Alias, item->GetName());
-                                    //orderAtoms.push_back(ctx.Expr.NewAtom(node->Pos(),
-                                        //NTypeAnnImpl::MakeAliasedColumn(x.Alias, item->GetName())));
                                 }
                             }
                         }
@@ -2166,17 +2163,27 @@ IGraphTransformer::TStatus RebuildLambdaColumns(const TExprNode::TPtr& root, con
                                 if (usedInUsing.contains(lcase)) {
                                     usedFromUsing.emplace(lcase);
                                     aliased.emplace_back(x.Alias, usedInUsing[lcase]);
-                                    //orderAtoms.push_back(ctx.Expr.NewAtom(node->Pos(), NTypeAnnImpl::MakeAliasedColumn(x.Alias, usedInUsing[lcase])));
                                 } else {
                                     aliased.emplace_back(x.Alias, o);
-                                    //orderAtoms.push_back(ctx.Expr.NewAtom(node->Pos(),
-                                        //NTypeAnnImpl::MakeAliasedColumn(x.Alias, o)));
                                 }
                             }
                         }
                     }
                 }
             }
+
+            decltype(aliased) aliasedRightUsingOrder;
+            for (auto& [alias, name] : aliased) {
+                if (usedInUsing.contains(to_lower(name))) {
+                    aliasedRightUsingOrder.emplace_back(alias, name);
+                }
+            }
+            for (auto& [alias, name] : aliased) {
+                if (!usedInUsing.contains(to_lower(name))) {
+                    aliasedRightUsingOrder.emplace_back(alias, name);
+                }
+            }
+            aliased = std::move(aliasedRightUsingOrder);
 
             for (auto& [alias, name] : aliased) {
                 if (!hasExternalInput) {
@@ -3576,6 +3583,10 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                     bool isExpr = false;
                                     THashSet<TString> alreadyPresent;
                                     if (lambda.Tail().IsCallable("PgStar")) {
+                                        for (auto& [e, n]: repeatedColumnsInUsing) {
+                                            // coalesce of two inputs in first order
+                                            o.AddColumn(n);
+                                        }
                                         for (ui32 priority : { TInput::Projection, TInput::Current, TInput::External }) {
                                             for (const auto& x : joinInputs) {
                                                 if (priority != x.Priority) {
@@ -3595,8 +3606,6 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                                         }
                                                         if (repeatedColumnsInUsing.contains(lcase)) {
                                                             alreadyPresent.emplace(lcase);
-                                                            // coalesce of two inputs
-                                                            o.AddColumn(repeatedColumnsInUsing[lcase]);
                                                         } else {
                                                             o.AddColumn(MakeAliasedColumn(x.Alias, col));
                                                         }
@@ -4921,7 +4930,6 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
         return IGraphTransformer::TStatus::Repeat;
     }
     input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(outputRowType));
-    Cerr << *input->GetTypeAnn() << "\n";
     return IGraphTransformer::TStatus::Ok;
 }
 

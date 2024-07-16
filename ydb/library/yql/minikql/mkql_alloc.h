@@ -96,6 +96,7 @@ struct TAllocState : public TAlignedPagePool
     explicit TAllocState(const TSourceLocation& location, const TAlignedPagePoolCounters& counters, bool supportsSizedAllocators);
     void KillAllBoxed();
     void InvalidateMemInfo();
+    void UntrackAllArrow();
     size_t GetDeallocatedInPages() const;
     static void CleanupPAllocList(TListEntry* root);
     static void CleanupArrowList(TListEntry* root);

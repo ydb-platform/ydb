@@ -30,6 +30,7 @@ public:
         ~TKernelState()
         {
             Alloc.Acquire();
+            Alloc.Ref().UntrackAllArrow();
         }
 
         TScopedAlloc Alloc;

@@ -58,6 +58,16 @@ void TAllocState::CleanupArrowList(TListEntry* root) {
     root->InitLinks();
 }
 
+void TAllocState::UntrackAllArrow() {
+    for (auto curr = ArrowBlocksRoot.Right; curr != &ArrowBlocksRoot; ) {
+        auto next = curr->Right;
+        MKQLArrowUntrack((TMkqlArrowHeader*)curr + 1);
+        curr = next;
+    }
+
+    ArrowBlocksRoot.InitLinks();
+}
+
 void TAllocState::KillAllBoxed() {
     {
         const auto root = GetRoot();

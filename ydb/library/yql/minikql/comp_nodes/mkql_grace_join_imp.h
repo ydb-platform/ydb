@@ -71,6 +71,8 @@ struct TTableBucket {
     std::set<ui32> AllLeftMatchedIds;  // All row ids of left join table which have matching rows in right table. To process streaming join mode.
     std::set<ui32> AllRightMatchedIds; // All row ids of right join table which matching rows in left table. To process streaming join mode. 
 
+    std::vector<ui64, TMKQLAllocator<ui64>> JoinSlots;  // Hashtable
+    ui64 NSlots = 0;  // Hashtable
  };
 
  struct TTableBucketStats {

@@ -40,19 +40,19 @@ DEFINE_REFCOUNTED_TYPE(THistogramExponentialBounds)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class THistogramConfig
+class TTimeHistogramConfig
     : public NYTree::TYsonStruct
 {
 public:
     std::optional<THistogramExponentialBoundsPtr> ExponentialBounds;
     std::optional<std::vector<TDuration>> CustomBounds;
 
-    REGISTER_YSON_STRUCT(THistogramConfig);
+    REGISTER_YSON_STRUCT(TTimeHistogramConfig);
 
     static void Register(TRegistrar registrar);
 };
 
-DEFINE_REFCOUNTED_TYPE(THistogramConfig)
+DEFINE_REFCOUNTED_TYPE(TTimeHistogramConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -62,7 +62,7 @@ class TServiceCommonConfig
 {
 public:
     bool EnablePerUserProfiling;
-    THistogramConfigPtr HistogramTimerProfiling;
+    TTimeHistogramConfigPtr TimeHistogram;
     bool EnableErrorCodeCounter;
     ERequestTracingMode TracingMode;
 
@@ -96,7 +96,7 @@ class TServiceCommonDynamicConfig
 {
 public:
     std::optional<bool> EnablePerUserProfiling;
-    std::optional<THistogramConfigPtr> HistogramTimerProfiling;
+    std::optional<TTimeHistogramConfigPtr> TimeHistogram;
     std::optional<bool> EnableErrorCodeCounter;
     std::optional<ERequestTracingMode> TracingMode;
 
@@ -131,7 +131,7 @@ public:
     std::optional<bool> EnablePerUserProfiling;
     std::optional<bool> EnableErrorCodeCounter;
     std::optional<ERequestTracingMode> TracingMode;
-    THistogramConfigPtr HistogramTimerProfiling;
+    TTimeHistogramConfigPtr TimeHistogram;
     THashMap<TString, TMethodConfigPtr> Methods;
     std::optional<int> AuthenticationQueueSizeLimit;
     std::optional<TDuration> PendingPayloadsTimeout;

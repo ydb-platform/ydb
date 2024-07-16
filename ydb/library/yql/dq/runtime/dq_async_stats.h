@@ -100,8 +100,9 @@ struct TDqAsyncStats {
 
     inline void TryPause() {
         if (CollectFull()) {
+            auto now = TInstant::Now();
+
             if (!CurrentPauseTs) {
-                auto now = TInstant::Now();
                 if (ResumeMessageTs) {
                     auto delta = now - ResumeMessageTs;
                     if (delta >= MinWaitDuration) {
@@ -113,6 +114,13 @@ struct TDqAsyncStats {
                 } else {
                     CurrentPauseTs = now;
                 }
+            }
+
+            auto delta = now - *CurrentPauseTs;
+            if (delta >= MinWaitDuration * 2) {
+                WaitTime += delta;
+                WaitTime -= MinWaitDuration;
+                *CurrentPauseTs = now - MinWaitDuration;
             }
         }
     }

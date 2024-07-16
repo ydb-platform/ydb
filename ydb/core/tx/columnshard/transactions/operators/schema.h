@@ -65,7 +65,8 @@ private:
 public:
     using TBase::TBase;
 
-    virtual bool ExecuteOnProgress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
+    virtual bool ProgressOnExecute(
+        TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
         if (!!TxAddSharding) {
             auto* tx = dynamic_cast<TTxAddShardingInfo*>(TxAddSharding.get());
             AFL_VERIFY(tx);
@@ -79,7 +80,7 @@ public:
         return true;
     }
 
-    virtual bool CompleteOnProgress(TColumnShard& owner, const TActorContext& ctx) override {
+    virtual bool ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) override {
         if (!!TxAddSharding) {
             TxAddSharding->Complete(ctx);
         }

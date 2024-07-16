@@ -92,6 +92,7 @@ runs:
 
         export TEST_ARTIFACTS_DIR=$RESULT_DIR/test_artifacts
         echo "TEST_ARTIFACTS_DIR=$TEST_ARTIFACTS_DIR" >> $GITHUB_ENV
+        echo "TEST_ARTIFACTS_DIR_URL=$S3_URL_PREFIX/test_artifacts" >> $GITHUB_ENV
         mkdir -p $TEST_ARTIFACTS_DIR
 
         export REPORTS_ARTIFACTS_DIR=$TMP_DIR/artifacts/test_reports
@@ -326,7 +327,7 @@ runs:
           --log-url-prefix "$ARTIFACTS_DIR_URL/logs/" \
           --log-out-dir "$ARTIFACTS_DIR/logs/" \
           --test-stuff-out "$TEST_ARTIFACTS_DIR/" \
-          --test-stuff-prefix "$S3_TEST_ARTIFACTS_URL_PREFIX/" \
+          --test-stuff-prefix "$TEST_ARTIFACTS_DIR_URL/" \
           "$JUNIT_REPORT_XML"
     
         .github/scripts/tests/split-junit.py -o "$JUNIT_REPORT_PARTS" "$JUNIT_REPORT_XML"

@@ -1599,4 +1599,17 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
         TSetup setup;
         setup.Run(cases);
     }
+
+    Y_UNIT_TEST(DropNotNull) {
+        TCases cases = {
+            {"ALTER TABLE t ALTER COLUMN c DROP NOT NULL",
+             "AlTeR table t AltER colUmn c DroP NOT null"},
+
+            {"ALTER TABLE t ALTER COLUMN c DROP NOT NULL",
+             "alter table t       \nalter column c\n drop not \tnull"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
 }

@@ -349,6 +349,7 @@ public:
     void Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvBalanceConsumer::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx);
 
 private:
     TString GetPrefix() const;

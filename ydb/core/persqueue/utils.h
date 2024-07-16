@@ -55,6 +55,8 @@ public:
 
     const Node* GetPartition(ui32 id) const;
     std::set<ui32> GetActiveChildren(ui32 id) const;
+
+    void Travers(std::function<bool (ui32 id)> func, bool includeSelf = false) const;
     void Travers(ui32 id, std::function<bool (ui32 id)> func, bool includeSelf = false) const;
 
 private:

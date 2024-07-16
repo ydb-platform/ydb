@@ -159,6 +159,31 @@ std::set<ui32> TPartitionGraph::GetActiveChildren(ui32 id) const {
     return result;
 }
 
+void TPartitionGraph::Travers(std::function<bool (ui32 id)> func, bool includeSelf) const {
+    std::deque<const Node*> queue;
+
+    for (auto& [id, node] : Partitions) {
+        if (!node.IsRoot()) {
+            continue;
+        }
+
+        if (includeSelf && !func(id)) {
+            continue;
+        }
+
+        queue.push_back(&node);
+    }
+
+    while(!queue.empty()) {
+        auto* node = queue.front();
+        queue.pop_front();
+
+        if (func(node->Id)) {
+            queue.insert(queue.end(), node->Children.begin(), node->Children.end());
+        }
+    }
+}
+
 void TPartitionGraph::Travers(ui32 id, std::function<bool (ui32 id)> func, bool includeSelf) const {
     auto* n = GetPartition(id);
     if (!n) {

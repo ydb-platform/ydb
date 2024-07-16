@@ -139,6 +139,24 @@ namespace NYql {
         clusterConfig.mutable_datasourceoptions()->insert({TString("schema"), TString(it->second)});
     }
 
+    void ParseServiceName(const THashMap<TString, TString>& properties,
+                     NYql::TGenericClusterConfig& clusterConfig) {
+        auto it = properties.find("service_name");
+        if (it == properties.cend()) {
+            // TODO: required property? copied from ParserSchema
+            // ythrow yexception() <<  "missing 'SERVICE_NAME' value";
+            return;
+        }
+
+        if (!it->second) {
+            // TODO: required property? copied from ParserSchema
+            // ythrow yexception() << "invalid 'SERVICE_NAME' value: '" << it->second << "'";
+            return;
+        }
+
+        clusterConfig.mutable_datasourceoptions()->insert({TString("service_name"), TString(it->second)});
+    }
+
     void ParseMdbClusterId(const THashMap<TString, TString>& properties,
                            NYql::TGenericClusterConfig& clusterConfig) {
         auto it = properties.find("mdb_cluster_id");
@@ -192,7 +210,7 @@ namespace NYql {
                        NYql::TGenericClusterConfig& clusterConfig) {
         using namespace NConnector::NApi;
 
-        if (IsIn({EDataSourceKind::GREENPLUM, EDataSourceKind::YDB, EDataSourceKind::MYSQL, EDataSourceKind::MS_SQL_SERVER}, clusterConfig.GetKind())) {
+        if (IsIn({EDataSourceKind::GREENPLUM, EDataSourceKind::YDB, EDataSourceKind::MYSQL, EDataSourceKind::MS_SQL_SERVER, EDataSourceKind::ORACLE}, clusterConfig.GetKind())) {
             clusterConfig.SetProtocol(EProtocol::NATIVE);
             return;
         }
@@ -268,6 +286,7 @@ namespace NYql {
         ParseUseTLS(properties, clusterConfig);
         ParseDatabaseName(properties, clusterConfig);
         ParseSchema(properties, clusterConfig);
+        ParseServiceName(properties, clusterConfig);
         ParseMdbClusterId(properties, clusterConfig);
         ParseDatabaseId(properties, clusterConfig);
         ParseSourceType(properties, clusterConfig);

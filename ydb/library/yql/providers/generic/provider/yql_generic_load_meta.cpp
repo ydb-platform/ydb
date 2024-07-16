@@ -327,6 +327,20 @@ namespace NYql {
             request.set_schema(schema);
         }
 
+        template <typename T>
+        void GetServiceName(T& request, const TGenericClusterConfig& clusterConfig) {
+            TString serviceName;
+            const auto it = clusterConfig.GetDataSourceOptions().find("service_name");
+            if (it != clusterConfig.GetDataSourceOptions().end()) {
+                serviceName = it->second;
+            }
+            if (!serviceName) {
+                serviceName = "";
+            }
+
+            request.set_service_name(serviceName);
+        }
+
         void FillDataSourceOptions(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig) {
             const auto dataSourceKind = clusterConfig.GetKind();
             switch (dataSourceKind) {
@@ -345,6 +359,10 @@ namespace NYql {
                 case NYql::NConnector::NApi::POSTGRESQL: {
                     auto* options = request.mutable_data_source_instance()->mutable_pg_options();
                     SetSchema(*options, clusterConfig);
+                } break;
+                case NYql::NConnector::NApi::ORACLE: {
+                    auto* options = request.mutable_data_source_instance()->mutable_ora_options();
+                    GetServiceName(*options, clusterConfig);
                 } break;
 
                 default:

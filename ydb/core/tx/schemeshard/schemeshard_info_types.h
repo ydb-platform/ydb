@@ -86,18 +86,18 @@ struct TSplitSettings {
     {}
 
     void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
-        icb->RegisterSharedControl(SplitMergePartCountLimit,        "SchemeShardSplitMergePartCountLimit");
-        icb->RegisterSharedControl(FastSplitSizeThreshold,          "SchemeShardFastSplitSizeThreshold");
-        icb->RegisterSharedControl(FastSplitRowCountThreshold,      "SchemeShardFastSplitRowCountThreshold");
-        icb->RegisterSharedControl(FastSplitCpuPercentageThreshold, "SchemeShardFastSplitCpuPercentageThreshold");
+        ICB_REG_SHARED_CONTROL(*icb, SplitMergePartCountLimit,        SchemeShardSplitMergePartCountLimit);
+        ICB_REG_SHARED_CONTROL(*icb, FastSplitSizeThreshold,          SchemeShardFastSplitSizeThreshold);
+        ICB_REG_SHARED_CONTROL(*icb, FastSplitRowCountThreshold,      SchemeShardFastSplitRowCountThreshold);
+        ICB_REG_SHARED_CONTROL(*icb, FastSplitCpuPercentageThreshold, SchemeShardFastSplitCpuPercentageThreshold);
 
-        icb->RegisterSharedControl(SplitByLoadEnabled,              "SchemeShardSplitByLoadEnabled");
-        icb->RegisterSharedControl(SplitByLoadMaxShardsDefault,     "SchemeShardSplitByLoadMaxShardsDefault");
-        icb->RegisterSharedControl(MergeByLoadMinUptimeSec,         "SchemeShardMergeByLoadMinUptimeSec");
-        icb->RegisterSharedControl(MergeByLoadMinLowLoadDurationSec,"SchemeShardMergeByLoadMinLowLoadDurationSec");
+        ICB_REG_SHARED_CONTROL(*icb, SplitByLoadEnabled,              SchemeShardSplitByLoadEnabled);
+        ICB_REG_SHARED_CONTROL(*icb, SplitByLoadMaxShardsDefault,     SchemeShardSplitByLoadMaxShardsDefault);
+        ICB_REG_SHARED_CONTROL(*icb, MergeByLoadMinUptimeSec,         SchemeShardMergeByLoadMinUptimeSec);
+        ICB_REG_SHARED_CONTROL(*icb, MergeByLoadMinLowLoadDurationSec,SchemeShardMergeByLoadMinLowLoadDurationSec);
 
-        icb->RegisterSharedControl(ForceShardSplitDataSize,         "SchemeShardControlsForceShardSplitDataSize");
-        icb->RegisterSharedControl(DisableForceShardSplit,          "SchemeShardControlsDisableForceShardSplit");
+        ICB_REG_SHARED_CONTROL(*icb, ForceShardSplitDataSize,         SchemeShardControlsForceShardSplitDataSize);
+        ICB_REG_SHARED_CONTROL(*icb, DisableForceShardSplit,          SchemeShardControlsDisableForceShardSplit);
     }
 
     TForceShardSplitSettings GetForceShardSplitSettings() const {

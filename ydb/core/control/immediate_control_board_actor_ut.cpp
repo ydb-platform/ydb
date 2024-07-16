@@ -1,6 +1,7 @@
 #include "defs.h"
 #include "immediate_control_board_actor.h"
 #include "immediate_control_board_wrapper.h"
+#include "immediate_control_board_impl.h"
 
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/core/mon/mon.h>
@@ -100,7 +101,7 @@ static void Run(i64 instances = 1) {
 
         // ICB Actor creation
         TActorId IcbActorId = MakeIcbId(setup->NodeId);
-        TActorSetupCmd testSetup(CreateImmediateControlActor(appData.Icb, Counters), TMailboxType::Revolving, 0);
+        TActorSetupCmd testSetup(CreateImmediateControlActor(appData.Icb, appData.ExpService, Counters), TMailboxType::Revolving, 0);
         setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(IcbActorId, std::move(testSetup)));
 
 
@@ -343,12 +344,12 @@ class TTestHttpPostReaction : public TBaseTest {
                         "Unexpected response message type, expected is HttpInfoRes");
                 bool isControlExists;
                 TAtomicBase value;
-                Icb->GetValue("DataShardControlsDisableByKeyFilter", value, isControlExists);
+                ICB_GET_VALUE(*Icb, DataShardControlsDisableByKeyFilter, value, isControlExists);
                 ASSERT_YTHROW(!isControlExists, "Parameter mustn't be created by POST request");
                 VERBOSE_COUT("Testing POST request with an DataShardControlsMaxTxInFly");
                 TControlWrapper control(10);
-                Icb->RegisterSharedControl(control, "DataShardControlsMaxTxInFly");
-                Icb->GetValue("DataShardControlsMaxTxInFly", value, isControlExists);
+                ICB_REG_SHARED_CONTROL(*Icb, control, DataShardControlsMaxTxInFly);
+                ICB_GET_VALUE(*Icb, DataShardControlsMaxTxInFly, value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 10, "Error in control creation and registration");
                 HttpRequest->CgiParameters.clear();
@@ -362,7 +363,7 @@ class TTestHttpPostReaction : public TBaseTest {
                         "Unexpected response message type, expected is HttpInfoRes");
                 bool isControlExists;
                 TAtomicBase value;
-                Icb->GetValue("DataShardControlsMaxTxInFly", value, isControlExists);
+                ICB_GET_VALUE(*Icb, DataShardControlsMaxTxInFly, value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 15, "Parameter haven't changed by POST request");
                 VERBOSE_COUT("Test of restoreDefaults POST request");
@@ -377,23 +378,23 @@ class TTestHttpPostReaction : public TBaseTest {
                         "Unexpected response message type, expected is HttpInfoRes");
                 bool isControlExists;
                 TAtomicBase value;
-                Icb->GetValue("DataShardControlsMaxTxInFly", value, isControlExists);
+                ICB_GET_VALUE(*Icb, DataShardControlsMaxTxInFly, value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 10,  "Parameter haven't restored default value");
                 VERBOSE_COUT("Test is bounds pulling wokrs");
                 TControlWrapper control1(10, 5, 15);
                 TControlWrapper control2(10, 5, 15);
-                Icb->RegisterSharedControl(control1, "DataShardControlsMaxTxLagMilliseconds");
-                Icb->RegisterSharedControl(control2, "DataShardControlsDataTxProfile.LogThresholdMs");
-                Icb->GetValue("DataShardControlsMaxTxLagMilliseconds", value, isControlExists);
+                ICB_REG_SHARED_CONTROL(*Icb, control1, DataShardControlsMaxTxLagMilliseconds);
+                ICB_REG_SHARED_CONTROL(*Icb, control2, DataShardControlsDataTxProfileLogThresholdMs);
+                ICB_GET_VALUE(*Icb, DataShardControlsMaxTxLagMilliseconds, value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 10, "Error in control creation and registration");
-                Icb->GetValue("DataShardControlsDataTxProfile.LogThresholdMs", value, isControlExists);
+                ICB_GET_VALUE(*Icb, DataShardControlsDataTxProfileLogThresholdMs, value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 10, "Error in control creation and registration");
                 HttpRequest->CgiParameters.clear();
                 HttpRequest->CgiParameters.emplace("DataShardControlsMaxTxLagMilliseconds", "1");
-                HttpRequest->CgiParameters.emplace("DataShardControlsDataTxProfile.LogThresholdMs", "99999");
+                HttpRequest->CgiParameters.emplace("DataShardControlsDataTxProfileLogThresholdMs", "99999");
                 ctx.Send(IcbActor, new NMon::TEvHttpInfo(MonService2HttpRequest));
                 break;
             }
@@ -404,11 +405,11 @@ class TTestHttpPostReaction : public TBaseTest {
                 bool isControlExists;
                 TAtomicBase value;
 
-                Icb->GetValue("DataShardControlsMaxTxLagMilliseconds", value, isControlExists);
+                ICB_GET_VALUE(*Icb, DataShardControlsMaxTxLagMilliseconds, value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 5, "Pulling value to bounds doesn't work");
 
-                Icb->GetValue("DataShardControlsDataTxProfile.LogThresholdMs", value, isControlExists);
+                ICB_GET_VALUE(*Icb, DataShardControlsDataTxProfileLogThresholdMs, value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 15, "Pulling value to bounds doesn't work");
 

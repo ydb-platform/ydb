@@ -7,7 +7,7 @@ namespace NKikimr {
 class TControlWrapper {
     TIntrusivePtr<TControl> Control;
     friend class TExperimentingService;
-    friend class TControlBoard;
+    friend struct TControlBoard;
 
 public:
     TControlWrapper(TAtomicBase defaultValue = 0)

@@ -1,4 +1,5 @@
 #include "immediate_control_board_actor.h"
+#include "experimenting_service.h"
 
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/base/appdata.h>
@@ -34,6 +35,7 @@ class TImmediateControlActor : public TActorBootstrapped<TImmediateControlActor>
     };
 
     TIntrusivePtr<TControlBoard> Board;
+    TIntrusivePtr<TExperimentingService> ExpService;
     TVector<TLogRecord> HistoryLog;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr HasChanged;
@@ -45,8 +47,10 @@ public:
     }
 
     TImmediateControlActor(TIntrusivePtr<TControlBoard> board,
+            TIntrusivePtr<TExperimentingService> expService,
             const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
         : Board(board)
+        , ExpService(expService)
     {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> IcbGroup = GetServiceCounters(counters, "utils");
         HasChanged = IcbGroup->GetCounter("Icb/HasChangedContol");
@@ -67,7 +71,8 @@ public:
 private:
     void HandlePostParams(const TCgiParameters &cgi) {
         if (cgi.Has("restoreDefaults")) {
-            Board->RestoreDefaults();
+            ICB_RESTORE_DEFAULTS(*Board);
+            ExpService->RestoreDefaults();
             HistoryLog.emplace_back(TInstant::Now(), "RestoreDefaults", 0, 0);
             *HasChanged = 0;
             *ChangedCount = 0;
@@ -75,7 +80,7 @@ private:
         for (const auto &param : cgi) {
             TAtomicBase newValue = strtoull(param.second.data(), nullptr, 10);
             TAtomicBase prevValue = newValue;
-            bool isDefault = Board->SetValue(param.first, newValue, prevValue);
+            bool isDefault = ExpService->SetValue(param.first, newValue, prevValue);
             if (prevValue != newValue) {
                 HistoryLog.emplace_back(TInstant::Now(), param.first, prevValue, newValue);
                 if (isDefault) {
@@ -88,13 +93,39 @@ private:
         }
     }
 
+    TString RenderControlsAsHtml() {
+        TStringStream str;
+        HTML(str) {
+            TABLE_SORTABLE_CLASS("table") {
+                TABLEHEAD() {
+                    TABLER() {
+                        TABLEH() { str << "Parameter"; }
+                        TABLEH() { str << "Acceptable range"; }
+                        TABLEH() { str << "Current"; }
+                        TABLEH() { str << "Default"; }
+                        TABLEH() { str << "Send new value"; }
+                        TABLEH() { str << "Changed"; }
+                    }
+                }
+                TABLEBODY() {
+                    ExpService->RenderAsHtmlTableRows(str);
+                    Board->RenderAsHtmlTableRows(str);
+                }
+            }
+            str << "<form class='form_horizontal' method='post'>";
+            str << "<button type='submit' name='restoreDefaults' style='color:green;'><b>Restore Default</b></button>";
+            str << "</form>";
+        }
+        return str.Str();
+    }
+
     void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
         HTTP_METHOD method = ev->Get()->Request.GetMethod();
         if (method == HTTP_METHOD_POST) {
             HandlePostParams(ev->Get()->Request.GetPostParams());
         }
         TStringStream str;
-        str << Board->RenderAsHtml();
+        str << RenderControlsAsHtml();
         HTML(str) {
             str << "<h3>History</h3>";
             TABLE_SORTABLE_CLASS("historyLogTable") {
@@ -129,7 +160,8 @@ private:
 };
 
 NActors::IActor* CreateImmediateControlActor(TIntrusivePtr<TControlBoard> board,
+            TIntrusivePtr<TExperimentingService> expService,
             const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
-    return new NKikimr::TImmediateControlActor(board, counters);
+    return new NKikimr::TImmediateControlActor(board, expService, counters);
 }
 };

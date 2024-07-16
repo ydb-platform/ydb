@@ -53,9 +53,9 @@ struct TLimits {
     TLimits();
 
     void RegisterControls(TControlBoard& icb) {
-        icb.RegisterSharedControl(MinInsertBytes, "ColumnShardControlsMinBytesToIndex");
-        icb.RegisterSharedControl(MaxInsertBytes, "ColumnShardControlsMaxBytesToIndex");
-        icb.RegisterSharedControl(InsertTableSize, "ColumnShardControlsInsertTableCommittedSize");
+        ICB_REG_SHARED_CONTROL(icb, MinInsertBytes, ColumnShardControlsMinBytesToIndex);
+        ICB_REG_SHARED_CONTROL(icb, MaxInsertBytes, ColumnShardControlsMaxBytesToIndex);
+        ICB_REG_SHARED_CONTROL(icb, InsertTableSize, ColumnShardControlsInsertTableCommittedSize);
     }
 };
 
@@ -80,11 +80,11 @@ struct TCompactionLimits {
     {}
 
     void RegisterControls(TControlBoard& icb) {
-        icb.RegisterSharedControl(GoodBlobSize, "ColumnShardControlsIndexGoodBlobSize");
-        icb.RegisterSharedControl(GranuleOverloadSize, "ColumnShardControlsGranuleOverloadBytes");
-        icb.RegisterSharedControl(InGranuleCompactSeconds, "ColumnShardControlsCompactionDelaySec");
-        icb.RegisterSharedControl(GranuleIndexedPortionsSizeLimit, "ColumnShardControlsGranuleIndexedPortionsSizeLimit");
-        icb.RegisterSharedControl(GranuleIndexedPortionsCountLimit, "ColumnShardControlsGranuleIndexedPortionsCountLimit");
+        ICB_REG_SHARED_CONTROL(icb, GoodBlobSize, ColumnShardControlsIndexGoodBlobSize);
+        ICB_REG_SHARED_CONTROL(icb, GranuleOverloadSize, ColumnShardControlsGranuleOverloadBytes);
+        ICB_REG_SHARED_CONTROL(icb, InGranuleCompactSeconds, ColumnShardControlsCompactionDelaySec);
+        ICB_REG_SHARED_CONTROL(icb, GranuleIndexedPortionsSizeLimit, ColumnShardControlsGranuleIndexedPortionsSizeLimit);
+        ICB_REG_SHARED_CONTROL(icb, GranuleIndexedPortionsCountLimit, ColumnShardControlsGranuleIndexedPortionsCountLimit);
     }
 
     NOlap::TCompactionLimits Get() const {

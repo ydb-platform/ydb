@@ -45,10 +45,10 @@ namespace NPDisk {
 }
 
     void SetupIcb(TTestActorRuntime& runtime, ui32 nodeIndex, const NKikimrConfig::TImmediateControlsConfig& config,
-            const TIntrusivePtr<NKikimr::TControlBoard>& icb)
+            const TIntrusivePtr<NKikimr::TControlBoard>& icb, const TIntrusivePtr<NKikimr::TExperimentingService>& expService)
     {
         runtime.AddLocalService(MakeIcbId(runtime.GetNodeId(nodeIndex)),
-            TActorSetupCmd(CreateImmediateControlActor(icb, runtime.GetDynamicCounters(nodeIndex)),
+            TActorSetupCmd(CreateImmediateControlActor(icb, expService, runtime.GetDynamicCounters(nodeIndex)),
                     TMailboxType::ReadAsFilled, 0),
             nodeIndex);
 
@@ -362,7 +362,7 @@ namespace NPDisk {
             if (const auto it = app.Keys.find(nodeIndex); it != app.Keys.end()) {
                 keyConfig = it->second;
             }
-            SetupIcb(runtime, nodeIndex, app.ImmediateControlsConfig, app.Icb[nodeIndex]);
+            SetupIcb(runtime, nodeIndex, app.ImmediateControlsConfig, app.Icb[nodeIndex], app.ExpService[nodeIndex]);
             SetupBSNodeWarden(runtime, nodeIndex, disk.MakeWardenConf(*app.Domains, keyConfig));
 
             SetupTabletResolver(runtime, nodeIndex);

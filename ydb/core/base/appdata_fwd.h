@@ -85,7 +85,7 @@ namespace NKikimr {
     struct TChannelProfiles;
     struct TDomainsInfo;
     class TResourceProfiles;
-    class TControlBoard;
+    struct TControlBoard;
     class TExperimentingService;
     class TFeatureFlags;
 }

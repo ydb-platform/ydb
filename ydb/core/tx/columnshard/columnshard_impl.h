@@ -122,9 +122,9 @@ struct TSettings {
     {}
 
     void RegisterControls(TControlBoard& icb) {
-        icb.RegisterSharedControl(BlobWriteGrouppingEnabled, "ColumnShardControlsBlobWriteGrouppingEnabled");
-        icb.RegisterSharedControl(CacheDataAfterIndexing, "ColumnShardControlsCacheDataAfterIndexing");
-        icb.RegisterSharedControl(CacheDataAfterCompaction, "ColumnShardControlsCacheDataAfterCompaction");
+        ICB_REG_SHARED_CONTROL(icb, BlobWriteGrouppingEnabled, ColumnShardControlsBlobWriteGrouppingEnabled);
+        ICB_REG_SHARED_CONTROL(icb, CacheDataAfterIndexing, ColumnShardControlsCacheDataAfterIndexing);
+        ICB_REG_SHARED_CONTROL(icb, CacheDataAfterCompaction, ColumnShardControlsCacheDataAfterCompaction);
     }
 };
 

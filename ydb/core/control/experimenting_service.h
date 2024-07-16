@@ -23,7 +23,7 @@ public:
     // Only for tests
     void GetValue(TString name, TAtomic &outValue, bool &outIsControlExists) const;
 
-    TString RenderAsHtml() const;
+    void RenderAsHtmlTableRows(TStringStream& str) const;
 };
 
 } // namespace NKikimr

@@ -36,7 +36,7 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
             }
         } else {
             NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(NIndexes::TIndexMetaContainer(indexMeta));
-            const std::vector<TString> data = portion.GetIndexInplaceData(indexMeta->GetIndexId());
+            const std::vector<TString> data = portion.GetIndexInplaceDataVerified(indexMeta->GetIndexId());
             max = indexMeta->GetMaxScalarVerified(data, portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type());
         }
         auto tieringInfo = Tiering->GetTierToMove(max, now);

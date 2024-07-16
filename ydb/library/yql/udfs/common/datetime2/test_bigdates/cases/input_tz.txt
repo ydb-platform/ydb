@@ -1,0 +1,40 @@
+{
+    "tzd32"="1-1-1,GMT";
+    "tzdt64"="1-1-1T0:0:0,GMT";
+    "tzts64"="1-1-1T0:0:0,GMT";
+};
+{
+    "tzd32"="1-1-1,UTC";
+    "tzdt64"="1-1-1T0:0:0,UTC";
+    "tzts64"="1-1-1T0:0:0,UTC";
+};
+{
+    "tzd32"="1-1-1,Europe/Moscow";
+    "tzdt64"="1-1-1T0:0:0,Europe/Moscow";
+    "tzts64"="1-1-1T0:0:0,Europe/Moscow";
+};
+{
+    "tzd32"="1-1-1,Atlantic/Azores";
+    "tzdt64"="1-1-1T0:0:0,Atlantic/Azores";
+    "tzts64"="1-1-1T0:0:0,Atlantic/Azores";
+};
+{
+    "tzd32"="1970-1-1,GMT";
+    "tzdt64"="1970-1-1T0:0:0,GMT";
+    "tzts64"="1970-1-1T0:0:0,GMT";
+};
+{
+    "tzd32"="1970-1-1,UTC";
+    "tzdt64"="1970-1-1T0:0:0,UTC";
+    "tzts64"="1970-1-1T0:0:0,UTC";
+};
+{
+    "tzd32"="1970-1-1,Europe/Moscow";
+    "tzdt64"="1970-1-1T0:0:0,Europe/Moscow";
+    "tzts64"="1970-1-1T0:0:0,Europe/Moscow";
+};
+{
+    "tzd32"="1970-1-1,Atlantic/Azores";
+    "tzdt64"="1970-1-1T0:0:0,Atlantic/Azores";
+    "tzts64"="1970-1-1T0:0:0,Atlantic/Azores";
+};

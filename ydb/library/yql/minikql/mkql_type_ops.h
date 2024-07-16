@@ -55,6 +55,10 @@ void SplitTimestamp64(i64 value, i32& year, ui32& month, ui32& day, ui32& hour, 
 void SplitTzTimestamp64(i64 value, i32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec, ui32& usec,
         ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId);
 
+bool MakeTzDate32(i32 year, ui32 month, ui32 day, i32& value, ui16 tzId);
+bool MakeDatetime64(i32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec, i64& value);
+bool MakeTzDatetime64(i32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec, i64& value, ui16 tzId);
+
 bool SplitTzDate(ui16 value, ui32& year, ui32& month, ui32& day, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId);
 bool SplitTzDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId);
 

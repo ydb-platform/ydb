@@ -65,6 +65,7 @@ struct TTMStorage {
     inline ui16 ToDate(const NUdf::IDateBuilder& builder, bool local) const {
         if (!IsUniversal(TimezoneId)) {
             ui32 datetime;
+            // FIXME local is always true here
             if (!builder.MakeDatetime(Year, Month, Day, local ? 0 : Hour, local ? 0 : Minute, local ? 0 : Second, datetime, TimezoneId)) {
                 ythrow yexception() << "Error in MakeDatetime";
             }

@@ -4,28 +4,27 @@
             "StructType";
             [
                 [
-                    "d32";
+                    "tzd32";
                     [
                         "DataType";
-                        "Date32"
+                        "String"
                     ]
                 ];
                 [
-                    "dt64";
+                    "tzdt64";
                     [
                         "DataType";
-                        "Datetime64"
+                        "String"
                     ]
                 ];
                 [
-                    "ts64";
+                    "tzts64";
                     [
                         "DataType";
-                        "Timestamp64"
+                        "String"
                     ]
                 ]
             ]
         ]
     }
 }
-

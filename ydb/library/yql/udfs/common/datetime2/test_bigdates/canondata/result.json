@@ -3,5 +3,10 @@
         {
             "uri": "file://test.test_SplitMake_/results.txt"
         }
+    ],
+    "test.test[debug]": [
+        {
+            "uri": "file://test.test_debug_/results.txt"
+        }
     ]
 }

@@ -1075,6 +1075,40 @@ public:
         return true;
     }
 
+    bool MakeTzDate32(i32 year, ui32 month, ui32 day, i32& value, ui16 tzId) const {
+        if (tzId == 0) {
+            return MakeDate32(year, month, day, value);
+        }
+        const auto& tz = Singleton<TTimezones>()->GetZone(tzId);
+        cctz::civil_second cs(year, month, day, 0, 0, 0);
+        auto unixSeconds = cctz::TimePointToUnixSeconds(tz.lookup(cs).pre);
+        value = ((unixSeconds >= 0) ? unixSeconds : unixSeconds - 86400ll)/ 86400ll;
+        return NUdf::MIN_DATE32 <= value && value <= NUdf::MAX_DATE32;
+    }
+
+    bool MakeDatetime64(i32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec, i64& value) const {
+        i32 date;
+        ui32 time;
+        if (!MakeDate32(year, month, day, date)) {
+            return false;
+        }
+        if (!MakeTime(hour, min, sec, time)) {
+            return false;
+        }
+        value = date * 86400ll + time;
+        return true;
+    }
+
+    bool MakeTzDatetime64(i32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec, i64& value, ui16 tzId) const {
+        if (tzId == 0) {
+            return MakeDatetime64(year, month, day, hour, min, sec, value);
+        }
+        const auto& tz = Singleton<TTimezones>()->GetZone(tzId);
+        cctz::civil_second cs(year, month, day, hour, min, sec);
+        value = cctz::TimePointToUnixSeconds(tz.lookup(cs).pre);
+        return NUdf::MIN_DATETIME64 <= value && value <= NUdf::MAX_DATETIME64;
+    }
+
     bool EnrichByOffset(ui16 value, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) const {
         if (Y_UNLIKELY(value >= Days_.size())) {
             return false;
@@ -1252,6 +1286,18 @@ bool MakeDate(ui32 year, ui32 month, ui32 day, ui16& value) {
 
 bool MakeDate32(i32 year, ui32 month, ui32 day, i32& value) {
     return TDateTable::Instance().MakeDate32(year, month, day, value);
+}
+
+bool MakeTzDate32(i32 year, ui32 month, ui32 day, i32& value, ui16 tzId) {
+    return TDateTable::Instance().MakeTzDate32(year, month, day, value, tzId);
+}
+
+bool MakeDatetime64(i32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec, i64& value) {
+    return TDateTable::Instance().MakeDatetime64(year, month, day, hour, min, sec, value);
+}
+
+bool MakeTzDatetime64(i32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec, i64& value, ui16 tzId) {
+    return TDateTable::Instance().MakeTzDatetime64(year, month, day, hour, min, sec, value, tzId);
 }
 
 bool SplitDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec) {

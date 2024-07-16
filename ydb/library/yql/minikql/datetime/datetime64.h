@@ -47,7 +47,19 @@ struct TTM64Storage {
     void FromTimestamp64(i64 value);
     void FromTzTimestamp64(i64 value, ui16 tzId);
 
-    i32 ToDate32() const; // TODO add arg "local"?
+    i32 ToDate32() const;
+    i32 ToTzDate32() const;
+
+    i64 ToDatetime64() const;
+    i64 ToTzDatetime64() const;
+
+    inline i64 ToTimestamp64() const {
+        return ToDatetime64() * 1000000ll + Microsecond;
+    }
+
+    inline i64 ToTzTimestamp64() const {
+        return ToTzDatetime64() * 1000000ll + Microsecond;
+    }
 };
 
 }

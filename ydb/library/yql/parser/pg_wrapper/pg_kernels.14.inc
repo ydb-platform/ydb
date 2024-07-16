@@ -94,6 +94,8 @@ TExecFunc arrow_void_in() { return TGenericExec<TPgDirectFunc<&void_in>, true, t
 TExecFunc arrow_void_out() { return TGenericExec<TPgDirectFunc<&void_out>, true, false, TArgs_void_out_Policy>({}); }
 TExecFunc arrow_void_recv() { return TGenericExec<TPgDirectFunc<&void_recv>, true, true, TArgs_void_recv_Policy>({}); }
 TExecFunc arrow_void_send() { return TGenericExec<TPgDirectFunc<&void_send>, true, false, TArgs_void_send_Policy>({}); }
+TExecFunc arrow_xid8_larger() { return TGenericExec<TPgDirectFunc<&xid8_larger>, true, true, TArgs_xid8_larger_Policy>({}); }
+TExecFunc arrow_xid8_smaller() { return TGenericExec<TPgDirectFunc<&xid8_smaller>, true, true, TArgs_xid8_smaller_Policy>({}); }
 TExecFunc arrow_xid8cmp() { return TGenericExec<TPgDirectFunc<&xid8cmp>, true, true, TArgs_xid8cmp_Policy>({}); }
 TExecFunc arrow_xid8eq() { return TGenericExec<TPgDirectFunc<&xid8eq>, true, true, TArgs_xid8eq_Policy>({}); }
 TExecFunc arrow_xid8ge() { return TGenericExec<TPgDirectFunc<&xid8ge>, true, true, TArgs_xid8ge_Policy>({}); }

@@ -121,9 +121,11 @@ bool TPortionDataSource::DoStartFetchingIndexes(const std::shared_ptr<IDataSourc
                 continue;
             }
             indexIds.emplace(i.GetIndexId());
-            auto readAction = action.GetReading(Schema->GetIndexInfo().GetIndexStorageId(i.GetIndexId()));
-            readAction->SetIsBackgroundProcess(false);
-            readAction->AddRange(Portion->RestoreBlobRange(i.GetBlobRange()));
+            if (auto bRange = i.GetBlobRangeOptional()) {
+                auto readAction = action.GetReading(Schema->GetIndexInfo().GetIndexStorageId(i.GetIndexId()));
+                readAction->SetIsBackgroundProcess(false);
+                readAction->AddRange(Portion->RestoreBlobRange(*bRange));
+            }
         }
         if (indexes->GetIndexIdsSet().size() != indexIds.size()) {
             return false;
@@ -154,7 +156,11 @@ void TPortionDataSource::DoApplyIndex(const NIndexes::TIndexCheckerContainer& in
             if (!indexIds.contains(i->GetIndexId())) {
                 continue;
             }
-            indexBlobs[i->GetIndexId()].emplace_back(StageData->ExtractBlob(i->GetAddress()));
+            if (i->HasBlobData()) {
+                indexBlobs[i->GetIndexId()].emplace_back(i->GetBlobDataVerified());
+            } else {
+                indexBlobs[i->GetIndexId()].emplace_back(StageData->ExtractBlob(i->GetAddress()));
+            }
         }
         for (auto&& i : indexIds) {
             if (!indexBlobs.contains(i)) {

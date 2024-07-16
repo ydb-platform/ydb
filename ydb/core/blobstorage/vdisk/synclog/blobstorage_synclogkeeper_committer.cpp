@@ -3,7 +3,6 @@
 #include "blobstorage_synclog_public_events.h"
 
 #include <ydb/core/base/blobstorage_grouptype.h>
-#include <ydb/core/base/compile_time_flags.h>
 
 using namespace NKikimrServices;
 
@@ -35,8 +34,7 @@ namespace NKikimr {
 
             void GenerateCommit(const TActorContext &ctx) {
                 // serialize
-                const bool oldFormat = !KIKIMR_VDISK_SYNCLOG_ENTRY_POINT_PROTO_FORMAT;
-                EntryPointSerializer.Serialize(Delta, oldFormat);
+                EntryPointSerializer.Serialize(Delta);
 
                 // lsn
                 TLsnSeg seg = SlCtx->LsnMngr->AllocLsnForLocalUse();

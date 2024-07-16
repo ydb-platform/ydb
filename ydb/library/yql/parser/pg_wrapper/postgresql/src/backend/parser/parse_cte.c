@@ -3,7 +3,7 @@
  * parse_cte.c
  *	  handle CTEs (common table expressions) in parser
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -125,6 +125,13 @@ transformWithClause(ParseState *pstate, WithClause *withClause)
 	{
 		CommonTableExpr *cte = (CommonTableExpr *) lfirst(lc);
 		ListCell   *rest;
+
+		/* MERGE is allowed by parser, but unimplemented. Reject for now */
+		if (IsA(cte->ctequery, MergeStmt))
+			ereport(ERROR,
+					errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					errmsg("MERGE not supported in WITH query"),
+					parser_errposition(pstate, cte->location));
 
 		for_each_cell(rest, withClause->ctes, lnext(withClause->ctes, lc))
 		{
@@ -462,7 +469,7 @@ analyzeCTE(ParseState *pstate, CommonTableExpr *cte)
 
 		foreach(lc, search_clause->search_col_list)
 		{
-			Value	   *colname = lfirst(lc);
+			String	   *colname = lfirst_node(String, lc);
 
 			if (!list_member(cte->ctecolnames, colname))
 				ereport(ERROR,
@@ -495,7 +502,7 @@ analyzeCTE(ParseState *pstate, CommonTableExpr *cte)
 
 		foreach(lc, cycle_clause->cycle_col_list)
 		{
-			Value	   *colname = lfirst(lc);
+			String	   *colname = lfirst_node(String, lc);
 
 			if (!list_member(cte->ctecolnames, colname))
 				ereport(ERROR,

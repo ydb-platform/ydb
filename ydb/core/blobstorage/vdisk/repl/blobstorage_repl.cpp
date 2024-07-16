@@ -167,6 +167,7 @@ namespace NKikimr {
         TBlobIdQueuePtr BlobsToReplicatePtr;
         TBlobIdQueuePtr UnreplicatedBlobsPtr = std::make_shared<TBlobIdQueue>();
         TUnreplicatedBlobRecords UnreplicatedBlobRecords;
+        TMilestoneQueue MilestoneQueue;
         TActorId ReplJobActorId;
         std::list<std::optional<TDonorQueueItem>> DonorQueue;
         std::deque<std::pair<TVDiskID, TActorId>> Donors;
@@ -356,6 +357,7 @@ namespace NKikimr {
 
             UnrecoveredNonphantomBlobs |= info->UnrecoveredNonphantomBlobs;
             UnreplicatedBlobRecords = std::move(info->UnreplicatedBlobRecords);
+            MilestoneQueue = std::move(info->MilestoneQueue);
 
             if (info->ItemsRecovered > 0) {
                 ResetReplProgressTimer(false);
@@ -453,7 +455,8 @@ namespace NKikimr {
                 donor->NodeId << ":" << donor->PDiskId << ":" << donor->VSlotId << "}") : "generic"));
             ReplJobActorId = Register(CreateReplJobActor(ReplCtx, SelfId(), from, QueueActorMapPtr,
                 BlobsToReplicatePtr, UnreplicatedBlobsPtr, donor ? std::make_optional(std::make_pair(
-                donor->VDiskId, donor->QueueActorId)) : std::nullopt, std::move(UnreplicatedBlobRecords)));
+                donor->VDiskId, donor->QueueActorId)) : std::nullopt, std::move(UnreplicatedBlobRecords),
+                std::move(MilestoneQueue)));
         }
 
         template<typename Iter>

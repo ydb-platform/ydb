@@ -3,7 +3,7 @@
  * async.c
  *	  Asynchronous notification: NOTIFY, LISTEN, UNLISTEN
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -1232,20 +1232,6 @@ Exec_UnlistenAllCommit(void)
 
 	list_free_deep(listenChannels);
 	listenChannels = NIL;
-}
-
-/*
- * ProcessCompletedNotifies --- nowadays this does nothing
- *
- * This routine used to send signals and handle self-notifies,
- * but that functionality has been moved elsewhere.
- * We'd delete it entirely, except that the documentation used to instruct
- * background-worker authors to call it.  To avoid an ABI break in stable
- * branches, keep it as a no-op routine.
- */
-void
-ProcessCompletedNotifies(void)
-{
 }
 
 /*

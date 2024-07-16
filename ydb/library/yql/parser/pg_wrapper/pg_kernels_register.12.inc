@@ -156,3 +156,7 @@ RegisterExec(4641, arrow_brin_minmax_multi_summary_send());
 RegisterExec(5033, arrow_network_sortsupport());
 RegisterExec(5040, arrow_matchingsel());
 RegisterExec(5041, arrow_matchingjoinsel());
+RegisterExec(6275, arrow_json_agg_strict_transfn());
+RegisterExec(6277, arrow_json_object_agg_strict_transfn());
+RegisterExec(6278, arrow_json_object_agg_unique_transfn());
+RegisterExec(6279, arrow_json_object_agg_unique_strict_transfn());

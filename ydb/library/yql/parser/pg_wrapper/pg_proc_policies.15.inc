@@ -1,3 +1,7 @@
+struct TArgs_any_value_transfn_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
 struct TArgs_brin_bloom_add_value_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
@@ -657,6 +661,14 @@ struct TArgs_pg_current_logfile_1arg_Policy {
 struct TArgs_pg_get_replica_identity_index_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+struct TArgs_pg_input_error_info_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+struct TArgs_pg_input_is_valid_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
 struct TArgs_pg_relation_is_updatable_Policy {
     static constexpr bool VarArgs = false;

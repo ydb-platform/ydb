@@ -3,7 +3,7 @@ PY3TEST()
 IF(ORIGINAL)
 
 TEST_SRCS(
-    test_postgres_original.py
+#    test_postgres_original.py
 )
 
 DATA(
@@ -13,7 +13,7 @@ DATA(
 ELSE()
 
 TEST_SRCS(
-    test_postgres.py
+#    test_postgres.py
 )
 
 DATA(

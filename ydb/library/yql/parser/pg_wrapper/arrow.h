@@ -15,6 +15,7 @@
 extern "C" {
 #include "postgres.h"
 #include "fmgr.h"
+#include "varatt.h"
 #include "catalog/pg_type_d.h"
 #include "catalog/pg_collation_d.h"
 }

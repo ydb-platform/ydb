@@ -1734,12 +1734,16 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 case TEvHive::EvResponseHiveInfo: {
                     auto *x = reinterpret_cast<TEvHive::TEvResponseHiveInfo::TPtr*>(&ev);
                     auto& record = (*x)->Get()->Record;
-                    record.SetStartTimeTimestamp(0);
+                    TInstant now = TInstant::Hours(1);
+                    record.SetResponseTimestamp(now.MilliSeconds());
+                    TInstant startTime;
+                    TDuration syncPeriodDuration = TDuration::MilliSeconds(NHealthCheck::TSelfCheckRequest::HIVE_SYNCHRONIZATION_PERIOD_MS);
                     if (syncPeriod) {
-                        record.SetResponseTimestamp(NHealthCheck::TSelfCheckRequest::HIVE_SYNCHRONIZATION_PERIOD_MS / 2);
+                        startTime = now - syncPeriodDuration / 2;
                     } else {
-                        record.SetResponseTimestamp(NHealthCheck::TSelfCheckRequest::HIVE_SYNCHRONIZATION_PERIOD_MS * 2);
+                        startTime = now - syncPeriodDuration * 2;
                     }
+                    record.SetStartTimeTimestamp(startTime.MilliSeconds());
                     auto *tablet = record.MutableTablets()->Add();
                     tablet->SetTabletID(1);
                     tablet->SetNodeID(dynNodeId);
@@ -1747,6 +1751,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     tablet->SetVolatileState(NKikimrHive::TABLET_VOLATILE_STATE_BOOTING);
                     tablet->MutableObjectDomain()->SetSchemeShard(SUBDOMAIN_KEY.OwnerId);
                     tablet->MutableObjectDomain()->SetPathId(SUBDOMAIN_KEY.LocalPathId);
+                    TInstant lastAliveTimestamp = now - TDuration::Minutes(6);
+                    tablet->SetLastAliveTimestamp(lastAliveTimestamp.MilliSeconds());
                     break;
                 }
                 case TEvHive::EvResponseHiveNodeStats: {

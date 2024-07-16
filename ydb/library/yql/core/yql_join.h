@@ -154,7 +154,8 @@ TExprNode::TPtr BuildEquiJoinLinkSettings(const TEquiJoinLinkSettings& linkSetti
 TExprNode::TPtr RemapNonConvertibleMemberForJoin(TPositionHandle pos, const TExprNode::TPtr& memberValue,
     const TTypeAnnotationNode& memberType, const TTypeAnnotationNode& unifiedType, TExprContext& ctx);
 
-TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNode::TListType& keyTypes, TExprNode::TListType& keys, TExprNode::TListType& payloads, bool payload, bool optional, bool filter, TExprContext& ctx);
+TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNode::TListType& keyTypes, TExprNode::TListType& keys, bool payload, bool optional, bool filter, TExprContext& ctx);
+TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNode::TListType& keyTypes, TExprNode::TListType& keys, TExprNode::TListType&& payloads, bool payload, bool optional, bool filter, TExprContext& ctx);
 
 template<bool Squeeze = false>
 TExprNode::TPtr MakeDictForJoin(TExprNode::TPtr&& list, bool payload, bool multi, TExprContext& ctx);

@@ -6,7 +6,7 @@ LLVM_BC(
     postgresql/src/backend/utils/adt/mac8.c
     postgresql/src/backend/utils/adt/mcxtfuncs.c
     postgresql/src/backend/utils/mb/mbutils.c
-    postgresql/src/backend/utils/misc/guc.c
+    postgresql/src/backend/utils/misc/guc_funcs.c
     postgresql/src/backend/utils/time/snapmgr.c
     pg_kernels.16.cpp
 
@@ -83,6 +83,7 @@ LLVM_BC(
     arrow_pg_reload_conf
     arrow_pg_rotate_logfile
     arrow_pg_rotate_logfile_v2
+    arrow_pg_settings_get_flags
     arrow_pg_terminate_backend
     arrow_set_config_by_name
     arrow_show_config_by_name

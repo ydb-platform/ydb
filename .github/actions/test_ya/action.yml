@@ -81,9 +81,9 @@ runs:
         echo "PUBLIC_DIR=$PUBLIC_DIR" >> $GITHUB_ENV
         mkdir -p $PUBLIC_DIR
 
-        export OUT_DIR=$TMP_DIR/out
-        echo "OUT_DIR=$OUT_DIR" >> $GITHUB_ENV
-        mkdir -p $OUT_DIR
+        export YA_MAKE_OUT_DIR=$TMP_DIR/out
+        echo "YA_MAKE_OUT_DIR=$YA_MAKE_OUT_DIR" >> $GITHUB_ENV
+        mkdir -p $YA_MAKE_OUT_DIR
 
         export ARTIFACTS_DIR=$PUBLIC_DIR/artifacts
         echo "ARTIFACTS_DIR=$ARTIFACTS_DIR" >> $GITHUB_ENV
@@ -95,9 +95,6 @@ runs:
         echo "TEST_ARTIFACTS_DIR_URL=$S3_URL_PREFIX/test_artifacts" >> $GITHUB_ENV
         mkdir -p $TEST_ARTIFACTS_DIR
 
-        export JUNIT_REPORT_PARTS=$TMP_DIR/junit-split
-        echo "JUNIT_REPORT_PARTS=$JUNIT_REPORT_PARTS" >> $GITHUB_ENV
-        mkdir -p $JUNIT_REPORT_PARTS
 
         echo "JUNIT_REPORT_XML=$PUBLIC_DIR/junit.xml" >> $GITHUB_ENV
         echo "TESTMO_URL=${{ inputs.testman_url }}" >> $GITHUB_ENV
@@ -111,7 +108,6 @@ runs:
         echo YA_MAKE_OUTPUT="$PUBLIC_DIR/ya_make_output.log" >>  $GITHUB_ENV
         export YA_MAKE_OUTPUT_URL="$S3_URL_PREFIX/ya_make_output.log"
         echo "YA_MAKE_OUTPUT_URL=$YA_MAKE_OUTPUT_URL" >> $GITHUB_ENV
-        echo "YA_MAKE_OUTPUT_URL=$YA_MAKE_OUTPUT_URL" >> $GITHUB_OUTPUT
 
         # install test mo
         npm install -g @testmo/testmo-cli
@@ -273,7 +269,7 @@ runs:
           --stat --log-file "$YA_TEST_LOG" -DCONSISTENT_DEBUG \
           --no-dir-outputs --test-failure-code 0 --build-all \
           --cache-size 2TB --force-build-depends --evlog-file "$PUBLIC_DIR/ya_evlog.jsonl" \
-          --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR"; echo $? > exit_code) |& tee $YA_MAKE_OUTPUT
+          --junit "$JUNIT_REPORT_XML" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& tee $YA_MAKE_OUTPUT
         set -e
         RC=`cat exit_code`
 
@@ -319,17 +315,13 @@ runs:
         # postprocess junit report
         .github/scripts/tests/transform-ya-junit.py -i \
           -m .github/config/muted_ya.txt \
-          --ya-out "$OUT_DIR" \
+          --ya-out "$YA_MAKE_OUT_DIR" \
           --log-url-prefix "$ARTIFACTS_DIR_URL/logs/" \
           --log-out-dir "$ARTIFACTS_DIR/logs/" \
           --test-stuff-out "$TEST_ARTIFACTS_DIR/" \
           --test-stuff-prefix "$TEST_ARTIFACTS_DIR_URL/" \
           "$JUNIT_REPORT_XML"
-    
-        .github/scripts/tests/split-junit.py -o "$JUNIT_REPORT_PARTS" "$JUNIT_REPORT_XML"
-
-        # archive unitest reports (transformed)
-        tar -C $JUNIT_REPORT_PARTS/.. -czf $PUBLIC_DIR/junit_parts.xml.tar.gz $(basename $JUNIT_REPORT_PARTS)
+  
     
     - name: Test history upload results to YDB
       if: inputs.run_tests
@@ -360,6 +352,14 @@ runs:
         TESTMO_TOKEN: ${{ inputs.testman_token }}
       run: |
         set -x
+
+        # split large junit_report
+        export JUNIT_REPORT_PARTS=$TMP_DIR/junit-split
+        mkdir -p $JUNIT_REPORT_PARTS
+        .github/scripts/tests/split-junit.py -o "$JUNIT_REPORT_PARTS" "$JUNIT_REPORT_XML"
+        # archive unitest reports (transformed)
+        tar -C $JUNIT_REPORT_PARTS/.. -czf $PUBLIC_DIR/junit_parts.xml.tar.gz $(basename $JUNIT_REPORT_PARTS)
+
         PROXY_ADDR=127.0.0.1:8888
 
         openssl req -x509 -newkey rsa:2048 \

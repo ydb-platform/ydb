@@ -27,14 +27,16 @@ public:
         if (Self->State != TShardState::Ready) {
             Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
-                NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_WRONG_STATE);
+                NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_WRONG_STATE,
+                TStringBuilder() << "DataShard is not ready");
             return true;
         }
 
         if (!Self->IsReplicated()) {
             Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
-                NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST);
+                NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
+                TStringBuilder() << "Table is not replicated");
             return true;
         }
 

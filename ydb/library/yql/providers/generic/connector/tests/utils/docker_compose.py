@@ -159,31 +159,28 @@ class DockerComposeHelper:
 
         return result
 
-    def await_mysql(self):
+    def list_mysql_tables(self) -> Sequence[str]:
         params = self.docker_compose_yml_data["services"]["mysql"]
+        password = params["environment"]["MYSQL_ROOT_PASSWORD"]
+        db = params["environment"]["MYSQL_DATABASE"]
         cmd = [
             self.docker_bin_path,
             'exec',
             params["container_name"],
             'mysql',
-            f'--password={params["environment"]["MYSQL_ROOT_PASSWORD"]}',
-            f'{params["environment"]["MYSQL_DATABASE"]}',
+            f'--password={password}',
+            db,
             '-e',
-            'SELECT version()',
+            f'SELECT table_name FROM information_schema.tables WHERE table_schema = "{db}"',
         ]
 
         LOGGER.debug("calling command: " + " ".join(cmd))
 
-        err = RuntimeError("docker-compose error: timed out to check cmd output")  # default error value
-        start = datetime.now()
-        timeout = 20
+        out = None
 
-        while (datetime.now() - start).total_seconds() < timeout:
-            try:
-                subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf8')
-            except subprocess.CalledProcessError as e:
-                LOGGER.error(f"called subprocess output: {e.output}")
-                err = RuntimeError(f"docker-compose error: {e.output} (code {e.returncode})")
-                time.sleep(5)
-
-        raise err
+        try:
+            out = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf8')
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"docker cmd failed: {e.output} (code {e.returncode})")
+        else:
+            return out.splitlines()[2:]

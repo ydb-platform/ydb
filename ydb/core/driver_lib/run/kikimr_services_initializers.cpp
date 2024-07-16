@@ -1157,9 +1157,6 @@ void TSharedCacheInitializer::InitializeServices(
     if (cfg.HasActivePagesReservationPercent()) {
         config->ActivePagesReservationPercent = cfg.GetActivePagesReservationPercent();
     }
-    if (cfg.HasMemTableReservationPercent()) {
-        config->MemTableReservationPercent = cfg.GetMemTableReservationPercent();
-    }
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
     TIntrusivePtr<::NMonitoring::TDynamicCounters> sausageGroup = tabletGroup->GetSubgroup("type", "S_CACHE");

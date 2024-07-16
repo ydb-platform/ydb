@@ -1,5 +1,4 @@
 #pragma once
-#include "defs.h"
 #include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/protos/shared_cache.pb.h>
 #include <ydb/core/util/cache_cache.h>
@@ -39,9 +38,6 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
     const TCounterPtr CacheMissBytes;
     const TCounterPtr LoadInFlyPages;
     const TCounterPtr LoadInFlyBytes;
-    const TCounterPtr MemTableTotalBytes;
-    const TCounterPtr MemTableCompactingBytes;
-    const TCounterPtr MemTableCompactedBytes;
 
     explicit TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters> &group);
 };
@@ -53,7 +49,6 @@ struct TSharedPageCacheConfig {
     TString CacheName = "SharedPageCache";
     TIntrusivePtr<TSharedPageCacheCounters> Counters;
     ui32 ActivePagesReservationPercent = 50;
-    ui32 MemTableReservationPercent = 20;
 };
 
 IActor* CreateSharedPageCache(THolder<TSharedPageCacheConfig> config, TIntrusivePtr<NMemory::IMemoryConsumer> memoryConsumer);

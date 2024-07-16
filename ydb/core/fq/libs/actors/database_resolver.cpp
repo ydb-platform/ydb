@@ -478,10 +478,12 @@ public:
                     continue;
                 }
 
+                const auto& servicesArray = hostMap.at("services").GetArraySafe();
+
                 // check if all services of a particular host are alive
                 const bool alive = std::all_of(
-                    hostMap.at("services").GetArraySafe().begin(),
-                    hostMap.at("services").GetArraySafe().end(),
+                    servicesArray.begin(),
+                    servicesArray.end(),
                     [](const auto& service) {
                         return service["health"].GetString() == "ALIVE";
                     }

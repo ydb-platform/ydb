@@ -125,6 +125,9 @@ bool TS3BufferRaw::Collect(const NTable::IScan::TRow& row, IOutputStream& out) {
         case NScheme::NTypeIds::Pg:
             serialized = PgToStream(cell.AsBuf(), column.Type.GetTypeDesc(), out, ErrorString);
             break;
+        case NScheme::NTypeIds::Uuid:
+            serialized = UuidToStream(cell.AsValue<std::pair<ui64, ui64>>(), out, ErrorString);
+            break;
         default:
             Y_ABORT("Unsupported type");
         }

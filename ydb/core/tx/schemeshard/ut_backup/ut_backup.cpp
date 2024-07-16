@@ -100,6 +100,30 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
         });
     }
 
+    Y_UNIT_TEST_WITH_COMPRESSION(BackupUuidColumn) {
+        TTestBasicRuntime runtime;
+
+        Backup(runtime, ToString(Codec), R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uuid" }
+            KeyColumnNames: ["key"]
+        )", [](TTestBasicRuntime& runtime) {
+            NKikimrMiniKQL::TResult result;
+            TString error;
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets, Sprintf(R"(
+                (
+                    (let key '( '('key (Uint32 '%d) ) ) )
+                    (let row '( '('value (Uuid '"%s") ) ) )
+                    (return (AsList (UpdateRow '__user__%s key row) ))
+                )
+            )", 1, "0000111122223333", "Table"), result, error);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
+            UNIT_ASSERT_VALUES_EQUAL(error, "");
+        });
+    }
+
     template<ECompressionCodec Codec>
     void ShouldSucceedOnLargeData(ui32 minWriteBatchSize, const std::pair<ui32, ui32>& expectedResult) {
         TTestBasicRuntime runtime;

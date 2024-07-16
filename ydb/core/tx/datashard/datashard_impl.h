@@ -2706,7 +2706,7 @@ private:
     bool MediatorStateWaiting = false;
     bool MediatorStateRestoreTxPending = false;
 
-    bool ExpServiceInitialized = false;
+    bool IcbRegistered = false;
 
     TControlWrapper DisableByKeyFilter;
     TControlWrapper MaxTxInFly;

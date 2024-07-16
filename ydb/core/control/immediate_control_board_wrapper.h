@@ -9,10 +9,6 @@ class TControlWrapper {
     friend class TControlBoard;
 
 public:
-    TControlWrapper(TControl* controlPtr) 
-        : Control(controlPtr)
-    {}
-
     TControlWrapper(TAtomicBase defaultValue = 0)
         : Control(new TControl(defaultValue, Min<TAtomicBase>(), Max<TAtomicBase>()))
     {}
@@ -28,10 +24,6 @@ public:
     i64 operator=(i64 value) {
         Control->Set(value);
         return value;
-    }
-
-    inline bool IsDefined() {
-        return bool(Control);
     }
 
     bool IsTheSame(TControlWrapper another) {

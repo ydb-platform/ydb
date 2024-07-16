@@ -4458,25 +4458,25 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
         ChannelProfiles = appData->ChannelProfiles;
     }
 
-    EXP_SERVICE_REG_SHARED(*appData->ExpService, SchemeShardAllowConditionalEraseOperations, AllowConditionalEraseOperations);
-    EXP_SERVICE_REG_SHARED(*appData->ExpService, SchemeShardDisablePublicationsOfDropping, DisablePublicationsOfDropping);
-    EXP_SERVICE_REG_SHARED(*appData->ExpService, SchemeShardFillAllocatePQ, FillAllocatePQ);
+    appData->Icb->RegisterSharedControl(AllowConditionalEraseOperations, "SchemeShard_AllowConditionalEraseOperations");
+    appData->Icb->RegisterSharedControl(DisablePublicationsOfDropping, "SchemeShard_DisablePublicationsOfDropping");
+    appData->Icb->RegisterSharedControl(FillAllocatePQ, "SchemeShard_FillAllocatePQ");
 
     AllowDataColumnForIndexTable = appData->FeatureFlags.GetEnableDataColumnForIndexTable();
-    EXP_SERVICE_REG_SHARED(*appData->ExpService, SchemeShardAllowDataColumnForIndexTable, AllowDataColumnForIndexTable);
+    appData->Icb->RegisterSharedControl(AllowDataColumnForIndexTable, "SchemeShard_AllowDataColumnForIndexTable");
 
     for (const auto& sid : appData->MeteringConfig.GetSystemBackupSIDs()) {
         SystemBackupSIDs.insert(sid);
     }
 
     AllowServerlessStorageBilling = appData->FeatureFlags.GetAllowServerlessStorageBillingForSchemeShard();
-    EXP_SERVICE_REG_SHARED(*appData->ExpService, SchemeShardAllowServerlessStorageBilling, AllowServerlessStorageBilling);
+    appData->Icb->RegisterSharedControl(AllowServerlessStorageBilling, "SchemeShard_AllowServerlessStorageBilling");
 
     TxAllocatorClient = RegisterWithSameMailbox(CreateTxAllocatorClient(appData));
 
     SysPartitionStatsCollector = Register(NSysView::CreatePartitionStatsCollector().Release());
 
-    SplitSettings.Register(appData->ExpService);
+    SplitSettings.Register(appData->Icb);
 
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
     Execute(CreateTxInitSchema(), ctx);

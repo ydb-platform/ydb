@@ -7,7 +7,6 @@ SIZE(MEDIUM)
 PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion
-    ydb/core/control
 )
 
 SRCS(
@@ -17,7 +16,6 @@ SRCS(
     logoblob_ut.cpp
     statestorage_ut.cpp
     statestorage_guardian_impl_ut.cpp
-    experimenting_service_ut.cpp
 )
 
 END()

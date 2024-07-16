@@ -83,7 +83,6 @@ namespace NActors {
 namespace NKikimr {
     struct TDynamicNameserviceConfig;
     struct TChannelProfiles;
-    struct TExperimentingService;
     struct TDomainsInfo;
     class TResourceProfiles;
     class TControlBoard;
@@ -183,7 +182,6 @@ struct TAppData {
     NActors::TMon* Mon;
     ::NMonitoring::TDynamicCounterPtr Counters;
     TIntrusivePtr<NKikimr::TControlBoard> Icb;
-    TIntrusivePtr<NKikimr::TExperimentingService> ExpService;
     TIntrusivePtr<NGRpcService::TInFlightLimiterRegistry> InFlightLimiterRegistry;
 
     TIntrusivePtr<NInterconnect::TPollerThreads> PollerThreads;

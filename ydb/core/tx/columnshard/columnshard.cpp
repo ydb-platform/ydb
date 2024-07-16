@@ -82,9 +82,9 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     BackgroundSessionsManager = std::make_shared<NOlap::NBackground::TSessionsManager>(std::make_shared<NBackground::TAdapter>(selfActorId, (NOlap::TTabletId)TabletID(), *this));
 
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "initialize_tiring_finished");
-    auto& expService = *AppData(ctx)->ExpService;
-    Limits.RegisterControls(expService);
-    Settings.RegisterControls(expService);
+    auto& icb = *AppData(ctx)->Icb;
+    Limits.RegisterControls(icb);
+    Settings.RegisterControls(icb);
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
     BufferizationWriteActorId = ctx.Register(new NColumnShard::NWriting::TActor(TabletID(), SelfId()));
     Execute(CreateTxInitSchema(), ctx);

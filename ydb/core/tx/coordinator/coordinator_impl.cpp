@@ -502,30 +502,30 @@ void TTxCoordinator::SendViaSession(const TActorId& sessionId, const TActorId& t
     TActivationContext::Send(ev.Release());
 }
 
-void TTxCoordinator::ExpServiceInitialize() {
-    if (!ExpServiceInitialized) {
-        EXP_SERVICE_REG_SHARED(*AppData()->ExpService, CoordinatorControlsEnableLeaderLeases, EnableLeaderLeases);
-        EXP_SERVICE_REG_SHARED(*AppData()->ExpService, CoordinatorControlsMinLeaderLeaseDurationUs, MinLeaderLeaseDurationUs);
-        EXP_SERVICE_REG_SHARED(*AppData()->ExpService, CoordinatorControlsVolatilePlanLeaseMs, VolatilePlanLeaseMs);
-        EXP_SERVICE_REG_SHARED(*AppData()->ExpService, CoordinatorControlsPlanAheadTimeShiftMs, PlanAheadTimeShiftMs);
-        ExpServiceInitialized = true;
+void TTxCoordinator::IcbRegister() {
+    if (!IcbRegistered) {
+        AppData()->Icb->RegisterSharedControl(EnableLeaderLeases, "CoordinatorControls.EnableLeaderLeases");
+        AppData()->Icb->RegisterSharedControl(MinLeaderLeaseDurationUs, "CoordinatorControls.MinLeaderLeaseDurationUs");
+        AppData()->Icb->RegisterSharedControl(VolatilePlanLeaseMs, "CoordinatorControls.VolatilePlanLeaseMs");
+        AppData()->Icb->RegisterSharedControl(PlanAheadTimeShiftMs, "CoordinatorControls.PlanAheadTimeShiftMs");
+        IcbRegistered = true;
     }
 }
 
 bool TTxCoordinator::ReadOnlyLeaseEnabled() {
-    ExpServiceInitialize();
+    IcbRegister();
     ui64 value = EnableLeaderLeases;
     return value != 0;
 }
 
 TDuration TTxCoordinator::ReadOnlyLeaseDuration() {
-    ExpServiceInitialize();
+    IcbRegister();
     ui64 value = MinLeaderLeaseDurationUs;
     return TDuration::MicroSeconds(value);
 }
 
 void TTxCoordinator::OnActivateExecutor(const TActorContext &ctx) {
-    ExpServiceInitialize();
+    IcbRegister();
     TryInitMonCounters(ctx);
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
     Execute(CreateTxSchema(), ctx);

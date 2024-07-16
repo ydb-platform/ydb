@@ -85,7 +85,7 @@ runs:
         echo "OUT_DIR=$OUT_DIR" >> $GITHUB_ENV
         mkdir -p $OUT_DIR
 
-        export ARTIFACTS_DIR=$TMP_DIR/artifacts
+        export ARTIFACTS_DIR=$RESULT_DIR/artifacts
         echo "ARTIFACTS_DIR=$ARTIFACTS_DIR" >> $GITHUB_ENV
         mkdir -p $ARTIFACTS_DIR
 
@@ -272,7 +272,7 @@ runs:
         echo "Build+Tests **{platform_name}-${BUILD_PRESET}** is running..." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
         set +e
         (./ya make ${{ inputs.build_target }} "${params[@]}" \
-          --stat --log-file "$YA_TEST_LOG_URL" -DCONSISTENT_DEBUG \
+          --stat --log-file "$YA_TEST_LOG" -DCONSISTENT_DEBUG \
           --no-dir-outputs --test-failure-code 0 --build-all \
           --cache-size 2TB --force-build-depends --evlog-file "$RESULT_DIR/ya_evlog.jsonl" \
           --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR"; echo $? > exit_code) |& tee $GITHUB_ENV

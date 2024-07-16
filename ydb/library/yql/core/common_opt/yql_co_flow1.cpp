@@ -1409,7 +1409,7 @@ TExprNode::TPtr OptimizeFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, 
             return FuseFlatMapOverByKey<false>(*node, ctx);
         }
 
-        if (node->Head().IsCallable({"PartitionByKey", "PartitionsByKeys"})) {
+        if (node->Head().IsCallable({"PartitionByKey", "PartitionsByKeys", "ShuffleByKeys"})) {
             return FuseFlatMapOverByKey<true>(*node, ctx);
         }
     }

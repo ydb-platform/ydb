@@ -419,13 +419,6 @@ public:
                 if (!HasMemoryForProcessing() && InputStatus != EFetchResult::Finish && TryToReduceMemoryAndWait()) return true;
 
                 if (BufferForUsedInputItems.size()) {
-                    size_t actualSize = 0;
-                    for (size_t i = 0; i < BufferForUsedInputItems.size(); ++i) {
-                        if (!BufferForUsedInputItems[i].HasValue()) break;
-                        ++actualSize;
-                    }
-                    BufferForUsedInputItems.resize(actualSize);
-
                     auto& bucket = SpilledBuckets[BufferForUsedInputItemsBucketId];
                     if (bucket.AsyncWriteOperation.has_value()) return true;
 

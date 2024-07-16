@@ -1,4 +1,5 @@
 #include "memory_controller.h"
+#include "memtable_collection.h"
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -38,152 +39,7 @@ ui64 SafeDiff(ui64 a, ui64 b) {
 
 }
 
-namespace NMemTable {
-
-using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
-
-class TMemTableMemoryConsumersCollection;
-
-class TMemTableMemoryConsumer : public IMemoryConsumer {
-public:
-   TMemTableMemoryConsumer(TActorId owner, ui32 table, std::weak_ptr<TMemTableMemoryConsumersCollection> collection)
-        : Collection(std::move(collection))
-        , Owner(owner)
-        , Table(table)
-    {}
-
-    ui64 GetConsumption() const {
-        return Consumption;
-    }
-
-    void SetConsumption(ui64 consumption);
-
-private:
-    const std::weak_ptr<TMemTableMemoryConsumersCollection> Collection;
-    std::atomic<ui64> Consumption = 0;
-
-public:
-    const TActorId Owner;
-    const ui32 Table;
-};
-
-class TMemTableMemoryConsumersCollection : public std::enable_shared_from_this<TMemTableMemoryConsumersCollection> {
-    friend TMemTableMemoryConsumer;
-
-public:
-    TMemTableMemoryConsumersCollection(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, TIntrusivePtr<NMemory::IMemoryConsumer> memoryConsumer)
-        : MemTableTotalBytesCounter(counters->GetCounter("MemTable/TotalBytes"))
-        , MemTableCompactingBytesCounter(counters->GetCounter("MemTable/CompactingBytes"))
-        , MemTableCompactedBytesCounter(counters->GetCounter("MemTable/CompactedBytes", true))
-        , MemoryConsumer(std::move(memoryConsumer))
-    {}
-
-    TIntrusivePtr<TMemTableMemoryConsumer> Register(TActorId owner, ui32 table) {
-        auto &ptr = Consumers[{owner, table}];
-        if (!ptr) {
-            ptr = MakeIntrusive<TMemTableMemoryConsumer>(owner, table, weak_from_this());
-            NonCompacting.insert(ptr);
-        }
-        return ptr;
-    }
-
-    void Unregister(TActorId owner, ui32 table) {
-        auto it = Consumers.find({owner, table});
-        if (it != Consumers.end()) {
-            auto& consumer = it->second;
-            CompactionComplete(consumer);
-            consumer->SetConsumption(0);
-            Y_DEBUG_ABORT_UNLESS(NonCompacting.contains(consumer));
-            NonCompacting.erase(consumer);
-            Consumers.erase(it);
-        }
-    }
-
-    ui32 CompactionComplete(TIntrusivePtr<TMemTableMemoryConsumer> consumer) {
-        auto it = Compacting.find(consumer);
-        if (it != Compacting.end()) {
-            ui32 table = it->first->Table;
-            MemTableCompactedBytesCounter->Add(it->second);
-            ChangeTotalCompacting(-it->second);
-            NonCompacting.insert(it->first);
-            Compacting.erase(it);
-            return table;
-        }
-        return Max<ui32>();
-    }
-
-    /**
-     * @return consumers and their consumptions that should be compacted
-     */
-    TVector<std::pair<TIntrusivePtr<TMemTableMemoryConsumer>, ui64>> SelectForCompaction(ui64 limitBytes) {
-        TVector<std::pair<TIntrusivePtr<TMemTableMemoryConsumer>, ui64>> result;
-
-        ui64 toCompact = SafeDiff(TotalConsumption, limitBytes);
-        if (toCompact <= TotalCompacting) {
-            // nothing to compact more
-            return result;
-        }
-
-        for (const auto &r : NonCompacting) {
-            ui64 consumption = r->GetConsumption();
-            if (consumption) {
-                result.emplace_back(r, consumption);
-            }
-        }
-
-        Sort(result, [](const auto &x, const auto &y) { return x.second > y.second; });
-
-        size_t take = 0;
-        for (auto it = result.begin(); it != result.end() && toCompact > TotalCompacting; it++) {
-            auto reg = it->first;
-
-            Compacting[reg] = it->second;
-            Y_ABORT_UNLESS(NonCompacting.erase(reg));
-
-            ChangeTotalCompacting(it->second);
-
-            take++;
-        }
-
-        result.resize(take);
-        return result;
-    }
-
-private:
-    void ChangeTotalConsumption(ui64 delta) {
-        ui64 consumption = TotalConsumption.fetch_add(delta) + delta;
-        MemoryConsumer->SetConsumption(consumption);
-        MemTableTotalBytesCounter->Set(consumption);
-    }
-
-    void ChangeTotalCompacting(ui64 delta) {
-        ui64 compacting = (TotalCompacting += delta);
-        MemTableCompactingBytesCounter->Set(compacting);
-    }
-
-private:
-    const TCounterPtr MemTableTotalBytesCounter, MemTableCompactingBytesCounter, MemTableCompactedBytesCounter;
-    TIntrusivePtr<NMemory::IMemoryConsumer> MemoryConsumer;
-    TMap<std::pair<TActorId, ui32>, TIntrusivePtr<TMemTableMemoryConsumer>> Consumers;
-    THashSet<TIntrusivePtr<TMemTableMemoryConsumer>> NonCompacting;
-    THashMap<TIntrusivePtr<TMemTableMemoryConsumer>, ui64> Compacting;
-    std::atomic<ui64> TotalConsumption = 0;
-
-    // Approximate value, updates only on compaction start/stop
-    // Counts only self triggered compactions
-    ui64 TotalCompacting = 0;
-};
-
-void TMemTableMemoryConsumer::SetConsumption(ui64 newConsumption) {
-    ui64 before = Consumption.exchange(newConsumption);
-    if (auto t = Collection.lock()) {
-        t->ChangeTotalConsumption(newConsumption - before);
-    }
-}
-
-}
-
-namespace NMemoryController {
+namespace {
 
 using namespace NActors;
 using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
@@ -259,7 +115,7 @@ public:
             const NKikimrConfig::TMemoryControllerConfig& config,
             TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
         : Interval(interval)
-        , MemTables(std::make_shared<NMemTable::TMemTableMemoryConsumersCollection>(counters, 
+        , MemTables(std::make_shared<TMemTableMemoryConsumersCollection>(counters, 
             Consumers.emplace(EMemoryConsumerKind::MemTable, MakeIntrusive<TMemoryConsumer>(EMemoryConsumerKind::MemTable, TActorId{})).first->second))
         , ProcessMemoryInfoProvider(std::move(processMemoryInfoProvider))
         , Config(config)
@@ -393,7 +249,7 @@ private:
 
     void Handle(TEvMemTableCompacted::TPtr &ev, const TActorContext& ctx) {
         const auto *msg = ev->Get();
-        if (auto consumer = dynamic_cast<NMemTable::TMemTableMemoryConsumer*>(msg->MemoryConsumer.Get())) {
+        if (auto consumer = dynamic_cast<TMemTableMemoryConsumer*>(msg->MemoryConsumer.Get())) {
             ui32 table = MemTables->CompactionComplete(consumer);
             LOG_TRACE_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "MemTable " << ev->Sender << " " << table << " compacted");
         }
@@ -576,7 +432,7 @@ private:
 private:
     const TDuration Interval;
     TMap<EMemoryConsumerKind, TIntrusivePtr<TMemoryConsumer>> Consumers;
-    std::shared_ptr<NMemTable::TMemTableMemoryConsumersCollection> MemTables;
+    std::shared_ptr<TMemTableMemoryConsumersCollection> MemTables;
     const TIntrusiveConstPtr<IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
     NKikimrConfig::TMemoryControllerConfig Config;
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
@@ -590,7 +446,7 @@ IActor* CreateMemoryController(
         TIntrusiveConstPtr<IProcessMemoryInfoProvider> processMemoryInfoProvider,
         const NKikimrConfig::TMemoryControllerConfig& config, 
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
-    return new NMemoryController::TMemoryController(
+    return new TMemoryController(
         interval,
         std::move(processMemoryInfoProvider),
         config,

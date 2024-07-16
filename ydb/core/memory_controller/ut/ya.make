@@ -10,6 +10,7 @@ PEERDIR(
 
 SRCS(
     memory_controller_ut.cpp
+    memory_collection_ut.cpp
 )
 
 END()

@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     memory_controller.cpp
+    memtable_collection.cpp
 )
 
 PEERDIR(

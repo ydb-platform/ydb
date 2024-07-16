@@ -50,6 +50,7 @@ struct TAllocState : public TAlignedPagePool
         void Link(TListEntry* root) noexcept;
         void Unlink() noexcept;
         void InitLinks() noexcept { Left = Right = this; }
+        bool IsUnlinked() const noexcept { return !Left && !Right; }
     };
 
 #ifndef NDEBUG
@@ -74,7 +75,7 @@ struct TAllocState : public TAlignedPagePool
     TListEntry OffloadedBlocksRoot;
     TListEntry GlobalPAllocList;
     TListEntry* CurrentPAllocList;
-    std::shared_ptr<std::atomic<size_t>> ArrowMemoryUsage = std::make_shared<std::atomic<size_t>>();
+    TListEntry ArrowBlocksRoot;
     void* MainContext = nullptr;
     void* CurrentContext = nullptr;
 
@@ -97,6 +98,7 @@ struct TAllocState : public TAlignedPagePool
     void InvalidateMemInfo();
     size_t GetDeallocatedInPages() const;
     static void CleanupPAllocList(TListEntry* root);
+    static void CleanupArrowList(TListEntry* root);
 
     void LockObject(::NKikimr::NUdf::TUnboxedValuePod value);
     void UnlockObject(::NKikimr::NUdf::TUnboxedValuePod value);
@@ -162,6 +164,15 @@ static_assert(sizeof(TMkqlPAllocHeader) ==
     sizeof(size_t) +
     sizeof(TAllocState::TListEntry) +
     sizeof(void*), "Padding is not allowed");
+
+constexpr size_t ArrowAlignment = 64;
+struct TMkqlArrowHeader {
+    TAllocState::TListEntry Entry;
+    ui64 Size;
+    char Padding[ArrowAlignment - sizeof(TAllocState::TListEntry) - sizeof(ui64)];
+};
+
+static_assert(sizeof(TMkqlArrowHeader) == ArrowAlignment);
 
 class TScopedAlloc {
 public:
@@ -410,6 +421,7 @@ inline void MKQLUnregisterObject(NUdf::TBoxedValue* value) noexcept {
 void* MKQLArrowAllocate(ui64 size);
 void* MKQLArrowReallocate(const void* mem, ui64 prevSize, ui64 size);
 void MKQLArrowFree(const void* mem, ui64 size);
+void MKQLArrowUntrack(const void* mem);
 
 template <const EMemorySubPool MemoryPoolExt = EMemorySubPool::Default>
 struct TWithMiniKQLAlloc {

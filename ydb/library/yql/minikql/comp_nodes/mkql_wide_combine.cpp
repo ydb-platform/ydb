@@ -146,7 +146,7 @@ struct TCombinerNodes {
     void ExtractValues(TComputationContext& ctx, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue** values) const {
         for (size_t i = 0, j = 0; i != ItemNodes.size(); ++i) {
             if (IsInputItemNodeUsed(i)) {
-                values[i] = &keys[j++];
+                *values[i] = keys[j++];
             } else {
                 values[i] = nullptr;
             }
@@ -688,8 +688,9 @@ private:
                     fields[i] = &(BufferForUsedInputItems[j++]);
                 }
             }*/ 
-
-            Tongue = nullptr;
+            Tongue = bucket.InMemoryProcessingState->Tongue;
+            Throat = bucket.InMemoryProcessingState->Throat;
+            // Tongue = nullptr;
             
             HasRawDataToExtract = true;
             return false;
@@ -767,7 +768,7 @@ private:
     bool RecoverState; //sub mode for ProcessSpilledData
 
     TAsyncReadOperation AsyncReadOperation = std::nullopt;
-    static constexpr size_t SpilledBucketCount = 1;
+    static constexpr size_t SpilledBucketCount = 128;
     std::deque<TSpilledBucket> SpilledBuckets;
     ui64 BufferForUsedInputItemsBucketId;
     TUnboxedValueVector BufferForUsedInputItems;
@@ -1281,11 +1282,9 @@ public:
                 if (ptr->UpdateAndWait()) {
                     return EFetchResult::Yield;
                 }
-
                 if (ptr->InputStatus != EFetchResult::Finish) {
                     for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i)
                         fields[i] = Nodes.GetUsedInputItemNodePtrOrNull(ctx, i);
-                    
                     switch (ptr->InputStatus = Flow->FetchValues(ctx, fields)) {
                         case EFetchResult::One:
                             break;
@@ -1297,8 +1296,7 @@ public:
                 }
 
                 if (ptr->IsProcessingRequired()) {
-                    if (ptr->Tongue)
-                        Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
+                    Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
 
                     switch(ptr->TasteIt()) {
                         case TSpillingSupportState::ETasteResult::Init:

@@ -36,9 +36,13 @@ ui64 SafeDiff(ui64 a, ui64 b) {
     return a - Min(a, b);
 }
 
+}
+
+namespace {
+
 class TMemTableMemoryConsumersCollection;
 
-class TMemTableMemoryConsumer : public IMemTableMemoryConsumer {
+class TMemTableMemoryConsumer : public IMemoryConsumer {
 public:
    TMemTableMemoryConsumer(TActorId owner, ui32 table, std::weak_ptr<TMemTableMemoryConsumersCollection> collection)
         : Collection(std::move(collection))
@@ -94,14 +98,17 @@ public:
         }
     }
 
-    void CompactionComplete(TIntrusivePtr<TMemTableMemoryConsumer> consumer) {
+    ui32 CompactionComplete(TIntrusivePtr<TMemTableMemoryConsumer> consumer) {
         auto it = Compacting.find(consumer);
         if (it != Compacting.end()) {
+            ui32 table = it->first->Table;
             MemTableCompactedBytesCounter->Add(it->second);
             ChangeTotalCompacting(-it->second);
             NonCompacting.insert(it->first);
             Compacting.erase(it);
+            return table;
         }
+        return Max<ui32>();
     }
 
     /**
@@ -181,6 +188,29 @@ namespace {
 using namespace NActors;
 using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
 
+class TMemoryConsumer : public IMemoryConsumer {
+public:
+    TMemoryConsumer(EMemoryConsumerKind kind, TActorId actorId)
+        : Kind(kind)
+        , ActorId(actorId)
+    {
+    }
+
+    ui64 GetConsumption() const {
+        return Consumption;
+    }
+
+    void SetConsumption(ui64 value) override {
+        Consumption = value;
+    }
+
+public:
+    const EMemoryConsumerKind Kind;
+    const TActorId ActorId;
+private:
+    std::atomic<ui64> Consumption = 0;
+};
+
 struct TConsumerConfig {
     std::optional<float> MinPercent;
     std::optional<ui64> MinBytes;
@@ -190,17 +220,17 @@ struct TConsumerConfig {
 };
 
 struct TConsumerState {
-    TIntrusivePtr<TMemoryConsumer> Consumer_;
-    EMemoryConsumerKind Kind;
-    ui64 Consumption;
-    TConsumerConfig Config;
+    const EMemoryConsumerKind Kind;
+    const TActorId ActorId;
+    const ui64 Consumption;
+    const TConsumerConfig Config;
     ui64 MinBytes = 0;
     ui64 MaxBytes = 0;
 
-    TConsumerState(TIntrusivePtr<TMemoryConsumer> consumer, TConsumerConfig config)
-        : Consumer_(std::move(consumer))
-        , Kind(Consumer_->GetKind())
-        , Consumption(Consumer_->GetConsumption())
+    TConsumerState(const TMemoryConsumer& consumer, TConsumerConfig config)
+        : Kind(consumer.Kind)
+        , ActorId(consumer.ActorId)
+        , Consumption(consumer.GetConsumption())
         , Config(config)
     {
     }
@@ -225,13 +255,12 @@ public:
 
     TMemoryController(
             TDuration interval,
-            TIntrusivePtr<TMemoryConsumersCollection> consumersCollection,
             TIntrusiveConstPtr<IProcessMemoryInfoProvider> processMemoryInfoProvider,
             const NKikimrConfig::TMemoryControllerConfig& config,
             TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
         : Interval(interval)
-        , ConsumersCollection(std::move(consumersCollection))
-        , MemTableMemoryConsumersCollection(std::make_shared<TMemTableMemoryConsumersCollection>(counters, ConsumersCollection->Register(EMemoryConsumerKind::MemTable)))
+        , MemTables(std::make_shared<TMemTableMemoryConsumersCollection>(counters, 
+            Consumers.emplace(EMemoryConsumerKind::MemTable, MakeIntrusive<TMemoryConsumer>(EMemoryConsumerKind::MemTable, TActorId{})).first->second))
         , ProcessMemoryInfoProvider(std::move(processMemoryInfoProvider))
         , Config(config)
         , Counters(counters)
@@ -254,9 +283,11 @@ private:
             HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig);
             CFunc(TEvents::TEvWakeup::EventType, HandleWakeup);
 
-            hFunc(TEvMemTableRegister, Handle);
-            hFunc(TEvMemTableUnregister, Handle);
-            hFunc(TEvMemTableCompacted, Handle);
+            HFunc(TEvConsumerRegister, Handle);
+
+            HFunc(TEvMemTableRegister, Handle);
+            HFunc(TEvMemTableUnregister, Handle);
+            HFunc(TEvMemTableCompacted, Handle);
         }
     }
 
@@ -272,14 +303,12 @@ private:
         ui64 softLimitBytes = GetSoftLimitBytes(hardLimitBytes);
         ui64 targetUtilizationBytes = GetTargetUtilizationBytes(hardLimitBytes);
 
-        auto consumers_ = ConsumersCollection->GetConsumers();
-        TVector<TConsumerState> consumers(::Reserve(consumers_.size()));
+        TVector<TConsumerState> consumers(::Reserve(Consumers.size()));
         ui64 consumersConsumption = 0;
-        for (auto& consumer : consumers_) {
-            consumers.push_back(BuildConsumerState(std::move(consumer), hardLimitBytes));
+        for (const auto& consumer : Consumers) {
+            consumers.push_back(BuildConsumerState(*consumer.second, hardLimitBytes));
             consumersConsumption += consumers.back().Consumption;
         }
-        consumers_.clear();
 
         // allocatedMemory = externalConsumption + consumersConsumption
         ui64 externalConsumption = SafeDiff(processMemoryInfo.AllocatedMemory, consumersConsumption);
@@ -341,21 +370,32 @@ private:
         ctx.Schedule(Interval, new TEvents::TEvWakeup());
     }
 
-    void Handle(TEvMemTableRegister::TPtr &ev) {
+    void Handle(TEvConsumerRegister::TPtr &ev, const TActorContext& ctx) {
         const auto *msg = ev->Get();
-        auto consumer = MemTableMemoryConsumersCollection->Register(ev->Sender, msg->Table);
+        auto consumer = Consumers.emplace(msg->Kind, MakeIntrusive<TMemoryConsumer>(msg->Kind, ev->Sender));
+        Y_ABORT_UNLESS(consumer.second, "Consumer kinds should be unique");
+        LOG_DEBUG_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Consumer " << msg->Kind << " " << ev->Sender << " registered");
+        Send(ev->Sender, new TEvConsumerRegistered(consumer.first->second));
+    }
+
+    void Handle(TEvMemTableRegister::TPtr &ev, const TActorContext& ctx) {
+        const auto *msg = ev->Get();
+        auto consumer = MemTables->Register(ev->Sender, msg->Table);
+        LOG_TRACE_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "MemTable " << ev->Sender << " " << msg->Table << " registered");
         Send(ev->Sender, new TEvMemTableRegistered(msg->Table, std::move(consumer)));
     }
 
-    void Handle(TEvMemTableUnregister::TPtr &ev) {
+    void Handle(TEvMemTableUnregister::TPtr &ev, const TActorContext& ctx) {
         const auto *msg = ev->Get();
-        MemTableMemoryConsumersCollection->Unregister(ev->Sender, msg->Table);
+        MemTables->Unregister(ev->Sender, msg->Table);
+        LOG_TRACE_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "MemTable " << ev->Sender << " " << msg->Table << " unregistered");
     }
 
-    void Handle(TEvMemTableCompacted::TPtr &ev) {
+    void Handle(TEvMemTableCompacted::TPtr &ev, const TActorContext& ctx) {
         const auto *msg = ev->Get();
-        if (auto consumer = dynamic_cast<TMemTableMemoryConsumer*>(msg->Consumer.Get())) {
-            MemTableMemoryConsumersCollection->CompactionComplete(consumer);
+        if (auto consumer = dynamic_cast<TMemTableMemoryConsumer*>(msg->MemoryConsumer.Get())) {
+            ui32 table = MemTables->CompactionComplete(consumer);
+            LOG_TRACE_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "MemTable " << ev->Sender << " " << table << " compacted");
         }
     }
 
@@ -382,23 +422,21 @@ private:
     }
 
     void ApplyLimit(const TConsumerState& consumer, ui64 limitBytes) const {
-        consumer.Consumer_->SetLimit(limitBytes);
         switch (consumer.Kind) {
-            case EMemoryConsumerKind::SharedCache:
-                Send(MakeSharedPageCacheId(), new TEvMemoryLimit(limitBytes));
-                break;
             case EMemoryConsumerKind::MemTable:
                 ApplyMemTableLimit(limitBytes);
                 break;
             default:
-                Y_ABORT("Unhandled consumer");
+                Send(consumer.ActorId, new TEvConsumerLimit(limitBytes));
+                break;
+
         }
     }
 
     void ApplyMemTableLimit(ui64 limitBytes) const {
-        auto consumers = MemTableMemoryConsumersCollection->SelectForCompaction(limitBytes);
+        auto consumers = MemTables->SelectForCompaction(limitBytes);
         for (const auto& consumer : consumers) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::MEMORY_CONTROLLER, "Request MemTable compaction of table " <<
+            LOG_TRACE_S(TlsActivationContext->AsActorContext(), NKikimrServices::MEMORY_CONTROLLER, "Request MemTable compaction of table " <<
                 consumer.first->Table << " with " << consumer.second << " bytes");
             Send(consumer.first->Owner, new TEvMemTableCompact(consumer.first->Table, consumer.second));
         }
@@ -418,8 +456,8 @@ private:
         }).first->second;
     }
 
-    TConsumerState BuildConsumerState(TIntrusivePtr<TMemoryConsumer>&& consumer, ui64 availableMemory) const {
-        auto config = GetConsumerConfig(consumer->GetKind());
+    TConsumerState BuildConsumerState(const TMemoryConsumer& consumer, ui64 availableMemory) const {
+        auto config = GetConsumerConfig(consumer.Kind);
         
         std::optional<ui64> minBytes;
         std::optional<ui64> maxBytes;
@@ -462,6 +500,21 @@ private:
         TConsumerConfig result;
 
         switch (consumer) {
+            case EMemoryConsumerKind::MemTable: {
+                if (Config.HasMemTableMinPercent() || Config.GetMemTableMinPercent()) {
+                    result.MinPercent = Config.GetMemTableMinPercent();
+                }
+                if (Config.HasMemTableMinBytes() || Config.GetMemTableMinBytes()) {
+                    result.MinBytes = Config.GetMemTableMinBytes();
+                }
+                if (Config.HasMemTableMaxPercent() || Config.GetMemTableMaxPercent()) {
+                    result.MaxPercent = Config.GetMemTableMaxPercent();
+                }
+                if (Config.HasMemTableMaxBytes() || Config.GetMemTableMaxBytes()) {
+                    result.MaxBytes = Config.GetMemTableMaxBytes();
+                }
+                break;
+            }
             case EMemoryConsumerKind::SharedCache: {
                 if (Config.HasSharedCacheMinPercent() || Config.GetSharedCacheMinPercent()) {
                     result.MinPercent = Config.GetSharedCacheMinPercent();
@@ -476,21 +529,6 @@ private:
                     result.MaxBytes = Config.GetSharedCacheMaxBytes();
                 }
                 result.CanZeroLimit = true;
-                break;
-            }
-            case EMemoryConsumerKind::MemTable: {
-                if (Config.HasMemTableMinPercent() || Config.GetMemTableMinPercent()) {
-                    result.MinPercent = Config.GetMemTableMinPercent();
-                }
-                if (Config.HasMemTableMinBytes() || Config.GetMemTableMinBytes()) {
-                    result.MinBytes = Config.GetMemTableMinBytes();
-                }
-                if (Config.HasMemTableMaxPercent() || Config.GetMemTableMaxPercent()) {
-                    result.MaxPercent = Config.GetMemTableMaxPercent();
-                }
-                if (Config.HasMemTableMaxBytes() || Config.GetMemTableMaxBytes()) {
-                    result.MaxBytes = Config.GetMemTableMaxBytes();
-                }
                 break;
             }
             default:
@@ -537,8 +575,8 @@ private:
 
 private:
     const TDuration Interval;
-    const TIntrusivePtr<TMemoryConsumersCollection> ConsumersCollection;
-    std::shared_ptr<TMemTableMemoryConsumersCollection> MemTableMemoryConsumersCollection;
+    TMap<EMemoryConsumerKind, TIntrusivePtr<TMemoryConsumer>> Consumers;
+    std::shared_ptr<TMemTableMemoryConsumersCollection> MemTables;
     const TIntrusiveConstPtr<IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
     NKikimrConfig::TMemoryControllerConfig Config;
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
@@ -549,13 +587,11 @@ private:
 
 IActor* CreateMemoryController(
         TDuration interval,
-        TIntrusivePtr<TMemoryConsumersCollection> consumersCollection,
         TIntrusiveConstPtr<IProcessMemoryInfoProvider> processMemoryInfoProvider,
         const NKikimrConfig::TMemoryControllerConfig& config, 
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
     return new TMemoryController(
         interval,
-        std::move(consumersCollection),
         std::move(processMemoryInfoProvider),
         config,
         GetServiceCounters(counters, "utils")->GetSubgroup("component", "memory_controller"));

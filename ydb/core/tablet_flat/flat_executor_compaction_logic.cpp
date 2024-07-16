@@ -314,7 +314,7 @@ TReflectSchemeChangesResult TCompactionLogic::ReflectSchemeChanges()
     return result;
 }
 
-void TCompactionLogic::ProvideMemTableMemoryConsumer(ui32 table, TIntrusivePtr<NMemory::IMemTableMemoryConsumer> memTableMemoryConsumer)
+void TCompactionLogic::ProvideMemTableMemoryConsumer(ui32 table, TIntrusivePtr<NMemory::IMemoryConsumer> memTableMemoryConsumer)
 {
     auto *tableInfo = State->Tables.FindPtr(table);
     if (tableInfo) {

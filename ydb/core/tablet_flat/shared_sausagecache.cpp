@@ -236,10 +236,17 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             CheckExpiredCollections(std::move(recheck));
         }
 
-        MemoryConsumer->SetConsumption(GetStatAllBytes());
+        if (MemoryConsumer) {
+            MemoryConsumer->SetConsumption(GetStatAllBytes());
+        }
     }
 
-    void Handle(NMemory::TEvMemoryLimit::TPtr &ev) {
+    void Handle(NMemory::TEvConsumerRegistered::TPtr &ev) {
+        auto *msg = ev->Get();
+        MemoryConsumer = std::move(msg->Consumer);
+    }
+
+    void Handle(NMemory::TEvConsumerLimit::TPtr &ev) {
         auto *msg = ev->Get();
 
         MemLimitBytes = msg->LimitBytes;
@@ -250,12 +257,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         ActualizeCacheSizeLimit();
 
         DoGC();
-
-        // TODO: move out
-        if (MemLimitBytes < ConfigLimitBytes) {
-            // in normal scenario we expect that we can fill the whole shared cache
-            
-        }
     }
 
     void Registered(TActorSystem *sys, const TActorId &owner)
@@ -1119,9 +1120,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
 public:
-    TSharedPageCache(THolder<TSharedPageCacheConfig> config, TIntrusivePtr<NMemory::IMemoryConsumer> memoryConsumer)
-        : MemoryConsumer(std::move(memoryConsumer))
-        , Config(std::move(config))
+    TSharedPageCache(THolder<TSharedPageCacheConfig> config)
+        : Config(std::move(config))
         , Cache(*Config->CacheConfig)
         , SizeOverride(Config->CacheConfig->Limit, 1, Max<i64>())
         , ConfigLimitBytes(Config->CacheConfig->Limit)
@@ -1131,7 +1131,9 @@ public:
     }
 
     void Bootstrap() {
-        MemLimitBytes = MemoryConsumer->GetLimit();
+        ActualizeCacheSizeLimit();
+        MemLimitBytes = ConfigLimitBytes;
+        Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::SharedCache));
 
         Become(&TThis::StateFunc);
         Schedule(TDuration::Seconds(1), new TKikimrEvents::TEvWakeup(UPDATE_WHITEBOARD_TAG));
@@ -1150,7 +1152,7 @@ public:
             hFunc(TKikimrEvents::TEvWakeup, Wakeup);
             cFunc(TEvents::TSystem::PoisonPill, TakePoison);
 
-            hFunc(NMemory::TEvMemoryLimit, Handle);
+            hFunc(NMemory::TEvConsumerLimit, Handle);
         }
     }
 
@@ -1161,8 +1163,8 @@ public:
 
 } // NTabletFlatExecutor
 
-IActor* CreateSharedPageCache(THolder<TSharedPageCacheConfig> config, TIntrusivePtr<NMemory::IMemoryConsumer> memoryConsumer) {
-    return new NTabletFlatExecutor::TSharedPageCache(std::move(config), std::move(memoryConsumer));
+IActor* CreateSharedPageCache(THolder<TSharedPageCacheConfig> config) {
+    return new NTabletFlatExecutor::TSharedPageCache(std::move(config));
 }
 
 }

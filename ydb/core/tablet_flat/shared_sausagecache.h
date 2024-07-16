@@ -51,7 +51,7 @@ struct TSharedPageCacheConfig {
     ui32 ActivePagesReservationPercent = 50;
 };
 
-IActor* CreateSharedPageCache(THolder<TSharedPageCacheConfig> config, TIntrusivePtr<NMemory::IMemoryConsumer> memoryConsumer);
+IActor* CreateSharedPageCache(THolder<TSharedPageCacheConfig> config);
 
 inline TActorId MakeSharedPageCacheId(ui64 id = 0) {
     char x[12] = { 's', 'h', 's', 'c' };

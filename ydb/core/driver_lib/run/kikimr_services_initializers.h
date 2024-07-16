@@ -89,10 +89,8 @@ public:
 };
 
 class TSharedCacheInitializer : public IKikimrServicesInitializer {
-    TIntrusivePtr<NMemory::IMemoryConsumer> MemoryConsumer;
-
 public:
-    TSharedCacheInitializer(const TKikimrRunConfig& runConfig, TIntrusivePtr<NMemory::IMemoryConsumer> MemoryConsumer);
+    TSharedCacheInitializer(const TKikimrRunConfig& runConfig);
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
@@ -374,10 +372,9 @@ public:
 };
 
 class TMemoryControllerInitializer : public IKikimrServicesInitializer {
-    TIntrusivePtr<NMemory::TMemoryConsumersCollection> MemoryConsumersCollection;
     TIntrusiveConstPtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
 public:
-    TMemoryControllerInitializer(const TKikimrRunConfig& runConfig, TIntrusivePtr<NMemory::TMemoryConsumersCollection> memoryConsumersCollection, TIntrusiveConstPtr<NMemory::IProcessMemoryInfoProvider> processMemoryInfoProvider);
+    TMemoryControllerInitializer(const TKikimrRunConfig& runConfig, TIntrusiveConstPtr<NMemory::IProcessMemoryInfoProvider> processMemoryInfoProvider);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };

@@ -1133,9 +1133,8 @@ void TLocalServiceInitializer::InitializeServices(
 
 // TSharedCacheInitializer
 
-TSharedCacheInitializer::TSharedCacheInitializer(const TKikimrRunConfig& runConfig, TIntrusivePtr<NMemory::IMemoryConsumer> memoryConsumer)
+TSharedCacheInitializer::TSharedCacheInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig)
-    , MemoryConsumer(std::move(memoryConsumer))
 {}
 
 void TSharedCacheInitializer::InitializeServices(
@@ -1168,7 +1167,7 @@ void TSharedCacheInitializer::InitializeServices(
     config->Counters = new TSharedPageCacheCounters(sausageGroup);
 
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeSharedPageCacheId(0),
-        TActorSetupCmd(CreateSharedPageCache(std::move(config), MemoryConsumer), TMailboxType::ReadAsFilled, appData->UserPoolId)));
+        TActorSetupCmd(CreateSharedPageCache(std::move(config)), TMailboxType::ReadAsFilled, appData->UserPoolId)));
 
     auto *configurator = NConsole::CreateSharedCacheConfigurator();
     setup->LocalServices.emplace_back(TActorId(),
@@ -2102,9 +2101,8 @@ void TMemoryTrackerInitializer::InitializeServices(
     );
 }
 
-TMemoryControllerInitializer::TMemoryControllerInitializer(const TKikimrRunConfig& runConfig, TIntrusivePtr<NMemory::TMemoryConsumersCollection> memoryConsumersCollection, TIntrusiveConstPtr<NMemory::IProcessMemoryInfoProvider> processMemoryInfoProvider)
+TMemoryControllerInitializer::TMemoryControllerInitializer(const TKikimrRunConfig& runConfig, TIntrusiveConstPtr<NMemory::IProcessMemoryInfoProvider> processMemoryInfoProvider)
     : IKikimrServicesInitializer(runConfig)
-    , MemoryConsumersCollection(std::move(memoryConsumersCollection))
     , ProcessMemoryInfoProvider(std::move(processMemoryInfoProvider))
 {}
 
@@ -2113,7 +2111,7 @@ void TMemoryControllerInitializer::InitializeServices(
     const NKikimr::TAppData* appData)
 {
     auto config = appData->MemoryControllerConfig;
-    auto* actor = NMemory::CreateMemoryController(TDuration::Seconds(1), MemoryConsumersCollection, ProcessMemoryInfoProvider, config, appData->Counters);
+    auto* actor = NMemory::CreateMemoryController(TDuration::Seconds(1), ProcessMemoryInfoProvider, config, appData->Counters);
     setup->LocalServices.emplace_back(
         TActorId(),
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->BatchPoolId)

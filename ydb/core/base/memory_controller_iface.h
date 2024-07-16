@@ -4,17 +4,19 @@
 
 namespace NKikimr::NMemory {
 
-struct IMemoryConsumer : public TThrRefBase {
-    virtual ui64 GetLimit() const = 0; // TODO: initial limit?
-    virtual void SetConsumption(ui64 value) = 0;
+enum class EMemoryConsumerKind {
+    SharedCache,
+    MemTable,
 };
 
-struct IMemTableMemoryConsumer : public TThrRefBase {
+struct IMemoryConsumer : public TThrRefBase {
     virtual void SetConsumption(ui64 value) = 0;
 };
 
 enum EEvMemory {
-    EvMemoryLimit = EventSpaceBegin(TKikimrEvents::ES_MEMORY),
+    EvConsumerRegister = EventSpaceBegin(TKikimrEvents::ES_MEMORY),
+    EvConsumerRegistered,
+    EvConsumerLimit,
     
     EvMemTableRegister,
     EvMemTableRegistered,
@@ -27,10 +29,26 @@ enum EEvMemory {
 
 static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_MEMORY), "expected EvEnd < EventSpaceEnd");
 
-struct TEvMemoryLimit : public TEventLocal<TEvMemoryLimit, EvMemoryLimit> {
+struct TEvConsumerRegister : public TEventLocal<TEvConsumerRegister, EvConsumerRegister> {
+    const EMemoryConsumerKind Kind;
+
+    TEvConsumerRegister(EMemoryConsumerKind kind)
+        : Kind(kind)
+    {}
+};
+
+struct TEvConsumerRegistered : public TEventLocal<TEvConsumerRegistered, EvConsumerRegistered> {
+    TIntrusivePtr<IMemoryConsumer> Consumer;
+
+    TEvConsumerRegistered(TIntrusivePtr<IMemoryConsumer> consumer)
+        : Consumer(std::move(consumer))
+    {}
+};
+
+struct TEvConsumerLimit : public TEventLocal<TEvConsumerLimit, EvConsumerLimit> {
     ui64 LimitBytes;
 
-    TEvMemoryLimit(ui64 limitBytes)
+    TEvConsumerLimit(ui64 limitBytes)
         : LimitBytes(limitBytes)
     {}
 };
@@ -45,9 +63,9 @@ struct TEvMemTableRegister : public TEventLocal<TEvMemTableRegister, EvMemTableR
 
 struct TEvMemTableRegistered : public TEventLocal<TEvMemTableRegistered, EvMemTableRegistered> {
     const ui32 Table;
-    TIntrusivePtr<IMemTableMemoryConsumer> Consumer;
+    TIntrusivePtr<IMemoryConsumer> Consumer;
 
-    TEvMemTableRegistered(ui32 table, TIntrusivePtr<IMemTableMemoryConsumer> consumer)
+    TEvMemTableRegistered(ui32 table, TIntrusivePtr<IMemoryConsumer> consumer)
         : Table(table)
         , Consumer(std::move(consumer))
     {}
@@ -64,10 +82,10 @@ struct TEvMemTableCompact : public TEventLocal<TEvMemTableCompact, EvMemTableCom
 };
 
 struct TEvMemTableCompacted : public TEventLocal<TEvMemTableCompacted, EvMemTableCompacted> {
-    const TIntrusivePtr<IMemTableMemoryConsumer> Consumer;
+    const TIntrusivePtr<IMemoryConsumer> MemoryConsumer;
 
-    TEvMemTableCompacted(TIntrusivePtr<IMemTableMemoryConsumer> consumer)
-        : Consumer(consumer)
+    TEvMemTableCompacted(TIntrusivePtr<IMemoryConsumer> memoryConsumer)
+        : MemoryConsumer(std::move(memoryConsumer))
     {}
 };
 

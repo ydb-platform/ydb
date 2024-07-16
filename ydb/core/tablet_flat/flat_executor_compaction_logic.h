@@ -86,7 +86,7 @@ struct TCompactionLogicState {
 
         THolder<NTable::ICompactionStrategy> Strategy;
 
-        TIntrusivePtr<NMemory::IMemTableMemoryConsumer> MemTableMemoryConsumer;
+        TIntrusivePtr<NMemory::IMemoryConsumer> MemTableMemoryConsumer;
 
         TDeque<TSnapRequest> SnapRequests;
 
@@ -229,7 +229,7 @@ public:
     void AllowBorrowedGarbageCompaction(ui32 table);
 
     TReflectSchemeChangesResult ReflectSchemeChanges();
-    void ProvideMemTableMemoryConsumer(ui32 table, TIntrusivePtr<NMemory::IMemTableMemoryConsumer> memTableMemoryConsumer);
+    void ProvideMemTableMemoryConsumer(ui32 table, TIntrusivePtr<NMemory::IMemoryConsumer> memTableMemoryConsumer);
     void ReflectRemovedRowVersions(ui32 table);
     void UpdateInMemStatsStep(ui32 table, ui32 steps, ui64 size);
     void CheckInMemStats(ui32 table);

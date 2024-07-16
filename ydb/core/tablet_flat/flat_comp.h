@@ -385,7 +385,7 @@ namespace NTable {
     public:
         virtual void Register(ui32 table) = 0;
         virtual void Unregister(ui32 table) = 0;
-        virtual void CompactionComplete(TIntrusivePtr<NMemory::IMemTableMemoryConsumer> consumer) = 0;
+        virtual void CompactionComplete(TIntrusivePtr<NMemory::IMemoryConsumer> consumer) = 0;
         virtual ~IMemTableMemoryConsumersCollection() = default;
     };
 

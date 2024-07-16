@@ -60,7 +60,6 @@ protected:
     std::shared_ptr<TLogBackend> LogBackend;
     TAutoPtr<TActorSystem> ActorSystem;
 
-    TIntrusivePtr<NMemory::TMemoryConsumersCollection> MemoryConsumersCollection;
     TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
 
     TKikimrRunner(std::shared_ptr<TModuleFactories> factories = {});

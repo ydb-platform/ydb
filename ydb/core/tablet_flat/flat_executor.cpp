@@ -76,7 +76,7 @@ public:
         Send(new NMemory::TEvMemTableUnregister(table));
     }
 
-    void CompactionComplete(TIntrusivePtr<NMemory::IMemTableMemoryConsumer> consumer) override {
+    void CompactionComplete(TIntrusivePtr<NMemory::IMemoryConsumer> consumer) override {
         Send(new NMemory::TEvMemTableCompacted(std::move(consumer)));
     }
 

@@ -131,9 +131,7 @@ public:
     void SendData();
     void CloseSession();
 
-    void Handle(TEvPrivate::TEvPqEventsReady::TPtr&);
-    void Handle(TEvRowDispatcher::TEvSessionAddConsumer::TPtr&);
-    void Handle(TEvRowDispatcher::TEvSessionDeleteConsumer::TPtr&);
+
     TString GetSessionId() const;
     void HandleNewEvents();
     void PassAway() override;
@@ -146,6 +144,10 @@ public:
     std::pair<NYql::NUdf::TUnboxedValuePod, i64> CreateItem(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message);
     TReadyBatch& GetActiveBatch(/*const TPartitionKey& partitionKey, TInstant time*/);
 
+    void Handle(TEvPrivate::TEvPqEventsReady::TPtr&);
+    void Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr&);
+    void Handle(TEvRowDispatcher::TEvSessionAddConsumer::TPtr&);
+    void Handle(TEvRowDispatcher::TEvSessionDeleteConsumer::TPtr&);
     void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev);
     void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev);
     void Handle(NActors::TEvents::TEvUndelivered::TPtr &ev);
@@ -156,6 +158,7 @@ private:
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvPqEventsReady, Handle);
+        hFunc(TEvRowDispatcher::TEvGetNextBatch, Handle);
         hFunc(TEvRowDispatcher::TEvSessionAddConsumer, Handle);
         hFunc(TEvRowDispatcher::TEvSessionDeleteConsumer, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
@@ -265,6 +268,11 @@ void TTopicSession::Handle(TEvPrivate::TEvPqEventsReady::TPtr&) {
     HandleNewEvents();
     SubscribeOnNextEvent();
     ParseData();
+}
+
+void TTopicSession::Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr&) {
+    LOG_ROW_DISPATCHER_DEBUG("TEvGetNextBatch");
+ 
 }
 
 void TTopicSession::HandleNewEvents() {
@@ -490,7 +498,7 @@ void TTopicSession::SendData() {
             message.SetJson(json);
             message.SetOffset(CurrentOffset);
             
-            auto event = std::make_unique<TEvRowDispatcher::TEvSessionData>();
+            auto event = std::make_unique<TEvRowDispatcher::TEvMessageBatch>();
             event->Record.SetPartitionId(PartitionId);    
             event->Record.AddMessages()->CopyFrom(message);
 

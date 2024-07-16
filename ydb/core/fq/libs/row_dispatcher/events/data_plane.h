@@ -17,8 +17,10 @@ struct TEvRowDispatcher {
         EvCreateSemaphoreResult = YqEventSubspaceBegin(TYqEventSubspace::RowDispatcher),
         EvCoordinatorChanged,
         EvStartSession,
+        EvAck,
+        EvGetNextBatch,
+        EvMessageBatch,
         EvStopSession,
-        EvSessionData,
         EvSessionError,
 
         EvRowDispatcherRequest,
@@ -67,7 +69,37 @@ struct TEvRowDispatcher {
 
     struct TEvStartSession : public NActors::TEventPB<TEvStartSession,
         NFq::NRowDispatcherProto::TEvStartSession, EEv::EvStartSession> {
+            
         TEvStartSession() = default;
+        TEvStartSession(
+            const NYql::NPq::NProto::TDqPqTopicSource& sourceParams,
+            ui64 partitionId,
+            const TString token,
+            bool addBearerToToken,
+            TMaybe<ui64> readOffset,
+            ui64 startingMessageTimestampMs) {
+            Record.MutableSource()->CopyFrom(sourceParams);
+            Record.SetPartitionId(partitionId);
+            Record.SetToken(token);
+            Record.SetAddBearerToToken(addBearerToToken);
+            if (readOffset) {
+                Record.SetOffset(*readOffset);
+            }
+            Record.SetStartingMessageTimestampMs(startingMessageTimestampMs);
+        }
+    };
+
+    struct TEvAck : public NActors::TEventPB<TEvAck,
+        NFq::NRowDispatcherProto::TEvAck, EEv::EvAck> {
+        TEvAck() = default;
+        explicit TEvAck(const NYql::NDqProto::TMessageTransportMeta& transportMeta) {
+            Record.MutableTransportMeta()->CopyFrom(transportMeta);
+        }
+    };
+
+    struct TEvGetNextBatch : public NActors::TEventPB<TEvGetNextBatch,
+        NFq::NRowDispatcherProto::TEvGetNextBatch, EEv::EvGetNextBatch> {
+        TEvGetNextBatch() = default;
     };
 
     struct TEvStopSession : public NActors::TEventPB<TEvStopSession,
@@ -75,12 +107,12 @@ struct TEvRowDispatcher {
         TEvStopSession() = default;
     };
 
-    struct TEvSessionData : public NActors::TEventPB<TEvSessionData,
-        NFq::NRowDispatcherProto::TEvSessionData, EEv::EvSessionData> {
-        TEvSessionData() = default;
+    struct TEvMessageBatch : public NActors::TEventPB<TEvMessageBatch,
+        NFq::NRowDispatcherProto::TEvMessageBatch, EEv::EvMessageBatch> {
+        TEvMessageBatch() = default;
     };
 
-    struct TEvSessionError : public NActors::TEventPB<TEvSessionData,
+    struct TEvSessionError : public NActors::TEventPB<TEvSessionError,
         NFq::NRowDispatcherProto::TEvSessionError, EEv::EvSessionError> {
         TEvSessionError() = default;
     };

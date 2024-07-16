@@ -2,12 +2,13 @@
 #include "dq_pq_rd_session.h"
 #include "probes.h"
 
+#include <ydb/library/yql/dq/common/dq_common.h>
+#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
-#include <ydb/library/yql/dq/actors/compute/dq_source_watermark_tracker.h>
-#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
-#include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
+#include <ydb/library/yql/dq/actors/compute/dq_source_watermark_tracker.h>
+#include <ydb/library/yql/dq/actors/compute/retry_queue.h>
 
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
@@ -20,7 +21,6 @@
 //#include <ydb/core/fq/libs/row_dispatcher/leader_detector.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
-
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
@@ -125,12 +125,22 @@ private:
             Started,
 
         };
-        TActorId RowDispatcherActorId;
+        SessionInfo(
+            const TTxId& txId,
+            const NActors::TActorId selfId,
+            TActorId rowDispatcherActorId,
+            ui64 eventQueueId) {
+            EventsQueue.Init(txId, selfId, selfId, eventQueueId);
+            EventsQueue.OnNewRecipientId(rowDispatcherActorId);
+        }
+
         ESessionStatus Status = ESessionStatus::NoSession;
         ui64 LastOffset = 0;
 
         TVector<TString> Data;
-//        TVector<> Data;
+        NYql::NDq::TRetryEventsQueue EventsQueue;
+    //private:
+        TActorId RowDispatcherActorId;
     };
     
     TMap<ui64, SessionInfo> Sessions;
@@ -156,7 +166,9 @@ public:
     void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev);
     void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev);
     void Handle(NActors::TEvents::TEvUndelivered::TPtr &ev);
-    void Handle(NFq::TEvRowDispatcher::TEvSessionData::TPtr &ev);
+    void Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev);
+    void Handle(NFq::TEvRowDispatcher::TEvAck::TPtr &ev);
+    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&);
 
     STRICT_STFUNC(
         StateFunc, {
@@ -166,11 +178,10 @@ public:
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
         hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
-        hFunc(NFq::TEvRowDispatcher::TEvSessionData, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvMessageBatch, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvAck, Handle);
+        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
 
-        // hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
-        // hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
-        // hFunc(TEvents::TEvUndelivered, Handle);
         // hFunc(NActors::TEvents::TEvWakeup, Handle)
     })
     static constexpr char ActorName[] = "DQ_PQ_READ_ACTOR";
@@ -249,16 +260,14 @@ void TDqPqRdReadActor::ProcessState() {
 
             SRC_LOG_D("readOffset " << readOffset << " partitionId " << partitionId );
 
-            auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStartSession>();
-            event->Record.MutableSource()->CopyFrom(SourceParams);
-            event->Record.SetPartitionId(partitionId);
-            event->Record.SetToken(Token);
-            event->Record.SetAddBearerToToken(AddBearerToToken);
-            if (readOffset) {
-                event->Record.SetOffset(*readOffset);
-            }
-            event->Record.SetStartingMessageTimestampMs(StartingMessageTimestamp.MilliSeconds());
-            Send(sessionInfo.RowDispatcherActorId, event.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+            auto event = new NFq::TEvRowDispatcher::TEvStartSession(
+                SourceParams,
+                partitionId,
+                Token,
+                AddBearerToToken,
+                readOffset,
+                StartingMessageTimestamp.MilliSeconds());
+            sessionInfo.EventsQueue.Send(event);
             sessionInfo.Status = SessionInfo::ESessionStatus::Started;
         }
     }
@@ -446,6 +455,23 @@ std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
     return res;
 }
 
+void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvAck::TPtr &/*ev*/) {
+    SRC_LOG_D("TEvAck = ");
+
+    //  TODO 
+    // FileQueueEvents.OnEventReceived(ev);
+}
+
+void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {
+    SRC_LOG_D("TEvRetry");
+    ui64 partitionId = ev->Get()->EventQueueId;
+
+    auto sessionIt = Sessions.find(partitionId);
+    YQL_ENSURE(sessionIt != Sessions.end(), "Unknown partition id");
+    sessionIt->second.EventsQueue.Retry();
+}
+
+
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr &ev) {
     SRC_LOG_D("TEvCoordinatorChanged = " << ev->Get()->CoordinatorActorId);
 
@@ -474,9 +500,16 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr 
         TActorId rowDispatcherActorId = ActorIdFromProto(p.GetActorId());
         SRC_LOG_D("   rowDispatcherActorId:" << rowDispatcherActorId);
 
-        for (auto& partitionId : p.GetPartitionId()) {
+        for (auto partitionId : p.GetPartitionId()) {
             SRC_LOG_D("   partitionId:" << partitionId);
-            Sessions[partitionId].RowDispatcherActorId = rowDispatcherActorId;
+            if (!Sessions.contains(partitionId)) { // TODO
+                Sessions.emplace(
+                    std::piecewise_construct,
+                    std::forward_as_tuple(partitionId),
+                    std::forward_as_tuple(TxId, SelfId(), rowDispatcherActorId, partitionId));
+            
+            }
+           // Sessions[partitionId].RowDispatcherActorId = rowDispatcherActorId;
         }
     }
     ProcessState();
@@ -484,29 +517,39 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr 
 
 void TDqPqRdReadActor::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
     SRC_LOG_D("EvNodeConnected " << ev->Get()->NodeId);
+    for (auto& [partitionId, sessionInfo] : Sessions) {
+        sessionInfo.EventsQueue.HandleNodeConnected(ev->Get()->NodeId);
+    }
 }
 
 void TDqPqRdReadActor::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
     SRC_LOG_D("TEvNodeDisconnected " << ev->Get()->NodeId);
-    for (const auto& [partitionId, sessionInfo] : Sessions) {
-        if (!sessionInfo.RowDispatcherActorId 
-            || sessionInfo.RowDispatcherActorId.NodeId() != ev->Get()->NodeId) {
-                continue;
-        }
-        Stop("TEvNodeDisconnected");
+    for (auto& [partitionId, sessionInfo] : Sessions) {
+        sessionInfo.EventsQueue.HandleNodeDisconnected(ev->Get()->NodeId);
     }
+    Stop("TEvNodeDisconnected"); // TODO
+
 }
 
 void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
     SRC_LOG_D("TEvUndelivered, ev: " << ev->Get()->ToString());
 }
 
-void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionData::TPtr &ev) {
-    SRC_LOG_D("TEvSessionData, ev: " << ev->Sender);
+void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev) {
+    SRC_LOG_D("TEvMessageBatch, ev: " << ev->Sender);
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
     YQL_ENSURE(Sessions.count(partitionId), "Unknown partition id");
-
-    auto& sessionInfo = Sessions[partitionId];
+    auto it = Sessions.find(partitionId);
+    if (it == Sessions.end()) {
+        Stop("Wrong session data");
+        
+        return;
+    }
+    auto& sessionInfo = it->second;
+    if (!sessionInfo.EventsQueue.OnEventReceived(ev)) {
+        SRC_LOG_D("OnEventReceived failed ");
+        return;
+    }
     for (const auto& message : ev->Get()->Record.GetMessages()) {
         SRC_LOG_D("Json: " << message.GetJson());    
         sessionInfo.Data.emplace_back(message.GetJson());

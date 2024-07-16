@@ -165,6 +165,7 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPt
     for (auto& partitionId : ev->Get()->Record.GetPartitionId()) {
         LOG_ROW_DISPATCHER_DEBUG("  partitionId " << partitionId);
     }
+    DebugPrint();
 
     if (RowDispatchersByNode.empty()) {
         LOG_ROW_DISPATCHER_DEBUG("empty  RowDispatchersByNode"); // TODO
@@ -172,6 +173,7 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPt
     }
 
     const auto& nodeInfo = RowDispatchersByNode.begin()->second;
+    LOG_ROW_DISPATCHER_DEBUG("Send  TEvCoordinatorResult " << nodeInfo.ActorId);
     auto response = std::make_unique<TEvRowDispatcher::TEvCoordinatorResult>();
     auto* partitions = response->Record.AddPartitions();
     for (auto& partitionId : ev->Get()->Record.GetPartitionId()) {

@@ -182,6 +182,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
     if (ev->Get()->Record.HasOffset()) {
         readOffset = ev->Get()->Record.GetOffset();
     }
+    Send(ev->Sender, new NFq::TEvRowDispatcher::TEvAck(ev->Get()->Record.GetTransportMeta()));
 
     SessionKey key{ev->Get()->Record.GetSource().GetTopicPath(), ev->Get()->Record.GetPartitionId()};
     LOG_ROW_DISPATCHER_DEBUG("Sessions count " << Sessions.size());

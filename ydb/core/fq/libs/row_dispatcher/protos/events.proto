@@ -5,6 +5,7 @@ option cc_enable_arenas = true;
 
 import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/yql/providers/pq/proto/dq_io.proto";
+import "ydb/library/yql/dq/actors/protos/dq_events.proto";
 
 message TEvGetAddressRequest {
     NYql.NPq.NProto.TDqPqTopicSource Source = 1;
@@ -27,6 +28,15 @@ message TEvStartSession {
     bool AddBearerToToken = 4;
     optional uint64 Offset = 5;
     uint64 StartingMessageTimestampMs = 6;
+    optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
+}
+
+message TEvAck {
+    optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
+}
+
+message TEvGetNextBatch {
+    optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 
 message TEvStopSession {
@@ -39,9 +49,10 @@ message TEvMessage {
     uint64 Offset = 2;
 }
 
-message TEvSessionData {
+message TEvMessageBatch {
     repeated TEvMessage Messages = 1;
     uint32 PartitionId = 2;
+    optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 
 message TEvSessionError {

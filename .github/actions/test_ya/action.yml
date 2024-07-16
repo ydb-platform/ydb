@@ -95,15 +95,11 @@ runs:
         echo "TEST_ARTIFACTS_DIR_URL=$S3_URL_PREFIX/test_artifacts" >> $GITHUB_ENV
         mkdir -p $TEST_ARTIFACTS_DIR
 
-        export REPORTS_ARTIFACTS_DIR=$TMP_DIR/artifacts/test_reports
-        echo "REPORTS_ARTIFACTS_DIR=$REPORTS_ARTIFACTS_DIR" >> $GITHUB_ENV
-        mkdir -p $REPORTS_ARTIFACTS_DIR
-
         export JUNIT_REPORT_PARTS=$TMP_DIR/junit-split
         echo "JUNIT_REPORT_PARTS=$JUNIT_REPORT_PARTS" >> $GITHUB_ENV
         mkdir -p $JUNIT_REPORT_PARTS
 
-        echo "JUNIT_REPORT_XML=$TMP_DIR/junit.xml" >> $GITHUB_ENV
+        echo "JUNIT_REPORT_XML=$RESULT_DIR/junit.xml" >> $GITHUB_ENV
         echo "TESTMO_URL=${{ inputs.testman_url }}" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$RESULT_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
@@ -318,7 +314,7 @@ runs:
       run: |
         set -x
         # archive unitest reports (orig) 
-        gzip -c $JUNIT_REPORT_XML > $REPORTS_ARTIFACTS_DIR/orig_junit.xml.gz
+        gzip -c $JUNIT_REPORT_XML > $RESULT_DIR/orig_junit.xml.gz
 
         # postprocess junit report
         .github/scripts/tests/transform-ya-junit.py -i \
@@ -333,7 +329,7 @@ runs:
         .github/scripts/tests/split-junit.py -o "$JUNIT_REPORT_PARTS" "$JUNIT_REPORT_XML"
 
         # archive unitest reports (transformed)
-        tar -C $JUNIT_REPORT_PARTS/.. -czf $REPORTS_ARTIFACTS_DIR/junit_parts.xml.tar.gz $(basename $JUNIT_REPORT_PARTS)
+        tar -C $JUNIT_REPORT_PARTS/.. -czf $RESULT_DIR/junit_parts.xml.tar.gz $(basename $JUNIT_REPORT_PARTS)
     
     - name: Test history upload results to YDB
       if: inputs.run_tests
@@ -411,7 +407,7 @@ runs:
 
         .github/scripts/tests/generate-summary.py \
           --summary-out-path $ARTIFACTS_DIR/summary/ \
-          --summary-url-prefix $S3_URL_PREFIX/summary/ \
+          --summary-url-prefix $ARTIFACTS_DIR_URL/summary/ \
           --test-history-url "$TEST_HISTORY_URL" \
           --test-log-url="$YA_TEST_LOG_URL" \
           --build-preset "$BUILD_PRESET" \

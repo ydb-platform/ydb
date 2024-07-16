@@ -367,6 +367,227 @@ void TExternalComputationNode::InvalidateValue(TComputationContext& ctx) const {
     }
 }
 
+bool TComputationValueBaseNotSupportedStub::HasFastListLength() const {
+    ThrowNotSupported(__func__);
+    return false;
+}
+
+ui64 TComputationValueBaseNotSupportedStub::GetListLength() const {
+    ThrowNotSupported(__func__);
+    return 0;
+}
+
+ui64 TComputationValueBaseNotSupportedStub::GetEstimatedListLength() const {
+    ThrowNotSupported(__func__);
+    return 0;
+}
+
+bool TComputationValueBaseNotSupportedStub::HasListItems() const {
+    ThrowNotSupported(__func__);
+    return false;
+}
+
+const NUdf::TOpaqueListRepresentation* TComputationValueBaseNotSupportedStub::GetListRepresentation() const {
+    return nullptr;
+}
+
+NUdf::IBoxedValuePtr TComputationValueBaseNotSupportedStub::ReverseListImpl(const NUdf::IValueBuilder& builder) const {
+    Y_UNUSED(builder);
+    return nullptr;
+}
+
+NUdf::IBoxedValuePtr TComputationValueBaseNotSupportedStub::SkipListImpl(const NUdf::IValueBuilder& builder, ui64 count) const {
+    Y_UNUSED(builder);
+    Y_UNUSED(count);
+    return nullptr;
+}
+
+NUdf::IBoxedValuePtr TComputationValueBaseNotSupportedStub::TakeListImpl(const NUdf::IValueBuilder& builder, ui64 count) const {
+    Y_UNUSED(builder);
+    Y_UNUSED(count);
+    return nullptr;
+}
+
+NUdf::IBoxedValuePtr TComputationValueBaseNotSupportedStub::ToIndexDictImpl(const NUdf::IValueBuilder& builder) const {
+    Y_UNUSED(builder);
+    return nullptr;
+}
+
+ui64 TComputationValueBaseNotSupportedStub::GetDictLength() const {
+    ThrowNotSupported(__func__);
+    return 0;
+}
+
+bool TComputationValueBaseNotSupportedStub::HasDictItems() const {
+    ThrowNotSupported(__func__);
+    return false;
+}
+
+NUdf::TStringRef TComputationValueBaseNotSupportedStub::GetResourceTag() const {
+    ThrowNotSupported(__func__);
+    return NUdf::TStringRef();
+}
+
+void* TComputationValueBaseNotSupportedStub::GetResource() {
+    ThrowNotSupported(__func__);
+    return nullptr;
+}
+
+void TComputationValueBaseNotSupportedStub::Apply(NUdf::IApplyContext& applyCtx) const {
+    Y_UNUSED(applyCtx);
+}
+
+NUdf::TUnboxedValue TComputationValueBaseNotSupportedStub::GetListIterator() const {
+    ThrowNotSupported(__func__);
+    return {};
+}
+
+NUdf::TUnboxedValue TComputationValueBaseNotSupportedStub::GetDictIterator() const {
+    ThrowNotSupported(__func__);
+    return {};
+}
+
+NUdf::TUnboxedValue TComputationValueBaseNotSupportedStub::GetKeysIterator() const {
+    ThrowNotSupported(__func__);
+    return {};
+}
+
+NUdf::TUnboxedValue TComputationValueBaseNotSupportedStub::GetPayloadsIterator() const {
+    ThrowNotSupported(__func__);
+    return {};
+}
+
+bool TComputationValueBaseNotSupportedStub::Contains(const NUdf::TUnboxedValuePod& key) const {
+    Y_UNUSED(key);
+    ThrowNotSupported(__func__);
+    return false;
+}
+
+NUdf::TUnboxedValue TComputationValueBaseNotSupportedStub::Lookup(const NUdf::TUnboxedValuePod& key) const {
+    Y_UNUSED(key);
+    ThrowNotSupported(__func__);
+    return NUdf::TUnboxedValuePod();
+}
+
+NUdf::TUnboxedValue TComputationValueBaseNotSupportedStub::GetElement(ui32 index) const {
+    Y_UNUSED(index);
+    ThrowNotSupported(__func__);
+    return {};
+}
+
+const NUdf::TUnboxedValue* TComputationValueBaseNotSupportedStub::GetElements() const {
+    return nullptr;
+}
+
+NUdf::TUnboxedValue TComputationValueBaseNotSupportedStub::Run(
+        const NUdf::IValueBuilder* valueBuilder,
+        const NUdf::TUnboxedValuePod* args) const
+{
+    Y_UNUSED(valueBuilder);
+    Y_UNUSED(args);
+    ThrowNotSupported(__func__);
+    return {};
+}
+
+bool TComputationValueBaseNotSupportedStub::Skip() {
+    NUdf::TUnboxedValue stub;
+    return Next(stub);
+}
+
+bool TComputationValueBaseNotSupportedStub::Next(NUdf::TUnboxedValue&) {
+    ThrowNotSupported(__func__);
+    return false;
+}
+
+bool TComputationValueBaseNotSupportedStub::NextPair(NUdf::TUnboxedValue&, NUdf::TUnboxedValue&) {
+    ThrowNotSupported(__func__);
+    return false;
+}
+
+ui32 TComputationValueBaseNotSupportedStub::GetVariantIndex() const {
+    ThrowNotSupported(__func__);
+    return 0;
+}
+
+NUdf::TUnboxedValue TComputationValueBaseNotSupportedStub::GetVariantItem() const {
+    ThrowNotSupported(__func__);
+    return {};
+}
+
+NUdf::EFetchStatus TComputationValueBaseNotSupportedStub::Fetch(NUdf::TUnboxedValue& result) {
+    Y_UNUSED(result);
+    ThrowNotSupported(__func__);
+    return NUdf::EFetchStatus::Finish;
+}
+
+ui32 TComputationValueBaseNotSupportedStub::GetTraverseCount() const {
+    ThrowNotSupported(__func__);
+    return 0;
+}
+
+NUdf::TUnboxedValue TComputationValueBaseNotSupportedStub::GetTraverseItem(ui32 index) const {
+    Y_UNUSED(index);
+    ThrowNotSupported(__func__);
+    return {};
+}
+
+NUdf::TUnboxedValue TComputationValueBaseNotSupportedStub::Save() const {
+    ThrowNotSupported(__func__);
+    return NUdf::TUnboxedValue::Zero();
+}
+
+void TComputationValueBaseNotSupportedStub::Load(const NUdf::TStringRef& state) {
+    Y_UNUSED(state);
+    ThrowNotSupported(__func__);
+}
+
+bool TComputationValueBaseNotSupportedStub::Load2(const NUdf::TUnboxedValue& state) {
+    Y_UNUSED(state);
+    ThrowNotSupported(__func__);
+    return false;
+}
+
+void TComputationValueBaseNotSupportedStub::Push(const NUdf::TUnboxedValuePod& value) {
+    Y_UNUSED(value);
+    ThrowNotSupported(__func__);
+}
+
+bool TComputationValueBaseNotSupportedStub::IsSortedDict() const {
+    ThrowNotSupported(__func__);
+    return false;
+}
+
+void TComputationValueBaseNotSupportedStub::Unused1() {
+    ThrowNotSupported(__func__);
+}
+
+void TComputationValueBaseNotSupportedStub::Unused2() {
+    ThrowNotSupported(__func__);
+}
+
+void TComputationValueBaseNotSupportedStub::Unused3() {
+    ThrowNotSupported(__func__);
+}
+
+void TComputationValueBaseNotSupportedStub::Unused4() {
+    ThrowNotSupported(__func__);
+}
+
+void TComputationValueBaseNotSupportedStub::Unused5() {
+    ThrowNotSupported(__func__);
+}
+
+void TComputationValueBaseNotSupportedStub::Unused6() {
+    ThrowNotSupported(__func__);
+}
+
+NUdf::EFetchStatus TComputationValueBaseNotSupportedStub::WideFetch(NUdf::TUnboxedValue* result, ui32 width) {
+    Y_UNUSED(result);
+    Y_UNUSED(width);
+    ThrowNotSupported(__func__);
+    return NUdf::EFetchStatus::Finish;
+}
+
 TString TWideFlowProxyComputationNode::DebugString() const { return "WideFlowArg"; }
 
 EValueRepresentation TWideFlowProxyComputationNode::GetRepresentation() const {

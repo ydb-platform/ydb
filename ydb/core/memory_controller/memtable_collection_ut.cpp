@@ -44,7 +44,7 @@ Y_UNIT_TEST(Empty) {
     VERIFY_TOTAL(0);
     VERIFY_COMPACTING(0);
 
-    UNIT_ASSERT(collection->SelectForCompaction(100).empty());
+    UNIT_ASSERT(collection->SelectForCompaction(0).empty());
 
     VERIFY_TOTAL(0);
     VERIFY_COMPACTING(0);
@@ -317,64 +317,64 @@ Y_UNIT_TEST(SelectForCompaction) {
 
     reset();
     expected = {{consumers[1], 100}};
-    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(1), expected);
+    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(50), expected);
     VERIFY_TOTAL(123);
     VERIFY_COMPACTING(100);
 
     reset();
     expected = {{consumers[1], 100}};
-    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(100), expected);
+    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(23), expected);
     VERIFY_TOTAL(123);
     VERIFY_COMPACTING(100);
 
     reset();
     expected = {{consumers[1], 100}, {consumers[2], 20}};
-    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(101), expected);
+    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(22), expected);
     VERIFY_TOTAL(123);
     VERIFY_COMPACTING(120);
 
     reset();
     expected = {{consumers[1], 100}, {consumers[2], 20}, {consumers[0], 3}};
-    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(123), expected);
+    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(2), expected);
     VERIFY_TOTAL(123);
     VERIFY_COMPACTING(123);
 
     reset();
     expected = {{consumers[1], 100}, {consumers[2], 20}, {consumers[0], 3}};
-    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(999), expected);
+    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(0), expected);
     VERIFY_TOTAL(123);
     VERIFY_COMPACTING(123);
 
     reset();
     expected = {{consumers[1], 100}};
-    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(1), expected);
-    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(100).size(), 0); // compacts max, not sum
+    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(50), expected);
+    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(40).size(), 0); // compacts max, not sum
     VERIFY_TOTAL(123);
     VERIFY_COMPACTING(100);
 
     reset();
     expected = {{consumers[1], 100}};
-    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(1), expected);
+    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(50), expected);
     expected = {{consumers[2], 20}};
-    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(101), expected);
+    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(5), expected);
     VERIFY_TOTAL(123);
     VERIFY_COMPACTING(120);
 
     reset();
     expected = {{consumers[1], 100}};
-    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(1), expected);
+    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(50), expected);
     VERIFY_TOTAL(123);
     VERIFY_COMPACTING(100);
     collection->CompactionComplete(consumers[1]);
     VERIFY_TOTAL(123);
     VERIFY_COMPACTING(0);
-    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(1), expected);
+    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(50), expected);
     VERIFY_TOTAL(123);
     VERIFY_COMPACTING(100);
 
     reset();
     expected = {{consumers[1], 100}};
-    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(1), expected);
+    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(50), expected);
     consumers[1]->SetConsumption(1000);
     VERIFY_TOTAL(1023);
     VERIFY_COMPACTING(100); // didn't update
@@ -382,14 +382,14 @@ Y_UNIT_TEST(SelectForCompaction) {
     reset();
     consumers[2]->SetConsumption(0);
     expected = {{consumers[1], 100}, {consumers[0], 3}};
-    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(999), expected);
+    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(0), expected);
     VERIFY_TOTAL(103);
     VERIFY_COMPACTING(103);
 
     reset();
     collection->Unregister(TActorId{1, 10}, 101);
     expected = {{consumers[2], 20}, {consumers[0], 3}};
-    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(100), expected);
+    UNIT_ASSERT_VALUES_EQUAL(collection->SelectForCompaction(0), expected);
     VERIFY_TOTAL(23);
     VERIFY_COMPACTING(23);
     consumers[1] = collection->Register(TActorId{1, 10}, 101);

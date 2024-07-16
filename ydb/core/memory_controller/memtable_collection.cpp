@@ -70,10 +70,10 @@ TVector<std::pair<TIntrusivePtr<TMemTableMemoryConsumer>, ui64>> TMemTableMemory
         return result;
     }
 
-    for (const auto &r : NonCompacting) {
-        ui64 consumption = r->GetConsumption();
+    for (const auto &consumer : NonCompacting) {
+        ui64 consumption = consumer->GetConsumption();
         if (consumption) {
-            result.emplace_back(r, consumption);
+            result.emplace_back(consumer, consumption);
         }
     }
 
@@ -81,10 +81,10 @@ TVector<std::pair<TIntrusivePtr<TMemTableMemoryConsumer>, ui64>> TMemTableMemory
 
     size_t take = 0;
     for (auto it = result.begin(); it != result.end() && toCompact > TotalCompacting; it++) {
-        auto reg = it->first;
+        auto consumer = it->first;
 
-        Compacting[reg] = it->second;
-        Y_ABORT_UNLESS(NonCompacting.erase(reg));
+        Compacting[consumer] = it->second;
+        Y_ABORT_UNLESS(NonCompacting.erase(consumer));
 
         ChangeTotalCompacting(it->second);
 

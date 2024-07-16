@@ -108,7 +108,9 @@ async function createTables(session: Session, logger: Logger) {
 }
 ```
 
-С помощью метода `Session.describeTable()` можно вывести информацию о структуре строковой таблицы и убедиться, что она успешно создалась:
+Метод `Session.createTable()` не позволяет создавать колоночные таблицы. Это можно сделать с помощью метода `Session.executeQuery()`, который выполняет YQL-запросы. Работа с методом `Session.executeQuery()` описана в разделе [Получение выборки данных](#query-processing). 
+
+Если вы создали строковую таблицу и хотите вывести информацию о её структуре и убедиться, что она успешно создалась, воспользуйтесь методом `Session.describeTable()`:
 
 ```ts
 async function describeTable(session: Session, tableName: string, logger: Logger) {

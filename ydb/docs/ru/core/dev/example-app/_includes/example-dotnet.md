@@ -36,42 +36,90 @@ using var tableClient = new TableClient(driver, new TableClientConfig());
 
 {% include [steps/02_create_table.md](steps/02_create_table.md) %}
 
-Для создания строковых таблиц используется метод `session.ExecuteSchemeQuery` с DDL (Data Definition Language) YQL-запросом.
+Для создания таблиц используется метод `session.ExecuteSchemeQuery` с DDL (Data Definition Language) YQL-запросом:
 
-```c#
-var response = await tableClient.SessionExec(async session =>
-{
-    return await session.ExecuteSchemeQuery(@"
-        CREATE TABLE series (
-            series_id Uint64 NOT NULL,
-            title Utf8,
-            series_info Utf8,
-            release_date Date,
-            PRIMARY KEY (series_id)
-        );
+{% list tabs %}
 
-        CREATE TABLE seasons (
-            series_id Uint64,
-            season_id Uint64,
-            title Utf8,
-            first_aired Date,
-            last_aired Date,
-            PRIMARY KEY (series_id, season_id)
-        );
+- Создание строковых таблиц
 
-        CREATE TABLE episodes (
-            series_id Uint64,
-            season_id Uint64,
-            episode_id Uint64,
-            title Utf8,
-            air_date Date,
-            PRIMARY KEY (series_id, season_id, episode_id)
-        );
-    ");
-});
+    ```c#
+    var response = await tableClient.SessionExec(async session =>
+    {
+        return await session.ExecuteSchemeQuery(@"
+            CREATE TABLE series (
+                series_id Uint64 NOT NULL,
+                title Utf8,
+                series_info Utf8,
+                release_date Date,
+                PRIMARY KEY (series_id)
+            );
 
-response.Status.EnsureSuccess();
-```
+            CREATE TABLE seasons (
+                series_id Uint64,
+                season_id Uint64,
+                title Utf8,
+                first_aired Date,
+                last_aired Date,
+                PRIMARY KEY (series_id, season_id)
+            );
+
+            CREATE TABLE episodes (
+                series_id Uint64,
+                season_id Uint64,
+                episode_id Uint64,
+                title Utf8,
+                air_date Date,
+                PRIMARY KEY (series_id, season_id, episode_id)
+            );
+        ");
+    });
+
+    response.Status.EnsureSuccess();
+    ```
+
+- Создание колоночных таблиц
+
+    Для создания колоночных таблиц с помощью YQL-запроса используется блок `WITH` с параметром `STORE = COLUMN`.
+
+    ```c#
+    var response = await tableClient.SessionExec(async session =>
+    {
+        return await session.ExecuteSchemeQuery(@"
+            CREATE TABLE series (
+                series_id Uint64 NOT NULL,
+                title Utf8,
+                series_info Utf8,
+                release_date Date,
+                PRIMARY KEY (series_id)
+            )
+            WITH (STORE = COLUMN);
+
+            CREATE TABLE seasons (
+                series_id Uint64,
+                season_id Uint64,
+                title Utf8,
+                first_aired Date,
+                last_aired Date,
+                PRIMARY KEY (series_id, season_id)
+            )
+            WITH (STORE = COLUMN);
+
+            CREATE TABLE episodes (
+                series_id Uint64,
+                season_id Uint64,
+                episode_id Uint64,
+                title Utf8,
+                air_date Date,
+                PRIMARY KEY (series_id, season_id, episode_id)
+            )
+            WITH (STORE = COLUMN);
+        ");
+    });
+
+    response.Status.EnsureSuccess();
+    ```
+
+{% endlist %}
 
 {% include [steps/03_write_queries.md](steps/03_write_queries.md) %}
 
@@ -108,7 +156,7 @@ response.Status.EnsureSuccess();
 
 {% include [steps/04_query_processing.md](steps/04_query_processing.md) %}
 
-Для выполнения YQL-запросов используется метод `session.ExecuteDataQuery()`. SDK позволяет в явном виде контролировать выполнение транзакций и настраивать необходимый режим выполнения транзакций с помощью класса `TxControl`. В фрагменте кода, приведенном ниже, используется транзакция с режимом `SerializableRW` и автоматическим коммитом после выполнения запроса. Значения параметров запроса передаются в виде словаря имя-значение в аргументе `parameters`.
+Для выполнения YQL-запросов используется метод `session.ExecuteDataQuery()` (также может быть использован для создания колоночных таблиц). SDK позволяет в явном виде контролировать выполнение транзакций и настраивать необходимый режим выполнения транзакций с помощью класса `TxControl`. В фрагменте кода, приведенном ниже, используется транзакция с режимом `SerializableRW` и автоматическим коммитом после выполнения запроса. Значения параметров запроса передаются в виде словаря имя-значение в аргументе `parameters`.
 
 ```c#
 var response = await tableClient.SessionExec(async session =>

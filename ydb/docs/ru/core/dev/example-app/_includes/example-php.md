@@ -92,8 +92,9 @@ protected function createTabels()
     $this->print('Table `episodes` has been created.');
 }
 ```
+Метод `session->createTable()` не позволяет создавать колоночные таблицы. Это можно сделать с помощью метода `session->query()`, который выполняет YQL-запросы. Работа с методом `session->query()` описана в разделе [Получение выборки данных](#query-processing). 
 
-С помощью метода `session->describeTable()` можно вывести информацию о структуре строковой таблицы и убедиться, что она успешно создалась:
+Если вы создали строковую таблицу и хотите вывести информацию о её структуре и убедиться, что она успешно создалась, воспользуйтесь методом`session->describeTable()`:
 
 ```php
 protected function describeTable($table)

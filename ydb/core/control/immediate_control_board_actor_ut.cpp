@@ -333,8 +333,8 @@ class TTestHttpPostReaction : public TBaseTest {
         VERBOSE_COUT("Test step " << TestStep);
         switch (TestStep) {
             case 0:
-                VERBOSE_COUT("Testing POST request with an unexistentParameter");
-                HttpRequest->CgiParameters.emplace("unexistentParameter", "10");
+                VERBOSE_COUT("Testing POST request with an DataShardControls.DisableByKeyFilter");
+                HttpRequest->CgiParameters.emplace("DataShardControls.DisableByKeyFilter", "10");
                 ctx.Send(IcbActor, new NMon::TEvHttpInfo(MonService2HttpRequest));
                 break;
             case 10:
@@ -343,16 +343,16 @@ class TTestHttpPostReaction : public TBaseTest {
                         "Unexpected response message type, expected is HttpInfoRes");
                 bool isControlExists;
                 TAtomicBase value;
-                Icb->GetValue("unexistentParameter", value, isControlExists);
+                Icb->GetValue("DataShardControls.DisableByKeyFilter", value, isControlExists);
                 ASSERT_YTHROW(!isControlExists, "Parameter mustn't be created by POST request");
-                VERBOSE_COUT("Testing POST request with an existentParameter");
+                VERBOSE_COUT("Testing POST request with an DataShardControls.MaxTxInFly");
                 TControlWrapper control(10);
-                Icb->RegisterSharedControl(control, "existentParameter");
-                Icb->GetValue("existentParameter", value, isControlExists);
+                Icb->RegisterSharedControl(control, "DataShardControls.MaxTxInFly");
+                Icb->GetValue("DataShardControls.MaxTxInFly", value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 10, "Error in control creation and registration");
                 HttpRequest->CgiParameters.clear();
-                HttpRequest->CgiParameters.emplace("existentParameter", "15");
+                HttpRequest->CgiParameters.emplace("DataShardControls.MaxTxInFly", "15");
                 ctx.Send(IcbActor, new NMon::TEvHttpInfo(MonService2HttpRequest));
                 break;
             }
@@ -362,7 +362,7 @@ class TTestHttpPostReaction : public TBaseTest {
                         "Unexpected response message type, expected is HttpInfoRes");
                 bool isControlExists;
                 TAtomicBase value;
-                Icb->GetValue("existentParameter", value, isControlExists);
+                Icb->GetValue("DataShardControls.MaxTxInFly", value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 15, "Parameter haven't changed by POST request");
                 VERBOSE_COUT("Test of restoreDefaults POST request");
@@ -377,23 +377,23 @@ class TTestHttpPostReaction : public TBaseTest {
                         "Unexpected response message type, expected is HttpInfoRes");
                 bool isControlExists;
                 TAtomicBase value;
-                Icb->GetValue("existentParameter", value, isControlExists);
+                Icb->GetValue("DataShardControls.MaxTxInFly", value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 10,  "Parameter haven't restored default value");
                 VERBOSE_COUT("Test is bounds pulling wokrs");
                 TControlWrapper control1(10, 5, 15);
                 TControlWrapper control2(10, 5, 15);
-                Icb->RegisterSharedControl(control1, "existentParameterWithBoundsLower");
-                Icb->RegisterSharedControl(control2, "existentParameterWithBoundsUpper");
-                Icb->GetValue("existentParameterWithBoundsLower", value, isControlExists);
+                Icb->RegisterSharedControl(control1, "DataShardControls.MaxTxLagMilliseconds");
+                Icb->RegisterSharedControl(control2, "DataShardControls.DataTxProfile.LogThresholdMs");
+                Icb->GetValue("DataShardControls.MaxTxLagMilliseconds", value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 10, "Error in control creation and registration");
-                Icb->GetValue("existentParameterWithBoundsUpper", value, isControlExists);
+                Icb->GetValue("DataShardControls.DataTxProfile.LogThresholdMs", value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 10, "Error in control creation and registration");
                 HttpRequest->CgiParameters.clear();
-                HttpRequest->CgiParameters.emplace("existentParameterWithBoundsLower", "1");
-                HttpRequest->CgiParameters.emplace("existentParameterWithBoundsUpper", "99999");
+                HttpRequest->CgiParameters.emplace("DataShardControls.MaxTxLagMilliseconds", "1");
+                HttpRequest->CgiParameters.emplace("DataShardControls.DataTxProfile.LogThresholdMs", "99999");
                 ctx.Send(IcbActor, new NMon::TEvHttpInfo(MonService2HttpRequest));
                 break;
             }
@@ -404,11 +404,11 @@ class TTestHttpPostReaction : public TBaseTest {
                 bool isControlExists;
                 TAtomicBase value;
 
-                Icb->GetValue("existentParameterWithBoundsLower", value, isControlExists);
+                Icb->GetValue("DataShardControls.MaxTxLagMilliseconds", value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 5, "Pulling value to bounds doesn't work");
 
-                Icb->GetValue("existentParameterWithBoundsUpper", value, isControlExists);
+                Icb->GetValue("DataShardControls.DataTxProfile.LogThresholdMs", value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 15, "Pulling value to bounds doesn't work");
 

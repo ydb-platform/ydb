@@ -86,6 +86,7 @@ namespace NKikimr {
     struct TDomainsInfo;
     class TResourceProfiles;
     class TControlBoard;
+    class TExperimentingService;
     class TFeatureFlags;
 }
 
@@ -181,6 +182,7 @@ struct TAppData {
 
     NActors::TMon* Mon;
     ::NMonitoring::TDynamicCounterPtr Counters;
+    TIntrusivePtr<NKikimr::TExperimentingService> ExpService;
     TIntrusivePtr<NKikimr::TControlBoard> Icb;
     TIntrusivePtr<NGRpcService::TInFlightLimiterRegistry> InFlightLimiterRegistry;
 

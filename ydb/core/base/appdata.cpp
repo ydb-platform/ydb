@@ -10,6 +10,7 @@
 #include "resource_profile.h"
 #include "event_filter.h"
 
+#include <ydb/core/control/experimenting_service.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/protos/auth.pb.h>
@@ -86,6 +87,7 @@ TAppData::TAppData(
     , CompilerSchemeCachePaths(Max<ui64>() / 4)
     , CompilerSchemeCacheTables(Max<ui64>() / 4)
     , Mon(nullptr)
+    , ExpService(new TExperimentingService())
     , Icb(new TControlBoard())
     , InFlightLimiterRegistry(new NGRpcService::TInFlightLimiterRegistry(Icb))
     , StreamingConfig(Impl->StreamingConfig)

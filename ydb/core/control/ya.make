@@ -12,12 +12,12 @@ PEERDIR(
 
 SRCS(
     defs.h
+    experimenting_service.cpp
     immediate_control_board_actor.cpp
     immediate_control_board_actor.h
     immediate_control_board_control.cpp
     immediate_control_board_control.h
     immediate_control_board_impl.cpp
-    immediate_control_board_impl.h
     immediate_control_board_wrapper.h
 )
 

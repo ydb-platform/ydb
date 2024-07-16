@@ -6,7 +6,7 @@
 #include "blobstorage_pdisk_request_id.h"
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/experimenting_service.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/blobstorage/crypto/secured_block.h>
 #include <ydb/library/schlab/schine/job_kind.h>
@@ -2577,12 +2577,12 @@ void TPDisk::OnDriveStartup() {
 
 bool TPDisk::Initialize(TActorSystem *actorSystem, const TActorId &pDiskActor) {
 #define REGISTER_LOCAL_CONTROL(control) \
-    actorSystem->AppData<TAppData>()->Icb->RegisterLocalControl(control, \
+    actorSystem->AppData<TAppData>()->ExpService->RegisterLocalControl(control, \
             TStringBuilder() << "PDisk_" << PDiskId << "_" << #control)
 
     PDiskActor = pDiskActor;
     if (!IsStarted) {
-        if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
+        if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->ExpService) {
             REGISTER_LOCAL_CONTROL(SlowdownAddLatencyNs);
             REGISTER_LOCAL_CONTROL(EnableForsetiBinLog);
             REGISTER_LOCAL_CONTROL(ForsetiMinLogCostNsControl);

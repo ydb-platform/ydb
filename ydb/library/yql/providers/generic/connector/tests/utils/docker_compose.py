@@ -5,7 +5,6 @@ import shutil
 import socket
 import subprocess
 import yaml
-import time
 from typing import Dict, Any, Sequence
 
 import yatest.common

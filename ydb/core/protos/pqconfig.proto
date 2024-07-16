@@ -1084,15 +1084,21 @@ message TTransaction {
     enum EState {
         UNKNOWN = 0;
         PREPARING = 1;
-        PREPARED = 2;     // хранится
+        PREPARED = 2;     // persist
         PLANNING = 3;
-        PLANNED = 4;      // хранится. хотим выкинуть и не персистить
+        PLANNED = 4;      // persist
         CALCULATING = 5;
         CALCULATED = 6;
-        WAIT_RS = 7;      // хранится
+        WAIT_RS = 7;      // persist
         EXECUTING = 8;
         EXECUTED = 9;
+        DELETING = 10;
     };
+
+    message TPredicateReceived {
+        optional uint64 TabletId = 1;
+        optional bool Predicate = 2;
+    }
 
     optional EKind Kind = 11;
     optional uint64 Step = 8;
@@ -1101,14 +1107,14 @@ message TTransaction {
     optional uint64 MinStep = 3;
     optional uint64 MaxStep = 4;
 
+    repeated TPredicateReceived PredicatesReceived = 5;
+    repeated uint64 PredicateRecipients = 6;
+    optional bool Predicate = 9;
+
     //
     // TDataTransaction
     //
-    repeated uint64 Senders = 5;
-    repeated uint64 Receivers = 6;
     repeated TPartitionOperation Operations = 7;
-    optional bool SelfPredicate = 9;  // только предикаты партиций. предикаты коллег отдельно
-    optional bool AggrPredicate = 10;
 
     //
     // TConfigTransaction

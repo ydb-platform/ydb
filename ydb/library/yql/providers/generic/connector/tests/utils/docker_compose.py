@@ -181,9 +181,8 @@ class DockerComposeHelper:
         while (datetime.now() - start).total_seconds() < timeout:
             try:
                 subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf8')
-                return
             except subprocess.CalledProcessError as e:
-                LOGGER.error(f"called process error: {e}")
+                LOGGER.error(f"called subprocess output: {e.output}")
                 err = RuntimeError(f"docker-compose error: {e.output} (code {e.returncode})")
                 time.sleep(5)
 

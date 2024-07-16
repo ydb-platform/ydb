@@ -106,12 +106,14 @@ runs:
         echo "SUMMARY_LINKS=$RESULT_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
         
-        echo "YA_TEST_LOG_FILENAME=$RESULT_DIR/ya_log.log" >> $GITHUB_ENV
+        echo "YA_TEST_LOG=$RESULT_DIR/ya_log.log" >> $GITHUB_ENV
         echo "YA_TEST_LOG_URL=$S3_URL_PREFIX/ya_log.log" >> $GITHUB_ENV
 
-        export LOG_URL="$S3_URL_PREFIX/ya_make_output.log"
-        echo "LOG_URL=$LOG_URL" >> $GITHUB_ENV
-        echo "LOG_URL=$LOG_URL" >> $GITHUB_OUTPUT
+
+        echo YA_MAKE_OUTPUT="$RESULT_DIR/ya_make_output.log" >>  $GITHUB_ENV
+        export YA_MAKE_OUTPUT_URL="$S3_URL_PREFIX/ya_make_output.log"
+        echo "YA_MAKE_OUTPUT_URL=$YA_MAKE_OUTPUT_URL" >> $GITHUB_ENV
+        echo "YA_MAKE_OUTPUT_URL=$YA_MAKE_OUTPUT_URL" >> $GITHUB_OUTPUT
 
         # install test mo
         npm install -g @testmo/testmo-cli
@@ -270,14 +272,14 @@ runs:
         echo "Build+Tests **{platform_name}-${BUILD_PRESET}** is running..." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
         set +e
         (./ya make ${{ inputs.build_target }} "${params[@]}" \
-          --stat --log-file "$YA_TEST_LOG_FILENAME" -DCONSISTENT_DEBUG \
+          --stat --log-file "$YA_TEST_LOG_URL" -DCONSISTENT_DEBUG \
           --no-dir-outputs --test-failure-code 0 --build-all \
-          --cache-size 2TB --force-build-depends --evlog-file "$TMP_DIR/ya_evlog.jsonl" \
-          --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR"; echo $? > exit_code) |& tee $TMP_DIR/ya_make.log
+          --cache-size 2TB --force-build-depends --evlog-file "$RESULT_DIR/ya_evlog.jsonl" \
+          --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR"; echo $? > exit_code) |& tee $GITHUB_ENV
         set -e
         RC=`cat exit_code`
 
-        echo "10 [Ya make output]($LOG_URL)" >> $SUMMARY_LINKS
+        echo "10 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
         echo "20 [Ya logs]($YA_TEST_LOG_URL)" >> $SUMMARY_LINKS
 
         if [ $RC -ne 0 ]; then
@@ -300,7 +302,7 @@ runs:
           curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
             -d '{"state":"failure","description":"The check has been failed","context":"build_${{inputs.build_preset}}"}'
-          echo "Build failed. see the [logs]($LOG_URL)." | .github/scripts/tests/comment-pr.py --fail
+          echo "Build failed. see the [logs]($YA_MAKE_OUTPUT_URL)." | .github/scripts/tests/comment-pr.py --fail
         else
           curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
@@ -441,7 +443,7 @@ runs:
         set -x
         echo "::group::s3-sync"
         .github/scripts/Indexer/indexer.py -r "$RESULT_DIR/"
-        echo "00 [Workflow run results](${S3_BUCKET_PATH}/index.html)" >> $SUMMARY_LINKS
+        echo "00 [Workflow run results](${S3_URL_PREFIX}/index.html)" >> $SUMMARY_LINKS
         s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$RESULT_DIR/" "$S3_BUCKET_PATH/"     
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
         echo "::endgroup::"

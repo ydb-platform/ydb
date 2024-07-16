@@ -321,6 +321,9 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
     if( hasMoreRightTuples )
         RightTableBatch_ = true;
 
+    auto table1Batch = LeftTableBatch_;
+    auto table2Batch = RightTableBatch_;
+
     JoinTable1 = &t1;
     JoinTable2 = &t2;
 
@@ -333,6 +336,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
 
     if ( JoinKind == EJoinKind::Right || JoinKind == EJoinKind::RightOnly || JoinKind == EJoinKind::RightSemi ) {
         std::swap(JoinTable1, JoinTable2);
+        std::swap(table1Batch, table2Batch);
     }
 
     ui64 tuplesFound = 0;
@@ -358,7 +362,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         bool table2HasKeyStringColumns = (JoinTable2->NumberOfKeyStringColumns != 0);
         bool table1HasKeyIColumns = (JoinTable1->NumberOfKeyIColumns != 0);
         bool table2HasKeyIColumns = (JoinTable2->NumberOfKeyIColumns != 0);
-        bool swapTables = tuplesNum2 > tuplesNum1 && !LeftTableBatch_ || RightTableBatch_;
+        bool swapTables = tuplesNum2 > tuplesNum1 && !table1Batch || table2Batch;
 
 
         if (swapTables) {
@@ -371,7 +375,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
             std::swap(tuplesNum1, tuplesNum2);
        }
 
-        if (tuplesNum2 == 0)
+        if (tuplesNum2 == 0 || tuplesNum1 == 0)
             continue;
 
         ui64 slotSize = headerSize2 + 1;
@@ -1147,6 +1151,7 @@ void TTable::InitializeBucketSpillers(ISpiller::TPtr spiller) {
 
 ui64 TTable::GetSizeOfBucket(ui64 bucket) const {
     return TableBuckets[bucket].KeyIntVals.size() * sizeof(ui64)
+    + TableBuckets[bucket].JoinSlots.size() * sizeof(ui64)
     + TableBuckets[bucket].DataIntVals.size() * sizeof(ui64)
     + TableBuckets[bucket].StringsValues.size()
     + TableBuckets[bucket].StringsOffsets.size() * sizeof(ui32)

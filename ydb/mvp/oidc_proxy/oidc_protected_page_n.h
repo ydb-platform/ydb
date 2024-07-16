@@ -86,7 +86,7 @@ public:
         if (event->Get()->Response != nullptr) {
             NHttp::THttpIncomingResponsePtr response = event->Get()->Response;
             LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Incoming response for protected resource: " << response->Status);
-            if (response->Status == "400" && RequestedPageScheme.empty()) {
+            if ((response->Status == "400" || response->Status.empty()) && RequestedPageScheme.empty()) {
                 NHttp::THttpOutgoingRequestPtr request = response->GetRequest();
                 if (!request->Secure) {
                     LOG_DEBUG_S(ctx, EService::MVP, "Try to send request to HTTPS port");
@@ -218,9 +218,35 @@ private:
         Die(ctx);
     }
 
+    TString GetProtectedPageUrlWithPort(bool secure) {
+        TString addressPart;
+        TIpPort portPart = 0;
+        TStringBuf scheme, host, uri;
+        NHttp::CrackURL(ProtectedPageUrl, scheme, host, uri);
+        NHttp::CrackAddress(TString(host), addressPart, portPart);
+        if (portPart == 0) {
+            if (scheme == "http") {
+                portPart = 80;
+            } else if (scheme == "https") {
+                portPart = 443;
+            } else {
+                portPart = secure ? 443 : 80;
+            }
+        }
+        TStringBuilder sb;
+        if (!scheme.empty()) {
+            sb << scheme << "://";
+        }
+        sb << addressPart << ":" << portPart;
+        if (!uri.empty()) {
+            sb << uri;
+        }
+        return sb;
+    }
+
     void ForwardUserRequest(TStringBuf authHeader, const NActors::TActorContext& ctx, bool secure = false) {
         LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Forward user request");
-        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequest(Request->Method, ProtectedPageUrl);
+        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequest(Request->Method, GetProtectedPageUrlWithPort(secure));
         ForwardRequestHeaders(httpRequest);
         if (!authHeader.empty()) {
             httpRequest->Set(AUTH_HEADER_NAME, authHeader);

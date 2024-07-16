@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        const TString allowedProxyHost {"ydb.viewer.page"};
+        const TString allowedProxyHost {"ydb.viewer.page:80"};
 
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        const TString allowedProxyHost {"ydb.viewer.page"};
+        const TString allowedProxyHost {"ydb.viewer.page:80"};
 
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
@@ -241,7 +241,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        const TString allowedProxyHost {"ydb.viewer.page"};
+        const TString allowedProxyHost {"ydb.viewer.page:80"};
 
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),

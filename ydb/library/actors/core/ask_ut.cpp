@@ -85,7 +85,6 @@ Y_UNIT_TEST_SUITE(AskActor) {
         auto pingpong = runtime->Register(new TPingPong);
 
         {
-            UNIT_ASSERT_VALUES_EQUAL(42, 420);
             auto fut = runtime->GetAnyNodeActorSystem()->Ask<TEvents::TEvBlob>(
                 pingpong,
                 THolder(new TEvents::TEvPing));

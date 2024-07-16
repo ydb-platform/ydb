@@ -26,24 +26,4 @@ namespace NActors {
         }
     };
 
-    template <typename TEv, ui32 TEventType>
-    class TEventScheduler: public TEventLocal<TEv, TEventType> {
-    public:
-        TSchedulerCookieHolder Cookie;
-
-        TEventScheduler(ISchedulerCookie* cookie)
-            : Cookie(cookie)
-        {
-        }
-    };
-
-    template <ui32 TEventType>
-    class TEventSchedulerEv: public TEventScheduler<TEventSchedulerEv<TEventType>, TEventType> {
-    public:
-        TEventSchedulerEv(ISchedulerCookie* cookie)
-            : TEventScheduler<TEventSchedulerEv<TEventType>, TEventType>(cookie)
-        {
-        }
-    };
-
 }

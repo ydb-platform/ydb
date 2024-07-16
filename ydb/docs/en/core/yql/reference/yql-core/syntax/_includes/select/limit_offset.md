@@ -1,4 +1,4 @@
-## LIMIT and OFFSET {#limit-offset}
+# LIMIT and OFFSET
 
 `LIMIT`: limits the output to the specified number of rows. By default, the output is not restricted.
 

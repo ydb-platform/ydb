@@ -116,6 +116,7 @@ enum class EYtSettingType: ui64 {
     MonotonicKeys            /* "monotonic_keys", "monotonickeys" */,
     MutationId               /* "mutationid", "mutation_id" */,
     ColumnGroups             /* "column_groups", "columngroups" */,
+    SecurityTags             /* "security_tags", "securitytags" */,
 
     LAST
 };

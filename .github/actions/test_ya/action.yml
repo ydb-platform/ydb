@@ -178,7 +178,7 @@ runs:
           --tags "$BRANCH_TAG" --tags "$EXTRA_TAG"
         )
         echo "runid=${RUN_ID}" >> $GITHUB_OUTPUT
-        echo "TEST_HISTORY_URL=${TESTMO_URL}/automation/runs/view/${RUN_ID}" >> $YA_MAKE_OUTPUT
+        echo "TEST_HISTORY_URL=${TESTMO_URL}/automation/runs/view/${RUN_ID}" >> $GITHUB_ENV
 
         # Print test history link
         echo "10 [Test history](${TEST_HISTORY_URL})" >> $SUMMARY_LINKS
@@ -273,7 +273,7 @@ runs:
           --stat --log-file "$YA_TEST_LOG" -DCONSISTENT_DEBUG \
           --no-dir-outputs --test-failure-code 0 --build-all \
           --cache-size 2TB --force-build-depends --evlog-file "$RESULT_DIR/ya_evlog.jsonl" \
-          --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR"; echo $? > exit_code) |& tee $GITHUB_ENV
+          --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR"; echo $? > exit_code) |& tee $YA_MAKE_OUTPUT
         set -e
         RC=`cat exit_code`
 

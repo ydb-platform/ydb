@@ -11,7 +11,6 @@ PEERDIR(
     ydb/core/base
     ydb/core/mon
     ydb/core/mon_alloc
-    ydb/core/memory_controller
     ydb/core/scheme
     ydb/core/tablet
 )

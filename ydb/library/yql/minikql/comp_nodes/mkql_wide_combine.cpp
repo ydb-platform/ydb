@@ -365,8 +365,7 @@ public:
         Init = -1,
         Update,
         DataRequired,
-        RawDataExtractionRequired,
-        Skip
+        RawDataExtractionRequired
     };
     TSpillingSupportState(
         TMemoryUsageInfo* memInfo,
@@ -1293,9 +1292,6 @@ public:
                         case TSpillingSupportState::ETasteResult::RawDataExtractionRequired:
                             Nodes.ExtractValues(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Throat), fields);
                             break;
-
-                        case TSpillingSupportState::ETasteResult::Skip:
-                            break;
                     }
                     continue;
                 }
@@ -1573,8 +1569,7 @@ public:
 #endif
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
-        state = ctx.HolderFactory.Create<TSpillingSupportState>(
-            UsedInputItemType, KeyAndStateType,
+        state = ctx.HolderFactory.Create<TSpillingSupportState>(UsedInputItemType, KeyAndStateType,
             Nodes.KeyNodes.size(),
             Nodes.ItemNodes.size(),
 #ifdef MKQL_DISABLE_CODEGEN

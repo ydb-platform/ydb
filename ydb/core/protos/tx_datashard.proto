@@ -1453,6 +1453,53 @@ message TEvBuildIndexProgressResponse {
     optional uint64 RequestSeqNoRound = 13;
 }
 
+message TEvSampleKRequest {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional uint64 OwnerId = 3;
+    optional uint64 PathId = 4;
+
+    optional uint64 K = 5;
+    optional uint64 Seed = 6;
+
+    repeated string Columns = 7;
+    optional NKikimrTx.TKeyRange KeyRange = 8;
+
+    optional uint64 SnapshotTxId = 9;
+    optional uint64 SnapshotStep = 10;
+
+    optional uint64 SeqNoGeneration = 11;
+    optional uint64 SeqNoRound = 12;
+}
+
+message TEvSampleKResponse {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional uint64 OwnerId = 3;
+    optional uint64 PathId = 4;
+
+    enum EStatus {
+        INVALID = 0;
+        DONE = 1;
+
+        ABORTED = 2;
+        BAD_REQUEST = 3;
+    }
+
+    optional EStatus Status = 5;
+    repeated Ydb.Issue.IssueMessage Issues = 6;
+
+    optional NKikimrTx.TKeyRange RequestedKeyRange = 7;
+
+    optional uint64 RequestSeqNoGeneration = 8;
+    optional uint64 RequestSeqNoRound = 9;
+
+    repeated uint64 Probabilities = 10;
+    repeated bytes Rows = 11;
+}
+
 message TEvCdcStreamScanRequest {
     message TLimits {
         optional uint32 BatchMaxBytes = 1 [default = 512000];

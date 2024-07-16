@@ -2502,6 +2502,19 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             "<main>:1:40: Error: local: alternative is not implemented yet: 723:35: local_index\n");
     }
 
+    Y_UNIT_TEST(CreateTableAddIndexVector) {
+        const auto result = SqlToYql(R"(USE plato;
+            CREATE TABLE table (
+                pk INT32 NOT NULL,
+                col String, 
+                INDEX idx GLOBAL USING vector_kmeans_tree 
+                    WITH (distance=cosine, vector_type=float, vector_dimension=1024,) 
+                    ON (col) COVER (col),
+                PRIMARY KEY (pk))
+                )");
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    }
+
     Y_UNIT_TEST(AlterTableAddIndexVector) {
         const auto result = SqlToYql(R"(USE plato; 
             ALTER TABLE table ADD INDEX idx 

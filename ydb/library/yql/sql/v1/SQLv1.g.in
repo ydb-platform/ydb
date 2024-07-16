@@ -729,7 +729,7 @@ local_index: LOCAL;
 
 index_subtype: an_id;
 
-with_index_settings: WITH LPAREN index_setting_entry (COMMA index_setting_entry)* RPAREN; 
+with_index_settings: WITH LPAREN index_setting_entry (COMMA index_setting_entry)* COMMA? RPAREN; 
 index_setting_entry: an_id EQUALS index_setting_value;
 index_setting_value:
       id

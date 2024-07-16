@@ -462,6 +462,8 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
                 if (*slotIt != hash)
                     continue;
 
+                tuple2Idx = slotIt[slotSize - 1];
+
                 if (table1HasKeyIColumns || !(keysValSize - nullsSize1 <= slotSize - 1 - nullsSize2)) {
                     // 2nd condition cannot be true unless HasKeyStringColumns or HasKeyIColumns, hence size at the end of header is present
 
@@ -500,8 +502,6 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
                     if (!std::equal(it1 + keyIntOffset1, it1 + keysValSize, slotIt + keyIntOffset2))
                         continue;
                 }
-
-                tuple2Idx = slotIt[slotSize - 1];
 
                 tuplesFound++;
                 JoinTuplesIds joinIds;

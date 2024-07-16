@@ -270,12 +270,14 @@ public:
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx) {
         NHttp::THttpIncomingRequestPtr request = event->Get()->Request;
         if (request->Method == "GET") {
-            if (Settings.AuthProfile == NMVP::EAuthProfile::YProfile) {
-                ctx.Register(new THandlerSessionCreate(event->Sender, request, HttpProxyId, Settings));
-            } else {
-                ctx.Register(new THandlerSessionCreateN(event->Sender, request, HttpProxyId, Settings));
+            switch (Settings.AuthProfile) {
+                case NMVP::EAuthProfile::YProfile:
+                    ctx.Register(new THandlerSessionCreate(event->Sender, request, HttpProxyId, Settings));
+                    return;
+                case NMVP::EAuthProfile::NProfile:
+                    ctx.Register(new THandlerSessionCreateN(event->Sender, request, HttpProxyId, Settings));
+                    return;
             }
-            return;
         }
         auto response = request->CreateResponseBadRequest();
         ctx.Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));

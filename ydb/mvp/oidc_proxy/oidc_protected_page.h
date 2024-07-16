@@ -289,10 +289,13 @@ public:
     {}
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx) {
-        if (Settings.AuthProfile == NMVP::EAuthProfile::YProfile) {
-            ctx.Register(new THandlerSessionServiceCheck(event->Sender, event->Get()->Request, HttpProxyId, Settings));
-        } else {
-            ctx.Register(new THandlerSessionServiceCheckN(event->Sender, event->Get()->Request, HttpProxyId, Settings));
+        switch (Settings.AuthProfile) {
+            case NMVP::EAuthProfile::YProfile:
+                ctx.Register(new THandlerSessionServiceCheck(event->Sender, event->Get()->Request, HttpProxyId, Settings));
+                break;
+            case NMVP::EAuthProfile::NProfile:
+                ctx.Register(new THandlerSessionServiceCheckN(event->Sender, event->Get()->Request, HttpProxyId, Settings));
+                break;
         }
     }
 

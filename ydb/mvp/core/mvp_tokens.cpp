@@ -76,10 +76,13 @@ void TMvpTokenator::Handle(TEvPrivate::TEvRefreshToken::TPtr event) {
     BLOG_D("Refreshing token " << name);
     const NMvp::TJwtInfo* jwtInfo = TokenConfigs.GetJwtTokenConfig(name);
     if (jwtInfo != nullptr) {
-        if (AuthProfile == NMVP::EAuthProfile::YProfile) {
-            UpdateJwtTokenY(jwtInfo);
-        } else {
-            UpdateJwtTokenN(jwtInfo);
+        switch (AuthProfile) {
+            case NMVP::EAuthProfile::YProfile:
+                UpdateJwtTokenY(jwtInfo);
+                break;
+            case NMVP::EAuthProfile::NProfile:
+                UpdateJwtTokenN(jwtInfo);
+                break;
         }
         return;
     }

@@ -2519,7 +2519,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         const auto result = SqlToYql(R"(USE plato; 
             ALTER TABLE table ADD INDEX idx 
                 GLOBAL USING vector_kmeans_tree 
-                WITH (distance=cosine, vector_type=float, vector_dimension=1024) 
+                WITH (distance=cosine, vector_type="float", vector_dimension=1024) 
                 ON (col) COVER (col))");
         UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
     }

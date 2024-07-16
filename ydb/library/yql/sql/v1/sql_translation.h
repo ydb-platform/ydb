@@ -181,7 +181,7 @@ protected:
     bool CreateIndexSettings(const TRule_with_index_settings& settingsNode, TIndexDescription::EType indexType, TIndexDescription::TIndexSettings& indexSettings);
     bool CreateIndexSettingEntry(const TIdentifier& id, const TRule_index_setting_value& value, TIndexDescription::EType indexType, TIndexDescription::TIndexSettings& indexSettings);
     template<typename T>
-    std::tuple<bool, T, TString> GetIndexSettingValue(const TRule_index_setting_value& node, NSQLTranslationV1::TTranslation& ctx);
+    std::tuple<bool, T, TString> GetIndexSettingValue(const TRule_index_setting_value& node);
 
     TIdentifier GetTopicConsumerId(const TRule_topic_consumer_ref& node);
     bool CreateConsumerSettings(const TRule_topic_consumer_settings& settingsNode, TTopicConsumerSettings& settings);

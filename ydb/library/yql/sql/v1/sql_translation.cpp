@@ -735,22 +735,49 @@ bool TSqlTranslation::CreateIndexSettings(const TRule_with_index_settings& setti
 }
 
 template<typename T>
-std::tuple<bool, T, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node, NSQLTranslationV1::TTranslation& ctx) {
+std::tuple<bool, T, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
     T value;
-    const TString stringValue = IdEx(node.GetAlt_index_setting_value1().GetRule_id1(), ctx).Name;
-    if (!TryFromString<T>(stringValue, value)) {
+    // id_or_type
+    if (node.HasAlt_index_setting_value1()) {
+        const TString stringValue = IdEx(node.GetAlt_index_setting_value1().GetRule_id_or_type1(), *this).Name;
+        if (!TryFromString<T>(stringValue, value)) {
+            return {false, value, stringValue};
+        }
+        return {true, value, stringValue};
+    }
+    // STRING_VALUE
+    else if (node.HasAlt_index_setting_value2()) {
+        const TString stringValue = Token(node.GetAlt_index_setting_value2().GetToken1());
+        const auto unescaped = StringContent(Ctx, Ctx.Pos(), stringValue);
+        if (!unescaped) {
+            return {false, value, stringValue};
+        }
+        if (!TryFromString<T>(unescaped->Content, value)) {
+            return {false, value, stringValue};
+        }
+        return {true, value, unescaped->Content};
+    } else {
+        Y_ABORT("You should change implementation according to grammar changes");
+    }
+}
+
+template<>
+std::tuple<bool, ui64, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
+    const auto& intNode = node.GetAlt_index_setting_value3().GetRule_integer1();
+    const TString stringValue = Token(intNode.GetToken1());
+    ui64 value;
+    TString suffix;
+    if (!ParseNumbers(Ctx, stringValue, value, suffix)) {
         return {false, value, stringValue};
     }
     return {true, value, stringValue};
 }
 
 template<>
-std::tuple<bool, ui64, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node, NSQLTranslationV1::TTranslation& ctx) {
-    const auto& intNode = node.GetAlt_index_setting_value2().GetRule_integer1();
-    const TString stringValue = ctx.Token(intNode.GetToken1());
-    ui64 value;
-    TString suffix;
-    if (!ParseNumbers(Ctx, stringValue, value, suffix)) {
+std::tuple<bool, bool, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
+    bool value;
+    const TString stringValue = to_lower(Token(node.GetAlt_index_setting_value4().GetRule_bool_value1().GetToken1()));;
+    if (!TryFromString<bool>(stringValue, value)) {
         return {false, value, stringValue};
     }
     return {true, value, stringValue};
@@ -766,28 +793,28 @@ bool TSqlTranslation::CreateIndexSettingEntry(const TIdentifier &id,
         TVectorIndexSettings &vectorIndexSettings = std::get<TVectorIndexSettings>(indexSettings);
 
         if (to_lower(id.Name) == "distance") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<TVectorIndexSettings::EDistance>(node, *this);
+            const auto [success, value, stringValue] = GetIndexSettingValue<TVectorIndexSettings::EDistance>(node);
             if (!success) {
                 Ctx.Error() << "Invalid distance: " << stringValue;
                 return false;
             }
             vectorIndexSettings.Metric = value;
         } else if (to_lower(id.Name) == "similarity") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<TVectorIndexSettings::ESimilarity>(node, *this);
+            const auto [success, value, stringValue] = GetIndexSettingValue<TVectorIndexSettings::ESimilarity>(node);
             if (!success) {
                 Ctx.Error() << "Invalid similarity: " << stringValue;
                 return false;
             }
             vectorIndexSettings.Metric = value;
         } else if (to_lower(id.Name) == "vector_type") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<TVectorIndexSettings::EVectorType>(node, *this);
+            const auto [success, value, stringValue] = GetIndexSettingValue<TVectorIndexSettings::EVectorType>(node);
             if (!success) {
                 Ctx.Error() << "Invalid vector_type: " << stringValue;
                 return false;
             }
             vectorIndexSettings.VectorType = value;
         } else if (to_lower(id.Name) == "vector_dimension") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<ui64>(node, *this);
+            const auto [success, value, stringValue] = GetIndexSettingValue<ui64>(node);
             if (!success || value > Max<ui32>()) {
                 Ctx.Error() << "Invalid vector_dimension: " << stringValue;
                 return false;

@@ -116,6 +116,10 @@ struct TDqAsyncStats {
                 }
             }
 
+            // we want to report wait time asap (not on next message only)
+            // so we decrease wait period to minimal possible value of MinWaitDuration
+            // (used to filter out short periods) and report the rest
+
             auto delta = now - *CurrentPauseTs;
             if (delta >= MinWaitDuration * 2) {
                 WaitTime += delta;

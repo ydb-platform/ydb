@@ -414,7 +414,7 @@ namespace NYql {
         // Oracle:
         // * always set service_name for oracle;
         if (clusterConfig.GetKind() == NConnector::NApi::ORACLE) {
-            if (!clusterConfig.HasServiceName()) {
+            if (!clusterConfig.GetDataSourceOptions().contains("service_name")) {
                 return ValidationError(
                     clusterConfig,
                     context,

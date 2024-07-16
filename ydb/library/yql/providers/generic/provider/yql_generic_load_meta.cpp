@@ -327,18 +327,11 @@ namespace NYql {
             request.set_schema(schema);
         }
 
-        template <typename T>
-        void GetServiceName(T& request, const TGenericClusterConfig& clusterConfig) {
-            TString serviceName;
+        void GetServiceName(NYql::NConnector::NApi::TOracleDataSourceOptions& request, const TGenericClusterConfig& clusterConfig) {
             const auto it = clusterConfig.GetDataSourceOptions().find("service_name");
             if (it != clusterConfig.GetDataSourceOptions().end()) {
-                serviceName = it->second;
+                request.set_service_name(it->second);
             }
-            if (!serviceName) {
-                serviceName = "";
-            }
-
-            request.set_service_name(serviceName);
         }
 
         void FillDataSourceOptions(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig) {

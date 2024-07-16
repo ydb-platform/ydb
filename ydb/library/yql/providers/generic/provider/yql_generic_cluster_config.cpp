@@ -143,14 +143,10 @@ namespace NYql {
                      NYql::TGenericClusterConfig& clusterConfig) {
         auto it = properties.find("service_name");
         if (it == properties.cend()) {
-            // TODO: required property? copied from ParserSchema
-            // ythrow yexception() <<  "missing 'SERVICE_NAME' value";
             return;
         }
 
         if (!it->second) {
-            // TODO: required property? copied from ParserSchema
-            // ythrow yexception() << "invalid 'SERVICE_NAME' value: '" << it->second << "'";
             return;
         }
 
@@ -412,6 +408,17 @@ namespace NYql {
                     clusterConfig,
                     context,
                     "For YDB clusters you must set either database name or database id, but you have set none of them");
+            }
+        }
+
+        // Oracle:
+        // * always set service_name for oracle;
+        if (clusterConfig.GetKind() == NConnector::NApi::ORACLE) {
+            if (!clusterConfig.HasServiceName()) {
+                return ValidationError(
+                    clusterConfig,
+                    context,
+                    "For Oracle databases you must set service, but you have not set it");
             }
         }
 

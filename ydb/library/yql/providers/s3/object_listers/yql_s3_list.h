@@ -165,6 +165,7 @@ public:
 
 IS3Lister::TPtr MakeS3Lister(
     const IHTTPGateway::TPtr& httpGateway,
+    const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
     const TListingRequest& listingRequest,
     const TMaybe<TString>& delimiter,
     bool allowLocalFiles,
@@ -176,6 +177,7 @@ public:
 
     virtual NThreading::TFuture<NS3Lister::IS3Lister::TPtr> Make(
         const IHTTPGateway::TPtr& httpGateway,
+        const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
         const NS3Lister::TListingRequest& listingRequest,
         const TMaybe<TString>& delimiter,
         bool allowLocalFiles) = 0;

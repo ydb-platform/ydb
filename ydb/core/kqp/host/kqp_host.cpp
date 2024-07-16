@@ -1697,6 +1697,7 @@ private:
         state->Configuration->AllowAtomicUploadCommit = queryType == EKikimrQueryType::Script;
         state->Configuration->Init(FederatedQuerySetup->S3GatewayConfig, TypesCtx);
         state->Gateway = FederatedQuerySetup->HttpGateway;
+        state->GatewayRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
         state->ExecutorPoolId = AppData()->UserPoolId;
 
         auto dataSource = NYql::CreateS3DataSource(state);

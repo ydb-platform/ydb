@@ -442,12 +442,9 @@ struct TEvKesus {
     // Quoter API
 
     struct TEvDescribeQuoterResources : public TEventPB<TEvDescribeQuoterResources, NKikimrKesus::TEvDescribeQuoterResources, EvDescribeQuoterResources> {
-        using TEventPB::TEventPB;
     };
 
     struct TEvDescribeQuoterResourcesResult : public TEventPB<TEvDescribeQuoterResourcesResult, NKikimrKesus::TEvDescribeQuoterResourcesResult, EvDescribeQuoterResourcesResult> {
-        using TEventPB::TEventPB;
-
         TEvDescribeQuoterResourcesResult() = default;
 
         TEvDescribeQuoterResourcesResult(Ydb::StatusIds::StatusCode status, const TString& reason) {
@@ -456,12 +453,9 @@ struct TEvKesus {
     };
 
     struct TEvAddQuoterResource : public TEventPB<TEvAddQuoterResource, NKikimrKesus::TEvAddQuoterResource, EvAddQuoterResource> {
-        using TEventPB::TEventPB;
     };
 
     struct TEvAddQuoterResourceResult : public TEventPB<TEvAddQuoterResourceResult, NKikimrKesus::TEvAddQuoterResourceResult, EvAddQuoterResourceResult> {
-        using TEventPB::TEventPB;
-
         TEvAddQuoterResourceResult() = default;
 
         TEvAddQuoterResourceResult(Ydb::StatusIds::StatusCode status, const TString& reason) {
@@ -470,12 +464,9 @@ struct TEvKesus {
     };
 
     struct TEvUpdateQuoterResource : public TEventPB<TEvUpdateQuoterResource, NKikimrKesus::TEvUpdateQuoterResource, EvUpdateQuoterResource> {
-        using TEventPB::TEventPB;
     };
 
     struct TEvUpdateQuoterResourceResult : public TEventPB<TEvUpdateQuoterResourceResult, NKikimrKesus::TEvUpdateQuoterResourceResult, EvUpdateQuoterResourceResult> {
-        using TEventPB::TEventPB;
-
         TEvUpdateQuoterResourceResult() = default;
 
         TEvUpdateQuoterResourceResult(Ydb::StatusIds::StatusCode status, const TString& reason) {
@@ -484,12 +475,9 @@ struct TEvKesus {
     };
 
     struct TEvDeleteQuoterResource : public TEventPB<TEvDeleteQuoterResource, NKikimrKesus::TEvDeleteQuoterResource, EvDeleteQuoterResource> {
-        using TEventPB::TEventPB;
     };
 
     struct TEvDeleteQuoterResourceResult : public TEventPB<TEvDeleteQuoterResourceResult, NKikimrKesus::TEvDeleteQuoterResourceResult, EvDeleteQuoterResourceResult> {
-        using TEventPB::TEventPB;
-
         TEvDeleteQuoterResourceResult() = default;
 
         TEvDeleteQuoterResourceResult(Ydb::StatusIds::StatusCode status, const TString& reason) {

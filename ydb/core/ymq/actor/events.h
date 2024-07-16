@@ -419,7 +419,6 @@ struct TSqsEvents {
     };
 
     struct TEvActionCounterChanged: public NActors::TEventPB<TEvActionCounterChanged, NKikimrClient::TSqsActionCounterChanged, EvActionCounterChanged> {
-        using TEventPB::TEventPB;
     };
 
     struct TEvLocalCounterChanged: public NActors::TEventLocal<TEvLocalCounterChanged, EvLocalCounterChanged> {
@@ -441,12 +440,10 @@ struct TSqsEvents {
 
     // Request that is sent from proxy to sqs service actor on other (leader) node
     struct TEvSqsRequest : public NActors::TEventPB<TEvSqsRequest, NKikimrClient::TSqsRequest, EvSqsRequest> {
-        using TEventPB::TEventPB;
     };
 
     // Response to TEvSqsRequest
     struct TEvSqsResponse : public NActors::TEventPB<TEvSqsResponse, NKikimrClient::TSqsResponse, EvSqsResponse> {
-        using TEventPB::TEventPB;
     };
 
     // Request for proxying request to sqs service actor on other (leader) node

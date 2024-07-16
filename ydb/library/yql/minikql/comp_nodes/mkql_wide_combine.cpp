@@ -132,20 +132,20 @@ struct TCombinerNodes {
         }
     }
 
-    void ExtractValues(TComputationContext& ctx, NUdf::TUnboxedValue** values, NUdf::TUnboxedValue* keys) const {
+    void ExtractValues(TComputationContext& ctx, NUdf::TUnboxedValue** from, NUdf::TUnboxedValue* to) const {
         for (ui32 i = 0U; i < ItemNodes.size(); ++i) {
-            if (values[i]) {
-                keys[i] = std::move(*(values[i]));
+            if (from[i]) {
+                to[i] = std::move(*(from[i]));
             }
         }
     }
 
-    void ExtractValues(TComputationContext& ctx, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue** values) const {
+    void ExtractValues(TComputationContext& ctx, NUdf::TUnboxedValue* from, NUdf::TUnboxedValue** to) const {
         for (size_t i = 0, j = 0; i != ItemNodes.size(); ++i) {
             if (IsInputItemNodeUsed(i)) {
-                *values[i] = std::move(keys[j++]);
+                *to[i] = std::move(from[j++]);
             } else {
-                values[i] = nullptr;
+                to[i] = nullptr;
             }
         }
     }
@@ -365,7 +365,7 @@ public:
         Init = -1,
         Update,
         DataRequired,
-        DataExtractionRequired,
+        RawDataExtractionRequired,
         Skip
     };
     TSpillingSupportState(
@@ -455,7 +455,7 @@ public:
                 Throat = BufferForUsedInputItems.data();
                 HasRawDataToExtract = false;
                 HasDataForProcessing = true;
-                return ETasteResult::DataExtractionRequired;
+                return ETasteResult::RawDataExtractionRequired;
             }
             HasDataForProcessing = false;
             // while restoration we process buckets one by one starting from the first in a queue
@@ -677,15 +677,9 @@ private:
             if (AsyncReadOperation) {
                 return true;
             }
-            /* auto **fields = Ctx.WideFields.data() + WideFieldsIndex;
-            for (size_t i = 0, j = 0; i < ItemNodesSize; ++i) {
-                if (fields[i]) {
-                    fields[i] = &(BufferForUsedInputItems[j++]);
-                }
-            }*/ 
+
             Tongue = bucket.InMemoryProcessingState->Tongue;
             Throat = bucket.InMemoryProcessingState->Throat;
-            // Tongue = nullptr;
             
             HasRawDataToExtract = true;
             return false;
@@ -1303,7 +1297,7 @@ public:
                         case TSpillingSupportState::ETasteResult::DataRequired:
                             Nodes.ExtractValues(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
                             break;
-                        case TSpillingSupportState::ETasteResult::DataExtractionRequired:
+                        case TSpillingSupportState::ETasteResult::RawDataExtractionRequired:
                             Nodes.ExtractValues(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Throat), fields);
                             break;
 

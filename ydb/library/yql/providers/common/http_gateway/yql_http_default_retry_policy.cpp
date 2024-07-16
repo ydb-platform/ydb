@@ -29,7 +29,8 @@ std::unordered_set<CURLcode> FqRetriedCurlCodes() {
         CURLE_SEND_ERROR,
         CURLE_RECV_ERROR,
         CURLE_NO_CONNECTION_AVAILABLE,
-        CURLE_GOT_NOTHING
+        CURLE_GOT_NOTHING,
+        CURLE_COULDNT_RESOLVE_HOST
     };
 }
 

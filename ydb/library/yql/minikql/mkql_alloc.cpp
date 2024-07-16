@@ -20,7 +20,7 @@ void TAllocState::TListEntry::Link(TAllocState::TListEntry* root) noexcept {
 
 void TAllocState::TListEntry::Unlink() noexcept {
     std::tie(Right->Left, Left->Right) = std::make_pair(Left, Right);
-    Left = Right = nullptr;
+    Clear();
 }
 
 TAllocState::TAllocState(const TSourceLocation& location, const NKikimr::TAlignedPagePoolCounters &counters, bool supportsSizedAllocators)
@@ -56,16 +56,6 @@ void TAllocState::CleanupArrowList(TListEntry* root) {
     }
 
     root->InitLinks();
-}
-
-void TAllocState::UntrackAllArrow() {
-    for (auto curr = ArrowBlocksRoot.Right; curr != &ArrowBlocksRoot; ) {
-        auto next = curr->Right;
-        MKQLArrowUntrack((TMkqlArrowHeader*)curr + 1);
-        curr = next;
-    }
-
-    ArrowBlocksRoot.InitLinks();
 }
 
 void TAllocState::KillAllBoxed() {
@@ -258,10 +248,18 @@ void* MKQLArrowAllocate(ui64 size) {
     TAllocState* state = TlsAllocState;
     Y_ENSURE(state);
     auto fullSize = size + sizeof(TMkqlArrowHeader);
-    state->OffloadAlloc(fullSize);
+    if (state->EnableArrowTracking) {
+        state->OffloadAlloc(fullSize);
+    }
+    
     auto ptr = GetAlignedPage(fullSize);
     auto header = (TMkqlArrowHeader*)ptr;
-    header->Entry.Link(&state->ArrowBlocksRoot);
+    if (state->EnableArrowTracking) {
+        header->Entry.Link(&state->ArrowBlocksRoot);
+    } else {
+        header->Entry.Clear();
+    }
+
     header->Size = size;
     return header + 1;
 }

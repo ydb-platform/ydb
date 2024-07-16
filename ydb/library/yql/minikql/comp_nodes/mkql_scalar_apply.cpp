@@ -55,13 +55,13 @@ public:
                 nullptr, Alloc.Ref(), *RandomProvider, *TimeProvider, NUdf::EValidatePolicy::Exception, nullptr),
                 originalContext.Mutables, *NYql::NUdf::GetYqlMemoryPool())
         {
+            Alloc.Ref().EnableArrowTracking = false;
             Alloc.Release();
         }
 
         ~TKernelState()
         {
             Alloc.Acquire();
-            Alloc.Ref().UntrackAllArrow();
         }
 
         TScopedAlloc Alloc;

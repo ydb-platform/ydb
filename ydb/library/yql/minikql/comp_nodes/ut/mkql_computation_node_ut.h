@@ -103,10 +103,6 @@ struct TSetup {
         PgmBuilder.Reset(new TProgramBuilder(*Env, *FunctionRegistry));
     }
 
-    ~TSetup() {
-        Alloc.Ref().UntrackAllArrow();
-    }
-
     THolder<IComputationGraph> BuildGraph(TRuntimeNode pgm, const std::vector<TNode*>& entryPoints = std::vector<TNode*>()) {
        return BuildGraph(pgm, EGraphPerProcess::Multi, entryPoints);
     }

@@ -50,6 +50,7 @@ struct TAllocState : public TAlignedPagePool
         void Link(TListEntry* root) noexcept;
         void Unlink() noexcept;
         void InitLinks() noexcept { Left = Right = this; }
+        void Clear() noexcept { Left = Right = nullptr; }
         bool IsUnlinked() const noexcept { return !Left && !Right; }
     };
 
@@ -76,6 +77,8 @@ struct TAllocState : public TAlignedPagePool
     TListEntry GlobalPAllocList;
     TListEntry* CurrentPAllocList;
     TListEntry ArrowBlocksRoot;
+    bool EnableArrowTracking = true;
+
     void* MainContext = nullptr;
     void* CurrentContext = nullptr;
 
@@ -96,7 +99,6 @@ struct TAllocState : public TAlignedPagePool
     explicit TAllocState(const TSourceLocation& location, const TAlignedPagePoolCounters& counters, bool supportsSizedAllocators);
     void KillAllBoxed();
     void InvalidateMemInfo();
-    void UntrackAllArrow();
     size_t GetDeallocatedInPages() const;
     static void CleanupPAllocList(TListEntry* root);
     static void CleanupArrowList(TListEntry* root);

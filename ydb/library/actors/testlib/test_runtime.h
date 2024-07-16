@@ -665,7 +665,7 @@ namespace NActors {
         bool NeedMonitoring;
         ui16 MonitoringPortOffset = 0;
         bool MonitoringTypeAsync = false;
-        bool NeedStatsCollectors = true;
+        bool NeedStatsCollectors = false;
 
         TIntrusivePtr<IRandomProvider> RandomProvider;
         TIntrusivePtr<ITimeProvider> TimeProvider;

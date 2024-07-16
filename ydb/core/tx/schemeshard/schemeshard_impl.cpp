@@ -598,8 +598,9 @@ void TSchemeShard::ClearDescribePathCaches(const TPathElement::TPtr node, bool f
     } else if (node->PathType == NKikimrSchemeOp::EPathType::EPathTypeTable) {
         Y_ABORT_UNLESS(Tables.contains(node->PathId));
         TTableInfo::TPtr tabletInfo = Tables.at(node->PathId);
-        tabletInfo->PreSerializedPathDescription.clear();
-        tabletInfo->PreSerializedPathDescriptionWithoutRangeKey.clear();
+        tabletInfo->PreserializedTablePartitions.clear();
+        tabletInfo->PreserializedTablePartitionsNoKeys.clear();
+        tabletInfo->PreserializedTableSplitBoundaries.clear();
     }
 }
 

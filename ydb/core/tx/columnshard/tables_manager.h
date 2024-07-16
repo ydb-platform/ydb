@@ -123,6 +123,11 @@ public:
     TTableInfo(const ui64 pathId)
         : PathId(pathId)
     {}
+    TTableInfo(const ui64 pathId, const TSet<NOlap::TSnapshot>& versions)
+        : PathId(pathId)
+        , Versions(versions)
+    {
+    }
 
     template <class TRow>
     bool InitFromDB(const TRow& rowset) {
@@ -141,7 +146,7 @@ private:
     THashSet<ui32> SchemaPresetsIds;
     THashSet<ui64> PathsToDrop;
     TTtl Ttl;
-    std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
+    std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex; //
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     ui64 TabletId = 0;
 public:
@@ -185,7 +190,7 @@ public:
 
     const NOlap::TIndexInfo& GetIndexInfo(const NOlap::TSnapshot& version) const {
         Y_ABORT_UNLESS(!!PrimaryIndex);
-        return PrimaryIndex->GetVersionedIndex().GetSchema(version)->GetIndexInfo();
+        return PrimaryIndex->GetVersionedIndex().GetSchema(version)->GetIndexInfo(); //<<--
     }
 
     const std::unique_ptr<NOlap::IColumnEngine>& GetPrimaryIndex() const {
@@ -235,6 +240,8 @@ public:
 
     void DropTable(const ui64 pathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db);
     void DropPreset(const ui32 presetId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db);
+
+    void MoveTable(const ui64 pathId, const ui64 dstPathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db);
 
     void RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db);
     bool RegisterSchemaPreset(const TSchemaPreset& schemaPreset, NIceDb::TNiceDb& db);

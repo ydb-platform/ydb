@@ -106,7 +106,8 @@ std::shared_ptr<TTxController::ITransactionOperator> TTxController::UpdateTxSour
 
 TTxController::TTxInfo TTxController::RegisterTx(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
-    auto& txInfo = txOperator->GetTxInfo();
+    auto& txInfo = txOperator->MutableTxInfo();
+    //txInfo.MinStep = GetAllowedStep();
     AFL_VERIFY(txInfo.MaxStep == Max<ui64>());
     AFL_VERIFY(Operators.emplace(txInfo.TxId, txOperator).second);
 

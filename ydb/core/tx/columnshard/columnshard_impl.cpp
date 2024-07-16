@@ -336,6 +336,10 @@ void TColumnShard::RunSchemaTx(const NKikimrTxColumnShard::TSchemaTxBody& body, 
             RunAlterStore(body.GetAlterStore(), version, txc);
             return;
         }
+        case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable: {
+            RunMoveTable(body.GetMoveTable(), version, txc);
+            return;
+        }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET: {
             break;
         }
@@ -502,6 +506,30 @@ void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto,
         }
         TablesManager.AddSchemaVersion(presetProto.GetId(), version, presetProto.GetSchema(), db, Tiers);
     }
+}
+
+void TColumnShard::RunMoveTable(const NKikimrTxColumnShard::TMoveTable& proto, const NOlap::TSnapshot& version,
+                                 NTabletFlatExecutor::TTransactionContext& txc) {
+    NIceDb::TNiceDb db(txc.DB);
+
+    const ui64 pathId = proto.GetPathId();
+    if (!TablesManager.HasTable(pathId)) {
+        LOG_S_DEBUG("MoveTable for unknown or deleted pathId: " << pathId << " at tablet " << TabletID());
+        return;
+    }
+
+    const ui64 dstPathId = proto.GetDstPathId();
+    if (!TablesManager.HasTable(dstPathId)) {
+        LOG_S_ERROR("MoveTable to existing pathId: " << pathId << " at tablet " << TabletID());
+        return;
+    }
+    TablesManager.MoveTable(pathId, dstPathId, version, db);
+
+    TBlobGroupSelector dsGroupSelector(Info());
+    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
+    THashSet<TWriteId> writesToAbort = InsertTable->DropPath(dbTable, pathId);
+
+    TryAbortWrites(db, dbTable, std::move(writesToAbort));
 }
 
 void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {

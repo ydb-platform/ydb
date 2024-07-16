@@ -63,6 +63,7 @@ NKikimr::NColumnShard::TTxController::TProposeResult TSchemaTransactionOperator:
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterTable:
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterStore:
         case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
+        case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable:
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;
     }
@@ -184,6 +185,7 @@ bool TSchemaTransactionOperator::DoOnStartAsync(TColumnShard& owner) {
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterTable:
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterStore:
         case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
+        case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable:
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;
     }

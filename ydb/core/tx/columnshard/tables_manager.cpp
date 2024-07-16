@@ -248,6 +248,21 @@ void TTablesManager::DropPreset(const ui32 presetId, const NOlap::TSnapshot& ver
     Schema::SaveSchemaPresetDropVersion(db, presetId, version);
 }
 
+void TTablesManager::MoveTable(const ui64 pathId, const ui64 dstPathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db) {
+    AFL_VERIFY(!Tables.contains(dstPathId));
+    const auto table = Tables.FindPtr(pathId);
+    AFL_VERIFY(table);
+    AFL_VERIFY(table->GetTieringUsage().Empty());
+    AFL_VERIFY(!table->IsDropped());
+    TTableInfo dstTable(dstPathId, table->GetVersions());
+    RegisterTable(std::move(dstTable), db);
+    table->SetDropVersion(version);
+    PathsToDrop.insert(pathId);
+    Ttl.DropPathTtl(pathId);
+    Schema::SaveTableDropVersion(db, pathId, version.GetPlanStep(), version.GetTxId());
+}
+
+
 void TTablesManager::RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db) {
     Y_ABORT_UNLESS(!HasTable(table.GetPathId()));
     Y_ABORT_UNLESS(table.IsEmpty());

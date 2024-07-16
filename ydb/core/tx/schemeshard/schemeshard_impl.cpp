@@ -600,6 +600,11 @@ void TSchemeShard::ClearDescribePathCaches(const TPathElement::TPtr node, bool f
         TTableInfo::TPtr tabletInfo = Tables.at(node->PathId);
         tabletInfo->PreSerializedPathDescription.clear();
         tabletInfo->PreSerializedPathDescriptionWithoutRangeKey.clear();
+    } else if (node->PathType == NKikimrSchemeOp::EPathType::EPathTypeColumnTable) {
+        auto tabletInfo = ColumnTables.GetVerified(node->PathId);
+        Y_ABORT_UNLESS(tabletInfo);
+        //tabletInfo->PreSerializedPathDescription.clear();
+        //tabletInfo->PreSerializedPathDescriptionWithoutRangeKey.clear();
     }
 }
 

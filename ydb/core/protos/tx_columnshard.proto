@@ -238,6 +238,16 @@ message TCreateTable {
     optional uint64 SchemaPresetVersionAdj = 6;
 }
 
+message TMoveTable {
+    optional uint64 PathId = 1;
+    optional uint64 TableSchemaVersion = 2;
+
+    optional uint64 DstPathId = 3;
+    optional string DstPath = 4;
+
+    //repeated TRemapIndexPathId ReMapIndexes = 5;
+}
+
 message TInitShard {
     optional uint32 DataChannelCount = 1;
     optional uint64 OwnerPathId = 2;
@@ -287,6 +297,7 @@ message TSchemaTxBody {
         TDropTable DropTable = 4;
         TAlterTable AlterTable = 5;
         TAlterStore AlterStore = 6;
+        TMoveTable MoveTable = 7;
     }
 
     optional NKikimrSchemeOp.TGranuleShardingInfo GranuleShardingInfo = 20;

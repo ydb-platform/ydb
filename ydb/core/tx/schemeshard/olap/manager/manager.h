@@ -41,6 +41,9 @@ public:
             Y_DEBUG_ABORT_UNLESS(Object);
             return *Object;
         }
+        TColumnTableInfo::TPtr GetPtr() const {
+            return Object;
+        }
     };
 
     class TTableCreateOperator: public TTableReadGuard {

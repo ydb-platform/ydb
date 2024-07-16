@@ -406,10 +406,12 @@ private:
         auto limit = Limit_.load();
         YT_VERIFY(limit >= 0);
 
-        auto delay = Max<i64>(0, -Available_ * 1000 / limit);
+        // Reconfigure clears the update cookie, so infinity is fine.
+        auto delay = limit ? TDuration::MilliSeconds(Max<i64>(0, -Available_ * 1000 / limit)) : TDuration::Max();
+
         UpdateCookie_ = TDelayedExecutor::Submit(
             BIND_NO_PROPAGATE(&TReconfigurableThroughputThrottler::Update, MakeWeak(this)),
-            TDuration::MilliSeconds(delay));
+            delay);
     }
 
     void TryUpdateAvailable()
@@ -428,6 +430,8 @@ private:
         if (deltaAvailable == 0) {
             return;
         }
+        // The delta computed above is zero if the limit is zero.
+        YT_VERIFY(limit > 0);
 
         current = lastUpdated + TDuration::MilliSeconds(deltaAvailable * 1000 / limit);
 
@@ -472,7 +476,7 @@ private:
                     request->Amount,
                     waitTime);
 
-                if (limit) {
+                if (limit >= 0) {
                     Available_ -= request->Amount;
                 }
                 readyList.push_back(request);

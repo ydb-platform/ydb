@@ -299,6 +299,35 @@ TEST(TReconfigurableThroughputThrottlerTest, ZeroLimit)
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 1000u);
 }
 
+TEST(TReconfigurableThroughputThrottlerTest, ZeroLimitDoesNotLetAnythingThrough)
+{
+    auto throttler = CreateReconfigurableThroughputThrottler(
+        TThroughputThrottlerConfig::Create(0));
+
+    std::vector<TFuture<void>> scheduled;
+    for (int i = 0; i < 4; ++i) {
+        scheduled.push_back(throttler->Throttle(1));
+    }
+
+    Sleep(TDuration::Seconds(2));
+
+    // You shall not pass!
+    for (const auto& future : scheduled) {
+        EXPECT_FALSE(future.IsSet());
+    }
+
+    throttler->SetLimit(std::nullopt);
+    // Now we should pass through in a breeze.
+
+    NProfiling::TWallTimer timer;
+
+    for (const auto& future : scheduled) {
+        future.Get().ThrowOnError();
+    }
+
+    EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 100u);
+}
+
 TEST(TReconfigurableThroughputThrottlerTest, Release)
 {
     auto throttler = CreateReconfigurableThroughputThrottler(

@@ -1076,10 +1076,10 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
             destPart->set_active(sourcePart.GetStatus() == ::NKikimrPQ::ETopicPartitionStatus::Active);
             if (sourcePart.HasKeyRange()) {
                 if (sourcePart.GetKeyRange().HasFromBound()) {
-                    destPart->set_from_bound(sourcePart.GetKeyRange().GetFromBound());
+                    destPart->mutable_key_range()->set_from_bound(sourcePart.GetKeyRange().GetFromBound());
                 }
                 if (sourcePart.GetKeyRange().HasToBound()) {
-                    destPart->set_to_bound(sourcePart.GetKeyRange().GetToBound());
+                    destPart->mutable_key_range()->set_to_bound(sourcePart.GetKeyRange().GetToBound());
                 }
             }
 

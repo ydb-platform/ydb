@@ -404,12 +404,12 @@ TPartitionInfo::TPartitionInfo(const Ydb::Topic::DescribeTopicResult::PartitionI
         PartitionLocation_ = TPartitionLocation{partitionInfo.partition_location()};
     }
 
-    if (partitionInfo.has_from_bound()) {
-        FromBound_ = TString(partitionInfo.from_bound());
+    if (partitionInfo.has_key_range() && partitionInfo.key_range().has_from_bound()) {
+        FromBound_ = TString(partitionInfo.key_range().from_bound());
     }
 
-    if (partitionInfo.has_to_bound()) {
-        ToBound_ = TString(partitionInfo.to_bound());
+    if (partitionInfo.has_key_range() && partitionInfo.key_range().has_to_bound()) {
+        ToBound_ = TString(partitionInfo.key_range().to_bound());
     }
 }
 

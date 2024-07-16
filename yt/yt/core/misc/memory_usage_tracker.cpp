@@ -56,6 +56,13 @@ public:
     {
         return reference;
     }
+
+    TErrorOr<TSharedRef> TryTrack(
+        TSharedRef reference,
+        bool /*keepExistingTracking*/) override
+    {
+        return reference;
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -353,6 +360,17 @@ void TMemoryTrackedBlob::Clear()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+TErrorOr<TSharedRef> TryTrackMemory(
+    const IMemoryUsageTrackerPtr& tracker,
+    TSharedRef reference,
+    bool keepExistingTracking)
+{
+    if (!tracker || !reference) {
+        return reference;
+    }
+    return tracker->TryTrack(reference, keepExistingTracking);
+}
 
 TSharedRef TrackMemory(
     const IMemoryUsageTrackerPtr& tracker,

@@ -85,10 +85,14 @@ tasks.withType<Javadoc> {
 }
 {% endif %}
 
+{# javac flags #}
 {%- if (target.javac.flags is defined) and (target.javac.flags|length) %}
 tasks.withType<JavaCompile> {
 {%- for javac_flag in target.javac.flags %}
+{%-     if '-Xep:' in javac_flag %}
+{%      else %}
     options.compilerArgs.add("{{ javac_flag }}")
+{%-     endif %}
 {%- endfor %}
 }
 {%- endif %}

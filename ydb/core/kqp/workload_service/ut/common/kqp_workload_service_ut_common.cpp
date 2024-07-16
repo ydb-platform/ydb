@@ -598,7 +598,7 @@ void IYdbSetup::WaitFor(TDuration timeout, TString description, std::function<bo
         Cerr << "Wait " << description << " " << TInstant::Now() - start << ": " << errorString << "\n";
         Sleep(TDuration::Seconds(1));
     }
-    UNIT_ASSERT_C(false, "Waiting " << description << " timeout");
+    UNIT_ASSERT_C(false, "Waiting " << description << " timeout. Spent time " << TInstant::Now() - start << " exceeds limit " << timeout);
 }
 
 //// TSampleQueriess

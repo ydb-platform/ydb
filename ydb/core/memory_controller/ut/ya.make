@@ -4,13 +4,9 @@ SIZE(SMALL)
 
 TIMEOUT(60)
 
-PEERDIR(
-    ydb/core/memory_controller
-)
-
 SRCS(
     memory_controller_ut.cpp
-    memory_collection_ut.cpp
+    memtable_collection_ut.cpp
 )
 
 END()

@@ -7,7 +7,6 @@
 #include <ydb/core/util/page_map.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
-#include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/set.h>
@@ -58,7 +57,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     };
 
     static const ui64 DO_GC_TAG = 1;
-    static const ui64 UPDATE_WHITEBOARD_TAG = 2;
 
     struct TCollection;
 
@@ -788,19 +786,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             ProcessGCList();
             break;
         }
-        case UPDATE_WHITEBOARD_TAG: {
-            SendWhiteboardStats();
-            Schedule(TDuration::Seconds(1), new TKikimrEvents::TEvWakeup(UPDATE_WHITEBOARD_TAG));
-            break;
-        }
         default:
             Y_ABORT("Unknown wakeup tag: %lu", ev->Get()->Tag);
         }
-    }
-
-    void SendWhiteboardStats() {
-        TActorId whiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
-        Send(whiteboardId, NNodeWhiteboard::TEvWhiteboard::CreateSharedCacheStatsUpdateRequest(GetStatAllBytes(), Min(ConfigLimitBytes, MemLimitBytes)));
     }
 
     void ProcessGCList() {
@@ -1136,7 +1124,6 @@ public:
         Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::SharedCache));
 
         Become(&TThis::StateFunc);
-        Schedule(TDuration::Seconds(1), new TKikimrEvents::TEvWakeup(UPDATE_WHITEBOARD_TAG));
     }
 
     STFUNC(StateFunc) {

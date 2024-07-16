@@ -5,6 +5,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/mon_alloc/stats.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/memory_controller_config.pb.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -205,11 +206,13 @@ private:
         Counters->GetCounter("Stats/ResultingConsumersConsumption")->Set(resultingConsumersConsumption);
         Counters->GetCounter("Stats/Coefficient")->Set(coefficient);
 
+        ui64 consumersLimitBytes = 0;
         for (const auto& consumer : consumers) {
             ui64 limitBytes = consumer.GetLimit(coefficient);
             if (resultingConsumersConsumption + externalConsumption > softLimitBytes && consumer.Config.CanZeroLimit) {
                 limitBytes = SafeDiff(limitBytes, resultingConsumersConsumption + externalConsumption - softLimitBytes);
-            } 
+            }
+            consumersLimitBytes += limitBytes;
 
             LOG_DEBUG_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Consumer " << consumer.Kind << " state "
                 << " Consumption: " << consumer.Consumption << " LimitBytes: " << limitBytes
@@ -222,6 +225,9 @@ private:
 
             ApplyLimit(consumer, limitBytes);
         }
+
+        Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), 
+            NNodeWhiteboard::TEvWhiteboard::CreateCachesConsumptionUpdateRequest(consumersConsumption, consumersLimitBytes));
 
         ctx.Schedule(Interval, new TEvents::TEvWakeup());
     }

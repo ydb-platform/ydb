@@ -11,6 +11,7 @@ PEERDIR(
     ydb/library/services
     ydb/core/cms/console
     ydb/core/mon_alloc
+    ydb/core/node_whiteboard
 )
 
 END()

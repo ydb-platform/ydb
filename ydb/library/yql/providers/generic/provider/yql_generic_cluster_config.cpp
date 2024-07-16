@@ -140,7 +140,7 @@ namespace NYql {
     }
 
     void ParseServiceName(const THashMap<TString, TString>& properties,
-                     NYql::TGenericClusterConfig& clusterConfig) {
+                          NYql::TGenericClusterConfig& clusterConfig) {
         auto it = properties.find("service_name");
         if (it == properties.cend()) {
             return;

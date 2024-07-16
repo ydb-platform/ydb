@@ -364,8 +364,8 @@ public:
     enum class ETasteResult: i8 {
         Init = -1,
         Update,
-        DataRequired,
-        RawDataExtractionRequired
+        ConsumeRawData,
+        ExtractRawData
     };
     TSpillingSupportState(
         TMemoryUsageInfo* memInfo,
@@ -447,7 +447,7 @@ public:
                 Throat = BufferForUsedInputItems.data();
                 HasRawDataToExtract = false;
                 HasDataForProcessing = true;
-                return ETasteResult::RawDataExtractionRequired;
+                return ETasteResult::ExtractRawData;
             }
             HasDataForProcessing = false;
             // while restoration we process buckets one by one starting from the first in a queue
@@ -478,7 +478,7 @@ public:
         BufferForUsedInputItemsBucketId = bucketId;
         Throat = BufferForUsedInputItems.data();
         
-        return ETasteResult::DataRequired;
+        return ETasteResult::ConsumeRawData;
     }
 
     NUdf::TUnboxedValuePod* Extract() {
@@ -1286,10 +1286,10 @@ public:
                         case TSpillingSupportState::ETasteResult::Update:
                             Nodes.ProcessItem(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
                             break;
-                        case TSpillingSupportState::ETasteResult::DataRequired:
+                        case TSpillingSupportState::ETasteResult::ConsumeRawData:
                             Nodes.ExtractValues(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
                             break;
-                        case TSpillingSupportState::ETasteResult::RawDataExtractionRequired:
+                        case TSpillingSupportState::ETasteResult::ExtractRawData:
                             Nodes.ExtractValues(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Throat), fields);
                             break;
                     }

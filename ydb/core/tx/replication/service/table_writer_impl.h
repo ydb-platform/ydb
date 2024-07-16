@@ -179,14 +179,14 @@ public:
     }
 
     explicit TTablePartitionWriter(
-        const TActorId& parent,
-        ui64 tabletId,
-        const TTableId& tableId,
-        TChangeRecordBuilderContextTrait<TChangeRecord> builderContext)
-            : Parent(parent)
-            , TabletId(tabletId)
-            , TableId(tableId)
-            , BuilderContext(builderContext)
+            const TActorId& parent,
+            ui64 tabletId,
+            const TTableId& tableId,
+            TChangeRecordBuilderContextTrait<TChangeRecord> builderContext)
+        : Parent(parent)
+        , TabletId(tabletId)
+        , TableId(tableId)
+        , BuilderContext(builderContext)
     {}
 
     void Bootstrap() {

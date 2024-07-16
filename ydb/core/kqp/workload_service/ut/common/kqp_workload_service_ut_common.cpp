@@ -460,6 +460,7 @@ public:
         }
     }
 
+    // Coomon helpers
     TTestActorRuntime* GetRuntime() const override {
         return Server_->GetRuntime();
     }
@@ -489,19 +490,6 @@ private:
         request->SetPoolId(settings.PoolId_);
 
         return event;
-    }
-
-    static void WaitFor(TDuration timeout, TString description, std::function<bool(TString&)> callback) {
-        TInstant start = TInstant::Now();
-        while (TInstant::Now() - start <= timeout) {
-            TString errorString;
-            if (callback(errorString)) {
-                return;
-            }
-            Cerr << "Wait " << description << " " << TInstant::Now() - start << ": " << errorString << "\n";
-            Sleep(TDuration::Seconds(1));
-        }
-        UNIT_ASSERT_C(false, "Waiting " << description << " timeout");
     }
 
     NMonitoring::TDynamicCounterPtr GetWorkloadManagerCounters(ui32 nodeIndex) const {
@@ -596,6 +584,21 @@ bool TQueryRunnerResultAsync::HasValue() const {
 
 TIntrusivePtr<IYdbSetup> TYdbSetupSettings::Create() const {
     return MakeIntrusive<TWorkloadServiceYdbSetup>(*this);
+}
+
+//// IYdbSetup
+
+void IYdbSetup::WaitFor(TDuration timeout, TString description, std::function<bool(TString&)> callback) {
+    TInstant start = TInstant::Now();
+    while (TInstant::Now() - start <= timeout) {
+        TString errorString;
+        if (callback(errorString)) {
+            return;
+        }
+        Cerr << "Wait " << description << " " << TInstant::Now() - start << ": " << errorString << "\n";
+        Sleep(TDuration::Seconds(1));
+    }
+    UNIT_ASSERT_C(false, "Waiting " << description << " timeout");
 }
 
 //// TSampleQueriess

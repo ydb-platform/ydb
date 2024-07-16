@@ -147,9 +147,12 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceTables) {
         ydb->WaitPoolHandlersCount(0);
 
         // Check that lease expired
-        const TDuration leaseDuration = TDuration::Seconds(30);  // Same as pool_handlers_acors.cpp:LEASE_DURATION
-        Sleep(leaseDuration + TDuration::Seconds(5));  // 5s for last pool refresh request
-        CheckPoolDescription(ydb, 0, 0);
+        IYdbSetup::WaitFor(TDuration::Seconds(60), "lease expiration", [ydb](TString& errorString) {
+            auto description = ydb->GetPoolDescription(TDuration::Zero());
+
+            errorString = TStringBuilder() << "delayed = " << description.DelayedRequests << ", running = " << description.RunningRequests;
+            return description.AmountRequests() == 0;
+        });
     }
 
     Y_UNIT_TEST(TestLeaseUpdates) {

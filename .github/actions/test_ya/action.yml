@@ -76,21 +76,21 @@ runs:
         mkdir -p $TMP_DIR
         echo "TMP_DIR=$TMP_DIR" >> $GITHUB_ENV
 
-        # The whole dir will be uploaded to s3 with public ACL
-        export RESULT_DIR=$TMP_DIR/results
-        echo "RESULT_DIR=$RESULT_DIR" >> $GITHUB_ENV
-        mkdir -p $RESULT_DIR
+        # The whole dir will be uploaded to s3 with public (=wild internet) ACL
+        export PUBLIC_DIR=$TMP_DIR/results
+        echo "PUBLIC_DIR=$PUBLIC_DIR" >> $GITHUB_ENV
+        mkdir -p $PUBLIC_DIR
 
         export OUT_DIR=$TMP_DIR/out
         echo "OUT_DIR=$OUT_DIR" >> $GITHUB_ENV
         mkdir -p $OUT_DIR
 
-        export ARTIFACTS_DIR=$RESULT_DIR/artifacts
+        export ARTIFACTS_DIR=$PUBLIC_DIR/artifacts
         echo "ARTIFACTS_DIR=$ARTIFACTS_DIR" >> $GITHUB_ENV
         echo "ARTIFACTS_DIR_URL=$S3_URL_PREFIX/artifacts" >> $GITHUB_ENV
         mkdir -p $ARTIFACTS_DIR
 
-        export TEST_ARTIFACTS_DIR=$RESULT_DIR/test_artifacts
+        export TEST_ARTIFACTS_DIR=$PUBLIC_DIR/test_artifacts
         echo "TEST_ARTIFACTS_DIR=$TEST_ARTIFACTS_DIR" >> $GITHUB_ENV
         echo "TEST_ARTIFACTS_DIR_URL=$S3_URL_PREFIX/test_artifacts" >> $GITHUB_ENV
         mkdir -p $TEST_ARTIFACTS_DIR
@@ -99,16 +99,16 @@ runs:
         echo "JUNIT_REPORT_PARTS=$JUNIT_REPORT_PARTS" >> $GITHUB_ENV
         mkdir -p $JUNIT_REPORT_PARTS
 
-        echo "JUNIT_REPORT_XML=$RESULT_DIR/junit.xml" >> $GITHUB_ENV
+        echo "JUNIT_REPORT_XML=$PUBLIC_DIR/junit.xml" >> $GITHUB_ENV
         echo "TESTMO_URL=${{ inputs.testman_url }}" >> $GITHUB_ENV
-        echo "SUMMARY_LINKS=$RESULT_DIR/summary_links.txt" >> $GITHUB_ENV
+        echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
         
-        echo "YA_TEST_LOG=$RESULT_DIR/ya_log.log" >> $GITHUB_ENV
+        echo "YA_TEST_LOG=$PUBLIC_DIR/ya_log.log" >> $GITHUB_ENV
         echo "YA_TEST_LOG_URL=$S3_URL_PREFIX/ya_log.log" >> $GITHUB_ENV
 
 
-        echo YA_MAKE_OUTPUT="$RESULT_DIR/ya_make_output.log" >>  $GITHUB_ENV
+        echo YA_MAKE_OUTPUT="$PUBLIC_DIR/ya_make_output.log" >>  $GITHUB_ENV
         export YA_MAKE_OUTPUT_URL="$S3_URL_PREFIX/ya_make_output.log"
         echo "YA_MAKE_OUTPUT_URL=$YA_MAKE_OUTPUT_URL" >> $GITHUB_ENV
         echo "YA_MAKE_OUTPUT_URL=$YA_MAKE_OUTPUT_URL" >> $GITHUB_OUTPUT
@@ -272,7 +272,7 @@ runs:
         (./ya make ${{ inputs.build_target }} "${params[@]}" \
           --stat --log-file "$YA_TEST_LOG" -DCONSISTENT_DEBUG \
           --no-dir-outputs --test-failure-code 0 --build-all \
-          --cache-size 2TB --force-build-depends --evlog-file "$RESULT_DIR/ya_evlog.jsonl" \
+          --cache-size 2TB --force-build-depends --evlog-file "$PUBLIC_DIR/ya_evlog.jsonl" \
           --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR"; echo $? > exit_code) |& tee $YA_MAKE_OUTPUT
         set -e
         RC=`cat exit_code`
@@ -314,7 +314,7 @@ runs:
       run: |
         set -x
         # archive unitest reports (orig) 
-        gzip -c $JUNIT_REPORT_XML > $RESULT_DIR/orig_junit.xml.gz
+        gzip -c $JUNIT_REPORT_XML > $PUBLIC_DIR/orig_junit.xml.gz
 
         # postprocess junit report
         .github/scripts/tests/transform-ya-junit.py -i \
@@ -329,7 +329,7 @@ runs:
         .github/scripts/tests/split-junit.py -o "$JUNIT_REPORT_PARTS" "$JUNIT_REPORT_XML"
 
         # archive unitest reports (transformed)
-        tar -C $JUNIT_REPORT_PARTS/.. -czf $RESULT_DIR/junit_parts.xml.tar.gz $(basename $JUNIT_REPORT_PARTS)
+        tar -C $JUNIT_REPORT_PARTS/.. -czf $PUBLIC_DIR/junit_parts.xml.tar.gz $(basename $JUNIT_REPORT_PARTS)
     
     - name: Test history upload results to YDB
       if: inputs.run_tests
@@ -440,9 +440,9 @@ runs:
       run: |
         set -x
         echo "::group::s3-sync"
-        .github/scripts/Indexer/indexer.py -r "$RESULT_DIR/"
+        .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/"
         echo "00 [Workflow run results](${S3_URL_PREFIX}/index.html)" >> $SUMMARY_LINKS
-        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$RESULT_DIR/" "$S3_BUCKET_PATH/"     
+        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"     
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
         echo "::endgroup::"
 

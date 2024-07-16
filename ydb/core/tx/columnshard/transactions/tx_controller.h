@@ -336,8 +336,8 @@ public:
             return DoFinishProposeOnComplete(owner, ctx);
         }
 
-        virtual bool ExecuteOnProgress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) = 0;
-        virtual bool CompleteOnProgress(TColumnShard& owner, const TActorContext& ctx) = 0;
+        virtual bool ProgressOnExecute(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) = 0;
+        virtual bool ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) = 0;
 
         virtual bool ExecuteOnAbort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) = 0;
         virtual bool CompleteOnAbort(TColumnShard& owner, const TActorContext& ctx) = 0;

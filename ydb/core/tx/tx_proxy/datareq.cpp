@@ -281,14 +281,14 @@ private:
 
     struct TEvPrivate {
         enum EEv {
-            TEvProxyDataReqOngoingTransactionsWatchdog = EventSpaceBegin(TEvents::ES_PRIVATE),
+            EvProxyDataReqOngoingTransactionsWatchdog = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvReattachToShard,
             EvEnd
         };
 
         static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
-        struct TTEvProxyDataReqOngoingTransactionsWatchdog : public TEventLocal<TTEvProxyDataReqOngoingTransactionsWatchdog, TEvProxyDataReqOngoingTransactionsWatchdog> {};
+        struct TEvProxyDataReqOngoingTransactionsWatchdog : public TEventLocal<TEvProxyDataReqOngoingTransactionsWatchdog, EvProxyDataReqOngoingTransactionsWatchdog> {};
 
         struct TEvReattachToShard : public TEventLocal<TEvReattachToShard, EvReattachToShard> {
             const ui64 TabletId;
@@ -503,7 +503,7 @@ public:
             HFuncTraced(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
             HFuncTraced(TEvents::TEvUndelivered, HandleUndeliveredResolve); // we must wait for resolve completion
             CFunc(TEvents::TSystem::Wakeup, HandleExecTimeoutResolve); // we must wait for resolve completion to keep key description
-            CFunc(TEvPrivate::TEvProxyDataReqOngoingTransactionsWatchdog, HandleWatchdog);
+            CFunc(TEvPrivate::EvProxyDataReqOngoingTransactionsWatchdog, HandleWatchdog);
         }
     }
 
@@ -514,7 +514,7 @@ public:
             HFuncTraced(TEvTxProcessing::TEvStreamIsDead, Handle);
             HFuncTraced(TEvents::TEvUndelivered, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleExecTimeout);
-            CFunc(TEvPrivate::TEvProxyDataReqOngoingTransactionsWatchdog, HandleWatchdog);
+            CFunc(TEvPrivate::EvProxyDataReqOngoingTransactionsWatchdog, HandleWatchdog);
         }
     }
 
@@ -544,7 +544,7 @@ public:
             HFuncTraced(TEvPrivate::TEvReattachToShard, Handle);
             HFuncTraced(TEvents::TEvUndelivered, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleExecTimeout);
-            CFunc(TEvPrivate::TEvProxyDataReqOngoingTransactionsWatchdog, HandleWatchdog);
+            CFunc(TEvPrivate::EvProxyDataReqOngoingTransactionsWatchdog, HandleWatchdog);
         }
     }
 
@@ -577,7 +577,7 @@ public:
             HFuncTraced(TEvPrivate::TEvReattachToShard, Handle);
             HFuncTraced(TEvents::TEvUndelivered, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleExecTimeout);
-            CFunc(TEvPrivate::TEvProxyDataReqOngoingTransactionsWatchdog, HandleWatchdog);
+            CFunc(TEvPrivate::EvProxyDataReqOngoingTransactionsWatchdog, HandleWatchdog);
         }
     }
 };

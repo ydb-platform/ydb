@@ -140,7 +140,8 @@ private:
 
         if (Settings_.MonitoringEnabled) {
             serverSettings.InitKikimrRunConfig();
-            serverSettings.SetMonitoringPortOffset(Settings_.MonitoringPortOffset, false, true);
+            serverSettings.SetMonitoringPortOffset(Settings_.MonitoringPortOffset);
+            serverSettings.SetNeedStatsCollectors(true);
         }
 
         return serverSettings;

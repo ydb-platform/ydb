@@ -1600,11 +1600,10 @@ namespace NActors {
         return node->DynamicCounters;
     }
 
-    void TTestActorRuntimeBase::SetupMonitoring(ui16 monitoringPortOffset, bool monitoringTypeAsync, bool needStatsCollectors) {
+    void TTestActorRuntimeBase::SetupMonitoring(ui16 monitoringPortOffset, bool monitoringTypeAsync) {
         NeedMonitoring = true;
         MonitoringPortOffset = monitoringPortOffset;
         MonitoringTypeAsync = monitoringTypeAsync;
-        NeedStatsCollectors = needStatsCollectors;
     }
 
     void TTestActorRuntimeBase::SendInternal(TAutoPtr<IEventHandle> ev, ui32 nodeIndex, bool viaActorSystem) {

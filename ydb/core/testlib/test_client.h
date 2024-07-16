@@ -164,7 +164,8 @@ namespace Tests {
 
         TServerSettings& SetGrpcPort(ui16 value) { GrpcPort = value; return *this; }
         TServerSettings& SetGrpcMaxMessageSize(int value) { GrpcMaxMessageSize = value; return *this; }
-        TServerSettings& SetMonitoringPortOffset(ui16 value, bool monitoringTypeAsync = false, bool needStatsCollectors = false) { MonitoringPortOffset = value; MonitoringTypeAsync = monitoringTypeAsync; NeedStatsCollectors = needStatsCollectors; return *this; }
+        TServerSettings& SetMonitoringPortOffset(ui16 value, bool monitoringTypeAsync = false) { MonitoringPortOffset = value; MonitoringTypeAsync = monitoringTypeAsync; return *this; }
+        TServerSettings& SetNeedStatsCollectors(bool value) { NeedStatsCollectors = value; return *this; }
         TServerSettings& SetSupportsRedirect(bool value) { SupportsRedirect = value; return *this; }
         TServerSettings& SetTracePath(const TString& value) { TracePath = value; return *this; }
         TServerSettings& SetDomain(ui32 value) { Domain = value; return *this; }

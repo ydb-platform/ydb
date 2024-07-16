@@ -44,6 +44,10 @@ namespace NActors {
         InitNodes();
     }
 
+    void TTestActorRuntime::SetupStatsCollectors() {
+        NeedStatsCollectors = true;
+    }
+
     TTestActorRuntime::TTestActorRuntime(THeSingleSystemEnv d)
         : TPortManager(false)
         , TTestActorRuntimeBase{d}

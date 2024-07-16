@@ -19,14 +19,22 @@ struct TS3Credentials {
         TString AwsRegion;
     };
 
+    TS3Credentials() = default;
     TS3Credentials(ISecuredServiceAccountCredentialsFactory::TPtr factory, const TString& structuredTokenJson, bool addBearerToToken = false);
 
     TAuthInfo GetAuthInfo() const;
 
+    bool operator<(const TS3Credentials& other) const;
+    friend IOutputStream& operator<<(IOutputStream& stream, const TS3Credentials& credentials);
+
 private:
-    NYdb::TCredentialsProviderPtr CredentialsProvider;
+    TString StructuredTokenJson;
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
+    mutable NYdb::TCredentialsProviderPtr CredentialsProvider;
     TS3Credentials::TAuthInfo AuthInfo;
 };
+
+IOutputStream& operator<<(IOutputStream& stream, const TS3Credentials& credentials);
 
 TS3Credentials::TAuthInfo GetAuthInfo(ISecuredServiceAccountCredentialsFactory::TPtr factory, const TString& structuredTokenJson);
 

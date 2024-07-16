@@ -106,8 +106,10 @@ public:
     virtual void StopWorkloadService(ui64 nodeIndex = 0) const = 0;
     virtual void ValidateWorkloadServiceCounters(bool checkTableCounters = true, const TString& poolId = "") const = 0;
 
+    // Coomon helpers
     virtual TTestActorRuntime* GetRuntime() const = 0;
     virtual const TYdbSetupSettings& GetSettings() const = 0;
+    static void WaitFor(TDuration timeout, TString description, std::function<bool(TString&)> callback);
 };
 
 // Test queries

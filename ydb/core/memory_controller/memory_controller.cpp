@@ -38,7 +38,9 @@ ui64 SafeDiff(ui64 a, ui64 b) {
 
 }
 
-namespace {
+namespace NMemTable {
+
+using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
 
 class TMemTableMemoryConsumersCollection;
 
@@ -70,10 +72,9 @@ class TMemTableMemoryConsumersCollection : public std::enable_shared_from_this<T
 
 public:
     TMemTableMemoryConsumersCollection(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, TIntrusivePtr<NMemory::IMemoryConsumer> memoryConsumer)
-        : Counters(counters)
-        , MemTableTotalBytesCounter(Counters->GetCounter("MemTable/TotalBytes"))
-        , MemTableCompactingBytesCounter(Counters->GetCounter("MemTable/CompactingBytes"))
-        , MemTableCompactedBytesCounter(Counters->GetCounter("MemTable/CompactedBytes", true))
+        : MemTableTotalBytesCounter(counters->GetCounter("MemTable/TotalBytes"))
+        , MemTableCompactingBytesCounter(counters->GetCounter("MemTable/CompactingBytes"))
+        , MemTableCompactedBytesCounter(counters->GetCounter("MemTable/CompactedBytes", true))
         , MemoryConsumer(std::move(memoryConsumer))
     {}
 
@@ -161,8 +162,7 @@ private:
     }
 
 private:
-    const TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
-    const ::NMonitoring::TDynamicCounters::TCounterPtr MemTableTotalBytesCounter, MemTableCompactingBytesCounter, MemTableCompactedBytesCounter;
+    const TCounterPtr MemTableTotalBytesCounter, MemTableCompactingBytesCounter, MemTableCompactedBytesCounter;
     TIntrusivePtr<NMemory::IMemoryConsumer> MemoryConsumer;
     TMap<std::pair<TActorId, ui32>, TIntrusivePtr<TMemTableMemoryConsumer>> Consumers;
     THashSet<TIntrusivePtr<TMemTableMemoryConsumer>> NonCompacting;
@@ -183,7 +183,7 @@ void TMemTableMemoryConsumer::SetConsumption(ui64 newConsumption) {
 
 }
 
-namespace {
+namespace NMemoryController {
 
 using namespace NActors;
 using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
@@ -259,7 +259,7 @@ public:
             const NKikimrConfig::TMemoryControllerConfig& config,
             TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
         : Interval(interval)
-        , MemTables(std::make_shared<TMemTableMemoryConsumersCollection>(counters, 
+        , MemTables(std::make_shared<NMemTable::TMemTableMemoryConsumersCollection>(counters, 
             Consumers.emplace(EMemoryConsumerKind::MemTable, MakeIntrusive<TMemoryConsumer>(EMemoryConsumerKind::MemTable, TActorId{})).first->second))
         , ProcessMemoryInfoProvider(std::move(processMemoryInfoProvider))
         , Config(config)
@@ -393,7 +393,7 @@ private:
 
     void Handle(TEvMemTableCompacted::TPtr &ev, const TActorContext& ctx) {
         const auto *msg = ev->Get();
-        if (auto consumer = dynamic_cast<TMemTableMemoryConsumer*>(msg->MemoryConsumer.Get())) {
+        if (auto consumer = dynamic_cast<NMemTable::TMemTableMemoryConsumer*>(msg->MemoryConsumer.Get())) {
             ui32 table = MemTables->CompactionComplete(consumer);
             LOG_TRACE_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "MemTable " << ev->Sender << " " << table << " compacted");
         }
@@ -576,7 +576,7 @@ private:
 private:
     const TDuration Interval;
     TMap<EMemoryConsumerKind, TIntrusivePtr<TMemoryConsumer>> Consumers;
-    std::shared_ptr<TMemTableMemoryConsumersCollection> MemTables;
+    std::shared_ptr<NMemTable::TMemTableMemoryConsumersCollection> MemTables;
     const TIntrusiveConstPtr<IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
     NKikimrConfig::TMemoryControllerConfig Config;
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
@@ -590,7 +590,7 @@ IActor* CreateMemoryController(
         TIntrusiveConstPtr<IProcessMemoryInfoProvider> processMemoryInfoProvider,
         const NKikimrConfig::TMemoryControllerConfig& config, 
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
-    return new TMemoryController(
+    return new NMemoryController::TMemoryController(
         interval,
         std::move(processMemoryInfoProvider),
         config,

@@ -1,11 +1,27 @@
-from typing import List, Set, Optional
+from typing import Dict, List, Set, Optional
 import os
 from os import path
 
+from dataclasses import dataclass
+from enum import Enum
+
 import docker
+import xmltodict
 import pytest
 
 import yatest
+
+
+class TestState(Enum):
+    PASSED = 1
+    FAILED = 2
+    SKIPPED = 3
+
+@dataclass
+class TestCase:
+    name: str
+    state: TestState
+    log: str
 
 
 class IntegrationTests:
@@ -14,6 +30,7 @@ class IntegrationTests:
     _all_tests: Set[str]
     _selected_test: Set[str]
     _docker_executed: bool
+    _test_results: Dict[str, TestCase]
 
     def __init__(self, folder: str, image_name: str = 'ydb-pg-test-image'):
         self._folder = folder
@@ -23,6 +40,7 @@ class IntegrationTests:
         self._selected_test = set(self._all_tests)
 
         self._docker_executed = False
+        self._test_results = dict()
 
     def pytest_generate_tests(self, metafunc: pytest.Metafunc):
         """
@@ -39,7 +57,24 @@ class IntegrationTests:
             self._selected_test.remove(test_name)
 
     def execute_test(self, testname: str):
-        self._run_tests_in_docker(testname)
+        if not self._docker_executed:
+            self._run_tests_in_docker(testname)
+            test_results_file=path.join(self._test_result_folder, "raw", "result.xml")
+            self._test_results = _read_tests_result(test_results_file)
+
+        self._check_test_results(testname)
+
+    def _check_test_results(self, testname: str):
+        print(self._test_results)
+        test = self._test_results[testname]
+        if test.state == TestState.PASSED:
+            return
+        if test.state == TestState.SKIPPED:
+            pytest.skip(test.log)
+        if test.state == TestState.FAILED:
+            pytest.fail(reason=test.log)
+
+        raise Exception(f"Unexpected test state: '{test.state}'")
 
     def _run_tests_in_docker(self, test_name: Optional[str]):
         if self._docker_executed:
@@ -65,11 +100,12 @@ class IntegrationTests:
             pass
 
         try:
-            test_result_folder=path.join(yatest.common.output_path(), "test-result")
-            os.mkdir(test_result_folder)
+            os.mkdir(self._test_result_folder)
         except FileExistsError:
             pass
 
+
+        # TODO: run YDB with scripts/receipt and get connection port/database with runtime
         container = client.containers.create(
             image=self._image_name,
             # command="/docker-start.bash",
@@ -93,7 +129,7 @@ class IntegrationTests:
                 ),
                 docker.types.Mount(
                     target="/test-result",
-                    source=test_result_folder,
+                    source=self._test_result_folder,
                     type="bind",
                 ),
             ],
@@ -106,6 +142,11 @@ class IntegrationTests:
         finally:
             container.remove()
 
+
+    @property
+    def _test_result_folder(self):
+        return path.join(yatest.common.output_path(), "test-result")
+
 def _read_tests(folder: str) -> Set[str]:
     with open(path.join(folder, "full-test-list.txt"), "rt") as f:
         all = set(line.strip() for line in f.readlines())
@@ -115,3 +156,34 @@ def _read_tests(folder: str) -> Set[str]:
 
     test_list_for_run = all - unit
     return test_list_for_run
+
+def _read_tests_result(filepath: str) -> Dict[str, TestCase]:
+    with open(filepath, "rt") as f:
+        data = f.read()
+    d = xmltodict.parse(data)
+    testsuites = d["testsuites"]
+    test_suite = testsuites["testsuite"]
+    test_cases = test_suite["testcase"]
+
+    res: Dict[str, TestCase] = dict()
+
+    for test_case in test_cases:
+        name = test_case["@classname"] + "/" + test_case["@name"]
+        test_state = TestState.PASSED
+        if "failure" in test_case:
+            test_state = TestState.FAILED
+            log = test_case["failure"].get("#text", "")
+        if "skipped" in test_case:
+            test_state = TestState.SKIPPED
+            log = test_case["skipped"].get("#text", "")
+        else:
+            test_state = TestState.PASSED
+            log = ""
+
+        res[name] = TestCase(
+            name=name,
+            state=test_state,
+            log=log,
+        )
+
+    return res

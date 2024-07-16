@@ -1,6 +1,6 @@
 # Создание таблиц
 
-Создайте [строковые](../../concepts/datamodel/table.md#row-oriented-tables) или [колоночные](../../concepts/datamodel/table.md#column-oriented-tables) таблицы и задайте для них схемы данных с помощью конструкции [CREATE TABLE](../../yql/reference/syntax/create_table.md).
+Создайте [строковые](../../concepts/datamodel/table.md#row-oriented-tables) таблицы для OLTP-операций или [колоночные](../../concepts/datamodel/table.md#column-oriented-tables) таблицы для OLAP-нагрузок и задайте для них схемы данных с помощью конструкции [CREATE TABLE](../../yql/reference/syntax/create_table.md). Подробнее о типах таблиц в {{ ydb-short-name }} и области их применения можно прочесть в статье [{#T}](../../concepts/datamodel/table.md)
 
 {% note info %}
 

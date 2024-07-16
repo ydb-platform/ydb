@@ -2865,10 +2865,80 @@ bool ReplaceProjectionRefs(TExprNode::TPtr& lambda, const TStringBuf& scope, con
     return status != IGraphTransformer::TStatus::Error;
 }
 
+bool ValidateByProjection(TExtContext& ctx, const TExprNodePtr lambda, const THashSet<TString>& refs, const TExprNodePtr projection) {
+    auto projectionItems = projection->Tail().ChildrenSize();
+
+    // if column in order is ambigous, throw error
+    // column reference is not ambigous when
+    // it contains only in PgResultItem with one output (not star/qualified star)
+    // it has same projection lambda for all projection outputs with that name
+    THashMap<TString, ui32> lowerCaseToIndex;
+    TVector<TExprNodePtr> columnProjections;
+    auto emplace = [&](const TString& name) {
+        if (lowerCaseToIndex.emplace(to_lower(name), lowerCaseToIndex.size()).second) {
+            columnProjections.emplace_back();
+        }
+    };
+    // case when order by function of column from projection
+    if (lambda->Child(0)->Children().size() == 1) {
+        auto lambdaArg = lambda->Child(0)->Child(0);
+        VisitExpr(lambda->Child(1), [&](const TExprNode::TPtr& node) {
+            if (node->IsCallable("Member")) {
+                // Projection member
+                if (node->Child(0) == lambdaArg) {
+                    emplace(to_lower(TString(node->Child(1)->Content())));
+                }
+                return false;
+            }
+            return true;
+        });
+    }
+    // case when order by column (or expression with column) from input
+    for (auto& name: refs) {
+        emplace(name);
+    }
+
+    for (ui32 i = 0; i < projectionItems; ++i) {
+        const auto lambdaPtr = projection->Tail().Child(i)->TailPtr();
+        auto columnOrder = projection->Tail().Child(i)->HeadPtr();
+        if (columnOrder->IsAtom()) {
+            TString nameLCase = to_lower(TString(columnOrder->Content()));
+            if (auto it = lowerCaseToIndex.FindPtr(nameLCase)) {
+                if (!columnProjections[*it]) {
+                    columnProjections[*it] = lambdaPtr;
+                } else if (const TExprNode* l = &*columnProjections[*it], *r = &*lambdaPtr; !CompareExprTrees(l, r)) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambda->Pos()), TStringBuilder() << "ORDER BY column reference '" << nameLCase << "' is ambigous"));
+                    return false;
+                }
+            }
+        } else if (EnsureListType(*columnOrder, ctx.Expr)) {
+            // if has duplicates on columns used in refs, throw error
+            THashSet<TString> outputProjectionNames;
+            for (auto& e: columnOrder->Children()) {
+                TString nameLCase;
+                if (e->IsAtom()) {
+                    nameLCase = to_lower(TString(e->Content()));
+                } else if (EnsureListType(*e, ctx.Expr)) {
+                    nameLCase = to_lower(TString(e->HeadPtr()->Content()));
+                } else {
+                    return false;
+                }
+                if (lowerCaseToIndex.contains(nameLCase) && !outputProjectionNames.emplace(nameLCase).second) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambda->Pos()), TStringBuilder() << "ORDER BY column refrence '" << nameLCase << "' is ambigous"));
+                    return false;
+                }
+            }
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool ValidateGroups(TInputs& inputs, const THashSet<TString>& possibleAliases,
     const TExprNode& data, TExtContext& ctx, TExprNode::TListType& newGroups, bool& hasNewGroups, bool scanColumnsOnly,
     bool allowAggregates, const TExprNode::TPtr& groupExprs, const TStringBuf& scope,
-    const TProjectionOrders* projectionOrders, const TExprNode::TPtr& result, THashMap<TString, TString> usedInUsing={}) {
+    const TProjectionOrders* projectionOrders, const TExprNode::TPtr& projection, const TExprNode::TPtr& result, THashMap<TString, TString> usedInUsing={}) {
     newGroups.clear();
     hasNewGroups = false;
     bool hasColumnRef = false;
@@ -2920,6 +2990,10 @@ bool ValidateGroups(TInputs& inputs, const THashSet<TString>& possibleAliases,
             AddColumns(inputs, nullptr, refs, &qualifiedRefs, items, ctx.Expr, usedInUsing);
             auto effectiveType = ctx.Expr.MakeType<TStructExprType>(items);
             if (!effectiveType->Validate(group->Pos(), ctx.Expr)) {
+                return false;
+            }
+
+            if (!ValidateByProjection(ctx, group->Child(1), refs, projection)) {
                 return false;
             }
 
@@ -3132,60 +3206,12 @@ bool ValidateSort(TInputs& inputs, TInputs& subLinkInputs, const THashSet<TStrin
 
             if (canReplaceProjectionExpr) {
                 auto projectionItems = projection->Tail().ChildrenSize();
-
-                // if column in order is ambigous, throw error
-                // column reference is not ambigous when
-                // it contains only in PgResultItem with one output (not star/qualified star)
-                // it has same projection lambda for all projection outputs with that name
-                THashMap<TString, ui32> lowerCaseToIndex;
-                TVector<TExprNodePtr> columnProjections;
-                // case when order by column from projection
-                if (oneSort->Child(1)->Child(1)->IsCallable("Member")) {
-                    lowerCaseToIndex.emplace(oneSort->Child(1)->Child(1)->Child(1)->Content(), 0);
-                    columnProjections.emplace_back();
+                if (!ValidateByProjection(ctx, oneSort->Child(1), refs, projection)) {
+                    return false;
                 }
-                // case when order by column (or expression with column) from input
-                for (auto& name: refs) {
-                    if (lowerCaseToIndex.emplace(to_lower(name), lowerCaseToIndex.size()).second) {
-                        columnProjections.emplace_back();
-                    }
-                }
-
                 for (ui32 i = 0; i < projectionItems; ++i) {
                     TNodeMap<ui64> hashVisited;
                     const auto& lambda = projection->Tail().Child(i)->Tail();
-                    const auto lambdaPtr = projection->Tail().Child(i)->TailPtr();
-                    auto columnOrder = projection->Tail().Child(i)->HeadPtr();
-                    if (columnOrder->IsAtom()) {
-                        TString nameLCase = to_lower(TString(columnOrder->Content()));
-                        if (auto it = lowerCaseToIndex.FindPtr(nameLCase)) {
-                            if (!columnProjections[*it]) {
-                                columnProjections[*it] = lambdaPtr;
-                            } else if (const TExprNode* l = &*columnProjections[*it], *r = &*lambdaPtr; !CompareExprTrees(l, r)) {
-                                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(oneSort->Pos()), TStringBuilder() << "ORDER BY column reference '" << nameLCase << "' is ambigous"));
-                                return false;
-                            }
-                        }
-                    } else if (EnsureListType(*columnOrder, ctx.Expr)) {
-                        // if has duplicates on columns used in refs, throw error
-                        THashSet<TString> outputProjectionNames;
-                        for (auto& e: columnOrder->Children()) {
-                            TString nameLCase;
-                            if (e->IsAtom()) {
-                                nameLCase = to_lower(TString(e->Content()));
-                            } else if (EnsureListType(*e, ctx.Expr)) {
-                                nameLCase = to_lower(TString(e->HeadPtr()->Content()));
-                            } else {
-                                return false;
-                            }
-                            if (lowerCaseToIndex.contains(nameLCase) && !outputProjectionNames.emplace(nameLCase).second) {
-                                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(oneSort->Pos()), TStringBuilder() << "ORDER BY column refrence '" << nameLCase << "' is ambigous"));
-                                return false;
-                            }
-                        }
-                    } else {
-                        return false;
-                    }
                     if (lambda.Head().ChildrenSize() == 1) {
                         if (lambda.Tail().IsCallable() && lambda.Tail().Content() == "Member") {
                             auto lcase = lambda.Tail().Tail().Content();
@@ -4457,7 +4483,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
 
                     TExprNode::TListType newGroups;
                     bool hasNewGroups = false;
-                    if (!ValidateGroups(joinInputs, possibleAliases, data, ctx, newGroups, hasNewGroups, scanColumnsOnly, false, nullptr, "GROUP BY", &projectionOrders, result, repeatedColumnsInUsing)) {
+                    if (!ValidateGroups(joinInputs, possibleAliases, data, ctx, newGroups, hasNewGroups, scanColumnsOnly, false, nullptr, "GROUP BY", &projectionOrders, GetSetting(options, "result"), result, repeatedColumnsInUsing)) {
                         return IGraphTransformer::TStatus::Error;
                     }
 
@@ -4578,7 +4604,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         auto newChildren = x->ChildrenList();
                         TExprNode::TListType newGroups;
                         bool hasNewGroups = false;
-                        if (!ValidateGroups(joinInputs, possibleAliases, *partitions, ctx, newGroups, hasNewGroups, scanColumnsOnly, true, groupExprs, "", nullptr, nullptr, repeatedColumnsInUsing)) {
+                        if (!ValidateGroups(joinInputs, possibleAliases, *partitions, ctx, newGroups, hasNewGroups, scanColumnsOnly, true, groupExprs, "", nullptr, nullptr, nullptr, repeatedColumnsInUsing)) {
                             return IGraphTransformer::TStatus::Error;
                         }
 
@@ -4641,7 +4667,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                     TExprNode::TListType newGroups;
                     TInputs projectionInputs;
                     projectionInputs.push_back(TInput{ "", outputRowType, Nothing(), TInput::Projection, {} });
-                    if (!ValidateGroups(projectionInputs, {}, data, ctx, newGroups, hasNewGroups, scanColumnsOnly, false, nullptr, "DISTINCT ON", &projectionOrders, nullptr, repeatedColumnsInUsing)) {
+                    if (!ValidateGroups(projectionInputs, {}, data, ctx, newGroups, hasNewGroups, scanColumnsOnly, false, nullptr, "DISTINCT ON", &projectionOrders, GetSetting(options, "result"), nullptr, repeatedColumnsInUsing)) {
                         return IGraphTransformer::TStatus::Error;
                     }
 

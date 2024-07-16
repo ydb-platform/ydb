@@ -15091,6 +15091,13 @@
             "uri": "https://{canondata_backend}/1925842/c5051194d02e92f1031cbdc67af1746096a23db4/resource.tar.gz#test_sql2yql.test_pg_duplicated-order_by7_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg_duplicated-order_by8]": [
+        {
+            "checksum": "2eacb5806ddb7805f05dc3cd4d9849d2",
+            "size": 876,
+            "uri": "https://{canondata_backend}/1937027/4f82ec9568d371786c4da91a035176264bd07186/resource.tar.gz#test_sql2yql.test_pg_duplicated-order_by8_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg_duplicated-t1]": [
         {
             "checksum": "de6763b6b24aaf53e1cdac5753f040ad",

@@ -2492,6 +2492,11 @@
         }
     ],
     "test.test[pg_duplicated-order_by2-default.txt-Results]": [],
+    "test.test[pg_duplicated-order_by8--Results]": [
+        {
+            "uri": "file://test.test_pg_duplicated-order_by8--Results_/extracted"
+        }
+    ],
     "test.test[produce-reduce_all-default.txt-Analyze]": [
         {
             "checksum": "9bd46d79daaa9520002fc1a9f8ead7ad",

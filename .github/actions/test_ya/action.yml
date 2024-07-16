@@ -87,6 +87,7 @@ runs:
 
         export ARTIFACTS_DIR=$RESULT_DIR/artifacts
         echo "ARTIFACTS_DIR=$ARTIFACTS_DIR" >> $GITHUB_ENV
+        echo "ARTIFACTS_DIR_URL=$S3_URL_PREFIX/artifacts" >> $GITHUB_ENV
         mkdir -p $ARTIFACTS_DIR
 
         export TEST_ARTIFACTS_DIR=$RESULT_DIR/test_artifacts
@@ -322,7 +323,7 @@ runs:
         .github/scripts/tests/transform-ya-junit.py -i \
           -m .github/config/muted_ya.txt \
           --ya-out "$OUT_DIR" \
-          --log-url-prefix "$S3_URL_PREFIX/logs/" \
+          --log-url-prefix "$ARTIFACTS_DIR_URL/logs/" \
           --log-out-dir "$ARTIFACTS_DIR/logs/" \
           --test-stuff-out "$TEST_ARTIFACTS_DIR/" \
           --test-stuff-prefix "$S3_TEST_ARTIFACTS_URL_PREFIX/" \

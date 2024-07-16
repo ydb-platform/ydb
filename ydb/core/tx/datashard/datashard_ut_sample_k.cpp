@@ -1,0 +1,156 @@
+#include "defs.h"
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
+#include "datashard_ut_common_kqp.h"
+
+#include <ydb/core/testlib/test_client.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/tx_proxy/upload_rows.h>
+
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
+
+#include <library/cpp/testing/unittest/registar.h>
+
+template <>
+inline void Out<NKikimrTxDataShard::TEvSampleKResponse::EStatus>(IOutputStream& o, NKikimrTxDataShard::TEvSampleKResponse::EStatus status)
+{
+    o << NKikimrTxDataShard::TEvSampleKResponse::EStatus_Name(status);
+}
+
+namespace NKikimr {
+
+using namespace NKikimr::NDataShard::NKqpHelpers;
+using namespace NSchemeShard;
+using namespace Tests;
+
+Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
+    static TString DoSampleK(Tests::TServer::TPtr server, TActorId sender,
+                             const TString& tableFrom, const TRowVersion& snapshot, ui64 seed, ui64 k) {
+        static ui64 sId = 1;
+        auto id = sId++;
+        auto& runtime = *server->GetRuntime();
+        auto datashards = GetTableShards(server, sender, tableFrom);
+        TTableId tableId = ResolveTableId(server, sender, tableFrom);
+
+        TStringBuilder data;
+
+        for (auto tid : datashards) {
+            auto ev = new TEvDataShard::TEvSampleKRequest;
+            auto& rec = ev->Record;
+            rec.SetId(1);
+
+            rec.SetSeqNoGeneration(id);
+            rec.SetSeqNoRound(1);
+
+            rec.SetTabletId(tid);
+            rec.SetOwnerId(tableId.PathId.OwnerId);
+            rec.SetPathId(tableId.PathId.LocalPathId);
+
+            rec.AddColumns("value");
+            rec.AddColumns("key");
+
+            rec.SetSnapshotTxId(snapshot.TxId);
+            rec.SetSnapshotStep(snapshot.Step);
+
+            rec.SetSeed(seed);
+            rec.SetK(k);
+
+            runtime.SendToPipe(tid, sender, ev, 0, GetPipeConfigWithRetries());
+
+            TAutoPtr<IEventHandle> handle;
+            auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvSampleKResponse>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrTxDataShard::TEvSampleKResponse::DONE);
+
+            TString err;
+            for (auto& row : reply->Record.GetRows()) {
+                TSerializedCellVec vec;
+                UNIT_ASSERT(TSerializedCellVec::TryParse(row, vec));
+                const auto& cells = vec.GetCells();
+                UNIT_ASSERT_EQUAL(cells.size(), 2);
+                data.Out << "value = ";
+                cells[0].ToStream<i32>(data.Out, err);
+                data.Out << ", key = ";
+                cells[1].ToStream<i32>(data.Out, err);
+                data.Out << "\n";
+            }
+        }
+        return data;
+    }
+
+    Y_UNIT_TEST (RunScan) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+
+        // Allow manipulating shadow data using normal schemeshard operations
+        runtime.GetAppData().AllowShadowDataInSchemeShardForTests = true;
+
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
+
+        // Upsert some initial values
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 10), (2, 20), (3, 30), (4, 40), (5, 50);");
+
+        auto snapshot = CreateVolatileSnapshot(server, {"/Root/table-1"});
+
+        ui64 seed, k;
+        TString data;
+
+        seed = 0;
+        {
+            k = 1;
+            data = DoSampleK(server, sender, "/Root/table-1", snapshot, seed, k);
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                                     "value = 30, key = 3\n");
+
+            k = 3;
+            data = DoSampleK(server, sender, "/Root/table-1", snapshot, seed, k);
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                                     "value = 30, key = 3\n"
+                                     "value = 20, key = 2\n"
+                                     "value = 50, key = 5\n");
+
+            k = 9;
+            data = DoSampleK(server, sender, "/Root/table-1", snapshot, seed, k);
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                                     "value = 30, key = 3\n"
+                                     "value = 20, key = 2\n"
+                                     "value = 50, key = 5\n"
+                                     "value = 40, key = 4\n"
+                                     "value = 10, key = 1\n");
+        }
+        seed = 111;
+        {
+            k = 1;
+            data = DoSampleK(server, sender, "/Root/table-1", snapshot, seed, k);
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                                     "value = 10, key = 1\n");
+
+            k = 3;
+            data = DoSampleK(server, sender, "/Root/table-1", snapshot, seed, k);
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                                     "value = 10, key = 1\n"
+                                     "value = 20, key = 2\n"
+                                     "value = 30, key = 3\n");
+
+            k = 9;
+            data = DoSampleK(server, sender, "/Root/table-1", snapshot, seed, k);
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                                     "value = 10, key = 1\n"
+                                     "value = 20, key = 2\n"
+                                     "value = 30, key = 3\n"
+                                     "value = 50, key = 5\n"
+                                     "value = 40, key = 4\n");
+        }
+    }
+}
+
+} // namespace NKikimr

@@ -115,6 +115,7 @@ message TEvStatisticsResponse {
         SUCCESS = 1;
         ABORTED = 2;
         ERROR = 3;
+        PROCESSING = 4;
     }
     optional EStatus Status = 2;
 

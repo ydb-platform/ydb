@@ -119,10 +119,11 @@ void IKikimrGateway::BuildIndexMetadata(TTableMetadataResult& loadTableMetadataR
         NKikimr::NTableIndex::TIndexColumns indexColumns{index.KeyColumns, {}};
 
         TString error;
-        NKikimrSchemeOp::EIndexType indexType = TIndexDescription::ConvertIndexType(index.Type);
+        auto indexType = TIndexDescription::ConvertIndexType(index.Type);
+        YQL_ENSURE(indexType != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
         YQL_ENSURE(IsCompatibleIndex(indexType, tableColumns, indexColumns, error), "Index is not compatible: " << error);
 
-        NKikimr::NTableIndex::TTableColumns indexTableColumns = NKikimr::NTableIndex::CalcTableImplDescription(indexType, tableColumns, indexColumns);
+        auto indexTableColumns = NKikimr::NTableIndex::CalcTableImplDescription(indexType, tableColumns, indexColumns);
 
         TKikimrTableMetadataPtr indexTableMetadata = new TKikimrTableMetadata(cluster, indexTablePath);
         indexTableMetadata->DoesExist = true;

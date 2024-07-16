@@ -1,5 +1,6 @@
 #include "schemeshard_utils.h"
 
+#include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/persqueue/utils.h>
 #include <ydb/core/protos/counters_schemeshard.pb.h>
@@ -210,7 +211,7 @@ PQGroupReserve::PQGroupReserve(const ::NKikimrPQ::TPQTabletConfig& tabletConfig,
 namespace NTableIndex {
 
 TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription &tableDescr) {
-    NTableIndex::TTableColumns result;
+    TTableColumns result;
     for (auto& column: tableDescr.GetColumns()) {
         result.Columns.insert(column.GetName());
     }
@@ -221,7 +222,7 @@ TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription &tableDescr) 
 }
 
 TIndexColumns ExtractInfo(const NKikimrSchemeOp::TIndexCreationConfig &indexDesc) {
-    NTableIndex::TIndexColumns result;
+    TIndexColumns result;
     for (auto& keyName: indexDesc.GetKeyColumnNames()) {
         result.KeyColumns.push_back(keyName);
     }
@@ -232,7 +233,7 @@ TIndexColumns ExtractInfo(const NKikimrSchemeOp::TIndexCreationConfig &indexDesc
 }
 
 TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr &tableInfo) {
-    NTableIndex::TTableColumns result;
+    TTableColumns result;
     for (auto& item: tableInfo->Columns) {
         const auto& column = item.second;
         if (column.IsDropped()) {
@@ -254,6 +255,8 @@ TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr &tableInfo) {
 
     return result;
 }
+
+namespace {
 
 NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
         const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
@@ -348,39 +351,47 @@ void SetImplTablePartitionConfig(
     *tableDescription.MutablePartitionConfig() = PartitionConfigForIndexes(baseTablePartitionConfig, indexTableDesc);
 }
 
- void FillIndexImplTableColumns(
-    const THashMap<ui32, struct NSchemeShard::TTableInfo::TColumn>& baseTableColumns,
-    const NTableIndex::TTableColumns& implTableColumns,
+void FillIndexImplTableColumns(
+    const auto& baseTableColumns,
+    const TTableColumns& implTableColumns,
     NKikimrSchemeOp::TTableDescription& implTableDesc)
 {
-    //Columns and KeyColumnNames order is really important
-    //the order of implTableColumns.Keys is the right one
+    const auto was = implTableDesc.ColumnsSize();
 
     THashMap<TString, ui32> implKeyToImplColumn;
     for (ui32 keyId = 0; keyId < implTableColumns.Keys.size(); ++keyId) {
         implKeyToImplColumn[implTableColumns.Keys[keyId]] = keyId;
     }
 
-    for (auto& iter: baseTableColumns) {
-        const NSchemeShard::TTableInfo::TColumn& column = iter.second;
-        if (column.IsDropped()) {
-            continue;
+    for (ui32 i = Max<ui32>() / 2; auto& iter: baseTableColumns) {
+        NKikimrSchemeOp::TColumnDescription* item = nullptr;
+        if constexpr (std::is_same_v<const std::pair<const ui32, NSchemeShard::TTableInfo::TColumn>&, decltype(iter)>) {
+            const NSchemeShard::TTableInfo::TColumn& column = iter.second;
+            if (!column.IsDropped() && implTableColumns.Columns.contains(column.Name)) {
+                item = implTableDesc.AddColumns();
+                item->SetName(column.Name);
+                item->SetType(NScheme::TypeName(column.PType, column.PTypeMod));
+                item->SetNotNull(column.NotNull);
+            }
+        } else {
+            if (implTableColumns.Columns.contains(iter.GetName())) {
+                item = implTableDesc.AddColumns();
+                *item = iter;
+                item->ClearFamily();
+                item->ClearFamilyName();
+                item->ClearDefaultValue();
+            }
         }
-
-        if (implTableColumns.Columns.contains(column.Name)) {
-            auto item = implTableDesc.AddColumns();
-            item->SetName(column.Name);
-            item->SetType(NScheme::TypeName(column.PType, column.PTypeMod));
-            item->SetNotNull(column.NotNull);
-            ui32 order = Max<ui32>();
-            if (implKeyToImplColumn.contains(column.Name)) {
-                order = implKeyToImplColumn.at(column.Name);
+        if (item) {
+            ui32 order = i++;
+            if (const auto* id = implKeyToImplColumn.FindPtr(item->GetName())) {
+                order = *id;
             }
             item->SetId(order);
         }
     }
 
-    std::sort(implTableDesc.MutableColumns()->begin(),
+    std::sort(implTableDesc.MutableColumns()->begin() + was,
               implTableDesc.MutableColumns()->end(),
               [] (auto& left, auto& right) {
                   return left.GetId() < right.GetId();
@@ -395,69 +406,63 @@ void SetImplTablePartitionConfig(
     }
 }
 
-void FillIndexImplTableColumns(
-    const ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription>& baseTableColumns,
-    const NTableIndex::TTableColumns& implTableColumns,
-    NKikimrSchemeOp::TTableDescription& implTableDesc)
+const auto& GetPartitionConfig(const NSchemeShard::TTableInfo::TPtr& tableInfo) {
+    return tableInfo->PartitionConfig();
+}
+
+const auto& GetColumns(const NSchemeShard::TTableInfo::TPtr& tableInfo) {
+    return tableInfo->Columns;
+}
+
+const auto& GetPartitionConfig(const NKikimrSchemeOp::TTableDescription& tableDescr) {
+    return tableDescr.GetPartitionConfig();
+}
+
+const auto& GetColumns(const NKikimrSchemeOp::TTableDescription& tableDescr) {
+    return tableDescr.GetColumns();
+}
+
+auto CalcImplTableDescImpl(
+    const auto& baseTable,
+    const TTableColumns& implTableColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
 {
-    //Columns and KeyColumnNames order is really important
-    //the order of implTableColumns.Keys is the right one
+    NKikimrSchemeOp::TTableDescription implTableDesc;
+    implTableDesc.SetName("indexImplTable");
+    SetImplTablePartitionConfig(GetPartitionConfig(baseTable), indexTableDesc, implTableDesc);
+    FillIndexImplTableColumns(GetColumns(baseTable), implTableColumns, implTableDesc);
+    return implTableDesc;
+}
 
-    THashMap<TString, ui32> implKeyToImplColumn;
-    for (ui32 keyId = 0; keyId < implTableColumns.Keys.size(); ++keyId) {
-        implKeyToImplColumn[implTableColumns.Keys[keyId]] = keyId;
+auto CalcVectorKmeansTreePostingImplTableDescImpl(
+    const auto& baseTable,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const TTableColumns& implTableColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    std::string_view suffix)
+{
+    NKikimrSchemeOp::TTableDescription implTableDesc;
+    implTableDesc.SetName(TString::Join(NTableVectorKmeansTreeIndex::PostingTable, suffix));
+    SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
+    {
+        auto parentColumn = implTableDesc.AddColumns();
+        parentColumn->SetName(NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn);
+        parentColumn->SetType("Uint32");
+        parentColumn->SetTypeId(NScheme::NTypeIds::Uint32);
     }
+    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn);
+    FillIndexImplTableColumns(GetColumns(baseTable), implTableColumns, implTableDesc);
+    return implTableDesc;
+}
 
-    for (auto& column: baseTableColumns) {
-        auto& columnName = column.GetName();
-        if (implTableColumns.Columns.contains(columnName)) {
-            auto item = implTableDesc.AddColumns();
-            *item = column;
-
-            // Indexes don't use column families
-            item->ClearFamily();
-            item->ClearFamilyName();
-
-            // Indexes can't have a default value
-            item->ClearDefaultValue();
-
-            ui32 order = Max<ui32>();
-            if (implKeyToImplColumn.contains(columnName)) {
-                order = implKeyToImplColumn.at(columnName);
-            }
-            item->SetId(order);
-        }
-    }
-
-    std::sort(implTableDesc.MutableColumns()->begin(),
-              implTableDesc.MutableColumns()->end(),
-              [] (auto& left, auto& right) {
-                  return left.GetId() < right.GetId();
-              });
-
-    for (auto& column: *implTableDesc.MutableColumns()) {
-        column.ClearId();
-    }
-
-    for (auto& keyName: implTableColumns.Keys) {
-        implTableDesc.AddKeyColumnNames(keyName);
-    }
 }
 
 NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
-    const NTableIndex::TTableColumns& implTableColumns,
+    const TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc)
 {
-    NKikimrSchemeOp::TTableDescription implTableDesc;
-
-    implTableDesc.SetName("indexImplTable");
-
-    SetImplTablePartitionConfig(baseTableInfo->PartitionConfig(), indexTableDesc, implTableDesc);
-
-    FillIndexImplTableColumns(baseTableInfo->Columns, implTableColumns, implTableDesc);
-
-    return implTableDesc;
+    return CalcImplTableDescImpl(baseTableInfo, implTableColumns, indexTableDesc);
 }
 
 NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
@@ -465,15 +470,7 @@ NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
     const TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc)
 {
-    NKikimrSchemeOp::TTableDescription implTableDesc;
-
-    implTableDesc.SetName("indexImplTable");
-
-    SetImplTablePartitionConfig(baseTableDescr.GetPartitionConfig(), indexTableDesc, implTableDesc);
-
-    FillIndexImplTableColumns(baseTableDescr.GetColumns(), implTableColumns, implTableDesc);
-
-    return implTableDesc;
+    return CalcImplTableDescImpl(baseTableDescr, implTableColumns, indexTableDesc);
 }
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
@@ -487,25 +484,22 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
     SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
 
     {
-        auto parentIdColumn = implTableDesc.AddColumns();
-        parentIdColumn->SetName(NTableVectorKmeansTreeIndex::LevelTable_ParentIdColumn);
-        parentIdColumn->SetType("Uint32");
-        parentIdColumn->SetTypeId(NScheme::NTypeIds::Uint32);
-        parentIdColumn->SetId(0);
+        auto parentColumn = implTableDesc.AddColumns();
+        parentColumn->SetName(NTableVectorKmeansTreeIndex::LevelTable_ParentIdColumn);
+        parentColumn->SetType("Uint32");
+        parentColumn->SetTypeId(NScheme::NTypeIds::Uint32);
     }
     {
         auto idColumn = implTableDesc.AddColumns();
         idColumn->SetName(NTableVectorKmeansTreeIndex::LevelTable_IdColumn);
         idColumn->SetType("Uint32");
         idColumn->SetTypeId(NScheme::NTypeIds::Uint32);
-        idColumn->SetId(1);
     }
     {
         auto centroidColumn = implTableDesc.AddColumns();
         centroidColumn->SetName(NTableVectorKmeansTreeIndex::LevelTable_EmbeddingColumn);
         centroidColumn->SetType("String");
         centroidColumn->SetTypeId(NScheme::NTypeIds::String);
-        centroidColumn->SetId(2);
     }
 
     implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::LevelTable_ParentIdColumn);
@@ -517,54 +511,22 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-    const NTableIndex::TTableColumns& implTableColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+    const TTableColumns& implTableColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    std::string_view suffix)
 {
-    NKikimrSchemeOp::TTableDescription implTableDesc;
-
-    implTableDesc.SetName(NTableVectorKmeansTreeIndex::PostingTable);
-
-    SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
-
-    {
-        auto parentIdColumn = implTableDesc.AddColumns();
-        parentIdColumn->SetName(NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn);
-        parentIdColumn->SetType("Uint32");
-        parentIdColumn->SetTypeId(NScheme::NTypeIds::Uint32);
-        parentIdColumn->SetId(0);
-    }
-
-    FillIndexImplTableColumns(baseTableInfo->Columns, implTableColumns, implTableDesc);
-
-    return implTableDesc;
+    return CalcVectorKmeansTreePostingImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, implTableColumns, indexTableDesc, suffix);
 }
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
-    const NKikimrSchemeOp::TTableDescription &baseTableDescr,
+    const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-    const NTableIndex::TTableColumns& implTableColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+    const TTableColumns& implTableColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    std::string_view suffix)
 {
-    NKikimrSchemeOp::TTableDescription implTableDesc;
-
-    implTableDesc.SetName(NTableVectorKmeansTreeIndex::PostingTable);
-
-    SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
-
-    {
-        auto parentIdColumn = implTableDesc.AddColumns();
-        parentIdColumn->SetName(NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn);
-        parentIdColumn->SetType("Uint32");
-        parentIdColumn->SetTypeId(NScheme::NTypeIds::Uint32);
-        parentIdColumn->SetId(0);
-    }
-
-    FillIndexImplTableColumns(baseTableDescr.GetColumns(), implTableColumns, implTableDesc);
-
-    return implTableDesc;
+    return CalcVectorKmeansTreePostingImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, implTableColumns, indexTableDesc, suffix);
 }
-
-
 
 bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDescr, TColumnTypes& columnTypes, TString& explain) {
     const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;

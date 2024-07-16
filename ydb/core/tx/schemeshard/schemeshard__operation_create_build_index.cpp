@@ -117,9 +117,10 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         auto outTx = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable);
         *outTx.MutableCreateTable() = implTableDesc;
 
+        implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
         implTableDesc.MutablePartitionConfig()->SetShadowData(true);
 
-        return CreateInitializeBuildIndexImplTable(NextPartId(opId, result), outTx);
+        result.push_back(CreateInitializeBuildIndexImplTable(NextPartId(opId, result), outTx));
     };
 
     if (indexDesc.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
@@ -129,17 +130,18 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             indexLevelTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
             indexPostingTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
         }
-        result.push_back(createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexLevelTableDesc)));
-        result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc)));
+        createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexLevelTableDesc));
+        createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc));
+        // TODO Maybe better to use partition from main table
+        createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc, "0tmp"));
+        createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc, "1tmp"));
     } else {
         NKikimrSchemeOp::TTableDescription indexTableDesc;
         // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS
         if (indexDesc.IndexImplTableDescriptionsSize() == 1) {
             indexTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
         }
-        NKikimrSchemeOp::TTableDescription implTableDesc = CalcImplTableDesc(tableInfo, implTableColumns, indexTableDesc);
-        implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
-        result.push_back(createIndexImplTable(std::move(implTableDesc)));
+        createIndexImplTable(CalcImplTableDesc(tableInfo, implTableColumns, indexTableDesc));
     }
 
     return result;

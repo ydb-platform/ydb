@@ -441,8 +441,8 @@ runs:
         set -x
         echo "::group::s3-sync"
         .github/scripts/Indexer/indexer.py -r "$RESULT_DIR/"
-        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$RESULT_DIR/" "$S3_BUCKET_PATH/"
-        echo "00 [Workflow run results](${S3_BUCKET_PATH}/index.html)" >> $SUMMARY_LINKS        
+        echo "00 [Workflow run results](${S3_BUCKET_PATH}/index.html)" >> $SUMMARY_LINKS
+        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$RESULT_DIR/" "$S3_BUCKET_PATH/"     
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
         echo "::endgroup::"
 

@@ -261,7 +261,7 @@ def process_dir(top_dir, opts):
                          <tbody>
                          <tr class="clickable">
                              <td></td>
-                             <td><a href=".."><svg width="1.5em" height="1em" version="1.1" viewBox="0 0 24 24"><use xlink:href="#go-up"></use></svg>
+                             <td><a href="../index.html"><svg width="1.5em" height="1em" version="1.1" viewBox="0 0 24 24"><use xlink:href="#go-up"></use></svg>
                  <span class="goup">..</span></a></td>
                              <td>&mdash;</td>
                              <td class="hideable">&mdash;</td>
@@ -312,9 +312,13 @@ def process_dir(top_dir, opts):
 
         if entry.is_dir() and not entry.is_symlink():
             entry_type = 'folder'
-            if os.name not in ('nt',):
-                # append trailing slash to dirs, unless it's windows
-                entry_path = os.path.join(entry.name, '')
+            # yurchuk: add index.html to dirs if recursive
+            if opts.recursive:
+                    entry_path = os.path.join(entry.name, 'index.html')
+            else:
+                if os.name not in ('nt',):
+                    # append trailing slash to dirs, unless it's windows
+                    entry_path = os.path.join(entry.name, '')
 
         elif entry.is_dir() and entry.is_symlink():
             entry_type = 'folder-shortcut'

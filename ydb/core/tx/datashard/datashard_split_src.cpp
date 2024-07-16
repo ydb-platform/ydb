@@ -430,7 +430,7 @@ public:
     void Complete(const TActorContext &ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Sending snapshots from src for split OpId " << Self->SrcSplitOpId);
         Self->SplitSrcSnapshotSender.DoSend(ctx);
-        if (ChangeExchangeSplit && !Self->ChangesQueue) { // double check queue
+        if (ChangeExchangeSplit) {
             Self->KillChangeSender(ctx);
             Self->ChangeExchangeSplitter.DoSplit(ctx);
         }
@@ -494,7 +494,7 @@ public:
             }
         }
 
-        if (ActivateTabletId && !Self->ChangesQueue) { // double check queue
+        if (ActivateTabletId) {
             Self->ChangeSenderActivator.DoSend(ActivateTabletId, ctx);
         }
     }

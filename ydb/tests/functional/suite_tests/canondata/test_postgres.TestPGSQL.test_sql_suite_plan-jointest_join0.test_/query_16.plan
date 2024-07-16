@@ -50,7 +50,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "Nth.unique2 == 42"
+                                                "Predicate": "item.b.unique2 == 42"
                                             },
                                             {
                                                 "Inputs": [

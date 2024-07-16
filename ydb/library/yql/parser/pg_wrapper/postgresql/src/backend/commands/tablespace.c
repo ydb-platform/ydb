@@ -12,12 +12,12 @@
  * remove the possibility of having file name conflicts, we isolate
  * files within a tablespace into database-specific subdirectories.
  *
- * To support file access via the information given in RelFileNode, we
+ * To support file access via the information given in RelFileLocator, we
  * maintain a symbolic-link map in $PGDATA/pg_tblspc. The symlinks are
  * named by tablespace OIDs and point to the actual tablespace directories.
  * There is also a per-cluster version directory in each tablespace.
  * Thus the full path to an arbitrary file is
- *			$PGDATA/pg_tblspc/spcoid/PG_MAJORVER_CATVER/dboid/relfilenode
+ *			$PGDATA/pg_tblspc/spcoid/PG_MAJORVER_CATVER/dboid/relfilenumber
  * e.g.
  *			$PGDATA/pg_tblspc/20981/PG_9.0_201002161/719849/83292814
  *
@@ -25,8 +25,8 @@
  * tables) and pg_default (for everything else).  For backwards compatibility
  * and to remain functional on platforms without symlinks, these tablespaces
  * are accessed specially: they are respectively
- *			$PGDATA/global/relfilenode
- *			$PGDATA/base/dboid/relfilenode
+ *			$PGDATA/global/relfilenumber
+ *			$PGDATA/base/dboid/relfilenumber
  *
  * To allow CREATE DATABASE to give a new database a default tablespace
  * that's different from the template database's default, we make the
@@ -35,7 +35,7 @@
  * and munge the system catalogs of the new database.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -56,8 +56,9 @@
 #include "access/sysattr.h"
 #include "access/tableam.h"
 #include "access/xact.h"
-#include "access/xlog.h"
 #include "access/xloginsert.h"
+#include "access/xlogutils.h"
+#include "catalog/binary_upgrade.h"
 #include "catalog/catalog.h"
 #include "catalog/dependency.h"
 #include "catalog/indexing.h"
@@ -78,7 +79,7 @@
 #include "utils/acl.h"
 #include "utils/builtins.h"
 #include "utils/fmgroids.h"
-#include "utils/guc.h"
+#include "utils/guc_hooks.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
@@ -89,6 +90,7 @@ __thread char	   *default_tablespace = NULL;
 __thread char	   *temp_tablespaces = NULL;
 __thread bool		allow_in_place_tablespaces = false;
 
+__thread Oid			binary_upgrade_next_pg_tablespace_oid = InvalidOid;
 
 static void create_tablespace_directories(const char *location,
 										  const Oid tablespaceoid);
@@ -113,7 +115,7 @@ static bool destroy_tablespace_directories(Oid tablespaceoid, bool redo);
  * re-create a database subdirectory (of $PGDATA/base) during WAL replay.
  */
 void
-TablespaceCreateDbspace(Oid spcNode, Oid dbNode, bool isRedo)
+TablespaceCreateDbspace(Oid spcOid, Oid dbOid, bool isRedo)
 {
 	struct stat st;
 	char	   *dir;
@@ -122,13 +124,13 @@ TablespaceCreateDbspace(Oid spcNode, Oid dbNode, bool isRedo)
 	 * The global tablespace doesn't have per-database subdirectories, so
 	 * nothing to do for it.
 	 */
-	if (spcNode == GLOBALTABLESPACE_OID)
+	if (spcOid == GLOBALTABLESPACE_OID)
 		return;
 
-	Assert(OidIsValid(spcNode));
-	Assert(OidIsValid(dbNode));
+	Assert(OidIsValid(spcOid));
+	Assert(OidIsValid(dbOid));
 
-	dir = GetDatabasePath(dbNode, spcNode);
+	dir = GetDatabasePath(dbOid, spcOid);
 
 	if (stat(dir, &st) < 0)
 	{
@@ -211,10 +213,9 @@ TablespaceCreateDbspace(Oid spcNode, Oid dbNode, bool isRedo)
 Oid
 CreateTableSpace(CreateTableSpaceStmt *stmt)
 {
-#ifdef HAVE_SYMLINK
 	Relation	rel;
 	Datum		values[Natts_pg_tablespace];
-	bool		nulls[Natts_pg_tablespace];
+	bool		nulls[Natts_pg_tablespace] = {0};
 	HeapTuple	tuple;
 	Oid			tablespaceoid;
 	char	   *location;
@@ -222,7 +223,7 @@ CreateTableSpace(CreateTableSpaceStmt *stmt)
 	Datum		newOptions;
 	bool		in_place;
 
-	/* Must be super user */
+	/* Must be superuser */
 	if (!superuser())
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
@@ -316,10 +317,20 @@ CreateTableSpace(CreateTableSpaceStmt *stmt)
 	 */
 	rel = table_open(TableSpaceRelationId, RowExclusiveLock);
 
-	MemSet(nulls, false, sizeof(nulls));
+	if (IsBinaryUpgrade)
+	{
+		/* Use binary-upgrade override for tablespace oid */
+		if (!OidIsValid(binary_upgrade_next_pg_tablespace_oid))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("pg_tablespace OID value not set when in binary upgrade mode")));
 
-	tablespaceoid = GetNewOidWithIndex(rel, TablespaceOidIndexId,
-									   Anum_pg_tablespace_oid);
+		tablespaceoid = binary_upgrade_next_pg_tablespace_oid;
+		binary_upgrade_next_pg_tablespace_oid = InvalidOid;
+	}
+	else
+		tablespaceoid = GetNewOidWithIndex(rel, TablespaceOidIndexId,
+										   Anum_pg_tablespace_oid);
 	values[Anum_pg_tablespace_oid - 1] = ObjectIdGetDatum(tablespaceoid);
 	values[Anum_pg_tablespace_spcname - 1] =
 		DirectFunctionCall1(namein, CStringGetDatum(stmt->tablespacename));
@@ -379,12 +390,6 @@ CreateTableSpace(CreateTableSpaceStmt *stmt)
 	table_close(rel, NoLock);
 
 	return tablespaceoid;
-#else							/* !HAVE_SYMLINK */
-	ereport(ERROR,
-			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("tablespaces are not supported on this platform")));
-	return InvalidOid;			/* keep compiler quiet */
-#endif							/* HAVE_SYMLINK */
 }
 
 /*
@@ -395,7 +400,6 @@ CreateTableSpace(CreateTableSpaceStmt *stmt)
 void
 DropTableSpace(DropTableSpaceStmt *stmt)
 {
-#ifdef HAVE_SYMLINK
 	char	   *tablespacename = stmt->tablespacename;
 	TableScanDesc scandesc;
 	Relation	rel;
@@ -432,7 +436,6 @@ DropTableSpace(DropTableSpaceStmt *stmt)
 			ereport(NOTICE,
 					(errmsg("tablespace \"%s\" does not exist, skipping",
 							tablespacename)));
-			/* XXX I assume I need one or both of these next two calls */
 			table_endscan(scandesc);
 			table_close(rel, NoLock);
 		}
@@ -443,13 +446,12 @@ DropTableSpace(DropTableSpaceStmt *stmt)
 	tablespaceoid = spcform->oid;
 
 	/* Must be tablespace owner */
-	if (!pg_tablespace_ownercheck(tablespaceoid, GetUserId()))
+	if (!object_ownercheck(TableSpaceRelationId, tablespaceoid, GetUserId()))
 		aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_TABLESPACE,
 					   tablespacename);
 
 	/* Disallow drop of the standard tablespaces, even by superuser */
-	if (tablespaceoid == GLOBALTABLESPACE_OID ||
-		tablespaceoid == DEFAULTTABLESPACE_OID)
+	if (IsPinnedObject(TableSpaceRelationId, tablespaceoid))
 		aclcheck_error(ACLCHECK_NO_PRIV, OBJECT_TABLESPACE,
 					   tablespacename);
 
@@ -503,15 +505,23 @@ DropTableSpace(DropTableSpaceStmt *stmt)
 		 * but we can't tell them apart from important data files that we
 		 * mustn't delete.  So instead, we force a checkpoint which will clean
 		 * out any lingering files, and try again.
-		 *
-		 * XXX On Windows, an unlinked file persists in the directory listing
-		 * until no process retains an open handle for the file.  The DDL
-		 * commands that schedule files for unlink send invalidation messages
-		 * directing other PostgreSQL processes to close the files.  DROP
-		 * TABLESPACE should not give up on the tablespace becoming empty
-		 * until all relevant invalidation processing is complete.
 		 */
 		RequestCheckpoint(CHECKPOINT_IMMEDIATE | CHECKPOINT_FORCE | CHECKPOINT_WAIT);
+
+		/*
+		 * On Windows, an unlinked file persists in the directory listing
+		 * until no process retains an open handle for the file.  The DDL
+		 * commands that schedule files for unlink send invalidation messages
+		 * directing other PostgreSQL processes to close the files, but
+		 * nothing guarantees they'll be processed in time.  So, we'll also
+		 * use a global barrier to ask all backends to close all files, and
+		 * wait until they're finished.
+		 */
+		LWLockRelease(TablespaceCreateLock);
+		WaitForProcSignalBarrier(EmitProcSignalBarrier(PROCSIGNAL_BARRIER_SMGRRELEASE));
+		LWLockAcquire(TablespaceCreateLock, LW_EXCLUSIVE);
+
+		/* And now try again. */
 		if (!destroy_tablespace_directories(tablespaceoid, false))
 		{
 			/* Still not empty, the files must be important then */
@@ -555,11 +565,6 @@ DropTableSpace(DropTableSpaceStmt *stmt)
 
 	/* We keep the lock on pg_tablespace until commit */
 	table_close(rel, NoLock);
-#else							/* !HAVE_SYMLINK */
-	ereport(ERROR,
-			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("tablespaces are not supported on this platform")));
-#endif							/* HAVE_SYMLINK */
 }
 
 
@@ -787,8 +792,7 @@ destroy_tablespace_directories(Oid tablespaceoid, bool redo)
 	/*
 	 * Try to remove the symlink.  We must however deal with the possibility
 	 * that it's a directory instead of a symlink --- this could happen during
-	 * WAL replay (see TablespaceCreateDbspace), and it is also the case on
-	 * Windows where junction points lstat() as directories.
+	 * WAL replay (see TablespaceCreateDbspace).
 	 *
 	 * Note: in the redo case, we'll return true if this final step fails;
 	 * there's no point in retrying it.  Also, ENOENT should provoke no more
@@ -818,7 +822,6 @@ remove_symlink:
 							linkloc)));
 		}
 	}
-#ifdef S_ISLNK
 	else if (S_ISLNK(st.st_mode))
 	{
 		if (unlink(linkloc) < 0)
@@ -831,7 +834,6 @@ remove_symlink:
 							linkloc)));
 		}
 	}
-#endif
 	else
 	{
 		/* Refuse to remove anything that's not a directory or symlink */
@@ -909,7 +911,6 @@ remove_tablespace_symlink(const char *linkloc)
 					 errmsg("could not remove directory \"%s\": %m",
 							linkloc)));
 	}
-#ifdef S_ISLNK
 	else if (S_ISLNK(st.st_mode))
 	{
 		if (unlink(linkloc) < 0 && errno != ENOENT)
@@ -918,7 +919,6 @@ remove_tablespace_symlink(const char *linkloc)
 					 errmsg("could not remove symbolic link \"%s\": %m",
 							linkloc)));
 	}
-#endif
 	else
 	{
 		/* Refuse to remove anything that's not a directory or symlink */
@@ -966,7 +966,7 @@ RenameTableSpace(const char *oldname, const char *newname)
 	table_endscan(scan);
 
 	/* Must be owner */
-	if (!pg_tablespace_ownercheck(tspId, GetUserId()))
+	if (!object_ownercheck(TableSpaceRelationId, tspId, GetUserId()))
 		aclcheck_error(ACLCHECK_NO_PRIV, OBJECT_TABLESPACE, oldname);
 
 	/* Validate new name */
@@ -1051,7 +1051,7 @@ AlterTableSpaceOptions(AlterTableSpaceOptionsStmt *stmt)
 	tablespaceoid = ((Form_pg_tablespace) GETSTRUCT(tup))->oid;
 
 	/* Must be owner of the existing object */
-	if (!pg_tablespace_ownercheck(tablespaceoid, GetUserId()))
+	if (!object_ownercheck(TableSpaceRelationId, tablespaceoid, GetUserId()))
 		aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_TABLESPACE,
 					   stmt->tablespacename);
 
@@ -1277,8 +1277,8 @@ check_temp_tablespaces(char **newval, void **extra, GucSource source)
 			}
 
 			/* Check permissions, similarly complaining only if interactive */
-			aclresult = pg_tablespace_aclcheck(curoid, GetUserId(),
-											   ACL_CREATE);
+			aclresult = object_aclcheck(TableSpaceRelationId, curoid, GetUserId(),
+										ACL_CREATE);
 			if (aclresult != ACLCHECK_OK)
 			{
 				if (source >= PGC_S_INTERACTIVE)
@@ -1290,8 +1290,8 @@ check_temp_tablespaces(char **newval, void **extra, GucSource source)
 		}
 
 		/* Now prepare an "extra" struct for assign_temp_tablespaces */
-		myextra = malloc(offsetof(temp_tablespaces_extra, tblSpcs) +
-						 numSpcs * sizeof(Oid));
+		myextra = guc_malloc(LOG, offsetof(temp_tablespaces_extra, tblSpcs) +
+							 numSpcs * sizeof(Oid));
 		if (!myextra)
 			return false;
 		myextra->numSpcs = numSpcs;
@@ -1407,8 +1407,8 @@ PrepareTempTablespaces(void)
 		}
 
 		/* Check permissions similarly */
-		aclresult = pg_tablespace_aclcheck(curoid, GetUserId(),
-										   ACL_CREATE);
+		aclresult = object_aclcheck(TableSpaceRelationId, curoid, GetUserId(),
+									ACL_CREATE);
 		if (aclresult != ACLCHECK_OK)
 			continue;
 
@@ -1531,6 +1531,9 @@ tblspc_redo(XLogReaderState *record)
 	else if (info == XLOG_TBLSPC_DROP)
 	{
 		xl_tblspc_drop_rec *xlrec = (xl_tblspc_drop_rec *) XLogRecGetData(record);
+
+		/* Close all smgr fds in all backends. */
+		WaitForProcSignalBarrier(EmitProcSignalBarrier(PROCSIGNAL_BARRIER_SMGRRELEASE));
 
 		/*
 		 * If we issued a WAL record for a drop tablespace it implies that

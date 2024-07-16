@@ -1,4 +1,4 @@
-name: Run tests (ya make)
+name: Run build and tests (ya make)
 description: Run test targets listed in repository root ya.make (to be created previously)
 inputs:
   build_target:
@@ -36,28 +36,71 @@ inputs:
   testman_project_id:
     required: false
     description: "test manager project id"
+  put_build_results_to_cache:
+    required: false
+    default: "true"
   bazel_remote_uri:
     required: false
     description: "bazel-remote endpoint"
+  bazel_remote_username:
+    required: false
+    description: "bazel-remote username"
+  bazel_remote_password:
+    required: false
+    description: "bazel-remote password"
+  run_tests:
+    type: boolean
+    default: true
+    description: "run tests"
+outputs:
+  success:
+    value: ${{ steps.build.outputs.status }}
+    description: "build success"
 
 runs:
   using: "composite"
   steps:
+    - name: Install Node required for Testmo CLI
+      uses: actions/setup-node@v3
+      with:
+        node-version: 19
+    
     - name: Init
       id: init
       shell: bash
       run: |
+        set -x
+
         export TMP_DIR=$(pwd)/tmp
-        export LOG_DIR=$TMP_DIR/logs
-        
+        rm -rf $TMP_DIR
+        mkdir -p $TMP_DIR
         echo "TMP_DIR=$TMP_DIR" >> $GITHUB_ENV
+
+        export LOG_DIR=$TMP_DIR/logs
         echo "LOG_DIR=$LOG_DIR" >> $GITHUB_ENV
-        echo "OUT_DIR=$TMP_DIR/out" >> $GITHUB_ENV
-        echo "ARTIFACTS_DIR=$TMP_DIR/artifacts" >> $GITHUB_ENV
-        echo "TEST_ARTIFACTS_DIR=$TMP_DIR/test_artifacts" >> $GITHUB_ENV
-        echo "REPORTS_ARTIFACTS_DIR=$TMP_DIR/artifacts/test_reports" >> $GITHUB_ENV
+        mkdir -p $LOG_DIR
+
+        export OUT_DIR=$TMP_DIR/out
+        echo "OUT_DIR=$OUT_DIR" >> $GITHUB_ENV
+        mkdir -p $OUT_DIR
+
+        export ARTIFACTS_DIR=$TMP_DIR/artifacts
+        echo "ARTIFACTS_DIR=$ARTIFACTS_DIR" >> $GITHUB_ENV
+        mkdir -p $ARTIFACTS_DIR
+
+        export TEST_ARTIFACTS_DIR=$TMP_DIR/test_artifacts
+        echo "TEST_ARTIFACTS_DIR=$TEST_ARTIFACTS_DIR" >> $GITHUB_ENV
+        mkdir -p $TEST_ARTIFACTS_DIR
+
+        export REPORTS_ARTIFACTS_DIR=$TMP_DIR/artifacts/test_reports
+        echo "REPORTS_ARTIFACTS_DIR=$REPORTS_ARTIFACTS_DIR" >> $GITHUB_ENV
+        mkdir -p $REPORTS_ARTIFACTS_DIR
+
+        export JUNIT_REPORT_PARTS=$TMP_DIR/junit-split
+        echo "JUNIT_REPORT_PARTS=$JUNIT_REPORT_PARTS" >> $GITHUB_ENV
+        mkdir -p $JUNIT_REPORT_PARTS
+
         echo "JUNIT_REPORT_XML=$TMP_DIR/junit.xml" >> $GITHUB_ENV
-        echo "JUNIT_REPORT_PARTS=$TMP_DIR/junit-split" >> $GITHUB_ENV
         echo "TESTMO_URL=${{ inputs.testman_url }}" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$(mktemp)" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
@@ -65,27 +108,18 @@ runs:
         echo "YA_TEST_LOG_FILENAME=$LOG_DIR/ya_test.log" >> $GITHUB_ENV
         echo "YA_TEST_LOG_URL=$S3_URL_PREFIX/test_logs/ya_test.log" >> $GITHUB_ENV
         echo "S3_LOG_BUCKET_PATH=$S3_BUCKET_PATH/test_logs" >> $GITHUB_ENV
-        
+
+        export log_url="$S3_URL_PREFIX/build_logs/ya_make.log"
+        echo "LOG_URL=$log_url" >> $GITHUB_ENV
+        echo "log_url=$log_url" >> $GITHUB_OUTPUT
+
+        # install test mo
+        npm install -g @testmo/testmo-cli
     
-    - name: prepare
-      shell: bash
-      run: |
-        set -x
-        rm -rf $TMP_DIR $JUNIT_REPORT_XML $JUNIT_REPORT_PARTS $REPORTS_ARTIFACTS_DIR
-        mkdir -p $TMP_DIR $OUT_DIR $ARTIFACTS_DIR $TEST_ARTIFACTS_DIR $LOG_DIR $JUNIT_REPORT_PARTS $REPORTS_ARTIFACTS_DIR
-    
-    - name: Install Node required for Testmo CLI
-      uses: actions/setup-node@v3
-      with:
-        node-version: 19
-    
-    - name: Install Testmo CLI
-      shell: bash
-      run: npm install -g @testmo/testmo-cli
 
     - name: Upload tests result to testmo
       id: th
-      if: inputs.testman_token
+      if: inputs.testman_token && inputs.run_tests
       shell: bash
       env:
         PR_NUMBER: ${{ github.event.number }}
@@ -146,18 +180,17 @@ runs:
         echo "runid=${RUN_ID}" >> $GITHUB_OUTPUT
         echo "TEST_HISTORY_URL=${TESTMO_URL}/automation/runs/view/${RUN_ID}" >> $GITHUB_ENV
 
-    - name: Print test history link
-      shell: bash
-      if: inputs.testman_token
-      run: |
+        # Print test history link
         echo "10 [Test history](${TEST_HISTORY_URL})" >> $SUMMARY_LINKS
 
     - name: set environment variables required by some tests
+      if: inputs.run_tests
       shell: bash
       run: |
         echo "PSQL_BINARY=/usr/bin/psql" >> $GITHUB_ENV
 
-    - name: ya test
+    - name: ya build and test
+      id: build
       shell: bash
       run: |
         set -x
@@ -165,14 +198,13 @@ runs:
         readarray -d ',' -t test_type < <(printf "%s" "${{ inputs.test_type }}")
 
         params=(
-          -T -k
+          -T
           ${test_size[@]/#/--test-size=} ${test_type[@]/#/--test-type=}
-          --do-not-output-stderrs
           --stat
           --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
+          -DUSE_EAT_MY_DATA
         )
         
-        # FIXME: copy-paste from build_ya
         case "$BUILD_PRESET" in
           debug)
             params+=(--build "debug")
@@ -180,22 +212,31 @@ runs:
           relwithdebinfo)
             params+=(--build "relwithdebinfo")
             ;;
+          release)  
+            params+=(--build "release")
+            ;;
+          release-clang14)
+            params+=(--build "release")
+            params+=(--target-platform="CLANG14-LINUX-X86_64")
+            params+=(-DLLD_VERSION=16)
+            params+=(-DSTRIP)
+            ;;
           release-asan)
             params+=(
               --build "release" --sanitize="address"
-              -DSKIP_JUNK -DUSE_EAT_MY_DATA -DDEBUGINFO_LINES_ONLY
+              -DDEBUGINFO_LINES_ONLY
             )
             ;;
           release-tsan)
             params+=(
               --build "release" --sanitize="thread"
-              -DSKIP_JUNK -DUSE_EAT_MY_DATA -DDEBUGINFO_LINES_ONLY
+              -DDEBUGINFO_LINES_ONLY
             )
             ;;
           release-msan)
             params+=(
               --build "release" --sanitize="memory"
-              -DSKIP_JUNK -DUSE_EAT_MY_DATA -DDEBUGINFO_LINES_ONLY
+              -DDEBUGINFO_LINES_ONLY
             )
             ;;
           *)
@@ -213,40 +254,69 @@ runs:
           params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
         fi
 
+        if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
+          params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
+          params+=(--bazel-remote-password "${{ inputs.bazel_remote_password }}")
+          params+=(--bazel-remote-put --dist-cache-max-file-size=209715200)
+        fi
+
+        if [ true = ${{ inputs.run_tests }} ]; then
+          params+=(-A)
+        fi
+
         echo "::debug::get version"
         ./ya --version
         
-        echo "Tests are running..." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
-        
-        ./ya test ${{ inputs.build_target }} "${params[@]}" \
+        echo "Build+Tests **{platform_name}-${BUILD_PRESET}** is running..." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
+        set +e
+        (./ya make ${{ inputs.build_target }} "${params[@]}" \
           --stat --log-file "$YA_TEST_LOG_FILENAME" -DCONSISTENT_DEBUG \
-          --no-dir-outputs \
-          --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR" || (
-            RC=$?
-            if [ $RC -ne 0 ]; then
-              echo "10 [Test run log]($YA_TEST_LOG_URL)" >> $SUMMARY_LINKS
+          --no-dir-outputs --test-failure-code 0 --build-all \
+          --cache-size 2TB --force-build-depends --evlog-file "$TMP_DIR/ya_evlog.jsonl" \
+          --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR"; echo $? > exit_code) |& tee $TMP_DIR/ya_make.log
+        set -e
+        RC=`cat exit_code`
 
-              echo "ya test returned $RC, check existence $JUNIT_REPORT_XML"
-              if [ -s "$JUNIT_REPORT_XML" ]; then
-                echo "$JUNIT_REPORT_XML exists"
-                ls -la "$JUNIT_REPORT_XML"
-              else
-                echo "$JUNIT_REPORT_XML doesn't exist or has zero size"
-                ls -la "$JUNIT_REPORT_XML" || true
-                exit $RC
-              fi
-            fi
-        )
+        echo "10 [Ya make output]($LOG_URL)" >> $SUMMARY_LINKS
+        echo "20 [Ya logs]($YA_TEST_LOG_URL)" >> $SUMMARY_LINKS
 
-    - name: archive unitest reports (orig)
+        if [ $RC -ne 0 ]; then
+          echo "ya make returned $RC, build failed"
+          echo "status=failed" >> $GITHUB_OUTPUT
+        else
+          echo "status=true" >> $GITHUB_OUTPUT
+        fi
+
+
+    - name: comment-build-status
+      if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
       shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
       run: |
-        gzip -c $JUNIT_REPORT_XML > $REPORTS_ARTIFACTS_DIR/orig_junit.xml.gz
-    
-    - name: postprocess junit report
+        set -x
+        
+        if [ "${{ steps.build.outputs.status }}" == "failed" ]; then
+          curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+            -d '{"state":"failure","description":"The check has been failed","context":"build_${{inputs.build_preset}}"}'
+          echo "Build failed. see the [logs]($LOG_URL)." | .github/scripts/tests/comment-pr.py --fail
+        else
+          curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+            -d '{"state":"success","description":"The check has been completed successfully","context":"build_${{inputs.build_preset}}"}'
+          echo "Build successful." | .github/scripts/tests/comment-pr.py --ok
+        fi
+
+    - name: process reports
+      if: inputs.run_tests
       shell: bash
       run: |
         set -x
+        # archive unitest reports (orig) 
+        gzip -c $JUNIT_REPORT_XML > $REPORTS_ARTIFACTS_DIR/orig_junit.xml.gz
+
+        # postprocess junit report
         .github/scripts/tests/transform-ya-junit.py -i \
           -m .github/config/muted_ya.txt \
           --ya-out "$OUT_DIR" \
@@ -257,14 +327,34 @@ runs:
           "$JUNIT_REPORT_XML"
     
         .github/scripts/tests/split-junit.py -o "$JUNIT_REPORT_PARTS" "$JUNIT_REPORT_XML"
-    
-    - name: archive unitest reports (transformed)
-      shell: bash
-      run: |
+
+        # archive unitest reports (transformed)
         tar -C $JUNIT_REPORT_PARTS/.. -czf $REPORTS_ARTIFACTS_DIR/junit_parts.xml.tar.gz $(basename $JUNIT_REPORT_PARTS)
+    
+    - name: Test history upload results to YDB
+      if: inputs.run_tests
+      continue-on-error: true
+      shell: bash
+      env:
+        PR_NUMBER: ${{ github.event.number }}
+        JOB_NAME: ${{ github.workflow }}
+        JOB_ID: ${{github.run_id }}
+      run: |
+        set -x
+        python3 -m pip install ydb ydb[yc] codeowners
+
+        #Variables
+        echo "JUNIT_REPORT_XML=${JUNIT_REPORT_XML}"
+        echo "BUILD_PRESET=${BUILD_PRESET}"
+        echo "PR_NUMBER=${PR_NUMBER}"
+        echo "JOB_NAME=${JOB_NAME}"
+        echo "JOB_ID=${JOB_ID}"
+        echo "GITHUB_REF_NAME=${GITHUB_REF_NAME}"
+        
+        result=`.github/scripts/upload_tests_results.py --test-results-file ${JUNIT_REPORT_XML} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull ${PR_NUMBER} --job-name ${JOB_NAME} --job-id ${JOB_ID} --branch ${GITHUB_REF_NAME}`
 
     - name: Unit test history upload results
-      if: inputs.testman_token
+      if: inputs.testman_token && inputs.run_tests
       shell: bash
       env:
         TESTMO_TOKEN: ${{ inputs.testman_token }}
@@ -292,7 +382,7 @@ runs:
         kill $proxy_pid
 
     - name: Test history run complete
-      if: always() && inputs.testman_token
+      if: always() && inputs.testman_token && inputs.run_tests
       shell: bash
       env:
         TESTMO_TOKEN: ${{ inputs.testman_token }}
@@ -306,15 +396,23 @@ runs:
         set -x
         echo "::group::s3-sync"
         s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$LOG_DIR/" "$S3_LOG_BUCKET_PATH/"
+        s3cmd sync --acl-public --no-progress --stats --no-check-md5 "$TMP_DIR/ya_make.log" "$S3_BUCKET_PATH/build_logs/"
         echo "::endgroup::"
     
-    - name: write tests summary
+    - name: analyze tests results
       shell: bash
-      if: always()
+      if: always() && inputs.run_tests
       env:
         GITHUB_TOKEN: ${{ github.token }}
       run: |
         set -x
+
+        if [ "${{ inputs.run_tests }}" != "true" ]; then
+          # I have no idea why 'always() && inputs.run_tests' not working 
+          # Probably because of implicit bool->str cast? 
+          exit 0
+        fi
+
         mkdir $ARTIFACTS_DIR/summary/
         
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
@@ -337,9 +435,13 @@ runs:
         curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
             -d '{"state":"'$teststatus'","description":"'"$testmessage"'","context":"test_${{inputs.build_preset}}"}'
+        
+        if [[ $teststatus != "success" ]];then
+          echo "status=failed" >> $GITHUB_OUTPUT
+        fi
 
     - name: sync test results to s3
-      if: always()
+      if: always() && inputs.run_tests
       shell: bash
       run: |
         set -x
@@ -349,6 +451,7 @@ runs:
         echo "::endgroup::"
     
     - name: check test results
+      if: inputs.run_tests
       shell: bash
       run: |
         .github/scripts/tests/fail-checker.py "$JUNIT_REPORT_XML"

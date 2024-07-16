@@ -7,7 +7,7 @@
  *	  stuff - checking the qualification and projecting the tuple
  *	  appropriately.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -281,7 +281,7 @@ ExecAssignScanProjectionInfo(ScanState *node)
  *		As above, but caller can specify varno expected in Vars in the tlist.
  */
 void
-ExecAssignScanProjectionInfoWithVarno(ScanState *node, Index varno)
+ExecAssignScanProjectionInfoWithVarno(ScanState *node, int varno)
 {
 	TupleDesc	tupdesc = node->ss_ScanTupleSlot->tts_tupleDescriptor;
 
@@ -316,7 +316,7 @@ ExecScanReScan(ScanState *node)
 
 		if (scanrelid > 0)
 			epqstate->relsubs_done[scanrelid - 1] =
-				epqstate->epqExtra->relsubs_blocked[scanrelid - 1];
+				epqstate->relsubs_blocked[scanrelid - 1];
 		else
 		{
 			Bitmapset  *relids;
@@ -328,7 +328,7 @@ ExecScanReScan(ScanState *node)
 			 * all of them.
 			 */
 			if (IsA(node->ps.plan, ForeignScan))
-				relids = ((ForeignScan *) node->ps.plan)->fs_relids;
+				relids = ((ForeignScan *) node->ps.plan)->fs_base_relids;
 			else if (IsA(node->ps.plan, CustomScan))
 				relids = ((CustomScan *) node->ps.plan)->custom_relids;
 			else
@@ -339,7 +339,7 @@ ExecScanReScan(ScanState *node)
 			{
 				Assert(rtindex > 0);
 				epqstate->relsubs_done[rtindex - 1] =
-					epqstate->epqExtra->relsubs_blocked[rtindex - 1];
+					epqstate->relsubs_blocked[rtindex - 1];
 			}
 		}
 	}

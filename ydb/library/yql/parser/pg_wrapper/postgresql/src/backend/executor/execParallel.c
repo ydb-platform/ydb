@@ -3,7 +3,7 @@
  * execParallel.c
  *	  Support routines for parallel execution.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * This file contains routines that are intended to support setting up,
@@ -126,9 +126,9 @@ typedef struct ExecParallelInitializeDSMContext
 
 /* Helper functions that run in the parallel leader. */
 static char *ExecSerializePlan(Plan *plan, EState *estate);
-static bool ExecParallelEstimate(PlanState *node,
+static bool ExecParallelEstimate(PlanState *planstate,
 								 ExecParallelEstimateContext *e);
-static bool ExecParallelInitializeDSM(PlanState *node,
+static bool ExecParallelInitializeDSM(PlanState *planstate,
 									  ExecParallelInitializeDSMContext *d);
 static shm_mq_handle **ExecParallelSetupTupleQueues(ParallelContext *pcxt,
 													bool reinitialize);
@@ -184,6 +184,7 @@ ExecSerializePlan(Plan *plan, EState *estate)
 	pstmt->parallelModeNeeded = false;
 	pstmt->planTree = plan;
 	pstmt->rtable = estate->es_range_table;
+	pstmt->permInfos = estate->es_rteperminfos;
 	pstmt->resultRelations = NIL;
 	pstmt->appendRelations = NIL;
 
@@ -1420,7 +1421,7 @@ ParallelQueryMain(dsm_segment *seg, shm_toc *toc)
 	/* Setting debug_query_string for individual workers */
 	debug_query_string = queryDesc->sourceText;
 
-	/* Report workers' query and queryId for monitoring purposes */
+	/* Report workers' query for monitoring purposes */
 	pgstat_report_activity(STATE_RUNNING, debug_query_string);
 
 	/* Attach to the dynamic shared memory area. */
@@ -1439,7 +1440,6 @@ ParallelQueryMain(dsm_segment *seg, shm_toc *toc)
 
 		paramexec_space = dsa_get_address(area, fpes->param_exec);
 		RestoreParamExecParams(paramexec_space, queryDesc->estate);
-
 	}
 	pwcxt.toc = toc;
 	pwcxt.seg = seg;

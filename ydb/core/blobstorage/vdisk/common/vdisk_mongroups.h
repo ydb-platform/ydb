@@ -592,16 +592,39 @@ public:                                                                         
         public:
             GROUP_CONSTRUCTOR(TBalancingGroup)
             {
+                COUNTER_INIT(BalancingIterations, true);
+
                 COUNTER_INIT(PlannedToSendOnMain, false);
-                COUNTER_INIT(SentOnMain, false);
                 COUNTER_INIT(CandidatesToDelete, false);
-                COUNTER_INIT(MarkedReadyToDelete, false);
+
+                COUNTER_INIT(ReadFromHandoffBytes, true);
+                COUNTER_INIT(ReadFromHandoffResponseBytes, true);
+                COUNTER_INIT(SentOnMain, true);
+                COUNTER_INIT(SentOnMainBytes, true);
+                COUNTER_INIT(SentOnMainWithResponseBytes, true);
+
+                COUNTER_INIT(CandidatesToDeleteAskedFromMain, true);
+                COUNTER_INIT(CandidatesToDeleteAskedFromMainResponse, true);
+                COUNTER_INIT(MarkedReadyToDelete, true);
+                COUNTER_INIT(MarkedReadyToDeleteBytes, true);
+                COUNTER_INIT(MarkedReadyToDeleteResponse, true);
+                COUNTER_INIT(MarkedReadyToDeleteWithResponseBytes, true);
             }
 
+            COUNTER_DEF(BalancingIterations);
             COUNTER_DEF(PlannedToSendOnMain);
+            COUNTER_DEF(ReadFromHandoffBytes);
+            COUNTER_DEF(ReadFromHandoffResponseBytes);
             COUNTER_DEF(SentOnMain);
+            COUNTER_DEF(SentOnMainBytes);
+            COUNTER_DEF(SentOnMainWithResponseBytes);
             COUNTER_DEF(CandidatesToDelete);
+            COUNTER_DEF(CandidatesToDeleteAskedFromMain);
+            COUNTER_DEF(CandidatesToDeleteAskedFromMainResponse);
             COUNTER_DEF(MarkedReadyToDelete);
+            COUNTER_DEF(MarkedReadyToDeleteBytes);
+            COUNTER_DEF(MarkedReadyToDeleteResponse);
+            COUNTER_DEF(MarkedReadyToDeleteWithResponseBytes);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////

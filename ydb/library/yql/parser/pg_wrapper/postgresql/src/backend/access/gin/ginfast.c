@@ -7,7 +7,7 @@
  *	  transfer pending entries into the regular index structure.  This
  *	  wins because bulk insertion is much more efficient than retail.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -235,7 +235,7 @@ ginHeapTupleFastInsert(GinState *ginstate, GinTupleCollector *collector)
 
 	needWal = RelationNeedsWAL(index);
 
-	data.node = index->rd_node;
+	data.locator = index->rd_locator;
 	data.ntuples = 0;
 	data.newRightlink = data.prevTail = InvalidBlockNumber;
 
@@ -513,7 +513,7 @@ ginHeapTupleFastCollect(GinState *ginstate,
 		 * resizing (since palloc likes powers of 2).
 		 */
 		collector->lentuples = pg_nextpower2_32(Max(16, nentries));
-		collector->tuples = (IndexTuple *) palloc(sizeof(IndexTuple) * collector->lentuples);
+		collector->tuples = palloc_array(IndexTuple, collector->lentuples);
 	}
 	else if (collector->lentuples < collector->ntuples + nentries)
 	{
@@ -523,8 +523,8 @@ ginHeapTupleFastCollect(GinState *ginstate,
 		 * MaxAllocSize/sizeof(IndexTuple), causing an error in repalloc.
 		 */
 		collector->lentuples = pg_nextpower2_32(collector->ntuples + nentries);
-		collector->tuples = (IndexTuple *) repalloc(collector->tuples,
-													sizeof(IndexTuple) * collector->lentuples);
+		collector->tuples = repalloc_array(collector->tuples,
+										   IndexTuple, collector->lentuples);
 	}
 
 	/*
@@ -673,9 +673,8 @@ shiftList(Relation index, Buffer metabuffer, BlockNumber newHead,
 static void
 initKeyArray(KeyArray *keys, int32 maxvalues)
 {
-	keys->keys = (Datum *) palloc(sizeof(Datum) * maxvalues);
-	keys->categories = (GinNullCategory *)
-		palloc(sizeof(GinNullCategory) * maxvalues);
+	keys->keys = palloc_array(Datum, maxvalues);
+	keys->categories = palloc_array(GinNullCategory, maxvalues);
 	keys->nvalues = 0;
 	keys->maxvalues = maxvalues;
 }
@@ -687,10 +686,8 @@ addDatum(KeyArray *keys, Datum datum, GinNullCategory category)
 	if (keys->nvalues >= keys->maxvalues)
 	{
 		keys->maxvalues *= 2;
-		keys->keys = (Datum *)
-			repalloc(keys->keys, sizeof(Datum) * keys->maxvalues);
-		keys->categories = (GinNullCategory *)
-			repalloc(keys->categories, sizeof(GinNullCategory) * keys->maxvalues);
+		keys->keys = repalloc_array(keys->keys, Datum, keys->maxvalues);
+		keys->categories = repalloc_array(keys->categories, GinNullCategory, keys->maxvalues);
 	}
 
 	keys->keys[keys->nvalues] = datum;
@@ -1061,7 +1058,7 @@ gin_clean_pending_list(PG_FUNCTION_ARGS)
 				 errmsg("cannot access temporary indexes of other sessions")));
 
 	/* User must own the index (comparable to privileges needed for VACUUM) */
-	if (!pg_class_ownercheck(indexoid, GetUserId()))
+	if (!object_ownercheck(RelationRelationId, indexoid, GetUserId()))
 		aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_INDEX,
 					   RelationGetRelationName(indexRel));
 

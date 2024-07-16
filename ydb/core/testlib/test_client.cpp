@@ -225,6 +225,9 @@ namespace Tests {
 
         NKikimr::SetupChannelProfiles(app);
 
+        if (Settings->NeedStatsCollectors) {
+            Runtime->SetupStatsCollectors();
+        }
         Runtime->SetupMonitoring(Settings->MonitoringPortOffset, Settings->MonitoringTypeAsync);
         Runtime->SetLogBackend(Settings->LogBackend);
 

@@ -359,7 +359,8 @@ struct TSchemeCacheRequest {
         KindUnknown = 0,
         KindRegularTable = 1,
         KindSyncIndexTable = 2,
-        KindAsyncIndexTable= 3,
+        KindAsyncIndexTable = 3,
+        KindVectorIndexTable = 4,
     };
 
     struct TEntry {

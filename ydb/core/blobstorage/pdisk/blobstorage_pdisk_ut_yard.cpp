@@ -145,28 +145,6 @@ YARD_UNIT_TEST(TestSysLogReordering) {
     }
 }
 
-YARD_UNIT_TEST(TestLogWriteReaDifferentHashers) {
-    for (ui32 i = 0; i < 4; ++i) {
-        TTestContext tc(false, true);
-        TTestRunConfig cfg(&tc);
-
-        cfg.UseT1ha0Hasher = i / 2;
-        Run<TTestLogWriteRead<6000>>(cfg);
-        cfg.UseT1ha0Hasher = i % 2;
-        Run<TTestWholeLogRead>(cfg);
-    }
-}
-
-YARD_UNIT_TEST(TestChunkWriteReadDifferentHashers) {
-    for (ui32 i = 0; i < 2; ++i) {
-        TTestContext tc(false, true);
-        TTestRunConfig cfg(&tc);
-
-        cfg.UseT1ha0Hasher = i;
-        Run<TTestChunkWriteRead<1000000, 1500000>>(cfg);
-    }
-}
-
 YARD_UNIT_TEST(TestLogWriteCutUnequal) {
     TTestContext tc(false, true);
     FillDeviceWithZeroes(&tc, MIN_CHUNK_SIZE);

@@ -2598,7 +2598,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 SELECT * FROM Table1 ORDER BY Key;
                 SELECT * FROM Table2 ORDER BY Key;
                 SELECT * FROM Table3 ORDER BY Key;
-            )", TTxControl::NoTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(500))).ExtractValueSync();
+            )", TTxControl::NoTx(), TExecuteQuerySettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 3);
             // Results are empty. Snapshot was taken before tables were created, so we don't see changes after snapshot.
@@ -3044,7 +3044,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
             AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
             AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
-            AppConfig.MutableTableServiceConfig()->SetOldLookupJoinBehaviour(false);
             auto settings = TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false);
 
             Kikimr = std::make_unique<TKikimrRunner>(settings);

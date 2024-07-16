@@ -84,12 +84,12 @@ private:
 public:
     std::vector<std::shared_ptr<IPortionDataChunk>> GetEntityChunks(const ui32 entityId) const;
 
-    void FillStatistics(const TIndexInfo& index);
-
     static TWritePortionInfoWithBlobsConstructor BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
+        const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks,
         const ui64 granule, const ui64 schemaVersion, const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators);
 
     static TWritePortionInfoWithBlobsConstructor BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
+        const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks,
         TPortionInfoConstructor&& constructor, const std::shared_ptr<IStoragesManager>& operators);
 
     std::vector<TBlobInfo>& GetBlobs() {

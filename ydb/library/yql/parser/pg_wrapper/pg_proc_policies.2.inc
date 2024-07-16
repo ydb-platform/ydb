@@ -146,9 +146,13 @@ struct TArgs_nextval_oid_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-struct TArgs_pg_backup_start_time_Policy {
+struct TArgs_pg_backup_start_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 0> IsFixedArg = {};
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+struct TArgs_pg_backup_stop_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
 struct TArgs_pg_create_restore_point_Policy {
     static constexpr bool VarArgs = false;
@@ -166,11 +170,11 @@ struct TArgs_pg_current_wal_lsn_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 0> IsFixedArg = {};
 };
-struct TArgs_pg_get_wal_replay_pause_state_Policy {
+struct TArgs_pg_database_collation_actual_version_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 0> IsFixedArg = {};
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-struct TArgs_pg_is_in_backup_Policy {
+struct TArgs_pg_get_wal_replay_pause_state_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 0> IsFixedArg = {};
 };
@@ -194,6 +198,10 @@ struct TArgs_pg_last_xact_replay_timestamp_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 0> IsFixedArg = {};
 };
+struct TArgs_pg_log_standby_snapshot_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 0> IsFixedArg = {};
+};
 struct TArgs_pg_promote_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
@@ -206,13 +214,9 @@ struct TArgs_pg_sequence_parameters_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-struct TArgs_pg_start_backup_Policy {
+struct TArgs_pg_split_walfile_name_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
-};
-struct TArgs_pg_stop_backup_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 0> IsFixedArg = {};
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
 struct TArgs_pg_switch_wal_Policy {
     static constexpr bool VarArgs = false;

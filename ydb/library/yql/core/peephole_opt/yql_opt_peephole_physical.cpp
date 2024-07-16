@@ -670,8 +670,8 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
     const bool multi1 = payload1 && !uniqueLeft;
     const bool multi2 = payload2 && !uniqueRight;
 
-    list1 = PrepareListForJoin(std::move(list1), keyTypeItems, keyMembers1, payloads1, payload1, optKey, filter1, ctx);
-    list2 = PrepareListForJoin(std::move(list2), keyTypeItems, keyMembers2, payloads2, payload2, optKey, filter2, ctx);
+    list1 = PrepareListForJoin(std::move(list1), keyTypeItems, keyMembers1, std::move(payloads1), payload1, optKey, filter1, ctx);
+    list2 = PrepareListForJoin(std::move(list2), keyTypeItems, keyMembers2, std::move(payloads2), payload2, optKey, filter2, ctx);
 
     return ctx.Builder(node.Pos())
         .Callable("Map")

@@ -8,7 +8,7 @@
  * exit-time cleanup for either a postmaster or a backend.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -80,7 +80,7 @@ static __thread struct ONEXIT on_proc_exit_list[MAX_ON_EXITS];
 static __thread struct ONEXIT on_shmem_exit_list[MAX_ON_EXITS];
 static __thread struct ONEXIT before_shmem_exit_list[MAX_ON_EXITS];
 
-static int	on_proc_exit_index,
+static __thread int	on_proc_exit_index,
 			on_shmem_exit_index,
 			before_shmem_exit_index;
 

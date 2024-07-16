@@ -2,7 +2,7 @@
  * brin_tuple.h
  *		Declarations for dealing with BRIN-specific tuples.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -44,7 +44,7 @@ typedef struct BrinValues
 typedef struct BrinMemTuple
 {
 	bool		bt_placeholder; /* this is a placeholder tuple */
-	bool		bt_empty_range;	/* range represents no tuples */
+	bool		bt_empty_range; /* range represents no tuples */
 	BlockNumber bt_blkno;		/* heap blkno that the tuple is for */
 	MemoryContext bt_context;	/* memcxt holding the bt_columns values */
 	/* output arrays for brin_deform_tuple: */

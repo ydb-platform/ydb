@@ -215,7 +215,7 @@ bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, T
                     (sector + format.SectorSize - sizeof(NPDisk::TDataSectorFooter));
 
                 ui64 sectorOffset = sysLogOffset + (ui64)((idx / 3) * 3) * (ui64)format.SectorSize;
-                bool isCrcOk = NPDisk::TPDiskHashCalculator(KIKIMR_PDISK_ENABLE_T1HA_HASH_WRITING).CheckSectorHash(
+                bool isCrcOk = NPDisk::TPDiskHashCalculator().CheckSectorHash(
                         sectorOffset, format.MagicSysLogChunk, sector, format.SectorSize, logFooter->Hash);
                 outInfo.SectorInfo.push_back(TPDiskInfo::TSectorInfo(logFooter->Nonce, logFooter->Version, isCrcOk));
             }

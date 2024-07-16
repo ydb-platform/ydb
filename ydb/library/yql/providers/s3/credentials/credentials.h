@@ -29,8 +29,7 @@ struct TS3Credentials {
 
 private:
     TString StructuredTokenJson;
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
-    mutable NYdb::TCredentialsProviderPtr CredentialsProvider;
+    NYdb::TCredentialsProviderPtr CredentialsProvider;
     TS3Credentials::TAuthInfo AuthInfo;
 };
 

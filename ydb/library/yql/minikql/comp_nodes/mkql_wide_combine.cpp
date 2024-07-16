@@ -133,14 +133,11 @@ struct TCombinerNodes {
     }
 
     void ExtractValues(TComputationContext& ctx, NUdf::TUnboxedValue** values, NUdf::TUnboxedValue* keys) const {
-        size_t actualExtracted = 0;
         for (ui32 i = 0U; i < ItemNodes.size(); ++i) {
             if (values[i]) {
                 keys[i] = std::move(*(values[i]));
-                ++actualExtracted;
             }
         }
-        std::cerr << "MISHA actually extracted " << actualExtracted << std::endl;
     }
 
     void ExtractValues(TComputationContext& ctx, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue** values) const {
@@ -428,8 +425,6 @@ public:
                         ++actualSize;
                     }
                     BufferForUsedInputItems.resize(actualSize);
-
-                    std::cerr << "MISHA actual size: " << actualSize << std::endl;
 
                     auto& bucket = SpilledBuckets[BufferForUsedInputItemsBucketId];
                     if (bucket.AsyncWriteOperation.has_value()) return true;
@@ -741,7 +736,7 @@ private:
     }
 
     bool IsSwitchToSpillingModeCondition() const {
-        return true;
+        return false;
         // TODO: YQL-18033
         // return !HasMemoryForProcessing();
     }
@@ -1300,19 +1295,15 @@ public:
 
                     switch(ptr->TasteIt()) {
                         case TSpillingSupportState::ETasteResult::Init:
-                            std::cerr << "MISHA: Init" << std::endl;
                             Nodes.ProcessItem(ctx, nullptr, static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
                             break;
                         case TSpillingSupportState::ETasteResult::Update:
-                            std::cerr << "MISHA: Update" << std::endl;
                             Nodes.ProcessItem(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
                             break;
                         case TSpillingSupportState::ETasteResult::DataRequired:
-                            std::cerr << "MISHA: DataRequired" << std::endl;
                             Nodes.ExtractValues(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
                             break;
                         case TSpillingSupportState::ETasteResult::DataExtractionRequired:
-                            std::cerr << "MISHA: DataExtractionRequired" << std::endl;
                             Nodes.ExtractValues(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Throat), fields);
                             break;
 

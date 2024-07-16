@@ -1288,7 +1288,6 @@ THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime,
 {
     auto &runtime = *server->GetRuntime();
     TAutoPtr<IEventHandle> handle;
-    TVector<ui64> shards;
 
     auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
     request->Record.MutableDescribePath()->SetPath(path);

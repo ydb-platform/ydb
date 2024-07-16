@@ -106,6 +106,8 @@ LLVM_BC(
     arrow_void_out
     arrow_void_recv
     arrow_void_send
+    arrow_xid8_larger
+    arrow_xid8_smaller
     arrow_xid8cmp
     arrow_xid8eq
     arrow_xid8ge

@@ -6,7 +6,7 @@ List arguments in round brackets, following them by the arrow and lambda functio
 
 The scope for the lambda body: first the local named expressions, then arguments, then named expressions defined above by the lambda function at the top level of the query.
 
-Only use pure expressions inside the lambda body (those might also be other lambdas, possibly passed through arguments). However, you can't use [SELECT](../../select.md), [INSERT INTO](../../insert_into.md), or other top-level expressions.
+Only use pure expressions inside the lambda body (those might also be other lambdas, possibly passed through arguments). However, you can't use [SELECT](../../select/index.md), [INSERT INTO](../../insert_into.md), or other top-level expressions.
 
 One or more of the last lambda parameters can be marked with a question mark as optional: if they haven't been specified when calling lambda, they are assigned the `NULL` value.
 

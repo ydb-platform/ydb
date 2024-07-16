@@ -37,8 +37,12 @@ namespace {
             }
         }
         
-        if (operation.StartTime() != TInstant::Zero()) {
-            freeText << "Start time: " << operation.StartTime().ToStringUpToSeconds() << Endl;
+        if (!operation.CreatedBy().Empty()) {
+            freeText << "Created by: " << operation.CreatedBy() << Endl;
+        }
+
+        if (operation.CreateTime() != TInstant::Zero()) {
+            freeText << "Create time: " << operation.CreateTime().ToStringUpToSeconds() << Endl;
         }
 
         if (operation.EndTime() != TInstant::Zero()) {
@@ -122,8 +126,12 @@ namespace {
 
         freeText << "TypeV3: " << (settings.UseTypeV3_ ? "true" : "false") << Endl;
 
-        if (operation.StartTime() != TInstant::Zero()) {
-            freeText << "Start time: " << operation.StartTime().ToStringUpToSeconds() << Endl;
+        if (!operation.CreatedBy().Empty()) {
+            freeText << "Created by: " << operation.CreatedBy() << Endl;
+        }
+
+        if (operation.CreateTime() != TInstant::Zero()) {
+            freeText << "Create time: " << operation.CreateTime().ToStringUpToSeconds() << Endl;
         }
 
         if (operation.EndTime() != TInstant::Zero()) {
@@ -184,8 +192,12 @@ namespace {
             freeText << "Number of retries: " << settings.NumberOfRetries_.GetRef() << Endl;
         }
 
-        if (operation.StartTime() != TInstant::Zero()) {
-            freeText << "Start time: " << operation.StartTime().ToStringUpToSeconds() << Endl;
+        if (!operation.CreatedBy().Empty()) {
+            freeText << "Created by: " << operation.CreatedBy() << Endl;
+        }
+
+        if (operation.CreateTime() != TInstant::Zero()) {
+            freeText << "Create time: " << operation.CreateTime().ToStringUpToSeconds() << Endl;
         }
 
         if (operation.EndTime() != TInstant::Zero()) {

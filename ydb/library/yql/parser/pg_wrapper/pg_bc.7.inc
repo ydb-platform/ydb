@@ -13,13 +13,15 @@ LLVM_BC(
     arrow_currtid_byrelname
     arrow_hashtid
     arrow_hashtidextended
-    arrow_pg_read_binary_file
     arrow_pg_read_binary_file_all
+    arrow_pg_read_binary_file_all_missing
     arrow_pg_read_binary_file_off_len
+    arrow_pg_read_binary_file_off_len_missing
     arrow_pg_read_file
     arrow_pg_read_file_all
+    arrow_pg_read_file_all_missing
     arrow_pg_read_file_off_len
-    arrow_pg_read_file_v2
+    arrow_pg_read_file_off_len_missing
     arrow_pg_stat_file
     arrow_pg_stat_file_1arg
     arrow_quote_ident

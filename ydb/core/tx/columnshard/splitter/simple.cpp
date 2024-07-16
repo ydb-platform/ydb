@@ -19,6 +19,10 @@ TString TSplittedColumnChunk::DoDebugString() const {
     return TStringBuilder() << "records_count=" << GetRecordsCount() << ";data=" << NArrow::DebugJson(Data.GetSlicedBatch(), 3, 3) << ";";
 }
 
+ui64 TSplittedColumnChunk::DoGetRawBytesImpl() const {
+    return NArrow::GetBatchDataSize(Data.GetSlicedBatch());
+}
+
 std::vector<TSaverSplittedChunk> TSimpleSplitter::Split(const std::shared_ptr<arrow::Array>& data, const std::shared_ptr<arrow::Field>& field, const ui32 maxBlobSize) const {
     AFL_VERIFY(data);
     AFL_VERIFY(field);

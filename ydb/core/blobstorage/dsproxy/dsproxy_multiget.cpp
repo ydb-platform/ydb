@@ -13,7 +13,7 @@ namespace NKikimr {
 // GET request
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TBlobStorageGroupMultiGetRequest> {
+class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor {
     struct TRequestInfo {
         ui64 BeginIdx;
         ui64 EndIdx;
@@ -65,8 +65,7 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TB
         SendRequests();
     }
 
-    friend class TBlobStorageGroupRequestActor<TBlobStorageGroupMultiGetRequest>;
-    void ReplyAndDie(NKikimrProto::EReplyStatus status) {
+    void ReplyAndDie(NKikimrProto::EReplyStatus status) override {
         std::unique_ptr<TEvBlobStorage::TEvGetResult> ev(new TEvBlobStorage::TEvGetResult(status, QuerySize, Info->GroupID));
         Y_ABORT_UNLESS(status != NKikimrProto::NODATA);
         for (ui32 i = 0, e = QuerySize; i != e; ++i) {
@@ -82,17 +81,17 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TB
         SendResponseAndDie(std::move(ev));
     }
 
-    std::unique_ptr<IEventBase> RestartQuery(ui32) {
+    std::unique_ptr<IEventBase> RestartQuery(ui32) override {
         Y_ABORT();
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::BS_PROXY_MULTIGET_ACTOR;
+    ::NMonitoring::TDynamicCounters::TCounterPtr& GetActiveCounter() const override {
+        return Mon->ActiveMultiGet;
     }
 
-    static const auto& ActiveCounter(const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon) {
-        return mon->ActiveMultiGet;
+    ERequestType GetRequestType() const override {
+        return ERequestType::Get;
     }
 
     TBlobStorageGroupMultiGetRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
@@ -102,7 +101,8 @@ public:
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
                 NKikimrServices::BS_PROXY_MULTIGET, false, latencyQueueKind, now, storagePoolCounters, 0,
-                std::move(traceId), "DSProxy.MultiGet", ev, std::move(ev->ExecutionRelay))
+                std::move(traceId), "DSProxy.MultiGet", ev, std::move(ev->ExecutionRelay),
+                NKikimrServices::TActivity::BS_PROXY_MULTIGET_ACTOR)
         , QuerySize(ev->QuerySize)
         , Queries(ev->Queries.Release())
         , Deadline(ev->Deadline)
@@ -150,7 +150,7 @@ public:
         }
     }
 
-    void Bootstrap() {
+    void Bootstrap() override {
         auto dumpQuery = [this] {
             TStringStream str;
             str << "{";
@@ -195,7 +195,7 @@ public:
 
         SendRequests();
 
-        Become(&TThis::StateWait);
+        Become(&TBlobStorageGroupMultiGetRequest::StateWait);
     }
 
     STATEFN(StateWait) {

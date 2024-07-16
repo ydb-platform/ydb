@@ -13,7 +13,7 @@
  * come from different tuples. In theory, the standard scalar selectivity
  * functions could be used with the combined histogram.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -31,6 +31,7 @@
 #include "utils/lsyscache.h"
 #include "utils/rangetypes.h"
 #include "utils/multirangetypes.h"
+#include "varatt.h"
 
 static int	float8_qsort_cmp(const void *a1, const void *a2, void *arg);
 static int	range_bound_qsort_cmp(const void *a1, const void *a2, void *arg);
@@ -311,7 +312,8 @@ compute_range_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 				bound_hist_values[i] = PointerGetDatum(range_serialize(typcache,
 																	   &lowers[pos],
 																	   &uppers[pos],
-																	   false));
+																	   false,
+																	   NULL));
 				pos += delta;
 				posfrac += deltafrac;
 				if (posfrac >= (num_hist - 1))

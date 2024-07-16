@@ -7,7 +7,6 @@ PEERDIR(
     ydb/core/tx/schemeshard/olap/schema
     ydb/core/tx/schemeshard/olap/common
     ydb/core/tx/schemeshard/olap/operations
-    ydb/core/tx/schemeshard/olap/statistics
     ydb/core/tx/schemeshard/olap/options
     ydb/core/tx/schemeshard/olap/layout
     ydb/core/tx/schemeshard/olap/manager

@@ -22,6 +22,9 @@ protected:
     virtual ui32 DoGetRecordsCountImpl() const override {
         return Record.GetMeta().GetNumRows();
     }
+    virtual ui64 DoGetRawBytesImpl() const override {
+        return Record.GetMeta().GetRawBytes();
+    }
     virtual TString DoDebugString() const override {
         return "";
     }

@@ -4,7 +4,7 @@
  *
  *	  Routines for opclass (and opfamily) manipulation commands
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -52,7 +52,7 @@
 static void AlterOpFamilyAdd(AlterOpFamilyStmt *stmt,
 							 Oid amoid, Oid opfamilyoid,
 							 int maxOpNumber, int maxProcNumber,
-							 int opclassOptsProcNumber, List *items);
+							 int optsProcNumber, List *items);
 static void AlterOpFamilyDrop(AlterOpFamilyStmt *stmt,
 							  Oid amoid, Oid opfamilyoid,
 							  int maxOpNumber, int maxProcNumber,
@@ -362,7 +362,7 @@ DefineOpClass(CreateOpClassStmt *stmt)
 													 &opcname);
 
 	/* Check we have creation rights in target namespace */
-	aclresult = pg_namespace_aclcheck(namespaceoid, GetUserId(), ACL_CREATE);
+	aclresult = object_aclcheck(NamespaceRelationId, namespaceoid, GetUserId(), ACL_CREATE);
 	if (aclresult != ACLCHECK_OK)
 		aclcheck_error(aclresult, OBJECT_SCHEMA,
 					   get_namespace_name(namespaceoid));
@@ -421,7 +421,7 @@ DefineOpClass(CreateOpClassStmt *stmt)
 #ifdef NOT_USED
 	/* XXX this is unnecessary given the superuser check above */
 	/* Check we have ownership of the datatype */
-	if (!pg_type_ownercheck(typeoid, GetUserId()))
+	if (!object_ownercheck(TypeRelationId, typeoid, GetUserId()))
 		aclcheck_error_type(ACLCHECK_NOT_OWNER, typeoid);
 #endif
 
@@ -513,11 +513,11 @@ DefineOpClass(CreateOpClassStmt *stmt)
 #ifdef NOT_USED
 				/* XXX this is unnecessary given the superuser check above */
 				/* Caller must own operator and its underlying function */
-				if (!pg_oper_ownercheck(operOid, GetUserId()))
+				if (!object_ownercheck(OperatorRelationId, operOid, GetUserId()))
 					aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_OPERATOR,
 								   get_opname(operOid));
 				funcOid = get_opcode(operOid);
-				if (!pg_proc_ownercheck(funcOid, GetUserId()))
+				if (!object_ownercheck(ProcedureRelationId, funcOid, GetUserId()))
 					aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_FUNCTION,
 								   get_func_name(funcOid));
 #endif
@@ -542,7 +542,7 @@ DefineOpClass(CreateOpClassStmt *stmt)
 #ifdef NOT_USED
 				/* XXX this is unnecessary given the superuser check above */
 				/* Caller must own function */
-				if (!pg_proc_ownercheck(funcOid, GetUserId()))
+				if (!object_ownercheck(ProcedureRelationId, funcOid, GetUserId()))
 					aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_FUNCTION,
 								   get_func_name(funcOid));
 #endif
@@ -570,7 +570,7 @@ DefineOpClass(CreateOpClassStmt *stmt)
 #ifdef NOT_USED
 				/* XXX this is unnecessary given the superuser check above */
 				/* Check we have ownership of the datatype */
-				if (!pg_type_ownercheck(storageoid, GetUserId()))
+				if (!object_ownercheck(TypeRelationId, storageoid, GetUserId()))
 					aclcheck_error_type(ACLCHECK_NOT_OWNER, storageoid);
 #endif
 				break;
@@ -781,7 +781,7 @@ DefineOpFamily(CreateOpFamilyStmt *stmt)
 													 &opfname);
 
 	/* Check we have creation rights in target namespace */
-	aclresult = pg_namespace_aclcheck(namespaceoid, GetUserId(), ACL_CREATE);
+	aclresult = object_aclcheck(NamespaceRelationId, namespaceoid, GetUserId(), ACL_CREATE);
 	if (aclresult != ACLCHECK_OK)
 		aclcheck_error(aclresult, OBJECT_SCHEMA,
 					   get_namespace_name(namespaceoid));
@@ -819,7 +819,7 @@ AlterOpFamily(AlterOpFamilyStmt *stmt)
 	Oid			amoid,			/* our AM's oid */
 				opfamilyoid;	/* oid of opfamily */
 	int			maxOpNumber,	/* amstrategies value */
-				optsProcNumber, /* amopclassopts value */
+				optsProcNumber, /* amoptsprocnum value */
 				maxProcNumber;	/* amsupport value */
 	HeapTuple	tup;
 	Form_pg_am	amform;
@@ -930,11 +930,11 @@ AlterOpFamilyAdd(AlterOpFamilyStmt *stmt, Oid amoid, Oid opfamilyoid,
 #ifdef NOT_USED
 				/* XXX this is unnecessary given the superuser check above */
 				/* Caller must own operator and its underlying function */
-				if (!pg_oper_ownercheck(operOid, GetUserId()))
+				if (!object_ownercheck(OperatorRelationId, operOid, GetUserId()))
 					aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_OPERATOR,
 								   get_opname(operOid));
 				funcOid = get_opcode(operOid);
-				if (!pg_proc_ownercheck(funcOid, GetUserId()))
+				if (!object_ownercheck(ProcedureRelationId, funcOid, GetUserId()))
 					aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_FUNCTION,
 								   get_func_name(funcOid));
 #endif
@@ -964,7 +964,7 @@ AlterOpFamilyAdd(AlterOpFamilyStmt *stmt, Oid amoid, Oid opfamilyoid,
 #ifdef NOT_USED
 				/* XXX this is unnecessary given the superuser check above */
 				/* Caller must own function */
-				if (!pg_proc_ownercheck(funcOid, GetUserId()))
+				if (!object_ownercheck(ProcedureRelationId, funcOid, GetUserId()))
 					aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_FUNCTION,
 								   get_func_name(funcOid));
 #endif
@@ -1321,7 +1321,7 @@ assignProcTypes(OpFamilyMember *member, Oid amoid, Oid typeoid,
 			/*
 			 * pg_amproc functions are indexed by (lefttype, righttype), but
 			 * an equalimage function can only be called at CREATE INDEX time.
-			 * The same opclass opcintype OID is always used for leftype and
+			 * The same opclass opcintype OID is always used for lefttype and
 			 * righttype.  Providing a cross-type routine isn't sensible.
 			 * Reject cross-type ALTER OPERATOR FAMILY ...  ADD FUNCTION 4
 			 * statements here.

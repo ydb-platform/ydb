@@ -597,7 +597,6 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnableSequences = serviceConfig.GetEnableSequences();
     kqpConfig.EnableColumnsWithDefault = serviceConfig.GetEnableColumnsWithDefault();
     kqpConfig.BindingsMode = RemapBindingsMode(serviceConfig.GetBindingsMode());
-    kqpConfig.PredicateExtract20 = serviceConfig.GetPredicateExtract20();
     kqpConfig.IndexAutoChooserMode = serviceConfig.GetIndexAutoChooseMode();
     kqpConfig.EnablePgConstsToParams = serviceConfig.GetEnablePgConstsToParams() && serviceConfig.GetEnableAstCache();
     kqpConfig.ExtractPredicateRangesLimit = serviceConfig.GetExtractPredicateRangesLimit();
@@ -607,8 +606,9 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnableOltpSink = serviceConfig.GetEnableOltpSink();
     kqpConfig.BlockChannelsMode = serviceConfig.GetBlockChannelsMode();
     kqpConfig.IdxLookupJoinsPrefixPointLimit = serviceConfig.GetIdxLookupJoinPointsLimit();
-    kqpConfig.OldLookupJoinBehaviour = serviceConfig.GetOldLookupJoinBehaviour();
     kqpConfig.EnableSpillingGenericQuery = serviceConfig.GetEnableQueryServiceSpilling();
+    kqpConfig.DefaultCostBasedOptimizationLevel = serviceConfig.GetDefaultCostBasedOptimizationLevel();
+    kqpConfig.EnableConstantFolding = serviceConfig.GetEnableConstantFolding();
 
     if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
         kqpConfig._KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));

@@ -56,10 +56,16 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
             NArrow::Append<arrow::UInt64Type>(*builders[6], r->GetChunkIdx());
             NArrow::Append<arrow::StringType>(*builders[7], ReadMetadata->GetEntityName(r->GetIndexId()).value_or("undefined"));
             NArrow::Append<arrow::UInt32Type>(*builders[8], r->GetIndexId());
-            std::string blobIdString = portion.GetBlobId(r->GetBlobRange().GetBlobIdxVerified()).ToStringLegacy();
-            NArrow::Append<arrow::StringType>(*builders[9], blobIdString);
-            NArrow::Append<arrow::UInt64Type>(*builders[10], r->GetBlobRange().Offset);
-            NArrow::Append<arrow::UInt64Type>(*builders[11], r->GetBlobRange().Size);
+            if (auto bRange = r->GetBlobRangeOptional()) {
+                std::string blobIdString = portion.GetBlobId(bRange->GetBlobIdxVerified()).ToStringLegacy();
+                NArrow::Append<arrow::StringType>(*builders[9], blobIdString);
+                NArrow::Append<arrow::UInt64Type>(*builders[10], bRange->Offset);
+                NArrow::Append<arrow::UInt64Type>(*builders[11], bRange->Size);
+            } else if (auto bData = r->GetBlobDataOptional()) {
+                NArrow::Append<arrow::StringType>(*builders[9], "INPLACE");
+                NArrow::Append<arrow::UInt64Type>(*builders[10], 0);
+                NArrow::Append<arrow::UInt64Type>(*builders[11], bData->size());
+            }
             NArrow::Append<arrow::BooleanType>(*builders[12], activity);
             const auto tierName = portionSchema->GetIndexInfo().GetEntityStorageId(r->GetIndexId(), portion.GetMeta().GetTierName());
             std::string strTierName(tierName.data(), tierName.size());

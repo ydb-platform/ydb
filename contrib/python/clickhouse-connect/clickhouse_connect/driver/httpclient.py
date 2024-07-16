@@ -16,7 +16,7 @@ from clickhouse_connect import common
 from clickhouse_connect.datatypes import registry
 from clickhouse_connect.datatypes.base import ClickHouseType
 from clickhouse_connect.driver.client import Client
-from clickhouse_connect.driver.common import dict_copy, coerce_bool, coerce_int
+from clickhouse_connect.driver.common import dict_copy, coerce_bool, coerce_int, dict_add
 from clickhouse_connect.driver.compression import available_compression
 from clickhouse_connect.driver.ctypes import RespBuffCls
 from clickhouse_connect.driver.exceptions import DatabaseError, OperationalError, ProgrammingError
@@ -58,7 +58,7 @@ class HttpClient(Client):
                  connect_timeout: int = 10,
                  send_receive_timeout: int = 300,
                  client_name: Optional[str] = None,
-                 verify: bool = True,
+                 verify: Union[bool, str] = True,
                  ca_cert: Optional[str] = None,
                  client_cert: Optional[str] = None,
                  client_cert_key: Optional[str] = None,
@@ -81,22 +81,23 @@ class HttpClient(Client):
         if interface == 'https':
             if not https_proxy:
                 https_proxy = check_env_proxy('https', host, port)
-            if client_cert:
+            if https_proxy and isinstance(verify, str) and verify.lower() == 'proxy':
+                verify = 'proxy'
+            else:
+                verify = coerce_bool(verify)
+            if client_cert and verify != 'proxy':
                 if not username:
                     raise ProgrammingError('username parameter is required for Mutual TLS authentication')
                 self.headers['X-ClickHouse-User'] = username
                 self.headers['X-ClickHouse-SSL-Certificate-Auth'] = 'on'
-            verify = coerce_bool(verify)
             # pylint: disable=too-many-boolean-expressions
             if not self.http and (server_host_name or ca_cert or client_cert or not verify or https_proxy):
-                options = {
-                    'ca_cert': ca_cert,
-                    'client_cert': client_cert,
-                    'verify': verify,
-                    'client_cert_key': client_cert_key
-                }
+                options = {'verify': verify is not False}
+                dict_add(options,'ca_cert', ca_cert)
+                dict_add(options, 'client_cert', client_cert)
+                dict_add(options, 'client_cert_key', client_cert_key)
                 if server_host_name:
-                    if verify:
+                    if options['verify']:
                         options['assert_hostname'] = server_host_name
                     options['server_hostname'] = server_host_name
                 self.http = get_pool_manager(https_proxy=https_proxy, **options)
@@ -109,7 +110,7 @@ class HttpClient(Client):
             else:
                 self.http = default_pool_manager()
 
-        if not client_cert and username:
+        if (not client_cert or verify == 'proxy') and username:
             self.headers['Authorization'] = 'Basic ' + b64encode(f'{username}:{password}'.encode()).decode()
         self.headers['User-Agent'] = common.build_client_name(client_name)
         self._read_format = self._write_format = 'Native'

@@ -31,6 +31,12 @@ TString ExtractServiceAccountIdWithConnection(const T& setting) {
     case FederatedQuery::ConnectionSetting::kPostgresqlCluster: {
         return GetServiceAccountId(setting.postgresql_cluster().auth());
     }
+    case FederatedQuery::ConnectionSetting::kGreenplumCluster: {
+        return GetServiceAccountId(setting.greenplum_cluster().auth());
+    }
+    case FederatedQuery::ConnectionSetting::kMysqlCluster: {
+        return GetServiceAccountId(setting.mysql_cluster().auth());
+    }
     // Do not replace with default. Adding a new connection should cause a compilation error
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
     break;

@@ -178,7 +178,7 @@ runs:
           --tags "$BRANCH_TAG" --tags "$EXTRA_TAG"
         )
         echo "runid=${RUN_ID}" >> $GITHUB_OUTPUT
-        echo "TEST_HISTORY_URL=${TESTMO_URL}/automation/runs/view/${RUN_ID}" >> $GITHUB_ENV
+        echo "TEST_HISTORY_URL=${TESTMO_URL}/automation/runs/view/${RUN_ID}" >> $YA_MAKE_OUTPUT
 
         # Print test history link
         echo "10 [Test history](${TEST_HISTORY_URL})" >> $SUMMARY_LINKS

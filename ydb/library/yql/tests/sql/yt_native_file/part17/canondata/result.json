@@ -2105,6 +2105,13 @@
             "uri": "https://{canondata_backend}/1942415/9dc26178536314feaac77333a6a0e27c8703d1e2/resource.tar.gz#test.test_pg_catalog-pg_timezone_names-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[pg_duplicated-order_by1--Debug]": [],
+    "test.test[pg_duplicated-order_by1--Plan]": [],
+    "test.test[pg_duplicated-order_by1--Results]": [
+        {
+            "uri": "file://test.test_pg_duplicated-order_by1--Results_/extracted"
+        }
+    ],
     "test.test[pg_duplicated-t4-default.txt-Debug]": [
         {
             "checksum": "28165f6bb425450a07bc486da67037d2",

@@ -2330,6 +2330,11 @@
         }
     ],
     "test.test[pg-with-default.txt-Results]": [],
+    "test.test[pg_duplicated-order_by6--Results]": [
+        {
+            "uri": "file://test.test_pg_duplicated-order_by6--Results_/extracted"
+        }
+    ],
     "test.test[produce-process_streaming_inline_bash-default.txt-Analyze]": [
         {
             "checksum": "6162a55f00076c0fc59f3223b35424e8",

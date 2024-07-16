@@ -2099,6 +2099,13 @@
             "uri": "https://{canondata_backend}/1937001/6dbc96ff77152887e13678a082b69fe3bbda8ba9/resource.tar.gz#test.test_pg-with-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[pg_duplicated-order_by6--Debug]": [],
+    "test.test[pg_duplicated-order_by6--Plan]": [],
+    "test.test[pg_duplicated-order_by6--Results]": [
+        {
+            "uri": "file://test.test_pg_duplicated-order_by6--Results_/extracted"
+        }
+    ],
     "test.test[produce-process_streaming_inline_bash-default.txt-Debug]": [
         {
             "checksum": "fb7fa4a5e89e443740291fd54bb30381",

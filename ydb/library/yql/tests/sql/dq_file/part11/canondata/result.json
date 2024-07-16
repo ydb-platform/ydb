@@ -2271,6 +2271,11 @@
         }
     ],
     "test.test[pg_catalog-user-default.txt-Results]": [],
+    "test.test[pg_duplicated-order_by3--Results]": [
+        {
+            "uri": "file://test.test_pg_duplicated-order_by3--Results_/extracted"
+        }
+    ],
     "test.test[produce-process_with_lambda-default.txt-Analyze]": [
         {
             "checksum": "ebe34f5d2b86ce7954a161dc02a783aa",

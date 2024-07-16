@@ -2346,6 +2346,11 @@
         }
     ],
     "test.test[pg_catalog-pg_timezone_names-default.txt-Results]": [],
+    "test.test[pg_duplicated-order_by1--Results]": [
+        {
+            "uri": "file://test.test_pg_duplicated-order_by1--Results_/extracted"
+        }
+    ],
     "test.test[pg_duplicated-t4-default.txt-Analyze]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",

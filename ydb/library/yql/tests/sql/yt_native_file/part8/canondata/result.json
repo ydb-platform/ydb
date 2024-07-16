@@ -2603,6 +2603,13 @@
             "uri": "https://{canondata_backend}/1775059/105879cd875204bc7c66426c8bfdd2bbd01bfaf7/resource.tar.gz#test.test_pg_catalog-pg_locks-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[pg_duplicated-order_by4--Debug]": [],
+    "test.test[pg_duplicated-order_by4--Plan]": [],
+    "test.test[pg_duplicated-order_by4--Results]": [
+        {
+            "uri": "file://test.test_pg_duplicated-order_by4--Results_/extracted"
+        }
+    ],
     "test.test[pragma-release_temp_data_chain_pull_single_thread--Debug]": [
         {
             "checksum": "280c47bff6a833450a7b1d127fb06423",

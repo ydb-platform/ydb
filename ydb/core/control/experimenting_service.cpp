@@ -1,4 +1,4 @@
-#include "immediate_control_board_impl.h"
+#include "experimenting_service.h"
 
 #include <util/generic/string.h>
 #include <util/stream/str.h>
@@ -6,7 +6,7 @@
 
 namespace NKikimr {
 
-bool TControlBoard::RegisterLocalControl(TControlWrapper control, TString name) {
+bool TExperimentingService::RegisterLocalControl(TControlWrapper control, TString name) {
     bool result = true;
     if (Board.Has(name)) {
         result = false;
@@ -15,7 +15,7 @@ bool TControlBoard::RegisterLocalControl(TControlWrapper control, TString name) 
     return result;
 }
 
-bool TControlBoard::RegisterSharedControl(TControlWrapper& control, TString name) {
+bool TExperimentingService::RegisterSharedControl(TControlWrapper& control, TString name) {
     auto& ptr = Board.InsertIfAbsent(name, control.Control);
     if (control.Control == ptr) {
         return true;
@@ -25,7 +25,7 @@ bool TControlBoard::RegisterSharedControl(TControlWrapper& control, TString name
     }
 }
 
-void TControlBoard::RestoreDefaults() {
+void TExperimentingService::RestoreDefaults() {
     for (auto& bucket : Board.Buckets) {
         TReadGuard guard(bucket.GetLock());
         for (auto &control : bucket.GetMap()) {
@@ -34,14 +34,14 @@ void TControlBoard::RestoreDefaults() {
     }
 }
 
-void TControlBoard::RestoreDefault(TString name) {
+void TExperimentingService::RestoreDefault(TString name) {
     TIntrusivePtr<TControl> control;
     if (Board.Get(name, control)) {
         control->RestoreDefault();
     }
 }
 
-bool TControlBoard::SetValue(TString name, TAtomic value, TAtomic &outPrevValue) {
+bool TExperimentingService::SetValue(TString name, TAtomic value, TAtomic &outPrevValue) {
     TIntrusivePtr<TControl> control;
     if (Board.Get(name, control)) {
         outPrevValue = control->SetFromHtmlRequest(value);
@@ -51,7 +51,7 @@ bool TControlBoard::SetValue(TString name, TAtomic value, TAtomic &outPrevValue)
 }
 
 // Only for tests
-void TControlBoard::GetValue(TString name, TAtomic &outValue, bool &outIsControlExists) const {
+void TExperimentingService::GetValue(TString name, TAtomic &outValue, bool &outIsControlExists) const {
     TIntrusivePtr<TControl> control;
     outIsControlExists = Board.Get(name, control);
     if (outIsControlExists) {
@@ -59,7 +59,7 @@ void TControlBoard::GetValue(TString name, TAtomic &outValue, bool &outIsControl
     }
 }
 
-TString TControlBoard::RenderAsHtml() const {
+TString TExperimentingService::RenderAsHtml() const {
     TStringStream str;
     HTML(str) {
         TABLE_SORTABLE_CLASS("table") {

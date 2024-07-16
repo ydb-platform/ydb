@@ -173,8 +173,8 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         auto& icb = AppData(ctx)->Icb;
-        icb->RegisterSharedControl(MaxCacheDataSize, "BlobCache.MaxCacheDataSize");
-        icb->RegisterSharedControl(MaxInFlightDataSize, "BlobCache.MaxInFlightDataSize");
+        icb->RegisterSharedControl(MaxCacheDataSize, "BlobCacheMaxCacheDataSize");
+        icb->RegisterSharedControl(MaxInFlightDataSize, "BlobCacheMaxInFlightDataSize");
 
         LOG_S_NOTICE("MaxCacheDataSize: " << (i64)MaxCacheDataSize
             << " InFlightDataSize: " << (i64)InFlightDataSize);

@@ -4458,19 +4458,19 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
         ChannelProfiles = appData->ChannelProfiles;
     }
 
-    appData->Icb->RegisterSharedControl(AllowConditionalEraseOperations, "SchemeShard_AllowConditionalEraseOperations");
-    appData->Icb->RegisterSharedControl(DisablePublicationsOfDropping, "SchemeShard_DisablePublicationsOfDropping");
-    appData->Icb->RegisterSharedControl(FillAllocatePQ, "SchemeShard_FillAllocatePQ");
+    appData->Icb->RegisterSharedControl(AllowConditionalEraseOperations, "SchemeShardAllowConditionalEraseOperations");
+    appData->Icb->RegisterSharedControl(DisablePublicationsOfDropping, "SchemeShardDisablePublicationsOfDropping");
+    appData->Icb->RegisterSharedControl(FillAllocatePQ, "SchemeShardFillAllocatePQ");
 
     AllowDataColumnForIndexTable = appData->FeatureFlags.GetEnableDataColumnForIndexTable();
-    appData->Icb->RegisterSharedControl(AllowDataColumnForIndexTable, "SchemeShard_AllowDataColumnForIndexTable");
+    appData->Icb->RegisterSharedControl(AllowDataColumnForIndexTable, "SchemeShardAllowDataColumnForIndexTable");
 
     for (const auto& sid : appData->MeteringConfig.GetSystemBackupSIDs()) {
         SystemBackupSIDs.insert(sid);
     }
 
     AllowServerlessStorageBilling = appData->FeatureFlags.GetAllowServerlessStorageBillingForSchemeShard();
-    appData->Icb->RegisterSharedControl(AllowServerlessStorageBilling, "SchemeShard_AllowServerlessStorageBilling");
+    appData->Icb->RegisterSharedControl(AllowServerlessStorageBilling, "SchemeShardAllowServerlessStorageBilling");
 
     TxAllocatorClient = RegisterWithSameMailbox(CreateTxAllocatorClient(appData));
 

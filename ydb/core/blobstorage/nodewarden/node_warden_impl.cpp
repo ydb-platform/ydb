@@ -172,26 +172,26 @@ void TNodeWarden::Bootstrap() {
     if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
         const TIntrusivePtr<NKikimr::TControlBoard>& icb = actorSystem->AppData<TAppData>()->Icb;
 
-        icb->RegisterLocalControl(EnablePutBatching, "BlobStorage_EnablePutBatching");
-        icb->RegisterLocalControl(EnableVPatch, "BlobStorage_EnableVPatch");
-        icb->RegisterSharedControl(EnableLocalSyncLogDataCutting, "VDiskControls.EnableLocalSyncLogDataCutting");
-        icb->RegisterSharedControl(EnableSyncLogChunkCompressionHDD, "VDiskControls.EnableSyncLogChunkCompressionHDD");
-        icb->RegisterSharedControl(EnableSyncLogChunkCompressionSSD, "VDiskControls.EnableSyncLogChunkCompressionSSD");
-        icb->RegisterSharedControl(MaxSyncLogChunksInFlightHDD, "VDiskControls.MaxSyncLogChunksInFlightHDD");
-        icb->RegisterSharedControl(MaxSyncLogChunksInFlightSSD, "VDiskControls.MaxSyncLogChunksInFlightSSD");
+        icb->RegisterLocalControl(EnablePutBatching, "BlobStorageEnablePutBatching");
+        icb->RegisterLocalControl(EnableVPatch, "BlobStorageEnableVPatch");
+        icb->RegisterSharedControl(EnableLocalSyncLogDataCutting, "VDiskControlsEnableLocalSyncLogDataCutting");
+        icb->RegisterSharedControl(EnableSyncLogChunkCompressionHDD, "VDiskControlsEnableSyncLogChunkCompressionHDD");
+        icb->RegisterSharedControl(EnableSyncLogChunkCompressionSSD, "VDiskControlsEnableSyncLogChunkCompressionSSD");
+        icb->RegisterSharedControl(MaxSyncLogChunksInFlightHDD, "VDiskControlsMaxSyncLogChunksInFlightHDD");
+        icb->RegisterSharedControl(MaxSyncLogChunksInFlightSSD, "VDiskControlsMaxSyncLogChunksInFlightSSD");
 
         icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_ROT].BurstThresholdNs,
-                "VDiskControls.BurstThresholdNsHDD");
+                "VDiskControlsBurstThresholdNsHDD");
         icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_SSD].BurstThresholdNs,
-                "VDiskControls.BurstThresholdNsSSD");
+                "VDiskControlsBurstThresholdNsSSD");
         icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_NVME].BurstThresholdNs,
-                "VDiskControls.BurstThresholdNsNVME");
+                "VDiskControlsBurstThresholdNsNVME");
         icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_ROT].DiskTimeAvailableScale,
-                "VDiskControls.DiskTimeAvailableScaleHDD");
+                "VDiskControlsDiskTimeAvailableScaleHDD");
         icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_SSD].DiskTimeAvailableScale,
-                "VDiskControls.DiskTimeAvailableScaleSSD");
+                "VDiskControlsDiskTimeAvailableScaleSSD");
         icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_NVME].DiskTimeAvailableScale,
-                "VDiskControls.DiskTimeAvailableScaleNVME");
+                "VDiskControlsDiskTimeAvailableScaleNVME");
     }
 
     // start replication broker

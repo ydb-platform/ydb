@@ -92,8 +92,8 @@ Y_UNIT_TEST_SUITE(ControlImplementationTests) {
         TIntrusivePtr<TControlBoard> Icb(new TControlBoard);
         TControlWrapper control1(1, 1, 1);
         TControlWrapper control2(2, 2, 2);
-        UNIT_ASSERT(Icb->RegisterLocalControl(control1, "DataShardControls.DisableByKeyFilter"));
-        UNIT_ASSERT(!Icb->RegisterLocalControl(control2, "DataShardControls.DisableByKeyFilter"));
+        UNIT_ASSERT(Icb->RegisterLocalControl(control1, "DataShardControlsDisableByKeyFilter"));
+        UNIT_ASSERT(!Icb->RegisterLocalControl(control2, "DataShardControlsDisableByKeyFilter"));
         UNIT_ASSERT_EQUAL(1, 1);
     }
 
@@ -103,9 +103,9 @@ Y_UNIT_TEST_SUITE(ControlImplementationTests) {
         TControlWrapper control1_origin(control1);
         TControlWrapper control2(2, 2, 2);
         TControlWrapper control2_origin(control2);
-        Icb->RegisterSharedControl(control1, "DataShardControls.MaxTxInFly");
+        Icb->RegisterSharedControl(control1, "DataShardControlsMaxTxInFly");
         UNIT_ASSERT(control1.IsTheSame(control1_origin));
-        Icb->RegisterSharedControl(control2, "DataShardControls.MaxTxInFly");
+        Icb->RegisterSharedControl(control2, "DataShardControlsMaxTxInFly");
         UNIT_ASSERT(control2.IsTheSame(control1_origin));
     }
 
@@ -113,12 +113,12 @@ Y_UNIT_TEST_SUITE(ControlImplementationTests) {
         void* (*parallelJob)(void*) = [](void *controlBoard) -> void *{
             TControlBoard *Icb = reinterpret_cast<TControlBoard *>(controlBoard);
             TControlWrapper control1(1, 1, 1);
-            Icb->RegisterSharedControl(control1, "DataShardControls.MaxTxInFly");
+            Icb->RegisterSharedControl(control1, "DataShardControlsMaxTxInFly");
             // Useless because running this test with --sanitize=thread cannot reveal
             // race condition in Icb->RegisterLocalControl(...) without mutex
             TControlWrapper control2(2, 2, 2);
             TControlWrapper control2_origin(control2);
-            Icb->RegisterLocalControl(control2, "DataShardControls.DisableByKeyFilter");
+            Icb->RegisterLocalControl(control2, "DataShardControlsDisableByKeyFilter");
             UNIT_ASSERT_EQUAL(control2, control2_origin);
             return nullptr;
         };

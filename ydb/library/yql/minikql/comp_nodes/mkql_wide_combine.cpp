@@ -136,7 +136,7 @@ struct TCombinerNodes {
         size_t actualExtracted = 0;
         for (ui32 i = 0U; i < ItemNodes.size(); ++i) {
             if (values[i]) {
-                keys[i] = *(values[i]);
+                keys[i] = std::move(*(values[i]));
                 ++actualExtracted;
             }
         }
@@ -146,7 +146,7 @@ struct TCombinerNodes {
     void ExtractValues(TComputationContext& ctx, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue** values) const {
         for (size_t i = 0, j = 0; i != ItemNodes.size(); ++i) {
             if (IsInputItemNodeUsed(i)) {
-                *values[i] = keys[j++];
+                *values[i] = std::move(keys[j++]);
             } else {
                 values[i] = nullptr;
             }

@@ -4,4 +4,4 @@ items:
 - name: Grafana дашборды 
   href: grafana-dashboards.md
 - name: Метрики производительности распределённого хранилища
-  href: performance.md
+  href: distributed-storage-performance.md

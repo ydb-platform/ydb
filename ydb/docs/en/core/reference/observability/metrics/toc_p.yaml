@@ -4,4 +4,4 @@ items:
 - name: Grafana dashboards
   href: grafana-dashboards.md
 - name: Distributed Storage performance metrics
-  href: performance.md
+  href: distributed-storage-performance.md

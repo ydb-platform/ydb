@@ -533,8 +533,14 @@ public:
                         tablet->TabletStorageInfo->Channels.emplace_back();
                         tablet->TabletStorageInfo->Channels.back().Channel = tablet->TabletStorageInfo->Channels.size() - 1;
                     }
-                    TTabletChannelInfo& channel = tablet->TabletStorageInfo->Channels[channelId];
-                    channel.History.emplace_back(generationId, groupId, timestamp);
+                    TTabletChannelInfo::THistoryEntry entry(generationId, groupId, timestamp);
+                    auto deletedAtGeneration = tabletChannelGenRowset.GetValueOrDefault<Schema::TabletChannelGen::DeletedAtGeneration>();
+                    if (deletedAtGeneration) {
+                        tablet->DeletedHistory.emplace(channelId, entry, deletedAtGeneration);
+                    } else {
+                        TTabletChannelInfo& channel = tablet->TabletStorageInfo->Channels[channelId];
+                        channel.History.push_back(entry);
+                    }
                 } else {
                     ++numMissingTablets;
                 }

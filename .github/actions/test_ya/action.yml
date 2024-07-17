@@ -270,7 +270,7 @@ runs:
           --no-dir-outputs --test-failure-code 0 --build-all \
           --cache-size 2TB --force-build-depends --evlog-file "$PUBLIC_DIR/ya_evlog.jsonl" \
           --junit "$JUNIT_REPORT_XML" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& tee $YA_MAKE_OUTPUT
-        set -e
+        set -ex
         echo "Build+Tests **{platform_name}-${BUILD_PRESET}** is running..." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
         set +ex
@@ -279,7 +279,7 @@ runs:
           --no-dir-outputs --test-failure-code 0 --build-all \
           --cache-size 2TB --force-build-depends --evlog-file "$PUBLIC_DIR/ya_evlog.jsonl" \
           --junit "$JUNIT_REPORT_XML" --output "$YA_MAKE_OUT_DIR" -X; echo $? > exit_code) |& tee $PUBLIC_DIR/ya_make_output2.log
-        set -e
+        set -ex
         RC=`cat exit_code`
 
         echo "10 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS

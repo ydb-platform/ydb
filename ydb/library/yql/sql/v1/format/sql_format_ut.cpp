@@ -438,6 +438,10 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
              "ALTER TABLE user\n\tDROP COLUMN user;\n"},
             {"alter table user alter column user set family user",
              "ALTER TABLE user\n\tALTER COLUMN user SET FAMILY user;\n"},
+            {"ALTER TABLE t ALTER COLUMN c DROP NOT NULL",
+             "AlTeR table t AltER colUmn c DroP NOT null"},
+            {"ALTER TABLE t ALTER COLUMN c DROP NOT NULL",
+             "alter table t       \nalter column c\n drop not \tnull"},
             {"alter table user add family user(user='foo')",
              "ALTER TABLE user\n\tADD FAMILY user (user = 'foo');\n"},
             {"alter table user alter family user set user 'foo'",
@@ -1594,19 +1598,6 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
              "ALTER RESOURCE POOL eds\n\tRESET (a),\n\tSET (x = y);\n"},
             {"dRop reSourCe poOl naMe",
              "DROP RESOURCE POOL naMe;\n"},
-        };
-
-        TSetup setup;
-        setup.Run(cases);
-    }
-
-    Y_UNIT_TEST(DropNotNull) {
-        TCases cases = {
-            {"ALTER TABLE t ALTER COLUMN c DROP NOT NULL",
-             "AlTeR table t AltER colUmn c DroP NOT null"},
-
-            {"ALTER TABLE t ALTER COLUMN c DROP NOT NULL",
-             "alter table t       \nalter column c\n drop not \tnull"},
         };
 
         TSetup setup;

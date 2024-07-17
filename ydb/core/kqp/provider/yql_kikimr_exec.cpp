@@ -328,7 +328,7 @@ namespace {
         TAlterSequenceSettings alterSequenceSettings;
         alterSequenceSettings.Name = TString(alterSequence.Sequence());
         alterSequenceSettings.SequenceSettings = ParseSequenceSettings(alterSequence.SequenceSettings());
-        if (TString(alterSequence.ValueType()) == "Null") {
+        if (TString(alterSequence.ValueType()) != "Null") {
             alterSequenceSettings.SequenceSettings.DataType = TString(alterSequence.ValueType());
         }
 

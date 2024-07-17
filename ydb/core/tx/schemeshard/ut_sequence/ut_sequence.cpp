@@ -479,12 +479,12 @@ Y_UNIT_TEST_SUITE(TSequence) {
 
         TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
             Name: "seq"
-            DataType: SMALLINT
+            DataType: "Int16"
         )", {NKikimrScheme::StatusInvalidParameter});
 
         TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
             Name: "seq"
-            DataType: INTEGER
+            DataType: "Int32"
         )");
         env.TestWaitNotification(runtime, txId);
 
@@ -496,13 +496,13 @@ Y_UNIT_TEST_SUITE(TSequence) {
 
         TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
             Name: "seq"
-            DataType: SMALLINT
+            DataType: "Int16"
         )");
         env.TestWaitNotification(runtime, txId);
 
         TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
             Name: "seq"
-            DataType: BIGINT
+            DataType: "Int64"
         )");
         env.TestWaitNotification(runtime, txId);
 
@@ -514,12 +514,12 @@ Y_UNIT_TEST_SUITE(TSequence) {
 
         TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
             Name: "seq"
-            DataType: INTEGER
+            DataType: "Int32"
         )", {NKikimrScheme::StatusInvalidParameter});
 
         TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
             Name: "seq"
-            DataType: SMALLINT
+            DataType: "Int16"
         )", {NKikimrScheme::StatusInvalidParameter});
 
         TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
@@ -530,7 +530,7 @@ Y_UNIT_TEST_SUITE(TSequence) {
 
         TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
             Name: "seq"
-            DataType: SMALLINT
+            DataType: "Int16"
         )");
         env.TestWaitNotification(runtime, txId);
 

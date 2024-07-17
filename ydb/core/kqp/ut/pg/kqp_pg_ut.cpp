@@ -2522,6 +2522,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetCache(), 3);
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetIncrement(), 2);
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetCycle(), true);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetDataType(), "pgint4");
         }
 
         {
@@ -2555,6 +2556,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetCache(), 3);
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetIncrement(), 5);
             UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetCycle(), false);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetDataType(), "pgint2");
         }
 
         {
@@ -2564,11 +2566,25 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             const auto queryAlter = R"(
                 --!syntax_pg
                 ALTER SEQUENCE IF EXISTS seq
-                    MAXVALUE WITH 65000;
+                    MAXVALUE 65000;
             )";
 
             auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT(!resultAlter.IsSuccess());
+        }
+
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto id = session.GetId();
+
+            const auto queryAlter = R"(
+                --!syntax_pg
+                ALTER SEQUENCE IF EXISTS seq
+                    MAXVALUE 32000;
+            )";
+
+            auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultAlter.IsSuccess(), resultAlter.GetIssues().ToString());
         }
 
         {
@@ -2583,6 +2599,49 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT(!resultAlter.IsSuccess());
+        }
+
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto id = session.GetId();
+
+            const auto queryAlter = R"(
+                --!syntax_pg
+                ALTER SEQUENCE IF EXISTS seq
+                    as bigint;
+            )";
+
+            auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultAlter.IsSuccess(), resultAlter.GetIssues().ToString());
+        }
+
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto id = session.GetId();
+
+            const auto queryAlter = R"(
+                --!syntax_pg
+                ALTER SEQUENCE IF EXISTS seq
+                    as integer;
+                    MAXVALUE 2147483647;
+            )";
+
+            auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT(!resultAlter.IsSuccess());
+        }
+
+         {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto id = session.GetId();
+
+            const auto queryAlter = R"(
+                --!syntax_pg
+                ALTER SEQUENCE IF EXISTS seq
+                    MAXVALUE 2147483647;
+            )";
+
+            auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultAlter.IsSuccess(), resultAlter.GetIssues().ToString());
         }
     }
 

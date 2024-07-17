@@ -240,69 +240,12 @@ std::optional<NKikimrSchemeOp::TSequenceDescription> GetAlterSequenceDescription
         dataType = alter.GetDataType();
     }
 
-    i64 dataTypeMaxValue, dataTypeMinValue;
-
-    auto typeName = NMiniKQL::AdaptLegacyYqlType(dataType);
-    const NScheme::IType* type = typeRegistry.GetType(typeName);
-    if (type) {
-        if (!NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
-            errStr = Sprintf("Type '%s' specified for sequence '%s' is no longer supported", dataType.data(), sequence.GetName().data());
-            return std::nullopt;
-        }
-
-        switch (type->GetTypeId()) {
-            case NScheme::NTypeIds::Int16: {
-                dataTypeMaxValue = Max<i16>();
-                dataTypeMinValue = Min<i16>();
-                break;
-            }
-            case NScheme::NTypeIds::Int32: {
-                dataTypeMaxValue = Max<i32>();
-                dataTypeMinValue = Min<i32>();
-                break;
-            }
-            case NScheme::NTypeIds::Int64: {
-                dataTypeMaxValue = Max<i64>();
-                dataTypeMinValue = Min<i64>();
-                break;
-            }
-            default: {
-                errStr = Sprintf("Type '%s' specified for sequence '%s' is not supported", dataType.data(), sequence.GetName().data());
-                return std::nullopt;
-            }
-        }                    
-    } else {
-        auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
-        if (!typeDesc) {
-            errStr = Sprintf("Type '%s' specified for sequence '%s' is not supported", dataType.data(), sequence.GetName().data());
-            return std::nullopt;
-        }
-        if (!pgTypesEnabled) {
-            errStr = Sprintf("Type '%s' specified for sequence '%s', but support for pg types is disabled (EnableTablePgTypes feature flag is off)", dataType.data(), sequence.GetName().data());
-            return std::nullopt;
-        }
-        switch (NPg::PgTypeIdFromTypeDesc(typeDesc)) {
-            case INT2OID: {
-                dataTypeMaxValue = Max<i16>();
-                dataTypeMinValue = Min<i16>();
-                break;
-            }
-            case INT4OID: {
-                dataTypeMaxValue = Max<i32>();
-                dataTypeMinValue = Min<i32>();
-                break;
-            }
-            case INT8OID: {
-                dataTypeMaxValue = Max<i64>();
-                dataTypeMinValue = Min<i64>();
-                break;
-            }
-            default: {
-                errStr = Sprintf("Type '%s' specified for sequence '%s' is not supported", dataType.data(), sequence.GetName().data());
-                return std::nullopt;
-            }
-        }
+    auto validationResult = ValidateSequenceType(sequence.GetName(), dataType, typeRegistry, pgTypesEnabled, errStr);
+    if (!validationResult) {
+        return std::nullopt;
     }
+
+    auto [dataTypeMinValue, dataTypeMaxValue] = *validationResult;
 
     if (maxValue != Max<i16>() && maxValue != Max<i32>() && maxValue != Max<i64>()) {
         if (maxValue > dataTypeMaxValue) {

@@ -525,15 +525,16 @@ void TPQTabletFixture::WaitForCalcPredicateResult()
 {
     bool found = false;
 
-    auto observer = [&found](TAutoPtr<IEventHandle>& event) {
+    TTestActorRuntimeBase::TEventObserver prev;
+    auto observer = [&found, &prev](TAutoPtr<IEventHandle>& event) {
         if (auto* msg = event->CastAsLocal<TEvPQ::TEvTxCalcPredicateResult>()) {
             found = true;
         }
 
-        return TTestActorRuntimeBase::EEventAction::PROCESS;
+        return prev ? prev(event) : TTestActorRuntimeBase::EEventAction::PROCESS;
     };
 
-    Ctx->Runtime->SetObserverFunc(observer);
+    prev = Ctx->Runtime->SetObserverFunc(observer);
 
     TDispatchOptions options;
     options.CustomFinalCondition = [&found]() {
@@ -541,6 +542,8 @@ void TPQTabletFixture::WaitForCalcPredicateResult()
     };
 
     UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+
+    Ctx->Runtime->SetObserverFunc(prev);
 }
 
 std::unique_ptr<TEvPersQueue::TEvRequest> TPQTabletFixture::MakeGetOwnershipRequest(const TGetOwnershipRequestParams& params,
@@ -669,13 +672,30 @@ void TPQTabletFixture::SendWriteRequest(const TWriteRequestParams& params)
 
 void TPQTabletFixture::WaitWriteResponse(const TWriteResponseMatcher& matcher)
 {
-    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>();
-    UNIT_ASSERT(event != nullptr);
+    bool found = false;
 
-    if (matcher.Cookie.Defined()) {
-        UNIT_ASSERT(event->Record.HasCookie());
-        UNIT_ASSERT_VALUES_EQUAL(*matcher.Cookie, event->Record.GetCookie());
-    }
+    auto observer = [&found, &matcher](TAutoPtr<IEventHandle>& event) {
+        if (auto* msg = event->CastAsLocal<TEvPersQueue::TEvResponse>()) {
+            if (matcher.Cookie.Defined()) {
+                if (msg->Record.HasCookie() && (*matcher.Cookie == msg->Record.GetCookie())) {
+                    found = true;
+                }
+            }
+        }
+
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+
+    auto prev = Ctx->Runtime->SetObserverFunc(observer);
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&found]() {
+        return found;
+    };
+
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+
+    Ctx->Runtime->SetObserverFunc(prev);
 }
 
 void TPQTabletFixture::StartPQWriteObserver(bool& flag, unsigned cookie)
@@ -1311,6 +1331,36 @@ Y_UNIT_TEST_F(ProposeTx_Command_After_Propose, TPQTabletFixture)
                      .Cookie=5},
                      {.Cookie=5,
                      .Status=NMsgBusProxy::MSTATUS_ERROR});
+}
+
+Y_UNIT_TEST_F(TEvTxCommit_After_Restart, TPQTabletFixture)
+{
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(22222);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    const ui64 txId = 67890;
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={22222}, .Receivers={22222},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    StartPQWriteTxsObserver();
+    WaitForCalcPredicateResult();
+    WaitForPQWriteTxs();
+
+    PQTabletRestart(*Ctx);
+
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+    WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=22222, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
 }
 
 }

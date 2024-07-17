@@ -165,7 +165,7 @@ runs:
             EXTRA_TAG=""
             ;;
         esac
-
+        export TESTMO_RUN_NAME
         testmo automation:resources:add-link --name build --url "$RUN_URL" --resources testmo.json
         testmo automation:resources:add-field --name git-sha --type string --value "${GITHUB_SHA:0:7}" --resources testmo.json
         RUN_ID=$(
@@ -343,25 +343,8 @@ runs:
         echo "JOB_ID=${JOB_ID}"
         echo "GITHUB_REF_NAME=${GITHUB_REF_NAME}"
 
-        case $GITHUB_EVENT_NAME in
-          workflow_dispatch)
-            TESTMO_RUN_NAME=${{ github.run_id }}_manual
-            ;;
-          pull_request | pull_request_target)
-            TESTMO_RUN_NAME=${{ github.run_id }}_PR_${PR_NUMBER}
-            ;;
-          schedule)
-            TESTMO_RUN_NAME=${{ github.run_id }}_schedule
-            ;;
-          push)
-            TESTMO_RUN_NAME=${{ github.run_id }}_POST
-            ;;
-          *)
-            TESTMO_RUN_NAME=${{ github.run_id }}
-            ;;
-        esac
-        FLAGS=(--pull="$TESTMO_RUN_NAME")
-        result=`.github/scripts/upload_tests_results.py --test-results-file ${JUNIT_REPORT_XML} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} "${FLAGS[@]}" --job-name ${JOB_NAME} --job-id ${JOB_ID} --branch ${GITHUB_REF_NAME}`
+        run_name="${TESTMO_RUN_NAME// /"_"}"
+        result=`.github/scripts/upload_tests_results.py --test-results-file ${JUNIT_REPORT_XML} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull $run_name --job-name ${JOB_NAME} --job-id ${JOB_ID} --branch ${GITHUB_REF_NAME}`
 
     - name: Unit test history upload results
       if: inputs.testman_token && inputs.run_tests

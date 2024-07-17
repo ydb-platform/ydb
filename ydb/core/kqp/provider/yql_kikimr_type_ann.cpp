@@ -1566,7 +1566,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
         if (TString(node.Temporary()) == "true") {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                << "Temporary sequences is currently not supported"));
+                << "Temporary sequences are currently not supported"));
             return TStatus::Error;
         }
 

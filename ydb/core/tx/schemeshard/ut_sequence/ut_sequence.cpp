@@ -446,13 +446,13 @@ Y_UNIT_TEST_SUITE(TSequence) {
             Name: "seq"
             Cycle: false
             MinValue: 7
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )", {{NKikimrScheme::StatusInvalidParameter, "MINVALUE (7) must be less than MAXVALUE (4)"}});
 
         TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
             Name: "seq"
             Cycle: false
             MinValue: 3
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )", {{NKikimrScheme::StatusInvalidParameter, "START value (2) cannot be less than MINVALUE (3)"}});
 
         TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
             Name: "seq"
@@ -467,7 +467,7 @@ Y_UNIT_TEST_SUITE(TSequence) {
             Cycle: false
             MinValue: 3
             MaxValue: 2
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )", {{NKikimrScheme::StatusInvalidParameter, "MINVALUE (3) must be less than MAXVALUE (2)"}});
 
         TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
             Name: "seq"
@@ -480,7 +480,7 @@ Y_UNIT_TEST_SUITE(TSequence) {
         TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
             Name: "seq"
             DataType: "Int16"
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )", {{NKikimrScheme::StatusInvalidParameter, "MAXVALUE (65000) is out of range for sequence data type Int16"}});
 
         TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
             Name: "seq"
@@ -515,12 +515,12 @@ Y_UNIT_TEST_SUITE(TSequence) {
         TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
             Name: "seq"
             DataType: "Int32"
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )", {{NKikimrScheme::StatusInvalidParameter, "MAXVALUE (2147483648) is out of range for sequence data type Int32"}});
 
         TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
             Name: "seq"
             DataType: "Int16"
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )", {{NKikimrScheme::StatusInvalidParameter, "MAXVALUE (2147483648) is out of range for sequence data type Int16"}});
 
         TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
             Name: "seq"
@@ -759,7 +759,7 @@ Y_UNIT_TEST_SUITE(TSequence) {
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table3"
             Columns { Name: "value" DefaultFromSequence: "/MyRoot/seq1" }
-        )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
+        )", {{NKikimrScheme::StatusInvalidParameter, "Column 'value' is of type Bool but default expression is of type Int64"}});
     }
 
 } // Y_UNIT_TEST_SUITE(TSequence)

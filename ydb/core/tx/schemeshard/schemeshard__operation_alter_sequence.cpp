@@ -249,7 +249,7 @@ std::optional<NKikimrSchemeOp::TSequenceDescription> GetAlterSequenceDescription
 
     if (maxValue != Max<i16>() && maxValue != Max<i32>() && maxValue != Max<i64>()) {
         if (maxValue > dataTypeMaxValue) {
-            errStr = Sprintf("MAXVALUE (%ld) is out of range for sequence", maxValue);
+            errStr = Sprintf("MAXVALUE (%ld) is out of range for sequence data type %s", maxValue, dataType.c_str());
             return std::nullopt;
         }
     } else {
@@ -258,7 +258,7 @@ std::optional<NKikimrSchemeOp::TSequenceDescription> GetAlterSequenceDescription
 
     if (minValue != Min<i16>() && minValue != Min<i32>() && minValue != Min<i64>()) {
         if (minValue < dataTypeMinValue) {
-            errStr = Sprintf("MINVALUE (%ld) is out of range for sequence", minValue);
+            errStr = Sprintf("MINVALUE (%ld) is out of range for sequence data type %s", minValue, dataType.c_str());
             return std::nullopt;
         }
     } else {

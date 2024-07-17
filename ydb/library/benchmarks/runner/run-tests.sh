@@ -22,6 +22,7 @@ fi
 : ${script_path=${0%/*}}
 : ${ydb_path=$script_path/../../../..}
 : ${enable_spilling=--enable-spilling}
+: ${decimal=--decimal=True}
 if [ -w /proc/self/oom_score_adj ]; then
     # tests sometimes run into OOM; mark ourself as preferred victim
     echo 500 > /proc/self/oom_score_adj
@@ -75,6 +76,7 @@ ${ydb_path}/ydb/library/benchmarks/gen_queries/gen_queries \
 [ -f ${qs}-${datasize}-$tasks/$variant/bindings.json ] ||
 ${ydb_path}/ydb/library/benchmarks/gen_queries/gen_queries \
         --output ${qs}-${datasize}-$tasks --variant ${variant} --syntax ${syntax-yql} --dataset-size $datasize \
+        $decimal \
     --pragma dq.MaxTasksPerStage=$tasks \
     --pragma config.flags=LLVM_OFF \
     --pragma dq.ComputeActorType="async" \
@@ -88,6 +90,7 @@ ${ydb_path}/ydb/library/benchmarks/gen_queries/gen_queries \
 [ -f ${qsL}-${datasize}-$tasks/$variant/bindings.json ] ||
 ${ydb_path}/ydb/library/benchmarks/gen_queries/gen_queries \
         --output ${qsL}-${datasize}-$tasks --variant ${variant} --syntax ${syntax-yql} --dataset-size $datasize \
+        $decimal \
     --pragma dq.MaxTasksPerStage=$tasks \
     --pragma dq.ComputeActorType="async" \
     --pragma dq.UseFinalizeByKey=true \

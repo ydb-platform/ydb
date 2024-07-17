@@ -12,9 +12,9 @@ $$
 cost(operation) = A + operation.size() \times B
 $$
 
-The physical rationale behind the linear dependency is as follows: coefficient \(A\) is the time needed for the physical device to access the data, and coefficient \(B\) is the time required to read or write one byte of data.
+The physical rationale behind the linear dependency is as follows: coefficient $A$ is the time needed for the physical device to access the data, and coefficient $B$ is the time required to read or write one byte of data.
 
-The coefficients \(A\) and \(B\) depend on the request request and device type. These coefficients were measured experimentally for each device type and each request type.
+The coefficients $A$ and $B$ depend on the request request and device type. These coefficients were measured experimentally for each device type and each request type.
 
 In {{ ydb-short-name }}, all physical devices are divided into three types: HDD, SATA SSD (further referred to as SSD), and NVMe SSD (further referred to as NVMe). HDDs are rotating hard drives characterized by high data access time. SSD and NVMe types differ in their interfaces: NVMe provides a higher operation speed.
 

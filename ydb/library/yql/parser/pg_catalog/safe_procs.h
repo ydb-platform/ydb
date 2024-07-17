@@ -3,4 +3,12 @@
 "pg_get_userbyid",
 "pg_total_relation_size",
 "row_to_json",
+"set_config",//pgadmin
+"pg_is_in_recovery",//pgadmin
+"pg_is_wal_replay_paused",//pgadmin
+"pg_encoding_to_char",//psql
+"pg_function_is_visible",//psql
+"pg_get_function_result",//psql
+"pg_get_function_arguments",//psql
+"pg_table_is_visible",//psql
 "version",

@@ -9,7 +9,7 @@ namespace NYql::NCompressors {
 
 namespace {
     TString GetResourcePath(const TString& path) {
-        return ArcadiaSourceRoot() + "/ydb/library/yql/providers/s3/compressors/ut/test_compression_data/" + path;
+        return ArcadiaFromCurrentLocation(__SOURCE_FILE__, "test_compression_data/" + path);
     }
 }
 

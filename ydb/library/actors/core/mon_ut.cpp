@@ -10,6 +10,7 @@ Y_UNIT_TEST_SUITE(ActorSystemMon) {
         NActorsProto::TRemoteHttpInfo info;
         info.SetPath("hello");
 
+        UNIT_ASSERT_VALUES_EQUAL(42, 420);
         auto ev = std::make_unique<TEvRemoteHttpInfo>(info);
         UNIT_ASSERT(ev->ExtendedQuery);
         UNIT_ASSERT_VALUES_EQUAL(ev->ExtendedQuery->GetPath(), info.GetPath());

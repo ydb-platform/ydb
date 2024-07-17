@@ -403,12 +403,12 @@ runs:
         mkdir $ARTIFACTS_DIR/summary/
 
         .github/scripts/tests/generate-summary.py \
-          --summary-out-path $ARTIFACTS_DIR/summary/ \
-          --summary-url-prefix $ARTIFACTS_DIR_URL/summary/ \
-          --test-history-url "$TEST_HISTORY_URL" \
-          --test-log-url="$YA_TEST_LOG_URL" \
-          --build-preset "$BUILD_PRESET" \
-          --status-report-file statusrep.txt \
+          --summary_out_path $ARTIFACTS_DIR/summary/ \
+          --summary_url_prefix $ARTIFACTS_DIR_URL/summary/ \
+          --test_history_url "$TEST_HISTORY_URL" \
+          --test_log_url="$YA_TEST_LOG_URL" \
+          --build_preset "$BUILD_PRESET" \
+          --status_report_file statusrep.txt \
           "Tests" ya-test.html "$JUNIT_REPORT_XML"
 
         teststatus=$(cat statusrep.txt)

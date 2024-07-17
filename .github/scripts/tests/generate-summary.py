@@ -328,12 +328,12 @@ def get_comment_text(pr: PullRequest, summary: TestSummary, test_history_url: st
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--summary-out-path", required=True)
-    parser.add_argument("--summary-url-prefix", required=True)
-    parser.add_argument('--test-history-url', required=False)
-    parser.add_argument('--test-log-url', required=False)
-    parser.add_argument('--build-preset', default="default-linux-x86-64-relwithdebinfo", required=False)
-    parser.add_argument('--status-report-file', required=False)
+    parser.add_argument("--summary_out_path", required=True)
+    parser.add_argument("--summary_url_prefix", required=True)
+    parser.add_argument('--test_history_url', required=False)
+    parser.add_argument('--test_log_url', required=False)
+    parser.add_argument('--build_preset', default="default-linux-x86-64-relwithdebinfo", required=False)
+    parser.add_argument('--status_report_file', required=False)
     parser.add_argument("args", nargs="+", metavar="TITLE html_out path")
     args = parser.parse_args()
 

@@ -494,6 +494,16 @@
                 {"Index": 2, "Name": "Replication", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Cascade", "Type":  "TCoAtom"}
             ]
+        },
+        {
+            "Name": "TKiAnalyzeTable",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiAnalyze!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "Table", "Type": "TCoAtom"}
+            ]
         }
     ]
 }

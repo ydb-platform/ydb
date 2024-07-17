@@ -1428,6 +1428,36 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                                                           context));
             break;
         }
+        case TRule_sql_stmt_core::kAltSqlStmtCore51: {
+            // analyze_stmt: ANALYZE table_ref
+            Ctx.BodyPart();
+            const auto& rule = core.GetAlt_sql_stmt_core48().GetRule_analyze_stmt1();
+
+            if (!rule.GetRule_analyze_table_list2().GetBlock2().empty()) {
+                Error() << "ANALYZE with multitables hasn't been implemented yet";
+                return false;
+            }
+            auto analyzeTable = rule.GetRule_analyze_table_list2().GetRule_analyze_table1();
+
+            TVector<TString> columns;
+            if (analyzeTable.HasBlock2()) {
+                auto columnsNode = 
+                    analyzeTable.GetBlock2().GetBlock1().GetRule_column_list_in_parens1().GetRule_column_list2();
+                columns.push_back(Id(columnsNode.GetRule_column_name1().GetRule_an_id2(), *this));
+                for (const auto& columnNode: columnsNode.GetBlock2()) {
+                    columns.push_back(Id(columnNode.GetRule_column_name2().GetRule_an_id2(), *this));
+                }
+            }
+
+            TTableRef tr;
+            if (!SimpleTableRefImpl(rule.GetRule_analyze_table_list2().GetRule_analyze_table1().GetRule_simple_table_ref1(), tr)) {
+                return false;
+            }
+
+            auto params = TAnalyzeParams{.Table = std::make_shared<TTableRef>(tr), .Columns = std::move(columns)};
+            AddStatementToBlocks(blocks, BuildAnalyze(Ctx.Pos(), tr.Service, tr.Cluster, params, Ctx.Scoped));
+            break;
+        }
         case TRule_sql_stmt_core::ALT_NOT_SET:
             Ctx.IncrementMonCounter("sql_errors", "UnknownStatement" + internalStatementName);
             AltNotImplemented("sql_stmt_core", core);

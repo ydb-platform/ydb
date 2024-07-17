@@ -170,6 +170,7 @@ bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
         case TRule_sql_stmt_core::kAltSqlStmtCore48: // create backup collection
         case TRule_sql_stmt_core::kAltSqlStmtCore49: // alter backup collection
         case TRule_sql_stmt_core::kAltSqlStmtCore50: // drop backup collection
+        case TRule_sql_stmt_core::kAltSqlStmtCore51: // analyze
             return false;
     }
 }

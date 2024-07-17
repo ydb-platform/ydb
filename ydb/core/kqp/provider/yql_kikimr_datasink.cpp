@@ -79,6 +79,16 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleAnalyze(TKiAnalyzeTable node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+
+        auto cluster = node.DataSink().Cluster();
+        auto table = node.Table();
+
+        SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table));
+        return TStatus::Ok;
+    }
+
     TStatus HandleCreateTopic(TKiCreateTopic node, TExprContext& ctx) override {
         Y_UNUSED(ctx);
         Y_UNUSED(node);
@@ -273,6 +283,9 @@ private:
                         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Filter option is required for table delete."));
                         return TStatus::Error;
                     }
+                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
+                    return TStatus::Ok;
+                } else if (mode == "analyze") {
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
                 } else {
@@ -546,6 +559,10 @@ public:
         }
 
         if(node.IsCallable(TPgDropObject::CallableName())) {
+            return true;
+        }
+
+        if (node.IsCallable(TKiAnalyzeTable::CallableName())) {
             return true;
         }
 
@@ -1002,6 +1019,13 @@ public:
                             .Done()
                             .Ptr();
                     }
+                } else if (mode == "analyze") {
+                    return Build<TKiAnalyzeTable>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Table().Build(key.GetTablePath())
+                        .Done()
+                        .Ptr();
                 } else {
                     return Build<TKiWriteTable>(ctx, node->Pos())
                         .World(node->Child(0))
@@ -1166,7 +1190,7 @@ public:
                         .Topic().Build(key.GetTopicPath())
                         .Settings(settings.Other)
                         .Done()
-                        .Ptr();
+                        .Ptr(); 
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Unknown operation type for topic"));
                     return nullptr;
@@ -1574,6 +1598,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = callable.Maybe<TKiAlterSequence>()) {
         return HandleAlterSequence(node.Cast(), ctx);
+    }
+
+    if (auto node = callable.Maybe<TKiAnalyzeTable>()) {
+        return HandleAnalyze(node.Cast(), ctx);
     }
 
     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Kikimr DataSink) Unsupported function: "

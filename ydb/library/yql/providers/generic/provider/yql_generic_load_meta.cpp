@@ -354,7 +354,7 @@ namespace NYql {
                     SetSchema(*options, clusterConfig);
                 } break;
                 case NYql::NConnector::NApi::ORACLE: {
-                    auto* options = request.mutable_data_source_instance()->mutable_ora_options();
+                    auto* options = request.mutable_data_source_instance()->mutable_oracle_options();
                     GetServiceName(*options, clusterConfig);
                 } break;
 

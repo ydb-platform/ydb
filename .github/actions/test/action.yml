@@ -245,16 +245,16 @@ runs:
 
         case $GITHUB_EVENT_NAME in
             workflow_dispatch)
-              TESTMO_RUN_NAME=${{ github.run_id }} manual
+              TESTMO_RUN_NAME=${{ github.run_id }}_manual
               ;;
             pull_request | pull_request_target)
-              TESTMO_RUN_NAME=${{ github.run_id }} PR #${PR_NUMBER}
+              TESTMO_RUN_NAME=${{ github.run_id }}_PR_${PR_NUMBER}
               ;;
             schedule)
-              TESTMO_RUN_NAME=${{ github.run_id }} schedule
+              TESTMO_RUN_NAME=${{ github.run_id }}_schedule
               ;;
             push)
-              TESTMO_RUN_NAME=${{ github.run_id }} POST
+              TESTMO_RUN_NAME=${{ github.run_id }}_POST
               ;;
             *)
               TESTMO_RUN_NAME=${{ github.run_id }}

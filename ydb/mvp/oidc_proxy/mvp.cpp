@@ -74,7 +74,7 @@ int TMVP::Init() {
     ActorSystem.Register(NActors::CreateProcStatCollector(TDuration::Seconds(5), AppData.MetricRegistry = std::make_shared<NMonitoring::TMetricRegistry>()));
 
     BaseHttpProxyId = ActorSystem.Register(NHttp::CreateHttpProxy(AppData.MetricRegistry));
-    ActorSystem.Register(AppData.Tokenator = TMvpTokenator::CreateTokenator(TokensConfig, BaseHttpProxyId, AuthProfile));
+    ActorSystem.Register(AppData.Tokenator = TMvpTokenator::CreateTokenator(TokensConfig, BaseHttpProxyId, OpenIdConnectSettings.AuthProfile));
 
     HttpProxyId = ActorSystem.Register(NHttp::CreateHttpCache(BaseHttpProxyId, GetCachePolicy));
 
@@ -289,11 +289,17 @@ void TMVP::TryGetGenericOptionsFromConfig(
     }
 
     if (generic["auth_profile"]) {
-        auto authProfile = generic["auth_profile"].as<std::string>("y-profile");
-        AuthProfile = authProfile != "n-profile"
-            ? NMVP::EAuthProfile::Yandex
-            : NMVP::EAuthProfile::Nebius;
-        OpenIdConnectSettings.AuthProfile = AuthProfile;
+        auto authProfile = generic["auth_profile"].as<std::string>("yandex");
+        switch (authProfile) {
+            case "yandex":
+                OpenIdConnectSettings.AuthProfile = NMVP::EAuthProfile::yandex;
+                break;
+            case "nebius":
+                OpenIdConnectSettings.AuthProfile = NMVP::EAuthProfile::nebius;
+                break;
+            default:
+                ythrow yexception() << "Invalid auth_profile value: " << authProfile;
+        }
     }
 }
 

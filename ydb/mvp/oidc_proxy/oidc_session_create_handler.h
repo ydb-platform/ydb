@@ -22,10 +22,10 @@ public:
         NHttp::THttpIncomingRequestPtr request = event->Get()->Request;
         if (request->Method == "GET") {
             switch (Settings.AuthProfile) {
-                case NMVP::EAuthProfile::Yandex:
+                case NMVP::EAuthProfile::yandex:
                     ctx.Register(new THandlerSessionCreateYandex(event->Sender, request, HttpProxyId, Settings));
                     return;
-                case NMVP::EAuthProfile::Nebius:
+                case NMVP::EAuthProfile::nebius:
                     ctx.Register(new THandlerSessionCreateNebius(event->Sender, request, HttpProxyId, Settings));
                     return;
             }

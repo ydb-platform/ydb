@@ -29,7 +29,7 @@ struct TRedirectUrlParameters {
 };
 
 bool TryAppendAuthEndpointFromDetailsYandexProfile(const TRedirectUrlParameters& parameters, TStringBuilder& locationHeaderValue) {
-    if (parameters.AuthProfile != NMVP::EAuthProfile::Yandex) {
+    if (parameters.AuthProfile != NMVP::EAuthProfile::yandex) {
         return false;
     }
     const auto& eventDetails = parameters.SessionServerCheckDetails;

@@ -77,10 +77,10 @@ void TMvpTokenator::Handle(TEvPrivate::TEvRefreshToken::TPtr event) {
     const NMvp::TJwtInfo* jwtInfo = TokenConfigs.GetJwtTokenConfig(name);
     if (jwtInfo != nullptr) {
         switch (AuthProfile) {
-            case NMVP::EAuthProfile::Yandex:
+            case NMVP::EAuthProfile::yandex:
                 UpdateJwtTokenYandex(jwtInfo);
                 break;
-            case NMVP::EAuthProfile::Nebius:
+            case NMVP::EAuthProfile::nebius:
                 UpdateJwtTokenNebius(jwtInfo);
                 break;
         }

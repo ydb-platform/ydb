@@ -76,42 +76,38 @@ runs:
         mkdir -p $TMP_DIR
         echo "TMP_DIR=$TMP_DIR" >> $GITHUB_ENV
 
-        export LOG_DIR=$TMP_DIR/logs
-        echo "LOG_DIR=$LOG_DIR" >> $GITHUB_ENV
-        mkdir -p $LOG_DIR
+        # The whole dir will be uploaded to s3 with public (=wild internet) ACL
+        export PUBLIC_DIR=$TMP_DIR/results
+        echo "PUBLIC_DIR=$PUBLIC_DIR" >> $GITHUB_ENV
+        mkdir -p $PUBLIC_DIR
 
-        export OUT_DIR=$TMP_DIR/out
-        echo "OUT_DIR=$OUT_DIR" >> $GITHUB_ENV
-        mkdir -p $OUT_DIR
+        export YA_MAKE_OUT_DIR=$TMP_DIR/out
+        echo "YA_MAKE_OUT_DIR=$YA_MAKE_OUT_DIR" >> $GITHUB_ENV
+        mkdir -p $YA_MAKE_OUT_DIR
 
-        export ARTIFACTS_DIR=$TMP_DIR/artifacts
+        export ARTIFACTS_DIR=$PUBLIC_DIR/artifacts
         echo "ARTIFACTS_DIR=$ARTIFACTS_DIR" >> $GITHUB_ENV
+        echo "ARTIFACTS_DIR_URL=$S3_URL_PREFIX/artifacts" >> $GITHUB_ENV
         mkdir -p $ARTIFACTS_DIR
 
-        export TEST_ARTIFACTS_DIR=$TMP_DIR/test_artifacts
+        export TEST_ARTIFACTS_DIR=$PUBLIC_DIR/test_artifacts
         echo "TEST_ARTIFACTS_DIR=$TEST_ARTIFACTS_DIR" >> $GITHUB_ENV
+        echo "TEST_ARTIFACTS_DIR_URL=$S3_URL_PREFIX/test_artifacts" >> $GITHUB_ENV
         mkdir -p $TEST_ARTIFACTS_DIR
 
-        export REPORTS_ARTIFACTS_DIR=$TMP_DIR/artifacts/test_reports
-        echo "REPORTS_ARTIFACTS_DIR=$REPORTS_ARTIFACTS_DIR" >> $GITHUB_ENV
-        mkdir -p $REPORTS_ARTIFACTS_DIR
 
-        export JUNIT_REPORT_PARTS=$TMP_DIR/junit-split
-        echo "JUNIT_REPORT_PARTS=$JUNIT_REPORT_PARTS" >> $GITHUB_ENV
-        mkdir -p $JUNIT_REPORT_PARTS
-
-        echo "JUNIT_REPORT_XML=$TMP_DIR/junit.xml" >> $GITHUB_ENV
+        echo "JUNIT_REPORT_XML=$PUBLIC_DIR/junit.xml" >> $GITHUB_ENV
         echo "TESTMO_URL=${{ inputs.testman_url }}" >> $GITHUB_ENV
-        echo "SUMMARY_LINKS=$(mktemp)" >> $GITHUB_ENV
+        echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
         
-        echo "YA_TEST_LOG_FILENAME=$LOG_DIR/ya_test.log" >> $GITHUB_ENV
-        echo "YA_TEST_LOG_URL=$S3_URL_PREFIX/test_logs/ya_test.log" >> $GITHUB_ENV
-        echo "S3_LOG_BUCKET_PATH=$S3_BUCKET_PATH/test_logs" >> $GITHUB_ENV
+        echo "YA_TEST_LOG=$PUBLIC_DIR/ya_log.log" >> $GITHUB_ENV
+        echo "YA_TEST_LOG_URL=$S3_URL_PREFIX/ya_log.log" >> $GITHUB_ENV
 
-        export log_url="$S3_URL_PREFIX/build_logs/ya_make.log"
-        echo "LOG_URL=$log_url" >> $GITHUB_ENV
-        echo "log_url=$log_url" >> $GITHUB_OUTPUT
+
+        echo YA_MAKE_OUTPUT="$PUBLIC_DIR/ya_make_output.log" >>  $GITHUB_ENV
+        export YA_MAKE_OUTPUT_URL="$S3_URL_PREFIX/ya_make_output.log"
+        echo "YA_MAKE_OUTPUT_URL=$YA_MAKE_OUTPUT_URL" >> $GITHUB_ENV
 
         # install test mo
         npm install -g @testmo/testmo-cli
@@ -270,14 +266,14 @@ runs:
         echo "Build+Tests **{platform_name}-${BUILD_PRESET}** is running..." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
         set +ex
         (./ya make ${{ inputs.build_target }} "${params[@]}" \
-          --stat --log-file "$YA_TEST_LOG_FILENAME" -DCONSISTENT_DEBUG \
+          --stat --log-file "$YA_TEST_LOG" -DCONSISTENT_DEBUG \
           --no-dir-outputs --test-failure-code 0 --build-all \
-          --cache-size 2TB --force-build-depends --evlog-file "$TMP_DIR/ya_evlog.jsonl" \
-          --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR"; echo $? > exit_code) |& tee $TMP_DIR/ya_make.log
-        set -ex
+          --cache-size 2TB --force-build-depends --evlog-file "$PUBLIC_DIR/ya_evlog.jsonl" \
+          --junit "$JUNIT_REPORT_XML" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& tee $YA_MAKE_OUTPUT
+        set -e
         RC=`cat exit_code`
 
-        echo "10 [Ya make output]($LOG_URL)" >> $SUMMARY_LINKS
+        echo "10 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
         echo "20 [Ya logs]($YA_TEST_LOG_URL)" >> $SUMMARY_LINKS
 
         if [ $RC -ne 0 ]; then
@@ -300,7 +296,7 @@ runs:
           curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
             -d '{"state":"failure","description":"The check has been failed","context":"build_${{inputs.build_preset}}"}'
-          echo "Build failed. see the [logs]($LOG_URL)." | .github/scripts/tests/comment-pr.py --fail
+          echo "Build failed. see the [logs]($YA_MAKE_OUTPUT_URL)." | .github/scripts/tests/comment-pr.py --fail
         else
           curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
@@ -314,22 +310,18 @@ runs:
       run: |
         set -x
         # archive unitest reports (orig) 
-        gzip -c $JUNIT_REPORT_XML > $REPORTS_ARTIFACTS_DIR/orig_junit.xml.gz
+        gzip -c $JUNIT_REPORT_XML > $PUBLIC_DIR/orig_junit.xml.gz
 
         # postprocess junit report
         .github/scripts/tests/transform-ya-junit.py -i \
           -m .github/config/muted_ya.txt \
-          --ya-out "$OUT_DIR" \
-          --log-url-prefix "$S3_URL_PREFIX/logs/" \
+          --ya-out "$YA_MAKE_OUT_DIR" \
+          --log-url-prefix "$ARTIFACTS_DIR_URL/logs/" \
           --log-out-dir "$ARTIFACTS_DIR/logs/" \
           --test-stuff-out "$TEST_ARTIFACTS_DIR/" \
-          --test-stuff-prefix "$S3_TEST_ARTIFACTS_URL_PREFIX/" \
+          --test-stuff-prefix "$TEST_ARTIFACTS_DIR_URL/" \
           "$JUNIT_REPORT_XML"
-    
-        .github/scripts/tests/split-junit.py -o "$JUNIT_REPORT_PARTS" "$JUNIT_REPORT_XML"
-
-        # archive unitest reports (transformed)
-        tar -C $JUNIT_REPORT_PARTS/.. -czf $REPORTS_ARTIFACTS_DIR/junit_parts.xml.tar.gz $(basename $JUNIT_REPORT_PARTS)
+  
     
     - name: Test history upload results to YDB
       if: inputs.run_tests
@@ -360,6 +352,14 @@ runs:
         TESTMO_TOKEN: ${{ inputs.testman_token }}
       run: |
         set -x
+
+        # split large junit_report
+        export JUNIT_REPORT_PARTS=$TMP_DIR/junit-split
+        mkdir -p $JUNIT_REPORT_PARTS
+        .github/scripts/tests/split-junit.py -o "$JUNIT_REPORT_PARTS" "$JUNIT_REPORT_XML"
+        # archive unitest reports (transformed)
+        tar -C $JUNIT_REPORT_PARTS/.. -czf $PUBLIC_DIR/junit_parts.xml.tar.gz $(basename $JUNIT_REPORT_PARTS)
+
         PROXY_ADDR=127.0.0.1:8888
 
         openssl req -x509 -newkey rsa:2048 \
@@ -388,16 +388,6 @@ runs:
         TESTMO_TOKEN: ${{ inputs.testman_token }}
       run: |
         testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{ steps.th.outputs.runid }}
-
-    - name: sync logs results to s3
-      if: always()
-      shell: bash
-      run: |
-        set -x
-        echo "::group::s3-sync"
-        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$LOG_DIR/" "$S3_LOG_BUCKET_PATH/"
-        s3cmd sync --acl-public --no-progress --stats --no-check-md5 "$TMP_DIR/ya_make.log" "$S3_BUCKET_PATH/build_logs/"
-        echo "::endgroup::"
     
     - name: analyze tests results
       shell: bash
@@ -414,12 +404,10 @@ runs:
         fi
 
         mkdir $ARTIFACTS_DIR/summary/
-        
-        cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
 
         .github/scripts/tests/generate-summary.py \
           --summary-out-path $ARTIFACTS_DIR/summary/ \
-          --summary-url-prefix $S3_URL_PREFIX/summary/ \
+          --summary-url-prefix $ARTIFACTS_DIR_URL/summary/ \
           --test-history-url "$TEST_HISTORY_URL" \
           --test-log-url="$YA_TEST_LOG_URL" \
           --build-preset "$BUILD_PRESET" \
@@ -439,22 +427,24 @@ runs:
         if [[ $teststatus != "success" ]];then
           echo "status=failed" >> $GITHUB_OUTPUT
         fi
-
-    - name: sync test results to s3
-      if: always() && inputs.run_tests
-      shell: bash
-      run: |
-        set -x
-        echo "::group::s3-sync"
-        s3cmd sync -r --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$ARTIFACTS_DIR/" "$S3_BUCKET_PATH/"
-        s3cmd sync -r --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$TEST_ARTIFACTS_DIR/" "$S3_TEST_ARTIFACTS_BUCKET_PATH/"
-        echo "::endgroup::"
     
     - name: check test results
       if: inputs.run_tests
       shell: bash
       run: |
         .github/scripts/tests/fail-checker.py "$JUNIT_REPORT_XML"
+
+    - name: sync results to s3 and publish links
+      if: always()
+      shell: bash
+      run: |
+        set -x
+        echo "::group::s3-sync"
+        .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/"
+        echo "00 [Workflow run results](${S3_URL_PREFIX}/index.html)" >> $SUMMARY_LINKS
+        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"     
+        cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
+        echo "::endgroup::"
 
     - name: show free space
       if: always()

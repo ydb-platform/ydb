@@ -227,6 +227,9 @@ protected:
     std::unique_ptr<TEvPersQueue::TEvRequest> MakeGetOwnershipRequest(const TGetOwnershipRequestParams& params,
                                                                       const TActorId& pipe) const;
 
+    void TestEvTxCommitAfterRestart(ui64 mockTabletId,
+                                    TProposeTransactionParams&& params);
+
     //
     // TODO(abcdef): для тестирования повторных вызовов нужны примитивы Send+Wait
     //
@@ -1333,18 +1336,17 @@ Y_UNIT_TEST_F(ProposeTx_Command_After_Propose, TPQTabletFixture)
                      .Status=NMsgBusProxy::MSTATUS_ERROR});
 }
 
-Y_UNIT_TEST_F(TEvTxCommit_After_Restart, TPQTabletFixture)
+void TPQTabletFixture::TestEvTxCommitAfterRestart(ui64 mockTabletId,
+                                                  TProposeTransactionParams&& params)
 {
-    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(22222);
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
     PQTabletPrepare({.partitions=1}, {}, *Ctx);
 
     const ui64 txId = 67890;
 
-    SendProposeTransactionRequest({.TxId=txId,
-                                  .Senders={22222}, .Receivers={22222},
-                                  .TxOps={
-                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
-                                  }});
+    params.TxId = txId;
+
+    SendProposeTransactionRequest(params);
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
 
@@ -1360,7 +1362,18 @@ Y_UNIT_TEST_F(TEvTxCommit_After_Restart, TPQTabletFixture)
 
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
-    WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=22222, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
+
+    tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
+    WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=mockTabletId, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
+}
+
+Y_UNIT_TEST_F(Read_TEvTxCommit_After_Restart, TPQTabletFixture)
+{
+    TestEvTxCommitAfterRestart(22222,
+                               {.Senders={22222}, .Receivers={22222},
+                               .TxOps={
+                               {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                               }});
 }
 
 }

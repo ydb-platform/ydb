@@ -14,6 +14,8 @@
 
 #include <ydb/core/protos/console_config.pb.h>
 
+#include <ydb/library/actors/interconnect/interconnect.h>
+
 
 namespace NKikimr::NKqp {
 
@@ -34,7 +36,8 @@ class TKqpWorkloadService : public TActorBootstrapped<TKqpWorkloadService> {
 
     enum class EWakeUp {
         IdleCheck,
-        StartCpuLoadRequest
+        StartCpuLoadRequest,
+        StartNodeInfoRequest
     };
 
 public:
@@ -92,6 +95,13 @@ public:
         Send(ev->Sender, responseEvent.release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
     }
 
+    void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
+        NodeCount = ev->Get()->Nodes.size();
+        ScheduleNodeInfoRequest();
+
+        LOG_T("Updated node info, noode count: " << NodeCount);
+    }
+
     void Handle(TEvents::TEvUndelivered::TPtr& ev) const {
         switch (ev->Get()->SourceType) {
             case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
@@ -100,6 +110,11 @@ public:
 
             case NConsole::TEvConsole::EvConfigNotificationResponse:
                 LOG_E("Failed to deliver config notification response");
+                break;
+
+            case TEvInterconnect::EvListNodes:
+                LOG_W("Failed to deliver list nodes request");
+                ScheduleNodeInfoRequest();
                 break;
 
             default:
@@ -145,6 +160,10 @@ public:
             case EWakeUp::StartCpuLoadRequest:
                 RunCpuLoadRequest();
                 break;
+
+            case EWakeUp::StartNodeInfoRequest:
+                RunNodeInfoRequest();
+                break;
         }
     }
 
@@ -152,6 +171,7 @@ public:
         sFunc(TEvents::TEvPoison, HandlePoison);
         sFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleSetConfigSubscriptionResponse);
         hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+        hFunc(TEvInterconnect::TEvNodesInfo, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
 
         hFunc(TEvPlaceRequestIntoPool, Handle);
@@ -160,6 +180,7 @@ public:
 
         hFunc(TEvPrivate::TEvResolvePoolResponse, Handle);
         hFunc(TEvPrivate::TEvPlaceRequestIntoPoolResponse, Handle);
+        hFunc(TEvPrivate::TEvNodesInfoRequest, Handle);
         hFunc(TEvPrivate::TEvRefreshPoolState, Handle);
         hFunc(TEvPrivate::TEvCpuQuotaRequest, Handle);
         hFunc(TEvPrivate::TEvFinishRequestInPool, Handle);
@@ -212,6 +233,10 @@ private:
             poolState->UpdateHandler();
             poolState->StartPlaceRequest();
         }
+    }
+
+    void Handle(TEvPrivate::TEvNodesInfoRequest::TPtr& ev) const {
+        Send(ev->Sender, new TEvPrivate::TEvNodesInfoResponse(NodeCount));
     }
 
     void Handle(TEvPrivate::TEvRefreshPoolState::TPtr& ev) {
@@ -333,6 +358,7 @@ private:
 
         LOG_I("Started workload service initialization");
         Register(CreateCleanupTablesActor());
+        RunNodeInfoRequest();
     }
 
     void PrepareWorkloadServiceTables() {
@@ -420,6 +446,14 @@ private:
         Register(CreateCpuLoadFetcherActor(SelfId()));
     }
 
+    void ScheduleNodeInfoRequest() const {
+        Schedule(IDLE_DURATION * 2, new TEvents::TEvWakeup(static_cast<ui64>(EWakeUp::StartCpuLoadRequest)));
+    }
+
+    void RunNodeInfoRequest() const {
+        Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(), IEventHandle::FlagTrackDelivery);
+    }
+
 private:
     void ReplyContinueError(const TActorId& replyActorId, Ydb::StatusIds::StatusCode status, const TString& message) const {
         ReplyContinueError(replyActorId, status, {NYql::TIssue(message)});
@@ -494,6 +528,7 @@ private:
     std::unordered_set<TString> DatabasesWithDefaultPool;
     std::unordered_map<TString, TPoolState> PoolIdToState;
     std::unique_ptr<TCpuQuotaManagerState> CpuQuotaManager;
+    ui32 NodeCount = 0;
 
     NMonitoring::TDynamicCounters::TCounterPtr ActivePools;
 };

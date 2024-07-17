@@ -1,12 +1,13 @@
+#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
-#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -38,7 +39,7 @@ TString Exec(const TString& cmd) {
 
 TString GetExternalPort(const TString& service, const TString& port) {
     auto dockerComposeBin = BinaryPath("library/recipes/docker_compose/bin/docker-compose");
-    auto composeFileYml = ArcadiaSourceRoot() + "/ydb/core/external_sources/s3/ut/docker-compose.yml";
+    auto composeFileYml = ArcadiaFromCurrentLocation(__SOURCE_FILE__, "docker-compose.yml");
     auto result = StringSplitter(Exec(dockerComposeBin + " -f " + composeFileYml + " port " + service + " " + port)).Split(':').ToList<TString>();
     return result ? Strip(result.back()) : TString{};
 }
@@ -46,7 +47,8 @@ TString GetExternalPort(const TString& service, const TString& port) {
 Y_UNIT_TEST_SUITE(S3AwsCredentials) {
     Y_UNIT_TEST(ExecuteScriptWithEqSymbol) {
         const TString externalDataSourceName = "/Root/external_data_source";
-        auto kikimr = MakeKikimrRunner(true);
+        auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+        auto kikimr = MakeKikimrRunner(true, nullptr, nullptr, std::nullopt, s3ActorsFactory);
         auto tc = kikimr->GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();
         const TString query = fmt::format(R"(

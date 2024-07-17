@@ -33,6 +33,8 @@ struct TEvPrivate {
         EvCpuQuotaRequest,
         EvCpuQuotaResponse,
         EvCpuLoadResponse,
+        EvNodesInfoRequest,
+        EvNodesInfoResponse,
 
         EvTablesCreationFinished,
         EvCleanupTableResponse,
@@ -181,6 +183,17 @@ struct TEvPrivate {
         const double InstantLoad;
         const ui64 CpuNumber;
         const NYql::TIssues Issues;
+    };
+
+    struct TEvNodesInfoRequest : public NActors::TEventLocal<TEvNodesInfoRequest, EvNodesInfoRequest> {
+    };
+
+    struct TEvNodesInfoResponse : public NActors::TEventLocal<TEvNodesInfoResponse, EvNodesInfoResponse> {
+        explicit TEvNodesInfoResponse(ui32 nodeCount)
+            : NodeCount(nodeCount)
+        {}
+
+        const ui32 NodeCount;
     };
 
     // Tables queries events

@@ -797,8 +797,8 @@ Y_UNIT_TEST_F(Multiple_PQTablets, TPQTabletFixture)
     WaitProposeTransactionResponse({.TxId=txId_2,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
 
-    WaitReadSetAck(*tablet, {.Step=100, .TxId=txId_2, .Source=22222, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
     tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId_2, .Source=Ctx->TabletId});
+    WaitReadSetAck(*tablet, {.Step=100, .TxId=txId_2, .Source=22222, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
 
     //
     // TODO(abcdef): проверить, что удалена информация о транзакции
@@ -872,8 +872,8 @@ Y_UNIT_TEST_F(PQTablet_Send_RS_With_Abort, TPQTabletFixture)
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
 
-    WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=22222, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
     tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
+    WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=22222, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
 
     //
     // TODO(abcdef): проверить, что удалена информация о транзакции
@@ -911,8 +911,8 @@ Y_UNIT_TEST_F(Partition_Send_Predicate_With_False, TPQTabletFixture)
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
 
-    WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=22222, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
     tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
+    WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=22222, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
 
     //
     // TODO(abcdef): проверить, что удалена информация о транзакции

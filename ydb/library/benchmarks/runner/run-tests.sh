@@ -21,6 +21,7 @@ fi
 : ${tasks=${3:-1}}
 : ${script_path=${0%/*}}
 : ${ydb_path=$script_path/../../../..}
+: ${enable_spilling=--enable-spilling}
 if [ -w /proc/self/oom_score_adj ]; then
     # tests sometimes run into OOM; mark ourself as preferred victim
     echo 500 > /proc/self/oom_score_adj
@@ -105,13 +106,13 @@ command time ${script_path}/runner/runner $perf $runner_opts --query-dir ${ql}-$
 fi
 if false; then
 echo main NO LLVM && \
-command time ${script_path}/runner/runner $perf $runner_opts --query-dir ${qX}-${datasize}-$tasks/${variant} --bindings ${qX}-${datasize}-$tasks/${variant}/bindings.json --result-dir $outdir ${dq_path}/dqrun-unspilled --enable-spilling -s --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
+command time ${script_path}/runner/runner $perf $runner_opts --query-dir ${qX}-${datasize}-$tasks/${variant} --bindings ${qX}-${datasize}-$tasks/${variant}/bindings.json --result-dir $outdir ${dq_path}/dqrun-unspilled ${enable_spilling} -s --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
 (cd ${dq_path}; cat dqrun-unspilled.commit) > $outdir/${qX}-${datasize}-$tasks/${variant}/commit
 fi
 if [ -z "${skipllvm+set}" ]; then
 start="`cd ${dq_path} && git describe --always --dirty`"
 echo Spilling+LLVM && \
-command time ${script_path}/runner/runner $perf $runner_opts --query-dir ${qsL}-${datasize}-$tasks/${variant} --bindings ${qsL}-${datasize}-$tasks/${variant}/bindings.json --result-dir $outdir ${dq_path}/dqrun$dqsuffix -s --enable-spilling --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
+command time ${script_path}/runner/runner $perf $runner_opts --query-dir ${qsL}-${datasize}-$tasks/${variant} --bindings ${qsL}-${datasize}-$tasks/${variant}/bindings.json --result-dir $outdir ${dq_path}/dqrun$dqsuffix -s ${enable_spilling} --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
 (echo $start; cd ${dq_path} && git describe --always --dirty) > $outdir/${qsL}-${datasize}-$tasks/${variant}/commit
 if [ -z "${skipmain+set}" ]; then
 echo main+LLVM no enable spilling && \
@@ -122,7 +123,7 @@ fi
 if [ -z "${skipnollvm+set}" ]; then
 start="`cd ${dq_path} && git describe --always --dirty`"
 echo Spilling NO LLVM && \
-command time ${script_path}/runner/runner $perf $runner_opts --query-dir ${qs}-${datasize}-$tasks/${variant} --bindings ${qs}-${datasize}-$tasks/${variant}/bindings.json --result-dir $outdir ${dq_path}/dqrun$dqsuffix -s --enable-spilling --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
+command time ${script_path}/runner/runner $perf $runner_opts --query-dir ${qs}-${datasize}-$tasks/${variant} --bindings ${qs}-${datasize}-$tasks/${variant}/bindings.json --result-dir $outdir ${dq_path}/dqrun$dqsuffix -s ${enable_spilling} --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
 (echo $start; cd ${dq_path} && git describe --always --dirty) > $outdir/${qs}-${datasize}-$tasks/${variant}/commit
 if [ -z "${skipmain+set}" ]; then
 echo main NO LLVM no enable spilling && \

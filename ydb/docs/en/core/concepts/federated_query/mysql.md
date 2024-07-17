@@ -47,8 +47,7 @@ In the MySQL database, the optionality of column values (whether the column can 
 
 Below is a correspondence table between MySQL types and {{ ydb-short-name }} types. All other data types, except those listed, are not supported.
 
-
-|Тип данных MySQL|Тип данных {{ ydb-full-name }}|Примечания|
+| MySQL Data Type | {{ ydb-full-name }} Data Type | Notes |
 |---|----|------|
 |`bool`|`Optional<Bool>`||
 |`tinyint`|`Optional<Int8>`||

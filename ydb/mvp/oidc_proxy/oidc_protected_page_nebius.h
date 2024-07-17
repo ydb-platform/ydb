@@ -61,6 +61,7 @@ public:
 
     void HandleExchange(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
         if (!event->Get()->Response) {
+            LOG_DEBUG_S(ctx, EService::MVP, "Getting access token: Bad Request");
             NHttp::THeadersBuilder ResponseHeaders;
             ResponseHeaders.Set("Content-Type", "text/plain");
             NHttp::THttpOutgoingResponsePtr httpResponse = Request->CreateResponse("400", "Bad Request", ResponseHeaders, event->Get()->Error);
@@ -68,10 +69,8 @@ public:
             Die(ctx);
         } else {
             NHttp::THttpIncomingResponsePtr response = event->Get()->Response;
-            LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Incoming response for getting access token: " << response->Status);
+            LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Getting access token: " << response->Status);
             if (response->Status.StartsWith("2")) {
-                LOG_DEBUG_S(ctx, EService::MVP, "SessionService.Check(): OK");
-
                 TString iamToken;
                 static NJson::TJsonReaderConfig JsonConfig;
                 NJson::TJsonValue requestData;

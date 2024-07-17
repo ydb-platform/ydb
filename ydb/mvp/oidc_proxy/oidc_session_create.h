@@ -168,8 +168,8 @@ public:
                 if (NJson::ReadJsonTree(response->Body, &jsonConfig, &jsonValue)) {
                     const NJson::TJsonValue* jsonAccessToken;
                     if (jsonValue.GetValuePointer("access_token", &jsonAccessToken)) {
-                        TString accessToken = jsonAccessToken->GetStringRobust();
-                        ProcessSessionToken(accessToken, ctx);
+                        TString sessionToken = jsonAccessToken->GetStringRobust();
+                        ProcessSessionToken(sessionToken, ctx);
                         return;
                     } else {
                         jsonError = "Wrong OIDC provider response: access_token not found";

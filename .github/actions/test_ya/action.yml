@@ -165,7 +165,7 @@ runs:
             EXTRA_TAG=""
             ;;
         esac
-        export TESTMO_RUN_NAME
+        echo "TESTMO_RUN_NAME=$TESTMO_RUN_NAME" >> $GITHUB_ENV 
         testmo automation:resources:add-link --name build --url "$RUN_URL" --resources testmo.json
         testmo automation:resources:add-field --name git-sha --type string --value "${GITHUB_SHA:0:7}" --resources testmo.json
         RUN_ID=$(

@@ -7,7 +7,7 @@
     ```sql
     CREATE OBJECT mysql_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
     ```
-1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий определённую базу данных в составе кластера MySQL. Параметр `LOCATION` содержит сетевой адрес экземпляра MySQL, к которому осуществляется сетевое подключение. В `DATABASE_NAME` указывается имя базы данных (например, `mysql`). Для аутентификации во внешнюю базу используются значения параметров `LOGIN` и `PASSWORD_SECRET_NAME`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`. 
+1. Создайте [внешний источник данных](../datamodel/external_data_source.md), описывающий определённую MySQL базу данных. Параметр `LOCATION` содержит сетевой адрес экземпляра MySQL, к которому осуществляется подключение. В `DATABASE_NAME` указывается имя базы данных (например, `mysql`). Для аутентификации во внешнюю базу используются значения параметров `LOGIN` и `PASSWORD_SECRET_NAME`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`.
     ```sql
     CREATE EXTERNAL DATA SOURCE mysql_datasource WITH (
         SOURCE_TYPE="MySQL",

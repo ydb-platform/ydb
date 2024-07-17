@@ -4,7 +4,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
-namespace NKikimr::NOlap::NIndexes {
+namespace NKikimr::NOlap::NIndexes::NCountMinSketch {
 
 void TCountMinSketchChecker::DoSerializeToProtoImpl(NKikimrSSA::TProgram::TOlapIndexChecker& proto) const {
     Y_ABORT("Unimplemented");  // unimplemented, should not be used

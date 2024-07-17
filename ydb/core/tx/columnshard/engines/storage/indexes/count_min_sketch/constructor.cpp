@@ -3,7 +3,7 @@
 
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
-namespace NKikimr::NOlap::NIndexes {
+namespace NKikimr::NOlap::NIndexes::NCountMinSketch {
 
 std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TCountMinSketchConstructor::DoCreateIndexMeta(const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
     std::set<ui32> columnIds;
@@ -15,7 +15,7 @@ std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TCountMinSketchConstructor
         }
         AFL_VERIFY(columnIds.emplace(columnInfo->GetId()).second);
     }
-    return std::make_shared<TCountMinSketchIndexMeta>(indexId, indexName, columnIds, Width, Depth);
+    return std::make_shared<TIndexMeta>(indexId, indexName, columnIds);
 }
 
 NKikimr::TConclusionStatus TCountMinSketchConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
@@ -32,17 +32,6 @@ NKikimr::TConclusionStatus TCountMinSketchConstructor::DoDeserializeFromJson(con
         }
         ColumnNames.emplace(i.GetString());
     }
-    if (!jsonInfo["width"].IsUInteger()) {
-        return TConclusionStatus::Fail("width have to be in count min sketch features as unsigned integer field");
-    }
-    if (!jsonInfo["depth"].IsUInteger()) {
-        return TConclusionStatus::Fail("depth have to be in count min sketch features as unsigned integer field");
-    }
-    Width = jsonInfo["width"].GetUInteger();
-    Depth = jsonInfo["depth"].GetUInteger();
-    if (Width == 0 || Depth == 0) {
-        return TConclusionStatus::Fail("width and depth have to be positive in count min sketch features");
-    }
     return TConclusionStatus::Success();
 }
 
@@ -53,18 +42,6 @@ NKikimr::TConclusionStatus TCountMinSketchConstructor::DoDeserializeFromProto(co
         return TConclusionStatus::Fail(errorMessage);
     }
     auto& sketch = proto.GetCountMinSketch();
-    Width = sketch.GetWidth();
-    if (Width == 0) {
-        const TString errorMessage = "Width have to be positive";
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", errorMessage);
-        return TConclusionStatus::Fail(errorMessage);
-    }
-    Depth = sketch.GetWidth();
-    if (Depth == 0) {
-        const TString errorMessage = "Depth have to be positive";
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", errorMessage);
-        return TConclusionStatus::Fail(errorMessage);
-    }
     for (auto&& i : sketch.GetColumnNames()) {
         ColumnNames.emplace(i);
     }
@@ -73,8 +50,6 @@ NKikimr::TConclusionStatus TCountMinSketchConstructor::DoDeserializeFromProto(co
 
 void TCountMinSketchConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const {
     auto* sketchProto = proto.MutableCountMinSketch();
-    sketchProto->SetWidth(Width);
-    sketchProto->SetDepth(Depth);
     for (auto&& i : ColumnNames) {
         sketchProto->AddColumnNames(i);
     }

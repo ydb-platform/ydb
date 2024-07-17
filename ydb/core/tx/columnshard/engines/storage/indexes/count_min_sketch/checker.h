@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/simple.h>
 
-namespace NKikimr::NOlap::NIndexes {
+namespace NKikimr::NOlap::NIndexes::NCountMinSketch {
 
 class TCountMinSketchChecker: public TSimpleIndexChecker {
 public:

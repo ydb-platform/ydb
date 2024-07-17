@@ -134,11 +134,11 @@ class YdbCluster:
                 if uptime < 15:
                     LOGGER.error(f'Node {name} too yong: {uptime}')
                     return False
-#                if 'MemoryUsed' in ss and 'MemoryLimit' in ss:
-#                    used = int(ss['MemoryUsed'])
-#                    limit = int(ss['MemoryLimit'])
-#                    if used > 0.9 * limit:
-#                        LOGGER.error(f'Node {name} use too many rss: {used} from {limit}')
+                if 'MemoryUsed' in ss and 'MemoryLimit' in ss:
+                    used = int(ss['MemoryUsed'])
+                    limit = int(ss['MemoryLimit'])
+                    if used > 0.9 * limit:
+                        LOGGER.error(f'Node {name} use too many rss: {used} from {limit}')
             cls.execute_single_result_query("select 1", timeout)
             return True
         except BaseException as ex:

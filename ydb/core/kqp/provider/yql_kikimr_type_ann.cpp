@@ -1589,13 +1589,6 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             return TStatus::Error;
         }
 
-        TString valueType = TString(node.ValueType());
-        if (valueType != "Null" && valueType != "int8" && valueType != "int4" && valueType != "int2") {
-            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                << "Unsupported value type for sequence: " << valueType));
-            return TStatus::Error;
-        }
-
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }
@@ -1608,6 +1601,13 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         if (!node.Settings().Empty()) {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
                 << "Unsupported sequence settings"));
+            return TStatus::Error;
+        }
+
+        TString valueType = TString(node.ValueType());
+        if (valueType != "Null" && valueType != "int8" && valueType != "int4" && valueType != "int2") {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                << "Unsupported value type for sequence: " << valueType));
             return TStatus::Error;
         }
 

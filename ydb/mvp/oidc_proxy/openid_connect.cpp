@@ -25,17 +25,18 @@ struct TRedirectUrlParameters {
     TStringBuf Scheme;
     TStringBuf Host;
     NMVP::EAuthProfile AuthProfile;
+    TStringBuf AuthEndpoint;
 };
 
-bool TryAppendAuthEndpointFromDetailsYProfile(const TRedirectUrlParameters& parameters, TStringBuilder& locationHeaderValue) {
-    if (parameters.AuthProfile != NMVP::EAuthProfile::YProfile) {
+bool TryAppendAuthEndpointFromDetailsYandexProfile(const TRedirectUrlParameters& parameters, TStringBuilder& locationHeaderValue) {
+    if (parameters.AuthProfile != NMVP::EAuthProfile::Yandex) {
         return false;
     }
     const auto& eventDetails = parameters.SessionServerCheckDetails;
-    size_t posAuthUrl = eventDetails.find(TOpenIdConnectSettings::AUTH_REQUEST_Y);
+    size_t posAuthUrl = eventDetails.find(parameters.AuthEndpoint);
     if (posAuthUrl != TStringBuf::npos) {
         size_t pos = eventDetails.rfind("https://", posAuthUrl);
-        locationHeaderValue << eventDetails.substr(pos, posAuthUrl - pos) + TOpenIdConnectSettings::AUTH_REQUEST_Y;
+        locationHeaderValue << eventDetails.substr(pos, posAuthUrl - pos) << parameters.AuthEndpoint;
         return true;
     }
     return false;
@@ -43,8 +44,8 @@ bool TryAppendAuthEndpointFromDetailsYProfile(const TRedirectUrlParameters& para
 
 TString CreateRedirectUrl(const TRedirectUrlParameters& parameters) {
     TStringBuilder locationHeaderValue;
-    if (!TryAppendAuthEndpointFromDetailsYProfile(parameters, locationHeaderValue)) {
-        locationHeaderValue << parameters.OidcSettings.GetAuthEndpoint();
+    if (!TryAppendAuthEndpointFromDetailsYandexProfile(parameters, locationHeaderValue)) {
+        locationHeaderValue << parameters.OidcSettings.GetAuthEndpointURL();
     }
     locationHeaderValue << "?response_type=code"
                         << "&scope=openid"
@@ -123,7 +124,8 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(TStringBuf eventDetai
                                                     .State = state,
                                                     .Scheme = (request->Endpoint->Secure ? "https://" : "http://"),
                                                     .Host = request->Host,
-                                                    .AuthProfile = settings.AuthProfile});
+                                                    .AuthProfile = settings.AuthProfile,
+                                                    .AuthEndpoint = settings.AuthEndpoint});
     const size_t cookieMaxAgeSec = 420;
     TStringBuilder setCookieBuilder;
     setCookieBuilder << CreateNameYdbOidcCookie(settings.ClientSecret, state) << "=" << GenerateCookie(state, GetRequestedUrl(request, isAjaxRequest), settings.ClientSecret, isAjaxRequest)

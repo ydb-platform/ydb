@@ -14,36 +14,37 @@ struct TOpenIdConnectSettings {
     static const inline TString YDB_OIDC_COOKIE = "ydb_oidc_cookie";
     static const inline TString SESSION_COOKIE = "session_cookie";
 
-    static const inline TString AUTH_REQUEST_Y = "/oauth/authorize";
-    static const inline TString AUTH_REQUEST_N = "/oauth2/authorize";
-    static const inline TString TOKEN_REQUEST_Y = "/oauth/token";
-    static const inline TString TOKEN_REQUEST_N = "/oauth2/token";
-    static const inline TString EXCHANGE_REQUEST = "/oauth2/session/exchange";
+    static const inline TString DEFAULT_CLIENT_ID = "yc.oauth.ydb-viewer";
+    static const inline TString DEFAULT_AUTH_ENDPOINT = "/oauth/authorize";
+    static const inline TString DEFAULT_TOKEN_ENDPOINT = "/oauth/token";
+    static const inline TString DEFAULT_EXCHANGE_ENDPOINT = "/oauth2/session/exchange";
 
-    TString ClientId;
+    TString ClientId = DEFAULT_CLIENT_ID;
     TString SessionServiceEndpoint;
     TString SessionServiceTokenName;
     TString AuthorizationServerAddress;
     TString ClientSecret;
     std::vector<TString> AllowedProxyHosts;
-    NMVP::EAuthProfile AuthProfile = NMVP::EAuthProfile::YProfile;
+
+    NMVP::EAuthProfile AuthProfile = NMVP::EAuthProfile::Yandex;
+    TString AuthEndpoint = DEFAULT_AUTH_ENDPOINT;
+    TString TokenEndpoint = DEFAULT_TOKEN_ENDPOINT;
+    TString ExchangeEndpoint = DEFAULT_EXCHANGE_ENDPOINT;
 
     TString GetAuthorizationString() const {
         return Base64Encode(ClientId + ":" + ClientSecret);
     }
 
-    TString GetAuthEndpoint() const {
-        return AuthorizationServerAddress +
-            (AuthProfile == NMVP::EAuthProfile::YProfile ? AUTH_REQUEST_Y : AUTH_REQUEST_N);
+    TString GetAuthEndpointURL() const {
+        return AuthorizationServerAddress + AuthEndpoint;
     }
 
-    TString GetTokenEndpoint() const {
-        return AuthorizationServerAddress +
-            (AuthProfile == NMVP::EAuthProfile::YProfile ? TOKEN_REQUEST_Y : TOKEN_REQUEST_N);
+    TString GetTokenEndpointURL() const {
+        return AuthorizationServerAddress + TokenEndpoint;
     }
 
-    TString GetExchangeEndpoint() const {
-        return AuthorizationServerAddress + EXCHANGE_REQUEST;
+    TString GetExchangeEndpointURL() const {
+        return AuthorizationServerAddress + ExchangeEndpoint;
     }
 };
 

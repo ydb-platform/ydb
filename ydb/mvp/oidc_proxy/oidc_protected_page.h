@@ -18,14 +18,12 @@
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/core/util/wildcard.h>
 #include "openid_connect.h"
-#include "oidc_protected_page_n.h"
 
 namespace NMVP {
 
 class THandlerSessionServiceCheck : public NActors::TActorBootstrapped<THandlerSessionServiceCheck> {
-private:
+protected:
     using TBase = NActors::TActorBootstrapped<THandlerSessionServiceCheck>;
-    using TSessionService = yandex::cloud::priv::oauth::v1::SessionService;
 
     const NActors::TActorId Sender;
     const NHttp::THttpIncomingRequestPtr Request;
@@ -51,7 +49,9 @@ public:
         , ProtectedPageUrl(Request->URL.SubStr(1))
         {}
 
-    void Bootstrap(const NActors::TActorContext& ctx) {
+
+    virtual void Bootstrap(const NActors::TActorContext& ctx) {
+        Cerr << "iii Bootstrap" << Endl;
         if (!CheckRequestedHost()) {
             ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponseNotFound(NOT_FOUND_HTML_PAGE, "text/html")));
             Die(ctx);
@@ -61,13 +61,11 @@ public:
         TStringBuf authHeader = headers.Get(AUTH_HEADER_NAME);
         if (Request->Method == "OPTIONS" || IsAuthorizedRequest(authHeader)) {
             LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Forward request bypass OIDC");
-            ForwardRequest(TString(authHeader), ctx);
+            ForwardUserRequest(TString(authHeader), ctx);
         } else {
             LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Start OIDC process");
-            StartOidcProcess(headers, ctx);
+            StartOidcProcess(ctx);
         }
-
-        Become(&THandlerSessionServiceCheck::StateWork);
     }
 
     void Handle(TEvPrivate::TEvCheckSessionResponse::TPtr event, const NActors::TActorContext& ctx) {
@@ -75,7 +73,7 @@ public:
         auto response = event->Get()->Response;
         const auto& iamToken = response.Getiam_token();
         const TString authHeader = IAM_TOKEN_SCHEME + iamToken.Getiam_token();
-        ForwardRequest(authHeader, ctx);
+        ForwardUserRequest(authHeader, ctx);
     }
 
     void Handle(TEvPrivate::TEvErrorResponse::TPtr event, const NActors::TActorContext& ctx) {
@@ -99,7 +97,7 @@ public:
                 if (!request->Secure) {
                     LOG_DEBUG_S(ctx, EService::MVP, "Try to send request to HTTPS port");
                     NHttp::THeadersBuilder headers {request->Headers};
-                    ForwardRequest(headers.Get(AUTH_HEADER_NAME), ctx, true);
+                    ForwardUserRequest(headers.Get(AUTH_HEADER_NAME), ctx, true);
                     return;
                 }
             }
@@ -126,7 +124,7 @@ public:
         }
     }
 
-private:
+protected:
     bool CheckRequestedHost() {
         size_t pos = ProtectedPageUrl.find('/');
         if (pos == TString::npos) {
@@ -153,39 +151,37 @@ private:
         return authHeader.StartsWith(IAM_TOKEN_SCHEME);
     }
 
-    void StartOidcProcess(const NHttp::THeaders& headers, const NActors::TActorContext& ctx) {
-        TStringBuf cookie = headers.Get("cookie");
-        IsAjaxRequest = DetectAjaxRequest(headers);
-        yandex::cloud::priv::oauth::v1::CheckSessionRequest request;
-        request.Setcookie_header(TString(cookie));
+    virtual void StartOidcProcess(const NActors::TActorContext& ctx) = 0;
 
-        std::unique_ptr<NYdbGrpc::TServiceConnection<TSessionService>> connection = CreateGRpcServiceConnection<TSessionService>(Settings.SessionServiceEndpoint);
-
-        NActors::TActorSystem* actorSystem = ctx.ActorSystem();
-        NActors::TActorId actorId = ctx.SelfID;
-        NYdbGrpc::TResponseCallback<yandex::cloud::priv::oauth::v1::CheckSessionResponse> responseCb =
-            [actorId, actorSystem](NYdbGrpc::TGrpcStatus&& status, yandex::cloud::priv::oauth::v1::CheckSessionResponse&& response) -> void {
-            if (status.Ok()) {
-                actorSystem->Send(actorId, new TEvPrivate::TEvCheckSessionResponse(std::move(response)));
+    TString GetProtectedPageUrlWithPort(bool secure) {
+        TString addressPart;
+        TIpPort portPart = 0;
+        TStringBuf scheme, host, uri;
+        NHttp::CrackURL(ProtectedPageUrl, scheme, host, uri);
+        NHttp::CrackAddress(TString(host), addressPart, portPart);
+        if (portPart == 0) {
+            if (scheme == "http") {
+                portPart = 80;
+            } else if (scheme == "https") {
+                portPart = 443;
             } else {
-                actorSystem->Send(actorId, new TEvPrivate::TEvErrorResponse(status));
+                portPart = secure ? 443 : 80;
             }
-        };
-
-        NMVP::TMvpTokenator* tokenator = MVPAppData()->Tokenator;
-        TString token = "";
-        if (tokenator) {
-            token = tokenator->GetToken(Settings.SessionServiceTokenName);
         }
-        NYdbGrpc::TCallMeta meta;
-        SetHeader(meta, "authorization", token);
-        meta.Timeout = TDuration::Seconds(10);
-        connection->DoRequest(request, std::move(responseCb), &yandex::cloud::priv::oauth::v1::SessionService::Stub::AsyncCheck, meta);
-
+        TStringBuilder sb;
+        if (!scheme.empty()) {
+            sb << scheme << "://";
+        }
+        sb << addressPart << ":" << portPart;
+        if (!uri.empty()) {
+            sb << uri;
+        }
+        return sb;
     }
 
-    void ForwardRequest(TStringBuf authHeader, const NActors::TActorContext& ctx, bool secure = false) {
-        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequest(Request->Method, ProtectedPageUrl);
+    virtual void ForwardUserRequest(TStringBuf authHeader, const NActors::TActorContext& ctx, bool secure = false) {
+        LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Forward user request");
+        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequest(Request->Method, GetProtectedPageUrlWithPort(secure));
         ForwardRequestHeaders(httpRequest);
         if (!authHeader.empty()) {
             httpRequest->Set(AUTH_HEADER_NAME, authHeader);
@@ -272,37 +268,6 @@ private:
             }
         }
         return resultHeaders;
-    }
-};
-
-class TProtectedPageHandler : public NActors::TActor<TProtectedPageHandler> {
-    using TBase = NActors::TActor<TProtectedPageHandler>;
-
-    NActors::TActorId HttpProxyId;
-    const TOpenIdConnectSettings Settings;
-
-public:
-    TProtectedPageHandler(const NActors::TActorId& httpProxyId, const TOpenIdConnectSettings& settings)
-        : TBase(&TProtectedPageHandler::StateWork)
-        , HttpProxyId(httpProxyId)
-        , Settings(settings)
-    {}
-
-    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx) {
-        switch (Settings.AuthProfile) {
-            case NMVP::EAuthProfile::YProfile:
-                ctx.Register(new THandlerSessionServiceCheck(event->Sender, event->Get()->Request, HttpProxyId, Settings));
-                break;
-            case NMVP::EAuthProfile::NProfile:
-                ctx.Register(new THandlerSessionServiceCheckN(event->Sender, event->Get()->Request, HttpProxyId, Settings));
-                break;
-        }
-    }
-
-    STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
-        }
     }
 };
 

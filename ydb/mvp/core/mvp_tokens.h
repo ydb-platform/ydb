@@ -19,15 +19,15 @@
 namespace NMVP {
 
 enum EAuthProfile {
-    YProfile = 1,
-    NProfile = 2
+    Yandex = 1,
+    Nebius = 2
 };
 
 class TMvpTokenator : public NActors::TActorBootstrapped<TMvpTokenator> {
 public:
     using TBase = NActors::TActorBootstrapped<TMvpTokenator>;
 
-    static TMvpTokenator* CreateTokenator(const NMvp::TTokensConfig& tokensConfig, const NActors::TActorId& httpProxy, const NMVP::EAuthProfile authProfile = NMVP::EAuthProfile::YProfile);
+    static TMvpTokenator* CreateTokenator(const NMvp::TTokensConfig& tokensConfig, const NActors::TActorId& httpProxy, const NMVP::EAuthProfile authProfile = NMVP::EAuthProfile::Yandex);
     TString GetToken(const TString& name);
 
 protected:
@@ -40,9 +40,9 @@ protected:
     struct TEvPrivate {
         enum EEv {
             EvRefreshToken = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-            EvUpdateIamToken,
+            EvUpdateIamTokenYandex,
             EvUpdateStaticCredentialsToken,
-            EvUpdateIamTokenN,
+            EvUpdateIamTokenNebius,
             EvEnd
         };
 
@@ -71,8 +71,8 @@ protected:
             {}
         };
 
-        using TEvUpdateIamToken = TEvUpdateToken<EvUpdateIamToken, yandex::cloud::priv::iam::v1::CreateIamTokenResponse>;
-        using TEvUpdateIamTokenN = TEvUpdateToken<EvUpdateIamTokenN, nebius::iam::v1::CreateTokenResponse>;
+        using TEvUpdateIamTokenYandex = TEvUpdateToken<EvUpdateIamTokenYandex, yandex::cloud::priv::iam::v1::CreateIamTokenResponse>;
+        using TEvUpdateIamTokenNebius = TEvUpdateToken<EvUpdateIamTokenNebius, nebius::iam::v1::CreateTokenResponse>;
         using TEvUpdateStaticCredentialsToken = TEvUpdateToken<EvUpdateStaticCredentialsToken, Ydb::Auth::LoginResponse>;
     };
 
@@ -80,16 +80,16 @@ protected:
     void Bootstrap();
     void HandlePeriodic();
     void Handle(TEvPrivate::TEvRefreshToken::TPtr event);
-    void Handle(TEvPrivate::TEvUpdateIamToken::TPtr event);
-    void Handle(TEvPrivate::TEvUpdateIamTokenN::TPtr event);
+    void Handle(TEvPrivate::TEvUpdateIamTokenYandex::TPtr event);
+    void Handle(TEvPrivate::TEvUpdateIamTokenNebius::TPtr event);
     void Handle(TEvPrivate::TEvUpdateStaticCredentialsToken::TPtr event);
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event);
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvRefreshToken, Handle);
-            hFunc(TEvPrivate::TEvUpdateIamToken, Handle);
-            hFunc(TEvPrivate::TEvUpdateIamTokenN, Handle);
+            hFunc(TEvPrivate::TEvUpdateIamTokenYandex, Handle);
+            hFunc(TEvPrivate::TEvUpdateIamTokenNebius, Handle);
             hFunc(TEvPrivate::TEvUpdateStaticCredentialsToken, Handle);
             hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
             cFunc(NActors::TEvents::TSystem::Wakeup, HandlePeriodic);
@@ -163,8 +163,8 @@ protected:
     }
 
     void UpdateMetadataToken(const NMvp::TMetadataTokenInfo* metadataTokenInfo);
-    void UpdateJwtTokenY(const NMvp::TJwtInfo* iwtInfo);
-    void UpdateJwtTokenN(const NMvp::TJwtInfo* iwtInfo);
+    void UpdateJwtTokenYandex(const NMvp::TJwtInfo* iwtInfo);
+    void UpdateJwtTokenNebius(const NMvp::TJwtInfo* iwtInfo);
     void UpdateOAuthToken(const NMvp::TOAuthInfo* oauthInfo);
     void UpdateStaticCredentialsToken(const NMvp::TStaticCredentialsInfo* staticCredentialsInfo);
     void UpdateStaffApiUserToken(const NMvp::TStaffApiUserTokenInfo* staffApiUserTokenInfo);

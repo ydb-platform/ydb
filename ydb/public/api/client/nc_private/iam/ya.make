@@ -8,8 +8,4 @@ SRCS(
     token_exchange_service.proto
 )
 
-USE_COMMON_GOOGLE_APIS(
-    api/annotations
-)
-
 END()

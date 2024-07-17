@@ -77,11 +77,11 @@ void TMvpTokenator::Handle(TEvPrivate::TEvRefreshToken::TPtr event) {
     const NMvp::TJwtInfo* jwtInfo = TokenConfigs.GetJwtTokenConfig(name);
     if (jwtInfo != nullptr) {
         switch (AuthProfile) {
-            case NMVP::EAuthProfile::YProfile:
-                UpdateJwtTokenY(jwtInfo);
+            case NMVP::EAuthProfile::Yandex:
+                UpdateJwtTokenYandex(jwtInfo);
                 break;
-            case NMVP::EAuthProfile::NProfile:
-                UpdateJwtTokenN(jwtInfo);
+            case NMVP::EAuthProfile::Nebius:
+                UpdateJwtTokenNebius(jwtInfo);
                 break;
         }
         return;
@@ -104,7 +104,7 @@ void TMvpTokenator::Handle(TEvPrivate::TEvRefreshToken::TPtr event) {
     BLOG_ERROR("Token " << name << " not found");
 }
 
-void TMvpTokenator::Handle(TEvPrivate::TEvUpdateIamToken::TPtr event) {
+void TMvpTokenator::Handle(TEvPrivate::TEvUpdateIamTokenYandex::TPtr event) {
     TDuration refreshPeriod = SUCCESS_REFRESH_PERIOD;
     if (event->Get()->Status.Ok()) {
         BLOG_D("Updating token " << event->Get()->Name << " to " << event->Get()->Response.subject());
@@ -119,7 +119,7 @@ void TMvpTokenator::Handle(TEvPrivate::TEvUpdateIamToken::TPtr event) {
     RefreshQueue.push({TInstant::Now() + refreshPeriod, event->Get()->Name});
 }
 
-void TMvpTokenator::Handle(TEvPrivate::TEvUpdateIamTokenN::TPtr event) {
+void TMvpTokenator::Handle(TEvPrivate::TEvUpdateIamTokenNebius::TPtr event) {
     TDuration refreshPeriod = SUCCESS_REFRESH_PERIOD;
     if (event->Get()->Status.Ok()) {
         BLOG_D("Updating token " << event->Get()->Name << " to " << event->Get()->Subject);
@@ -245,11 +245,11 @@ void TMvpTokenator::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr ev
     HttpRequestNames.erase(httpRequstsIt);
 }
 
-void TMvpTokenator::UpdateJwtTokenY(const NMvp::TJwtInfo* jwtInfo) {
+void TMvpTokenator::UpdateJwtTokenYandex(const NMvp::TJwtInfo* jwtInfo) {
     auto now = std::chrono::system_clock::now();
-    auto expires_at = now + std::chrono::hours(1);
-    auto serviceAccountId = jwtInfo->accountid();
-    auto keyId = jwtInfo->keyid();
+    auto expiresAt = now + std::chrono::hours(1);
+    const auto& serviceAccountId = jwtInfo->accountid();
+    const auto& keyId = jwtInfo->keyid();
     std::set<std::string> audience;
     audience.insert(jwtInfo->audience());
     auto algorithm = jwt::algorithm::ps256(jwtInfo->publickey(), jwtInfo->privatekey());
@@ -259,7 +259,7 @@ void TMvpTokenator::UpdateJwtTokenY(const NMvp::TJwtInfo* jwtInfo) {
             .set_issuer(serviceAccountId)
             .set_audience(audience)
             .set_issued_at(now)
-            .set_expires_at(expires_at)
+            .set_expires_at(expiresAt)
             .sign(algorithm);
 
     yandex::cloud::priv::iam::v1::CreateIamTokenRequest request;
@@ -267,25 +267,22 @@ void TMvpTokenator::UpdateJwtTokenY(const NMvp::TJwtInfo* jwtInfo) {
     RequestCreateToken<yandex::cloud::priv::iam::v1::IamTokenService,
                        yandex::cloud::priv::iam::v1::CreateIamTokenRequest,
                        yandex::cloud::priv::iam::v1::CreateIamTokenResponse,
-                       TEvPrivate::TEvUpdateIamToken>(jwtInfo->name(), jwtInfo->endpoint(), request, &yandex::cloud::priv::iam::v1::IamTokenService::Stub::AsyncCreate);
+                       TEvPrivate::TEvUpdateIamTokenYandex>(jwtInfo->name(), jwtInfo->endpoint(), request, &yandex::cloud::priv::iam::v1::IamTokenService::Stub::AsyncCreate);
 }
 
-void TMvpTokenator::UpdateJwtTokenN(const NMvp::TJwtInfo* jwtInfo) {
+void TMvpTokenator::UpdateJwtTokenNebius(const NMvp::TJwtInfo* jwtInfo) {
     auto now = std::chrono::system_clock::now();
-    auto expires_at = now + std::chrono::hours(1);
-    auto serviceAccountId = jwtInfo->accountid();
-    auto keyId = jwtInfo->keyid();
-    std::set<std::string> audience;
-    audience.insert(jwtInfo->audience());
+    auto expiresAt = now + std::chrono::hours(1);
+    const auto& serviceAccountId = jwtInfo->accountid();
+    const auto& keyId = jwtInfo->keyid();
     auto algorithm = jwt::algorithm::rs256(jwtInfo->publickey(), jwtInfo->privatekey());
 
     auto encoded_token = jwt::create()
             .set_key_id(keyId)
             .set_issuer(serviceAccountId)
             .set_subject(serviceAccountId)
-            .set_audience(audience)
             .set_issued_at(now)
-            .set_expires_at(expires_at)
+            .set_expires_at(expiresAt)
             .sign(algorithm);
 
     nebius::iam::v1::ExchangeTokenRequest request;
@@ -293,12 +290,11 @@ void TMvpTokenator::UpdateJwtTokenN(const NMvp::TJwtInfo* jwtInfo) {
     request.set_requested_token_type("urn:ietf:params:oauth:token-type:access_token");
     request.set_subject_token_type("urn:ietf:params:oauth:token-type:jwt");
     request.set_subject_token(TString(encoded_token));
-    request.set_audience("mvp-oidc-testing");
 
     RequestCreateToken<nebius::iam::v1::TokenExchangeService,
                        nebius::iam::v1::ExchangeTokenRequest,
                        nebius::iam::v1::CreateTokenResponse,
-                       TEvPrivate::TEvUpdateIamTokenN>(jwtInfo->name(), jwtInfo->endpoint(), request, &nebius::iam::v1::TokenExchangeService::Stub::AsyncExchange, serviceAccountId);
+                       TEvPrivate::TEvUpdateIamTokenNebius>(jwtInfo->name(), jwtInfo->endpoint(), request, &nebius::iam::v1::TokenExchangeService::Stub::AsyncExchange, serviceAccountId);
 }
 
 void TMvpTokenator::UpdateOAuthToken(const NMvp::TOAuthInfo* oauthInfo) {
@@ -307,7 +303,7 @@ void TMvpTokenator::UpdateOAuthToken(const NMvp::TOAuthInfo* oauthInfo) {
     RequestCreateToken<yandex::cloud::priv::iam::v1::IamTokenService,
                        yandex::cloud::priv::iam::v1::CreateIamTokenRequest,
                        yandex::cloud::priv::iam::v1::CreateIamTokenResponse,
-                       TEvPrivate::TEvUpdateIamToken>(oauthInfo->name(), oauthInfo->endpoint(), request, &yandex::cloud::priv::iam::v1::IamTokenService::Stub::AsyncCreate);
+                       TEvPrivate::TEvUpdateIamTokenYandex>(oauthInfo->name(), oauthInfo->endpoint(), request, &yandex::cloud::priv::iam::v1::IamTokenService::Stub::AsyncCreate);
 }
 
 }

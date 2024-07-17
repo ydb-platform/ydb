@@ -7,8 +7,8 @@
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/mvp/core/mvp_test_runtime.h>
 #include "oidc_protected_page.h"
-#include "oidc_session_create.h"
-#include "oidc_session_create_n.h"
+#include "oidc_protected_page_handler.h"
+#include "oidc_session_create_handler.h"
 
 namespace {
 
@@ -61,12 +61,12 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Body, "this is test.");
     }
 
-    Y_UNIT_TEST(OpenIdConnectRequestWithIamTokenY) {
-        OpenIdConnectRequestWithIamTokenTest(NMVP::EAuthProfile::YProfile);
+    Y_UNIT_TEST(OpenIdConnectRequestWithIamTokenYandex) {
+        OpenIdConnectRequestWithIamTokenTest(NMVP::EAuthProfile::Yandex);
     }
 
-    Y_UNIT_TEST(OpenIdConnectRequestWithIamTokenN) {
-        OpenIdConnectRequestWithIamTokenTest(NMVP::EAuthProfile::NProfile);
+    Y_UNIT_TEST(OpenIdConnectRequestWithIamTokenNebius) {
+        OpenIdConnectRequestWithIamTokenTest(NMVP::EAuthProfile::Nebius);
     }
 
     void OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile profile) {
@@ -114,12 +114,12 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRINGS_EQUAL(headers.Get("Access-Control-Allow-Credentials"), "true");
     }
 
-    Y_UNIT_TEST(OpenIdConnectNonAuthorizeRequestWithOptionMethodY) {
-        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile::YProfile);
+    Y_UNIT_TEST(OpenIdConnectNonAuthorizeRequestWithOptionMethodYandex) {
+        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile::Yandex);
     }
 
-    Y_UNIT_TEST(OpenIdConnectNonAuthorizeRequestWithOptionMethodN) {
-        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile::NProfile);
+    Y_UNIT_TEST(OpenIdConnectNonAuthorizeRequestWithOptionMethodNebius) {
+        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile::Nebius);
     }
 
     void OpenIdConnectSessionServiceCheckValidCookieTest(NMVP::EAuthProfile profile) {
@@ -165,12 +165,12 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Body, "this is test.");
     }
 
-    Y_UNIT_TEST(OpenIdConnectSessionServiceCheckValidCookieY) {
-        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile::YProfile);
+    Y_UNIT_TEST(OpenIdConnectSessionServiceCheckValidCookieYandex) {
+        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile::Yandex);
     }
 
-    Y_UNIT_TEST(OpenIdConnectSessionServiceCheckValidCookieN) {
-        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile::NProfile);
+    Y_UNIT_TEST(OpenIdConnectSessionServiceCheckValidCookieNebius) {
+        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile::Nebius);
     }
 
     Y_UNIT_TEST(OpenIdConnectProxyOnHttpsHost) {
@@ -179,12 +179,12 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        const TString allowedProxyHost {"ydb.viewer.page"};
+        const TString allowedProxyHost {"ydb.viewer.page:80"};
 
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
             .AllowedProxyHosts = {allowedProxyHost},
-            .AuthProfile = NMVP::EAuthProfile::YProfile
+            .AuthProfile = NMVP::EAuthProfile::Yandex
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
@@ -235,19 +235,20 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
 
-    Y_UNIT_TEST(OpenIdConnectExchangeN) {
+    Y_UNIT_TEST(OpenIdConnectExchangeNebius) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
+        Cerr << "1" << Endl;
         const TString allowedProxyHost {"ydb.viewer.page:80"};
 
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
             .AuthorizationServerAddress = "https://auth.test.net",
             .AllowedProxyHosts = {allowedProxyHost},
-            .AuthProfile = NMVP::EAuthProfile::NProfile
+            .AuthProfile = NMVP::EAuthProfile::Nebius
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
@@ -267,6 +268,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
         TAutoPtr<IEventHandle> handle;
 
+        Cerr << "2" << Endl;
         auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, "auth.test.net");
         UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/oauth2/session/exchange");
@@ -279,6 +281,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
                                          "Content-Length: " + ToString(okResponseBody.size()) + "\r\n\r\n" + okResponseBody);
         runtime.Send(new IEventHandle(handle->Sender, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(outgoingRequestEv->Request, incomingResponse)));
 
+        Cerr << "3" << Endl;
         outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, allowedProxyHost);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/counters");
@@ -295,6 +298,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         auto outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "200");
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Body, "this is test");
+        Cerr << "4" << Endl;
     }
 
     Y_UNIT_TEST(OpenIdConnectSessionServiceCheckAuthorizationFail) {
@@ -445,7 +449,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        const TString allowedProxyHost {"ydb.viewer.page"};
+        const TString allowedProxyHost {"ydb.viewer.page:80"};
 
         TOpenIdConnectSettings settings {
             .ClientId = "client_id",
@@ -496,7 +500,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRING_CONTAINS(setCookie, CreateNameYdbOidcCookie(settings.ClientSecret, state));
         redirectStrategy.CheckSpecificHeaders(headers);
 
-        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreator(edge, settings));
+        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreateHandler(edge, settings));
         incomingRequest = new NHttp::THttpIncomingRequest();
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template&state=" << state << " HTTP/1.1\r\n";
@@ -581,7 +585,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
-        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreator(edge, settings));
+        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreateHandler(edge, settings));
         const TString state = "test_state";
         const TString wrongState = "wrong_state";
         const TString hostProxy = "oidcproxy.net";
@@ -630,7 +634,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreator(edge, settings));
+        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreateHandler(edge, settings));
 
         TSessionServiceMock sessionServiceMock;
         sessionServiceMock.IsTokenAllowed = false;
@@ -690,7 +694,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
-        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreator(edge, settings));
+        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreateHandler(edge, settings));
         const TString state = "test_state";
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template&state=" << state << " HTTP/1.1\r\n";
@@ -756,7 +760,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreator(edge, settings));
+        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreateHandler(edge, settings));
 
         TSessionServiceMock sessionServiceMock;
         sessionServiceMock.IsOpenIdScopeMissed = true;
@@ -815,7 +819,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
-        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreator(edge, settings));
+        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreateHandler(edge, settings));
         TStringBuf firstRequestState = "first_request_state";
         TStringBuf secondRequestState = "second_request_state";
         TString firstCookie {CreateNameYdbOidcCookie(settings.ClientSecret, firstRequestState) + "=" + GenerateCookie(firstRequestState, "/requested/page", settings.ClientSecret, redirectStrategy.IsAjaxRequest())};

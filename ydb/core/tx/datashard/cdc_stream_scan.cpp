@@ -208,6 +208,31 @@ class TDataShard::TTxCdcStreamScanProgress
         return updates;
     }
 
+    static std::optional<TVector<TUpdateOp>> MakeRestoreUpdates(TArrayRef<const TCell> cells, TArrayRef<const TTag> tags, TUserTable::TCPtr table) {
+        Y_ABORT_UNLESS(cells.size() >= 1);
+        TVector<TUpdateOp> updates(::Reserve(cells.size() - 1));
+
+        bool skipped = false;
+        Y_ABORT_UNLESS(cells.size() == tags.size());
+        for (TPos pos = 0; pos < cells.size(); ++pos) {
+            const auto tag = tags.at(pos);
+            auto it = table->Columns.find(tag);
+            Y_ABORT_UNLESS(it != table->Columns.end());
+            if (it->second.Name == "__incrBackupImpl_deleted") {
+                // FIXME assert
+                if (const auto& cell = cells.at(pos); !cell.IsNull() && cell.AsValue<bool>()) {
+                    return std::nullopt;
+                }
+                skipped = true;
+                continue;
+            }
+            updates.emplace_back(tag, ECellOp::Set, TRawTypeValue(cells.at(pos).AsRef(), it->second.Type));
+        }
+        Y_ABORT_UNLESS(skipped);
+
+        return updates;
+    }
+
     static TRowState MakeRow(TArrayRef<const TCell> cells) {
         TRowState row(cells.size());
 
@@ -307,6 +332,15 @@ public:
                 case NKikimrSchemeOp::ECdcStreamModeUpdate:
                     Serialize(body, ERowOp::Upsert, key, keyTags, MakeUpdates(v.GetCells(), valueTags, table));
                     break;
+                case NKikimrSchemeOp::ECdcStreamModeRestoreIncrBackup: {
+                    auto updates = MakeRestoreUpdates(v.GetCells(), valueTags, table);
+                    if (updates) {
+                        Serialize(body, ERowOp::Upsert, key, keyTags, *updates);
+                    } else {
+                        Serialize(body, ERowOp::Erase, key, keyTags, {});
+                    }
+                    break;
+                }
                 case NKikimrSchemeOp::ECdcStreamModeNewImage:
                 case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages: {
                     const auto newImage = MakeRow(v.GetCells());

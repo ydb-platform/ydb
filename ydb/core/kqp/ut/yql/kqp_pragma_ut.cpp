@@ -84,6 +84,47 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
     }
+
+    Y_UNIT_TEST(MatchRecognize) {
+        TKikimrSettings settings;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableQueryServiceConfig()->SetEnableMatchRecognize(true);
+        settings.SetAppConfig(appConfig);
+
+        TKikimrRunner kikimr(settings);
+        NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
+
+        auto result = client.ExecuteYqlScript(R"(
+            --!syntax_v1
+            PRAGMA FeatureR010="prototype";
+    
+            CREATE TABLE `/Root/NewTable` (
+                dt Uint64,
+                value String,
+                PRIMARY KEY (dt)
+            );
+            COMMIT;
+
+            INSERT INTO `/Root/NewTable` (dt, value) VALUES (1, 'value1'), (2, 'value2');
+            COMMIT;
+            
+            SELECT * FROM (SELECT dt, value FROM `/Root/NewTable`)
+                MATCH_RECOGNIZE(
+                    ORDER BY CAST(dt as Timestamp)
+                    MEASURES
+                        LAST(A.dt) as x1
+                    ONE ROW PER MATCH
+                    PATTERN (A)
+                    DEFINE A as A.value = "value2" 
+                );
+
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[2u]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
 }
 
 } // namspace NKqp

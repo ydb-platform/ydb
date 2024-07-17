@@ -233,7 +233,6 @@ def main():
     parser.add_argument("--log_out_dir", help="out dir to store logs (symlinked), relative to public_dir")
     parser.add_argument(
         "--log_truncate_size",
-        dest="log_truncate_size",
         type=int,
         default=134217728,
         help="truncate log after specific size, 0 disables truncation",

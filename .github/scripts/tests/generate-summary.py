@@ -287,7 +287,7 @@ def gen_summary(public_dir, public_dir_url, paths):
         if not summary_line.tests:
             continue
 
-        report_url = f"{public_dir_url}{html_fn}"
+        report_url = f"{public_dir_url}/{html_fn}"
 
         render_testlist_html(summary_line.tests, os.path.join(public_dir, html_fn))
         summary_line.add_report(html_fn, report_url)
@@ -314,7 +314,7 @@ def get_comment_text(pr: PullRequest, summary: TestSummary, summary_links: str):
         links = f.readlines()
     
     links.sort()
-    links = [line.split(" ", 1)[1] for line in links]
+    links = [line.split(" ", 1)[1].strip() for line in links]
 
     if links:
         body.append("")

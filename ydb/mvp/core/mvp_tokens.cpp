@@ -76,14 +76,7 @@ void TMvpTokenator::Handle(TEvPrivate::TEvRefreshToken::TPtr event) {
     BLOG_D("Refreshing token " << name);
     const NMvp::TJwtInfo* jwtInfo = TokenConfigs.GetJwtTokenConfig(name);
     if (jwtInfo != nullptr) {
-        switch (AuthProfile) {
-            case NMVP::EAuthProfile::Yandex:
-                UpdateJwtTokenYandex(jwtInfo);
-                break;
-            case NMVP::EAuthProfile::Nebius:
-                UpdateJwtTokenNebius(jwtInfo);
-                break;
-        }
+        UpdateJwtToken(jwtInfo);
         return;
     }
     const NMvp::TOAuthInfo* oauthInfo = TokenConfigs.GetOAuthTokenConfig(name);
@@ -245,7 +238,7 @@ void TMvpTokenator::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr ev
     HttpRequestNames.erase(httpRequstsIt);
 }
 
-void TMvpTokenator::UpdateJwtTokenYandex(const NMvp::TJwtInfo* jwtInfo) {
+void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
     auto now = std::chrono::system_clock::now();
     auto expiresAt = now + std::chrono::hours(1);
     const auto& serviceAccountId = jwtInfo->accountid();
@@ -254,47 +247,46 @@ void TMvpTokenator::UpdateJwtTokenYandex(const NMvp::TJwtInfo* jwtInfo) {
     audience.insert(jwtInfo->audience());
     auto algorithm = jwt::algorithm::ps256(jwtInfo->publickey(), jwtInfo->privatekey());
 
-    auto encoded_token = jwt::create()
-            .set_key_id(keyId)
-            .set_issuer(serviceAccountId)
-            .set_audience(audience)
-            .set_issued_at(now)
-            .set_expires_at(expiresAt)
-            .sign(algorithm);
+    switch (AuthProfile) {
+        case NMVP::EAuthProfile::Yandex: {
+            auto encoded_token = jwt::create()
+                    .set_key_id(keyId)
+                    .set_issuer(serviceAccountId)
+                    .set_audience(audience)
+                    .set_issued_at(now)
+                    .set_expires_at(expiresAt)
+                    .sign(algorithm);
+            yandex::cloud::priv::iam::v1::CreateIamTokenRequest request;
+            request.set_jwt(TString(encoded_token));
+            RequestCreateToken<yandex::cloud::priv::iam::v1::IamTokenService,
+                                yandex::cloud::priv::iam::v1::CreateIamTokenRequest,
+                                yandex::cloud::priv::iam::v1::CreateIamTokenResponse,
+                                TEvPrivate::TEvUpdateIamTokenYandex>(jwtInfo->name(), jwtInfo->endpoint(), request, &yandex::cloud::priv::iam::v1::IamTokenService::Stub::AsyncCreate);
 
-    yandex::cloud::priv::iam::v1::CreateIamTokenRequest request;
-    request.set_jwt(TString(encoded_token));
-    RequestCreateToken<yandex::cloud::priv::iam::v1::IamTokenService,
-                       yandex::cloud::priv::iam::v1::CreateIamTokenRequest,
-                       yandex::cloud::priv::iam::v1::CreateIamTokenResponse,
-                       TEvPrivate::TEvUpdateIamTokenYandex>(jwtInfo->name(), jwtInfo->endpoint(), request, &yandex::cloud::priv::iam::v1::IamTokenService::Stub::AsyncCreate);
-}
+            break;
+        }
+        case NMVP::EAuthProfile::Nebius: {
+            auto encoded_token = jwt::create()
+                    .set_key_id(keyId)
+                    .set_issuer(serviceAccountId)
+                    .set_subject(serviceAccountId)
+                    .set_issued_at(now)
+                    .set_expires_at(expiresAt)
+                    .sign(algorithm);
+            nebius::iam::v1::ExchangeTokenRequest request;
+            request.set_grant_type("urn:ietf:params:oauth:grant-type:token-exchange");
+            request.set_requested_token_type("urn:ietf:params:oauth:token-type:access_token");
+            request.set_subject_token_type("urn:ietf:params:oauth:token-type:jwt");
+            request.set_subject_token(TString(encoded_token));
 
-void TMvpTokenator::UpdateJwtTokenNebius(const NMvp::TJwtInfo* jwtInfo) {
-    auto now = std::chrono::system_clock::now();
-    auto expiresAt = now + std::chrono::hours(1);
-    const auto& serviceAccountId = jwtInfo->accountid();
-    const auto& keyId = jwtInfo->keyid();
-    auto algorithm = jwt::algorithm::rs256(jwtInfo->publickey(), jwtInfo->privatekey());
+            RequestCreateToken<nebius::iam::v1::TokenExchangeService,
+                                nebius::iam::v1::ExchangeTokenRequest,
+                                nebius::iam::v1::CreateTokenResponse,
+                                TEvPrivate::TEvUpdateIamTokenNebius>(jwtInfo->name(), jwtInfo->endpoint(), request, &nebius::iam::v1::TokenExchangeService::Stub::AsyncExchange, serviceAccountId);
 
-    auto encoded_token = jwt::create()
-            .set_key_id(keyId)
-            .set_issuer(serviceAccountId)
-            .set_subject(serviceAccountId)
-            .set_issued_at(now)
-            .set_expires_at(expiresAt)
-            .sign(algorithm);
-
-    nebius::iam::v1::ExchangeTokenRequest request;
-    request.set_grant_type("urn:ietf:params:oauth:grant-type:token-exchange");
-    request.set_requested_token_type("urn:ietf:params:oauth:token-type:access_token");
-    request.set_subject_token_type("urn:ietf:params:oauth:token-type:jwt");
-    request.set_subject_token(TString(encoded_token));
-
-    RequestCreateToken<nebius::iam::v1::TokenExchangeService,
-                       nebius::iam::v1::ExchangeTokenRequest,
-                       nebius::iam::v1::CreateTokenResponse,
-                       TEvPrivate::TEvUpdateIamTokenNebius>(jwtInfo->name(), jwtInfo->endpoint(), request, &nebius::iam::v1::TokenExchangeService::Stub::AsyncExchange, serviceAccountId);
+            break;
+        }
+    }
 }
 
 void TMvpTokenator::UpdateOAuthToken(const NMvp::TOAuthInfo* oauthInfo) {

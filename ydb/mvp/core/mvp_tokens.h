@@ -168,8 +168,7 @@ protected:
     }
 
     void UpdateMetadataToken(const NMvp::TMetadataTokenInfo* metadataTokenInfo);
-    void UpdateJwtTokenYandex(const NMvp::TJwtInfo* iwtInfo);
-    void UpdateJwtTokenNebius(const NMvp::TJwtInfo* iwtInfo);
+    void UpdateJwtToken(const NMvp::TJwtInfo* iwtInfo);
     void UpdateOAuthToken(const NMvp::TOAuthInfo* oauthInfo);
     void UpdateStaticCredentialsToken(const NMvp::TStaticCredentialsInfo* staticCredentialsInfo);
     void UpdateStaffApiUserToken(const NMvp::TStaffApiUserTokenInfo* staffApiUserTokenInfo);

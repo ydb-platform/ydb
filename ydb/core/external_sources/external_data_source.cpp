@@ -58,7 +58,7 @@ struct TExternalDataSource : public IExternalSource {
         }
 
         // oracle must have property service_name
-        if (proto.GetSourceType() && !proto.GetProperties().GetProperties().contains("service_name")) {
+        if (proto.GetSourceType() == "Oracle" && !proto.GetProperties().GetProperties().contains("service_name")) {
             ythrow TExternalSourceException() << proto.GetSourceType() << " source must provide service_name";
         }
 

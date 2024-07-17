@@ -2474,9 +2474,9 @@
     ],
     "test.test[pg_catalog-pg_database-default.txt-Results]": [
         {
-            "checksum": "ffb82ff2a66fffc2cebce35e729be6d3",
-            "size": 4022,
-            "uri": "https://{canondata_backend}/1946324/67e5945dc28520630af9ac756d628fe05ed75ccf/resource.tar.gz#test.test_pg_catalog-pg_database-default.txt-Results_/results.txt"
+            "checksum": "2fab1ece347b77674e8266730c8f8cab",
+            "size": 4160,
+            "uri": "https://{canondata_backend}/1942100/2598e59cb6089a030055722ac0c7d3bc8b4362ad/resource.tar.gz#test.test_pg_catalog-pg_database-default.txt-Results_/results.txt"
         }
     ],
     "test.test[pg_catalog-pg_stat_gssapi-default.txt-Debug]": [

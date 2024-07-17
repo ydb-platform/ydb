@@ -313,8 +313,8 @@ runs:
         .github/scripts/tests/transform-ya-junit.py -i \
           -m .github/config/muted_ya.txt \
           --ya_out "$YA_MAKE_OUT_DIR" \
-          --public_dir "$PUBLIC_DIR"
-          --public_dir_url "$PUBLIC_DIR_URL"
+          --public_dir "$PUBLIC_DIR" \
+          --public_dir_url "$PUBLIC_DIR_URL" \
           --log_out_dir "artifact/logs/" \
           --test_stuff_out "test_artifacts/" \
           "$JUNIT_REPORT_XML"

@@ -1,4 +1,13 @@
 #include "util.h"
+#include <set>
+
+static inline char d2x(unsigned x) {
+    return (char)((x < 10) ? ('0' + x) : ('A' + x - 10));
+}
+
+static inline const char* FixZero(const char* s) noexcept {
+    return s ? s : "";
+}
 
 namespace NYql::NS3Util {
 
@@ -11,6 +20,40 @@ TIssues AddParentIssue(const TStringBuilder& prefix, TIssues&& issues) {
         result.AddSubIssue(MakeIntrusive<TIssue>(issue));
     }
     return TIssues{result};
+}
+
+char* UrlEscape(char* to, const char* from) {
+    from = FixZero(from);
+
+    while (*from) {
+        const bool escapePercent = (*from == '%');
+
+        if (escapePercent || (unsigned char)*from <= ' ' || (unsigned char)*from > '~' ||
+                *from == '#' || *from == '?') {
+            *to++ = '%';
+            *to++ = d2x((unsigned char)*from >> 4);
+            *to++ = d2x((unsigned char)*from & 0xF);
+        } else
+            *to++ = *from;
+        ++from;
+    }
+
+    *to = 0;
+
+    return to;
+}
+
+void UrlEscape(TString& url) {
+    TTempBuf tempBuf(CgiEscapeBufLen(url.size()));
+    char* to = tempBuf.Data();
+    url.AssignNoAlias(to, UrlEscape(to, url.data()));
+}
+
+TString UrlEscapeRet(const TStringBuf from) {
+    TString to;
+    to.ReserveAndResize(CgiEscapeBufLen(from.size()));
+    to.resize(UrlEscape(to.begin(), from.begin()) - to.data());
+    return to;
 }
 
 }

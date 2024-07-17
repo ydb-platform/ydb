@@ -5,6 +5,7 @@
 
 #include <yt/yt/client/api/client.h>
 #include <yt/yt/client/api/transaction.h>
+#include <yt/yt/client/api/rpc_proxy/transaction_impl.h>
 #include <yt/yt/client/api/dynamic_table_transaction_mixin.h>
 #include <yt/yt/client/api/queue_transaction_mixin.h>
 
@@ -58,6 +59,7 @@ class TTransaction
     : public virtual ITransaction
     , public TDynamicTableTransactionMixin
     , public TQueueTransactionMixin
+    , public IFederatedClientTransactionMixin
 {
 public:
     TTransaction(TClientPtr client, int clientIndex, ITransactionPtr underlying);
@@ -195,6 +197,12 @@ public:
     void UnsubscribeAborted(const TAbortedHandler& handler) override
     {
         Underlying_->UnsubscribeAborted(handler);
+    }
+
+    std::optional<TString> TryGetStickyProxyAddress() const override
+    {
+        const auto* derived = Underlying_->TryAs<NRpcProxy::TTransaction>();
+        return nullptr == derived ? std::nullopt : std::make_optional(derived->GetStickyProxyAddress());
     }
 
     UNIMPLEMENTED_METHOD(TFuture<void>, SetNode, (const NYPath::TYPath&, const NYson::TYsonString&, const TSetNodeOptions&));

@@ -20,10 +20,10 @@ public:
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx) {
         switch (Settings.AuthProfile) {
-            case NMVP::EAuthProfile::yandex:
+            case NMVP::EAuthProfile::Yandex:
                 ctx.Register(new THandlerSessionServiceCheckYandex(event->Sender, event->Get()->Request, HttpProxyId, Settings));
                 break;
-            case NMVP::EAuthProfile::nebius:
+            case NMVP::EAuthProfile::Nebius:
                 ctx.Register(new THandlerSessionServiceCheckNebius(event->Sender, event->Get()->Request, HttpProxyId, Settings));
                 break;
         }

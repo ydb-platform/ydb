@@ -19,15 +19,20 @@
 namespace NMVP {
 
 enum EAuthProfile {
-    yandex = 1,
-    nebius = 2
+    Yandex = 1,
+    Nebius = 2
+};
+
+const THashMap<TString, EAuthProfile> AuthProfileByName = {
+    { "yandex", EAuthProfile::Yandex },
+    { "nebius", EAuthProfile::Nebius }
 };
 
 class TMvpTokenator : public NActors::TActorBootstrapped<TMvpTokenator> {
 public:
     using TBase = NActors::TActorBootstrapped<TMvpTokenator>;
 
-    static TMvpTokenator* CreateTokenator(const NMvp::TTokensConfig& tokensConfig, const NActors::TActorId& httpProxy, const NMVP::EAuthProfile authProfile = NMVP::EAuthProfile::yandex);
+    static TMvpTokenator* CreateTokenator(const NMvp::TTokensConfig& tokensConfig, const NActors::TActorId& httpProxy, const NMVP::EAuthProfile authProfile = NMVP::EAuthProfile::Yandex);
     TString GetToken(const TString& name);
 
 protected:

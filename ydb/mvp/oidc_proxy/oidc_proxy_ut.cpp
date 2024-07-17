@@ -62,11 +62,11 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OpenIdConnectRequestWithIamTokenYandex) {
-        OpenIdConnectRequestWithIamTokenTest(NMVP::EAuthProfile::yandex);
+        OpenIdConnectRequestWithIamTokenTest(NMVP::EAuthProfile::Yandex);
     }
 
     Y_UNIT_TEST(OpenIdConnectRequestWithIamTokenNebius) {
-        OpenIdConnectRequestWithIamTokenTest(NMVP::EAuthProfile::nebius);
+        OpenIdConnectRequestWithIamTokenTest(NMVP::EAuthProfile::Nebius);
     }
 
     void OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile profile) {
@@ -115,11 +115,11 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OpenIdConnectNonAuthorizeRequestWithOptionMethodYandex) {
-        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile::yandex);
+        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile::Yandex);
     }
 
     Y_UNIT_TEST(OpenIdConnectNonAuthorizeRequestWithOptionMethodNebius) {
-        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile::nebius);
+        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile::Nebius);
     }
 
     void OpenIdConnectSessionServiceCheckValidCookieTest(NMVP::EAuthProfile profile) {
@@ -184,7 +184,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
             .AllowedProxyHosts = {allowedProxyHost},
-            .AuthProfile = NMVP::EAuthProfile::yandex
+            .AuthProfile = NMVP::EAuthProfile::Yandex
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();

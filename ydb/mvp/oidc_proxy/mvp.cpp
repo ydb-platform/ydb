@@ -289,18 +289,15 @@ void TMVP::TryGetGenericOptionsFromConfig(
     }
 
     if (generic["auth_profile"]) {
-        auto authProfile = generic["auth_profile"].as<std::string>("yandex");
-        switch (authProfile) {
-            case "yandex":
-                OpenIdConnectSettings.AuthProfile = NMVP::EAuthProfile::yandex;
-                break;
-            case "nebius":
-                OpenIdConnectSettings.AuthProfile = NMVP::EAuthProfile::nebius;
-                break;
-            default:
-                ythrow yexception() << "Invalid auth_profile value: " << authProfile;
+        auto name = generic["auth_profile"].as<std::string>("yandex");
+        OpenIdConnectSettings.AuthProfile = AuthProfileByName[name];
+
+        auto it = AuthProfileByName.find(name);
+        if (it != AuthProfileByName.end()) {
+            OpenIdConnectSettings.AuthProfile = it->second;
         }
     }
+
 }
 
 THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char** argv) {

@@ -166,12 +166,15 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             result->AddStep(std::make_shared<TPredicateFilter>());
         }
         for (auto&& i : ReadMetadata->GetProgram().GetSteps()) {
-            if (!i->IsFilterOnly()) {
+            if (i->GetFilterOriginalColumnIds().empty()) {
                 break;
             }
             TColumnsSet stepColumnIds(i->GetFilterOriginalColumnIds(), ReadMetadata->GetIndexInfo(), ReadMetadata->GetResultSchema());
             acc.AddAssembleStep(*result, stepColumnIds, "EF", true);
             result->AddStep(std::make_shared<TFilterProgramStep>(i));
+            if (!i->IsFilterOnly()) {
+                break;
+            }
         }
         acc.AddFetchingStep(*result, *FFColumns);
         acc.AddAssembleStep(*result, *FFColumns, "LAST", true);
@@ -197,12 +200,15 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             result->AddStep(std::make_shared<TPredicateFilter>());
         }
         for (auto&& i : ReadMetadata->GetProgram().GetSteps()) {
-            if (!i->IsFilterOnly()) {
+            if (i->GetFilterOriginalColumnIds().empty()) {
                 break;
             }
             TColumnsSet stepColumnIds(i->GetFilterOriginalColumnIds(), ReadMetadata->GetIndexInfo(), ReadMetadata->GetResultSchema());
             acc.AddAssembleStep(*result, stepColumnIds, "EF", true);
             result->AddStep(std::make_shared<TFilterProgramStep>(i));
+            if (!i->IsFilterOnly()) {
+                break;
+            }
         }
         acc.AddFetchingStep(*result, *FFColumns);
         acc.AddAssembleStep(*result, *FFColumns, "LAST", true);

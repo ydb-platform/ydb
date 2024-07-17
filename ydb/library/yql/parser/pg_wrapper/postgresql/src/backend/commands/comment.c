@@ -4,7 +4,7 @@
  *
  * PostgreSQL object comments utility code.
  *
- * Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Copyright (c) 1996-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/commands/comment.c
@@ -52,7 +52,7 @@ CommentObject(CommentStmt *stmt)
 	 */
 	if (stmt->objtype == OBJECT_DATABASE)
 	{
-		char	   *database = strVal((Value *) stmt->object);
+		char	   *database = strVal(stmt->object);
 
 		if (!OidIsValid(get_database_oid(database, true)))
 		{
@@ -98,8 +98,9 @@ CommentObject(CommentStmt *stmt)
 				relation->rd_rel->relkind != RELKIND_PARTITIONED_TABLE)
 				ereport(ERROR,
 						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-						 errmsg("\"%s\" is not a table, view, materialized view, composite type, or foreign table",
-								RelationGetRelationName(relation))));
+						 errmsg("cannot set comment on relation \"%s\"",
+								RelationGetRelationName(relation)),
+						 errdetail_relkind_not_supported(relation->rd_rel->relkind)));
 			break;
 		default:
 			break;

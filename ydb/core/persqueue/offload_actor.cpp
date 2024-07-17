@@ -11,6 +11,7 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
@@ -34,7 +35,6 @@ private:
     const TActorId ParentTablet;
     const ui32 Partition;
     const NKikimrPQ::TOffloadConfig Config;
-    const TPathId DstPathId;
 
     mutable TMaybe<TString> LogPrefix;
     TActorId Worker;
@@ -60,14 +60,27 @@ public:
         : ParentTablet(parentTablet)
         , Partition(partition)
         , Config(config)
-        , DstPathId(PathIdFromPathId(config.GetIncrementalBackup().GetDstPathId()))
     {}
+
+    auto CreateReaderFactory() {
+        return [=]() -> IActor* {
+            return NBackup::NImpl::CreateLocalPartitionReader(ParentTablet, Partition);
+        };
+    }
+
+    auto CreateWriterFactory() {
+        return [=]() -> IActor* {
+            return NBackup::NImpl::CreateLocalTableWriter(
+                    PathIdFromPathId(Config.GetIncrementalBackup().GetDstPathId()));
+        };
+    }
 
     void Bootstrap() {
         auto* workerActor = CreateWorker(
             SelfId(),
-            [=]() -> IActor* { return NBackup::NImpl::CreateLocalPartitionReader(ParentTablet, Partition); },
-            [=]() -> IActor* { return NBackup::NImpl::CreateLocalTableWriter(DstPathId); });
+            CreateReaderFactory(),
+            CreateWriterFactory());
+
         Worker = TActivationContext::Register(workerActor);
 
         Become(&TOffloadActor::StateWork);
@@ -76,8 +89,7 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
         default:
-            Y_VERIFY_S(false, "Unhandled event type: " << ev->GetTypeRewrite()
-                        << " event: " << ev->ToString());
+            LOG_W("Unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
         }
     }
 };

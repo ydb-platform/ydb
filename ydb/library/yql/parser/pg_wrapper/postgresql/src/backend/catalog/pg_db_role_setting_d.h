@@ -3,7 +3,7 @@
  * pg_db_role_setting_d.h
  *    Macro definitions for pg_db_role_setting
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -19,6 +19,9 @@
 #define PG_DB_ROLE_SETTING_D_H
 
 #define DbRoleSettingRelationId 2964
+#define PgDbRoleSettingToastTable 2966
+#define PgDbRoleSettingToastIndex 2967
+#define DbRoleSettingDatidRolidIndexId 2965
 
 #define Anum_pg_db_role_setting_setdatabase 1
 #define Anum_pg_db_role_setting_setrole 2

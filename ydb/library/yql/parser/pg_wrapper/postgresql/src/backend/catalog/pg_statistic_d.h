@@ -3,7 +3,7 @@
  * pg_statistic_d.h
  *    Macro definitions for pg_statistic
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -19,6 +19,7 @@
 #define PG_STATISTIC_D_H
 
 #define StatisticRelationId 2619
+#define StatisticRelidAttnumInhIndexId 2696
 
 #define Anum_pg_statistic_starelid 1
 #define Anum_pg_statistic_staattnum 2

@@ -275,7 +275,7 @@ public:
     void Start(NColumnShard::TColumnShard& self);
 
     virtual ui32 GetWritePortionsCount() const = 0;
-    virtual TWritePortionInfoWithBlobs* GetWritePortionInfo(const ui32 index) = 0;
+    virtual TWritePortionInfoWithBlobsResult* GetWritePortionInfo(const ui32 index) = 0;
     virtual bool NeedWritePortion(const ui32 index) const = 0;
 
     void WriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context);

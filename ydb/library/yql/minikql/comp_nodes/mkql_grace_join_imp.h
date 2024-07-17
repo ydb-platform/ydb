@@ -15,7 +15,7 @@ class TTableBucketSpiller;
 const ui64 BitsForNumberOfBuckets = 5; // 2^5 = 32
 const ui64 BucketsMask = (0x00000001 << BitsForNumberOfBuckets)  - 1;
 const ui64 NumberOfBuckets = (0x00000001 << BitsForNumberOfBuckets);  // Number of hashed keys buckets to distribute incoming tables tuples
-const ui64 DefaultTuplesNum = 100; // Default initial number of tuples in one bucket to allocate memory
+const ui64 DefaultTuplesNum = 101; // Default initial number of tuples in one bucket to allocate memory
 const ui64 DefaultTupleBytes = 64; // Default size of all columns in table row for estimations
 const ui64 HashSize = 1; // Using ui64 hash size
 const ui64 SpillingSizeLimit = 1_MB; // Don't try to spill if net effect is lower than this size
@@ -71,6 +71,8 @@ struct TTableBucket {
     std::set<ui32> AllLeftMatchedIds;  // All row ids of left join table which have matching rows in right table. To process streaming join mode.
     std::set<ui32> AllRightMatchedIds; // All row ids of right join table which matching rows in left table. To process streaming join mode. 
 
+    std::vector<ui64, TMKQLAllocator<ui64>> JoinSlots;  // Hashtable
+    ui64 NSlots = 0;  // Hashtable
  };
 
  struct TTableBucketStats {
@@ -241,7 +243,7 @@ class TTable {
     inline bool HasJoinedTupleId(TTable* joinedTable, ui32& tupleId2);
 
     // Adds keys to KeysHashTable, return true if added, false if equal key already added
-    inline bool AddKeysToHashTable(KeysHashTable& t, ui64* keys);
+    inline bool AddKeysToHashTable(KeysHashTable& t, ui64* keys, NYql::NUdf::TUnboxedValue * iColumns);
 
     ui64 TotalPacked = 0; // Total number of packed tuples
     ui64 TotalUnpacked = 0; // Total number of unpacked tuples

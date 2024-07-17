@@ -569,10 +569,6 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         return {};
     }
 
-    if ((!kqpCtx.Config->PredicateExtract20 || kqpCtx.Config->OldLookupJoinBehaviour) && prefixLookup->Filter.IsValid()) {
-        return {};
-    }
-
     TMap<std::string_view, TString> rightJoinKeyToLeft;
     TVector<TCoAtom> rightKeyColumns;
     rightKeyColumns.reserve(join.JoinKeys().Size());
@@ -632,9 +628,6 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
                             .Build()
                         .Done());
                 deduplicateLeftColumns.insert(*leftColumn);
-                if ((!kqpCtx.Config->PredicateExtract20 || kqpCtx.Config->OldLookupJoinBehaviour)) {
-                    return {};
-                }
             }
 
             member = Build<TCoNth>(ctx, prefixRowArg.Pos())
@@ -926,8 +919,11 @@ TExprBase KqpJoinToIndexLookup(const TExprBase& node, TExprContext& ctx, const T
     }
     auto join = node.Cast<TDqJoin>();
 
-    if (useCBO && FromString<EJoinAlgoType>(join.JoinAlgo().StringValue()) != EJoinAlgoType::LookupJoin) {
-        return node;
+    if (useCBO){
+         auto algo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
+         if (algo != EJoinAlgoType::LookupJoin && algo != EJoinAlgoType::LookupJoinReverse && algo != EJoinAlgoType::Undefined) {
+            return node;
+         }
     }
 
     DBG("-- Join: " << KqpExprToPrettyString(join, ctx));

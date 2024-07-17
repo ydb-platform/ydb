@@ -1,6 +1,7 @@
 /* Common parts between scan-code.l, scan-gram.l, and scan-skel.l.
 
-   Copyright (C) 2006, 2009-2013 Free Software Foundation, Inc.
+   Copyright (C) 2006, 2009-2015, 2018-2019 Free Software Foundation,
+   Inc.
 
    This file is part of Bison, the GNU Compiler Compiler.
 
@@ -26,6 +27,32 @@
   ((YY_FLEX_MAJOR_VERSION) * 1000000    \
    + (YY_FLEX_MINOR_VERSION) * 1000     \
    + (YY_FLEX_SUBMINOR_VERSION))
+
+// Pacify warnings in yy_init_buffer (observed with Flex 2.6.4 and GCC
+// 6.4.0 and 7.3.0).
+//
+// ./src/scan-skel.c: In function 'skel_restart':
+// ./src/scan-skel.c:2035:20: error: potential null pointer dereference [-Werror=null-dereference]
+//   b->yy_fill_buffer = 1;
+//   ~~~~~~~~~~~~~~~~~~^~~
+// ./src/scan-skel.c:2031:19: error: potential null pointer dereference [-Werror=null-dereference]
+//   b->yy_input_file = file;
+//   ~~~~~~~~~~~~~~~~~^~~~~~
+#if defined __GNUC__ && ! defined __clang__ && 6 <= __GNUC__
+# pragma GCC diagnostic ignored "-Wnull-dereference"
+#endif
+
+// Old versions of Flex (2.5.35) generate an incomplete documentation comment.
+//
+//  In file included from src/scan-code-c.c:3:
+//  src/scan-code.c:2198:21: error: empty paragraph passed to '@param' command
+//        [-Werror,-Wdocumentation]
+//   * @param line_number
+//     ~~~~~~~~~~~~~~~~~^
+//  1 error generated.
+#if FLEX_VERSION <= 20060000 && defined __clang__
+# pragma clang diagnostic ignored "-Wdocumentation"
+#endif
 
 /* Pacify "gcc -Wmissing-prototypes" when flex 2.5.31 is used.  */
 #if FLEX_VERSION <= 2005031

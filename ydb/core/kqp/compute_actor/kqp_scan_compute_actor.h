@@ -46,10 +46,7 @@ public:
                     BaseStateFuncBody(ev);
             }
         } catch (const TMemoryLimitExceededException& e) {
-            const TString sInfo = TStringBuilder() << "Mkql memory limit exceeded, limit: " << GetMkqlMemoryLimit()
-                << ", host: " << HostName() << ", canAllocateExtraMemory: " << CanAllocateExtraMemory;
-            CA_LOG_E("ERROR:" + sInfo);
-            InternalError(NYql::NDqProto::StatusIds::PRECONDITION_FAILED, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, sInfo);
+            TBase::OnMemoryLimitExceptionHandler();
         } catch (const yexception& e) {
             InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, NYql::TIssuesIds::DEFAULT_ERROR, e.what());
         }

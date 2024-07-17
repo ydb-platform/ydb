@@ -274,12 +274,13 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync:
             *index.mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex();
             break;
-        case NKikimrSchemeOp::EIndexType::EIndexTypeInvalid:
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
+            *index.mutable_global_vector_kmeans_tree_index() = Ydb::Table::GlobalVectorKMeansTreeIndex();
+            break;
+        default:
             Y_ABORT("Unreachable");
-        };
-    }
-
-    if (info->IsBuildColumn()) {
+        }
+    } else if (info->IsBuildColumn()) {
         for(const auto& column : info->BuildColumns) {
             auto* columnProto = settings.mutable_column_build_operation()->add_column();
             columnProto->SetColumnName(column.ColumnName);

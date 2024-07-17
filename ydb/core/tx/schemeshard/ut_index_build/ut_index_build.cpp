@@ -453,7 +453,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
                     auto& tx = *msg->Record.MutableTransaction(0);
                     auto& config = *tx.MutableInitiateIndexBuild();
                     NKikimrSchemeOp::TIndexCreationConfig& indexConfig = *config.MutableIndex();
-                    NKikimrSchemeOp::TTableDescription& indexTableDescr = *indexConfig.MutableIndexImplTableDescription();
+                    NKikimrSchemeOp::TTableDescription& indexTableDescr = indexConfig.MutableIndexImplTableDescriptions()->at(0);
 
                     indexTableDescr.MutablePartitionConfig()->MutablePartitioningPolicy()->SetSizeToSplit(10);
                     indexTableDescr.MutablePartitionConfig()->MutablePartitioningPolicy()->SetMaxPartitionsCount(10);

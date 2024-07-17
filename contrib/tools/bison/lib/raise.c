@@ -1,6 +1,6 @@
 /* Provide a non-threads replacement for the POSIX raise function.
 
-   Copyright (C) 2002-2003, 2005-2006, 2009-2013 Free Software Foundation, Inc.
+   Copyright (C) 2002-2003, 2005-2006, 2009-2019 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,7 +13,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 /* written by Jim Meyering and Bruno Haible */
 
@@ -27,11 +27,41 @@
 
 # include <errno.h>
 
-# include "msvc-inval.h"
-
-# undef raise
+# if HAVE_MSVC_INVALID_PARAMETER_HANDLER
+#  include "msvc-inval.h"
+# endif
 
 # if HAVE_MSVC_INVALID_PARAMETER_HANDLER
+/* Forward declaration.  */
+static int raise_nothrow (int sig);
+# else
+#  define raise_nothrow raise
+# endif
+
+#else
+/* An old Unix platform.  */
+
+# include <unistd.h>
+
+#endif
+
+int
+raise (int sig)
+#undef raise
+{
+#if GNULIB_defined_signal_blocking && GNULIB_defined_SIGPIPE
+  if (sig == SIGPIPE)
+    return _gl_raise_SIGPIPE ();
+#endif
+
+#if HAVE_RAISE
+  return raise_nothrow (sig);
+#else
+  return kill (getpid (), sig);
+#endif
+}
+
+#if HAVE_RAISE && HAVE_MSVC_INVALID_PARAMETER_HANDLER
 static int
 raise_nothrow (int sig)
 {
@@ -50,30 +80,4 @@ raise_nothrow (int sig)
 
   return result;
 }
-# else
-#  define raise_nothrow raise
-# endif
-
-#else
-/* An old Unix platform.  */
-
-# include <unistd.h>
-
-# define rpl_raise raise
-
 #endif
-
-int
-rpl_raise (int sig)
-{
-#if GNULIB_defined_signal_blocking && GNULIB_defined_SIGPIPE
-  if (sig == SIGPIPE)
-    return _gl_raise_SIGPIPE ();
-#endif
-
-#if HAVE_RAISE
-  return raise_nothrow (sig);
-#else
-  return kill (getpid (), sig);
-#endif
-}

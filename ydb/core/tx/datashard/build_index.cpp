@@ -696,15 +696,15 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
     TUserTable::TCPtr userTable = GetUserTables().at(tableId.PathId.LocalPathId);
 
 
-    if (BuildIndexManager.Contains(buildIndexId)) {
-        TBuildIndexRecord recCard = BuildIndexManager.Get(buildIndexId);
-        if (recCard.SeqNo == seqNo) {
+    if (const auto* recCard = BuildIndexManager.Get(buildIndexId)) {
+        if (recCard->SeqNo == seqNo) {
             // do no start one more scan
             ctx.Send(ev->Sender, std::move(response));
             return;
         }
 
-        CancelScan(userTable->LocalTid, recCard.ScanId);
+        CancelScan(userTable->LocalTid, recCard->ScanId);
+        BuildIndexManager.Drop(buildIndexId);
     }
 
 

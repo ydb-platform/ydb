@@ -1,10 +1,13 @@
 #pragma once
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
 #include <ydb/core/formats/arrow/simple_builder/array.h>
 #include <ydb/core/formats/arrow/simple_builder/batch.h>
 #include <ydb/core/formats/arrow/simple_builder/filler.h>
+
+#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
+
+#include <library/cpp/json/writer/json_value.h>
 
 namespace NKikimr::NKqp {
 
@@ -19,7 +22,7 @@ private:
 protected:
     virtual TString GetTestTableSchema() const override;
     virtual std::vector<TString> GetShardingColumns() const override {
-        return {"pk_int"};
+        return { "pk_int" };
     }
 public:
     TTypedLocalHelper(const TString& typeName, TKikimrRunner& kikimrRunner, const TString& tableName = "olapTable", const TString& storeName = "olapStore")
@@ -66,7 +69,7 @@ public:
 
     void GetVolumes(ui64& rawBytes, ui64& bytes, const bool verbose = false, const std::vector<TString> columnNames = {});
 
-    void GetStats(std::vector<NKikimrColumnShardStatisticsProto::TPortionStorage>& stats, const bool verbose = false);
+    void GetStats(std::vector<NJson::TJsonValue>& stats, const bool verbose = false);
 
     void GetCount(ui64& count);
 

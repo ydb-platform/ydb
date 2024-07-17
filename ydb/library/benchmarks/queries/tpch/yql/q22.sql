@@ -30,7 +30,7 @@ select
 from
     $c
 where
-    c_acctbal > 0.00
+    c_acctbal > $z0_12
 );
 
 $join1 = (

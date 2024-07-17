@@ -3,7 +3,7 @@
  * indexam.c
  *	  general index access method routines
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -70,18 +70,23 @@
  * Note: the ReindexIsProcessingIndex() check in RELATION_CHECKS is there
  * to check that we don't try to scan or do retail insertions into an index
  * that is currently being rebuilt or pending rebuild.  This helps to catch
- * things that don't work when reindexing system catalogs.  The assertion
+ * things that don't work when reindexing system catalogs, as well as prevent
+ * user errors like index expressions that access their own tables.  The check
  * doesn't prevent the actual rebuild because we don't use RELATION_CHECKS
  * when calling the index AM's ambuild routine, and there is no reason for
  * ambuild to call its subsidiary routines through this file.
  * ----------------------------------------------------------------
  */
 #define RELATION_CHECKS \
-( \
-	AssertMacro(RelationIsValid(indexRelation)), \
-	AssertMacro(PointerIsValid(indexRelation->rd_indam)), \
-	AssertMacro(!ReindexIsProcessingIndex(RelationGetRelid(indexRelation))) \
-)
+do { \
+	Assert(RelationIsValid(indexRelation)); \
+	Assert(PointerIsValid(indexRelation->rd_indam)); \
+	if (unlikely(ReindexIsProcessingIndex(RelationGetRelid(indexRelation)))) \
+		ereport(ERROR, \
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED), \
+				 errmsg("cannot access index \"%s\" while it is being reindexed", \
+						RelationGetRelationName(indexRelation)))); \
+} while(0)
 
 #define SCAN_CHECKS \
 ( \
@@ -107,6 +112,7 @@ do { \
 static IndexScanDesc index_beginscan_internal(Relation indexRelation,
 											  int nkeys, int norderbys, Snapshot snapshot,
 											  ParallelIndexScanDesc pscan, bool temp_snap);
+static inline void validate_relation_kind(Relation r);
 
 
 /* ----------------------------------------------------------------
@@ -135,12 +141,30 @@ index_open(Oid relationId, LOCKMODE lockmode)
 
 	r = relation_open(relationId, lockmode);
 
-	if (r->rd_rel->relkind != RELKIND_INDEX &&
-		r->rd_rel->relkind != RELKIND_PARTITIONED_INDEX)
-		ereport(ERROR,
-				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-				 errmsg("\"%s\" is not an index",
-						RelationGetRelationName(r))));
+	validate_relation_kind(r);
+
+	return r;
+}
+
+/* ----------------
+ *		try_index_open - open a index relation by relation OID
+ *
+ *		Same as index_open, except return NULL instead of failing
+ *		if the relation does not exist.
+ * ----------------
+ */
+Relation
+try_index_open(Oid relationId, LOCKMODE lockmode)
+{
+	Relation	r;
+
+	r = try_relation_open(relationId, lockmode);
+
+	/* leave if index does not exist */
+	if (!r)
+		return NULL;
+
+	validate_relation_kind(r);
 
 	return r;
 }
@@ -167,6 +191,24 @@ index_close(Relation relation, LOCKMODE lockmode)
 	if (lockmode != NoLock)
 		UnlockRelationId(&relid, lockmode);
 }
+
+/* ----------------
+ *		validate_relation_kind - check the relation's kind
+ *
+ *		Make sure relkind is an index or a partitioned index.
+ * ----------------
+ */
+static inline void
+validate_relation_kind(Relation r)
+{
+	if (r->rd_rel->relkind != RELKIND_INDEX &&
+		r->rd_rel->relkind != RELKIND_PARTITIONED_INDEX)
+		ereport(ERROR,
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				 errmsg("\"%s\" is not an index",
+						RelationGetRelationName(r))));
+}
+
 
 /* ----------------
  *		index_insert - insert an index tuple into a relation
@@ -209,6 +251,8 @@ index_beginscan(Relation heapRelation,
 {
 	IndexScanDesc scan;
 
+	Assert(snapshot != InvalidSnapshot);
+
 	scan = index_beginscan_internal(indexRelation, nkeys, norderbys, snapshot, NULL, false);
 
 	/*
@@ -236,6 +280,8 @@ index_beginscan_bitmap(Relation indexRelation,
 					   int nkeys)
 {
 	IndexScanDesc scan;
+
+	Assert(snapshot != InvalidSnapshot);
 
 	scan = index_beginscan_internal(indexRelation, nkeys, 0, snapshot, NULL, false);
 
@@ -403,6 +449,8 @@ index_parallelscan_estimate(Relation indexRelation, Snapshot snapshot)
 {
 	Size		nbytes;
 
+	Assert(snapshot != InvalidSnapshot);
+
 	RELATION_CHECKS;
 
 	nbytes = offsetof(ParallelIndexScanDescData, ps_snapshot_data);
@@ -436,6 +484,8 @@ index_parallelscan_initialize(Relation heapRelation, Relation indexRelation,
 							  Snapshot snapshot, ParallelIndexScanDesc target)
 {
 	Size		offset;
+
+	Assert(snapshot != InvalidSnapshot);
 
 	RELATION_CHECKS;
 
@@ -953,7 +1003,6 @@ index_opclass_options(Relation indrel, AttrNumber attnum, Datum attoptions,
 		Oid			opclass;
 		Datum		indclassDatum;
 		oidvector  *indclass;
-		bool		isnull;
 
 		if (!DatumGetPointer(attoptions))
 			return NULL;		/* ok, no options, no procedure */
@@ -962,9 +1011,8 @@ index_opclass_options(Relation indrel, AttrNumber attnum, Datum attoptions,
 		 * Report an error if the opclass's options-parsing procedure does not
 		 * exist but the opclass options are specified.
 		 */
-		indclassDatum = SysCacheGetAttr(INDEXRELID, indrel->rd_indextuple,
-										Anum_pg_index_indclass, &isnull);
-		Assert(!isnull);
+		indclassDatum = SysCacheGetAttrNotNull(INDEXRELID, indrel->rd_indextuple,
+											   Anum_pg_index_indclass);
 		indclass = (oidvector *) DatumGetPointer(indclassDatum);
 		opclass = indclass->values[attnum - 1];
 

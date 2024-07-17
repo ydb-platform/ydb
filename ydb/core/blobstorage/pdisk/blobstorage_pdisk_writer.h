@@ -9,7 +9,6 @@
 #include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_request_id.h"
 
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/blobstorage/crypto/crypto.h>
 
 #include <util/generic/deque.h>
@@ -96,7 +95,6 @@ public:
     TLogChunkInfo *LogChunkInfo = nullptr;
 
     TPDiskHashCalculator Hash;
-    TControlWrapper UseT1ha0Hasher;
     TPDiskStreamCypher Cypher;
     TActorSystem *ActorSystem;
     ui32 PDiskId;
@@ -111,7 +109,7 @@ public:
     TSectorWriter(TPDiskMon &mon, IBlockDevice &blockDevice, TDiskFormat &format, ui64 &nonce,
             const TKey &key, TBufferPool *pool, ui64 firstSectorIdx, ui64 endSectorIdx, ui64 dataMagic, ui32 chunkIdx,
             TLogChunkInfo *logChunkInfo, ui64 sectorIdx, TBuffer *buffer, TActorSystem *actorSystem, ui32 pDiskId,
-            TDriveModel *driveModel, const TControlWrapper& useT1ha0Hasher, bool enableEncrytion)
+            TDriveModel *driveModel, bool enableEncrytion)
         : Mon(mon)
         , BlockDevice(blockDevice)
         , Format(format)
@@ -125,8 +123,7 @@ public:
         , RecordBytesLeft(0)
         , DataMagic(dataMagic)
         , LogChunkInfo(logChunkInfo)
-        , Hash(useT1ha0Hasher)
-        , UseT1ha0Hasher(useT1ha0Hasher)
+        , Hash()
         , Cypher(enableEncrytion)
         , ActorSystem(actorSystem)
         , PDiskId(pDiskId)
@@ -310,7 +307,6 @@ public:
         TDataSectorFooter &sectorFooter = *(TDataSectorFooter*)(sector + Format.SectorSize - sizeof(TDataSectorFooter));
         sectorFooter.Version = PDISK_DATA_VERSION;
         sectorFooter.Nonce = Nonce;
-        Hash.SetUseT1ha0Hasher(UseT1ha0Hasher);
         sectorFooter.Hash = Hash.HashSector(sectorOffset, magic, sector, Format.SectorSize);
 
         BufferedWriter->MarkDirty();
@@ -322,7 +318,6 @@ public:
         TParitySectorFooter &sectorFooter = *(TParitySectorFooter*)
             (sector + Format.SectorSize - sizeof(TParitySectorFooter));
         sectorFooter.Nonce = Nonce;
-        Hash.SetUseT1ha0Hasher(UseT1ha0Hasher);
         sectorFooter.Hash = Hash.HashSector(sectorOffset, magic, sector, Format.SectorSize);
         if (!IsLog && ActorSystem) {
             LOG_TRACE_S(*ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()

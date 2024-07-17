@@ -2,11 +2,11 @@
  * wait_event.c
  *	  Wait event reporting infrastructure.
  *
- * Copyright (c) 2001-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2001-2023, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
- *	  src/backend/postmaster/wait_event.c
+ *	  src/backend/utils/activity/wait_event.c
  *
  * NOTES
  *
@@ -34,8 +34,8 @@ static const char *pgstat_get_wait_timeout(WaitEventTimeout w);
 static const char *pgstat_get_wait_io(WaitEventIO w);
 
 
-static uint32 local_my_wait_event_info;
-uint32	   *my_wait_event_info = &local_my_wait_event_info;
+static __thread uint32 local_my_wait_event_info;
+__thread uint32	   *my_wait_event_info; void my_wait_event_info_init() { my_wait_event_info = &local_my_wait_event_info; }
 
 
 /*
@@ -230,8 +230,8 @@ pgstat_get_wait_activity(WaitEventActivity w)
 		case WAIT_EVENT_LOGICAL_LAUNCHER_MAIN:
 			event_name = "LogicalLauncherMain";
 			break;
-		case WAIT_EVENT_PGSTAT_MAIN:
-			event_name = "PgStatMain";
+		case WAIT_EVENT_LOGICAL_PARALLEL_APPLY_MAIN:
+			event_name = "LogicalParallelApplyMain";
 			break;
 		case WAIT_EVENT_RECOVERY_WAL_STREAM:
 			event_name = "RecoveryWalStream";
@@ -313,6 +313,12 @@ pgstat_get_wait_ipc(WaitEventIPC w)
 		case WAIT_EVENT_APPEND_READY:
 			event_name = "AppendReady";
 			break;
+		case WAIT_EVENT_ARCHIVE_CLEANUP_COMMAND:
+			event_name = "ArchiveCleanupCommand";
+			break;
+		case WAIT_EVENT_ARCHIVE_COMMAND:
+			event_name = "ArchiveCommand";
+			break;
 		case WAIT_EVENT_BACKEND_TERMINATION:
 			event_name = "BackendTermination";
 			break;
@@ -361,9 +367,6 @@ pgstat_get_wait_ipc(WaitEventIPC w)
 		case WAIT_EVENT_HASH_BUILD_HASH_OUTER:
 			event_name = "HashBuildHashOuter";
 			break;
-		case WAIT_EVENT_HASH_GROW_BATCHES_ALLOCATE:
-			event_name = "HashGrowBatchesAllocate";
-			break;
 		case WAIT_EVENT_HASH_GROW_BATCHES_DECIDE:
 			event_name = "HashGrowBatchesDecide";
 			break;
@@ -373,17 +376,26 @@ pgstat_get_wait_ipc(WaitEventIPC w)
 		case WAIT_EVENT_HASH_GROW_BATCHES_FINISH:
 			event_name = "HashGrowBatchesFinish";
 			break;
+		case WAIT_EVENT_HASH_GROW_BATCHES_REALLOCATE:
+			event_name = "HashGrowBatchesReallocate";
+			break;
 		case WAIT_EVENT_HASH_GROW_BATCHES_REPARTITION:
 			event_name = "HashGrowBatchesRepartition";
-			break;
-		case WAIT_EVENT_HASH_GROW_BUCKETS_ALLOCATE:
-			event_name = "HashGrowBucketsAllocate";
 			break;
 		case WAIT_EVENT_HASH_GROW_BUCKETS_ELECT:
 			event_name = "HashGrowBucketsElect";
 			break;
+		case WAIT_EVENT_HASH_GROW_BUCKETS_REALLOCATE:
+			event_name = "HashGrowBucketsReallocate";
+			break;
 		case WAIT_EVENT_HASH_GROW_BUCKETS_REINSERT:
 			event_name = "HashGrowBucketsReinsert";
+			break;
+		case WAIT_EVENT_LOGICAL_APPLY_SEND_DATA:
+			event_name = "LogicalApplySendData";
+			break;
+		case WAIT_EVENT_LOGICAL_PARALLEL_APPLY_STATE_CHANGE:
+			event_name = "LogicalParallelApplyStateChange";
 			break;
 		case WAIT_EVENT_LOGICAL_SYNC_DATA:
 			event_name = "LogicalSyncData";
@@ -427,6 +439,9 @@ pgstat_get_wait_ipc(WaitEventIPC w)
 		case WAIT_EVENT_RECOVERY_CONFLICT_TABLESPACE:
 			event_name = "RecoveryConflictTablespace";
 			break;
+		case WAIT_EVENT_RECOVERY_END_COMMAND:
+			event_name = "RecoveryEndCommand";
+			break;
 		case WAIT_EVENT_RECOVERY_PAUSE:
 			event_name = "RecoveryPause";
 			break;
@@ -435,6 +450,9 @@ pgstat_get_wait_ipc(WaitEventIPC w)
 			break;
 		case WAIT_EVENT_REPLICATION_SLOT_DROP:
 			event_name = "ReplicationSlotDrop";
+			break;
+		case WAIT_EVENT_RESTORE_COMMAND:
+			event_name = "RestoreCommand";
 			break;
 		case WAIT_EVENT_SAFE_SNAPSHOT:
 			event_name = "SafeSnapshot";
@@ -473,6 +491,9 @@ pgstat_get_wait_timeout(WaitEventTimeout w)
 		case WAIT_EVENT_BASE_BACKUP_THROTTLE:
 			event_name = "BaseBackupThrottle";
 			break;
+		case WAIT_EVENT_CHECKPOINT_WRITE_DELAY:
+			event_name = "CheckpointWriteDelay";
+			break;
 		case WAIT_EVENT_PG_SLEEP:
 			event_name = "PgSleep";
 			break;
@@ -482,8 +503,17 @@ pgstat_get_wait_timeout(WaitEventTimeout w)
 		case WAIT_EVENT_RECOVERY_RETRIEVE_RETRY_INTERVAL:
 			event_name = "RecoveryRetrieveRetryInterval";
 			break;
+		case WAIT_EVENT_REGISTER_SYNC_REQUEST:
+			event_name = "RegisterSyncRequest";
+			break;
+		case WAIT_EVENT_SPIN_DELAY:
+			event_name = "SpinDelay";
+			break;
 		case WAIT_EVENT_VACUUM_DELAY:
 			event_name = "VacuumDelay";
+			break;
+		case WAIT_EVENT_VACUUM_TRUNCATE:
+			event_name = "VacuumTruncate";
 			break;
 			/* no default case, so that compiler will warn */
 	}
@@ -506,6 +536,12 @@ pgstat_get_wait_io(WaitEventIO w)
 	{
 		case WAIT_EVENT_BASEBACKUP_READ:
 			event_name = "BaseBackupRead";
+			break;
+		case WAIT_EVENT_BASEBACKUP_SYNC:
+			event_name = "BaseBackupSync";
+			break;
+		case WAIT_EVENT_BASEBACKUP_WRITE:
+			event_name = "BaseBackupWrite";
 			break;
 		case WAIT_EVENT_BUFFILE_READ:
 			event_name = "BufFileRead";
@@ -561,6 +597,9 @@ pgstat_get_wait_io(WaitEventIO w)
 		case WAIT_EVENT_DATA_FILE_WRITE:
 			event_name = "DataFileWrite";
 			break;
+		case WAIT_EVENT_DSM_ALLOCATE:
+			event_name = "DSMAllocate";
+			break;
 		case WAIT_EVENT_DSM_FILL_ZERO_WRITE:
 			event_name = "DSMFillZeroWrite";
 			break;
@@ -606,8 +645,8 @@ pgstat_get_wait_io(WaitEventIO w)
 		case WAIT_EVENT_RELATION_MAP_READ:
 			event_name = "RelationMapRead";
 			break;
-		case WAIT_EVENT_RELATION_MAP_SYNC:
-			event_name = "RelationMapSync";
+		case WAIT_EVENT_RELATION_MAP_REPLACE:
+			event_name = "RelationMapReplace";
 			break;
 		case WAIT_EVENT_RELATION_MAP_WRITE:
 			event_name = "RelationMapWrite";
@@ -678,6 +717,12 @@ pgstat_get_wait_io(WaitEventIO w)
 		case WAIT_EVENT_TWOPHASE_FILE_WRITE:
 			event_name = "TwophaseFileWrite";
 			break;
+		case WAIT_EVENT_VERSION_FILE_SYNC:
+			event_name = "VersionFileSync";
+			break;
+		case WAIT_EVENT_VERSION_FILE_WRITE:
+			event_name = "VersionFileWrite";
+			break;
 		case WAIT_EVENT_WALSENDER_TIMELINE_HISTORY_READ:
 			event_name = "WALSenderTimelineHistoryRead";
 			break;
@@ -713,18 +758,6 @@ pgstat_get_wait_io(WaitEventIO w)
 			break;
 		case WAIT_EVENT_WAL_WRITE:
 			event_name = "WALWrite";
-			break;
-		case WAIT_EVENT_LOGICAL_CHANGES_READ:
-			event_name = "LogicalChangesRead";
-			break;
-		case WAIT_EVENT_LOGICAL_CHANGES_WRITE:
-			event_name = "LogicalChangesWrite";
-			break;
-		case WAIT_EVENT_LOGICAL_SUBXACT_READ:
-			event_name = "LogicalSubxactRead";
-			break;
-		case WAIT_EVENT_LOGICAL_SUBXACT_WRITE:
-			event_name = "LogicalSubxactWrite";
 			break;
 
 			/* no default case, so that compiler will warn */

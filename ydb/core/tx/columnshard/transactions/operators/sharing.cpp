@@ -51,11 +51,12 @@ void TSharingTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner
     TxPropose.release();
 }
 
-bool TSharingTransactionOperator::ExecuteOnProgress(TColumnShard& /*owner*/, const NOlap::TSnapshot& /*version*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) {
+bool TSharingTransactionOperator::ProgressOnExecute(
+    TColumnShard& /*owner*/, const NOlap::TSnapshot& /*version*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) {
     return true;
 }
 
-bool TSharingTransactionOperator::CompleteOnProgress(TColumnShard& owner, const TActorContext& ctx) {
+bool TSharingTransactionOperator::ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) {
     for (TActorId subscriber : NotifySubscribers) {
         auto event = MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(owner.TabletID(), GetTxId());
         ctx.Send(subscriber, event.Release(), 0, 0);

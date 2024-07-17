@@ -3,7 +3,7 @@
  * pg_type_d.h
  *    Macro definitions for pg_type
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -20,6 +20,8 @@
 
 #define TypeRelationId 1247
 #define TypeRelation_Rowtype_Id 71
+#define TypeOidIndexId 2703
+#define TypeNameNspIndexId 2704
 
 #define Anum_pg_type_oid 1
 #define Anum_pg_type_typname 2
@@ -84,6 +86,7 @@
 #define  TYPCATEGORY_USER		'U'
 #define  TYPCATEGORY_BITSTRING	'V' /* er ... "varbit"? */
 #define  TYPCATEGORY_UNKNOWN	'X'
+#define  TYPCATEGORY_INTERNAL	'Z'
 
 #define  TYPALIGN_CHAR			'c' /* char alignment (i.e. unaligned) */
 #define  TYPALIGN_SHORT			's' /* short alignment (typically 2 bytes) */

@@ -2592,7 +2592,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             auto result = session.ExecuteQuery(R"(
                 --!syntax_pg
                 CREATE TABLE Pg (
-                    key int4 PRIMARY KEY,
+                    key int8 PRIMARY KEY,
                     value int8
                 );
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -2627,7 +2627,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         {
             auto result = session.ExecuteQuery(R"(
                 --!syntax_pg
-                ALTER TABLE Pg ALTER COLUMN value SET DEFAULT nextval('seq');
+                ALTER TABLE Pg ALTER COLUMN key SET DEFAULT nextval('seq');
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT(!result.IsSuccess());
         }
@@ -2650,7 +2650,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         {
             auto result = session.ExecuteQuery(R"(
                 --!syntax_pg
-                ALTER TABLE Pg ALTER COLUMN value SET DEFAULT nextval('seq1');
+                ALTER TABLE Pg ALTER COLUMN key SET DEFAULT nextval('seq1');
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
@@ -2663,7 +2663,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             const auto& tableDescription = describeResult.GetPathDescription().GetTable();
 
             for (const auto& column: tableDescription.GetColumns()) {
-                if (column.GetName() == "value") {
+                if (column.GetName() == "key") {
                     UNIT_ASSERT(column.HasDefaultFromSequence());
                     UNIT_ASSERT(column.GetDefaultFromSequence() == "/Root/seq1");
                     break;
@@ -2674,7 +2674,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         {
             const auto query = Q_(R"(
                 --!syntax_pg
-                INSERT INTO Pg (key) values (2), (3);
+                INSERT INTO Pg (value) values (2), (3);
             )");
 
             auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -2692,7 +2692,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
             CompareYson(R"(
-                [["1";"1"];["2";"10"];["3";"12"]]
+                [["1";"1"];["10";"2"];["12";"3"]]
             )", FormatResultSetYson(result.GetResultSet(0)));
         }
 
@@ -2714,7 +2714,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         {
             auto result = session.ExecuteQuery(R"(
                 --!syntax_pg
-                ALTER TABLE Pg ALTER COLUMN value SET DEFAULT nextval('seq2');
+                ALTER TABLE Pg ALTER COLUMN key SET DEFAULT nextval('seq2');
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
@@ -2722,7 +2722,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         {
             const auto query = Q_(R"(
                 --!syntax_pg
-                INSERT INTO Pg (key) values (4), (5);
+                INSERT INTO Pg (value) values (4), (5);
             )");
 
             auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -2740,7 +2740,48 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
             CompareYson(R"(
-                [["1";"1"];["2";"10"];["3";"12"];["4";"5"];["5";"8"]]
+                [["1";"1"];["5";"4"];["8";"5"];["10";"2"];["12";"3"]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                --!syntax_pg
+                ALTER TABLE Pg ALTER COLUMN key DROP DEFAULT;
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                --!syntax_pg
+                ALTER TABLE Pg ALTER COLUMN value SET DEFAULT nextval('seq1');
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                INSERT INTO Pg (key) values (13), (14);
+            )");
+
+            auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        } 
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                SELECT * FROM Pg;
+            )");
+
+            auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            CompareYson(R"(
+                [["1";"1"];["5";"4"];["8";"5"];["10";"2"];["12";"3"];["13";"14"];["14";"16"]]
             )", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
@@ -4406,7 +4447,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 )");
                 auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-                UNIT_ASSERT(result.GetIssues().ToString().Contains("alternative is not implemented yet : 138"));
+                UNIT_ASSERT(result.GetIssues().ToString().Contains("alternative is not implemented yet : 34"));
             }
         }
 

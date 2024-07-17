@@ -69,7 +69,6 @@ bool TGeneralSerializedSlice::GroupBlobsImpl(const NSplitter::TGroupFeatures& fe
         chunksInProgress.AddChunks(i.GetChunks());
     }
     InternalSplitsCount = 0;
-    AFL_VERIFY(chunksInProgress.size());
     std::vector<TSplittedBlob> result;
     Y_ABORT_UNLESS(features.GetSplitSettings().GetMaxBlobSize() >= 2 * features.GetSplitSettings().GetMinBlobSize());
     while (!chunksInProgress.IsEmpty()) {

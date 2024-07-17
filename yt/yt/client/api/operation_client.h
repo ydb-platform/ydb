@@ -333,6 +333,7 @@ struct TJob
     std::optional<TString> Pool;
     std::optional<TString> MonitoringDescriptor;
     std::optional<ui64> JobCookie;
+    NYson::TYsonString ArchiveFeatures;
 
     std::optional<bool> IsStale;
 

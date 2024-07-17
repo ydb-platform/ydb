@@ -9,7 +9,7 @@
  * storage management for portals (but doesn't run any queries in them).
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -267,8 +267,8 @@ PortalCleanup(Portal portal)
 	/*
 	 * sanity checks
 	 */
-	AssertArg(PortalIsValid(portal));
-	AssertArg(portal->cleanup == PortalCleanup);
+	Assert(PortalIsValid(portal));
+	Assert(portal->cleanup == PortalCleanup);
 
 	/*
 	 * Shut down executor, if still running.  We skip this during error abort,
@@ -417,7 +417,7 @@ PersistHoldablePortal(Portal portal)
 										NULL);
 
 		/* Fetch the result set into the tuplestore */
-		ExecutorRun(queryDesc, direction, 0L, false);
+		ExecutorRun(queryDesc, direction, 0, false);
 
 		queryDesc->dest->rDestroy(queryDesc->dest);
 		queryDesc->dest = NULL;

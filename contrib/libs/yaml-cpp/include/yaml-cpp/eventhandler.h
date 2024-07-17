@@ -17,7 +17,7 @@ struct Mark;
 
 class EventHandler {
  public:
-  virtual ~EventHandler() {}
+  virtual ~EventHandler() = default;
 
   virtual void OnDocumentStart(const Mark& mark) = 0;
   virtual void OnDocumentEnd() = 0;
@@ -34,7 +34,12 @@ class EventHandler {
   virtual void OnMapStart(const Mark& mark, const std::string& tag,
                           anchor_t anchor, EmitterStyle::value style) = 0;
   virtual void OnMapEnd() = 0;
+
+  virtual void OnAnchor(const Mark& /*mark*/,
+                        const std::string& /*anchor_name*/) {
+    // empty default implementation for compatibility
+  }
 };
-}
+}  // namespace YAML
 
 #endif  // EVENTHANDLER_H_62B23520_7C8E_11DE_8A39_0800200C9A66

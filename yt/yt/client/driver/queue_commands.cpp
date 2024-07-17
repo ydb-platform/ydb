@@ -29,13 +29,17 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static NLogging::TLogger WithCommandTag(
+namespace {
+
+NLogging::TLogger WithCommandTag(
     const NLogging::TLogger& logger,
     const ICommandContextPtr& context)
 {
     return logger.WithTag("Command: %v",
         context->Request().CommandName);
 }
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -367,10 +371,12 @@ void TPushQueueProducerCommand::DoExecute(ICommandContextPtr context)
     auto queueTableInfoFuture = tableMountCache->GetTableInfo(QueuePath.GetPath());
     auto producerTableInfoFuture = tableMountCache->GetTableInfo(ProducerPath.GetPath());
 
-    auto queueTableInfo = WaitFor(queueTableInfoFuture).ValueOrThrow("Path %v is not valid queue", QueuePath);
+    auto queueTableInfo = WaitFor(queueTableInfoFuture)
+        .ValueOrThrow("Path %v does not point to a valid queue", QueuePath);
     queueTableInfo->ValidateOrdered();
 
-    auto producerTableInfo = WaitFor(producerTableInfoFuture).ValueOrThrow("Path %v is not valid producer", ProducerPath);
+    auto producerTableInfo = WaitFor(producerTableInfoFuture)
+        .ValueOrThrow("Path %v does not point to a valid producer", ProducerPath);
     producerTableInfo->ValidateSorted();
 
     struct TPushQueueProducerBufferTag

@@ -12,7 +12,7 @@
  * For UPDATE and DELETE queries, the targetlist must also contain "junk"
  * tlist entries needed to allow the executor to identify the rows to be
  * updated or deleted; for example, the ctid of a heap row.  (The planner
- * adds these; they're not in what we receive from the planner/rewriter.)
+ * adds these; they're not in what we receive from the parser/rewriter.)
  *
  * For all query types, there can be additional junk tlist entries, such as
  * sort keys, Vars needed for a RETURNING list, and row ID information needed
@@ -25,7 +25,7 @@
  * rewriter's work is more concerned with SQL semantics.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -107,14 +107,15 @@ preprocess_targetlist(PlannerInfo *root)
 		root->update_colnos = extract_update_targetlist_colnos(tlist);
 
 	/*
-	 * For non-inherited UPDATE/DELETE, register any junk column(s) needed to
-	 * allow the executor to identify the rows to be updated or deleted.  In
-	 * the inheritance case, we do nothing now, leaving this to be dealt with
-	 * when expand_inherited_rtentry() makes the leaf target relations.  (But
-	 * there might not be any leaf target relations, in which case we must do
-	 * this in distribute_row_identity_vars().)
+	 * For non-inherited UPDATE/DELETE/MERGE, register any junk column(s)
+	 * needed to allow the executor to identify the rows to be updated or
+	 * deleted.  In the inheritance case, we do nothing now, leaving this to
+	 * be dealt with when expand_inherited_rtentry() makes the leaf target
+	 * relations.  (But there might not be any leaf target relations, in which
+	 * case we must do this in distribute_row_identity_vars().)
 	 */
-	if ((command_type == CMD_UPDATE || command_type == CMD_DELETE) &&
+	if ((command_type == CMD_UPDATE || command_type == CMD_DELETE ||
+		 command_type == CMD_MERGE) &&
 		!target_rte->inh)
 	{
 		/* row-identity logic expects to add stuff to processed_tlist */
@@ -122,6 +123,65 @@ preprocess_targetlist(PlannerInfo *root)
 		add_row_identity_columns(root, result_relation,
 								 target_rte, target_relation);
 		tlist = root->processed_tlist;
+	}
+
+	/*
+	 * For MERGE we also need to handle the target list for each INSERT and
+	 * UPDATE action separately.  In addition, we examine the qual of each
+	 * action and add any Vars there (other than those of the target rel) to
+	 * the subplan targetlist.
+	 */
+	if (command_type == CMD_MERGE)
+	{
+		ListCell   *l;
+
+		/*
+		 * For MERGE, handle targetlist of each MergeAction separately. Give
+		 * the same treatment to MergeAction->targetList as we would have
+		 * given to a regular INSERT.  For UPDATE, collect the column numbers
+		 * being modified.
+		 */
+		foreach(l, parse->mergeActionList)
+		{
+			MergeAction *action = (MergeAction *) lfirst(l);
+			List	   *vars;
+			ListCell   *l2;
+
+			if (action->commandType == CMD_INSERT)
+				action->targetList = expand_insert_targetlist(action->targetList,
+															  target_relation);
+			else if (action->commandType == CMD_UPDATE)
+				action->updateColnos =
+					extract_update_targetlist_colnos(action->targetList);
+
+			/*
+			 * Add resjunk entries for any Vars and PlaceHolderVars used in
+			 * each action's targetlist and WHEN condition that belong to
+			 * relations other than the target.  We don't expect to see any
+			 * aggregates or window functions here.
+			 */
+			vars = pull_var_clause((Node *)
+								   list_concat_copy((List *) action->qual,
+													action->targetList),
+								   PVC_INCLUDE_PLACEHOLDERS);
+			foreach(l2, vars)
+			{
+				Var		   *var = (Var *) lfirst(l2);
+				TargetEntry *tle;
+
+				if (IsA(var, Var) && var->varno == result_relation)
+					continue;	/* don't need it */
+
+				if (tlist_member((Expr *) var, tlist))
+					continue;	/* already got it */
+
+				tle = makeTargetEntry((Expr *) var,
+									  list_length(tlist) + 1,
+									  NULL, true);
+				tlist = lappend(tlist, tle);
+			}
+			list_free(vars);
+		}
 	}
 
 	/*

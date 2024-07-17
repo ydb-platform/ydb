@@ -5,7 +5,7 @@
  *	  configuration settings (pg_db_role_setting)
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_db_role_setting.h
@@ -46,15 +46,12 @@ CATALOG(pg_db_role_setting,2964,DbRoleSettingRelationId) BKI_SHARED_RELATION
 
 typedef FormData_pg_db_role_setting * Form_pg_db_role_setting;
 
-DECLARE_TOAST(pg_db_role_setting, 2966, 2967);
-#define PgDbRoleSettingToastTable 2966
-#define PgDbRoleSettingToastIndex 2967
+DECLARE_TOAST_WITH_MACRO(pg_db_role_setting, 2966, 2967, PgDbRoleSettingToastTable, PgDbRoleSettingToastIndex);
 
-DECLARE_UNIQUE_INDEX_PKEY(pg_db_role_setting_databaseid_rol_index, 2965, on pg_db_role_setting using btree(setdatabase oid_ops, setrole oid_ops));
-#define DbRoleSettingDatidRolidIndexId	2965
+DECLARE_UNIQUE_INDEX_PKEY(pg_db_role_setting_databaseid_rol_index, 2965, DbRoleSettingDatidRolidIndexId, on pg_db_role_setting using btree(setdatabase oid_ops, setrole oid_ops));
 
 /*
- * prototypes for functions in pg_db_role_setting.h
+ * prototypes for functions in pg_db_role_setting.c
  */
 extern void AlterSetting(Oid databaseid, Oid roleid, VariableSetStmt *setstmt);
 extern void DropSetting(Oid databaseid, Oid roleid);

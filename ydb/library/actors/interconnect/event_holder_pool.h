@@ -12,7 +12,7 @@ namespace NActors {
         TStackVec<THolder<IEventBase>, MaxEvents> Events;
         TStackVec<THolder<TEventSerializedData>, MaxEvents> Buffers;
         std::shared_ptr<std::atomic<TAtomicBase>> Counter;
-        ui64 NumBytes = 0;
+        ui64 NumBytes = sizeof(TEvFreeItems);
 
         ~TEvFreeItems() {
             if (Counter) {
@@ -76,6 +76,7 @@ namespace NActors {
                 auto p = GetPendingEvent();
                 p->NumBytes += event->EventSerializedSize;
                 auto& events = p->Events;
+                p->NumBytes += sizeof(*ev);
                 events.push_back(std::move(ev));
                 trim = trim || events.size() >= TEvFreeItems::MaxEvents || p->NumBytes >= MaxBytesPerMessage;
             }
@@ -85,7 +86,9 @@ namespace NActors {
                 auto p = GetPendingEvent();
                 p->NumBytes += event->EventSerializedSize;
                 auto& buffers = p->Buffers;
-                buffers.emplace_back(event->Buffer.Release());
+                auto&& bufferReleased = event->Buffer.Release();
+                p->NumBytes += sizeof(*bufferReleased);
+                buffers.emplace_back(std::move(bufferReleased));
                 trim = trim || buffers.size() >= TEvFreeItems::MaxEvents || p->NumBytes >= MaxBytesPerMessage;
             }
 
@@ -93,11 +96,14 @@ namespace NActors {
             event->Clear();
             Cache.splice(Cache.end(), queue, event);
             if (Cache.size() >= FreeQueueTrimThreshold) {
-                auto& freeQueue = GetPendingEvent()->FreeQueue;
+                auto p = GetPendingEvent();
+                auto& freeQueue = p->FreeQueue;
                 auto it = Cache.begin();
-                std::advance(it, Cache.size() - MaxFreeQueueItems);
+                size_t addSize = Cache.size() - MaxFreeQueueItems;
+                std::advance(it, addSize);
                 freeQueue.splice(freeQueue.end(), Cache, Cache.begin(), it);
-                trim = true;
+                p->NumBytes += (sizeof(TEventHolder) + 5 * sizeof(void*)) * addSize;
+                trim = trim || p->NumBytes >= MaxBytesPerMessage;
             }
 
             // release items if we have hit the limit

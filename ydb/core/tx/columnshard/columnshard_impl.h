@@ -535,6 +535,7 @@ private:
 
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();
+    void TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TWriteId>&& writesToAbort);
 
     bool WaitPlanStep(ui64 step);
     void SendWaitPlanStep(ui64 step);

@@ -1,5 +1,8 @@
 #pragma once
 
+#include "table_vector_index.h"
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+
 #include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
 #include <util/generic/string.h>
@@ -18,8 +21,8 @@ struct TIndexColumns {
     TVector<TString> DataColumns;
 };
 
-bool IsCompatibleIndex(const TTableColumns& table, const TIndexColumns& index, TString& explain);
-TTableColumns CalcTableImplDescription(const TTableColumns& table, const TIndexColumns &index);
+bool IsCompatibleIndex(const NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index, TString& explain);
+TTableColumns CalcTableImplDescription(const NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index);
 
 }
 }

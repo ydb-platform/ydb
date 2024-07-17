@@ -67,8 +67,7 @@ public:
         , StartedAt(startedAt)
     {
         RequestEv.reset(ev->Release().Release());
-
-        if (AppData()->FeatureFlags.GetEnableImplicitQueryParameterTypes() && !RequestEv->GetYdbParameters().empty()) {
+        if (tableServiceConfig.GetEnableImplicitQueryParameterTypes() && !RequestEv->GetYdbParameters().empty()) {
             QueryParameterTypes = std::make_shared<std::map<TString, Ydb::Type>>();
             for (const auto& [name, typedValue] : RequestEv->GetYdbParameters()) {
                 QueryParameterTypes->insert({name, typedValue.Gettype()});
@@ -349,8 +348,6 @@ public:
         }
 
         if (TxCtx->HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
-            YQL_ENSURE(TxCtx->EnableImmediateEffects);
-
             if (tx && tx->GetHasEffects()) {
                 YQL_ENSURE(tx->ResultsSize() == 0);
                 // commit can be applied to the last transaction with effects

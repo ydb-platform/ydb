@@ -140,7 +140,7 @@ void TCommandListOperations::InitializeKindToHandler(TConfig& config) {
         {"scriptexec", &ListOperations<NQuery::TScriptExecutionOperation>},
     };
     if (config.UseExportToYt) {
-        KindToHandler.emplace("export", &ListOperations<NExport::TExportToYtResponse>); // deprecated
+        KindToHandler.emplace("export", THandlerWrapper(&ListOperations<NExport::TExportToYtResponse>, true)); // deprecated
         KindToHandler.emplace("export/yt", &ListOperations<NExport::TExportToYtResponse>);
     }
 }
@@ -149,11 +149,14 @@ TString TCommandListOperations::KindChoices() {
     TStringBuilder help;
 
     bool first = true;
-    for (const auto& kv : KindToHandler) {
+    for (const auto& [kind, handler] : KindToHandler) {
+        if (handler.Hidden) {
+            continue;
+        }
         if (!first) {
             help << ", ";
         }
-        help << kv.first;
+        help << kind;
         first = false;
     }
 

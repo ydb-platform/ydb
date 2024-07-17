@@ -8,7 +8,7 @@ $border = Date("1997-03-01");
 $revenue0 = (
     select
         l_suppkey as supplier_no,
-        Math::Round(sum(l_extendedprice * (1 - l_discount)), -8) as total_revenue
+        $round(sum(l_extendedprice * ($z1_12 - l_discount)), -8) as total_revenue
     from
         {{lineitem}}
     where

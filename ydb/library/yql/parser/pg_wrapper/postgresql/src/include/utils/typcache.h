@@ -6,7 +6,7 @@
  * The type cache exists to speed lookup of certain information about data
  * types that is not directly available from a type's pg_type row.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/typcache.h
@@ -210,8 +210,7 @@ struct HTAB;
 
 typedef struct RecordCacheState {
     struct HTAB *RecordCacheHash;
-    TupleDesc *RecordCacheArray;
-    uint64 *RecordIdentifierArray;
+    void* RecordCacheArray;
     int32 RecordCacheArrayLen;
     int32 NextRecordTypmod;
     uint64 tupledesc_id_counter;

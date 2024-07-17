@@ -22,13 +22,15 @@ SRCS(
 PEERDIR(
     contrib/libs/protobuf
     library/cpp/yson
+    library/cpp/yson/node
     yt/cpp/mapreduce/common
     yt/cpp/mapreduce/interface
     yt/cpp/mapreduce/interface/logging
-    yt/yt_proto/yt/formats
-    library/cpp/yson/node
     yt/cpp/mapreduce/skiff
+    yt/yt_proto/yt/formats
     yt/yt/core
 )
 
 END()
+
+RECURSE_FOR_TESTS(ut)

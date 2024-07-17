@@ -12,18 +12,6 @@ using namespace NConcurrency;
 /////////////////////////////////////////////////////////////////////////////
 
 void TQueueTransactionMixin::AdvanceConsumer(
-    const NYPath::TYPath& path,
-    int partitionIndex,
-    std::optional<i64> oldOffset,
-    i64 newOffset)
-{
-    THROW_ERROR_EXCEPTION_IF(newOffset < 0, "Queue consumer offset %v cannot be negative", newOffset);
-
-    auto consumerClient = CreateBigRTConsumerClient(GetClient(), path);
-    consumerClient->Advance(this, partitionIndex, oldOffset, newOffset);
-}
-
-void TQueueTransactionMixin::AdvanceConsumer(
     const NYPath::TRichYPath& consumerPath,
     const NYPath::TRichYPath& queuePath,
     int partitionIndex,

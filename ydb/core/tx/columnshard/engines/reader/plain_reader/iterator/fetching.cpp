@@ -15,20 +15,19 @@ bool TStepAction::DoApply(IDataReader& /*owner*/) const {
     return true;
 }
 
-bool TStepAction::DoExecute() {
+TConclusionStatus TStepAction::DoExecuteImpl() {
     if (Source->IsAborted()) {
-        return true;
+        return TConclusionStatus::Success();
     }
     auto executeResult = Cursor.Execute(Source);
     if (!executeResult) {
-        SetErrorMessage(executeResult.GetErrorMessage());
-        return false;
+        return executeResult;
     }
     if (*executeResult) {
         Source->Finalize();
         FinishedFlag = true;
     }
-    return true;
+    return TConclusionStatus::Success();
 }
 
 TConclusion<bool> TColumnBlobsFetchingStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {

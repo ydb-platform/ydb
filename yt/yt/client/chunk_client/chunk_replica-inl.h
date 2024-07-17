@@ -208,6 +208,11 @@ inline bool IsPhysicalChunkType(NObjectClient::EObjectType type)
         type == NObjectClient::EObjectType::ErasureJournalChunk;
 }
 
+inline bool IsPhysicalChunkId(TChunkId id)
+{
+    return IsPhysicalChunkType(NObjectClient::TypeFromId(id));
+}
+
 inline bool IsJournalChunkType(NObjectClient::EObjectType type)
 {
     return

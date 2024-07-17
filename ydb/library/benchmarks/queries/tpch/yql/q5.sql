@@ -79,7 +79,7 @@ on
 
 select
     n_name,
-    sum(l_extendedprice * (1 - l_discount)) as revenue
+    sum(l_extendedprice * ($z1_12 - l_discount)) as revenue
 from
     $j5
 group by

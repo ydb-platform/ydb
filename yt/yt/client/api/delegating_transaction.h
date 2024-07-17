@@ -225,11 +225,6 @@ public:
 
     // Queues
     void AdvanceConsumer(
-        const NYPath::TYPath& path,
-        int partitionIndex,
-        std::optional<i64> oldOffset,
-        i64 newOffset) override;
-    void AdvanceConsumer(
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
         int partitionIndex,

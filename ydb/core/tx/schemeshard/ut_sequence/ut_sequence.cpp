@@ -511,7 +511,8 @@ Y_UNIT_TEST_SUITE(TSequence) {
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table1"
             Columns { Name: "key" DefaultFromSequence: "/MyRoot/seq1" }
-        )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
+        )");
+        env.TestWaitNotification(runtime, txId);
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table1"
@@ -546,7 +547,7 @@ Y_UNIT_TEST_SUITE(TSequence) {
             .GetTable();
 
         for (const auto& column: table1.GetColumns()) {
-            if (column.GetName() == "value1") {
+            if (column.GetName() == "key" || column.GetName() == "value1") {
                 UNIT_ASSERT(column.HasDefaultFromSequence());
                 UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(), "/MyRoot/seq1");
 
@@ -555,7 +556,6 @@ Y_UNIT_TEST_SUITE(TSequence) {
                         NLs::SequenceName("seq1"),
                     }
                 );
-                break;
             }
         }
 
@@ -600,7 +600,6 @@ Y_UNIT_TEST_SUITE(TSequence) {
                         NLs::SequenceName("seq2"),
                     }
                 );
-                break;
             } else if (column.GetName() == "value2") {
                 UNIT_ASSERT(column.HasDefaultFromSequence());
                 UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(), "/MyRoot/seq1");
@@ -610,7 +609,70 @@ Y_UNIT_TEST_SUITE(TSequence) {
                         NLs::SequenceName("seq1"),
                     }
                 );
-                break;
+            }
+        }
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table2"
+            Columns { Name: "key" DefaultFromSequence: "/MyRoot/seq2" }
+            Columns { Name: "value1" EmptyDefault: NULL_VALUE }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        table2 = DescribePath(runtime, "/MyRoot/Table2")
+            .GetPathDescription()
+            .GetTable();
+
+        for (const auto& column: table2.GetColumns()) {
+            if (column.GetName() == "key") {
+                UNIT_ASSERT(column.HasDefaultFromSequence());
+                UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(), "/MyRoot/seq2");
+
+                TestDescribeResult(DescribePath(runtime, column.GetDefaultFromSequence()),
+                    {
+                        NLs::SequenceName("seq2"),
+                    }
+                );
+            }
+            if (column.GetName() == "value1") {
+                UNIT_ASSERT(!column.HasDefaultFromSequence());
+                UNIT_ASSERT(!column.HasDefaultFromLiteral());
+            } else if (column.GetName() == "value2") {
+                UNIT_ASSERT(column.HasDefaultFromSequence());
+                UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(), "/MyRoot/seq1");
+
+                TestDescribeResult(DescribePath(runtime, column.GetDefaultFromSequence()),
+                    {
+                        NLs::SequenceName("seq1"),
+                    }
+                );
+            }
+        }
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" EmptyDefault: NULL_VALUE }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        table1 = DescribePath(runtime, "/MyRoot/Table1")
+            .GetPathDescription()
+            .GetTable();
+
+        for (const auto& column: table1.GetColumns()) {
+            if (column.GetName() == "key") {
+                UNIT_ASSERT(!column.HasDefaultFromSequence());
+                UNIT_ASSERT(!column.HasDefaultFromLiteral());
+            }
+            if (column.GetName() == "value1") {
+                UNIT_ASSERT(column.HasDefaultFromSequence());
+                UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(), "/MyRoot/seq1");
+
+                TestDescribeResult(DescribePath(runtime, column.GetDefaultFromSequence()),
+                    {
+                        NLs::SequenceName("seq1"),
+                    }
+                );
             }
         }
     }

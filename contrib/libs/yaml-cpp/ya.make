@@ -4,7 +4,9 @@ LICENSE(MIT)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(0.5.3)
+VERSION(0.8.0)
+
+ORIGINAL_SOURCE(https://github.com/jbeder/yaml-cpp/archive/refs/tags/0.8.0.tar.gz)
 
 NO_UTIL()
 
@@ -15,6 +17,7 @@ ADDINCL(GLOBAL contrib/libs/yaml-cpp/include)
 SRCS(
     src/binary.cpp
     src/convert.cpp
+    src/depthguard.cpp
     src/directives.cpp
     src/emit.cpp
     src/emitfromevents.cpp

@@ -245,6 +245,9 @@ public:
     //! Use chunk prober to reduce the number of probing requests.
     bool UseChunkProber;
 
+    //! Use request batcher to reduce the number of get blocks requests.
+    bool UseReadBlocksBatcher;
+
     REGISTER_YSON_STRUCT(TReplicationReaderConfig);
 
     static void Register(TRegistrar registrar);

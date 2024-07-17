@@ -19,9 +19,9 @@ TCompactedWriteController::TCompactedWriteController(const TActorId& dstActor, T
         }
         auto* pInfo = changes.GetWritePortionInfo(i);
         Y_ABORT_UNLESS(pInfo);
-        TWritePortionInfoWithBlobs& portionWithBlobs = *pInfo;
+        TWritePortionInfoWithBlobsResult& portionWithBlobs = *pInfo;
         for (auto&& b : portionWithBlobs.GetBlobs()) {
-            auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.GetBlob(), changes.MutableBlobsAction().GetWriting(b.GetOperator()->GetStorageId())));
+            auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.GetResultBlob(), changes.MutableBlobsAction().GetWriting(b.GetOperator()->GetStorageId())));
             b.RegisterBlobId(portionWithBlobs, task.GetBlobId());
             WriteVolume += b.GetSize();
         }

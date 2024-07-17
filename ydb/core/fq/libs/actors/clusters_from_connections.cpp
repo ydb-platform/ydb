@@ -283,6 +283,18 @@ void AddClustersFromConnections(
             clusters.emplace(connectionName, GenericProviderName);
             break;
         }
+        case FederatedQuery::ConnectionSetting::kMysqlCluster: {
+            FillGenericClusterConfig(
+                common,
+                *gatewaysConfig.MutableGeneric()->AddClusterMapping(),
+                conn.content().setting().mysql_cluster(),
+                connectionName,
+                NYql::NConnector::NApi::EDataSourceKind::MYSQL,
+                authToken,
+                accountIdSignatures);
+            clusters.emplace(connectionName, GenericProviderName);
+            break;
+        }
 
         // Do not replace with default. Adding a new connection should cause a compilation error
         case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:

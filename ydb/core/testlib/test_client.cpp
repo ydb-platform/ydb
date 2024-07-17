@@ -225,6 +225,9 @@ namespace Tests {
 
         NKikimr::SetupChannelProfiles(app);
 
+        if (Settings->NeedStatsCollectors) {
+            Runtime->SetupStatsCollectors();
+        }
         Runtime->SetupMonitoring(Settings->MonitoringPortOffset, Settings->MonitoringTypeAsync);
         Runtime->SetLogBackend(Settings->LogBackend);
 
@@ -831,7 +834,7 @@ namespace Tests {
             auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
 
             IActor* kqpRmService = NKqp::CreateKqpResourceManagerActor(
-                Settings->AppConfig->GetTableServiceConfig().GetResourceManager(), nullptr, {}, kqpProxySharedResources);
+                Settings->AppConfig->GetTableServiceConfig().GetResourceManager(), nullptr, {}, kqpProxySharedResources, Runtime->GetNodeId(nodeIdx));
             TActorId kqpRmServiceId = Runtime->Register(kqpRmService, nodeIdx);
             Runtime->RegisterService(NKqp::MakeKqpRmServiceID(Runtime->GetNodeId(nodeIdx)), kqpRmServiceId, nodeIdx);
 
@@ -1672,7 +1675,7 @@ namespace Tests {
             }
 
             indexDesc->SetType(type);
-            indexDesc->MutableIndexImplTableDescription()->SetUniformPartitionsCount(16);
+            indexDesc->AddIndexImplTableDescriptions()->SetUniformPartitionsCount(16);
         }
 
         TAutoPtr<NBus::TBusMessage> reply;

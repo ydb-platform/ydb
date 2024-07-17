@@ -31,7 +31,8 @@ struct IYPathServiceContext
 {
     virtual void SetRequestHeader(std::unique_ptr<NRpc::NProto::TRequestHeader> header) = 0;
 
-    virtual void SetReadRequestComplexityLimiter(const TReadRequestComplexityLimiterPtr& limiter) = 0;
+    virtual void SetReadRequestComplexityLimiter(
+        const TReadRequestComplexityLimiterPtr& limiter) = 0;
     virtual TReadRequestComplexityLimiterPtr GetReadRequestComplexityLimiter() = 0;
 };
 
@@ -138,9 +139,9 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define DECLARE_SUPPORTS_METHOD(method, base) \
+#define DECLARE_SUPPORTS_METHOD(method, ...) \
     class TSupports##method \
-        : public base \
+        __VA_OPT__(: public)  __VA_ARGS__ \
     { \
     protected: \
         DECLARE_YPATH_SERVICE_METHOD(::NYT::NYTree::NProto, method); \
@@ -196,7 +197,6 @@ protected:
 DEFINE_YPATH_CONTEXT_IMPL(IYPathServiceContext, TTypedYPathServiceContext);
 
 class TSupportsExistsBase
-    : public virtual TRefCounted
 {
 protected:
     template <class TContextPtr>

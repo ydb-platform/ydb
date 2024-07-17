@@ -1,7 +1,6 @@
 #include "tablet_sys.h"
 #include "tablet_tracing_signals.h"
 
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/services/services.pb.h>

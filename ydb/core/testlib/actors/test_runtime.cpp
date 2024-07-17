@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/pool_stats_collector.h>
 #include <ydb/core/mon/sync_http_mon.h>
 #include <ydb/core/mon/async_http_mon.h>
 #include <ydb/core/mon_alloc/profiler.h>
@@ -41,6 +42,10 @@ namespace NActors {
         SetScheduledEventFilter(&TTestActorRuntime::DefaultScheduledFilterFunc);
         NodeFactory = MakeHolder<TNodeFactory>();
         InitNodes();
+    }
+
+    void TTestActorRuntime::SetupStatsCollectors() {
+        NeedStatsCollectors = true;
     }
 
     TTestActorRuntime::TTestActorRuntime(THeSingleSystemEnv d)
@@ -212,7 +217,14 @@ namespace NActors {
         return MonPorts[nodeIndex];
     }
 
-    void TTestActorRuntime::InitActorSystemSetup(TActorSystemSetup& /*setup*/) {
+    void TTestActorRuntime::InitActorSystemSetup(TActorSystemSetup& setup, TNodeDataBase* node) {
+        if (NeedMonitoring && NeedStatsCollectors) {
+            NActors::IActor* statsCollector = NKikimr::CreateStatsCollector(1, setup, node->DynamicCounters);
+            setup.LocalServices.push_back({
+                TActorId(),
+                NActors::TActorSetupCmd(statsCollector, NActors::TMailboxType::HTSwap, node->GetAppData<NKikimr::TAppData>()->SystemPoolId)
+            });
+        }
     }
 
     NKikimr::TAppData& TTestActorRuntime::GetAppData(ui32 nodeIndex) {

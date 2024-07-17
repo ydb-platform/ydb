@@ -20,6 +20,14 @@ TEvPrivate::TEvFetchPoolResponse::TPtr FetchPool(TIntrusivePtr<IYdbSetup> ydb, c
     return runtime->GrabEdgeEvent<TEvPrivate::TEvFetchPoolResponse>(edgeActor, FUTURE_WAIT_TIMEOUT);
 }
 
+TEvPrivate::TEvCpuLoadResponse::TPtr FetchCpuInfo(TIntrusivePtr<IYdbSetup> ydb) {
+    auto runtime = ydb->GetRuntime();
+    const auto& edgeActor = runtime->AllocateEdgeActor();
+
+    runtime->Register(CreateCpuLoadFetcherActor(edgeActor));
+    return runtime->GrabEdgeEvent<TEvPrivate::TEvCpuLoadResponse>(edgeActor, FUTURE_WAIT_TIMEOUT);
+}
+
 }  // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KqpWorkloadServiceActors) {
@@ -128,6 +136,28 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceActors) {
         TSampleQueries::CheckSuccess(ydb->ExecuteQuery(TStringBuilder() << R"(
             DROP RESOURCE POOL )" << NResourcePool::DEFAULT_POOL_ID << ";"
         , settings));
+    }
+
+    Y_UNIT_TEST(TestCpuLoadActor) {
+        const ui32 nodeCount = 5;
+        auto ydb = TYdbSetupSettings()
+            .NodeCount(nodeCount)
+            .Create();
+
+        auto response = FetchCpuInfo(ydb);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Status, Ydb::StatusIds::NOT_FOUND, response->Get()->Issues.ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS(response->Get()->Issues.ToString(), "Cpu info not found");
+
+        const double usage = 0.25;
+        const ui32 threads = 2;
+        for (size_t nodeIndex = 0; nodeIndex < nodeCount; ++nodeIndex) {
+            ydb->UpdateNodeCpuInfo(usage, threads, nodeIndex);
+        }
+
+        response = FetchCpuInfo(ydb);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Status, Ydb::StatusIds::SUCCESS, response->Get()->Issues.ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->CpuNumber, threads * nodeCount);
+        UNIT_ASSERT_DOUBLES_EQUAL(response->Get()->InstantLoad, usage, 0.01);
     }
 }
 

@@ -149,7 +149,28 @@ def main():
             row["id"] = str(uuid.uuid4())
             rows.append(copy.copy(row))
 
-        if rows:
+
+        """
+        Temporary disable because of 
+
+2024-07-12T08:09:49.8675916Z Traceback (most recent call last):
+2024-07-12T08:09:49.8677299Z   File "/home/runner/.local/lib/python3.10/site-packages/ydb/connection.py", line 458, in __call__
+2024-07-12T08:09:49.8678065Z     response = rpc_state(
+2024-07-12T08:09:49.8678879Z   File "/home/runner/.local/lib/python3.10/site-packages/ydb/connection.py", line 242, in __call__
+2024-07-12T08:09:49.8679773Z     response, rendezvous = self.rpc.with_call(*args, **kwargs)
+2024-07-12T08:09:49.8680722Z   File "/home/runner/.local/lib/python3.10/site-packages/grpc/_channel.py", line 1198, in with_call
+2024-07-12T08:09:49.8681604Z     return _end_unary_response_blocking(state, call, True, None)
+2024-07-12T08:09:49.8682681Z   File "/home/runner/.local/lib/python3.10/site-packages/grpc/_channel.py", line 1006, in _end_unary_response_blocking
+2024-07-12T08:09:49.8683773Z     raise _InactiveRpcError(state)  # pytype: disable=not-instantiable
+2024-07-12T08:09:49.8684656Z grpc._channel._InactiveRpcError: <_InactiveRpcError of RPC that terminated with:
+2024-07-12T08:09:49.8685362Z 	status = StatusCode.RESOURCE_EXHAUSTED
+2024-07-12T08:09:49.8686015Z 	details = "CLIENT: Sent message larger than max (64975458 vs. 64000000)"
+2024-07-12T08:09:49.8687739Z 	debug_error_string = "UNKNOWN:Error received from peer  ***grpc_message:"CLIENT: Sent message larger than max (64975458 vs. 64000000)", grpc_status:8, created_time:"2024-07-12T08:09:49.841712345+00:00"***"
+2024-07-12T08:09:49.8688817Z >
+        """
+        TEMPORARY_DISABLE = True
+
+        if rows and not TEMPORARY_DISABLE:
             row = rows[0]
             driver.table_client.bulk_upsert(
                 DATABASE_PATH + "/code-agility/cpp_compile_time", rows, generate_column_types(row)
@@ -177,7 +198,7 @@ def main():
             row["inclusion_count"] = inclusion_count
             rows.append(copy.copy(row))
 
-        if rows:
+        if rows and not TEMPORARY_DISABLE:
             row = rows[0]
             driver.table_client.bulk_upsert(
                 DATABASE_PATH + "/code-agility/headers_impact", rows, generate_column_types(row)
@@ -201,7 +222,7 @@ def main():
 
                 rows.append(copy.copy(row))
 
-        if rows:
+        if rows and not TEMPORARY_DISABLE:
             row = rows[0]
             driver.table_client.bulk_upsert(
                 DATABASE_PATH + "/code-agility/compile_breakdown", rows, generate_column_types(row)

@@ -50,7 +50,7 @@ void TServerConfig::Register(TRegistrar registrar)
         .Default(true);
 
     registrar.Parameter("cancel_fiber_on_connection_close", &TThis::CancelFiberOnConnectionClose)
-        .Default(false);
+        .Default();
 
     registrar.Parameter("nodelay", &TThis::NoDelay)
         .Default(true);

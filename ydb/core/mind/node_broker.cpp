@@ -860,9 +860,9 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
     LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER, "Handle TEvNodeBroker::TEvRegistrationRequest"
         << ": request# " << ev->Get()->Record.ShortDebugString());
 
-    class TRegisterNodeActor : public TActorBootstrapped<TRegisterNodeActor> {
+    class TResolveTenantActor : public TActorBootstrapped<TResolveTenantActor> {
         TEvNodeBroker::TEvRegistrationRequest::TPtr Ev;
-        TNodeBroker *Self;
+        TActorId ReplyTo;
         NActors::TScopeId ScopeId;
         TSubDomainKey ServicedSubDomain;
 
@@ -871,9 +871,9 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
             return NKikimrServices::TActivity::NODE_BROKER_ACTOR;
         }
 
-        TRegisterNodeActor(TEvNodeBroker::TEvRegistrationRequest::TPtr& ev, TNodeBroker *self)
+        TResolveTenantActor(TEvNodeBroker::TEvRegistrationRequest::TPtr& ev, TActorId replyTo)
             : Ev(ev)
-            , Self(self)
+            , ReplyTo(replyTo)
         {}
 
         void Bootstrap(const TActorContext& ctx) {
@@ -930,7 +930,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                 << ": scope id# " << ScopeIdToString(ScopeId)
                 << ": serviced subdomain# " << ServicedSubDomain);
 
-            Self->ProcessTx(Self->CreateTxRegisterNode(Ev, ScopeId, ServicedSubDomain), ctx);
+            Send(ReplyTo, new TEvPrivate::TEvResolvedRegistrationRequest(Ev, ScopeId, ServicedSubDomain));
             Die(ctx);
         }
 
@@ -939,7 +939,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
             CFunc(TEvents::TSystem::Undelivered, HandleUndelivered)
         })
     };
-    ctx.RegisterWithSameMailbox(new TRegisterNodeActor(ev, this));
+    ctx.RegisterWithSameMailbox(new TResolveTenantActor(ev, SelfId()));
 }
 
 void TNodeBroker::Handle(TEvNodeBroker::TEvExtendLeaseRequest::TPtr &ev,
@@ -987,6 +987,12 @@ void TNodeBroker::Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev,
     }
 
     ProcessTx(CreateTxUpdateEpoch(), ctx);
+}
+
+void TNodeBroker::Handle(TEvPrivate::TEvResolvedRegistrationRequest::TPtr &ev,
+                         const TActorContext &ctx)
+{
+    ProcessTx(CreateTxRegisterNode(ev), ctx);
 }
 
 IActor *CreateNodeBroker(const TActorId &tablet,

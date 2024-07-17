@@ -8,7 +8,7 @@
  *	  interrupted, unlike LWLock waits.  Condition variables are safe
  *	  to use within dynamic shared memory segments.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/backend/storage/lmgr/condition_variable.c
@@ -223,15 +223,17 @@ ConditionVariableTimedSleep(ConditionVariable *cv, long timeout,
  *
  * Do nothing if nothing is pending; this allows this function to be called
  * during transaction abort to clean up any unfinished CV sleep.
+ *
+ * Return true if we've been signaled.
  */
-void
+bool
 ConditionVariableCancelSleep(void)
 {
 	ConditionVariable *cv = cv_sleep_target;
 	bool		signaled = false;
 
 	if (cv == NULL)
-		return;
+		return false;
 
 	SpinLockAcquire(&cv->mutex);
 	if (proclist_contains(&cv->wakeup, MyProc->pgprocno, cvWaitLink))
@@ -240,15 +242,9 @@ ConditionVariableCancelSleep(void)
 		signaled = true;
 	SpinLockRelease(&cv->mutex);
 
-	/*
-	 * If we've received a signal, pass it on to another waiting process, if
-	 * there is one.  Otherwise a call to ConditionVariableSignal() might get
-	 * lost, despite there being another process ready to handle it.
-	 */
-	if (signaled)
-		ConditionVariableSignal(cv);
-
 	cv_sleep_target = NULL;
+
+	return signaled;
 }
 
 /*

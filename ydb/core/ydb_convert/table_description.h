@@ -65,9 +65,9 @@ void FillTableBoundary(Ydb::Table::CreateTableRequest& out,
 
 // out
 void FillIndexDescription(Ydb::Table::DescribeTableResult& out,
-    const NKikimrSchemeOp::TTableDescription& in, const NKikimrMiniKQL::TType& splitKeyType);
+    const NKikimrSchemeOp::TTableDescription& in);
 void FillIndexDescription(Ydb::Table::CreateTableRequest& out,
-    const NKikimrSchemeOp::TTableDescription& in, const NKikimrMiniKQL::TType& splitKeyType);
+    const NKikimrSchemeOp::TTableDescription& in);
 // in
 bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
     const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error);

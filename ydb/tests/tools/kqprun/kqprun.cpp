@@ -13,6 +13,7 @@
 
 #include <ydb/core/base/backtrace.h>
 
+#include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file_comp_nodes.h>
@@ -90,11 +91,13 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, NKqpRun::TKqp
             Cout << "..." << colors.Default() << Endl;
         }
 
+        TInstant startTime = TInstant::Now();
         switch (executionCase) {
         case TExecutionOptions::EExecutionCase::GenericScript:
             if (!runner.ExecuteScript(executionOptions.ScriptQueries[id], executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Script execution failed";
             }
+            Cout << colors.Cyan() << "Script request finished. Time: " << TInstant::Now() - startTime << colors.Default() << Endl;
             Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Fetching script results..." << colors.Default() << Endl;
             if (!runner.FetchScriptResults()) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Fetch script results failed";
@@ -111,12 +114,14 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, NKqpRun::TKqp
             if (!runner.ExecuteQuery(executionOptions.ScriptQueries[id], executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Query execution failed";
             }
+            Cout << colors.Cyan() << "Generic request finished. Time: " << TInstant::Now() - startTime << colors.Default() << Endl;
             break;
 
         case TExecutionOptions::EExecutionCase::YqlScript:
             if (!runner.ExecuteYqlScript(executionOptions.ScriptQueries[id], executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Yql script execution failed";
             }
+            Cout << colors.Cyan() << "Yql script request finished. Time: " << TInstant::Now() - startTime << colors.Default() << Endl;
             break;
 
         case TExecutionOptions::EExecutionCase::AsyncQuery:
@@ -301,7 +306,10 @@ protected:
             .DefaultValue("./configuration/app_config.conf")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 TString file(option->CurValOrDef());
-                if (!google::protobuf::TextFormat::ParseFromString(LoadFile(file), &RunnerOptions.YdbSettings.AppConfig)) {
+                if (file.EndsWith(".yaml")) {
+                    auto document = NKikimr::NFyaml::TDocument::Parse(LoadFile(file));
+                    RunnerOptions.YdbSettings.AppConfig = NKikimr::NYamlConfig::YamlToProto(document.Root());
+                } else if (!google::protobuf::TextFormat::ParseFromString(LoadFile(file), &RunnerOptions.YdbSettings.AppConfig)) {
                     ythrow yexception() << "Bad format of app configuration";
                 }
             });

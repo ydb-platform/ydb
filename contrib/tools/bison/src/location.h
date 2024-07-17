@@ -1,6 +1,7 @@
 /* Locations for Bison
 
-   Copyright (C) 2002, 2004-2013 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2004-2015, 2018-2019 Free Software Foundation,
+   Inc.
 
    This file is part of Bison, the GNU Compiler Compiler.
 
@@ -107,7 +108,7 @@ void location_compute (location *loc,
    Warning: uses quotearg's slot 3. */
 unsigned location_print (location loc, FILE *out);
 
-/* Free any allocated ressources and close any open file handles that are
+/* Free any allocated resources and close any open file handles that are
    left-over by the usage of location_caret.  */
 void cleanup_caret (void);
 
@@ -124,6 +125,9 @@ location_cmp (location a, location b)
     res = boundary_cmp (a.end, b.end);
   return res;
 }
+
+/* Whether this is the empty location.  */
+bool location_empty (location loc);
 
 /* LOC_STR must be formatted as 'file:line.column', it will be modified.  */
 void boundary_set_from_string (boundary *bound, char *loc_str);

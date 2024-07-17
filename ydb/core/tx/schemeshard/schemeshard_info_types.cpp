@@ -3,7 +3,6 @@
 #include "schemeshard_utils.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
@@ -324,9 +323,9 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
         bool isAlterColumn = (source && colName2Id.contains(colName));
         if (isAlterColumn) {
-            if (keys.contains(colName2Id.at(colName))) {
+            if (keys.contains(colName2Id.at(colName)) && columnFamily) {
                 errStr = TStringBuilder()
-                    << "Cannot alter key column ' " << colName << "' with id " << colName2Id.at(colName);
+                    << "Cannot set family for key column ' " << colName << "' with id " << colName2Id.at(colName);
                 return nullptr;
             }
 
@@ -335,20 +334,27 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
 
-            if (!columnFamily && !col.HasDefaultFromSequence()) {
+            if (!columnFamily && !col.HasDefaultFromSequence() && !col.HasEmptyDefault()) {
                 errStr = Sprintf("Nothing to alter for column '%s'", colName.data());
                 return nullptr;
             }
 
-            if (col.HasDefaultFromSequence()) {
-                if (!localSequences.contains(col.GetDefaultFromSequence())) {
-                    errStr = Sprintf("Column '%s' cannot use an unknown sequence '%s'", colName.c_str(), col.GetDefaultFromSequence().c_str());
-                    return nullptr;
-                }
-            } else {
-                if (col.DefaultValue_case() != NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET) {
-                    errStr = Sprintf("Cannot set default from literal for column '%s'", colName.c_str());
-                    return nullptr;
+            if (col.DefaultValue_case() != NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET) {
+                switch (col.GetDefaultValueCase()) {
+                    case NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence: {
+                        if (!localSequences.contains(col.GetDefaultFromSequence())) {
+                            errStr = Sprintf("Column '%s' cannot use an unknown sequence '%s'", colName.c_str(), col.GetDefaultFromSequence().c_str());
+                            return nullptr;
+                        }
+                        break;
+                    }
+                    case NKikimrSchemeOp::TColumnDescription::kEmptyDefault: {
+                        break;
+                    }
+                    default: {
+                        errStr = Sprintf("Cannot set default from literal for column '%s'", colName.c_str());
+                        return nullptr;
+                    }
                 }
             }
 
@@ -356,10 +362,10 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             const TTableInfo::TColumn& sourceColumn = source->Columns[colId];
 
             if (col.HasDefaultFromSequence()) {
-                if (sourceColumn.PType.GetTypeId() != NScheme::NTypeIds::Int64 
+                if (sourceColumn.PType.GetTypeId() != NScheme::NTypeIds::Int64
                         && NPg::PgTypeIdFromTypeDesc(sourceColumn.PType.GetTypeDesc()) != INT8OID) {
-                    TString sequenceType = sourceColumn.PType.GetTypeId() == NScheme::NTypeIds::Pg 
-                        ? NPg::PgTypeNameFromTypeDesc(NPg::TypeDescFromPgTypeId(INT8OID)) 
+                    TString sequenceType = sourceColumn.PType.GetTypeId() == NScheme::NTypeIds::Pg
+                        ? NPg::PgTypeNameFromTypeDesc(NPg::TypeDescFromPgTypeId(INT8OID))
                         : NScheme::TypeName(NScheme::NTypeIds::Int64);
                     errStr = Sprintf(
                         "Sequence value type '%s' must be equal to the column type '%s'", sequenceType.c_str(),
@@ -373,12 +379,18 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             if (columnFamily) {
                 column.Family = columnFamily->GetId();
             }
-            if (col.HasDefaultFromSequence()) {
-                column.DefaultKind = ETableColumnDefaultKind::FromSequence;
-                column.DefaultValue = col.GetDefaultFromSequence();
-            } else if (col.HasDefaultFromLiteral()) {
-                column.DefaultKind = ETableColumnDefaultKind::FromLiteral;
-                column.DefaultValue = col.GetDefaultFromLiteral().SerializeAsString();
+            switch (col.GetDefaultValueCase()) {
+                case NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence: {
+                    column.DefaultKind = ETableColumnDefaultKind::FromSequence;
+                    column.DefaultValue = col.GetDefaultFromSequence();
+                    break;
+                }
+                case NKikimrSchemeOp::TColumnDescription::kEmptyDefault: {
+                    column.DefaultKind = ETableColumnDefaultKind::None;
+                    column.DefaultValue = "";
+                    break;
+                }
+                default: break;
             }
         } else {
             if (colName2Id.contains(colName)) {
@@ -411,7 +423,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                             return nullptr;
                         default:
                             break;
-                    }                    
+                    }
                 }
             } else {
                 auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
@@ -507,6 +519,13 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     }
 
     if (op.HasTTLSettings()) {
+        for (const auto& indexDescription : op.GetTableIndexes()) {
+            if (indexDescription.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+                errStr = "Table with vector indexes doesn't support TTL";
+                return nullptr;                
+            }
+        }
+
         const auto& ttl = op.GetTTLSettings();
 
         if (!ValidateTtlSettings(ttl, source ? source->Columns : THashMap<ui32, TColumn>(), alterData->Columns, colName2Id, subDomain, errStr)) {
@@ -953,14 +972,6 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
         }
 
         if (familyId != 0) {
-            const bool allowColumnFamilies = (
-                KIKIMR_SCHEMESHARD_ALLOW_COLUMN_FAMILIES ||
-                AppData()->AllowColumnFamiliesForTest);
-            if (!allowColumnFamilies) {
-                errDescr = TStringBuilder()
-                    << "Server support for column families is not yet available";
-                return false;
-            }
             if (changesFamily.HasStorageConfig()) {
                 if (changesFamily.GetStorageConfig().HasDataThreshold() ||
                     changesFamily.GetStorageConfig().HasExternalThreshold() ||
@@ -1295,22 +1306,6 @@ bool TPartitionConfigMerger::VerifyAlterParams(
                     << "', in request '" << cfgStorage.ShortDebugString() << "'";
             return false;
         }
-
-        if (!KIKIMR_SCHEMESHARD_ALLOW_COLUMN_FAMILIES && !AppData()->AllowColumnFamiliesForTest) {
-            // When feature flag is not enabled we don't allow changes to data channels
-            // This is so we stay compatible without surprises during migration periods
-            if (srcStorage.HasData() != cfgStorage.HasData() ||
-                    srcStorage.HasExternal() != cfgStorage.HasExternal() ||
-                    !IsEquivalent(srcStorage.GetData(), cfgStorage.GetData()) ||
-                    !IsEquivalent(srcStorage.GetExternal(), cfgStorage.GetExternal()))
-            {
-                errDescr = TStringBuilder()
-                        << "Changing column family storage is currently disabled on the server."
-                        << " Was '" << srcStorage.ShortDebugString()
-                        << "', in request '" << cfgStorage.ShortDebugString() << "'";
-                return false;
-            }
-        }
     }
 
     if (isStorageConfig) {
@@ -1359,30 +1354,7 @@ bool TPartitionConfigMerger::VerifyAlterParams(
                 return false;
             }
 
-            if (!KIKIMR_SCHEMESHARD_ALLOW_COLUMN_FAMILIES && !AppData()->AllowColumnFamiliesForTest) {
-                // When feature flag is not enabled we don't allow changes to data channels
-                // This is so we stay compatible without surprises during migration periods
-                if (srcStorage.HasData() != dstStorage.HasData() ||
-                        !IsEquivalent(srcStorage.GetData(), dstStorage.GetData()))
-                {
-                    errDescr = TStringBuilder()
-                            << "Changing column family storage is currently disabled on the server."
-                            << " Was '" << srcStorage.ShortDebugString()
-                            << "', in request '" << dstStorage.ShortDebugString() << "'";
-                    return false;
-                }
-            }
-
             continue;
-        }
-
-        if (!KIKIMR_SCHEMESHARD_ALLOW_COLUMN_FAMILIES && !AppData()->AllowColumnFamiliesForTest) {
-            // When feature flag is not enabled we don't allow adding StorageConfig
-            if (family.HasStorageConfig() && (!srcFamily || !srcFamily->HasStorageConfig())) {
-                errDescr = TStringBuilder()
-                        << "Adding column family storage is currently disabled on the server.";
-                return false;
-            }
         }
     }
 
@@ -1614,8 +1586,9 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
     Stats.PartitionStats.swap(newPartitionStats);
     Stats.Aggregated = newAggregatedStats;
     Partitions.swap(newPartitioning);
-    PreSerializedPathDescription.clear();
-    PreSerializedPathDescriptionWithoutRangeKey.clear();
+    PreserializedTablePartitions.clear();
+    PreserializedTablePartitionsNoKeys.clear();
+    PreserializedTableSplitBoundaries.clear();
 
     CondEraseSchedule.clear();
     InFlightCondErase.clear();
@@ -2114,7 +2087,9 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
         *index.AddDataColumnNames() = x;
     }
 
-    *index.MutableIndexImplTableDescription() = ImplTableDescription;
+    for (const auto& implTableDescription : ImplTableDescriptions) {
+        *index.AddIndexImplTableDescriptions() = implTableDescription;
+    }
 }
 
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {

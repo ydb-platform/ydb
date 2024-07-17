@@ -632,9 +632,7 @@ void TAbortJobCommand::DoExecute(ICommandContextPtr context)
 void TDumpJobProxyLogCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("job_id", &TThis::JobId);
-
     registrar.Parameter("operation_id", &TThis::OperationId);
-
     registrar.Parameter("path", &TThis::Path);
 }
 

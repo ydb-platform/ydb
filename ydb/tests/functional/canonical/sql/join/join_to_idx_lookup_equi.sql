@@ -1,4 +1,4 @@
-
+PRAGMA ydb.OverrideStatistics='{"/local/base_join_join_to_idx_lookup_equi_sql_plan/InputJoin1":{"n_rows":7},"/local/base_join_join_to_idx_lookup_equi_sql_plan/InputJoin2":{"n_rows":9},"/local/base_join_join_to_idx_lookup_equi_sql_plan/InputJoin3":{"n_rows":3}}';
 PRAGMA DisableSimpleColumns;
 
 SELECT *

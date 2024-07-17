@@ -3,7 +3,7 @@
  * walreceiver.h
  *	  Exports from replication/walreceiverfuncs.c.
  *
- * Portions Copyright (c) 2010-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2010-2023, PostgreSQL Global Development Group
  *
  * src/include/replication/walreceiver.h
  *
@@ -12,9 +12,11 @@
 #ifndef _WALRECEIVER_H
 #define _WALRECEIVER_H
 
+#include <netdb.h>
+#include <sys/socket.h>
+
 #include "access/xlog.h"
 #include "access/xlogdefs.h"
-#include "getaddrinfo.h"		/* for NI_MAXHOST */
 #include "pgtime.h"
 #include "port/atomics.h"
 #include "replication/logicalproto.h"
@@ -25,9 +27,9 @@
 #include "utils/tuplestore.h"
 
 /* user-settable parameters */
-extern __thread int	wal_receiver_status_interval;
-extern __thread int	wal_receiver_timeout;
-extern __thread bool hot_standby_feedback;
+extern __thread PGDLLIMPORT int wal_receiver_status_interval;
+extern __thread PGDLLIMPORT int wal_receiver_timeout;
+extern __thread PGDLLIMPORT bool hot_standby_feedback;
 
 /*
  * MAXCONNINFO: maximum size of a connection string.
@@ -160,7 +162,7 @@ typedef struct
 	sig_atomic_t force_reply;	/* used as a bool */
 } WalRcvData;
 
-extern __thread WalRcvData *WalRcv;
+extern __thread PGDLLIMPORT WalRcvData *WalRcv;
 
 typedef struct
 {
@@ -180,7 +182,11 @@ typedef struct
 			uint32		proto_version;	/* Logical protocol version */
 			List	   *publication_names;	/* String list of publications */
 			bool		binary; /* Ask publisher to use binary */
-			bool		streaming;	/* Streaming of large transactions */
+			char	   *streaming_str;	/* Streaming of large transactions */
+			bool		twophase;	/* Streaming of two-phase transactions at
+									 * prepare time */
+			char	   *origin; /* Only publish data originating from the
+								 * specified origin */
 		}			logical;
 	}			proto;
 } WalRcvStreamOptions;
@@ -233,6 +239,7 @@ typedef struct WalRcvExecResult
  */
 typedef WalReceiverConn *(*walrcv_connect_fn) (const char *conninfo,
 											   bool logical,
+											   bool must_use_password,
 											   const char *appname,
 											   char **err);
 
@@ -241,7 +248,8 @@ typedef WalReceiverConn *(*walrcv_connect_fn) (const char *conninfo,
  *
  * Parse and validate the connection string given as of 'conninfo'.
  */
-typedef void (*walrcv_check_conninfo_fn) (const char *conninfo);
+typedef void (*walrcv_check_conninfo_fn) (const char *conninfo,
+										  bool must_use_password);
 
 /*
  * walrcv_get_conninfo_fn
@@ -347,6 +355,7 @@ typedef void (*walrcv_send_fn) (WalReceiverConn *conn,
 typedef char *(*walrcv_create_slot_fn) (WalReceiverConn *conn,
 										const char *slotname,
 										bool temporary,
+										bool two_phase,
 										CRSSnapshotAction snapshot_action,
 										XLogRecPtr *lsn);
 
@@ -398,10 +407,10 @@ typedef struct WalReceiverFunctionsType
 
 extern __thread PGDLLIMPORT WalReceiverFunctionsType *WalReceiverFunctions;
 
-#define walrcv_connect(conninfo, logical, appname, err) \
-	WalReceiverFunctions->walrcv_connect(conninfo, logical, appname, err)
-#define walrcv_check_conninfo(conninfo) \
-	WalReceiverFunctions->walrcv_check_conninfo(conninfo)
+#define walrcv_connect(conninfo, logical, must_use_password, appname, err) \
+	WalReceiverFunctions->walrcv_connect(conninfo, logical, must_use_password, appname, err)
+#define walrcv_check_conninfo(conninfo, must_use_password) \
+	WalReceiverFunctions->walrcv_check_conninfo(conninfo, must_use_password)
 #define walrcv_get_conninfo(conn) \
 	WalReceiverFunctions->walrcv_get_conninfo(conn)
 #define walrcv_get_senderinfo(conn, sender_host, sender_port) \
@@ -420,8 +429,8 @@ extern __thread PGDLLIMPORT WalReceiverFunctionsType *WalReceiverFunctions;
 	WalReceiverFunctions->walrcv_receive(conn, buffer, wait_fd)
 #define walrcv_send(conn, buffer, nbytes) \
 	WalReceiverFunctions->walrcv_send(conn, buffer, nbytes)
-#define walrcv_create_slot(conn, slotname, temporary, snapshot_action, lsn) \
-	WalReceiverFunctions->walrcv_create_slot(conn, slotname, temporary, snapshot_action, lsn)
+#define walrcv_create_slot(conn, slotname, temporary, two_phase, snapshot_action, lsn) \
+	WalReceiverFunctions->walrcv_create_slot(conn, slotname, temporary, two_phase, snapshot_action, lsn)
 #define walrcv_get_backend_pid(conn) \
 	WalReceiverFunctions->walrcv_get_backend_pid(conn)
 #define walrcv_exec(conn, exec, nRetTypes, retTypes) \
@@ -450,6 +459,7 @@ walrcv_clear_result(WalRcvExecResult *walres)
 /* prototypes for functions in walreceiver.c */
 extern void WalReceiverMain(void) pg_attribute_noreturn();
 extern void ProcessWalRcvInterrupts(void);
+extern void WalRcvForceReply(void);
 
 /* prototypes for functions in walreceiverfuncs.c */
 extern Size WalRcvShmemSize(void);
@@ -464,6 +474,5 @@ extern XLogRecPtr GetWalRcvFlushRecPtr(XLogRecPtr *latestChunkStart, TimeLineID 
 extern XLogRecPtr GetWalRcvWriteRecPtr(void);
 extern int	GetReplicationApplyDelay(void);
 extern int	GetReplicationTransferLatency(void);
-extern void WalRcvForceReply(void);
 
 #endif							/* _WALRECEIVER_H */

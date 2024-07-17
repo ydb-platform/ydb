@@ -165,6 +165,7 @@ public:
             case FederatedQuery::ConnectionSetting::kClickhouseCluster:
             case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
             case FederatedQuery::ConnectionSetting::kGreenplumCluster:
+            case FederatedQuery::ConnectionSetting::kMysqlCluster:
             case FederatedQuery::ConnectionSetting::kYdbDatabase:
                 return true;
             case FederatedQuery::ConnectionSetting::kDataStreams:

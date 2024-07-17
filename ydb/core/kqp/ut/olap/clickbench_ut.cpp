@@ -168,9 +168,8 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
                 LIMIT 10
             )")
             //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
-            // Should be fixed in https://st.yandex-team.ru/KIKIMR-17009
-            // .SetExpectedReadNodeType("TableFullScan");
-            .SetExpectedReadNodeType("Aggregate-TableFullScan");
+            .SetExpectedReadNodeType("TableFullScan");
+            // .SetExpectedReadNodeType("Aggregate-TableFullScan");
         q9.FillExpectedAggregationGroupByPlanOptions();
 
         TAggregationTestCase q12;
@@ -216,7 +215,7 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
                 LIMIT 10;
             )")
             .AddExpectedPlanOptions("KqpOlapFilter")
-            .SetExpectedReadNodeType("Aggregate-TableFullScan");
+            .SetExpectedReadNodeType("TableFullScan");
         q22.FillExpectedAggregationGroupByPlanOptions();
 
         TAggregationTestCase q39;

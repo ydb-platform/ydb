@@ -368,8 +368,9 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
 
     const TInstant snapshotInstant = snapshot.GetPlanInstant();
     for (auto it = CleanupPortions.begin(); !limitExceeded && it != CleanupPortions.end();) {
-        if (it->first >= snapshotInstant) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanupStop")("snapshot", snapshot.DebugString())("current_snapshot_ts", it->first);
+        if (it->first > snapshotInstant) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanupStop")("snapshot", snapshot.DebugString())(
+                "current_snapshot_ts", it->first.MilliSeconds());
             break;
         }
         for (ui32 i = 0; i < it->second.size();) {

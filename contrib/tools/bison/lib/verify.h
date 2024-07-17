@@ -1,6 +1,6 @@
 /* Compile-time assert-like macros.
 
-   Copyright (C) 2005-2006, 2009-2013 Free Software Foundation, Inc.
+   Copyright (C) 2005-2006, 2009-2019 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,7 +13,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 /* Written by Paul Eggert, Bruno Haible, and Jim Meyering.  */
 
@@ -26,7 +26,7 @@
    here generates easier-to-read diagnostics when verify (R) fails.
 
    Define _GL_HAVE_STATIC_ASSERT to 1 if static_assert works as per C++11.
-   This will likely be supported by future GCC versions, in C++ mode.
+   This is supported by GCC 6.1.0 and later, in C++ mode.
 
    Use this only with GCC.  If we were willing to slow 'configure'
    down we could also use it with other compilers, but since this
@@ -36,9 +36,7 @@
      && !defined __cplusplus)
 # define _GL_HAVE__STATIC_ASSERT 1
 #endif
-/* The condition (99 < __GNUC__) is temporary, until we know about the
-   first G++ release that supports static_assert.  */
-#if (99 < __GNUC__) && defined __cplusplus
+#if (6 <= __GNUC__) && defined __cplusplus
 # define _GL_HAVE_STATIC_ASSERT 1
 #endif
 
@@ -248,7 +246,37 @@ template <int w>
 /* Verify requirement R at compile-time, as a declaration without a
    trailing ';'.  */
 
-#define verify(R) _GL_VERIFY (R, "verify (" #R ")")
+#ifdef __GNUC__
+# define verify(R) _GL_VERIFY (R, "verify (" #R ")")
+#else
+/* PGI barfs if R is long.  Play it safe.  */
+# define verify(R) _GL_VERIFY (R, "verify (...)")
+#endif
+
+#ifndef __has_builtin
+# define __has_builtin(x) 0
+#endif
+
+/* Assume that R always holds.  This lets the compiler optimize
+   accordingly.  R should not have side-effects; it may or may not be
+   evaluated.  Behavior is undefined if R is false.  */
+
+#if (__has_builtin (__builtin_unreachable) \
+     || 4 < __GNUC__ + (5 <= __GNUC_MINOR__))
+# define assume(R) ((R) ? (void) 0 : __builtin_unreachable ())
+#elif 1200 <= _MSC_VER
+# define assume(R) __assume (R)
+#elif ((defined GCC_LINT || defined lint) \
+       && (__has_builtin (__builtin_trap) \
+           || 3 < __GNUC__ + (3 < __GNUC_MINOR__ + (4 <= __GNUC_PATCHLEVEL__))))
+  /* Doing it this way helps various packages when configured with
+     --enable-gcc-warnings, which compiles with -Dlint.  It's nicer
+     when 'assume' silences warnings even with older GCCs.  */
+# define assume(R) ((R) ? (void) 0 : __builtin_trap ())
+#else
+  /* Some tools grok NOTREACHED, e.g., Oracle Studio 12.6.  */
+# define assume(R) ((R) ? (void) 0 : /*NOTREACHED*/ (void) 0)
+#endif
 
 /* @assert.h omit end@  */
 

@@ -12,10 +12,10 @@
 #include <string>
 
 #include "yaml-cpp/anchor.h"
-#include "yaml-cpp/noncopyable.h"
 
 namespace YAML {
 class CollectionStack;
+template <int> class DepthGuard; // depthguard.h
 class EventHandler;
 class Node;
 class Scanner;
@@ -23,9 +23,13 @@ struct Directives;
 struct Mark;
 struct Token;
 
-class SingleDocParser : private noncopyable {
+class SingleDocParser {
  public:
   SingleDocParser(Scanner& scanner, const Directives& directives);
+  SingleDocParser(const SingleDocParser&) = delete;
+  SingleDocParser(SingleDocParser&&) = delete;
+  SingleDocParser& operator=(const SingleDocParser&) = delete;
+  SingleDocParser& operator=(SingleDocParser&&) = delete;
   ~SingleDocParser();
 
   void HandleDocument(EventHandler& eventHandler);
@@ -43,23 +47,25 @@ class SingleDocParser : private noncopyable {
   void HandleCompactMap(EventHandler& eventHandler);
   void HandleCompactMapWithNoKey(EventHandler& eventHandler);
 
-  void ParseProperties(std::string& tag, anchor_t& anchor);
+  void ParseProperties(std::string& tag, anchor_t& anchor,
+                       std::string& anchor_name);
   void ParseTag(std::string& tag);
-  void ParseAnchor(anchor_t& anchor);
+  void ParseAnchor(anchor_t& anchor, std::string& anchor_name);
 
   anchor_t RegisterAnchor(const std::string& name);
   anchor_t LookupAnchor(const Mark& mark, const std::string& name) const;
 
  private:
+  int depth = 0;
   Scanner& m_scanner;
   const Directives& m_directives;
   std::unique_ptr<CollectionStack> m_pCollectionStack;
 
-  typedef std::map<std::string, anchor_t> Anchors;
+  using Anchors = std::map<std::string, anchor_t>;
   Anchors m_anchors;
 
   anchor_t m_curAnchor;
 };
-}
+}  // namespace YAML
 
 #endif  // SINGLEDOCPARSER_H_62B23520_7C8E_11DE_8A39_0800200C9A66

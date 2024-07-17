@@ -1,6 +1,7 @@
 #include "tiering.h"
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 #include <ydb/core/tx/columnshard/engines/changes/actualization/construction/context.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
@@ -25,17 +26,18 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
 
     if (Tiering) {
         AFL_VERIFY(TieringColumnId);
-        auto statOperator = portionSchema->GetIndexInfo().GetStatistics(NStatistics::TIdentifier(NStatistics::EType::Max, {*TieringColumnId}));
+        auto indexMeta = portionSchema->GetIndexInfo().GetIndexMax(*TieringColumnId);
         std::shared_ptr<arrow::Scalar> max;
-        if (!statOperator) {
+        if (!indexMeta) {
             max = portion.MaxValue(*TieringColumnId);
             if (!max) {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "scalar_less_not_max");
                 return {};
             }
         } else {
-            NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(statOperator);
-            max = statOperator.GetScalarVerified(portion.GetMeta().GetStatisticsStorage());
+            NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(NIndexes::TIndexMetaContainer(indexMeta));
+            const std::vector<TString> data = portion.GetIndexInplaceDataVerified(indexMeta->GetIndexId());
+            max = indexMeta->GetMaxScalarVerified(data, portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type());
         }
         auto tieringInfo = Tiering->GetTierToMove(max, now);
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("tiering_info", tieringInfo.DebugString());

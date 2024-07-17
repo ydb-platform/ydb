@@ -7,7 +7,7 @@
  * This gives R-tree behavior, with Guttman's poly-time split algorithm.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -37,7 +37,6 @@ static uint64 part_bits32_by2(uint32 x);
 static uint32 ieee_float32_to_uint32(float f);
 static int	gist_bbox_zorder_cmp(Datum a, Datum b, SortSupport ssup);
 static Datum gist_bbox_zorder_abbrev_convert(Datum original, SortSupport ssup);
-static int	gist_bbox_zorder_cmp_abbrev(Datum z1, Datum z2, SortSupport ssup);
 static bool gist_bbox_zorder_abbrev_abort(int memtupcount, SortSupport ssup);
 
 
@@ -174,7 +173,7 @@ gist_box_union(PG_FUNCTION_ARGS)
 	numranges = entryvec->n;
 	pageunion = (BOX *) palloc(sizeof(BOX));
 	cur = DatumGetBoxP(entryvec->vector[0].key);
-	memcpy((void *) pageunion, (void *) cur, sizeof(BOX));
+	memcpy(pageunion, cur, sizeof(BOX));
 
 	for (i = 1; i < numranges; i++)
 	{
@@ -798,8 +797,8 @@ gist_box_picksplit(PG_FUNCTION_ARGS)
 		for (i = 0; i < commonEntriesCount; i++)
 		{
 			box = DatumGetBoxP(entryvec->vector[commonEntries[i].index].key);
-			commonEntries[i].delta = Abs(float8_mi(box_penalty(leftBox, box),
-												   box_penalty(rightBox, box)));
+			commonEntries[i].delta = fabs(float8_mi(box_penalty(leftBox, box),
+													box_penalty(rightBox, box)));
 		}
 
 		/*
@@ -1044,7 +1043,7 @@ gist_poly_compress(PG_FUNCTION_ARGS)
 		BOX		   *r;
 
 		r = (BOX *) palloc(sizeof(BOX));
-		memcpy((void *) r, (void *) &(in->boundbox), sizeof(BOX));
+		memcpy(r, &(in->boundbox), sizeof(BOX));
 
 		retval = (GISTENTRY *) palloc(sizeof(GISTENTRY));
 		gistentryinit(*retval, PointerGetDatum(r),
@@ -1726,21 +1725,6 @@ gist_bbox_zorder_abbrev_convert(Datum original, SortSupport ssup)
 #endif
 }
 
-static int
-gist_bbox_zorder_cmp_abbrev(Datum z1, Datum z2, SortSupport ssup)
-{
-	/*
-	 * Compare the pre-computed Z-orders as unsigned integers. Datum is a
-	 * typedef for 'uintptr_t', so no casting is required.
-	 */
-	if (z1 > z2)
-		return 1;
-	else if (z1 < z2)
-		return -1;
-	else
-		return 0;
-}
-
 /*
  * We never consider aborting the abbreviation.
  *
@@ -1764,7 +1748,7 @@ gist_point_sortsupport(PG_FUNCTION_ARGS)
 
 	if (ssup->abbreviate)
 	{
-		ssup->comparator = gist_bbox_zorder_cmp_abbrev;
+		ssup->comparator = ssup_datum_unsigned_cmp;
 		ssup->abbrev_converter = gist_bbox_zorder_abbrev_convert;
 		ssup->abbrev_abort = gist_bbox_zorder_abbrev_abort;
 		ssup->abbrev_full_comparator = gist_bbox_zorder_cmp;

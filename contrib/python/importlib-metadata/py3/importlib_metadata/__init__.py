@@ -17,8 +17,8 @@ import itertools
 import posixpath
 import collections
 
-from . import _adapters, _meta
-from .compat import py39
+from . import _meta
+from .compat import py39, py311
 from ._collections import FreezableDefaultDict, Pair
 from ._compat import (
     NullFinder,
@@ -466,6 +466,9 @@ class Distribution(DeprecatedNonAbstract):
         Custom providers may provide the METADATA file or override this
         property.
         """
+        # deferred for performance (python/cpython#109829)
+        from . import _adapters
+
         opt_text = (
             self.read_text('METADATA')
             or self.read_text('PKG-INFO')
@@ -572,9 +575,8 @@ class Distribution(DeprecatedNonAbstract):
             return
 
         paths = (
-            (subdir / name)
-            .resolve()
-            .relative_to(self.locate_file('').resolve())
+            py311.relative_fix((subdir / name).resolve())
+            .relative_to(self.locate_file('').resolve(), walk_up=True)
             .as_posix()
             for name in text.splitlines()
         )

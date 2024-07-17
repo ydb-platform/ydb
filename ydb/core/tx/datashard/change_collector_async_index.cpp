@@ -105,7 +105,7 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
     const auto tagToPos = MakeTagToPos(tagsToSelect, [](const auto tag) { return tag; });
     const auto updatedTagToPos = MakeTagToPos(updates, [](const TUpdateOp& op) { return op.Tag; });
 
-    userTable->ForEachAsyncIndex([&] (const auto& pathId, const auto& index) {
+    userTable->ForEachAsyncIndex([&](const auto& pathId, const TUserTable::TTableIndex& index) {
         if (generateDeletions) {
             bool needDeletion = rop == ERowOp::Erase || rop == ERowOp::Reset;
 
@@ -198,7 +198,7 @@ auto TAsyncIndexChangeCollector::CacheTags(const TTableId& tableId) const {
 
     TCachedTagsBuilder builder;
 
-    userTable->ForEachAsyncIndex([&] (const auto&, const auto& index) {
+    userTable->ForEachAsyncIndex([&](const auto&, const TUserTable::TTableIndex& index) {
         builder.AddIndexTags(index.KeyColumnIds);
         builder.AddDataTags(index.DataColumnIds);
     });

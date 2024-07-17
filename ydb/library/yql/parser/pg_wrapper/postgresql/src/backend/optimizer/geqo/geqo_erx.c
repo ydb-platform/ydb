@@ -162,7 +162,7 @@ gimme_edge(PlannerInfo *root, Gene gene1, Gene gene2, Edge *edge_table)
 
 	for (i = 0; i < edges; i++)
 	{
-		if ((Gene) Abs(edge_table[city1].edge_list[i]) == city2)
+		if ((Gene) abs(edge_table[city1].edge_list[i]) == city2)
 		{
 
 			/* mark shared edges as negative */
@@ -222,11 +222,9 @@ gimme_tour(PlannerInfo *root, Edge *edge_table, Gene *new_gene, int num_gene)
 
 		/* mark this node as incorporated */
 		edge_table[(int) new_gene[i - 1]].unused_edges = -1;
-
 	}							/* for (i=1; i<num_gene; i++) */
 
 	return edge_failures;
-
 }
 
 /* remove_gene
@@ -251,14 +249,14 @@ remove_gene(PlannerInfo *root, Gene gene, Edge edge, Edge *edge_table)
 
 	for (i = 0; i < edge.unused_edges; i++)
 	{
-		possess_edge = (int) Abs(edge.edge_list[i]);
+		possess_edge = abs(edge.edge_list[i]);
 		genes_remaining = edge_table[possess_edge].unused_edges;
 
 		/* find the input gene in all edge_lists and delete it */
 		for (j = 0; j < genes_remaining; j++)
 		{
 
-			if ((Gene) Abs(edge_table[possess_edge].edge_list[j]) == gene)
+			if ((Gene) abs(edge_table[possess_edge].edge_list[j]) == gene)
 			{
 
 				edge_table[possess_edge].unused_edges--;
@@ -309,7 +307,7 @@ gimme_gene(PlannerInfo *root, Edge edge, Edge *edge_table)
 		 * converting to absolute values
 		 */
 		if (friend < 0)
-			return (Gene) Abs(friend);
+			return (Gene) abs(friend);
 
 
 		/*
@@ -337,7 +335,6 @@ gimme_gene(PlannerInfo *root, Edge edge, Edge *edge_table)
 			elog(ERROR, "minimum_count not set");
 		else if (edge_table[(int) friend].unused_edges == minimum_edges)
 			minimum_count++;
-
 	}							/* for (i=0; i<edge.unused_edges; i++) */
 
 

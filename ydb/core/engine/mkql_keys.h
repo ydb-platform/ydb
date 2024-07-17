@@ -45,6 +45,13 @@ THolder<TKeyDesc> ExtractTableKey(TCallable& callable, const TTableStrings& stri
 TVector<THolder<TKeyDesc>> ExtractTableKeys(TExploringNodeVisitor& explorer, const TTypeEnvironment& env);
 TTableId ExtractTableId(const TRuntimeNode& node);
 
+template<typename T>
+TCell MakeCell(const NUdf::TUnboxedValuePod& value) {
+    static_assert(TCell::CanInline(sizeof(T)), "Can't inline data in cell.");
+    const auto v = value.Get<T>();
+    return TCell(reinterpret_cast<const char*>(&v), sizeof(v));
+}
+
 TCell MakeCell(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
     const TTypeEnvironment& env, bool copy = true,
     i32 typmod = -1, TMaybe<TString>* error = {});

@@ -4,7 +4,7 @@ Applying [aggregate functions](../../../builtins/aggregation.md) only to distinc
 
 {% note info %}
 
-Applying `DISTINCT` to calculated values is not currently implemented. For this purpose, you can use a [subquery](../../select.md#from) or the expression `GROUP BY ... AS ...`.
+Applying `DISTINCT` to calculated values is not currently implemented. For this purpose, you can use a [subquery](../../select/from.md) or the expression `GROUP BY ... AS ...`.
 
 {% endnote %}
 
@@ -20,5 +20,5 @@ ORDER BY count DESC
 LIMIT 3;
 ```
 
-You can also use `DISTINCT` to fetch distinct rows using [`SELECT DISTINCT`](../../select.md#distinct).
+You can also use `DISTINCT` to fetch distinct rows using [`SELECT DISTINCT`](../../select/distinct.md).
 

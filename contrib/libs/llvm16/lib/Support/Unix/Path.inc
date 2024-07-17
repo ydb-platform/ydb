@@ -91,7 +91,7 @@ extern char **environ;
 #include <linux/nfs_fs.h>
 #endif
 #if defined(HAVE_LINUX_SMB_H)
-#include <linux/smb.h>
+#error #include <linux/smb.h>
 #endif
 #endif
 #include <sys/vfs.h>

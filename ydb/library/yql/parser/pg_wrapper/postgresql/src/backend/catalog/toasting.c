@@ -4,7 +4,7 @@
  *	  This file contains routines to support creation of toast tables
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -105,10 +105,8 @@ BootstrapToastTable(char *relName, Oid toastOid, Oid toastIndexOid)
 
 	if (rel->rd_rel->relkind != RELKIND_RELATION &&
 		rel->rd_rel->relkind != RELKIND_MATVIEW)
-		ereport(ERROR,
-				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-				 errmsg("\"%s\" is not a table or materialized view",
-						relName)));
+		elog(ERROR, "\"%s\" is not a table or materialized view",
+			 relName);
 
 	/* create_toast_table does all the work */
 	if (!create_toast_table(rel, toastOid, toastIndexOid, (Datum) 0,
@@ -303,7 +301,10 @@ create_toast_table(Relation rel, Oid toastOid, Oid toastIndexOid,
 	indexInfo->ii_ExclusionStrats = NULL;
 	indexInfo->ii_OpclassOptions = NULL;
 	indexInfo->ii_Unique = true;
+	indexInfo->ii_NullsNotDistinct = false;
 	indexInfo->ii_ReadyForInserts = true;
+	indexInfo->ii_CheckedUnchanged = false;
+	indexInfo->ii_IndexUnchanged = false;
 	indexInfo->ii_Concurrent = false;
 	indexInfo->ii_BrokenHotChain = false;
 	indexInfo->ii_ParallelWorkers = 0;

@@ -44,7 +44,7 @@ namespace NKikimr::NColumnShard {
             }
         }
 
-        bool ExecuteOnProgress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
+        bool ProgressOnExecute(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
             TBlobGroupSelector dsGroupSelector(owner.Info());
             NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
 
@@ -66,7 +66,7 @@ namespace NKikimr::NColumnShard {
             return true;
         }
 
-        bool CompleteOnProgress(TColumnShard& owner, const TActorContext& ctx) override {
+        bool ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) override {
             auto result = std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(owner.TabletID(), TxInfo.TxKind, GetTxId(), NKikimrTxColumnShard::SUCCESS);
             result->Record.SetStep(TxInfo.PlanStep);
             ctx.Send(TxInfo.Source, result.release(), 0, TxInfo.Cookie);

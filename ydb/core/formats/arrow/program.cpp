@@ -946,18 +946,18 @@ arrow::Result<std::shared_ptr<NArrow::TColumnFilter>> TProgramStep::BuildFilter(
 }
 
 const std::set<ui32>& TProgramStep::GetFilterOriginalColumnIds() const {
-    AFL_VERIFY(IsFilterOnly());
+//    AFL_VERIFY(IsFilterOnly());
     return FilterOriginalColumnIds;
 }
 
 std::set<std::string> TProgram::GetEarlyFilterColumns() const {
     std::set<std::string> result;
     for (ui32 i = 0; i < Steps.size(); ++i) {
+        auto stepFields = Steps[i]->GetColumnsInUsage(true);
+        result.insert(stepFields.begin(), stepFields.end());
         if (!Steps[i]->IsFilterOnly()) {
             break;
         }
-        auto stepFields = Steps[i]->GetColumnsInUsage();
-        result.insert(stepFields.begin(), stepFields.end());
     }
     return result;
 }

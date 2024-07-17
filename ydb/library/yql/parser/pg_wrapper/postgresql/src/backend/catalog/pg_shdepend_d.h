@@ -3,7 +3,7 @@
  * pg_shdepend_d.h
  *    Macro definitions for pg_shdepend
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -19,6 +19,8 @@
 #define PG_SHDEPEND_D_H
 
 #define SharedDependRelationId 1214
+#define SharedDependDependerIndexId 1232
+#define SharedDependReferenceIndexId 1233
 
 #define Anum_pg_shdepend_dbid 1
 #define Anum_pg_shdepend_classid 2

@@ -332,11 +332,7 @@ public:
         if (CleanupState->Final) {
             ReplyProcessError(ev->Sender, proxyRequestId, Ydb::StatusIds::BAD_SESSION, "Session is being closed");
         } else {
-            auto busyStatus = Settings.TableService.GetUseSessionBusyStatus()
-                ? Ydb::StatusIds::SESSION_BUSY
-                : Ydb::StatusIds::PRECONDITION_FAILED;
-
-            ReplyProcessError(ev->Sender, proxyRequestId, busyStatus, "Pending previous query completion");
+            ReplyProcessError(ev->Sender, proxyRequestId, Ydb::StatusIds::SESSION_BUSY, "Pending previous query completion");
         }
     }
 
@@ -893,11 +889,7 @@ private:
             return;
         }
 
-        auto busyStatus = Settings.TableService.GetUseSessionBusyStatus()
-            ? Ydb::StatusIds::SESSION_BUSY
-            : Ydb::StatusIds::PRECONDITION_FAILED;
-
-        ReplyProcessError(ev->Sender, proxyRequestId, busyStatus,
+        ReplyProcessError(ev->Sender, proxyRequestId, Ydb::StatusIds::SESSION_BUSY,
             "Pending previous query completion");
     }
 

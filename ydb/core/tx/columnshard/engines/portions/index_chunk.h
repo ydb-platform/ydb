@@ -30,11 +30,41 @@ private:
     YDB_READONLY(ui32, ChunkIdx, 0);
     YDB_READONLY(ui32, RecordsCount, 0);
     YDB_READONLY(ui32, RawBytes, 0);
-    YDB_READONLY_DEF(TBlobRangeLink16, BlobRange);
+    std::variant<TBlobRangeLink16, TString> Data;
 
     TIndexChunk() = default;
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TIndexChunk& proto);
 public:
+    ui64 GetDataSize() const;
+
+    bool HasBlobRange() const {
+        return std::holds_alternative<TBlobRangeLink16>(Data);
+    }
+
+    const TBlobRangeLink16* GetBlobRangeOptional() const {
+        return std::get_if<TBlobRangeLink16>(&Data);
+    }
+
+    const TBlobRangeLink16& GetBlobRangeVerified() const {
+        const auto* result = std::get_if<TBlobRangeLink16>(&Data);
+        AFL_VERIFY(result);
+        return *result;
+    }
+
+    bool HasBlobData() const {
+        return std::holds_alternative<TString>(Data);
+    }
+
+    const TString* GetBlobDataOptional() const {
+        return std::get_if<TString>(&Data);
+    }
+
+    const TString& GetBlobDataVerified() const {
+        const auto* result = std::get_if<TString>(&Data);
+        AFL_VERIFY(result);
+        return *result;
+    }
+
     TChunkAddress GetAddress() const {
         return TChunkAddress(IndexId, ChunkIdx);
     }
@@ -48,13 +78,22 @@ public:
         , ChunkIdx(chunkIdx)
         , RecordsCount(recordsCount)
         , RawBytes(rawBytes)
-        , BlobRange(blobRange) {
+        , Data(blobRange) {
 
     }
 
+    TIndexChunk(const ui32 indexId, const ui32 chunkIdx, const ui32 recordsCount, const ui64 rawBytes, const TString& blobData)
+        : IndexId(indexId)
+        , ChunkIdx(chunkIdx)
+        , RecordsCount(recordsCount)
+        , RawBytes(rawBytes)
+        , Data(blobData) {
+    }
+
     void RegisterBlobIdx(const TBlobRangeLink16::TLinkId blobLinkId) {
-//        AFL_VERIFY(!BlobRange.BlobId.GetTabletId())("original", BlobRange.BlobId.ToStringNew())("new", blobId.ToStringNew());
-        BlobRange.BlobIdx = blobLinkId;
+        auto* result = std::get_if<TBlobRangeLink16>(&Data);
+        AFL_VERIFY(result);
+        result->BlobIdx = blobLinkId;
     }
 
     static TConclusion<TIndexChunk> BuildFromProto(const NKikimrColumnShardDataSharingProto::TIndexChunk& proto) {

@@ -1,6 +1,31 @@
 #line 2 "syncrep_scanner.c"
+/*-------------------------------------------------------------------------
+ *
+ * syncrep_scanner.l
+ *	  a lexical scanner for synchronous_standby_names
+ *
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1994, Regents of the University of California
+ *
+ *
+ * IDENTIFICATION
+ *	  src/backend/replication/syncrep_scanner.l
+ *
+ *-------------------------------------------------------------------------
+ */
+#include "postgres.h"
 
-#line 4 "syncrep_scanner.c"
+#include "lib/stringinfo.h"
+#include "nodes/pg_list.h"
+
+/*
+ * NB: include syncrep_gram.h only AFTER including syncrep.h, because syncrep.h
+ * includes node definitions needed for YYSTYPE.
+ */
+#include "replication/syncrep.h"
+#include "syncrep_gram.h"
+
+#line 29 "syncrep_scanner.c"
 
 #define  YY_INT_ALIGNED short int
 
@@ -722,25 +747,8 @@ __thread int yy_flex_debug = 0;
 #define YY_RESTORE_YY_MORE_OFFSET
 __thread char *yytext;
 #line 1 "syncrep_scanner.l"
-#line 2 "syncrep_scanner.l"
-/*-------------------------------------------------------------------------
- *
- * syncrep_scanner.l
- *	  a lexical scanner for synchronous_standby_names
- *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
- * Portions Copyright (c) 1994, Regents of the University of California
- *
- *
- * IDENTIFICATION
- *	  src/backend/replication/syncrep_scanner.l
- *
- *-------------------------------------------------------------------------
- */
-#include "postgres.h"
 
-#include "lib/stringinfo.h"
-
+#line 30 "syncrep_scanner.l"
 /* Avoid exit() on fatal scanner errors (a bit ugly -- see yy_fatal_error) */
 #undef fprintf
 #define fprintf(file, fmt, msg)  fprintf_to_ereport(fmt, msg)
@@ -758,13 +766,13 @@ static __thread StringInfoData xdbuf;
 
 /* LCOV_EXCL_START */
 
-#line 762 "syncrep_scanner.c"
+#line 770 "syncrep_scanner.c"
 #define YY_NO_INPUT 1
 /*
  * <xd> delimited identifiers (double-quoted identifiers)
  */
 
-#line 768 "syncrep_scanner.c"
+#line 776 "syncrep_scanner.c"
 
 #define INITIAL 0
 #define xd 1
@@ -980,9 +988,9 @@ YY_DECL
 		}
 
 	{
-#line 66 "syncrep_scanner.l"
+#line 76 "syncrep_scanner.l"
 
-#line 986 "syncrep_scanner.c"
+#line 994 "syncrep_scanner.c"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -1038,23 +1046,23 @@ do_action:	/* This label is used only to access EOF actions. */
 case 1:
 /* rule 1 can match eol */
 YY_RULE_SETUP
-#line 67 "syncrep_scanner.l"
+#line 77 "syncrep_scanner.l"
 { /* ignore */ }
 	YY_BREAK
 /* brute-force case insensitivity is safer than relying on flex -i */
 case 2:
 YY_RULE_SETUP
-#line 71 "syncrep_scanner.l"
+#line 81 "syncrep_scanner.l"
 { return ANY; }
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 72 "syncrep_scanner.l"
+#line 82 "syncrep_scanner.l"
 { return FIRST; }
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
-#line 74 "syncrep_scanner.l"
+#line 84 "syncrep_scanner.l"
 {
 				initStringInfo(&xdbuf);
 				BEGIN(xd);
@@ -1062,7 +1070,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 78 "syncrep_scanner.l"
+#line 88 "syncrep_scanner.l"
 {
 				appendStringInfoChar(&xdbuf, '"');
 		}
@@ -1070,78 +1078,78 @@ YY_RULE_SETUP
 case 6:
 /* rule 6 can match eol */
 YY_RULE_SETUP
-#line 81 "syncrep_scanner.l"
+#line 91 "syncrep_scanner.l"
 {
 				appendStringInfoString(&xdbuf, yytext);
 		}
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 84 "syncrep_scanner.l"
+#line 94 "syncrep_scanner.l"
 {
-				yylval.str = xdbuf.data;
+				syncrep_yylval.str = xdbuf.data;
 				xdbuf.data = NULL;
 				BEGIN(INITIAL);
 				return NAME;
 		}
 	YY_BREAK
 case YY_STATE_EOF(xd):
-#line 90 "syncrep_scanner.l"
+#line 100 "syncrep_scanner.l"
 {
-				yyerror("unterminated quoted identifier");
+				syncrep_yyerror("unterminated quoted identifier");
 				return JUNK;
 		}
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
-#line 95 "syncrep_scanner.l"
+#line 105 "syncrep_scanner.l"
 {
-				yylval.str = pstrdup(yytext);
+				syncrep_yylval.str = pstrdup(yytext);
 				return NAME;
 		}
 	YY_BREAK
 case 9:
 YY_RULE_SETUP
-#line 100 "syncrep_scanner.l"
+#line 110 "syncrep_scanner.l"
 {
-				yylval.str = pstrdup(yytext);
+				syncrep_yylval.str = pstrdup(yytext);
 				return NUM;
 		}
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 105 "syncrep_scanner.l"
+#line 115 "syncrep_scanner.l"
 {
-				yylval.str = "*";
+				syncrep_yylval.str = "*";
 				return NAME;
 		}
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 110 "syncrep_scanner.l"
+#line 120 "syncrep_scanner.l"
 { return ','; }
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 111 "syncrep_scanner.l"
+#line 121 "syncrep_scanner.l"
 { return '('; }
 	YY_BREAK
 case 13:
 YY_RULE_SETUP
-#line 112 "syncrep_scanner.l"
+#line 122 "syncrep_scanner.l"
 { return ')'; }
 	YY_BREAK
 case 14:
 YY_RULE_SETUP
-#line 114 "syncrep_scanner.l"
+#line 124 "syncrep_scanner.l"
 { return JUNK; }
 	YY_BREAK
 case 15:
 YY_RULE_SETUP
-#line 115 "syncrep_scanner.l"
+#line 125 "syncrep_scanner.l"
 YY_FATAL_ERROR( "flex scanner jammed" );
 	YY_BREAK
-#line 1145 "syncrep_scanner.c"
+#line 1153 "syncrep_scanner.c"
 case YY_STATE_EOF(INITIAL):
 	yyterminate();
 
@@ -2110,7 +2118,7 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 115 "syncrep_scanner.l"
+#line 125 "syncrep_scanner.l"
 
 
 /* LCOV_EXCL_STOP */

@@ -340,99 +340,44 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         TFakeWilsonUploader::Trace &trace = uploader->Traces.begin()->second;
 
         std::string canon;
-        if (server->GetSettings().AppConfig->GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup() || server->GetSettings().AppConfig->GetTableServiceConfig().GetPredicateExtract20()) {
-            auto readActorSpan = trace.Root.BFSFindOne("ReadActor");
-            UNIT_ASSERT(readActorSpan);
+        auto readActorSpan = trace.Root.BFSFindOne("ReadActor");
+        UNIT_ASSERT(readActorSpan);
 
-            auto dsReads = readActorSpan->get().FindAll("Datashard.Read"); // Read actor sends EvRead to each shard.
-            UNIT_ASSERT_VALUES_EQUAL(dsReads.size(), 2);
+        auto dsReads = readActorSpan->get().FindAll("Datashard.Read"); // Read actor sends EvRead to each shard.
+        UNIT_ASSERT_VALUES_EQUAL(dsReads.size(), 2);
 
-            canon = ExpectedSpan("Session.query.QUERY_ACTION_EXECUTE",
-                ExpectedSpan("CompileService", "CompileActor"),
-                "LiteralExecuter",
-                ExpectedSpan("DataExecuter",
-                    "WaitForTableResolve",
-                    "WaitForShardsResolve",
-                    "WaitForSnapshot",
-                    ExpectedSpan("ComputeActor",
-                        ExpectedSpan("ReadActor",
-                            "WaitForShardsResolve",
-                            Repeat(
-                                ExpectedSpan("Datashard.Read",
-                                    ExpectedSpan("Tablet.Transaction",
-                                        ExpectedSpan("Tablet.Transaction.Execute",
-                                            Repeat("Datashard.Unit", 3)),
-                                        // No extra page fault with btree index (root is in meta)
-                                        ConditionalSpanVec(!bTreeIndex,
-                                            "Tablet.Transaction.Wait",
-                                            "Tablet.Transaction.Enqueued",
-                                            ExpectedSpan("Tablet.Transaction.Execute",
-                                                "Datashard.Unit")),
+        canon = ExpectedSpan("Session.query.QUERY_ACTION_EXECUTE",
+            ExpectedSpan("CompileService", "CompileActor"),
+            "LiteralExecuter",
+            ExpectedSpan("DataExecuter",
+                "WaitForTableResolve",
+                "WaitForShardsResolve",
+                "WaitForSnapshot",
+                ExpectedSpan("ComputeActor",
+                    ExpectedSpan("ReadActor",
+                        "WaitForShardsResolve",
+                        Repeat(
+                            ExpectedSpan("Datashard.Read",
+                                ExpectedSpan("Tablet.Transaction",
+                                    ExpectedSpan("Tablet.Transaction.Execute",
+                                        Repeat("Datashard.Unit", 3)),
+                                    // No extra page fault with btree index (root is in meta)
+                                    ConditionalSpanVec(!bTreeIndex,
                                         "Tablet.Transaction.Wait",
                                         "Tablet.Transaction.Enqueued",
                                         ExpectedSpan("Tablet.Transaction.Execute",
-                                            Repeat("Datashard.Unit", 2)),
-                                        ExpectedSpan("Tablet.WriteLog", "Tablet.WriteLog.LogEntry"),
-                                        "Tablet.Transaction.Complete"),
-                                    "Datashard.SendWithConfirmedReadOnlyLease"),
-                                2))),
-                    "ComputeActor",
-                    "RunTasks"))
-                .ToString();
-        } else {
-            auto deSpan = trace.Root.BFSFindOne("DataExecuter");
-            UNIT_ASSERT(deSpan);
-
-            auto dsTxSpans = deSpan->get().FindAll("Datashard.Transaction");
-            UNIT_ASSERT_VALUES_EQUAL(2, dsTxSpans.size()); // Two shards, each executes a user transaction.
-
-            for (auto dsTxSpan : dsTxSpans) {
-                auto tabletTxs = dsTxSpan.get().FindAll("Tablet.Transaction");
-                UNIT_ASSERT_VALUES_EQUAL(1, tabletTxs.size());
-
-                auto propose = tabletTxs[0];
-                CheckTxHasWriteLog(propose);
-
-                // Blobs are loaded from BS.
-                UNIT_ASSERT_VALUES_EQUAL(2, propose.get().FindAll("Tablet.Transaction.Wait").size());
-                UNIT_ASSERT_VALUES_EQUAL(2, propose.get().FindAll("Tablet.Transaction.Enqueued").size());
-
-                // We execute tx multiple times, because we have to load data for it to execute.
-                auto executeSpans = propose.get().FindAll("Tablet.Transaction.Execute");
-                UNIT_ASSERT_VALUES_EQUAL(3, executeSpans.size());
-
-                CheckExecuteHasDatashardUnits(executeSpans[0], 3);
-                CheckExecuteHasDatashardUnits(executeSpans[1], 1);
-                CheckExecuteHasDatashardUnits(executeSpans[2], 3);
-            }
-
-            canon = ExpectedSpan("Session.query.QUERY_ACTION_EXECUTE",
-                ExpectedSpan("CompileService", "CompileActor"),
-                "LiteralExecuter",
-                ExpectedSpan("DataExecuter",
-                    "WaitForTableResolve",
-                    "WaitForSnapshot",
-                    "RunTasks",
-                    Repeat(
-                        ExpectedSpan("Datashard.Transaction",
-                            ExpectedSpan("Tablet.Transaction",
-                                ExpectedSpan("Tablet.Transaction.Execute",
-                                    Repeat("Datashard.Unit", 3)),
-                                "Tablet.Transaction.Wait",
-                                "Tablet.Transaction.Enqueued",
-                                ExpectedSpan("Tablet.Transaction.Execute",
-                                    "Datashard.Unit"),
-                                "Tablet.Transaction.Wait",
-                                "Tablet.Transaction.Enqueued",
-                                ExpectedSpan("Tablet.Transaction.Execute",
-                                    Repeat("Datashard.Unit", 3)),
-                                ExpectedSpan("Tablet.WriteLog", "Tablet.WriteLog.LogEntry"),
-                                "Tablet.Transaction.Complete"),
-                            "Datashard.SendResult"),
-                        2),
-                    "ComputeActor"))
-                .ToString();
-        }
+                                            "Datashard.Unit")),
+                                    "Tablet.Transaction.Wait",
+                                    "Tablet.Transaction.Enqueued",
+                                    ExpectedSpan("Tablet.Transaction.Execute",
+                                        Repeat("Datashard.Unit", 2)),
+                                    ExpectedSpan("Tablet.WriteLog", "Tablet.WriteLog.LogEntry"),
+                                    "Tablet.Transaction.Complete"),
+                                "Datashard.SendWithConfirmedReadOnlyLease"),
+                            2))),
+                "ComputeActor",
+                "RunTasks"))
+            .ToString();
 
         UNIT_ASSERT_VALUES_EQUAL(trace.ToString(), canon);
     }

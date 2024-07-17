@@ -1,13 +1,14 @@
 LLVM_BC(
     postgresql/src/backend/access/gist/gistproc.c
+    postgresql/src/backend/access/hash/hash.c
     postgresql/src/backend/access/spgist/spgkdtreeproc.c
-    postgresql/src/backend/access/spgist/spgutils.c
-    postgresql/src/backend/tsearch/dict_synonym.c
+    postgresql/src/backend/access/transam/xlogfuncs.c
+    postgresql/src/backend/commands/dbcommands.c
+    postgresql/src/backend/commands/sequence.c
+    postgresql/src/backend/tsearch/wparser_def.c
     postgresql/src/backend/utils/adt/array_selfuncs.c
-    postgresql/src/backend/utils/adt/multirangetypes.c
     postgresql/src/backend/utils/adt/network_selfuncs.c
     postgresql/src/backend/utils/adt/ri_triggers.c
-    postgresql/src/backend/utils/adt/ruleutils.c
     postgresql/src/backend/utils/adt/tsquery_op.c
     pg_kernels.2.cpp
 
@@ -28,9 +29,7 @@ LLVM_BC(
     arrow_RI_FKey_setnull_upd
     arrow_arraycontjoinsel
     arrow_arraycontsel
-    arrow_dsynonym_init
-    arrow_dsynonym_lexize
-    arrow_elem_contained_by_multirange
+    arrow_currval_oid
     arrow_gist_box_consistent
     arrow_gist_box_distance
     arrow_gist_box_penalty
@@ -48,96 +47,46 @@ LLVM_BC(
     arrow_gist_poly_compress
     arrow_gist_poly_consistent
     arrow_gist_poly_distance
-    arrow_hash_multirange
-    arrow_hash_multirange_extended
-    arrow_multirange_adjacent_multirange
-    arrow_multirange_adjacent_range
-    arrow_multirange_after_multirange
-    arrow_multirange_after_range
-    arrow_multirange_before_multirange
-    arrow_multirange_before_range
-    arrow_multirange_cmp
-    arrow_multirange_constructor0
-    arrow_multirange_constructor1
-    arrow_multirange_constructor2
-    arrow_multirange_contained_by_multirange
-    arrow_multirange_contained_by_range
-    arrow_multirange_contains_elem
-    arrow_multirange_contains_multirange
-    arrow_multirange_contains_range
-    arrow_multirange_empty
-    arrow_multirange_eq
-    arrow_multirange_ge
-    arrow_multirange_gt
-    arrow_multirange_in
-    arrow_multirange_intersect
-    arrow_multirange_intersect_agg_transfn
-    arrow_multirange_le
-    arrow_multirange_lower
-    arrow_multirange_lower_inc
-    arrow_multirange_lower_inf
-    arrow_multirange_lt
-    arrow_multirange_minus
-    arrow_multirange_ne
-    arrow_multirange_out
-    arrow_multirange_overlaps_multirange
-    arrow_multirange_overlaps_range
-    arrow_multirange_overleft_multirange
-    arrow_multirange_overleft_range
-    arrow_multirange_overright_multirange
-    arrow_multirange_overright_range
-    arrow_multirange_recv
-    arrow_multirange_send
-    arrow_multirange_union
-    arrow_multirange_upper
-    arrow_multirange_upper_inc
-    arrow_multirange_upper_inf
+    arrow_hashhandler
+    arrow_lastval
     arrow_networkjoinsel
     arrow_networksel
-    arrow_pg_get_constraintdef
-    arrow_pg_get_constraintdef_ext
-    arrow_pg_get_expr
-    arrow_pg_get_expr_ext
-    arrow_pg_get_function_arg_default
-    arrow_pg_get_function_arguments
-    arrow_pg_get_function_identity_arguments
-    arrow_pg_get_function_result
-    arrow_pg_get_function_sqlbody
-    arrow_pg_get_functiondef
-    arrow_pg_get_indexdef
-    arrow_pg_get_indexdef_ext
-    arrow_pg_get_partition_constraintdef
-    arrow_pg_get_partkeydef
-    arrow_pg_get_ruledef
-    arrow_pg_get_ruledef_ext
-    arrow_pg_get_serial_sequence
-    arrow_pg_get_statisticsobjdef
-    arrow_pg_get_statisticsobjdef_columns
-    arrow_pg_get_statisticsobjdef_expressions
-    arrow_pg_get_triggerdef
-    arrow_pg_get_triggerdef_ext
-    arrow_pg_get_userbyid
-    arrow_pg_get_viewdef
-    arrow_pg_get_viewdef_ext
-    arrow_pg_get_viewdef_name
-    arrow_pg_get_viewdef_name_ext
-    arrow_pg_get_viewdef_wrap
-    arrow_range_adjacent_multirange
-    arrow_range_after_multirange
-    arrow_range_agg_finalfn
-    arrow_range_agg_transfn
-    arrow_range_before_multirange
-    arrow_range_contained_by_multirange
-    arrow_range_contains_multirange
-    arrow_range_merge_from_multirange
-    arrow_range_overlaps_multirange
-    arrow_range_overleft_multirange
-    arrow_range_overright_multirange
+    arrow_nextval_oid
+    arrow_pg_backup_start
+    arrow_pg_backup_stop
+    arrow_pg_create_restore_point
+    arrow_pg_current_wal_flush_lsn
+    arrow_pg_current_wal_insert_lsn
+    arrow_pg_current_wal_lsn
+    arrow_pg_database_collation_actual_version
+    arrow_pg_get_wal_replay_pause_state
+    arrow_pg_is_in_recovery
+    arrow_pg_is_wal_replay_paused
+    arrow_pg_last_wal_receive_lsn
+    arrow_pg_last_wal_replay_lsn
+    arrow_pg_last_xact_replay_timestamp
+    arrow_pg_log_standby_snapshot
+    arrow_pg_promote
+    arrow_pg_sequence_last_value
+    arrow_pg_sequence_parameters
+    arrow_pg_split_walfile_name
+    arrow_pg_switch_wal
+    arrow_pg_wal_lsn_diff
+    arrow_pg_wal_replay_pause
+    arrow_pg_wal_replay_resume
+    arrow_pg_walfile_name
+    arrow_pg_walfile_name_offset
+    arrow_prsd_end
+    arrow_prsd_headline
+    arrow_prsd_lextype
+    arrow_prsd_nexttoken
+    arrow_prsd_start
+    arrow_setval3_oid
+    arrow_setval_oid
     arrow_spg_kd_choose
     arrow_spg_kd_config
     arrow_spg_kd_inner_consistent
     arrow_spg_kd_picksplit
-    arrow_spghandler
     arrow_tsq_mcontained
     arrow_tsq_mcontains
     arrow_tsquery_and

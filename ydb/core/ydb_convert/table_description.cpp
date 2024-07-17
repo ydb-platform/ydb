@@ -307,6 +307,10 @@ bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKiki
                     }
                     break;
                 }
+                case Ydb::Table::ColumnMeta::kEmptyDefault: {
+                    column->SetEmptyDefault(google::protobuf::NullValue());
+                    break;
+                }
                 default: break;
             }
         }
@@ -455,6 +459,10 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
         case NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence: {
             auto* fromSequence = newColumn->mutable_from_sequence();
             fromSequence->set_name(column.GetDefaultFromSequence());
+            break;
+        }
+        case NKikimrSchemeOp::TColumnDescription::kEmptyDefault: {
+            newColumn->set_empty_default(google::protobuf::NullValue());
             break;
         }
         default: break;
@@ -684,6 +692,10 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
                 *fromSequence = column.from_sequence().name();
                 break;
             }
+            case Ydb::Table::ColumnMeta::kEmptyDefault: {
+                cd->SetEmptyDefault(google::protobuf::NullValue());
+                break;
+            }
             default: break;
         }
     }
@@ -719,10 +731,9 @@ bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out,
 
 template <typename TYdbProto>
 void FillTableBoundaryImpl(TYdbProto& out,
-    const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TSplitBoundary>& boundaries,
-    const NKikimrMiniKQL::TType& splitKeyType
-) {
-    for (const auto& boundary : boundaries) {
+        const NKikimrSchemeOp::TTableDescription& in, const NKikimrMiniKQL::TType& splitKeyType) {
+
+    for (const auto& boundary : in.GetSplitBoundary()) {
         if (boundary.HasSerializedKeyPrefix()) {
             throw NYql::TErrorException(NKikimrIssues::TIssuesIds::DEFAULT_ERROR)
                 << "Unexpected serialized response from txProxy";
@@ -756,12 +767,12 @@ void FillTableBoundaryImpl(TYdbProto& out,
 
 void FillTableBoundary(Ydb::Table::DescribeTableResult& out,
         const NKikimrSchemeOp::TTableDescription& in, const NKikimrMiniKQL::TType& splitKeyType) {
-    FillTableBoundaryImpl<Ydb::Table::DescribeTableResult>(out, in.GetSplitBoundary(), splitKeyType);
+    FillTableBoundaryImpl<Ydb::Table::DescribeTableResult>(out, in, splitKeyType);
 }
 
 void FillTableBoundary(Ydb::Table::CreateTableRequest& out,
         const NKikimrSchemeOp::TTableDescription& in, const NKikimrMiniKQL::TType& splitKeyType) {
-    FillTableBoundaryImpl<Ydb::Table::CreateTableRequest>(out, in.GetSplitBoundary(), splitKeyType);
+    FillTableBoundaryImpl<Ydb::Table::CreateTableRequest>(out, in, splitKeyType);
 }
 
 template <typename TYdbProto>
@@ -802,38 +813,45 @@ void FillPartitioningSettings(TYdbProto& out, const NKikimrSchemeOp::TPartitioni
     }
 }
 
-void FillGlobalIndexSettings(Ydb::Table::GlobalIndexSettings& settings,
-        const NKikimrSchemeOp::TIndexDescription& tableIndex,
-        const NKikimrMiniKQL::TType& splitKeyType) {
+template <typename TYdbProto>
+void FillPartitioningSettingsImpl(TYdbProto& out,
+        const NKikimrSchemeOp::TTableDescription& in) {
 
-    switch (tableIndex.GetPartitionsCase()) {
-    case NKikimrSchemeOp::TIndexDescription::kUniformPartitions:
-        settings.set_uniform_partitions(tableIndex.GetUniformPartitions());
-        break;
-    case NKikimrSchemeOp::TIndexDescription::kExplicitPartitions:
-        FillTableBoundaryImpl(*settings.mutable_partition_at_keys(),
-            tableIndex.GetExplicitPartitions().GetSplitBoundary(),
+    auto& outPartSettings = *out.mutable_partitioning_settings();
+
+    if (!in.HasPartitionConfig()) {
+        FillDefaultPartitioningSettings(outPartSettings);
+        return;
+    }
+
+    const auto& partConfig = in.GetPartitionConfig();
+    if (!partConfig.HasPartitioningPolicy()) {
+        FillDefaultPartitioningSettings(outPartSettings);
+        return;
+    }
+
+    FillPartitioningSettings(outPartSettings, partConfig.GetPartitioningPolicy());
+}
+
+void FillGlobalIndexSettings(Ydb::Table::GlobalIndexSettings& settings,
+    const NKikimrSchemeOp::TTableDescription& indexImplTableDescription
+) {
+    if (indexImplTableDescription.SplitBoundarySize()) {
+        NKikimrMiniKQL::TType splitKeyType;
+        Ydb::Table::DescribeTableResult unused;
+        FillColumnDescription(unused, splitKeyType, indexImplTableDescription);
+        FillTableBoundaryImpl(
+            *settings.mutable_partition_at_keys(),
+            indexImplTableDescription,
             splitKeyType
         );
-        break;
-    default:
-        break;
     }
 
-    auto& partitioningSettings = *settings.mutable_partitioning_settings();
-    if (tableIndex.HasPartitioningPolicy()) {
-        FillPartitioningSettings(
-            partitioningSettings,
-            tableIndex.GetPartitioningPolicy()
-        );
-    } else {
-        FillDefaultPartitioningSettings(partitioningSettings);
-    }
+    FillPartitioningSettingsImpl(settings, indexImplTableDescription);
 }
 
 template <typename TYdbProto>
-void FillIndexDescriptionImpl(TYdbProto& out,
-        const NKikimrSchemeOp::TTableDescription& in, const NKikimrMiniKQL::TType& splitKeyType) {
+void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescription& in) {
 
     for (const auto& tableIndex : in.GetTableIndexes()) {
         auto index = out.add_indexes();
@@ -852,13 +870,35 @@ void FillIndexDescriptionImpl(TYdbProto& out,
 
         switch (tableIndex.GetType()) {
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobal:
-            FillGlobalIndexSettings(*index->mutable_global_index()->mutable_settings(), tableIndex, splitKeyType);
+            FillGlobalIndexSettings(
+                *index->mutable_global_index()->mutable_settings(),
+                tableIndex.GetIndexImplTableDescriptions(0)
+            );
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync:
-            FillGlobalIndexSettings(*index->mutable_global_async_index()->mutable_settings(), tableIndex, splitKeyType);
+            FillGlobalIndexSettings(
+                *index->mutable_global_async_index()->mutable_settings(),
+                tableIndex.GetIndexImplTableDescriptions(0)
+            );
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique:
-            FillGlobalIndexSettings(*index->mutable_global_unique_index()->mutable_settings(), tableIndex, splitKeyType);
+            FillGlobalIndexSettings(
+                *index->mutable_global_unique_index()->mutable_settings(),
+                tableIndex.GetIndexImplTableDescriptions(0)
+            );
+            break;
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
+            FillGlobalIndexSettings(
+                *index->mutable_global_vector_kmeans_tree_index()->mutable_level_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(0)
+            );
+            FillGlobalIndexSettings(
+                *index->mutable_global_vector_kmeans_tree_index()->mutable_posting_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(1)
+            );
+
+            *index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings() = tableIndex.GetVectorIndexKmeansTreeDescription().GetSettings();
+
             break;
         default:
             break;
@@ -876,13 +916,13 @@ void FillIndexDescriptionImpl(TYdbProto& out,
 }
 
 void FillIndexDescription(Ydb::Table::DescribeTableResult& out,
-        const NKikimrSchemeOp::TTableDescription& in, const NKikimrMiniKQL::TType& splitKeyType) {
-    FillIndexDescriptionImpl(out, in, splitKeyType);
+        const NKikimrSchemeOp::TTableDescription& in) {
+    FillIndexDescriptionImpl(out, in);
 }
 
 void FillIndexDescription(Ydb::Table::CreateTableRequest& out,
-        const NKikimrSchemeOp::TTableDescription& in, const NKikimrMiniKQL::TType& splitKeyType) {
-    FillIndexDescriptionImpl(out, in, splitKeyType);
+        const NKikimrSchemeOp::TTableDescription& in) {
+    FillIndexDescriptionImpl(out, in);
 }
 
 bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
@@ -913,6 +953,7 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
         }
 
         // specific fields
+        std::vector<NKikimrSchemeOp::TTableDescription> indexImplTableDescriptionsVector;
         switch (index.type_case()) {
         case Ydb::Table::TableIndex::kGlobalIndex:
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobal);
@@ -926,15 +967,21 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique);
             break;
 
+        case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
+            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
+            *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
+            break;
+
         default:
             // pass through
             // TODO: maybe return BAD_REQUEST?
             break;
         }
 
-        if (!FillIndexTablePartitioning(*indexDesc->MutableIndexImplTableDescription(), index, status, error)) {
+        if (!FillIndexTablePartitioning(indexImplTableDescriptionsVector, index, status, error)) {
             return false;
         }
+        *indexDesc->MutableIndexImplTableDescriptions() = {indexImplTableDescriptionsVector.begin(), indexImplTableDescriptionsVector.end()};
     }
 
     return true;
@@ -1260,26 +1307,6 @@ void FillAttributes(Ydb::Table::DescribeTableResult& out,
 void FillAttributes(Ydb::Table::CreateTableRequest& out,
         const NKikimrSchemeOp::TPathDescription& in) {
     FillAttributesImpl(out, in);
-}
-
-template <typename TYdbProto>
-void FillPartitioningSettingsImpl(TYdbProto& out,
-        const NKikimrSchemeOp::TTableDescription& in) {
-
-    auto& outPartSettings = *out.mutable_partitioning_settings();
-
-    if (!in.HasPartitionConfig()) {
-        FillDefaultPartitioningSettings(outPartSettings);
-        return;
-    }
-
-    const auto& partConfig = in.GetPartitionConfig();
-    if (!partConfig.HasPartitioningPolicy()) {
-        FillDefaultPartitioningSettings(outPartSettings);
-        return;
-    }
-
-    FillPartitioningSettings(outPartSettings, partConfig.GetPartitioningPolicy());
 }
 
 void FillPartitioningSettings(Ydb::Table::DescribeTableResult& out,

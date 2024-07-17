@@ -370,6 +370,9 @@ class TDynamoDBStreamsJsonSerializer: public TJsonSerializer {
             } else if (name.StartsWith("__Hash_")) {
                 bool indexed = false;
                 for (const auto& [_, index] : schema->Indexes) {
+                    if (index.Type != TUserTable::TTableIndex::EType::EIndexTypeGlobalAsync) {
+                        continue;
+                    }
                     Y_ABORT_UNLESS(index.KeyColumnIds.size() >= 1);
                     if (index.KeyColumnIds.at(0) == tag) {
                         indexed = true;

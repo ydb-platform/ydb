@@ -3,7 +3,7 @@
  * copyto.c
  *		COPY <table> TO file/program/client
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -51,6 +51,7 @@ typedef enum CopyDest
 {
 	COPY_FILE,					/* to file (or a piped program) */
 	COPY_FRONTEND,				/* to frontend */
+	COPY_CALLBACK				/* to callback function */
 } CopyDest;
 
 /*
@@ -85,6 +86,7 @@ typedef struct CopyToStateData
 	List	   *attnumlist;		/* integer list of attnums to copy */
 	char	   *filename;		/* filename, or NULL for STDOUT */
 	bool		is_program;		/* is 'filename' a program to popen? */
+	copy_data_dest_cb data_dest_cb; /* function for writing data */
 
 	CopyFormatOptions opts;
 	Node	   *whereClause;	/* WHERE condition (or NULL) */
@@ -97,7 +99,6 @@ typedef struct CopyToStateData
 	FmgrInfo   *out_functions;	/* lookup info for output functions */
 	MemoryContext rowcontext;	/* per-row evaluation context */
 	uint64		bytes_processed;	/* number of bytes processed so far */
-
 } CopyToStateData;
 
 /* DestReceiver for COPY (query) TO */
@@ -116,8 +117,8 @@ static const char BinarySignature[11] = "PGCOPY\n\377\r\n\0";
 static void EndCopy(CopyToState cstate);
 static void ClosePipeToProgram(CopyToState cstate);
 static void CopyOneRowTo(CopyToState cstate, TupleTableSlot *slot);
-static void CopyAttributeOutText(CopyToState cstate, char *string);
-static void CopyAttributeOutCSV(CopyToState cstate, char *string,
+static void CopyAttributeOutText(CopyToState cstate, const char *string);
+static void CopyAttributeOutCSV(CopyToState cstate, const char *string,
 								bool use_quote, bool single_attr);
 
 /* Low-level communications functions */
@@ -248,6 +249,9 @@ CopySendEndOfRow(CopyToState cstate)
 			/* Dump the accumulated row as one CopyData message */
 			(void) pq_putmessage('d', fe_msgbuf->data, fe_msgbuf->len);
 			break;
+		case COPY_CALLBACK:
+			cstate->data_dest_cb(fe_msgbuf->data, fe_msgbuf->len);
+			break;
 	}
 
 	/* Update the progress */
@@ -337,6 +341,17 @@ EndCopy(CopyToState cstate)
 
 /*
  * Setup CopyToState to read tuples from a table or a query for COPY TO.
+ *
+ * 'rel': Relation to be copied
+ * 'raw_query': Query whose results are to be copied
+ * 'queryRelId': OID of base relation to convert to a query (for RLS)
+ * 'filename': Name of server-local file to write, NULL for STDOUT
+ * 'is_program': true if 'filename' is program to execute
+ * 'data_dest_cb': Callback that processes the output data
+ * 'attnamelist': List of char *, columns to include. NIL selects all cols.
+ * 'options': List of DefElem. See copy_opt_item in gram.y for selections.
+ *
+ * Returns a CopyToState, to be passed to DoCopyTo() and related functions.
  */
 CopyToState
 BeginCopyTo(ParseState *pstate,
@@ -345,11 +360,12 @@ BeginCopyTo(ParseState *pstate,
 			Oid queryRelId,
 			const char *filename,
 			bool is_program,
+			copy_data_dest_cb data_dest_cb,
 			List *attnamelist,
 			List *options)
 {
 	CopyToState cstate;
-	bool		pipe = (filename == NULL);
+	bool		pipe = (filename == NULL && data_dest_cb == NULL);
 	TupleDesc	tupDesc;
 	int			num_phys_attrs;
 	MemoryContext oldcontext;
@@ -439,9 +455,9 @@ BeginCopyTo(ParseState *pstate,
 		 * Run parse analysis and rewrite.  Note this also acquires sufficient
 		 * locks on the source table(s).
 		 */
-		rewritten = pg_analyze_and_rewrite(raw_query,
-										   pstate->p_sourcetext, NULL, 0,
-										   NULL);
+		rewritten = pg_analyze_and_rewrite_fixedparams(raw_query,
+													   pstate->p_sourcetext, NULL, 0,
+													   NULL);
 
 		/* check that we got back something we can work with */
 		if (rewritten == NIL)
@@ -508,8 +524,8 @@ BeginCopyTo(ParseState *pstate,
 		/*
 		 * With row-level security and a user using "COPY relation TO", we
 		 * have to convert the "COPY relation TO" to a query-based COPY (eg:
-		 * "COPY (SELECT * FROM relation) TO"), to allow the rewriter to add
-		 * in any RLS clauses.
+		 * "COPY (SELECT * FROM ONLY relation) TO"), to allow the rewriter to
+		 * add in any RLS clauses.
 		 *
 		 * When this happens, we are passed in the relid of the originally
 		 * found relation (which we have locked).  As the planner will look up
@@ -592,52 +608,6 @@ BeginCopyTo(ParseState *pstate,
 		}
 	}
 
-	/* Convert FORCE_NOT_NULL name list to per-column flags, check validity */
-	cstate->opts.force_notnull_flags = (bool *) palloc0(num_phys_attrs * sizeof(bool));
-	if (cstate->opts.force_notnull)
-	{
-		List	   *attnums;
-		ListCell   *cur;
-
-		attnums = CopyGetAttnums(tupDesc, cstate->rel, cstate->opts.force_notnull);
-
-		foreach(cur, attnums)
-		{
-			int			attnum = lfirst_int(cur);
-			Form_pg_attribute attr = TupleDescAttr(tupDesc, attnum - 1);
-
-			if (!list_member_int(cstate->attnumlist, attnum))
-				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
-						 errmsg("FORCE_NOT_NULL column \"%s\" not referenced by COPY",
-								NameStr(attr->attname))));
-			cstate->opts.force_notnull_flags[attnum - 1] = true;
-		}
-	}
-
-	/* Convert FORCE_NULL name list to per-column flags, check validity */
-	cstate->opts.force_null_flags = (bool *) palloc0(num_phys_attrs * sizeof(bool));
-	if (cstate->opts.force_null)
-	{
-		List	   *attnums;
-		ListCell   *cur;
-
-		attnums = CopyGetAttnums(tupDesc, cstate->rel, cstate->opts.force_null);
-
-		foreach(cur, attnums)
-		{
-			int			attnum = lfirst_int(cur);
-			Form_pg_attribute attr = TupleDescAttr(tupDesc, attnum - 1);
-
-			if (!list_member_int(cstate->attnumlist, attnum))
-				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
-						 errmsg("FORCE_NULL column \"%s\" not referenced by COPY",
-								NameStr(attr->attname))));
-			cstate->opts.force_null_flags[attnum - 1] = true;
-		}
-	}
-
 	/* Use client encoding when ENCODING option is not specified. */
 	if (cstate->opts.file_encoding < 0)
 		cstate->file_encoding = pg_get_client_encoding();
@@ -657,7 +627,13 @@ BeginCopyTo(ParseState *pstate,
 
 	cstate->copy_dest = COPY_FILE;	/* default */
 
-	if (pipe)
+	if (data_dest_cb)
+	{
+		progress_vals[1] = PROGRESS_COPY_TYPE_CALLBACK;
+		cstate->copy_dest = COPY_CALLBACK;
+		cstate->data_dest_cb = data_dest_cb;
+	}
+	else if (pipe)
 	{
 		progress_vals[1] = PROGRESS_COPY_TYPE_PIPE;
 
@@ -766,11 +742,13 @@ EndCopyTo(CopyToState cstate)
 
 /*
  * Copy from relation or query TO file.
+ *
+ * Returns the number of rows processed.
  */
 uint64
 DoCopyTo(CopyToState cstate)
 {
-	bool		pipe = (cstate->filename == NULL);
+	bool		pipe = (cstate->filename == NULL && cstate->data_dest_cb == NULL);
 	bool		fe_copy = (pipe && whereToSendOutput == DestRemote);
 	TupleDesc	tupDesc;
 	int			num_phys_attrs;
@@ -861,8 +839,11 @@ DoCopyTo(CopyToState cstate)
 
 				colname = NameStr(TupleDescAttr(tupDesc, attnum - 1)->attname);
 
-				CopyAttributeOutCSV(cstate, colname, false,
-									list_length(cstate->attnumlist) == 1);
+				if (cstate->opts.csv_mode)
+					CopyAttributeOutCSV(cstate, colname, false,
+										list_length(cstate->attnumlist) == 1);
+				else
+					CopyAttributeOutText(cstate, colname);
 			}
 
 			CopySendEndOfRow(cstate);
@@ -902,7 +883,7 @@ DoCopyTo(CopyToState cstate)
 	else
 	{
 		/* run the plan --- the dest receiver will send tuples */
-		ExecutorRun(cstate->queryDesc, ForwardScanDirection, 0L, true);
+		ExecutorRun(cstate->queryDesc, ForwardScanDirection, 0, true);
 		processed = ((DR_copy *) cstate->queryDesc->dest)->processed;
 	}
 
@@ -1007,10 +988,10 @@ CopyOneRowTo(CopyToState cstate, TupleTableSlot *slot)
 	} while (0)
 
 static void
-CopyAttributeOutText(CopyToState cstate, char *string)
+CopyAttributeOutText(CopyToState cstate, const char *string)
 {
-	char	   *ptr;
-	char	   *start;
+	const char *ptr;
+	const char *start;
 	char		c;
 	char		delimc = cstate->opts.delim[0];
 
@@ -1160,11 +1141,11 @@ CopyAttributeOutText(CopyToState cstate, char *string)
  * CSV-style escaping
  */
 static void
-CopyAttributeOutCSV(CopyToState cstate, char *string,
+CopyAttributeOutCSV(CopyToState cstate, const char *string,
 					bool use_quote, bool single_attr)
 {
-	char	   *ptr;
-	char	   *start;
+	const char *ptr;
+	const char *start;
 	char		c;
 	char		delimc = cstate->opts.delim[0];
 	char		quotec = cstate->opts.quote[0];
@@ -1192,7 +1173,7 @@ CopyAttributeOutCSV(CopyToState cstate, char *string,
 			use_quote = true;
 		else
 		{
-			char	   *tptr = ptr;
+			const char *tptr = ptr;
 
 			while ((c = *tptr) != '\0')
 			{

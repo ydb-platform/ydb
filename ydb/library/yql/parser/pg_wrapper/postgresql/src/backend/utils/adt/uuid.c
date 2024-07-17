@@ -3,7 +3,7 @@
  * uuid.c
  *	  Functions for the built-in type "uuid".
  *
- * Copyright (c) 2007-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2007-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/utils/adt/uuid.c
@@ -31,10 +31,9 @@ typedef struct
 	hyperLogLogState abbr_card; /* cardinality estimator */
 } uuid_sortsupport_state;
 
-static void string_to_uuid(const char *source, pg_uuid_t *uuid);
+static void string_to_uuid(const char *source, pg_uuid_t *uuid, Node *escontext);
 static int	uuid_internal_cmp(const pg_uuid_t *arg1, const pg_uuid_t *arg2);
 static int	uuid_fast_cmp(Datum x, Datum y, SortSupport ssup);
-static int	uuid_cmp_abbrev(Datum x, Datum y, SortSupport ssup);
 static bool uuid_abbrev_abort(int memtupcount, SortSupport ssup);
 static Datum uuid_abbrev_convert(Datum original, SortSupport ssup);
 
@@ -45,7 +44,7 @@ uuid_in(PG_FUNCTION_ARGS)
 	pg_uuid_t  *uuid;
 
 	uuid = (pg_uuid_t *) palloc(sizeof(*uuid));
-	string_to_uuid(uuid_str, uuid);
+	string_to_uuid(uuid_str, uuid, fcinfo->context);
 	PG_RETURN_UUID_P(uuid);
 }
 
@@ -88,7 +87,7 @@ uuid_out(PG_FUNCTION_ARGS)
  * digits, is the only one used for output.)
  */
 static void
-string_to_uuid(const char *source, pg_uuid_t *uuid)
+string_to_uuid(const char *source, pg_uuid_t *uuid, Node *escontext)
 {
 	const char *src = source;
 	bool		braces = false;
@@ -131,7 +130,7 @@ string_to_uuid(const char *source, pg_uuid_t *uuid)
 	return;
 
 syntax_error:
-	ereport(ERROR,
+	ereturn(escontext,,
 			(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
 			 errmsg("invalid input syntax for type %s: \"%s\"",
 					"uuid", source)));
@@ -155,7 +154,7 @@ uuid_send(PG_FUNCTION_ARGS)
 	StringInfoData buffer;
 
 	pq_begintypsend(&buffer);
-	pq_sendbytes(&buffer, (char *) uuid->data, UUID_LEN);
+	pq_sendbytes(&buffer, uuid->data, UUID_LEN);
 	PG_RETURN_BYTEA_P(pq_endtypsend(&buffer));
 }
 
@@ -255,7 +254,7 @@ uuid_sortsupport(PG_FUNCTION_ARGS)
 
 		ssup->ssup_extra = uss;
 
-		ssup->comparator = uuid_cmp_abbrev;
+		ssup->comparator = ssup_datum_unsigned_cmp;
 		ssup->abbrev_converter = uuid_abbrev_convert;
 		ssup->abbrev_abort = uuid_abbrev_abort;
 		ssup->abbrev_full_comparator = uuid_fast_cmp;
@@ -276,20 +275,6 @@ uuid_fast_cmp(Datum x, Datum y, SortSupport ssup)
 	pg_uuid_t  *arg2 = DatumGetUUIDP(y);
 
 	return uuid_internal_cmp(arg1, arg2);
-}
-
-/*
- * Abbreviated key comparison func
- */
-static int
-uuid_cmp_abbrev(Datum x, Datum y, SortSupport ssup)
-{
-	if (x > y)
-		return 1;
-	else if (x == y)
-		return 0;
-	else
-		return -1;
 }
 
 /*
@@ -390,10 +375,10 @@ uuid_abbrev_convert(Datum original, SortSupport ssup)
 	/*
 	 * Byteswap on little-endian machines.
 	 *
-	 * This is needed so that uuid_cmp_abbrev() (an unsigned integer 3-way
-	 * comparator) works correctly on all platforms.  If we didn't do this,
-	 * the comparator would have to call memcmp() with a pair of pointers to
-	 * the first byte of each abbreviated key, which is slower.
+	 * This is needed so that ssup_datum_unsigned_cmp() (an unsigned integer
+	 * 3-way comparator) works correctly on all platforms.  If we didn't do
+	 * this, the comparator would have to call memcmp() with a pair of
+	 * pointers to the first byte of each abbreviated key, which is slower.
 	 */
 	res = DatumBigEndianToNative(res);
 

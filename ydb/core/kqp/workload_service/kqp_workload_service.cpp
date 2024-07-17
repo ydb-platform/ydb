@@ -1,4 +1,5 @@
 #include "kqp_workload_service.h"
+#include "kqp_workload_service_impl.h"
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/feature_flags.h>
@@ -8,11 +9,12 @@
 #include <ydb/core/cms/console/console.h>
 
 #include <ydb/core/kqp/workload_service/actors/actors.h>
-#include <ydb/core/kqp/workload_service/common/events.h>
 #include <ydb/core/kqp/workload_service/common/helpers.h>
 #include <ydb/core/kqp/workload_service/tables/table_queries.h>
 
 #include <ydb/core/protos/console_config.pb.h>
+
+#include <ydb/library/actors/interconnect/interconnect.h>
 
 
 namespace NKikimr::NKqp {
@@ -23,8 +25,6 @@ namespace {
 
 using namespace NActors;
 
-constexpr TDuration IDLE_DURATION = TDuration::Seconds(15);
-
 
 class TKqpWorkloadService : public TActorBootstrapped<TKqpWorkloadService> {
     enum class ETablesCreationStatus {
@@ -34,45 +34,10 @@ class TKqpWorkloadService : public TActorBootstrapped<TKqpWorkloadService> {
         Finished,
     };
 
-    struct TPoolState {
-        TActorId PoolHandler;
-        TActorContext ActorContext;
-
-        std::queue<TEvPrivate::TEvResolvePoolResponse::TPtr> PendingRequests = {};
-        bool WaitingInitialization = false;
-        bool PlaceRequestRunning = false;
-        std::optional<TActorId> NewPoolHandler = std::nullopt;
-
-        ui64 InFlightRequests = 0;
-        TInstant LastUpdateTime = TInstant::Now();
-
-        void UpdateHandler() {
-            if (PlaceRequestRunning || WaitingInitialization || !NewPoolHandler) {
-                return;
-            }
-
-            ActorContext.Send(PoolHandler, new TEvPrivate::TEvStopPoolHandler());
-            PoolHandler = *NewPoolHandler;
-            NewPoolHandler = std::nullopt;
-            InFlightRequests = 0;
-        }
-
-        void StartPlaceRequest() {
-            if (PlaceRequestRunning || PendingRequests.empty()) {
-                return;
-            }
-
-            PlaceRequestRunning = true;
-            InFlightRequests++;
-            ActorContext.Send(PendingRequests.front()->Forward(PoolHandler));
-            PendingRequests.pop();
-        }
-
-        void OnRequestFinished() {
-            Y_ENSURE(InFlightRequests);
-            InFlightRequests--;
-            LastUpdateTime = TInstant::Now();
-        }
+    enum class EWakeUp {
+        IdleCheck,
+        StartCpuLoadRequest,
+        StartNodeInfoRequest
     };
 
 public:
@@ -89,6 +54,8 @@ public:
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
             (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem
         }), IEventHandle::FlagTrackDelivery);
+
+        CpuQuotaManager = std::make_unique<TCpuQuotaManagerState>(ActorContext(), Counters->GetSubgroup("subcomponent", "CpuQuotaManager"));
 
         EnabledResourcePools = AppData()->FeatureFlags.GetEnableResourcePools();
         if (EnabledResourcePools) {
@@ -128,6 +95,13 @@ public:
         Send(ev->Sender, responseEvent.release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
     }
 
+    void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
+        NodeCount = ev->Get()->Nodes.size();
+        ScheduleNodeInfoRequest();
+
+        LOG_T("Updated node info, noode count: " << NodeCount);
+    }
+
     void Handle(TEvents::TEvUndelivered::TPtr& ev) const {
         switch (ev->Get()->SourceType) {
             case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
@@ -136,6 +110,11 @@ public:
 
             case NConsole::TEvConsole::EvConfigNotificationResponse:
                 LOG_E("Failed to deliver config notification response");
+                break;
+
+            case TEvInterconnect::EvListNodes:
+                LOG_W("Failed to deliver list nodes request");
+                ScheduleNodeInfoRequest();
                 break;
 
             default:
@@ -172,24 +151,19 @@ public:
         Send(ev->Forward(poolState->PoolHandler));
     }
 
-    void HandleWakeup() {
-        IdleChecksStarted = false;
+    void Handle(TEvents::TEvWakeup::TPtr& ev) {
+        switch (static_cast<EWakeUp>(ev->Get()->Tag)) {
+            case EWakeUp::IdleCheck:
+                RunIdleCheck();
+                break;
 
-        std::vector<TString> poolsToDelete;
-        poolsToDelete.reserve(PoolIdToState.size());
-        for (const auto& [poolKey, poolState] : PoolIdToState) {
-            if (!poolState.InFlightRequests && TInstant::Now() - poolState.LastUpdateTime > IDLE_DURATION) {
-                Send(poolState.PoolHandler, new TEvPrivate::TEvStopPoolHandler());
-                poolsToDelete.emplace_back(poolKey);
-            }
-        }
-        for (const auto& poolKey : poolsToDelete) {
-            PoolIdToState.erase(poolKey);
-            ActivePools->Dec();
-        }
+            case EWakeUp::StartCpuLoadRequest:
+                RunCpuLoadRequest();
+                break;
 
-        if (!PoolIdToState.empty()) {
-            StartIdleChecks();
+            case EWakeUp::StartNodeInfoRequest:
+                RunNodeInfoRequest();
+                break;
         }
     }
 
@@ -197,19 +171,23 @@ public:
         sFunc(TEvents::TEvPoison, HandlePoison);
         sFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleSetConfigSubscriptionResponse);
         hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+        hFunc(TEvInterconnect::TEvNodesInfo, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
 
         hFunc(TEvPlaceRequestIntoPool, Handle);
         hFunc(TEvCleanupRequest, Handle);
-        sFunc(TEvents::TEvWakeup, HandleWakeup);
+        hFunc(TEvents::TEvWakeup, Handle);
 
         hFunc(TEvPrivate::TEvResolvePoolResponse, Handle);
         hFunc(TEvPrivate::TEvPlaceRequestIntoPoolResponse, Handle);
+        hFunc(TEvPrivate::TEvNodesInfoRequest, Handle);
         hFunc(TEvPrivate::TEvRefreshPoolState, Handle);
+        hFunc(TEvPrivate::TEvCpuQuotaRequest, Handle);
         hFunc(TEvPrivate::TEvFinishRequestInPool, Handle);
         hFunc(TEvPrivate::TEvPrepareTablesRequest, Handle);
         hFunc(TEvPrivate::TEvCleanupTablesFinished, Handle);
         hFunc(TEvPrivate::TEvTablesCreationFinished, Handle);
+        hFunc(TEvPrivate::TEvCpuLoadResponse, Handle);
         hFunc(TEvPrivate::TEvResignPoolHandler, Handle);
     )
 
@@ -238,7 +216,7 @@ private:
             poolState = &PoolIdToState.insert({poolKey, TPoolState{.PoolHandler = poolHandler, .ActorContext = ActorContext()}}).first->second;
 
             ActivePools->Inc();
-            StartIdleChecks();
+            ScheduleIdleCheck();
         }
 
         poolState->PendingRequests.emplace(std::move(ev));
@@ -257,6 +235,10 @@ private:
         }
     }
 
+    void Handle(TEvPrivate::TEvNodesInfoRequest::TPtr& ev) const {
+        Send(ev->Sender, new TEvPrivate::TEvNodesInfoResponse(NodeCount));
+    }
+
     void Handle(TEvPrivate::TEvRefreshPoolState::TPtr& ev) {
         const auto& event = ev->Get()->Record;
         const TString& database = event.GetDatabase();
@@ -268,13 +250,26 @@ private:
         }
     }
 
+    void Handle(TEvPrivate::TEvCpuQuotaRequest::TPtr& ev) {
+        const TActorId& poolHandler = ev->Sender;
+        const double maxClusterLoad = ev->Get()->MaxClusterLoad;
+        LOG_T("Requested cpu quota from handler " << poolHandler << ", MaxClusterLoad: " << maxClusterLoad);
+
+        CpuQuotaManager->RequestCpuQuota(poolHandler, maxClusterLoad, ev->Cookie);
+        ScheduleCpuLoadRequest();
+    }
+
     void Handle(TEvPrivate::TEvFinishRequestInPool::TPtr& ev) {
         const TString& database = ev->Get()->Database;
         const TString& poolId = ev->Get()->PoolId;
-        LOG_T("Request finished in pool, Database: " << database << ", PoolId: " << poolId);
+        LOG_T("Request finished in pool, Database: " << database << ", PoolId: " << poolId << ", Duration: " << ev->Get()->Duration << ", CpuConsumed: " << ev->Get()->CpuConsumed << ", AdjustCpuQuota: " << ev->Get()->AdjustCpuQuota);
 
         if (auto poolState = GetPoolState(database, poolId)) {
             poolState->OnRequestFinished();
+        }
+        if (ev->Get()->AdjustCpuQuota) {
+            CpuQuotaManager->AdjustCpuQuota(ev->Get()->Duration, ev->Get()->CpuConsumed.SecondsFloat());
+            ScheduleCpuLoadRequest();
         }
     }
 
@@ -327,6 +322,19 @@ private:
         OnTabelsCreated(false, issues);
     }
 
+    void Handle(TEvPrivate::TEvCpuLoadResponse::TPtr& ev) {
+        const bool success = ev->Get()->Status == Ydb::StatusIds::SUCCESS;
+        if (!success) {
+            LOG_E("Failed to fetch cpu load " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
+        } else {
+            LOG_T("Succesfully fetched cpu load: " << 100.0 * ev->Get()->InstantLoad << "%, cpu number: " << ev->Get()->CpuNumber);
+        }
+
+        CpuQuotaManager->CpuLoadRequestRunning = false;
+        CpuQuotaManager->UpdateCpuLoad(ev->Get()->InstantLoad, ev->Get()->CpuNumber, success);
+        ScheduleCpuLoadRequest();
+    }
+
     void Handle(TEvPrivate::TEvResignPoolHandler::TPtr& ev) {
         const TString& database = ev->Get()->Database;
         const TString& poolId = ev->Get()->PoolId;
@@ -350,6 +358,7 @@ private:
 
         LOG_I("Started workload service initialization");
         Register(CreateCleanupTablesActor());
+        RunNodeInfoRequest();
     }
 
     void PrepareWorkloadServiceTables() {
@@ -378,13 +387,71 @@ private:
         PendingHandlers.clear();
     }
 
-    void StartIdleChecks() {
+    void ScheduleIdleCheck() {
         if (IdleChecksStarted) {
             return;
         }
         IdleChecksStarted = true;
 
-        Schedule(IDLE_DURATION, new TEvents::TEvWakeup());
+        Schedule(IDLE_DURATION / 2, new TEvents::TEvWakeup());
+    }
+
+    void RunIdleCheck() {
+        IdleChecksStarted = false;
+
+        std::vector<TString> poolsToDelete;
+        poolsToDelete.reserve(PoolIdToState.size());
+        for (const auto& [poolKey, poolState] : PoolIdToState) {
+            if (!poolState.InFlightRequests && TInstant::Now() - poolState.LastUpdateTime > IDLE_DURATION) {
+                CpuQuotaManager->CleanupHandler(poolState.PoolHandler);
+                Send(poolState.PoolHandler, new TEvPrivate::TEvStopPoolHandler());
+                poolsToDelete.emplace_back(poolKey);
+            }
+        }
+        for (const auto& poolKey : poolsToDelete) {
+            PoolIdToState.erase(poolKey);
+            ActivePools->Dec();
+        }
+
+        if (!PoolIdToState.empty()) {
+            ScheduleIdleCheck();
+        }
+    }
+
+    void ScheduleCpuLoadRequest() const {
+        auto delay = CpuQuotaManager->GetCpuLoadRequestDelay();
+        if (!delay) {
+            return;
+        }
+
+        if (*delay) {
+            Schedule(*delay, new TEvents::TEvWakeup(static_cast<ui64>(EWakeUp::StartCpuLoadRequest)));
+        } else {
+            RunCpuLoadRequest();
+        }
+    }
+
+    void RunCpuLoadRequest() const {
+        if (CpuQuotaManager->CpuLoadRequestRunning) {
+            return;
+        }
+
+        CpuQuotaManager->CpuLoadRequestTime = TInstant::Zero();
+        if (CpuQuotaManager->CpuQuotaManager.GetMonitoringRequestDelay()) {
+            ScheduleCpuLoadRequest();
+            return;
+        }
+
+        CpuQuotaManager->CpuLoadRequestRunning = true;
+        Register(CreateCpuLoadFetcherActor(SelfId()));
+    }
+
+    void ScheduleNodeInfoRequest() const {
+        Schedule(IDLE_DURATION * 2, new TEvents::TEvWakeup(static_cast<ui64>(EWakeUp::StartCpuLoadRequest)));
+    }
+
+    void RunNodeInfoRequest() const {
+        Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(), IEventHandle::FlagTrackDelivery);
     }
 
 private:
@@ -460,6 +527,8 @@ private:
 
     std::unordered_set<TString> DatabasesWithDefaultPool;
     std::unordered_map<TString, TPoolState> PoolIdToState;
+    std::unique_ptr<TCpuQuotaManagerState> CpuQuotaManager;
+    ui32 NodeCount = 0;
 
     NMonitoring::TDynamicCounters::TCounterPtr ActivePools;
 };

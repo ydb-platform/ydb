@@ -33,6 +33,7 @@ Generic {
 
 {% set CLICKHOUSE = 'CLICKHOUSE' %}
 {% set POSTGRESQL = 'POSTGRESQL' %}
+{% set MYSQL = 'MYSQL' %}
 
 {% macro data_source(kind, cluster, host, port, username, password, protocol, database, schema) -%}
     ClusterMapping {
@@ -82,6 +83,20 @@ Generic {
     settings.clickhouse.username,
     settings.clickhouse.password,
     CLICKHOUSE_PROTOCOL,
+    cluster.database,
+    NONE)
+}}
+{% endfor %}
+
+{% for cluster in generic_settings.mysql_clusters %}
+{{ data_source(
+    MYSQL,
+    settings.mysql.cluster_name,
+    settings.mysql.host_internal,
+    settings.mysql.port_internal,
+    settings.mysql.username,
+    settings.mysql.password,
+    NATIVE,
     cluster.database,
     NONE)
 }}

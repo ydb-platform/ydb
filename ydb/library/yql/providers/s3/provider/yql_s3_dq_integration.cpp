@@ -540,6 +540,7 @@ public:
                         fileQueueBatchSizeLimit,
                         fileQueueBatchObjectCountLimit,
                         State_->Gateway,
+                        State_->GatewayRetryPolicy,
                         connect.Url,
                         GetAuthInfo(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster)),
                         pathPattern,

@@ -12629,9 +12629,9 @@
     ],
     "test_sql2yql.test[pg-regoids]": [
         {
-            "checksum": "eab738419cb09d84413280147d5ebbe2",
-            "size": 3386,
-            "uri": "https://{canondata_backend}/1942415/fef0599b6207585cd5b6635353bbb33968e87399/resource.tar.gz#test_sql2yql.test_pg-regoids_/sql.yql"
+            "checksum": "cfee748ff3069e2026aa878742187dd1",
+            "size": 4216,
+            "uri": "https://{canondata_backend}/1600758/02851b6238039a3162d6f222d34d79a59e24c249/resource.tar.gz#test_sql2yql.test_pg-regoids_/sql.yql"
         }
     ],
     "test_sql2yql.test[pg-select_agg]": [

@@ -12,7 +12,7 @@
 namespace NKikimr::NOlap {
 
 class TVersionedIndex;
-class TWritePortionInfoWithBlobs;
+class TWritePortionInfoWithBlobsResult;
 
 class TReadPortionInfoWithBlobs: public TBasePortionInfoWithBlobs {
 private:
@@ -40,7 +40,7 @@ public:
         const TIndexInfo& indexInfo);
 
     std::shared_ptr<arrow::RecordBatch> GetBatch(const ISnapshotSchema::TPtr& data, const ISnapshotSchema& result, const std::set<std::string>& columnNames = {}) const;
-    static std::optional<TWritePortionInfoWithBlobs> SyncPortion(TReadPortionInfoWithBlobs&& source,
+    static std::optional<TWritePortionInfoWithBlobsResult> SyncPortion(TReadPortionInfoWithBlobs&& source,
         const ISnapshotSchema::TPtr& from, const ISnapshotSchema::TPtr& to, const TString& targetTier, const std::shared_ptr<IStoragesManager>& storages,
         std::shared_ptr<NColumnShard::TSplitterCounters> counters);
 

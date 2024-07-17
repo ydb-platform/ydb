@@ -2227,9 +2227,9 @@
     ],
     "test.test[pg-tpch-q01-default.txt-Debug]": [
         {
-            "checksum": "3af1b5b40b02aee79419c8a1b5d240d5",
+            "checksum": "f19e3b7d2091b8a960afec1f2cee32ca",
             "size": 14175,
-            "uri": "https://{canondata_backend}/1773845/06318af62e5da72747e6343c15ed6d2ac79bfaf0/resource.tar.gz#test.test_pg-tpch-q01-default.txt-Debug_/opt.yql_patched"
+            "uri": "https://{canondata_backend}/1871102/bc9c6bf8429fbf6f3c50296c2d5689b53f467982/resource.tar.gz#test.test_pg-tpch-q01-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-tpch-q01-default.txt-Plan]": [

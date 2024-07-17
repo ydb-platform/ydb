@@ -1,6 +1,6 @@
 /* General bitsets.
 
-   Copyright (C) 2002-2006, 2009-2013 Free Software Foundation, Inc.
+   Copyright (C) 2002-2006, 2009-2015, 2018-2019 Free Software Foundation, Inc.
 
    Contributed by Michael Hayes (m.hayes@elec.canterbury.ac.nz).
 
@@ -23,12 +23,14 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include "abitset.h"
-#include "lbitset.h"
-#include "ebitset.h"
-#include "vbitset.h"
-#include "bitset_stats.h"
+
 #include "obstack.h"
+
+#include "bitset/array.h"
+#include "bitset/list.h"
+#include "bitset/stats.h"
+#include "bitset/table.h"
+#include "bitset/vector.h"
 
 const char * const bitset_type_names[] = BITSET_TYPE_NAMES;
 
@@ -38,8 +40,6 @@ const char * const bitset_type_names[] = BITSET_TYPE_NAMES;
 size_t
 bitset_bytes (enum bitset_type type, bitset_bindex n_bits)
 {
-  size_t bytes;
-
   if (bitset_stats_enabled)
     return bitset_stats_bytes ();
 
@@ -49,23 +49,17 @@ bitset_bytes (enum bitset_type type, bitset_bindex n_bits)
       abort ();
 
     case BITSET_ARRAY:
-      bytes = abitset_bytes (n_bits);
-      break;
+      return abitset_bytes (n_bits);
 
     case BITSET_LIST:
-      bytes = lbitset_bytes (n_bits);
-      break;
+      return lbitset_bytes (n_bits);
 
     case BITSET_TABLE:
-      bytes = ebitset_bytes (n_bits);
-      break;
+      return tbitset_bytes (n_bits);
 
-    case BITSET_VARRAY:
-      bytes = vbitset_bytes (n_bits);
-      break;
+    case BITSET_VECTOR:
+      return vbitset_bytes (n_bits);
     }
-
-  return bytes;
 }
 
 
@@ -88,9 +82,9 @@ bitset_init (bitset bset, bitset_bindex n_bits, enum bitset_type type)
       return lbitset_init (bset, n_bits);
 
     case BITSET_TABLE:
-      return ebitset_init (bset, n_bits);
+      return tbitset_init (bset, n_bits);
 
-    case BITSET_VARRAY:
+    case BITSET_VECTOR:
       return vbitset_init (bset, n_bits);
     }
 }
@@ -100,7 +94,7 @@ bitset_init (bitset bset, bitset_bindex n_bits, enum bitset_type type)
    specified by ATTR.  For variable size bitsets, N_BITS is only a
    hint and may be zero.  */
 enum bitset_type
-bitset_type_choose (bitset_bindex n_bits ATTRIBUTE_UNUSED, unsigned int attr)
+bitset_type_choose (bitset_bindex n_bits ATTRIBUTE_UNUSED, unsigned attr)
 {
   /* Check attributes.  */
   if (attr & BITSET_FIXED && attr & BITSET_VARIABLE)
@@ -114,7 +108,7 @@ bitset_type_choose (bitset_bindex n_bits ATTRIBUTE_UNUSED, unsigned int attr)
 
   /* If no attributes selected, choose a good compromise.  */
   if (!attr)
-    return BITSET_VARRAY;
+    return BITSET_VECTOR;
 
   if (attr & BITSET_SPARSE)
     return BITSET_LIST;
@@ -125,7 +119,7 @@ bitset_type_choose (bitset_bindex n_bits ATTRIBUTE_UNUSED, unsigned int attr)
   if (attr & BITSET_GREEDY)
     return BITSET_TABLE;
 
-  return BITSET_VARRAY;
+  return BITSET_VECTOR;
 }
 
 
@@ -133,12 +127,9 @@ bitset_type_choose (bitset_bindex n_bits ATTRIBUTE_UNUSED, unsigned int attr)
 bitset
 bitset_alloc (bitset_bindex n_bits, enum bitset_type type)
 {
-  size_t bytes;
-  bitset bset;
+  size_t bytes = bitset_bytes (type, n_bits);
 
-  bytes = bitset_bytes (type, n_bits);
-
-  bset = xcalloc (1, bytes);
+  bitset bset = xcalloc (1, bytes);
 
   /* The cache is disabled until some elements are allocated.  If we
      have variable length arrays, then we may need to allocate a dummy
@@ -153,12 +144,9 @@ bitset
 bitset_obstack_alloc (struct obstack *bobstack,
                       bitset_bindex n_bits, enum bitset_type type)
 {
-  size_t bytes;
-  bitset bset;
+  size_t bytes = bitset_bytes (type, n_bits);
 
-  bytes = bitset_bytes (type, n_bits);
-
-  bset = obstack_alloc (bobstack, bytes);
+  bitset bset = obstack_alloc (bobstack, bytes);
   memset (bset, 0, bytes);
 
   return bitset_init (bset, n_bits, type);
@@ -168,11 +156,9 @@ bitset_obstack_alloc (struct obstack *bobstack,
 /* Create a bitset of N_BITS and with attribute hints specified by
    ATTR.  */
 bitset
-bitset_create (bitset_bindex n_bits, unsigned int attr)
+bitset_create (bitset_bindex n_bits, unsigned attr)
 {
-  enum bitset_type type;
-
-  type = bitset_type_choose (n_bits, attr);
+  enum bitset_type type = bitset_type_choose (n_bits, attr);
 
   return bitset_alloc (n_bits, type);
 }
@@ -199,11 +185,9 @@ bitset_obstack_free (bitset bset)
 enum bitset_type
 bitset_type_get (bitset bset)
 {
-   enum bitset_type type;
-
-   type = BITSET_TYPE_ (bset);
+   enum bitset_type type = BITSET_TYPE_ (bset);
    if (type != BITSET_STATS)
-      return type;
+     return type;
 
    return bitset_stats_type_get (bset);
 }
@@ -213,9 +197,7 @@ bitset_type_get (bitset bset)
 const char *
 bitset_type_name_get (bitset bset)
 {
-  enum bitset_type type;
-
-  type = bitset_type_get (bset);
+  enum bitset_type type = bitset_type_get (bset);
 
   return bitset_type_names[type];
 }
@@ -226,9 +208,8 @@ bitset_type_name_get (bitset bset)
 bitset_bindex
 bitset_next (bitset src, bitset_bindex bitno)
 {
-  bitset_bindex val;
   bitset_bindex next = bitno;
-
+  bitset_bindex val;
   if (!bitset_list (src, &val, 1, &next))
     return BITSET_BINDEX_MAX;
   return val;
@@ -239,7 +220,7 @@ bitset_next (bitset src, bitset_bindex bitno)
 extern bool
 bitset_compatible_p (bitset bset1, bitset bset2)
 {
-    return BITSET_COMPATIBLE_ (bset1, bset2);
+  return BITSET_COMPATIBLE_ (bset1, bset2);
 }
 
 
@@ -248,9 +229,8 @@ bitset_compatible_p (bitset bset1, bitset bset2)
 bitset_bindex
 bitset_prev (bitset src, bitset_bindex bitno)
 {
-  bitset_bindex val;
   bitset_bindex next = bitno;
-
+  bitset_bindex val;
   if (!bitset_list_reverse (src, &val, 1, &next))
     return BITSET_BINDEX_MAX;
   return val;
@@ -290,15 +270,13 @@ bitset_only_set_p (bitset src, bitset_bindex bitno)
 static void
 bitset_print (FILE *file, bitset bset, bool verbose)
 {
-  unsigned int pos;
-  bitset_bindex i;
-  bitset_iterator iter;
-
   if (verbose)
     fprintf (file, "n_bits = %lu, set = {",
-             (unsigned long int) bitset_size (bset));
+             (unsigned long) bitset_size (bset));
 
-  pos = 30;
+  unsigned pos = 30;
+  bitset_bindex i;
+  bitset_iterator iter;
   BITSET_FOR_EACH (iter, bset, i, 0)
   {
     if (pos > 70)
@@ -307,9 +285,9 @@ bitset_print (FILE *file, bitset bset, bool verbose)
         pos = 0;
       }
 
-    fprintf (file, "%lu ", (unsigned long int) i);
+    fprintf (file, "%lu ", (unsigned long) i);
     pos += 1 + (i >= 10) + (i >= 100);
-  };
+  }
 
   if (verbose)
     fprintf (file, "}\n");
@@ -329,7 +307,7 @@ void
 bitset_release_memory (void)
 {
   lbitset_release_memory ();
-  ebitset_release_memory ();
+  tbitset_release_memory ();
 }
 
 
@@ -356,7 +334,7 @@ bitset_toggle_ (bitset bset, bitset_bindex bitno)
 bitset_bindex
 bitset_size_ (bitset src)
 {
-    return BITSET_NBITS_ (src);
+  return BITSET_NBITS_ (src);
 }
 
 
@@ -365,18 +343,18 @@ bitset_bindex
 bitset_count_ (bitset src)
 {
   bitset_bindex list[BITSET_LIST_SIZE];
-  bitset_bindex next;
-  bitset_bindex num;
-  bitset_bindex count;
+  bitset_bindex count = 0;
 
   /* This could be greatly sped up by adding a count method for each
      bitset implementation that uses a direct technique (based on
      masks) for counting the number of bits set in a word.  */
 
-  next = 0;
-  for (count = 0; (num = bitset_list (src, list, BITSET_LIST_SIZE, &next));
-       count += num)
-    continue;
+  {
+    bitset_bindex next = 0;
+    bitset_bindex num;
+    while ((num = bitset_list (src, list, BITSET_LIST_SIZE, &next)))
+      count += num;
+  }
 
   return count;
 }
@@ -395,9 +373,7 @@ bitset_copy_ (bitset dst, bitset src)
      is large enough to hold the SRC bitset.  */
   bitset_zero (dst);
   BITSET_FOR_EACH (iter, src, i, 0)
-  {
-     bitset_set (dst, i);
-  };
+    bitset_set (dst, i);
 
   return true;
 }
@@ -410,13 +386,11 @@ bitset_op4_cmp (bitset dst, bitset src1, bitset src2, bitset src3,
                 enum bitset_ops op)
 {
   bool changed = false;
-  bool stats_enabled_save;
-  bitset tmp;
 
   /* Create temporary bitset.  */
-  stats_enabled_save = bitset_stats_enabled;
+  bool stats_enabled_save = bitset_stats_enabled;
   bitset_stats_enabled = false;
-  tmp = bitset_alloc (0, bitset_type_get (dst));
+  bitset tmp = bitset_alloc (0, bitset_type_get (dst));
   bitset_stats_enabled = stats_enabled_save;
 
   switch (op)

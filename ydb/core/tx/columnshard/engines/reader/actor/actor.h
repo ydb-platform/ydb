@@ -1,17 +1,17 @@
 #pragma once
+#include <ydb/core/formats/arrow/converter.h>
+#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
-#include <ydb/core/tx/columnshard/engines/reader/abstract/abstract.h>
-#include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
-#include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
+#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
+#include <ydb/core/tx/columnshard/engines/reader/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
+#include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
 #include <ydb/core/tx/conveyor/usage/events.h>
 #include <ydb/core/tx/tracing/usage/tracing.h>
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 
-#include <ydb/core/formats/arrow/converter.h>
-
-#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/chunks_limiter/chunks_limiter.h>
 
 namespace NKikimr::NOlap::NReader {
@@ -22,6 +22,7 @@ private:
     TActorId ReadCoordinatorActorId;
     const std::shared_ptr<IStoragesManager> StoragesManager;
     std::optional<TMonotonic> StartInstant;
+
 public:
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::KQP_OLAP_SCAN;
@@ -31,9 +32,8 @@ public:
     virtual void PassAway() override;
 
     TColumnShardScan(const TActorId& columnShardActorId, const TActorId& scanComputeActorId,
-        const std::shared_ptr<IStoragesManager>& storagesManager, const TComputeShardingPolicy& computeShardingPolicy,
-        ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie,
-        ui64 tabletId, TDuration timeout, const TReadMetadataBase::TConstPtr& readMetadataRange,
+        const std::shared_ptr<IStoragesManager>& storagesManager, const TComputeShardingPolicy& computeShardingPolicy, ui32 scanId, ui64 txId,
+        ui32 scanGen, ui64 requestCookie, ui64 tabletId, TDuration timeout, const TReadMetadataBase::TConstPtr& readMetadataRange,
         NKikimrDataEvents::EDataFormat dataFormat, const NColumnShard::TScanCounters& scanCountersPool);
 
     void Bootstrap(const TActorContext& ctx);
@@ -41,21 +41,20 @@ public:
 private:
     STATEFN(StateScan) {
         auto g = Stats->MakeGuard("processing");
-        TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN)
-            ("SelfId", SelfId())("TabletId", TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen)
-        );
+        TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN) ("SelfId", SelfId())(
+            "TabletId", TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen));
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleScan);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleScan);
             hFunc(TEvents::TEvUndelivered, HandleScan);
             hFunc(TEvents::TEvWakeup, HandleScan);
-            hFunc(NConveyor::TEvExecution::TEvTaskProcessedResult, HandleScan);
+            hFunc(NColumnShard::TEvPrivate::TEvTaskProcessedResult, HandleScan);
             default:
                 AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
         }
     }
 
-    void HandleScan(NConveyor::TEvExecution::TEvTaskProcessedResult::TPtr& ev);
+    void HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResult::TPtr& ev);
 
     void HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev);
 
@@ -80,10 +79,10 @@ private:
     class TScanStatsOwner: public NKqp::TEvKqpCompute::IShardScanStats {
     private:
         YDB_READONLY_DEF(TReadStats, Stats);
+
     public:
         TScanStatsOwner(const TReadStats& stats)
             : Stats(stats) {
-
         }
 
         virtual THashMap<TString, ui64> GetMetrics() const override {
@@ -142,11 +141,11 @@ private:
         TDuration ReadingDurationMax;
         NMonitoring::THistogramPtr BlobDurationsCounter;
         NMonitoring::THistogramPtr ByteDurationsCounter;
+
     public:
         TBlobStats(const NMonitoring::THistogramPtr blobDurationsCounter, const NMonitoring::THistogramPtr byteDurationsCounter)
             : BlobDurationsCounter(blobDurationsCounter)
             , ByteDurationsCounter(byteDurationsCounter) {
-
         }
         void Received(const TBlobRange& br, const TDuration d) {
             ReadingDurationSum += d;
@@ -181,4 +180,4 @@ private:
     TDuration LastReportedElapsedTime;
 };
 
-}
+}   // namespace NKikimr::NOlap::NReader

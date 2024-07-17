@@ -15,7 +15,7 @@ $$==============================================================================
 #include <yt/yt/core/misc/common.h>
 
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-#include <yt/yt/core/misc/source_location.h>
+#include <library/cpp/yt/misc/source_location.h>
 #endif
 
 namespace NYT::NDetail {

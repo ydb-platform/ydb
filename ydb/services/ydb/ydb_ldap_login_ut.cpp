@@ -378,5 +378,18 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         loginConnection.Stop();
         ldapServer.Stop();
     }
+
+    Y_UNIT_TEST(LdapAuthSetIncorrectDomain) {
+        TString login = "ldapuser";
+        TString password = "ldapUserPassword";
+        const TString incorrectLdapDomain = "@ldap.domain"; // Correct domain is AuthConfig.LdapAuthenticationDomain: "ldap"
+
+        auto factory = CreateLoginCredentialsProviderFactory({.User = login + incorrectLdapDomain, .Password = password});
+        TLoginClientConnection loginConnection(InitLdapSettings);
+        auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
+        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Invalid user");
+
+        loginConnection.Stop();
+    }
 }
 } //namespace NKikimr

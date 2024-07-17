@@ -422,6 +422,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
                 LOCATION="my-bucket",
                 AUTH_METHOD="BASIC",
                 LOGIN="mylogin",
+                DATABASE_NAME="postgres",
                 PASSWORD_SECRET_NAME=")" << secretId << R"("
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -458,6 +459,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
                 SERVICE_ACCOUNT_ID="mysa",
                 SERVICE_ACCOUNT_SECRET_NAME=")" << secretSaId << R"(",
                 LOGIN="mylogin",
+                DATABASE_NAME="postgres",
                 PASSWORD_SECRET_NAME=")" << secretPasswordId << R"("
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();

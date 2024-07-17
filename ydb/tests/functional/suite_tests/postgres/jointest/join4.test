@@ -252,11 +252,13 @@ UPSERT INTO tt2 (tt2_id, joincol) VALUES (22, 11);
 
 statement query
 select  tt1_id, tt1.joincol as joincol, tt2_id
-from tt1 left join tt2 on tt1.joincol = tt2.joincol;
+from tt1 left join tt2 on tt1.joincol = tt2.joincol
+order by tt1_id, joincol, tt2_id;
 
 statement query
 select  tt1_id, tt1.joincol as joincol, tt2_id
-from tt2 right join tt1 on tt1.joincol = tt2.joincol;
+from tt2 right join tt1 on tt1.joincol = tt2.joincol
+order by tt1_id, joincol, tt2_id;
 
 statement ok
 CREATE TABLE qrt1 (a int, b int, primary key(a, b));

@@ -1,12 +1,13 @@
 LLVM_BC(
-    postgresql/src/backend/access/brin/brin_inclusion.c
     postgresql/src/backend/access/index/amapi.c
     postgresql/src/backend/access/nbtree/nbtree.c
-    postgresql/src/backend/commands/collationcmds.c
     postgresql/src/backend/commands/constraint.c
+    postgresql/src/backend/statistics/dependencies.c
     postgresql/src/backend/utils/adt/acl.c
     postgresql/src/backend/utils/adt/int8.c
     postgresql/src/backend/utils/adt/jsonpath_exec.c
+    postgresql/src/backend/utils/adt/tsrank.c
+    postgresql/src/backend/utils/adt/xml.c
     pg_kernels.9.cpp
 
     NAME PgFuncs9
@@ -20,11 +21,12 @@ LLVM_BC(
     arrow_aclitemout
     arrow_aclremove
     arrow_amvalidate
-    arrow_brin_inclusion_add_value
-    arrow_brin_inclusion_consistent
-    arrow_brin_inclusion_opcinfo
-    arrow_brin_inclusion_union
     arrow_bthandler
+    arrow_cursor_to_xml
+    arrow_cursor_to_xmlschema
+    arrow_database_to_xml
+    arrow_database_to_xml_and_xmlschema
+    arrow_database_to_xmlschema
     arrow_dtoi8
     arrow_ftoi8
     arrow_generate_series_int8_support
@@ -70,6 +72,9 @@ LLVM_BC(
     arrow_has_language_privilege_name
     arrow_has_language_privilege_name_id
     arrow_has_language_privilege_name_name
+    arrow_has_parameter_privilege_id_name
+    arrow_has_parameter_privilege_name
+    arrow_has_parameter_privilege_name_name
     arrow_has_schema_privilege_id
     arrow_has_schema_privilege_id_id
     arrow_has_schema_privilege_id_name
@@ -169,6 +174,7 @@ LLVM_BC(
     arrow_int8inc
     arrow_int8inc_any
     arrow_int8inc_float8_float8
+    arrow_int8inc_support
     arrow_int8larger
     arrow_int8lcm
     arrow_int8le
@@ -201,13 +207,47 @@ LLVM_BC(
     arrow_jsonb_path_query_first_tz
     arrow_makeaclitem
     arrow_oidtoi8
-    arrow_pg_collation_actual_version
+    arrow_pg_dependencies_in
+    arrow_pg_dependencies_out
+    arrow_pg_dependencies_recv
+    arrow_pg_dependencies_send
     arrow_pg_has_role_id
     arrow_pg_has_role_id_id
     arrow_pg_has_role_id_name
     arrow_pg_has_role_name
     arrow_pg_has_role_name_id
     arrow_pg_has_role_name_name
-    arrow_pg_import_system_collations
+    arrow_query_to_xml
+    arrow_query_to_xml_and_xmlschema
+    arrow_query_to_xmlschema
+    arrow_schema_to_xml
+    arrow_schema_to_xml_and_xmlschema
+    arrow_schema_to_xmlschema
+    arrow_table_to_xml
+    arrow_table_to_xml_and_xmlschema
+    arrow_table_to_xmlschema
+    arrow_texttoxml
+    arrow_ts_rank_tt
+    arrow_ts_rank_ttf
+    arrow_ts_rank_wtt
+    arrow_ts_rank_wttf
+    arrow_ts_rankcd_tt
+    arrow_ts_rankcd_ttf
+    arrow_ts_rankcd_wtt
+    arrow_ts_rankcd_wttf
     arrow_unique_key_recheck
+    arrow_xml_in
+    arrow_xml_is_well_formed
+    arrow_xml_is_well_formed_content
+    arrow_xml_is_well_formed_document
+    arrow_xml_out
+    arrow_xml_recv
+    arrow_xml_send
+    arrow_xmlcomment
+    arrow_xmlconcat2
+    arrow_xmlexists
+    arrow_xmltotext
+    arrow_xmlvalidate
+    arrow_xpath
+    arrow_xpath_exists
 )

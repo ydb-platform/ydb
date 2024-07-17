@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 }
             }
 
-            auto permissionsSettings = 
+            auto permissionsSettings =
                 NYdb::NScheme::TModifyPermissionsSettings()
                 .AddGrantPermissions(NYdb::NScheme::TPermissions("user0@builtin", grantPermissions))
                 .AddRevokePermissions(NYdb::NScheme::TPermissions("user0@builtin", revokePermissions));
@@ -309,7 +309,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
     Y_UNIT_TEST(QueryTimeout) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(app));
 
         auto db = kikimr.GetTableClient();
@@ -321,7 +320,10 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         auto txControl = TTxControl::BeginTx().CommitTx();
 
-        NDataShard::gSkipRepliesFailPoint.Enable(-1, -1, 1);
+        NDataShard::gSkipReadIteratorResultFailPoint.Enable(-1);
+        Y_DEFER {
+            NDataShard::gSkipReadIteratorResultFailPoint.Disable();
+        };
 
         auto result = session.ExecuteDataQuery(
             query,
@@ -333,7 +335,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::TIMEOUT);
 
-        NDataShard::gSkipRepliesFailPoint.Disable();
+        NDataShard::gSkipReadIteratorResultFailPoint.Disable();
 
         const TInstant start = TInstant::Now();
         // Check session is ready or busy, but eventualy must be ready
@@ -349,45 +351,8 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         }
     }
 
-    Y_UNIT_TEST(QueryTimeoutImmediate) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig);
-        TKikimrRunner kikimr{settings};
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        auto query = Q_(R"(
-            SELECT * FROM `/Root/TwoShard` WHERE Key == 1;
-        )");
-
-        auto txControl = TTxControl::BeginTx().CommitTx();
-
-        NDataShard::gSkipRepliesFailPoint.Enable(-1, -1, 1);
-
-        auto result = session.ExecuteDataQuery(
-            query,
-            txControl,
-            TExecDataQuerySettings()
-                .OperationTimeout(TDuration::MilliSeconds(50))
-        ).ExtractValueSync();
-
-        result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::TIMEOUT);
-
-        NDataShard::gSkipRepliesFailPoint.Disable();
-
-        // Check session is ready or busy (both possible)
-        result = session.ExecuteDataQuery(query, txControl).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus() == EStatus::SUCCESS || result.GetStatus() == EStatus::SESSION_BUSY, true, result.GetIssues().ToString());
-    }
-
-    Y_UNIT_TEST_TWIN(QueryClientTimeout, EnableImmediateEffects) {
+    Y_UNIT_TEST(QueryClientTimeout) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
-        app.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(EnableImmediateEffects);
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(app);
 
@@ -404,7 +369,10 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         auto txControl = TTxControl::BeginTx().CommitTx();
 
-        NDataShard::gSkipRepliesFailPoint.Enable(-1, -1, 2);
+        NDataShard::gSkipReadIteratorResultFailPoint.Enable(-1);
+        Y_DEFER {
+            NDataShard::gSkipReadIteratorResultFailPoint.Disable();
+        };
 
         auto result = session.ExecuteDataQuery(
             query,
@@ -417,14 +385,13 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::CLIENT_DEADLINE_EXCEEDED);
 
-        NDataShard::gSkipRepliesFailPoint.Disable();
+        NDataShard::gSkipReadIteratorResultFailPoint.Disable();
 
         CheckStatusAfterTimeout(session, query, txControl);
     }
 
     Y_UNIT_TEST(QueryClientTimeoutPrecompiled) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(app));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -443,7 +410,10 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         auto txControl = TTxControl::BeginTx().CommitTx();
 
-        NDataShard::gSkipRepliesFailPoint.Enable(-1, -1, 1);
+        NDataShard::gSkipReadIteratorResultFailPoint.Enable(-1);
+        Y_DEFER {
+            NDataShard::gSkipReadIteratorResultFailPoint.Disable();
+        };
 
         auto result = prepareResult.GetQuery().Execute(
             txControl,
@@ -455,72 +425,9 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::CLIENT_DEADLINE_EXCEEDED);
 
-        NDataShard::gSkipRepliesFailPoint.Disable();
+        NDataShard::gSkipReadIteratorResultFailPoint.Disable();
 
         CheckStatusAfterTimeout(session, query, txControl);
-    }
-
-    Y_UNIT_TEST(QueryCancel) {
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
-        TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(app));
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        auto query = Q_(R"(
-            SELECT * FROM `/Root/TwoShard`
-        )");
-
-        auto txControl = TTxControl::BeginTx().CommitTx();
-
-        NDataShard::gCancelTxFailPoint.Enable(-1, -1, 1);
-
-        auto result = session.ExecuteDataQuery(
-            query,
-            txControl
-        ).ExtractValueSync();
-
-        result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::CANCELLED);
-
-        NDataShard::gCancelTxFailPoint.Disable();
-
-        // Check session is ready
-        result = session.ExecuteDataQuery(query, txControl).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-    }
-
-    Y_UNIT_TEST(QueryCancelImmediate) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig);
-        TKikimrRunner kikimr{settings};
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        auto query = Q_(R"(
-            SELECT * FROM `/Root/TwoShard` WHERE Key == 1;
-        )");
-
-        auto txControl = TTxControl::BeginTx().CommitTx();
-
-        NDataShard::gCancelTxFailPoint.Enable(-1, -1, 0);
-
-        auto result = session.ExecuteDataQuery(
-            query,
-            txControl
-        ).ExtractValueSync();
-
-        result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::CANCELLED);
-
-        NDataShard::gCancelTxFailPoint.Disable();
-
-        // Check session is ready
-        result = session.ExecuteDataQuery(query, txControl).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
     }
 
     Y_UNIT_TEST(QueryCancelWrite) {
@@ -1459,8 +1366,8 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto client = kikimr.GetQueryClient();
         auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        
-        { 
+
+        {
             auto prepareResult = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/Source` (Col1, Col2) VALUES
                     (1u, 1), (100u, 100), (10u, 10);
@@ -1623,7 +1530,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-        { 
+        {
             auto prepareResult = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/Source` (Col1, Col2) VALUES
                     (1u, 1), (100u, 100), (10u, 10);
@@ -1676,7 +1583,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-        { 
+        {
             auto prepareResult = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/Source` (Col1, Col2) VALUES
                     (1u, 1), (100u, 100), (10u, 10);

@@ -4,7 +4,7 @@
  *		parse analysis for utility commands
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/parser/parse_utilcmd.h
@@ -30,7 +30,8 @@ extern CreateStatsStmt *transformStatsStmt(Oid relid, CreateStatsStmt *stmt,
 										   const char *queryString);
 extern void transformRuleStmt(RuleStmt *stmt, const char *queryString,
 							  List **actions, Node **whereClause);
-extern List *transformCreateSchemaStmt(CreateSchemaStmt *stmt);
+extern List *transformCreateSchemaStmtElements(List *schemaElts,
+											   const char *schemaName);
 extern PartitionBoundSpec *transformPartitionBound(ParseState *pstate, Relation parent,
 												   PartitionBoundSpec *spec);
 extern List *expandTableLikeClause(RangeVar *heapRel,

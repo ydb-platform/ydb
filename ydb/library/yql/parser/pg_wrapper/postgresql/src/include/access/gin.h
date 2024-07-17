@@ -2,7 +2,7 @@
  * gin.h
  *	  Public header file for Generalized Inverted Index access method.
  *
- *	Copyright (c) 2006-2021, PostgreSQL Global Development Group
+ *	Copyright (c) 2006-2023, PostgreSQL Global Development Group
  *
  *	src/include/access/gin.h
  *--------------------------------------------------------------------------
@@ -57,18 +57,31 @@ typedef struct GinStatsData
  */
 typedef char GinTernaryValue;
 
+StaticAssertDecl(sizeof(GinTernaryValue) == sizeof(bool),
+				 "sizes of GinTernaryValue and bool are not equal");
+
 #define GIN_FALSE		0		/* item is not present / does not match */
 #define GIN_TRUE		1		/* item is present / matches */
 #define GIN_MAYBE		2		/* don't know if item is present / don't know
 								 * if matches */
 
-#define DatumGetGinTernaryValue(X) ((GinTernaryValue)(X))
-#define GinTernaryValueGetDatum(X) ((Datum)(X))
+static inline GinTernaryValue
+DatumGetGinTernaryValue(Datum X)
+{
+	return (GinTernaryValue) X;
+}
+
+static inline Datum
+GinTernaryValueGetDatum(GinTernaryValue X)
+{
+	return (Datum) X;
+}
+
 #define PG_RETURN_GIN_TERNARY_VALUE(x) return GinTernaryValueGetDatum(x)
 
 /* GUC parameters */
 extern __thread PGDLLIMPORT int GinFuzzySearchLimit;
-extern __thread int	gin_pending_list_limit;
+extern __thread PGDLLIMPORT int gin_pending_list_limit;
 
 /* ginutil.c */
 extern void ginGetStats(Relation index, GinStatsData *stats);

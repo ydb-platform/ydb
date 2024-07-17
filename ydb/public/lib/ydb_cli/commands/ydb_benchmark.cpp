@@ -364,7 +364,7 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
             } else {
                 ++failsCount;
                 Cout << "failed\t" << duration << " seconds" << Endl;
-                Cerr << queryN << ": " << query << Endl
+                Cerr << queryN << ": " << Endl
                     << res.GetErrorInfo() << Endl;
                 Cerr << "Query text:" << Endl;
                 Cerr << query << Endl << Endl;

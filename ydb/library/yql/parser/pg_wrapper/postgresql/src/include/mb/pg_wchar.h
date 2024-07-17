@@ -3,7 +3,7 @@
  * pg_wchar.h
  *	  multibyte-character support
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/mb/pg_wchar.h
@@ -359,7 +359,7 @@ typedef struct pg_enc2name
 #endif
 } pg_enc2name;
 
-extern const pg_enc2name pg_enc2name_tbl[];
+extern PGDLLIMPORT const pg_enc2name pg_enc2name_tbl[];
 
 /*
  * Encoding names for gettext
@@ -370,7 +370,7 @@ typedef struct pg_enc2gettext
 	const char *name;
 } pg_enc2gettext;
 
-extern const pg_enc2gettext pg_enc2gettext_tbl[];
+extern PGDLLIMPORT const pg_enc2gettext pg_enc2gettext_tbl[];
 
 /*
  * pg_wchar stuff
@@ -406,7 +406,7 @@ typedef struct
 	int			maxmblen;		/* max bytes for a char in this encoding */
 } pg_wchar_tbl;
 
-extern const pg_wchar_tbl pg_wchar_table[];
+extern PGDLLIMPORT const pg_wchar_tbl pg_wchar_table[];
 
 /*
  * Data structures for conversions between UTF-8 and other encodings
@@ -604,11 +604,11 @@ extern int	pg_encoding_wchar2mb_with_len(int encoding,
 extern int	pg_char_and_wchar_strcmp(const char *s1, const pg_wchar *s2);
 extern int	pg_wchar_strncmp(const pg_wchar *s1, const pg_wchar *s2, size_t n);
 extern int	pg_char_and_wchar_strncmp(const char *s1, const pg_wchar *s2, size_t n);
-extern size_t pg_wchar_strlen(const pg_wchar *wstr);
+extern size_t pg_wchar_strlen(const pg_wchar *str);
 extern int	pg_mblen(const char *mbstr);
 extern int	pg_dsplen(const char *mbstr);
 extern int	pg_mbstrlen(const char *mbstr);
-extern int	pg_mbstrlen_with_len(const char *mbstr, int len);
+extern int	pg_mbstrlen_with_len(const char *mbstr, int limit);
 extern int	pg_mbcliplen(const char *mbstr, int len, int limit);
 extern int	pg_encoding_mbcliplen(int encoding, const char *mbstr,
 								  int len, int limit);
@@ -639,7 +639,7 @@ extern int	pg_do_encoding_conversion_buf(Oid proc,
 										  int src_encoding,
 										  int dest_encoding,
 										  unsigned char *src, int srclen,
-										  unsigned char *dst, int dstlen,
+										  unsigned char *dest, int destlen,
 										  bool noError);
 
 extern char *pg_client_to_server(const char *s, int len);
@@ -648,6 +648,7 @@ extern char *pg_any_to_server(const char *s, int len, int encoding);
 extern char *pg_server_to_any(const char *s, int len, int encoding);
 
 extern void pg_unicode_to_server(pg_wchar c, unsigned char *s);
+extern bool pg_unicode_to_server_noerror(pg_wchar c, unsigned char *s);
 
 extern unsigned short BIG5toCNS(unsigned short big5, unsigned char *lc);
 extern unsigned short CNStoBIG5(unsigned short cns, unsigned char lc);

@@ -189,6 +189,7 @@ SRCS(
     receive_snapshot_unit.cpp
     remove_lock_change_records.cpp
     remove_locks.cpp
+    remove_schema_snapshots.cpp
     range_ops.cpp
     read_iterator.h
     restore_unit.cpp

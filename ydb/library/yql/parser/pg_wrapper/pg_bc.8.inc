@@ -1,15 +1,29 @@
 LLVM_BC(
     postgresql/src/backend/access/hash/hashfunc.c
+    postgresql/src/backend/catalog/catalog.c
+    postgresql/src/backend/replication/logical/origin.c
+    postgresql/src/backend/statistics/mvdistinct.c
     postgresql/src/backend/utils/adt/format_type.c
-    postgresql/src/backend/utils/adt/jsonb.c
     postgresql/src/backend/utils/adt/jsonbsubs.c
-    postgresql/src/backend/utils/adt/oid.c
+    postgresql/src/backend/utils/adt/jsonfuncs.c
+    postgresql/src/backend/utils/adt/like.c
+    postgresql/src/backend/utils/adt/oracle_compat.c
+    postgresql/src/backend/utils/adt/regexp.c
     postgresql/src/backend/utils/adt/version.c
     pg_kernels.8.cpp
 
     NAME PgFuncs8
 
     SYMBOLS
+    arrow_ascii
+    arrow_btrim
+    arrow_btrim1
+    arrow_bytealike
+    arrow_bytealtrim
+    arrow_byteanlike
+    arrow_byteartrim
+    arrow_byteatrim
+    arrow_chr
     arrow_format_type
     arrow_hashchar
     arrow_hashcharextended
@@ -35,52 +49,111 @@ LLVM_BC(
     arrow_hashtextextended
     arrow_hashvarlena
     arrow_hashvarlenaextended
-    arrow_jsonb_agg_finalfn
-    arrow_jsonb_agg_transfn
-    arrow_jsonb_bool
-    arrow_jsonb_build_array
-    arrow_jsonb_build_array_noargs
-    arrow_jsonb_build_object
-    arrow_jsonb_build_object_noargs
-    arrow_jsonb_float4
-    arrow_jsonb_float8
-    arrow_jsonb_in
-    arrow_jsonb_int2
-    arrow_jsonb_int4
-    arrow_jsonb_int8
-    arrow_jsonb_numeric
-    arrow_jsonb_object
-    arrow_jsonb_object_agg_finalfn
-    arrow_jsonb_object_agg_transfn
-    arrow_jsonb_object_two_arg
-    arrow_jsonb_out
-    arrow_jsonb_recv
-    arrow_jsonb_send
+    arrow_initcap
+    arrow_json_array_element
+    arrow_json_array_element_text
+    arrow_json_array_length
+    arrow_json_extract_path
+    arrow_json_extract_path_text
+    arrow_json_object_field
+    arrow_json_object_field_text
+    arrow_json_populate_record
+    arrow_json_strip_nulls
+    arrow_json_to_record
+    arrow_jsonb_array_element
+    arrow_jsonb_array_element_text
+    arrow_jsonb_array_length
+    arrow_jsonb_concat
+    arrow_jsonb_delete
+    arrow_jsonb_delete_array
+    arrow_jsonb_delete_idx
+    arrow_jsonb_delete_path
+    arrow_jsonb_extract_path
+    arrow_jsonb_extract_path_text
+    arrow_jsonb_insert
+    arrow_jsonb_object_field
+    arrow_jsonb_object_field_text
+    arrow_jsonb_populate_record
+    arrow_jsonb_pretty
+    arrow_jsonb_set
+    arrow_jsonb_set_lax
+    arrow_jsonb_strip_nulls
     arrow_jsonb_subscript_handler
-    arrow_jsonb_typeof
-    arrow_oideq
-    arrow_oidge
-    arrow_oidgt
-    arrow_oidin
-    arrow_oidlarger
-    arrow_oidle
-    arrow_oidlt
-    arrow_oidne
-    arrow_oidout
-    arrow_oidrecv
-    arrow_oidsend
-    arrow_oidsmaller
-    arrow_oidvectoreq
-    arrow_oidvectorge
-    arrow_oidvectorgt
-    arrow_oidvectorin
-    arrow_oidvectorle
-    arrow_oidvectorlt
-    arrow_oidvectorne
-    arrow_oidvectorout
-    arrow_oidvectorrecv
-    arrow_oidvectorsend
+    arrow_jsonb_to_record
+    arrow_like_escape
+    arrow_like_escape_bytea
+    arrow_lower
+    arrow_lpad
+    arrow_ltrim
+    arrow_ltrim1
+    arrow_nameiclike
+    arrow_nameicnlike
+    arrow_nameicregexeq
+    arrow_nameicregexne
+    arrow_namelike
+    arrow_namenlike
+    arrow_nameregexeq
+    arrow_nameregexne
     arrow_oidvectortypes
+    arrow_pg_ndistinct_in
+    arrow_pg_ndistinct_out
+    arrow_pg_ndistinct_recv
+    arrow_pg_ndistinct_send
+    arrow_pg_nextoid
+    arrow_pg_replication_origin_advance
+    arrow_pg_replication_origin_create
+    arrow_pg_replication_origin_drop
+    arrow_pg_replication_origin_oid
+    arrow_pg_replication_origin_progress
+    arrow_pg_replication_origin_session_is_setup
+    arrow_pg_replication_origin_session_progress
+    arrow_pg_replication_origin_session_reset
+    arrow_pg_replication_origin_session_setup
+    arrow_pg_replication_origin_xact_reset
+    arrow_pg_replication_origin_xact_setup
+    arrow_pg_stop_making_pinned_objects
     arrow_pgsql_version
-    arrow_to_jsonb
+    arrow_regexp_count
+    arrow_regexp_count_no_flags
+    arrow_regexp_count_no_start
+    arrow_regexp_instr
+    arrow_regexp_instr_no_endoption
+    arrow_regexp_instr_no_flags
+    arrow_regexp_instr_no_n
+    arrow_regexp_instr_no_start
+    arrow_regexp_instr_no_subexpr
+    arrow_regexp_like
+    arrow_regexp_like_no_flags
+    arrow_regexp_match
+    arrow_regexp_match_no_flags
+    arrow_regexp_split_to_array
+    arrow_regexp_split_to_array_no_flags
+    arrow_regexp_substr
+    arrow_regexp_substr_no_flags
+    arrow_regexp_substr_no_n
+    arrow_regexp_substr_no_start
+    arrow_regexp_substr_no_subexpr
+    arrow_repeat
+    arrow_rpad
+    arrow_rtrim
+    arrow_rtrim1
+    arrow_similar_escape
+    arrow_similar_to_escape_1
+    arrow_similar_to_escape_2
+    arrow_texticlike
+    arrow_texticnlike
+    arrow_texticregexeq
+    arrow_texticregexne
+    arrow_textlike
+    arrow_textnlike
+    arrow_textregexeq
+    arrow_textregexne
+    arrow_textregexreplace
+    arrow_textregexreplace_extended
+    arrow_textregexreplace_extended_no_flags
+    arrow_textregexreplace_extended_no_n
+    arrow_textregexreplace_noopt
+    arrow_textregexsubstr
+    arrow_translate
+    arrow_upper
 )

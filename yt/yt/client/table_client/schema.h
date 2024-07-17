@@ -286,7 +286,7 @@ public:
     bool IsUniqueKeys() const;
     bool HasRenamedColumns() const;
     bool IsEmpty() const;
-    bool IsCGCompatarorApplicable() const;
+    bool IsCGComparatorApplicable() const;
 
     std::optional<int> GetTtlColumnIndex() const;
 

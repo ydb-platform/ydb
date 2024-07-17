@@ -15,7 +15,6 @@ PEERDIR(
 
     ydb/library/actors/core
     ydb/core/tx/columnshard/engines/scheme/indexes
-    ydb/core/tx/columnshard/engines/scheme/statistics
     ydb/core/tx/columnshard/engines/scheme/abstract
     ydb/core/tx/columnshard/engines/scheme/versions
     ydb/core/tx/columnshard/engines/scheme/tiering

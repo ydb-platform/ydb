@@ -3,7 +3,7 @@
 # pg_opfamily.dat
 #    Initial contents of the pg_opfamily system catalog.
 #
-# Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+# Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
 # Portions Copyright (c) 1994, Regents of the University of California
 #
 # src/include/catalog/pg_opfamily.dat
@@ -50,7 +50,7 @@
   opfmethod => 'btree', opfname => 'integer_ops' },
 { oid => '1977',
   opfmethod => 'hash', opfname => 'integer_ops' },
-{ oid => '1982',
+{ oid => '1982', oid_symbol => 'INTERVAL_BTREE_FAM_OID',
   opfmethod => 'btree', opfname => 'interval_ops' },
 { oid => '1983',
   opfmethod => 'hash', opfname => 'interval_ops' },

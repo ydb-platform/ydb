@@ -8,6 +8,7 @@ from ydb.public.api.protos.ydb_value_pb2 import Type
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
 from ydb.library.yql.providers.generic.connector.tests.utils.generate import generate_table_data
 import ydb.library.yql.providers.generic.connector.tests.utils.types.clickhouse as clickhouse
+import ydb.library.yql.providers.generic.connector.tests.utils.types.mysql as mysql
 import ydb.library.yql.providers.generic.connector.tests.utils.types.postgresql as postgresql
 import ydb.library.yql.providers.generic.connector.tests.utils.types.ydb as Ydb
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
@@ -69,12 +70,16 @@ class Factory:
                 Column(
                     name='COL1',
                     ydb_type=Type.INT32,
-                    data_source_type=DataSourceType(ch=clickhouse.Int32(), pg=postgresql.Int4(), ydb=Ydb.Int32()),
+                    data_source_type=DataSourceType(
+                        ch=clickhouse.Int32(), pg=postgresql.Int4(), ydb=Ydb.Int32(), my=mysql.Integer()
+                    ),
                 ),
                 Column(
                     name='col2',
                     ydb_type=Type.INT32,
-                    data_source_type=DataSourceType(ch=clickhouse.Int32(), pg=postgresql.Int4(), ydb=Ydb.Int32()),
+                    data_source_type=DataSourceType(
+                        ch=clickhouse.Int32(), pg=postgresql.Int4(), ydb=Ydb.Int32(), my=mysql.Integer()
+                    ),
                 ),
             )
         )
@@ -92,6 +97,7 @@ class Factory:
                     EDataSourceKind.CLICKHOUSE,
                     EDataSourceKind.POSTGRESQL,
                     EDataSourceKind.YDB,
+                    EDataSourceKind.MYSQL,
                 ),
             ),
             # SELECT COL1 FROM table
@@ -105,6 +111,7 @@ class Factory:
                     EDataSourceKind.CLICKHOUSE,
                     # NOTE: YQ-2264: doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
                     EDataSourceKind.YDB,
+                    EDataSourceKind.MYSQL,
                 ),
             ),
             # SELECT col1 FROM table
@@ -127,6 +134,7 @@ class Factory:
                     EDataSourceKind.CLICKHOUSE,
                     EDataSourceKind.POSTGRESQL,
                     EDataSourceKind.YDB,
+                    EDataSourceKind.MYSQL,
                 ),
             ),
             # SELECT col2, COL1 FROM table
@@ -140,6 +148,7 @@ class Factory:
                     EDataSourceKind.CLICKHOUSE,
                     # NOTE: YQ-2264: doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
                     EDataSourceKind.YDB,
+                    EDataSourceKind.MYSQL,
                 ),
             ),
             # SELECT col2, col1 FROM table
@@ -163,6 +172,7 @@ class Factory:
                     EDataSourceKind.CLICKHOUSE,
                     # NOTE: YQ-2264: doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
                     EDataSourceKind.YDB,
+                    EDataSourceKind.MYSQL,
                 ),
             ),
             # Select the same column multiple times with different aliases
@@ -183,6 +193,7 @@ class Factory:
                     EDataSourceKind.CLICKHOUSE,
                     EDataSourceKind.POSTGRESQL,
                     EDataSourceKind.YDB,
+                    EDataSourceKind.MYSQL,
                 ),
             ),
         )
@@ -279,19 +290,22 @@ class Factory:
             EDataSourceKind.CLICKHOUSE: [EProtocol.NATIVE, EProtocol.HTTP],
             EDataSourceKind.POSTGRESQL: [EProtocol.NATIVE],
             EDataSourceKind.YDB: [EProtocol.NATIVE],
+            EDataSourceKind.MYSQL: [EProtocol.NATIVE],
         }
 
         base_test_cases = None
 
-        if data_source_kind == EDataSourceKind.YDB:
+        if data_source_kind in [EDataSourceKind.YDB, EDataSourceKind.MYSQL]:
             base_test_cases = self._column_selection()
-        else:
+        elif data_source_kind in [EDataSourceKind.CLICKHOUSE, EDataSourceKind.POSTGRESQL]:
             base_test_cases = list(
                 itertools.chain(
                     self._column_selection(),
                     self._large_table(),
                 )
             )
+        else:
+            raise f'Unexpected data source kind: {data_source_kind}'
 
         test_cases = []
         for base_tc in base_test_cases:

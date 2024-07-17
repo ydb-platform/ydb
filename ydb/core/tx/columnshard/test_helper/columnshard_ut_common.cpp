@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/common/tests/shard_reader.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/portions/portions.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>
@@ -394,6 +395,35 @@ NMetadata::NFetcher::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpec
     }
     cs->MutableTableTierings().emplace(tRule.GetTieringRuleId(), tRule);
     return cs;
+}
+
+void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& columns, const std::vector<NArrow::NTest::TTestColumn>& pk,
+    const TTableSpecials& specials, NKikimrSchemeOp::TColumnTableSchema* schema) {
+    schema->SetEngine(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
+
+    for (ui32 i = 0; i < columns.size(); ++i) {
+        *schema->MutableColumns()->Add() = columns[i].CreateColumn(i + 1);
+        if (!specials.NeedTestStatistics()) {
+            continue;
+        }
+        if (NOlap::NIndexes::NMax::TIndexMeta::IsAvailableType(columns[i].GetType())) {
+            *schema->AddIndexes() = NOlap::NIndexes::TIndexMetaContainer(
+                std::make_shared<NOlap::NIndexes::NMax::TIndexMeta>(1000 + i, "MAX::INDEX::" + columns[i].GetName(), "__LOCAL_METADATA", i + 1))
+                    .SerializeToProto();
+        }
+    }
+
+    Y_ABORT_UNLESS(pk.size() > 0);
+    for (auto& column : ExtractNames(pk)) {
+        schema->AddKeyColumnNames(column);
+    }
+
+    if (specials.HasCodec()) {
+        schema->MutableDefaultCompression()->SetCodec(specials.GetCodecId());
+    }
+    if (specials.CompressionLevel) {
+        schema->MutableDefaultCompression()->SetLevel(*specials.CompressionLevel);
+    }
 }
 
 }

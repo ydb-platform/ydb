@@ -288,7 +288,7 @@ private:
 
         static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
-        struct TEvProxyDataReqOngoingTransactionWatchdog : public TEventSimple<TEvProxyDataReqOngoingTransactionWatchdog, EvProxyDataReqOngoingTransactionsWatchdog> {};
+        struct TEvProxyDataReqOngoingTransactionsWatchdog : public TEventLocal<TEvProxyDataReqOngoingTransactionsWatchdog, EvProxyDataReqOngoingTransactionsWatchdog> {};
 
         struct TEvReattachToShard : public TEventLocal<TEvReattachToShard, EvReattachToShard> {
             const ui64 TabletId;
@@ -1306,7 +1306,7 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
     }
 
     WallClockAccepted = Now();
-    ctx.Schedule(TDuration::MilliSeconds(KIKIMR_DATAREQ_WATCHDOG_PERIOD), new TEvPrivate::TEvProxyDataReqOngoingTransactionWatchdog());
+    ctx.Schedule(TDuration::MilliSeconds(KIKIMR_DATAREQ_WATCHDOG_PERIOD), new TEvPrivate::TEvProxyDataReqOngoingTransactionsWatchdog());
 
     // Schedule execution timeout
     {
@@ -2942,7 +2942,7 @@ void TDataReq::HandleWatchdog(const TActorContext &ctx) {
     LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_INFO, NKikimrServices::TX_PROXY, TxId,
               "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
               << " Transactions still running for " << fromStart);
-    ctx.Schedule(TDuration::MilliSeconds(KIKIMR_DATAREQ_WATCHDOG_PERIOD), new TEvPrivate::TEvProxyDataReqOngoingTransactionWatchdog());
+    ctx.Schedule(TDuration::MilliSeconds(KIKIMR_DATAREQ_WATCHDOG_PERIOD), new TEvPrivate::TEvProxyDataReqOngoingTransactionsWatchdog());
 }
 
 void TDataReq::SendStreamClearanceResponse(ui64 shard, bool cleared, const TActorContext &ctx)

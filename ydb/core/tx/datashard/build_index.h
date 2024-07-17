@@ -33,26 +33,32 @@ struct TBuildIndexRecord {
 
 class TBuildIndexManager {
 public:
-    bool Contains(ui64 id) {
-        return Records.contains(id);
+    const TBuildIndexRecord* Get(ui64 id) const {
+        Y_ABORT_UNLESS(id != 0);
+        if (BuildIndexId == id) {
+            return &Record;
+        }
+        Y_ABORT_UNLESS(BuildIndexId == 0);
+        return nullptr;
     }
 
     void Set(ui64 id, TBuildIndexRecord record) {
-        Records.emplace(id, record);
-    }
-
-    TBuildIndexRecord Get(ui64 id) const {
-        return Records.at(id);
+        Y_ABORT_UNLESS(id != 0);
+        Y_ABORT_UNLESS(BuildIndexId == 0);
+        BuildIndexId = id;
+        Record = record;
     }
 
     void Drop(ui64 id) {
-        Records.erase(id);
+        Y_ABORT_UNLESS(Get(id) == &Record);
+        BuildIndexId = 0;
+        Record = {};
     }
 
 private:
-    using TBuildIndexIdToScanIdMap = TMap<ui64, TBuildIndexRecord>;
-
-    TBuildIndexIdToScanIdMap Records;
+    // Only single shard scan for build index possible now
+    ui64 BuildIndexId = 0;
+    TBuildIndexRecord Record;
 };
 
 }

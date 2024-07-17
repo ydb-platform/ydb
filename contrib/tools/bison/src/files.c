@@ -1,7 +1,7 @@
 /* Open and close files for Bison.
 
-   Copyright (C) 1984, 1986, 1989, 1992, 2000-2013 Free Software
-   Foundation, Inc.
+   Copyright (C) 1984, 1986, 1989, 1992, 2000-2015, 2018-2019 Free
+   Software Foundation, Inc.
 
    This file is part of Bison, the GNU Compiler Compiler.
 
@@ -43,7 +43,9 @@
 
 char const *spec_outfile = NULL;       /* for -o. */
 char const *spec_file_prefix = NULL;   /* for -b. */
+location spec_file_prefix_loc = EMPTY_LOCATION_INIT;
 char const *spec_name_prefix = NULL;   /* for -p. */
+location spec_name_prefix_loc = EMPTY_LOCATION_INIT;
 char *spec_verbose_file = NULL;  /* for --verbose. */
 char *spec_graph_file = NULL;    /* for -g. */
 char *spec_xml_file = NULL;      /* for -x. */
@@ -51,8 +53,17 @@ char *spec_defines_file = NULL;  /* for --defines. */
 char *parser_file_name;
 
 /* All computed output file names.  */
-static char **file_names = NULL;
-static int file_names_count = 0;
+typedef struct generated_file
+{
+  /** File name.  */
+  char *name;
+  /** Whether is a generated source file (e.g., *.c, *.java...), as
+      opposed to the report file (e.g., *.output).  When late errors
+      are detected, generated source files are removed.  */
+  bool is_source;
+} generated_file;
+static generated_file *generated_files = NULL;
+static int generated_files_size = 0;
 
 uniqstr grammar_file = NULL;
 uniqstr current_file = NULL;
@@ -110,14 +121,12 @@ concat2 (char const *str1, char const *str2)
 FILE *
 xfopen (const char *name, const char *mode)
 {
-  FILE *ptr;
-
-  ptr = fopen_safer (name, mode);
-  if (!ptr)
+  FILE *res = fopen_safer (name, mode);
+  if (!res)
     error (EXIT_FAILURE, get_errno (),
            _("%s: cannot open"), quotearg_colon (name));
 
-  return ptr;
+  return res;
 }
 
 /*-------------------------------------------------------------.
@@ -182,7 +191,7 @@ static void
 compute_exts_from_src (const char *ext)
 {
   /* We use this function when the user specifies `-o' or `--output',
-     so the extenions must be computed unconditionally from the file name
+     so the extensions must be computed unconditionally from the file name
      given by this option.  */
   src_extension = xstrdup (ext);
   /*
@@ -244,19 +253,18 @@ file_name_split (const char *file_name,
     }
 }
 
+/* Compute ALL_BUT_EXT and ALL_BUT_TAB_EXT from SPEC_OUTFILE or
+   GRAMMAR_FILE.
+
+   The precise -o name will be used for FTABLE.  For other output
+   files, remove the ".c" or ".tab.c" suffix.  */
 
 static void
 compute_file_name_parts (void)
 {
-  const char *base, *tab, *ext;
-
-  /* Compute ALL_BUT_EXT and ALL_BUT_TAB_EXT from SPEC_OUTFILE
-     or GRAMMAR_FILE.
-
-     The precise -o name will be used for FTABLE.  For other output
-     files, remove the ".c" or ".tab.c" suffix.  */
   if (spec_outfile)
     {
+      const char *base, *tab, *ext;
       file_name_split (spec_outfile, &base, &tab, &ext);
       dir_prefix = xstrndup (spec_outfile, base - spec_outfile);
 
@@ -276,6 +284,7 @@ compute_file_name_parts (void)
     }
   else
     {
+      const char *base, *tab, *ext;
       file_name_split (grammar_file, &base, &tab, &ext);
 
       if (spec_file_prefix)
@@ -286,7 +295,7 @@ compute_file_name_parts (void)
                       last_component (spec_file_prefix) - spec_file_prefix);
           all_but_tab_ext = xstrdup (spec_file_prefix);
         }
-      else if (yacc_flag)
+      else if (! location_empty (yacc_loc))
         {
           /* If --yacc, then the output is 'y.tab.c'.  */
           dir_prefix = xstrdup ("");
@@ -307,7 +316,7 @@ compute_file_name_parts (void)
         all_but_ext = xstrdup (all_but_tab_ext);
 
       /* Compute the extensions from the grammar file name.  */
-      if (ext && !yacc_flag)
+      if (ext && location_empty (yacc_loc))
         compute_exts_from_gf (ext);
     }
 }
@@ -342,21 +351,21 @@ compute_output_file_names (void)
     {
       if (! spec_graph_file)
         spec_graph_file = concat2 (all_but_tab_ext, ".dot");
-      output_file_name_check (&spec_graph_file);
+      output_file_name_check (&spec_graph_file, false);
     }
 
   if (xml_flag)
     {
       if (! spec_xml_file)
         spec_xml_file = concat2 (all_but_tab_ext, ".xml");
-      output_file_name_check (&spec_xml_file);
+      output_file_name_check (&spec_xml_file, false);
     }
 
   if (report_flag)
     {
       if (!spec_verbose_file)
         spec_verbose_file = concat2 (all_but_tab_ext, OUTPUT_EXT);
-      output_file_name_check (&spec_verbose_file);
+      output_file_name_check (&spec_verbose_file, false);
     }
 
   free (all_but_tab_ext);
@@ -365,7 +374,7 @@ compute_output_file_names (void)
 }
 
 void
-output_file_name_check (char **file_name)
+output_file_name_check (char **file_name, bool source)
 {
   bool conflict = false;
   if (STREQ (*file_name, grammar_file))
@@ -375,16 +384,13 @@ output_file_name_check (char **file_name)
       conflict = true;
     }
   else
-    {
-      int i;
-      for (i = 0; i < file_names_count; i++)
-        if (STREQ (file_names[i], *file_name))
-          {
-            complain (NULL, Wother, _("conflicting outputs to file %s"),
-                      quote (*file_name));
-            conflict = true;
-          }
-    }
+    for (int i = 0; i < generated_files_size; i++)
+      if (STREQ (generated_files[i].name, *file_name))
+        {
+          complain (NULL, Wother, _("conflicting outputs to file %s"),
+                    quote (generated_files[i].name));
+          conflict = true;
+        }
   if (conflict)
     {
       free (*file_name);
@@ -392,10 +398,20 @@ output_file_name_check (char **file_name)
     }
   else
     {
-      file_names = xnrealloc (file_names, ++file_names_count,
-                              sizeof *file_names);
-      file_names[file_names_count-1] = xstrdup (*file_name);
+      generated_files = xnrealloc (generated_files, ++generated_files_size,
+                                   sizeof *generated_files);
+      generated_files[generated_files_size-1].name = xstrdup (*file_name);
+      generated_files[generated_files_size-1].is_source = source;
     }
+}
+
+void
+unlink_generated_sources (void)
+{
+  for (int i = 0; i < generated_files_size; i++)
+    if (generated_files[i].is_source)
+      /* Ignore errors.  The file might not even exist.  */
+      unlink (generated_files[i].name);
 }
 
 void
@@ -408,10 +424,7 @@ output_file_names_free (void)
   free (spec_defines_file);
   free (parser_file_name);
   free (dir_prefix);
-  {
-    int i;
-    for (i = 0; i < file_names_count; i++)
-      free (file_names[i]);
-  }
-  free (file_names);
+  for (int i = 0; i < generated_files_size; i++)
+    free (generated_files[i].name);
+  free (generated_files);
 }

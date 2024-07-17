@@ -1,6 +1,6 @@
 /* xmemdup0.h -- copy a block of arbitrary bytes, plus a trailing NUL
 
-   Copyright (C) 2008-2013 Free Software Foundation, Inc.
+   Copyright (C) 2008-2019 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,7 +13,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #ifndef XMEMDUP_H_
 # define XMEMDUP_H_
@@ -24,13 +24,6 @@
 # ifdef __cplusplus
 extern "C" {
 # endif
-
-/* This function is always triggered when memory is exhausted.
-   It must be defined by the application, either explicitly
-   or by using gnulib's xalloc-die module.  This is the
-   function to call when one wants the program to die because of a
-   memory allocation failure.  */
-extern _Noreturn void xalloc_die (void);
 
 char *xmemdup0 (void const *p, size_t s);
 

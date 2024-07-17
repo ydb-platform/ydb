@@ -105,7 +105,8 @@
                 {"Index": 1, "Name": "Project", "Type": "TCoAtom"},
                 {"Index": 2, "Name": "Cluster", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Service", "Type": "TCoAtom"},
-                {"Index": 4, "Name": "Token", "Type": "TCoSecureParam", "Optional": true}
+                {"Index": 4, "Name": "RowType", "Type": "TExprBase"},
+                {"Index": 5, "Name": "Token", "Type": "TCoSecureParam", "Optional": true}
             ]
         }
     ]

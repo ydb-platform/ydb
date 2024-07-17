@@ -794,6 +794,7 @@ public:
         UpdateConfig(db, "MinNetworkScatterToBalance", configUpdates);
         UpdateConfig(db, "MinCounterScatterToBalance", configUpdates);
         UpdateConfig(db, "MaxNodeUsageToKick", configUpdates, TSchemeIds::State::MaxNodeUsageToKick);
+        UpdateConfig(db, "NodeUsageRangeToKick", configUpdates);
         UpdateConfig(db, "ResourceChangeReactionPeriod", configUpdates, TSchemeIds::State::ResourceChangeReactionPeriod);
         UpdateConfig(db, "TabletKickCooldownPeriod", configUpdates, TSchemeIds::State::TabletKickCooldownPeriod);
         UpdateConfig(db, "SpreadNeighbours", configUpdates, TSchemeIds::State::SpreadNeighbours);
@@ -1140,6 +1141,7 @@ public:
         ShowConfig(out, "MinCounterScatterToBalance");
         ShowConfig(out, "MinNodeUsageToBalance");
         ShowConfig(out, "MaxNodeUsageToKick");
+        ShowConfig(out, "NodeUsageRangeToKick");
         ShowConfig(out, "ResourceChangeReactionPeriod");
         ShowConfig(out, "TabletKickCooldownPeriod");
         ShowConfig(out, "NodeSelectStrategy");

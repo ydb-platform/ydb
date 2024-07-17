@@ -1,17 +1,23 @@
 import sys
 import subprocess
 import optparse
+import os
 import re
+
+import build_java_with_error_prone2 as java_error_prone
+import setup_java_tmpdir as java_tmpdir
 
 
 def parse_args():
     parser = optparse.OptionParser()
     parser.disable_interspersed_args()
     parser.add_option('--sources-list')
+    parser.add_option('--error-prone')
     parser.add_option('--verbose', default=False, action='store_true')
     parser.add_option('--remove-notes', default=False, action='store_true')
     parser.add_option('--ignore-errors', default=False, action='store_true')
     parser.add_option('--kotlin', default=False, action='store_true')
+    parser.add_option('--with-setup-java-tmpdir', default=False, action='store_true')
     return parser.parse_args()
 
 
@@ -44,6 +50,12 @@ def remove_notes(err):
 
 def main():
     opts, cmd = parse_args()
+
+    if opts.with_setup_java_tmpdir:
+        cmd = java_tmpdir.fix_tmpdir(cmd)
+
+    if opts.error_prone:
+        cmd = java_error_prone.fix_cmd_line(opts.error_prone, cmd)
 
     with open(opts.sources_list) as f:
         input_files = f.read().strip().split()

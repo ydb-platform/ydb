@@ -79,7 +79,6 @@ struct TTestEnv {
 
     auto SendGet(ui32 step, ui32 dataSize, bool mustRestoreFirst=false) {
         const TLogoBlobID blobId(1, 1, step, 0, dataSize, 0);
-        Cerr << "SEND TEvGet with key " << blobId.ToString() << Endl;
         const TActorId sender = Env.Runtime->AllocateEdgeActor(GroupInfo->GetActorId(*RunningNodes.begin()).NodeId(), __FILE__, __LINE__);
         auto ev = std::make_unique<TEvBlobStorage::TEvGet>(
             blobId,
@@ -94,7 +93,6 @@ struct TTestEnv {
         });
         TInstant getDeadline = Env.Now() + TDuration::Seconds(30);
         auto res = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(sender, /* termOnCapture */ false, getDeadline);
-        Cerr << "TEvGetResult: " << res->Get()->ToString() << Endl;
         return res;
     };
 
@@ -152,7 +150,7 @@ struct TTestEnv {
     bool CheckPartsLocations(const TLogoBlobID& blobId) {
         auto expectedParts = GetExpectedPartsLocations(blobId);
         auto actualParts = GetActualPartsLocations(blobId);
-        TString errMsg = ToString(expectedParts) + " != " + ToString(actualParts);
+        TString errMsg = ToString(expectedParts) + " != " + ToString(actualParts) + " Key: " + blobId.ToString();
         UNIT_ASSERT_VALUES_EQUAL_C(expectedParts.size(), actualParts.size(), errMsg);
 
         for (ui32 i = 0; i < expectedParts.size(); ++i) {
@@ -231,20 +229,20 @@ struct TStopOneNodeTest {
             Env.SendPut(step, data, NKikimrProto::OK);
             Env->Sim(TDuration::Seconds(10));
             Env.StartNode(nodeIdWithBlob);
-            Env->Sim(TDuration::Seconds(10));
+            Env->Sim(TDuration::Seconds(30));
 
             Cerr << "Start compaction 1" << Endl;
             for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
                 Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
             }
-            Env->Sim(TDuration::Seconds(10));
+            Env->Sim(TDuration::Seconds(30));
             Cerr << "Finish compaction 1" << Endl;
 
             Cerr << "Start compaction 2" << Endl;
             for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
                 Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
             }
-            Env->Sim(TDuration::Seconds(10));
+            Env->Sim(TDuration::Seconds(30));
             Cerr << "Finish compaction 2" << Endl;
 
             Env.CheckPartsLocations(MakeLogoBlobId(step, data.size()));
@@ -259,7 +257,7 @@ struct TRandomTest {
     ui32 MaxBlobSize;
 
     void RunTest() {
-        srand(123);
+        srand(123456);
         TVector<TString> data(Reserve(NumIters));
 
         TVector<ui32> successfulSteps;
@@ -302,7 +300,7 @@ struct TRandomTest {
             // Wipe random node
             if (random() % 100 == 1) {
                 ui32 pos = random() % Env->Settings.NodeCount;
-                if (Env.RunningNodes.contains(pos)) {
+                if (Env.RunningNodes.contains(pos) && Env.RunningNodes.contains(0)) {
                     Cerr << "Wipe node " << pos << Endl;
                     auto baseConfig = Env->FetchBaseConfig();
                     const auto& someVSlot = baseConfig.GetVSlot(pos);
@@ -321,7 +319,7 @@ struct TRandomTest {
         for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
             Env.StartNode(pos);
         }
-        Env->Sim(TDuration::Seconds(10));
+        Env->Sim(TDuration::Seconds(60));
 
         Cerr << "Start compaction 1" << Endl;
         for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
@@ -337,9 +335,8 @@ struct TRandomTest {
 
         Cerr << "Start checking" << Endl;
         for (ui32 step: successfulSteps) {
-            Cerr << "step = " << step << Endl;
             Env.CheckPartsLocations(MakeLogoBlobId(step, data[step].size()));
-            UNIT_ASSERT_VALUES_EQUAL(Env.SendGet(step, data[step].size())->Get()->Responses[0].Buffer.ConvertToString(), data[step]);
+            UNIT_ASSERT_VALUES_EQUAL_C(Env.SendGet(step, data[step].size())->Get()->Responses[0].Buffer.ConvertToString(), data[step], MakeLogoBlobId(step, data[step].size()).ToString());
         }
     }
 };
@@ -401,21 +398,21 @@ struct TTwoPartsOnOneNodeTest {
         // start all stopped nodes
         Env.StartNode(partIdxToNodeId[1]);
         Env.StartNode(handoffNodeIds[1]);
-        Env->Sim(TDuration::Seconds(10));
+        Env->Sim(TDuration::Seconds(30));
 
         // run compactions
         Cerr << "Start compaction 1" << Endl;
         for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
             Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
         }
-        Env->Sim(TDuration::Seconds(10));
+        Env->Sim(TDuration::Seconds(30));
         Cerr << "Finish compaction 1" << Endl;
 
         Cerr << "Start compaction 2" << Endl;
         for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
             Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
         }
-        Env->Sim(TDuration::Seconds(10));
+        Env->Sim(TDuration::Seconds(30));
         Cerr << "Finish compaction 2" << Endl;
 
         Env.CheckPartsLocations(MakeLogoBlobId(step, data.size()));

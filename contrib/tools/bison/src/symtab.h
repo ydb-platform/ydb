@@ -1,7 +1,7 @@
 /* Definitions for symtab.c and callers, part of Bison.
 
-   Copyright (C) 1984, 1989, 1992, 2000-2002, 2004-2013 Free Software
-   Foundation, Inc.
+   Copyright (C) 1984, 1989, 1992, 2000-2002, 2004-2015, 2018-2019 Free
+   Software Foundation, Inc.
 
    This file is part of Bison, the GNU Compiler Compiler.
 
@@ -40,7 +40,7 @@ typedef enum
 {
   unknown_sym,          /**< Undefined.  */
   token_sym,            /**< Terminal. */
-  nterm_sym             /**< Non-terminal. */
+  nterm_sym             /**< Nonterminal. */
 } symbol_class;
 
 
@@ -50,6 +50,7 @@ typedef int symbol_number;
 
 
 typedef struct symbol symbol;
+typedef struct sym_content sym_content;
 
 /* Declaration status of a symbol.
 
@@ -67,29 +68,50 @@ typedef enum
     undeclared,
     /** Used by %destructor/%printer but not defined (warning).  */
     used,
-    /** Used in the gramar (rules) but not defined (error).  */
+    /** Used in the grammar (rules) but not defined (error).  */
     needed,
     /** Defined with %type or %token (good).  */
     declared,
   } status;
 
-typedef enum code_props_type code_props_type;
 enum code_props_type
   {
     destructor = 0,
     printer = 1,
   };
+typedef enum code_props_type code_props_type;
 
 enum { CODE_PROPS_SIZE = 2 };
 
-/* When extending this structure, be sure to complete
-   symbol_check_alias_consistency.  */
 struct symbol
 {
   /** The key, name of the symbol.  */
   uniqstr tag;
-  /** The location of its first occurrence.  */
+
+  /** The "defining" location.  */
   location location;
+
+  /** Whether \a location is about the first uses as left-hand side
+      symbol of a rule (true), or simply the first occurrence (e.g.,
+      in a %type, or as a rhs symbol of a rule).  The former type of
+      location is more natural in error messages.  This Boolean helps
+      moving from location of the first occurrence to first use as
+      lhs. */
+  bool location_of_lhs;
+
+  /** Points to the other in the symbol-string pair for an alias. */
+  symbol *alias;
+
+  /** Whether this symbol is the alias of another or not. */
+  bool is_alias;
+
+  /** All the info about the pointed symbol is there. */
+  sym_content *content;
+};
+
+struct sym_content
+{
+  symbol *symbol;
 
   /** Its \c \%type.
 
@@ -115,24 +137,18 @@ struct symbol
   location prec_location;
   int prec;
   assoc assoc;
+
+  /** The user specified token number.
+
+      E.g., %token FOO 42.*/
   int user_token_number;
 
-  /* Points to the other in the symbol-string pair for an alias.
-     Special value USER_NUMBER_HAS_STRING_ALIAS in the symbol half of the
-     symbol-string pair for an alias.  */
-  symbol *alias;
   symbol_class class;
   status status;
 };
 
 /** Undefined user number.  */
 # define USER_NUMBER_UNDEFINED -1
-
-/* 'symbol->user_token_number == USER_NUMBER_HAS_STRING_ALIAS' means
-   this symbol has a literal string alias.  For instance, '%token foo
-   "foo"' has '"foo"' numbered regularly, and 'foo' numbered as
-   USER_NUMBER_HAS_STRING_ALIAS.  */
-# define USER_NUMBER_HAS_STRING_ALIAS -9991
 
 /* Undefined internal token number.  */
 # define NUMBER_UNDEFINED (-1)
@@ -174,6 +190,12 @@ uniqstr symbol_id_get (symbol const *sym);
  */
 void symbol_make_alias (symbol *sym, symbol *str, location loc);
 
+/**
+ * This symbol is used as the lhs of a rule.  Record this location
+ * as definition point, if not already done.
+ */
+void symbol_location_as_lhs_set (symbol *sym, location loc);
+
 /** Set the \c type_name associated with \c sym.
 
     Do nothing if passed 0 as \c type_name.  */
@@ -194,7 +216,10 @@ code_props *symbol_code_props_get (symbol *sym, code_props_type kind);
     Do nothing if invoked with \c undef_assoc as \c assoc.  */
 void symbol_precedence_set (symbol *sym, int prec, assoc a, location loc);
 
-/** Set the \c class associated with \c sym.  */
+/** Set the \c class associated with \c sym.
+
+    Whether \c declaring means whether this class definition comes
+    from %nterm or %token.  */
 void symbol_class_set (symbol *sym, symbol_class class, location loc,
                        bool declaring);
 
@@ -223,6 +248,8 @@ extern symbol *startsymbol;
 /** The location of the \c \%start declaration.  */
 extern location startsymbol_location;
 
+/** Whether a symbol declared with a type tag.  */
+extern bool tag_seen;
 
 
 /*-------------------.
@@ -289,7 +316,7 @@ typedef struct {
   /** The key, name of the semantic type.  */
   uniqstr tag;
 
-  /** The location of its first occurence.  */
+  /** The location of its first occurrence.  */
   location location;
 
   /** Its status : "undeclared", "used" or "declared".

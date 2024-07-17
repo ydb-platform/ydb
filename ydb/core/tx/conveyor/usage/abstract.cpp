@@ -5,20 +5,16 @@
 #include <util/string/builder.h>
 
 namespace NKikimr::NConveyor {
-bool ITask::Execute(std::shared_ptr<TTaskSignals> signals) {
+TConclusionStatus ITask::Execute(std::shared_ptr<TTaskSignals> signals, const std::shared_ptr<ITask>& taskPtr) {
     AFL_VERIFY(!ExecutedFlag);
     ExecutedFlag = true;
-    bool result = false;
     const TMonotonic start = TMonotonic::Now();
     try {
-        result = DoExecute();
-        if (!result) {
+        TConclusionStatus result = DoExecute(taskPtr);
+        if (result.IsFail()) {
             if (signals) {
                 signals->Fails->Add(1);
                 signals->FailsDuration->Add((TMonotonic::Now() - start).MicroSeconds());
-            }
-            if (!ErrorMessage) {
-                ErrorMessage = "cannot execute task (not specified error message)";
             }
         } else {
             if (signals) {
@@ -26,20 +22,18 @@ bool ITask::Execute(std::shared_ptr<TTaskSignals> signals) {
                 signals->SuccessDuration->Add((TMonotonic::Now() - start).MicroSeconds());
             }
         }
+        return result;
     } catch (...) {
         if (signals) {
             signals->Fails->Add(1);
             signals->FailsDuration->Add((TMonotonic::Now() - start).MicroSeconds());
         }
-        TStringBuilder sbLocalMessage;
-        sbLocalMessage << "exception: " << CurrentExceptionMessage();
-        if (!ErrorMessage) {
-            ErrorMessage = sbLocalMessage;
-        } else {
-            ErrorMessage += sbLocalMessage;
-        }
+        return TConclusionStatus::Fail("exception: " + CurrentExceptionMessage());
     }
-    return result;
+}
+
+void ITask::DoOnCannotExecute(const TString& reason) {
+    AFL_VERIFY(false)("problem", "cannot execute conveyor task")("reason", reason);
 }
 
 }

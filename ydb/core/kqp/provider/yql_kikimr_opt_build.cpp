@@ -844,7 +844,7 @@ TVector<TKiDataQueryBlock> MakeKiDataQueryBlocks(TExprBase node, const TKiExplor
 
 } // namespace
 
-TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TIntrusivePtr<TKikimrTablesData> tablesData,
+TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf database, TIntrusivePtr<TKikimrTablesData> tablesData,
     TTypeAnnotationContext& types, bool concurrentResults) {
     if (!node.Maybe<TCoCommit>().DataSink().Maybe<TKiDataSink>()) {
         return node.Ptr();
@@ -858,14 +858,14 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TIntrusivePtr<TK
     VisitExpr(node.Ptr(), [&replaces](const TExprNode::TPtr& input) -> bool {
         if (input->IsCallable("PgTableContent")) {
             TPgTableContent content(input);
-            if (content.Table() == "pg_tables") {
+            if (content.Table().StringValue() == "pg_tables") {
                 replaces[input.Get()] = nullptr;
             }
         }
         return true;
     });
     if (!replaces.empty()) {
-        TExprNode::TPtr path = ctx.NewCallable(node.Pos(), "String", { ctx.NewAtom(node.Pos(), "/Root/.sys/pg_tables") });
+        TExprNode::TPtr path = ctx.NewCallable(node.Pos(), "String", { ctx.NewAtom(node.Pos(), TStringBuilder() << "/" << database << "/.sys/pg_tables") });
         auto table = ctx.NewList(node.Pos(), {ctx.NewAtom(node.Pos(), "table"), path});
         auto newKey = ctx.NewCallable(node.Pos(), "Key", {table});
 

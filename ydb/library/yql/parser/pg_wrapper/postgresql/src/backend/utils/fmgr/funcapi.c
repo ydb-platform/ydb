@@ -4,7 +4,7 @@
  *	  Utility and convenience functions for fmgr functions that return
  *	  sets and/or composite types, or deal with VARIADIC inputs.
  *
- * Copyright (c) 2002-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2002-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/utils/fmgr/funcapi.c
@@ -19,6 +19,7 @@
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "funcapi.h"
+#include "miscadmin.h"
 #include "nodes/nodeFuncs.h"
 #include "utils/array.h"
 #include "utils/builtins.h"
@@ -27,6 +28,7 @@
 #include "utils/regproc.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
+#include "utils/tuplestore.h"
 #include "utils/typcache.h"
 
 
@@ -52,6 +54,73 @@ static bool resolve_polymorphic_tupdesc(TupleDesc tupdesc,
 										oidvector *declared_args,
 										Node *call_expr);
 static TypeFuncClass get_type_func_class(Oid typid, Oid *base_typeid);
+
+
+/*
+ * InitMaterializedSRF
+ *
+ * Helper function to build the state of a set-returning function used
+ * in the context of a single call with materialize mode.  This code
+ * includes sanity checks on ReturnSetInfo, creates the Tuplestore and
+ * the TupleDesc used with the function and stores them into the
+ * function's ReturnSetInfo.
+ *
+ * "flags" can be set to MAT_SRF_USE_EXPECTED_DESC, to use the tuple
+ * descriptor coming from expectedDesc, which is the tuple descriptor
+ * expected by the caller.  MAT_SRF_BLESS can be set to complete the
+ * information associated to the tuple descriptor, which is necessary
+ * in some cases where the tuple descriptor comes from a transient
+ * RECORD datatype.
+ */
+void
+InitMaterializedSRF(FunctionCallInfo fcinfo, bits32 flags)
+{
+	bool		random_access;
+	ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	Tuplestorestate *tupstore;
+	MemoryContext old_context,
+				per_query_ctx;
+	TupleDesc	stored_tupdesc;
+
+	/* check to see if caller supports returning a tuplestore */
+	if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("set-valued function called in context that cannot accept a set")));
+	if (!(rsinfo->allowedModes & SFRM_Materialize) ||
+		((flags & MAT_SRF_USE_EXPECTED_DESC) != 0 && rsinfo->expectedDesc == NULL))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("materialize mode required, but it is not allowed in this context")));
+
+	/*
+	 * Store the tuplestore and the tuple descriptor in ReturnSetInfo.  This
+	 * must be done in the per-query memory context.
+	 */
+	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
+	old_context = MemoryContextSwitchTo(per_query_ctx);
+
+	/* build a tuple descriptor for our result type */
+	if ((flags & MAT_SRF_USE_EXPECTED_DESC) != 0)
+		stored_tupdesc = CreateTupleDescCopy(rsinfo->expectedDesc);
+	else
+	{
+		if (get_call_result_type(fcinfo, NULL, &stored_tupdesc) != TYPEFUNC_COMPOSITE)
+			elog(ERROR, "return type must be a row type");
+	}
+
+	/* If requested, bless the tuple descriptor */
+	if ((flags & MAT_SRF_BLESS) != 0)
+		BlessTupleDesc(stored_tupdesc);
+
+	random_access = (rsinfo->allowedModes & SFRM_Materialize_Random) != 0;
+
+	tupstore = tuplestore_begin_heap(random_access, false, work_mem);
+	rsinfo->returnMode = SFRM_Materialize;
+	rsinfo->setResult = tupstore;
+	rsinfo->setDesc = stored_tupdesc;
+	MemoryContextSwitchTo(old_context);
+}
 
 
 /*
@@ -218,6 +287,13 @@ get_call_result_type(FunctionCallInfo fcinfo,
 /*
  * get_expr_result_type
  *		As above, but work from a calling expression node tree
+ *
+ * Beware of using this on the funcexpr of a RTE that has a coldeflist.
+ * The correct conclusion in such cases is always that the function returns
+ * RECORD with the columns defined by the coldeflist fields (funccolnames etc).
+ * If it does not, it's the executor's responsibility to catch the discrepancy
+ * at runtime; but code processing the query in advance of that point might
+ * come to inconsistent conclusions if it checks the actual expression.
  */
 TypeFuncClass
 get_expr_result_type(Node *expr,
@@ -269,6 +345,40 @@ get_expr_result_type(Node *expr,
 		if (resultTupleDesc)
 			*resultTupleDesc = BlessTupleDesc(tupdesc);
 		return TYPEFUNC_COMPOSITE;
+	}
+	else if (expr && IsA(expr, Const) &&
+			 ((Const *) expr)->consttype == RECORDOID &&
+			 !((Const *) expr)->constisnull)
+	{
+		/*
+		 * When EXPLAIN'ing some queries with SEARCH/CYCLE clauses, we may
+		 * need to resolve field names of a RECORD-type Const.  The datum
+		 * should contain a typmod that will tell us that.
+		 */
+		HeapTupleHeader rec;
+		Oid			tupType;
+		int32		tupTypmod;
+
+		rec = DatumGetHeapTupleHeader(((Const *) expr)->constvalue);
+		tupType = HeapTupleHeaderGetTypeId(rec);
+		tupTypmod = HeapTupleHeaderGetTypMod(rec);
+		if (resultTypeId)
+			*resultTypeId = tupType;
+		if (tupType != RECORDOID || tupTypmod >= 0)
+		{
+			/* Should be able to look it up */
+			if (resultTupleDesc)
+				*resultTupleDesc = lookup_rowtype_tupdesc_copy(tupType,
+															   tupTypmod);
+			return TYPEFUNC_COMPOSITE;
+		}
+		else
+		{
+			/* This shouldn't really happen ... */
+			if (resultTupleDesc)
+				*resultTupleDesc = NULL;
+			return TYPEFUNC_RECORD;
+		}
 	}
 	else
 	{
@@ -434,7 +544,8 @@ internal_get_result_type(Oid funcid,
  * if noError is true, else throws error.
  *
  * This is a simpler version of get_expr_result_type() for use when the caller
- * is only interested in determinate rowtype results.
+ * is only interested in determinate rowtype results.  As with that function,
+ * beware of using this on the funcexpr of a RTE that has a coldeflist.
  */
 TupleDesc
 get_expr_result_tupdesc(Node *expr, bool noError)
@@ -1321,9 +1432,8 @@ get_func_arg_info(HeapTuple procTup,
 		*p_argnames = NULL;
 	else
 	{
-		deconstruct_array(DatumGetArrayTypeP(proargnames),
-						  TEXTOID, -1, false, TYPALIGN_INT,
-						  &elems, NULL, &nelems);
+		deconstruct_array_builtin(DatumGetArrayTypeP(proargnames), TEXTOID,
+								  &elems, NULL, &nelems);
 		if (nelems != numargs)	/* should not happen */
 			elog(ERROR, "proargnames must have the same number of elements as the function has arguments");
 		*p_argnames = (char **) palloc(sizeof(char *) * numargs);
@@ -1437,8 +1547,7 @@ get_func_input_arg_names(Datum proargnames, Datum proargmodes,
 		ARR_HASNULL(arr) ||
 		ARR_ELEMTYPE(arr) != TEXTOID)
 		elog(ERROR, "proargnames is not a 1-D text array or it contains nulls");
-	deconstruct_array(arr, TEXTOID, -1, false, TYPALIGN_INT,
-					  &argnames, NULL, &numargs);
+	deconstruct_array_builtin(arr, TEXTOID, &argnames, NULL, &numargs);
 	if (proargmodes != PointerGetDatum(NULL))
 	{
 		arr = DatumGetArrayTypeP(proargmodes);	/* ensure not toasted */
@@ -1501,7 +1610,6 @@ get_func_result_name(Oid functionId)
 	HeapTuple	procTuple;
 	Datum		proargmodes;
 	Datum		proargnames;
-	bool		isnull;
 	ArrayType  *arr;
 	int			numargs;
 	char	   *argmodes;
@@ -1522,14 +1630,10 @@ get_func_result_name(Oid functionId)
 	else
 	{
 		/* Get the data out of the tuple */
-		proargmodes = SysCacheGetAttr(PROCOID, procTuple,
-									  Anum_pg_proc_proargmodes,
-									  &isnull);
-		Assert(!isnull);
-		proargnames = SysCacheGetAttr(PROCOID, procTuple,
-									  Anum_pg_proc_proargnames,
-									  &isnull);
-		Assert(!isnull);
+		proargmodes = SysCacheGetAttrNotNull(PROCOID, procTuple,
+											 Anum_pg_proc_proargmodes);
+		proargnames = SysCacheGetAttrNotNull(PROCOID, procTuple,
+											 Anum_pg_proc_proargnames);
 
 		/*
 		 * We expect the arrays to be 1-D arrays of the right types; verify
@@ -1552,8 +1656,7 @@ get_func_result_name(Oid functionId)
 			ARR_ELEMTYPE(arr) != TEXTOID)
 			elog(ERROR, "proargnames is not a 1-D text array of length %d or it contains nulls",
 				 numargs);
-		deconstruct_array(arr, TEXTOID, -1, false, TYPALIGN_INT,
-						  &argnames, NULL, &nargnames);
+		deconstruct_array_builtin(arr, TEXTOID, &argnames, NULL, &nargnames);
 		Assert(nargnames == numargs);
 
 		/* scan for output argument(s) */
@@ -1617,14 +1720,10 @@ build_function_result_tupdesc_t(HeapTuple procTuple)
 		return NULL;
 
 	/* Get the data out of the tuple */
-	proallargtypes = SysCacheGetAttr(PROCOID, procTuple,
-									 Anum_pg_proc_proallargtypes,
-									 &isnull);
-	Assert(!isnull);
-	proargmodes = SysCacheGetAttr(PROCOID, procTuple,
-								  Anum_pg_proc_proargmodes,
-								  &isnull);
-	Assert(!isnull);
+	proallargtypes = SysCacheGetAttrNotNull(PROCOID, procTuple,
+											Anum_pg_proc_proallargtypes);
+	proargmodes = SysCacheGetAttrNotNull(PROCOID, procTuple,
+										 Anum_pg_proc_proargmodes);
 	proargnames = SysCacheGetAttr(PROCOID, procTuple,
 								  Anum_pg_proc_proargnames,
 								  &isnull);
@@ -1701,8 +1800,7 @@ build_function_result_tupdesc_d(char prokind,
 			ARR_ELEMTYPE(arr) != TEXTOID)
 			elog(ERROR, "proargnames is not a 1-D text array of length %d or it contains nulls",
 				 numargs);
-		deconstruct_array(arr, TEXTOID, -1, false, TYPALIGN_INT,
-						  &argnames, NULL, &nargnames);
+		deconstruct_array_builtin(arr, TEXTOID, &argnames, NULL, &nargnames);
 		Assert(nargnames == numargs);
 	}
 
@@ -1777,7 +1875,7 @@ RelationNameGetTupleDesc(const char *relname)
 	List	   *relname_list;
 
 	/* Open relation and copy the tuple description */
-	relname_list = stringToQualifiedNameList(relname);
+	relname_list = stringToQualifiedNameList(relname, NULL);
 	relvar = makeRangeVarFromNameList(relname_list);
 	rel = relation_openrv(relvar, AccessShareLock);
 	tupdesc = CreateTupleDescCopy(RelationGetDescr(rel));

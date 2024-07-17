@@ -659,7 +659,7 @@ struct TDiskFormat {
 
     void InitMagic() {
         MagicFormatChunk = MagicFormatChunkId;
-        NPDisk::TPDiskHashCalculator hash(false);
+        NPDisk::TPDiskHashCalculator hash;
         hash.Hash(&Guid, sizeof(Guid));
         hash.Hash(&MagicNextLogChunkReferenceId, sizeof(MagicNextLogChunkReferenceId));
         MagicNextLogChunkReference = hash.GetHashResult();
@@ -686,7 +686,7 @@ struct TDiskFormat {
     }
 
     bool IsHashOk(ui64 bufferSize) const {
-        NPDisk::TPDiskHashCalculator hashCalculator(false);
+        NPDisk::TPDiskHashCalculator hashCalculator;
         if (Version == 2) {
             ui64 size = (char*)&HashVersion2 - (char*)this;
             hashCalculator.Hash(this, size);
@@ -709,7 +709,7 @@ struct TDiskFormat {
     void SetHash() {
         // Set an invalid HashVersion2 to prevent Version2 code from trying to read incompatible disks
         {
-            NPDisk::TPDiskHashCalculator hashCalculator(false);
+            NPDisk::TPDiskHashCalculator hashCalculator;
             ui64 size = (char*)&HashVersion2 - (char*)this;
             hashCalculator.Hash(this, size);
             HashVersion2 = hashCalculator.GetHashResult();
@@ -718,7 +718,7 @@ struct TDiskFormat {
         }
         // Set Hash
         {
-            NPDisk::TPDiskHashCalculator hashCalculator(false);
+            NPDisk::TPDiskHashCalculator hashCalculator;
             Y_ABORT_UNLESS(DiskFormatSize > sizeof(THash));
             ui64 size = DiskFormatSize - sizeof(THash);
             hashCalculator.Hash(this, size);

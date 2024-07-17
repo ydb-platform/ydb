@@ -1,8 +1,8 @@
 #include "index_info.h"
-#include "statistics/abstract/operator.h"
 
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
@@ -253,19 +253,6 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
         DefaultSerializer = container;
     }
 
-    {
-        for (const auto& stat : schema.GetStatistics()) {
-            NStatistics::TOperatorContainer container;
-            AFL_VERIFY(container.DeserializeFromProto(stat));
-            AFL_VERIFY(StatisticsByName.emplace(container.GetName(), std::move(container)).second);
-        }
-        NStatistics::TPortionStorageCursor cursor;
-        for (auto&& [_, container] : StatisticsByName) {
-            container.SetCursor(cursor);
-            container->ShiftCursor(cursor);
-        }
-    }
-
     for (const auto& idx : schema.GetIndexes()) {
         NIndexes::TIndexMetaContainer meta;
         AFL_VERIFY(meta.DeserializeFromProto(idx));
@@ -413,6 +400,38 @@ std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnDefaultValueVerified(const u
     } else {
         return features.GetDefaultValue().GetValue();
     }
+}
+
+NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData,
+    const ui32 indexId, const std::shared_ptr<IStoragesManager>& operators, TSecondaryData& result) const {
+    auto it = Indexes.find(indexId);
+    AFL_VERIFY(it != Indexes.end());
+    auto& index = it->second;
+    std::shared_ptr<IPortionDataChunk> chunk = index->BuildIndex(originalData, *this);
+    auto opStorage = operators->GetOperatorVerified(index->GetStorageId());
+    if ((i64)chunk->GetPackedSize() > opStorage->GetBlobSplitSettings().GetMaxBlobSize()) {
+        return TConclusionStatus::Fail("blob size for secondary data (" + ::ToString(indexId) + ") bigger than limit (" +
+                                       ::ToString(opStorage->GetBlobSplitSettings().GetMaxBlobSize()) + ")");
+    }
+    if (index->GetStorageId() == IStoragesManager::LocalMetadataStorageId) {
+        AFL_VERIFY(result.MutableSecondaryInplaceData().emplace(indexId, chunk).second);
+    } else {
+        AFL_VERIFY(result.MutableExternalData().emplace(indexId, std::vector<std::shared_ptr<IPortionDataChunk>>({chunk})).second);
+    }
+    return TConclusionStatus::Success();
+}
+
+std::shared_ptr<NIndexes::NMax::TIndexMeta> TIndexInfo::GetIndexMax(const ui32 columnId) const {
+    for (auto&& i : Indexes) {
+        if (i.second->GetClassName() != NIndexes::NMax::TIndexMeta::GetClassNameStatic()) {
+            continue;
+        }
+        auto maxIndex = static_pointer_cast<NIndexes::NMax::TIndexMeta>(i.second.GetObjectPtr());
+        if (maxIndex->GetColumnId() == columnId) {
+            return maxIndex;
+        }
+    }
+    return nullptr;
 }
 
 } // namespace NKikimr::NOlap

@@ -7,7 +7,7 @@ namespace NYT::NTableClient {
 void TVersionedReadOptions::Register(TRegistrar registrar)
 {
     registrar.Parameter("read_mode", &TThis::ReadMode)
-        .Default(EVersionedIoMode::Default);
+        .Default(EVersionedIOMode::Default);
 }
 
 std::optional<TString> GetTimestampColumnOriginalNameOrNull(TStringBuf name)

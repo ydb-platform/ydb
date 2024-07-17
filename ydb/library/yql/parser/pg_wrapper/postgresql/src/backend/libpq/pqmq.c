@@ -3,7 +3,7 @@
  * pqmq.c
  *	  Use the frontend/backend protocol for communication over a shm_mq
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *	src/backend/libpq/pqmq.c
@@ -13,11 +13,13 @@
 
 #include "postgres.h"
 
+#include "access/parallel.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
 #include "libpq/pqmq.h"
 #include "miscadmin.h"
 #include "pgstat.h"
+#include "replication/logicalworker.h"
 #include "tcop/tcopprot.h"
 #include "utils/builtins.h"
 
@@ -154,12 +156,27 @@ mq_putmessage(char msgtype, const char *s, size_t len)
 
 	for (;;)
 	{
-		result = shm_mq_sendv(pq_mq_handle, iov, 2, true);
+		/*
+		 * Immediately notify the receiver by passing force_flush as true so
+		 * that the shared memory value is updated before we send the parallel
+		 * message signal right after this.
+		 */
+		result = shm_mq_sendv(pq_mq_handle, iov, 2, true, true);
 
 		if (pq_mq_parallel_leader_pid != 0)
-			SendProcSignal(pq_mq_parallel_leader_pid,
-						   PROCSIG_PARALLEL_MESSAGE,
-						   pq_mq_parallel_leader_backend_id);
+		{
+			if (IsLogicalParallelApplyWorker())
+				SendProcSignal(pq_mq_parallel_leader_pid,
+							   PROCSIG_PARALLEL_APPLY_MESSAGE,
+							   pq_mq_parallel_leader_backend_id);
+			else
+			{
+				Assert(IsParallelWorker());
+				SendProcSignal(pq_mq_parallel_leader_pid,
+							   PROCSIG_PARALLEL_MESSAGE,
+							   pq_mq_parallel_leader_backend_id);
+			}
+		}
 
 		if (result != SHM_MQ_WOULD_BLOCK)
 			break;

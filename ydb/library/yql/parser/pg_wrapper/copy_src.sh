@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -eu
 
-VERSION="14.2"
+VERSION="16.3"
 
 errexit() {
     echo $1
@@ -24,14 +24,14 @@ tar zxf $DIST.tar.gz
 mv $DIST postgresql
 cd postgresql
 echo patching postgresql sources
-patch -p0 < ../../source.patch || errexit "Source patching failed"
+patch -p0 < ../../source16.patch || errexit "Source patching failed"
 
 COMPILER=$(ya tool cc --print-path)
 TOOL_DIR=$(dirname $COMPILER)
 export PATH="$TOOL_DIR:$PATH"
 export CC=clang
 export AR=llvm-ar
-export CFLAGS="-ffunction-sections -fdata-sections"
+export CFLAGS="-ffunction-sections -fdata-sections -DWAIT_USE_SELF_PIPE"
 
 echo configuring
 ./configure \
@@ -45,6 +45,10 @@ echo collecting *.c file list
 for i in $(find postgresql -name "*.o" | sed -e 's/o$/c/'); do if [ -f $i ]; then realpath --relative-to=.  $i; fi; done > src_files
 echo collecting *.h file list
 find postgresql -type f -name "*.h" | sort >> src_files
+find postgresql -type f -name "*.funcs.c" | sort >> src_files
+find postgresql -type f -name "*.switch.c" | sort >> src_files
+find postgresql -type f -name "regc_*.c" | sort >> src_files
+find postgresql -type f -name "rege_dfa.c" | sort >> src_files
 sort src_files > src_files.s
 mv src_files.s src_files
 

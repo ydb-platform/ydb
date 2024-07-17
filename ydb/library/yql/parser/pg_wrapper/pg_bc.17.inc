@@ -1,13 +1,11 @@
 LLVM_BC(
     postgresql/src/backend/commands/async.c
     postgresql/src/backend/commands/event_trigger.c
-    postgresql/src/backend/replication/walreceiver.c
-    postgresql/src/backend/statistics/mcv.c
     postgresql/src/backend/tsearch/dict_simple.c
-    postgresql/src/backend/tsearch/to_tsany.c
-    postgresql/src/backend/tsearch/wparser.c
-    postgresql/src/backend/utils/adt/int.c
-    postgresql/src/backend/utils/adt/jsonb_op.c
+    postgresql/src/backend/utils/adt/jsonb_gin.c
+    postgresql/src/backend/utils/adt/lockfuncs.c
+    postgresql/src/backend/utils/adt/network_spgist.c
+    postgresql/src/backend/utils/adt/pg_upgrade_support.c
     postgresql/src/backend/utils/adt/varlena.c
     pg_kernels.17.cpp
 
@@ -16,7 +14,22 @@ LLVM_BC(
     SYMBOLS
     arrow_array_to_text
     arrow_array_to_text_null
-    arrow_bool_int4
+    arrow_binary_upgrade_create_empty_extension
+    arrow_binary_upgrade_set_missing_value
+    arrow_binary_upgrade_set_next_array_pg_type_oid
+    arrow_binary_upgrade_set_next_heap_pg_class_oid
+    arrow_binary_upgrade_set_next_heap_relfilenode
+    arrow_binary_upgrade_set_next_index_pg_class_oid
+    arrow_binary_upgrade_set_next_index_relfilenode
+    arrow_binary_upgrade_set_next_multirange_array_pg_type_oid
+    arrow_binary_upgrade_set_next_multirange_pg_type_oid
+    arrow_binary_upgrade_set_next_pg_authid_oid
+    arrow_binary_upgrade_set_next_pg_enum_oid
+    arrow_binary_upgrade_set_next_pg_tablespace_oid
+    arrow_binary_upgrade_set_next_pg_type_oid
+    arrow_binary_upgrade_set_next_toast_pg_class_oid
+    arrow_binary_upgrade_set_next_toast_relfilenode
+    arrow_binary_upgrade_set_record_init_privs
     arrow_btnametextcmp
     arrow_bttext_pattern_cmp
     arrow_bttext_pattern_sortsupport
@@ -52,118 +65,20 @@ LLVM_BC(
     arrow_byteasend
     arrow_dsimple_init
     arrow_dsimple_lexize
-    arrow_generate_series_int4_support
-    arrow_get_current_ts_config
-    arrow_i2toi4
-    arrow_i4toi2
-    arrow_in_range_int2_int2
-    arrow_in_range_int2_int4
-    arrow_in_range_int2_int8
-    arrow_in_range_int4_int2
-    arrow_in_range_int4_int4
-    arrow_in_range_int4_int8
-    arrow_int24div
-    arrow_int24eq
-    arrow_int24ge
-    arrow_int24gt
-    arrow_int24le
-    arrow_int24lt
-    arrow_int24mi
-    arrow_int24mul
-    arrow_int24ne
-    arrow_int24pl
-    arrow_int2abs
-    arrow_int2and
-    arrow_int2div
-    arrow_int2eq
-    arrow_int2ge
-    arrow_int2gt
-    arrow_int2in
-    arrow_int2larger
-    arrow_int2le
-    arrow_int2lt
-    arrow_int2mi
-    arrow_int2mod
-    arrow_int2mul
-    arrow_int2ne
-    arrow_int2not
-    arrow_int2or
-    arrow_int2out
-    arrow_int2pl
-    arrow_int2recv
-    arrow_int2send
-    arrow_int2shl
-    arrow_int2shr
-    arrow_int2smaller
-    arrow_int2um
-    arrow_int2up
-    arrow_int2vectorin
-    arrow_int2vectorout
-    arrow_int2vectorrecv
-    arrow_int2vectorsend
-    arrow_int2xor
-    arrow_int42div
-    arrow_int42eq
-    arrow_int42ge
-    arrow_int42gt
-    arrow_int42le
-    arrow_int42lt
-    arrow_int42mi
-    arrow_int42mul
-    arrow_int42ne
-    arrow_int42pl
-    arrow_int4_bool
-    arrow_int4abs
-    arrow_int4and
-    arrow_int4div
-    arrow_int4eq
-    arrow_int4gcd
-    arrow_int4ge
-    arrow_int4gt
-    arrow_int4in
-    arrow_int4inc
-    arrow_int4larger
-    arrow_int4lcm
-    arrow_int4le
-    arrow_int4lt
-    arrow_int4mi
-    arrow_int4mod
-    arrow_int4mul
-    arrow_int4ne
-    arrow_int4not
-    arrow_int4or
-    arrow_int4out
-    arrow_int4pl
-    arrow_int4recv
-    arrow_int4send
-    arrow_int4shl
-    arrow_int4shr
-    arrow_int4smaller
-    arrow_int4um
-    arrow_int4up
-    arrow_int4xor
-    arrow_json_string_to_tsvector
-    arrow_json_string_to_tsvector_byid
-    arrow_json_to_tsvector
-    arrow_json_to_tsvector_byid
-    arrow_jsonb_cmp
-    arrow_jsonb_contained
-    arrow_jsonb_contains
-    arrow_jsonb_eq
-    arrow_jsonb_exists
-    arrow_jsonb_exists_all
-    arrow_jsonb_exists_any
-    arrow_jsonb_ge
-    arrow_jsonb_gt
-    arrow_jsonb_hash
-    arrow_jsonb_hash_extended
-    arrow_jsonb_le
-    arrow_jsonb_lt
-    arrow_jsonb_ne
-    arrow_jsonb_string_to_tsvector
-    arrow_jsonb_string_to_tsvector_byid
-    arrow_jsonb_to_tsvector
-    arrow_jsonb_to_tsvector_byid
+    arrow_gin_compare_jsonb
+    arrow_gin_consistent_jsonb
+    arrow_gin_consistent_jsonb_path
+    arrow_gin_extract_jsonb
+    arrow_gin_extract_jsonb_path
+    arrow_gin_extract_jsonb_query
+    arrow_gin_extract_jsonb_query_path
+    arrow_gin_triconsistent_jsonb
+    arrow_gin_triconsistent_jsonb_path
+    arrow_inet_spg_choose
+    arrow_inet_spg_config
+    arrow_inet_spg_inner_consistent
+    arrow_inet_spg_leaf_consistent
+    arrow_inet_spg_picksplit
     arrow_name_text
     arrow_nameeqtext
     arrow_namegetext
@@ -171,24 +86,42 @@ LLVM_BC(
     arrow_nameletext
     arrow_namelttext
     arrow_namenetext
+    arrow_pg_advisory_lock_int4
+    arrow_pg_advisory_lock_int8
+    arrow_pg_advisory_lock_shared_int4
+    arrow_pg_advisory_lock_shared_int8
+    arrow_pg_advisory_unlock_all
+    arrow_pg_advisory_unlock_int4
+    arrow_pg_advisory_unlock_int8
+    arrow_pg_advisory_unlock_shared_int4
+    arrow_pg_advisory_unlock_shared_int8
+    arrow_pg_advisory_xact_lock_int4
+    arrow_pg_advisory_xact_lock_int8
+    arrow_pg_advisory_xact_lock_shared_int4
+    arrow_pg_advisory_xact_lock_shared_int8
+    arrow_pg_blocking_pids
     arrow_pg_column_compression
     arrow_pg_column_size
     arrow_pg_event_trigger_table_rewrite_oid
     arrow_pg_event_trigger_table_rewrite_reason
-    arrow_pg_mcv_list_in
-    arrow_pg_mcv_list_out
-    arrow_pg_mcv_list_recv
-    arrow_pg_mcv_list_send
+    arrow_pg_isolation_test_session_is_blocked
     arrow_pg_notification_queue_usage
     arrow_pg_notify
-    arrow_pg_stat_get_wal_receiver
-    arrow_phraseto_tsquery
-    arrow_phraseto_tsquery_byid
-    arrow_plainto_tsquery
-    arrow_plainto_tsquery_byid
+    arrow_pg_safe_snapshot_blocking_pids
+    arrow_pg_try_advisory_lock_int4
+    arrow_pg_try_advisory_lock_int8
+    arrow_pg_try_advisory_lock_shared_int4
+    arrow_pg_try_advisory_lock_shared_int8
+    arrow_pg_try_advisory_xact_lock_int4
+    arrow_pg_try_advisory_xact_lock_int8
+    arrow_pg_try_advisory_xact_lock_shared_int4
+    arrow_pg_try_advisory_xact_lock_shared_int8
     arrow_replace_text
     arrow_split_part
+    arrow_string_agg_combine
+    arrow_string_agg_deserialize
     arrow_string_agg_finalfn
+    arrow_string_agg_serialize
     arrow_string_agg_transfn
     arrow_text_concat
     arrow_text_concat_ws
@@ -233,22 +166,6 @@ LLVM_BC(
     arrow_textsend
     arrow_to_hex32
     arrow_to_hex64
-    arrow_to_tsquery
-    arrow_to_tsquery_byid
-    arrow_to_tsvector
-    arrow_to_tsvector_byid
-    arrow_ts_headline
-    arrow_ts_headline_byid
-    arrow_ts_headline_byid_opt
-    arrow_ts_headline_json
-    arrow_ts_headline_json_byid
-    arrow_ts_headline_json_byid_opt
-    arrow_ts_headline_json_opt
-    arrow_ts_headline_jsonb
-    arrow_ts_headline_jsonb_byid
-    arrow_ts_headline_jsonb_byid_opt
-    arrow_ts_headline_jsonb_opt
-    arrow_ts_headline_opt
     arrow_unicode_is_normalized
     arrow_unicode_normalize_func
     arrow_unistr
@@ -256,6 +173,4 @@ LLVM_BC(
     arrow_unknownout
     arrow_unknownrecv
     arrow_unknownsend
-    arrow_websearch_to_tsquery
-    arrow_websearch_to_tsquery_byid
 )

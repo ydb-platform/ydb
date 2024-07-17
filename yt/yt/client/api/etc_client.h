@@ -23,6 +23,7 @@ struct TGetClusterMetaOptions
     bool PopulateMasterCacheNodeAddresses = false;
     bool PopulateTimestampProviderAddresses = false;
     bool PopulateFeatures = false;
+    bool PopulateUserDirectory = false;
 };
 
 struct TClusterMeta
@@ -30,6 +31,7 @@ struct TClusterMeta
     std::shared_ptr<NNodeTrackerClient::NProto::TNodeDirectory> NodeDirectory;
     std::shared_ptr<NHiveClient::NProto::TClusterDirectory> ClusterDirectory;
     std::shared_ptr<NChunkClient::NProto::TMediumDirectory> MediumDirectory;
+    std::shared_ptr<NObjectClient::NProto::TUserDirectory> UserDirectory;
     std::vector<TString> MasterCacheNodeAddresses;
     std::vector<TString> TimestampProviderAddresses;
     NYTree::IMapNodePtr Features;

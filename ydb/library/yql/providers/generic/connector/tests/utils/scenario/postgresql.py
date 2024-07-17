@@ -30,13 +30,13 @@ def prepare_table(
 ):
     # create database
     with client.get_cursor("postgres") as (conn, cur):
-        database_exists_stmt = database.exists()
+        database_exists_stmt = database.query_exists()
         debug_with_limit(LOGGER, database_exists_stmt)
         cur.execute(database_exists_stmt)
 
         # database doesn't exist
         if not cur.fetchone():
-            create_database_stmt = database.create()
+            create_database_stmt = database.query_create()
             LOGGER.debug(create_database_stmt)
             cur.execute(create_database_stmt)
 
@@ -94,7 +94,7 @@ def select_positive(
         test_name=test_name,
         client=client,
         database=test_case.database,
-        table_name=test_case.sql_table_name,
+        table_name=test_case.table_name,
         schema=test_case.schema,
         data_in=test_case.data_in,
     )
@@ -104,12 +104,12 @@ def select_positive(
     if test_case.select_where is not None:
         where_statement = "WHERE " + test_case.select_where.render(
             cluster_name=settings.postgresql.cluster_name,
-            table_name=test_case.qualified_table_name,
+            table_name=test_case.table_name,
         )
     yql_script = f"""
         {test_case.pragmas_sql_string}
         SELECT {test_case.select_what.yql_select_names}
-        FROM {settings.postgresql.cluster_name}.{test_case.qualified_table_name}
+        FROM {settings.postgresql.cluster_name}.{test_case.table_name}
         {where_statement}
     """
     result = runner.run(
@@ -139,7 +139,7 @@ def select_missing_database(
 
     yql_script = f"""
         SELECT *
-        FROM {settings.postgresql.cluster_name}.{test_case.qualified_table_name}
+        FROM {settings.postgresql.cluster_name}.{test_case.table_name}
     """
     result = runner.run(
         test_name=test_name,
@@ -159,13 +159,13 @@ def select_missing_table(
 ):
     # create database but don't create table
     with client.get_cursor("postgres") as (conn, cur):
-        database_exists_stmt = test_case.database.exists()
+        database_exists_stmt = test_case.database.query_exists()
         debug_with_limit(LOGGER, database_exists_stmt)
         cur.execute(database_exists_stmt)
 
         # database doesn't exist
         if not cur.fetchone():
-            create_database_stmt = test_case.database.create()
+            create_database_stmt = test_case.database.query_create()
             debug_with_limit(LOGGER, create_database_stmt)
             cur.execute(create_database_stmt)
 
@@ -175,7 +175,7 @@ def select_missing_table(
     # read data
     yql_script = f"""
         SELECT *
-        FROM {settings.postgresql.cluster_name}.{test_case.qualified_table_name}
+        FROM {settings.postgresql.cluster_name}.{test_case.table_name}
     """
     result = runner.run(
         test_name=test_name,
@@ -197,7 +197,7 @@ def select_pg_schema(
         test_name=test_name,
         client=client,
         database=test_case.database,
-        table_name=test_case.sql_table_name,
+        table_name=test_case.table_name,
         schema=test_case.schema,
         data_in=test_case.data_in,
         pg_schema=test_case.pg_schema,
@@ -206,7 +206,7 @@ def select_pg_schema(
     # read data
     yql_script = f"""
         SELECT {test_case.select_what.yql_select_names}
-        FROM {settings.postgresql.cluster_name}.{test_case.qualified_table_name}
+        FROM {settings.postgresql.cluster_name}.{test_case.table_name}
     """
     result = runner.run(
         test_name=test_name,

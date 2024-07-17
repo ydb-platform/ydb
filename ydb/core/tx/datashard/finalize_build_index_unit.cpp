@@ -46,7 +46,7 @@ public:
 
             const auto& userTables = DataShard.GetUserTables();
             Y_ABORT_UNLESS(userTables.contains(pathId.LocalPathId));
-            userTables.at(pathId.LocalPathId)->ForAsyncIndex(indexPathId, [&] (const auto&) {
+            userTables.at(pathId.LocalPathId)->ForAsyncIndex(indexPathId, [&](const auto&) {
                 RemoveSender.Reset(new TEvChangeExchange::TEvRemoveSender(indexPathId));
             });
 
@@ -66,9 +66,8 @@ public:
         ui64 txId = params.GetSnapshotTxId();
         Y_ABORT_UNLESS(step != 0);
 
-        if (DataShard.GetBuildIndexManager().Contains(params.GetBuildIndexId())) {
-            auto record = DataShard.GetBuildIndexManager().Get(params.GetBuildIndexId());
-            DataShard.CancelScan(tableInfo->LocalTid, record.ScanId);
+        if (const auto* record = DataShard.GetBuildIndexManager().Get(params.GetBuildIndexId())) {
+            DataShard.CancelScan(tableInfo->LocalTid, record->ScanId);
             DataShard.GetBuildIndexManager().Drop(params.GetBuildIndexId());
         }
 

@@ -779,20 +779,6 @@ void MakeErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYd
     NYql::IssuesToMessage(status.GetIssues(), &protoIssues);
 
     message.clear();
-    // find first deepest error
-    std::stable_sort(protoIssues.begin(), protoIssues.end(), [](const Ydb::Issue::IssueMessage& a, const Ydb::Issue::IssueMessage& b) -> bool {
-        return a.severity() < b.severity();
-    });
-
-    while (protoIssues.size() > 0 && protoIssues[0].issuesSize() > 0) {
-        protoIssues = protoIssues[0].issues();
-    }
-
-    if (protoIssues.size() > 0) {
-        const Ydb::Issue::IssueMessage& issue = protoIssues[0];
-        NProtobufJson::Proto2Json(issue, jsonResponse["error"]);
-        message = issue.message();
-    }
 
     NJson::TJsonValue& jsonIssues = jsonResponse["issues"];
     for (const auto& queryIssue : protoIssues) {
@@ -801,8 +787,25 @@ void MakeErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYd
     }
 
     TString textStatus = TStringBuilder() << status.GetStatus();
-
     jsonResponse["status"] = textStatus;
+
+    // find first deepest error
+    std::stable_sort(protoIssues.begin(), protoIssues.end(), [](const Ydb::Issue::IssueMessage& a, const Ydb::Issue::IssueMessage& b) -> bool {
+        return a.severity() < b.severity();
+    });
+
+    const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* protoIssuesPtr = &protoIssues;
+    while (protoIssuesPtr->size() > 0 && protoIssuesPtr->at(0).issuesSize() > 0) {
+        protoIssuesPtr = &protoIssuesPtr->at(0).issues();
+    }
+
+    if (protoIssuesPtr->size() > 0) {
+        const Ydb::Issue::IssueMessage& issue = protoIssuesPtr->at(0);
+        NProtobufJson::Proto2Json(issue, jsonResponse["error"]);
+        message = issue.message();
+    } else {
+        jsonResponse["error"]["message"] = textStatus;
+    }
 
     if (message.empty()) {
         message = textStatus;

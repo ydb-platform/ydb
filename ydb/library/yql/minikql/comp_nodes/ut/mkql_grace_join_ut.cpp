@@ -10,6 +10,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <stdlib.h>
+#include <random>
 
 #include <util/system/compiler.h>
 #include <util/stream/null.h>
@@ -36,9 +37,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinMemTest) {
     ui64 *buckets[NBuckets];
     ui64 tuplesPos[NBuckets];
 
+    std::mt19937_64 rng;
+    std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
+
     for (ui64 i = 0; i < TupleSize; i++)
     {
-        bigTuple[i] = std::rand() / (RAND_MAX / 10000);
+        bigTuple[i] = dist(rng);
     }
 
     ui64 bucket = 0;
@@ -90,10 +94,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinMemTest) {
 
     std::chrono::steady_clock::time_point begin02 = std::chrono::steady_clock::now();
 
+    std::uniform_int_distribution<ui64> bucketDist(0, NBuckets - 1);
     for (ui64 i = 0; i < NTuples; i++)
     {
         bucket = i % NBuckets;
-//        bucket = std::rand() / ( RAND_MAX / (NBuckets-1));
+//        bucket = bucketDist(rng);
         std::vector<ui64> &curr_vec = vec_buckets[bucket];
         curr_vec.insert(curr_vec.end(), bigTuple, bigTuple + TupleSize);
     }
@@ -112,7 +117,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinMemTest) {
     {
 
         bucket = i % NBuckets;
-//        bucket = std::rand() / ( RAND_MAX / (NBuckets-1));
+//        bucket = bucketDist(rng);
 
         ui64 * dst = buckets[bucket] + tuplesPos[bucket];
         std::memcpy(dst, bigTuple, TupleSize*sizeof(ui64));
@@ -136,7 +141,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinMemTest) {
 
     for (ui64 i = 0; i < NTuples; i++)
     {
-        bucket = std::rand() / ( RAND_MAX / (NBuckets-1));
+        bucket = bucketDist(rng);
 
         ui64 * dst = buckets[bucket] + tuplesPos[bucket];
 
@@ -184,6 +189,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinMemTest) {
 
 
 Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
+    constexpr ui64 BigTableTuples = 600000;
+    constexpr ui64 SmallTableTuples = 150000;
+    constexpr ui64 BigTupleSize = 40;
+
     Y_UNIT_TEST_LLVM(TestImp1) {
             TSetup<LLVM> setup;
             ui64 tuple[11] = {0,1,2,3,4,5,6,7,8,9,10};
@@ -208,33 +217,35 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
 
             ui64 bigTuple[TupleSize];
 
+            std::mt19937_64 rng; // deterministic PRNG
+
+            std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
+
             for (ui64 i = 0; i < TupleSize; i++) {
-                bigTuple[i] = std::rand() / ( RAND_MAX / 10000 );
+                bigTuple[i] = dist(rng);
             }
 
             ui64 milliseconds = 0;
 
 
 
-            const ui64 BigTableTuples = 600000;
-            const ui64 SmallTableTuples = 150000;
-            const ui64 BigTupleSize = 40;
+            std::uniform_int_distribution<ui64> smallDist(0, SmallTableTuples - 1);
 
             std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();
-
-
-            for ( ui64 i = 0; i < BigTableTuples; i++) {
-                tuple[1] = std::rand() % SmallTableTuples;
-                tuple[2] = tuple[1];
-                bigTable.AddTuple(tuple, strVals, strSizes);
-            }
 
             smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
 
             for ( ui64 i = 0; i < SmallTableTuples + 1; i++) {
-                tuple[1] = std::rand() % SmallTableTuples;
+                tuple[1] = smallDist(rng);
                 tuple[2] = tuple[1];
                 smallTable.AddTuple(tuple, strVals, strSizes);
+            }
+
+
+            for ( ui64 i = 0; i < BigTableTuples; i++) {
+                tuple[1] = smallDist(rng);
+                tuple[2] = tuple[1];
+                bigTable.AddTuple(tuple, strVals, strSizes);
             }
 
             std::chrono::steady_clock::time_point end03 = std::chrono::steady_clock::now();
@@ -252,19 +263,19 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
 
             begin03 = std::chrono::steady_clock::now();
 
-
-            for ( ui64 i = 0; i < BigTableTuples; i++) {
-                tuple[1] = std::rand() % SmallTableTuples;
-                tuple[2] = tuple[1];
-                bigTable.AddTuple(tuple, strVals, strSizes);
-            }
-
             smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
 
             for ( ui64 i = 0; i < SmallTableTuples + 1; i++) {
-                tuple[1] = std::rand() % SmallTableTuples;
+                tuple[1] = smallDist(rng);
                 tuple[2] = tuple[1];
                 smallTable.AddTuple(tuple, strVals, strSizes);
+            }
+
+
+            for ( ui64 i = 0; i < BigTableTuples; i++) {
+                tuple[1] = smallDist(rng);
+                tuple[2] = tuple[1];
+                bigTable.AddTuple(tuple, strVals, strSizes);
             }
 
             end03 = std::chrono::steady_clock::now();
@@ -354,6 +365,189 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
 
 
     }
+
+    Y_UNIT_TEST_LLVM(TestImp1Batch) {
+            TSetup<LLVM> setup;
+            ui64 tuple[11] = {0,1,2,3,4,5,6,7,8,9,10};
+            ui32 strSizes[2] = {4, 4};
+            char * strVals[] = {(char *)"aaaaa", (char *)"bbbb"};
+
+            char * bigStrVal[] = {(char *)"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                 (char *)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
+            ui32 bigStrSize[2] = {151, 151};
+
+
+            NMemInfo::TMemInfo mi = NMemInfo::GetMemInfo();
+            CTEST << "Mem usage before tables tuples added (MB): " << mi.RSS / (1024 * 1024) << Endl;
+
+            GraceJoin::TTable bigTable(1,1,1,1);
+            GraceJoin::TTable smallTable(1,1,1,1);
+            GraceJoin::TTable joinTable(1,1,1,1);
+
+            std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+
+            const ui64 TupleSize = 1024;
+
+            ui64 bigTuple[TupleSize];
+
+            std::mt19937_64 rng; // deterministic PRNG
+
+            std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
+
+            for (ui64 i = 0; i < TupleSize; i++) {
+                bigTuple[i] = dist(rng);
+            }
+
+            ui64 millisecondsAdd = 0;
+            ui64 millisecondsJoin = 0;
+            ui64 millisecondsNextJoinTuple = 0;
+            ui64 millisecondsNextTuple = 0;
+
+
+
+            const ui64 BatchTuples = 100000;
+
+            std::uniform_int_distribution<ui64> smallDist(0, SmallTableTuples - 1);
+
+            {
+                std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();
+
+                smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
+
+                for ( ui64 i = 0; i < SmallTableTuples + 1; i++) {
+                    tuple[1] = smallDist(rng);
+                    tuple[2] = tuple[1];
+                    smallTable.AddTuple(tuple, strVals, strSizes);
+                }
+
+                std::chrono::steady_clock::time_point end03 = std::chrono::steady_clock::now();
+                millisecondsAdd += std::chrono::duration_cast<std::chrono::milliseconds>(end03 - begin03).count();
+            }
+
+
+            for ( ui64 pos = 0; pos < BigTableTuples; ) {
+                std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();
+                ui64 limit = std::min(pos + BatchTuples, BigTableTuples);
+                for (; pos < limit; ++pos) {
+                    tuple[1] = smallDist(rng);
+                    tuple[2] = tuple[1];
+                    bigTable.AddTuple(tuple, strVals, strSizes);
+                }
+                bigTable.Clear();
+                std::chrono::steady_clock::time_point end03 = std::chrono::steady_clock::now();
+                millisecondsAdd += std::chrono::duration_cast<std::chrono::milliseconds>(end03 - begin03).count();
+            }
+
+            CTEST << "Time for hash = " << millisecondsAdd << "[ms]" << Endl;
+            CTEST << "Adding tuples speed: " << (BigTupleSize * (BigTableTuples + SmallTableTuples) * 1000) / ( millisecondsAdd * 1024 * 1024) << "MB/sec" << Endl;
+            CTEST << Endl;
+
+            mi = NMemInfo::GetMemInfo();
+            CTEST << "Mem usage after tables tuples added (MB): " << mi.RSS / (1024 * 1024) << Endl;
+            millisecondsAdd = 0;
+
+            smallTable.Clear();
+
+            {
+                auto begin03 = std::chrono::steady_clock::now();
+
+                smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
+
+                for ( ui64 i = 0; i < SmallTableTuples + 1; i++) {
+                    tuple[1] = smallDist(rng);
+                    tuple[2] = tuple[1];
+                    smallTable.AddTuple(tuple, strVals, strSizes);
+                }
+
+                auto end03 = std::chrono::steady_clock::now();
+                millisecondsAdd += std::chrono::duration_cast<std::chrono::milliseconds>(end03 - begin03).count();
+
+            }
+            std::vector<ui64> vals1, vals2;
+            std::vector<char *> strVals1, strVals2;
+            std::vector<ui32> strSizes1, strSizes2;
+            GraceJoin::TupleData td1, td2;
+            vals1.resize(100);
+            vals2.resize(100);
+            strVals1.resize(100);
+            strVals2.resize(100);
+            strSizes1.resize(100);
+            strSizes2.resize(100);
+            td1.IntColumns = vals1.data();
+            td1.StrColumns = strVals1.data();
+            td1.StrSizes = strSizes1.data();
+            td2.IntColumns = vals2.data();
+            td2.StrColumns = strVals2.data();
+            td2.StrSizes = strSizes2.data();
+
+            ui64 numJoinedTuples = 0;
+            ui64 numBigTuples = 0;
+
+            for ( ui64 pos = 0; pos < BigTableTuples; ) {
+                std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();
+                bigTable.Clear();
+                ui64 limit = std::min(pos + BatchTuples, BigTableTuples);
+                for (; pos < limit; ++pos) {
+                    tuple[1] = smallDist(rng);
+                    tuple[2] = tuple[1];
+                    bigTable.AddTuple(tuple, strVals, strSizes);
+                }
+                auto end03 = std::chrono::steady_clock::now();
+                millisecondsAdd += std::chrono::duration_cast<std::chrono::milliseconds>(end03 - begin03).count();
+
+                bigTable.ResetIterator();
+
+                std::chrono::steady_clock::time_point begin04 = std::chrono::steady_clock::now();
+
+                while(bigTable.NextTuple(td1)) { numBigTuples++; }
+                std::chrono::steady_clock::time_point end04 = std::chrono::steady_clock::now();
+
+                millisecondsNextTuple += std::chrono::duration_cast<std::chrono::milliseconds>(end04 - begin04).count();
+
+
+                std::chrono::steady_clock::time_point begin05 = std::chrono::steady_clock::now();
+
+                joinTable.Join(smallTable, bigTable, EJoinKind::Inner, false, pos < BigTableTuples);
+
+                std::chrono::steady_clock::time_point end05 = std::chrono::steady_clock::now();
+                millisecondsJoin += std::chrono::duration_cast<std::chrono::milliseconds>(end05 - begin05).count();
+
+
+                joinTable.ResetIterator();
+
+
+                std::chrono::steady_clock::time_point begin042 = std::chrono::steady_clock::now();
+                while(joinTable.NextJoinedData(td1, td2)) { numJoinedTuples++; }
+
+                std::chrono::steady_clock::time_point end042 = std::chrono::steady_clock::now();
+                millisecondsNextJoinTuple += std::chrono::duration_cast<std::chrono::milliseconds>(end042 - begin042).count();
+            }
+            std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+
+            CTEST << "Num of big tuples 1: " << numBigTuples << Endl;
+
+            CTEST << "Time for get 1 = " << millisecondsNextTuple << "[ms]" << Endl;
+            CTEST << Endl;
+            CTEST << "Time for join = " << millisecondsJoin << "[ms]" << Endl;
+            CTEST << Endl;
+            CTEST << "Time for get joined tuples: = " << millisecondsNextJoinTuple << "[ms]" << Endl;
+            CTEST << Endl;
+
+            mi = NMemInfo::GetMemInfo();
+            CTEST << "Mem usage after tables add and join (MB): " << mi.RSS / (1024 * 1024) << Endl;
+            CTEST << "Time for hash = " << millisecondsAdd << "[ms]" << Endl;
+            CTEST << "Adding tuples speed: " << (BigTupleSize * (BigTableTuples + SmallTableTuples) * 1000) / ( millisecondsAdd * 1024 * 1024) << "MB/sec" << Endl;
+            CTEST << Endl;
+
+            CTEST << "Num of joined tuples : " << numJoinedTuples << Endl;
+
+
+
+            CTEST << "Time difference = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]" << Endl;
+            CTEST << Endl;
+
+
+    }
 }
 
 Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinAnyTest) {
@@ -373,6 +567,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinAnyTest) {
             GraceJoin::TTable smallTable(1,1,1,1,0,0,1, nullptr, true);
             GraceJoin::TTable joinTable (1,1,1,1,0,0,1, nullptr, true);
 
+            std::mt19937_64 rng;
+            std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
+
             std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
             const ui64 TupleSize = 1024;
@@ -380,7 +577,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinAnyTest) {
             ui64 bigTuple[TupleSize];
 
             for (ui64 i = 0; i < TupleSize; i++) {
-                bigTuple[i] = std::rand() / ( RAND_MAX / 10000 );
+                bigTuple[i] = dist(rng);
             }
 
             ui64 milliseconds = 0;
@@ -391,14 +588,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinAnyTest) {
             const ui64 SmallTableTuples = 150000;
             const ui64 BigTupleSize = 40;
 
+            std::uniform_int_distribution<ui64> smallDist(0, SmallTableTuples - 1);
+
             std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();
 
-
-            for ( ui64 i = 0; i < BigTableTuples; i++) {
-                tuple[1] = i % SmallTableTuples;
-                tuple[2] = tuple[1];
-                bigTable.AddTuple(tuple, strVals, strSizes);
-            }
 
             smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
 
@@ -406,6 +599,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinAnyTest) {
                 tuple[1] = i;
                 tuple[2] = tuple[1];
                 smallTable.AddTuple(tuple, strVals, strSizes);
+            }
+
+            for ( ui64 i = 0; i < BigTableTuples; i++) {
+                tuple[1] = i % SmallTableTuples;
+                tuple[2] = tuple[1];
+                bigTable.AddTuple(tuple, strVals, strSizes);
             }
 
             std::chrono::steady_clock::time_point end03 = std::chrono::steady_clock::now();
@@ -512,8 +711,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceSelfJoinTest) {
 
             ui64 bigTuple[TupleSize];
 
+            std::mt19937_64 rng;
+            std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
+
             for (ui64 i = 0; i < TupleSize; i++) {
-                bigTuple[i] = std::rand() / ( RAND_MAX / 10000 );
+                bigTuple[i] = dist(rng);
             }
 
             ui64 milliseconds = 0;
@@ -527,18 +729,18 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceSelfJoinTest) {
             std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();
 
 
-            for ( ui64 i = 0; i < BigTableTuples; i++) {
-                tuple[1] = i % SmallTableTuples;
-                tuple[2] = tuple[1];
-                bigTable.AddTuple(tuple, strVals, strSizes);
-            }
-
             smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
 
             for ( ui64 i = 0; i < SmallTableTuples + 1; i++) {
                 tuple[1] = i;
                 tuple[2] = tuple[1];
                 smallTable.AddTuple(tuple, strVals, strSizes);
+            }
+
+            for ( ui64 i = 0; i < BigTableTuples; i++) {
+                tuple[1] = i % SmallTableTuples;
+                tuple[2] = tuple[1];
+                bigTable.AddTuple(tuple, strVals, strSizes);
             }
 
             std::chrono::steady_clock::time_point end03 = std::chrono::steady_clock::now();

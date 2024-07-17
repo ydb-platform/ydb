@@ -3,7 +3,7 @@
  * pg_subscription_rel_d.h
  *    Macro definitions for pg_subscription_rel
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -19,6 +19,7 @@
 #define PG_SUBSCRIPTION_REL_D_H
 
 #define SubscriptionRelRelationId 6102
+#define SubscriptionRelSrrelidSrsubidIndexId 6117
 
 #define Anum_pg_subscription_rel_srsubid 1
 #define Anum_pg_subscription_rel_srrelid 2

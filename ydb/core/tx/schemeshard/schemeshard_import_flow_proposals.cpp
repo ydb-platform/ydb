@@ -53,7 +53,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
                 const auto& fromSequence = column.from_sequence();
 
                 auto* seqDesc = indexedTable->MutableSequenceDescription()->Add();
-                FillSequenceDescription(*seqDesc, fromSequence, status, error);
+                if (!FillSequenceDescription(*seqDesc, fromSequence, status, error)) {
+                    return nullptr;
+                }
 
                 break;
             }

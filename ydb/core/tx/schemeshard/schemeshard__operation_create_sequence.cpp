@@ -247,29 +247,77 @@ public:
 };
 
 // fill sequence description with default values
-NKikimrSchemeOp::TSequenceDescription FillSequenceDescription(const NKikimrSchemeOp::TSequenceDescription& descr) {
-    NKikimrSchemeOp::TSequenceDescription result = descr;
+std::optional<NKikimrSchemeOp::TSequenceDescription> FillSequenceDescription(const NKikimrSchemeOp::TSequenceDescription& sequence,
+        const NScheme::TTypeRegistry& typeRegistry, bool pgTypesEnabled,
+        TString& errStr) {
+    NKikimrSchemeOp::TSequenceDescription result = sequence;
 
-    if (!result.HasDataType()) {
-        result.SetDataType(NKikimrSchemeOp::TSequenceDescription::BIGINT);
+    TString dataType;
+    if (!sequence.HasDataType()) {
+        errStr = Sprintf("Type is not specified for sequence '%s'", sequence.GetName().data());
+        return std::nullopt;
     }
 
     i64 dataTypeMaxValue, dataTypeMinValue;
-    switch (result.GetDataType()) {
-        case NKikimrSchemeOp::TSequenceDescription::BIGINT: {
-            dataTypeMaxValue = Max<i64>();
-            dataTypeMinValue = Min<i64>();
-            break;
+    auto typeName = NMiniKQL::AdaptLegacyYqlType(dataType);
+    const NScheme::IType* type = typeRegistry.GetType(typeName);
+    if (type) {
+        if (!NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
+            errStr = Sprintf("Type '%s' specified for sequence '%s' is no longer supported", dataType.data(), sequence.GetName().data());
+            return std::nullopt;
         }
-        case NKikimrSchemeOp::TSequenceDescription::INTEGER: {
-            dataTypeMaxValue = Max<i32>();
-            dataTypeMinValue = Min<i32>();
-            break;
+
+        switch (type->GetTypeId()) {
+            case NScheme::NTypeIds::Int16: {
+                dataTypeMaxValue = Max<i16>();
+                dataTypeMinValue = Min<i16>();
+                break;
+            }
+            case NScheme::NTypeIds::Int32: {
+                dataTypeMaxValue = Max<i32>();
+                dataTypeMinValue = Min<i32>();
+                break;
+            }
+            case NScheme::NTypeIds::Int64: {
+                dataTypeMaxValue = Max<i64>();
+                dataTypeMinValue = Min<i64>();
+                break;
+            }
+            default: {
+                errStr = Sprintf("Type '%s' specified for sequence '%s' is not supported", dataType.data(), sequence.GetName().data());
+                return std::nullopt;
+            }
+        }                    
+    } else {
+        auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+        if (!typeDesc) {
+            errStr = Sprintf("Type '%s' specified for sequence '%s' is not supported", dataType.data(), sequence.GetName().data());
+            return std::nullopt;
         }
-        case NKikimrSchemeOp::TSequenceDescription::SMALLINT: {
-            dataTypeMaxValue = Max<i16>();
-            dataTypeMinValue = Min<i16>();
-            break;
+        if (!pgTypesEnabled) {
+            errStr = Sprintf("Type '%s' specified for sequence '%s', but support for pg types is disabled (EnableTablePgTypes feature flag is off)", dataType.data(), sequence.GetName().data());
+            return std::nullopt;
+        }
+        switch (NPg::PgTypeIdFromTypeDesc(typeDesc)) {
+            case INT2OID: {
+                dataTypeMaxValue = Max<i16>();
+                dataTypeMinValue = Min<i16>();
+                break;
+            }
+            case INT4OID: {
+                dataTypeMaxValue = Max<i32>();
+                dataTypeMinValue = Min<i32>();
+                break;
+            }
+            case INT8OID: {
+                dataTypeMaxValue = Max<i64>();
+                dataTypeMinValue = Min<i64>();
+                break;
+            }
+            default: {
+                errStr = Sprintf("Type '%s' specified for sequence '%s' is not supported", dataType.data(), sequence.GetName().data());
+                return std::nullopt;
+            }
         }
     }
 
@@ -511,7 +559,15 @@ public:
 
         TSequenceInfo::TPtr sequenceInfo = new TSequenceInfo(0);
         TSequenceInfo::TPtr alterData = sequenceInfo->CreateNextVersion();
-        alterData->Description = FillSequenceDescription(descr);
+        const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
+        auto description = FillSequenceDescription(
+            descr, *typeRegistry, context.SS->EnableTablePgTypes, errStr);
+        if (!description) {
+            status = NKikimrScheme::StatusInvalidParameter;
+            result->SetError(status, errStr);
+            return result;
+        }
+        alterData->Description = *description;
 
         if (shardsToCreate) {
             sequenceShard = context.SS->RegisterShardInfo(

@@ -1495,11 +1495,11 @@ public:
             }
             if (settings.SequenceSettings.DataType) {
                 if (settings.SequenceSettings.DataType == "int8") {
-                    seqDesc->SetDataType(NKikimrSchemeOp::TSequenceDescription::BIGINT);
+                    seqDesc->SetDataType("pgint8");
                 } else if (settings.SequenceSettings.DataType == "int4") {
-                    seqDesc->SetDataType(NKikimrSchemeOp::TSequenceDescription::INTEGER);
+                    seqDesc->SetDataType("pgint4");
                 } else if (settings.SequenceSettings.DataType == "int2") {
-                    seqDesc->SetDataType(NKikimrSchemeOp::TSequenceDescription::SMALLINT);
+                    seqDesc->SetDataType("pgint2");
                 }
             }
 
@@ -1624,11 +1624,11 @@ public:
             }
             if (settings.SequenceSettings.DataType) {
                 if (settings.SequenceSettings.DataType == "int8") {
-                    seqDesc->SetDataType(NKikimrSchemeOp::TSequenceDescription::BIGINT);
+                    seqDesc->SetDataType("pgint8");
                 } else if (settings.SequenceSettings.DataType == "int4") {
-                    seqDesc->SetDataType(NKikimrSchemeOp::TSequenceDescription::INTEGER);
+                    seqDesc->SetDataType("pgint4");
                 } else if (settings.SequenceSettings.DataType == "int2") {
-                    seqDesc->SetDataType(NKikimrSchemeOp::TSequenceDescription::SMALLINT);
+                    seqDesc->SetDataType("pgint2");
                 }
             }
 

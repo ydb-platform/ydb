@@ -43,10 +43,6 @@ namespace NSequenceShard {
                 using Type = ESequenceState;
                 static constexpr ESequenceState Default = ESequenceState::Active;
             };
-            struct DataType : Column<11, NScheme::NTypeIds::Uint8> {
-                using Type = ESequenceState;
-                static constexpr ESequenceState Default = ESequenceState::Active;
-            };
             struct MovedTo : Column<12, NScheme::NTypeIds::Uint64> {};
 
             using TKey = TableKey<OwnerId, LocalId>;

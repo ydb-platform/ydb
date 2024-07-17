@@ -397,8 +397,6 @@ constexpr Datum FixedToDatum(T v) {
         return Float4GetDatum(v);
     } else if constexpr (std::is_same_v<T, double>) {
         return Float8GetDatum(v);
-    } else {
-        static_assert(false, "Can't convert that type to Datum :(");
     }
 }
 

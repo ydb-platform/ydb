@@ -465,9 +465,7 @@ message TRequestedMaxIndex {
 }
 
 message TRequestedCountMinSketch {
-    optional uint32 Width = 1 [default = 256];
-    optional uint32 Depth = 2 [default = 8];
-    repeated string ColumnNames = 3;
+    repeated string ColumnNames = 1;
 }
 
 message TOlapIndexRequested {
@@ -494,9 +492,7 @@ message TMaxIndex {
 }
 
 message TCountMinSketch {
-    optional uint32 Width = 1 [default = 256];
-    optional uint32 Depth = 2 [default = 8];
-    repeated uint32 ColumnIds = 3;
+    repeated uint32 ColumnIds = 1;
 }
 
 message TOlapIndexDescription {

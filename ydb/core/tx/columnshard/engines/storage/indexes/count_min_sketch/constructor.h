@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/constructor.h>
 
-namespace NKikimr::NOlap::NIndexes {
+namespace NKikimr::NOlap::NIndexes::NCountMinSketch {
 
 class TCountMinSketchConstructor: public IIndexMetaConstructor {
 public:
@@ -10,8 +10,6 @@ public:
     }
 private:
     std::set<TString> ColumnNames;
-    ui32 Width = 256;
-    ui32 Depth = 8;
     static inline auto Registrator = TFactory::TRegistrator<TCountMinSketchConstructor>(GetClassNameStatic());
 
 protected:

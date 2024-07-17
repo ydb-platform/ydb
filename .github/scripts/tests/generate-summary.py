@@ -296,7 +296,7 @@ def gen_summary(summary_url_prefix, summary_out_folder, paths):
     return summary
 
 
-def get_comment_text(pr: PullRequest, summary: TestSummary, test_history_url: str, test_log_file_url: str):
+def get_comment_text(pr: PullRequest, summary: TestSummary, summary_links: str):
     if summary.is_empty:
         return [
             f"Test run completed, no test results found for commit {pr.head.sha}. "
@@ -309,13 +309,12 @@ def get_comment_text(pr: PullRequest, summary: TestSummary, test_history_url: st
     body = [
         result
     ]
-    links = []
 
-    if test_history_url:
-        links.append(f"[Test history]({test_history_url})")
-
-    if test_log_file_url:
-        links.append(f"[Test log]({test_log_file_url})")
+    with open(summary_links) as f:
+        links = f.readlines()
+    
+    links.sort()
+    links = [line.split(" ", 1)[1] for line in link_lines]
 
     if links:
         body.append("")
@@ -330,8 +329,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--summary_out_path", required=True)
     parser.add_argument("--summary_url_prefix", required=True)
-    parser.add_argument('--test_history_url', required=False)
-    parser.add_argument('--test_log_url', required=False)
+    parser.add_argument("--summary_links", required=True)
     parser.add_argument('--build_preset', default="default-linux-x86-64-relwithdebinfo", required=False)
     parser.add_argument('--status_report_file', required=False)
     parser.add_argument("args", nargs="+", metavar="TITLE html_out path")
@@ -362,7 +360,7 @@ def main():
             event = json.load(fp)
 
         pr = gh.create_from_raw_data(PullRequest, event["pull_request"])
-        text = get_comment_text(pr, summary, args.test_history_url, args.test_log_url)
+        text = get_comment_text(pr, summary, args.summary_links)
 
         update_pr_comment_text(pr, args.build_preset, run_number, color, text='\n'.join(text), rewrite=False)
 

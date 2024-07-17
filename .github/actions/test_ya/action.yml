@@ -98,14 +98,6 @@ runs:
         echo "TESTMO_URL=${{ inputs.testman_url }}" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
-        
-        echo "YA_TEST_LOG=$PUBLIC_DIR/ya_log.log" >> $GITHUB_ENV
-        echo "YA_TEST_LOG_URL=$PUBLIC_DIR_URL/ya_log.log" >> $GITHUB_ENV
-
-
-        echo YA_MAKE_OUTPUT="$PUBLIC_DIR/ya_make_output.log" >>  $GITHUB_ENV
-        export YA_MAKE_OUTPUT_URL="$PUBLIC_DIR_URL/ya_make_output.log"
-        echo "YA_MAKE_OUTPUT_URL=$YA_MAKE_OUTPUT_URL" >> $GITHUB_ENV
 
         # install test mo
         npm install -g @testmo/testmo-cli
@@ -260,19 +252,21 @@ runs:
 
         echo "::debug::get version"
         ./ya --version
-        
+
+        YA_MAKE_OUTPUT="$PUBLIC_DIR/ya_make_output.log"
+        YA_MAKE_OUTPUT_URL="$PUBLIC_DIR_URL/ya_make_output.log"
+        echo "10 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
+
         echo "Build+Tests **{platform_name}-${BUILD_PRESET}** is running..." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
         set +ex
         (./ya make ${{ inputs.build_target }} "${params[@]}" \
-          --stat --log-file "$YA_TEST_LOG" -DCONSISTENT_DEBUG \
+          --stat --log-file "$PUBLIC_DIR/ya_log.log" -DCONSISTENT_DEBUG \
           --no-dir-outputs --test-failure-code 0 --build-all \
           --cache-size 2TB --force-build-depends --evlog-file "$PUBLIC_DIR/ya_evlog.jsonl" \
           --junit "$JUNIT_REPORT_XML" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& tee $YA_MAKE_OUTPUT
         set -e
         RC=`cat exit_code`
 
-        echo "10 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
-        echo "20 [Ya logs]($YA_TEST_LOG_URL)" >> $SUMMARY_LINKS
 
         if [ $RC -ne 0 ]; then
           echo "ya make returned $RC, build failed"
@@ -406,8 +400,7 @@ runs:
         .github/scripts/tests/generate-summary.py \
           --summary_out_path $ARTIFACTS_DIR/summary/ \
           --summary_url_prefix $ARTIFACTS_DIR_URL/summary/ \
-          --test_history_url "$TEST_HISTORY_URL" \
-          --test_log_url="$YA_TEST_LOG_URL" \
+          --summary_links "$SUMMARY_LINKS" \
           --build_preset "$BUILD_PRESET" \
           --status_report_file statusrep.txt \
           "Tests" ya-test.html "$JUNIT_REPORT_XML"

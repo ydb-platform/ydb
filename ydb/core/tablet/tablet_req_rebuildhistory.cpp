@@ -459,14 +459,14 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
 
     void ApplyDiscoveryRange(TEvBlobStorage::TEvRangeResult *msg) {
         if (IntrospectionTrace) {
-            IntrospectionTrace->Attach(MakeHolder<NTracing::TOnApplyDiscoveryRange>(msg->GroupId.GetRawId(), msg->From, msg->To));
+            IntrospectionTrace->Attach(MakeHolder<NTracing::TOnApplyDiscoveryRange>(msg->GroupId, msg->From, msg->To));
         }
         Y_ABORT_UNLESS(RangesToDiscover.erase(msg->To));
         for (TVector<TEvBlobStorage::TEvRangeResult::TResponse>::iterator it = msg->Responses.begin(), end = msg->Responses.end(); it != end; ++it) {
             const TLogoBlobID &id = it->Id;
 
-            GroupReadBytes[std::make_pair(id.Channel(), msg->GroupId.GetRawId())] += it->Buffer.size();
-            GroupReadOps[std::make_pair(id.Channel(), msg->GroupId.GetRawId())] += 1;
+            GroupReadBytes[std::make_pair(id.Channel(), msg->GroupId)] += it->Buffer.size();
+            GroupReadOps[std::make_pair(id.Channel(), msg->GroupId)] += 1;
 
             NKikimrTabletBase::TTabletLogEntry logEntry;
             if (!logEntry.ParseFromString(it->Buffer)) {
@@ -589,8 +589,8 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             switch (response.Status) {
             case NKikimrProto::OK:
                 Y_ABORT_UNLESS(1 == RefsToCheck.erase(response.Id));
-                GroupReadBytes[std::make_pair(response.Id.Channel(), msg->GroupId.GetRawId())] += response.Buffer.size();
-                GroupReadOps[std::make_pair(response.Id.Channel(), msg->GroupId.GetRawId())] += 1;
+                GroupReadBytes[std::make_pair(response.Id.Channel(), msg->GroupId)] += response.Buffer.size();
+                GroupReadOps[std::make_pair(response.Id.Channel(), msg->GroupId)] += 1;
                 break;
             case NKikimrProto::NODATA:
                 BLOG_W("TTabletReqRebuildHistoryGraph::CheckReferences - NODATA for blob " << response.Id, "TRRH07");

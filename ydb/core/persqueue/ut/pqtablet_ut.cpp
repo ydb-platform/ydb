@@ -47,7 +47,7 @@ struct TProposeTransactionParams {
     TVector<ui64> Receivers;
     TVector<TTxOperation> TxOps;
     TMaybe<TConfigParams> Configs;
-    TMaybe<ui64> WriteId;
+    TMaybe<TWriteId> WriteId;
 };
 
 struct TPlanStepParams {
@@ -74,7 +74,7 @@ struct TCancelTransactionProposalParams {
 struct TGetOwnershipRequestParams {
     TMaybe<ui32> Partition;
     TMaybe<ui64> MsgNo;
-    TMaybe<ui64> WriteId;
+    TMaybe<TWriteId> WriteId;
     TMaybe<bool> NeedSupportivePartition;
     TMaybe<TString> Owner; // o
     TMaybe<ui64> Cookie;
@@ -85,7 +85,7 @@ struct TWriteRequestParams {
     TMaybe<ui32> Partition;
     TMaybe<TString> Owner;
     TMaybe<ui64> MsgNo;
-    TMaybe<ui64> WriteId;
+    TMaybe<TWriteId> WriteId;
     TMaybe<TString> SourceId; // w
     TMaybe<ui64> SeqNo;       // w
     TMaybe<TString> Data;     // w
@@ -327,7 +327,7 @@ void TPQTabletFixture::SendProposeTransactionRequest(const TProposeTransactionPa
             body->AddReceivingShards(tabletId);
         }
         if (params.WriteId) {
-            body->SetWriteId(*params.WriteId);
+            SetWriteId(*body, *params.WriteId);
         }
         body->SetImmediate(params.Senders.empty() && params.Receivers.empty() && (partitions.size() == 1) && !params.WriteId.Defined());
     }
@@ -557,7 +557,7 @@ std::unique_ptr<TEvPersQueue::TEvRequest> TPQTabletFixture::MakeGetOwnershipRequ
         request->SetMessageNo(*params.MsgNo);
     }
     if (params.WriteId.Defined()) {
-        request->SetWriteId(*params.WriteId);
+        SetWriteId(*request, *params.WriteId);
     }
     if (params.NeedSupportivePartition.Defined()) {
         request->SetNeedSupportivePartition(*params.NeedSupportivePartition);
@@ -642,7 +642,7 @@ void TPQTabletFixture::SendWriteRequest(const TWriteRequestParams& params)
         request->SetMessageNo(*params.MsgNo);
     }
     if (params.WriteId.Defined()) {
-        request->SetWriteId(*params.WriteId);
+        SetWriteId(*request, *params.WriteId);
     }
     if (params.Cookie.Defined()) {
         request->SetCookie(*params.Cookie);
@@ -797,8 +797,8 @@ Y_UNIT_TEST_F(Multiple_PQTablets, TPQTabletFixture)
     WaitProposeTransactionResponse({.TxId=txId_2,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
 
-    WaitReadSetAck(*tablet, {.Step=100, .TxId=txId_2, .Source=22222, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
     tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId_2, .Source=Ctx->TabletId});
+    WaitReadSetAck(*tablet, {.Step=100, .TxId=txId_2, .Source=22222, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
 
     //
     // TODO(abcdef): проверить, что удалена информация о транзакции
@@ -872,8 +872,8 @@ Y_UNIT_TEST_F(PQTablet_Send_RS_With_Abort, TPQTabletFixture)
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
 
-    WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=22222, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
     tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
+    WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=22222, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
 
     //
     // TODO(abcdef): проверить, что удалена информация о транзакции
@@ -911,8 +911,8 @@ Y_UNIT_TEST_F(Partition_Send_Predicate_With_False, TPQTabletFixture)
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
 
-    WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=22222, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
     tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
+    WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=22222, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
 
     //
     // TODO(abcdef): проверить, что удалена информация о транзакции
@@ -1253,7 +1253,7 @@ Y_UNIT_TEST_F(ProposeTx_Unknown_WriteId, TPQTabletFixture)
     PQTabletPrepare({.partitions=1}, {}, *Ctx);
 
     const ui64 txId = 2;
-    const ui64 writeId = 3;
+    const TWriteId writeId(0, 3);
 
     SendProposeTransactionRequest({.TxId=txId,
                                   .TxOps={{.Partition=0, .Path="/topic"}},
@@ -1267,7 +1267,7 @@ Y_UNIT_TEST_F(ProposeTx_Unknown_Partition_2, TPQTabletFixture)
     PQTabletPrepare({.partitions=2}, {}, *Ctx);
 
     const ui64 txId = 2;
-    const ui64 writeId = 3;
+    const TWriteId writeId(0, 3);
     const ui64 cookie = 4;
 
     SendGetOwnershipRequest({.Partition=0,
@@ -1289,7 +1289,7 @@ Y_UNIT_TEST_F(ProposeTx_Command_After_Propose, TPQTabletFixture)
 
     const ui32 partitionId = 0;
     const ui64 txId = 2;
-    const ui64 writeId = 3;
+    const TWriteId writeId(0, 3);
 
     SyncGetOwnership({.Partition=partitionId,
                      .WriteId=writeId,

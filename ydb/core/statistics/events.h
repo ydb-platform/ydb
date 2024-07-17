@@ -3,7 +3,7 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/protos/statistics.pb.h>
-#include <ydb/core/util/count_min_sketch.h>
+#include <ydb/library/minsketch/count_min_sketch.h>
 #include <ydb/library/actors/core/events.h>
 
 namespace NKikimr {
@@ -75,6 +75,9 @@ struct TEvStatistics {
         EvGetScanStatus,
         EvGetScanStatusResponse,
 
+        EvStatisticsRequest,
+        EvStatisticsResponse,
+
         EvEnd
     };
 
@@ -87,7 +90,7 @@ struct TEvStatistics {
         bool Success = true;
         std::vector<TResponse> StatResponses;
     };
-    
+
     struct TEvConfigureAggregator : public TEventPB<
         TEvConfigureAggregator,
         NKikimrStat::TEvConfigureAggregator,
@@ -202,6 +205,17 @@ struct TEvStatistics {
         EvGetScanStatusResponse>
     {};
 
+    struct TEvStatisticsRequest : public TEventPB<
+        TEvStatisticsRequest,
+        NKikimrStat::TEvStatisticsRequest,
+        EvStatisticsRequest>
+    {};
+
+    struct TEvStatisticsResponse : public TEventPB<
+        TEvStatisticsResponse,
+        NKikimrStat::TEvStatisticsResponse,
+        EvStatisticsResponse>
+    {};
 };
 
 } // NStat

@@ -2749,7 +2749,9 @@ namespace NTypeAnnImpl {
                 if (!(*dataTypeOne == *dataTypeTwo)) {
                     ctx.Expr.AddError(TIssue(
                         ctx.Expr.GetPosition(input->Pos()),
-                        TStringBuilder() << "Cannot calculate with different decimals."
+                        TStringBuilder() << "Cannot calculate with different decimals: " 
+                            << static_cast<const TTypeAnnotationNode&>(*dataType[0]) << " != " 
+                            << static_cast<const TTypeAnnotationNode&>(*dataType[1])
                     ));
 
                     return IGraphTransformer::TStatus::Error;
@@ -7581,7 +7583,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
 
             auto udfInfo = ctx.Types.UdfModules.FindPtr(moduleName);
-            TStringBuf fileAlias = udfInfo ? udfInfo->FileAlias : "";
+            TStringBuf fileAlias = udfInfo ? udfInfo->FileAlias : ""_sb;
             auto ret = ctx.Expr.Builder(input->Pos())
                 .Callable("Udf")
                     .Add(0, input->HeadPtr())

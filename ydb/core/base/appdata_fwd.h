@@ -234,11 +234,7 @@ struct TAppData {
     bool EnableIntrospection = true;
 
     // Used to allow column families for testing
-    bool AllowColumnFamiliesForTest = false;
     bool AllowPrivateTableDescribeForTest = false;
-
-    // Used to allow immediate ReadTable in tests
-    bool AllowReadTableImmediate = false;
 
     // Used to disable object deletion in schemeshard for cleanup tests
     bool DisableSchemeShardCleanupOnDropForTest = false;

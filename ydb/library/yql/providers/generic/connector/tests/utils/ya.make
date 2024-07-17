@@ -13,6 +13,11 @@ PY_SRCS(
     sql.py
 )
 
+IF (AUTOCHECK)
+    # YQ-3351: enabling python style checks only for opensource
+    NO_LINT()
+ENDIF()
+
 PEERDIR(
     contrib/python/PyYAML
     ydb/library/yql/providers/generic/connector/api/common

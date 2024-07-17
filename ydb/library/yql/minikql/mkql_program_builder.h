@@ -86,6 +86,10 @@ inline void AddAnyJoinSide(EAnyJoinSettings& combined, EAnyJoinSettings value) {
     combined = (EAnyJoinSettings)combinedVal;
 }
 
+inline bool HasSpillingFlag(const TCallable& callable) {
+    return TStringBuf(callable.GetType()->GetName()).EndsWith("WithSpilling"_sb);
+}
+
 #define MKQL_SCRIPT_TYPES(xx) \
     xx(Unknown, 0, unknown, false) \
     xx(Python, 1, python, false) \
@@ -101,6 +105,12 @@ inline void AddAnyJoinSide(EAnyJoinSettings& combined, EAnyJoinSettings value) {
     xx(CustomPython3, 11, custompython3, true) \
     xx(SystemPython2, 12, systempython2, false) \
     xx(SystemPython3, 13, systempython3, false) \
+    xx(SystemPython3_8, 14, systempython3_8, false) \
+    xx(SystemPython3_9, 15, systempython3_9, false) \
+    xx(SystemPython3_10, 16, systempython3_10, false) \
+    xx(SystemPython3_11, 17, systempython3_11, false) \
+    xx(SystemPython3_12, 18, systempython3_12, false) \
+    xx(SystemPython3_13, 19, systempython3_13, false) \
 
 enum class EScriptType {
     MKQL_SCRIPT_TYPES(ENUM_VALUE_GEN)
@@ -440,10 +450,18 @@ public:
         ui64 memLimit, std::optional<ui32> sortedTableOrder,
         EAnyJoinSettings anyJoinSettings, const ui32 tableIndexField,
         TType* returnType);
+    TRuntimeNode GraceJoinCommon(const TStringBuf& funcName, TRuntimeNode flowLeft, TRuntimeNode flowRight, EJoinKind joinKind,
+        const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& rightKeyColumns,
+        const TArrayRef<const ui32>& leftRenames, const TArrayRef<const ui32>& rightRenames, TType* returnType, EAnyJoinSettings anyJoinSettings = EAnyJoinSettings::None);
     TRuntimeNode GraceJoin(TRuntimeNode flowLeft, TRuntimeNode flowRight, EJoinKind joinKind,
         const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& rightKeyColumns,
         const TArrayRef<const ui32>& leftRenames, const TArrayRef<const ui32>& rightRenames, TType* returnType, EAnyJoinSettings anyJoinSettings = EAnyJoinSettings::None);
     TRuntimeNode GraceSelfJoin(TRuntimeNode flowLeft,  EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& rightKeyColumns,
+        const TArrayRef<const ui32>& leftRenames, const TArrayRef<const ui32>& rightRenames, TType* returnType, EAnyJoinSettings anyJoinSettings = EAnyJoinSettings::None);
+    TRuntimeNode GraceJoinWithSpilling(TRuntimeNode flowLeft, TRuntimeNode flowRight, EJoinKind joinKind,
+        const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& rightKeyColumns,
+        const TArrayRef<const ui32>& leftRenames, const TArrayRef<const ui32>& rightRenames, TType* returnType, EAnyJoinSettings anyJoinSettings = EAnyJoinSettings::None);
+    TRuntimeNode GraceSelfJoinWithSpilling(TRuntimeNode flowLeft,  EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& rightKeyColumns,
         const TArrayRef<const ui32>& leftRenames, const TArrayRef<const ui32>& rightRenames, TType* returnType, EAnyJoinSettings anyJoinSettings = EAnyJoinSettings::None);
     TRuntimeNode CombineCore(TRuntimeNode stream,
         const TUnaryLambda& keyExtractor,

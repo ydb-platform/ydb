@@ -87,6 +87,14 @@ TEST(TStatistics, AddSample)
         statistics.Merge(CreateStatistics({{"/key", 5}})),
         std::exception);
 
+    EXPECT_THROW(
+        statistics.AddSample("/invalid.key/subkey", 42),
+        std::exception);
+
+    EXPECT_THROW(
+        statistics.AddSample("/invalid key/subkey", 42),
+        std::exception);
+
     statistics.AddSample("/key/subkey/x", 10);
     EXPECT_EQ(20, GetNumericValue(statistics, "/key/subkey/x"));
 

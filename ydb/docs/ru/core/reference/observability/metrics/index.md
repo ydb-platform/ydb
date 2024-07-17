@@ -40,8 +40,10 @@
 `grpc.topic.stream_read.partition_session.stopping_count`<br/>`RATE`, штуки | Количество останавливаемых сессий.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
 `grpc.topic.stream_read.partition_session.count`<br/>`RATE`, штуки | Количество partition_session.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
 `grpc.topic.stream_write.bytes`<br/>`RATE`, байты | Количество байт, записанных методом `Ydb::TopicService::StreamWrite`.<br/>Метки:<br/>- _topic_ – название топика.
+`grpc.topic.stream_write.uncommitted_bytes`<br/>`RATE`, байты | Количество байт, записанных методом `Ydb::TopicService::StreamWrite` в рамках ещё не закомиченных транзакций.<br/>Метки:<br/>- _topic_ – название топика.
 `grpc.topic.stream_write.errors`<br/>`RATE`, штуки | Количество ошибок при вызове метода  `Ydb::TopicService::StreamWrite`.<br/>Метки:<br/>- _topic_ – название топика.
 `grpc.topic.stream_write.messages`<br/>`RATE`, штуки | Количество сообщений, записанных методом   `Ydb::TopicService::StreamWrite`.<br/>Метки:<br/>- _topic_ – название топика.
+`grpc.topic.stream_write.uncommitted_messages`<br/>`RATE`, штуки | Количество сообщений, записанных методом   `Ydb::TopicService::StreamWrite` в рамках ещё не закомиченных транзакций.<br/>Метки:<br/>- _topic_ – название топика.
 `grpc.topic.stream_write.partition_throttled_milliseconds`<br/>`HIST_RATE`, штуки | Гистограммный счетчик. Интервалы заданы в миллисекундах. Показывает количество сообщений, ожидавших на квоте.<br/>Метки:<br/>- _topic_ – название топика.
 `grpc.topic.stream_write.sessions_active_count`<br/>`GAUGE`, штуки | Количество открытых сессий записи.<br/>Метки:<br/>- _topic_ – название топика.
 `grpc.topic.stream_write.sessions_created`<br/>`RATE`, штуки | Количество созданных сессий записи.<br/>Метки:<br/>- _topic_ – название топика.

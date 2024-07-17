@@ -5,7 +5,6 @@
 #include "datashard_txs.h"
 #include "datashard_write_operation.h"
 
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/tx/balance_coverage/balance_coverage_builder.h>
@@ -1604,16 +1603,6 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
                 tx->SetForceOnlineFlag();
             } else if (tx->IsReadTable()) {
                 // Feature flag tells us txproxy supports immediate mode for ReadTable
-                const bool immediateSupported = (
-                        KIKIMR_ALLOW_READTABLE_IMMEDIATE ||
-                        AppData()->AllowReadTableImmediate);
-
-                if (!immediateSupported) {
-                    LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                            "Shard " << Self->TabletID() << " force immediate tx "
-                            << tx->GetTxId() << " to online because immediate ReadTable is NYI");
-                    tx->SetForceOnlineFlag();
-                }
             } else if (dataTx->RequirePrepare()) {
                 LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
                            "Shard " << Self->TabletID() << " force immediate tx "
@@ -2031,6 +2020,15 @@ bool TPipeline::CheckInflightLimit() const {
     return true;
 }
 
+TPipeline::TWaitingDataTxOp::TWaitingDataTxOp(TAutoPtr<IEventHandle>&& ev)
+    : Event(std::move(ev))
+{
+    if (Event->TraceId) {
+        Span = NWilson::TSpan(15 /*max verbosity*/, std::move(Event->TraceId), "DataShard.WaitSnapshot");
+        Event->TraceId = Span.GetTraceId();
+    }
+}
+
 bool TPipeline::AddWaitingTxOp(TEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx) {
     if (!CheckInflightLimit())
         return false;
@@ -2090,7 +2088,8 @@ void TPipeline::ActivateWaitingTxOps(TRowVersion edge, const TActorContext& ctx)
                 minWait = it->first;
                 break;
             }
-            ctx.Send(it->second.Release());
+            it->second.Span.EndOk();
+            ctx.Send(it->second.Event.Release());
             it = WaitingDataTxOps.erase(it);
             activated = true;
         }
@@ -2100,7 +2099,8 @@ void TPipeline::ActivateWaitingTxOps(TRowVersion edge, const TActorContext& ctx)
                 minWait = Min(minWait, it->first);
                 break;
             }
-            ctx.Send(it->second.Release());
+            it->second.Span.EndOk();
+            ctx.Send(it->second.Event.Release());
             it = WaitingDataReadIterators.erase(it);
             activated = true;
         }
@@ -2128,6 +2128,15 @@ void TPipeline::ActivateWaitingTxOps(const TActorContext& ctx) {
     ActivateWaitingTxOps(GetUnreadableEdge(), ctx);
 }
 
+TPipeline::TWaitingReadIterator::TWaitingReadIterator(TEvDataShard::TEvRead::TPtr&& ev)
+    : Event(std::move(ev))
+{
+    if (Event->TraceId) {
+        Span = NWilson::TSpan(15 /*max verbosity*/, std::move(Event->TraceId), "DataShard.Read.WaitSnapshot");
+        Event->TraceId = Span.GetTraceId();
+    }
+}
+
 void TPipeline::AddWaitingReadIterator(
     const TRowVersion& version,
     TEvDataShard::TEvRead::TPtr ev,
@@ -2138,7 +2147,7 @@ void TPipeline::AddWaitingReadIterator(
 
     if (Y_UNLIKELY(Self->MvccSwitchState == TSwitchState::SWITCHING)) {
         // postpone tx processing till mvcc state switch is finished
-        WaitingDataReadIterators.emplace(TRowVersion::Min(), ev);
+        WaitingDataReadIterators.emplace(TRowVersion::Min(), std::move(ev));
         return;
     }
 

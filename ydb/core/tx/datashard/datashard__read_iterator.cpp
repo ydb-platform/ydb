@@ -274,7 +274,7 @@ class TReader {
 
     ui32 FirstUnprocessedQuery; // must be unsigned
     TString LastProcessedKey;
-    bool LastProcessedKeyErased = false;
+    bool LastProcessedKeyErasedOrMissing = false;
 
     ui64 RowsRead = 0;
     ui64 RowsProcessed = 0;
@@ -332,7 +332,7 @@ public:
         if (Y_UNLIKELY(FirstUnprocessedQuery == State.FirstUnprocessedQuery && State.LastProcessedKey)) {
             if (!State.Reverse) {
                 keyFromCells = TSerializedCellVec(State.LastProcessedKey);
-                fromInclusive = State.LastProcessedKeyErased;
+                fromInclusive = State.LastProcessedKeyErasedOrMissing;
 
                 keyToCells = range.To;
                 toInclusive = range.ToInclusive;
@@ -342,7 +342,7 @@ public:
                 fromInclusive = range.FromInclusive;
 
                 keyToCells = TSerializedCellVec(State.LastProcessedKey);
-                toInclusive = State.LastProcessedKeyErased;
+                toInclusive = State.LastProcessedKeyErasedOrMissing;
             }
         } else {
             keyFromCells = range.From;
@@ -375,13 +375,18 @@ public:
         }
 
         EReadStatus result;
+
+        txc.Env.EnableReadMissingReferences();
+
         if (!reverse) {
             auto iter = txc.DB.IterateRange(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
-            result = IterateRange(iter.Get(), ctx);
+            result = IterateRange(iter.Get(), ctx, txc.Env);
         } else {
             auto iter = txc.DB.IterateRangeReverse(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
-            result = IterateRange(iter.Get(), ctx);
+            result = IterateRange(iter.Get(), ctx, txc.Env);
         }
+
+        txc.Env.DisableReadMissingReferences();
 
         if (result == EReadStatus::NeedData && !(RowsProcessed && CanResume())) {
             if (LastProcessedKey) {
@@ -730,7 +735,7 @@ public:
         state.TotalRows += RowsRead;
         state.FirstUnprocessedQuery = FirstUnprocessedQuery;
         state.LastProcessedKey = LastProcessedKey;
-        state.LastProcessedKeyErased = LastProcessedKeyErased;
+        state.LastProcessedKeyErasedOrMissing = LastProcessedKeyErasedOrMissing;
         if (sentResult) {
             state.ConsumeSeqNo(RowsRead, BytesInResult);
         }
@@ -755,22 +760,22 @@ private:
         return true;
     }
 
-    bool OutOfQuota() const {
-        return RowsRead >= State.Quota.Rows ||
-            BlockBuilder.Bytes() >= State.Quota.Bytes||
-            BytesInResult >= State.Quota.Bytes;
+    bool OutOfQuota(ui64 prechargedCount = 0, ui64 bytesPrecharged = 0) const {
+        return RowsRead + prechargedCount >= State.Quota.Rows ||
+            BlockBuilder.Bytes() + bytesPrecharged >= State.Quota.Bytes ||
+            BytesInResult + bytesPrecharged >= State.Quota.Bytes;
     }
 
-    bool HasMaxRowsInResult() const {
-        return RowsRead >= State.MaxRowsInResult;
+    bool HasMaxRowsInResult(ui64 prechargedCount = 0) const {
+        return RowsRead + prechargedCount >= State.MaxRowsInResult;
     }
 
-    bool ReachedTotalRowsLimit() const {
+    bool ReachedTotalRowsLimit(ui64 prechargedCount = 0) const {
         if (State.TotalRowsLimit == Max<ui64>()) {
             return false;
         }
 
-        return State.TotalRows + RowsRead >= State.TotalRowsLimit;
+        return State.TotalRows + RowsRead + prechargedCount >= State.TotalRowsLimit;
     }
 
     ui64 GetTotalRowsLeft() const {
@@ -786,12 +791,12 @@ private:
         return State.TotalRowsLimit - State.TotalRows - RowsRead;
     }
 
-    bool ShouldStop() {
+    bool ShouldStop(ui64 prechargedCount = 0, ui64 bytesPrecharged = 0) {
         if (!CanResume()) {
             return false;
         }
 
-        return OutOfQuota() || HasMaxRowsInResult() || ShouldStopByElapsedTime();
+        return OutOfQuota(prechargedCount, bytesPrecharged) || HasMaxRowsInResult(prechargedCount) || ShouldStopByElapsedTime();
     }
 
     ui64 GetRowsLeft() {
@@ -838,25 +843,68 @@ private:
     }
 
     template <typename TIterator>
-    EReadStatus IterateRange(TIterator* iter, const TActorContext& ctx) {
+    EReadStatus IterateRange(TIterator* iter, const TActorContext& ctx, IExecuting& env) {
         Y_UNUSED(ctx);
 
         auto keyAccessSampler = Self->GetKeyAccessSampler();
 
         bool advanced = false;
+
+        bool precharging = false;
+        ui64 prechargedCount = 0;
+        ui64 prechargedRowsSize = 0; // Without referenced blobs (external, outer)
+
         while (iter->Next(NTable::ENext::Data) == NTable::EReady::Data) {
+            TDbTupleRef rowKey = iter->GetKey();
+            TDbTupleRef rowValues = iter->GetValues();
+
+            if (!precharging && env.MissingReferencesSize()) {
+                precharging = true;
+
+                ui64 deletedRowSkips = iter->Stats.DeletedRowSkips;
+                ui64 invisibleRowSkips = iter->Stats.InvisibleRowSkips;
+
+                const ui64 processedRecords = ResetRowSkips(iter->Stats);
+                
+                if ((RowsProcessed + processedRecords) > 0) {
+                    // There were some rows (regular, erased or invisible), so
+                    // this transaction won't be restarting and there is no point in precharging missing references.
+                    RowsSinceLastCheck += processedRecords;
+                    RowsProcessed += processedRecords;
+
+                    DeletedRowSkips += deletedRowSkips;
+                    InvisibleRowSkips += invisibleRowSkips;
+
+                    // We will be continuing from the current key (inclusive).
+                    LastProcessedKey = TSerializedCellVec::Serialize(rowKey.Cells());
+                    LastProcessedKeyErasedOrMissing = true;
+                    break;
+                }
+            }
+
+            if (precharging) {
+                // Precharge only if we didn't meet any rows prior to a row with a missing reference.
+                // Meanwhile, RowsProcessed, RowsSinceLastCheck and LastProcessed key are not updated,
+                // so we will restart the transaction from the exact same key we started iterating from.
+                prechargedCount++;
+                prechargedRowsSize += EstimateSize(rowValues.Cells());
+
+                if (ReachedTotalRowsLimit(prechargedCount) || ShouldStop(prechargedCount, prechargedRowsSize + env.MissingReferencesSize())) {
+                    break;
+                }
+
+                continue;
+            }
+
             advanced = true;
+
             DeletedRowSkips += iter->Stats.DeletedRowSkips;
             InvisibleRowSkips += iter->Stats.InvisibleRowSkips;
-
-            TDbTupleRef rowKey = iter->GetKey();
 
             keyAccessSampler->AddSample(TableId, rowKey.Cells());
             const ui64 processedRecords = 1 + ResetRowSkips(iter->Stats);
             RowsSinceLastCheck += processedRecords;
             RowsProcessed += processedRecords;
-
-            TDbTupleRef rowValues = iter->GetValues();
 
             // note that if user requests key columns then they will be in
             // rowValues and we don't have to add rowKey columns
@@ -870,7 +918,7 @@ private:
 
             if (ShouldStop()) {
                 LastProcessedKey = TSerializedCellVec::Serialize(rowKey.Cells());
-                LastProcessedKeyErased = false;
+                LastProcessedKeyErasedOrMissing = false;
                 return EReadStatus::StoppedByLimit;
             }
         }
@@ -883,17 +931,20 @@ private:
         // row). When there are not enough rows we would prefer restarting in
         // the same transaction, instead of starting a new one, in which case
         // we will not update stats and will not update RowsProcessed.
-        auto lastKey = iter->GetKey().Cells();
-        if (lastKey && (advanced || iter->Stats.DeletedRowSkips >= 4) && iter->Last() == NTable::EReady::Page) {
-            LastProcessedKey = TSerializedCellVec::Serialize(lastKey);
-            LastProcessedKeyErased = iter->GetKeyState() == NTable::ERowOp::Erase;
-            advanced = true;
-        } else {
-            LastProcessedKey.clear();
+        if (!precharging) {
+            auto lastKey = iter->GetKey().Cells();
+            
+            if (lastKey && (advanced || iter->Stats.DeletedRowSkips >= 4) && iter->Last() == NTable::EReady::Page) {
+                LastProcessedKey = TSerializedCellVec::Serialize(lastKey);
+                LastProcessedKeyErasedOrMissing = iter->GetKeyState() == NTable::ERowOp::Erase;
+                advanced = true;
+            } else {
+                LastProcessedKey.clear();
+            }
         }
 
         // last iteration to Page or Gone might also have deleted or invisible rows
-        if (advanced || iter->Last() != NTable::EReady::Page) {
+        if (advanced || (iter->Last() != NTable::EReady::Page && !precharging)) {
             DeletedRowSkips += iter->Stats.DeletedRowSkips;
             InvisibleRowSkips += iter->Stats.InvisibleRowSkips;
             const ui64 processedRecords = ResetRowSkips(iter->Stats);
@@ -903,7 +954,7 @@ private:
 
         // TODO: consider restart when Page and too few data read
         // (how much is too few, less than user's limit?)
-        if (iter->Last() == NTable::EReady::Page) {
+        if (iter->Last() == NTable::EReady::Page || precharging) {
             return EReadStatus::NeedData;
         }
 
@@ -1554,7 +1605,7 @@ public:
                 << "Iterator aborted"
                 << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")");
             Result->Record.SetReadId(ReadId.ReadId);
-            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId);
+            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId, request->ReadSpan.GetTraceId());
             
             request->ReadSpan.EndError("Iterator aborted");
             Self->DeleteReadIterator(it);
@@ -1574,7 +1625,7 @@ public:
             record.SetSeqNo(state.SeqNo + 1);
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << ReadId
                 << " TReadOperation::Execute() finished with error, aborting: " << record.DebugString());
-            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId);
+            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId, request->ReadSpan.GetTraceId());
 
             request->ReadSpan.EndError("Finished with error");
             Self->DeleteReadIterator(it);
@@ -1600,7 +1651,7 @@ public:
 
         if (!gSkipReadIteratorResultFailPoint.Check(Self->TabletID())) {
             LWTRACK(ReadSendResult, state.Orbit);
-            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId);
+            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId, request->ReadSpan.GetTraceId());
         }
     }
 
@@ -2391,6 +2442,7 @@ public:
             Self));
 
         LWTRACK(ReadExecute, state.Orbit);
+
         if (Reader->Read(txc, ctx)) {
             // Retry later when dependencies are resolved
             if (!Reader->GetVolatileReadDependencies().empty()) {
@@ -2487,7 +2539,7 @@ public:
             Result = MakeEvReadResult(ctx.SelfID.NodeId());
             SetStatusError(Result->Record, Ydb::StatusIds::ABORTED, "Iterator aborted");
             Result->Record.SetReadId(ReadId.ReadId);
-            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId);
+            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId, state.Request->ReadSpan.GetTraceId());
 
             state.Request->ReadSpan.EndError("Iterator aborted");
             Self->DeleteReadIterator(it);
@@ -2501,7 +2553,7 @@ public:
             record.SetReadId(ReadId.ReadId);
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << ReadId
                 << " TTxReadContinue::Execute() finished with error, aborting: " << record.DebugString());
-            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId);
+            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId, state.Request->ReadSpan.GetTraceId());
 
             state.Request->ReadSpan.EndError("Finished with error");
             Self->DeleteReadIterator(it);
@@ -2523,7 +2575,7 @@ public:
         bool useful = Reader->FillResult(*Result, state);
         if (useful) {
             LWTRACK(ReadSendResult, state.Orbit);
-            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId);
+            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId, state.Request->ReadSpan.GetTraceId());
         }
 
         if (Reader->HasUnreadQueries()) {
@@ -2553,9 +2605,13 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
     // Note that we mutate this request below
     auto* request = ev->Get();
     
-    if (!request->ReadSpan) {
+    if (ev->TraceId && !request->ReadSpan) {
         request->ReadSpan = NWilson::TSpan(TWilsonTablet::TabletTopLevel, std::move(ev->TraceId), "Datashard.Read", NWilson::EFlags::AUTO_END);
-        request->ReadSpan.Attribute("Shard", std::to_string(TabletID()));
+        if (request->ReadSpan) {
+            request->ReadSpan.Attribute("Shard", std::to_string(TabletID()));
+        }
+        // Reparent other event-based spans to the read span
+        ev->TraceId = request->ReadSpan.GetTraceId();
     }
 
     const auto& record = request->Record;

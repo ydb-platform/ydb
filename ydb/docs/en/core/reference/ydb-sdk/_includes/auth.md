@@ -122,7 +122,7 @@ Fields not described in this table are ignored.
 |**Description of fields of `creds_json` (JWT)**|||||
 |`type`|string|Token source type. Set `JWT`||
 |`alg`|string|Algorithm for JWT signature. Supported algorithms: ES256, ES384, ES512, HS256, HS384, HS512, PS256, PS384, PS512, RS256, RS384, RS512||
-|`private-key`|string|(Private) key in PEM format for JWT signature||
+|`private-key`|string|(Private) key in PEM format (for algorithms `ES*`, `PS*`, `RS*`) or Base64 format (for algorithms `HS*`) for JWT signature||
 |`kid`|string|`kid` JWT standard claim (key id)|optional|
 |`iss`|string|`iss` JWT standard claim (issuer)|optional|
 |`sub`|string|`sub` JWT standard claim (subject)|optional|

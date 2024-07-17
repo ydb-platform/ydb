@@ -255,8 +255,8 @@ bool AddDmlIssue(const TIssue& issue, TExprContext& ctx);
 
 class TKikimrTransactionContextBase : public TThrRefBase {
 public:
-    explicit TKikimrTransactionContextBase(bool enableImmediateEffects) : EnableImmediateEffects(enableImmediateEffects) {
-    }
+    explicit TKikimrTransactionContextBase()
+    {}
 
     bool HasStarted() const {
         return EffectiveIsolationLevel.Defined();
@@ -408,28 +408,10 @@ public:
             const bool currentModify = currentOps & KikimrModifyOps();
             if (currentModify) {
                 if (KikimrReadOps() & newOp) {
-                    if (!EnableImmediateEffects) {
-                        TString message = TStringBuilder() << "Data modifications previously made to table '" << table
-                            << "' in current transaction won't be seen by operation: '"
-                            << newOp << "'";
-                        const TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
-                        auto newIssue = AddDmlIssue(YqlIssue(pos, TIssuesIds::KIKIMR_READ_MODIFIED_TABLE, message));
-                        issues.AddIssue(newIssue);
-                        return {false, issues};
-                    }
-
                     HasUncommittedChangesRead = true;
                 }
 
                 if ((*info)->GetHasIndexTables()) {
-                    if (!EnableImmediateEffects) {
-                        TString message = TStringBuilder()
-                            << "Multiple modification of table with secondary indexes is not supported yet";
-                        const TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
-                        issues.AddIssue(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
-                        return {false, issues};
-                    }
-
                     HasUncommittedChangesRead = true;
                 }
             }
@@ -444,7 +426,6 @@ public:
 
 public:
     bool HasUncommittedChangesRead = false;
-    const bool EnableImmediateEffects;
     THashMap<TString, TYdbOperations> TableOperations;
     THashMap<TKikimrPathId, TString> TableByIdMap;
     TMaybe<NKikimrKqp::EIsolationLevel> EffectiveIsolationLevel;
@@ -506,12 +487,20 @@ public:
         return Database;
     }
 
+    const TString& GetSessionId() const {
+        return SessionId;
+    }
+
     void SetCluster(const TString& cluster) {
         Cluster = cluster;
     }
 
     void SetDatabase(const TString& database) {
         Database = database;
+    }
+
+    void SetSessionId(const TString& sessionId) {
+        SessionId = sessionId;
     }
 
     NKikimr::NKqp::TKqpTempTablesState::TConstPtr GetTempTablesState() const {
@@ -544,6 +533,7 @@ private:
     TString UserName;
     TString Cluster;
     TString Database;
+    TString SessionId;
     TKikimrConfiguration::TPtr Configuration;
     TIntrusivePtr<TKikimrTablesData> TablesData;
     TIntrusivePtr<TKikimrQueryContext> QueryCtx;

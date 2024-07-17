@@ -5,7 +5,7 @@
  *	  (pg_default_acl)
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_default_acl.h
@@ -51,10 +51,8 @@ typedef FormData_pg_default_acl *Form_pg_default_acl;
 
 DECLARE_TOAST(pg_default_acl, 4143, 4144);
 
-DECLARE_UNIQUE_INDEX(pg_default_acl_role_nsp_obj_index, 827, on pg_default_acl using btree(defaclrole oid_ops, defaclnamespace oid_ops, defaclobjtype char_ops));
-#define DefaultAclRoleNspObjIndexId 827
-DECLARE_UNIQUE_INDEX_PKEY(pg_default_acl_oid_index, 828, on pg_default_acl using btree(oid oid_ops));
-#define DefaultAclOidIndexId	828
+DECLARE_UNIQUE_INDEX(pg_default_acl_role_nsp_obj_index, 827, DefaultAclRoleNspObjIndexId, on pg_default_acl using btree(defaclrole oid_ops, defaclnamespace oid_ops, defaclobjtype char_ops));
+DECLARE_UNIQUE_INDEX_PKEY(pg_default_acl_oid_index, 828, DefaultAclOidIndexId, on pg_default_acl using btree(oid oid_ops));
 
 #ifdef EXPOSE_TO_CLIENT_CODE
 

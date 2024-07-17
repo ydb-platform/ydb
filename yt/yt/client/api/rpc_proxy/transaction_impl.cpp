@@ -23,6 +23,7 @@ using namespace NApi;
 using namespace NYTree;
 using namespace NYPath;
 using namespace NYson;
+using namespace NQueueClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -530,23 +531,23 @@ TFuture<void> TTransaction::AdvanceQueueConsumer(
 TFuture<TPushQueueProducerResult> TTransaction::PushQueueProducer(
     const NYPath::TRichYPath& producerPath,
     const NYPath::TRichYPath& queuePath,
-    const TString& sessionId,
-    i64 epoch,
+    const TQueueProducerSessionId& sessionId,
+    TQueueProducerEpoch epoch,
     NTableClient::TNameTablePtr nameTable,
     TSharedRange<NTableClient::TUnversionedRow> rows,
     const TPushQueueProducerOptions& options)
 {
     ValidateTabletTransactionId(GetId());
 
-    THROW_ERROR_EXCEPTION_IF(epoch < 0,
+    THROW_ERROR_EXCEPTION_IF(epoch.Underlying() < 0,
         "Epoch number %v cannot be negative", epoch);
-    THROW_ERROR_EXCEPTION_IF(options.SequenceNumber && *options.SequenceNumber < 0,
+    THROW_ERROR_EXCEPTION_IF(options.SequenceNumber && options.SequenceNumber->Underlying() < 0,
         "Sequence number %v cannot be negative", *options.SequenceNumber);
 
     auto req = Proxy_.PushQueueProducer();
     SetTimeoutOptions(*req, options);
     if (options.SequenceNumber) {
-        req->set_sequence_number(*options.SequenceNumber);
+        req->set_sequence_number(options.SequenceNumber->Underlying());
     }
 
     if (NTracing::IsCurrentTraceContextRecorded()) {
@@ -562,7 +563,7 @@ TFuture<TPushQueueProducerResult> TTransaction::PushQueueProducer(
     ToProto(req->mutable_queue_path(), queuePath);
 
     ToProto(req->mutable_session_id(), sessionId);
-    req->set_epoch(epoch);
+    req->set_epoch(epoch.Underlying());
 
     if (options.UserMeta) {
         ToProto(req->mutable_user_meta(), ConvertToYsonString(options.UserMeta).ToString());
@@ -575,7 +576,7 @@ TFuture<TPushQueueProducerResult> TTransaction::PushQueueProducer(
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPushQueueProducerPtr& rsp) {
         return TPushQueueProducerResult{
-            .LastSequenceNumber = rsp->last_sequence_number(),
+            .LastSequenceNumber = TQueueProducerSequenceNumber(rsp->last_sequence_number()),
             .SkippedRowCount = rsp->skipped_row_count(),
         };
     }));
@@ -901,7 +902,7 @@ TFuture<void> TTransaction::DoAbort(
 {
     VERIFY_SPINLOCK_AFFINITY(SpinLock_);
 
-    if (State_ == ETransactionState::Aborting || State_ == ETransactionState::Aborted) {
+    if (AbortPromise_) {
         return AbortPromise_.ToFuture();
     }
 
@@ -911,44 +912,59 @@ TFuture<void> TTransaction::DoAbort(
 
     auto alienTransactions = AlienTransactions_;
 
+    AbortPromise_ = NewPromise<void>();
+    auto abortFuture = AbortPromise_.ToFuture();
+
     guard->Release();
 
     auto req = Proxy_.AbortTransaction();
     ToProto(req->mutable_transaction_id(), GetId());
 
-    AbortPromise_.TrySetFrom(req->Invoke().Apply(
+    req->Invoke().Subscribe(
         BIND([=, this, this_ = MakeStrong(this)] (const TApiServiceProxy::TErrorOrRspAbortTransactionPtr& rspOrError) {
             {
                 auto guard = Guard(SpinLock_);
 
-                if (State_ != ETransactionState::Aborting) {
+                if (!AbortPromise_) {
                     YT_LOG_DEBUG(rspOrError, "Transaction is no longer aborting, abort response ignored");
                     return;
                 }
 
+                TError abortError;
                 if (rspOrError.IsOK()) {
                     YT_LOG_DEBUG("Transaction aborted");
                 } else if (rspOrError.FindMatching(NTransactionClient::EErrorCode::NoSuchTransaction)) {
-                    YT_LOG_DEBUG("Transaction has expired or was already aborted, ignored");
+                    YT_LOG_DEBUG("Transaction has expired or was already aborted");
                 } else {
-                    YT_LOG_DEBUG(rspOrError, "Error aborting transaction, considered detached");
-                    State_ = ETransactionState::Detached;
-                    THROW_ERROR_EXCEPTION("Error aborting transaction %v",
+                    YT_LOG_DEBUG(rspOrError, "Error aborting transaction");
+                    abortError = TError("Error aborting transaction %v",
                         GetId())
                         << rspOrError;
                 }
 
-                State_ = ETransactionState::Aborted;
-            }
+                if (abortError.IsOK()) {
+                    State_ = ETransactionState::Aborted;
+                } else {
+                    State_ = ETransactionState::AbortFailed;
+                }
 
-            Aborted_.Fire(TError("Transaction aborted by user request"));
-        })));
+                auto abortPromise = std::exchange(AbortPromise_, TPromise<void>());
+
+                guard.Release();
+
+                if (abortError.IsOK()) {
+                    Aborted_.Fire(TError("Transaction aborted by user request"));
+                }
+
+                abortPromise.Set(std::move(abortError));
+            }
+        }));
 
     for (const auto& transaction : alienTransactions) {
         YT_UNUSED_FUTURE(transaction->Abort());
     }
 
-    return AbortPromise_.ToFuture();
+    return abortFuture;
 }
 
 TFuture<void> TTransaction::SendPing()
@@ -987,7 +1003,6 @@ TFuture<void> TTransaction::SendPing()
                     GetId());
 
                 if (fireAborted) {
-                    AbortPromise_.TrySet();
                     Aborted_.Fire(error);
                 }
 

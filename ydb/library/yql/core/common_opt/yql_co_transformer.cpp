@@ -142,11 +142,16 @@ IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(const TExprNode::T
 
     TNodeOnNodeOwnedMap toOptimize;
     bool isError = false;
+    TFinalizingOptimizerExt defaultOpt;
+    auto defaultIt = callables.find("");
+    if (defaultIt != callables.end()) {
+        defaultOpt = defaultIt->second;
+    }
     VisitExpr(input,
         [&toOptimize, &isError](const TExprNode::TPtr&) {
             return toOptimize.empty() && !isError;
         },
-        [&callables, &toOptimize, &ctx, &optCtx, &isError](const TExprNode::TPtr& node) {
+        [&callables, &defaultOpt, &toOptimize, &ctx, &optCtx, &isError](const TExprNode::TPtr& node) {
             if (isError) {
                 return false;
             }
@@ -155,6 +160,9 @@ IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(const TExprNode::T
                 const auto rule = callables.find(node->Content());
                 if (callables.cend() != rule) {
                     isError = isError || !(rule->second)(node, toOptimize, ctx, optCtx);
+                }
+                if (defaultOpt && toOptimize.empty() && !isError) {
+                    isError = isError || !defaultOpt(node, toOptimize, ctx, optCtx);
                 }
             }
             return toOptimize.empty() && !isError;

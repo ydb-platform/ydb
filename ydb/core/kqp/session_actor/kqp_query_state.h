@@ -67,8 +67,7 @@ public:
         , StartedAt(startedAt)
     {
         RequestEv.reset(ev->Release().Release());
-
-        if (AppData()->FeatureFlags.GetEnableImplicitQueryParameterTypes() && !RequestEv->GetYdbParameters().empty()) {
+        if (tableServiceConfig.GetEnableImplicitQueryParameterTypes() && !RequestEv->GetYdbParameters().empty()) {
             QueryParameterTypes = std::make_shared<std::map<TString, Ydb::Type>>();
             for (const auto& [name, typedValue] : RequestEv->GetYdbParameters()) {
                 QueryParameterTypes->insert({name, typedValue.Gettype()});
@@ -138,7 +137,7 @@ public:
     std::shared_ptr<std::map<TString, Ydb::Type>> QueryParameterTypes;
 
     TKqpTempTablesState::TConstPtr TempTablesState;
-    bool PlacedInWorkloadPool = false;
+    TMaybe<TActorId> PoolHandlerActor;
 
     THolder<NYql::TExprContext> SplittedCtx;
     TVector<NYql::TExprNode::TPtr> SplittedExprs;
@@ -233,6 +232,14 @@ public:
         return RequestEv->GetDatabase();
     }
 
+    bool IsSplitted() const {
+        return !SplittedExprs.empty();
+    }
+
+    bool IsCreateTableAs() const {
+        return IsSplitted();
+    }
+
     // todo: gvit
     // fill this hash set only once on query compilation.
     void FillTables(const NKqpProto::TKqpPhyTx& phyTx) {
@@ -321,7 +328,6 @@ public:
 
     bool ShouldCommitWithCurrentTx(const TKqpPhyTxHolder::TConstPtr& tx) {
         const auto& phyQuery = PreparedQuery->GetPhysicalQuery();
-
         if (!Commit) {
             return false;
         }
@@ -342,8 +348,6 @@ public:
         }
 
         if (TxCtx->HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
-            YQL_ENSURE(TxCtx->EnableImmediateEffects);
-
             if (tx && tx->GetHasEffects()) {
                 YQL_ENSURE(tx->ResultsSize() == 0);
                 // commit can be applied to the last transaction with effects
@@ -357,8 +361,13 @@ public:
         return !TxCtx->TxHasEffects();
     }
 
-    bool ShouldAcquireLocks() {
+    bool ShouldAcquireLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
         if (*TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE) {
+            return false;
+        }
+
+        // Inconsistent writes (CTAS) don't require locks.
+        if (IsSplitted() && !HasTxSinkInTx(tx)) {
             return false;
         }
 
@@ -416,16 +425,35 @@ public:
         return tx;
     }
 
+    bool HasTxSinkInStage(const ::NKqpProto::TKqpPhyStage& stage) const {
+        for (const auto& sink : stage.GetSinks()) {
+            if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                NKikimrKqp::TKqpTableSinkSettings settings;
+                YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+                if (!settings.GetInconsistentTx()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    bool HasTxSink() const {
+        const auto& query = PreparedQuery->GetPhysicalQuery();
+        for (auto& tx : query.GetTransactions()) {
+            for (const auto& stage : tx.GetStages()) {
+                if (HasTxSinkInStage(stage)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     bool HasTxSinkInTx(const TKqpPhyTxHolder::TConstPtr& tx) const {
         for (const auto& stage : tx->GetStages()) {
-            for (const auto& sink : stage.GetSinks()) {
-                if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
-                    NKikimrKqp::TKqpTableSinkSettings settings;
-                    YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
-                    if (!settings.GetInconsistentTx()) {
-                        return true;
-                    }
-                }
+            if (HasTxSinkInStage(stage)) {
+                return true;
             }
         }
         return false;

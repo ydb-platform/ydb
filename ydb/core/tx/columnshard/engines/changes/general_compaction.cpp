@@ -19,23 +19,29 @@
 
 namespace NKikimr::NOlap::NCompaction {
 
-void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByFullBatches(TConstructionContext& context, std::vector<TReadPortionInfoWithBlobs>&& portions) noexcept {
+void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByFullBatches(
+    TConstructionContext& context, std::vector<TReadPortionInfoWithBlobs>&& portions) noexcept {
     std::vector<std::shared_ptr<arrow::RecordBatch>> batchResults;
     auto resultSchema = context.SchemaVersions.GetLastSchema();
     auto shardingActual = context.SchemaVersions.GetShardingInfoActual(GranuleMeta->GetPathId());
     {
         auto resultDataSchema = resultSchema->GetIndexInfo().ArrowSchemaWithSpecials();
-        NArrow::NMerger::TMergePartialStream mergeStream(resultSchema->GetIndexInfo().GetReplaceKey(), resultDataSchema, false, IIndexInfo::GetSpecialColumnNames());
+        NArrow::NMerger::TMergePartialStream mergeStream(
+            resultSchema->GetIndexInfo().GetReplaceKey(), resultDataSchema, false, IIndexInfo::GetSnapshotColumnNames());
+
+        THashSet<ui64> portionsInUsage;
+        for (auto&& i : portions) {
+            AFL_VERIFY(portionsInUsage.emplace(i.GetPortionInfo().GetPortionId()).second);
+        }
 
         for (auto&& i : portions) {
             auto dataSchema = i.GetPortionInfo().GetSchema(context.SchemaVersions);
             auto batch = i.GetBatch(dataSchema, *resultSchema);
-            if (shardingActual && i.GetPortionInfo().NeedShardingFilter(*shardingActual)) {
-                shardingActual->GetShardingInfo()->GetFilter(batch)->Apply(batch);
-            }
-            batch = resultSchema->NormalizeBatch(*dataSchema, batch);
+            batch = resultSchema->NormalizeBatch(*dataSchema, batch).DetachResult();
+            batch = IIndexInfo::NormalizeDeletionColumn(batch);
             Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(batch, resultSchema->GetIndexInfo().GetReplaceKey()));
-            mergeStream.AddSource(batch, nullptr);
+            auto filter = BuildPortionFilter(shardingActual, batch, i.GetPortionInfo(), portionsInUsage, resultSchema);
+            mergeStream.AddSource(batch, filter);
         }
         batchResults = mergeStream.DrainAllParts(CheckPoints, resultDataSchema->fields());
     }
@@ -52,54 +58,122 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByFullBatches(TCon
     }
 }
 
-void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstructionContext& context, std::vector<TReadPortionInfoWithBlobs>&& portions) noexcept {
+std::shared_ptr<NArrow::TColumnFilter> TGeneralCompactColumnEngineChanges::BuildPortionFilter(
+    const std::optional<NKikimr::NOlap::TGranuleShardingInfo>& shardingActual, const std::shared_ptr<arrow::RecordBatch>& batch,
+    const TPortionInfo& pInfo, const THashSet<ui64>& portionsInUsage, const ISnapshotSchema::TPtr& resultSchema) const {
+    std::shared_ptr<NArrow::TColumnFilter> filter;
+    if (shardingActual && pInfo.NeedShardingFilter(*shardingActual)) {
+        filter = shardingActual->GetShardingInfo()->GetFilter(batch);
+    }
+    NArrow::TColumnFilter filterDeleted = NArrow::TColumnFilter::BuildAllowFilter();
+    if (pInfo.GetMeta().GetDeletionsCount()) {
+        auto col = batch->GetColumnByName(TIndexInfo::SPEC_COL_DELETE_FLAG);
+        AFL_VERIFY(col);
+        AFL_VERIFY(col->type()->id() == arrow::Type::BOOL);
+        auto bCol = static_pointer_cast<arrow::BooleanArray>(col);
+        for (ui32 i = 0; i < bCol->length(); ++i) {
+            filterDeleted.Add(!bCol->GetView(i));
+        }
+        NArrow::TColumnFilter filterCorrection = NArrow::TColumnFilter::BuildDenyFilter();
+        auto pkSchema = resultSchema->GetIndexInfo().GetReplaceKey();
+        NArrow::NMerger::TRWSortableBatchPosition pos(batch, 0, pkSchema->field_names(), {}, false);
+        ui32 posCurrent = 0;
+        auto excludedIntervalsInfo = GranuleMeta->GetPortionsIndex().GetIntervalFeatures(pInfo, portionsInUsage);
+        for (auto&& i : excludedIntervalsInfo.GetExcludedIntervals()) {
+            NArrow::NMerger::TSortableBatchPosition startForFound(i.GetStart().ToBatch(pkSchema), 0, pkSchema->field_names(), {}, false);
+            NArrow::NMerger::TSortableBatchPosition finishForFound(i.GetFinish().ToBatch(pkSchema), 0, pkSchema->field_names(), {}, false);
+            auto foundStart =
+                NArrow::NMerger::TSortableBatchPosition::FindPosition(pos, pos.GetPosition(), batch->num_rows() - 1, startForFound, true);
+            AFL_VERIFY(foundStart);
+            AFL_VERIFY(!foundStart->IsLess())("pos", pos.DebugJson())("start", startForFound.DebugJson())("found", foundStart->DebugString());
+            auto foundFinish =
+                NArrow::NMerger::TSortableBatchPosition::FindPosition(pos, pos.GetPosition(), batch->num_rows() - 1, finishForFound, false);
+            AFL_VERIFY(foundFinish);
+            AFL_VERIFY(foundFinish->GetPosition() >= foundStart->GetPosition());
+            if (foundFinish->GetPosition() > foundStart->GetPosition()) {
+                AFL_VERIFY(!foundFinish->IsGreater())("pos", pos.DebugJson())("finish", finishForFound.DebugJson())(
+                    "found", foundFinish->DebugString());
+            }
+            filterCorrection.Add(foundStart->GetPosition() - posCurrent, false);
+            if (foundFinish->IsGreater()) {
+                filterCorrection.Add(foundFinish->GetPosition() - foundStart->GetPosition(), true);
+                posCurrent = foundFinish->GetPosition();
+            } else {
+                filterCorrection.Add(foundFinish->GetPosition() - foundStart->GetPosition() + 1, true);
+                posCurrent = foundFinish->GetPosition() + 1;
+            }
+        }
+        AFL_VERIFY(filterCorrection.Size() <= batch->num_rows());
+        filterCorrection.Add(false, batch->num_rows() - filterCorrection.Size());
+        filterDeleted = filterDeleted.Or(filterCorrection);
+    }
+    if (filter) {
+        *filter = filter->And(filterDeleted);
+    } else if (!filterDeleted.IsTotalAllowFilter()) {
+        filter = std::make_shared<NArrow::TColumnFilter>(std::move(filterDeleted));
+    }
+    return filter;
+}
+
+void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
+    TConstructionContext& context, std::vector<TReadPortionInfoWithBlobs>&& portions) noexcept {
     static const TString portionIdFieldName = "$$__portion_id";
     static const TString portionRecordIndexFieldName = "$$__portion_record_idx";
-    static const std::shared_ptr<arrow::Field> portionIdField = std::make_shared<arrow::Field>(portionIdFieldName, std::make_shared<arrow::UInt16Type>());
-    static const std::shared_ptr<arrow::Field> portionRecordIndexField = std::make_shared<arrow::Field>(portionRecordIndexFieldName, std::make_shared<arrow::UInt32Type>());
+    static const std::shared_ptr<arrow::Field> portionIdField =
+        std::make_shared<arrow::Field>(portionIdFieldName, std::make_shared<arrow::UInt16Type>());
+    static const std::shared_ptr<arrow::Field> portionRecordIndexField =
+        std::make_shared<arrow::Field>(portionRecordIndexFieldName, std::make_shared<arrow::UInt32Type>());
 
     auto resultSchema = context.SchemaVersions.GetLastSchema();
     auto shardingActual = context.SchemaVersions.GetShardingInfoActual(GranuleMeta->GetPathId());
 
     std::vector<std::string> pkFieldNames = resultSchema->GetIndexInfo().GetReplaceKey()->field_names();
     std::set<std::string> pkFieldNamesSet(pkFieldNames.begin(), pkFieldNames.end());
-    for (auto&& i : TIndexInfo::GetSpecialColumnNames()) {
+    for (auto&& i : TIndexInfo::GetSnapshotColumnNames()) {
         pkFieldNamesSet.emplace(i);
     }
+    pkFieldNamesSet.emplace(TIndexInfo::SPEC_COL_DELETE_FLAG);
 
     std::vector<std::shared_ptr<arrow::RecordBatch>> batchResults;
     {
         arrow::FieldVector indexFields;
         indexFields.emplace_back(portionIdField);
         indexFields.emplace_back(portionRecordIndexField);
-        for (auto&& i : TIndexInfo::ArrowSchemaSnapshot()->fields()) {
-            indexFields.emplace_back(i);
-        }
+        IIndexInfo::AddSpecialFields(indexFields);
         auto dataSchema = std::make_shared<arrow::Schema>(indexFields);
-        NArrow::NMerger::TMergePartialStream mergeStream(resultSchema->GetIndexInfo().GetReplaceKey(), dataSchema, false, IIndexInfo::GetSpecialColumnNames());
+        NArrow::NMerger::TMergePartialStream mergeStream(
+            resultSchema->GetIndexInfo().GetReplaceKey(), dataSchema, false, IIndexInfo::GetSnapshotColumnNames());
+        THashSet<ui64> usedPortionIds;
+        for (auto&& i : portions) {
+            AFL_VERIFY(usedPortionIds.emplace(i.GetPortionInfo().GetPortionId()).second);
+        }
+
         ui32 idx = 0;
         for (auto&& i : portions) {
             auto dataSchema = i.GetPortionInfo().GetSchema(context.SchemaVersions);
             auto batch = i.GetBatch(dataSchema, *resultSchema, pkFieldNamesSet);
             {
-                NArrow::NConstruction::IArrayBuilder::TPtr column = std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntConstFiller<arrow::UInt16Type>>>(portionIdFieldName, idx++);
-                batch = NArrow::TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), portionIdField, column->BuildArray(batch->num_rows())));
+                NArrow::NConstruction::IArrayBuilder::TPtr column =
+                    std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntConstFiller<arrow::UInt16Type>>>(
+                        portionIdFieldName, idx++);
+                batch = NArrow::TStatusValidator::GetValid(
+                    batch->AddColumn(batch->num_columns(), portionIdField, column->BuildArray(batch->num_rows())));
             }
             {
-                NArrow::NConstruction::IArrayBuilder::TPtr column = std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::UInt32Type>>>(portionRecordIndexFieldName);
-                batch = NArrow::TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), portionRecordIndexField, column->BuildArray(batch->num_rows())));
+                NArrow::NConstruction::IArrayBuilder::TPtr column =
+                    std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::UInt32Type>>>(
+                        portionRecordIndexFieldName);
+                batch = NArrow::TStatusValidator::GetValid(
+                    batch->AddColumn(batch->num_columns(), portionRecordIndexField, column->BuildArray(batch->num_rows())));
             }
+            batch = IIndexInfo::NormalizeDeletionColumn(batch);
             Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(batch, resultSchema->GetIndexInfo().GetReplaceKey()));
-            std::shared_ptr<NArrow::TColumnFilter> filter;
-            if (shardingActual && i.GetPortionInfo().NeedShardingFilter(*shardingActual)) {
-                filter = shardingActual->GetShardingInfo()->GetFilter(batch);
-            }
-
+            std::shared_ptr<NArrow::TColumnFilter> filter =
+                BuildPortionFilter(shardingActual, batch, i.GetPortionInfo(), usedPortionIds, resultSchema);
             mergeStream.AddSource(batch, filter);
         }
         batchResults = mergeStream.DrainAllParts(CheckPoints, indexFields);
     }
-    Y_ABORT_UNLESS(batchResults.size());
 
     std::shared_ptr<TSerializationStats> stats = std::make_shared<TSerializationStats>();
     for (auto&& i : SwitchedPortions) {
@@ -109,7 +183,8 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
     std::vector<std::map<ui32, std::vector<TColumnPortionResult>>> chunkGroups;
     chunkGroups.resize(batchResults.size());
     for (auto&& columnId : resultSchema->GetIndexInfo().GetColumnIds()) {
-        NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("field_name", resultSchema->GetIndexInfo().GetColumnName(columnId)));
+        NActors::TLogContextGuard logGuard(
+            NActors::TLogContextBuilder::Build()("field_name", resultSchema->GetIndexInfo().GetColumnName(columnId)));
         auto columnInfo = stats->GetColumnInfo(columnId);
         auto resultField = resultSchema->GetIndexInfo().GetColumnFieldVerified(columnId);
 
@@ -120,10 +195,15 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
             std::vector<const TColumnRecord*> records;
             std::vector<std::shared_ptr<IPortionDataChunk>> chunks;
             if (!p.ExtractColumnChunks(columnId, records, chunks)) {
-                AFL_VERIFY(!loader);
-                records = {nullptr};
-                chunks.emplace_back(std::make_shared<NChunks::TNullChunkPreparation>(columnId, p.GetPortionInfo().GetRecordsCount(), resultField, resultSchema->GetColumnSaver(columnId)));
-                loader = resultSchema->GetColumnLoaderVerified(columnId);
+                if (!loader) {
+                    loader = resultSchema->GetColumnLoaderVerified(columnId);
+                } else {
+                    AFL_VERIFY(dataSchema->IsSpecialColumnId(columnId));
+                }
+                chunks.emplace_back(std::make_shared<NChunks::TDefaultChunkPreparation>(columnId, p.GetPortionInfo().GetRecordsCount(),
+                    p.GetPortionInfo().GetColumnRawBytes({ columnId }), resultField, resultSchema->GetDefaultValueVerified(columnId),
+                    resultSchema->GetColumnSaver(columnId)));
+                records = { nullptr };
             }
             AFL_VERIFY(!!loader);
             cursors.emplace_back(TPortionColumnCursor(chunks, records, loader, p.GetPortionInfo().GetPortionId()));
@@ -134,8 +214,10 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
         std::map<std::string, std::vector<TColumnPortionResult>> columnChunks;
         ui32 batchIdx = 0;
         for (auto&& batchResult : batchResults) {
-            const ui32 portionRecordsCountLimit = batchResult->num_rows() / (batchResult->num_rows() / NSplitter::TSplitSettings().GetExpectedRecordsCountOnPage() + 1) + 1;
-            TColumnMergeContext context(columnId, resultSchema, portionRecordsCountLimit, NSplitter::TSplitSettings().GetExpectedUnpackColumnChunkRawSize(), columnInfo);
+            const ui32 portionRecordsCountLimit =
+                batchResult->num_rows() / (batchResult->num_rows() / NSplitter::TSplitSettings().GetExpectedRecordsCountOnPage() + 1) + 1;
+            TColumnMergeContext context(
+                columnId, resultSchema, portionRecordsCountLimit, NSplitter::TSplitSettings().GetExpectedUnpackColumnChunkRawSize(), columnInfo);
             TMergedColumn mColumn(context);
 
             auto columnPortionIdx = batchResult->GetColumnByName(portionIdFieldName);
@@ -175,7 +257,8 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
     }
     ui32 batchIdx = 0;
 
-    const auto groups = resultSchema->GetIndexInfo().GetEntityGroupsByStorageId(IStoragesManager::DefaultStorageId, *SaverContext.GetStoragesManager());
+    const auto groups =
+        resultSchema->GetIndexInfo().GetEntityGroupsByStorageId(IStoragesManager::DefaultStorageId, *SaverContext.GetStoragesManager());
     for (auto&& columnChunks : chunkGroups) {
         auto batchResult = batchResults[batchIdx];
         ++batchIdx;
@@ -184,10 +267,12 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
         for (auto&& i : columnChunks) {
             if (i.second.size() != columnChunks.begin()->second.size()) {
                 for (ui32 p = 0; p < std::min<ui32>(columnChunks.begin()->second.size(), i.second.size()); ++p) {
-                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("p_first", columnChunks.begin()->second[p].DebugString())("p", i.second[p].DebugString());
+                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("p_first", columnChunks.begin()->second[p].DebugString())(
+                        "p", i.second[p].DebugString());
                 }
             }
-            AFL_VERIFY(i.second.size() == columnChunks.begin()->second.size())("first", columnChunks.begin()->second.size())("current", i.second.size())("first_name", columnChunks.begin()->first)("current_name", i.first);
+            AFL_VERIFY(i.second.size() == columnChunks.begin()->second.size())("first", columnChunks.begin()->second.size())(
+                                              "current", i.second.size())("first_name", columnChunks.begin()->first)("current_name", i.first);
         }
 
         std::vector<TGeneralSerializedSlice> batchSlices;
@@ -198,7 +283,6 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
             for (auto&& p : columnChunks) {
                 portionColumns.emplace(p.first, p.second[i].GetChunks());
             }
-            resultSchema->GetIndexInfo().AppendIndexes(portionColumns);
             batchSlices.emplace_back(portionColumns, schemaDetails, context.Counters.SplitterCounters);
         }
         TSimilarPacker slicer(NSplitter::TSplitSettings().GetExpectedPortionSize());
@@ -206,18 +290,25 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
 
         ui32 recordIdx = 0;
         for (auto&& i : packs) {
-            TGeneralSerializedSlice slice(std::move(i));
+            TGeneralSerializedSlice slicePrimary(std::move(i));
+            auto dataWithSecondary =
+                resultSchema->GetIndexInfo().AppendIndexes(slicePrimary.GetPortionChunksToHash(), SaverContext.GetStoragesManager()).DetachResult();
+            TGeneralSerializedSlice slice(dataWithSecondary.GetExternalData(), schemaDetails, context.Counters.SplitterCounters);
+
             auto b = batchResult->Slice(recordIdx, slice.GetRecordsCount());
-            AppendedPortions.emplace_back(TWritePortionInfoWithBlobs::BuildByBlobs(slice.GroupChunksByBlobs(groups), GranuleMeta->GetPathId(),
-                resultSchema->GetVersion(), resultSchema->GetSnapshot(), SaverContext.GetStoragesManager()));
-            AppendedPortions.back().FillStatistics(resultSchema->GetIndexInfo());
+            const ui32 deletionsCount = IIndexInfo::CalcDeletions(b, true);
+            auto constructor = TWritePortionInfoWithBlobsConstructor::BuildByBlobs(slice.GroupChunksByBlobs(groups),
+                dataWithSecondary.GetSecondaryInplaceData(), GranuleMeta->GetPathId(),
+                resultSchema->GetVersion(), resultSchema->GetSnapshot(), SaverContext.GetStoragesManager());
+
             NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultSchema->GetIndexInfo().GetReplaceKey()));
             NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());
-            AppendedPortions.back().GetPortionConstructor().AddMetadata(*resultSchema, primaryKeys, snapshotKeys);
-            AppendedPortions.back().GetPortionConstructor().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);
+            constructor.GetPortionConstructor().AddMetadata(*resultSchema, deletionsCount, primaryKeys, snapshotKeys);
+            constructor.GetPortionConstructor().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);
             if (shardingActual) {
-                AppendedPortions.back().GetPortionConstructor().SetShardingVersion(shardingActual->GetSnapshotVersion());
+                constructor.GetPortionConstructor().SetShardingVersion(shardingActual->GetSnapshotVersion());
             }
+            AppendedPortions.emplace_back(std::move(constructor));
             recordIdx += slice.GetRecordsCount();
         }
     }
@@ -244,7 +335,8 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
     NChanges::TGeneralCompactionCounters::OnRepackPortions(portionsCount, portionsSize);
 
     {
-        std::vector<TReadPortionInfoWithBlobs> portions = TReadPortionInfoWithBlobs::RestorePortions(SwitchedPortions, Blobs, context.SchemaVersions);
+        std::vector<TReadPortionInfoWithBlobs> portions =
+            TReadPortionInfoWithBlobs::RestorePortions(SwitchedPortions, Blobs, context.SchemaVersions);
         if (!HasAppData() || AppDataVerified().ColumnShardConfig.GetUseChunkedMergeOnCompaction()) {
             BuildAppendedPortionsByChunks(context, std::move(portions));
         } else {
@@ -266,7 +358,8 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
         }
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "blobs_created_diff")("appended", sbAppended)("switched", sbSwitched);
     }
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "blobs_created")("appended", AppendedPortions.size())("switched", SwitchedPortions.size());
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "blobs_created")("appended", AppendedPortions.size())(
+        "switched", SwitchedPortions.size());
 
     return TConclusionStatus::Success();
 }
@@ -274,7 +367,8 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
 void TGeneralCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
     TBase::DoWriteIndexOnComplete(self, context);
     if (self) {
-        self->IncCounter(context.FinishedSuccessfully ? NColumnShard::COUNTER_SPLIT_COMPACTION_SUCCESS : NColumnShard::COUNTER_SPLIT_COMPACTION_FAIL);
+        self->IncCounter(
+            context.FinishedSuccessfully ? NColumnShard::COUNTER_SPLIT_COMPACTION_SUCCESS : NColumnShard::COUNTER_SPLIT_COMPACTION_FAIL);
         self->IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_BLOBS_WRITTEN, context.BlobsWritten);
         self->IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_BYTES_WRITTEN, context.BytesWritten);
     }
@@ -283,14 +377,16 @@ void TGeneralCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TC
 void TGeneralCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
     auto& g = *GranuleMeta;
-    self.CSCounters.OnSplitCompactionInfo(g.GetAdditiveSummary().GetCompacted().GetTotalPortionsSize(), g.GetAdditiveSummary().GetCompacted().GetPortionsCount());
+    self.CSCounters.OnSplitCompactionInfo(
+        g.GetAdditiveSummary().GetCompacted().GetTotalPortionsSize(), g.GetAdditiveSummary().GetCompacted().GetPortionsCount());
 }
 
 NColumnShard::ECumulativeCounters TGeneralCompactColumnEngineChanges::GetCounterIndex(const bool isSuccess) const {
     return isSuccess ? NColumnShard::COUNTER_COMPACTION_SUCCESS : NColumnShard::COUNTER_COMPACTION_FAIL;
 }
 
-void TGeneralCompactColumnEngineChanges::AddCheckPoint(const NArrow::NMerger::TSortableBatchPosition& position, const bool include, const bool validationDuplications) {
+void TGeneralCompactColumnEngineChanges::AddCheckPoint(
+    const NArrow::NMerger::TSortableBatchPosition& position, const bool include, const bool validationDuplications) {
     AFL_VERIFY(CheckPoints.emplace(position, include).second || !validationDuplications);
 }
 
@@ -324,7 +420,8 @@ ui64 TGeneralCompactColumnEngineChanges::TMemoryPredictorChunkedPolicy::AddPorti
         SumMemoryDelta = std::max(SumMemoryDelta, MaxMemoryByColumnChunk[i.first]);
     }
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("memory_prediction_after", SumMemoryFix + SumMemoryDelta)("portion_info", portionInfo.DebugString());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("memory_prediction_after", SumMemoryFix + SumMemoryDelta)(
+        "portion_info", portionInfo.DebugString());
     return SumMemoryFix + SumMemoryDelta;
 }
 

@@ -25,6 +25,7 @@ class ChangefeedDescription;
 class DescribeTableResult;
 class ExplicitPartitions;
 class GlobalIndexSettings;
+class VectorIndexSettings;
 class PartitioningSettings;
 class DateTypeColumnModeSettings;
 class TtlSettings;
@@ -192,6 +193,45 @@ struct TGlobalIndexSettings {
     void SerializeTo(Ydb::Table::GlobalIndexSettings& proto) const;
 };
 
+struct TVectorIndexSettings {
+public:
+    enum class EDistance {
+        Cosine,
+        Manhattan,
+        Euclidean,
+
+        Unknown = std::numeric_limits<int>::max()
+    };
+
+    enum class ESimilarity {
+        Cosine,
+        InnerProduct,
+
+        Unknown = std::numeric_limits<int>::max()
+    };
+
+    enum class EVectorType {
+        Float,
+        Uint8,
+        Int8,
+        Bit,
+
+        Unknown = std::numeric_limits<int>::max()
+    };
+    using TMetric = std::variant<std::monostate, EDistance, ESimilarity>;
+
+    TMetric Metric;
+    EVectorType VectorType;
+    ui32 VectorDimension;
+
+    template <typename TProto>
+    static TVectorIndexSettings FromProto(const TProto& proto);
+
+    void SerializeTo(Ydb::Table::VectorIndexSettings& settings) const;
+
+    void Out(IOutputStream &o) const;
+};
+
 //! Represents index description
 class TIndexDescription {
     friend class NYdb::TProtoAccessor;
@@ -202,20 +242,22 @@ public:
         EIndexType type,
         const TVector<TString>& indexColumns,
         const TVector<TString>& dataColumns = {},
-        const TGlobalIndexSettings& settings = {}
+        const TVector<TGlobalIndexSettings>& globalIndexSettings = {},
+        const std::optional<TVectorIndexSettings>& vectorIndexSettings = {}
     );
 
     TIndexDescription(
         const TString& name,
         const TVector<TString>& indexColumns,
         const TVector<TString>& dataColumns = {},
-        const TGlobalIndexSettings& settings = {}
+        const TVector<TGlobalIndexSettings>& globalIndexSettings = {}
     );
 
     const TString& GetIndexName() const;
     EIndexType GetIndexType() const;
     const TVector<TString>& GetIndexColumns() const;
     const TVector<TString>& GetDataColumns() const;
+    const std::optional<TVectorIndexSettings>& GetVectorIndexSettings() const;
     ui64 GetSizeBytes() const;
 
     void SerializeTo(Ydb::Table::TableIndex& proto) const;
@@ -234,7 +276,8 @@ private:
     EIndexType IndexType_;
     TVector<TString> IndexColumns_;
     TVector<TString> DataColumns_;
-    TGlobalIndexSettings GlobalIndexSettings_;
+    TVector<TGlobalIndexSettings> GlobalIndexSettings_;
+    std::optional<TVectorIndexSettings> VectorIndexSettings_;
     ui64 SizeBytes = 0;
 };
 
@@ -266,9 +309,26 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Represents index description
+//! Represents changefeed description
 class TChangefeedDescription {
     friend class NYdb::TProtoAccessor;
+
+public:
+    class TInitialScanProgress {
+    public:
+        TInitialScanProgress();
+        explicit TInitialScanProgress(ui32 total, ui32 completed);
+
+        TInitialScanProgress& operator+=(const TInitialScanProgress& other);
+
+        ui32 GetPartsTotal() const;
+        ui32 GetPartsCompleted() const;
+        float GetProgress() const; // percentage
+
+    private:
+        ui32 PartsTotal;
+        ui32 PartsCompleted;
+    };
 
 public:
     TChangefeedDescription(const TString& name, EChangefeedMode mode, EChangefeedFormat format);
@@ -297,6 +357,7 @@ public:
     bool GetInitialScan() const;
     const THashMap<TString, TString>& GetAttributes() const;
     const TString& GetAwsRegion() const;
+    const std::optional<TInitialScanProgress>& GetInitialScanProgress() const;
 
     void SerializeTo(Ydb::Table::Changefeed& proto) const;
     TString ToString() const;
@@ -320,6 +381,7 @@ private:
     bool InitialScan_ = false;
     THashMap<TString, TString> Attributes_;
     TString AwsRegion_;
+    std::optional<TInitialScanProgress> InitialScanProgress_;
 };
 
 bool operator==(const TChangefeedDescription& lhs, const TChangefeedDescription& rhs);
@@ -589,6 +651,9 @@ private:
     // unique
     void AddUniqueSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns);
     void AddUniqueSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);
+    // vector KMeansTree
+    void AddVectorKMeansTreeSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVectorIndexSettings& vectorIndexSettings);
+    void AddVectorKMeansTreeSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns, const TVectorIndexSettings& vectorIndexSettings);
 
     // default
     void AddSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns);
@@ -807,6 +872,10 @@ public:
     // unique
     TTableBuilder& AddUniqueSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns);
     TTableBuilder& AddUniqueSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);
+
+    // vector KMeansTree
+    TTableBuilder& AddVectorKMeansTreeSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVectorIndexSettings& vectorIndexSettings);
+    TTableBuilder& AddVectorKMeansTreeSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns, const TVectorIndexSettings& vectorIndexSettings);
 
     // default
     TTableBuilder& AddSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);

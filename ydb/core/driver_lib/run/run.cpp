@@ -23,7 +23,6 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
 #include <ydb/library/actors/interconnect/interconnect_mon.h>
-#include <ydb/core/actorlib_impl/mad_squirrel.h>
 #include <ydb/core/config/init/dummy.h>
 
 #include <ydb/core/control/immediate_control_board_actor.h>

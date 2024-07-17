@@ -46,6 +46,7 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
 {%- endmacro -%}
 
 {% set CLICKHOUSE = 'ClickHouse' %}
+{% set MYSQL = 'MySQL' %}
 {% set POSTGRESQL = 'PostgreSQL' %}
 {% set YDB = 'Ydb' %}
 
@@ -70,6 +71,20 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
     settings.clickhouse.username,
     settings.clickhouse.password,
     CLICKHOUSE_PROTOCOL,
+    cluster.database,
+    NONE)
+}}
+{% endfor %}
+
+{% for cluster in generic_settings.mysql_clusters %}
+{{ create_data_source(
+    MYSQL,
+    settings.mysql.cluster_name,
+    settings.mysql.host_internal,
+    settings.mysql.port_internal,
+    settings.mysql.username,
+    settings.mysql.password,
+    NONE,
     cluster.database,
     NONE)
 }}

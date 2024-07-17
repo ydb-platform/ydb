@@ -23,6 +23,7 @@ TLoader::TLoader(TVector<TIntrusivePtr<TCache>> pageCollections,
     if (Packs.size() < 1) {
         Y_Fail("Cannot load TPart from " << Packs.size() << " page collections");
     }
+    LoaderEnv = MakeHolder<TLoaderEnv>(Packs[0]);
 }
 
 TLoader::~TLoader() { }
@@ -153,25 +154,45 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
     Y_ABORT_UNLESS(!PartView, "PartView already initialized in CreatePartView stage");
     Y_ABORT_UNLESS(Packs && Packs.front());
 
-    TVector<TPageId> load;
-    for (auto page: { SchemeId, GlobsId,
-                        SmallId, LargeId, ByKeyId,
-                        GarbageStatsId, TxIdStatsId }) {
-        if (page != Max<TPageId>() && !Packs[0]->Lookup(page))
-            load.push_back(page);
+    auto getPage = [&](TPageId pageId) {
+        return pageId == Max<TPageId>() 
+            ? nullptr 
+            : LoaderEnv->TryGetPage(nullptr, pageId, {});
+    };
+
+    if (BTreeGroupIndexes) {
+        // Note: preload root nodes only because we don't want to have multiple restarts here
+        for (const auto& meta : BTreeGroupIndexes) {
+            if (meta.LevelCount) getPage(meta.GetPageId());
+        }
+        for (const auto& meta : BTreeHistoricIndexes) {
+            if (meta.LevelCount) getPage(meta.GetPageId());
+        }
+    } else if (FlatGroupIndexes) {
+        for (auto indexPageId : FlatGroupIndexes) {
+            getPage(indexPageId);
+        }
+        for (auto indexPageId : FlatHistoricIndexes) {
+            getPage(indexPageId);
+        }
     }
 
-    if (load) {
-        return new NPageCollection::TFetch{ 0, Packs[0]->PageCollection, std::move(load) };
+    for (auto pageId: { SchemeId, GlobsId, SmallId, LargeId, ByKeyId, GarbageStatsId, TxIdStatsId }) {
+        Y_DEBUG_ABORT_UNLESS(pageId == Max<TPageId>() || NeedIn(Packs[0]->GetPageType(pageId)));
+        getPage(pageId);
     }
 
-    auto *scheme = GetPage(SchemeId);
-    auto *large = GetPage(LargeId);
-    auto *small = GetPage(SmallId);
-    auto *blobs = GetPage(GlobsId);
-    auto *byKey = GetPage(ByKeyId);
-    auto *garbageStats = GetPage(GarbageStatsId);
-    auto *txIdStats = GetPage(TxIdStatsId);
+    if (auto fetch = LoaderEnv->GetFetch()) {
+        return fetch;
+    }
+
+    auto *scheme = getPage(SchemeId);
+    auto *large = getPage(LargeId);
+    auto *small = getPage(SmallId);
+    auto *blobs = getPage(GlobsId);
+    auto *byKey = getPage(ByKeyId);
+    auto *garbageStats = getPage(GarbageStatsId);
+    auto *txIdStats = getPage(TxIdStatsId);
 
     if (scheme == nullptr) {
         Y_ABORT("Scheme page is not loaded");
@@ -189,16 +210,21 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
     TEpoch epoch = Epoch != TEpoch::Max() ? Epoch : TEpoch(Root.GetEpoch());
 
     // TODO: put index size to stat?
-    // TODO: include history indexes bytes
     size_t indexesRawSize = 0;
     if (BTreeGroupIndexes) {
         for (const auto &meta : BTreeGroupIndexes) {
             indexesRawSize += meta.IndexSize;
         }
+        for (const auto &meta : BTreeHistoricIndexes) {
+            indexesRawSize += meta.IndexSize;
+        }
         // Note: although we also have flat index, it shouldn't be loaded; so let's not count it here
     } else {
         for (auto indexPage : FlatGroupIndexes) {
-            indexesRawSize += GetPageSize(indexPage);
+            indexesRawSize += Packs[0]->GetPageSize(indexPage);
+        }
+        for (auto indexPage : FlatHistoricIndexes) {
+            indexesRawSize += Packs[0]->GetPageSize(indexPage);
         }
     }
 
@@ -242,7 +268,7 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
 
     PartView = { partStore, std::move(overlay.Screen), std::move(overlay.Slices) };
 
-    KeysEnv = new TKeysEnv(PartView.Part.Get(), TPartStore::Storages(PartView).at(0));
+    LoaderEnv->ProvidePart(PartView.Part.Get());
 
     return nullptr;
 }
@@ -256,17 +282,17 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageSliceBounds() noexcept
         return nullptr;
     }
 
-    KeysEnv->Check(false); /* ensure there is no pending pages to load */
+    LoaderEnv->EnsureNoNeedPages();
 
-    TKeysLoader loader(PartView.Part.Get(), KeysEnv.Get());
+    TKeysLoader loader(PartView.Part.Get(), LoaderEnv.Get());
 
     if (auto run = loader.Do(PartView.Screen)) {
-        KeysEnv->Check(false); /* On success there shouldn't be left loads */
+        LoaderEnv->EnsureNoNeedPages(); /* On success there shouldn't be left loads */
         PartView.Slices = std::move(run);
         TOverlay{ PartView.Screen, PartView.Slices }.Validate();
 
         return nullptr;
-    } else if (auto fetches = KeysEnv->GetFetches()) {
+    } else if (auto fetches = LoaderEnv->GetFetch()) {
         return fetches;
     } else {
         Y_ABORT("Screen keys loader stalled without result");
@@ -288,17 +314,28 @@ void TLoader::StageDeltas() noexcept
     }
 }
 
-void TLoader::Save(ui64 cookie, TArrayRef<NSharedCache::TEvResult::TLoaded> blocks) noexcept
+TAutoPtr<NPageCollection::TFetch> TLoader::StagePreloadData() noexcept
+{
+    auto partStore = PartView.As<TPartStore>();
+
+    // Note: preload works only for main group pages    
+    auto total = partStore->PageCollections[0]->Total();
+
+    TVector<TPageId> toLoad(::Reserve(total));
+    for (TPageId pageId : xrange(total)) {
+        LoaderEnv->TryGetPage(PartView.Part.Get(), pageId, {});
+    }
+
+    return LoaderEnv->GetFetch();
+}
+
+void TLoader::Save(ui64 cookie, TArrayRef<NSharedCache::TEvResult::TLoaded> loadedPages) noexcept
 {
     Y_ABORT_UNLESS(cookie == 0, "Only the leader pack is used on load");
 
-    if (Stage == EStage::PartView) {
-        for (auto& loaded : blocks) {
-            Packs[0]->Fill(std::move(loaded), true);
-        }
-    } else if (Stage == EStage::Slice) {
-        for (auto& loaded : blocks) {
-            KeysEnv->Save(cookie, std::move(loaded));
+    if (Stage == EStage::PartView || Stage == EStage::Slice || Stage == EStage::PreloadData) {
+        for (auto& loaded : loadedPages) {
+            LoaderEnv->Save(cookie, std::move(loaded));
         }
     } else {
         Y_Fail("Unexpected pages save on stage " << int(Stage));

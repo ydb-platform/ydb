@@ -446,6 +446,9 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme AlterReplication = 35;
         NKikimrSchemeOp.TModifyScheme DropReplication = 36;
         NKikimrSchemeOp.TModifyScheme AlterSequence = 37;
+        NKikimrSchemeOp.TModifyScheme CreateResourcePool = 38;
+        NKikimrSchemeOp.TModifyScheme AlterResourcePool = 39;
+        NKikimrSchemeOp.TModifyScheme DropResourcePool = 40;
     }
 }
 

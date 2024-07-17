@@ -534,6 +534,7 @@ private:
 void LoadFromProto(TDqAsyncStats& stats, const NYql::NDqProto::TDqAsyncBufferStats& f)
 {
     stats.Bytes = f.GetBytes();
+    stats.DecompressedBytes = f.GetDecompressedBytes();
     stats.Rows = f.GetRows();
     stats.Chunks = f.GetChunks();
     stats.Splits = f.GetSplits();

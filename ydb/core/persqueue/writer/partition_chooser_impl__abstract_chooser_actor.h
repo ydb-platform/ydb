@@ -294,6 +294,10 @@ protected:
 
 protected:
     void ReplyResult(const NActors::TActorContext& ctx) {
+        if (ResultWasSent) {
+            return;
+        }
+        ResultWasSent = true;
         DEBUG("ReplyResult: Partition=" << Partition->PartitionId << ", SeqNo=" << SeqNo);
         ctx.Send(Parent, new TEvPartitionChooser::TEvChooseResult(Partition->PartitionId, Partition->TabletId, SeqNo));
     }
@@ -318,6 +322,7 @@ protected:
     TPartitionHelper<TPipeCreator> PartitionHelper;
 
     bool PartitionPersisted = false;
+    bool ResultWasSent = false;
 
     std::optional<ui64> SeqNo = 0;
 };

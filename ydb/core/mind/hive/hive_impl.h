@@ -414,6 +414,7 @@ protected:
     TOwnershipKeeper Keeper;
     TEventPriorityQueue<THive> EventQueue{*this};
     ui64 OperationsLogIndex = 0;
+    std::vector<TActorId> ActorsWaitingToMoveTablets;
 
     struct TPendingCreateTablet {
         NKikimrHive::TEvCreateTablet CreateTablet;
@@ -569,6 +570,7 @@ protected:
     void Handle(TEvPrivate::TEvProcessIncomingEvent::TPtr& ev);
     void Handle(TEvHive::TEvUpdateDomain::TPtr& ev);
     void Handle(TEvPrivate::TEvDeleteNode::TPtr& ev);
+    void Handle(TEvHive::TEvRequestTabletDistribution::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);
@@ -590,20 +592,9 @@ protected:
     void RestartBSControllerPipe();
     void RestartRootHivePipe();
 
-    struct TBestNodeResult {
-        TNodeInfo* BestNode;
-        bool TryToContinue;
-
-        TBestNodeResult(TNodeInfo& bestNode)
-            : BestNode(&bestNode)
-            , TryToContinue(true)
-        {}
-
-        TBestNodeResult(bool tryToContinue)
-            : BestNode(nullptr)
-            , TryToContinue(tryToContinue)
-        {}
-    };
+    struct TNoNodeFound {};
+    struct TTooManyTabletsStarting {};
+    using TBestNodeResult = std::variant<TNodeInfo*, TNoNodeFound, TTooManyTabletsStarting>;
 
     TBestNodeResult FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId = 0);
 
@@ -635,7 +626,7 @@ public:
     TTabletInfo& GetTablet(TTabletId tabletId, TFollowerId followerId);
     TTabletInfo* FindTablet(TTabletId tabletId, TFollowerId followerId);
     TTabletInfo* FindTablet(const TFullTabletId& tabletId) { return FindTablet(tabletId.first, tabletId.second); }
-    TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId);
+TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId);
     TStoragePoolInfo& GetStoragePool(const TString& name);
     TStoragePoolInfo* FindStoragePool(const TString& name);
     TDomainInfo* FindDomain(TSubDomainKey key);
@@ -658,6 +649,7 @@ public:
     void UpdateCounterBootQueueSize(ui64 bootQueueSize);
     void UpdateCounterEventQueueSize(i64 eventQueueSizeDiff);
     void UpdateCounterNodesConnected(i64 nodesConnectedDiff);
+    void UpdateCounterTabletsStarting(i64 tabletsStartingDiff);
     void RecordTabletMove(const TTabletMoveInfo& info);
     bool DomainHasNodes(const TSubDomainKey &domainKey) const;
     void ProcessBootQueue();
@@ -943,6 +935,10 @@ public:
         return CurrentConfig.GetStorageBalancerInflight();
     }
 
+    double GetNodeUsageRangeToKick() const {
+        return CurrentConfig.GetNodeUsageRangeToKick();
+    }
+
     static void ActualizeRestartStatistics(google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);
     static ui64 GetRestartsPerPeriod(const google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);
     static bool IsSystemTablet(TTabletTypes::EType type);
@@ -988,6 +984,7 @@ protected:
     THiveStats GetStats() const;
     void RemoveSubActor(ISubActor* subActor);
     bool StopSubActor(TSubActorId subActorId);
+    void WaitToMoveTablets(TActorId actor);
     const NKikimrLocal::TLocalConfig &GetLocalConfig() const { return LocalConfig; }
     NKikimrTabletBase::TMetrics GetDefaultResourceValuesForObject(TFullObjectId objectId);
     NKikimrTabletBase::TMetrics GetDefaultResourceValuesForTabletType(TTabletTypes::EType type);

@@ -80,6 +80,14 @@ public:
             if (Status == TEvLocal::TEvTabletStatus::StatusOk) {
                 tablet->Statistics.AddRestartTimestamp(now.MilliSeconds());
                 tablet->ActualizeTabletStatistics(now);
+                if (tablet->BootTime != TInstant()) {
+                    TDuration startTime = now - tablet->BootTime;
+                    if (startTime > TDuration::Seconds(30)) {
+                        BLOG_W("Tablet " << tablet->GetFullTabletId() << " was starting for " << startTime.Seconds() << " seconds");
+                    }
+                    Self->TabletCounters->Percentile()[NHive::COUNTER_TABLETS_START_TIME].IncrementFor(startTime.MilliSeconds());
+                    Self->UpdateCounterTabletsStarting(-1);
+                }
                 TNodeInfo* node = Self->FindNode(Local.NodeId());
                 if (node == nullptr) {
                     // event from IC about disconnection of the node could overtake events from the node itself because of Pipe Server
@@ -93,6 +101,10 @@ public:
                     SideEffects.Send(actor, new TEvPrivate::TEvRestartComplete({TabletId, FollowerId}, "OK"));
                 }
                 tablet->ActorsToNotifyOnRestart.clear();
+                for (const TActorId& actor : Self->ActorsWaitingToMoveTablets) {
+                    SideEffects.Send(actor, new TEvPrivate::TEvCanMoveTablets());
+                }
+                Self->ActorsWaitingToMoveTablets.clear();
                 if (tablet->GetLeader().IsDeleting()) {
                     tablet->SendStopTablet(SideEffects);
                     return true;

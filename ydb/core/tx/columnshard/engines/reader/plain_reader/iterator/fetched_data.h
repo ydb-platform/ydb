@@ -50,9 +50,9 @@ public:
         }
     }
 
-    void AddNulls(THashMap<TChunkAddress, ui32>&& blobs) {
+    void AddDefaults(THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo>&& blobs) {
         for (auto&& i : blobs) {
-            AFL_VERIFY(Blobs.emplace(i.first, i.second).second);
+            AFL_VERIFY(Blobs.emplace(i.first, std::move(i.second)).second);
         }
     }
 

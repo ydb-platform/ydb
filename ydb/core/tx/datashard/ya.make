@@ -189,6 +189,7 @@ SRCS(
     receive_snapshot_unit.cpp
     remove_lock_change_records.cpp
     remove_locks.cpp
+    remove_schema_snapshots.cpp
     range_ops.cpp
     read_iterator.h
     restore_unit.cpp
@@ -256,6 +257,7 @@ PEERDIR(
     ydb/library/aclib
     ydb/library/binary_json
     ydb/library/dynumber
+    ydb/library/minsketch
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/public/api/protos
     ydb/public/lib/deprecated/kicli

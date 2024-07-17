@@ -19,6 +19,7 @@ enum EDqStatsMode {
 message TDqAsyncBufferStats {
     // Data
     uint64 Bytes  = 1; // physical bytes
+    uint64 DecompressedBytes = 11; // decompressed bytes
     uint64 Rows   = 2; // logical rows (if applicable)
     uint64 Chunks = 3; // chunk is group of sent/received bytes in single batch
     uint64 Splits = 4; // logical partitioning (if applicable)
@@ -182,6 +183,7 @@ message TDqTaskStats {
     uint64 ResultBytes = 21;
 
     uint64 IngressBytes = 16;
+    uint64 IngressDecompressedBytes = 22;
     uint64 IngressRows = 17;
     uint64 EgressBytes = 18;
     uint64 EgressRows = 19;
@@ -239,11 +241,17 @@ message TDqComputeActorStats {
     google.protobuf.Any Extra = 200;
 }
 
+message TDqHistoryItem {
+    uint64 TimeMs = 1;
+    uint64 Value = 2;
+}
+
 message TDqStatsAggr {
     uint64 Min = 1;
     uint64 Max = 2;
     uint64 Sum = 3;
     uint64 Cnt = 4;
+    repeated TDqHistoryItem History = 5;
 }
 
 message TExtraStats {
@@ -258,6 +266,7 @@ message TDqStatsMinMax {
 message TDqAsyncStatsAggr {
     // Data
     TDqStatsAggr Bytes  = 1;
+    TDqStatsAggr DecompressedBytes = 12;
     TDqStatsAggr Rows   = 2;
     TDqStatsAggr Chunks = 3;
     TDqStatsAggr Splits = 4;
@@ -298,6 +307,7 @@ message TDqStageStats {
     uint32 StageId = 1;
     string StageGuid = 2;
     string Program = 3;
+    uint64 BaseTimeMs = 38;
 
     uint32 TotalTasksCount = 5;
     uint32 FailedTasksCount = 6;
@@ -312,6 +322,7 @@ message TDqStageStats {
     TDqStatsAggr ResultBytes = 27;
 
     TDqStatsAggr IngressBytes = 28;
+    TDqStatsAggr IngressDecompressedBytes = 37;
     TDqStatsAggr IngressRows = 29;
     TDqStatsAggr EgressBytes = 30;
     TDqStatsAggr EgressRows = 31;

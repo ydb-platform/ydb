@@ -1061,7 +1061,10 @@ public:
 
         SessionCtx->SetDatabase(database);
         SessionCtx->SetCluster(cluster);
-        SessionCtx->SetTempTables(std::move(tempTablesState));
+        if (tempTablesState) {
+            SessionCtx->SetSessionId(tempTablesState->SessionId);
+            SessionCtx->SetTempTables(std::move(tempTablesState));
+        }
 
         if (FederatedQuerySetup) {
             ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory({},
@@ -1692,6 +1695,7 @@ private:
         state->Configuration->AllowAtomicUploadCommit = queryType == EKikimrQueryType::Script;
         state->Configuration->Init(FederatedQuerySetup->S3GatewayConfig, TypesCtx);
         state->Gateway = FederatedQuerySetup->HttpGateway;
+        state->GatewayRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
         state->ExecutorPoolId = AppData()->UserPoolId;
 
         auto dataSource = NYql::CreateS3DataSource(state);

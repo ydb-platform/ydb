@@ -80,12 +80,10 @@ public:
         if (!batch || !batch->num_rows()) {
             return;
         }
-        if (filter && filter->IsTotalDenyFilter()) {
-            return;
-        }
 //        Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(batch, SortSchema));
+        const bool isDenyFilter = filter && filter->IsTotalDenyFilter();
         auto filterImpl = (!filter || filter->IsTotalAllowFilter()) ? nullptr : filter;
-        SortHeap.Push(TBatchIterator(batch, filterImpl, SortSchema->field_names(), DataSchema ? DataSchema->field_names() : std::vector<std::string>(), Reverse, VersionColumnNames));
+        SortHeap.Push(TBatchIterator(batch, filterImpl, SortSchema->field_names(), (!isDenyFilter && DataSchema) ? DataSchema->field_names() : std::vector<std::string>(), Reverse, VersionColumnNames));
     }
 
     bool IsEmpty() const {

@@ -5,6 +5,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/ut_utils.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/key.h>
+#include <ydb/core/persqueue/blob.h>
 
 #include <ydb/core/tx/long_tx_service/public/events.h>
 
@@ -108,6 +109,7 @@ protected:
     void TestTheCompletionOfATransaction(const TTransactionCompletionTestDescription& d);
     void RestartLongTxService();
     void RestartPQTablet(const TString& topicPath, ui32 partition);
+    void DumpPQTabletKeys(const TString& topicName, ui32 partition);
 
     void DeleteSupportivePartition(const TString& topicName,
                                    ui32 partition);
@@ -129,9 +131,25 @@ protected:
                       NTable::TTransaction* tx);
     size_t GetTableRecordsCount(const TString& tablePath);
 
+    enum ERestartPQTabletMode {
+        ERestartNo,
+        ERestartBeforeCommit,
+        ERestartAfterCommit,
+    };
+
+    struct TTestTxWithBigBlobsParams {
+        size_t OldHeadCount = 0;
+        size_t BigBlobsCount = 2;
+        size_t NewHeadCount = 0;
+        ERestartPQTabletMode RestartMode = ERestartNo;
+    };
+
+    void TestTxWithBigBlobs(const TTestTxWithBigBlobsParams& params);
+
     const TDriver& GetDriver() const;
 
     void CheckTabletKeys(const TString& topicName);
+    void DumpPQTabletKeys(const TString& topicName);
 
 private:
     template<class E>
@@ -142,17 +160,17 @@ private:
     ui64 GetTopicTabletId(const TActorId& actorId,
                           const TString& topicPath,
                           ui32 partition);
-    THashSet<TString> GetTabletKeys(const TActorId& actorId,
-                                    ui64 tabletId);
-    ui64 GetTransactionWriteId(const TActorId& actorId,
-                               ui64 tabletId);
+    TVector<TString> GetTabletKeys(const TActorId& actorId,
+                                   ui64 tabletId);
+    NPQ::TWriteId GetTransactionWriteId(const TActorId& actorId,
+                                        ui64 tabletId);
     void SendLongTxLockStatus(const TActorId& actorId,
                               ui64 tabletId,
-                              ui64 writeId,
+                              const NPQ::TWriteId& writeId,
                               NKikimrLongTxService::TEvLockStatus::EStatus status);
     void WaitForTheTabletToDeleteTheWriteInfo(const TActorId& actorId,
                                               ui64 tabletId,
-                                              ui64 writeId);
+                                              const NPQ::TWriteId& writeId);
 
     std::unique_ptr<TTopicSdkTestSetup> Setup;
     std::unique_ptr<TDriver> Driver;
@@ -498,6 +516,7 @@ auto TFixture::CreateTopicWriteSession(const TString& topicPath,
     options.ProducerId(messageGroupId);
     options.MessageGroupId(messageGroupId);
     options.PartitionId(partitionId);
+    options.Codec(ECodec::RAW);
     return client.CreateWriteSession(options);
 }
 
@@ -655,6 +674,7 @@ TVector<TString> TFixture::ReadFromTopic(const TString& topicPath,
 
         for (auto& event : session->GetEvents(settings)) {
             if (auto* e = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
+                Cerr << e->HasCompressedMessages() << " " << e->GetMessagesCount() << Endl;
                 for (auto& m : e->GetMessages()) {
                     messages.push_back(m.GetData());
                 }
@@ -778,7 +798,7 @@ ui64 TFixture::GetTopicTabletId(const TActorId& actorId, const TString& topicPat
     return Max<ui64>();
 }
 
-THashSet<TString> TFixture::GetTabletKeys(const TActorId& actorId, ui64 tabletId)
+TVector<TString> TFixture::GetTabletKeys(const TActorId& actorId, ui64 tabletId)
 {
     using TEvKeyValue = NKikimr::TEvKeyValue;
 
@@ -803,12 +823,12 @@ THashSet<TString> TFixture::GetTabletKeys(const TActorId& actorId, ui64 tabletId
     UNIT_ASSERT_VALUES_EQUAL(response->Record.GetCookie(), 12345);
     UNIT_ASSERT_VALUES_EQUAL(response->Record.ReadRangeResultSize(), 1);
 
-    THashSet<TString> keys;
+    TVector<TString> keys;
 
     auto& result = response->Record.GetReadRangeResult(0);
     for (size_t i = 0; i < result.PairSize(); ++i) {
         auto& kv = result.GetPair(i);
-        keys.insert(kv.GetKey());
+        keys.emplace_back(kv.GetKey());
     }
 
     return keys;
@@ -1224,8 +1244,8 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_10, TFixture)
     }
 }
 
-ui64 TFixture::GetTransactionWriteId(const TActorId& actorId,
-                                     ui64 tabletId)
+NPQ::TWriteId TFixture::GetTransactionWriteId(const TActorId& actorId,
+                                              ui64 tabletId)
 {
     using TEvKeyValue = NKikimr::TEvKeyValue;
 
@@ -1252,22 +1272,24 @@ ui64 TFixture::GetTransactionWriteId(const TActorId& actorId,
     auto& writeInfo = info.GetTxWrites(0);
     UNIT_ASSERT(writeInfo.HasWriteId());
 
-    return writeInfo.GetWriteId();
+    return NPQ::GetWriteId(writeInfo);
 }
 
 void TFixture::SendLongTxLockStatus(const TActorId& actorId,
                                     ui64 tabletId,
-                                    ui64 writeId,
+                                    const NPQ::TWriteId& writeId,
                                     NKikimrLongTxService::TEvLockStatus::EStatus status)
 {
-    auto event = std::make_unique<NKikimr::NLongTxService::TEvLongTxService::TEvLockStatus>(writeId, 0, status);
+    auto event =
+        std::make_unique<NKikimr::NLongTxService::TEvLongTxService::TEvLockStatus>(writeId.KeyId, writeId.NodeId,
+                                                                                   status);
     auto& runtime = Setup->GetRuntime();
     runtime.SendToPipe(tabletId, actorId, event.release());
 }
 
 void TFixture::WaitForTheTabletToDeleteTheWriteInfo(const TActorId& actorId,
                                                     ui64 tabletId,
-                                                    ui64 writeId)
+                                                    const NPQ::TWriteId& writeId)
 {
     while (true) {
         using TEvKeyValue = NKikimr::TEvKeyValue;
@@ -1295,7 +1317,7 @@ void TFixture::WaitForTheTabletToDeleteTheWriteInfo(const TActorId& actorId,
         for (size_t i = 0; i < info.TxWritesSize(); ++i) {
             auto& writeInfo = info.GetTxWrites(i);
             UNIT_ASSERT(writeInfo.HasWriteId());
-            if (writeInfo.GetWriteId() == writeId) {
+            if (NPQ::GetWriteId(writeInfo) == writeId) {
                 found = true;
                 break;
             }
@@ -1309,12 +1331,22 @@ void TFixture::WaitForTheTabletToDeleteTheWriteInfo(const TActorId& actorId,
     }
 }
 
+void TFixture::RestartPQTablet(const TString& topicName, ui32 partition)
+{
+    auto& runtime = Setup->GetRuntime();
+    TActorId edge = runtime.AllocateEdgeActor();
+    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partition);
+    runtime.SendToPipe(tabletId, edge, new TEvents::TEvPoison());
+
+    Sleep(TDuration::Seconds(2));
+}
+
 void TFixture::DeleteSupportivePartition(const TString& topicName, ui32 partition)
 {
     auto& runtime = Setup->GetRuntime();
     TActorId edge = runtime.AllocateEdgeActor();
     ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partition);
-    ui64 writeId = GetTransactionWriteId(edge, tabletId);
+    NPQ::TWriteId writeId = GetTransactionWriteId(edge, tabletId);
 
     SendLongTxLockStatus(edge, tabletId, writeId, NKikimrLongTxService::TEvLockStatus::STATUS_NOT_FOUND);
 
@@ -1336,7 +1368,7 @@ void TFixture::CheckTabletKeys(const TString& topicName)
     };
 
     bool found;
-    THashSet<TString> keys;
+    TVector<TString> keys;
     for (size_t i = 0; i < 20; ++i) {
         keys = GetTabletKeys(edge, tabletId);
 
@@ -1368,6 +1400,17 @@ void TFixture::CheckTabletKeys(const TString& topicName)
         Cerr << "=============" << Endl;
 
         UNIT_FAIL("unexpected keys for tablet " << tabletId);
+    }
+}
+
+void TFixture::DumpPQTabletKeys(const TString& topicName)
+{
+    auto& runtime = Setup->GetRuntime();
+    TActorId edge = runtime.AllocateEdgeActor();
+    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, 0);
+    auto keys = GetTabletKeys(edge, tabletId);
+    for (const auto& key : keys) {
+        Cerr << key << Endl;
     }
 }
 
@@ -1403,16 +1446,6 @@ void TFixture::TestTheCompletionOfATransaction(const TTransactionCompletionTestD
     for (auto& topic : d.Topics) {
         CheckTabletKeys(topic);
     }
-}
-
-void TFixture::RestartPQTablet(const TString& topicName, ui32 partition)
-{
-    auto& runtime = Setup->GetRuntime();
-    TActorId edge = runtime.AllocateEdgeActor();
-    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partition);
-    runtime.SendToPipe(tabletId, edge, new TEvents::TEvPoison());
-
-    Sleep(TDuration::Seconds(2));
 }
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_11, TFixture)
@@ -1514,6 +1547,125 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_16, TFixture)
     UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #2");
 }
 
+Y_UNIT_TEST_F(WriteToTopic_Demo_17, TFixture)
+{
+    CreateTopic("topic_A");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(22'000'000, 'x'));
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(100, 'x'));
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(200, 'x'));
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(300, 'x'));
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(10'000'000, 'x'));
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString( 6'000'000, 'x'), &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(20'000'000, 'x'), &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString( 7'000'000, 'x'), &tx);
+
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    //RestartPQTablet("topic_A", 0);
+
+    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 8);
+    UNIT_ASSERT_VALUES_EQUAL(messages[0].size(), 22'000'000);
+    UNIT_ASSERT_VALUES_EQUAL(messages[1].size(),        100);
+    UNIT_ASSERT_VALUES_EQUAL(messages[2].size(),        200);
+    UNIT_ASSERT_VALUES_EQUAL(messages[3].size(),        300);
+    UNIT_ASSERT_VALUES_EQUAL(messages[4].size(), 10'000'000);
+    UNIT_ASSERT_VALUES_EQUAL(messages[5].size(),  6'000'000);
+    UNIT_ASSERT_VALUES_EQUAL(messages[6].size(), 20'000'000);
+    UNIT_ASSERT_VALUES_EQUAL(messages[7].size(),  7'000'000);
+}
+
+void TFixture::TestTxWithBigBlobs(const TTestTxWithBigBlobsParams& params)
+{
+    size_t oldHeadMsgCount = 0;
+    size_t bigBlobMsgCount = 0;
+    size_t newHeadMsgCount = 0;
+
+    CreateTopic("topic_A");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    for (size_t i = 0; i < params.OldHeadCount; ++i) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(100'000, 'x'));
+        ++oldHeadMsgCount;
+    }
+
+    for (size_t i = 0; i < params.BigBlobsCount; ++i) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(7'900'000, 'x'), &tx);
+        ++bigBlobMsgCount;
+    }
+
+    for (size_t i = 0; i < params.NewHeadCount; ++i) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(100'000, 'x'), &tx);
+        ++newHeadMsgCount;
+    }
+
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+
+    if (params.RestartMode == ERestartBeforeCommit) {
+        RestartPQTablet("topic_A", 0);
+    }
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    if (params.RestartMode == ERestartAfterCommit) {
+        RestartPQTablet("topic_A", 0);
+    }
+
+    TVector<TString> messages;
+    for (size_t i = 0; (i < 10) && (messages.size() < (oldHeadMsgCount + bigBlobMsgCount + newHeadMsgCount)); ++i) {
+        auto block = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        for (auto& m : block) {
+            messages.push_back(std::move(m));
+        }
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), oldHeadMsgCount + bigBlobMsgCount + newHeadMsgCount);
+
+    size_t start = 0;
+
+    for (size_t i = 0; i < oldHeadMsgCount; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(messages[start + i].size(), 100'000);
+    }
+    start += oldHeadMsgCount;
+
+    for (size_t i = 0; i < bigBlobMsgCount; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(messages[start + i].size(), 7'900'000);
+    }
+    start += bigBlobMsgCount;
+
+    for (size_t i = 0; i < newHeadMsgCount; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(messages[start + i].size(), 100'000);
+    }
+}
+
+#define Y_UNIT_TEST_WITH_REBOOTS(name, oldHeadCount, bigBlobsCount, newHeadCount) \
+Y_UNIT_TEST_F(name##_RestartNo, TFixture) { \
+    TestTxWithBigBlobs({.OldHeadCount = oldHeadCount, .BigBlobsCount = bigBlobsCount, .NewHeadCount = newHeadCount, .RestartMode = ERestartNo}); \
+} \
+Y_UNIT_TEST_F(name##_RestartBeforeCommit, TFixture) { \
+    TestTxWithBigBlobs({.OldHeadCount = oldHeadCount, .BigBlobsCount = bigBlobsCount, .NewHeadCount = newHeadCount, .RestartMode = ERestartBeforeCommit}); \
+} \
+Y_UNIT_TEST_F(name##_RestartAfterCommit, TFixture) { \
+    TestTxWithBigBlobs({.OldHeadCount = oldHeadCount, .BigBlobsCount = bigBlobsCount, .NewHeadCount = newHeadCount, .RestartMode = ERestartAfterCommit}); \
+}
+
+Y_UNIT_TEST_WITH_REBOOTS(WriteToTopic_Demo_18, 10, 2, 10);
+Y_UNIT_TEST_WITH_REBOOTS(WriteToTopic_Demo_19, 10, 0, 10);
+Y_UNIT_TEST_WITH_REBOOTS(WriteToTopic_Demo_20, 10, 2,  0);
+
+Y_UNIT_TEST_WITH_REBOOTS(WriteToTopic_Demo_21,  0, 2, 10);
+Y_UNIT_TEST_WITH_REBOOTS(WriteToTopic_Demo_22,  0, 0, 10);
+Y_UNIT_TEST_WITH_REBOOTS(WriteToTopic_Demo_23,  0, 2,  0);
+
 void TFixture::CreateTable(const TString& tablePath)
 {
     UNIT_ASSERT(!tablePath.empty());
@@ -1568,7 +1720,9 @@ void TFixture::WriteToTable(const TString& tablePath,
                             const TVector<TTableRecord>& records,
                             NTable::TTransaction* tx)
 {
-    TString query = Sprintf(R"(UPSERT INTO `%s` (key, value) VALUES ($key, $value);)",
+    TString query = Sprintf("DECLARE $key AS Utf8;"
+                            "DECLARE $value AS Utf8;"
+                            "UPSERT INTO `%s` (key, value) VALUES ($key, $value);",
                             tablePath.data());
     NTable::TSession session = tx->GetSession();
 

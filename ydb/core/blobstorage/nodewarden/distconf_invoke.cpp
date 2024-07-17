@@ -378,7 +378,9 @@ namespace NKikimr::NStorage {
                     try {
                         Self->AllocateStaticGroup(&config, vdiskId.GroupID.GetRawId(), vdiskId.GroupGeneration + 1,
                             TBlobStorageGroupType((TBlobStorageGroupType::EErasureSpecies)group.GetErasureSpecies()),
-                            settings.GetGeometry(), settings.GetPDiskFilter(), replacedDisks, forbid, maxSlotSize,
+                            settings.GetGeometry(), settings.GetPDiskFilter(),
+                            settings.HasPDiskType() ? std::make_optional(settings.GetPDiskType()) : std::nullopt,
+                            replacedDisks, forbid, maxSlotSize,
                             &BaseConfig.value(), cmd.GetConvertToDonor(), cmd.GetIgnoreVSlotQuotaCheck(),
                             cmd.GetIsSelfHealReasonDecommit());
                     } catch (const TExConfigError& ex) {

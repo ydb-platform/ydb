@@ -1,4 +1,4 @@
-## Data views (VIEW) {#view}
+# Data views (VIEW)
 
 YQL supports two types of data views:
 

@@ -37,6 +37,7 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/engine/mkql_engine_flat_host.h>
+#include <ydb/core/statistics/events.h>
 #include <ydb/core/tablet/pipe_tracker.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
@@ -240,6 +241,7 @@ class TDataShard
     class TTxCdcStreamScanProgress;
     class TTxCdcStreamEmitHeartbeats;
     class TTxUpdateFollowerReadEdge;
+    class TTxRemoveSchemaSnapshots;
 
     template <typename T> friend class TTxDirectBase;
     class TTxUploadRows;
@@ -373,6 +375,7 @@ class TDataShard
             EvPlanPredictedTxs,
             EvStatisticsScanFinished,
             EvTableStatsError,
+            EvRemoveSchemaSnapshots,
             EvEnd
         };
 
@@ -594,6 +597,8 @@ class TDataShard
         struct TEvPlanPredictedTxs : public TEventLocal<TEvPlanPredictedTxs, EvPlanPredictedTxs> {};
 
         struct TEvStatisticsScanFinished : public TEventLocal<TEvStatisticsScanFinished, EvStatisticsScanFinished> {};
+
+        struct TEvRemoveSchemaSnapshots : public TEventLocal<TEvRemoveSchemaSnapshots, EvRemoveSchemaSnapshots> {};
     };
 
     struct Schema : NIceDb::Schema {
@@ -1322,8 +1327,8 @@ class TDataShard
     void Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAsyncJobComplete::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRestartOperation::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvStatisticsScanRequest::TPtr& ev, const TActorContext& ctx);
-    void HandleSafe(TEvDataShard::TEvStatisticsScanRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvStatisticsScanFinished::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvDataShard::TEvCancelBackup::TPtr &ev, const TActorContext &ctx);
@@ -1381,6 +1386,8 @@ class TDataShard
     void Handle(TEvPrivate::TEvConfirmReadonlyLease::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvPlanPredictedTxs::TPtr& ev, const TActorContext& ctx);
+
+    void Handle(TEvPrivate::TEvRemoveSchemaSnapshots::TPtr& ev, const TActorContext& ctx);
 
     void HandleByReplicationSourceOffsetsServer(STATEFN_SIG);
 
@@ -1494,8 +1501,10 @@ public:
             const TActorId& target, std::unique_ptr<IEventBase> event,
             ui64 cookie = 0);
 
-    void SendResult(const TActorContext &ctx, TOutputOpData::TResultPtr &result, const TActorId &target, ui64 step, ui64 txId);
-    void SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& result, const TActorId& target, ui64 step, ui64 txId);
+    void SendResult(const TActorContext &ctx, TOutputOpData::TResultPtr &result, const TActorId &target, ui64 step, ui64 txId,
+        NWilson::TTraceId traceId);
+    void SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& result, const TActorId& target, ui64 step, ui64 txId,
+        NWilson::TTraceId traceId);
 
     void FillSplitTrajectory(ui64 origin, NKikimrTx::TBalanceTrackList& tracks);
 
@@ -1854,6 +1863,11 @@ public:
         const TPathId& pathId, ui64 tableSchemaVersion,
         const NKikimrSchemeOp::TIndexDescription& indexDesc);
 
+    TUserTable::TPtr AlterTableSwitchIndexState(
+        const TActorContext& ctx, TTransactionContext& txc,
+        const TPathId& pathId, ui64 tableSchemaVersion,
+        const TPathId& streamPathId, NKikimrSchemeOp::EIndexState state);
+
     TUserTable::TPtr AlterTableDropIndex(
         const TActorContext& ctx, TTransactionContext& txc,
         const TPathId& pathId, ui64 tableSchemaVersion,
@@ -1898,7 +1912,8 @@ public:
     void MoveChangeRecord(NIceDb::TNiceDb& db, ui64 order, const TPathId& pathId);
     void MoveChangeRecord(NIceDb::TNiceDb& db, ui64 lockId, ui64 lockOffset, const TPathId& pathId);
     void RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order);
-    void EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records, ui64 cookie = 0);
+    // TODO(ilnaz): remove 'afterMove' after #6541
+    void EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records, ui64 cookie = 0, bool afterMove = false);
     ui32 GetFreeChangeQueueCapacity(ui64 cookie);
     ui64 ReserveChangeQueueCapacity(ui32 capacity);
     void UpdateChangeExchangeLag(TInstant now);
@@ -1912,6 +1927,8 @@ public:
     bool LoadChangeRecordCommits(NIceDb::TNiceDb& db, TVector<IDataShardChangeCollector::TChange>& records);
     void ScheduleRemoveLockChanges(ui64 lockId);
     void ScheduleRemoveAbandonedLockChanges();
+    void ScheduleRemoveSchemaSnapshot(const TSchemaSnapshotKey& key);
+    void ScheduleRemoveAbandonedSchemaSnapshots();
 
     static void PersistCdcStreamScanLastKey(NIceDb::TNiceDb& db, const TSerializedCellVec& value,
         const TPathId& tablePathId, const TPathId& streamPathId);
@@ -1950,7 +1967,6 @@ public:
     }
 
     TBuildIndexManager& GetBuildIndexManager() { return BuildIndexManager; }
-    const TBuildIndexManager& GetBuildIndexManager() const { return BuildIndexManager; }
 
     // Returns true when datashard is working in mvcc mode
     bool IsMvccEnabled() const;
@@ -1984,7 +2000,9 @@ public:
             const TRowVersion& version, EPromotePostExecuteEdges mode, TTransactionContext& txc);
     ui64 GetMaxObservedStep() const;
     void SendImmediateWriteResult(
-            const TRowVersion& version, const TActorId& target, IEventBase* event, ui64 cookie = 0);
+            const TRowVersion& version, const TActorId& target, IEventBase* event, ui64 cookie = 0,
+            const TActorId& sessionId = {},
+            NWilson::TTraceId traceId = {});
     TMonotonic ConfirmReadOnlyLease();
     void ConfirmReadOnlyLease(TMonotonic ts);
     void SendWithConfirmedReadOnlyLease(
@@ -1992,23 +2010,27 @@ public:
         const TActorId& target,
         IEventBase* event,
         ui64 cookie = 0,
-        const TActorId& sessionId = {});
+        const TActorId& sessionId = {},
+        NWilson::TTraceId traceId = {});
     void SendWithConfirmedReadOnlyLease(
         const TActorId& target,
         IEventBase* event,
         ui64 cookie = 0,
-        const TActorId& sessionId = {});
+        const TActorId& sessionId = {},
+        NWilson::TTraceId traceId = {});
     void SendImmediateReadResult(
         TMonotonic readTime,
         const TActorId& target,
         IEventBase* event,
         ui64 cookie = 0,
-        const TActorId& sessionId = {});
+        const TActorId& sessionId = {},
+        NWilson::TTraceId traceId = {});
     void SendImmediateReadResult(
         const TActorId& target,
         IEventBase* event,
         ui64 cookie = 0,
-        const TActorId& sessionId = {});
+        const TActorId& sessionId = {},
+        NWilson::TTraceId traceId = {});
     void SendAfterMediatorStepActivate(ui64 mediatorStep, const TActorContext& ctx);
 
     void CheckMediatorStateRestored();
@@ -2652,11 +2674,16 @@ private:
         TActorId Target;
         THolder<IEventBase> Event;
         ui64 Cookie;
+        TActorId SessionId;
+        NWilson::TSpan Span;
 
-        TMediatorDelayedReply(const TActorId& target, THolder<IEventBase> event, ui64 cookie)
+        TMediatorDelayedReply(const TActorId& target, THolder<IEventBase> event, ui64 cookie,
+                const TActorId& sessionId, NWilson::TSpan&& span)
             : Target(target)
             , Event(std::move(event))
             , Cookie(cookie)
+            , SessionId(sessionId)
+            , Span(std::move(span))
         { }
     };
 
@@ -2785,24 +2812,29 @@ private:
         ui64 LockOffset;
         ui64 ReservationCookie;
 
-        explicit TEnqueuedRecord(ui64 bodySize, const TPathId& tableId,
-                ui64 schemaVersion, TInstant created, TInstant enqueued,
-                ui64 lockId = 0, ui64 lockOffset = 0, ui64 cookie = 0)
+        explicit TEnqueuedRecord(ui64 bodySize, const TPathId& tableId, ui64 schemaVersion,
+                TInstant created, ui64 lockId = 0, ui64 lockOffset = 0)
             : BodySize(bodySize)
             , TableId(tableId)
             , SchemaVersion(schemaVersion)
             , SchemaSnapshotAcquired(false)
             , CreatedAt(created)
-            , EnqueuedAt(enqueued)
+            , EnqueuedAt(TInstant::Zero())
             , LockId(lockId)
             , LockOffset(lockOffset)
-            , ReservationCookie(cookie)
+            , ReservationCookie(0)
         {
         }
 
-        explicit TEnqueuedRecord(const IDataShardChangeCollector::TChange& record, TInstant now, ui64 cookie)
-            : TEnqueuedRecord(record.BodySize, record.TableId, record.SchemaVersion, record.CreatedAt(), now,
-                record.LockId, record.LockOffset, cookie)
+        explicit TEnqueuedRecord(const IDataShardChangeCollector::TChange& record)
+            : TEnqueuedRecord(record.BodySize, record.TableId, record.SchemaVersion,
+                record.CreatedAt(), record.LockId, record.LockOffset)
+        {
+        }
+
+        explicit TEnqueuedRecord(const TChangeRecord& record)
+            : TEnqueuedRecord(record.GetBody().size(), record.GetTableId(), record.GetSchemaVersion(),
+                record.GetApproximateCreationDateTime(), record.GetLockId(), record.GetLockOffset())
         {
         }
     };
@@ -2844,9 +2876,11 @@ private:
         size_t Count = 0;
     };
 
+    TVector<ui64> CommittingChangeRecords;
     THashMap<ui64, TUncommittedLockChangeRecords> LockChangeRecords; // ui64 is lock id
     THashMap<ui64, TCommittedLockChangeRecords> CommittedLockChangeRecords; // ui64 is lock id
     TVector<ui64> PendingLockChangeRecordsToRemove;
+    TVector<TSchemaSnapshotKey> PendingSchemaSnapshotsToGc;
 
     // in
     THashMap<ui64, TInChangeSender> InChangeSenders; // ui64 is shard id
@@ -2946,6 +2980,16 @@ public:
         CommittedLockChangeRecords = std::move(committedLockChangeRecords);
     }
 
+    auto TakeChangesQueue() {
+        auto result = std::move(ChangesQueue);
+        ChangesQueue.clear();
+        return result;
+    }
+
+    void SetChangesQueue(THashMap<ui64, TEnqueuedRecord>&& changesQueue) {
+        ChangesQueue = std::move(changesQueue);
+    }
+
 protected:
     // Redundant init state required by flat executor implementation
     void StateInit(TAutoPtr<NActors::IEventHandle> &ev) {
@@ -2967,6 +3011,7 @@ protected:
             HFuncTraced(TEvMediatorTimecast::TEvNotifyPlanStep, Handle);
             HFuncTraced(TEvPrivate::TEvMediatorRestoreBackup, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveLockChangeRecords, Handle);
+            HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateInactive unhandled event type: " << ev->GetTypeRewrite()
@@ -3093,8 +3138,9 @@ protected:
             HFuncTraced(TEvPrivate::TEvRemoveLockChangeRecords, Handle);
             HFunc(TEvPrivate::TEvConfirmReadonlyLease, Handle);
             HFunc(TEvPrivate::TEvPlanPredictedTxs, Handle);
-            HFunc(TEvDataShard::TEvStatisticsScanRequest, Handle);
+            HFunc(NStat::TEvStatistics::TEvStatisticsRequest, Handle);
             HFunc(TEvPrivate::TEvStatisticsScanFinished, Handle);
+            HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWork unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
@@ -3191,7 +3237,7 @@ protected:
 
             ev->Record.MutableTableStats()->SetDataSize(ti.Stats.DataStats.DataSize.Size + ti.Stats.MemDataSize);
             ev->Record.MutableTableStats()->SetIndexSize(ti.Stats.DataStats.IndexSize.Size);
-            ev->Record.MutableTableStats()->SetInMemSize(ti.Stats.MemDataSize);            
+            ev->Record.MutableTableStats()->SetInMemSize(ti.Stats.MemDataSize);
 
             TMap<ui8, std::tuple<ui64, ui64>> channels; // Channel -> (DataSize, IndexSize)
             for (size_t channel = 0; channel < ti.Stats.DataStats.DataSize.ByChannel.size(); channel++) {
@@ -3295,6 +3341,7 @@ void SendViaSession(const TActorId& sessionId,
                     const TActorId& src,
                     IEventBase* event,
                     ui32 flags = 0,
-                    ui64 cookie = 0);
+                    ui64 cookie = 0,
+                    NWilson::TTraceId traceId = {});
 
 }}

@@ -315,7 +315,7 @@ namespace NTabletFlatExecutor {
                     { },
                     std::move(result.Overlay));
 
-                auto fetch = loader.Run();
+                auto fetch = loader.Run(false);
 
                 Y_ABORT_UNLESS(!fetch, "Just compacted part needs to load some pages");
 
@@ -454,7 +454,7 @@ namespace NTabletFlatExecutor {
             }
 
             if (ok) {
-                Send(Owner, new NBlockIO::TEvStat(NBlockIO::EDir::Write, NBlockIO::EPriority::Bulk, msg.GroupId.GetRawId(), msg.Id));
+                Send(Owner, new NBlockIO::TEvStat(NBlockIO::EDir::Write, NBlockIO::EPriority::Bulk, msg.GroupId, msg.Id));
 
                 while (!WriteQueue.empty() && Writing < MaxFlight) {
                     SendToBs(std::move(WriteQueue.front()));

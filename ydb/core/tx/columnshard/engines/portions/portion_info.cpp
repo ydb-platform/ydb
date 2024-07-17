@@ -312,7 +312,10 @@ THashMap<NKikimr::NOlap::TChunkAddress, TString> TPortionInfo::DecodeBlobAddress
                 continue;
             }
             for (auto&& record : Indexes) {
-                if (RestoreBlobRange(record.GetBlobRange()) == b.first) {
+                if (!record.HasBlobRange()) {
+                    continue;
+                }
+                if (RestoreBlobRange(record.GetBlobRangeVerified()) == b.first) {
                     if (columnId != record.GetIndexId()) {
                         columnStorageId = indexInfo.GetIndexStorageId(record.GetIndexId());
                     }
@@ -355,7 +358,9 @@ void TPortionInfo::FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange
     }
     for (auto&& i : Indexes) {
         const TString& storageId = indexInfo.GetIndexStorageId(i.GetIndexId());
-        AFL_VERIFY(result[storageId].emplace(RestoreBlobRange(i.GetBlobRange())).second)("blob_id", RestoreBlobRange(i.GetBlobRange()).ToString());
+        if (auto bRange = i.GetBlobRangeOptional()) {
+            AFL_VERIFY(result[storageId].emplace(RestoreBlobRange(*bRange)).second)("blob_id", RestoreBlobRange(*bRange).ToString());
+        }
     }
 }
 
@@ -400,11 +405,13 @@ void TPortionInfo::FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobI
                 lastBlobIdx = BlobIds.size();
             }
         }
-        if (lastBlobIdx != i.GetBlobRange().GetBlobIdxVerified() && currentHashLocal->emplace(i.GetBlobRange().GetBlobIdxVerified()).second) {
-            auto blobId = GetBlobId(i.GetBlobRange().GetBlobIdxVerified());
-            AFL_VERIFY(currentHashResult);
-            AFL_VERIFY(currentHashResult->emplace(blobId).second)("blob_id", blobId.ToStringNew());
-            lastBlobIdx = i.GetBlobRange().GetBlobIdxVerified();
+        if (auto bRange = i.GetBlobRangeOptional()) {
+            if (lastBlobIdx != bRange->GetBlobIdxVerified() && currentHashLocal->emplace(bRange->GetBlobIdxVerified()).second) {
+                auto blobId = GetBlobId(bRange->GetBlobIdxVerified());
+                AFL_VERIFY(currentHashResult);
+                AFL_VERIFY(currentHashResult->emplace(blobId).second)("blob_id", blobId.ToStringNew());
+                lastBlobIdx = bRange->GetBlobIdxVerified();
+            }
         }
     }
 }
@@ -414,38 +421,30 @@ void TPortionInfo::FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobI
     return FillBlobIdsByStorage(result, schema->GetIndexInfo());
 }
 
-THashMap<TString, THashMap<TUnifiedBlobId, std::vector<std::shared_ptr<IPortionDataChunk>>>> TPortionInfo::RestoreEntityChunks(NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const {
-    THashMap<TString, THashMap<TUnifiedBlobId, std::vector<std::shared_ptr<IPortionDataChunk>>>> result;
+THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> TPortionInfo::RestoreEntityChunks(NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const {
+    THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> result;
     for (auto&& c : GetRecords()) {
         const TString& storageId = GetColumnStorageId(c.GetColumnId(), indexInfo);
-        auto& storageRecords = result[storageId];
-        auto& blobRecords = storageRecords[GetBlobId(c.GetBlobRange().GetBlobIdxVerified())];
-        blobRecords.emplace_back(std::make_shared<NChunks::TChunkPreparation>(blobs.Extract(storageId, RestoreBlobRange(c.GetBlobRange())), c, indexInfo.GetColumnFeaturesVerified(c.GetColumnId())));
-        blobRecords.back()->SetChunkIdx(c.GetChunkIdx());
+        auto chunk = std::make_shared<NChunks::TChunkPreparation>(blobs.Extract(storageId, RestoreBlobRange(c.GetBlobRange())), c, indexInfo.GetColumnFeaturesVerified(c.GetColumnId()));
+        chunk->SetChunkIdx(c.GetChunkIdx());
+        AFL_VERIFY(result[storageId].emplace(c.GetAddress(), chunk).second);
     }
     for (auto&& c : GetIndexes()) {
         const TString& storageId = indexInfo.GetIndexStorageId(c.GetIndexId());
-        auto& storageRecords = result[storageId];
-        auto& blobRecords = storageRecords[GetBlobId(c.GetBlobRange().GetBlobIdxVerified())];
-        blobRecords.emplace_back(std::make_shared<NChunks::TPortionIndexChunk>(c.GetAddress(), c.GetRecordsCount(), c.GetRawBytes(), blobs.Extract(storageId, RestoreBlobRange(c.GetBlobRange()))));
-        blobRecords.back()->SetChunkIdx(c.GetChunkIdx());
-    }
-    return result;
-}
+        const TString blobData = [&]() -> TString {
+            if (auto bRange = c.GetBlobRangeOptional()) {
+                return blobs.Extract(storageId, RestoreBlobRange(*bRange));
+            } else if (auto data = c.GetBlobDataOptional()) {
+                return *data;
+            } else {
+                AFL_VERIFY(false);
+                Y_UNREACHABLE();
+            }
+        }();
+        auto chunk = std::make_shared<NChunks::TPortionIndexChunk>(c.GetAddress(), c.GetRecordsCount(), c.GetRawBytes(), blobData);
+        chunk->SetChunkIdx(c.GetChunkIdx());
 
-THashMap<TString, THashMap<NKikimr::NOlap::TUnifiedBlobId, std::vector<NKikimr::NOlap::TEntityChunk>>> TPortionInfo::GetEntityChunks(const TIndexInfo& indexInfo) const {
-    THashMap<TString, THashMap<TUnifiedBlobId, std::vector<TEntityChunk>>> result;
-    for (auto&& c : GetRecords()) {
-        const TString& storageId = GetColumnStorageId(c.GetColumnId(), indexInfo);
-        auto& storageRecords = result[storageId];
-        auto& blobRecords = storageRecords[GetBlobId(c.GetBlobRange().GetBlobIdxVerified())];
-        blobRecords.emplace_back(TEntityChunk(c.GetAddress(), c.GetMeta().GetNumRows(), c.GetMeta().GetRawBytes(), c.GetBlobRange()));
-    }
-    for (auto&& c : GetIndexes()) {
-        const TString& storageId = indexInfo.GetIndexStorageId(c.GetIndexId());
-        auto& storageRecords = result[storageId];
-        auto& blobRecords = storageRecords[GetBlobId(c.GetBlobRange().GetBlobIdxVerified())];
-        blobRecords.emplace_back(TEntityChunk(c.GetAddress(), c.GetRecordsCount(), c.GetRawBytes(), c.GetBlobRange()));
+        AFL_VERIFY(result[storageId].emplace(c.GetAddress(), chunk).second);
     }
     return result;
 }
@@ -496,7 +495,9 @@ void TPortionInfo::FullValidation() const {
         blobIdxs.emplace(i.GetBlobRange().GetBlobIdxVerified());
     }
     for (auto&& i : Indexes) {
-        blobIdxs.emplace(i.GetBlobRange().GetBlobIdxVerified());
+        if (auto bRange = i.GetBlobRangeOptional()) {
+            blobIdxs.emplace(bRange->GetBlobIdxVerified());
+        }
     }
     if (BlobIds.size()) {
         AFL_VERIFY(BlobIds.size() == blobIdxs.size());
@@ -713,11 +714,11 @@ std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() c
 }
 
 TDeserializeChunkedArray::TChunk TPortionInfo::TAssembleBlobInfo::BuildDeserializeChunk(const std::shared_ptr<TColumnLoader>& loader) const {
-    if (NullRowsCount) {
+    if (DefaultRowsCount) {
         Y_ABORT_UNLESS(!Data);
-        auto emptyBatch = NArrow::MakeEmptyBatch(loader->GetExpectedSchema(), NullRowsCount);
-        AFL_VERIFY(emptyBatch->num_columns() == 1);
-        return TDeserializeChunkedArray::TChunk(emptyBatch->column(0));
+        AFL_VERIFY(loader->GetExpectedSchema()->num_fields() == 1);
+        auto col = NArrow::TThreadSimpleArraysCache::Get(loader->GetExpectedSchema()->field(0)->type(), DefaultValue, DefaultRowsCount);
+        return TDeserializeChunkedArray::TChunk(col);
     } else {
         AFL_VERIFY(ExpectedRowsCount);
         return TDeserializeChunkedArray::TChunk(*ExpectedRowsCount, Data);
@@ -725,9 +726,11 @@ TDeserializeChunkedArray::TChunk TPortionInfo::TAssembleBlobInfo::BuildDeseriali
 }
 
 std::shared_ptr<arrow::RecordBatch> TPortionInfo::TAssembleBlobInfo::BuildRecordBatch(const TColumnLoader& loader) const {
-    if (NullRowsCount) {
+    if (DefaultRowsCount) {
         Y_ABORT_UNLESS(!Data);
-        return NArrow::MakeEmptyBatch(loader.GetExpectedSchema(), NullRowsCount);
+        AFL_VERIFY(loader.GetExpectedSchema()->num_fields() == 1);
+        return arrow::RecordBatch::Make(loader.GetExpectedSchema(), DefaultRowsCount,
+            { NArrow::TThreadSimpleArraysCache::Get(loader.GetExpectedSchema()->field(0)->type(), DefaultValue, DefaultRowsCount) });
     } else {
         auto result = loader.Apply(Data);
         if (!result.ok()) {
@@ -762,12 +765,7 @@ std::shared_ptr<arrow::Table> TPortionInfo::TPreparedBatchData::AssembleTable(co
         std::shared_ptr<arrow::Scalar> scalar;
         if (options.IsConstantColumn(i.GetColumnId(), scalar)) {
             auto type = i.GetField()->type();
-            std::shared_ptr<arrow::Array> arr;
-            if (scalar) {
-                arr = NArrow::TThreadSimpleArraysCache::GetConst(type, scalar, RowsCount);
-            } else {
-                arr = NArrow::TThreadSimpleArraysCache::GetNull(type, RowsCount);
-            }
+            std::shared_ptr<arrow::Array> arr = NArrow::TThreadSimpleArraysCache::Get(type, scalar, RowsCount);
             columns.emplace_back(std::make_shared<arrow::ChunkedArray>(arr));
         } else {
             columns.emplace_back(i.Assemble());

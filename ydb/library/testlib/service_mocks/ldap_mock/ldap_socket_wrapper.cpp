@@ -59,18 +59,19 @@ wuQ2pZHL/HJ0laUSieHDJ5917w==
 };
 }
 
-TLdapSocketWrapper::TLdapSocketWrapper(TAtomicSharedPtr<TInetStreamSocket> listenSocket)
+TLdapSocketWrapper::TLdapSocketWrapper(TAtomicSharedPtr<TInetStreamSocket> listenSocket, bool isSecureConnection)
     : ListenSocket(listenSocket)
     , Socket()
     , Ctx(CreateSslContext())
     , Ssl(SSL_new(Ctx.Get()))
+    , IsSecureConnection(isSecureConnection)
 {
     SetupCerts();
     SSL_set_accept_state(Ssl.Get());
 }
 
 void TLdapSocketWrapper::Receive(void* buf, size_t len) {
-    TBaseSocket::Check(RecieveMsg(*this, buf, len), "Recieve");
+    TBaseSocket::Check(ReceiveMsg(*this, buf, len), "Receive");
 }
 
 void TLdapSocketWrapper::Send(const void* msg, size_t len) {
@@ -80,22 +81,29 @@ void TLdapSocketWrapper::Send(const void* msg, size_t len) {
 void TLdapSocketWrapper::OnAccept() {
     TSockAddrInet Addr;
     TBaseSocket::Check(ListenSocket->Accept(&Socket, &Addr), "accept");
-    RecieveMsg = &TLdapSocketWrapper::InsecureRecieve;
-    SendMsg = &TLdapSocketWrapper::InsecureSend;
+    if (IsSecureConnection) {
+        EnableSecureConnection();
+    } else {
+        ReceiveMsg = &TLdapSocketWrapper::InsecureReceive;
+        SendMsg = &TLdapSocketWrapper::InsecureSend;
+    }
 }
 
-void TLdapSocketWrapper::SslAccept() {
+void TLdapSocketWrapper::EnableSecureConnection() {
     SSL_set_fd(Ssl.Get(), Socket);
     TBaseSocket::Check(SSL_accept(Ssl.Get()), "SslAccept");
-    RecieveMsg = &TLdapSocketWrapper::SecureReceive;
+    ReceiveMsg = &TLdapSocketWrapper::SecureReceive;
     SendMsg = &TLdapSocketWrapper::SecureSend;
+}
+bool TLdapSocketWrapper::IsSecure() const {
+    return IsSecureConnection;
 }
 
 void TLdapSocketWrapper::Close() {
     Socket.Close();
 }
 
-ssize_t TLdapSocketWrapper::InsecureRecieve(void* buf, size_t len) {
+ssize_t TLdapSocketWrapper::InsecureReceive(void* buf, size_t len) {
     return Socket.Recv(buf, len);
 }
 

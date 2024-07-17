@@ -30,6 +30,7 @@ public:
     }
 
     std::shared_ptr<arrow::Table> BuildTable(const std::optional<std::set<std::string>>& columnNames = {}) const;
+    std::shared_ptr<arrow::Table> BuildTableOptional(const std::optional<std::set<std::string>>& columnNames = {}) const;
 
     std::shared_ptr<TGeneralContainer> BuildEmptySame() const;
 

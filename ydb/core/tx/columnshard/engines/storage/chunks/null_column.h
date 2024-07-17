@@ -6,10 +6,12 @@
 
 namespace NKikimr::NOlap::NChunks {
 
-class TNullChunkPreparation: public IPortionColumnChunk {
+class TDefaultChunkPreparation: public IPortionColumnChunk {
 private:
     using TBase = IPortionColumnChunk;
+    const std::shared_ptr<arrow::Scalar> DefaultValue;
     const ui32 RecordsCount;
+    const ui64 RawBytes;
     TString Data;
 protected:
     virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplitImpl(const TColumnSaver& /*saver*/, const std::shared_ptr<NColumnShard::TSplitterCounters>& /*counters*/,
@@ -23,6 +25,9 @@ protected:
     virtual ui32 DoGetRecordsCountImpl() const override {
         return RecordsCount;
     }
+    virtual ui64 DoGetRawBytesImpl() const override {
+        return RawBytes;
+    }
     virtual TString DoDebugString() const override {
         return TStringBuilder() << "rc=" << RecordsCount << ";data_size=" << Data.size() << ";";
     }
@@ -31,19 +36,22 @@ protected:
         return TSimpleChunkMeta(nullptr, false, false);
     }
     virtual std::shared_ptr<arrow::Scalar> DoGetFirstScalar() const override {
-        return nullptr;
+        return DefaultValue;
     }
     virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const override {
-        return nullptr;
+        return DefaultValue;
     }
 
 public:
-    TNullChunkPreparation(const ui32 columnId, const ui32 recordsCount, const std::shared_ptr<arrow::Field>& f, const TColumnSaver& saver)
+    TDefaultChunkPreparation(const ui32 columnId, const ui32 recordsCount, const ui32 rawBytes, const std::shared_ptr<arrow::Field>& f, 
+        const std::shared_ptr<arrow::Scalar>& defaultValue, const TColumnSaver& saver)
         : TBase(columnId)
+        , DefaultValue(defaultValue)
         , RecordsCount(recordsCount)
-        , Data(saver.Apply(NArrow::TThreadSimpleArraysCache::GetNull(f->type(), recordsCount), f))
+        , RawBytes(rawBytes)
     {
         Y_ABORT_UNLESS(RecordsCount);
+        Data = saver.Apply(NArrow::TThreadSimpleArraysCache::Get(f->type(), defaultValue, RecordsCount), f);
         SetChunkIdx(0);
     }
 };

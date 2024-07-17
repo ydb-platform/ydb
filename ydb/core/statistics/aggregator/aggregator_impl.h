@@ -16,7 +16,7 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/core/util/count_min_sketch.h>
+#include <ydb/library/minsketch/count_min_sketch.h>
 #include <ydb/core/util/intrusive_heap.h>
 
 #include <util/generic/intrlist.h>
@@ -107,7 +107,7 @@ private:
     void Handle(TEvStatistics::TEvScanTable::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev);
-    void Handle(TEvDataShard::TEvStatisticsScanResponse::TPtr& ev);
+    void Handle(NStat::TEvStatistics::TEvStatisticsResponse::TPtr& ev);
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev);
     void Handle(TEvStatistics::TEvStatTableCreationResponse::TPtr& ev);
     void Handle(TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr& ev);
@@ -157,7 +157,7 @@ private:
             hFunc(TEvStatistics::TEvScanTable, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
-            hFunc(TEvDataShard::TEvStatisticsScanResponse, Handle);
+            hFunc(NStat::TEvStatistics::TEvStatisticsResponse, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(TEvStatistics::TEvStatTableCreationResponse, Handle);
             hFunc(TEvStatistics::TEvSaveStatisticsQueryResponse, Handle);

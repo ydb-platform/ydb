@@ -38,6 +38,10 @@ namespace NKikimr {
 
                 static constexpr bool HaveToMergeData() { return true; }
 
+                void Finish() {}
+
+                void Clear() {}
+
                 void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key,
                         ui64 circaLsn) {
                     TDiskDataExtractor extr;
@@ -77,9 +81,8 @@ namespace NKikimr {
 
             TMerger merger{*res, Max<ui32>()};
             TFreshDataSnapshot<TKeyLogoBlob, TMemRecLogoBlob>::TForwardIterator iter(Snap.HullCtx, &Snap.LogoBlobsSnap.FreshSnap);
-            for (iter.SeekToFirst(); iter.Valid(); iter.Next()) {
-                iter.PutToMerger(&merger);
-            }
+            THeapIterator<TKeyLogoBlob, TMemRecLogoBlob, true> heapIt(&iter);
+            heapIt.Walk(TKeyLogoBlob::First(), &merger, [] (TKeyLogoBlob /*key*/, auto* /*merger*/) { return true; });
 
             Send(Ev->Sender, res.release(), 0, Ev->Cookie);
             PassAway();

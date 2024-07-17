@@ -1,0 +1,7 @@
+package NYT.NTesting;
+
+message TRow {
+    optional string String = 1;
+    optional int32 Int32 = 2;
+    optional fixed64 Fixed64 = 3;
+}

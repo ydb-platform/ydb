@@ -5,6 +5,8 @@
 #include <library/cpp/json/yson/json2yson.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+
 namespace NFq {
 
 using TAggregates = std::map<TString, std::optional<ui64>>;
@@ -70,6 +72,7 @@ struct TTotalStatistics {
     TAggregate ResultBytes;
     TAggregate ResultRows;
     TAggregate IngressBytes;
+    TAggregate IngressDecompressedBytes;
     TAggregate IngressRows;
     TAggregate EgressBytes;
     TAggregate EgressRows;
@@ -288,6 +291,8 @@ void WriteNamedNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const T
                         totals.ResultRows.Add(*sum);
                     } else if (name == "IngressBytes") {
                         totals.IngressBytes.Add(*sum);
+                    } else if (name == "IngressDecompressedBytes") {
+                        totals.IngressDecompressedBytes.Add(*sum);
                     } else if (name == "IngressRows") {
                         totals.IngressRows.Add(*sum);
                     } else if (name == "EgressBytes") {
@@ -457,6 +462,7 @@ TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage) {
                         totals.ResultBytes.Write(writer, "ResultBytes");
                         totals.ResultRows.Write(writer, "ResultRows");
                         totals.IngressBytes.Write(writer, "IngressBytes");
+                        totals.IngressDecompressedBytes.Write(writer, "IngressDecompressedBytes");
                         totals.IngressRows.Write(writer, "IngressRows");
                         totals.EgressBytes.Write(writer, "EgressBytes");
                         totals.EgressRows.Write(writer, "EgressRows");
@@ -504,6 +510,11 @@ struct TStatsAggregator {
             Aggregates[source + ".Bytes"] += ingress->GetIntegerSafe();
             success = true;
         }
+        if (auto ingress = node.GetValueByPath("Ingress.DecompressedBytes.Sum")) {
+            auto source = name.substr(prefix.size());
+            Aggregates[source + ".DecompressedBytes"] += ingress->GetIntegerSafe();
+            success = true;
+        }
         if (auto ingress = node.GetValueByPath("Ingress.Rows.Sum")) {
             auto source = name.substr(prefix.size());
             Aggregates[source + ".Rows"] += ingress->GetIntegerSafe();
@@ -519,6 +530,7 @@ struct TStatsAggregator {
 
     THashMap<TString, i64> Aggregates{std::pair<TString, i64>
         {"IngressBytes", 0},
+        {"IngressDecompressedBytes", 0},
         {"EgressBytes", 0},
         {"IngressRows", 0},
         {"EgressRows", 0},
@@ -959,6 +971,7 @@ TString GetPrettyStatistics(const TString& statistics) {
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.Tasks", "Tasks");
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.CpuTimeUs", "CpuTimeUs");
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressBytes", "IngressBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.DecompressedBytes", "DecompressedBytes");
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressRows", "IngressRows");
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.InputBytes", "InputBytes");
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.InputRows", "InputRows");
@@ -979,6 +992,7 @@ TString GetPrettyStatistics(const TString& statistics) {
                     RemapNode(writer, p.second, "Tasks", "Tasks");
                     RemapNode(writer, p.second, "CpuTimeUs", "CpuTimeUs");
                     RemapNode(writer, p.second, "IngressBytes", "IngressBytes");
+                    RemapNode(writer, p.second, "IngressDecompressedBytes", "IngressDecompressedBytes");
                     RemapNode(writer, p.second, "IngressRows", "IngressRows");
                     RemapNode(writer, p.second, "InputBytes", "InputBytes");
                     RemapNode(writer, p.second, "InputRows", "InputRows");
@@ -1121,8 +1135,8 @@ TString SimplifiedPlan(const TString& plan) {
 }
 
 struct TNoneStatProcessor : IPlanStatProcessor {
-    Ydb::Query::StatsMode GetStatsMode() override {
-        return Ydb::Query::StatsMode::STATS_MODE_NONE;
+    NYdb::NQuery::EStatsMode GetStatsMode() override {
+        return NYdb::NQuery::EStatsMode::None;
     }
 
     TString ConvertPlan(const TString& plan) override {
@@ -1148,14 +1162,14 @@ struct TNoneStatProcessor : IPlanStatProcessor {
 };
 
 struct TBasicStatProcessor : TNoneStatProcessor {
-    Ydb::Query::StatsMode GetStatsMode() override {
-        return Ydb::Query::StatsMode::STATS_MODE_BASIC;
+    NYdb::NQuery::EStatsMode GetStatsMode() override {
+        return NYdb::NQuery::EStatsMode::Basic;
     }
 };
 
 struct TPlanStatProcessor : IPlanStatProcessor {
-    Ydb::Query::StatsMode GetStatsMode() override {
-        return Ydb::Query::StatsMode::STATS_MODE_FULL;
+    NYdb::NQuery::EStatsMode GetStatsMode() override {
+        return NYdb::NQuery::EStatsMode::Full;
     }
 
     TString ConvertPlan(const TString& plan) override {
@@ -1192,8 +1206,8 @@ struct TCostStatProcessor : TPlanStatProcessor {
 };
 
 struct TProfileStatProcessor : TPlanStatProcessor {
-    Ydb::Query::StatsMode GetStatsMode() override {
-        return Ydb::Query::StatsMode::STATS_MODE_PROFILE;
+    NYdb::NQuery::EStatsMode GetStatsMode() override {
+        return NYdb::NQuery::EStatsMode::Profile;
     }
 };
 
@@ -1221,7 +1235,7 @@ PingTaskRequestBuilder::PingTaskRequestBuilder(const NConfig::TCommonConfig& com
 {}
 
 Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(
-    const Ydb::TableStats::QueryStats& queryStats, 
+    const NYdb::NQuery::TExecStats& queryStats,
     const NYql::TIssues& issues, 
     std::optional<FederatedQuery::QueryMeta::ComputeStatus> computeStatus,
     std::optional<NYql::NDqProto::StatusIds::StatusCode> pendingStatusCode
@@ -1244,8 +1258,9 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(
 }
 
 
-Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const Ydb::TableStats::QueryStats& queryStats) {
-    return Build(queryStats.query_plan(), queryStats.query_ast(), queryStats.compilation().duration_us(), queryStats.total_duration_us());
+Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const NYdb::NQuery::TExecStats& queryStats) {
+    const auto& statsProto = NYdb::TProtoAccessor().GetProto(queryStats); 
+    return Build(statsProto.query_plan(), statsProto.query_ast(), statsProto.compilation().duration_us(), statsProto.total_duration_us());
 }
 
 Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const TString& queryPlan, const TString& queryAst, int64_t compilationTimeUs, int64_t computeTimeUs) {

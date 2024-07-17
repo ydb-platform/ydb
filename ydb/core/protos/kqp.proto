@@ -79,7 +79,12 @@ message TTopicOperationsRequest {
 }
 
 message TTopicOperationsResponse {
-    optional int64 WriteId = 1;
+    message TWriteId {
+        optional uint64 NodeId = 1;
+        optional uint64 KeyId = 2;
+    }
+
+    optional TWriteId WriteId = 1;
 };
 
 message TQueryRequest {
@@ -732,6 +737,7 @@ message TKqpTableSinkSettings {
         MODE_UPSERT = 1;
         MODE_INSERT = 2;
         MODE_DELETE = 3;
+        MODE_UPDATE = 4;
     }
 
     optional NKqpProto.TKqpPhyTableId Table = 3;
@@ -800,4 +806,5 @@ message TScriptExecutionOperationMeta {
 /// KQP workload manager Events
 message TEvRefreshPoolState {
     optional string PoolId = 1;
+    optional string Database = 2;
 }

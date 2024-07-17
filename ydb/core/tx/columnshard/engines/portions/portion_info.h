@@ -180,6 +180,10 @@ public:
         return ShardingVersion;
     }
 
+    bool CrossSSWith(const TPortionInfo& p) const {
+        return std::min(RecordSnapshotMax(), p.RecordSnapshotMax()) <= std::max(RecordSnapshotMin(), p.RecordSnapshotMin());
+    }
+
     ui64 GetShardingVersionDef(const ui64 verDefault) const {
         return ShardingVersion.value_or(verDefault);
     }
@@ -191,6 +195,16 @@ public:
 
     void SetRemoveSnapshot(const ui64 planStep, const ui64 txId) {
         SetRemoveSnapshot(TSnapshot(planStep, txId));
+    }
+
+    std::vector<TString> GetIndexInplaceDataVerified(const ui32 indexId) const {
+        std::vector<TString> result;
+        for (auto&& i : Indexes) {
+            if (i.GetEntityId() == indexId) {
+                result.emplace_back(i.GetBlobDataVerified());
+            }
+        }
+        return result;
     }
 
     void InitRuntimeFeature(const ERuntimeFeature feature, const bool activity) {
@@ -235,8 +249,7 @@ public:
 
     void ReorderChunks();
 
-    THashMap<TString, THashMap<TUnifiedBlobId, std::vector<std::shared_ptr<IPortionDataChunk>>>> RestoreEntityChunks(NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const;
-    THashMap<TString, THashMap<TUnifiedBlobId, std::vector<TEntityChunk>>> GetEntityChunks(const TIndexInfo & info) const;
+    THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> RestoreEntityChunks(NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const;
 
     const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
         return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
@@ -380,20 +393,6 @@ public:
             }
         }
         return nullptr;
-    }
-
-    std::optional<TEntityChunk> GetEntityRecord(const TChunkAddress& address) const {
-        for (auto&& c : GetRecords()) {
-            if (c.GetAddress() == address) {
-                return TEntityChunk(c.GetAddress(), c.GetMeta().GetNumRows(), c.GetMeta().GetRawBytes(), c.GetBlobRange());
-            }
-        }
-        for (auto&& c : GetIndexes()) {
-            if (c.GetAddress() == address) {
-                return TEntityChunk(c.GetAddress(), c.GetRecordsCount(), c.GetRawBytes(), c.GetBlobRange());
-            }
-        }
-        return {};
     }
 
     bool HasEntityAddress(const TChunkAddress& address) const {
@@ -587,7 +586,7 @@ public:
     ui64 GetIndexBlobBytes() const noexcept {
         ui64 sum = 0;
         for (const auto& rec : Indexes) {
-            sum += rec.GetBlobRange().Size;
+            sum += rec.GetDataSize();
         }
         return sum;
     }
@@ -609,7 +608,8 @@ public:
     class TAssembleBlobInfo {
     private:
         YDB_READONLY_DEF(std::optional<ui32>, ExpectedRowsCount);
-        ui32 NullRowsCount = 0;
+        ui32 DefaultRowsCount = 0;
+        std::shared_ptr<arrow::Scalar> DefaultValue;
         TString Data;
     public:
         ui32 GetExpectedRowsCountVerified() const {
@@ -621,13 +621,15 @@ public:
             AFL_VERIFY(!ExpectedRowsCount);
             ExpectedRowsCount = expectedRowsCount;
             if (!Data) {
-                AFL_VERIFY(*ExpectedRowsCount == NullRowsCount);
+                AFL_VERIFY(*ExpectedRowsCount == DefaultRowsCount);
             }
         }
 
-        TAssembleBlobInfo(const ui32 rowsCount)
-            : NullRowsCount(rowsCount) {
-            AFL_VERIFY(NullRowsCount);
+        TAssembleBlobInfo(const ui32 rowsCount, const std::shared_ptr<arrow::Scalar>& defValue)
+            : DefaultRowsCount(rowsCount)
+            , DefaultValue(defValue)
+        {
+            AFL_VERIFY(DefaultRowsCount);
         }
 
         TAssembleBlobInfo(const TString& data)
@@ -635,8 +637,8 @@ public:
             AFL_VERIFY(!!Data);
         }
 
-        ui32 GetNullRowsCount() const noexcept {
-            return NullRowsCount;
+        ui32 GetDefaultRowsCount() const noexcept {
+            return DefaultRowsCount;
         }
 
         const TString& GetData() const noexcept {
@@ -644,11 +646,11 @@ public:
         }
 
         bool IsBlob() const {
-            return !NullRowsCount && !!Data;
+            return !DefaultRowsCount && !!Data;
         }
 
-        bool IsNull() const {
-            return NullRowsCount && !Data;
+        bool IsDefault() const {
+            return DefaultRowsCount && !Data;
         }
 
         std::shared_ptr<arrow::RecordBatch> BuildRecordBatch(const TColumnLoader& loader) const;
@@ -784,7 +786,7 @@ public:
 
         TPreparedColumn Compile() {
             if (BlobsInfo.empty()) {
-                BlobsInfo.emplace_back(TAssembleBlobInfo(NumRows));
+                BlobsInfo.emplace_back(TAssembleBlobInfo(NumRows, DataLoader ? DataLoader->GetDefaultValue() : ResultLoader->GetDefaultValue()));
                 return TPreparedColumn(std::move(BlobsInfo), ResultLoader);
             } else {
                 AFL_VERIFY(NumRowsByChunks == NumRows)("by_chunks", NumRowsByChunks)("expected", NumRows);

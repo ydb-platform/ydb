@@ -55,8 +55,6 @@ void ConvertDirectoryEntry(const NKikimrSchemeOp::TPathDescription& from, Ydb::S
 bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
                                 TCell& c, TString& err, TMemoryPool& valueDataPool);
 
-bool CellFromLiteralExprNode(NYql::NNodes::TExprBase maybeLiteral, TCell& cell, TMemoryPool& valueDataPool); 
-
 void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeInfo, const TCell& cell);
 
 

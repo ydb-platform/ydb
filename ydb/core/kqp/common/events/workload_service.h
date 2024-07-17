@@ -13,37 +13,47 @@
 namespace NKikimr::NKqp::NWorkload {
 
 struct TEvPlaceRequestIntoPool : public NActors::TEventLocal<TEvPlaceRequestIntoPool, TKqpWorkloadServiceEvents::EvPlaceRequestIntoPool> {
-    TEvPlaceRequestIntoPool(const TString& sessionId, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken)
-        : SessionId(sessionId)
+    TEvPlaceRequestIntoPool(const TString& database, const TString& sessionId, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken)
+        : Database(database)
+        , SessionId(sessionId)
         , PoolId(poolId)
         , UserToken(userToken)
     {}
 
+    const TString Database;
     const TString SessionId;
-    const TString PoolId;
-    const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TString PoolId;  // Can be changed to default pool id
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 };
 
 struct TEvContinueRequest : public NActors::TEventLocal<TEvContinueRequest, TKqpWorkloadServiceEvents::EvContinueRequest> {
-    TEvContinueRequest(Ydb::StatusIds::StatusCode status, const NResourcePool::TPoolSettings& poolConfig, NYql::TIssues issues = {})
+    TEvContinueRequest(Ydb::StatusIds::StatusCode status, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, NYql::TIssues issues = {})
         : Status(status)
+        , PoolId(poolId)
         , PoolConfig(poolConfig)
         , Issues(std::move(issues))
     {}
 
     const Ydb::StatusIds::StatusCode Status;
+    const TString PoolId;
     const NResourcePool::TPoolSettings PoolConfig;
     const NYql::TIssues Issues;
 };
 
 struct TEvCleanupRequest : public NActors::TEventLocal<TEvCleanupRequest, TKqpWorkloadServiceEvents::EvCleanupRequest> {
-    explicit TEvCleanupRequest(const TString& sessionId, const TString& poolId)
-        : SessionId(sessionId)
+    TEvCleanupRequest(const TString& database, const TString& sessionId, const TString& poolId, TDuration duration, TDuration cpuConsumed)
+        : Database(database)
+        , SessionId(sessionId)
         , PoolId(poolId)
+        , Duration(duration)
+        , CpuConsumed(cpuConsumed)
     {}
 
+    const TString Database;
     const TString SessionId;
     const TString PoolId;
+    const TDuration Duration;
+    const TDuration CpuConsumed;
 };
 
 struct TEvCleanupResponse : public NActors::TEventLocal<TEvCleanupResponse, TKqpWorkloadServiceEvents::EvCleanupResponse> {

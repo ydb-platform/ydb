@@ -379,6 +379,7 @@ public:
             decompressorBuffer = MakeDecompressor(*buffer, ReadSpec->Compression);
             YQL_ENSURE(decompressorBuffer, "Unsupported " << ReadSpec->Compression << " compression.");
             buffer = decompressorBuffer.get();
+            
         }
 
         auto stream = std::make_unique<NDB::InputStreamFromInputFormat>(
@@ -390,7 +391,7 @@ public:
         while (NDB::Block batch = stream->read()) {
             Paused = SourceContext->Add(batch.bytes(), SelfActorId);
             const bool isCancelled = StopIfConsumedEnough(batch.rows());
-            Send(ParentActorId, new TEvS3Provider::TEvNextBlock(batch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta()));
+            Send(ParentActorId, new TEvS3Provider::TEvNextBlock(batch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta(), ReadSpec->Compression ? TakeIngressDecompressedDelta(buffer->count()) : 0ULL));
             if (Paused) {
                 CpuTime += GetCpuTimeDelta();
                 auto ev = WaitForSpecificEvent<TEvS3Provider::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
@@ -431,7 +432,7 @@ public:
         while (NDB::Block batch = stream->read()) {
             Paused = SourceContext->Add(batch.bytes(), SelfActorId);
             const bool isCancelled = StopIfConsumedEnough(batch.rows());
-            Send(ParentActorId, new TEvS3Provider::TEvNextBlock(batch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta()));
+            Send(ParentActorId, new TEvS3Provider::TEvNextBlock(batch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta(), ReadSpec->Compression ? TakeIngressDecompressedDelta(buffer->count()) : 0ULL));
             if (Paused) {
                 CpuTime += GetCpuTimeDelta();
                 auto ev = WaitForSpecificEvent<TEvS3Provider::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
@@ -1016,6 +1017,12 @@ private:
         return currentIngressBytes;
     }
 
+    ui64 TakeIngressDecompressedDelta(ui64 current) {
+        ui64 delta = current - TotalIngressDecompressedBytes;
+        TotalIngressDecompressedBytes = current;
+        return delta;
+    }
+
     TDuration TakeCpuTimeDelta() {
         auto currentCpuTime = CpuTime;
         CpuTime = TDuration::Zero();
@@ -1160,6 +1167,7 @@ private:
     std::size_t LastOffset = 0;
     TString LastData;
     ui64 IngressBytes = 0;
+    ui64 TotalIngressDecompressedBytes = 0;
     TDuration CpuTime;
     ui64 StartCycleCount = 0;
     TString InputBuffer;
@@ -1311,6 +1319,7 @@ public:
                 FileQueueBatchSizeLimit,
                 FileQueueBatchObjectCountLimit,
                 Gateway,
+                RetryPolicy,
                 Url,
                 AuthInfo,
                 Pattern,
@@ -1644,6 +1653,7 @@ private:
         YQL_ENSURE(!ReadSpec->Arrow);
         auto rows = next->Get()->Block.rows();
         IngressStats.Bytes += next->Get()->IngressDelta;
+        IngressStats.DecompressedBytes += next->Get()->IngressDecompressedDelta;
         IngressStats.Rows += rows;
         IngressStats.Chunks++;
         IngressStats.Resume();

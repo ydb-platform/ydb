@@ -225,11 +225,6 @@ public:
 
     // Queues
     void AdvanceConsumer(
-        const NYPath::TYPath& path,
-        int partitionIndex,
-        std::optional<i64> oldOffset,
-        i64 newOffset) override;
-    void AdvanceConsumer(
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
         int partitionIndex,
@@ -246,8 +241,8 @@ public:
     TFuture<TPushQueueProducerResult> PushQueueProducer(
         const NYPath::TRichYPath& producerPath,
         const NYPath::TRichYPath& queuePath,
-        const TString& sessionId,
-        i64 epoch,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
+        NQueueClient::TQueueProducerEpoch epoch,
         NTableClient::TNameTablePtr nameTable,
         TSharedRange<NTableClient::TUnversionedRow> rows,
         const TPushQueueProducerOptions& options) override;

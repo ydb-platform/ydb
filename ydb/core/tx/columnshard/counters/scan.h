@@ -3,6 +3,7 @@
 #include "common/histogram.h"
 #include <ydb/core/tx/columnshard/resources/memory.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/counters.h>
+#include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NKikimr::NColumnShard {
@@ -10,21 +11,23 @@ namespace NKikimr::NColumnShard {
 class TScanAggregations: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
-    std::shared_ptr<NOlap::TMemoryAggregation> ReadBlobs;
-    std::shared_ptr<NOlap::TMemoryAggregation> GranulesProcessing;
-    std::shared_ptr<NOlap::TMemoryAggregation> GranulesReady;
     std::shared_ptr<NOlap::TMemoryAggregation> ResultsReady;
+    std::shared_ptr<NOlap::TMemoryAggregation> RequestedResourcesMemory;
     std::shared_ptr<TValueAggregationClient> ScanDuration;
     std::shared_ptr<TValueAggregationClient> BlobsWaitingDuration;
 public:
     TScanAggregations(const TString& moduleId)
         : TBase(moduleId)
-        , GranulesProcessing(std::make_shared<NOlap::TMemoryAggregation>(moduleId, "InFlight/Granules/Processing"))
         , ResultsReady(std::make_shared<NOlap::TMemoryAggregation>(moduleId, "InFlight/Results/Ready"))
+        , RequestedResourcesMemory(std::make_shared<NOlap::TMemoryAggregation>(moduleId, "InFlight/Resources/Requested"))
         , ScanDuration(TBase::GetValueAutoAggregationsClient("ScanDuration"))
         , BlobsWaitingDuration(TBase::GetValueAutoAggregationsClient("BlobsWaitingDuration"))
     {
 
+    }
+
+    std::shared_ptr<NOlap::TMemoryAggregation> GetRequestedResourcesMemory() const {
+        return RequestedResourcesMemory;
     }
 
     void OnBlobWaitingDuration(const TDuration d, const TDuration fullScanDuration) const {
@@ -32,9 +35,6 @@ public:
         ScanDuration->SetValue(fullScanDuration.MicroSeconds());
     }
 
-    const std::shared_ptr<NOlap::TMemoryAggregation>& GetGranulesProcessing() const {
-        return GranulesProcessing;
-    }
     const std::shared_ptr<NOlap::TMemoryAggregation>& GetResultsReady() const {
         return ResultsReady;
     }
@@ -282,15 +282,54 @@ public:
 
 };
 
+class TReaderResourcesGuard {
+private:
+    std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> Allocated;
+    std::shared_ptr<TAtomicCounter> Requested;
+    const std::shared_ptr<NOlap::TMemoryAggregation> SignalCounter;
+    const ui64 Volume;
+
+public:
+    TReaderResourcesGuard(const ui64 volume, const std::shared_ptr<TAtomicCounter>& requested, const std::shared_ptr<NOlap::TMemoryAggregation>& signalWatcher)
+        : Requested(requested)
+        , SignalCounter(signalWatcher)
+        , Volume(volume)
+    {
+        AFL_VERIFY(Requested);
+        Requested->Add(Volume);
+        SignalCounter->AddBytes(volume);
+    }
+
+    void InitResources(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& g) {
+        AFL_VERIFY(!Allocated);
+        AFL_VERIFY(g->GetMemory() == Volume)("volume", Volume)("allocated", g->GetMemory());
+        Allocated = g;
+    }
+
+    ~TReaderResourcesGuard() {
+        SignalCounter->RemoveBytes(Volume);
+        AFL_VERIFY(Requested->Sub(Volume) >= 0);
+    }
+};
+
 class TConcreteScanCounters: public TScanCounters {
 private:
     using TBase = TScanCounters;
+    std::shared_ptr<TAtomicCounter> RequestedResourcesBytes;
     std::shared_ptr<TAtomicCounter> MergeTasksCount;
     std::shared_ptr<TAtomicCounter> AssembleTasksCount;
     std::shared_ptr<TAtomicCounter> ReadTasksCount;
     std::shared_ptr<TAtomicCounter> ResourcesAllocationTasksCount;
 public:
     TScanAggregations Aggregations;
+
+    ui64 GetRequestedMemoryBytes() const {
+        return RequestedResourcesBytes->Val();
+    }
+
+    std::shared_ptr<TReaderResourcesGuard> BuildRequestedResourcesGuard(const ui64 volume) const {
+        return std::make_shared<TReaderResourcesGuard>(volume, RequestedResourcesBytes, Aggregations.GetRequestedResourcesMemory());
+    }
 
     TCounterGuard GetMergeTasksGuard() const {
         return TCounterGuard(MergeTasksCount);
@@ -319,6 +358,7 @@ public:
 
     TConcreteScanCounters(const TScanCounters& counters)
         : TBase(counters)
+        , RequestedResourcesBytes(std::make_shared<TAtomicCounter>())
         , MergeTasksCount(std::make_shared<TAtomicCounter>())
         , AssembleTasksCount(std::make_shared<TAtomicCounter>())
         , ReadTasksCount(std::make_shared<TAtomicCounter>())

@@ -1,5 +1,6 @@
 #include "scrub_actor_impl.h"
 #include "restore_corrupted_blob_actor.h"
+#include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_heap_it.h>
 
 namespace NKikimr {
 

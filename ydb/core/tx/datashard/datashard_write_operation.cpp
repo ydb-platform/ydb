@@ -95,6 +95,7 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE:
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE:
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT:
+        case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE:
             break;
         default:
             return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << OperationType << " operation is not supported now"};

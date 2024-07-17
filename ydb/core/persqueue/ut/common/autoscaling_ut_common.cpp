@@ -27,13 +27,17 @@ TEvTx* CreateRequest(ui64 txId, NKikimrSchemeOp::TModifyScheme&& tx) {
 }
 
 void DoRequest(TTopicSdkTestSetup& setup, ui64& txId, NKikimrSchemeOp::TPersQueueGroupDescription& scheme) {
+    DoRequest(setup.GetRuntime(), txId, scheme);
+}
+
+void DoRequest(NActors::TTestActorRuntime& runtime, ui64& txId, NKikimrSchemeOp::TPersQueueGroupDescription& scheme) {
     Sleep(TDuration::Seconds(1));
 
     Cerr << "ALTER_SCHEME: " << scheme << Endl << Flush;
 
-    const auto sender = setup.GetRuntime().AllocateEdgeActor();
+    const auto sender = runtime.AllocateEdgeActor();
     const auto request = CreateRequest(txId, CreateTransaction("/Root", scheme));
-    setup.GetRuntime().Send(new IEventHandle(
+    runtime.Send(new IEventHandle(
             MakeTabletResolverID(),
             sender,
             new TEvTabletResolver::TEvForward(
@@ -44,14 +48,14 @@ void DoRequest(TTopicSdkTestSetup& setup, ui64& txId, NKikimrSchemeOp::TPersQueu
             )),
             0);
 
-    auto subscriber = CreateNotificationSubscriber(setup.GetRuntime(), SS);
-    setup.GetRuntime().Send(new IEventHandle(subscriber, sender, new TEvSchemeShard::TEvNotifyTxCompletion(txId)));
+    auto subscriber = CreateNotificationSubscriber(runtime, SS);
+    runtime.Send(new IEventHandle(subscriber, sender, new TEvSchemeShard::TEvNotifyTxCompletion(txId)));
     TAutoPtr<IEventHandle> handle;
-    auto event = setup.GetRuntime().GrabEdgeEvent<TEvSchemeShard::TEvNotifyTxCompletionResult>(handle);
+    auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvNotifyTxCompletionResult>(handle);
     UNIT_ASSERT(event);
     UNIT_ASSERT_EQUAL(event->Record.GetTxId(), txId);
 
-    auto e = setup.GetRuntime().GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
+    auto e = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
     UNIT_ASSERT_EQUAL_C(e->Record.GetStatus(), TEvSchemeShard::EStatus::StatusAccepted,
         "Unexpected status " << NKikimrScheme::EStatus_Name(e->Record.GetStatus()) << " " << e->Record.GetReason());
 
@@ -59,13 +63,17 @@ void DoRequest(TTopicSdkTestSetup& setup, ui64& txId, NKikimrSchemeOp::TPersQueu
 }
 
 void SplitPartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partition, TString boundary) {
+    SplitPartition(setup.GetRuntime(), txId, partition, boundary);
+}
+
+void SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const ui32 partition, TString boundary) {
     ::NKikimrSchemeOp::TPersQueueGroupDescription scheme;
     scheme.SetName(TEST_TOPIC);
     auto* split = scheme.AddSplit();
     split->SetPartition(partition);
     split->SetSplitBoundary(boundary);
 
-    DoRequest(setup, txId, scheme);
+    DoRequest(runtime, txId, scheme);
 }
 
 void MergePartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partitionLeft, const ui32 partitionRight) {
@@ -124,7 +132,7 @@ std::shared_ptr<ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& cl
 }
 
 
-TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, size_t expectedMessagesCount, bool autoCommit, std::set<ui32> partitions, bool autoscalingSupport) {
+TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, size_t expectedMessagesCount, bool autoCommit, std::set<ui32> partitions, bool autoPartitioningSupport) {
     Impl = std::make_shared<TImpl>(name, autoCommit);
 
     Impl->Acquire();
@@ -132,7 +140,7 @@ TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, si
     auto readSettings = TReadSessionSettings()
         .ConsumerName(TEST_CONSUMER)
         .AppendTopics(TEST_TOPIC)
-        .AutoscalingSupport(autoscalingSupport);
+        .AutoPartitioningSupport(autoPartitioningSupport);
     for (auto partitionId : partitions) {
         readSettings.Topics_[0].AppendPartitionIds(partitionId);
     }

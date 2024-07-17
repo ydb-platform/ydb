@@ -268,13 +268,13 @@ bool CanPropagateWideBlockThroughChannel(
     TExprContext& ctx,
     TTypeAnnotationContext& typesCtx)
 {
+    const auto& program = programs.at(output.Stage().Ref().UniqueId());
+
     ui32 index = FromString<ui32>(output.Index().Value());
     if (index != 0) {
         // stage has multiple outputs
         return false;
     }
-
-    const auto& program = programs.at(output.Stage().Ref().UniqueId());
 
     auto outputItemType = program.Lambda().Ref().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType();
     if (IsWideBlockType(*outputItemType)) {
@@ -347,7 +347,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
         // Propagate "WideFromBlock" through connections.
         // TODO(ilezhankin): this peephole optimization should be implemented instead as
         //       the original whole-graph transformer |CreateDqBuildWideBlockChannelsTransformer|.
-        if (config->BlockChannelsMode != NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR) {
+        if (config->BlockChannelsMode == NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO) {
             TNodeOnNodeOwnedMap argsMap;
 
             YQL_ENSURE(stage.Inputs().Size() == stage.Program().Args().Size());
@@ -375,9 +375,9 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                     auto stageUid = connection.Cast().Output().Stage().Ref().UniqueId();
 
                     // Update input program with: FromFlow(WideFromBlocks($1)) → FromFlow($1)
+                    if (const auto& inputProgram = programs.at(stageUid); inputProgram.Lambda().Body().Maybe<TCoFromFlow>() &&
+                        inputProgram.Lambda().Body().Cast<TCoFromFlow>().Input().Maybe<TCoWideFromBlocks>())
                     {
-                        const auto& inputProgram = programs.at(stageUid);
-
                         auto newBody = Build<TCoFromFlow>(ctx, inputProgram.Lambda().Body().Cast<TCoFromFlow>().Pos())
                             .Input(inputProgram.Lambda().Body().Cast<TCoFromFlow>().Input().Cast<TCoWideFromBlocks>().Input())
                             .Done();

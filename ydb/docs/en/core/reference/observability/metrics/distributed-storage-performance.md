@@ -12,9 +12,9 @@ $$
 cost(operation) = A + operation.size() \times B
 $$
 
-The physical rationale behind the linear dependency is as follows: coefficient \(A\) is the time needed for the physical device to access the data, and coefficient \(B\) is the time required to read or write one byte of data.
+The physical rationale behind the linear dependency is as follows: coefficient $A$ is the time needed for the physical device to access the data, and coefficient $B$ is the time required to read or write one byte of data.
 
-The coefficients \(A\) and \(B\) depend on the request request and device type. These coefficients were measured experimentally for each device type and each request type.
+The coefficients $A$ and $B$ depend on the request request and device type. These coefficients were measured experimentally for each device type and each request type.
 
 In {{ ydb-short-name }}, all physical devices are divided into three types: HDD, SATA SSD (further referred to as SSD), and NVMe SSD (further referred to as NVMe). HDDs are rotating hard drives characterized by high data access time. SSD and NVMe types differ in their interfaces: NVMe provides a higher operation speed.
 
@@ -36,15 +36,15 @@ A burst is a sharp, short-term increase in the load on a VDisk, which can lead t
 ### Performance metrics
 
 Performance metrics are calculated based on the following VDisk sensors:
-| Sensor Name           | Units             | Description                                                                           |
-|-----------------------|-------------------|---------------------------------------------------------------------------------------|
-| `DiskTimeAvailable`   | arbitrary units   | Available disk time. |
-| `UserDiskCost`        | arbitrary units   | Total cost of requests a VDisk receives from the DS Proxy.                            |
-| `InternalDiskCost`    | arbitrary units   | Total cost of requests received by a VDisk from another VDisk in the group, for example, as part of the replication process. |
-| `CompactionDiskCost`  | arbitrary units   | Total cost of requests the VDisk sends as part of the compaction process.             |
-| `DefragDiskCost`      | arbitrary units   | Total cost of requests the VDisk sends as part of the defragmentation process.        |
-| `ScrubDiskCost`       | arbitrary units   | Total cost of requests the VDisk sends as part of the scrubbing process.              |
-| `BurstDetector_redMs` | ms                | The duration in milliseconds during which the Token Bucket was in an underflow state. |
+| Sensor Name           | Description                                                                                                                   | Units             |
+|-----------------------|-------------------------------------------------------------------------------------------------------------------------------|-------------------|
+| `DiskTimeAvailable`   | Available disk time.                                                                                                          | arbitrary units   |
+| `UserDiskCost`        | Total cost of requests a VDisk receives from the DS Proxy.                                                                    | arbitrary units   |
+| `InternalDiskCost`    | Total cost of requests received by a VDisk from another VDisk in the group, for example, as part of the replication process.  | arbitrary units   |
+| `CompactionDiskCost`  | Total cost of requests the VDisk sends as part of the compaction process.                                                     | arbitrary units   |
+| `DefragDiskCost`      | Total cost of requests the VDisk sends as part of the defragmentation process.                                                | arbitrary units   |
+| `ScrubDiskCost`       | Total cost of requests the VDisk sends as part of the scrubbing process.                                                      | arbitrary units   |
+| `BurstDetector_redMs` | The duration in milliseconds during which the Token Bucket was in an underflow state.                                         | ms                |
 
 `DiskTimeAvailable` and the request cost are estimates of available and consumed bandwidth, respectively, and not actually measured time, therefore both of these quantities are measured in arbitrary units.
 
@@ -59,14 +59,14 @@ The {{ ydb-short-name }} distributed storage can ensure low response times only 
 
 Since the coefficients for the request cost formula were measured on specific physical devices from development clusters, and the performance of other devices may vary, the metrics may require additional adjustments to be used as a source of guarantees for Distributed Storage. Performance metric parameters can be managed via [dynamic cluster configuration](../../../maintenance/manual/dynamic-config.md) and the Immediate Controls mechanism without restarting {{ ydb-short-name }} processes.
 
-| Parameter Name                        | Description                                                                                   | Default Value |
-|---------------------------------------|-----------------------------------------------------------------------------------------------|---------------|
-| `disk_time_available_scale_hdd`       | [`DiskTimeAvailableScale` parameter](#diskTimeAvailable) for VDisks running on HDD devices.   | `1000`        |
-| `disk_time_available_scale_ssd`       | [`DiskTimeAvailableScale` parameter](#diskTimeAvailable) for VDisks running on SSD devices.   | `1000`        |
-| `disk_time_available_partition_nvme`  | [`DiskTimeAvailableScale` parameter](#diskTimeAvailable) for VDisks running on NVMe devices.  | `1000`        |
-| `burst_threshold_ns_hdd`              | [`BurstThresholdNs` parameter](#burstDetector) for VDisks running on HDD devices.             | `200000000`   |
-| `burst_threshold_ns_ssd`              | [`BurstThresholdNs` parameter](#burstDetector) for VDisks running on SSD devices.             | `50000000`    |
-| `burst_threshold_ns_nvme`             | [`BurstThresholdNs` parameter](#burstDetector) for VDisks running on NVMe devices.            | `32000000`    |
+| Parameter Name                        | Description                                                                                   |  Units            | Default Value |
+|---------------------------------------|-----------------------------------------------------------------------------------------------|-------------------|---------------|
+| `disk_time_available_scale_hdd`       | [`DiskTimeAvailableScale` parameter](#diskTimeAvailable) for VDisks running on HDD devices.   | arbitrary units   | `1000`        |
+| `disk_time_available_scale_ssd`       | [`DiskTimeAvailableScale` parameter](#diskTimeAvailable) for VDisks running on SSD devices.   | arbitrary units   | `1000`        |
+| `disk_time_available_partition_nvme`  | [`DiskTimeAvailableScale` parameter](#diskTimeAvailable) for VDisks running on NVMe devices.  | arbitrary units   | `1000`        |
+| `burst_threshold_ns_hdd`              | [`BurstThresholdNs` parameter](#burstDetector) for VDisks running on HDD devices.             | ns                | `200000000`   |
+| `burst_threshold_ns_ssd`              | [`BurstThresholdNs` parameter](#burstDetector) for VDisks running on SSD devices.             | ns                | `50000000`    |
+| `burst_threshold_ns_nvme`             | [`BurstThresholdNs` parameter](#burstDetector) for VDisks running on NVMe devices.            | ns                | `32000000`    |
 
 #### Configuration examples
 

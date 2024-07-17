@@ -3,13 +3,19 @@
 #include <ydb/library/yql/public/udf/arrow/defs.h>
 #include <ydb/library/yql/public/udf/arrow/block_builder.h>
 #include <ydb/library/yql/public/udf/arrow/block_reader.h>
+
 #include <ydb/library/yql/utils/yql_panic.h>
+
+#include <ydb/library/yql/minikql/mkql_alloc.h>
+#include <ydb/library/yql/minikql/mkql_terminator.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 
+#include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
+
 #include <library/cpp/yson/node/node_io.h>
-#include <library/cpp/yson/detail.h>
 #include <library/cpp/yson/varint.h>
+
 #include <util/stream/mem.h>
 
 #include <arrow/array/data.h>
@@ -87,84 +93,6 @@ arrow::Datum StringConverterImpl(NUdf::IArrayBuilder* builder, std::shared_ptr<a
 using namespace NKikimr::NMiniKQL;
 using namespace NYson::NDetail;
 
-class TYsonReaderDetails {
-public:
-    TYsonReaderDetails(const std::string_view& s) : Data_(s.data()), Available_(s.size()) {}
-
-    constexpr char Next() {
-        YQL_ENSURE(Available_-- > 0);
-        return *(++Data_);
-    }
-
-    constexpr char Current() {
-        return *Data_;
-    }
-
-    template<typename T>
-    constexpr T ReadVarSlow() {
-        T shift = 0;
-        T value = Current() & 0x7f;
-        for (;;) {
-            shift += 7;
-            value |= T(Next() & 0x7f) << shift;
-            if (!(Current() & 0x80)) {
-                break;
-            }
-        }
-        Next();
-        return value;
-    }
-
-    ui32 ReadVarUI32() {
-        char prev = Current();
-        if (Y_LIKELY(!(prev & 0x80))) {
-            Next();
-            return prev;
-        }
-
-        return ReadVarSlow<ui32>();
-    }
-
-    ui64 ReadVarUI64() {
-        char prev = Current();
-        if (Y_LIKELY(!(prev & 0x80))) {
-            Next();
-            return prev;
-        }
-
-        return ReadVarSlow<ui64>();
-    }
-
-    i32 ReadVarI32() {
-        return NYson::ZigZagDecode32(ReadVarUI32());
-    }
-
-    i64 ReadVarI64() {
-        return NYson::ZigZagDecode64(ReadVarUI64());
-    }
-
-    double NextDouble() {
-        double val = *reinterpret_cast<const double*>(Data_);
-        Data_ += sizeof(double);
-        return val;
-    }
-    
-    void Skip(i32 cnt) {
-        Data_ += cnt;
-    }
-
-    const char* Data() {
-        return Data_;
-    }
-    
-    size_t Available() const {
-        return Available_;
-    }
-private:
-    const char* Data_;
-    size_t Available_;
-};
-
 namespace {
 void SkipYson(TYsonReaderDetails& buf) {
     switch (buf.Current()) {
@@ -230,41 +158,6 @@ NUdf::TBlockItem ReadYson(TYsonReaderDetails& buf) {
 }
 };
 
-class IYsonBlockReader {
-public:
-    virtual NUdf::TBlockItem GetItem(TYsonReaderDetails& buf) = 0;
-    virtual ~IYsonBlockReader() = default;
-};
-
-template<bool Native>
-class IYsonBlockReaderWithNativeFlag : public IYsonBlockReader {
-public:
-    virtual NUdf::TBlockItem GetNotNull(TYsonReaderDetails&) = 0;
-    NUdf::TBlockItem GetNullableItem(TYsonReaderDetails& buf) {
-        char prev = buf.Current();
-        if constexpr (Native) {
-            if (prev == EntitySymbol) {
-                buf.Next();
-                return NUdf::TBlockItem();
-            }
-            return GetNotNull(buf).MakeOptional();
-        }
-        buf.Next();
-        if (prev == EntitySymbol) {
-            return NUdf::TBlockItem();
-        }
-        YQL_ENSURE(prev == BeginListSymbol);
-        auto result = GetNotNull(buf);
-        if (buf.Current() == ListItemSeparatorSymbol) {
-            buf.Next();
-        }
-        YQL_ENSURE(buf.Current() == EndListSymbol);
-        buf.Next();
-        return result.MakeOptional();
-    }
-private:
-};
-
 template<bool Nullable, bool Native>
 class TYsonTupleBlockReader final : public IYsonBlockReaderWithNativeFlag<Native> {
 public:
@@ -279,6 +172,7 @@ public:
         }
         return GetNotNull(buf);
     }
+
     NUdf::TBlockItem GetNotNull(TYsonReaderDetails& buf) override final {
         YQL_ENSURE(buf.Current() == BeginListSymbol);
         buf.Next();
@@ -372,6 +266,7 @@ struct TYtColumnConverterSettings {
     const bool IsTopOptional;
     std::shared_ptr<arrow::DataType> ArrowType;
     std::unique_ptr<NKikimr::NUdf::IArrayBuilder> Builder;
+    std::unique_ptr<NKikimr::NUdf::IArrayBuilder> BuilderForPg;
 };
 }
 
@@ -466,23 +361,16 @@ struct TYsonBlockReaderTraits {
     using TStrings = TYsonStringBlockReader<TStringType, Nullable, OriginalT, Native>;
     using TExtOptional = TYsonExternalOptBlockReader<Native>;
 
-    static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
-        Y_UNUSED(pgBuilder);
-        if (desc.PassByValue) {
-            return std::make_unique<TFixedSize<ui64, true>>();
-        } else {
-            return std::make_unique<TStrings<arrow::BinaryType, true, NKikimr::NUdf::EDataSlot::String>>();
-        }
+    static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder*) {
+        return BuildPgYsonColumnReader(Native, desc);
     }
 
-    static std::unique_ptr<TResult> MakeResource(bool isOptional) {
-        Y_UNUSED(isOptional);
+    static std::unique_ptr<TResult> MakeResource(bool) {
         ythrow yexception() << "Yson reader not implemented for block resources";
     }   
 
     template<typename TTzDate>
     static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
-        Y_UNUSED(isOptional);
         if (isOptional) {
             using TTzDateReader = TYsonTzDateBlockReader<TTzDate, true, Native>;
             return std::make_unique<TTzDateReader>();
@@ -612,12 +500,26 @@ public:
         : Settings_(std::move(settings))
         , DictYsonConverter_(Settings_)
         , YsonConverter_(Settings_)
-        , DictPrimitiveConverter_(Settings_) {}
+        , DictPrimitiveConverter_(Settings_)
+        , PgTopLevelReader_(BuildPgTopLevelColumnReader(std::move(Settings_.BuilderForPg), Settings_.Type->IsPg() ? static_cast<const TPgType*>(Settings_.Type) : nullptr)) {}
 
     arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> block) override {
+        if (Settings_.Type->IsPg()) {
+            // Top-level PG is a special case
+            return PgTopLevelReader_->Convert(block);
+        }
         if (arrow::Type::DICTIONARY == block->type->id()) {
-            if (static_cast<const arrow::DictionaryType&>(*block->type).value_type()->Equals(Settings_.ArrowType)) {
+            auto valType = static_cast<const arrow::DictionaryType&>(*block->type).value_type();
+            if (valType->Equals(Settings_.ArrowType)) {
+                // just unpack
                 return DictPrimitiveConverter_.Convert(block);
+            } else if (arrow::Type::UINT8 == Settings_.ArrowType->id() && arrow::Type::BOOL == valType->id()
+                        || arrow::Type::BINARY == valType->id() && arrow::Type::STRING == Settings_.ArrowType->id())
+            {
+                // unpack an cast
+                auto result = arrow::compute::Cast(DictPrimitiveConverter_.Convert(block), Settings_.ArrowType);
+                YQL_ENSURE(result.ok());
+                return *result;
             } else {
                 return DictYsonConverter_.Convert(block);
             }
@@ -626,9 +528,11 @@ public:
             auto noConvert = blockType->Equals(Settings_.ArrowType);
             if (noConvert) {
                 return block;
-            } else if (arrow::Type::UINT8 == Settings_.ArrowType->id() && arrow::Type::BOOL == blockType->id()) {
+            } else if (arrow::Type::UINT8 == Settings_.ArrowType->id() && arrow::Type::BOOL == blockType->id()
+                        || arrow::Type::BINARY == blockType->id() && arrow::Type::STRING == Settings_.ArrowType->id())
+            {
                 auto result = arrow::compute::Cast(arrow::Datum(*block), Settings_.ArrowType);
-                Y_ENSURE(result.ok());
+                YQL_ENSURE(result.ok());
                 return *result;
             } else {
                 YQL_ENSURE(arrow::Type::BINARY == blockType->id());
@@ -641,6 +545,7 @@ private:
     TYtYsonColumnConverter<Native, IsTopOptional, true> DictYsonConverter_;
     TYtYsonColumnConverter<Native, IsTopOptional, false> YsonConverter_;
     TPrimitiveColumnConverter<true> DictPrimitiveConverter_;
+    std::unique_ptr<ITopLevelBlockReader> PgTopLevelReader_;
 };
 
 TYtColumnConverterSettings::TYtColumnConverterSettings(NKikimr::NMiniKQL::TType* type, const NUdf::IPgBuilder* pgBuilder, arrow::MemoryPool& pool, bool isNative) 
@@ -654,7 +559,7 @@ TYtColumnConverterSettings::TYtColumnConverterSettings(NKikimr::NMiniKQL::TType*
     YQL_ENSURE(ConvertArrowType(type, ArrowType), "Can't convert type to arrow");
     size_t maxBlockItemSize = CalcMaxBlockItemSize(type);
     size_t maxBlockLen = CalcBlockLen(maxBlockItemSize);
-    Builder = std::move(NUdf::MakeArrayBuilder(
+    (type->IsPg() ? BuilderForPg : Builder) = std::move(NUdf::MakeArrayBuilder(
                     TTypeInfoHelper(), type,
                     pool,
                     maxBlockLen,

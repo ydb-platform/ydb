@@ -4,21 +4,24 @@
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/codec.h>
+#include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/arrow/arrow_util.h>
 #include <ydb/library/dynumber/dynumber.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 #include <util/generic/singleton.h>
-
 #include <arrow/compute/cast.h>
 #include <arrow/array.h>
 #include <arrow/array/builder_binary.h>
 #include <util/system/mutex.h>
+#include <util/system/align.h>
 
 extern "C" {
 #include "utils/date.h"
 #include "utils/timestamp.h"
 #include "utils/fmgrprotos.h"
+#include "lib/stringinfo.h"
 }
 
 namespace NYql {
@@ -315,6 +318,522 @@ Datum MakePgDateFromUint16(ui16 value) {
 Datum MakePgTimestampFromInt64(i64 value) {
     return DatumGetTimestamp(USECS_PER_SEC * ((UNIX_EPOCH_JDATE - POSTGRES_EPOCH_JDATE) * SECS_PER_DAY + value));
 }
+
+NUdf::TBlockItem BlockItemFromDatum(Datum datum, const NPg::TTypeDesc& desc, std::vector<char>& tmp) {
+    if (desc.PassByValue) {
+        return NUdf::TBlockItem((ui64)datum);
+    }
+    auto typeLen = desc.TypeLen;
+    ui32 len;
+    if (typeLen == -1) {
+        len = GetFullVarSize((const text*)datum);
+    } else if (typeLen == -2) {
+        len = 1 + strlen((const char*)datum);
+    } else {
+        len = typeLen;
+    }
+    len += sizeof(void*);
+    len = AlignUp<i32>(len, 8);
+    tmp.resize(len);
+    memcpy(tmp.data() + sizeof(void*), (const char*) datum, len);
+    return NUdf::TBlockItem(std::string_view(tmp.data(), len));
+}
+
+NUdf::TBlockItem PgBlockItemFromNativeBinary(const TStringBuf binary, ui32 pgTypeId, std::vector<char>& tmp) {
+    NKikimr::NMiniKQL::TPAllocScope call;
+    StringInfoData stringInfo;
+    stringInfo.data = (char*)binary.Data();
+    stringInfo.len = binary.Size();
+    stringInfo.maxlen = binary.Size();
+    stringInfo.cursor = 0;
+
+    const auto& typeInfo = NPg::LookupType(pgTypeId);
+    auto typeIOParam = MakeTypeIOParam(typeInfo);
+    auto receiveFuncId = typeInfo.ReceiveFuncId;
+    if (typeInfo.TypeId == typeInfo.ArrayTypeId) {
+        receiveFuncId = NPg::LookupProc("array_recv", { 0,0,0 }).ProcId;
+    }
+
+    {
+        FmgrInfo finfo;
+        Zero(finfo);
+        Y_ENSURE(receiveFuncId);
+        fmgr_info(receiveFuncId, &finfo);
+        Y_ENSURE(!finfo.fn_retset);
+        Y_ENSURE(finfo.fn_addr);
+        Y_ENSURE(finfo.fn_nargs >= 1 && finfo.fn_nargs <= 3);
+        LOCAL_FCINFO(callInfo, 3);
+        Zero(*callInfo);
+        callInfo->flinfo = &finfo;
+        callInfo->nargs = 3;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
+        callInfo->isnull = false;
+        callInfo->args[0] = { (Datum)&stringInfo, false };
+        callInfo->args[1] = { ObjectIdGetDatum(typeIOParam), false };
+        callInfo->args[2] = { Int32GetDatum(-1), false };
+
+        auto x = finfo.fn_addr(callInfo);
+        Y_ENSURE(!callInfo->isnull);
+        if (stringInfo.cursor != stringInfo.len) {
+            TStringBuilder errMsg;
+            errMsg << "Not all data has been consumed by 'recv' function: " << NPg::LookupProc(receiveFuncId).Name << ", data size: " << stringInfo.len << ", consumed size: " << stringInfo.cursor;
+            UdfTerminate(errMsg.c_str());
+        }
+        return BlockItemFromDatum(x, typeInfo, tmp);
+    }
+}
+
+template<typename T>
+constexpr Datum FixedToDatum(T v) {
+    if constexpr (std::is_same_v<T, bool>) {
+        return BoolGetDatum(v);
+    } else if constexpr (std::is_same_v<T, i16>) {
+        return Int16GetDatum(v);
+    } else if constexpr (std::is_same_v<T, i32>) {
+        return Int32GetDatum(v);
+    } else if constexpr (std::is_same_v<T, i64>) {
+        return Int64GetDatum(v);
+    } else if constexpr (std::is_same_v<T, float>) {
+        return Float4GetDatum(v);
+    } else if constexpr (std::is_same_v<T, double>) {
+        return Float8GetDatum(v);
+    } else {
+        static_assert(false, "Can't convert that type to Datum :(");
+    }
+}
+
+template<bool Native, typename T>
+class PgYsonFixedColumnReader : public IYsonBlockReaderWithNativeFlag<Native> {
+public:
+    NUdf::TBlockItem GetItem(TYsonReaderDetails& buf) override final {
+        return this->GetNullableItem(buf);
+    }
+
+    NUdf::TBlockItem GetNotNull(TYsonReaderDetails& buf) override final {
+        Datum val;
+        if constexpr (std::is_same_v<T, bool>) {
+            Y_ENSURE(buf.Current() == NYson::NDetail::FalseMarker || buf.Current() == NYson::NDetail::TrueMarker);
+            val = FixedToDatum<T>(buf.Current() == NYson::NDetail::TrueMarker);
+            buf.Next();
+        } else if constexpr (std::is_integral_v<T>) {
+            if constexpr (std::is_signed_v<T>) {
+                Y_ENSURE(buf.Current() == NYson::NDetail::Int64Marker);
+                buf.Next();
+                val = FixedToDatum<T>(buf.ReadVarI64());
+            } else {
+                Y_ENSURE(buf.Current() == NYson::NDetail::Uint64Marker);
+                buf.Next();
+                val = FixedToDatum<T>(buf.ReadVarUI64());
+            }
+        } else {
+            val = FixedToDatum<T>(buf.NextDouble());
+        }
+        return NUdf::TBlockItem(val);
+    }
+};
+
+template<bool Native, bool IsCString, bool Fixed>
+class PgYsonStringColumnReader : public IYsonBlockReaderWithNativeFlag<Native> {
+public:
+    PgYsonStringColumnReader() {
+        static_assert(!Fixed, "PgYsonStringColumnReader ctor w/o typeLen available only on non-fixed types");
+    }
+
+    PgYsonStringColumnReader(i32 typeLen) : TypeSize_(typeLen) {
+        static_assert(Fixed, "PgYsonStringColumnReader ctor with typeLen available only on fixed types");
+    }
+
+    NUdf::TBlockItem GetItem(TYsonReaderDetails& buf) override final {
+        return this->GetNullableItem(buf);
+    }
+
+    NUdf::TBlockItem GetNotNull(TYsonReaderDetails& buf) override final {
+        Y_ENSURE(buf.Current() == NYson::NDetail::StringMarker);
+        buf.Next();
+        const i32 originalLen = buf.ReadVarI32();
+        auto res = buf.Data();
+        buf.Skip(originalLen);
+
+        ui32 len;
+        if constexpr (IsCString) {
+            len = 1 + originalLen + sizeof(void*);
+        } else if constexpr (Fixed) {
+            len = TypeSize_;
+        } else {
+            len = VARHDRSZ + originalLen +  + sizeof(void*);
+        }
+
+        if (Tmp_.capacity() < len) {
+            Tmp_.reserve(Max<ui64>(len, Tmp_.capacity() * 2));
+        }
+        len = AlignUp<ui32>(len, 8);
+        Tmp_.resize(len);
+        if constexpr (IsCString) {
+            memcpy(Tmp_.data() + sizeof(void*), res, originalLen);
+            Tmp_[len - 1] = 0;
+        } else if constexpr (Fixed) {
+            memcpy(Tmp_.data() +  sizeof(void*), res, originalLen);
+            memset(Tmp_.data() + originalLen + sizeof(void*), 0, len - originalLen);
+        } else {
+            memcpy(Tmp_.data() + VARHDRSZ + sizeof(void*), res, originalLen);
+            UpdateCleanVarSize((text*)(Tmp_.data() + sizeof(void*)), originalLen);
+        }
+        return NUdf::TBlockItem(NUdf::TStringRef(Tmp_.data(), len));
+    }
+private:
+    std::vector<char> Tmp_;
+    i32 TypeSize_;
+};
+
+template<bool Native>
+class PgYsonOtherColumnReader : public IYsonBlockReaderWithNativeFlag<Native> {
+public:
+    PgYsonOtherColumnReader(Oid typeId) : TypeId_(typeId) {}
+    NUdf::TBlockItem GetItem(TYsonReaderDetails& buf) override final {
+        return this->GetNullableItem(buf);
+    }
+
+    NUdf::TBlockItem GetNotNull(TYsonReaderDetails& buf) override final {
+        Y_ENSURE(buf.Current() == NYson::NDetail::StringMarker);
+        buf.Next();
+        const i32 len = buf.ReadVarI32();
+        auto ptr = buf.Data();
+        buf.Skip(len);
+        return PgBlockItemFromNativeBinary(TStringBuf(ptr, len), TypeId_, Tmp_);
+    }
+private:
+    Oid TypeId_;
+    std::vector<char> Tmp_;
+};
+
+template<bool Native>
+std::unique_ptr<IYsonBlockReader> BuildPgYsonColumnReader(const NUdf::TPgTypeDescription& desc) {
+    switch (desc.TypeId) {
+    case BOOLOID: {
+        return std::make_unique<PgYsonFixedColumnReader<Native, bool>>();
+    }
+    case INT2OID: {
+        return std::make_unique<PgYsonFixedColumnReader<Native, i16>>();
+    }
+    case INT4OID: {
+        return std::make_unique<PgYsonFixedColumnReader<Native, i32>>();
+    }
+    case INT8OID: {
+        return std::make_unique<PgYsonFixedColumnReader<Native, i64>>();
+    }
+    case FLOAT4OID: {
+        return std::make_unique<PgYsonFixedColumnReader<Native, float>>();
+    }
+    case FLOAT8OID: {
+        return std::make_unique<PgYsonFixedColumnReader<Native, double>>();
+    }
+    case BYTEAOID:
+    case VARCHAROID:
+    case TEXTOID:
+    case CSTRINGOID: {
+        auto typeLen = NPg::LookupType(desc.TypeId).TypeLen;
+        if (typeLen == -2) {
+            return std::make_unique<PgYsonStringColumnReader<Native, true, false>>();
+        } else if (typeLen == -1) {
+            return std::make_unique<PgYsonStringColumnReader<Native, false, false>>();
+        } else {
+            return std::make_unique<PgYsonStringColumnReader<Native, false, true>>(typeLen);
+        }
+    }
+    default:
+        return std::make_unique<PgYsonOtherColumnReader<Native>>(desc.TypeId);
+    }
+}
+
+std::unique_ptr<IYsonBlockReader> BuildPgYsonColumnReader(bool Native, const NUdf::TPgTypeDescription& desc) {
+    return BuildPgYsonColumnReader<true>(desc);
+}
+
+template<typename T, arrow::Type::type Expected, typename ArrType>
+class PgTopLevelFixedColumnReader : public ITopLevelBlockReader {
+public:
+    using Fn = Datum(*)(const T&);
+    PgTopLevelFixedColumnReader(std::unique_ptr<NKikimr::NUdf::IArrayBuilder>&& builder) : Builder_(std::move(builder)) {}
+
+    arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> data) override final {
+        if (arrow::Type::DICTIONARY == data->type->id()) {
+            auto valType = static_cast<const arrow::DictionaryType&>(*data->type).value_type();
+            Y_ENSURE(Expected == valType->id());
+            return ConvertDict(data);
+        } else {
+            Y_ENSURE(Expected == data->type->id());
+            return ConvertNonDict(data);
+        }
+    }
+
+    arrow::Datum ConvertNonDict(std::shared_ptr<arrow::ArrayData> data) {
+        ArrType arr(data);
+        if (arr.null_count()) {
+            for (i64 i = 0; i < data->length; ++i) {
+                if (arr.IsNull(i)) {
+                    Builder_->Add(NUdf::TBlockItem{});
+                } else {
+                    Builder_->Add(NUdf::TBlockItem(FixedToDatum<T>(arr.Value(i))));
+                }
+            }
+        } else {
+            for (i64 i = 0; i < data->length; ++i) {
+                Builder_->Add(NUdf::TBlockItem(FixedToDatum<T>(arr.Value(i))));
+            }
+        }
+        return Builder_->Build(false);
+    }
+
+    arrow::Datum ConvertDict(std::shared_ptr<arrow::ArrayData> data) {
+        arrow::DictionaryArray dict(data);
+        auto values = data->dictionary->GetValues<T>(0);
+        auto indices = dict.indices()->data()->GetValues<ui32>(1);
+        if (dict.null_count()) {
+            for (i64 i = 0; i < data->length; ++i) {
+                if (dict.IsNull(i)) {
+                    Builder_->Add(NUdf::TBlockItem{});
+                } else {
+                    Builder_->Add(NUdf::TBlockItem(FixedToDatum<T>(values[indices[i]])));
+                }
+            }
+        } else {
+            for (i64 i = 0; i < data->length; ++i) {
+                Builder_->Add(NUdf::TBlockItem(FixedToDatum<T>(values[indices[i]])));
+            }
+        }
+        return Builder_->Build(false);
+    }
+private:
+    std::unique_ptr<NKikimr::NUdf::IArrayBuilder> Builder_;
+};
+
+template<bool IsCString, bool Fixed>
+class PgTopLevelStringColumnReader : public ITopLevelBlockReader {
+public:
+    PgTopLevelStringColumnReader(std::unique_ptr<NKikimr::NUdf::IArrayBuilder>&& builder) : Builder_(std::move(builder)) {
+        static_assert(!Fixed, "can't call PgTopLevelStringColumnReader without typeLen on fixed type");
+    }
+
+    PgTopLevelStringColumnReader(std::unique_ptr<NKikimr::NUdf::IArrayBuilder>&& builder, i32 typeLen) : Builder_(std::move(builder)), TypeSize_(typeLen) {
+        static_assert(Fixed, "can't call PgTopLevelStringColumnReader with typeLen on non-fixed type");
+    }
+
+    constexpr NUdf::TBlockItem ConvertOnce(const uint8_t* res, size_t originalLen) {
+        ui32 len;
+        if constexpr (IsCString) {
+            len = 1 + originalLen + sizeof(void*);
+        } else if constexpr (Fixed) {
+            len = TypeSize_;
+        } else {
+            len = VARHDRSZ + originalLen +  + sizeof(void*);
+        }
+
+        if (Tmp_.capacity() < len) {
+            Tmp_.reserve(Max<ui64>(len, Tmp_.capacity() * 2));
+        }
+        len = AlignUp<ui32>(len, 8);
+        Tmp_.resize(len);
+        if constexpr (IsCString) {
+            memcpy(Tmp_.data() + sizeof(void*), res, originalLen);
+            Tmp_[len - 1] = 0;
+        } else if constexpr (Fixed) {
+            memcpy(Tmp_.data() +  sizeof(void*), res, originalLen);
+            memset(Tmp_.data() + originalLen + sizeof(void*), 0, len - originalLen);
+        } else {
+            memcpy(Tmp_.data() + VARHDRSZ + sizeof(void*), res, originalLen);
+            UpdateCleanVarSize((text*)(Tmp_.data() + sizeof(void*)), originalLen);
+        }
+        return NUdf::TBlockItem(NUdf::TStringRef(Tmp_.data(), len));
+    }
+
+    arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> data) override final {
+        if (arrow::Type::DICTIONARY == data->type->id()) {
+            auto valType = static_cast<const arrow::DictionaryType&>(*data->type).value_type();
+            Y_ENSURE(arrow::Type::BINARY == valType->id() || arrow::Type::STRING == valType->id());
+            return ConvertDict(data);
+        } else {
+            if (arrow::Type::STRING == data->type->id()) {
+                auto res = arrow::compute::Cast(data, std::make_shared<arrow::BinaryType>());
+                Y_ENSURE(res.ok());
+                data = res->array();
+            }
+            Y_ENSURE(arrow::Type::BINARY == data->type->id());
+            return ConvertNonDict(data);
+        }
+    }
+
+    arrow::Datum ConvertNonDict(std::shared_ptr<arrow::ArrayData> data) {
+        arrow::BinaryArray arr(data);
+        if (arr.null_count()) {
+            for (i64 i = 0; i < data->length; ++i) {
+                if (arr.IsNull(i)) {
+                    Builder_->Add(NUdf::TBlockItem{});
+                } else {
+                    i32 len;
+                    auto res = arr.GetValue(i, &len);
+                    Builder_->Add(ConvertOnce(res, len));
+                }
+            }
+        } else {
+            for (i64 i = 0; i < data->length; ++i) {
+                i32 len;
+                auto res = arr.GetValue(i, &len);
+                Builder_->Add(ConvertOnce(res, len));
+            }
+        }
+        return Builder_->Build(false);
+    }
+
+    arrow::Datum ConvertDict(std::shared_ptr<arrow::ArrayData> data) {
+        arrow::DictionaryArray dict(data);
+        if (arrow::Type::STRING == data->dictionary->type->id()) {
+            auto res = arrow::compute::Cast(data->dictionary, std::make_shared<arrow::BinaryType>());
+            Y_ENSURE(res.ok());
+            data->dictionary = res->array();
+        }
+        arrow::BinaryArray arr(data->dictionary);
+        auto indices = dict.indices()->data()->GetValues<ui32>(1);
+        if (dict.null_count()) {
+            for (i64 i = 0; i < data->length; ++i) {
+                if (dict.IsNull(i)) {
+                    Builder_->Add(NUdf::TBlockItem{});
+                } else {
+                    i32 len;
+                    auto res = arr.GetValue(indices[i], &len);
+                    Builder_->Add(NUdf::TBlockItem(ConvertOnce(res, len)));
+                }
+            }
+        } else {
+            for (i64 i = 0; i < data->length; ++i) {
+                i32 len;
+                auto res = arr.GetValue(indices[i], &len);
+                Builder_->Add(NUdf::TBlockItem(ConvertOnce(res, len)));
+            }
+        }
+        return Builder_->Build(false);
+    }
+private:
+    std::unique_ptr<NKikimr::NUdf::IArrayBuilder> Builder_;
+    std::vector<char> Tmp_;
+    i32 TypeSize_;
+};
+
+class PgTopLevelOtherColumnReader : public ITopLevelBlockReader {
+public:
+    PgTopLevelOtherColumnReader(std::unique_ptr<NKikimr::NUdf::IArrayBuilder>&& builder, Oid typeId) : Builder_(std::move(builder)), TypeId_(typeId) {}
+
+    inline NUdf::TBlockItem ConvertOnce(const uint8_t* res, size_t len) {
+        return PgBlockItemFromNativeBinary(TStringBuf(reinterpret_cast<const char*>(res), len), TypeId_, Tmp_);
+    }
+
+    arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> data) override final {
+        if (arrow::Type::DICTIONARY == data->type->id()) {
+            auto valType = static_cast<const arrow::DictionaryType&>(*data->type).value_type();
+            Y_ENSURE(arrow::Type::BINARY == valType->id() || arrow::Type::STRING == valType->id());
+            return ConvertDict(data);
+        } else {
+            Y_ENSURE(arrow::Type::BINARY == data->type->id() || arrow::Type::STRING == data->type->id());
+            return ConvertNonDict(data);
+        }
+    }
+
+    arrow::Datum ConvertNonDict(std::shared_ptr<arrow::ArrayData> data) {
+        arrow::BinaryArray arr(data);
+        if (arr.null_count()) {
+            for (i64 i = 0; i < data->length; ++i) {
+                if (arr.IsNull(i)) {
+                    Builder_->Add(NUdf::TBlockItem{});
+                } else {
+                    i32 len;
+                    auto res = arr.GetValue(i, &len);
+                    Builder_->Add(NUdf::TBlockItem(ConvertOnce(res, len)));
+                }
+            }
+        } else {
+            for (i64 i = 0; i < data->length; ++i) {
+                i32 len;
+                auto res = arr.GetValue(i, &len);
+                Builder_->Add(NUdf::TBlockItem(ConvertOnce(res, len)));
+            }
+        }
+        return Builder_->Build(false);
+    }
+
+    arrow::Datum ConvertDict(std::shared_ptr<arrow::ArrayData> data) {
+        arrow::DictionaryArray dict(data);
+        if (arrow::Type::STRING == data->dictionary->type->id()) {
+            auto res = arrow::compute::Cast(data->dictionary, std::make_shared<arrow::BinaryType>());
+            Y_ENSURE(res.ok());
+            data->dictionary = res->array();
+        }
+        arrow::BinaryArray arr(data->dictionary);
+        auto indices = dict.indices()->data()->GetValues<ui32>(1);
+        if (dict.null_count()) {
+            for (i64 i = 0; i < data->length; ++i) {
+                if (dict.IsNull(i)) {
+                    Builder_->Add(NUdf::TBlockItem{});
+                } else {
+                    i32 len;
+                    auto res = arr.GetValue(indices[i], &len);
+                    Builder_->Add(NUdf::TBlockItem(ConvertOnce(res, len)));
+                }
+            }
+        } else {
+            for (i64 i = 0; i < data->length; ++i) {
+                i32 len;
+                auto res = arr.GetValue(indices[i], &len);
+                Builder_->Add(NUdf::TBlockItem(ConvertOnce(res, len)));
+            }
+        }
+        return Builder_->Build(false);
+    }
+private:
+    std::unique_ptr<NKikimr::NUdf::IArrayBuilder> Builder_;
+    Oid TypeId_;
+    std::vector<char> Tmp_;
+};
+
+std::unique_ptr<ITopLevelBlockReader> BuildPgTopLevelColumnReader(std::unique_ptr<NKikimr::NUdf::IArrayBuilder>&& builder,const  NKikimr::NMiniKQL::TPgType* targetType) {
+    if (!targetType) {
+        return {};
+    }
+    switch (targetType->GetTypeId()) {
+    case BOOLOID: {
+        return std::make_unique<PgTopLevelFixedColumnReader<bool, arrow::Type::BOOL, arrow::BooleanArray>>(std::move(builder));
+    }
+    case INT2OID: {
+        return std::make_unique<PgTopLevelFixedColumnReader<i16, arrow::Type::INT16, arrow::Int16Array>>(std::move(builder));
+    }
+    case INT4OID: {
+        return std::make_unique<PgTopLevelFixedColumnReader<i32, arrow::Type::INT32, arrow::Int32Array>>(std::move(builder));
+    }
+    case INT8OID: {
+        return std::make_unique<PgTopLevelFixedColumnReader<i64, arrow::Type::INT64, arrow::Int64Array>>(std::move(builder));
+    }
+    case FLOAT4OID: {
+        return std::make_unique<PgTopLevelFixedColumnReader<float, arrow::Type::DOUBLE, arrow::DoubleArray>>(std::move(builder));
+    }
+    case FLOAT8OID: {
+        return std::make_unique<PgTopLevelFixedColumnReader<double, arrow::Type::DOUBLE, arrow::DoubleArray>>(std::move(builder));
+    }
+    case BYTEAOID:
+    case VARCHAROID:
+    case TEXTOID:
+    case CSTRINGOID: {
+        auto typeLen = NPg::LookupType(targetType->GetTypeId()).TypeLen;
+        if (typeLen == -2) {
+            return std::make_unique<PgTopLevelStringColumnReader<true, false>>(std::move(builder));
+        } else if (typeLen == -1) {
+            return std::make_unique<PgTopLevelStringColumnReader<false, false>>(std::move(builder));
+        } else {
+            return std::make_unique<PgTopLevelStringColumnReader<false, true>>(std::move(builder), typeLen);
+        }
+    }
+    default:
+        return std::make_unique<PgTopLevelOtherColumnReader>(std::move(builder), targetType->GetTypeId());
+    }
+}
+
 
 TColumnConverter BuildPgColumnConverter(const std::shared_ptr<arrow::DataType>& originalType, NKikimr::NMiniKQL::TPgType* targetType) {
     switch (targetType->GetTypeId()) {

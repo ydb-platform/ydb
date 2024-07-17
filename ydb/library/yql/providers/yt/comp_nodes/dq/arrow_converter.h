@@ -1,5 +1,8 @@
+#pragma once
 #include <ydb/library/yql/public/udf/arrow/block_builder.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
+
+#include <library/cpp/yson/detail.h>
 
 #include <arrow/io/interfaces.h>
 #include <arrow/io/memory.h>

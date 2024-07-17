@@ -1,14 +1,16 @@
 #include "kqp_workload_service_ut_common.h"
 
 #include <ydb/core/base/backtrace.h>
+#include <ydb/core/base/counters.h>
 
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/workload_service/actors/actors.h>
 #include <ydb/core/kqp/workload_service/tables/table_queries.h>
-
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 
 
 namespace NKikimr::NKqp::NWorkload {
@@ -286,6 +288,7 @@ private:
         poolConfig.QueueSize = Settings_.QueueSize_;
         poolConfig.QueryCancelAfter = Settings_.QueryCancelAfter_;
         poolConfig.QueryMemoryLimitPercentPerNode = Settings_.QueryMemoryLimitPercentPerNode_;
+        poolConfig.DatabaseLoadCpuThreshold = Settings_.DatabaseLoadCpuThreshold_;
 
         TActorId edgeActor = GetRuntime()->AllocateEdgeActor();
         GetRuntime()->Register(CreatePoolCreatorActor(edgeActor, Settings_.DomainName_, Settings_.PoolId_, poolConfig, nullptr, {}));
@@ -302,6 +305,41 @@ public:
         CreateSamplePool();
     }
 
+    // Cluster helpers
+    void UpdateNodeCpuInfo(double usage, ui32 threads, ui64 nodeIndex = 0) override {
+        TVector<std::tuple<TString, double, ui32, ui32>> pools;
+        pools.emplace_back("User", usage, threads, threads);
+
+        auto edgeActor = GetRuntime()->AllocateEdgeActor(nodeIndex);
+        GetRuntime()->Send(
+            NNodeWhiteboard::MakeNodeWhiteboardServiceId(GetRuntime()->GetNodeId(nodeIndex)), edgeActor,
+            new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate(pools), nodeIndex
+        );
+
+        WaitFor(FUTURE_WAIT_TIMEOUT, "node cpu usage", [this, usage, threads, nodeIndex, edgeActor](TString& errorString) {
+            GetRuntime()->Send(
+                NNodeWhiteboard::MakeNodeWhiteboardServiceId(GetRuntime()->GetNodeId(nodeIndex)), edgeActor,
+                new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest(), nodeIndex
+            );
+            auto response = GetRuntime()->GrabEdgeEvent<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse>(edgeActor, FUTURE_WAIT_TIMEOUT);
+            
+            if (!response->Get()->Record.SystemStateInfoSize()) {
+                errorString = "empty system state info";
+                return false;
+            }
+            const auto& systemStateInfo = response->Get()->Record.GetSystemStateInfo()[0];
+
+            if (!systemStateInfo.PoolStatsSize()) {
+                errorString = "empty pool stats";
+                return false;
+            }
+            const auto& poolStat = systemStateInfo.GetPoolStats()[0];
+
+            errorString = TStringBuilder() << "usage: " << poolStat.GetUsage() << ", threads: " << poolStat.GetThreads();
+            return poolStat.GetUsage() == usage && threads == poolStat.GetThreads();
+        });
+    }
+
     // Scheme queries helpers
     NYdb::NScheme::TSchemeClient GetSchemeClient() const override {
         return NYdb::NScheme::TSchemeClient(*YdbDriver_);
@@ -315,8 +353,24 @@ public:
         }
     }
 
-    THolder<NKikimr::NSchemeCache::TSchemeCacheNavigate> Navigate(const TString& path, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown) override {
+    THolder<NKikimr::NSchemeCache::TSchemeCacheNavigate> Navigate(const TString& path, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown) const override {
         return NKqp::Navigate(*GetRuntime(), GetRuntime()->AllocateEdgeActor(), CanonizePath({Settings_.DomainName_, path}), operation);
+    }
+
+    void WaitPoolAccess(const TString& userSID, ui32 access, const TString& poolId = "") const override {
+        auto token = NACLib::TUserToken(userSID, {});
+
+        WaitFor(FUTURE_WAIT_TIMEOUT, "pool acl", [this, token, access, poolId](TString& errorString) {
+            auto response = Navigate(TStringBuilder() << ".resource_pools/" << (poolId ? poolId : Settings_.PoolId_));
+            if (!response) {
+                errorString = "empty response";
+                return false;
+            }
+            const auto& result = response->ResultSet.at(0);
+            bool resourcePool = result.Kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindResourcePool;
+            errorString = (resourcePool ? TStringBuilder() << "access denied" : TStringBuilder() << "unexpected kind " << result.Kind);
+            return resourcePool && (!result.SecurityObject || result.SecurityObject->CheckAccess(access, token));
+        });
     }
 
     // Generic query helpers
@@ -369,15 +423,24 @@ public:
     }
 
     void WaitPoolState(const TPoolStateDescription& state, const TString& poolId = "") const override {
-        TInstant start = TInstant::Now();
-        while (TInstant::Now() - start <= FUTURE_WAIT_TIMEOUT) {
+        WaitFor(FUTURE_WAIT_TIMEOUT, "pool state", [this, state, poolId](TString& errorString) {
             auto description = GetPoolDescription(TDuration::Zero(), poolId);
-            if (description.DelayedRequests == state.DelayedRequests && description.RunningRequests == state.RunningRequests) {
-                return;
-            }
-            Sleep(TDuration::Seconds(1));
+            errorString = TStringBuilder() << "delayed = " << description.DelayedRequests << ", running = " << description.RunningRequests;
+            return description.DelayedRequests == state.DelayedRequests && description.RunningRequests == state.RunningRequests;
+        });
+    }
+
+    void WaitPoolHandlersCount(i64 finalCount, std::optional<i64> initialCount = std::nullopt, TDuration timeout = FUTURE_WAIT_TIMEOUT) const override {
+        auto counter = GetWorkloadManagerCounters(0)->GetCounter("ActivePoolHandlers");
+
+        if (initialCount) {
+            UNIT_ASSERT_VALUES_EQUAL_C(counter->Val(), *initialCount, "Unexpected pool handlers count");
         }
-        UNIT_ASSERT_C(false, "Pool state waiting timeout");
+
+        WaitFor(timeout, "pool handlers", [counter, finalCount](TString& errorString) {
+            errorString = TStringBuilder() << "number handlers = " << counter->Val();
+            return counter->Val() == finalCount;
+        });
     }
 
     void StopWorkloadService(ui64 nodeIndex = 0) const override {
@@ -385,6 +448,19 @@ public:
         Sleep(TDuration::Seconds(1));
     }
 
+    void ValidateWorkloadServiceCounters(bool checkTableCounters = true, const TString& poolId = "") const override {
+        for (ui32 nodeIndex = 0; nodeIndex < Settings_.NodeCount_; ++nodeIndex) {
+            auto subgroup = GetWorkloadManagerCounters(nodeIndex)
+                ->GetSubgroup("pool", CanonizePath(TStringBuilder() << Settings_.DomainName_ << "/" << (poolId ? poolId : Settings_.PoolId_)));
+
+            CheckCommonCounters(subgroup);
+            if (checkTableCounters) {
+                CheckTableCounters(subgroup);
+            }
+        }
+    }
+
+    // Coomon helpers
     TTestActorRuntime* GetRuntime() const override {
         return Server_->GetRuntime();
     }
@@ -414,6 +490,45 @@ private:
         request->SetPoolId(settings.PoolId_);
 
         return event;
+    }
+
+    NMonitoring::TDynamicCounterPtr GetWorkloadManagerCounters(ui32 nodeIndex) const {
+        return GetServiceCounters(GetRuntime()->GetAppData(nodeIndex).Counters, "kqp")
+            ->GetSubgroup("subsystem", "workload_manager");
+    }
+
+    static void CheckCommonCounters(NMonitoring::TDynamicCounterPtr subgroup) {
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("LocalInFly", false)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("LocalDelayedRequests", false)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("ContinueOverloaded", true)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("ContinueError", true)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("CleanupError", true)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("Cancelled", true)->Val(), 0);
+
+        UNIT_ASSERT_GE(subgroup->GetCounter("ContinueOk", true)->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("ContinueOk", true)->Val(), subgroup->GetCounter("CleanupOk", true)->Val());
+    }
+
+    static void CheckTableCounters(NMonitoring::TDynamicCounterPtr subgroup) {
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("PendingRequestsCount", false)->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("FinishingRequestsCount", false)->Val(), 0);
+
+        const std::vector<std::pair<TString, bool>> tableQueries = {
+            {"TCleanupTablesQuery", false},
+            {"TRefreshPoolStateQuery", true},
+            {"TDelayRequestQuery", true},
+            {"TStartFirstDelayedRequestQuery", true},
+            {"TStartRequestQuery", false},
+            {"TCleanupRequestsQuery", true},
+        };
+        for (const auto& [operation, runExpected] : tableQueries) {
+            auto operationSubgroup = subgroup->GetSubgroup("operation", operation);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(operationSubgroup->GetCounter("FinishError", true)->Val(), 0, TStringBuilder() << "Unexpected vaule for operation " << operation);
+            if (runExpected) {
+                UNIT_ASSERT_GE_C(operationSubgroup->GetCounter("FinishOk", true)->Val(), 1, TStringBuilder() << "Unexpected vaule for operation " << operation);
+            }
+        }
     }
 
 private:
@@ -469,6 +584,21 @@ bool TQueryRunnerResultAsync::HasValue() const {
 
 TIntrusivePtr<IYdbSetup> TYdbSetupSettings::Create() const {
     return MakeIntrusive<TWorkloadServiceYdbSetup>(*this);
+}
+
+//// IYdbSetup
+
+void IYdbSetup::WaitFor(TDuration timeout, TString description, std::function<bool(TString&)> callback) {
+    TInstant start = TInstant::Now();
+    while (TInstant::Now() - start <= timeout) {
+        TString errorString;
+        if (callback(errorString)) {
+            return;
+        }
+        Cerr << "Wait " << description << " " << TInstant::Now() - start << ": " << errorString << "\n";
+        Sleep(TDuration::Seconds(1));
+    }
+    UNIT_ASSERT_C(false, "Waiting " << description << " timeout. Spent time " << TInstant::Now() - start << " exceeds limit " << timeout);
 }
 
 //// TSampleQueriess

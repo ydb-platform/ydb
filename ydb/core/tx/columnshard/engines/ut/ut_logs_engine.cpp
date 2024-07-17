@@ -275,19 +275,27 @@ TString MakeTestBlob(i64 start = 0, i64 end = 100, ui32 step = 1) {
     return NArrow::SerializeBatchNoCompression(batch);
 }
 
-void AddIdsToBlobs(std::vector<TWritePortionInfoWithBlobs>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs, ui32& step) {
+void AddIdsToBlobs(std::vector<TWritePortionInfoWithBlobsResult>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs, ui32& step) {
     for (auto& portion : portions) {
-        for (auto& rec : portion.GetPortionConstructor().MutableRecords()) {
-            rec.BlobRange.BlobIdx = portion.GetPortionConstructor().RegisterBlobId(MakeUnifiedBlobId(++step, portion.GetBlobFullSizeVerified(rec.ColumnId, rec.Chunk)));
-            TString data = portion.GetBlobByRangeVerified(rec.ColumnId, rec.Chunk);
-            blobs.Add(IStoragesManager::DefaultStorageId, portion.GetPortionConstructor().RestoreBlobRange(rec.BlobRange), std::move(data));
+        THashMap<TUnifiedBlobId, TString> blobsData;
+        for (auto& b : portion.GetBlobs()) {
+            const auto blobId = MakeUnifiedBlobId(++step, b.GetSize());
+            b.RegisterBlobId(portion, blobId);
+            blobsData.emplace(blobId, b.GetResultBlob());
+        }
+        for (auto&& rec : portion.GetPortionConstructor().GetRecords()) {
+            auto range = portion.GetPortionConstructor().RestoreBlobRange(rec.BlobRange);
+            auto it = blobsData.find(range.BlobId);
+            AFL_VERIFY(it != blobsData.end());
+            const TString& data = it->second;
+            AFL_VERIFY(range.Offset + range.Size <= data.size());
+            blobs.Add(IStoragesManager::DefaultStorageId, range, data.substr(range.Offset, range.Size));
         }
     }
 }
 
-bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
-            std::vector<TInsertedData>&& dataToIndex, NBlobOperations::NRead::TCompositeReadBlobs& blobs, ui32& step) {
-
+bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, std::vector<TInsertedData>&& dataToIndex,
+    NBlobOperations::NRead::TCompositeReadBlobs& blobs, ui32& step) {
     for (ui32 i = 0; i < dataToIndex.size(); ++i) {
         // Commited data always has nonzero planstep (for WriteLoadRead tests)
         dataToIndex[i].PlanStep = i + 1;

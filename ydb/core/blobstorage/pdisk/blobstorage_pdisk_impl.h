@@ -152,7 +152,6 @@ public:
     ui64 SysLogLsn = 0;
     TNonceSet LoggedNonces; // Latest on-disk Nonce set
     ui64 CostLimitNs;
-    TControlWrapper UseT1ha0HashInFooter;
 
     TDriveData DriveData;
     TAtomic EstimatedLogChunkIdx = 0; // For cost estimation only TDriveData DriveData;

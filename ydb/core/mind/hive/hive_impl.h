@@ -570,6 +570,7 @@ protected:
     void Handle(TEvPrivate::TEvProcessIncomingEvent::TPtr& ev);
     void Handle(TEvHive::TEvUpdateDomain::TPtr& ev);
     void Handle(TEvPrivate::TEvDeleteNode::TPtr& ev);
+    void Handle(TEvHive::TEvRequestTabletDistribution::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);
@@ -931,6 +932,10 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
 
     ui64 GetStorageBalancerInflight() const {
         return CurrentConfig.GetStorageBalancerInflight();
+    }
+
+    double GetNodeUsageRangeToKick() const {
+        return CurrentConfig.GetNodeUsageRangeToKick();
     }
 
     static void ActualizeRestartStatistics(google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);

@@ -22,6 +22,7 @@ DEFINE_ENUM(ETransactionState,
     (FlushedModifications)
     (Aborting)
     (Aborted)
+    (AbortFailed)
     (Detached)
 );
 
@@ -269,7 +270,7 @@ private:
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
     ETransactionState State_ = ETransactionState::Active;
-    const TPromise<void> AbortPromise_ = NewPromise<void>();
+    TPromise<void> AbortPromise_;
     std::vector<NApi::ITransactionPtr> AlienTransactions_;
 
     THashSet<NObjectClient::TCellId> AdditionalParticipantCellIds_;

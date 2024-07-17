@@ -116,7 +116,7 @@ void TCompletionLogWrite::Release(TActorSystem *actorSystem) {
 
 TCompletionChunkReadPart::TCompletionChunkReadPart(TPDisk *pDisk, TIntrusivePtr<TChunkRead> &read, ui64 rawReadSize,
         ui64 payloadReadSize, ui64 commonBufferOffset, TCompletionChunkRead *cumulativeCompletion, bool isTheLastPart,
-        const TControlWrapper& useT1ha0Hasher, NWilson::TSpan&& span)
+        NWilson::TSpan&& span)
     : TCompletionAction()
     , PDisk(pDisk)
     , Read(read)
@@ -126,7 +126,6 @@ TCompletionChunkReadPart::TCompletionChunkReadPart(TPDisk *pDisk, TIntrusivePtr<
     , CumulativeCompletion(cumulativeCompletion)
     , Buffer(PDisk->BufferPool->Pop())
     , IsTheLastPart(isTheLastPart)
-    , UseT1ha0Hasher(useT1ha0Hasher)
     , Span(std::move(span))
 {
     if (!IsTheLastPart) {
@@ -192,7 +191,7 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
             format, actorSystem, PDisk->PDiskActor, PDisk->PDiskId, &PDisk->Mon, PDisk->BufferPool.Get());
         ui64 lastNonce = Min((ui64)0, chunkNonce - 1);
         restorator.Restore(source, format.Offset(Read->ChunkIdx, sectorIdx), format.MagicDataChunk, lastNonce,
-                UseT1ha0Hasher, Read->Owner);
+                Read->Owner);
 
         const ui32 sectorCount = 1;
         if (restorator.GoodSectorCount != sectorCount) {

@@ -2,7 +2,6 @@
 #include "defs.h"
 
 #include <ydb/core/base/blobstorage.h>
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
 #include <ydb/core/control/immediate_control_board_wrapper.h>
 #include <ydb/core/protos/blobstorage.pb.h>
@@ -128,7 +127,6 @@ struct TPDiskConfig : public TThrRefBase {
     ui32 BufferPoolBufferCount = 256;
     ui32 MaxQueuedCompletionActions = 128; // BufferPoolBufferCount / 2;
     bool UseSpdkNvmeDriver;
-    TControlWrapper UseT1ha0HashInFooter;
 
     ui64 ExpectedSlotCount = 0;
 
@@ -161,7 +159,6 @@ struct TPDiskConfig : public TThrRefBase {
         , PDiskGuid(pDiskGuid)
         , PDiskId(pdiskId)
         , PDiskCategory(pDiskCategory)
-        , UseT1ha0HashInFooter(KIKIMR_PDISK_ENABLE_T1HA_HASH_WRITING, 0, 1)
     {
         Initialize();
     }

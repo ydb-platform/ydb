@@ -92,7 +92,7 @@ private:
                 Col("wait_deadline", NScheme::NTypeIds::Timestamp),
                 Col("lease_deadline", NScheme::NTypeIds::Timestamp),
             },
-            { "database", "pool_id", "start_time", "session_id" },
+            { "database", "pool_id", "node_id", "start_time", "session_id" },
             NKikimrServices::KQP_WORKLOAD_SERVICE,
             TtlCol("lease_deadline", DEADLINE_OFFSET, BRO_RUN_INTERVAL)
         );
@@ -383,7 +383,7 @@ public:
                 .Utf8(PoolId)
                 .Build();
 
-        RunDataQuery(sql, &params);
+        RunDataQuery(sql, &params, TTxControl::BeginAndCommitTx(true));
         SetQueryResultHandler(&TRefreshPoolStateQuery::OnQueryResult, "Describe pool");
     }
 
@@ -515,6 +515,8 @@ public:
     {}
 
     void OnRunQuery() override {
+        RequestNodeId = SelfId().NodeId();
+
         TString sql = TStringBuilder() << R"(
             -- TStartFirstDelayedRequestQuery::OnRunQuery
             DECLARE $database AS Text;
@@ -539,7 +541,7 @@ public:
                 .Utf8(PoolId)
                 .Build();
 
-        RunDataQuery(sql, &params);
+        RunDataQuery(sql, &params, TTxControl::BeginAndCommitTx(true));
         SetQueryResultHandler(&TStartFirstDelayedRequestQuery::OnGetPoolInfo, "Describe pool");
     }
 
@@ -599,6 +601,7 @@ public:
             DELETE FROM `)" << TTablesCreator::GetDelayedRequestsPath() << R"(`
             WHERE database = $database
               AND pool_id = $pool_id
+              AND node_id = $node_id
               AND start_time = $start_time
               AND session_id = $session_id;
 
@@ -780,6 +783,7 @@ public:
             DELETE FROM `)" << TTablesCreator::GetDelayedRequestsPath() << R"(`
             WHERE database = $database
               AND pool_id = $pool_id
+              AND node_id = $node_id
               AND session_id IN $session_ids;
 
             DELETE FROM `)" << TTablesCreator::GetRunningRequestsPath() << R"(`

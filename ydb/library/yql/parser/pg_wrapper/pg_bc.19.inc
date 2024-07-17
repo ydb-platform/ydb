@@ -1,15 +1,10 @@
 LLVM_BC(
-    postgresql/src/backend/foreign/foreign.c
     postgresql/src/backend/replication/slotfuncs.c
     postgresql/src/backend/tsearch/ts_selfuncs.c
-    postgresql/src/backend/tsearch/ts_typanalyze.c
-    postgresql/src/backend/utils/adt/cash.c
-    postgresql/src/backend/utils/adt/cryptohashfuncs.c
     postgresql/src/backend/utils/adt/encode.c
     postgresql/src/backend/utils/adt/geo_ops.c
     postgresql/src/backend/utils/adt/geo_spgist.c
-    postgresql/src/backend/utils/adt/misc.c
-    postgresql/src/backend/utils/adt/regproc.c
+    postgresql/src/backend/utils/adt/tsquery_rewrite.c
     pg_kernels.19.cpp
 
     NAME PgFuncs19
@@ -55,34 +50,6 @@ LLVM_BC(
     arrow_box_sub
     arrow_box_width
     arrow_boxes_bound_box
-    arrow_cash_cmp
-    arrow_cash_div_cash
-    arrow_cash_div_flt4
-    arrow_cash_div_flt8
-    arrow_cash_div_int2
-    arrow_cash_div_int4
-    arrow_cash_div_int8
-    arrow_cash_eq
-    arrow_cash_ge
-    arrow_cash_gt
-    arrow_cash_in
-    arrow_cash_le
-    arrow_cash_lt
-    arrow_cash_mi
-    arrow_cash_mul_flt4
-    arrow_cash_mul_flt8
-    arrow_cash_mul_int2
-    arrow_cash_mul_int4
-    arrow_cash_mul_int8
-    arrow_cash_ne
-    arrow_cash_numeric
-    arrow_cash_out
-    arrow_cash_pl
-    arrow_cash_recv
-    arrow_cash_send
-    arrow_cash_words
-    arrow_cashlarger
-    arrow_cashsmaller
     arrow_circle_above
     arrow_circle_add_pt
     arrow_circle_area
@@ -117,24 +84,18 @@ LLVM_BC(
     arrow_circle_same
     arrow_circle_send
     arrow_circle_sub_pt
-    arrow_close_lb
     arrow_close_ls
     arrow_close_lseg
     arrow_close_pb
     arrow_close_pl
     arrow_close_ps
     arrow_close_sb
-    arrow_close_sl
     arrow_construct_point
     arrow_cr_circle
-    arrow_current_database
-    arrow_current_query
-    arrow_dist_bl
     arrow_dist_bp
     arrow_dist_bs
     arrow_dist_cpoint
     arrow_dist_cpoly
-    arrow_dist_lb
     arrow_dist_lp
     arrow_dist_ls
     arrow_dist_pathp
@@ -149,13 +110,6 @@ LLVM_BC(
     arrow_dist_sb
     arrow_dist_sl
     arrow_dist_sp
-    arrow_flt4_mul_cash
-    arrow_flt8_mul_cash
-    arrow_int2_mul_cash
-    arrow_int4_cash
-    arrow_int4_mul_cash
-    arrow_int8_cash
-    arrow_int8_mul_cash
     arrow_inter_lb
     arrow_inter_sb
     arrow_inter_sl
@@ -192,20 +146,15 @@ LLVM_BC(
     arrow_lseg_recv
     arrow_lseg_send
     arrow_lseg_vertical
-    arrow_md5_bytea
-    arrow_md5_text
-    arrow_numeric_cash
     arrow_on_pb
     arrow_on_pl
     arrow_on_ppath
     arrow_on_ps
     arrow_on_sb
     arrow_on_sl
-    arrow_parse_ident
     arrow_path_add
     arrow_path_add_pt
     arrow_path_area
-    arrow_path_center
     arrow_path_close
     arrow_path_distance
     arrow_path_div_pt
@@ -227,8 +176,6 @@ LLVM_BC(
     arrow_path_recv
     arrow_path_send
     arrow_path_sub_pt
-    arrow_pg_collation_for
-    arrow_pg_column_is_updatable
     arrow_pg_copy_logical_replication_slot_a
     arrow_pg_copy_logical_replication_slot_b
     arrow_pg_copy_logical_replication_slot_c
@@ -236,17 +183,8 @@ LLVM_BC(
     arrow_pg_copy_physical_replication_slot_b
     arrow_pg_create_logical_replication_slot
     arrow_pg_create_physical_replication_slot
-    arrow_pg_current_logfile
-    arrow_pg_current_logfile_1arg
     arrow_pg_drop_replication_slot
-    arrow_pg_get_replica_identity_index
-    arrow_pg_num_nonnulls
-    arrow_pg_num_nulls
-    arrow_pg_relation_is_updatable
     arrow_pg_replication_slot_advance
-    arrow_pg_sleep
-    arrow_pg_tablespace_location
-    arrow_pg_typeof
     arrow_point_above
     arrow_point_add
     arrow_point_below
@@ -290,57 +228,8 @@ LLVM_BC(
     arrow_poly_right
     arrow_poly_same
     arrow_poly_send
-    arrow_postgresql_fdw_validator
     arrow_pt_contained_circle
     arrow_pt_contained_poly
-    arrow_regclassin
-    arrow_regclassout
-    arrow_regclassrecv
-    arrow_regclasssend
-    arrow_regcollationin
-    arrow_regcollationout
-    arrow_regcollationrecv
-    arrow_regcollationsend
-    arrow_regconfigin
-    arrow_regconfigout
-    arrow_regconfigrecv
-    arrow_regconfigsend
-    arrow_regdictionaryin
-    arrow_regdictionaryout
-    arrow_regdictionaryrecv
-    arrow_regdictionarysend
-    arrow_regnamespacein
-    arrow_regnamespaceout
-    arrow_regnamespacerecv
-    arrow_regnamespacesend
-    arrow_regoperatorin
-    arrow_regoperatorout
-    arrow_regoperatorrecv
-    arrow_regoperatorsend
-    arrow_regoperin
-    arrow_regoperout
-    arrow_regoperrecv
-    arrow_regopersend
-    arrow_regprocedurein
-    arrow_regprocedureout
-    arrow_regprocedurerecv
-    arrow_regproceduresend
-    arrow_regprocin
-    arrow_regprocout
-    arrow_regprocrecv
-    arrow_regprocsend
-    arrow_regrolein
-    arrow_regroleout
-    arrow_regrolerecv
-    arrow_regrolesend
-    arrow_regtypein
-    arrow_regtypeout
-    arrow_regtyperecv
-    arrow_regtypesend
-    arrow_sha224_bytea
-    arrow_sha256_bytea
-    arrow_sha384_bytea
-    arrow_sha512_bytea
     arrow_spg_bbox_quad_config
     arrow_spg_box_quad_choose
     arrow_spg_box_quad_config
@@ -348,17 +237,8 @@ LLVM_BC(
     arrow_spg_box_quad_leaf_consistent
     arrow_spg_box_quad_picksplit
     arrow_spg_poly_quad_compress
-    arrow_text_regclass
-    arrow_to_regclass
-    arrow_to_regcollation
-    arrow_to_regnamespace
-    arrow_to_regoper
-    arrow_to_regoperator
-    arrow_to_regproc
-    arrow_to_regprocedure
-    arrow_to_regrole
-    arrow_to_regtype
-    arrow_ts_typanalyze
     arrow_tsmatchjoinsel
     arrow_tsmatchsel
+    arrow_tsquery_rewrite
+    arrow_tsquery_rewrite_query
 )

@@ -221,7 +221,7 @@ StatServiceSettings::StatServiceSettings():
     MaxInFlightTabletRequests(DefaultMaxInFlightTabletRequests) {}
 
 struct TAggregationStatistics {
-    using TColumnsStatistics = ::google::protobuf::RepeatedPtrField<::NKikimrStat::TColumnStatistics>;
+    using TColumnsStatistics = ::google::protobuf::RepeatedPtrField<::NKikimrStat::TColumn>;
 
     struct TFailedTablet {
         using EErrorType = NKikimrStat::TEvAggregateStatisticsResponse::EErrorType;

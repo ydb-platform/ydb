@@ -6,4 +6,4 @@
     <tmp_path>/program.sql:<main>: Error: Fatal Error
 
     
-        <tmp_path>/program.sql:<main>: Error: Failed to parse response from monitoring: library/cpp/json/json_reader.cpp:417: Offset: 2, Code: 4, Error: Missing a name for object member. (appeared 1 time at ISOTIME)
+        <tmp_path>/program.sql:<main>: Error: Failed to parse response from monitoring: library/cpp/json/json_reader.cpp:xxx: Offset: 2, Code: 4, Error: Missing a name for object member. (appeared 1 time at ISOTIME)

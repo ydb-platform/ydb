@@ -304,7 +304,8 @@ struct TObjectStorageExternalSource : public IExternalSource {
         }
 
         auto httpGateway = NYql::IHTTPGateway::Make();
-        auto s3Lister = NYql::NS3Lister::MakeS3Lister(httpGateway, NYql::NS3Lister::TListingRequest{
+        auto httpRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
+        auto s3Lister = NYql::NS3Lister::MakeS3Lister(httpGateway, httpRetryPolicy, NYql::NS3Lister::TListingRequest{
             .Url = meta->DataSourceLocation,
             .AuthInfo = authInfo,
             .Pattern = meta->TableLocation,

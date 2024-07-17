@@ -14,7 +14,7 @@ import ydb.library.yql.providers.generic.connector.tests.utils.scenario.ydb as s
 import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_positive_common as select_positive_common
 
 # import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_database as select_missing_database
-# import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_table as select_missing_table
+import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_table as select_missing_table
 
 from conftest import docker_compose_dir
 from collection import Collection
@@ -56,19 +56,19 @@ class OneTimeWaiter:
 
 one_time_waiter = OneTimeWaiter(
     expected_tables=[
-        "column_selection_A_b_C_d_E_NATIVE",
-        "column_selection_COL1_NATIVE",
-        "column_selection_asterisk_NATIVE",
-        "column_selection_col2_COL1_NATIVE",
-        "column_selection_col2_NATIVE",
-        "column_selection_col3_NATIVE",
-        "primitive_types_NATIVE",
-        "optional_types_NATIVE",
-        "constant_NATIVE",
-        "count_NATIVE",
-        "pushdown_NATIVE",
-        "unsupported_types_NATIVE",
-        "json_NATIVE",
+        "column_selection_A_b_C_d_E",
+        "column_selection_COL1",
+        "column_selection_asterisk",
+        "column_selection_col2_COL1",
+        "column_selection_col2",
+        "column_selection_col3",
+        "primitive_types",
+        "optional_types",
+        "constant",
+        "count",
+        "pushdown",
+        "unsupported_types",
+        "json",
     ]
 )
 
@@ -96,19 +96,22 @@ def test_select_positive(
 
 
 # FIXME: YQ-3315
-# @pytest.mark.parametrize("runner_type", runner_types)
-# @pytest.mark.parametrize(
-#     "test_case", tc_collection.get('select_missing_table'), ids=tc_collection.ids('select_missing_table')
-# )
-# def test_select_missing_table(
-#     request: pytest.FixtureRequest,
-#     runner_type: str,
-#     test_case: select_missing_table.TestCase,
-# ):
-#     runner = configure_runner(runner_type=runner_type, settings=settings)
-#     scenario.select_missing_table(
-#         test_name=request.node.name,
-#         settings=settings,
-#         runner=runner,
-#         test_case=test_case,
-#     )
+@pytest.mark.parametrize("runner_type", runner_types)
+@pytest.mark.parametrize(
+    "test_case", tc_collection.get('select_missing_table'), ids=tc_collection.ids('select_missing_table')
+)
+def test_select_missing_table(
+    request: pytest.FixtureRequest,
+    runner_type: str,
+    test_case: select_missing_table.TestCase,
+):
+    # Let YDB container initialize tables
+    one_time_waiter.wait()
+
+    runner = configure_runner(runner_type=runner_type, settings=settings)
+    scenario.select_missing_table(
+        test_name=request.node.name,
+        settings=settings,
+        runner=runner,
+        test_case=test_case,
+    )

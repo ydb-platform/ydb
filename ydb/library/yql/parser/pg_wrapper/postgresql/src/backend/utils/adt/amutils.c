@@ -3,7 +3,7 @@
  * amutils.c
  *	  SQL-level APIs related to index access methods.
  *
- * Copyright (c) 2016-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2016-2023, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -119,7 +119,6 @@ test_indoption(HeapTuple tuple, int attno, bool guard,
 			   bool *res)
 {
 	Datum		datum;
-	bool		isnull;
 	int2vector *indoption;
 	int16		indoption_val;
 
@@ -129,9 +128,7 @@ test_indoption(HeapTuple tuple, int attno, bool guard,
 		return true;
 	}
 
-	datum = SysCacheGetAttr(INDEXRELID, tuple,
-							Anum_pg_index_indoption, &isnull);
-	Assert(!isnull);
+	datum = SysCacheGetAttrNotNull(INDEXRELID, tuple, Anum_pg_index_indoption);
 
 	indoption = ((int2vector *) DatumGetPointer(datum));
 	indoption_val = indoption->values[attno - 1];
@@ -466,5 +463,5 @@ pg_indexam_progress_phasename(PG_FUNCTION_ARGS)
 	if (!name)
 		PG_RETURN_NULL();
 
-	PG_RETURN_TEXT_P(CStringGetTextDatum(name));
+	PG_RETURN_DATUM(CStringGetTextDatum(name));
 }

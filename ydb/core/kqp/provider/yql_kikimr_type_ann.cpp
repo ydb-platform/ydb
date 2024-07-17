@@ -263,9 +263,9 @@ namespace {
         return columnTypeError;
     }
 
-    TStringBuf GetColumnTypeName(const TTypeAnnotationNode* type) {
+    TString GetColumnTypeName(const TTypeAnnotationNode* type) {
         if (type->GetKind() == ETypeAnnotationKind::Data) {
-            return type->Cast<TDataExprType>()->GetName();
+            return ToString(type->Cast<TDataExprType>()->GetName());
         } else {
             auto pgTypeId = type->Cast<TPgExprType>()->GetId();
             auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId);
@@ -1373,17 +1373,26 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                     auto alterColumnAction = TString(alterColumnList.Item(0).Cast<TCoAtom>());
                     if (alterColumnAction == "setDefault") {
                         auto setDefault = alterColumnList.Item(1).Cast<TCoAtomList>();
-                        auto func = TString(setDefault.Item(0).Cast<TCoAtom>());
-                        auto arg = TString(setDefault.Item(1).Cast<TCoAtom>());
-                        if (func != "nextval") {
-                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
-                                TStringBuilder() << "Unsupported function to set default: " << func));
-                            return TStatus::Error;
-                        }
-                        if (setDefault.Size() > 2) {
-                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
-                                TStringBuilder() << "Function nextval has exactly one argument"));
-                            return TStatus::Error;
+                        if (setDefault.Size() == 1) {
+                            auto defaultExpr = TString(setDefault.Item(0).Cast<TCoAtom>());
+                            if (defaultExpr != "Null") {
+                                ctx.AddError(TIssue(ctx.GetPosition(setDefault.Pos()),
+                                    TStringBuilder() << "Unsupported value to set defualt: " << defaultExpr));
+                                return TStatus::Error;
+                            }
+                        } else {
+                            auto func = TString(setDefault.Item(0).Cast<TCoAtom>());
+                            auto arg = TString(setDefault.Item(1).Cast<TCoAtom>());
+                            if (func != "nextval") {
+                                ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
+                                    TStringBuilder() << "Unsupported function to set default: " << func));
+                                return TStatus::Error;
+                            }
+                            if (setDefault.Size() > 2) {
+                                ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
+                                    TStringBuilder() << "Function nextval has exactly one argument"));
+                                return TStatus::Error;
+                            }
                         }
                     } else if (alterColumnAction == "setFamily") {
                         auto families = alterColumnList.Item(1).Cast<TCoAtomList>();

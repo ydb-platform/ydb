@@ -3,7 +3,7 @@
  * pgarch.h
  *	  Exports from postmaster/pgarch.c.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/postmaster/pgarch.h
@@ -31,5 +31,6 @@ extern void PgArchShmemInit(void);
 extern bool PgArchCanRestart(void);
 extern void PgArchiverMain(void) pg_attribute_noreturn();
 extern void PgArchWakeup(void);
+extern void PgArchForceDirScan(void);
 
 #endif							/* _PGARCH_H */

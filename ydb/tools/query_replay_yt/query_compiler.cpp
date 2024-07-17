@@ -137,6 +137,7 @@ struct TMetadataInfoHolder {
 class TStaticTableMetadataLoader: public NYql::IKikimrGateway::IKqpTableMetadataLoader, public NYql::IDbSchemeResolver {
     TActorSystem* ActorSystem;
     std::shared_ptr<TMetadataInfoHolder> TableMetadata;
+    bool IsMissingTableMetadata = false;
 
 public:
     TStaticTableMetadataLoader(TActorSystem* actorSystem, std::shared_ptr<TMetadataInfoHolder>& tableMetadata)
@@ -152,6 +153,10 @@ public:
         Y_UNUSED(database);
         Y_UNUSED(userToken);
         auto ptr = TableMetadata->find(table);
+        if (ptr == TableMetadata->end()) {
+            IsMissingTableMetadata = true;
+        }
+
         Y_ENSURE(ptr != TableMetadata->end());
 
         NYql::IKikimrGateway::TTableMetadataResult result;
@@ -199,6 +204,10 @@ public:
         return results;
     }
 
+    bool HasMissingTableMetadata() const {
+        return IsMissingTableMetadata;
+    }
+
     virtual NThreading::TFuture<TTableResults> ResolveTables(const TVector<TTable>& tables) override {
         return NThreading::MakeFuture(Resolve(tables));
     }
@@ -215,13 +224,16 @@ public:
 
 class TReplayCompileActor: public TActorBootstrapped<TReplayCompileActor> {
 public:
-    TReplayCompileActor(TIntrusivePtr<TModuleResolverState> moduleResolverState, const NMiniKQL::IFunctionRegistry* functionRegistry)
+    TReplayCompileActor(TIntrusivePtr<TModuleResolverState> moduleResolverState, const NMiniKQL::IFunctionRegistry* functionRegistry,
+        NYql::IHTTPGateway::TPtr httpGateway)
         : ModuleResolverState(moduleResolverState)
         , KqpSettings()
         , Config(MakeIntrusive<TKikimrConfiguration>())
         , FunctionRegistry(functionRegistry)
+        , HttpGateway(std::move(httpGateway))
     {
         Config->EnableKqpScanQueryStreamLookup = true;
+        Config->EnablePreparedDdl = true;
     }
 
     void Bootstrap() {
@@ -495,7 +507,13 @@ private:
         Y_UNUSED(queryPlan);
         if (status != Ydb::StatusIds::SUCCESS) {
             ev->Success = false;
-            ev->Status = status == Ydb::StatusIds::TIMEOUT ? TQueryReplayEvents::CompileTimeout : TQueryReplayEvents::CompileError;
+            if (MetadataLoader->HasMissingTableMetadata()) {
+                ev->Status = TQueryReplayEvents::MissingTableMetadata;
+            } else if (status == Ydb::StatusIds::TIMEOUT) {
+                ev->Status = TQueryReplayEvents::CompileTimeout;
+            } else {
+                ev->Status = TQueryReplayEvents::CompileError;
+            }
             ev->Message = issues.ToString();
             Cerr << "Failed to compile query: " << ev->Message << Endl;
             WriteJsonData("-repro.txt", ReplayDetails);
@@ -594,16 +612,17 @@ private:
 	    Config->_KqpYqlSyntaxVersion = syntax;
         Config->FreezeDefaults();
 
-        std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = make_shared<TStaticTableMetadataLoader>(TlsActivationContext->ActorSystem(), TableMetadata);
+        MetadataLoader = make_shared<TStaticTableMetadataLoader>(TlsActivationContext->ActorSystem(), TableMetadata);
+        std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = MetadataLoader;
 
         auto c = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto counters = MakeIntrusive<TKqpRequestCounters>();
         counters->Counters = new TKqpCounters(c);
         counters->TxProxyMon = new NTxProxy::TTxProxyMon(c);
 
-        Gateway = CreateKikimrIcGateway(Query->Cluster, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, Query->Database, std::move(loader),
+        Gateway = CreateKikimrIcGateway(Query->Cluster, queryType, Query->Database, std::move(loader),
             TlsActivationContext->ExecutorThread.ActorSystem, SelfId().NodeId(), counters);
-        auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}, {}, nullptr, nullptr});
+        auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({HttpGateway, nullptr, nullptr, nullptr, {}, {}, {}, nullptr, nullptr});
         KqpHost = CreateKqpHost(Gateway, Query->Cluster, Query->Database, Config, ModuleResolverState->ModuleResolver,
             federatedQuerySetup, nullptr, GUCSettings, Nothing(), FunctionRegistry, false);
 
@@ -652,10 +671,12 @@ private:
     std::shared_ptr<TMetadataInfoHolder> TableMetadata;
     TActorId MiniKQLCompileService;
     NJson::TJsonValue ReplayDetails;
+    std::shared_ptr<TStaticTableMetadataLoader> MetadataLoader;
+    NYql::IHTTPGateway::TPtr HttpGateway;
 };
 
 IActor* CreateQueryCompiler(TIntrusivePtr<TModuleResolverState> moduleResolverState,
-    const NMiniKQL::IFunctionRegistry* functionRegistry)
+    const NMiniKQL::IFunctionRegistry* functionRegistry, NYql::IHTTPGateway::TPtr httpGateway)
 {
-    return new TReplayCompileActor(moduleResolverState, functionRegistry);
+    return new TReplayCompileActor(moduleResolverState, functionRegistry, httpGateway);
 }

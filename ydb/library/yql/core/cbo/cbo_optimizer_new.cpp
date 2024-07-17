@@ -131,13 +131,15 @@ bool TBaseProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizer
     const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
     const TVector<TString>& leftJoinKeys,
     const TVector<TString>& rightJoinKeys,
-    EJoinAlgoType joinAlgo) {
+    EJoinAlgoType joinAlgo,
+    EJoinKind joinKind) {
 
     Y_UNUSED(left);
     Y_UNUSED(right);
     Y_UNUSED(joinConditions);
     Y_UNUSED(leftJoinKeys);
     Y_UNUSED(rightJoinKeys);
+    Y_UNUSED(joinKind);
 
     return joinAlgo == EJoinAlgoType::MapJoin;
 }
@@ -221,7 +223,7 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     } else {
         std::optional<double> lhsUniqueVals;
         std::optional<double> rhsUniqueVals;
-        if (leftStats.ColumnStatistics && rightStats.ColumnStatistics) {
+        if (leftStats.ColumnStatistics && rightStats.ColumnStatistics && !leftJoinKeys.empty() && !rightJoinKeys.empty()) {
             auto lhs = leftJoinKeys[0];
             lhsUniqueVals = leftStats.ColumnStatistics->Data[lhs].NumUniqueVals;
             auto rhs = rightJoinKeys[0];
@@ -230,7 +232,6 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         }
 
         if (lhsUniqueVals.has_value() && rhsUniqueVals.has_value()) {
-            selectivity = std::max(*lhsUniqueVals, *rhsUniqueVals);
             newCard = leftStats.Nrows * rightStats.Nrows / std::max(*lhsUniqueVals, *rhsUniqueVals);
         } else {
             newCard = 0.2 * leftStats.Nrows * rightStats.Nrows;

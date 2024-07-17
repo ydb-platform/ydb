@@ -106,6 +106,22 @@ struct TArgs_arrayoverlap_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
+struct TArgs_brin_inclusion_add_value_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
+};
+struct TArgs_brin_inclusion_consistent_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
+};
+struct TArgs_brin_inclusion_opcinfo_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+struct TArgs_brin_inclusion_union_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
+};
 struct TArgs_btarraycmp_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
@@ -146,43 +162,11 @@ struct TArgs_hash_array_extended_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,true};
 };
-struct TArgs_multirange_gist_compress_Policy {
+struct TArgs_pg_collation_actual_version_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-struct TArgs_multirange_gist_consistent_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 5> IsFixedArg = {true,false,true,true,true};
-};
-struct TArgs_multirange_typanalyze_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-struct TArgs_pg_relation_is_publishable_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-struct TArgs_range_gist_consistent_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 5> IsFixedArg = {true,false,true,true,true};
-};
-struct TArgs_range_gist_penalty_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
-};
-struct TArgs_range_gist_picksplit_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-struct TArgs_range_gist_same_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {false,false,true};
-};
-struct TArgs_range_gist_union_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-struct TArgs_range_typanalyze_Policy {
+struct TArgs_pg_import_system_collations_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };

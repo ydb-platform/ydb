@@ -3,7 +3,7 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/protos/statistics.pb.h>
-#include <ydb/core/util/count_min_sketch.h>
+#include <ydb/library/minsketch/count_min_sketch.h>
 #include <ydb/library/actors/core/events.h>
 
 namespace NKikimr {
@@ -109,9 +109,6 @@ struct TEvStatistics {
         NKikimrStat::TEvAggregateStatisticsResponse,
         EvAggregateStatisticsResponse>
     {};
-
-
-
 
     struct TEvGetStatistics : public TEventLocal<TEvGetStatistics, EvGetStatistics> {
         EStatType StatType;

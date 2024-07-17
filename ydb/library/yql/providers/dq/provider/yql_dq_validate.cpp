@@ -147,7 +147,7 @@ public:
         , State_(state)
         , CheckSelfJoin_(!TypeCtx_.ForceDq
             && !State_->Settings->SplitStageOnDqReplicate.Get().GetOrElse(TDqSettings::TDefault::SplitStageOnDqReplicate)
-            && !State_->Settings->IsSpillingEnabled())
+            && !State_->Settings->IsSpillingInChannelsEnabled())
     {}
 
     bool ValidateDqExecution(const TExprNode& node) {

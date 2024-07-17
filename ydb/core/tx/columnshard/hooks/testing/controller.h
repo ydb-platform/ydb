@@ -177,9 +177,6 @@ protected:
     virtual void DoOnDataSharingFinished(const ui64 /*tabletId*/, const TString& sessionId) override {
         TGuard<TMutex> g(Mutex);
         AFL_VERIFY(SharingIds.erase(sessionId));
-        if (SharingIds.empty()) {
-            CheckInvariants();
-        }
     }
     virtual void DoOnDataSharingStarted(const ui64 /*tabletId*/, const TString& sessionId) override {
         // dont check here. on finish only

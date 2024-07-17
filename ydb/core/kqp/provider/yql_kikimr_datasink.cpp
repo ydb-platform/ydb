@@ -79,6 +79,16 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleAnalyze(TKiAnalyze node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+
+        auto cluster = node.DataSink().Cluster();
+        auto table = node.Table();
+
+        SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table));
+        return TStatus::Ok;
+    }
+
     TStatus HandleCreateTopic(TKiCreateTopic node, TExprContext& ctx) override {
         Y_UNUSED(ctx);
         Y_UNUSED(node);
@@ -552,6 +562,10 @@ public:
             return true;
         }
 
+        if (node.IsCallable(TKiAnalyze::CallableName())) {
+            return true;
+        }
+
         if (auto maybeRight = TMaybeNode<TCoNth>(&node).Tuple().Maybe<TCoRight>()) {
             if (maybeRight.Input().Maybe<TKiExecDataQuery>()) {
                 return true;
@@ -1000,6 +1014,13 @@ public:
                             .Done()
                             .Ptr();
                     }
+                } else if (mode == "analyze") {
+                    return Build<TKiAnalyze>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Table().Build(key.GetTablePath())
+                        .Done()
+                        .Ptr();
                 } else {
                     return Build<TKiWriteTable>(ctx, node->Pos())
                         .World(node->Child(0))
@@ -1164,7 +1185,7 @@ public:
                         .Topic().Build(key.GetTopicPath())
                         .Settings(settings.Other)
                         .Done()
-                        .Ptr();
+                        .Ptr(); 
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Unknown operation type for topic"));
                     return nullptr;
@@ -1572,6 +1593,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = callable.Maybe<TKiAlterSequence>()) {
         return HandleAlterSequence(node.Cast(), ctx);
+    }
+
+    if (auto node = callable.Maybe<TKiAnalyze>()) {
+        return HandleAnalyze(node.Cast(), ctx);
     }
 
     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Kikimr DataSink) Unsupported function: "

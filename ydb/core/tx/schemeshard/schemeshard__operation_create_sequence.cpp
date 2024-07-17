@@ -254,7 +254,7 @@ std::optional<NKikimrSchemeOp::TSequenceDescription> FillSequenceDescription(con
 
     TString dataType;
     if (!sequence.HasDataType()) {
-        dataType = "Int64";
+        dataType = NScheme::TypeName(NScheme::NTypeIds::Int64);
     } else {
         dataType = sequence.GetDataType();
     }

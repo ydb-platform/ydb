@@ -2864,7 +2864,7 @@ public:
                                 if (ListLength(typeName->names) > 0) {
                                     options.emplace_back(QL(QAX(nameElem),
                                         QAX(StrVal(ListNodeNth(typeName->names, ListLength(typeName->names) - 1)))));
-                                    }
+                                }
                                 break;
                             }
                             default:

@@ -692,6 +692,7 @@ struct TSequenceSettings {
     TMaybe<i64> Increment;
     TMaybe<bool> Cycle;
     TMaybe<TString> OwnedBy;
+    TMaybe<TString> DataType;
 };
 
 struct TCreateSequenceSettings {

@@ -258,6 +258,7 @@ runs:
 
         if [ true = ${{ inputs.run_tests }} ]; then
           params+=(-A)
+          params+=(--test-tag=-ya:not_autocheck) 
         fi
 
         echo "::debug::get version"

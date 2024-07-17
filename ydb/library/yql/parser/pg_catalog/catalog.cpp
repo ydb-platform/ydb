@@ -1894,6 +1894,11 @@ struct TCatalog {
                 const auto& desc = o.second;
                 ExportFunction(desc.ProcId);
             }
+
+            for (const auto& c : Casts) {
+                const auto& desc = c.second;
+                ExportFunction(desc.FunctionId);
+            }
         } else {
             for (size_t i = 0; i < Y_ARRAY_SIZE(AllowedProcsRaw); ++i) {
                 const auto& raw = AllowedProcsRaw[i];

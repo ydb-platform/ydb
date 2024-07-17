@@ -1,5 +1,6 @@
 "current_database",
 "format_type",
 "pg_get_userbyid",
+"pg_total_relation_size",
 "row_to_json",
 "version",

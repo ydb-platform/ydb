@@ -162,8 +162,8 @@ std::set<ui32> TPartitionGraph::GetActiveChildren(ui32 id) const {
 void TPartitionGraph::Travers(std::function<bool (ui32 id)> func, bool includeSelf) const {
     std::deque<const Node*> queue;
 
-    for (auto& [id, node] : Partitions) {
-        if (!node.IsRoot()) {
+    for (auto& [id, n] : Partitions) {
+        if (!n.IsRoot()) {
             continue;
         }
 
@@ -171,7 +171,7 @@ void TPartitionGraph::Travers(std::function<bool (ui32 id)> func, bool includeSe
             continue;
         }
 
-        queue.push_back(&node);
+        queue.insert(queue.end(), n.Children.begin(), n.Children.end());
     }
 
     while(!queue.empty()) {

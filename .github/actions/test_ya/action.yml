@@ -306,7 +306,6 @@ runs:
           --log_out_dir "artifacts/logs/" \
           --test_stuff_out "test_artifacts/" \
           "$JUNIT_REPORT_XML"
-  
     
     - name: Test history upload results to YDB
       if: inputs.run_tests
@@ -423,7 +422,7 @@ runs:
         set -x
         echo "::group::s3-sync"
         .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/"
-        echo "00 [Workflow run results](${S3_URL_PREFIX}/index.html)" >> $SUMMARY_LINKS
+        echo "00 [Workflow artifacts](${S3_URL_PREFIX}/index.html)" >> $SUMMARY_LINKS
         s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"     
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
         echo "::endgroup::"

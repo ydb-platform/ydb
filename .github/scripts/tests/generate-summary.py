@@ -314,7 +314,7 @@ def get_comment_text(pr: PullRequest, summary: TestSummary, summary_links: str):
         links = f.readlines()
     
     links.sort()
-    links = [line.split(" ", 1)[1] for line in link_lines]
+    links = [line.split(" ", 1)[1] for line in links]
 
     if links:
         body.append("")

@@ -214,7 +214,7 @@ private:
     static const ui64 SecondRoundCookie = 2;
 };
 
-StatServiceSettings::StatServiceSettings():
+TStatServiceSettings::TStatServiceSettings():
     AggregateKeepAlivePeriod(DefaultAggregateKeepAlivePeriod),
     AggregateKeepAliveTimeout(DefaultAggregateKeepAliveTimeout),
     AggregateKeepAliveAckTimeout(DefaultAggregateKeepAliveAckTimeout),
@@ -296,12 +296,47 @@ class TStatService : public TActorBootstrapped<TStatService> {
 public:
     using TBase = TActorBootstrapped<TStatService>;
 
-    TStatService(const StatServiceSettings& settings):
+    TStatService(const TStatServiceSettings& settings):
         Settings(settings) {}
 
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::STAT_SERVICE;
     }
+
+    struct TEvPrivate {
+        enum EEv {
+            EvRequestTimeout = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+            EvDispatchKeepAlive,
+            EvKeepAliveTimeout,
+            EvKeepAliveAckTimeout,
+
+            EvEnd
+        };
+
+        struct TEvRequestTimeout : public NActors::TEventLocal<TEvRequestTimeout, EvRequestTimeout> {
+            std::unordered_set<ui64> NeedSchemeShards;
+            NActors::TActorId PipeClientId;
+        };
+
+        struct TEvDispatchKeepAlive: public NActors::TEventLocal<TEvDispatchKeepAlive, EvDispatchKeepAlive> {
+            TEvDispatchKeepAlive(ui64 round): Round(round) {}
+
+            ui64 Round;
+        };
+
+        struct TEvKeepAliveAckTimeout: public NActors::TEventLocal<TEvKeepAliveAckTimeout, EvKeepAliveAckTimeout> {
+            TEvKeepAliveAckTimeout(ui64 round): Round(round) {}
+
+            ui64 Round;
+        };
+
+        struct TEvKeepAliveTimeout: public NActors::TEventLocal<TEvKeepAliveTimeout, EvKeepAliveTimeout> {
+            TEvKeepAliveTimeout(ui64 round, ui32 nodeId): Round(round), NodeId(nodeId) {}
+
+            ui64 Round;
+            ui32 NodeId;
+        };
+    };
 
     void Bootstrap() {
         EnableStatistics = AppData()->FeatureFlags.GetEnableStatistics();
@@ -334,13 +369,13 @@ public:
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             hFunc(TEvStatistics::TEvStatisticsIsDisabled, Handle);
             hFunc(TEvStatistics::TEvLoadStatisticsQueryResponse, Handle);
-            hFunc(TEvStatService::TEvRequestTimeout, Handle);
+            hFunc(TEvPrivate::TEvRequestTimeout, Handle);
 
             hFunc(TEvStatistics::TEvAggregateKeepAliveAck, Handle);
-            hFunc(TEvStatService::TEvKeepAliveAckTimeout, Handle);
+            hFunc(TEvPrivate::TEvKeepAliveAckTimeout, Handle);
             hFunc(TEvStatistics::TEvAggregateKeepAlive, Handle);
-            hFunc(TEvStatService::TEvDispatchKeepAlive, Handle);
-            hFunc(TEvStatService::TEvKeepAliveTimeout, Handle);
+            hFunc(TEvPrivate::TEvDispatchKeepAlive, Handle);
+            hFunc(TEvPrivate::TEvKeepAliveTimeout, Handle);
             hFunc(TEvPipeCache::TEvGetTabletNodeResult, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(TEvStatistics::TEvStatisticsResponse, Handle);
@@ -510,7 +545,7 @@ private:
         AggregationStatistics.LastAckHeartbeat = GetCycleCountFast();
     }
 
-    void Handle(TEvStatService::TEvKeepAliveAckTimeout::TPtr& ev) {
+    void Handle(TEvPrivate::TEvKeepAliveAckTimeout::TPtr& ev) {
         const auto round = ev->Get()->Round;
         if (IsNotCurrentRound(round)) {
             LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
@@ -523,7 +558,7 @@ private:
         const auto now = GetCycleCountFast();
 
         if (deadline >= now) {
-            Schedule(Settings.AggregateKeepAliveAckTimeout, new TEvStatService::TEvKeepAliveAckTimeout(round));
+            Schedule(Settings.AggregateKeepAliveAckTimeout, new TEvPrivate::TEvKeepAliveAckTimeout(round));
             return;
         }
 
@@ -538,7 +573,7 @@ private:
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
     }
 
-    void Handle(TEvStatService::TEvDispatchKeepAlive::TPtr& ev) {
+    void Handle(TEvPrivate::TEvDispatchKeepAlive::TPtr& ev) {
         const auto round = ev->Get()->Round;
         if (IsNotCurrentRound(round)) {
             LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
@@ -549,10 +584,10 @@ private:
         auto keepAlive = std::make_unique<TEvStatistics::TEvAggregateKeepAlive>();
         keepAlive->Record.SetRound(round);
         Send(AggregationStatistics.ParentNode, keepAlive.release());
-        Schedule(Settings.AggregateKeepAlivePeriod, new TEvStatService::TEvDispatchKeepAlive(round));
+        Schedule(Settings.AggregateKeepAlivePeriod, new TEvPrivate::TEvDispatchKeepAlive(round));
     }
 
-    void Handle(TEvStatService::TEvKeepAliveTimeout::TPtr& ev) {
+    void Handle(TEvPrivate::TEvKeepAliveTimeout::TPtr& ev) {
         const auto round = ev->Get()->Round;
         if (IsNotCurrentRound(round)) {
             LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
@@ -560,14 +595,20 @@ private:
             return;
         }
 
+
         const auto nodeId = ev->Get()->NodeId;
         auto& node = AggregationStatistics.GetChildNode(nodeId);
+
+        if (node.Status != TAggregationStatistics::TNode::EStatus::Processing) {
+            return;
+        }
+
         const auto maxDuration = DurationToCycles(Settings.AggregateKeepAliveTimeout);
         const auto deadline = node.LastHeartbeat + maxDuration;
         const auto now = GetCycleCountFast();
 
         if (deadline >= now) {
-            Schedule(Settings.AggregateKeepAliveTimeout, new TEvStatService::TEvKeepAliveTimeout(round, nodeId));
+            Schedule(Settings.AggregateKeepAliveTimeout, new TEvPrivate::TEvKeepAliveTimeout(round, nodeId));
             return;
         }
 
@@ -735,7 +776,7 @@ private:
 
         Send(node.Actor, request.release());
         Schedule(Settings.AggregateKeepAliveTimeout,
-                new TEvStatService::TEvKeepAliveTimeout(AggregationStatistics.Round, nodeId));
+                new TEvPrivate::TEvKeepAliveTimeout(AggregationStatistics.Round, nodeId));
     }
 
     void Handle(TEvStatistics::TEvAggregateStatistics::TPtr& ev) {
@@ -772,7 +813,7 @@ private:
         AggregationStatistics.ParentNode = ev->Sender;
 
         // schedule keep alive with the parent node
-        Schedule(Settings.AggregateKeepAlivePeriod, new TEvStatService::TEvDispatchKeepAlive(round));
+        Schedule(Settings.AggregateKeepAlivePeriod, new TEvPrivate::TEvDispatchKeepAlive(round));
 
         const auto& pathId = record.GetPathId();
         AggregationStatistics.PathId.OwnerId = pathId.GetOwnerId();
@@ -988,7 +1029,7 @@ private:
             requestStats->Record.AddNeedSchemeShards(request.SchemeShardId);
             NTabletPipe::SendData(SelfId(), SAPipeClientId, requestStats.release());
 
-            auto timeout = std::make_unique<TEvStatService::TEvRequestTimeout>();
+            auto timeout = std::make_unique<TEvPrivate::TEvRequestTimeout>();
             timeout->NeedSchemeShards.insert(request.SchemeShardId);
             timeout->PipeClientId = SAPipeClientId;
             Schedule(RequestTimeout, timeout.release());
@@ -1141,7 +1182,7 @@ private:
         }
     }
 
-    void Handle(TEvStatService::TEvRequestTimeout::TPtr& ev) {
+    void Handle(TEvPrivate::TEvRequestTimeout::TPtr& ev) {
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
             "EvRequestTimeout"
             << ", pipe client id = " << ev->Get()->PipeClientId
@@ -1186,7 +1227,7 @@ private:
         auto connect = std::make_unique<TEvStatistics::TEvConnectNode>();
         auto& record = connect->Record;
 
-        auto timeout = std::make_unique<TEvStatService::TEvRequestTimeout>();
+        auto timeout = std::make_unique<TEvPrivate::TEvRequestTimeout>();
         timeout->PipeClientId = SAPipeClientId;
 
         record.SetNodeId(SelfId().NodeId());
@@ -1375,7 +1416,7 @@ private:
     }
 
 private:
-    StatServiceSettings Settings;
+    TStatServiceSettings Settings;
     TAggregationStatistics AggregationStatistics;
 
     bool EnableStatistics = false;
@@ -1425,7 +1466,7 @@ private:
     static constexpr TDuration RequestTimeout = TDuration::MilliSeconds(100);
 };
 
-THolder<IActor> CreateStatService(const StatServiceSettings& settings) {
+THolder<IActor> CreateStatService(const TStatServiceSettings& settings) {
     return MakeHolder<TStatService>(settings);
 }
 

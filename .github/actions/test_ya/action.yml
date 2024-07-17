@@ -79,6 +79,7 @@ runs:
         # The whole dir will be uploaded to s3 with public (=wild internet) ACL
         export PUBLIC_DIR=$TMP_DIR/results
         echo "PUBLIC_DIR=$PUBLIC_DIR" >> $GITHUB_ENV
+        echo "PUBLIC_DIR_URL=$S3_URL_PREFIX" >> $GITHUB_ENV
         mkdir -p $PUBLIC_DIR
 
         export YA_MAKE_OUT_DIR=$TMP_DIR/out
@@ -87,13 +88,9 @@ runs:
 
         export ARTIFACTS_DIR=$PUBLIC_DIR/artifacts
         echo "ARTIFACTS_DIR=$ARTIFACTS_DIR" >> $GITHUB_ENV
-        echo "ARTIFACTS_DIR_URL=$S3_URL_PREFIX/artifacts" >> $GITHUB_ENV
+        echo "ARTIFACTS_DIR_URL=$PUBLIC_DIR_URL/artifacts" >> $GITHUB_ENV
         mkdir -p $ARTIFACTS_DIR
 
-        export TEST_ARTIFACTS_DIR=$PUBLIC_DIR/test_artifacts
-        echo "TEST_ARTIFACTS_DIR=$TEST_ARTIFACTS_DIR" >> $GITHUB_ENV
-        echo "TEST_ARTIFACTS_DIR_URL=$S3_URL_PREFIX/test_artifacts" >> $GITHUB_ENV
-        mkdir -p $TEST_ARTIFACTS_DIR
 
 
         echo "JUNIT_REPORT_XML=$PUBLIC_DIR/junit.xml" >> $GITHUB_ENV
@@ -102,11 +99,11 @@ runs:
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
         
         echo "YA_TEST_LOG=$PUBLIC_DIR/ya_log.log" >> $GITHUB_ENV
-        echo "YA_TEST_LOG_URL=$S3_URL_PREFIX/ya_log.log" >> $GITHUB_ENV
+        echo "YA_TEST_LOG_URL=$PUBLIC_DIR_URL/ya_log.log" >> $GITHUB_ENV
 
 
         echo YA_MAKE_OUTPUT="$PUBLIC_DIR/ya_make_output.log" >>  $GITHUB_ENV
-        export YA_MAKE_OUTPUT_URL="$S3_URL_PREFIX/ya_make_output.log"
+        export YA_MAKE_OUTPUT_URL="$PUBLIC_DIR_URL/ya_make_output.log"
         echo "YA_MAKE_OUTPUT_URL=$YA_MAKE_OUTPUT_URL" >> $GITHUB_ENV
 
         # install test mo
@@ -315,11 +312,11 @@ runs:
         # postprocess junit report
         .github/scripts/tests/transform-ya-junit.py -i \
           -m .github/config/muted_ya.txt \
-          --ya-out "$YA_MAKE_OUT_DIR" \
-          --log-url-prefix "$ARTIFACTS_DIR_URL/logs/" \
-          --log-out-dir "$ARTIFACTS_DIR/logs/" \
-          --test-stuff-out "$TEST_ARTIFACTS_DIR/" \
-          --test-stuff-prefix "$TEST_ARTIFACTS_DIR_URL/" \
+          --ya_out "$YA_MAKE_OUT_DIR" \
+          --public_dir "$PUBLIC_DIR"
+          --public_dir_url "$PUBLIC_DIR_URL"
+          --log_out_dir "artifact/logs/" \
+          --test_stuff_out "test_artifacts/" \
           "$JUNIT_REPORT_XML"
   
     

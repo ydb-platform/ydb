@@ -1,4 +1,6 @@
-## TABLESAMPLE and SAMPLE {#tablesample} {#sample}
+# TABLESAMPLE and SAMPLE
+
+{% include [olap_warning_note](../../../../../_includes/not_allow_for_olap_note.md) %}
 
 Building a random sample from the data source specified in `FROM`.
 

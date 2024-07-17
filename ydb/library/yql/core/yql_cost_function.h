@@ -19,6 +19,7 @@ struct IProviderContext;
 enum class EJoinAlgoType {
     Undefined,
     LookupJoin,
+    LookupJoinReverse,
     MapJoin,
     GraceJoin,
     StreamLookupJoin, //Right part can be updated during an operation. Used mainly for joining streams with lookup tables. Currently impplemented in Dq by LookupInputTransform
@@ -26,7 +27,7 @@ enum class EJoinAlgoType {
 };
 
 //StreamLookupJoin is not a subject for CBO and not not included here
-static constexpr auto AllJoinAlgos = { EJoinAlgoType::MapJoin, EJoinAlgoType::GraceJoin, EJoinAlgoType::LookupJoin, EJoinAlgoType::MergeJoin };
+static constexpr auto AllJoinAlgos = { EJoinAlgoType::LookupJoin, EJoinAlgoType::LookupJoinReverse, EJoinAlgoType::MapJoin, EJoinAlgoType::GraceJoin, EJoinAlgoType::MergeJoin };
 
 namespace NDq {
 

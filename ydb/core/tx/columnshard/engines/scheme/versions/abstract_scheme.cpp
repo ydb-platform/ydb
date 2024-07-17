@@ -76,7 +76,7 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
 
     const std::shared_ptr<arrow::Schema> dstSchema = GetIndexInfo().ArrowSchema();
 
-    auto batch = NArrow::ExtractColumnsOptional(incomingBatch, NArrow::ConvertStrings(dstSchema->field_names()));
+    auto batch = NArrow::TColumnOperator().SkipIfAbsent().Extract(incomingBatch, dstSchema->field_names());
 
     for (auto&& i : batch->schema()->fields()) {
         AFL_VERIFY(GetIndexInfo().HasColumnName(i->name()));
@@ -125,7 +125,7 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
                     if (batch->GetColumnByName(f->name())) {
                         continue;
                     }
-                    if (!GetIndexInfo().GetColumnDefaultWriteValueVerified(f->name())) {
+                    if (!GetIndexInfo().GetColumnDefaultValueVerified(f->name())) {
                         return TConclusionStatus::Fail("empty field for non-default column: '" + f->name() + "'");
                     }
                 }
@@ -187,7 +187,7 @@ std::vector<std::shared_ptr<arrow::Field>> ISnapshotSchema::GetAbsentFields(cons
 TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::BuildDefaultBatch(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ui32 rowsCount) const {
     std::vector<std::shared_ptr<arrow::Array>> columns;
     for (auto&& i : fields) {
-        auto defaultValue = GetDefaultWriteValueVerified(i->name());
+        auto defaultValue = GetDefaultValueVerified(i->name());
         if (!defaultValue && !GetIndexInfo().IsNullableVerified(i->name())) {
             return TConclusionStatus::Fail("not nullable field with no default: " + i->name());
         }
@@ -196,16 +196,12 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::BuildDefaultBa
     return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), rowsCount, columns);
 }
 
-std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetDefaultWriteValueVerified(const std::string& columnName) const {
-    return GetIndexInfo().GetColumnDefaultWriteValueVerified(columnName);
+std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetDefaultValueVerified(const std::string& columnName) const {
+    return GetIndexInfo().GetColumnDefaultValueVerified(columnName);
 }
 
-std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetDefaultWriteValueVerified(const ui32 columnId) const {
-    return GetIndexInfo().GetColumnDefaultWriteValueVerified(columnId);
-}
-
-std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetDefaultReadValueVerified(const ui32 columnId) const {
-    return GetIndexInfo().GetColumnDefaultReadValueVerified(columnId);
+std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetDefaultValueVerified(const ui32 columnId) const {
+    return GetIndexInfo().GetColumnDefaultValueVerified(columnId);
 }
 
 TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::AddDefault(const std::shared_ptr<arrow::RecordBatch>& batch, const bool force) const {
@@ -214,7 +210,7 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::AddDefault(con
         if (batch->schema()->GetFieldIndex(i->name()) != -1) {
             continue;
         }
-        auto defaultValue = GetDefaultWriteValueVerified(i->name());
+        auto defaultValue = GetDefaultValueVerified(i->name());
         if (!defaultValue && !GetIndexInfo().IsNullableVerified(i->name())) {
             if (!force) {
                 return TConclusionStatus::Fail("not nullable field withno default: " + i->name());

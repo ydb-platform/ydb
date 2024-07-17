@@ -144,7 +144,9 @@ namespace NKikimr::NStorage {
         }
 
         const auto it = SubscribedSessions.find(nodeId);
-        Y_ABORT_UNLESS(it != SubscribedSessions.end());
+        if (it == SubscribedSessions.end()) {
+            return; // this may be a race with unsubscription
+        }
         Y_ABORT_UNLESS(!it->second || it->second == ev->Sender);
         SubscribedSessions.erase(it);
 

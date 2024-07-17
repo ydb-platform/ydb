@@ -1,41 +1,132 @@
 #pragma once
 
-#include "kqp_workload_service_tables_impl.h"
+#include <queue>
 
-#include <ydb/core/kqp/common/events/events.h>
-#include <ydb/core/resource_pools/resource_pool_settings.h>
-
-#include <ydb/library/actors/core/actor.h>
+#include <ydb/core/kqp/workload_service/common/cpu_quota_manager.h>
+#include <ydb/core/kqp/workload_service/common/events.h>
 
 
 namespace NKikimr::NKqp::NWorkload {
 
-constexpr TDuration LEASE_DURATION = TDuration::Seconds(30);
+constexpr TDuration IDLE_DURATION = TDuration::Seconds(60);
 
-namespace NQueue {
+struct TPoolState {
+    NActors::TActorId PoolHandler;
+    NActors::TActorContext ActorContext;
 
-class IState : public TThrRefBase {
-public:
-    virtual bool TablesRequired() const = 0;
-    virtual ui64 GetLocalPoolSize() const = 0;
+    std::queue<TEvPrivate::TEvResolvePoolResponse::TPtr> PendingRequests = {};
+    bool WaitingInitialization = false;
+    bool PlaceRequestRunning = false;
+    std::optional<TActorId> NewPoolHandler = std::nullopt;
 
-    virtual void OnPreparingFinished(Ydb::StatusIds::StatusCode status, NYql::TIssues issues) = 0;
+    ui64 InFlightRequests = 0;
+    TInstant LastUpdateTime = TInstant::Now();
 
-    virtual bool PlaceRequest(const NActors::TActorId& workerActorId, const TString& sessionId) = 0;
-    virtual void CleanupRequest(const NActors::TActorId& workerActorId, const TString& sessionId) = 0;
-    virtual void RefreshState(bool refreshRequired = false) = 0;
+    void UpdateHandler() {
+        if (PlaceRequestRunning || WaitingInitialization || !NewPoolHandler) {
+            return;
+        }
 
-    virtual void Handle(TEvPrivate::TEvCancelRequest::TPtr) {};
-    virtual void Handle(TEvPrivate::TEvRefreshPoolStateResponse::TPtr) {};
-    virtual void Handle(TEvPrivate::TEvDelayRequestResponse::TPtr) {};
-    virtual void Handle(TEvPrivate::TEvStartRequestResponse::TPtr) {};
-    virtual void Handle(TEvPrivate::TEvCleanupRequestsResponse::TPtr) {};
+        ActorContext.Send(PoolHandler, new TEvPrivate::TEvStopPoolHandler());
+        PoolHandler = *NewPoolHandler;
+        NewPoolHandler = std::nullopt;
+        InFlightRequests = 0;
+    }
+
+    void StartPlaceRequest() {
+        if (PlaceRequestRunning || PendingRequests.empty()) {
+            return;
+        }
+
+        PlaceRequestRunning = true;
+        InFlightRequests++;
+        ActorContext.Send(PendingRequests.front()->Forward(PoolHandler));
+        PendingRequests.pop();
+    }
+
+    void OnRequestFinished() {
+        Y_ENSURE(InFlightRequests);
+        InFlightRequests--;
+        LastUpdateTime = TInstant::Now();
+    }
 };
 
-using TStatePtr = TIntrusivePtr<IState>;
+struct TCpuQuotaManagerState {
+    TCpuQuotaManager CpuQuotaManager;
+    NActors::TActorContext ActorContext;
+    bool CpuLoadRequestRunning = false;
+    TInstant CpuLoadRequestTime = TInstant::Zero();
 
-TStatePtr CreateState(const NActors::TActorContext& actorContext, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, NMonitoring::TDynamicCounterPtr counters);
+    TCpuQuotaManagerState(NActors::TActorContext actorContext, NMonitoring::TDynamicCounterPtr subComponent)
+        : CpuQuotaManager(TDuration::Seconds(1), TDuration::Seconds(10), IDLE_DURATION, 0.1, true, 0, subComponent)
+        , ActorContext(actorContext)
+    {}
 
-}  // NQueue
+    void RequestCpuQuota(TActorId poolHandler, double maxClusterLoad, ui64 coockie) {
+        auto response = CpuQuotaManager.RequestCpuQuota(0.0, maxClusterLoad);
 
-}  // NKikimr::NKqp::NWorkload
+        bool quotaAccepted = response.Status == NYdb::EStatus::SUCCESS;
+        ActorContext.Send(poolHandler, new TEvPrivate::TEvCpuQuotaResponse(quotaAccepted), 0, coockie);
+
+        // Schedule notification
+        if (!quotaAccepted) {
+            if (auto it = HandlersLimits.find(poolHandler); it != HandlersLimits.end()) {
+                PendingHandlers[it->second].erase(poolHandler);
+            }
+            HandlersLimits[poolHandler] = maxClusterLoad;
+            PendingHandlers[maxClusterLoad].insert(poolHandler);
+        }
+    }
+
+    void UpdateCpuLoad(double instantLoad, ui64 cpuNumber, bool success) {
+        CpuQuotaManager.UpdateCpuLoad(instantLoad, cpuNumber, success);
+        CheckPendingQueue();
+    }
+
+    void AdjustCpuQuota(TDuration duration, double cpuSecondsConsumed) {
+        CpuQuotaManager.AdjustCpuQuota(0.0, duration, cpuSecondsConsumed);
+        CheckPendingQueue();
+    }
+
+    std::optional<TDuration> GetCpuLoadRequestDelay() {
+        if (CpuLoadRequestRunning) {
+            return std::nullopt;
+        }
+
+        auto requestTime = CpuQuotaManager.GetMonitoringRequestTime();
+        if (!CpuLoadRequestTime || CpuLoadRequestTime > requestTime) {
+            CpuLoadRequestTime = requestTime;
+            return CpuLoadRequestTime - TInstant::Now();
+        }
+        return std::nullopt;
+    }
+
+    void CleanupHandler(TActorId poolHandler) {
+        if (auto it = HandlersLimits.find(poolHandler); it != HandlersLimits.end()) {
+            PendingHandlers[it->second].erase(poolHandler);
+            HandlersLimits.erase(it);
+        }
+    }
+
+private:
+    void CheckPendingQueue() {
+        while (!PendingHandlers.empty()) {
+            const auto& [maxClusterLoad, poolHandlers] = *PendingHandlers.begin();
+            if (!CpuQuotaManager.HasCpuQuota(maxClusterLoad)) {
+                break;
+            }
+
+            for (const TActorId& poolHandler : poolHandlers) {
+                ActorContext.Send(poolHandler, new TEvPrivate::TEvRefreshPoolState());
+                HandlersLimits.erase(poolHandler);
+            }
+            PendingHandlers.erase(PendingHandlers.begin());
+        }
+    }
+
+private:
+    std::map<double, std::unordered_set<TActorId>> PendingHandlers;
+    std::unordered_map<TActorId, double> HandlersLimits;
+};
+
+}  // namespace NKikimr::NKqp::NWorkload

@@ -24,7 +24,7 @@
  * caller many authoritative lookups, such as expensive probes of a much larger
  * on-disk structure.
  *
- * Copyright (c) 2018-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2018-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/lib/bloomfilter.c
@@ -55,7 +55,7 @@ static int	my_bloom_power(uint64 target_bitset_bits);
 static int	optimal_k(uint64 bitset_bits, int64 total_elems);
 static void k_hashes(bloom_filter *filter, uint32 *hashes, unsigned char *elem,
 					 size_t len);
-static inline uint32 mod_m(uint32 a, uint64 m);
+static inline uint32 mod_m(uint32 val, uint64 m);
 
 /*
  * Create Bloom filter in caller's memory context.  We aim for a false positive
@@ -81,8 +81,7 @@ static inline uint32 mod_m(uint32 a, uint64 m);
  * distinct seed value on every call makes it unlikely that the same false
  * positives will reoccur when the same set is fingerprinted a second time.
  * Callers that don't care about this pass a constant as their seed, typically
- * 0.  Callers can use a pseudo-random seed in the range of 0 - INT_MAX by
- * calling random().
+ * 0.  Callers can also use a pseudo-random seed, eg from pg_prng_uint64().
  */
 bloom_filter *
 bloom_create(int64 total_elems, int bloom_work_mem, uint64 seed)

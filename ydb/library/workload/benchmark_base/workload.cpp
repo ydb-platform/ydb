@@ -38,19 +38,21 @@ std::string TWorkloadGeneratorBase::GetDDLQueries() const {
         notNull = "NOT NULL";
         partitionBy = "PARTITION BY HASH";
         break;
-    case TWorkloadBaseParams::EStoreType::ExternalS3:
-        storageType = fmt::format(R"(DATA_SOURCE = "{}_tpc_s3_external_source", FORMAT = "parquet", LOCATION = )", Params.GetPath());
+    case TWorkloadBaseParams::EStoreType::ExternalS3: {
+        TString dataSourceName = Params.GetFullTableName(nullptr) + "_s3_external_source";
+        storageType = fmt::format(R"(DATA_SOURCE = "{}", FORMAT = "parquet", LOCATION = )", dataSourceName);
         notNull = "NOT NULL";
         createExternalDataSource = fmt::format(R"(
-            CREATE EXTERNAL DATA SOURCE `{}_tpc_s3_external_source` WITH (
+            CREATE EXTERNAL DATA SOURCE `{}` WITH (
                 SOURCE_TYPE="ObjectStorage",
                 LOCATION="{}",
                 AUTH_METHOD="NONE"
             );
-        )", Params.GetFullTableName(nullptr), Params.GetS3Endpoint());
+        )", dataSourceName, Params.GetS3Endpoint());
         external = "EXTERNAL";
         partitioning = "--";
         primaryKey = "--";
+    }
     case TWorkloadBaseParams::EStoreType::Row:
         break;
     }
@@ -67,7 +69,6 @@ std::string TWorkloadGeneratorBase::GetDDLQueries() const {
     SubstGlobal(createSql, "{string_type}", Params.GetStringType());
     SubstGlobal(createSql, "{date_type}", Params.GetDateType());
     SubstGlobal(createSql, "{timestamp_type}", Params.GetTimestampType());
-    SubstGlobal(createSql, "{float_type}", Params.GetFloatType());
     return createSql.c_str();
 }
 
@@ -119,8 +120,6 @@ void TWorkloadBaseParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommand
         opts.AddLongOption("string", "Use String type in tables instead Utf8 one.").NoArgument().StoreValue(&StringType, "String");
         opts.AddLongOption("datetime", "Use Date and Timestamp types in tables instead Date32 and Timestamp64 ones.").NoArgument()
             .StoreValue(&DateType, "Date").StoreValue(&TimestampType, "Timestamp");
-        opts.AddLongOption("decimal", "Use Decimal(22,9) type in tables instead Double one.").NoArgument()
-            .StoreValue(&FloatType, "Decimal(22,9)");
         break;
     case TWorkloadParams::ECommandType::Root:
         opts.AddLongOption('p', "path", "Path where benchmark tables are located")

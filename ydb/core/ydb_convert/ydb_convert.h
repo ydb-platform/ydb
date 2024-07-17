@@ -13,6 +13,10 @@
 
 #include <util/memory/pool.h>
 
+namespace NYql::NNodes {
+    class TExprBase;
+}
+
 namespace NKikimr {
 
 void ConvertMiniKQLTypeToYdbType(const NKikimrMiniKQL::TType& input, Ydb::Type& output);

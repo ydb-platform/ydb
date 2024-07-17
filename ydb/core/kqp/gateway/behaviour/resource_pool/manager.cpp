@@ -136,6 +136,18 @@ void FillResourcePoolDescription(NKikimrSchemeOp::TResourcePoolDescription& reso
     if (!featuresExtractor.IsFinished()) {
         ythrow yexception() << "Unknown property: " << featuresExtractor.GetRemainedParamsString();
     }
+
+    if (settings.GetObjectId() == NResourcePool::DEFAULT_POOL_ID) {
+        std::vector<TString> forbiddenProperties = {
+            "concurrent_query_limit",
+            "database_load_cpu_threshold"
+        };
+        for (const TString& property : forbiddenProperties) {
+            if (properties.contains(property)) {
+                ythrow yexception() << "Can not change property " << property << " for default pool";
+            }
+        }
+    }
 }
 
 TResourcePoolManager::TYqlConclusionStatus StatusFromActivityType(TResourcePoolManager::EActivityType activityType) {
@@ -223,6 +235,10 @@ TResourcePoolManager::TYqlConclusionStatus TResourcePoolManager::DoPrepare(NKqpP
 
 void TResourcePoolManager::PrepareCreateResourcePool(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TCreateObjectSettings& settings, TInternalModificationContext& context) const {
     ValidateObjectId(settings.GetObjectId());
+
+    if (settings.GetObjectId() == NResourcePool::DEFAULT_POOL_ID) {
+        ythrow yexception() << "Cannot create default pool manually, pool will be created automatically during first request execution";
+    }
 
     auto& schemeTx = *schemeOperation.MutableCreateResourcePool();
     schemeTx.SetWorkingDir(JoinPath({context.GetExternalData().GetDatabase(), ".resource_pools/"}));

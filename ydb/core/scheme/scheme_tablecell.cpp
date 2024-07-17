@@ -258,6 +258,45 @@ bool TSerializedCellVec::DoTryParse(const TString& data) {
     return TryDeserializeCellVec(data, Buf, Cells);
 }
 
+bool TSerializedCellVec::UnsafeAppendCells(TConstArrayRef<TCell> cells, TString& serializedCellVec) {
+    if (Y_UNLIKELY(cells.size() == 0)) {
+        return true;
+    }
+
+    if (!serializedCellVec) {
+        TSerializedCellVec::Serialize(serializedCellVec, cells);
+        return true;
+    }
+
+    const char* buf = serializedCellVec.data();
+    const char* bufEnd = serializedCellVec.data() + serializedCellVec.size();
+    const size_t bufSize = bufEnd - buf;
+
+    if (Y_UNLIKELY(bufSize < static_cast<ptrdiff_t>(sizeof(ui16)))) {
+        return false;
+    }
+
+    ui16 cellCount = ReadUnaligned<ui16>(buf);
+    cellCount += cells.size();
+
+    size_t newSize = serializedCellVec.size();
+
+    for (auto& cell : cells) {
+        newSize += sizeof(TCellHeader) + cell.Size();
+    }
+
+    serializedCellVec.ReserveAndResize(newSize);
+
+    char* mutableBuf = serializedCellVec.Detach();
+    char* oldBufEnd = mutableBuf + bufSize;
+
+    WriteUnaligned<ui16>(mutableBuf, cellCount);
+
+    SerializeCellVecBody(cells, oldBufEnd, nullptr);
+
+    return true;
+}
+
 TSerializedCellMatrix::TSerializedCellMatrix(TConstArrayRef<TCell> cells, ui32 rowCount, ui16 colCount)
     : RowCount(rowCount), ColCount(colCount)
 {
@@ -307,46 +346,6 @@ bool TSerializedCellMatrix::DoTryParse(const TString& data) {
     return TryDeserializeCellMatrix(data, Buf, Cells, RowCount, ColCount);
 }
 
-TCellsBatcher::TCellsBatcher(ui16 colCount, ui64 maxBytesPerBatch)
-    : ColCount(colCount)
-    , MaxBytesPerBatch(maxBytesPerBatch) {
-}
-
-bool TCellsBatcher::IsEmpty() const {
-    return Batches.empty();
-}
-
-TCellsBatcher::TBatch TCellsBatcher::Flush(bool force) {
-    TBatch res;
-    if ((!Batches.empty() && force) || Batches.size() > 1) {
-        res = std::move(Batches.front());
-        Batches.pop_front();
-    }
-    return res;
-}
-
-ui64 TCellsBatcher::AddRow(TArrayRef<TCell> cells) {
-    Y_ABORT_UNLESS(cells.size() == ColCount);
-    ui64 newMemory = 0;
-    for (const auto& cell : cells) {
-        newMemory += cell.Size();
-    }
-    if (Batches.empty() || newMemory + sizeof(TCellHeader) * ColCount + Batches.back().MemorySerialized > MaxBytesPerBatch) {
-        Batches.emplace_back();
-        Batches.back().Memory = 0;
-        Batches.back().MemorySerialized = CellMatrixHeaderSize;
-    }
-
-    for (auto& cell : cells) {
-        Batches.back().Data.emplace_back(std::move(cell));
-    }
-
-    Batches.back().Memory += newMemory;
-    Batches.back().MemorySerialized += newMemory + sizeof(TCellHeader) * ColCount;
-
-    return newMemory;
-}
-
 void TCellsStorage::Reset(TArrayRef<const TCell> cells)
 {
     size_t cellsSize = cells.size();
@@ -389,13 +388,7 @@ size_t TOwnedCellVecBatch::Append(TConstArrayRef<TCell> cells) {
         return 0;
     }
 
-    size_t size = sizeof(TCell) * cellsSize;
-    for (auto& cell : cells) {
-        if (!cell.IsNull() && !cell.IsInline()) {
-            const size_t cellSize = cell.Size();
-            size += AlignUp(cellSize);
-        }
-    }
+    size_t size = EstimateSize(cells);
 
     char * allocatedBuffer = reinterpret_cast<char *>(Pool->Allocate(size));
 
@@ -497,6 +490,14 @@ TString DbgPrintTuple(const TDbTupleRef& row, const NScheme::TTypeRegistry& type
     }
     res += ")";
     return res;
+}
+
+size_t GetCellMatrixHeaderSize() {
+    return CellMatrixHeaderSize;
+}
+
+size_t GetCellHeaderSize() {
+    return sizeof(TCellHeader);
 }
 
 } // namespace NKikimr

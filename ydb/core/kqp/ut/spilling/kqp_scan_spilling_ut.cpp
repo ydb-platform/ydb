@@ -60,6 +60,7 @@ Y_UNIT_TEST(SelfJoinQueryService) {
 
     auto query = R"(
         --!syntax_v1
+        PRAGMA ydb.CostBasedOptimizationLevel='0';
         select t1.Key, t1.Value, t2.Key, t2.Value
         from `/Root/KeyValue` as t1 join `/Root/KeyValue` as t2 on t1.Value = t2.Value
         order by t1.Key
@@ -120,6 +121,7 @@ Y_UNIT_TEST(SelfJoin) {
 
     auto query = R"(
         --!syntax_v1
+        PRAGMA ydb.CostBasedOptimizationLevel='0';
         select t1.Key, t1.Value, t2.Key, t2.Value
         from `/Root/KeyValue` as t1 join `/Root/KeyValue` as t2 on t1.Key = t2.Key
         order by t1.Key

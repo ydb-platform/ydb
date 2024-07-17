@@ -167,6 +167,9 @@ bool IsArtifactChunkId(TChunkId id);
 //! Returns |true| iff this is a chunk or any type (journal or blob, replicated or erasure-coded).
 bool IsPhysicalChunkType(NObjectClient::EObjectType type);
 
+//! Returns |true| iff this is a chunk or any type (journal or blob, replicated or erasure-coded).
+bool IsPhysicalChunkId(TChunkId id);
+
 //! Returns |true| iff this is a journal chunk type.
 bool IsJournalChunkType(NObjectClient::EObjectType type);
 

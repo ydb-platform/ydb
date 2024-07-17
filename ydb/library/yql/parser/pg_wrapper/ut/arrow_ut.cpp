@@ -1,3 +1,5 @@
+#include "../pg_compat.h"
+
 #include <arrow/api.h>
 #include <arrow/array.h>
 

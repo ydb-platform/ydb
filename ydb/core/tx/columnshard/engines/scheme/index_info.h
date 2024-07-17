@@ -5,8 +5,6 @@
 
 #include "abstract/index_info.h"
 #include "indexes/abstract/meta.h"
-#include "statistics/abstract/operator.h"
-#include "statistics/abstract/common.h"
 
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 
@@ -25,6 +23,11 @@ namespace arrow {
 }
 
 namespace NKikimr::NOlap {
+
+namespace NIndexes::NMax {
+class TIndexMeta;
+}
+
 namespace NStorageOptimizer {
 class IOptimizerPlannerConstructor;
 }
@@ -41,13 +44,11 @@ private:
     THashMap<ui32, TColumnFeatures> ColumnFeatures;
     THashMap<ui32, std::shared_ptr<arrow::Field>> ArrowColumnByColumnIdCache;
     THashMap<ui32, NIndexes::TIndexMetaContainer> Indexes;
-    std::map<TString, NStatistics::TOperatorContainer> StatisticsByName;
     TIndexInfo(const TString& name);
     bool SchemeNeedActualization = false;
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> CompactionPlannerConstructor;
     bool ExternalGuaranteeExclusivePK = false;
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators);
-    TColumnFeatures& GetOrCreateColumnFeatures(const ui32 columnId) const;
     void InitializeCaches(const std::shared_ptr<IStoragesManager>& operators);
 public:
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> GetCompactionPlannerConstructor() const;
@@ -64,17 +65,8 @@ public:
         return !it->second.NotNull;
     }
 
-    std::shared_ptr<arrow::Scalar> GetColumnDefaultWriteValueVerified(const std::string& colName) const;
-    std::shared_ptr<arrow::Scalar> GetColumnDefaultWriteValueVerified(const ui32 colId) const;
-
-    std::shared_ptr<arrow::Scalar> GetColumnDefaultReadValueVerified(const std::string& colName) const {
-        auto& features = GetColumnFeaturesVerified(GetColumnIdVerified(colName));
-        return features.GetDefaultReadValue();
-    }
-    std::shared_ptr<arrow::Scalar> GetColumnDefaultReadValueVerified(const ui32 colId) const {
-        auto& features = GetColumnFeaturesVerified(colId);
-        return features.GetDefaultReadValue();
-    }
+    std::shared_ptr<arrow::Scalar> GetColumnDefaultValueVerified(const std::string& colName) const;
+    std::shared_ptr<arrow::Scalar> GetColumnDefaultValueVerified(const ui32 colId) const;
 
     bool GetExternalGuaranteeExclusivePK() const {
         return ExternalGuaranteeExclusivePK;
@@ -105,19 +97,6 @@ public:
     }
 
     std::vector<std::shared_ptr<IPortionDataChunk>> MakeEmptyChunks(const ui32 columnId, const std::vector<ui32>& pages, const TSimpleColumnInfo& columnInfo) const;
-
-    const std::map<TString, NStatistics::TOperatorContainer>& GetStatisticsByName() const {
-        return StatisticsByName;
-    }
-
-    NStatistics::TOperatorContainer GetStatistics(const NStatistics::TIdentifier& id) const {
-        for (auto&& i : StatisticsByName) {
-            if (i.second->GetIdentifier() == id) {
-                return i.second;
-            }
-        }
-        return NStatistics::TOperatorContainer();
-    }
 
     const THashMap<ui32, NIndexes::TIndexMetaContainer>& GetIndexes() const {
         return Indexes;
@@ -209,6 +188,12 @@ public:
         return it->second;
     }
 
+    NIndexes::TIndexMetaContainer GetIndexVerified(const ui32 indexId) const {
+        auto it = Indexes.find(indexId);
+        AFL_VERIFY(it != Indexes.end());
+        return it->second;
+    }
+
     std::optional<TString> GetIndexNameOptional(const ui32 indexId) const {
         auto meta = GetIndexOptional(indexId);
         if (!meta) {
@@ -217,19 +202,33 @@ public:
         return meta->GetIndexName();
     }
 
-    void AppendIndexes(THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData) const {
+    class TSecondaryData {
+    private:
+        using TStorageData = THashMap<ui32, std::shared_ptr<IPortionDataChunk>>;
+        YDB_ACCESSOR_DEF(TStorageData, SecondaryInplaceData);
+        using TPrimaryStorageData = THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>;
+        YDB_ACCESSOR_DEF(TPrimaryStorageData, ExternalData);
+    public:
+        TSecondaryData() = default;
+    };
+
+    [[nodiscard]] TConclusion<TSecondaryData> AppendIndexes(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& primaryData,
+        const std::shared_ptr<IStoragesManager>& operators) const {
+        TSecondaryData result;
+        result.MutableExternalData() = primaryData;
         for (auto&& i : Indexes) {
-            std::shared_ptr<IPortionDataChunk> chunk = i.second->BuildIndex(i.first, originalData, *this);
-            AFL_VERIFY(originalData.emplace(i.first, std::vector<std::shared_ptr<IPortionDataChunk>>({chunk})).second);
+            auto conclusion = AppendIndex(primaryData, i.first, operators, result);
+            if (conclusion.IsFail()) {
+                return conclusion;
+            }
         }
+        return result;
     }
 
-    void AppendIndex(THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData, const ui32 indexId) const {
-        auto it = Indexes.find(indexId);
-        AFL_VERIFY(it != Indexes.end());
-        std::shared_ptr<IPortionDataChunk> chunk = it->second->BuildIndex(indexId, originalData, *this);
-        AFL_VERIFY(originalData.emplace(indexId, std::vector<std::shared_ptr<IPortionDataChunk>>({chunk})).second);
-    }
+    std::shared_ptr<NIndexes::NMax::TIndexMeta> GetIndexMax(const ui32 columnId) const;
+
+    [[nodiscard]] TConclusionStatus AppendIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData, const ui32 indexId,
+        const std::shared_ptr<IStoragesManager>& operators, TSecondaryData& result) const;
 
     /// Returns an id of the column located by name. The name should exists in the schema.
     ui32 GetColumnIdVerified(const std::string& name) const;

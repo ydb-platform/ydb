@@ -34,6 +34,9 @@ public:
     [[nodiscard]] static std::shared_ptr<arrow::RecordBatch> Build(std::vector<std::shared_ptr<arrow::Field>>&& fields, std::vector<std::shared_ptr<TColumn>>&& columns, const ui32 count) {
         return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(std::move(fields)), count, std::move(columns));
     }
+    [[nodiscard]] static std::shared_ptr<arrow::RecordBatch> Build(const std::shared_ptr<arrow::Schema>& schema, std::vector<std::shared_ptr<TColumn>>&& columns, const ui32 count) {
+        return arrow::RecordBatch::Make(schema, count, std::move(columns));
+    }
     [[nodiscard]] static std::shared_ptr<arrow::RecordBatch> ApplyArrowFilter(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::BooleanArray>& filter) {
         auto res = arrow::compute::Filter(batch, filter);
         Y_VERIFY_S(res.ok(), res.status().message());
@@ -53,6 +56,9 @@ public:
     using TAccessor = NAccessor::TTrivialChunkedArray;
     [[nodiscard]] static std::shared_ptr<arrow::Table> Build(std::vector<std::shared_ptr<arrow::Field>>&& fields, std::vector<std::shared_ptr<TColumn>>&& columns, const ui32 count) {
         return arrow::Table::Make(std::make_shared<arrow::Schema>(std::move(fields)), std::move(columns), count);
+    }
+    [[nodiscard]] static std::shared_ptr<arrow::Table> Build(const std::shared_ptr<arrow::Schema>& schema, std::vector<std::shared_ptr<TColumn>>&& columns, const ui32 count) {
+        return arrow::Table::Make(schema, std::move(columns), count);
     }
     [[nodiscard]] static std::shared_ptr<arrow::Table> AddColumn(const std::shared_ptr<arrow::Table>& batch, const std::shared_ptr<arrow::Field>& field, const std::shared_ptr<arrow::Array>& extCol) {
         return TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), field, std::make_shared<arrow::ChunkedArray>(extCol)));

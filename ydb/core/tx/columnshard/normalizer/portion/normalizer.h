@@ -85,7 +85,12 @@ public:
         : DsGroupSelector(info.GetStorageInfo())
     {}
 
-    virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override final;
+    TConclusionStatus InitColumns(
+        const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashMap<ui64, TPortionInfoConstructor>& portions);
+    TConclusionStatus InitIndexes(NIceDb::TNiceDb& db, THashMap<ui64, TPortionInfoConstructor>& portions);
+
+    virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(
+        const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override final;
 
 protected:
     virtual INormalizerTask::TPtr BuildTask(std::vector<std::shared_ptr<TPortionInfo>>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const = 0;

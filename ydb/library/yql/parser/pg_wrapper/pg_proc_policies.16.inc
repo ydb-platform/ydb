@@ -6,167 +6,151 @@ struct TArgs_PG_encoding_to_char_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-struct TArgs_array_to_json_Policy {
+struct TArgs_bool_accum_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_bool_accum_inv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_bool_alltrue_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+struct TArgs_bool_anytrue_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+struct TArgs_booland_statefunc_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_booleq_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_boolge_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_boolgt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_boolin_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-struct TArgs_array_to_json_pretty_Policy {
+struct TArgs_boolle_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_boollt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_boolne_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_boolor_statefunc_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_boolout_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+struct TArgs_boolrecv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+struct TArgs_boolsend_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+struct TArgs_booltext_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+struct TArgs_enum_cmp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_enum_eq_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_enum_first_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+struct TArgs_enum_ge_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_enum_gt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_enum_in_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,true};
 };
-struct TArgs_brin_minmax_multi_add_value_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
-};
-struct TArgs_brin_minmax_multi_consistent_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
-};
-struct TArgs_brin_minmax_multi_distance_date_Policy {
+struct TArgs_enum_larger_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-struct TArgs_brin_minmax_multi_distance_float4_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-struct TArgs_brin_minmax_multi_distance_float8_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-struct TArgs_brin_minmax_multi_distance_inet_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-struct TArgs_brin_minmax_multi_distance_int2_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-struct TArgs_brin_minmax_multi_distance_int4_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-struct TArgs_brin_minmax_multi_distance_int8_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-struct TArgs_brin_minmax_multi_distance_interval_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-struct TArgs_brin_minmax_multi_distance_macaddr_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-struct TArgs_brin_minmax_multi_distance_macaddr8_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-struct TArgs_brin_minmax_multi_distance_numeric_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-struct TArgs_brin_minmax_multi_distance_pg_lsn_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-struct TArgs_brin_minmax_multi_distance_tid_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-struct TArgs_brin_minmax_multi_distance_time_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-struct TArgs_brin_minmax_multi_distance_timestamp_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-struct TArgs_brin_minmax_multi_distance_timetz_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-struct TArgs_brin_minmax_multi_distance_uuid_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-struct TArgs_brin_minmax_multi_opcinfo_Policy {
+struct TArgs_enum_last_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-struct TArgs_brin_minmax_multi_options_Policy {
+struct TArgs_enum_le_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_enum_lt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_enum_ne_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+struct TArgs_enum_out_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-struct TArgs_brin_minmax_multi_summary_in_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_brin_minmax_multi_summary_out_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_brin_minmax_multi_summary_recv_Policy {
+struct TArgs_enum_range_all_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-struct TArgs_brin_minmax_multi_summary_send_Policy {
+struct TArgs_enum_range_bounds_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-struct TArgs_brin_minmax_multi_union_Policy {
+struct TArgs_enum_recv_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-struct TArgs_cidr_abbrev_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_cidr_in_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_cidr_out_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_cidr_recv_Policy {
+struct TArgs_enum_send_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-struct TArgs_cidr_send_Policy {
+struct TArgs_enum_smaller_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_cidr_set_masklen_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
-};
-struct TArgs_eqjoinsel_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 5> IsFixedArg = {true,true,true,true,true};
-};
-struct TArgs_eqsel_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
-};
-struct TArgs_gen_random_uuid_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 0> IsFixedArg = {};
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
 struct TArgs_getdatabaseencoding_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 0> IsFixedArg = {};
 };
-struct TArgs_gisthandler_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-struct TArgs_hashinet_Policy {
+struct TArgs_hashmacaddr8_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-struct TArgs_hashinetextended_Policy {
+struct TArgs_hashmacaddr8extended_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,true};
 };
@@ -174,249 +158,85 @@ struct TArgs_heap_tableam_handler_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-struct TArgs_inet_abbrev_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_inet_client_addr_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 0> IsFixedArg = {};
-};
-struct TArgs_inet_client_port_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 0> IsFixedArg = {};
-};
-struct TArgs_inet_in_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_inet_merge_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_inet_out_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_inet_recv_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-struct TArgs_inet_same_family_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_inet_send_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_inet_server_addr_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 0> IsFixedArg = {};
-};
-struct TArgs_inet_server_port_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 0> IsFixedArg = {};
-};
-struct TArgs_inet_set_masklen_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
-};
-struct TArgs_inet_to_cidr_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_inetand_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_inetmi_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_inetmi_int8_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
-};
-struct TArgs_inetnot_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_inetor_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_inetpl_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
-};
-struct TArgs_json_agg_finalfn_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-struct TArgs_json_agg_transfn_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-struct TArgs_json_build_array_noargs_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 0> IsFixedArg = {};
-};
-struct TArgs_json_build_object_noargs_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 0> IsFixedArg = {};
-};
-struct TArgs_json_in_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_json_object_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_json_object_agg_finalfn_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-struct TArgs_json_object_agg_transfn_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
-};
-struct TArgs_json_object_two_arg_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_json_out_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_json_recv_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-struct TArgs_json_send_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_json_typeof_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
 struct TArgs_length_in_encoding_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-struct TArgs_matchingjoinsel_Policy {
+struct TArgs_macaddr8_and_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 5> IsFixedArg = {true,true,true,true,true};
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-struct TArgs_matchingsel_Policy {
+struct TArgs_macaddr8_cmp_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-struct TArgs_neqjoinsel_Policy {
+struct TArgs_macaddr8_eq_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 5> IsFixedArg = {true,true,true,true,true};
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-struct TArgs_neqsel_Policy {
+struct TArgs_macaddr8_ge_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-struct TArgs_network_broadcast_Policy {
+struct TArgs_macaddr8_gt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+struct TArgs_macaddr8_in_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-struct TArgs_network_cmp_Policy {
+struct TArgs_macaddr8_le_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-struct TArgs_network_eq_Policy {
+struct TArgs_macaddr8_lt_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-struct TArgs_network_family_Policy {
+struct TArgs_macaddr8_ne_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+struct TArgs_macaddr8_not_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-struct TArgs_network_ge_Policy {
+struct TArgs_macaddr8_or_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-struct TArgs_network_gt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_network_host_Policy {
+struct TArgs_macaddr8_out_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-struct TArgs_network_hostmask_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_network_larger_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_network_le_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_network_lt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_network_masklen_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_network_ne_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_network_netmask_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_network_network_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_network_overlap_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_network_show_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_network_smaller_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_network_sortsupport_Policy {
+struct TArgs_macaddr8_recv_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-struct TArgs_network_sub_Policy {
+struct TArgs_macaddr8_send_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-struct TArgs_network_subeq_Policy {
+struct TArgs_macaddr8_set7bit_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-struct TArgs_network_subset_support_Policy {
+struct TArgs_macaddr8_trunc_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+struct TArgs_macaddr8tomacaddr_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+struct TArgs_macaddrtomacaddr8_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+struct TArgs_pg_cancel_backend_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-struct TArgs_network_sup_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_network_supeq_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
 struct TArgs_pg_client_encoding_Policy {
     static constexpr bool VarArgs = false;
@@ -438,45 +258,33 @@ struct TArgs_pg_encoding_max_length_sql_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-struct TArgs_row_to_json_Policy {
+struct TArgs_pg_export_snapshot_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 0> IsFixedArg = {};
+};
+struct TArgs_pg_log_backend_memory_contexts_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+struct TArgs_pg_reload_conf_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 0> IsFixedArg = {};
+};
+struct TArgs_pg_rotate_logfile_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 0> IsFixedArg = {};
+};
+struct TArgs_pg_rotate_logfile_v2_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 0> IsFixedArg = {};
+};
+struct TArgs_pg_settings_get_flags_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-struct TArgs_row_to_json_pretty_Policy {
+struct TArgs_pg_terminate_backend_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
-};
-struct TArgs_scalargejoinsel_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 5> IsFixedArg = {true,true,true,true,true};
-};
-struct TArgs_scalargesel_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
-};
-struct TArgs_scalargtjoinsel_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 5> IsFixedArg = {true,true,true,true,true};
-};
-struct TArgs_scalargtsel_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
-};
-struct TArgs_scalarlejoinsel_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 5> IsFixedArg = {true,true,true,true,true};
-};
-struct TArgs_scalarlesel_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
-};
-struct TArgs_scalarltjoinsel_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 5> IsFixedArg = {true,true,true,true,true};
-};
-struct TArgs_scalarltsel_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
 struct TArgs_set_config_by_name_Policy {
     static constexpr bool VarArgs = false;
@@ -489,64 +297,4 @@ struct TArgs_show_config_by_name_Policy {
 struct TArgs_show_config_by_name_missing_ok_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,true};
-};
-struct TArgs_to_json_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-struct TArgs_uuid_cmp_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_uuid_eq_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_uuid_ge_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_uuid_gt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_uuid_hash_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_uuid_hash_extended_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
-};
-struct TArgs_uuid_in_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_uuid_le_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_uuid_lt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_uuid_ne_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-struct TArgs_uuid_out_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_uuid_recv_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-struct TArgs_uuid_send_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-struct TArgs_uuid_sortsupport_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
 };

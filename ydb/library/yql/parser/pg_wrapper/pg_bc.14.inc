@@ -1,27 +1,65 @@
 LLVM_BC(
+    postgresql/src/backend/access/gin/ginutil.c
     postgresql/src/backend/access/spgist/spgtextproc.c
-    postgresql/src/backend/utils/adt/amutils.c
     postgresql/src/backend/utils/adt/mac.c
-    postgresql/src/backend/utils/adt/rangetypes_selfuncs.c
-    postgresql/src/backend/utils/adt/rowtypes.c
-    postgresql/src/backend/utils/adt/trigfuncs.c
+    postgresql/src/backend/utils/adt/pseudotypes.c
+    postgresql/src/backend/utils/adt/tsvector.c
     postgresql/src/backend/utils/adt/xid.c
     pg_kernels.14.cpp
 
     NAME PgFuncs14
 
     SYMBOLS
-    arrow_btrecordcmp
-    arrow_btrecordimagecmp
+    arrow_any_in
+    arrow_any_out
+    arrow_anyarray_in
+    arrow_anyarray_out
+    arrow_anyarray_recv
+    arrow_anyarray_send
+    arrow_anycompatible_in
+    arrow_anycompatible_out
+    arrow_anycompatiblearray_in
+    arrow_anycompatiblearray_out
+    arrow_anycompatiblearray_recv
+    arrow_anycompatiblearray_send
+    arrow_anycompatiblemultirange_in
+    arrow_anycompatiblemultirange_out
+    arrow_anycompatiblenonarray_in
+    arrow_anycompatiblenonarray_out
+    arrow_anycompatiblerange_in
+    arrow_anycompatiblerange_out
+    arrow_anyelement_in
+    arrow_anyelement_out
+    arrow_anyenum_in
+    arrow_anyenum_out
+    arrow_anymultirange_in
+    arrow_anymultirange_out
+    arrow_anynonarray_in
+    arrow_anynonarray_out
+    arrow_anyrange_in
+    arrow_anyrange_out
     arrow_cideq
     arrow_cidin
     arrow_cidout
     arrow_cidrecv
     arrow_cidsend
-    arrow_hash_record
-    arrow_hash_record_extended
+    arrow_cstring_in
+    arrow_cstring_out
+    arrow_cstring_recv
+    arrow_cstring_send
+    arrow_event_trigger_in
+    arrow_event_trigger_out
+    arrow_fdw_handler_in
+    arrow_fdw_handler_out
+    arrow_ginhandler
     arrow_hashmacaddr
     arrow_hashmacaddrextended
+    arrow_index_am_handler_in
+    arrow_index_am_handler_out
+    arrow_internal_in
+    arrow_internal_out
+    arrow_language_handler_in
+    arrow_language_handler_out
     arrow_macaddr_and
     arrow_macaddr_cmp
     arrow_macaddr_eq
@@ -39,33 +77,37 @@ LLVM_BC(
     arrow_macaddr_sortsupport
     arrow_macaddr_trunc
     arrow_mxid_age
-    arrow_pg_index_column_has_property
-    arrow_pg_index_has_property
-    arrow_pg_indexam_has_property
-    arrow_pg_indexam_progress_phasename
-    arrow_rangesel
-    arrow_record_eq
-    arrow_record_ge
-    arrow_record_gt
-    arrow_record_image_eq
-    arrow_record_image_ge
-    arrow_record_image_gt
-    arrow_record_image_le
-    arrow_record_image_lt
-    arrow_record_image_ne
-    arrow_record_in
-    arrow_record_le
-    arrow_record_lt
-    arrow_record_ne
-    arrow_record_out
-    arrow_record_recv
-    arrow_record_send
+    arrow_pg_ddl_command_in
+    arrow_pg_ddl_command_out
+    arrow_pg_ddl_command_recv
+    arrow_pg_ddl_command_send
+    arrow_pg_node_tree_in
+    arrow_pg_node_tree_out
+    arrow_pg_node_tree_recv
+    arrow_pg_node_tree_send
+    arrow_shell_in
+    arrow_shell_out
     arrow_spg_text_choose
     arrow_spg_text_config
     arrow_spg_text_inner_consistent
     arrow_spg_text_leaf_consistent
     arrow_spg_text_picksplit
-    arrow_suppress_redundant_updates_trigger
+    arrow_table_am_handler_in
+    arrow_table_am_handler_out
+    arrow_trigger_in
+    arrow_trigger_out
+    arrow_tsm_handler_in
+    arrow_tsm_handler_out
+    arrow_tsvectorin
+    arrow_tsvectorout
+    arrow_tsvectorrecv
+    arrow_tsvectorsend
+    arrow_void_in
+    arrow_void_out
+    arrow_void_recv
+    arrow_void_send
+    arrow_xid8_larger
+    arrow_xid8_smaller
     arrow_xid8cmp
     arrow_xid8eq
     arrow_xid8ge

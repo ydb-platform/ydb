@@ -264,7 +264,7 @@ private:
             connection->SubscribePeerDisconnect(BIND([config = Config_, canceler = GetCurrentFiberCanceler(), connectionId = connectionId] {
                 YT_LOG_DEBUG("Client closed TCP socket (ConnectionId: %v)", connectionId);
 
-                if (config->CancelFiberOnConnectionClose) {
+                if (config->CancelFiberOnConnectionClose.value_or(false)) {
                     canceler(TError("Client closed TCP socket; HTTP connection closed"));
                 }
             }));

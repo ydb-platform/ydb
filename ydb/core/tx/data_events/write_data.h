@@ -75,8 +75,6 @@ private:
 public:
     TWriteData(const TWriteMeta& writeMeta, IDataContainer::TPtr data, const std::shared_ptr<arrow::Schema>& primaryKeySchema, const std::shared_ptr<NOlap::IBlobsWritingAction>& blobsAction);
 
-    const IDataContainer& GetDataVerified() const;
-
     const TWriteMeta& GetWriteMeta() const {
         return WriteMeta;
     }

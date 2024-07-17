@@ -1,50 +1,19 @@
 LLVM_BC(
     postgresql/src/backend/access/brin/brin_bloom.c
+    postgresql/src/backend/foreign/foreign.c
+    postgresql/src/backend/tsearch/ts_typanalyze.c
+    postgresql/src/backend/utils/adt/cash.c
+    postgresql/src/backend/utils/adt/cryptohashfuncs.c
+    postgresql/src/backend/utils/adt/misc.c
     postgresql/src/backend/utils/adt/network_gist.c
     postgresql/src/backend/utils/adt/numeric.c
-    postgresql/src/backend/utils/adt/partitionfuncs.c
-    postgresql/src/backend/utils/adt/timestamp.c
-    postgresql/src/backend/utils/adt/varbit.c
+    postgresql/src/backend/utils/adt/regproc.c
     pg_kernels.15.cpp
 
     NAME PgFuncs15
 
     SYMBOLS
-    arrow_bit
-    arrow_bit_and
-    arrow_bit_bit_count
-    arrow_bit_in
-    arrow_bit_or
-    arrow_bit_out
-    arrow_bit_recv
-    arrow_bit_send
-    arrow_bitcat
-    arrow_bitcmp
-    arrow_biteq
-    arrow_bitfromint4
-    arrow_bitfromint8
-    arrow_bitge
-    arrow_bitgetbit
-    arrow_bitgt
-    arrow_bitle
-    arrow_bitlength
-    arrow_bitlt
-    arrow_bitne
-    arrow_bitnot
-    arrow_bitoctetlength
-    arrow_bitoverlay
-    arrow_bitoverlay_no_len
-    arrow_bitposition
-    arrow_bitsetbit
-    arrow_bitshiftleft
-    arrow_bitshiftright
-    arrow_bitsubstr
-    arrow_bitsubstr_no_len
-    arrow_bittoint4
-    arrow_bittoint8
-    arrow_bittypmodin
-    arrow_bittypmodout
-    arrow_bitxor
+    arrow_any_value_transfn
     arrow_brin_bloom_add_value
     arrow_brin_bloom_consistent
     arrow_brin_bloom_opcinfo
@@ -54,19 +23,43 @@ LLVM_BC(
     arrow_brin_bloom_summary_recv
     arrow_brin_bloom_summary_send
     arrow_brin_bloom_union
-    arrow_clock_timestamp
-    arrow_extract_interval
-    arrow_extract_timestamp
-    arrow_extract_timestamptz
+    arrow_cash_cmp
+    arrow_cash_div_cash
+    arrow_cash_div_flt4
+    arrow_cash_div_flt8
+    arrow_cash_div_int2
+    arrow_cash_div_int4
+    arrow_cash_div_int8
+    arrow_cash_eq
+    arrow_cash_ge
+    arrow_cash_gt
+    arrow_cash_in
+    arrow_cash_le
+    arrow_cash_lt
+    arrow_cash_mi
+    arrow_cash_mul_flt4
+    arrow_cash_mul_flt8
+    arrow_cash_mul_int2
+    arrow_cash_mul_int4
+    arrow_cash_mul_int8
+    arrow_cash_ne
+    arrow_cash_numeric
+    arrow_cash_out
+    arrow_cash_pl
+    arrow_cash_recv
+    arrow_cash_send
+    arrow_cash_words
+    arrow_cashlarger
+    arrow_cashsmaller
+    arrow_current_database
+    arrow_current_query
     arrow_float4_numeric
     arrow_float8_numeric
-    arrow_float8_timestamptz
+    arrow_flt4_mul_cash
+    arrow_flt8_mul_cash
     arrow_hash_numeric
     arrow_hash_numeric_extended
-    arrow_in_range_interval_interval
     arrow_in_range_numeric_numeric
-    arrow_in_range_timestamp_interval
-    arrow_in_range_timestamptz_interval
     arrow_inet_gist_compress
     arrow_inet_gist_consistent
     arrow_inet_gist_fetch
@@ -78,6 +71,7 @@ LLVM_BC(
     arrow_int2_accum_inv
     arrow_int2_avg_accum
     arrow_int2_avg_accum_inv
+    arrow_int2_mul_cash
     arrow_int2_numeric
     arrow_int2_sum
     arrow_int2int4_sum
@@ -86,6 +80,8 @@ LLVM_BC(
     arrow_int4_avg_accum
     arrow_int4_avg_accum_inv
     arrow_int4_avg_combine
+    arrow_int4_cash
+    arrow_int4_mul_cash
     arrow_int4_numeric
     arrow_int4_sum
     arrow_int8_accum
@@ -96,48 +92,12 @@ LLVM_BC(
     arrow_int8_avg_combine
     arrow_int8_avg_deserialize
     arrow_int8_avg_serialize
+    arrow_int8_cash
+    arrow_int8_mul_cash
     arrow_int8_numeric
     arrow_int8_sum
-    arrow_interval_accum
-    arrow_interval_accum_inv
-    arrow_interval_avg
-    arrow_interval_cmp
-    arrow_interval_combine
-    arrow_interval_div
-    arrow_interval_eq
-    arrow_interval_finite
-    arrow_interval_ge
-    arrow_interval_gt
-    arrow_interval_hash
-    arrow_interval_hash_extended
-    arrow_interval_in
-    arrow_interval_justify_days
-    arrow_interval_justify_hours
-    arrow_interval_justify_interval
-    arrow_interval_larger
-    arrow_interval_le
-    arrow_interval_lt
-    arrow_interval_mi
-    arrow_interval_mul
-    arrow_interval_ne
-    arrow_interval_out
-    arrow_interval_part
-    arrow_interval_pl
-    arrow_interval_recv
-    arrow_interval_scale
-    arrow_interval_send
-    arrow_interval_smaller
-    arrow_interval_support
-    arrow_interval_trunc
-    arrow_interval_um
-    arrow_intervaltypmodin
-    arrow_intervaltypmodout
-    arrow_make_interval
-    arrow_make_timestamp
-    arrow_make_timestamptz
-    arrow_make_timestamptz_at_timezone
-    arrow_mul_d_interval
-    arrow_now
+    arrow_md5_bytea
+    arrow_md5_text
     arrow_numeric
     arrow_numeric_abs
     arrow_numeric_accum
@@ -148,6 +108,7 @@ LLVM_BC(
     arrow_numeric_avg_combine
     arrow_numeric_avg_deserialize
     arrow_numeric_avg_serialize
+    arrow_numeric_cash
     arrow_numeric_ceil
     arrow_numeric_cmp
     arrow_numeric_combine
@@ -212,81 +173,79 @@ LLVM_BC(
     arrow_numeric_var_samp
     arrow_numerictypmodin
     arrow_numerictypmodout
-    arrow_overlaps_timestamp
-    arrow_pg_conf_load_time
-    arrow_pg_partition_root
-    arrow_pg_postmaster_start_time
-    arrow_statement_timestamp
-    arrow_timeofday
-    arrow_timestamp_age
-    arrow_timestamp_bin
-    arrow_timestamp_cmp
-    arrow_timestamp_cmp_timestamptz
-    arrow_timestamp_eq
-    arrow_timestamp_eq_timestamptz
-    arrow_timestamp_finite
-    arrow_timestamp_ge
-    arrow_timestamp_ge_timestamptz
-    arrow_timestamp_gt
-    arrow_timestamp_gt_timestamptz
-    arrow_timestamp_hash
-    arrow_timestamp_hash_extended
-    arrow_timestamp_in
-    arrow_timestamp_izone
-    arrow_timestamp_larger
-    arrow_timestamp_le
-    arrow_timestamp_le_timestamptz
-    arrow_timestamp_lt
-    arrow_timestamp_lt_timestamptz
-    arrow_timestamp_mi
-    arrow_timestamp_mi_interval
-    arrow_timestamp_ne
-    arrow_timestamp_ne_timestamptz
-    arrow_timestamp_out
-    arrow_timestamp_part
-    arrow_timestamp_pl_interval
-    arrow_timestamp_recv
-    arrow_timestamp_scale
-    arrow_timestamp_send
-    arrow_timestamp_smaller
-    arrow_timestamp_sortsupport
-    arrow_timestamp_support
-    arrow_timestamp_timestamptz
-    arrow_timestamp_trunc
-    arrow_timestamp_zone
-    arrow_timestamptypmodin
-    arrow_timestamptypmodout
-    arrow_timestamptz_age
-    arrow_timestamptz_bin
-    arrow_timestamptz_cmp_timestamp
-    arrow_timestamptz_eq_timestamp
-    arrow_timestamptz_ge_timestamp
-    arrow_timestamptz_gt_timestamp
-    arrow_timestamptz_in
-    arrow_timestamptz_izone
-    arrow_timestamptz_le_timestamp
-    arrow_timestamptz_lt_timestamp
-    arrow_timestamptz_mi_interval
-    arrow_timestamptz_ne_timestamp
-    arrow_timestamptz_out
-    arrow_timestamptz_part
-    arrow_timestamptz_pl_interval
-    arrow_timestamptz_recv
-    arrow_timestamptz_scale
-    arrow_timestamptz_send
-    arrow_timestamptz_timestamp
-    arrow_timestamptz_trunc
-    arrow_timestamptz_trunc_zone
-    arrow_timestamptz_zone
-    arrow_timestamptztypmodin
-    arrow_timestamptztypmodout
-    arrow_varbit
-    arrow_varbit_in
-    arrow_varbit_out
-    arrow_varbit_recv
-    arrow_varbit_send
-    arrow_varbit_support
-    arrow_varbittypmodin
-    arrow_varbittypmodout
+    arrow_parse_ident
+    arrow_pg_collation_for
+    arrow_pg_column_is_updatable
+    arrow_pg_current_logfile
+    arrow_pg_current_logfile_1arg
+    arrow_pg_get_replica_identity_index
+    arrow_pg_input_error_info
+    arrow_pg_input_is_valid
+    arrow_pg_num_nonnulls
+    arrow_pg_num_nulls
+    arrow_pg_relation_is_updatable
+    arrow_pg_sleep
+    arrow_pg_tablespace_location
+    arrow_pg_typeof
+    arrow_postgresql_fdw_validator
+    arrow_regclassin
+    arrow_regclassout
+    arrow_regclassrecv
+    arrow_regclasssend
+    arrow_regcollationin
+    arrow_regcollationout
+    arrow_regcollationrecv
+    arrow_regcollationsend
+    arrow_regconfigin
+    arrow_regconfigout
+    arrow_regconfigrecv
+    arrow_regconfigsend
+    arrow_regdictionaryin
+    arrow_regdictionaryout
+    arrow_regdictionaryrecv
+    arrow_regdictionarysend
+    arrow_regnamespacein
+    arrow_regnamespaceout
+    arrow_regnamespacerecv
+    arrow_regnamespacesend
+    arrow_regoperatorin
+    arrow_regoperatorout
+    arrow_regoperatorrecv
+    arrow_regoperatorsend
+    arrow_regoperin
+    arrow_regoperout
+    arrow_regoperrecv
+    arrow_regopersend
+    arrow_regprocedurein
+    arrow_regprocedureout
+    arrow_regprocedurerecv
+    arrow_regproceduresend
+    arrow_regprocin
+    arrow_regprocout
+    arrow_regprocrecv
+    arrow_regprocsend
+    arrow_regrolein
+    arrow_regroleout
+    arrow_regrolerecv
+    arrow_regrolesend
+    arrow_regtypein
+    arrow_regtypeout
+    arrow_regtyperecv
+    arrow_regtypesend
+    arrow_sha224_bytea
+    arrow_sha256_bytea
+    arrow_sha384_bytea
+    arrow_sha512_bytea
+    arrow_text_regclass
+    arrow_to_regclass
+    arrow_to_regcollation
+    arrow_to_regnamespace
+    arrow_to_regoper
+    arrow_to_regoperator
+    arrow_to_regproc
+    arrow_to_regprocedure
+    arrow_to_regrole
+    arrow_to_regtype
+    arrow_ts_typanalyze
     arrow_width_bucket_numeric
 )

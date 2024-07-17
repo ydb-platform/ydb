@@ -122,6 +122,14 @@ void Serialize(const std::deque<T, A>& value, NYson::IYsonConsumer* consumer);
 template <class T, size_t N>
 void Serialize(const TCompactVector<T, N>& value, NYson::IYsonConsumer* consumer);
 
+// RepeatedPtrField
+template <class T>
+void Serialize(const google::protobuf::RepeatedPtrField<T>& items, NYson::IYsonConsumer* consumer);
+
+// RepeatedField
+template <class T>
+void Serialize(const google::protobuf::RepeatedField<T>& items, NYson::IYsonConsumer* consumer);
+
 // TErrorOr
 template <class T>
 void Serialize(const TErrorOr<T>& error, NYson::IYsonConsumer* consumer);

@@ -35,19 +35,19 @@ void TWideSerializedBatch::InitBlobId(const TUnifiedBlobId& id) {
 
 void TWritingBuffer::InitReadyInstant(const TMonotonic instant) {
     for (auto&& aggr : Aggregations) {
-        aggr->GetWriteData()->MutableWriteMeta().SetWriteMiddle5StartInstant(instant);
+        aggr->MutableWriteMeta().SetWriteMiddle5StartInstant(instant);
     }
 }
 
 void TWritingBuffer::InitStartSending(const TMonotonic instant) {
     for (auto&& aggr : Aggregations) {
-        aggr->GetWriteData()->MutableWriteMeta().SetWriteMiddle4StartInstant(instant);
+        aggr->MutableWriteMeta().SetWriteMiddle4StartInstant(instant);
     }
 }
 
 void TWritingBuffer::InitReplyReceived(const TMonotonic instant) {
     for (auto&& aggr : Aggregations) {
-        aggr->GetWriteData()->MutableWriteMeta().SetWriteMiddle6StartInstant(instant);
+        aggr->MutableWriteMeta().SetWriteMiddle6StartInstant(instant);
     }
 }
 

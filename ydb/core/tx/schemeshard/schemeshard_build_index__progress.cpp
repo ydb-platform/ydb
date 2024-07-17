@@ -236,7 +236,7 @@ public:
             } else if (!buildInfo->LockTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo->LockTxId)));
             } else {
-                ChangeState(BuildId, TIndexBuildInfo::EState::GatheringStatistics);
+                ChangeState(BuildId, TIndexBuildInfo::EState::Initiating);
                 Progress(BuildId);
             }
 

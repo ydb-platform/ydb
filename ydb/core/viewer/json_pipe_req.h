@@ -34,6 +34,8 @@ protected:
     ui32 Requests = 0;
     static constexpr ui32 MaxRequestsInFlight = 50;
     NWilson::TSpan Span;
+    IViewer* Viewer = nullptr;
+    NMon::TEvHttpInfo::TPtr Event;
 
     struct TPipeInfo {
         TActorId PipeClient;
@@ -48,6 +50,70 @@ protected:
 
     std::deque<TDelayedRequest> DelayedRequests;
 
+    template<typename T>
+    struct TRequestResponse {
+        std::variant<std::monostate, std::unique_ptr<T>, TString> Response;
+        NWilson::TSpan Span;
+
+        TRequestResponse() = default;
+        TRequestResponse(NWilson::TSpan&& span)
+            : Span(std::move(span))
+        {}
+
+        TRequestResponse(const TRequestResponse&) = delete;
+        TRequestResponse(TRequestResponse&&) = default;
+        TRequestResponse& operator =(const TRequestResponse&) = delete;
+        TRequestResponse& operator =(TRequestResponse&&) = default;
+
+        void Set(std::unique_ptr<T>&& response) {
+            if (!IsDone()) {
+                Span.EndOk();
+            }
+            Response = std::move(response);
+        }
+
+        void Set(TAutoPtr<TEventHandle<T>>&& response) {
+            Set(std::unique_ptr<T>(response->Release().Release()));
+        }
+
+        void Error(const TString& error) {
+            if (!IsDone()) {
+                Span.EndError(error);
+            }
+            if (!IsOk()) {
+                Response = error;
+            }
+        }
+
+        bool IsOk() const {
+            return std::holds_alternative<std::unique_ptr<T>>(Response);
+        }
+
+        bool IsError() const {
+            return std::holds_alternative<TString>(Response);
+        }
+
+        bool IsDone() const {
+            return Response.index() != 0;
+        }
+
+        explicit operator bool() const {
+            return IsOk();
+        }
+
+        T* Get() {
+            return std::get<std::unique_ptr<T>>(Response).get();
+        }
+
+        T* operator ->() {
+            return std::get<std::unique_ptr<T>>(Response).get();
+        }
+
+        TString GetError() const {
+            return std::get<TString>(Response);
+        }
+    };
+
     NTabletPipe::TClientConfig GetPipeClientConfig() {
         NTabletPipe::TClientConfig clientConfig;
         if (WithRetry) {
@@ -58,15 +124,35 @@ protected:
 
     TViewerPipeClient() = default;
 
-    TViewerPipeClient(NMon::TEvHttpInfo::TPtr& ev) {
-        InitConfig(ev->Get()->Request.GetParams());
-        TStringBuf traceparent = ev->Get()->Request.GetHeader("traceparent");
+    TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+        : Viewer(viewer)
+        , Event(ev)
+    {
+        InitConfig(Event->Get()->Request.GetParams());
+        NWilson::TTraceId traceId;
+        TStringBuf traceparent = Event->Get()->Request.GetHeader("traceparent");
         if (traceparent) {
-            NWilson::TTraceId traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, TComponentTracingLevels::ProductionVerbose);
-            if (traceId) {
-                Span = {TComponentTracingLevels::THttp::TopLevel, std::move(traceId), "http", NWilson::EFlags::AUTO_END};
-                Span.Attribute("request_type", TString(ev->Get()->Request.GetPathInfo()));
+            traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, TComponentTracingLevels::ProductionVerbose);
+        }
+        TStringBuf wantTrace = Event->Get()->Request.GetHeader("X-Want-Trace");
+        TStringBuf traceVerbosity = Event->Get()->Request.GetHeader("X-Trace-Verbosity");
+        TStringBuf traceTTL = Event->Get()->Request.GetHeader("X-Trace-TTL");
+        if (!traceId && (FromStringWithDefault<bool>(wantTrace) || !traceVerbosity.empty() || !traceTTL.empty())) {
+            ui8 verbosity = TComponentTracingLevels::ProductionVerbose;
+            if (traceVerbosity) {
+                verbosity = FromStringWithDefault<ui8>(traceVerbosity, verbosity);
+                verbosity = std::min(verbosity, NWilson::TTraceId::MAX_VERBOSITY);
             }
+            ui32 ttl = Max<ui32>();
+            if (traceTTL) {
+                ttl = FromStringWithDefault<ui32>(traceTTL, ttl);
+                ttl = std::min(ttl, NWilson::TTraceId::MAX_TIME_TO_LIVE);
+            }
+            traceId = NWilson::TTraceId::NewTraceId(verbosity, ttl);
+        }
+        if (traceId) {
+            Span = {TComponentTracingLevels::THttp::TopLevel, std::move(traceId), "http", NWilson::EFlags::AUTO_END};
+            Span.Attribute("request_type", TString(Event->Get()->Request.GetUri().Before('?')));
         }
     }
 
@@ -99,6 +185,20 @@ protected:
         std::unique_ptr<IEventHandle> event = std::make_unique<IEventHandle>(pipe, TBase::SelfId(), ev, 0/*flags*/, cookie, nullptr/*forwardOnNondelivery*/, std::move(traceId));
         event->Rewrite(TEvTabletPipe::EvSend, pipe);
         SendEvent(std::move(event));
+    }
+
+    template<typename TResponse>
+    TRequestResponse<TResponse> MakeRequest(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) {
+        TRequestResponse<TResponse> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, TypeName(*ev)));
+        SendRequest(recipient, ev, flags, cookie, response.Span.GetTraceId());
+        return response;
+    }
+
+    template<typename TResponse>
+    TRequestResponse<TResponse> MakeRequestToPipe(const TActorId& pipe, IEventBase* ev, ui64 cookie = 0) {
+        TRequestResponse<TResponse> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, TypeName(*ev)));
+        SendRequestToPipe(pipe, ev, cookie, response.Span.GetTraceId());
+        return response;
     }
 
     void SendDelayedRequests() {
@@ -210,7 +310,7 @@ protected:
         SendRequestToPipe(pipeClient, request.Release());
     }
 
-    void RequestBSControllerPDiskInfo(ui32 nodeId, ui32 pdiskId, NWilson::TTraceId traceId = {}) {
+    TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse> RequestBSControllerPDiskInfo(ui32 nodeId, ui32 pdiskId) {
         TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
         auto request = std::make_unique<NSysView::TEvSysView::TEvGetPDisksRequest>();
         request->Record.SetInclusiveFrom(true);
@@ -219,10 +319,10 @@ protected:
         request->Record.MutableFrom()->SetPDiskId(pdiskId);
         request->Record.MutableTo()->SetNodeId(nodeId);
         request->Record.MutableTo()->SetPDiskId(pdiskId);
-        SendRequestToPipe(pipeClient, request.release(), 0/*cookie*/, std::move(traceId));
+        return MakeRequestToPipe<NSysView::TEvSysView::TEvGetPDisksResponse>(pipeClient, request.release(), 0/*cookie*/);
     }
 
-    void RequestBSControllerVDiskInfo(ui32 nodeId, ui32 pdiskId, NWilson::TTraceId traceId = {}) {
+    TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> RequestBSControllerVDiskInfo(ui32 nodeId, ui32 pdiskId) {
         TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
         auto request = std::make_unique<NSysView::TEvSysView::TEvGetVSlotsRequest>();
         request->Record.SetInclusiveFrom(true);
@@ -233,7 +333,7 @@ protected:
         request->Record.MutableTo()->SetNodeId(nodeId);
         request->Record.MutableTo()->SetPDiskId(pdiskId);
         request->Record.MutableTo()->SetVSlotId(std::numeric_limits<ui32>::max());
-        SendRequestToPipe(pipeClient, request.release(), 0/*cookie*/, std::move(traceId));
+        return MakeRequestToPipe<NSysView::TEvSysView::TEvGetVSlotsResponse>(pipeClient, request.release(), 0/*cookie*/);
     }
 
     void RequestBSControllerPDiskUpdateStatus(const NKikimrBlobStorage::TUpdateDriveStatus& driveStatus, bool force = false) {
@@ -355,6 +455,46 @@ protected:
     void PassAway() override {
         ClosePipes();
         TBase::PassAway();
+    }
+
+    TRequestState GetRequest() const {
+        return {Event->Get(), Span.GetTraceId()};
+    }
+
+    void ReplyAndPassAway(TString data, const TString& error = {}) {
+        TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(data, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        if (Span) {
+            if (error) {
+                Span.EndError(error);
+            } else {
+                Span.EndOk();
+            }
+        }
+        PassAway();
+    }
+
+    TString GetHTTPOK(TString contentType = {}, TString response = {}, TInstant lastModified = {}) {
+        return Viewer->GetHTTPOK(GetRequest(), contentType, response, lastModified);
+    }
+
+    TString GetHTTPOKJSON(TString response = {}, TInstant lastModified = {}) {
+        return Viewer->GetHTTPOKJSON(GetRequest(), response, lastModified);
+    }
+
+    TString GetHTTPGATEWAYTIMEOUT(TString contentType = {}, TString response = {}) {
+        return Viewer->GetHTTPGATEWAYTIMEOUT(GetRequest(), contentType, response);
+    }
+
+    TString GetHTTPBADREQUEST(TString contentType = {}, TString response = {}) {
+        return Viewer->GetHTTPBADREQUEST(GetRequest(), contentType, response);
+    }
+
+    TString GetHTTPINTERNALERROR(TString contentType = {}, TString response = {}) {
+        return Viewer->GetHTTPINTERNALERROR(GetRequest(), contentType, response);
+    }
+
+    TString MakeForward(const std::vector<ui32>& nodes) {
+        return Viewer->MakeForward(GetRequest(), nodes);
     }
 };
 

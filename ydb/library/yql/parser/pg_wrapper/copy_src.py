@@ -1,7 +1,8 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 import os
+import sys
 from shutil import Error, copy2, rmtree
 import subprocess
 from collections import defaultdict
@@ -33,6 +34,79 @@ to_add_const = set([
     "viewCheckOptValues",
     "enumRelOpts",
     "stringRelOpts"])
+
+source_dirs = [
+    "postgresql/src/backend",
+    "postgresql/src/common",
+    "postgresql/src/include",
+    "postgresql/src/port",
+    "postgresql/src/timezone",
+]
+
+def is_inside_source_dirs(filename):
+    for dir in source_dirs:
+        if filename.startswith(dir):
+            return True
+    return False
+
+no_copy_sources = [
+    # not used (and linux/darwin-only)
+    "postgresql/src/backend/port/posix_sema.c",
+    "postgresql/src/backend/port/sysv_shmem.c",
+    # not used, was excluded earlier
+    "postgresql/src/include/utils/help_config.h",
+    "postgresql/src/backend/utils/misc/help_config.c",
+    # provided in libc_compat
+    "postgresql/src/port/strlcat.c",
+    "postgresql/src/port/strlcpy.c",
+
+    # unneded headers
+    "postgresql/src/common/md5_int.h",
+    "postgresql/src/common/sha1_int.h",
+    "postgresql/src/common/sha2_int.h",
+    "postgresql/src/include/common/connect.h",
+    "postgresql/src/include/common/logging.h",
+    "postgresql/src/include/common/restricted_token.h",
+    "postgresql/src/include/fe_utils/",
+    "postgresql/src/include/getopt_long.h",
+    "postgresql/src/include/jit/llvmjit.h",
+    "postgresql/src/include/jit/llvmjit_emit.h",
+    "postgresql/src/include/libpq/be-gssapi-common.h",
+    "postgresql/src/include/port/aix.h",
+    "postgresql/src/include/port/atomics/arch-hppa.h",
+    "postgresql/src/include/port/atomics/arch-ia64.h",
+    "postgresql/src/include/port/atomics/arch-ppc.h",
+    "postgresql/src/include/port/atomics/generic-acc.h",
+    "postgresql/src/include/port/atomics/generic-sunpro.h",
+    "postgresql/src/include/port/cygwin.h",
+    "postgresql/src/include/port/darwin.h",
+    "postgresql/src/include/port/freebsd.h",
+    "postgresql/src/include/port/hpux.h",
+    "postgresql/src/include/port/linux.h",
+    "postgresql/src/include/port/netbsd.h",
+    "postgresql/src/include/port/openbsd.h",
+    "postgresql/src/include/port/pg_pthread.h",
+    "postgresql/src/include/port/solaris.h",
+    "postgresql/src/include/port/win32/dlfcn.h",
+    "postgresql/src/include/port/win32.h",
+    "postgresql/src/include/replication/pgoutput.h",
+    "postgresql/src/include/snowball/",
+    "postgresql/src/port/pthread-win32.h",
+]
+
+def need_copy(filename):
+    if not is_inside_source_dirs(filename):
+        return False
+    for prefix in no_copy_sources:
+        if filename.startswith(prefix):
+            return False
+    return True
+
+exclude_from_source_list = set([
+    # platform-specific, explicitly added in ya.make
+    "postgresql/src/port/pg_crc32c_sse42.c",
+    "postgresql/src/port/pg_crc32c_sse42_choose.c",
+])
 
 def fix_line(line, all_lines, pos):
     global inside_func
@@ -194,6 +268,14 @@ def fix_line(line, all_lines, pos):
         ret+="\n";
         thread_funcs.append(found_v+"_init");
 
+    if "DCLIST_STATIC_INIT" in ret:
+        # rewrite without {{}} inits
+        pos=ret.find("=");
+        ret=ret[:pos] + ";";
+        ret+="void "+found_v+"_init(void) { dlist_init(&" + found_v + ".dlist); " + found_v + ".count = 0; }";
+        ret+="\n";
+        thread_funcs.append(found_v+"_init");
+
     if "CurrentTransactionState" in ret or "mainrdata_last" in ret:
         # rewrite with address of TLS var
         pos=ret.find("=");
@@ -218,45 +300,57 @@ def mycopy2(src, dst):
                 if line is not None:
                     fdst.write(line)
 
-def copytree(src, dst):
-    names = os.listdir(src)
-    os.makedirs(dst)
+def copy_and_patch_sources(src_dir):
     errors = []
-    for name in names:
-        if name == "help_config.c": continue
-        srcname = os.path.join(src, name)
-        dstname = os.path.join(dst, name)
-        #print(srcname)
-        try:
-            if os.path.isdir(srcname):
-                copytree(srcname, dstname)
+    with open(os.path.join(src_dir, "src_files"), "r") as fd:
+        for line in fd:
+            name = line.strip()
+            if not need_copy(name):
+                continue
+            srcname = os.path.join(src_dir, name)
+            if name == "postgresql/src/include/pg_config.h":
+                dstname = "postgresql/src/include/pg_config-linux.h"
             else:
-                mycopy2(srcname, dstname)
-        except OSError as why:
-            errors.append((srcname, dstname, str(why)))
-        except Error as err:
-            errors.extend(err.args[0])
-    if errors:
-        raise Error(errors)
+                dstname = name
+            try:
+                os.makedirs(os.path.dirname(dstname), mode=0o755, exist_ok=True)
+                if os.path.islink(srcname):
+                    target_full = os.path.realpath(srcname)
+                    target = os.path.relpath(target_full, start=os.path.realpath(os.path.dirname(srcname)))
+                    with open(dstname, "w") as f:
+                        print('#include "' + target + '" /* inclink generated by yamaker */', file=f)
+                else:
+                    mycopy2(srcname, dstname)
+            except OSError as why:
+                errors.append((srcname, dstname, str(why)))
+            except Error as err:
+                errors.extend(err.args[0])
+        if errors:
+            raise Error(errors)
 
-def make_sources_list():
-   with open("../../../../../contrib/libs/postgresql/ya.make","r") as fsrc:
-       with open("pg_sources.inc","w") as fdst:
-          fdst.write("SRCS(\n")
-          for line in fsrc:
-             if line.startswith("    src/"):
-                 #print(line.strip())
-                 if "/help_config.c" in line: continue
-                 fdst.write("    postgresql/" + line.strip() + "\n")
-          fdst.write(")\n")
+def make_sources_list(build_dir):
+    with open(f"{build_dir}/src_files","r") as fsrc:
+        with open("pg_sources.inc","w") as fdst:
+            fdst.write("SRCS(\n")
+            for line in fsrc:
+                #print(line.strip())
+                name = line.strip()
+                if name.endswith(".funcs.c"): continue
+                if name.endswith(".switch.c"): continue
+                basename = os.path.basename(name)
+                if basename.startswith("regc_") and basename.endswith(".c"): continue
+                if basename == "rege_dfa.c": continue
+                if name.endswith(".c") and need_copy(name) and name not in exclude_from_source_list:
+                    fdst.write("    " + name + "\n")
+            fdst.write(")\n")
 
-def get_vars():
-    s=subprocess.check_output("objdump ../../../../../contrib/libs/postgresql/libpostgres.a -tw",shell=True).decode("utf-8")
+def get_vars(build_dir):
+    s=subprocess.check_output(f"objdump {build_dir}/postgresql/src/backend/postgres.a -tw",shell=True).decode("utf-8")
     for a in s.replace("\t"," ").split("\n"):
         for b in a.split(" "):
             sym=None
             if b.startswith(".bss."): sym=b[5:]
-            elif b.startswith(".data."): sym=b[6:]
+            elif b.startswith(".data.") and not b.startswith(".data.rel.ro."): sym=b[6:]
             if sym is not None:
                 all_vars.add(sym.replace("yql_",""))
 
@@ -301,22 +395,25 @@ static __thread int pg_thread_init_flag;
 void pg_thread_init(void) {
     if (pg_thread_init_flag) return;
     pg_thread_init_flag=1;
-    setup_pg_thread_cleanup();
-    pg_timezone_initialize();
-""", file=f)
+    my_wait_event_info_init();""", file=f)
 
         for a in sorted(thread_funcs):
             print("    " + a + "();", file=f)
-        print("}", file=f)
+        print("""
+    setup_pg_thread_cleanup();
+    pg_timezone_initialize();
+}""", file=f)
 
     with open("thread_inits.h","w") as f:
         print("#pragma once", file=f)
         print("extern void pg_thread_init();", file=f)
 
 if __name__ == "__main__":
-    get_vars()
-    make_sources_list()
-    if os.path.isdir("postgresql"):
-        rmtree("postgresql")
-    copytree("../../../../../contrib/libs/postgresql", "postgresql")
+    if len(sys.argv) != 2:
+        print("Usage ", sys.argv[0], " <build directory>");
+        sys.exit(1)
+    build_dir=sys.argv[1]
+    get_vars(build_dir)
+    make_sources_list(build_dir)
+    copy_and_patch_sources(build_dir)
     write_thread_inits()

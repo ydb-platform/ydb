@@ -10,12 +10,12 @@
  * via functions such as SubTransGetTopmostTransaction().
  *
  * These functions are used to support the txid_XXX functions and the newer
- * pg_current_xact, pg_current_snapshot and related fmgr functions, since the
- * only difference between them is whether they expose xid8 or int8 values to
- * users.  The txid_XXX variants should eventually be dropped.
+ * pg_current_xact_id, pg_current_snapshot and related fmgr functions, since
+ * the only difference between them is whether they expose xid8 or int8 values
+ * to users.  The txid_XXX variants should eventually be dropped.
  *
  *
- *	Copyright (c) 2003-2021, PostgreSQL Global Development Group
+ *	Copyright (c) 2003-2023, PostgreSQL Global Development Group
  *	Author: Jan Wieck, Afilias USA INC.
  *	64-bit txids: Marko Kreen, Skype Technologies
  *
@@ -75,6 +75,14 @@ typedef struct
 	((MaxAllocSize - offsetof(pg_snapshot, xip)) / sizeof(FullTransactionId))
 
 /*
+ * Compile-time limits on the procarray (MAX_BACKENDS processes plus
+ * MAX_BACKENDS prepared transactions) guarantee nxip won't be too large.
+ */
+StaticAssertDecl(MAX_BACKENDS * 2 <= PG_SNAPSHOT_MAX_NXIP,
+				 "possible overflow in pg_current_snapshot()");
+
+
+/*
  * Helper to get a TransactionId from a 64-bit xid with wraparound detection.
  *
  * It is an ERROR if the xid is in the future.  Otherwise, returns true if
@@ -115,9 +123,8 @@ TransactionIdInRecentPast(FullTransactionId fxid, TransactionId *extracted_xid)
 	if (!FullTransactionIdPrecedes(fxid, now_fullxid))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("transaction ID %s is in the future",
-						psprintf(UINT64_FORMAT,
-								 U64FromFullTransactionId(fxid)))));
+				 errmsg("transaction ID %llu is in the future",
+						(unsigned long long) U64FromFullTransactionId(fxid))));
 
 	/*
 	 * ShmemVariableCache->oldestClogXid is protected by XactTruncationLock,
@@ -261,7 +268,7 @@ buf_init(FullTransactionId xmin, FullTransactionId xmax)
 	snap.nxip = 0;
 
 	buf = makeStringInfo();
-	appendBinaryStringInfo(buf, (char *) &snap, PG_SNAPSHOT_SIZE(0));
+	appendBinaryStringInfo(buf, &snap, PG_SNAPSHOT_SIZE(0));
 	return buf;
 }
 
@@ -273,7 +280,7 @@ buf_add_txid(StringInfo buf, FullTransactionId fxid)
 	/* do this before possible realloc */
 	snap->nxip++;
 
-	appendBinaryStringInfo(buf, (char *) &fxid, sizeof(fxid));
+	appendBinaryStringInfo(buf, &fxid, sizeof(fxid));
 }
 
 static pg_snapshot *
@@ -294,7 +301,7 @@ buf_finalize(StringInfo buf)
  * parse snapshot from cstring
  */
 static pg_snapshot *
-parse_snapshot(const char *str)
+parse_snapshot(const char *str, Node *escontext)
 {
 	FullTransactionId xmin;
 	FullTransactionId xmax;
@@ -304,12 +311,12 @@ parse_snapshot(const char *str)
 	char	   *endp;
 	StringInfo	buf;
 
-	xmin = FullTransactionIdFromU64(pg_strtouint64(str, &endp, 10));
+	xmin = FullTransactionIdFromU64(strtou64(str, &endp, 10));
 	if (*endp != ':')
 		goto bad_format;
 	str = endp + 1;
 
-	xmax = FullTransactionIdFromU64(pg_strtouint64(str, &endp, 10));
+	xmax = FullTransactionIdFromU64(strtou64(str, &endp, 10));
 	if (*endp != ':')
 		goto bad_format;
 	str = endp + 1;
@@ -327,7 +334,7 @@ parse_snapshot(const char *str)
 	while (*str != '\0')
 	{
 		/* read next value */
-		val = FullTransactionIdFromU64(pg_strtouint64(str, &endp, 10));
+		val = FullTransactionIdFromU64(strtou64(str, &endp, 10));
 		str = endp;
 
 		/* require the input to be in order */
@@ -350,11 +357,10 @@ parse_snapshot(const char *str)
 	return buf_finalize(buf);
 
 bad_format:
-	ereport(ERROR,
+	ereturn(escontext, NULL,
 			(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
 			 errmsg("invalid input syntax for type %s: \"%s\"",
 					"pg_snapshot", str_start)));
-	return NULL;				/* keep compiler quiet */
 }
 
 /*
@@ -378,7 +384,7 @@ pg_current_xact_id(PG_FUNCTION_ARGS)
 }
 
 /*
- * Same as pg_current_xact_if_assigned() but doesn't assign a new xid if there
+ * Same as pg_current_xact_id() but doesn't assign a new xid if there
  * isn't one yet.
  */
 Datum
@@ -411,13 +417,6 @@ pg_current_snapshot(PG_FUNCTION_ARGS)
 	cur = GetActiveSnapshot();
 	if (cur == NULL)
 		elog(ERROR, "no active snapshot set");
-
-	/*
-	 * Compile-time limits on the procarray (MAX_BACKENDS processes plus
-	 * MAX_BACKENDS prepared transactions) guarantee nxip won't be too large.
-	 */
-	StaticAssertStmt(MAX_BACKENDS * 2 <= PG_SNAPSHOT_MAX_NXIP,
-					 "possible overflow in pg_current_snapshot()");
 
 	/* allocate */
 	nxip = cur->xcnt;
@@ -456,7 +455,7 @@ pg_snapshot_in(PG_FUNCTION_ARGS)
 	char	   *str = PG_GETARG_CSTRING(0);
 	pg_snapshot *snap;
 
-	snap = parse_snapshot(str);
+	snap = parse_snapshot(str, fcinfo->context);
 
 	PG_RETURN_POINTER(snap);
 }
@@ -528,7 +527,7 @@ pg_snapshot_recv(PG_FUNCTION_ARGS)
 	for (i = 0; i < nxip; i++)
 	{
 		FullTransactionId cur =
-		FullTransactionIdFromU64((uint64) pq_getmsgint64(buf));
+			FullTransactionIdFromU64((uint64) pq_getmsgint64(buf));
 
 		if (FullTransactionIdPrecedes(cur, last) ||
 			FullTransactionIdPrecedes(cur, xmin) ||
@@ -687,7 +686,7 @@ pg_xact_status(PG_FUNCTION_ARGS)
 		Assert(TransactionIdIsValid(xid));
 
 		/*
-		 * Like when doing visiblity checks on a row, check whether the
+		 * Like when doing visibility checks on a row, check whether the
 		 * transaction is still in progress before looking into the CLOG.
 		 * Otherwise we would incorrectly return "committed" for a transaction
 		 * that is committing and has already updated the CLOG, but hasn't

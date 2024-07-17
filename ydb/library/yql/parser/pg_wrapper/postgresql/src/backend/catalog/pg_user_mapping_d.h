@@ -3,7 +3,7 @@
  * pg_user_mapping_d.h
  *    Macro definitions for pg_user_mapping
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -19,6 +19,8 @@
 #define PG_USER_MAPPING_D_H
 
 #define UserMappingRelationId 1418
+#define UserMappingOidIndexId 174
+#define UserMappingUserServerIndexId 175
 
 #define Anum_pg_user_mapping_oid 1
 #define Anum_pg_user_mapping_umuser 2

@@ -18,11 +18,6 @@ IF (AUTOCHECK)
     NO_LINT()
 ENDIF()
 
-IF (OPENSOURCE) 
-    # YQ-3351: enabling python style checks only for opensource
-    STYLE_PYTHON()
-ENDIF()
-
 PEERDIR(
     contrib/python/PyYAML
     ydb/library/yql/providers/generic/connector/api/common

@@ -46,29 +46,4 @@ namespace NActors {
         }
     };
 
-    template <typename TEv, ui32 TEventType>
-    class TEventSimple: public TEventBase<TEv, TEventType> {
-    public:
-        TString ToStringHeader() const override {
-            static TString header(TypeName<TEv>());
-            return header;
-        }
-
-        bool SerializeToArcadiaStream(TChunkSerializer* /*serializer*/) const override {
-            static_assert(sizeof(TEv) == sizeof(TEventSimple<TEv, TEventType>), "Descendant should be an empty class");
-            return true;
-        }
-
-        bool IsSerializable() const override {
-            return true;
-        }
-
-        static IEventBase* Load(NActors::TEventSerializedData*) {
-            return new TEv();
-        }
-
-        static IEventBase* Load(const TString&) {
-            return new TEv();
-        }
-    };
 }

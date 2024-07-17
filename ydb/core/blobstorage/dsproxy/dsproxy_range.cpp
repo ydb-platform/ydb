@@ -13,7 +13,7 @@ namespace NKikimr {
 // RANGE request
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlobStorageGroupRangeRequest> {
+class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
     static constexpr ui32 MaxBlobsToQueryAtOnce = 8096;
 
     const ui64 TabletId;
@@ -62,7 +62,6 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
         msg->Record.SetSuppressBarrierCheck(true);
 
         // trace message and send it to queue
-        CountEvent(*msg);
         SendToQueue(std::move(msg), 0);
 
         // add pending count
@@ -70,8 +69,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
     }
 
     void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev) {
-        ProcessReplyFromQueue(ev);
-        CountEvent(*ev->Get());
+        ProcessReplyFromQueue(ev->Get());
 
         const auto& record = ev->Get()->Record;
         Y_ABORT_UNLESS(record.HasStatus());
@@ -254,7 +252,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
         SendToProxy(std::move(get), 0, Span.GetTraceId());
 
         // switch state
-        Become(&TThis::StateGet);
+        Become(&TBlobStorageGroupRangeRequest::StateGet);
     }
 
     TString DumpBlobsToGet() const {
@@ -307,7 +305,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
         SendReply(result);
     }
 
-    void ReplyAndDie(NKikimrProto::EReplyStatus status) {
+    void ReplyAndDie(NKikimrProto::EReplyStatus status) override {
         std::unique_ptr<TEvBlobStorage::TEvRangeResult> result(new TEvBlobStorage::TEvRangeResult(
                     status, From, To, Info->GroupID));
         result->ErrorReason = ErrorReason;
@@ -315,9 +313,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
         SendReply(result);
     }
 
-    friend class TBlobStorageGroupRequestActor<TBlobStorageGroupRangeRequest>;
-
-    std::unique_ptr<IEventBase> RestartQuery(ui32 counter) {
+    std::unique_ptr<IEventBase> RestartQuery(ui32 counter) override {
         ++*Mon->NodeMon->RestartRange;
         auto ev = std::make_unique<TEvBlobStorage::TEvRange>(TabletId, From, To, MustRestoreFirst, Deadline, IsIndexOnly,
             ForceBlockedGeneration);
@@ -327,15 +323,11 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::BS_GROUP_RANGE;
+    ::NMonitoring::TDynamicCounters::TCounterPtr& GetActiveCounter() const override {
+        return Mon->ActiveRange;
     }
 
-    static const auto& ActiveCounter(const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon) {
-        return mon->ActiveRange;
-    }
-
-    static constexpr ERequestType RequestType() {
+    ERequestType GetRequestType() const override {
         return ERequestType::Range;
     }
 
@@ -346,7 +338,8 @@ public:
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
                 NKikimrServices::BS_PROXY_RANGE, false, {}, now, storagePoolCounters,
-                ev->RestartCounter, std::move(traceId), "DSProxy.Range", ev, std::move(ev->ExecutionRelay))
+                ev->RestartCounter, std::move(traceId), "DSProxy.Range", ev, std::move(ev->ExecutionRelay),
+                NKikimrServices::TActivity::BS_GROUP_RANGE)
         , TabletId(ev->TabletId)
         , From(ev->From)
         , To(ev->To)
@@ -359,7 +352,7 @@ public:
         , FailedDisks(&Info->GetTopology())
     {}
 
-    void Bootstrap() {
+    void Bootstrap() override {
         A_LOG_INFO_S("DSR07", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
@@ -380,7 +373,7 @@ public:
             SendQueryToVDisk(Info->GetVDiskId(vdisk.OrderNumber), From, To);
         }
 
-        Become(&TThis::StateWait);
+        Become(&TBlobStorageGroupRangeRequest::StateWait);
     }
 
     STATEFN(StateWait) {

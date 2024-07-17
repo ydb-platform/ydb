@@ -278,13 +278,12 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         auto& record = eventStatus->Record;
         record.SetStartTime(StartTime.GetValue());
         record.MutableResourceMaximum()->CopyFrom(ResourceLimit);
+        NActors::TExecutorPoolState userPoolState;
+        ctx.ExecutorThread.ActorSystem->GetExecutorPoolState(AppData()->UserPoolId, userPoolState);
+
         if (!record.GetResourceMaximum().HasCPU()) {
-            TExecutorPoolStats poolStats;
-            TVector<TExecutorThreadStats> statsCopy;
-            TVector<TExecutorThreadStats> sharedStatsCopy;
-            ctx.ExecutorThread.ActorSystem->GetPoolStats(AppData()->UserPoolId, poolStats, statsCopy, sharedStatsCopy);
-            if (!statsCopy.empty()) {
-                record.MutableResourceMaximum()->SetCPU(poolStats.CurrentThreadCount * 1000000);
+            if (userPoolState.PossibleMaxLimit) {
+                record.MutableResourceMaximum()->SetCPU(userPoolState.PossibleMaxLimit * 1000000);
             }
         }
         if (!record.GetResourceMaximum().HasMemory()) {
@@ -649,7 +648,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             const NKikimrWhiteboard::TSystemStateInfo& info = record.GetSystemStateInfo(0);
             if (static_cast<ui32>(info.PoolStatsSize()) > AppData()->UserPoolId) {
                 const auto& poolStats(info.GetPoolStats(AppData()->UserPoolId));
-                UserPoolUsage = poolStats.usage() * poolStats.threads() * 1000000; // uS
+                UserPoolUsage = poolStats.usage() * poolStats.limit() * 1000000; // uS
             }
 
             // Note: we use allocated memory because MemoryUsed(AnonRSS) has lag

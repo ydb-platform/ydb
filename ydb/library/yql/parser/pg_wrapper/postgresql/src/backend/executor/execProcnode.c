@@ -7,7 +7,7 @@
  *	 ExecProcNode, or ExecEndNode on its subnodes and do the appropriate
  *	 processing.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -769,10 +769,10 @@ ExecEndNode(PlanState *node)
  * Give execution nodes a chance to stop asynchronous resource consumption
  * and release any resources still held.
  */
-bool
+void
 ExecShutdownNode(PlanState *node)
 {
-	return ExecShutdownNode_walker(node, NULL);
+	(void) ExecShutdownNode_walker(node, NULL);
 }
 
 static bool

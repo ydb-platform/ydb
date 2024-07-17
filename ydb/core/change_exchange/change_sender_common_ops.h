@@ -336,7 +336,7 @@ class TBaseChangeSender {
         Y_ABORT_UNLESS(it != Broadcasting.end());
 
         auto& broadcast = it->second;
-        if (broadcast.Partitions.contains(partitionId)) {
+        if (broadcast.CompletedPartitions.contains(partitionId)) {
             return false;
         }
 

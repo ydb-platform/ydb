@@ -19,7 +19,7 @@
  *	and "Expression Evaluation" sections.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -32,6 +32,7 @@
 
 #include "access/nbtree.h"
 #include "catalog/objectaccess.h"
+#include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "executor/execExpr.h"
 #include "executor/nodeSubplan.h"
@@ -366,7 +367,7 @@ ExecBuildProjectionInfo(List *targetList,
 
 	projInfo->pi_exprContext = econtext;
 	/* We embed ExprState into ProjectionInfo instead of doing extra palloc */
-	projInfo->pi_state.tag = T_ExprState;
+	projInfo->pi_state.type = T_ExprState;
 	state = &projInfo->pi_state;
 	state->expr = (Expr *) targetList;
 	state->parent = parent;
@@ -534,7 +535,7 @@ ExecBuildUpdateProjection(List *targetList,
 
 	projInfo->pi_exprContext = econtext;
 	/* We embed ExprState into ProjectionInfo instead of doing extra palloc */
-	projInfo->pi_state.tag = T_ExprState;
+	projInfo->pi_state.type = T_ExprState;
 	state = &projInfo->pi_state;
 	if (evalTargetList)
 		state->expr = (Expr *) targetList;
@@ -1191,27 +1192,40 @@ ExecInitExprRec(Expr *node, ExprState *state,
 				FmgrInfo   *finfo;
 				FunctionCallInfo fcinfo;
 				AclResult	aclresult;
-				FmgrInfo   *hash_finfo;
-				FunctionCallInfo hash_fcinfo;
+				Oid			cmpfuncid;
+
+				/*
+				 * Select the correct comparison function.  When we do hashed
+				 * NOT IN clauses, the opfuncid will be the inequality
+				 * comparison function and negfuncid will be set to equality.
+				 * We need to use the equality function for hash probes.
+				 */
+				if (OidIsValid(opexpr->negfuncid))
+				{
+					Assert(OidIsValid(opexpr->hashfuncid));
+					cmpfuncid = opexpr->negfuncid;
+				}
+				else
+					cmpfuncid = opexpr->opfuncid;
 
 				Assert(list_length(opexpr->args) == 2);
 				scalararg = (Expr *) linitial(opexpr->args);
 				arrayarg = (Expr *) lsecond(opexpr->args);
 
 				/* Check permission to call function */
-				aclresult = pg_proc_aclcheck(opexpr->opfuncid,
-											 GetUserId(),
-											 ACL_EXECUTE);
+				aclresult = object_aclcheck(ProcedureRelationId, cmpfuncid,
+											GetUserId(),
+											ACL_EXECUTE);
 				if (aclresult != ACLCHECK_OK)
 					aclcheck_error(aclresult, OBJECT_FUNCTION,
-								   get_func_name(opexpr->opfuncid));
-				InvokeFunctionExecuteHook(opexpr->opfuncid);
+								   get_func_name(cmpfuncid));
+				InvokeFunctionExecuteHook(cmpfuncid);
 
 				if (OidIsValid(opexpr->hashfuncid))
 				{
-					aclresult = pg_proc_aclcheck(opexpr->hashfuncid,
-												 GetUserId(),
-												 ACL_EXECUTE);
+					aclresult = object_aclcheck(ProcedureRelationId, opexpr->hashfuncid,
+												GetUserId(),
+												ACL_EXECUTE);
 					if (aclresult != ACLCHECK_OK)
 						aclcheck_error(aclresult, OBJECT_FUNCTION,
 									   get_func_name(opexpr->hashfuncid));
@@ -1221,7 +1235,7 @@ ExecInitExprRec(Expr *node, ExprState *state,
 				/* Set up the primary fmgr lookup information */
 				finfo = palloc0(sizeof(FmgrInfo));
 				fcinfo = palloc0(SizeForFunctionCallInfo(2));
-				fmgr_info(opexpr->opfuncid, finfo);
+				fmgr_info(cmpfuncid, finfo);
 				fmgr_info_set_expr((Node *) node, finfo);
 				InitFunctionCallInfoData(*fcinfo, finfo, 2,
 										 opexpr->inputcollid, NULL, NULL);
@@ -1235,18 +1249,6 @@ ExecInitExprRec(Expr *node, ExprState *state,
 				 */
 				if (OidIsValid(opexpr->hashfuncid))
 				{
-					hash_finfo = palloc0(sizeof(FmgrInfo));
-					hash_fcinfo = palloc0(SizeForFunctionCallInfo(1));
-					fmgr_info(opexpr->hashfuncid, hash_finfo);
-					fmgr_info_set_expr((Node *) node, hash_finfo);
-					InitFunctionCallInfoData(*hash_fcinfo, hash_finfo,
-											 1, opexpr->inputcollid, NULL,
-											 NULL);
-
-					scratch.d.hashedscalararrayop.hash_finfo = hash_finfo;
-					scratch.d.hashedscalararrayop.hash_fcinfo_data = hash_fcinfo;
-					scratch.d.hashedscalararrayop.hash_fn_addr = hash_finfo->fn_addr;
-
 					/* Evaluate scalar directly into left function argument */
 					ExecInitExprRec(scalararg, state,
 									&fcinfo->args[0].value, &fcinfo->args[0].isnull);
@@ -1262,13 +1264,11 @@ ExecInitExprRec(Expr *node, ExprState *state,
 
 					/* And perform the operation */
 					scratch.opcode = EEOP_HASHED_SCALARARRAYOP;
+					scratch.d.hashedscalararrayop.inclause = opexpr->useOr;
 					scratch.d.hashedscalararrayop.finfo = finfo;
 					scratch.d.hashedscalararrayop.fcinfo_data = fcinfo;
-					scratch.d.hashedscalararrayop.fn_addr = finfo->fn_addr;
+					scratch.d.hashedscalararrayop.saop = opexpr;
 
-					scratch.d.hashedscalararrayop.hash_finfo = hash_finfo;
-					scratch.d.hashedscalararrayop.hash_fcinfo_data = hash_fcinfo;
-					scratch.d.hashedscalararrayop.hash_fn_addr = hash_finfo->fn_addr;
 
 					ExprEvalPushStep(state, &scratch);
 				}
@@ -1452,7 +1452,7 @@ ExecInitExprRec(Expr *node, ExprState *state,
 				/* find out the number of columns in the composite type */
 				tupDesc = lookup_rowtype_tupdesc(fstore->resulttype, -1);
 				ncolumns = tupDesc->natts;
-				DecrTupleDescRefCount(tupDesc);
+				ReleaseTupleDesc(tupDesc);
 
 				/* create workspace for column values */
 				values = (Datum *) palloc(sizeof(Datum) * ncolumns);
@@ -2290,6 +2290,97 @@ ExecInitExprRec(Expr *node, ExprState *state,
 				break;
 			}
 
+		case T_JsonValueExpr:
+			{
+				JsonValueExpr *jve = (JsonValueExpr *) node;
+
+				Assert(jve->formatted_expr != NULL);
+				ExecInitExprRec(jve->formatted_expr, state, resv, resnull);
+				break;
+			}
+
+		case T_JsonConstructorExpr:
+			{
+				JsonConstructorExpr *ctor = (JsonConstructorExpr *) node;
+				List	   *args = ctor->args;
+				ListCell   *lc;
+				int			nargs = list_length(args);
+				int			argno = 0;
+
+				if (ctor->func)
+				{
+					ExecInitExprRec(ctor->func, state, resv, resnull);
+				}
+				else
+				{
+					JsonConstructorExprState *jcstate;
+
+					jcstate = palloc0(sizeof(JsonConstructorExprState));
+
+					scratch.opcode = EEOP_JSON_CONSTRUCTOR;
+					scratch.d.json_constructor.jcstate = jcstate;
+
+					jcstate->constructor = ctor;
+					jcstate->arg_values = (Datum *) palloc(sizeof(Datum) * nargs);
+					jcstate->arg_nulls = (bool *) palloc(sizeof(bool) * nargs);
+					jcstate->arg_types = (Oid *) palloc(sizeof(Oid) * nargs);
+					jcstate->nargs = nargs;
+
+					foreach(lc, args)
+					{
+						Expr	   *arg = (Expr *) lfirst(lc);
+
+						jcstate->arg_types[argno] = exprType((Node *) arg);
+
+						if (IsA(arg, Const))
+						{
+							/* Don't evaluate const arguments every round */
+							Const	   *con = (Const *) arg;
+
+							jcstate->arg_values[argno] = con->constvalue;
+							jcstate->arg_nulls[argno] = con->constisnull;
+						}
+						else
+						{
+							ExecInitExprRec(arg, state,
+											&jcstate->arg_values[argno],
+											&jcstate->arg_nulls[argno]);
+						}
+						argno++;
+					}
+
+					ExprEvalPushStep(state, &scratch);
+				}
+
+				if (ctor->coercion)
+				{
+					Datum	   *innermost_caseval = state->innermost_caseval;
+					bool	   *innermost_isnull = state->innermost_casenull;
+
+					state->innermost_caseval = resv;
+					state->innermost_casenull = resnull;
+
+					ExecInitExprRec(ctor->coercion, state, resv, resnull);
+
+					state->innermost_caseval = innermost_caseval;
+					state->innermost_casenull = innermost_isnull;
+				}
+			}
+			break;
+
+		case T_JsonIsPredicate:
+			{
+				JsonIsPredicate *pred = (JsonIsPredicate *) node;
+
+				ExecInitExprRec((Expr *) pred->expr, state, resv, resnull);
+
+				scratch.opcode = EEOP_IS_JSON;
+				scratch.d.is_json.pred = pred;
+
+				ExprEvalPushStep(state, &scratch);
+				break;
+			}
+
 		case T_NullTest:
 			{
 				NullTest   *ntest = (NullTest *) node;
@@ -2466,7 +2557,7 @@ ExecInitFunc(ExprEvalStep *scratch, Expr *node, List *args, Oid funcid,
 	ListCell   *lc;
 
 	/* Check permission to call function */
-	aclresult = pg_proc_aclcheck(funcid, GetUserId(), ACL_EXECUTE);
+	aclresult = object_aclcheck(ProcedureRelationId, funcid, GetUserId(), ACL_EXECUTE);
 	if (aclresult != ACLCHECK_OK)
 		aclcheck_error(aclresult, OBJECT_FUNCTION, get_func_name(funcid));
 	InvokeFunctionExecuteHook(funcid);
@@ -3466,19 +3557,30 @@ ExecBuildAggTrans(AggState *aggstate, AggStatePerPhase phase,
 				scratch.resnull = &state->resnull;
 			}
 			argno++;
+
+			Assert(pertrans->numInputs == argno);
 		}
-		else if (pertrans->numSortCols == 0)
+		else if (!pertrans->aggsortrequired)
 		{
 			ListCell   *arg;
 
 			/*
-			 * Normal transition function without ORDER BY / DISTINCT.
+			 * Normal transition function without ORDER BY / DISTINCT or with
+			 * ORDER BY / DISTINCT but the planner has given us pre-sorted
+			 * input.
 			 */
 			strictargs = trans_fcinfo->args + 1;
 
 			foreach(arg, pertrans->aggref->args)
 			{
 				TargetEntry *source_tle = (TargetEntry *) lfirst(arg);
+
+				/*
+				 * Don't initialize args for any ORDER BY clause that might
+				 * exist in a presorted aggregate.
+				 */
+				if (argno == pertrans->numTransInputs)
+					break;
 
 				/*
 				 * Start from 1, since the 0th arg will be the transition
@@ -3489,14 +3591,16 @@ ExecBuildAggTrans(AggState *aggstate, AggStatePerPhase phase,
 								&trans_fcinfo->args[argno + 1].isnull);
 				argno++;
 			}
+			Assert(pertrans->numTransInputs == argno);
 		}
 		else if (pertrans->numInputs == 1)
 		{
 			/*
-			 * DISTINCT and/or ORDER BY case, with a single column sorted on.
+			 * Non-presorted DISTINCT and/or ORDER BY case, with a single
+			 * column sorted on.
 			 */
 			TargetEntry *source_tle =
-			(TargetEntry *) linitial(pertrans->aggref->args);
+				(TargetEntry *) linitial(pertrans->aggref->args);
 
 			Assert(list_length(pertrans->aggref->args) == 1);
 
@@ -3505,11 +3609,14 @@ ExecBuildAggTrans(AggState *aggstate, AggStatePerPhase phase,
 							&state->resnull);
 			strictnulls = &state->resnull;
 			argno++;
+
+			Assert(pertrans->numInputs == argno);
 		}
 		else
 		{
 			/*
-			 * DISTINCT and/or ORDER BY case, with multiple columns sorted on.
+			 * Non-presorted DISTINCT and/or ORDER BY case, with multiple
+			 * columns sorted on.
 			 */
 			Datum	   *values = pertrans->sortslot->tts_values;
 			bool	   *nulls = pertrans->sortslot->tts_isnull;
@@ -3525,8 +3632,8 @@ ExecBuildAggTrans(AggState *aggstate, AggStatePerPhase phase,
 								&values[argno], &nulls[argno]);
 				argno++;
 			}
+			Assert(pertrans->numInputs == argno);
 		}
-		Assert(pertrans->numInputs == argno);
 
 		/*
 		 * For a strict transfn, nothing happens when there's a NULL input; we
@@ -3543,6 +3650,21 @@ ExecBuildAggTrans(AggState *aggstate, AggStatePerPhase phase,
 			scratch.d.agg_strict_input_check.args = strictargs;
 			scratch.d.agg_strict_input_check.jumpnull = -1; /* adjust later */
 			scratch.d.agg_strict_input_check.nargs = pertrans->numTransInputs;
+			ExprEvalPushStep(state, &scratch);
+			adjust_bailout = lappend_int(adjust_bailout,
+										 state->steps_len - 1);
+		}
+
+		/* Handle DISTINCT aggregates which have pre-sorted input */
+		if (pertrans->numDistinctCols > 0 && !pertrans->aggsortrequired)
+		{
+			if (pertrans->numDistinctCols > 1)
+				scratch.opcode = EEOP_AGG_PRESORTED_DISTINCT_MULTI;
+			else
+				scratch.opcode = EEOP_AGG_PRESORTED_DISTINCT_SINGLE;
+
+			scratch.d.agg_presorted_distinctcheck.pertrans = pertrans;
+			scratch.d.agg_presorted_distinctcheck.jumpdistinct = -1;	/* adjust later */
 			ExprEvalPushStep(state, &scratch);
 			adjust_bailout = lappend_int(adjust_bailout,
 										 state->steps_len - 1);
@@ -3608,6 +3730,12 @@ ExecBuildAggTrans(AggState *aggstate, AggStatePerPhase phase,
 				Assert(as->d.agg_deserialize.jumpnull == -1);
 				as->d.agg_deserialize.jumpnull = state->steps_len;
 			}
+			else if (as->opcode == EEOP_AGG_PRESORTED_DISTINCT_SINGLE ||
+					 as->opcode == EEOP_AGG_PRESORTED_DISTINCT_MULTI)
+			{
+				Assert(as->d.agg_presorted_distinctcheck.jumpdistinct == -1);
+				as->d.agg_presorted_distinctcheck.jumpdistinct = state->steps_len;
+			}
 			else
 				Assert(false);
 		}
@@ -3657,7 +3785,8 @@ ExecBuildAggTransCall(ExprState *state, AggState *aggstate,
 	/*
 	 * Determine appropriate transition implementation.
 	 *
-	 * For non-ordered aggregates:
+	 * For non-ordered aggregates and ORDER BY / DISTINCT aggregates with
+	 * presorted input:
 	 *
 	 * If the initial value for the transition state doesn't exist in the
 	 * pg_aggregate table then we will let the first non-NULL value returned
@@ -3687,7 +3816,7 @@ ExecBuildAggTransCall(ExprState *state, AggState *aggstate,
 	 * process_ordered_aggregate_{single, multi} and
 	 * advance_transition_function.
 	 */
-	if (pertrans->numSortCols == 0)
+	if (!pertrans->aggsortrequired)
 	{
 		if (pertrans->transtypeByVal)
 		{
@@ -3816,7 +3945,7 @@ ExecBuildGroupingEqual(TupleDesc ldesc, TupleDesc rdesc,
 		AclResult	aclresult;
 
 		/* Check permission to call function */
-		aclresult = pg_proc_aclcheck(foid, GetUserId(), ACL_EXECUTE);
+		aclresult = object_aclcheck(ProcedureRelationId, foid, GetUserId(), ACL_EXECUTE);
 		if (aclresult != ACLCHECK_OK)
 			aclcheck_error(aclresult, OBJECT_FUNCTION, get_func_name(foid));
 
@@ -3950,7 +4079,7 @@ ExecBuildParamSetEqual(TupleDesc desc,
 		AclResult	aclresult;
 
 		/* Check permission to call function */
-		aclresult = pg_proc_aclcheck(foid, GetUserId(), ACL_EXECUTE);
+		aclresult = object_aclcheck(ProcedureRelationId, foid, GetUserId(), ACL_EXECUTE);
 		if (aclresult != ACLCHECK_OK)
 			aclcheck_error(aclresult, OBJECT_FUNCTION, get_func_name(foid));
 

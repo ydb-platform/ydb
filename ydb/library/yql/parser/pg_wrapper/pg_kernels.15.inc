@@ -1,3 +1,4 @@
+TExecFunc arrow_any_value_transfn() { return TGenericExec<TPgDirectFunc<&any_value_transfn>, true, true, TArgs_any_value_transfn_Policy>({}); }
 TExecFunc arrow_brin_bloom_add_value() { return TGenericExec<TPgDirectFunc<&brin_bloom_add_value>, true, true, TArgs_brin_bloom_add_value_Policy>({}); }
 TExecFunc arrow_brin_bloom_consistent() { return TGenericExec<TPgDirectFunc<&brin_bloom_consistent>, true, true, TArgs_brin_bloom_consistent_Policy>({}); }
 TExecFunc arrow_brin_bloom_opcinfo() { return TGenericExec<TPgDirectFunc<&brin_bloom_opcinfo>, true, true, TArgs_brin_bloom_opcinfo_Policy>({}); }
@@ -163,6 +164,8 @@ TExecFunc arrow_pg_column_is_updatable() { return TGenericExec<TPgDirectFunc<&pg
 TExecFunc arrow_pg_current_logfile() { return TGenericExec<TPgDirectFunc<&pg_current_logfile>, false, false, TArgs_pg_current_logfile_Policy>({}); }
 TExecFunc arrow_pg_current_logfile_1arg() { return TGenericExec<TPgDirectFunc<&pg_current_logfile_1arg>, false, false, TArgs_pg_current_logfile_1arg_Policy>({}); }
 TExecFunc arrow_pg_get_replica_identity_index() { return TGenericExec<TPgDirectFunc<&pg_get_replica_identity_index>, true, true, TArgs_pg_get_replica_identity_index_Policy>({}); }
+TExecFunc arrow_pg_input_error_info() { return TGenericExec<TPgDirectFunc<&pg_input_error_info>, true, false, TArgs_pg_input_error_info_Policy>({}); }
+TExecFunc arrow_pg_input_is_valid() { return TGenericExec<TPgDirectFunc<&pg_input_is_valid>, true, true, TArgs_pg_input_is_valid_Policy>({}); }
 TExecFunc arrow_pg_num_nonnulls() { return TGenericExec<TPgDirectFunc<&pg_num_nonnulls>, false, true, TDefaultArgsPolicy>({}); }
 TExecFunc arrow_pg_num_nulls() { return TGenericExec<TPgDirectFunc<&pg_num_nulls>, false, true, TDefaultArgsPolicy>({}); }
 TExecFunc arrow_pg_relation_is_updatable() { return TGenericExec<TPgDirectFunc<&pg_relation_is_updatable>, true, true, TArgs_pg_relation_is_updatable_Policy>({}); }

@@ -3,7 +3,7 @@
  * jsonb_op.c
  *	 Special operators for jsonb only, used by various index access methods
  *
- * Copyright (c) 2014-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2014-2023, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -53,8 +53,7 @@ jsonb_exists_any(PG_FUNCTION_ARGS)
 	bool	   *key_nulls;
 	int			elem_count;
 
-	deconstruct_array(keys, TEXTOID, -1, false, TYPALIGN_INT,
-					  &key_datums, &key_nulls, &elem_count);
+	deconstruct_array_builtin(keys, TEXTOID, &key_datums, &key_nulls, &elem_count);
 
 	for (i = 0; i < elem_count; i++)
 	{
@@ -87,8 +86,7 @@ jsonb_exists_all(PG_FUNCTION_ARGS)
 	bool	   *key_nulls;
 	int			elem_count;
 
-	deconstruct_array(keys, TEXTOID, -1, false, TYPALIGN_INT,
-					  &key_datums, &key_nulls, &elem_count);
+	deconstruct_array_builtin(keys, TEXTOID, &key_datums, &key_nulls, &elem_count);
 
 	for (i = 0; i < elem_count; i++)
 	{

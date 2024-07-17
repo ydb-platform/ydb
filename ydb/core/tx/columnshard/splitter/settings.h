@@ -22,6 +22,7 @@ private:
     YDB_ACCESSOR(i64, MinBlobSize, DefaultMinBlobSize);
     YDB_ACCESSOR(i64, MinRecordsCount, DefaultMinRecordsCount);
     YDB_ACCESSOR(i64, MaxPortionSize, DefaultMaxPortionSize);
+
 public:
     ui64 GetExpectedRecordsCountOnPage() const {
         return 1.5 * MinRecordsCount;

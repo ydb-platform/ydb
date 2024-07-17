@@ -89,6 +89,7 @@ TExecFunc arrow_inetnot() { return MakeIndirectExec<true, false>(&inetnot); }
 TExecFunc arrow_inetor() { return MakeIndirectExec<true, false>(&inetor); }
 TExecFunc arrow_inetpl() { return MakeIndirectExec<true, false>(&inetpl); }
 TExecFunc arrow_json_agg_finalfn() { return MakeIndirectExec<false, false>(&json_agg_finalfn); }
+TExecFunc arrow_json_agg_strict_transfn() { return MakeIndirectExec<false, true>(&json_agg_strict_transfn); }
 TExecFunc arrow_json_agg_transfn() { return MakeIndirectExec<false, true>(&json_agg_transfn); }
 TExecFunc arrow_json_build_array() { return MakeIndirectExec<false, false>(&json_build_array); }
 TExecFunc arrow_json_build_array_noargs() { return MakeIndirectExec<false, false>(&json_build_array_noargs); }
@@ -97,7 +98,10 @@ TExecFunc arrow_json_build_object_noargs() { return MakeIndirectExec<false, fals
 TExecFunc arrow_json_in() { return MakeIndirectExec<true, false>(&json_in); }
 TExecFunc arrow_json_object() { return MakeIndirectExec<true, false>(&json_object); }
 TExecFunc arrow_json_object_agg_finalfn() { return MakeIndirectExec<false, false>(&json_object_agg_finalfn); }
+TExecFunc arrow_json_object_agg_strict_transfn() { return MakeIndirectExec<false, true>(&json_object_agg_strict_transfn); }
 TExecFunc arrow_json_object_agg_transfn() { return MakeIndirectExec<false, true>(&json_object_agg_transfn); }
+TExecFunc arrow_json_object_agg_unique_strict_transfn() { return MakeIndirectExec<false, true>(&json_object_agg_unique_strict_transfn); }
+TExecFunc arrow_json_object_agg_unique_transfn() { return MakeIndirectExec<false, true>(&json_object_agg_unique_transfn); }
 TExecFunc arrow_json_object_two_arg() { return MakeIndirectExec<true, false>(&json_object_two_arg); }
 TExecFunc arrow_json_out() { return MakeIndirectExec<true, false>(&json_out); }
 TExecFunc arrow_json_recv() { return MakeIndirectExec<true, false>(&json_recv); }

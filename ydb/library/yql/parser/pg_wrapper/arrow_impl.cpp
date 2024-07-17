@@ -1,3 +1,4 @@
+#include "pg_compat.h"
 #include "arrow.h"
 
 namespace NYql {

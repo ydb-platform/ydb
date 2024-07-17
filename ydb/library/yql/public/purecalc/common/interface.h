@@ -250,6 +250,9 @@ namespace NYql {
             /// decision to the platform heuristics.
             TString BlockEngineSettings;
 
+            /// Output stream to dump the compiled and optimized expressions.
+            IOutputStream* ExprOutputStream;
+
             /// Provider for generic counters which can be used to export statistics from UDFs.
             NKikimr::NUdf::ICountersProvider* CountersProvider;
 
@@ -322,6 +325,13 @@ namespace NYql {
              * @return reference to self, to allow method chaining.
              */
             TProgramFactoryOptions& SetBlockEngineSettings(TStringBuf blockEngineSettings);
+
+            /**
+             * Set the stream to dump the compiled and optimized expressions.
+             *
+             * @return reference to self, to allow method chaining.
+             */
+            TProgramFactoryOptions& SetExprOutputStream(IOutputStream* exprOutputStream);
 
             /**
              * Set new counters provider. Passed pointer should stay alive for as long as the processor factory

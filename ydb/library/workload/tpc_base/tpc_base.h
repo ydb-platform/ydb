@@ -25,6 +25,8 @@ protected:
 
 private:
     const TTpcBaseWorkloadParams& Params;
+    TString FilterHeader(TStringBuf header, const TString& query) const;
+    void PatchHeader(TString& header) const;
 };
 
 } // namespace NYdbWorkload

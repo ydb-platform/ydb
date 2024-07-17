@@ -5,6 +5,7 @@ LLVM_BC(
     postgresql/src/backend/utils/adt/rangetypes_gist.c
     postgresql/src/backend/utils/adt/rangetypes_typanalyze.c
     postgresql/src/backend/utils/adt/tsginidx.c
+    postgresql/src/backend/utils/adt/windowfuncs.c
     pg_kernels.1.cpp
 
     NAME PgFuncs1
@@ -150,4 +151,10 @@ LLVM_BC(
     arrow_timetz_zone
     arrow_timetztypmodin
     arrow_timetztypmodout
+    arrow_window_cume_dist_support
+    arrow_window_dense_rank_support
+    arrow_window_ntile_support
+    arrow_window_percent_rank_support
+    arrow_window_rank_support
+    arrow_window_row_number_support
 )

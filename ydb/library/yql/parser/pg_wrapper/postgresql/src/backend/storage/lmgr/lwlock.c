@@ -20,7 +20,7 @@
  * appropriate value for a free lock.  The meaning of the variable is up to
  * the caller, the lightweight lock code just assigns and compares it.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -79,6 +79,7 @@
 #include "miscadmin.h"
 #include "pg_trace.h"
 #include "pgstat.h"
+#include "port/pg_bitutils.h"
 #include "postmaster/postmaster.h"
 #include "replication/slot.h"
 #include "storage/ipc.h"
@@ -106,6 +107,9 @@ extern __thread slock_t *ShmemLock;
 #define LW_LOCK_MASK				((uint32) ((1 << 25)-1))
 /* Must be greater than MAX_BACKENDS - which is 2^23-1, so we're fine. */
 #define LW_SHARED_MASK				((uint32) ((1 << 24)-1))
+
+StaticAssertDecl(LW_VAL_EXCLUSIVE > (uint32) MAX_BACKENDS,
+				 "MAX_BACKENDS too big for lwlock.c");
 
 /*
  * There are three sorts of LWLock "tranches":
@@ -175,7 +179,17 @@ static const char *const BuiltinTrancheNames[] = {
 	/* LWTRANCHE_PARALLEL_APPEND: */
 	"ParallelAppend",
 	/* LWTRANCHE_PER_XACT_PREDICATE_LIST: */
-	"PerXactPredicateList"
+	"PerXactPredicateList",
+	/* LWTRANCHE_PGSTATS_DSA: */
+	"PgStatsDSA",
+	/* LWTRANCHE_PGSTATS_HASH: */
+	"PgStatsHash",
+	/* LWTRANCHE_PGSTATS_DATA: */
+	"PgStatsData",
+	/* LWTRANCHE_LAUNCHER_DSA: */
+	"LogicalRepLauncherDSA",
+	/* LWTRANCHE_LAUNCHER_HASH: */
+	"LogicalRepLauncherHash",
 };
 
 StaticAssertDecl(lengthof(BuiltinTrancheNames) ==
@@ -235,8 +249,6 @@ __thread int			NamedLWLockTrancheRequests = 0;
 
 /* points to data in shared memory: */
 __thread NamedLWLockTranche *NamedLWLockTrancheArray = NULL;
-
-static __thread bool lock_named_request_allowed = true;
 
 static void InitializeLWLocks(void);
 static inline void LWLockReportWaitStart(LWLock *lock);
@@ -451,9 +463,6 @@ LWLockShmemSize(void)
 	for (i = 0; i < NamedLWLockTrancheRequests; i++)
 		size = add_size(size, strlen(NamedLWLockTrancheRequestArray[i].tranche_name) + 1);
 
-	/* Disallow adding any more named tranches. */
-	lock_named_request_allowed = false;
-
 	return size;
 }
 
@@ -464,12 +473,6 @@ LWLockShmemSize(void)
 void
 CreateLWLocks(void)
 {
-	StaticAssertStmt(LW_VAL_EXCLUSIVE > (uint32) MAX_BACKENDS,
-					 "MAX_BACKENDS too big for lwlock.c");
-
-	StaticAssertStmt(sizeof(LWLock) <= LWLOCK_PADDED_SIZE,
-					 "Miscalculated LWLock padding");
-
 	if (!IsUnderPostmaster)
 	{
 		Size		spaceLocks = LWLockShmemSize();
@@ -659,22 +662,15 @@ LWLockRegisterTranche(int tranche_id, const char *tranche_name)
 	{
 		int			newalloc;
 
-		newalloc = Max(LWLockTrancheNamesAllocated, 8);
-		while (newalloc <= tranche_id)
-			newalloc *= 2;
+		newalloc = pg_nextpower2_32(Max(8, tranche_id + 1));
 
 		if (LWLockTrancheNames == NULL)
 			LWLockTrancheNames = (const char **)
 				MemoryContextAllocZero(TopMemoryContext,
 									   newalloc * sizeof(char *));
 		else
-		{
-			LWLockTrancheNames = (const char **)
-				repalloc(LWLockTrancheNames, newalloc * sizeof(char *));
-			memset(LWLockTrancheNames + LWLockTrancheNamesAllocated,
-				   0,
-				   (newalloc - LWLockTrancheNamesAllocated) * sizeof(char *));
-		}
+			LWLockTrancheNames =
+				repalloc0_array(LWLockTrancheNames, const char *, LWLockTrancheNamesAllocated, newalloc);
 		LWLockTrancheNamesAllocated = newalloc;
 	}
 
@@ -686,12 +682,9 @@ LWLockRegisterTranche(int tranche_id, const char *tranche_name)
  *		Request that extra LWLocks be allocated during postmaster
  *		startup.
  *
- * This is only useful for extensions if called from the _PG_init hook
- * of a library that is loaded into the postmaster via
- * shared_preload_libraries.  Once shared memory has been allocated, calls
- * will be ignored.  (We could raise an error, but it seems better to make
- * it a no-op, so that libraries containing such calls can be reloaded if
- * needed.)
+ * This may only be called via the shmem_request_hook of a library that is
+ * loaded into the postmaster via shared_preload_libraries.  Calls from
+ * elsewhere will fail.
  *
  * The tranche name will be user-visible as a wait event name, so try to
  * use a name that fits the style for those.
@@ -701,8 +694,8 @@ RequestNamedLWLockTranche(const char *tranche_name, int num_lwlocks)
 {
 	NamedLWLockTrancheRequest *request;
 
-	if (IsUnderPostmaster || !lock_named_request_allowed)
-		return;					/* too late */
+	if (!process_shmem_requests_in_progress)
+		elog(FATAL, "cannot request additional LWLocks outside shmem_request_hook");
 
 	if (NamedLWLockTrancheRequestArray == NULL)
 	{
@@ -715,10 +708,7 @@ RequestNamedLWLockTranche(const char *tranche_name, int num_lwlocks)
 
 	if (NamedLWLockTrancheRequests >= NamedLWLockTrancheRequestsAllocated)
 	{
-		int			i = NamedLWLockTrancheRequestsAllocated;
-
-		while (i <= NamedLWLockTrancheRequests)
-			i *= 2;
+		int			i = pg_nextpower2_32(NamedLWLockTrancheRequests + 1);
 
 		NamedLWLockTrancheRequestArray = (NamedLWLockTrancheRequest *)
 			repalloc(NamedLWLockTrancheRequestArray,
@@ -822,7 +812,7 @@ LWLockAttemptLock(LWLock *lock, LWLockMode mode)
 {
 	uint32		old_state;
 
-	AssertArg(mode == LW_EXCLUSIVE || mode == LW_SHARED);
+	Assert(mode == LW_EXCLUSIVE || mode == LW_SHARED);
 
 	/*
 	 * Read once outside the loop, later iterations will get the newer value
@@ -1103,7 +1093,6 @@ LWLockQueueSelf(LWLock *lock, LWLockMode mode)
 #ifdef LOCK_DEBUG
 	pg_atomic_fetch_add_u32(&lock->nwaiters, 1);
 #endif
-
 }
 
 /*
@@ -1129,9 +1118,9 @@ LWLockDequeueSelf(LWLock *lock)
 	LWLockWaitListLock(lock);
 
 	/*
-	 * Remove ourselves from the waitlist, unless we've already been
-	 * removed. The removal happens with the wait list lock held, so there's
-	 * no race in this check.
+	 * Remove ourselves from the waitlist, unless we've already been removed.
+	 * The removal happens with the wait list lock held, so there's no race in
+	 * this check.
 	 */
 	on_waitlist = MyProc->lwWaiting == LW_WS_WAITING;
 	if (on_waitlist)
@@ -1214,7 +1203,7 @@ LWLockAcquire(LWLock *lock, LWLockMode mode)
 	lwstats = get_lwlock_stats_entry(lock);
 #endif
 
-	AssertArg(mode == LW_SHARED || mode == LW_EXCLUSIVE);
+	Assert(mode == LW_SHARED || mode == LW_EXCLUSIVE);
 
 	PRINT_LWDEBUG("LWLockAcquire", lock, mode);
 
@@ -1378,7 +1367,7 @@ LWLockConditionalAcquire(LWLock *lock, LWLockMode mode)
 {
 	bool		mustwait;
 
-	AssertArg(mode == LW_SHARED || mode == LW_EXCLUSIVE);
+	Assert(mode == LW_SHARED || mode == LW_EXCLUSIVE);
 
 	PRINT_LWDEBUG("LWLockConditionalAcquire", lock, mode);
 
@@ -1927,13 +1916,13 @@ LWLockReleaseAll(void)
  * This is meant as debug support only.
  */
 bool
-LWLockHeldByMe(LWLock *l)
+LWLockHeldByMe(LWLock *lock)
 {
 	int			i;
 
 	for (i = 0; i < num_held_lwlocks; i++)
 	{
-		if (held_lwlocks[i].lock == l)
+		if (held_lwlocks[i].lock == lock)
 			return true;
 	}
 	return false;
@@ -1945,14 +1934,14 @@ LWLockHeldByMe(LWLock *l)
  * This is meant as debug support only.
  */
 bool
-LWLockAnyHeldByMe(LWLock *l, int nlocks, size_t stride)
+LWLockAnyHeldByMe(LWLock *lock, int nlocks, size_t stride)
 {
 	char	   *held_lock_addr;
 	char	   *begin;
 	char	   *end;
 	int			i;
 
-	begin = (char *) l;
+	begin = (char *) lock;
 	end = begin + nlocks * stride;
 	for (i = 0; i < num_held_lwlocks; i++)
 	{
@@ -1971,13 +1960,13 @@ LWLockAnyHeldByMe(LWLock *l, int nlocks, size_t stride)
  * This is meant as debug support only.
  */
 bool
-LWLockHeldByMeInMode(LWLock *l, LWLockMode mode)
+LWLockHeldByMeInMode(LWLock *lock, LWLockMode mode)
 {
 	int			i;
 
 	for (i = 0; i < num_held_lwlocks; i++)
 	{
-		if (held_lwlocks[i].lock == l && held_lwlocks[i].mode == mode)
+		if (held_lwlocks[i].lock == lock && held_lwlocks[i].mode == mode)
 			return true;
 	}
 	return false;

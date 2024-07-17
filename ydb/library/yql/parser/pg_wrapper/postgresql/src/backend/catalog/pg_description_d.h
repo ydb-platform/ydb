@@ -3,7 +3,7 @@
  * pg_description_d.h
  *    Macro definitions for pg_description
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -19,6 +19,7 @@
 #define PG_DESCRIPTION_D_H
 
 #define DescriptionRelationId 2609
+#define DescriptionObjIndexId 2675
 
 #define Anum_pg_description_objoid 1
 #define Anum_pg_description_classoid 2

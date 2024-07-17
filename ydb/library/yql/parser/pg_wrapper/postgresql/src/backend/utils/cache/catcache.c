@@ -3,7 +3,7 @@
  * catcache.c
  *	  System catalog cache for tuples matching a key.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -19,13 +19,14 @@
 #include "access/relscan.h"
 #include "access/sysattr.h"
 #include "access/table.h"
-#include "access/valid.h"
 #include "access/xact.h"
 #include "catalog/pg_collation.h"
 #include "catalog/pg_operator.h"
 #include "catalog/pg_type.h"
 #include "common/hashfn.h"
+#include "common/pg_prng.h"
 #include "miscadmin.h"
+#include "port/pg_bitutils.h"
 #ifdef CATCACHE_STATS
 #include "storage/ipc.h"		/* for on_proc_exit */
 #endif
@@ -88,6 +89,8 @@ static void CatCachePrintStats(int code, Datum arg);
 #endif
 static void CatCacheRemoveCTup(CatCache *cache, CatCTup *ct);
 static void CatCacheRemoveCList(CatCache *cache, CatCList *cl);
+static void RehashCatCache(CatCache *cp);
+static void RehashCatCacheLists(CatCache *cp);
 static void CatalogCacheInitializeCache(CatCache *cache);
 static CatCTup *CatalogCacheCreateEntry(CatCache *cache,
 										HeapTuple ntp, SysScanDesc scandesc,
@@ -282,25 +285,18 @@ CatalogCacheComputeHashValue(CatCache *cache, int nkeys,
 	{
 		case 4:
 			oneHash = (cc_hashfunc[3]) (v4);
-
-			hashValue ^= oneHash << 24;
-			hashValue ^= oneHash >> 8;
+			hashValue ^= pg_rotate_left32(oneHash, 24);
 			/* FALLTHROUGH */
 		case 3:
 			oneHash = (cc_hashfunc[2]) (v3);
-
-			hashValue ^= oneHash << 16;
-			hashValue ^= oneHash >> 16;
+			hashValue ^= pg_rotate_left32(oneHash, 16);
 			/* FALLTHROUGH */
 		case 2:
 			oneHash = (cc_hashfunc[1]) (v2);
-
-			hashValue ^= oneHash << 8;
-			hashValue ^= oneHash >> 24;
+			hashValue ^= pg_rotate_left32(oneHash, 8);
 			/* FALLTHROUGH */
 		case 1:
 			oneHash = (cc_hashfunc[0]) (v1);
-
 			hashValue ^= oneHash;
 			break;
 		default:
@@ -399,6 +395,7 @@ CatCachePrintStats(int code, Datum arg)
 	long		cc_neg_hits = 0;
 	long		cc_newloads = 0;
 	long		cc_invals = 0;
+	long		cc_nlists = 0;
 	long		cc_lsearches = 0;
 	long		cc_lhits = 0;
 
@@ -408,7 +405,7 @@ CatCachePrintStats(int code, Datum arg)
 
 		if (cache->cc_ntup == 0 && cache->cc_searches == 0)
 			continue;			/* don't print unused caches */
-		elog(DEBUG2, "catcache %s/%u: %d tup, %ld srch, %ld+%ld=%ld hits, %ld+%ld=%ld loads, %ld invals, %ld lsrch, %ld lhits",
+		elog(DEBUG2, "catcache %s/%u: %d tup, %ld srch, %ld+%ld=%ld hits, %ld+%ld=%ld loads, %ld invals, %d lists, %ld lsrch, %ld lhits",
 			 cache->cc_relname,
 			 cache->cc_indexoid,
 			 cache->cc_ntup,
@@ -420,6 +417,7 @@ CatCachePrintStats(int code, Datum arg)
 			 cache->cc_searches - cache->cc_hits - cache->cc_neg_hits - cache->cc_newloads,
 			 cache->cc_searches - cache->cc_hits - cache->cc_neg_hits,
 			 cache->cc_invals,
+			 cache->cc_nlist,
 			 cache->cc_lsearches,
 			 cache->cc_lhits);
 		cc_searches += cache->cc_searches;
@@ -427,10 +425,11 @@ CatCachePrintStats(int code, Datum arg)
 		cc_neg_hits += cache->cc_neg_hits;
 		cc_newloads += cache->cc_newloads;
 		cc_invals += cache->cc_invals;
+		cc_nlists += cache->cc_nlist;
 		cc_lsearches += cache->cc_lsearches;
 		cc_lhits += cache->cc_lhits;
 	}
-	elog(DEBUG2, "catcache totals: %d tup, %ld srch, %ld+%ld=%ld hits, %ld+%ld=%ld loads, %ld invals, %ld lsrch, %ld lhits",
+	elog(DEBUG2, "catcache totals: %d tup, %ld srch, %ld+%ld=%ld hits, %ld+%ld=%ld loads, %ld invals, %ld lists, %ld lsrch, %ld lhits",
 		 CacheHdr->ch_ntup,
 		 cc_searches,
 		 cc_hits,
@@ -440,6 +439,7 @@ CatCachePrintStats(int code, Datum arg)
 		 cc_searches - cc_hits - cc_neg_hits - cc_newloads,
 		 cc_searches - cc_hits - cc_neg_hits,
 		 cc_invals,
+		 cc_nlists,
 		 cc_lsearches,
 		 cc_lhits);
 }
@@ -528,6 +528,8 @@ CatCacheRemoveCList(CatCache *cache, CatCList *cl)
 					 cache->cc_keyno, cl->keys);
 
 	pfree(cl);
+
+	--cache->cc_nlist;
 }
 
 
@@ -566,14 +568,19 @@ CatCacheInvalidate(CatCache *cache, uint32 hashValue)
 	 * Invalidate *all* CatCLists in this cache; it's too hard to tell which
 	 * searches might still be correct, so just zap 'em all.
 	 */
-	dlist_foreach_modify(iter, &cache->cc_lists)
+	for (int i = 0; i < cache->cc_nlbuckets; i++)
 	{
-		CatCList   *cl = dlist_container(CatCList, cache_elem, iter.cur);
+		dlist_head *bucket = &cache->cc_lbucket[i];
 
-		if (cl->refcount > 0)
-			cl->dead = true;
-		else
-			CatCacheRemoveCList(cache, cl);
+		dlist_foreach_modify(iter, bucket)
+		{
+			CatCList   *cl = dlist_container(CatCList, cache_elem, iter.cur);
+
+			if (cl->refcount > 0)
+				cl->dead = true;
+			else
+				CatCacheRemoveCList(cache, cl);
+		}
 	}
 
 	/*
@@ -646,14 +653,19 @@ ResetCatalogCache(CatCache *cache)
 	int			i;
 
 	/* Remove each list in this cache, or at least mark it dead */
-	dlist_foreach_modify(iter, &cache->cc_lists)
+	for (i = 0; i < cache->cc_nlbuckets; i++)
 	{
-		CatCList   *cl = dlist_container(CatCList, cache_elem, iter.cur);
+		dlist_head *bucket = &cache->cc_lbucket[i];
 
-		if (cl->refcount > 0)
-			cl->dead = true;
-		else
-			CatCacheRemoveCList(cache, cl);
+		dlist_foreach_modify(iter, bucket)
+		{
+			CatCList   *cl = dlist_container(CatCList, cache_elem, iter.cur);
+
+			if (cl->refcount > 0)
+				cl->dead = true;
+			else
+				CatCacheRemoveCList(cache, cl);
+		}
 	}
 
 	/* Remove each tuple in this cache, or at least mark it dead */
@@ -770,7 +782,6 @@ InitCatCache(int id,
 {
 	CatCache   *cp;
 	MemoryContext oldcxt;
-	size_t		sz;
 	int			i;
 
 	/*
@@ -814,9 +825,15 @@ InitCatCache(int id,
 	 *
 	 * Note: we rely on zeroing to initialize all the dlist headers correctly
 	 */
-	sz = sizeof(CatCache) + PG_CACHE_LINE_SIZE;
-	cp = (CatCache *) CACHELINEALIGN(palloc0(sz));
+	cp = (CatCache *) palloc_aligned(sizeof(CatCache), PG_CACHE_LINE_SIZE,
+									 MCXT_ALLOC_ZERO);
 	cp->cc_bucket = palloc0(nbuckets * sizeof(dlist_head));
+
+	/*
+	 * Many catcaches never receive any list searches.  Therefore, we don't
+	 * allocate the cc_lbuckets till we get a list search.
+	 */
+	cp->cc_lbucket = NULL;
 
 	/*
 	 * initialize the cache's relation information for the relation
@@ -830,7 +847,9 @@ InitCatCache(int id,
 	cp->cc_relisshared = false; /* temporary */
 	cp->cc_tupdesc = (TupleDesc) NULL;
 	cp->cc_ntup = 0;
+	cp->cc_nlist = 0;
 	cp->cc_nbuckets = nbuckets;
+	cp->cc_nlbuckets = 0;
 	cp->cc_nkeys = nkeys;
 	for (i = 0; i < nkeys; ++i)
 		cp->cc_keyno[i] = key[i];
@@ -890,6 +909,44 @@ RehashCatCache(CatCache *cp)
 	pfree(cp->cc_bucket);
 	cp->cc_nbuckets = newnbuckets;
 	cp->cc_bucket = newbucket;
+}
+
+/*
+ * Enlarge a catcache's list storage, doubling the number of buckets.
+ */
+static void
+RehashCatCacheLists(CatCache *cp)
+{
+	dlist_head *newbucket;
+	int			newnbuckets;
+	int			i;
+
+	elog(DEBUG1, "rehashing catalog cache id %d for %s; %d lists, %d buckets",
+		 cp->id, cp->cc_relname, cp->cc_nlist, cp->cc_nlbuckets);
+
+	/* Allocate a new, larger, hash table. */
+	newnbuckets = cp->cc_nlbuckets * 2;
+	newbucket = (dlist_head *) MemoryContextAllocZero(CacheMemoryContext, newnbuckets * sizeof(dlist_head));
+
+	/* Move all entries from old hash table to new. */
+	for (i = 0; i < cp->cc_nlbuckets; i++)
+	{
+		dlist_mutable_iter iter;
+
+		dlist_foreach_modify(iter, &cp->cc_lbucket[i])
+		{
+			CatCList   *cl = dlist_container(CatCList, cache_elem, iter.cur);
+			int			hashIndex = HASH_INDEX(cl->hash_value, newnbuckets);
+
+			dlist_delete(iter.cur);
+			dlist_push_head(&newbucket[hashIndex], &cl->cache_elem);
+		}
+	}
+
+	/* Switch to the new array. */
+	pfree(cp->cc_lbucket);
+	cp->cc_nlbuckets = newnbuckets;
+	cp->cc_lbucket = newbucket;
 }
 
 /*
@@ -1534,7 +1591,9 @@ SearchCatCacheList(CatCache *cache,
 	Datum		v4 = 0;			/* dummy last-column value */
 	Datum		arguments[CATCACHE_MAXKEYS];
 	uint32		lHashValue;
+	Index		lHashIndex;
 	dlist_iter	iter;
+	dlist_head *lbucket;
 	CatCList   *cl;
 	CatCTup    *ct;
 	List	   *volatile ctlist;
@@ -1548,7 +1607,7 @@ SearchCatCacheList(CatCache *cache,
 	/*
 	 * one-time startup overhead for each cache
 	 */
-	if (cache->cc_tupdesc == NULL)
+	if (unlikely(cache->cc_tupdesc == NULL))
 		CatalogCacheInitializeCache(cache);
 
 	Assert(nkeys > 0 && nkeys < cache->cc_nkeys);
@@ -1564,11 +1623,36 @@ SearchCatCacheList(CatCache *cache,
 	arguments[3] = v4;
 
 	/*
-	 * compute a hash value of the given keys for faster search.  We don't
-	 * presently divide the CatCList items into buckets, but this still lets
-	 * us skip non-matching items quickly most of the time.
+	 * If we haven't previously done a list search in this cache, create the
+	 * bucket header array; otherwise, consider whether it's time to enlarge
+	 * it.
+	 */
+	if (cache->cc_lbucket == NULL)
+	{
+		/* Arbitrary initial size --- must be a power of 2 */
+		int			nbuckets = 16;
+
+		cache->cc_lbucket = (dlist_head *)
+			MemoryContextAllocZero(CacheMemoryContext,
+								   nbuckets * sizeof(dlist_head));
+		/* Don't set cc_nlbuckets if we get OOM allocating cc_lbucket */
+		cache->cc_nlbuckets = nbuckets;
+	}
+	else
+	{
+		/*
+		 * If the hash table has become too full, enlarge the buckets array.
+		 * Quite arbitrarily, we enlarge when fill factor > 2.
+		 */
+		if (cache->cc_nlist > cache->cc_nlbuckets * 2)
+			RehashCatCacheLists(cache);
+	}
+
+	/*
+	 * Find the hash bucket in which to look for the CatCList.
 	 */
 	lHashValue = CatalogCacheComputeHashValue(cache, nkeys, v1, v2, v3, v4);
+	lHashIndex = HASH_INDEX(lHashValue, cache->cc_nlbuckets);
 
 	/*
 	 * scan the items until we find a match or exhaust our list
@@ -1576,7 +1660,8 @@ SearchCatCacheList(CatCache *cache,
 	 * Note: it's okay to use dlist_foreach here, even though we modify the
 	 * dlist within the loop, because we don't continue the loop afterwards.
 	 */
-	dlist_foreach(iter, &cache->cc_lists)
+	lbucket = &cache->cc_lbucket[lHashIndex];
+	dlist_foreach(iter, lbucket)
 	{
 		cl = dlist_container(CatCList, cache_elem, iter.cur);
 
@@ -1596,13 +1681,13 @@ SearchCatCacheList(CatCache *cache,
 			continue;
 
 		/*
-		 * We found a matching list.  Move the list to the front of the
-		 * cache's list-of-lists, to speed subsequent searches.  (We do not
+		 * We found a matching list.  Move the list to the front of the list
+		 * for its hashbucket, so as to speed subsequent searches.  (We do not
 		 * move the members to the fronts of their hashbucket lists, however,
 		 * since there's no point in that unless they are searched for
 		 * individually.)
 		 */
-		dlist_move_head(&cache->cc_lists, &cl->cache_elem);
+		dlist_move_head(lbucket, &cl->cache_elem);
 
 		/* Bump the list's refcount and return it */
 		ResourceOwnerEnlargeCatCacheListRefs(CurrentResourceOwner);
@@ -1767,7 +1852,6 @@ SearchCatCacheList(CatCache *cache,
 		 * we'd better do so before we start marking the members as belonging
 		 * to the list.
 		 */
-
 	}
 	PG_CATCH();
 	{
@@ -1814,7 +1898,12 @@ SearchCatCacheList(CatCache *cache,
 	}
 	Assert(i == nmembers);
 
-	dlist_push_head(&cache->cc_lists, &cl->cache_elem);
+	/*
+	 * Add the CatCList to the appropriate bucket, and count it.
+	 */
+	dlist_push_head(lbucket, &cl->cache_elem);
+
+	cache->cc_nlist++;
 
 	/* Finally, bump the list's refcount and return it */
 	cl->refcount++;
@@ -1887,7 +1976,7 @@ CatalogCacheCreateEntry(CatCache *cache, HeapTuple ntp, SysScanDesc scandesc,
 		 * fields.
 		 */
 #ifdef USE_ASSERT_CHECKING
-		if (random() <= (MAX_RANDOM_VALUE / 1000))
+		if (pg_prng_uint32(&pg_global_prng_state) <= (PG_UINT32_MAX / 1000))
 			return NULL;
 #endif
 
@@ -2053,7 +2142,6 @@ CatCacheCopyKeys(TupleDesc tupdesc, int nkeys, int *attnos,
 							   att->attbyval,
 							   att->attlen);
 	}
-
 }
 
 /*

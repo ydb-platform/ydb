@@ -6425,6 +6425,10 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         }
         testHelper.DropTable("/Root/ColumnTableTest");
         for (auto tablet: tabletIds) {
+            auto deadline = TInstant::Now() + TDuration::Seconds(1);
+            while (testHelper.GetKikimr().GetTestClient().TabletExistsInHive(&testHelper.GetRuntime(), tablet) && deadline >= TInstant::Now()) {
+                // do nothing
+            }
             UNIT_ASSERT_C(!testHelper.GetKikimr().GetTestClient().TabletExistsInHive(&testHelper.GetRuntime(), tablet), ToString(tablet) + " is alive");
         }
     }

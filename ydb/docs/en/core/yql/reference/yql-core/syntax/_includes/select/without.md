@@ -1,4 +1,4 @@
-## WITHOUT {#without}
+# WITHOUT
 
 Excluding columns from the result of `SELECT *`.
 

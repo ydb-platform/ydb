@@ -1,0 +1,1 @@
+{% include [x](../_includes/select/from_as_table.md) %}

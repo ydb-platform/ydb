@@ -436,8 +436,11 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     TMap<TTxId, TBackupRestoreResult> BackupHistory;
     TMap<TTxId, TBackupRestoreResult> RestoreHistory;
 
-    TString PreSerializedPathDescription;
-    TString PreSerializedPathDescriptionWithoutRangeKey;
+    // Preserialized TDescribeSchemeResult with PathDescription.TablePartitions field filled
+    TString PreserializedTablePartitions;
+    TString PreserializedTablePartitionsNoKeys;
+    // Preserialized TDescribeSchemeResult with PathDescription.Table.SplitBoundary field filled
+    TString PreserializedTableSplitBoundaries;
 
     THashMap<TShardIdx, NKikimrSchemeOp::TPartitionConfig> PerShardPartitionConfig;
 

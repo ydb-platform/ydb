@@ -8,6 +8,11 @@ namespace NKikimr {
 
 namespace NKikimr::NBackup::NImpl {
 
-IActor* CreateLocalTableWriter(const TPathId& tablePathId);
+enum class EWriterType {
+    Backup,
+    Restore,
+};
+
+IActor* CreateLocalTableWriter(const TPathId& tablePathId, EWriterType type = EWriterType::Backup);
 
 }

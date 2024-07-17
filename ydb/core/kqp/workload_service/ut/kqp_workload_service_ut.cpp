@@ -444,19 +444,16 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
             DROP RESOURCE POOL )" << poolId << ";"
         );
 
-        TInstant start = TInstant::Now();
-        while (TInstant::Now() - start <= FUTURE_WAIT_TIMEOUT) {
-            if (ydb->Navigate(TStringBuilder() << ".resource_pools/" << poolId)->ResultSet.at(0).Kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown) {
-                auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings);
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::NOT_FOUND, result.GetIssues().ToString());
-                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "Resource pool " << poolId << " not found");
-                return;
-            }
+        IYdbSetup::WaitFor(FUTURE_WAIT_TIMEOUT, "pool drop", [ydb, poolId](TString& errorString) {
+            auto kind = ydb->Navigate(TStringBuilder() << ".resource_pools/" << poolId)->ResultSet.at(0).Kind;
 
-            Cerr << "WaitPoolDrop " << TInstant::Now() - start << "\n";
-            Sleep(TDuration::Seconds(1));
-        }
-        UNIT_ASSERT_C(false, "Pool drop waiting timeout");
+            errorString = TStringBuilder() << "kind = " << kind;
+            return kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown;
+        });
+
+        auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::NOT_FOUND, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "Resource pool " << poolId << " not found");
     }
 
     Y_UNIT_TEST(TestResourcePoolAcl) {

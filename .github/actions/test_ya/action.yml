@@ -264,7 +264,7 @@ runs:
         ./ya --version
         
         echo "Build+Tests **{platform_name}-${BUILD_PRESET}** is running..." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
-        set +e
+        set +ex
         (./ya make ${{ inputs.build_target }} "${params[@]}" \
           --stat --log-file "$YA_TEST_LOG" -DCONSISTENT_DEBUG \
           --no-dir-outputs --test-failure-code 0 --build-all \

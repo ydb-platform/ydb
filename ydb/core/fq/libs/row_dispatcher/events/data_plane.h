@@ -5,6 +5,7 @@
 #include <ydb/core/fq/libs/events/event_subspace.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/protos/events.pb.h>
+#include <ydb/core/fq/libs/row_dispatcher/consumer.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 
 namespace NFq {
@@ -16,8 +17,9 @@ struct TEvRowDispatcher {
     enum EEv : ui32 {
         EvCreateSemaphoreResult = YqEventSubspaceBegin(TYqEventSubspace::RowDispatcher),
         EvCoordinatorChanged,
-        EvStartSession,
+        EvAddConsumer,
         EvAck,
+        EvNewDataArrived,
         EvGetNextBatch,
         EvMessageBatch,
         EvStopSession,
@@ -64,14 +66,13 @@ struct TEvRowDispatcher {
         TEvCoordinatorResult() = default;
     };
 
-
     //  Read actor <-> row_dispatcher : 
 
-    struct TEvStartSession : public NActors::TEventPB<TEvStartSession,
-        NFq::NRowDispatcherProto::TEvStartSession, EEv::EvStartSession> {
+    struct TEvAddConsumer : public NActors::TEventPB<TEvAddConsumer,
+        NFq::NRowDispatcherProto::TEvAddConsumer, EEv::EvAddConsumer> {
             
-        TEvStartSession() = default;
-        TEvStartSession(
+        TEvAddConsumer() = default;
+        TEvAddConsumer(
             const NYql::NPq::NProto::TDqPqTopicSource& sourceParams,
             ui64 partitionId,
             const TString token,
@@ -97,10 +98,16 @@ struct TEvRowDispatcher {
         }
     };
 
+    struct TEvNewDataArrived : public NActors::TEventPB<TEvNewDataArrived,
+        NFq::NRowDispatcherProto::TEvNewDataArrived, EEv::EvNewDataArrived> {
+        TEvNewDataArrived() = default;
+    };
+
     struct TEvGetNextBatch : public NActors::TEventPB<TEvGetNextBatch,
         NFq::NRowDispatcherProto::TEvGetNextBatch, EEv::EvGetNextBatch> {
         TEvGetNextBatch() = default;
     };
+
 
     struct TEvStopSession : public NActors::TEventPB<TEvStopSession,
         NFq::NRowDispatcherProto::TEvStopSession, EEv::EvStopSession> {
@@ -120,10 +127,10 @@ struct TEvRowDispatcher {
 
     //  Row_dispatcher  <->  session: 
     struct TEvSessionAddConsumer : public NActors::TEventLocal<TEvSessionAddConsumer, EEv::EvSessionAddConsumer> {
-        NActors::TActorId ConsumerActorId;
-        TMaybe<ui64> Offset;
-        ui64 StartingMessageTimestampMs;
-        NYql::NPq::NProto::TDqPqTopicSource SourceParams;
+        TEvSessionAddConsumer(THolder<NFq::Consumer>&& consumer) 
+            : Consumer(consumer.Release()) // TODO 
+            {}
+        THolder<NFq::Consumer> Consumer;
     };
 
     struct TEvSessionDeleteConsumer : public NActors::TEventLocal<TEvSessionDeleteConsumer, EEv::EvSessionDeleteConsumer> {

@@ -119,11 +119,9 @@ private:
 
 
     struct SessionInfo {
-
         enum class ESessionStatus {
             NoSession,
             Started,
-
         };
         SessionInfo(
             const TTxId& txId,
@@ -136,9 +134,10 @@ private:
 
         ESessionStatus Status = ESessionStatus::NoSession;
         ui64 LastOffset = 0;
-
+        bool IsWaitingRowDispatcherResponse = false;
         TVector<TString> Data;
         NYql::NDq::TRetryEventsQueue EventsQueue;
+        bool NewDataArrived = false;
     //private:
         TActorId RowDispatcherActorId;
     };
@@ -162,24 +161,24 @@ public:
 
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr &ev);
-
+    void Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev);
+    void Handle(NFq::TEvRowDispatcher::TEvAck::TPtr &ev);
+    void Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev);
     void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev);
     void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev);
     void Handle(NActors::TEvents::TEvUndelivered::TPtr &ev);
-    void Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev);
-    void Handle(NFq::TEvRowDispatcher::TEvAck::TPtr &ev);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&);
 
     STRICT_STFUNC(
         StateFunc, {
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorResult, Handle);
-        
+        hFunc(NFq::TEvRowDispatcher::TEvNewDataArrived, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvMessageBatch, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvAck, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
         hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
-        hFunc(NFq::TEvRowDispatcher::TEvMessageBatch, Handle);
-        hFunc(NFq::TEvRowDispatcher::TEvAck, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
 
         // hFunc(NActors::TEvents::TEvWakeup, Handle)
@@ -260,7 +259,7 @@ void TDqPqRdReadActor::ProcessState() {
 
             SRC_LOG_D("readOffset " << readOffset << " partitionId " << partitionId );
 
-            auto event = new NFq::TEvRowDispatcher::TEvStartSession(
+            auto event = new NFq::TEvRowDispatcher::TEvAddConsumer(
                 SourceParams,
                 partitionId,
                 Token,
@@ -268,6 +267,8 @@ void TDqPqRdReadActor::ProcessState() {
                 readOffset,
                 StartingMessageTimestamp.MilliSeconds());
             sessionInfo.EventsQueue.Send(event);
+            sessionInfo.EventsQueue.Send(new NFq::TEvRowDispatcher::TEvGetNextBatch());
+            sessionInfo.IsWaitingRowDispatcherResponse = true;
             sessionInfo.Status = SessionInfo::ESessionStatus::Started;
         }
     }
@@ -456,10 +457,18 @@ std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvAck::TPtr &/*ev*/) {
-    SRC_LOG_D("TEvAck = ");
+    SRC_LOG_D("TEvAck");
 
     //  TODO 
     // FileQueueEvents.OnEventReceived(ev);
+}
+
+void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev) {
+    SRC_LOG_D("TEvNewDataArrived");
+    ui64 partitionId = ev->Get()->Record.GetPartitionId();
+    auto sessionIt = Sessions.find(partitionId);
+    YQL_ENSURE(sessionIt != Sessions.end(), "Unknown partition id");
+    sessionIt->second.NewDataArrived = true;
 }
 
 void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {

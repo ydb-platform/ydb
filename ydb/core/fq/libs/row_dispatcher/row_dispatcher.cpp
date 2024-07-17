@@ -14,6 +14,7 @@
 
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/topic_session.h>
+#include <ydb/core/fq/libs/row_dispatcher/consumer.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
@@ -76,8 +77,9 @@ public:
     void Handle(NActors::TEvents::TEvWakeup::TPtr &ev);
     void Handle(NActors::TEvents::TEvPong::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvRowDispatcherRequest::TPtr &ev);
-    void Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev);
+    void Handle(NFq::TEvRowDispatcher::TEvAddConsumer::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev);
+    void Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr &ev);
 
     STRICT_STFUNC(
         StateFunc, {
@@ -88,8 +90,9 @@ public:
         hFunc(NActors::TEvents::TEvWakeup, Handle)
         hFunc(NActors::TEvents::TEvPong, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvRowDispatcherRequest, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvGetNextBatch, Handle);
 
-        hFunc(NFq::TEvRowDispatcher::TEvStartSession, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvAddConsumer, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStopSession, Handle);
     })
 
@@ -174,8 +177,8 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvRowDispatcherRequest::TPtr
     CoordinatorChangedSubscribers.insert(ev->Sender);
 }
 
-void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvStartSession, topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
+void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvAddConsumer::TPtr &ev) {
+    LOG_ROW_DISPATCHER_DEBUG("TEvAddConsumer, topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
         " partitionId " << ev->Get()->Record.GetPartitionId());
 
     TMaybe<ui64> readOffset;
@@ -207,15 +210,22 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
     }
 
     //auto sessionActorId = Sessions[key];
+    auto consumer = MakeHolder<NFq::Consumer>(sessionActorId, ev->Get()->Record);
 
-    sessions[sessionActorId].Consumers.insert(ev->Sender);
-    auto event = std::make_unique<TEvRowDispatcher::TEvSessionAddConsumer>();
-    event->ConsumerActorId = ev->Sender;
-    event->Offset = readOffset;
-    event->StartingMessageTimestampMs = ev->Get()->Record.GetStartingMessageTimestampMs(); 
-    event->SourceParams = ev->Get()->Record.GetSource();
-    Send(sessionActorId, event.release());
+    //sessions[sessionActorId].Consumers.insert(ev->Sender);
+    //auto event = std::make_unique<TEvRowDispatcher::TEvSessionAddConsumer>();
+    // event->ConsumerActorId = ev->Sender;
+    // event->Offset = readOffset;
+    // event->StartingMessageTimestampMs = ev->Get()->Record.GetStartingMessageTimestampMs(); 
+    // event->SourceParams = ev->Get()->Record.GetSource();
+    Send(sessionActorId, new TEvRowDispatcher::TEvSessionAddConsumer(std::move(consumer)));
 }
+
+void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr &/*ev*/) {
+    LOG_ROW_DISPATCHER_DEBUG("TEvGetNextBatch ");
+
+}
+
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvStopSession, topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<

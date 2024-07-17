@@ -97,13 +97,10 @@ private:
    // NKikimr::NMiniKQL::TScopedAlloc Alloc; // TODO ?
 
     struct ConsumersInfo {
-        
-        TMaybe<ui64> Offset;
-        TInstant StartingMessageTimestamp;
+        THolder<NFq::Consumer> Consumer; 
+       
         ui64 LastSendedMessage = 0;
-
         std::unique_ptr<TJsonFilter> Filter;
-        std::queue<TString> Buffer;
     };
     TMap<NActors::TActorId, ConsumersInfo> Consumers;
     std::unique_ptr<TJsonParser> Parser;
@@ -371,8 +368,8 @@ std::optional<NYql::TIssues> TTopicSession::ProcessStartPartitionSessionEvent(NY
     TMaybe<ui64> minOffset;
     for (const auto& [actorId, info] : Consumers) {
         if (!minOffset
-            || (info.Offset && (*info.Offset < *minOffset))) {
-                minOffset = info.Offset;
+            || (info.Consumer->Offset && (*info.Consumer->Offset < *minOffset))) {
+                minOffset = info.Consumer->Offset;
             } 
     }
     LOG_ROW_DISPATCHER_DEBUG("minOffset " << minOffset);
@@ -492,8 +489,8 @@ void TTopicSession::SendData() {
     LOG_ROW_DISPATCHER_DEBUG("SendData");
     
     for (auto& [actorId, info] : Consumers) {
-        while (!info.Buffer.empty()) {
-            const TString json = info.Buffer.front();
+        while (!info.Consumer->Buffer.empty()) {
+            const TString json = info.Consumer->Buffer.front();
             NFq::NRowDispatcherProto::TEvMessage message;
             message.SetJson(json);
             message.SetOffset(CurrentOffset);
@@ -505,7 +502,7 @@ void TTopicSession::SendData() {
             LOG_ROW_DISPATCHER_DEBUG("SendData to " << actorId);
             Send(actorId, event.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
 
-            info.Buffer.pop();
+            info.Consumer->Buffer.pop();
         }
     }
 }
@@ -524,25 +521,23 @@ void TTopicSession::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
 }
 
 void TTopicSession::Handle(TEvRowDispatcher::TEvSessionAddConsumer::TPtr& ev) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvSessionAddConsumer: " << ev->Get()->ConsumerActorId);
-    LOG_ROW_DISPATCHER_DEBUG("TEvSessionAddConsumer: offset " << ev->Get()->Offset);
-    LOG_ROW_DISPATCHER_DEBUG("TEvSessionAddConsumer: StartingMessageTimestampMs " << ev->Get()->StartingMessageTimestampMs);
-    auto& newConsumer = Consumers[ev->Get()->ConsumerActorId]; // TODO : mv to try
-    newConsumer.Offset = ev->Get()->Offset;
-    newConsumer.StartingMessageTimestamp = TInstant::MilliSeconds(ev->Get()->StartingMessageTimestampMs);
+    LOG_ROW_DISPATCHER_DEBUG("TEvSessionAddConsumer");
+    //THolder<NFq::Consumer>& consumer = ev->Get()->Consumer;
 
+    auto& consumer = Consumers[ev->Get()->Consumer->ConsumerActorId]; // TODO : mv to try
+    consumer.Consumer = std::move(ev->Get()->Consumer);
     TString predicate;
     try {
-        predicate = FormatWhere(ev->Get()->SourceParams.GetPredicate());
+        predicate = FormatWhere(consumer.Consumer->SourceParams.GetPredicate());
         LOG_ROW_DISPATCHER_DEBUG("predicate " << predicate);
 
-        newConsumer.Filter = NewJsonFilter(
-            GetVector(ev->Get()->SourceParams.GetColumns()),
-            GetVector(ev->Get()->SourceParams.GetColumnTypes()),
+        consumer.Filter = NewJsonFilter(
+            GetVector(consumer.Consumer->SourceParams.GetColumns()),
+            GetVector(consumer.Consumer->SourceParams.GetColumnTypes()),
             predicate,
-            [&, actorId = ev->Get()->ConsumerActorId](const TString& json){
+            [&, actorId = consumer.Consumer->ConsumerActorId](const TString& json){
                 auto& consumer = Consumers[actorId];
-                consumer.Buffer.push(json);
+                consumer.Consumer->Buffer.push(json);
                 LOG_ROW_DISPATCHER_DEBUG("JsonFilter data: " << json);
                 SendData();
             });

@@ -3,7 +3,7 @@
  * pg_trigger_d.h
  *    Macro definitions for pg_trigger
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -19,6 +19,9 @@
 #define PG_TRIGGER_D_H
 
 #define TriggerRelationId 2620
+#define TriggerConstraintIndexId 2699
+#define TriggerRelidNameIndexId 2701
+#define TriggerOidIndexId 2702
 
 #define Anum_pg_trigger_oid 1
 #define Anum_pg_trigger_tgrelid 2

@@ -3,7 +3,7 @@
  * indexam.c
  *	  general index access method routines
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -251,6 +251,8 @@ index_beginscan(Relation heapRelation,
 {
 	IndexScanDesc scan;
 
+	Assert(snapshot != InvalidSnapshot);
+
 	scan = index_beginscan_internal(indexRelation, nkeys, norderbys, snapshot, NULL, false);
 
 	/*
@@ -278,6 +280,8 @@ index_beginscan_bitmap(Relation indexRelation,
 					   int nkeys)
 {
 	IndexScanDesc scan;
+
+	Assert(snapshot != InvalidSnapshot);
 
 	scan = index_beginscan_internal(indexRelation, nkeys, 0, snapshot, NULL, false);
 
@@ -445,6 +449,8 @@ index_parallelscan_estimate(Relation indexRelation, Snapshot snapshot)
 {
 	Size		nbytes;
 
+	Assert(snapshot != InvalidSnapshot);
+
 	RELATION_CHECKS;
 
 	nbytes = offsetof(ParallelIndexScanDescData, ps_snapshot_data);
@@ -478,6 +484,8 @@ index_parallelscan_initialize(Relation heapRelation, Relation indexRelation,
 							  Snapshot snapshot, ParallelIndexScanDesc target)
 {
 	Size		offset;
+
+	Assert(snapshot != InvalidSnapshot);
 
 	RELATION_CHECKS;
 
@@ -995,7 +1003,6 @@ index_opclass_options(Relation indrel, AttrNumber attnum, Datum attoptions,
 		Oid			opclass;
 		Datum		indclassDatum;
 		oidvector  *indclass;
-		bool		isnull;
 
 		if (!DatumGetPointer(attoptions))
 			return NULL;		/* ok, no options, no procedure */
@@ -1004,9 +1011,8 @@ index_opclass_options(Relation indrel, AttrNumber attnum, Datum attoptions,
 		 * Report an error if the opclass's options-parsing procedure does not
 		 * exist but the opclass options are specified.
 		 */
-		indclassDatum = SysCacheGetAttr(INDEXRELID, indrel->rd_indextuple,
-										Anum_pg_index_indclass, &isnull);
-		Assert(!isnull);
+		indclassDatum = SysCacheGetAttrNotNull(INDEXRELID, indrel->rd_indextuple,
+											   Anum_pg_index_indclass);
 		indclass = (oidvector *) DatumGetPointer(indclassDatum);
 		opclass = indclass->values[attnum - 1];
 

@@ -233,7 +233,6 @@ public:
         , HttpGateway(std::move(httpGateway))
     {
         Config->EnableKqpScanQueryStreamLookup = true;
-        Config->PredicateExtract20 = true;
         Config->EnablePreparedDdl = true;
     }
 

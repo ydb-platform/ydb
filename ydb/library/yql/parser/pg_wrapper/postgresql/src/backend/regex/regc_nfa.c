@@ -143,11 +143,7 @@ newstate(struct nfa *nfa)
 	 * compilation, since no code path will go very long without making a new
 	 * state or arc.
 	 */
-	if (CANCEL_REQUESTED(nfa->v->re))
-	{
-		NERR(REG_CANCEL);
-		return NULL;
-	}
+	INTERRUPT(nfa->v->re);
 
 	/* first, recycle anything that's on the freelist */
 	if (nfa->freestates != NULL)
@@ -297,11 +293,7 @@ newarc(struct nfa *nfa,
 	 * compilation, since no code path will go very long without making a new
 	 * state or arc.
 	 */
-	if (CANCEL_REQUESTED(nfa->v->re))
-	{
-		NERR(REG_CANCEL);
-		return;
-	}
+	INTERRUPT(nfa->v->re);
 
 	/* check for duplicate arc, using whichever chain is shorter */
 	if (from->nouts <= to->nins)
@@ -810,11 +802,7 @@ moveins(struct nfa *nfa,
 		 * Because we bypass newarc() in this code path, we'd better include a
 		 * cancel check.
 		 */
-		if (CANCEL_REQUESTED(nfa->v->re))
-		{
-			NERR(REG_CANCEL);
-			return;
-		}
+		INTERRUPT(nfa->v->re);
 
 		sortins(nfa, oldState);
 		sortins(nfa, newState);
@@ -899,11 +887,7 @@ copyins(struct nfa *nfa,
 		 * Because we bypass newarc() in this code path, we'd better include a
 		 * cancel check.
 		 */
-		if (CANCEL_REQUESTED(nfa->v->re))
-		{
-			NERR(REG_CANCEL);
-			return;
-		}
+		INTERRUPT(nfa->v->re);
 
 		sortins(nfa, oldState);
 		sortins(nfa, newState);
@@ -969,11 +953,7 @@ mergeins(struct nfa *nfa,
 	 * Because we bypass newarc() in this code path, we'd better include a
 	 * cancel check.
 	 */
-	if (CANCEL_REQUESTED(nfa->v->re))
-	{
-		NERR(REG_CANCEL);
-		return;
-	}
+	INTERRUPT(nfa->v->re);
 
 	/* Sort existing inarcs as well as proposed new ones */
 	sortins(nfa, s);
@@ -1083,11 +1063,7 @@ moveouts(struct nfa *nfa,
 		 * Because we bypass newarc() in this code path, we'd better include a
 		 * cancel check.
 		 */
-		if (CANCEL_REQUESTED(nfa->v->re))
-		{
-			NERR(REG_CANCEL);
-			return;
-		}
+		INTERRUPT(nfa->v->re);
 
 		sortouts(nfa, oldState);
 		sortouts(nfa, newState);
@@ -1172,11 +1148,7 @@ copyouts(struct nfa *nfa,
 		 * Because we bypass newarc() in this code path, we'd better include a
 		 * cancel check.
 		 */
-		if (CANCEL_REQUESTED(nfa->v->re))
-		{
-			NERR(REG_CANCEL);
-			return;
-		}
+		INTERRUPT(nfa->v->re);
 
 		sortouts(nfa, oldState);
 		sortouts(nfa, newState);
@@ -3225,11 +3197,7 @@ checkmatchall_recurse(struct nfa *nfa, struct state *s, bool **haspaths)
 		return false;
 
 	/* In case the search takes a long time, check for cancel */
-	if (CANCEL_REQUESTED(nfa->v->re))
-	{
-		NERR(REG_CANCEL);
-		return false;
-	}
+	INTERRUPT(nfa->v->re);
 
 	/* Create a haspath array for this state */
 	haspath = (bool *) MALLOC((DUPINF + 2) * sizeof(bool));

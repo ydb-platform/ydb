@@ -72,6 +72,9 @@ LLVM_BC(
     arrow_has_language_privilege_name
     arrow_has_language_privilege_name_id
     arrow_has_language_privilege_name_name
+    arrow_has_parameter_privilege_id_name
+    arrow_has_parameter_privilege_name
+    arrow_has_parameter_privilege_name_name
     arrow_has_schema_privilege_id
     arrow_has_schema_privilege_id_id
     arrow_has_schema_privilege_id_name
@@ -171,6 +174,7 @@ LLVM_BC(
     arrow_int8inc
     arrow_int8inc_any
     arrow_int8inc_float8_float8
+    arrow_int8inc_support
     arrow_int8larger
     arrow_int8lcm
     arrow_int8le

@@ -3,7 +3,7 @@
  * pg_index_d.h
  *    Macro definitions for pg_index
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -19,29 +19,32 @@
 #define PG_INDEX_D_H
 
 #define IndexRelationId 2610
+#define IndexIndrelidIndexId 2678
+#define IndexRelidIndexId 2679
 
 #define Anum_pg_index_indexrelid 1
 #define Anum_pg_index_indrelid 2
 #define Anum_pg_index_indnatts 3
 #define Anum_pg_index_indnkeyatts 4
 #define Anum_pg_index_indisunique 5
-#define Anum_pg_index_indisprimary 6
-#define Anum_pg_index_indisexclusion 7
-#define Anum_pg_index_indimmediate 8
-#define Anum_pg_index_indisclustered 9
-#define Anum_pg_index_indisvalid 10
-#define Anum_pg_index_indcheckxmin 11
-#define Anum_pg_index_indisready 12
-#define Anum_pg_index_indislive 13
-#define Anum_pg_index_indisreplident 14
-#define Anum_pg_index_indkey 15
-#define Anum_pg_index_indcollation 16
-#define Anum_pg_index_indclass 17
-#define Anum_pg_index_indoption 18
-#define Anum_pg_index_indexprs 19
-#define Anum_pg_index_indpred 20
+#define Anum_pg_index_indnullsnotdistinct 6
+#define Anum_pg_index_indisprimary 7
+#define Anum_pg_index_indisexclusion 8
+#define Anum_pg_index_indimmediate 9
+#define Anum_pg_index_indisclustered 10
+#define Anum_pg_index_indisvalid 11
+#define Anum_pg_index_indcheckxmin 12
+#define Anum_pg_index_indisready 13
+#define Anum_pg_index_indislive 14
+#define Anum_pg_index_indisreplident 15
+#define Anum_pg_index_indkey 16
+#define Anum_pg_index_indcollation 17
+#define Anum_pg_index_indclass 18
+#define Anum_pg_index_indoption 19
+#define Anum_pg_index_indexprs 20
+#define Anum_pg_index_indpred 21
 
-#define Natts_pg_index 20
+#define Natts_pg_index 21
 
 
 /*

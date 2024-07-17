@@ -85,6 +85,10 @@ public:
         return Registrations;
     }
 
+    const THashSet<TString>& GetSourceIdsToDelete() const {
+        return Deregistrations;
+    }
+
     template <typename... Args>
     void RegisterSourceId(const TString& sourceId, Args&&... args) {
         Registrations[sourceId] = TSourceIdInfo(std::forward<Args>(args)...);

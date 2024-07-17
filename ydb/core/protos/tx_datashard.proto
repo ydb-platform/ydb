@@ -1829,6 +1829,7 @@ message TEvApplyReplicationChangesResult {
         REASON_SCHEME_ERROR = 2;
         REASON_BAD_REQUEST = 3;
         REASON_UNEXPECTED_ROW_OPERATION = 4;
+        REASON_OUTDATED_SCHEME = 6;
     }
 
     optional EStatus Status = 1;

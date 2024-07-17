@@ -1,15 +1,11 @@
 #pragma once
+
 #include "defs.h"
-#include <algorithm>
-#include "hullds_ut.h"
-#include "hullds_generic_it.h"
-#include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sstslice_it.h>
-#include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idxsnap_it.h>
-#include <ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_segment_impl.h>
-#include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idxsnap_it.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_segment.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_appendix.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sst_it.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sstvec_it.h>
+#include <algorithm>
 
 namespace NKikimr {
 
@@ -79,6 +75,13 @@ namespace NKikimr {
         }
 
     public:
+        template <typename TIter>
+        THeapIterator(TIter* iter) {
+            iter->PutToHeap(*this);
+        }
+
+        THeapIterator() = default;
+
         bool Valid() const {
             return HeapItems;
         }
@@ -146,19 +149,19 @@ namespace NKikimr {
             }
         }
 
-        template<typename TMerger>
-        void Walk(TKey key, TMerger merger, std::function<bool(const TKey&, TMerger)> callback) {
-            for (int idx = 0; idx < HeapItems; idx++) {
-                auto *iter = Heap[idx];
-                iter->Seek(key);
-                while (iter->Valid()) {
-                    iter->PutToMerger(&merger);
-                    if (!callback(iter->GetCurKey(), merger)) {
-                        break;
-                    }
-                    merger.Clear();
-                    Move(nullptr);
+        template<typename TMerger, typename TCallback>
+        void Walk(std::optional<TKey> key, TMerger merger, TCallback&& callback) {
+            if (key.has_value()) {
+                Seek(key.value());
+            }
+            while (Valid()) {
+                const TKey key = GetCurKey();
+                PutToMergerAndAdvance(merger);
+                merger->Finish();
+                if (!callback(key, merger)) {
+                    break;
                 }
+                merger->Clear();
             }
         }
 

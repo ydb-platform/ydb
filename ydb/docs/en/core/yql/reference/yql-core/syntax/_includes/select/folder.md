@@ -1,6 +1,6 @@
 ## Listing the contents of a directory in a cluster {#folder}
 
-It's expressed as the `FOLDER` function in [FROM](#from).
+It's expressed as the `FOLDER` function in [FROM](../../select/from.md).
 
 Arguments:
 

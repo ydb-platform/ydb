@@ -60,14 +60,21 @@ public:
         return this;
     }
 
-
 protected:
 
-    void FailOnError() {
-        if (Error_) {
-            LOG_E("Error: " << *Error_);
-            Send(SpillingActorId_, new TEvents::TEvPoison);
-        }
+    void FailWithError(const TString& error) {
+        LOG_E("Error: " << error);
+        SendInternal(SpillingActorId_, new TEvents::TEvPoison);
+        PassAway();
+
+        // Currently there is no better way to handle the error.
+        // Since the message was not sent from the actor system, there is no one to send the error message to.
+        Y_ABORT("Error: %s", error.c_str());
+    }
+
+    void SendInternal(const TActorId& recipient, IEventBase* ev, TEventFlags flags = IEventHandle::FlagTrackDelivery) {
+        bool isSent = Send(recipient, ev, flags);
+        Y_ABORT_UNLESS(isSent, "Event was not sent");
     }
 
 private:
@@ -88,7 +95,7 @@ private:
     }
 
     void HandleWork(TEvents::TEvPoison::TPtr&) {
-        Send(SpillingActorId_, new TEvents::TEvPoison);
+        SendInternal(SpillingActorId_, new TEvents::TEvPoison);
         PassAway();
     }
 
@@ -96,7 +103,7 @@ private:
         auto& msg = *ev->Get();
         ui64 size = msg.Blob_.size();
 
-        Send(SpillingActorId_, new TEvDqSpilling::TEvWrite(NextBlobId, std::move(msg.Blob_)));
+        SendInternal(SpillingActorId_, new TEvDqSpilling::TEvWrite(NextBlobId, std::move(msg.Blob_)));
 
         WritingBlobs_.emplace(NextBlobId, std::make_pair(size, std::move(msg.Promise_)));
         WritingBlobsSize_ += size;
@@ -117,7 +124,7 @@ private:
         TLoadingBlobInfo loadingBlobInfo = std::make_pair(removeBlobAfterRead, std::move(msg.Promise_));
         LoadingBlobs_.emplace(msg.Key_, std::move(loadingBlobInfo));
 
-        Send(SpillingActorId_, new TEvDqSpilling::TEvRead(msg.Key_, removeBlobAfterRead));
+        SendInternal(SpillingActorId_, new TEvDqSpilling::TEvRead(msg.Key_, removeBlobAfterRead));
     }
 
     void HandleWork(TEvDelete::TPtr& ev) {
@@ -130,7 +137,7 @@ private:
 
         DeletingBlobs_.emplace(msg.Key_, std::move(msg.Promise_));
 
-        Send(SpillingActorId_, new TEvDqSpilling::TEvRead(msg.Key_, true));
+        SendInternal(SpillingActorId_, new TEvDqSpilling::TEvRead(msg.Key_, true));
     }
 
     void HandleWork(TEvDqSpilling::TEvWriteResult::TPtr& ev) {
@@ -140,11 +147,7 @@ private:
 
         auto it = WritingBlobs_.find(msg.BlobId);
         if (it == WritingBlobs_.end()) {
-            LOG_E("Got unexpected TEvWriteResult, blobId: " << msg.BlobId);
-
-            Error_ = "Internal error";
-
-            Send(SpillingActorId_, new TEvents::TEvPoison);
+            FailWithError(TStringBuilder() << "[TEvWriteResult] Got unexpected TEvWriteResult, blobId: " << msg.BlobId);
             return;
         }
 
@@ -177,11 +180,7 @@ private:
 
         auto it = LoadingBlobs_.find(msg.BlobId);
         if (it == LoadingBlobs_.end()) {
-            LOG_E("Got unexpected TEvReadResult, blobId: " << msg.BlobId);
-
-            Error_ = "Internal error";
-
-            Send(SpillingActorId_, new TEvents::TEvPoison);
+            FailWithError(TStringBuilder() << "[TEvReadResult] Got unexpected TEvReadResult, blobId: " << msg.BlobId);
             return;
         }
 
@@ -202,9 +201,7 @@ private:
 
     void HandleWork(TEvDqSpilling::TEvError::TPtr& ev) {
         auto& msg = *ev->Get();
-        LOG_D("[TEvError] " << msg.Message);
-
-        Error_.ConstructInPlace(msg.Message);
+        FailWithError(TStringBuilder() << "[TEvError] " << msg.Message);
     }
 
     bool HandleDelete(TKey blobId, ui64 size) {
@@ -241,8 +238,6 @@ private:
 
     TMap<TKey, TDeletingBlobInfo> DeletingBlobs_;
 
-    TMaybe<TString> Error_;
-
     TKey NextBlobId = 0;
 
     TString SpillerName_;
@@ -252,7 +247,6 @@ private:
     std::function<void()> WakeupCallback_;
 
     TSet<TKey> StoredBlobs_;
-
 };
 
 } // anonymous namespace

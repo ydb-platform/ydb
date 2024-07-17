@@ -8,9 +8,7 @@
 
 namespace NKikimr {
 
-class TBlobStorageGroupMirror3of4DiscoverRequest
-    : public TBlobStorageGroupRequestActor<TBlobStorageGroupMirror3of4DiscoverRequest>
-{
+class TBlobStorageGroupMirror3of4DiscoverRequest : public TBlobStorageGroupRequestActor {
     const ui64 TabletId;
     const ui32 MinGeneration;
     const TInstant StartTime;
@@ -21,11 +19,11 @@ class TBlobStorageGroupMirror3of4DiscoverRequest
     const bool FromLeader;
 
 public:
-    static const auto& ActiveCounter(const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon) {
-        return mon->ActiveDiscover;
+    ::NMonitoring::TDynamicCounters::TCounterPtr& GetActiveCounter() const override {
+        return Mon->ActiveDiscover;
     }
 
-    static constexpr ERequestType RequestType() {
+    ERequestType GetRequestType() const override {
         return ERequestType::Discover;
     }
 
@@ -36,8 +34,8 @@ public:
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
         : TBlobStorageGroupRequestActor(std::move(info), std::move(state), std::move(mon), source, cookie,
                 NKikimrServices::BS_PROXY_DISCOVER, false, {}, now, storagePoolCounters, ev->RestartCounter,
-                NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.Discover(mirror-3of4)"),
-                std::move(ev->ExecutionRelay))
+                std::move(traceId), "DSProxy.Discover", ev, std::move(ev->ExecutionRelay),
+                NKikimrServices::TActivity::BS_GROUP_DISCOVER)
         , TabletId(ev->TabletId)
         , MinGeneration(ev->MinGeneration)
         , StartTime(now)
@@ -54,7 +52,7 @@ public:
         }
     }
 
-    std::unique_ptr<IEventBase> RestartQuery(ui32 counter) {
+    std::unique_ptr<IEventBase> RestartQuery(ui32 counter) override {
         ++*Mon->NodeMon->RestartDiscover;
         auto ev = std::make_unique<TEvBlobStorage::TEvDiscover>(TabletId, MinGeneration, ReadBody,
             DiscoverBlockedGeneration, Deadline, ForceBlockedGeneration, FromLeader);
@@ -62,7 +60,7 @@ public:
         return ev;
     }
 
-    void Bootstrap() {
+    void Bootstrap() override {
         A_LOG_INFO_S("DSPDX01", "bootstrap"
             << " TabletId# " << TabletId
             << " MinGeneration# " << MinGeneration
@@ -73,7 +71,7 @@ public:
             << " FromLeader# " << (FromLeader ? "true" : "false")
             << " RestartCounter# " << RestartCounter);
 
-        Become(&TThis::StateFunc);
+        Become(&TBlobStorageGroupMirror3of4DiscoverRequest::StateFunc);
 
         if (Deadline != TInstant::Max()) {
             Schedule(Deadline - TActivationContext::Now(), new TEvents::TEvWakeup);
@@ -87,10 +85,7 @@ public:
         ReplyAndDie(NKikimrProto::DEADLINE);
     }
 
-    void ReplyAndDie(NKikimrProto::EReplyStatus status, std::optional<TString> errorReason = std::nullopt) {
-        if (errorReason) {
-            ErrorReason = std::move(*errorReason);
-        }
+    void ReplyAndDie(NKikimrProto::EReplyStatus status) override {
         Y_ABORT_UNLESS(status != NKikimrProto::OK);
         auto formatFailedGroupDisks = [&] {
             TStringBuilder s;
@@ -112,6 +107,13 @@ public:
             0U));
         response->ErrorReason = ErrorReason;
         SendResponseAndDie(std::move(response));
+    }
+
+    void ReplyAndDie(NKikimrProto::EReplyStatus status, std::optional<TString> errorReason) {
+        if (errorReason) {
+            ErrorReason = std::move(*errorReason);
+        }
+        ReplyAndDie(status);
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -163,7 +165,7 @@ public:
     }
 
     void Handle(TEvBlobStorage::TEvVGetResult::TPtr ev) {
-        ProcessReplyFromQueue(ev);
+        ProcessReplyFromQueue(ev->Get());
         auto& record = ev->Get()->Record;
         if (!record.HasStatus() || !record.HasVDiskID()) {
             return ReplyAndDie(NKikimrProto::ERROR, "incorrect TEvVGetResult from VDisk");

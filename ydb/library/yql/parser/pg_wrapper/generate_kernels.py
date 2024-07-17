@@ -130,6 +130,27 @@ def main():
                 elif srcline.startswith("PSEUDOTYPE_DUMMY_RECEIVE_FUNC(") and "\\" not in srcline:
                     pos=srcline.find(")")
                     names=[srcline[30:pos]+"_recv"]
+                elif srcline.startswith("PG_STAT_GET_DBENTRY_FLOAT8_MS("):
+                    pos=srcline.find(")")
+                    names=["pg_stat_get_db_" + srcline[30:pos]]
+                elif srcline.startswith("PG_STAT_GET_DBENTRY_INT64("):
+                    pos=srcline.find(")")
+                    names=["pg_stat_get_db_" + srcline[26:pos]]
+                elif srcline.startswith("PG_STAT_GET_RELENTRY_INT64("):
+                    pos=srcline.find(")")
+                    names=["pg_stat_get_" + srcline[27:pos]]
+                elif srcline.startswith("PG_STAT_GET_RELENTRY_TIMESTAMPTZ("):
+                    pos=srcline.find(")")
+                    names=["pg_stat_get_" + srcline[33:pos]]
+                elif srcline.startswith("PG_STAT_GET_XACT_RELENTRY_INT64("):
+                    pos=srcline.find(")")
+                    names=["pg_stat_get_xact_" + srcline[32:pos]]
+                elif srcline.startswith("PG_STAT_GET_FUNCENTRY_FLOAT8_MS("):
+                    pos=srcline.find(")")
+                    names=["pg_stat_get_function_" + srcline[32:pos]]
+                elif srcline.startswith("PG_STAT_GET_XACT_FUNCENTRY_FLOAT8_MS("):
+                    pos=srcline.find(")")
+                    names=["pg_stat_get_xact_function_" + srcline[37:pos]]
                 else:
                     continue
                 for name in names:
@@ -349,6 +370,7 @@ def main():
                 '#undef fopen\n'
                 '#undef bind\n'
                 '#undef locale_t\n'
+                '#undef strtou64\n'
                 '}\n'
                 '\n'
                 '#include "arrow.h"\n'

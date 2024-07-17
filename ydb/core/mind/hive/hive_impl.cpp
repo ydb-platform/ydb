@@ -228,6 +228,7 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffec
     TStackVec<TBootQueue::TBootQueueRecord> delayedTablets;
     while (!BootQueue.BootQueue.empty() && processedItems < GetMaxBootBatchSize()) {
         TBootQueue::TBootQueueRecord record = BootQueue.PopFromBootQueue();
+        BLOG_TRACE("Tablet " << record.TabletId << "." << record.FollowerId << " has priority " << record.Priority);
         ++processedItems;
         TTabletInfo* tablet = FindTablet(record.TabletId, record.FollowerId);
         if (tablet == nullptr) {
@@ -277,6 +278,7 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffec
         }
     }
     for (TBootQueue::TBootQueueRecord record : delayedTablets) {
+        record.Priority -= 1;
         BootQueue.AddToBootQueue(record);
     }
     if (TabletCounters != nullptr) {
@@ -1686,6 +1688,14 @@ void THive::UpdateCounterNodesConnected(i64 nodesConnectedDiff) {
     }
 }
 
+void THive::UpdateCounterTabletsStarting(i64 tabletsStartingDiff) {
+    if (TabletCounters != nullptr) {
+        auto& counter = TabletCounters->Simple()[NHive::COUNTER_TABLETS_STARTING];
+        auto newValue = counter.Get() + tabletsStartingDiff;
+        counter.Set(newValue);
+    }
+}
+
 void THive::RecordTabletMove(const TTabletMoveInfo& moveInfo) {
     TabletMoveHistory.PushBack(moveInfo);
     TabletCounters->Cumulative()[NHive::COUNTER_TABLETS_MOVED].Increment(1);
@@ -2327,7 +2337,8 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
         nodeUsageHistogram.IncrementFor(record.Usage * 100);
     }
 
-    if (stats.MaxUsage >= GetMaxNodeUsageToKick()) {
+    double minUsageToKick = GetMaxNodeUsageToKick() - GetNodeUsageRangeToKick();
+    if (stats.MaxUsage >= GetMaxNodeUsageToKick() && stats.MinUsage < minUsageToKick) {
         std::vector<TNodeId> overloadedNodes;
         for (const auto& [nodeId, nodeInfo] : Nodes) {
             if (nodeInfo.IsAlive() && !nodeInfo.Down && nodeInfo.IsOverloaded()) {
@@ -2747,6 +2758,7 @@ void THive::UpdateTabletFollowersNumber(TLeaderTabletInfo& tablet, NIceDb::TNice
             db.Table<Schema::Metrics>().Key(tablet.Id, follower.Id).Delete();
             follower.InitiateStop(sideEffects);
             tablet.Followers.erase(std::prev(itFollower.base()));
+            UpdateCounterTabletsTotal(-1);
             --followerCount;
         }
     }

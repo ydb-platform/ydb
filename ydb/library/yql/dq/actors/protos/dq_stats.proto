@@ -241,11 +241,17 @@ message TDqComputeActorStats {
     google.protobuf.Any Extra = 200;
 }
 
+message TDqHistoryItem {
+    uint64 TimeMs = 1;
+    uint64 Value = 2;
+}
+
 message TDqStatsAggr {
     uint64 Min = 1;
     uint64 Max = 2;
     uint64 Sum = 3;
     uint64 Cnt = 4;
+    repeated TDqHistoryItem History = 5;
 }
 
 message TExtraStats {
@@ -301,6 +307,7 @@ message TDqStageStats {
     uint32 StageId = 1;
     string StageGuid = 2;
     string Program = 3;
+    uint64 BaseTimeMs = 38;
 
     uint32 TotalTasksCount = 5;
     uint32 FailedTasksCount = 6;

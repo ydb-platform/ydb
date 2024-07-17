@@ -2442,7 +2442,7 @@ bool TSequenceInfo::ValidateCreate(const NKikimrSchemeOp::TSequenceDescription& 
 }
 
 // validate type of the sequence
-std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceName, const TString dataType, 
+std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceName, const TString& dataType, 
         const NScheme::TTypeRegistry& typeRegistry, bool pgTypesEnabled, TString& errStr) {
 
     i64 dataTypeMaxValue, dataTypeMinValue;

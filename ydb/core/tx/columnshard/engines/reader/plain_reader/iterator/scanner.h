@@ -2,6 +2,7 @@
 #include "source.h"
 #include "interval.h"
 #include <ydb/core/formats/arrow/reader/position.h>
+#include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 

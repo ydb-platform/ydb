@@ -3141,4 +3141,47 @@ private:
 TNodePtr BuildWorldForNode(TPosition pos, TNodePtr list, TNodePtr bodyNode, TNodePtr elseNode, bool isEvaluate, bool isParallel) {
     return new TWorldFor(pos, list, bodyNode, elseNode, isEvaluate, isParallel);
 }
+
+class TAnalyzeNode final: public TAstListNode {
+public:
+    TAnalyzeNode(TPosition pos, const TTableRef& tr, TScopedStatePtr scoped)
+        : TAstListNode(pos)
+        , Table(tr)
+        , Scoped(scoped)
+    {
+        FakeSource = BuildFakeSource(pos);
+        scoped->UseCluster(Table.Service, Table.Cluster);
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        Y_UNUSED(src);
+        auto keys = Table.Keys->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::DROP);
+        if (!keys || !keys->Init(ctx, FakeSource.Get())) {
+            return false;
+        }
+
+        auto opts = Y();
+        opts = L(opts, Q(Y(Q("mode"), Q("analyze"))));
+        Add("block", Q(Y(
+            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Table.Service), Scoped->WrapCluster(Table.Cluster, ctx))),
+            Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(opts))),
+            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
+        )));
+
+        return TAstListNode::DoInit(ctx, FakeSource.Get());
+    }
+
+    TPtr DoClone() const final {
+        return {};
+    }
+private:
+    TTableRef Table;
+    TScopedStatePtr Scoped;
+    TSourcePtr FakeSource;
+};
+
+TNodePtr BuildAnalyze(TPosition pos, const TTableRef& tr, TScopedStatePtr scoped) {
+    return new TAnalyzeNode(pos, tr, scoped);
+}
+
 } // namespace NSQLTranslationV1

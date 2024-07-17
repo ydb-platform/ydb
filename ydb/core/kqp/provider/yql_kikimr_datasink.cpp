@@ -275,6 +275,9 @@ private:
                     }
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
+                } else if (mode == "analyze") {
+                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
+                    return TStatus::Ok;
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
                         << "Unsupported Kikimr table write mode: " << settings.Mode.Cast().Value()));

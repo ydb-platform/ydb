@@ -1344,6 +1344,19 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx.Pos(), objectId, "RESOURCE_POOL", false, {}, context));
             break;
         }
+        case TRule_sql_stmt_core::kAltSqlStmtCore48: {
+            // analyze_stmt: ANALYZE table_ref
+            Ctx.BodyPart();
+            const auto& rule = core.GetAlt_sql_stmt_core48().GetRule_analyze_stmt1();
+
+            TTableRef tr;
+            if (!SimpleTableRefImpl(rule.GetRule_simple_table_ref2(), tr)) {
+                return false;
+            }
+
+            AddStatementToBlocks(blocks, BuildAnalyze(Ctx.Pos(), tr, Ctx.Scoped));
+            break;
+        }
         case TRule_sql_stmt_core::ALT_NOT_SET:
             Ctx.IncrementMonCounter("sql_errors", "UnknownStatement" + internalStatementName);
             AltNotImplemented("sql_stmt_core", core);

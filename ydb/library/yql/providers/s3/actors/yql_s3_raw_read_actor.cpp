@@ -165,7 +165,7 @@ public:
         const TString requestId = CreateGuidAsString();
         LOG_D("TS3ReadActor", "Download: " << url << ", ID: " << id << ", request id: [" << requestId << "]");
         Gateway->Download(
-            UrlEscapeRet(url, true),
+            NS3Util::UrlEscapeRet(url),
             IHTTPGateway::MakeYcHeaders(requestId, AuthInfo.GetToken(), {}, AuthInfo.GetAwsUserPwd(), AuthInfo.GetAwsSigV4()),
             0U,
             std::min(object.GetSize(), SizeLimit),
@@ -285,7 +285,7 @@ private:
     void HandleAck(TEvS3Provider::TEvAck::TPtr& ev) {
         FileQueueEvents.OnEventReceived(ev);
     }
-    
+
     static void OnDownloadFinished(NActors::TActorSystem* actorSystem, NActors::TActorId selfId, const TString& requestId, IHTTPGateway::TResult&& result, size_t pathInd, const TString path) {
         if (!result.Issues) {
             actorSystem->Send(new NActors::IEventHandle(selfId, NActors::TActorId(), new TEvS3Provider::TEvReadResult(std::move(result.Content), requestId, pathInd, path)));
@@ -397,7 +397,7 @@ private:
         auto issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while reading file " << path << " with request id [" << requestId << "]", TIssues{result->Get()->Error});
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
     }
-    
+
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&) {
         FileQueueEvents.Retry();
     }
@@ -526,14 +526,14 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateRawRead
         statsLevel,
         txId,
         std::move(gateway),
-        holderFactory, 
-        url, 
-        authInfo, 
+        holderFactory,
+        url,
+        authInfo,
         pattern,
         patternVariant,
         std::move(paths),
         addPathIndex,
-        computeActorId, 
+        computeActorId,
         sizeLimit,
         retryPolicy,
         readActorFactoryCfg,

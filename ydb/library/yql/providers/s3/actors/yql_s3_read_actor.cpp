@@ -185,7 +185,7 @@ struct TRetryStuff {
         const TString& requestId,
         const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy
     ) : Gateway(std::move(gateway))
-      , Url(UrlEscapeRet(url, true))
+      , Url(NS3Util::UrlEscapeRet(url))
       , Headers(headers)
       , Offset(0U)
       , SizeLimit(sizeLimit)
@@ -379,7 +379,7 @@ public:
             decompressorBuffer = MakeDecompressor(*buffer, ReadSpec->Compression);
             YQL_ENSURE(decompressorBuffer, "Unsupported " << ReadSpec->Compression << " compression.");
             buffer = decompressorBuffer.get();
-            
+
         }
 
         auto stream = std::make_unique<NDB::InputStreamFromInputFormat>(
@@ -755,7 +755,7 @@ public:
                 if (isCancelled) {
                     LOG_CORO_D("RunCoroBlockArrowParserOverHttp - STOPPED ON SATURATION, downloaded " <<
                                SourceContext->GetDownloadedBytes() << " bytes");
-                    break;        
+                    break;
                 }
             }
         }
@@ -1360,7 +1360,7 @@ public:
         if (ReadSpec->ParallelDownloadCount && splitCount >= ReadSpec->ParallelDownloadCount) {
             // explicit limit
             return false;
-        } 
+        }
         if (splitCount && DownloadSize * SourceContext->Ratio() > ReadActorFactoryCfg.DataInflight * 2) {
             // dynamic limit
             return false;
@@ -1718,7 +1718,7 @@ private:
             }
         }
     }
-    
+
     void Handle(TEvS3Provider::TEvAck::TPtr& ev) {
         FileQueueEvents.OnEventReceived(ev);
     }

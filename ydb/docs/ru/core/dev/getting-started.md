@@ -28,7 +28,7 @@
 
 ## Начать писать код
 
-### Для пути с {{ ydb-short-name }}SDK
+### Для пути с {{ ydb-short-name }} SDK
 
 – Пройдите [туториал по YQL](yql-tutorial/index.md), чтобы познакомиться с SQL диалектом  {{ ydb-short-name }}.
 - Изучите [примеры приложений](example-app/index.md), чтобы узнать, как выглядит работа с SDK.

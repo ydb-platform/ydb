@@ -162,7 +162,4 @@ struct TTempDirInfo {
     TActorId TempDirOwnerActorId;
 };
 
-std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceName, const TString dataType, 
-    const NScheme::TTypeRegistry& typeRegistry, bool pgTypesEnabled, TString& errStr);
-
 }

@@ -58,7 +58,9 @@ message IssueLog {
 * `Pool usage over 90/95/99%`: One of the pools' CPUs is overloaded.
 * `System tablet is unresponsive / response time over 1000ms/5000ms`: The system tablet is not responding or it takes too long to respond.
 * `Tablets are restarting too often`: Tablets are restarting too often.
-* `Tablets are dead`: Tablets are not started (or cannot be started).
+* `Tablets/Followers are dead`: Tablets are not running (probably cannot be started).
+* `Node is restarting too often`.
+* `The number of node restarts has increased`: The number of node restarts has exceeded the threshold.
 * `LoadAverage above 100%`: A physical host is overloaded.
 * `There are no compute nodes`: The database has no nodes to start the tablets.
 * `PDisk state is ...`: Indicates problems with a physical disk.
@@ -72,3 +74,4 @@ message IssueLog {
 * `Group has no redundancy`: A storage group lost its redundancy.
 * `Group failed`: A storage group lost its integrity.
 * `Group degraded`: The number of disks allowed in the group is not available.
+* `The nodes have a time difference of ... ms`: Time drift on nodes might lead to potential issues with coordinating distributed transactions.

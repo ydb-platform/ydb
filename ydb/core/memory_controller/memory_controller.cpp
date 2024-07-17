@@ -14,7 +14,7 @@
 
 namespace NKikimr::NMemory {
 
-TProcessMemoryInfo TProcessMemoryInfoProvider::IProcessMemoryInfoProvider::Get() const {
+TProcessMemoryInfo TProcessMemoryInfoProvider::Get() const {
     std::optional<TMemoryUsage> memoryUsage = TAllocState::TryGetMemoryUsage();
 
     TProcessMemoryInfo result{

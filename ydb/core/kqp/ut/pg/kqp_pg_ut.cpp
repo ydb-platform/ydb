@@ -2580,11 +2580,11 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             const auto queryAlter = R"(
                 --!syntax_pg
                 ALTER SEQUENCE IF EXISTS seq
-                    MAXVALUE 32000;
+                    START WITH 31;
             )";
 
             auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(resultAlter.IsSuccess(), resultAlter.GetIssues().ToString());
+            UNIT_ASSERT(!resultAlter.IsSuccess());
         }
 
         {
@@ -2594,11 +2594,11 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             const auto queryAlter = R"(
                 --!syntax_pg
                 ALTER SEQUENCE IF EXISTS seq
-                    START WITH 31;
+                    MAXVALUE 32000;
             )";
 
             auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT(!resultAlter.IsSuccess());
+            UNIT_ASSERT_C(resultAlter.IsSuccess(), resultAlter.GetIssues().ToString());
         }
 
         {

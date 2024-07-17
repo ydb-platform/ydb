@@ -174,7 +174,6 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
         }
         batchResults = mergeStream.DrainAllParts(CheckPoints, indexFields);
     }
-    Y_ABORT_UNLESS(batchResults.size());
 
     std::shared_ptr<TSerializationStats> stats = std::make_shared<TSerializationStats>();
     for (auto&& i : SwitchedPortions) {

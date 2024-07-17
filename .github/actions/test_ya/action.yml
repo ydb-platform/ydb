@@ -316,7 +316,7 @@ runs:
           --ya_out "$YA_MAKE_OUT_DIR" \
           --public_dir "$PUBLIC_DIR" \
           --public_dir_url "$PUBLIC_DIR_URL" \
-          --log_out_dir "artifact/logs/" \
+          --log_out_dir "artifacts/logs/" \
           --test_stuff_out "test_artifacts/" \
           "$JUNIT_REPORT_XML"
   

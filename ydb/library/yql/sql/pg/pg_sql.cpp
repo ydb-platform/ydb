@@ -3505,8 +3505,10 @@ public:
             );
         case SVFOP_CURRENT_USER:
         case SVFOP_CURRENT_ROLE:
-        case SVFOP_USER:
-            return L(A("PgConst"), QA("postgres"), L(A("PgType"), QA("name")));
+        case SVFOP_USER: {
+            auto user = Settings.GUCSettings->Get("ydb_user");
+            return L(A("PgConst"), user ? QAX(TString(*user))  : QA("postgres"), L(A("PgType"), QA("name")));
+        }
         case SVFOP_CURRENT_CATALOG: {
             std::optional<TString> database;
             if (Settings.GUCSettings) {

@@ -503,6 +503,8 @@ private:
     bool CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& operation,
                                const TWriteId& writeId) const;
     bool CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBody) const;
+
+    void SendEvTxCalcPredicatesToPartition(const TPartitionId& partitionId, const TActorContext& ctx);
 };
 
 

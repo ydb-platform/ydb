@@ -26,6 +26,7 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/string/escape.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 #define PQ_LOG_ERROR_AND_DIE(expr) \
     PQ_LOG_ERROR(expr); \
@@ -784,6 +785,7 @@ void TPersQueue::EndWriteConfig(const NKikimrClient::TResponse& resp, const TAct
 
 void TPersQueue::HandleConfigReadResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::HandleConfigReadResponse");
     bool ok =
         (resp.GetStatus() == NMsgBusProxy::MSTATUS_OK) &&
         (resp.ReadResultSize() == 3) &&
@@ -894,6 +896,8 @@ void TPersQueue::CreateOriginalPartition(const NKikimrPQ::TPQTabletConfig& confi
                                          bool newPartition,
                                          const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::CreateOriginalPartition");
+    DBGTRACE_LOG("partitionId=" << partitionId);
     TActorId actorId = ctx.Register(CreatePartitionActor(partitionId,
                                                          topicConverter,
                                                          config,
@@ -905,6 +909,37 @@ void TPersQueue::CreateOriginalPartition(const NKikimrPQ::TPQTabletConfig& confi
                                              GetPartitionKeyRange(config, partition),
                                              *Counters));
     ++OriginalPartitionsCount;
+
+    if (!InitCompleted) {
+        SendEvTxCalcPredicatesToPartition(partitionId, ctx);
+    }
+}
+
+void TPersQueue::SendEvTxCalcPredicatesToPartition(const TPartitionId& partitionId, const TActorContext& ctx)
+{
+    DBGTRACE("TPersQueue::SendEvTxCalcPredicatesToPartition");
+
+    Y_ABORT_UNLESS(Partitions.contains(partitionId));
+    auto& partition = Partitions.at(partitionId);
+
+    for (auto& [txId, tx] : Txs) {
+        DBGTRACE_LOG(txId <<
+                     " " << NKikimrPQ::TTransaction_EState_Name(tx.State) <<
+                     " " << (tx.Partitions.contains(partitionId.OriginalPartitionId) ? '+' : '-'));
+        if (!tx.Partitions.contains(partitionId.OriginalPartitionId)) {
+            continue;
+        }
+        if (tx.State <= NKikimrPQ::TTransaction::PLANNED) {
+            continue;
+        }
+
+        tx.State = NKikimrPQ::TTransaction::CALCULATING;
+
+        auto event = std::make_unique<TEvPQ::TEvTxCalcPredicate>(tx.Step, tx.TxId);
+        ctx.Send(partition.Actor, event.release());
+
+        ++tx.PartitionRepliesExpected;
+    }
 }
 
 void TPersQueue::AddSupportivePartition(const TPartitionId& partitionId)
@@ -977,6 +1012,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
                             const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange,
                             const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::ReadConfig");
     Y_ABORT_UNLESS(read.HasStatus());
     if (read.GetStatus() != NKikimrProto::OK && read.GetStatus() != NKikimrProto::NODATA) {
         LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
@@ -1374,6 +1410,7 @@ bool TPersQueue::AllOriginalPartitionsInited() const
 
 void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::Handle(TEvPQ::TEvInitComplete)");
     const auto& partitionId = ev->Get()->Partition;
     auto& partition = GetPartitionInfo(partitionId);
     Y_ABORT_UNLESS(!partition.InitDone);
@@ -3002,9 +3039,11 @@ TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
 
 void TPersQueue::CreatedHook(const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::CreatedHook");
     IsServerless = AppData(ctx)->FeatureFlags.GetEnableDbCounters(); //TODO: find out it via describe
     CacheActor = ctx.Register(new TPQCacheProxy(ctx.SelfID, TabletID()));
 
+    DBGTRACE_LOG("send TEvInterconnect::TEvGetNode");
     ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(ctx.SelfID.NodeId()));
     InitProcessingParams(ctx);
 }
@@ -3055,6 +3094,7 @@ void TPersQueue::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, 
 
 void TPersQueue::Handle(TEvInterconnect::TEvNodeInfo::TPtr& ev, const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::Handle(TEvInterconnect::TEvNodeInfo)");
     PQ_LOG_D("Handle TEvInterconnect::TEvNodeInfo");
 
     Y_ABORT_UNLESS(ev->Get()->Node);
@@ -3077,6 +3117,7 @@ void TPersQueue::Handle(TEvInterconnect::TEvNodeInfo::TPtr& ev, const TActorCont
 
     request->Record.MutableCmdSetExecutorFastLogPolicy()
                 ->SetIsAllowed(AppData(ctx)->PQConfig.GetTactic() == NKikimrClient::TKeyValueRequest::MIN_LATENCY);
+    DBGTRACE_LOG("send TEvKeyValue::TEvRequest(READ_CONFIG_COOKIE)");
     ctx.Send(ctx.SelfID, request.Release());
     ctx.Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup());
 }
@@ -3356,6 +3397,8 @@ void TPersQueue::Handle(TEvPQ::TEvTxCalcPredicateResult::TPtr& ev, const TActorC
     if (!tx) {
         return;
     }
+
+    Y_ABORT_UNLESS(tx->State == NKikimrPQ::TTransaction::CALCULATING);
 
     tx->OnTxCalcPredicateResult(event);
 
@@ -4460,6 +4503,7 @@ void TPersQueue::TryStartTransaction(const TActorContext& ctx)
 
 void TPersQueue::OnInitComplete(const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::OnInitComplete");
     SignalTabletActive(ctx);
     TryStartTransaction(ctx);
     InitCompleted = true;

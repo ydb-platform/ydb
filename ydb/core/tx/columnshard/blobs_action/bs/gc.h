@@ -20,7 +20,7 @@ public:
     using TGCListsByGroup = THashMap<ui32, TGCLists>;
 private:
     TGCListsByGroup ListsByGroupId;
-    TGenStep CollectGenStepInFlight;
+    std::optional<TGenStep> CollectGenStepInFlight;
     const ui64 TabletId;
     const ui64 CurrentGen;
     std::deque<TUnifiedBlobId> KeepsToErase;
@@ -30,11 +30,11 @@ protected:
     virtual void DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) override;
     virtual bool DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) override;
     virtual bool DoIsEmpty() const override {
-        return false;
+        return !CollectGenStepInFlight && KeepsToErase.empty();
     }
 
 public:
-    TGCTask(const TString& storageId, TGCListsByGroup&& listsByGroupId, const TGenStep& collectGenStepInFlight, std::deque<TUnifiedBlobId>&& keepsToErase,
+    TGCTask(const TString& storageId, TGCListsByGroup&& listsByGroupId, const std::optional<TGenStep>& collectGenStepInFlight, std::deque<TUnifiedBlobId>&& keepsToErase,
         const std::shared_ptr<TBlobManager>& manager, TBlobsCategories&& blobsToRemove, const std::shared_ptr<TRemoveGCCounters>& counters, const ui64 tabletId, const ui64 currentGen);
 
     const TGCListsByGroup& GetListsByGroupId() const {

@@ -79,7 +79,8 @@ runs:
         # The whole dir will be uploaded to s3 with public (=wild internet) ACL
         export PUBLIC_DIR=$TMP_DIR/results
         echo "PUBLIC_DIR=$PUBLIC_DIR" >> $GITHUB_ENV
-        echo "PUBLIC_DIR_URL=$S3_URL_PREFIX" >> $GITHUB_ENV
+        export PUBLIC_DIR_URL=$S3_URL_PREFIX
+        echo "PUBLIC_DIR_URL=$PUBLIC_DIR_URL" >> $GITHUB_ENV
         mkdir -p $PUBLIC_DIR
 
         export YA_MAKE_OUT_DIR=$TMP_DIR/out

@@ -290,8 +290,6 @@ void TMVP::TryGetGenericOptionsFromConfig(
 
     if (generic["auth_profile"]) {
         auto name = generic["auth_profile"].as<std::string>("yandex");
-        OpenIdConnectSettings.AuthProfile = AuthProfileByName[name];
-
         auto it = AuthProfileByName.find(name);
         if (it != AuthProfileByName.end()) {
             OpenIdConnectSettings.AuthProfile = it->second;

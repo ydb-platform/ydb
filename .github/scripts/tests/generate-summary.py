@@ -255,7 +255,7 @@ def render_testlist_html(rows, fn):
         fp.write(content)
 
 
-def write_summary(summary: TestSummary, test_log_url: str):
+def write_summary(summary: TestSummary):
     summary_fn = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary_fn:
         fp = open(summary_fn, "at")
@@ -263,7 +263,7 @@ def write_summary(summary: TestSummary, test_log_url: str):
         fp = sys.stdout
 
     if summary.is_empty:
-        fp.write(f":red_circle: Test run completed, no test results found. Please check [test logs]({test_log_url}).")
+        fp.write(f":red_circle: Test run completed, no test results found. Please check ya make output.")
     else:
         for line in summary.render(add_footnote=True):
             fp.write(f"{line}\n")
@@ -274,7 +274,7 @@ def write_summary(summary: TestSummary, test_log_url: str):
         fp.close()
 
 
-def gen_summary(summary_url_prefix, summary_out_folder, paths):
+def gen_summary(public_dir, public_dir_url, paths):
     summary = TestSummary()
 
     for title, html_fn, path in paths:
@@ -287,9 +287,9 @@ def gen_summary(summary_url_prefix, summary_out_folder, paths):
         if not summary_line.tests:
             continue
 
-        report_url = f"{summary_url_prefix}{html_fn}"
+        report_url = f"{public_dir_url}{html_fn}"
 
-        render_testlist_html(summary_line.tests, os.path.join(summary_out_folder, html_fn))
+        render_testlist_html(summary_line.tests, os.path.join(public_dir, html_fn))
         summary_line.add_report(html_fn, report_url)
         summary.add_line(summary_line)
 
@@ -327,8 +327,8 @@ def get_comment_text(pr: PullRequest, summary: TestSummary, summary_links: str):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--summary_out_path", required=True)
-    parser.add_argument("--summary_url_prefix", required=True)
+    parser.add_argument("--public_dir", required=True)
+    parser.add_argument("--public_dir_url", required=True)
     parser.add_argument("--summary_links", required=True)
     parser.add_argument('--build_preset', default="default-linux-x86-64-relwithdebinfo", required=False)
     parser.add_argument('--status_report_file', required=False)
@@ -342,8 +342,8 @@ def main():
     paths = iter(args.args)
     title_path = list(zip(paths, paths, paths))
 
-    summary = gen_summary(args.summary_url_prefix, args.summary_out_path, title_path)
-    write_summary(summary, args.test_log_url)
+    summary = gen_summary(args.public_dir, args.public_dir_url, title_path)
+    write_summary(summary)
 
     if summary.is_empty | summary.is_failed:
         color = 'red'

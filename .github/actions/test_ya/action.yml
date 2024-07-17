@@ -87,13 +87,6 @@ runs:
         echo "YA_MAKE_OUT_DIR=$YA_MAKE_OUT_DIR" >> $GITHUB_ENV
         mkdir -p $YA_MAKE_OUT_DIR
 
-        export ARTIFACTS_DIR=$PUBLIC_DIR/artifacts
-        echo "ARTIFACTS_DIR=$ARTIFACTS_DIR" >> $GITHUB_ENV
-        echo "ARTIFACTS_DIR_URL=$PUBLIC_DIR_URL/artifacts" >> $GITHUB_ENV
-        mkdir -p $ARTIFACTS_DIR
-
-
-
         echo "JUNIT_REPORT_XML=$PUBLIC_DIR/junit.xml" >> $GITHUB_ENV
         echo "TESTMO_URL=${{ inputs.testman_url }}" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
@@ -395,12 +388,10 @@ runs:
           exit 0
         fi
 
-        mkdir $ARTIFACTS_DIR/summary/
-
         .github/scripts/tests/generate-summary.py \
-          --summary_out_path $ARTIFACTS_DIR/summary/ \
-          --summary_url_prefix $ARTIFACTS_DIR_URL/summary/ \
           --summary_links "$SUMMARY_LINKS" \
+          --public_dir "$PUBLIC_DIR" \
+          --public_dir_url "$PUBLIC_DIR_URL" \
           --build_preset "$BUILD_PRESET" \
           --status_report_file statusrep.txt \
           "Tests" ya-test.html "$JUNIT_REPORT_XML"

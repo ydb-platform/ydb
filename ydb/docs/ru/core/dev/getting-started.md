@@ -52,4 +52,4 @@
 
 Вышеизложенного должно быть достаточно, чтобы начать разработку приложений, взаимодействующих с {{ ydb-short-name }}. В процессе работы используйте справочную документацию [YQL](../yql/reference/index.md) и [{{ ydb-short-name }} SDK](../reference/ydb-sdk/index.md), а также другую ресурсы в этом разделе документации.
 
-В случае возникновения каких-либо проблем, не стесняйтесь обсуждать их в [{{ ydb-short-name }} Discord] (https://discord.gg/R5MvZTESWc) или [Telegram чате](https://t.me/ydb_ru).
+В случае возникновения каких-либо проблем, не стесняйтесь обсуждать их в [{{ ydb-short-name }} Discord](https://discord.gg/R5MvZTESWc) или [Telegram чате](https://t.me/ydb_ru).

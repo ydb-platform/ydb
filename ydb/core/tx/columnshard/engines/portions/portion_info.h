@@ -197,7 +197,7 @@ public:
         SetRemoveSnapshot(TSnapshot(planStep, txId));
     }
 
-    std::vector<TString> GetIndexInplaceData(const ui32 indexId) const {
+    std::vector<TString> GetIndexInplaceDataVerified(const ui32 indexId) const {
         std::vector<TString> result;
         for (auto&& i : Indexes) {
             if (i.GetEntityId() == indexId) {

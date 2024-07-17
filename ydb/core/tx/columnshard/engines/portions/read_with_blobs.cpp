@@ -143,16 +143,8 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
     TIndexInfo::TSecondaryData secondaryData;
     secondaryData.MutableExternalData() = entityChunksNew;
     for (auto&& i : to->GetIndexInfo().GetIndexes()) {
-        if (from->GetIndexInfo().HasIndexId(i.first)) {
-            for (auto&& c : source.PortionInfo.GetIndexes()) {
-                if (c.GetEntityId() == i.first) {
-                    constructor.AddIndex(c);
-                }
-            }
-        } else {
             to->GetIndexInfo().AppendIndex(entityChunksNew, i.first, storages, secondaryData).Validate();
         }
-    }
 
     const NSplitter::TEntityGroups groups = to->GetIndexInfo().GetEntityGroupsByStorageId(targetTier, *storages);
     auto schemaTo = std::make_shared<TDefaultSchemaDetails>(to, std::make_shared<TSerializationStats>());

@@ -91,9 +91,6 @@ runs:
         echo "TESTMO_URL=${{ inputs.testman_url }}" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
-
-        # install test mo
-        npm install -g @testmo/testmo-cli
     
 
     - name: Upload tests result to testmo
@@ -109,6 +106,9 @@ runs:
         BRANCH_TAG="$GITHUB_REF_NAME"
         ARCH="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
         
+        # install test mo
+        npm install -g @testmo/testmo-cli
+
         case "$BUILD_PRESET" in
           relwithdebinfo)
             TESTMO_SOURCE="ya-${ARCH}"
@@ -157,7 +157,8 @@ runs:
           --tags "$BRANCH_TAG" --tags "$EXTRA_TAG"
         )
         echo "runid=${RUN_ID}" >> $GITHUB_OUTPUT
-        echo "TEST_HISTORY_URL=${TESTMO_URL}/automation/runs/view/${RUN_ID}" >> $GITHUB_ENV
+        TEST_HISTORY_URL="${TESTMO_URL}/automation/runs/view/${RUN_ID}"
+        echo "TEST_HISTORY_URL=$TEST_HISTORY_URL" >> $GITHUB_ENV
 
         # Print test history link
         echo "10 [Test history](${TEST_HISTORY_URL})" >> $SUMMARY_LINKS

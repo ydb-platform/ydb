@@ -1,6 +1,16 @@
 # UPDATE
 
-{% include [OLAP_not_allow_note](../../../../_includes/not_allow_for_olap_note.md) %}
+{% if backend_name == "YDB" %}
+
+{% note warning %}
+
+{% include [OLAP_not_allow_text](../../../../_includes/not_allow_for_olap_text.md) %}
+
+{% include [OLAP_not_allow_text](../../../../_includes/ways_add_data_to_olap.md) %}
+
+{% endnote %}
+
+{% endif %}
 
 `UPDATE` не может менять значение колонок, входящих в состав первичного ключа.
 

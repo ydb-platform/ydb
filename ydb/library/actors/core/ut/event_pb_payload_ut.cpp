@@ -145,6 +145,7 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
         THolder<TEvMessageWithPayloadPreSerialized> parsedEvent(static_cast<TEvMessageWithPayloadPreSerialized*>(TEvMessageWithPayloadPreSerialized::Load(data.Get())));
         UNIT_ASSERT_VALUES_EQUAL(parsedEvent->PreSerializedData, ""); // this field is empty after deserialization
         auto& record = parsedEvent->GetRecord();
+        UNIT_ASSERT_VALUES_EQUAL(42, 420);
         UNIT_ASSERT_VALUES_EQUAL(record.GetMeta(), msg.GetMeta());
         UNIT_ASSERT_VALUES_EQUAL(record.PayloadIdSize(), msg.PayloadIdSize());
         UNIT_ASSERT_VALUES_EQUAL(record.PayloadIdSize(), 2);

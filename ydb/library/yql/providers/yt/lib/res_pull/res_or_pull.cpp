@@ -189,10 +189,6 @@ void TSkiffExecuteResOrPull::WriteValue(const NUdf::TUnboxedValue& value, TType*
             SkiffWriter.AddRow(item);
         }
     } else {
-        YQL_LOG(ERROR) << "WriteValue(value, type): " << value << " " << value.GetListLength();
-        for (size_t i = 0; i < value.GetListLength(); ++i) {
-            YQL_LOG(ERROR) << "WriteNext(specsCache, recBox, tableIndex): " << value.GetElement(i);
-        }
         SkiffWriter.AddRow(value);
     }
 }

@@ -602,7 +602,12 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         {
             auto session = client.CreateSession().GetValueSync().GetSession();
             const auto query = Q_(R"(
-                create table ja(a text, b text, c text, primary key(a));
+                CREATE TABLE ta(
+                    a Int64, 
+                    b Int64, 
+                    c Int64, 
+                    PRIMARY KEY(a)
+                );
             )");
             auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -610,7 +615,11 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         {
             auto session = client.CreateSession().GetValueSync().GetSession();
             const auto query = Q_(R"(
-                create table jb(b text, bv text, primary key(b));    
+                CREATE TABLE tb(
+                    b Int64, 
+                    bval Int64, 
+                    PRIMARY KEY(b)
+                );    
             )");
             auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -618,22 +627,26 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         {
             auto session = client.CreateSession().GetValueSync().GetSession();
             const auto query = Q_(R"(
-                create table jc(c text, cv text, primary key(c));
+                CREATE TABLE tc(
+                    c Int64, 
+                    cval Int64, 
+                    PRIMARY KEY(c)
+                );
             )");
             auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
         {
             auto result = db.ExecuteQuery(R"(
-                upsert into ja(a,b,c) values("1"u, "1001"u, "2001"u),("2"u, "1002"u, "2002"u), ("3"u, "1003"u, "2003"u);
-                upsert into jb(b, bv) values("1001"u,"b 1001"u),("1002"u,"b 1002"u),("1003"u,"b 1003"u);
-                upsert into jc(c, cv) values("7001"u,"c 7001"u),("7002"u,"c 7002"u),("7003"u,"c 7003"u);
+                UPSERT INTO ta(a, b, c) VALUES (1, 1001, 2001), (2, 1002, 2002), (3, 1003, 2003);
+                UPSERT INTO tb(b, bval) VALUES (1001, 1001), (1002, 1002), (1003, 1003);
+                UPSERT INTO tc(c, cval) VALUES (2001, 2001), (2002, 2002), (2003, 2003);
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
         {
             auto result = db.ExecuteQuery(R"(
-                select ja.a, jb.bv, jc.cv from ja inner join jb on ja.b=jb.b left join jc on ja.c=jc.cv;
+                SELECT ta.a, tb.bval, tc.cval FROM ta INNER JOIN tb ON ta.b = tb.b LEFT JOIN tc ON ta.c = tc.cval;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }

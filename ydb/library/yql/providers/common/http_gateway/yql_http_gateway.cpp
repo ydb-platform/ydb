@@ -605,6 +605,313 @@ private:
     const std::hash<IHTTPGateway::TRetryPolicy::TPtr> HashPtr;
 };
 
+class THTTPScopedGateway : public IHTTPGateway {
+public:
+    using TPtr = std::shared_ptr<THTTPScopedGateway>;
+    using TWeakPtr = std::weak_ptr<THTTPScopedGateway>;
+
+    struct TCancelInfo {
+        std::atomic_uint32_t Final;
+        TCancelHook CancelHook;
+
+        TCancelInfo() = default;
+        TCancelInfo(TCancelHook cancelHook) : CancelHook(cancelHook) {}
+    };
+
+    class TDownloadInfo {
+    public:
+        TDownloadInfo(
+            ui32 priority,
+            TString url,
+            THeaders headers,
+            std::size_t offset,
+            std::size_t sizeLimit,
+            TOnResult callback,
+            TString data,
+            TRetryPolicy::TPtr retryPolicy)
+        :   Priority(priority),
+            Url(url),
+            Headers(headers),
+            Offset(offset),
+            SizeLimit(sizeLimit),
+            Callback(callback),
+            Data(data),
+            RetryPolicy(retryPolicy)
+        {
+        }
+
+        TDownloadInfo(
+            ui32 priority,
+            TString url,
+            THeaders headers,
+            std::size_t offset,
+            std::size_t sizeLimit,
+            TOnDownloadStart onStart,
+            TOnNewDataPart onNewData,
+            TOnDownloadFinish onFinish,
+            const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter,
+            std::shared_ptr<TCancelInfo> cancelInfo)
+        :   Priority(priority),
+            Url(url),
+            Headers(headers),
+            Offset(offset),
+            SizeLimit(sizeLimit),
+            OnStart(onStart),
+            OnNewData(onNewData),
+            OnFinish(onFinish),
+            InflightCounter(&inflightCounter),
+            CancelInfo(cancelInfo)
+        {
+        }
+
+        friend bool operator< (TDownloadInfo const& x, TDownloadInfo const& y) {
+            // priority queue prioritizes largest items, so we reverse Priority
+            return x.Priority > y.Priority;
+        }
+
+        // common fields
+        ui32 Priority;
+        TString Url;
+        THeaders Headers;
+        std::size_t Offset;
+        std::size_t SizeLimit;
+        // in memory download
+        TOnResult Callback;
+        TString Data;
+        TRetryPolicy::TPtr RetryPolicy;
+        // streaming download
+        TOnDownloadStart OnStart;
+        TOnNewDataPart OnNewData;
+        TOnDownloadFinish OnFinish;
+        const ::NMonitoring::TDynamicCounters::TCounterPtr* InflightCounter;
+        std::shared_ptr<TCancelInfo> CancelInfo;
+    };
+
+public:
+    THTTPScopedGateway(IHTTPGateway::TPtr gateway, ui32 limit) : Gateway(gateway), Limit(limit) {
+        Y_UNUSED(Limit);
+    }
+
+    static TPtr Make(IHTTPGateway::TPtr gateway, ui32 limit) {
+        auto result = std::make_shared<THTTPScopedGateway>(gateway, limit);
+        result->SetSelf(result);
+        return result;
+    }
+
+    void SetSelf(TWeakPtr self) {
+        Self = self;
+    }
+
+    static void OnResult(THTTPScopedGateway::TWeakPtr weakSelf, TOnResult clientCallback, IHTTPGateway::TResult&& result) {
+        if (auto self = weakSelf.lock()) {
+            self->DecCount();
+        }
+        clientCallback(std::move(result));
+    }
+
+    static void OnFinished(THTTPScopedGateway::TWeakPtr weakSelf, std::shared_ptr<TCancelInfo> cancelInfo, TOnDownloadFinish clientCallback, CURLcode curlResponseCode, TIssues issues) {
+        if (auto self = weakSelf.lock()) {
+            if (!cancelInfo->Final.exchange(true)) {
+                self->DecCount();
+            }
+        }
+        clientCallback(curlResponseCode, issues);
+    }
+
+    static void CancelHook(THTTPScopedGateway::TWeakPtr weakSelf, std::shared_ptr<TCancelInfo> cancelInfo, TIssue issue) {
+        if (auto self = weakSelf.lock()) {
+            self->Cancel(cancelInfo, issue);
+        } else {
+            if (!cancelInfo->Final.exchange(true)) {
+                if (cancelInfo->CancelHook) {
+                    cancelInfo->CancelHook(issue);
+                }
+            }
+        }
+    }
+
+    void DecCount() {
+        std::unique_lock lock(Mutex);
+        auto count = Count.fetch_sub(1);
+        if (count >= Limit) {
+            return;
+        }
+        bool limitReached = false;
+        while (!limitReached && !Queue.empty()) {
+            auto& item = Queue.top();            
+            if (item.CancelInfo) {
+                if (!item.CancelInfo->Final) {
+                    auto count = Count.fetch_add(1);
+                    limitReached = count >= Limit;
+                    item.CancelInfo->CancelHook = Gateway->Download(item.Url, item.Headers, item.Offset, item.SizeLimit, item.OnStart, item.OnNewData,
+                        std::bind(&THTTPScopedGateway::OnFinished, Self, item.CancelInfo, item.OnFinish, std::placeholders::_1, std::placeholders::_2),
+                        *item.InflightCounter
+                    );
+                }
+            } else {
+                auto count = Count.fetch_add(1);
+                limitReached = count >= Limit;
+                Gateway->Download(item.Url, item.Headers, item.Offset, item.SizeLimit,
+                    std::bind(&THTTPScopedGateway::OnResult, Self, item.Callback, std::placeholders::_1),
+                    item.Data, item.RetryPolicy
+                );
+            }
+            Queue.pop();
+        }
+    }
+
+    void Cancel(std::shared_ptr<TCancelInfo> cancelInfo, TIssue issue) {
+        TCancelHook cancelHook;
+        {
+            std::unique_lock lock(Mutex);
+            if (cancelInfo->Final.exchange(true)) {
+                return;
+            }
+            cancelHook = cancelInfo->CancelHook;
+        }            
+        if (cancelHook) {
+            cancelHook(issue);
+            DecCount();
+        }
+    }
+
+    void Upload(
+        TString url,
+        THeaders headers,
+        TString body,
+        TOnResult callback,
+        bool put = false,
+        TRetryPolicy::TPtr retryPolicy = TRetryPolicy::GetNoRetryPolicy()) final {
+        // Upload is just pass through
+        Count.fetch_add(1);
+        Gateway->Upload(url, headers, body,
+            std::bind(&THTTPScopedGateway::OnResult, Self, callback, std::placeholders::_1),
+            put, retryPolicy
+        );
+    }
+
+    void Delete(
+        TString url,
+        THeaders headers,
+        TOnResult callback,
+        TRetryPolicy::TPtr retryPolicy) final {
+        // Delete is just pass through
+        Count.fetch_add(1);
+        Gateway->Delete(url, headers,
+            std::bind(&THTTPScopedGateway::OnResult, Self, callback, std::placeholders::_1),
+            retryPolicy
+        );
+    }
+
+    void Download(
+        TString url,
+        THeaders headers,
+        std::size_t offset,
+        std::size_t sizeLimit,
+        TOnResult callback,
+        TString data = {},
+        TRetryPolicy::TPtr retryPolicy = TRetryPolicy::GetNoRetryPolicy()) final {
+        // old-style Download implies priority == 0
+        this->Download(0, url, headers, offset, sizeLimit, callback, data, retryPolicy);
+    }
+
+    void Download(
+        ui32 priority,
+        TString url,
+        THeaders headers,
+        std::size_t offset,
+        std::size_t sizeLimit,
+        TOnResult callback,
+        TString data,
+        TRetryPolicy::TPtr retryPolicy) final {
+        if (priority == 0 || Limit == 0) {
+            auto count = Count.fetch_add(1);
+            Gateway->Download(url, headers, offset, sizeLimit,
+                std::bind(&THTTPScopedGateway::OnResult, Self, callback, std::placeholders::_1),
+                data, retryPolicy
+            );
+            Y_UNUSED(count);
+        } else {
+            auto count = Count.fetch_add(1);
+            if (count < Limit) {
+                Gateway->Download(url, headers, offset, sizeLimit,
+                    std::bind(&THTTPScopedGateway::OnResult, Self, callback, std::placeholders::_1),
+                    data, retryPolicy
+                );
+            } else {
+                {
+                    std::unique_lock lock(Mutex);
+                    Queue.emplace(priority, url, headers, offset, sizeLimit, callback, data, retryPolicy);
+                }
+                DecCount();
+            }
+        }
+    }
+
+    TCancelHook Download(
+        TString url,
+        THeaders headers,
+        std::size_t offset,
+        std::size_t sizeLimit,
+        TOnDownloadStart onStart,
+        TOnNewDataPart onNewData,
+        TOnDownloadFinish onFinish,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter) final {
+        // old-style Download implies priority == 0
+        return this->Download(0, url, headers, offset, sizeLimit, onStart, onNewData, onFinish, inflightCounter);
+    }
+
+    TCancelHook Download(
+        ui32 priority,
+        TString url,
+        THeaders headers,
+        std::size_t offset,
+        std::size_t sizeLimit,
+        TOnDownloadStart onStart,
+        TOnNewDataPart onNewData,
+        TOnDownloadFinish onFinish,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter) final {
+        auto cancelInfo = std::make_shared<TCancelInfo>();
+        if (priority == 0 || Limit == 0) {
+            Count.fetch_add(1);
+            cancelInfo->CancelHook = Gateway->Download(url, headers, offset, sizeLimit, onStart, onNewData,
+                std::bind(&THTTPScopedGateway::OnFinished, Self, cancelInfo, onFinish, std::placeholders::_1, std::placeholders::_2),
+                inflightCounter
+            );
+        } else {
+            if (Count.fetch_add(1) < Limit) {
+                cancelInfo->CancelHook = Gateway->Download(url, headers, offset, sizeLimit, onStart, onNewData,
+                    std::bind(&THTTPScopedGateway::OnFinished, Self, cancelInfo, onFinish, std::placeholders::_1, std::placeholders::_2),
+                    inflightCounter
+                );
+            } else {
+                {
+                    std::unique_lock lock(Mutex);
+                    Queue.emplace(priority, url, headers, offset, sizeLimit, onStart, onNewData, onFinish, inflightCounter, cancelInfo);
+                }
+                DecCount();
+            }
+        }
+        return std::bind(&THTTPScopedGateway::CancelHook, Self, cancelInfo, std::placeholders::_1);
+    }
+
+    ui64 GetBuffersSizePerStream() final {
+        return Gateway->GetBuffersSizePerStream();
+    }
+
+    IHTTPGateway::TPtr GetScopedGateway(const TString& scope, ui32 limit) final {
+        return Gateway->GetScopedGateway(scope, limit);
+    }
+
+private:
+    IHTTPGateway::TPtr Gateway;
+    ui32 Limit;
+    std::atomic_uint32_t Count;
+    TWeakPtr Self;
+    std::priority_queue<TDownloadInfo> Queue;
+    std::mutex Mutex;
+};
+
 class THTTPMultiGateway : public IHTTPGateway {
 friend class IHTTPGateway;
 public:
@@ -904,6 +1211,19 @@ private:
         Wakeup(sizeLimit);
     }
 
+    void Download(
+        ui32 /* priority */,
+        TString url,
+        THeaders headers,
+        size_t offset,
+        size_t sizeLimit,
+        TOnResult callback,
+        TString data,
+        TRetryPolicy::TPtr retryPolicy) final
+    {
+        this->Download(url, headers, offset, sizeLimit, callback, data, retryPolicy);
+    }
+
     TCancelHook Download(
         TString url,
         THeaders headers,
@@ -927,8 +1247,41 @@ private:
         };
     }
 
+    TCancelHook Download(
+        ui32 /* priority */,
+        TString url,
+        THeaders headers,
+        size_t offset,
+        size_t sizeLimit,
+        TOnDownloadStart onStart,
+        TOnNewDataPart onNewData,
+        TOnDownloadFinish onFinish,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter) final
+    {
+        return this->Download(url, headers, offset, sizeLimit, onStart, onNewData, onFinish, inflightCounter);
+    }
+
     ui64 GetBuffersSizePerStream() final {
         return BuffersSizePerStream;
+    }
+
+    IHTTPGateway::TPtr GetScopedGateway(const TString& scope, ui32 limit) final {
+
+        auto gateway = THTTPMultiGateway::Singleton.lock();
+        Y_ABORT_UNLESS(gateway);
+        const std::unique_lock lock(THTTPMultiGateway::CreateSync);
+
+        auto it = ScopedGateways.find(scope);
+        if (it != ScopedGateways.end()) {
+            if (auto result = it->second.lock()) {
+                // if scoped gateway exists, limit is ignored
+                return result;
+            }
+        }
+
+        IHTTPGateway::TPtr result = THTTPScopedGateway::Make(gateway, limit);
+        ScopedGateways.emplace(scope, result);
+        return result;
     }
 
     void OnRetry(TEasyCurlBuffer::TPtr easy) {
@@ -961,7 +1314,7 @@ private:
 
     std::mutex Sync;
     std::thread Thread;
-    std::atomic<bool> IsStopped = false;
+    std::atomic_bool IsStopped = false;
 
     size_t AllocatedSize = 0ULL;
     static std::atomic_size_t OutputSize;
@@ -970,6 +1323,7 @@ private:
     static TWeakPtr Singleton;
 
     TDNSGateway<> DnsGateway;
+    std::unordered_map<TString, IHTTPGateway::TWeakPtr> ScopedGateways;
 
     const ::NMonitoring::TDynamicCounterPtr Counters;
     const ::NMonitoring::TDynamicCounters::TCounterPtr Rps;

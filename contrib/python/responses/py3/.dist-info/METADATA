@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: responses
-Version: 0.25.0
+Version: 0.25.3
 Summary: A utility library for mocking out the `requests` Python library.
 Home-page: https://github.com/getsentry/responses
 Author: David Cramer

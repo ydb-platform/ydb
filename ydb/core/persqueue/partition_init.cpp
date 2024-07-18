@@ -1,3 +1,4 @@
+#include "offload_actor.h"
 #include "partition.h"
 #include "partition_util.h"
 #include <memory>
@@ -6,7 +7,6 @@ namespace NKikimr::NPQ {
 
 static const ui32 LEVEL0 = 32;
 static const TString WRITE_QUOTA_ROOT_PATH = "write-quota";
-
 
 bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev);
 void RequestInfoRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key);
@@ -19,8 +19,8 @@ bool ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TP
 
 TInitializer::TInitializer(TPartition* partition)
     : Partition(partition)
-    , InProgress(false) {
-
+    , InProgress(false)
+{
     Steps.push_back(MakeHolder<TInitConfigStep>(this));
     Steps.push_back(MakeHolder<TInitInternalFieldsStep>(this));
     Steps.push_back(MakeHolder<TInitDiskStatusStep>(this));
@@ -751,6 +751,10 @@ void TPartition::Initialize(const TActorContext& ctx) {
         DataKeysHead.push_back(TKeyLevel(CompactLevelBorder[i]));
     }
 
+    if (Config.HasOffloadConfig() && !OffloadActor && !IsSupportive()) {
+        OffloadActor = Register(CreateOffloadActor(Tablet, Partition, Config.GetOffloadConfig()));
+    }
+
     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "bootstrapping " << Partition << " " << ctx.SelfID);
 
     if (AppData(ctx)->Counters) {
@@ -784,7 +788,7 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
 
     subGroup = GetServiceCounters(counters, "pqproxy|writeInfo");
     {
-        std::unique_ptr<TPercentileCounter> percentileCounter(new TPercentileCounter( 
+        std::unique_ptr<TPercentileCounter> percentileCounter(new TPercentileCounter(
             subGroup, labels, {{"sensor", "MessageSize" + suffix}}, "Size",
             TVector<std::pair<ui64, TString>>{
                 {1_KB, "1kb"}, {5_KB, "5kb"}, {10_KB, "10kb"},
@@ -864,15 +868,21 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
 
     subgroups.push_back({"name", "topic.write.lag_milliseconds"});
 
-    InputTimeLag = THolder<NKikimr::NPQ::TPercentileCounter>(new NKikimr::NPQ::TPercentileCounter(
-        NPersQueue::GetCountersForTopic(counters, IsServerless), {},
-                    subgroups, "bin",
-                    TVector<std::pair<ui64, TString>>{
-                        {100, "100"}, {200, "200"}, {500, "500"},
-                        {1000, "1000"}, {2000, "2000"}, {5000, "5000"},
-                        {10'000, "10000"}, {30'000, "30000"}, {60'000, "60000"},
-                        {180'000,"180000"}, {9'999'999, "999999"}}, true));
+    if (IsSupportive()) {
+        SupportivePartitionTimeLag = MakeHolder<TMultiBucketCounter>(
+                TVector<ui64>{100, 200, 500, 1000, 2000, 5000, 10'000, 30'000, 60'000, 180'000, 9'999'999},
+                DEFAULT_BUCKET_COUNTER_MULTIPLIER, ctx.Now().MilliSeconds());
+    } else {
+        InputTimeLag = THolder<NKikimr::NPQ::TPercentileCounter>(new NKikimr::NPQ::TPercentileCounter(
+            NPersQueue::GetCountersForTopic(counters, IsServerless), {},
+                        subgroups, "bin",
+                        TVector<std::pair<ui64, TString>>{
+                            {100, "100"}, {200, "200"}, {500, "500"},
+                            {1000, "1000"}, {2000, "2000"}, {5000, "5000"},
+                            {10'000, "10000"}, {30'000, "30000"}, {60'000, "60000"},
+                            {180'000,"180000"}, {9'999'999, "999999"}}, true));
 
+    }
     subgroups.back().second = "topic.write.message_size_bytes";
     {
         std::unique_ptr<TPercentileCounter> percentileCounter(new TPercentileCounter(

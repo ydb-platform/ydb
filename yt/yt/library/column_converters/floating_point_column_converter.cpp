@@ -16,7 +16,7 @@ namespace {
 
 template <typename T>
 void FillColumnarFloatingPointValues(
-    NTableClient::IUnversionedColumnarRowBatch::TColumn* column,
+    IUnversionedColumnarRowBatch::TColumn* column,
     i64 startIndex,
     i64 valueCount,
     TRef data)
@@ -24,7 +24,8 @@ void FillColumnarFloatingPointValues(
     column->StartIndex = startIndex;
     column->ValueCount = valueCount;
 
-    auto& values = column->Values.emplace();
+    column->Values = IUnversionedColumnarRowBatch::TValueBuffer{};
+    auto& values = *column->Values;
     values.BitWidth = sizeof(T) * 8;
     values.Data = data;
 }
@@ -45,7 +46,7 @@ TSharedRef SerializeFloatingPointVector(const std::vector<T>& values)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class TValue, NTableClient::EValueType ValueType>
+template <class TValue, EValueType ValueType>
 class TFloatingPointColumnConverter
     : public IColumnConverter
 {
@@ -54,7 +55,7 @@ public:
 
     TFloatingPointColumnConverter(
         int columnId,
-        const NTableClient::TColumnSchema& columnSchema,
+        const TColumnSchema& columnSchema,
         int columnOffset)
         : ColumnId_(columnId)
         , ColumnSchema_(columnSchema)
@@ -113,7 +114,7 @@ private:
     {
         for (const auto& rowValues : rowsValues) {
             auto value = rowValues[ColumnOffset_];
-            bool isNull = !value || value->Type == NTableClient::EValueType::Null;
+            bool isNull = !value || value->Type == EValueType::Null;
             TValue valueData = isNull ? 0 : value->Data.Double;
             NullBitmap_.Append(isNull);
             Values_.push_back(valueData);
@@ -125,14 +126,14 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IColumnConverterPtr CreateFloatingPoint32ColumnConverter(int columnId, const NTableClient::TColumnSchema& columnSchema, int columnOffset)
+IColumnConverterPtr CreateFloatingPoint32ColumnConverter(int columnId, const TColumnSchema& columnSchema, int columnOffset)
 {
-    return std::make_unique<TFloatingPointColumnConverter<float, NTableClient::EValueType::Double>>(columnId, columnSchema, columnOffset);
+    return std::make_unique<TFloatingPointColumnConverter<float, EValueType::Double>>(columnId, columnSchema, columnOffset);
 }
 
-IColumnConverterPtr CreateFloatingPoint64ColumnConverter(int columnId, const NTableClient::TColumnSchema& columnSchema, int columnOffset)
+IColumnConverterPtr CreateFloatingPoint64ColumnConverter(int columnId, const TColumnSchema& columnSchema, int columnOffset)
 {
-    return std::make_unique<TFloatingPointColumnConverter<double, NTableClient::EValueType::Double>>(columnId, columnSchema, columnOffset);
+    return std::make_unique<TFloatingPointColumnConverter<double, EValueType::Double>>(columnId, columnSchema, columnOffset);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

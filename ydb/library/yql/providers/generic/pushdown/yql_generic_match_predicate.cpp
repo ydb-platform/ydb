@@ -1,6 +1,6 @@
 #include "yql_generic_match_predicate.h"
 
-namespace NYql {
+namespace NYql::NGenericPushDown {
 
     namespace {
 
@@ -90,18 +90,18 @@ namespace NYql {
             return timestampStatistics.lowValue <= greatestTimestamp && timestampStatistics.highValue >= leastTimestamp ? Triple::True : Triple::False;
         }
 
-        Triple ComparatorTimestamp(const TMaybe<TColumnStatistics>& statistics, ::NYql::NConnector::NApi::TPredicate::TComparison::EOperation operation, const Ydb::TypedValue& rightValue, int64_t multiplier) {
-            if (!statistics || !statistics->Timestamp || !statistics->Timestamp->lowValue || !statistics->Timestamp->highValue) {
+        Triple ComparatorTimestamp(const TMaybe<TColumnStatistics>& lValue, ::NYql::NConnector::NApi::TPredicate::TComparison::EOperation operation, const Ydb::TypedValue& rValue, int64_t multiplier) {
+            if (!lValue || !lValue->Timestamp || !lValue->Timestamp->lowValue || !lValue->Timestamp->highValue) {
                 return Triple::Unknown;
             }
-            auto& timestampStatistics = *statistics->Timestamp;
-            if (!rightValue.type().has_type_id()) {
+            if (!rValue.type().has_type_id()) {
                 return Triple::Unknown;
             }
-            if (statistics->ColumnType.type_id() != rightValue.type().type_id()) {
+            if (lValue->ColumnType.type_id() != rValue.type().type_id()) {
                 return Triple::Unknown;
             }
-            auto rightValueTimestamp = TInstant::FromValue(rightValue.value().int64_value() * multiplier);
+            auto& timestampStatistics = *lValue->Timestamp;
+            auto rightValueTimestamp = TInstant::FromValue(rValue.value().int64_value() * multiplier);
             switch (operation) {
                 case ::NYql::NConnector::NApi::TPredicate::TComparison::EQ:
                     return timestampStatistics.lowValue <= rightValueTimestamp && rightValueTimestamp <= timestampStatistics.highValue ? Triple::True : Triple::False;
@@ -115,6 +115,38 @@ namespace NYql {
                     return rightValueTimestamp < timestampStatistics.highValue ? Triple::True : Triple::False;
                 case ::NYql::NConnector::NApi::TPredicate::TComparison::NE:
                     return rightValueTimestamp < timestampStatistics.lowValue || timestampStatistics.highValue < rightValueTimestamp ? Triple::True : Triple::False;
+                case ::NYql::NConnector::NApi::TPredicate::TComparison::COMPARISON_OPERATION_UNSPECIFIED:
+                case ::NYql::NConnector::NApi::TPredicate_TComparison_EOperation_TPredicate_TComparison_EOperation_INT_MIN_SENTINEL_DO_NOT_USE_:
+                case ::NYql::NConnector::NApi::TPredicate_TComparison_EOperation_TPredicate_TComparison_EOperation_INT_MAX_SENTINEL_DO_NOT_USE_:
+                    return Triple::Unknown;
+            }
+        }
+
+        Triple ComparatorTimestamp(const Ydb::TypedValue& lValue, ::NYql::NConnector::NApi::TPredicate::TComparison::EOperation operation, const TMaybe<TColumnStatistics>& rValue, int64_t multiplier) {
+            if (!rValue || !rValue->Timestamp || !rValue->Timestamp->lowValue || !rValue->Timestamp->highValue) {
+                return Triple::Unknown;
+            }
+            if (!lValue.type().has_type_id()) {
+                return Triple::Unknown;
+            }
+            if (lValue.type().type_id() != rValue->ColumnType.type_id()) {
+                return Triple::Unknown;
+            }
+            auto& timestampStatistics = *rValue->Timestamp;
+            auto leftValueTimestamp = TInstant::FromValue(lValue.value().int64_value() * multiplier);
+            switch (operation) {
+                case ::NYql::NConnector::NApi::TPredicate::TComparison::EQ:
+                    return timestampStatistics.lowValue <= leftValueTimestamp && leftValueTimestamp <= timestampStatistics.highValue ? Triple::True : Triple::False;
+                case ::NYql::NConnector::NApi::TPredicate::TComparison::LE:
+                    return leftValueTimestamp <= timestampStatistics.highValue ? Triple::True : Triple::False;
+                case ::NYql::NConnector::NApi::TPredicate::TComparison::L:
+                    return leftValueTimestamp < timestampStatistics.highValue ? Triple::True : Triple::False;
+                case ::NYql::NConnector::NApi::TPredicate::TComparison::GE:
+                    return timestampStatistics.lowValue <= leftValueTimestamp ? Triple::True : Triple::False;
+                case ::NYql::NConnector::NApi::TPredicate::TComparison::G:
+                    return timestampStatistics.lowValue < leftValueTimestamp ? Triple::True : Triple::False;
+                case ::NYql::NConnector::NApi::TPredicate::TComparison::NE:
+                    return leftValueTimestamp < timestampStatistics.lowValue || timestampStatistics.highValue < leftValueTimestamp ? Triple::True : Triple::False;
                 case ::NYql::NConnector::NApi::TPredicate::TComparison::COMPARISON_OPERATION_UNSPECIFIED:
                 case ::NYql::NConnector::NApi::TPredicate_TComparison_EOperation_TPredicate_TComparison_EOperation_INT_MIN_SENTINEL_DO_NOT_USE_:
                 case ::NYql::NConnector::NApi::TPredicate_TComparison_EOperation_TPredicate_TComparison_EOperation_INT_MAX_SENTINEL_DO_NOT_USE_:
@@ -161,36 +193,85 @@ namespace NYql {
             }
         }
 
-        Triple MatchComparison(const TMap<TString, TColumnStatistics>& columns, const NYql::NConnector::NApi::TPredicate::TComparison& comparison) {
-            TString columnName;
-            if (!GetColumn(comparison.left_value(), columnName)) { // TODO: ArithmeticalExpression
-                return Triple::Unknown;
-            }
-
-            auto it = columns.find(columnName);
-            if (it == columns.end()) {
-                return Triple::Unknown;
-            }
-
-            Ydb::TypedValue rightValue;
-            if (!GetTypedValue(comparison.right_value(), rightValue)) { // TODO: ArithmeticalExpression
-                return Triple::Unknown;
-            }
-
-            auto& statistics = it->second;
-            if (!statistics.ColumnType.has_type_id()) { // TODO: OptionalType
-                return Triple::Unknown;
-            }
-
-            switch (statistics.ColumnType.type_id()) {
+        Triple MatchComparison(const Ydb::TypedValue& lValue, ::NYql::NConnector::NApi::TPredicate::TComparison::EOperation operation, const TMaybe<TColumnStatistics>& rValue) {
+            switch (rValue->ColumnType.type_id()) {
                 case Ydb::Type::TIMESTAMP:
-                    return ComparatorTimestamp(statistics, comparison.operation(), rightValue, 1);
+                    return ComparatorTimestamp(lValue, operation, rValue, 1);
                 case Ydb::Type::DATETIME:
-                    return ComparatorTimestamp(statistics, comparison.operation(), rightValue, 1000000);
+                    return ComparatorTimestamp(lValue, operation, rValue, 1000000);
                 case Ydb::Type::DATE:
-                    return ComparatorTimestamp(statistics, comparison.operation(), rightValue, 24 * 3600 * 1000000LL);
+                    return ComparatorTimestamp(lValue, operation, rValue, 24 * 3600 * 1000000LL);
                 // TODO: other types
                 default:
+                    return Triple::Unknown;
+            }
+        }
+
+        Triple MatchComparison(const TMaybe<TColumnStatistics>& lValue, ::NYql::NConnector::NApi::TPredicate::TComparison::EOperation operation, const Ydb::TypedValue& rValue) {
+            switch (lValue->ColumnType.type_id()) {
+                case Ydb::Type::TIMESTAMP:
+                    return ComparatorTimestamp(lValue, operation, rValue, 1);
+                case Ydb::Type::DATETIME:
+                    return ComparatorTimestamp(lValue, operation, rValue, 1000000);
+                case Ydb::Type::DATE:
+                    return ComparatorTimestamp(lValue, operation, rValue, 24 * 3600 * 1000000LL);
+                // TODO: other types
+                default:
+                    return Triple::Unknown;
+            }
+        }
+
+        Triple MatchComparison(const TMap<TString, TColumnStatistics>& columns, const NYql::NConnector::NApi::TPredicate::TComparison& comparison) {
+            switch (comparison.left_value().payload_case()) {
+                case NYql::NConnector::NApi::TExpression::kColumn: {
+                    TString columnName;
+                    if (!GetColumn(comparison.left_value(), columnName)) { // TODO: ArithmeticalExpression
+                        return Triple::Unknown;
+                    }
+
+                    auto it = columns.find(columnName);
+                    if (it == columns.end()) {
+                        return Triple::Unknown;
+                    }
+
+                    Ydb::TypedValue rightValue;
+                    if (!GetTypedValue(comparison.right_value(), rightValue)) { // TODO: ArithmeticalExpression
+                        return Triple::Unknown;
+                    }
+
+                    auto& statistics = it->second;
+                    if (!statistics.ColumnType.has_type_id()) { // TODO: OptionalType
+                        return Triple::Unknown;
+                    }
+
+                    return MatchComparison(statistics, comparison.operation(), rightValue);
+                }
+                case NYql::NConnector::NApi::TExpression::kTypedValue: {
+                    TString columnName;
+                    if (!GetColumn(comparison.right_value(), columnName)) { // TODO: ArithmeticalExpression
+                        return Triple::Unknown;
+                    }
+
+                    auto it = columns.find(columnName);
+                    if (it == columns.end()) {
+                        return Triple::Unknown;
+                    }
+
+                    Ydb::TypedValue leftValue;
+                    if (!GetTypedValue(comparison.left_value(), leftValue)) { // TODO: ArithmeticalExpression
+                        return Triple::Unknown;
+                    }
+
+                    auto& statistics = it->second;
+                    if (!statistics.ColumnType.has_type_id()) { // TODO: OptionalType
+                        return Triple::Unknown;
+                    }
+
+                    return MatchComparison(leftValue, comparison.operation(), statistics);
+                }
+                case NYql::NConnector::NApi::TExpression::kArithmeticalExpression:
+                case NYql::NConnector::NApi::TExpression::kNull:
+                case NYql::NConnector::NApi::TExpression::PAYLOAD_NOT_SET:
                     return Triple::Unknown;
             }
         }
@@ -242,4 +323,4 @@ namespace NYql {
         return MatchPredicateImpl(columns, predicate) != Triple::False;
     }
 
-} // namespace NYql
+}

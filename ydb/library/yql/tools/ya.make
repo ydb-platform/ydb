@@ -8,6 +8,7 @@ RECURSE(
     pg-make-test
     pgrun
     purebench
+    solomon_emulator
     sql2yql
     sql_formatter
     udf_dep_stub

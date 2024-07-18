@@ -6,8 +6,6 @@ SRCS(
     yql_provider.cpp
     yql_provider.h
     yql_provider_names.h
-    yql_table_lookup.cpp
-    yql_table_lookup.h
 )
 
 PEERDIR(

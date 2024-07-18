@@ -15,6 +15,7 @@
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <contrib/libs/yaml-cpp/include/yaml-cpp/yaml.h>
 #include <library/cpp/yaml/as/tstring.h>
+#include <library/cpp/protobuf/json/proto2json.h>
 #include <util/system/fstat.h>
 #include <util/stream/file.h>
 #include "viewer.h"
@@ -43,6 +44,7 @@ extern void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitPDiskJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitVDiskJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitOperationJsonHandlers(TJsonHandlers& jsonHandlers);
+extern void InitSchemeJsonHandlers(TJsonHandlers& jsonHandlers);
 
 void SetupPQVirtualHandlers(IViewer* viewer) {
     viewer->RegisterVirtualHandler(
@@ -160,6 +162,13 @@ public:
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
+            mon->RegisterActorPage({
+                .RelPath = "scheme",
+                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorId = ctx.SelfID,
+                .UseAuth = true,
+                .AllowedSIDs = viewerAllowedSIDs,
+            });
             auto whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId());
             ctx.Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint(
                 "http-mon", Sprintf(":%d", KikimrRunConfig.AppConfig.GetMonitoringConfig().GetMonitoringPort())));
@@ -170,6 +179,7 @@ public:
             InitPDiskJsonHandlers(JsonHandlers);
             InitVDiskJsonHandlers(JsonHandlers);
             InitOperationJsonHandlers(JsonHandlers);
+            InitSchemeJsonHandlers(JsonHandlers);
 
             for (const auto& handler : JsonHandlers.JsonHandlersList) {
                 // temporary handling of old paths
@@ -197,16 +207,17 @@ public:
         return KikimrRunConfig;
     }
 
-    TString GetCORS(const NMon::TEvHttpInfo* request) override;
-    TString GetHTTPOK(const NMon::TEvHttpInfo* request, TString type, TString response, TInstant lastModified) override;
-    TString GetHTTPGATEWAYTIMEOUT(const NMon::TEvHttpInfo* request, TString type, TString response) override;
-    TString GetHTTPBADREQUEST(const NMon::TEvHttpInfo* request, TString type, TString response) override;
-    TString GetHTTPFORBIDDEN(const NMon::TEvHttpInfo* request) override;
-    TString GetHTTPNOTFOUND(const NMon::TEvHttpInfo* request) override;
-    TString GetHTTPINTERNALERROR(const NMon::TEvHttpInfo* request, TString contentType = {}, TString response = {}) override;
-    TString GetHTTPFORWARD(const NMon::TEvHttpInfo* request, const TString& location) override;
+    void FillCORS(TStringBuilder& stream, const TRequestState& request);
+    void FillTraceId(TStringBuilder& stream, const TRequestState& request);
+    TString GetHTTPOK(const TRequestState& request, TString type, TString response, TInstant lastModified) override;
+    TString GetHTTPGATEWAYTIMEOUT(const TRequestState& request, TString type, TString response) override;
+    TString GetHTTPBADREQUEST(const TRequestState& request, TString type, TString response) override;
+    TString GetHTTPFORBIDDEN(const TRequestState& request, TString type, TString response) override;
+    TString GetHTTPNOTFOUND(const TRequestState& request) override;
+    TString GetHTTPINTERNALERROR(const TRequestState& request, TString contentType = {}, TString response = {}) override;
+    TString GetHTTPFORWARD(const TRequestState& request, const TString& location) override;
 
-    bool CheckAccessAdministration(const NMon::TEvHttpInfo* request) override {
+    bool CheckAccessAdministration(const TRequestState& request) override {
         if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
             if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenCheckRequirement() || request->UserToken.empty()) {
                 return true;
@@ -292,7 +303,7 @@ public:
         }
     }
 
-    TString MakeForward(const NMon::TEvHttpInfo* request, const std::vector<ui32>& nodes) override {
+    TString MakeForward(const TRequestState& request, const std::vector<ui32>& nodes) override {
         if (nodes.empty()) {
             return GetHTTPINTERNALERROR(request, "text/plain", "Couldn't resolve database nodes");
         }
@@ -631,8 +642,7 @@ IActor* CreateViewer(const TKikimrRunConfig& kikimrRunConfig) {
     return new TViewer(kikimrRunConfig);
 }
 
-TString TViewer::GetCORS(const NMon::TEvHttpInfo* request) {
-    TStringBuilder res;
+void TViewer::FillCORS(TStringBuilder& stream, const TRequestState& request) {
     TString origin;
     if (AllowOrigin) {
         origin = AllowOrigin;
@@ -640,15 +650,20 @@ TString TViewer::GetCORS(const NMon::TEvHttpInfo* request) {
         origin = request->Request.GetHeader("Origin");
     }
     if (origin) {
-        res << "Access-Control-Allow-Origin: " << origin << "\r\n"
-            << "Access-Control-Allow-Credentials: true\r\n"
-            << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
-            << "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n";
+        stream << "Access-Control-Allow-Origin: " << origin << "\r\n"
+               << "Access-Control-Allow-Credentials: true\r\n"
+               << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
+               << "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n";
     }
-    return res;
 }
 
-TString TViewer::GetHTTPGATEWAYTIMEOUT(const NMon::TEvHttpInfo* request, TString contentType, TString response) {
+void TViewer::FillTraceId(TStringBuilder& stream, const TRequestState& request) {
+    if (request.TraceId) {
+        stream << "traceresponse: " << request.TraceId.ToTraceresponseHeader() << "\r\n";
+    }
+}
+
+TString TViewer::GetHTTPGATEWAYTIMEOUT(const TRequestState& request, TString contentType, TString response) {
     TStringBuilder res;
     res << "HTTP/1.1 504 Gateway Time-out\r\n"
         << "Connection: Close\r\n"
@@ -656,7 +671,8 @@ TString TViewer::GetHTTPGATEWAYTIMEOUT(const NMon::TEvHttpInfo* request, TString
     if (contentType) {
         res << "Content-Type: " << contentType << "\r\n";
     }
-    res << GetCORS(request);
+    FillCORS(res, request);
+    FillTraceId(res, request);
     res << "\r\n";
     if (response) {
         res << response << "\r\n";
@@ -666,7 +682,7 @@ TString TViewer::GetHTTPGATEWAYTIMEOUT(const NMon::TEvHttpInfo* request, TString
     return res;
 }
 
-TString TViewer::GetHTTPBADREQUEST(const NMon::TEvHttpInfo* request, TString contentType, TString response) {
+TString TViewer::GetHTTPBADREQUEST(const TRequestState& request, TString contentType, TString response) {
     TStringBuilder res;
     res << "HTTP/1.1 400 Bad Request\r\n"
         << "Connection: Close\r\n"
@@ -674,7 +690,8 @@ TString TViewer::GetHTTPBADREQUEST(const NMon::TEvHttpInfo* request, TString con
     if (contentType) {
         res << "Content-Type: " << contentType << "\r\n";
     }
-    res << GetCORS(request);
+    FillCORS(res, request);
+    FillTraceId(res, request);
     res << "\r\n";
     if (response) {
         res << response;
@@ -682,29 +699,38 @@ TString TViewer::GetHTTPBADREQUEST(const NMon::TEvHttpInfo* request, TString con
     return res;
 }
 
-TString TViewer::GetHTTPFORBIDDEN(const NMon::TEvHttpInfo* request) {
+TString TViewer::GetHTTPFORBIDDEN(const TRequestState& request, TString contentType, TString response) {
     TStringBuilder res;
     res << "HTTP/1.1 403 Forbidden\r\n"
         << "Connection: Close\r\n";
-    res << GetCORS(request);
+    if (contentType) {
+        res << "Content-Type: " << contentType << "\r\n";
+    }
+    FillCORS(res, request);
+    FillTraceId(res, request);
     res << "\r\n";
+    if (response) {
+        res << response;
+    }
     return res;
 }
 
-TString TViewer::GetHTTPNOTFOUND(const NMon::TEvHttpInfo* request) {
+TString TViewer::GetHTTPNOTFOUND(const TRequestState& request) {
     TStringBuilder res;
     res << "HTTP/1.1 404 Not Found\r\n"
         << "Connection: Close\r\n";
-    res << GetCORS(request);
+    FillCORS(res, request);
+    FillTraceId(res, request);
     res << "\r\n";
     return res;
 }
 
-TString TViewer::GetHTTPOK(const NMon::TEvHttpInfo* request, TString contentType, TString response, TInstant lastModified) {
+TString TViewer::GetHTTPOK(const TRequestState& request, TString contentType, TString response, TInstant lastModified) {
     TStringBuilder res;
     res << "HTTP/1.1 200 Ok\r\n"
         << "X-Worker-Name: " << CurrentWorkerName << "\r\n";
-    res << GetCORS(request);
+    FillCORS(res, request);
+    FillTraceId(res, request);
     if (response) {
         res << "Content-Type: " << contentType << "\r\n";
         res << "Content-Length: " << response.size() << "\r\n";
@@ -721,11 +747,12 @@ TString TViewer::GetHTTPOK(const NMon::TEvHttpInfo* request, TString contentType
     return res;
 }
 
-TString TViewer::GetHTTPINTERNALERROR(const NMon::TEvHttpInfo* request, TString contentType, TString response) {
+TString TViewer::GetHTTPINTERNALERROR(const TRequestState& request, TString contentType, TString response) {
     TStringBuilder res;
     res << "HTTP/1.1 500 Internal Server Error\r\n"
         << "X-Worker-Name: " << CurrentWorkerName << "\r\n";
-    res << GetCORS(request);
+    FillCORS(res, request);
+    FillTraceId(res, request);
     if (response) {
         res << "Content-Type: " << contentType << "\r\n";
         res << "Content-Length: " << response.size() << "\r\n";
@@ -737,13 +764,52 @@ TString TViewer::GetHTTPINTERNALERROR(const NMon::TEvHttpInfo* request, TString 
     return res;
 }
 
-TString TViewer::GetHTTPFORWARD(const NMon::TEvHttpInfo* request, const TString& location) {
+TString TViewer::GetHTTPFORWARD(const TRequestState& request, const TString& location) {
     TStringBuilder res;
     res << "HTTP/1.1 307 Temporary Redirect\r\n"
         << "Location: " << location << "\r\n";
-    res << GetCORS(request);
+    FillCORS(res, request);
+    FillTraceId(res, request);
     res << "\r\n";
     return res;
+}
+
+void MakeErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYdb::TStatus& status) {
+    google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> protoIssues;
+    NYql::IssuesToMessage(status.GetIssues(), &protoIssues);
+
+    message.clear();
+
+    NJson::TJsonValue& jsonIssues = jsonResponse["issues"];
+    for (const auto& queryIssue : protoIssues) {
+        NJson::TJsonValue& issue = jsonIssues.AppendValue({});
+        NProtobufJson::Proto2Json(queryIssue, issue);
+    }
+
+    TString textStatus = TStringBuilder() << status.GetStatus();
+    jsonResponse["status"] = textStatus;
+
+    // find first deepest error
+    std::stable_sort(protoIssues.begin(), protoIssues.end(), [](const Ydb::Issue::IssueMessage& a, const Ydb::Issue::IssueMessage& b) -> bool {
+        return a.severity() < b.severity();
+    });
+
+    const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* protoIssuesPtr = &protoIssues;
+    while (protoIssuesPtr->size() > 0 && protoIssuesPtr->at(0).issuesSize() > 0) {
+        protoIssuesPtr = &protoIssuesPtr->at(0).issues();
+    }
+
+    if (protoIssuesPtr->size() > 0) {
+        const Ydb::Issue::IssueMessage& issue = protoIssuesPtr->at(0);
+        NProtobufJson::Proto2Json(issue, jsonResponse["error"]);
+        message = issue.message();
+    } else {
+        jsonResponse["error"]["message"] = textStatus;
+    }
+
+    if (message.empty()) {
+        message = textStatus;
+    }
 }
 
 NKikimrViewer::EFlag GetFlagFromTabletState(NKikimrWhiteboard::TTabletStateInfo::ETabletState state) {
@@ -993,6 +1059,26 @@ NKikimrViewer::EFlag GetBSGroupOverallFlag(
         const TMap<NKikimrBlobStorage::TVDiskID, const NKikimrWhiteboard::TVDiskStateInfo&>& vDisksIndex,
         const TMap<std::pair<ui32, ui32>, const NKikimrWhiteboard::TPDiskStateInfo&>& pDisksIndex) {
     return GetBSGroupOverallState(info, vDisksIndex, pDisksIndex).Overall;
+}
+
+NKikimrViewer::EFlag GetViewerFlag(Ydb::Monitoring::StatusFlag::Status flag) {
+    switch (flag) {
+    case Ydb::Monitoring::StatusFlag::GREY:
+    case Ydb::Monitoring::StatusFlag::UNSPECIFIED:
+    case Ydb::Monitoring::StatusFlag_Status_StatusFlag_Status_INT_MIN_SENTINEL_DO_NOT_USE_:
+    case Ydb::Monitoring::StatusFlag_Status_StatusFlag_Status_INT_MAX_SENTINEL_DO_NOT_USE_:
+        return NKikimrViewer::EFlag::Grey;
+    case Ydb::Monitoring::StatusFlag::GREEN:
+        return NKikimrViewer::EFlag::Green;
+    case Ydb::Monitoring::StatusFlag::BLUE:
+        return NKikimrViewer::EFlag::Green;
+    case Ydb::Monitoring::StatusFlag::YELLOW:
+        return NKikimrViewer::EFlag::Yellow;
+    case Ydb::Monitoring::StatusFlag::ORANGE:
+        return NKikimrViewer::EFlag::Orange;
+    case Ydb::Monitoring::StatusFlag::RED:
+        return NKikimrViewer::EFlag::Red;
+    }
 }
 
 NKikimrWhiteboard::EFlag GetWhiteboardFlag(NKikimrViewer::EFlag flag) {

@@ -24,6 +24,7 @@ private:
     TString JsonReportFileName;
     TString CsvReportFileName;
     TString MiniStatFileName;
+    TString PlanFileName;
     TSet<ui32> QueriesToRun;
     TSet<ui32> QueriesToSkip;
     TVector<TString> QuerySettings;

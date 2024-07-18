@@ -1,0 +1,3 @@
+/*! Fabric.js Copyright 2008-2015, Printio (Juriy Zaytsev, Maxim Chernyak) */
+
+/*! crc32.js (C) 2014-present SheetJS -- http://sheetjs.com */

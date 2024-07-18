@@ -31,9 +31,7 @@ std::shared_ptr<arrow::RecordBatch> TReadPortionInfoWithBlobs::GetBatch(const IS
         for (auto&& i : columnNames) {
             columnNamesString.emplace_back(i.data(), i.size());
         }
-        auto result = NArrow::ExtractColumns(*CachedBatch, columnNamesString);
-        Y_ABORT_UNLESS(result);
-        return result;
+        return NArrow::TColumnOperator().VerifyIfAbsent().Extract(*CachedBatch, columnNamesString);
     } else {
         auto filteredSchema = std::make_shared<TFilteredSnapshotSchema>(data, columnNames);
         THashMap<TChunkAddress, TString> blobs;
@@ -47,12 +45,10 @@ std::shared_ptr<arrow::RecordBatch> TReadPortionInfoWithBlobs::GetBatch(const IS
 
 NKikimr::NOlap::TReadPortionInfoWithBlobs TReadPortionInfoWithBlobs::RestorePortion(const TPortionInfo& portion, NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) {
     TReadPortionInfoWithBlobs result(portion);
-    THashMap<TString, THashMap<TUnifiedBlobId, std::vector<std::shared_ptr<IPortionDataChunk>>>> records = result.PortionInfo.RestoreEntityChunks(blobs, indexInfo);
-    for (auto&& [storageId, recordsByBlob] : records) {
-        for (auto&& i : recordsByBlob) {
-            for (auto&& d : i.second) {
-                result.RestoreChunk(d);
-            }
+    THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> records = result.PortionInfo.RestoreEntityChunks(blobs, indexInfo);
+    for (auto&& [storageId, chunksByAddress] : records) {
+        for (auto&& [_, chunk] : chunksByAddress) {
+            result.RestoreChunk(chunk);
         }
     }
     return result;
@@ -107,7 +103,7 @@ bool TReadPortionInfoWithBlobs::ExtractColumnChunks(const ui32 entityId, std::ve
     return true;
 }
 
-std::optional<TWritePortionInfoWithBlobs> TReadPortionInfoWithBlobs::SyncPortion(TReadPortionInfoWithBlobs&& source,
+std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncPortion(TReadPortionInfoWithBlobs&& source,
     const ISnapshotSchema::TPtr& from, const ISnapshotSchema::TPtr& to, const TString& targetTier, const std::shared_ptr<IStoragesManager>& storages,
     std::shared_ptr<NColumnShard::TSplitterCounters> counters) {
     if (from->GetVersion() == to->GetVersion() && targetTier == source.GetPortionInfo().GetTierNameDef(IStoragesManager::DefaultStorageId)) {
@@ -139,34 +135,23 @@ std::optional<TWritePortionInfoWithBlobs> TReadPortionInfoWithBlobs::SyncPortion
         AFL_VERIFY(entityChunksNew.emplace(i, std::move(newChunks)).second);
     }
 
-    for (auto&& i : to->GetIndexInfo().GetIndexes()) {
-        if (from->GetIndexInfo().HasIndexId(i.first)) {
-            continue;
-        }
-        to->GetIndexInfo().AppendIndex(entityChunksNew, i.first);
-    }
-
-    auto schemaTo = std::make_shared<TDefaultSchemaDetails>(to, std::make_shared<TSerializationStats>());
-    TGeneralSerializedSlice slice(entityChunksNew, schemaTo, counters);
-    const NSplitter::TEntityGroups groups = to->GetIndexInfo().GetEntityGroupsByStorageId(targetTier, *storages);
     TPortionInfoConstructor constructor(source.PortionInfo, false, true);
     constructor.SetMinSnapshotDeprecated(to->GetSnapshot());
     constructor.SetSchemaVersion(to->GetVersion());
     constructor.MutableMeta().ResetTierName(targetTier);
 
-    NStatistics::TPortionStorage storage;
-    for (auto&& i : to->GetIndexInfo().GetStatisticsByName()) {
-        auto it = from->GetIndexInfo().GetStatisticsByName().find(i.first);
-        if (it != from->GetIndexInfo().GetStatisticsByName().end()) {
-            i.second->CopyData(it->second.GetCursorVerified(), source.PortionInfo.GetMeta().GetStatisticsStorage(), storage);
-        } else {
-            i.second->FillStatisticsData(entityChunksNew, storage, to->GetIndexInfo());
+    TIndexInfo::TSecondaryData secondaryData;
+    secondaryData.MutableExternalData() = entityChunksNew;
+    for (auto&& i : to->GetIndexInfo().GetIndexes()) {
+            to->GetIndexInfo().AppendIndex(entityChunksNew, i.first, storages, secondaryData).Validate();
         }
-    }
-    constructor.MutableMeta().ResetStatisticsStorage(std::move(storage));
 
-    TWritePortionInfoWithBlobs result = TWritePortionInfoWithBlobs::BuildByBlobs(slice.GroupChunksByBlobs(groups), std::move(constructor), storages);
-    return result;
+    const NSplitter::TEntityGroups groups = to->GetIndexInfo().GetEntityGroupsByStorageId(targetTier, *storages);
+    auto schemaTo = std::make_shared<TDefaultSchemaDetails>(to, std::make_shared<TSerializationStats>());
+    TGeneralSerializedSlice slice(secondaryData.GetExternalData(), schemaTo, counters);
+
+    return TWritePortionInfoWithBlobsConstructor::BuildByBlobs(
+        slice.GroupChunksByBlobs(groups), secondaryData.GetSecondaryInplaceData(), std::move(constructor), storages);
 }
 
 const TString& TReadPortionInfoWithBlobs::GetBlobByAddressVerified(const ui32 columnId, const ui32 chunkId) const {

@@ -199,14 +199,14 @@ public:
         sslResult = SSL_get_error(Ssl_, sslResult);
         YT_VERIFY(sslResult == SSL_ERROR_WANT_READ);
 
-        Invoker_->Invoke(BIND(&TTlsConnection::DoRun, MakeStrong(this)));
+        Invoker_->Invoke(BIND(&TTlsConnection::DoRun, MakeWeak(this)));
     }
 
     void StartServer()
     {
         SSL_set_accept_state(Ssl_);
 
-        Invoker_->Invoke(BIND(&TTlsConnection::DoRun, MakeStrong(this)));
+        Invoker_->Invoke(BIND(&TTlsConnection::DoRun, MakeWeak(this)));
     }
 
     int GetHandle() const override
@@ -268,7 +268,11 @@ public:
     {
         auto promise = NewPromise<size_t>();
         ++ActiveIOCount_;
-        Invoker_->Invoke(BIND([this, this_ = MakeStrong(this), promise, buffer] {
+        Invoker_->Invoke(BIND([this, weakThis = MakeWeak(this), promise, buffer] {
+            auto thisLocked = weakThis.Lock();
+            if (!thisLocked) {
+                return;
+            }
             ReadBuffer_ = buffer;
             ReadPromise_ = promise;
 
@@ -289,7 +293,11 @@ public:
     {
         auto promise = NewPromise<void>();
         ++ActiveIOCount_;
-        Invoker_->Invoke(BIND([this, this_ = MakeStrong(this), promise, buffer] {
+        Invoker_->Invoke(BIND([this, weakThis = MakeWeak(this), promise, buffer] {
+            auto thisLocked = weakThis.Lock();
+            if (!thisLocked) {
+                return;
+            }
             WriteBuffer_ = buffer;
             WritePromise_ = promise;
 
@@ -420,7 +428,11 @@ private:
             UnderlyingReadActive_ = true;
             HandleUnderlyingIOResult(
                 Underlying_->Read(InputBuffer_),
-                BIND([this, this_ = MakeStrong(this)] (const TErrorOr<size_t>& result) {
+                BIND([this, weakThis = MakeWeak(this)] (const TErrorOr<size_t>& result) {
+                    auto thisLocked = weakThis.Lock();
+                    if (!thisLocked) {
+                        return;
+                    }
                     UnderlyingReadActive_ = false;
                     if (result.IsOK()) {
                         if (result.Value() > 0) {
@@ -447,7 +459,11 @@ private:
 
             HandleUnderlyingIOResult(
                 Underlying_->Write(OutputBuffer_.Slice(0, count)),
-                BIND([this, this_ = MakeStrong(this)] (const TError& result) {
+                BIND([this, weakThis = MakeWeak(this)] (const TError& result) {
+                    auto thisLocked = weakThis.Lock();
+                    if (!thisLocked) {
+                        return;
+                    }
                     UnderlyingWriteActive_ = false;
                     if (result.IsOK()) {
                         // Hooray!

@@ -49,7 +49,7 @@
  * we calculate operands first.  Then we check that results are numeric
  * singleton lists, calculate the result and pass it to the next path item.
  *
- * Copyright (c) 2019-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2019-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	src/backend/utils/adt/jsonpath_exec.c
@@ -64,6 +64,7 @@
 #include "funcapi.h"
 #include "lib/stringinfo.h"
 #include "miscadmin.h"
+#include "nodes/miscnodes.h"
 #include "regex/regex.h"
 #include "utils/builtins.h"
 #include "utils/date.h"
@@ -252,7 +253,7 @@ static int	JsonbType(JsonbValue *jb);
 static JsonbValue *getScalar(JsonbValue *scalar, enum jbvType type);
 static JsonbValue *wrapItemsInArray(const JsonValueList *items);
 static int	compareDatetime(Datum val1, Oid typid1, Datum val2, Oid typid2,
-							bool useTz, bool *have_error);
+							bool useTz, bool *cast_error);
 
 /****************** User interface to JsonPath executor ********************/
 
@@ -958,9 +959,13 @@ executeItemOptUnwrapTarget(JsonPathExecContext *cxt, JsonPathItem *jsp,
 				JsonbValue *v;
 				bool		hasNext = jspGetNext(jsp, &elem);
 
-				if (!hasNext && !found)
+				if (!hasNext && !found && jsp->type != jpiVariable)
 				{
-					res = jperOk;	/* skip evaluation */
+					/*
+					 * Skip evaluation, but not for variables.  We must
+					 * trigger an error for the missing variable.
+					 */
+					res = jperOk;
 					break;
 				}
 
@@ -1041,15 +1046,15 @@ executeItemOptUnwrapTarget(JsonPathExecContext *cxt, JsonPathItem *jsp,
 					char	   *tmp = DatumGetCString(DirectFunctionCall1(numeric_out,
 																		  NumericGetDatum(jb->val.numeric)));
 					double		val;
-					bool		have_error = false;
+					ErrorSaveContext escontext = {T_ErrorSaveContext};
 
-					val = float8in_internal_opt_error(tmp,
-													  NULL,
-													  "double precision",
-													  tmp,
-													  &have_error);
+					val = float8in_internal(tmp,
+											NULL,
+											"double precision",
+											tmp,
+											(Node *) &escontext);
 
-					if (have_error || isinf(val) || isnan(val))
+					if (escontext.error_occurred || isinf(val) || isnan(val))
 						RETURN_ERROR(ereport(ERROR,
 											 (errcode(ERRCODE_NON_NUMERIC_SQL_JSON_ITEM),
 											  errmsg("numeric argument of jsonpath item method .%s() is out of range for type double precision",
@@ -1062,15 +1067,15 @@ executeItemOptUnwrapTarget(JsonPathExecContext *cxt, JsonPathItem *jsp,
 					double		val;
 					char	   *tmp = pnstrdup(jb->val.string.val,
 											   jb->val.string.len);
-					bool		have_error = false;
+					ErrorSaveContext escontext = {T_ErrorSaveContext};
 
-					val = float8in_internal_opt_error(tmp,
-													  NULL,
-													  "double precision",
-													  tmp,
-													  &have_error);
+					val = float8in_internal(tmp,
+											NULL,
+											"double precision",
+											tmp,
+											(Node *) &escontext);
 
-					if (have_error || isinf(val) || isnan(val))
+					if (escontext.error_occurred || isinf(val) || isnan(val))
 						RETURN_ERROR(ereport(ERROR,
 											 (errcode(ERRCODE_NON_NUMERIC_SQL_JSON_ITEM),
 											  errmsg("string argument of jsonpath item method .%s() is not a valid representation of a double precision number",
@@ -1227,6 +1232,9 @@ executeBoolItem(JsonPathExecContext *cxt, JsonPathItem *jsp,
 	JsonPathBool res;
 	JsonPathBool res2;
 
+	/* since this function recurses, it could be driven to stack overflow */
+	check_stack_depth();
+
 	if (!canHaveNext && jspHasNext(jsp))
 		elog(ERROR, "boolean jsonpath item cannot have next item");
 
@@ -1321,8 +1329,8 @@ executeBoolItem(JsonPathExecContext *cxt, JsonPathItem *jsp,
 				 */
 				JsonValueList vals = {0};
 				JsonPathExecResult res =
-				executeItemOptUnwrapResultNoThrow(cxt, &larg, jb,
-												  false, &vals);
+					executeItemOptUnwrapResultNoThrow(cxt, &larg, jb,
+													  false, &vals);
 
 				if (jperIsError(res))
 					return jpbUnknown;
@@ -1332,8 +1340,8 @@ executeBoolItem(JsonPathExecContext *cxt, JsonPathItem *jsp,
 			else
 			{
 				JsonPathExecResult res =
-				executeItemOptUnwrapResultNoThrow(cxt, &larg, jb,
-												  false, NULL);
+					executeItemOptUnwrapResultNoThrow(cxt, &larg, jb,
+													  false, NULL);
 
 				if (jperIsError(res))
 					return jpbUnknown;
@@ -1720,7 +1728,8 @@ executeLikeRegex(JsonPathItem *jsp, JsonbValue *str, JsonbValue *rarg,
 		cxt->regex =
 			cstring_to_text_with_len(jsp->content.like_regex.pattern,
 									 jsp->content.like_regex.patternlen);
-		cxt->cflags = jspConvertRegexFlags(jsp->content.like_regex.flags);
+		(void) jspConvertRegexFlags(jsp->content.like_regex.flags,
+									&(cxt->cflags), NULL);
 	}
 
 	if (RE_compile_and_execute(cxt->regex, str->val.string.val,
@@ -1807,7 +1816,7 @@ executeDateTimeMethod(JsonPathExecContext *cxt, JsonPathItem *jsp,
 		text	   *template;
 		char	   *template_str;
 		int			template_len;
-		bool		have_error = false;
+		ErrorSaveContext escontext = {T_ErrorSaveContext};
 
 		jspGetArg(jsp, &elem);
 
@@ -1821,9 +1830,9 @@ executeDateTimeMethod(JsonPathExecContext *cxt, JsonPathItem *jsp,
 
 		value = parse_datetime(datetime, template, collid, true,
 							   &typid, &typmod, &tz,
-							   jspThrowErrors(cxt) ? NULL : &have_error);
+							   jspThrowErrors(cxt) ? NULL : (Node *) &escontext);
 
-		if (have_error)
+		if (escontext.error_occurred)
 			res = jperError;
 		else
 			res = jperOk;
@@ -1834,20 +1843,29 @@ executeDateTimeMethod(JsonPathExecContext *cxt, JsonPathItem *jsp,
 		 * According to SQL/JSON standard enumerate ISO formats for: date,
 		 * timetz, time, timestamptz, timestamp.
 		 *
-		 * We also support ISO 8601 for timestamps, because to_json[b]()
-		 * functions use this format.
+		 * We also support ISO 8601 format (with "T") for timestamps, because
+		 * to_json[b]() functions use this format.
 		 */
 		static __thread const char *fmt_str[] =
 		{
-			"yyyy-mm-dd",
+			"yyyy-mm-dd",		/* date */
+			"HH24:MI:SS.USTZH:TZM", /* timetz */
+			"HH24:MI:SS.USTZH",
 			"HH24:MI:SSTZH:TZM",
 			"HH24:MI:SSTZH",
+			"HH24:MI:SS.US",	/* time without tz */
 			"HH24:MI:SS",
+			"yyyy-mm-dd HH24:MI:SS.USTZH:TZM",	/* timestamptz */
+			"yyyy-mm-dd HH24:MI:SS.USTZH",
 			"yyyy-mm-dd HH24:MI:SSTZH:TZM",
 			"yyyy-mm-dd HH24:MI:SSTZH",
-			"yyyy-mm-dd HH24:MI:SS",
+			"yyyy-mm-dd\"T\"HH24:MI:SS.USTZH:TZM",
+			"yyyy-mm-dd\"T\"HH24:MI:SS.USTZH",
 			"yyyy-mm-dd\"T\"HH24:MI:SSTZH:TZM",
 			"yyyy-mm-dd\"T\"HH24:MI:SSTZH",
+			"yyyy-mm-dd HH24:MI:SS.US", /* timestamp without tz */
+			"yyyy-mm-dd HH24:MI:SS",
+			"yyyy-mm-dd\"T\"HH24:MI:SS.US",
 			"yyyy-mm-dd\"T\"HH24:MI:SS"
 		};
 
@@ -1858,12 +1876,12 @@ executeDateTimeMethod(JsonPathExecContext *cxt, JsonPathItem *jsp,
 		/* loop until datetime format fits */
 		for (i = 0; i < lengthof(fmt_str); i++)
 		{
-			bool		have_error = false;
+			ErrorSaveContext escontext = {T_ErrorSaveContext};
 
 			if (!fmt_txt[i])
 			{
 				MemoryContext oldcxt =
-				MemoryContextSwitchTo(TopMemoryContext);
+					MemoryContextSwitchTo(TopMemoryContext);
 
 				fmt_txt[i] = cstring_to_text(fmt_str[i]);
 				MemoryContextSwitchTo(oldcxt);
@@ -1871,9 +1889,9 @@ executeDateTimeMethod(JsonPathExecContext *cxt, JsonPathItem *jsp,
 
 			value = parse_datetime(datetime, fmt_txt[i], collid, true,
 								   &typid, &typmod, &tz,
-								   &have_error);
+								   (Node *) &escontext);
 
-			if (!have_error)
+			if (!escontext.error_occurred)
 			{
 				res = jperOk;
 				break;
@@ -2452,7 +2470,7 @@ JsonValueListLength(const JsonValueList *jvl)
 static bool
 JsonValueListIsEmpty(JsonValueList *jvl)
 {
-	return !jvl->singleton && list_length(jvl->list) <= 0;
+	return !jvl->singleton && (jvl->list == NIL);
 }
 
 static JsonbValue *
@@ -2643,7 +2661,7 @@ static int
 compareDatetime(Datum val1, Oid typid1, Datum val2, Oid typid2,
 				bool useTz, bool *cast_error)
 {
-	PGFunction cmpfunc;
+	PGFunction	cmpfunc;
 
 	*cast_error = false;
 

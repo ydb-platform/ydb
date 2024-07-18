@@ -63,7 +63,7 @@ std::vector<TFiberIntrospectionInfo> IntrospectFibers()
                 YT_LOG_DEBUG("Waiting fiber is successfully locked for introspection (FiberId: %x)",
                     fiberId);
 
-                const auto& propagatingStorage = NConcurrency::GetPropagatingStorage(*fiber->GetFls());
+                const auto& propagatingStorage = *NConcurrency::TryGetPropagatingStorage(*fiber->GetFls());
                 const auto* traceContext = TryGetTraceContextFromPropagatingStorage(propagatingStorage);
 
                 TFiberIntrospectionInfo info{

@@ -38,11 +38,11 @@ void PrintStatistics(const TString& fullStat, const THashMap<TString, i64>& flat
     output << "\nFlat statistics:" << Endl;
     for (const auto& [propery, value] : flatStat) {
         TString valueString = ToString(value);
-        if (propery.find("Bytes") != TString::npos || propery.find("Source") != TString::npos) {
+        if (propery.Contains("Bytes")) {
             valueString = NKikimr::NBlobDepot::FormatByteSize(value);
-        } else if (propery.find("TimeUs") != TString::npos) {
+        } else if (propery.Contains("TimeUs")) {
             valueString = NFq::FormatDurationUs(value);
-        } else if (propery.find("TimeMs") != TString::npos) {
+        } else if (propery.Contains("TimeMs")) {
             valueString = NFq::FormatDurationMs(value);
         } else {
             valueString = FormatNumber(value);
@@ -199,12 +199,16 @@ public:
             return false;
         }
 
+        if (!status.Issues.Empty()) {
+            Cerr << CerrColors_.Red() << "Forget operation finished with issues:" << CerrColors_.Default() << Endl << status.Issues.ToString() << Endl;
+        }
+
         return true;
     }
 
     void PrintScriptResults() const {
         if (Options_.ResultOutput) {
-            Cout << CoutColors_.Cyan() << "Writing script query results" << CoutColors_.Default() << Endl;
+            Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Writing script query results..." << CoutColors_.Default() << Endl;
             for (size_t i = 0; i < ResultSets_.size(); ++i) {
                 if (ResultSets_.size() > 1) {
                     *Options_.ResultOutput << CoutColors_.Cyan() << "Result set " << i + 1 << ":" << CoutColors_.Default() << Endl;

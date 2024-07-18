@@ -42,6 +42,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/include/client.h>
 #include <thread>
 
 
@@ -978,7 +979,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     }
 
     Y_UNIT_TEST(DirectReadPreCached) {
-        TPersQueueV1TestServer server{{.CheckACL=true}};
+TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         SET_LOCALS;
         TDirectReadTestSetup setup{server};
         setup.DoWrite(pqClient->GetDriver(), "acc/topic1", 1_MB, 30);
@@ -1011,7 +1012,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     }
 
     Y_UNIT_TEST(DirectReadNotCached) {
-        TPersQueueV1TestServer server{{.CheckACL=true}};
+        TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         SET_LOCALS;
         TDirectReadTestSetup setup{server};
 
@@ -1042,7 +1043,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     }
 
     Y_UNIT_TEST(DirectReadBadCases) {
-        TPersQueueV1TestServer server{{.CheckACL=true}};
+        TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         SET_LOCALS;
         TDirectReadTestSetup setup{server};
         setup.InitControlSession("acc/topic1");
@@ -3373,6 +3374,54 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightTotal->Val(), 0);
 
         DumpCounters("End");
+    }
+
+    Y_UNIT_TEST(NoDecompressionMemoryLeaks) {
+
+        NPersQueue::TTestServer server;
+        server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::PQ_READ_PROXY});
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
+
+        auto driver = server.AnnoyingClient->GetDriver();
+        auto decompressor = CreateThreadPoolExecutorWrapper(2);
+
+        NYdb::NPersQueue::TReadSessionSettings settings;
+        settings.ConsumerName("shared/user").AppendTopics(SHORT_TOPIC_NAME).ReadOriginal({"dc1"});
+        settings.DecompressionExecutor(decompressor);
+        settings.MaxMemoryUsageBytes(5_MB);
+        settings.Decompress(true);
+
+        auto reader = CreateReader(*driver, settings);
+
+        //
+        // there should be 1 TCreatePartitionStreamEvent events in the queue
+        //
+        {
+            auto msg = reader->GetEvent(true, 1);
+            UNIT_ASSERT(msg);
+
+            Cerr << ">>>> message: " << NYdb::NPersQueue::DebugString(*msg) << Endl;
+
+            auto ev = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*msg);
+            UNIT_ASSERT(ev);
+
+            ev->Confirm();
+        }
+
+        for (ui32 i = 0; i < 10; ++i) {
+            auto writer = CreateSimpleWriter(*driver, SHORT_TOPIC_NAME, TStringBuilder() << "source" << i);
+
+            std::string message(1_MB - 1_KB, 'x');
+
+            bool res = writer->Write(message, 1);
+            UNIT_ASSERT(res);
+
+            res = writer->Close(TDuration::Seconds(10));
+            UNIT_ASSERT(res);
+        }
+
+        decompressor->StartFuncs({0, 1, 2});
+        Sleep(TDuration::Seconds(1));
     }
 
     enum WhenTheTopicIsDeletedMode {
@@ -7223,6 +7272,100 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         readConsistently2.join();
         diff = (TInstant::Now() - startTime).Seconds();
         UNIT_ASSERT(diff >= timeNeededToWaitQuotaAfterReadToEnd * 2);
+    }
+
+    Y_UNIT_TEST(TxCounters) {
+        TServerSettings settings = PQSettings(0, 1);
+        settings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+        settings.PQConfig.SetRoot("/Root");
+        settings.PQConfig.SetDatabase("/Root");
+        settings.SetEnableTopicServiceTx(true);
+        NPersQueue::TTestServer server{settings, true};
+
+        server.EnableLogs({ NKikimrServices::PERSQUEUE }, NActors::NLog::PRI_INFO);
+
+
+        NYdb::TDriverConfig config;
+        config.SetEndpoint(TStringBuilder() << "localhost:" + ToString(server.GrpcPort));
+        config.SetDatabase("/Root");
+        config.SetAuthToken("root@builtin");
+        auto driver = NYdb::TDriver(config);
+
+        NYdb::NTable::TTableClient client(driver);
+        NYdb::NTopic::TTopicClient topicClient(driver);
+
+        auto result = client.CreateSession().ExtractValueSync();
+        auto tableSession = result.GetSession();
+        auto txResult = tableSession.BeginTransaction().ExtractValueSync();
+        auto tx = txResult.GetTransaction();
+
+        TString topic = "topic";
+        NYdb::NTopic::TCreateTopicSettings createSettings;
+        createSettings.BeginConfigurePartitioningSettings()
+              .MinActivePartitions(1)
+              .MaxActivePartitions(1);
+
+        auto status = topicClient.CreateTopic(topic, createSettings).GetValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        server.WaitInit(topic);
+
+        NYdb::NTopic::TWriteSessionSettings options;
+        options.Path(topic);
+        options.ProducerId("123");
+        auto writer = topicClient.CreateWriteSession(options);
+
+        auto send = [&](ui64 dataSize, const TDuration& writeLag) {
+            while (true) {
+                auto msg = writer->GetEvent(true);
+                UNIT_ASSERT(msg);
+                auto ev = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*msg);
+                if (!ev)
+                    continue;
+                TString data(dataSize, 'a');
+                NYdb::NTopic::TWriteMessage writeMsg{data};
+                writeMsg.CreateTimestamp(TInstant::Now() - writeLag);
+                writeMsg.Codec = NYdb::NTopic::ECodec::RAW;
+                writeMsg.Tx(tx);
+                writer->Write(std::move(ev->ContinuationToken), std::move(writeMsg));
+                return;
+            }
+        };
+        send(10, TDuration::MilliSeconds(1001));
+        send(5 * 1024 + 1, TDuration::MilliSeconds(1101));
+        send(5 * 1024 + 1, TDuration::MilliSeconds(1201));
+        send(10241, TDuration::MilliSeconds(2505));
+        writer->Close();
+
+        auto commitResult = tx.Commit().ExtractValueSync();
+        UNIT_ASSERT(commitResult.GetStatus() == NYdb::EStatus::SUCCESS);
+
+        auto counters = server.GetRuntime()->GetAppData(0).Counters;
+        auto serviceCounters = GetServiceCounters(counters, "datastreams", false);
+        auto dbGroup = serviceCounters->GetSubgroup("database", "/Root")
+                                ->GetSubgroup("cloud_id", "")
+                                ->GetSubgroup("folder_id", "")
+                                ->GetSubgroup("database_id", "")->GetSubgroup("topic", "topic");
+        TStringStream countersStr;
+        dbGroup->OutputHtml(countersStr);
+        Cerr << "Counters: ================================ \n" << countersStr.Str() << Endl;
+        auto checkSingleCounter = [&](const TString& name, ui64 expected) {
+            auto counter = dbGroup->GetNamedCounter("name", name);
+            UNIT_ASSERT(counter);
+            UNIT_ASSERT_VALUES_EQUAL((ui64)counter->Val(), expected);
+        };
+        checkSingleCounter("api.grpc.topic.stream_write.bytes", 20796);
+        checkSingleCounter("api.grpc.topic.stream_write.messages", 4);
+        {
+            auto group = dbGroup->GetSubgroup("name", "topic.write.lag_milliseconds");
+            UNIT_ASSERT_VALUES_EQUAL((ui64)group->GetNamedCounter("bin", "2000")->Val(), 3);
+            UNIT_ASSERT_VALUES_EQUAL((ui64)group->GetNamedCounter("bin", "5000")->Val(), 1);
+        }
+        {
+            auto group = dbGroup->GetSubgroup("name", "topic.write.message_size_bytes");
+            UNIT_ASSERT_VALUES_EQUAL((ui64)group->GetNamedCounter("bin", "1024")->Val(), 1);
+            UNIT_ASSERT_VALUES_EQUAL((ui64)group->GetNamedCounter("bin", "10240")->Val(), 2);
+            UNIT_ASSERT_VALUES_EQUAL((ui64)group->GetNamedCounter("bin", "20480")->Val(), 1);
+        }
     }
 
 }

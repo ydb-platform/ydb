@@ -21,7 +21,7 @@ class TSubscriberTest: public NUnitTest::TTestBase {
         const TActorId proxy = MakeStateStorageProxyID();
         const TActorId edge = Context->AllocateEdgeActor();
 
-        Context->Send(proxy, edge, new TEvStateStorage::TEvListSchemeBoard());
+        Context->Send(proxy, edge, new TEvStateStorage::TEvListSchemeBoard(false));
         auto ev = Context->GrabEdgeEvent<TEvStateStorage::TEvListSchemeBoardResult>(edge);
 
         Y_ABORT_UNLESS(ev->Get()->Info);
@@ -253,7 +253,7 @@ class TSubscriberCombinationsTest: public NUnitTest::TTestBase {
         const TActorId proxy = MakeStateStorageProxyID();
         const TActorId edge = context.AllocateEdgeActor();
 
-        context.Send(proxy, edge, new TEvStateStorage::TEvListSchemeBoard());
+        context.Send(proxy, edge, new TEvStateStorage::TEvListSchemeBoard(false));
         auto ev = context.GrabEdgeEvent<TEvStateStorage::TEvListSchemeBoardResult>(edge);
 
         Y_ABORT_UNLESS(ev->Get()->Info);

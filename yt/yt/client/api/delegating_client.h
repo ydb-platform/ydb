@@ -127,15 +127,14 @@ public:
     DELEGATE_METHOD(TFuture<TCreateQueueProducerSessionResult>, CreateQueueProducerSession, (
         const NYPath::TRichYPath& producerPath,
         const NYPath::TRichYPath& queuePath,
-        const TString& sessionId,
-        const std::optional<NYson::TYsonString>& userMeta,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
         const TCreateQueueProducerSessionOptions& options),
-        (producerPath, queuePath, sessionId, userMeta, options))
+        (producerPath, queuePath, sessionId, options))
 
     DELEGATE_METHOD(TFuture<void>, RemoveQueueProducerSession, (
         const NYPath::TRichYPath& producerPath,
         const NYPath::TRichYPath& queuePath,
-        const TString& sessionId,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
         const TRemoveQueueProducerSessionOptions& options),
         (producerPath, queuePath, sessionId, options))
 
@@ -555,6 +554,13 @@ public:
         const TAbortJobOptions& options),
         (jobId, options))
 
+    DELEGATE_METHOD(TFuture<void>, DumpJobProxyLog, (
+        NJobTrackerClient::TJobId jobId,
+        NJobTrackerClient::TOperationId operationId,
+        const NYPath::TYPath& path,
+        const TDumpJobProxyLogOptions& options),
+        (jobId, operationId, path, options))
+
     // Metadata
     DELEGATE_METHOD(TFuture<TClusterMeta>, GetClusterMeta, (
         const TGetClusterMetaOptions& options),
@@ -823,9 +829,9 @@ public:
         const TPausePipelineOptions& options),
         (pipelinePath, options))
 
-    DELEGATE_METHOD(TFuture<TPipelineStatus>, GetPipelineStatus, (
+    DELEGATE_METHOD(TFuture<TPipelineState>, GetPipelineState, (
         const NYPath::TYPath& pipelinePath,
-        const TGetPipelineStatusOptions& options),
+        const TGetPipelineStateOptions& options),
         (pipelinePath, options))
 
     DELEGATE_METHOD(TFuture<TGetFlowViewResult>, GetFlowView, (

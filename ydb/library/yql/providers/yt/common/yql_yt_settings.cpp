@@ -152,14 +152,6 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, OptimizeFor)
         .Parser([](const TString& v) {
             return FromString<NYT::EOptimizeForAttr>(v);
-        })
-        .ValueSetter([this](const TString& cluster, const NYT::EOptimizeForAttr& value) {
-            OptimizeFor[cluster] = value;
-            if (value == NYT::EOptimizeForAttr::OF_LOOKUP_ATTR) {
-                if (ColumnGroupMode.Get(cluster).GetOrElse(EColumnGroupMode::Disable) != EColumnGroupMode::Disable) {
-                    ColumnGroupMode[cluster] = EColumnGroupMode::Disable;
-                }
-            }
         });
 
     REGISTER_SETTING(*this, DefaultCluster)
@@ -322,11 +314,12 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, MapJoinUseFlow);
     REGISTER_SETTING(*this, EvaluationTableSizeLimit).Upper(10_MB); // Max 10Mb
     REGISTER_SETTING(*this, LookupJoinLimit).Upper(10_MB); // Same as EvaluationTableSizeLimit
-    REGISTER_SETTING(*this, LookupJoinMaxRows).Upper(1000);
+    REGISTER_SETTING(*this, LookupJoinMaxRows).Upper(10000);
     REGISTER_SETTING(*this, DisableOptimizers);
     REGISTER_SETTING(*this, MaxInputTables).Lower(2).Upper(3000); // 3000 - default max limit on YT clusters
     REGISTER_SETTING(*this, MaxOutputTables).Lower(1).Upper(100); // https://ml.yandex-team.ru/thread/yt/166633186212752141/
     REGISTER_SETTING(*this, MaxInputTablesForSortedMerge).Lower(2).Upper(1000); // https://st.yandex-team.ru/YTADMINREQ-16742
+    REGISTER_SETTING(*this, DisableFuseOperations);
     REGISTER_SETTING(*this, MaxExtraJobMemoryToFuseOperations);
     REGISTER_SETTING(*this, MaxReplicationFactorToFuseOperations).Lower(1.0);
     REGISTER_SETTING(*this, MaxOperationFiles).Lower(2).Upper(1000);
@@ -455,7 +448,7 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, DqPruneKeyFilterLambda);
     REGISTER_SETTING(*this, MergeAdjacentPointRanges);
     REGISTER_SETTING(*this, KeyFilterForStartsWith);
-    REGISTER_SETTING(*this, MaxKeyRangeCount).Upper(1000);
+    REGISTER_SETTING(*this, MaxKeyRangeCount).Upper(10000);
     REGISTER_SETTING(*this, MaxChunksForDqRead).Lower(1);
     REGISTER_SETTING(*this, NetworkProject);
     REGISTER_SETTING(*this, FileCacheTtl);
@@ -504,15 +497,9 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, ColumnGroupMode)
         .Parser([](const TString& v) {
             return FromString<EColumnGroupMode>(v);
-        })
-        .ValueSetter([this](const TString& cluster, EColumnGroupMode value) {
-            ColumnGroupMode[cluster] = value;
-            if (value != EColumnGroupMode::Disable) {
-                if (OptimizeFor.Get(cluster).GetOrElse(NYT::EOptimizeForAttr::OF_LOOKUP_ATTR) != NYT::EOptimizeForAttr::OF_SCAN_ATTR) {
-                    OptimizeFor[cluster] = NYT::EOptimizeForAttr::OF_SCAN_ATTR;
-                }
-            }
         });
+    REGISTER_SETTING(*this, MinColumnGroupSize).Lower(2);
+    REGISTER_SETTING(*this, MaxColumnGroups);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

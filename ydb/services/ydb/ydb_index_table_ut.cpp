@@ -13,6 +13,7 @@
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 
+using namespace NKikimr;
 using namespace NYdb;
 using namespace NYdb::NTable;
 
@@ -151,6 +152,153 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
             )", "root@builtin");
             UNIT_ASSERT_VALUES_EQUAL_C(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_ERROR, "Super user must not be able to alter coloumns");
             UNIT_ASSERT_VALUES_EQUAL(result->Record.GetErrorReason(), "Adding or dropping columns in index table is not supported");
+        }
+    }
+
+    Y_UNIT_TEST(CreateTableAddIndex) {
+        TKikimrWithGrpcAndRootSchema server;
+
+        auto channel = grpc::CreateChannel("localhost:" + ToString(server.GetPort()), grpc::InsecureChannelCredentials());
+        auto tableService = Ydb::Table::V1::TableService::NewStub(channel);
+        {
+            grpc::ClientContext context;
+            Ydb::Table::CreateTableRequest request;
+            UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(R"(
+                path: "/Root/TheTable"
+                columns { name: "Key"   type { optional_type { item { type_id: UINT32 } } } }
+                columns { name: "Value" type { optional_type { item { type_id: UINT32 } } } }
+                primary_key: ["Key"]
+                indexes {
+                    name: "ByValue"
+                    index_columns: "Value"
+                    global_index {
+                        settings {
+                            uniform_partitions: 5
+                            partitioning_settings {
+                                partitioning_by_load: ENABLED
+                                min_partitions_count: 5
+                            }
+                        }
+                    }
+                }
+            )", &request));
+
+            Ydb::Table::CreateTableResponse response;
+            auto grpcStatus = tableService->CreateTable(&context, request, &response);
+
+            UNIT_ASSERT(grpcStatus.ok());
+            UNIT_ASSERT(response.operation().ready());
+        }
+        {
+            grpc::ClientContext context;
+            Ydb::Table::DescribeTableRequest request;
+            UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(R"(
+                path: "/Root/TheTable/ByValue/indexImplTable"
+                include_table_stats: true
+                include_partition_stats: true
+            )", &request));
+
+            Ydb::Table::DescribeTableResponse response;
+            auto grpcStatus = tableService->DescribeTable(&context, request, &response);
+
+            UNIT_ASSERT(grpcStatus.ok());
+            const auto& operation = response.operation();
+            UNIT_ASSERT(operation.ready());
+            UNIT_ASSERT_VALUES_EQUAL(operation.status(), Ydb::StatusIds::SUCCESS);
+
+            Ydb::Table::DescribeTableResult result;
+            operation.result().UnpackTo(&result);
+
+            auto partitioning = result.partitioning_settings().ShortDebugString();
+            UNIT_ASSERT_STRINGS_EQUAL(partitioning, 
+                "partitioning_by_size: DISABLED "
+                "partitioning_by_load: ENABLED "
+                "min_partitions_count: 5"
+            );
+
+            const auto& tableStats = result.table_stats();
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.partitions(), 5, tableStats.DebugString());
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableAddIndex) {
+        TKikimrWithGrpcAndRootSchema server;
+
+        auto channel = grpc::CreateChannel("localhost:" + ToString(server.GetPort()), grpc::InsecureChannelCredentials());
+        auto tableService = Ydb::Table::V1::TableService::NewStub(channel);
+        {
+            grpc::ClientContext context;
+            Ydb::Table::CreateTableRequest request;
+            UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(R"(
+                path: "/Root/TheTable"
+                columns { name: "Key"   type { optional_type { item { type_id: UINT32 } } } }
+                columns { name: "Value" type { optional_type { item { type_id: UINT32 } } } }
+                primary_key: ["Key"]
+            )", &request));
+
+            Ydb::Table::CreateTableResponse response;
+            auto grpcStatus = tableService->CreateTable(&context, request, &response);
+
+            UNIT_ASSERT(grpcStatus.ok());
+            UNIT_ASSERT(response.operation().ready());
+        }
+        {
+            grpc::ClientContext context;
+            Ydb::Table::AlterTableRequest request;
+            UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(R"(
+                path: "/Root/TheTable"
+                add_indexes {
+                    name: "ByValue"
+                    index_columns: "Value"
+                    global_index {
+                        settings {
+                            uniform_partitions: 5
+                            partitioning_settings {
+                                partitioning_by_load: ENABLED
+                                min_partitions_count: 5
+                            }
+                        }
+                    }
+                }
+            )", &request));
+
+            Ydb::Table::AlterTableResponse response;
+            auto grpcStatus = tableService->AlterTable(&context, request, &response);
+
+            UNIT_ASSERT(grpcStatus.ok());
+            const auto& id = response.operation().id();
+            TString error;
+            UNIT_ASSERT_VALUES_EQUAL_C(WaitForStatus(channel, id, &error), Ydb::StatusIds::SUCCESS, error);
+        }
+        {
+            grpc::ClientContext context;
+            Ydb::Table::DescribeTableRequest request;
+            UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(R"(
+                path: "/Root/TheTable/ByValue/indexImplTable"
+                include_table_stats: true
+                include_partition_stats: true
+            )", &request));
+
+            Ydb::Table::DescribeTableResponse response;
+            auto grpcStatus = tableService->DescribeTable(&context, request, &response);
+
+            UNIT_ASSERT(grpcStatus.ok());
+            const auto& operation = response.operation();
+            UNIT_ASSERT(operation.ready());
+            UNIT_ASSERT_VALUES_EQUAL(operation.status(), Ydb::StatusIds::SUCCESS);
+
+            Ydb::Table::DescribeTableResult result;
+            operation.result().UnpackTo(&result);
+
+            auto partitioning = result.partitioning_settings().ShortDebugString();
+            UNIT_ASSERT_STRINGS_EQUAL(partitioning, 
+                "partitioning_by_size: DISABLED "
+                "partitioning_by_load: ENABLED "
+                "min_partitions_count: 5"
+            );
+
+            const auto& tableStats = result.table_stats();
+            UNIT_ASSERT_VALUES_EQUAL_C(tableStats.partitions(), 5, tableStats.DebugString());
         }
     }
 }

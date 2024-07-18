@@ -17,9 +17,7 @@ namespace NKikimr {
 // PATCH request
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class TBlobStorageGroupPatchRequest : public TBlobStorageGroupRequestActor<TBlobStorageGroupPatchRequest> {
-    friend class TBlobStorageGroupRequestActor<TBlobStorageGroupPatchRequest>;
-
+class TBlobStorageGroupPatchRequest : public TBlobStorageGroupRequestActor {
     struct TPartPlacement {
         ui8 VDiskIdxInSubgroup = 0;
         ui8 PartId = 0;
@@ -35,7 +33,7 @@ class TBlobStorageGroupPatchRequest : public TBlobStorageGroupRequestActor<TBlob
 
     TString Buffer;
 
-    ui32 OriginalGroupId;
+    TGroupId OriginalGroupId;
     TLogoBlobID OriginalId;
     TLogoBlobID PatchedId;
     ui32 MaskForCookieBruteForcing;
@@ -51,11 +49,6 @@ class TBlobStorageGroupPatchRequest : public TBlobStorageGroupRequestActor<TBlob
 
     NLWTrace::TOrbit Orbit;
     TString ErrorReason;
-
-    ui32 SendedGetRequests = 0;
-    ui32 ReceivedGetResponses = 0;
-    ui32 SendedPutRequests = 0;
-    ui32 ReceivedPutResponses = 0;
 
     TVector<ui32> OkVDisksWithParts;
 
@@ -89,28 +82,25 @@ class TBlobStorageGroupPatchRequest : public TBlobStorageGroupRequestActor<TBlob
 // PATCH_LOG
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::BS_PROXY_PATCH_ACTOR;
+    ::NMonitoring::TDynamicCounters::TCounterPtr& GetActiveCounter() const override {
+        return Mon->ActivePatch;
     }
 
-    static const auto& ActiveCounter(const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon) {
-        return mon->ActivePatch;
-    }
-
-    static constexpr ERequestType RequestType() {
+    ERequestType GetRequestType() const override {
         return ERequestType::Patch;
     }
 
     TBlobStorageGroupPatchRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
             const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
             const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvPatch *ev,
-            ui64 cookie, NWilson::TSpan&& span, TInstant now,
+            ui64 cookie, NWilson::TTraceId&& traceId, TInstant now,
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
             bool useVPatch = false)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
                 NKikimrServices::BS_PROXY_PATCH, false, {}, now, storagePoolCounters,
-                ev->RestartCounter, std::move(span), std::move(ev->ExecutionRelay))
-        , OriginalGroupId(ev->OriginalGroupId)
+                ev->RestartCounter, std::move(traceId), "DSProxy.Patch", ev, std::move(ev->ExecutionRelay),
+                NKikimrServices::TActivity::BS_PROXY_PATCH_ACTOR)
+        , OriginalGroupId(TGroupId::FromValue(ev->OriginalGroupId))
         , OriginalId(ev->OriginalId)
         , PatchedId(ev->PatchedId)
         , MaskForCookieBruteForcing(ev->MaskForCookieBruteForcing)
@@ -122,7 +112,7 @@ public:
         , UseVPatch(useVPatch)
     {}
 
-    void ReplyAndDie(NKikimrProto::EReplyStatus status) {
+    void ReplyAndDie(NKikimrProto::EReplyStatus status) override {
         PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA02, "ReplyAndDie",
                 (Status, status),
                 (ErrorReason, ErrorReason));
@@ -136,10 +126,10 @@ public:
         SendResponseAndDie(std::move(result));
     }
 
-    std::unique_ptr<IEventBase> RestartQuery(ui32 counter) {
+    std::unique_ptr<IEventBase> RestartQuery(ui32 counter) override {
         ++*Mon->NodeMon->RestartPatch;
         TEvBlobStorage::TEvPatch *patch;
-        std::unique_ptr<IEventBase> ev(patch = new TEvBlobStorage::TEvPatch(OriginalGroupId, OriginalId, PatchedId,
+        std::unique_ptr<IEventBase> ev(patch = new TEvBlobStorage::TEvPatch(OriginalGroupId.GetRawId(), OriginalId, PatchedId,
                 MaskForCookieBruteForcing, std::move(Diffs), DiffCount, Deadline));
         patch->RestartCounter = counter;
         patch->Orbit = std::move(Orbit);
@@ -429,7 +419,10 @@ public:
                         (VDiskId, VDisks[subgroupIdx]));
             }
         }
-        SendToQueues(events, false);
+        for (auto& ev : events) {
+            const ui64 cookie = ev->Record.GetCookie();
+            SendToQueue(std::move(ev), cookie);
+        }
     }
 
     bool WithXorDiffs() const {
@@ -506,7 +499,10 @@ public:
                     (WaitedXorDiffs, waitedXorDiffs));
             events.push_back(std::move(ev));
         }
-        SendToQueues(events, false);
+        for (auto& ev : events) {
+            const ui64 cookie = ev->Record.GetCookie();
+            SendToQueue(std::move(ev), cookie);
+        }
         SendStopDiffs();
         ReceivedResponseFlags.assign(VDisks.size(), false);
     }
@@ -536,7 +532,7 @@ public:
     void StartMovedPatch() {
         PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA09, "Start Moved strategy",
                 (SentStarts, SentStarts));
-        Become(&TThis::MovedPatchState);
+        Become(&TBlobStorageGroupPatchRequest::MovedPatchState);
 
         ui32 subgroupIdx = 0;
         if (OkVDisksWithParts) {
@@ -549,19 +545,22 @@ public:
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVMovedPatch>> events;
 
         ui64 cookie = ((ui64)OriginalId.Hash() << 32) | PatchedId.Hash();
-        events.emplace_back(new TEvBlobStorage::TEvVMovedPatch(OriginalGroupId, Info->GroupID,
+        events.emplace_back(new TEvBlobStorage::TEvVMovedPatch(OriginalGroupId.GetRawId(), Info->GroupID.GetRawId(),
                 OriginalId, PatchedId, vDisk, false, cookie, Deadline));
         events.back()->Orbit = std::move(Orbit);
         for (ui64 diffIdx = 0; diffIdx < DiffCount; ++diffIdx) {
             auto &diff = Diffs[diffIdx];
             events.back()->AddDiff(diff.Offset, diff.Buffer);
         }
-        SendToQueues(events, false);
+        for (auto& ev : events) {
+            const ui64 cookie = ev->Record.GetCookie();
+            SendToQueue(std::move(ev), cookie);
+        }
     }
 
     void StartNaivePatch() {
         PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA07, "Start Naive strategy");
-        Become(&TThis::NaiveState);
+        Become(&TBlobStorageGroupPatchRequest::NaiveState);
         auto get = std::make_unique<TEvBlobStorage::TEvGet>(OriginalId, 0, OriginalId.BlobSize(), Deadline,
             NKikimrBlobStorage::AsyncRead);
         get->Orbit = std::move(Orbit);
@@ -586,7 +585,7 @@ public:
     }
 
     void StartVPatch() {
-        Become(&TThis::VPatchState);
+        Become(&TBlobStorageGroupPatchRequest::VPatchState);
 
         Info->PickSubgroup(OriginalId.Hash(), &VDisks, nullptr);
         ReceivedResponseFlags.assign(VDisks.size(), false);
@@ -606,7 +605,10 @@ public:
         PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA08, "Start VPatch strategy",
                 (SentStarts, SentStarts));
 
-        SendToQueues(events, false);
+        for (auto& ev : events) {
+            const ui64 cookie = ev->Record.GetCookie();
+            SendToQueue(std::move(ev), cookie);
+        }
     }
 
     bool FindHandoffs(const TStackVec<TStackVec<ui32, TypicalHandoffCount>, TypicalPartsInBlob>& handoffForParts,
@@ -781,14 +783,14 @@ public:
         return true;
     }
 
-    void Bootstrap() {
+    void Bootstrap() override {
         PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA01, "Actor bootstrapped");
 
         TLogoBlobID truePatchedBlobId = PatchedId;
         bool result = true;
         if (Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock) {
             result = TEvBlobStorage::TEvPatch::GetBlobIdWithSamePlacement(OriginalId, &truePatchedBlobId,
-                    MaskForCookieBruteForcing, OriginalGroupId, Info->GroupID);
+                    MaskForCookieBruteForcing, OriginalGroupId.GetRawId(), Info->GroupID.GetRawId());
             if (result && PatchedId != truePatchedBlobId) {
                 TStringBuilder str;
                 str << "PatchedId wasn't from TEvBlobStorage::TEvPatch::GetBlobIdWithSamePlacement;";
@@ -869,12 +871,7 @@ IActor* CreateBlobStorageGroupPatchRequest(const TIntrusivePtr<TBlobStorageGroup
         ui64 cookie, NWilson::TTraceId traceId, TInstant now,
         TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
         bool useVPatch) {
-    NWilson::TSpan span(TWilson::BlobStorage, std::move(traceId), "DSProxy.Patch");
-    if (span) {
-        span.Attribute("event", ev->ToString());
-    }
-
-    return new TBlobStorageGroupPatchRequest(info, state, source, mon, ev, cookie, std::move(span), now,
+    return new TBlobStorageGroupPatchRequest(info, state, source, mon, ev, cookie, std::move(traceId), now,
         storagePoolCounters, useVPatch);
 }
 

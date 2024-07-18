@@ -97,20 +97,27 @@ std::shared_ptr<NKikimr::NArrow::TGeneralContainer> TGeneralContainer::BuildEmpt
     return std::make_shared<TGeneralContainer>(Schema, std::move(columns));
 }
 
-std::shared_ptr<arrow::Table> TGeneralContainer::BuildTable(const std::optional<std::set<std::string>>& columnNames /*= {}*/) const {
+std::shared_ptr<arrow::Table> TGeneralContainer::BuildTableOptional(const std::optional<std::set<std::string>>& columnNames /*= {}*/) const {
     std::vector<std::shared_ptr<arrow::ChunkedArray>> columns;
     std::vector<std::shared_ptr<arrow::Field>> fields;
-    ui32 count = 0;
     for (i32 i = 0; i < Schema->num_fields(); ++i) {
         if (columnNames && !columnNames->contains(Schema->field(i)->name())) {
             continue;
         }
-        ++count;
         columns.emplace_back(Columns[i]->GetChunkedArray());
         fields.emplace_back(Schema->field(i));
     }
-    AFL_VERIFY(!columnNames || count == columnNames->size());
+    if (fields.empty()) {
+        return nullptr;
+    }
     return arrow::Table::Make(std::make_shared<arrow::Schema>(fields), columns, RecordsCount);
+}
+
+std::shared_ptr<arrow::Table> TGeneralContainer::BuildTable(const std::optional<std::set<std::string>>& columnNames /*= {}*/) const {
+    auto result = BuildTableOptional(columnNames);
+    AFL_VERIFY(result);
+    AFL_VERIFY(!columnNames || result->schema()->num_fields() == (i32)columnNames->size());
+    return result;
 }
 
 }

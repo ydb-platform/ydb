@@ -45,9 +45,6 @@ TClickbenchWorkloadDataInitializerGenerator::TDataGenerartor::TDataGenerartor(co
 }
 
 IBulkDataGenerator::TDataPortions TClickbenchWorkloadDataInitializerGenerator::TDataGenerartor::GenerateDataPortion() {
-    if (Owner.StateProcessor) {
-        Owner.StateProcessor->FinishPortions();
-    }
     while (true) {
         size_t index;
         TFile::TPtr file;
@@ -139,13 +136,14 @@ public:
         data.reserve(lines.size() * 10000);
         data << Header << Endl;
         data << JoinSeq("\n", lines) << Endl;
-        if (Owner.Owner.StateProcessor) {
-            Owner.Owner.StateProcessor->AddPortion(Path, Readed, lines.size());
-        }
+        const ui64 position = Readed;
         Readed += lines.size();
-        return MakeIntrusive<TDataPortion>(
+        return MakeIntrusive<TDataPortionWithState>(
+            Owner.Owner.StateProcessor.Get(),
             Owner.Owner.Params.GetFullTableName(nullptr),
+            Path,
             TDataPortion::TCsv(std::move(data), Foramt),
+            position,
             lines.size()
         );
     }

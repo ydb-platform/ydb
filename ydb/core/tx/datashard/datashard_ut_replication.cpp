@@ -244,6 +244,9 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
         ExecSQL(server, sender, "SELECT * FROM `/Root/table-1`");
         ExecSQL(server, sender, "INSERT INTO `/Root/table-1` (key, value) VALUES (1, 10);", true,
             Ydb::StatusIds::GENERIC_ERROR);
+
+        WaitTxNotification(server, sender, AsyncAlterDropReplicationConfig(server, "/Root", "table-1"));
+        ExecSQL(server, sender, "INSERT INTO `/Root/table-1` (key, value) VALUES (1, 10);");
     }
 
     Y_UNIT_TEST(ApplyChangesToReplicatedTable) {
@@ -279,6 +282,29 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
             "key = 2, value = 22\n"
             "key = 3, value = 33\n"
         );
+    }
+
+    Y_UNIT_TEST(ApplyChangesToCommonTable) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions());
+
+        auto shards = GetTableShards(server, sender, "/Root/table-1");
+        auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+
+        ApplyChanges(server, shards.at(0), tableId, "my-source", {
+            TChange{ .Offset = 0, .WriteTxId = 0, .Key = 1, .Value = 11 },
+        }, NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED);
     }
 
 }

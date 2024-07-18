@@ -41,7 +41,9 @@ public:
     virtual NNet::IConnectionReaderPtr GetStdOutReader() = 0;
     virtual NNet::IConnectionReaderPtr GetStdErrReader() = 0;
 
+    //! Returns process completion future, which ends with EErrorCode::OK or EProcessErrorCode.
     TFuture<void> Spawn();
+
     virtual void Kill(int signal) = 0;
 
     TString GetPath() const;

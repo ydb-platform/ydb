@@ -7,8 +7,11 @@
 #include <ydb/library/actors/core/defs.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/core/driver_lib/run/config.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
+#include <ydb/public/api/protos/ydb_monitoring.pb.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 #include <util/system/hostname.h>
 
 namespace NKikimr {
@@ -60,6 +63,28 @@ struct TRequestSettings {
 };
 
 IActor* CreateViewer(const TKikimrRunConfig& kikimrRunConfig);
+
+struct TRequestState {
+    const NMon::TEvHttpInfo* Request;
+    NWilson::TTraceId TraceId;
+
+    TRequestState(const NMon::TEvHttpInfo* request)
+        : Request(request)
+    {}
+
+    TRequestState(const NMon::TEvHttpInfo* request, NWilson::TTraceId traceId)
+        : Request(request)
+        , TraceId(traceId)
+    {}
+
+    const NMon::TEvHttpInfo* operator ->() const {
+        return Request;
+    }
+
+    explicit operator bool() const {
+        return Request != nullptr;
+    }
+};
 
 class IViewer {
 public:
@@ -154,30 +179,29 @@ public:
         NKikimrViewer::EObjectType objectType,
         const TContentHandler& handler) = 0;
 
-    virtual TString GetCORS(const NMon::TEvHttpInfo* request) = 0;
-    virtual TString GetHTTPOK(const NMon::TEvHttpInfo* request, TString contentType = {}, TString response = {}, TInstant lastModified = {}) = 0;
+    virtual TString GetHTTPOK(const TRequestState& request, TString contentType = {}, TString response = {}, TInstant lastModified = {}) = 0;
 
-    TString GetHTTPOKJSON(const NMon::TEvHttpInfo* request, TString response = {}, TInstant lastModified = {}) {
+    TString GetHTTPOKJSON(const TRequestState& request, TString response = {}, TInstant lastModified = {}) {
         return GetHTTPOK(request, "application/json", response, lastModified);
     }
 
-    TString GetHTTPOKYAML(const NMon::TEvHttpInfo* request, TString response = {}, TInstant lastModified = {}) {
+    TString GetHTTPOKYAML(const TRequestState& request, TString response = {}, TInstant lastModified = {}) {
         return GetHTTPOK(request, "application/yaml", response, lastModified);
     }
 
-    TString GetHTTPOKTEXT(const NMon::TEvHttpInfo* request, TString response = {}, TInstant lastModified = {}) {
+    TString GetHTTPOKTEXT(const TRequestState& request, TString response = {}, TInstant lastModified = {}) {
         return GetHTTPOK(request, "text/plain", response, lastModified);
     }
 
-    virtual TString GetHTTPGATEWAYTIMEOUT(const NMon::TEvHttpInfo* request, TString contentType = {}, TString response = {}) = 0;
-    virtual TString GetHTTPBADREQUEST(const NMon::TEvHttpInfo* request, TString contentType = {}, TString response = {}) = 0;
-    virtual TString GetHTTPFORBIDDEN(const NMon::TEvHttpInfo* request) = 0;
-    virtual TString GetHTTPNOTFOUND(const NMon::TEvHttpInfo* request) = 0;
-    virtual TString GetHTTPINTERNALERROR(const NMon::TEvHttpInfo* request, TString contentType = {}, TString response = {}) = 0;
-    virtual TString GetHTTPFORWARD(const NMon::TEvHttpInfo* request, const TString& location) = 0;
-    virtual bool CheckAccessAdministration(const NMon::TEvHttpInfo* request) = 0;
+    virtual TString GetHTTPGATEWAYTIMEOUT(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
+    virtual TString GetHTTPBADREQUEST(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
+    virtual TString GetHTTPFORBIDDEN(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
+    virtual TString GetHTTPNOTFOUND(const TRequestState& request) = 0;
+    virtual TString GetHTTPINTERNALERROR(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
+    virtual TString GetHTTPFORWARD(const TRequestState& request, const TString& location) = 0;
+    virtual bool CheckAccessAdministration(const TRequestState& request) = 0;
     virtual void TranslateFromBSC2Human(const NKikimrBlobStorage::TConfigResponse& response, TString& bscError, bool& forceRetryPossible) = 0;
-    virtual TString MakeForward(const NMon::TEvHttpInfo* request, const std::vector<ui32>& nodes) = 0;
+    virtual TString MakeForward(const TRequestState& request, const std::vector<ui32>& nodes) = 0;
 
     virtual void AddRunningQuery(const TString& queryId, const TActorId& actorId) = 0;
     virtual void EndRunningQuery(const TString& queryId, const TActorId& actorId) = 0;
@@ -237,6 +261,8 @@ void SplitIds(TStringBuf source, char delim, std::unordered_set<ValueType>& valu
     GenericSplitIds<ValueType>(source, delim, std::inserter(values, values.end()));
 }
 
+void MakeErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYdb::TStatus& status);
+
 TString GetHTTPOKJSON();
 TString GetHTTPGATEWAYTIMEOUT();
 NKikimrViewer::EFlag GetFlagFromTabletState(NKikimrWhiteboard::TTabletStateInfo::ETabletState state);
@@ -272,6 +298,8 @@ NKikimrViewer::EFlag GetFlagFromUsage(double usage);
 
 NKikimrWhiteboard::EFlag GetWhiteboardFlag(NKikimrViewer::EFlag flag);
 NKikimrViewer::EFlag GetViewerFlag(NKikimrWhiteboard::EFlag flag);
+NKikimrViewer::EFlag GetViewerFlag(Ydb::Monitoring::StatusFlag::Status flag);
+
 
 } // NViewer
 } // NKikimr

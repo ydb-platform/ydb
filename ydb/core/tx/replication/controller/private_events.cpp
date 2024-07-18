@@ -163,6 +163,19 @@ TString TEvPrivate::TEvRemoveWorker::ToString() const {
     << " }";
 }
 
+TEvPrivate::TEvDescribeTargetsResult::TEvDescribeTargetsResult(const TActorId& sender, ui64 rid, TResult&& result)
+    : Sender(sender)
+    , ReplicationId(rid)
+    , Result(std::move(result))
+{
+}
+
+TString TEvPrivate::TEvDescribeTargetsResult::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " ReplicationId: " << ReplicationId
+    << " }";
+}
+
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::NController::TEvPrivate::TEvDiscoveryTargetsResult::TAddEntry, stream, value) {

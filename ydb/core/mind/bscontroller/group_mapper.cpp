@@ -1152,8 +1152,8 @@ namespace NKikimr::NBsController {
         return Impl->FindMisplacedVDisks(group);
     }
 
-    std::optional<TPDiskId> TGroupMapper::TargetMisplacedVDisk(ui32 groupId, TGroupMapper::TGroupDefinition& group, 
+    std::optional<TPDiskId> TGroupMapper::TargetMisplacedVDisk(TGroupId groupId, TGroupMapper::TGroupDefinition& group, 
             TVDiskIdShort vdisk, TForbiddenPDisks forbid, i64 requiredSpace, bool requireOperational, TString& error) {
-        return Impl->TargetMisplacedVDisk(groupId, group, vdisk, std::move(forbid), requiredSpace, requireOperational, error);
+        return Impl->TargetMisplacedVDisk(groupId.GetRawId(), group, vdisk, std::move(forbid), requiredSpace, requireOperational, error);
     }
 } // NKikimr::NBsController

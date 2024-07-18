@@ -31,11 +31,6 @@ void FormatValue(TStringBuilderBase* builder, const TDiskLocationResources& loca
         locationResources.medium_index());
 }
 
-TString ToString(const TDiskLocationResources& locationResources)
-{
-    return ToStringViaBuilder(locationResources);
-}
-
 void FormatValue(TStringBuilderBase* builder, const TDiskResources& diskResources, TStringBuf /*spec*/)
 {
     builder->AppendFormat(
@@ -43,11 +38,6 @@ void FormatValue(TStringBuilderBase* builder, const TDiskResources& diskResource
         MakeFormattableView(diskResources.disk_location_resources(), [] (TStringBuilderBase* builder, const TDiskLocationResources& diskLocationResources) {
             FormatValue(builder, diskLocationResources, "%v");
         }));
-}
-
-TString ToString(const TDiskResources& diskResources)
-{
-    return ToStringViaBuilder(diskResources);
 }
 
 } // namespace NProto

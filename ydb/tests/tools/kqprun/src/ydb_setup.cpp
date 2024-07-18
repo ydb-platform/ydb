@@ -93,10 +93,11 @@ private:
 
                 runtime.SetLogPriority(service, NActors::NLog::EPriority(setting.GetLevel()));
             }
+
+            runtime.SetLogBackendFactory([this]() { return CreateLogBackend(); });
         };
 
         serverSettings.SetLoggerInitializer(loggerInitializer);
-        serverSettings.SetLogBackend(CreateLogBackend());
     }
 
     void SetFunctionRegistry(NKikimr::Tests::TServerSettings& serverSettings) const {
@@ -140,6 +141,7 @@ private:
         if (Settings_.MonitoringEnabled) {
             serverSettings.InitKikimrRunConfig();
             serverSettings.SetMonitoringPortOffset(Settings_.MonitoringPortOffset);
+            serverSettings.SetNeedStatsCollectors(true);
         }
 
         return serverSettings;
@@ -244,19 +246,20 @@ public:
     NKikimr::NKqp::TEvFetchScriptResultsResponse::TPtr FetchScriptExecutionResultsRequest(const TString& operation, i32 resultSetId) const {
         TString executionId = *NKikimr::NKqp::ScriptExecutionIdFromOperation(operation);
 
-        NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor();
+        ui32 nodeIndex = RandomNumber(Settings_.NodeCount);
+        NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor(nodeIndex);
         auto rowsLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultRowsLimit();
         auto sizeLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultSizeLimit();
         NActors::IActor* fetchActor = NKikimr::NKqp::CreateGetScriptExecutionResultActor(edgeActor, Settings_.DomainName, executionId, resultSetId, 0, rowsLimit, sizeLimit, TInstant::Max());
 
-        GetRuntime()->Register(fetchActor, RandomNumber(Settings_.NodeCount));
+        GetRuntime()->Register(fetchActor, nodeIndex);
 
         return GetRuntime()->GrabEdgeEvent<NKikimr::NKqp::TEvFetchScriptResultsResponse>(edgeActor);
     }
 
     NKikimr::NKqp::TEvForgetScriptExecutionOperationResponse::TPtr ForgetScriptExecutionOperationRequest(const TString& operation) const {
         NKikimr::NOperationId::TOperationId operationId(operation);
-        auto event = MakeHolder<NKikimr::NKqp::TEvForgetScriptExecutionOperation>(Settings_.DomainName, operationId, TInstant::Max());
+        auto event = MakeHolder<NKikimr::NKqp::TEvForgetScriptExecutionOperation>(Settings_.DomainName, operationId);
 
         return RunKqpProxyRequest<NKikimr::NKqp::TEvForgetScriptExecutionOperation, NKikimr::NKqp::TEvForgetScriptExecutionOperationResponse>(std::move(event));
     }
@@ -303,10 +306,11 @@ private:
 
     template <typename TRequest, typename TResponse>
     typename TResponse::TPtr RunKqpProxyRequest(THolder<TRequest> event) const {
-        NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor();
-        NActors::TActorId kqpProxy = NKikimr::NKqp::MakeKqpProxyID(GetRuntime()->GetNodeId(RandomNumber(Settings_.NodeCount)));
+        ui32 nodeIndex = RandomNumber(Settings_.NodeCount);
+        NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor(nodeIndex);
+        NActors::TActorId kqpProxy = NKikimr::NKqp::MakeKqpProxyID(GetRuntime()->GetNodeId(nodeIndex));
 
-        GetRuntime()->Send(kqpProxy, edgeActor, event.Release());
+        GetRuntime()->Send(kqpProxy, edgeActor, event.Release(), nodeIndex);
 
         return GetRuntime()->GrabEdgeEvent<TResponse>(edgeActor);
     }
@@ -322,6 +326,7 @@ private:
         request->SetAction(action);
         request->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
         request->SetDatabase(Settings_.DomainName);
+        request->SetPoolId(Settings_.DefaultPoolId);
     }
 
     void FillScriptRequest(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId, NKikimrKqp::TEvQueryRequest& event) const {

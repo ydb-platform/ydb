@@ -106,7 +106,7 @@ TClientCommand::TClientCommand(
 {
     HideOption("svnrevision");
     Opts.AddHelpOption('h');
-    ChangeOptionDescription("help", "Print usage");
+    ChangeOptionDescription("help", "Print usage, -hh for detailed help");
     auto terminalWidth = GetTerminalWidth();
     size_t lineLength = terminalWidth ? *terminalWidth : Max<size_t>();
     Opts.SetWrap(Max(Opts.Wrap_, static_cast<ui32>(lineLength)));
@@ -125,6 +125,32 @@ ELogPriority TClientCommand::TConfig::VerbosityLevelToELogPriority(TClientComman
         default:
             return ELogPriority::TLOG_ERR;
     }
+}
+
+size_t TClientCommand::TConfig::ParseHelpCommandVerbosilty(int argc, char** argv) {
+    size_t cnt = 0;
+    for (int i = 0; i < argc; ++i) {
+        TStringBuf arg = argv[i];
+        if (arg == "--help") {
+            ++cnt;
+            continue;
+        }
+        if (arg.StartsWith("--")) { // other option
+            continue;
+        }
+        if (arg.StartsWith("-")) { // char options
+            for (size_t i = 1; i < arg.size(); ++i) {
+                if (arg[i] == 'h') {
+                    ++cnt;
+                }
+            }
+        }
+    }
+
+    if (!cnt) {
+        cnt = 1;
+    }
+    return cnt;
 }
 
 TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& config) {
@@ -279,6 +305,9 @@ void TClientCommand::RenderOneCommandDescription(
     const NColorizer::TColors& colors,
     RenderEntryType type
 ) {
+    if (Hidden) {
+        return;
+    }
     TString prefix;
     if (type == MIDDLE) {
         prefix = "├─ ";
@@ -308,6 +337,10 @@ void TClientCommand::RenderOneCommandDescription(
     stream << '\n';
 }
 
+void TClientCommand::Hide() {
+    Hidden = true;
+}
+
 TClientCommandTree::TClientCommandTree(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)
     : TClientCommand(name, aliases, description)
     , SelectedCommand(nullptr)
@@ -321,6 +354,11 @@ void TClientCommandTree::AddCommand(std::unique_ptr<TClientCommand> command) {
     }
     command->Parent = this;
     SubCommands[command->Name] = std::move(command);
+}
+
+void TClientCommandTree::AddHiddenCommand(std::unique_ptr<TClientCommand> command) {
+    command->Hide();
+    AddCommand(std::move(command));
 }
 
 void TClientCommandTree::Config(TConfig& config) {

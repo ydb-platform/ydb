@@ -380,7 +380,9 @@ int Main(int argc, const char *argv[])
     TOpts opts = TOpts::Default();
     TString programFile;
     TVector<TString> tablesMappingList;
+    TVector<TString> tablesDirMappingList;
     THashMap<TString, TString> tablesMapping;
+    THashMap<TString, TString> tablesDirMapping;
     TVector<TString> filesMappingList;
     TUserDataTable filesMapping;
     TVector<TString> urlsMappingList;
@@ -413,6 +415,7 @@ int Main(int argc, const char *argv[])
     opts.AddLongOption('s', "sql", "program is SQL query").NoArgument();
     opts.AddLongOption("pg", "program has PG syntax").NoArgument();
     opts.AddLongOption('t', "table", "table@file").AppendTo(&tablesMappingList);
+    opts.AddLongOption("tables-dir", "cluster@dir").AppendTo(&tablesDirMappingList);
     opts.AddLongOption('C', "cluster", "set cluster to service mapping").RequiredArgument("name@service").Handler(new TStoreMappingFunctor(&clusterMapping));
     opts.AddLongOption("ndebug", "should be at first argument, do not show debug info in error output").NoArgument();
     opts.AddLongOption("parse-only", "exit after program has been parsed").NoArgument();
@@ -500,6 +503,23 @@ int Main(int argc, const char *argv[])
             return 1;
         }
         tablesMapping[tableName] = filePath;
+    }
+
+    for (auto& s : tablesDirMappingList) {
+        TStringBuf clusterName, dirPath;
+        TStringBuf(s).Split('@', clusterName, dirPath);
+        if (clusterName.empty() || dirPath.empty()) {
+            Cerr << "Incorrect table directory mapping, expected form cluster@dir, e.g. yt.plato@/tmp/tables" << Endl;
+            return 1;
+        }
+        tablesDirMapping[clusterName] = dirPath;
+        for (const auto& entry : TDirIterator(TFsPath(dirPath))) {
+            if (auto entryPath = TFsPath(entry.fts_path); entryPath.IsFile() && entryPath.GetExtension() == "txt") {
+                auto tableName = TString(clusterName).append('.').append(entryPath.RelativeTo(TFsPath(dirPath)).GetPath());
+                tableName = tableName.substr(0, tableName.Size() - 4); // remove .txt extension
+                tablesMapping[tableName] = entryPath.GetPath();
+            }
+        }
     }
 
     if (hasValidate) {
@@ -644,7 +664,7 @@ int Main(int argc, const char *argv[])
     bool emulateOutputForMultirun = false;
     if (hasValidate) {
         if (gatewayTypes.contains(YtProviderName) || res.Has("opt-collision")) {
-            auto yqlNativeServices = NFile::TYtFileServices::Make(funcRegistry.Get(), tablesMapping, fileStorage, tmpDir, res.Has("keep-temp"));
+            auto yqlNativeServices = NFile::TYtFileServices::Make(funcRegistry.Get(), tablesMapping, fileStorage, tmpDir, res.Has("keep-temp"), tablesDirMapping);
             auto ytNativeGateway = CreateYtFileGateway(yqlNativeServices, &emulateOutputForMultirun);
             dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
         }

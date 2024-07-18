@@ -66,7 +66,8 @@ enum class EInferSchemaMode {
 
 enum class EColumnGroupMode {
     Disable     /* "disable" */,
-    Single      /* "single" */
+    Single      /* "single" */,
+    PerUsage    /* "perusage", "per-usage" */,
 };
 
 struct TYtSettings {
@@ -202,7 +203,6 @@ struct TYtSettings {
     NCommon::TConfSetting<TDuration, true> DQRPCReaderTimeout;
     NCommon::TConfSetting<TSet<TString>, true> BlockReaderSupportedTypes;
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, true> BlockReaderSupportedDataTypes;
-    NCommon::TConfSetting<EColumnGroupMode, true> ColumnGroupMode;
 
     // Optimizers
     NCommon::TConfSetting<bool, true> _EnableDq;
@@ -226,6 +226,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui32, false> MaxInputTables;
     NCommon::TConfSetting<ui32, false> MaxInputTablesForSortedMerge;
     NCommon::TConfSetting<ui32, false> MaxOutputTables;
+    NCommon::TConfSetting<bool, false> DisableFuseOperations;
     NCommon::TConfSetting<NSize::TSize, false> MaxExtraJobMemoryToFuseOperations;
     NCommon::TConfSetting<double, false> MaxReplicationFactorToFuseOperations;
     NCommon::TConfSetting<ui32, false> MaxOperationFiles;
@@ -276,6 +277,9 @@ struct TYtSettings {
     NCommon::TConfSetting<ui64, false> ApplyStoredConstraints;
     NCommon::TConfSetting<bool, false> ViewIsolation;
     NCommon::TConfSetting<bool, false> PartitionByConstantKeysViaMap;
+    NCommon::TConfSetting<EColumnGroupMode, false> ColumnGroupMode;
+    NCommon::TConfSetting<ui16, false> MinColumnGroupSize;
+    NCommon::TConfSetting<ui16, false> MaxColumnGroups;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);

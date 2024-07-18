@@ -221,7 +221,7 @@ public:
         }
 
         if (auto maxChunks = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ); canFallback && chunksCount > maxChunks) {
-            throw TFallbackError() << DqFallbackErrorMessageWrap("table with too many chunks");
+            throw TFallbackError() << DqFallbackErrorMessageWrap( TStringBuilder() << "table with too many chunks: " << chunksCount << " > " << maxChunks);
         }
 
         if (hasErasure) {
@@ -470,7 +470,7 @@ public:
                 }
             }
             if (auto maxChunks = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ); chunksCount > maxChunks) {
-                AddMessage(ctx, "table with too many chunks", skipIssues, State_->PassiveExecution);
+                AddMessage(ctx,  TStringBuilder() << "table with too many chunks: " << chunksCount << " > " << maxChunks, skipIssues, State_->PassiveExecution);
                 return false;
             }
             return true;
@@ -489,7 +489,7 @@ public:
         if (!State_->Configuration->UseRPCReaderInDQ.Get(maybeRead.Cast().DataSource().Cluster().StringValue()).GetOrElse(DEFAULT_USE_RPC_READER_IN_DQ)) {
             return false;
         }
-    
+
         auto supportedTypes = State_->Configuration->BlockReaderSupportedTypes.Get(maybeRead.Cast().DataSource().Cluster().StringValue()).GetOrElse(DEFAULT_BLOCK_READER_SUPPORTED_TYPES);
         auto supportedDataTypes = State_->Configuration->BlockReaderSupportedDataTypes.Get(maybeRead.Cast().DataSource().Cluster().StringValue()).GetOrElse(DEFAULT_BLOCK_READER_SUPPORTED_DATA_TYPES);
         const auto structType = GetSeqItemType(maybeRead.Raw()->GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back())->Cast<TStructExprType>();
@@ -586,14 +586,14 @@ public:
                             }
                             if (tableInfo->Stat) {
                                 chunksCount += tableInfo->Stat->ChunkCount;
+                                if (chunksCount > maxChunks) {
+                                    AddErrorWrap(ctx, node_->Pos(),  TStringBuilder() << "table with too many chunks: " << chunksCount << " > " << maxChunks);
+                                    return Nothing();
+                                }
                             }
                         }
                         groupIdPathInfo.back().emplace_back(pathInfo);
                     }
-                }
-                if (chunksCount > maxChunks) {
-                    AddErrorWrap(ctx, node_->Pos(), "table with too many chunks");
-                    return Nothing();
                 }
                 clusterToNodesAndErasure[cluster].push_back({node_, hasErasure});
             } else {
@@ -653,7 +653,7 @@ public:
         TYtTableBaseInfo::TPtr tableInfo{TYtTableBaseInfo::Parse(table)};
         auto codecSpec = tableInfo->GetCodecSpecNode({});
         TString rowSpec = NodeToYsonString(codecSpec, NYT::NYson::EYsonFormat::Text);
-        
+
         NYt::NSource::TLookupSource source;
         source.SetCluster(table.Cluster().StringValue());
         source.SetTable(table.Name().StringValue());

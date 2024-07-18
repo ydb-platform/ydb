@@ -2829,18 +2829,31 @@ private:
 
     template <bool Final>
     TStatus AggregateWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
-        if (HasSetting(input->Tail(), "session"))
+        if (HasSetting(input->Tail(), "session")) {
+            // TODO: support sessions
             return TStatus::Ok;
+        }
 
         if (const auto size = input->Child(1)->ChildrenSize()) {
             if constexpr (Final) {
-                std::vector<std::string_view> columns;
-                columns.reserve(size);
-                for (const auto& child: input->Child(1)->Children()) {
-                    columns.emplace_back(child->Content());
+                bool allKeysInOutput = true;
+                if (auto outputColumnsSetting = GetSetting(input->Tail(), "output_columns")) {
+                    THashSet<TStringBuf> outputColumns;
+                    for (auto& col : outputColumnsSetting->Child(1)->Children()) {
+                        YQL_ENSURE(col->IsAtom());
+                        outputColumns.insert(col->Content());
+                    }
+                    allKeysInOutput = AllOf(input->Child(1)->Children(), [&](const auto& key) { return outputColumns.contains(key->Content()); });
                 }
-                input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(columns));
-                input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(columns));
+                if (allKeysInOutput) {
+                    std::vector<std::string_view> columns;
+                    columns.reserve(size);
+                    for (const auto& child: input->Child(1)->Children()) {
+                        columns.emplace_back(child->Content());
+                    }
+                    input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(columns));
+                    input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(columns));
+                }
             }
             return FromFirst<TEmptyConstraintNode>(input, output, ctx);
         }

@@ -28,7 +28,6 @@ IF (NOT WITH_VALGRIND)
 
     SRCS(
         ut_base_reboots.cpp
-        ut_allocate_reboot_pq.cpp
     )
 
     END()

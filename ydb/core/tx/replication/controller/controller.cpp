@@ -59,6 +59,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvUpdateTenantNodes, Handle);
         HFunc(TEvPrivate::TEvProcessQueues, Handle);
         HFunc(TEvPrivate::TEvRemoveWorker, Handle);
+        HFunc(TEvPrivate::TEvDescribeTargetsResult, Handle);
         HFunc(TEvDiscovery::TEvDiscoveryData, Handle);
         HFunc(TEvDiscovery::TEvError, Handle);
         HFunc(TEvService::TEvStatus, Handle);
@@ -128,6 +129,11 @@ void TController::Handle(TEvPrivate::TEvDropReplication::TPtr& ev, const TActorC
 }
 
 void TController::Handle(TEvController::TEvDescribeReplication::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    RunTxDescribeReplication(ev, ctx);
+}
+
+void TController::Handle(TEvPrivate::TEvDescribeTargetsResult::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
     RunTxDescribeReplication(ev, ctx);
 }
@@ -341,6 +347,8 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
     case NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING:
         if (!session.HasWorker(id)) {
             StopQueue.emplace(id, nodeId);
+        } else if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_INFO) {
+            UpdateLag(id, TDuration::MilliSeconds(record.GetLagMilliSeconds()));
         }
         break;
     case NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED:
@@ -366,6 +374,20 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
     }
 
     ScheduleProcessQueues();
+}
+
+void TController::UpdateLag(const TWorkerId& id, TDuration lag) {
+    auto replication = Find(id.ReplicationId());
+    if (!replication) {
+        return;
+    }
+
+    auto* target = replication->FindTarget(id.TargetId());
+    if (!target) {
+        return;
+    }
+
+    target->UpdateLag(id.WorkerId(), lag);
 }
 
 void TController::Handle(TEvService::TEvRunWorker::TPtr& ev, const TActorContext& ctx) {

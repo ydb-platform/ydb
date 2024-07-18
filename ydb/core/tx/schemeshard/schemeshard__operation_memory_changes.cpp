@@ -104,6 +104,10 @@ void TMemoryChanges::GrabView(TSchemeShard* ss, const TPathId& pathId) {
     Grab<TViewInfo>(pathId, ss->Views, Views);
 }
 
+void TMemoryChanges::GrabResourcePool(TSchemeShard* ss, const TPathId& pathId) {
+    Grab<TResourcePoolInfo>(pathId, ss->ResourcePools, ResourcePools);
+}
+
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
     // be aware of the order of grab & undo ops
     // stack is the best way to manage it right
@@ -229,6 +233,16 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->Views.erase(id);
         }
         Views.pop();
+    }
+
+    while (ResourcePools) {
+        const auto& [id, elem] = ResourcePools.top();
+        if (elem) {
+            ss->ResourcePools[id] = elem;
+        } else {
+            ss->ResourcePools.erase(id);
+        }
+        ResourcePools.pop();
     }
 }
 

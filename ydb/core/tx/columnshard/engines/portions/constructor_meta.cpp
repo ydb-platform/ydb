@@ -4,11 +4,12 @@
 
 namespace NKikimr::NOlap {
 
-void TPortionMetaConstructor::FillMetaInfo(const NArrow::TFirstLastSpecialKeys& primaryKeys, const NArrow::TMinMaxSpecialKeys& snapshotKeys, const TIndexInfo& indexInfo) {
+void TPortionMetaConstructor::FillMetaInfo(const NArrow::TFirstLastSpecialKeys& primaryKeys, const ui32 deletionsCount, const NArrow::TMinMaxSpecialKeys& snapshotKeys, const TIndexInfo& indexInfo) {
     AFL_VERIFY(!FirstAndLastPK);
     FirstAndLastPK = *primaryKeys.BuildAccordingToSchemaVerified(indexInfo.GetReplaceKey());
     AFL_VERIFY(!RecordSnapshotMin);
     AFL_VERIFY(!RecordSnapshotMax);
+    DeletionsCount = deletionsCount;
     {
         auto cPlanStep = snapshotKeys.GetBatch()->GetColumnByName(TIndexInfo::SPEC_COL_PLAN_STEP);
         auto cTxId = snapshotKeys.GetBatch()->GetColumnByName(TIndexInfo::SPEC_COL_TX_ID);
@@ -26,16 +27,14 @@ TPortionMetaConstructor::TPortionMetaConstructor(const TPortionMeta& meta) {
     FirstAndLastPK = meta.ReplaceKeyEdges;
     RecordSnapshotMin = meta.RecordSnapshotMin;
     RecordSnapshotMax = meta.RecordSnapshotMax;
+    DeletionsCount = meta.GetDeletionsCount();
     TierName = meta.GetTierNameOptional();
-    if (!meta.StatisticsStorage.IsEmpty()) {
-        StatisticsStorage = meta.StatisticsStorage;
-    }
     if (meta.Produced != NPortion::EProduced::UNSPECIFIED) {
         Produced = meta.Produced;
     }
 }
 
-NKikimr::NOlap::TPortionMeta TPortionMetaConstructor::Build() {
+TPortionMeta TPortionMetaConstructor::Build() {
     AFL_VERIFY(FirstAndLastPK);
     AFL_VERIFY(RecordSnapshotMin);
     AFL_VERIFY(RecordSnapshotMax);
@@ -43,11 +42,10 @@ NKikimr::NOlap::TPortionMeta TPortionMetaConstructor::Build() {
     if (TierName) {
         result.TierName = *TierName;
     }
+    AFL_VERIFY(DeletionsCount);
+    result.DeletionsCount = *DeletionsCount;
     AFL_VERIFY(Produced);
     result.Produced = *Produced;
-    if (StatisticsStorage) {
-        result.StatisticsStorage = *StatisticsStorage;
-    }
     return result;
 }
 
@@ -56,19 +54,13 @@ bool TPortionMetaConstructor::LoadMetadata(const NKikimrTxColumnShard::TIndexPor
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DeserializeFromProto")("error", "parsing duplication");
         return true;
     }
-    if (portionMeta.HasStatisticsStorage()) {
-        auto parsed = NStatistics::TPortionStorage::BuildFromProto(portionMeta.GetStatisticsStorage());
-        if (!parsed) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DeserializeFromProto")("error", parsed.GetErrorMessage());
-            return false;
-        }
-        StatisticsStorage = parsed.DetachResult();
-        if (StatisticsStorage->IsEmpty()) {
-            StatisticsStorage.reset();
-        }
-    }
     if (portionMeta.GetTierName()) {
         TierName = portionMeta.GetTierName();
+    }
+    if (portionMeta.HasDeletionsCount()) {
+        DeletionsCount = portionMeta.GetDeletionsCount();
+    } else {
+        DeletionsCount = 0;
     }
     if (portionMeta.GetIsInserted()) {
         Produced = TPortionMeta::EProduced::INSERTED;

@@ -360,6 +360,19 @@ namespace NProtobufJson {
         break;                                                                         \
     }
 
+#define REPEATED_INT_FIELD_TO_JSON(EProtoCppType, ProtoGet)                              \
+    case FieldDescriptor::EProtoCppType: {                                               \
+        for (size_t i = 0, endI = reflection->FieldSize(proto, &field); i < endI; ++i) { \
+            const auto value = reflection->ProtoGet(proto, &field, i);                   \
+            if (NeedStringifyRepeatedNumber(value)) {                                    \
+                json.Write(ToString(value));                                             \
+            } else {                                                                     \
+                json.Write(value);                                                       \
+            }                                                                            \
+        }                                                                                \
+        break;                                                                           \
+    }
+
         const Reflection* reflection = proto.GetReflection();
 
         if (reflection->FieldSize(proto, &field) > 0) {
@@ -371,10 +384,10 @@ namespace NProtobufJson {
             }
 
             switch (field.cpp_type()) {
-                REPEATED_FIELD_TO_JSON(CPPTYPE_INT32, GetRepeatedInt32);
-                REPEATED_FIELD_TO_JSON(CPPTYPE_INT64, GetRepeatedInt64);
-                REPEATED_FIELD_TO_JSON(CPPTYPE_UINT32, GetRepeatedUInt32);
-                REPEATED_FIELD_TO_JSON(CPPTYPE_UINT64, GetRepeatedUInt64);
+                REPEATED_INT_FIELD_TO_JSON(CPPTYPE_INT32, GetRepeatedInt32);
+                REPEATED_INT_FIELD_TO_JSON(CPPTYPE_INT64, GetRepeatedInt64);
+                REPEATED_INT_FIELD_TO_JSON(CPPTYPE_UINT32, GetRepeatedUInt32);
+                REPEATED_INT_FIELD_TO_JSON(CPPTYPE_UINT64, GetRepeatedUInt64);
                 REPEATED_FIELD_TO_JSON(CPPTYPE_DOUBLE, GetRepeatedDouble);
                 REPEATED_FIELD_TO_JSON(CPPTYPE_FLOAT, GetRepeatedFloat);
                 REPEATED_FIELD_TO_JSON(CPPTYPE_BOOL, GetRepeatedBool);
@@ -583,6 +596,25 @@ namespace NProtobufJson {
         constexpr long long SAFE_INTEGER_RANGE_DOUBLE = 1LL << 53;
 
         switch (GetConfig().StringifyNumbers) {
+            case TProto2JsonConfig::StringifyLongNumbersNever:
+                return false;
+            case TProto2JsonConfig::StringifyLongNumbersForFloat:
+                return !ValueInRange(value, SAFE_INTEGER_RANGE_FLOAT);
+            case TProto2JsonConfig::StringifyLongNumbersForDouble:
+                return !ValueInRange(value, SAFE_INTEGER_RANGE_DOUBLE);
+            case TProto2JsonConfig::StringifyInt64Always:
+                return std::is_same_v<T, i64> || std::is_same_v<T, ui64>;
+        }
+
+        return false;
+    }
+
+    template <class T>
+    bool TProto2JsonPrinter::NeedStringifyRepeatedNumber(T value) const {
+        constexpr long SAFE_INTEGER_RANGE_FLOAT = 1L << 24;
+        constexpr long long SAFE_INTEGER_RANGE_DOUBLE = 1LL << 53;
+
+        switch (GetConfig().StringifyNumbersRepeated) {
             case TProto2JsonConfig::StringifyLongNumbersNever:
                 return false;
             case TProto2JsonConfig::StringifyLongNumbersForFloat:

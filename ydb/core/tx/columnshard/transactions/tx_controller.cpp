@@ -1,4 +1,5 @@
 #include "tx_controller.h"
+#include "transactions/tx_finish_async.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 
@@ -231,7 +232,7 @@ size_t TTxController::CleanExpiredTxs(NTabletFlatExecutor::TTransactionContext& 
     size_t removedCount = 0;
     if (HaveOutdatedTxs()) {
         ui64 outdatedStep = Owner.GetOutdatedStep();
-        while (!DeadlineQueue.empty()) {
+        while (DeadlineQueue.size()) {
             auto it = DeadlineQueue.begin();
             if (outdatedStep < it->Step) {
                 // This transaction has a chance to be planned
@@ -358,6 +359,14 @@ void TTxController::FinishProposeOnComplete(const ui64 txId, const TActorContext
     AFL_VERIFY(!txOperator->IsFail());
     txOperator->FinishProposeOnComplete(Owner, ctx);
     txOperator->SendReply(Owner, ctx);
+}
+
+void TTxController::StartOperators() {
+    AFL_VERIFY(!StartedFlag);
+    StartedFlag = true;
+    for (auto&& i : Operators) {
+        Y_UNUSED(i.second->OnStartAsync(Owner));
+    }
 }
 
 void TTxController::ITransactionOperator::SwitchStateVerified(const EStatus from, const EStatus to) {

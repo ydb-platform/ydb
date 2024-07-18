@@ -77,57 +77,58 @@ protected:
     const ui32 WideFieldsIndex;
 };
 
-class TWideFilterWrapper : public TSimpleStatelessWideFlowCodegeneratorNode<TWideFilterWrapper>,  public TBaseWideFilterWrapper {
-using TBaseComputation = TSimpleStatelessWideFlowCodegeneratorNode<TWideFilterWrapper>;
+class TWideFilterWrapper : public TStatelessWideFlowCodegeneratorNode<TWideFilterWrapper>,  public TBaseWideFilterWrapper {
+using TBaseComputation = TStatelessWideFlowCodegeneratorNode<TWideFilterWrapper>;
 public:
     TWideFilterWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* predicate)
-        : TBaseComputation(flow, items.size(), items.size())
+        : TBaseComputation(flow)
         , TBaseWideFilterWrapper(mutables, flow, std::move(items), predicate)
     {}
 
-    NUdf::TUnboxedValue*const* PrepareInput(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        return PrepareArguments(ctx, output);
-    }
+    EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+        auto** fields = GetFields(ctx);
 
-    TMaybeFetchResult DoProcess(TComputationContext& ctx, TMaybeFetchResult fetchRes, NUdf::TUnboxedValue*const* output) const {
-        if (fetchRes.Get() == EFetchResult::One) {
+        while (true) {
+            PrepareArguments(ctx, output);
+
+            if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result)
+                return result;
+
             if (Predicate->GetValue(ctx).Get<bool>()) {
                 FillOutputs(ctx, output);
                 return EFetchResult::One;
             }
-            return TMaybeFetchResult::None();
         }
-        return fetchRes;
     }
-
 #ifndef MKQL_DISABLE_CODEGEN
-    typename TBaseComputation::TGenerateResult GenFetchProcess(const TCodegenContext& ctx, const TResultCodegenerator& fetchGenerator, BasicBlock*& block) const override {
-        auto &context = ctx.Codegen.GetContext();
-        auto pass = BasicBlock::Create(context, "pass", ctx.Func);
-        auto check = BasicBlock::Create(context, "check", ctx.Func);
-        auto decr = BasicBlock::Create(context, "decr", ctx.Func);
-        auto maybeResultVal = PHINode::Create(TMaybeFetchResult::LLVMType(context), 4, "maybe_res", pass);
-        
-        auto [fetchResVal, fetchGetters] = fetchGenerator(ctx, block);
-        auto passCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, ConstantInt::get(fetchResVal->getType(), static_cast<i32>(EFetchResult::One)), fetchResVal, "not_one", block);
-        maybeResultVal->addIncoming(TMaybeFetchResult::LLVMFromFetchResult(fetchResVal, "fetch_res_ext", block), block);
-        BranchInst::Create(pass, check, passCond, block);
+    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const {
+        auto& context = ctx.Codegen.GetContext();
 
-        block = check;
-        auto predicateCond = GenGetPredicate<false>(ctx, fetchGetters, block);
-        maybeResultVal->addIncoming(TMaybeFetchResult::None().LLVMConst(context), block);
-        BranchInst::Create(decr, pass, predicateCond, block);
+        const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
 
-        block = decr;
-        maybeResultVal->addIncoming(TMaybeFetchResult(EFetchResult::One).LLVMConst(context), block);
-        BranchInst::Create(pass, block);
+        BranchInst::Create(loop, block);
+
+        block = loop;
+
+        auto status = GetNodeValues(Flow, ctx, block);
+
+        const auto good = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, status.first, ConstantInt::get(status.first->getType(), 0), "good", block);
+
+        const auto work = BasicBlock::Create(context, "work", ctx.Func);
+        const auto pass = BasicBlock::Create(context, "pass", ctx.Func);
+
+        BranchInst::Create(work, pass, good, block);
+
+        block = work;
+
+        const auto predicate = GenGetPredicate(ctx, status.second, block);
+
+        BranchInst::Create(pass, loop, predicate, block);
 
         block = pass;
-
-        return {maybeResultVal, std::move(fetchGetters)};
+        return status;
     }
 #endif
-
 private:
     void RegisterDependencies() const final {
         if (const auto flow = FlowDependsOn(Flow)) {
@@ -137,8 +138,8 @@ private:
     }
 };
 
-class TWideFilterWithLimitWrapper : public TSimpleStatefulWideFlowCodegeneratorNode<TWideFilterWithLimitWrapper>,  public TBaseWideFilterWrapper {
-using TBaseComputation = TSimpleStatefulWideFlowCodegeneratorNode<TWideFilterWithLimitWrapper>;
+class TWideFilterWithLimitWrapper : public TSimpleStatefulWideFlowCodegeneratorNode<TWideFilterWithLimitWrapper, ui64>,  public TBaseWideFilterWrapper {
+using TBaseComputation = TSimpleStatefulWideFlowCodegeneratorNode<TWideFilterWithLimitWrapper, ui64>;
 public:
     TWideFilterWithLimitWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* limit,
             TComputationExternalNodePtrVector&& items, IComputationNode* predicate)
@@ -219,8 +220,8 @@ private:
 };
 
 template<bool Inclusive>
-class TWideTakeWhileWrapper : public TSimpleStatefulWideFlowCodegeneratorNode<TWideTakeWhileWrapper<Inclusive>>,  public TBaseWideFilterWrapper {
-using TBaseComputation = TSimpleStatefulWideFlowCodegeneratorNode<TWideTakeWhileWrapper<Inclusive>>;
+class TWideTakeWhileWrapper : public TSimpleStatefulWideFlowCodegeneratorNode<TWideTakeWhileWrapper<Inclusive>, bool>,  public TBaseWideFilterWrapper {
+using TBaseComputation = TSimpleStatefulWideFlowCodegeneratorNode<TWideTakeWhileWrapper<Inclusive>, bool>;
 public:
      TWideTakeWhileWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items,
             IComputationNode* predicate)
@@ -297,8 +298,8 @@ private:
 };
 
 template<bool Inclusive>
-class TWideSkipWhileWrapper : public TSimpleStatefulWideFlowCodegeneratorNode<TWideSkipWhileWrapper<Inclusive>>,  public TBaseWideFilterWrapper {
-using TBaseComputation = TSimpleStatefulWideFlowCodegeneratorNode<TWideSkipWhileWrapper<Inclusive>>;
+class TWideSkipWhileWrapper : public TSimpleStatefulWideFlowCodegeneratorNode<TWideSkipWhileWrapper<Inclusive>, bool>,  public TBaseWideFilterWrapper {
+using TBaseComputation = TSimpleStatefulWideFlowCodegeneratorNode<TWideSkipWhileWrapper<Inclusive>, bool>;
 public:
      TWideSkipWhileWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* predicate)
         : TBaseComputation(mutables, flow, items.size(), items.size())

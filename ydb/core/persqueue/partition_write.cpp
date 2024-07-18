@@ -312,7 +312,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 ", Offset: " << offset << " is " << (already ? "already written" : "stored on disk")
             );
 
-            if (PartitionWriteQuotaWaitCounter) {
+            if (PartitionWriteQuotaWaitCounter && !writeResponse.Internal) {
                 PartitionWriteQuotaWaitCounter->IncFor(PartitionQuotaWaitTimeForCurrentBlob.MilliSeconds());
             }
             if (!already && partNo + 1 == totalParts && !writeResponse.Msg.HeartbeatVersion)
@@ -485,6 +485,17 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     }
     HaveWriteMsg = false;
 
+    for (auto& [sourceId, info] : TxSourceIdForPostPersist) {
+        auto it = SourceIdStorage.GetInMemorySourceIds().find(sourceId);
+        if (it.IsEnd()) {
+            SourceIdStorage.RegisterSourceId(sourceId, info.SeqNo, info.Offset, ctx.Now());
+        } else {
+            ui64 seqNo = std::max(info.SeqNo, it->second.SeqNo);
+            SourceIdStorage.RegisterSourceId(sourceId, it->second.Updated(seqNo, info.Offset, ctx.Now()));
+        }
+    }
+    TxSourceIdForPostPersist.clear();
+
     TxAffectedSourcesIds.clear();
     WriteAffectedSourcesIds.clear();
     TxAffectedConsumers.clear();
@@ -524,15 +535,20 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
         "TPartition::HandleWriteResponse writeNewSize# " << WriteNewSize;
     );
 
+    if (SupportivePartitionTimeLag) {
+        SupportivePartitionTimeLag->UpdateTimestamp(now.MilliSeconds());
+    }
     if (SplitMergeEnabled(Config)) {
-        SplitMergeAvgWriteBytes->Update(WriteNewSize, now);
+        SplitMergeAvgWriteBytes->Update(WriteNewSizeFull, now);
         auto needScaling = CheckScaleStatus(ctx);
         ChangeScaleStatusIfNeeded(needScaling);
     }
     WriteCycleSize = 0;
     WriteNewSize = 0;
+    WriteNewSizeFull = 0;
     WriteNewSizeInternal = 0;
     WriteNewSizeUncompressed = 0;
+    WriteNewSizeUncompressedFull = 0;
     WriteNewMessages = 0;
     WriteNewMessagesInternal = 0;
     UpdateWriteBufferIsFullState(now);
@@ -602,7 +618,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
 
     if (!CanEnqueue()) {
         ReplyError(ctx, ev->Get()->Cookie, InactivePartitionErrorCode,
-            TStringBuilder() << "Write to inactive partition");
+            TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
         return;
     }
 
@@ -879,7 +895,7 @@ void TPartition::CancelOneWriteOnWrite(const TActorContext& ctx,
 TPartition::EProcessResult TPartition::PreProcessRequest(TRegisterMessageGroupMsg& msg) {
     if (!CanWrite()) {
         ScheduleReplyError(msg.Cookie, InactivePartitionErrorCode,
-            TStringBuilder() << "Write to inactive partition");
+            TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
         return EProcessResult::ContinueDrop;
     }
     if (DiskIsFull) {
@@ -911,7 +927,7 @@ void TPartition::ExecRequest(TRegisterMessageGroupMsg& msg, ProcessParameters& p
 TPartition::EProcessResult TPartition::PreProcessRequest(TDeregisterMessageGroupMsg& msg) {
     if (!CanWrite()) {
         ScheduleReplyError(msg.Cookie, InactivePartitionErrorCode,
-            TStringBuilder() << "Write to inactive partition");
+            TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
         return EProcessResult::ContinueDrop;
     }
     if (DiskIsFull) {
@@ -935,7 +951,7 @@ void TPartition::ExecRequest(TDeregisterMessageGroupMsg& msg, ProcessParameters&
 TPartition::EProcessResult TPartition::PreProcessRequest(TSplitMessageGroupMsg& msg) {
     if (!CanWrite()) {
         ScheduleReplyError(msg.Cookie, InactivePartitionErrorCode,
-            TStringBuilder() << "Write to inactive partition");
+            TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
         return EProcessResult::ContinueDrop;
     }
     if (DiskIsFull) {
@@ -980,7 +996,7 @@ void TPartition::ExecRequest(TSplitMessageGroupMsg& msg, ProcessParameters& para
 TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
     if (!CanWrite()) {
         ScheduleReplyError(p.Cookie, InactivePartitionErrorCode,
-            TStringBuilder() << "Write to inactive partition");
+            TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
         return EProcessResult::ContinueDrop;
     }
     if (DiskIsFull) {
@@ -996,10 +1012,81 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
     return EProcessResult::Continue;
 }
 
+void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
+                             TEvKeyValue::TEvRequest* request,
+                             const TActorContext& ctx)
+{
+    auto write = request->Record.AddCmdWrite();
+    write->SetKey(newWrite->Key.ToString());
+    write->SetValue(newWrite->Value);
+    Y_ABORT_UNLESS(!newWrite->Key.IsHead());
+    auto channel = GetChannel(NextChannel(newWrite->Key.IsHead(), newWrite->Value.Size()));
+    write->SetStorageChannel(channel);
+    write->SetTactic(AppData(ctx)->PQConfig.GetTactic());
+
+    TKey resKey = newWrite->Key;
+    resKey.SetType(TKeyPrefix::TypeData);
+    write->SetKeyToCache(resKey.ToString());
+    WriteCycleSize += newWrite->Value.size();
+}
+
+void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFormedBlobInfo>& formedBlobs,
+                                   ProcessParameters& parameters,
+                                   ui32 curWrites,
+                                   TEvKeyValue::TEvRequest* request,
+                                   const TActorContext& ctx)
+{
+    for (ui32 i = 0; i < formedBlobs.size(); ++i) {
+        const auto& x = formedBlobs[i];
+        if (i + curWrites < formedBlobs.size()) { //this KV pair is already writed, rename needed
+            auto rename = request->Record.AddCmdRename();
+            rename->SetOldKey(x.OldKey.ToString());
+            rename->SetNewKey(x.NewKey.ToString());
+        }
+        if (!DataKeysBody.empty() && CompactedKeys.empty()) {
+            Y_ABORT_UNLESS(DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount() <= x.NewKey.GetOffset(),
+                           "LAST KEY %s, HeadOffset %lu, NEWKEY %s",
+                           DataKeysBody.back().Key.ToString().c_str(),
+                           Head.Offset,
+                           x.NewKey.ToString().c_str());
+        }
+        LOG_DEBUG_S(
+                    ctx, NKikimrServices::PERSQUEUE,
+                    "writing blob: topic '" << TopicName() << "' partition " << Partition
+                    << " " << x.OldKey.ToString() << " size " << x.Size << " WTime " << ctx.Now().MilliSeconds()
+                   );
+
+        CompactedKeys.emplace_back(x.NewKey, x.Size);
+    }
+
+    if (!formedBlobs.empty()) {
+        parameters.HeadCleared = true;
+
+        NewHead.Clear();
+        NewHead.Offset = PartitionedBlob.GetOffset();
+        NewHead.PartNo = PartitionedBlob.GetHeadPartNo();
+        NewHead.PackedSize = 0;
+    }
+}
+
+ui32 TPartition::RenameTmpCmdWrites(TEvKeyValue::TEvRequest* request)
+{
+    ui32 curWrites = 0;
+    for (ui32 i = 0; i < request->Record.CmdWriteSize(); ++i) { //change keys for yet to be writed KV pairs
+        TKey key(request->Record.GetCmdWrite(i).GetKey());
+        if (key.GetType() == TKeyPrefix::TypeTmpData) {
+            key.SetType(TKeyPrefix::TypeData);
+            request->Record.MutableCmdWrite(i)->SetKey(TString(key.Data(), key.Size()));
+            ++curWrites;
+        }
+    }
+    return curWrites;
+}
+
 bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request) {
     if (!CanWrite()) {
         ScheduleReplyError(p.Cookie, InactivePartitionErrorCode,
-            TStringBuilder() << "Write to inactive partition");
+            TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
         return false;
     }
     if (DiskIsFull) {
@@ -1044,14 +1131,17 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                         << ". Writing seqNo: " << sourceId.UpdatedSeqNo()
                         << ". EndOffset: " << EndOffset << ". CurOffset: " << curOffset << ". Offset: " << poffset
             );
-
-            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ALREADY].Increment(1);
-            MsgsDiscarded.Inc();
-            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ALREADY].Increment(p.Msg.Data.size());
-            BytesDiscarded.Inc(p.Msg.Data.size());
+            if (!p.Internal) {
+                TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ALREADY].Increment(1);
+                MsgsDiscarded.Inc();
+                TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ALREADY].Increment(p.Msg.Data.size());
+                BytesDiscarded.Inc(p.Msg.Data.size());
+            }
         } else {
-            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_SMALL_OFFSET].Increment(1);
-            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_SMALL_OFFSET].Increment(p.Msg.Data.size());
+            if (!p.Internal) {
+                TabletCounters.Cumulative()[COUNTER_PQ_WRITE_SMALL_OFFSET].Increment(1);
+                TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_SMALL_OFFSET].Increment(p.Msg.Data.size());
+            }
         }
 
         TString().swap(p.Msg.Data);
@@ -1153,14 +1243,17 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         ctx.Send(Tablet, new TEvents::TEvPoisonPill());
         return false;
     }
-
-    WriteNewSize += p.Msg.SourceId.size() + p.Msg.Data.size();
-    WriteNewSizeInternal += p.Msg.External ? 0 : (p.Msg.SourceId.size() + p.Msg.Data.size());
-    WriteNewSizeUncompressed += p.Msg.UncompressedSize + p.Msg.SourceId.size();
-    if (p.Msg.PartNo == 0) {
-            ++WriteNewMessages;
-            if (!p.Msg.External)
-                ++WriteNewMessagesInternal;
+    WriteNewSizeFull += p.Msg.SourceId.size() + p.Msg.Data.size();
+    WriteNewSizeUncompressedFull += p.Msg.UncompressedSize + p.Msg.SourceId.size();
+    if (!p.Internal) {
+        WriteNewSize += p.Msg.SourceId.size() + p.Msg.Data.size();
+        WriteNewSizeUncompressed += p.Msg.UncompressedSize + p.Msg.SourceId.size();
+        WriteNewSizeInternal += p.Msg.External ? 0 : (p.Msg.SourceId.size() + p.Msg.Data.size());
+    }
+    if (p.Msg.PartNo == 0 && !p.Internal) {
+        ++WriteNewMessages;
+        if (!p.Msg.External)
+            ++WriteNewMessagesInternal;
     }
 
     TMaybe<TPartData> partData;
@@ -1176,85 +1269,42 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     const ui64 writeLagMs =
         (WriteTimestamp - TInstant::MilliSeconds(p.Msg.CreateTimestamp)).MilliSeconds();
     WriteLagMs.Update(writeLagMs, WriteTimestamp);
-    if (InputTimeLag) {
+    if (InputTimeLag && !p.Internal) {
         InputTimeLag->IncFor(writeLagMs, 1);
-        if (p.Msg.PartNo == 0) {
-            MessageSize.IncFor(p.Msg.TotalSize + p.Msg.SourceId.size(), 1);
-        }
+    } else if (SupportivePartitionTimeLag) {
+        SupportivePartitionTimeLag->Insert(writeLagMs, 1);
     }
-
+    if (p.Msg.PartNo == 0  && !p.Internal) {
+        MessageSize.IncFor(p.Msg.TotalSize + p.Msg.SourceId.size(), 1);
+    }
     bool lastBlobPart = blob.IsLastPart();
 
     //will return compacted tmp blob
     auto newWrite = PartitionedBlob.Add(std::move(blob));
 
-    if (newWrite && !newWrite->second.empty()) {
-        auto write = request->Record.AddCmdWrite();
-        write->SetKey(newWrite->first.Data(), newWrite->first.Size());
-        write->SetValue(newWrite->second);
-        Y_ABORT_UNLESS(!newWrite->first.IsHead());
-        auto channel = GetChannel(NextChannel(newWrite->first.IsHead(), newWrite->second.Size()));
-        write->SetStorageChannel(channel);
-        write->SetTactic(AppData(ctx)->PQConfig.GetTactic());
-
-        TKey resKey = newWrite->first;
-        resKey.SetType(TKeyPrefix::TypeData);
-        write->SetKeyToCache(resKey.Data(), resKey.Size());
-        WriteCycleSize += newWrite->second.size();
+    if (newWrite && !newWrite->Value.empty()) {
+        AddCmdWrite(newWrite, request, ctx);
 
         LOG_DEBUG_S(
-                ctx, NKikimrServices::PERSQUEUE,
-                "Topic '" << TopicName() <<
+                    ctx, NKikimrServices::PERSQUEUE,
+                    "Topic '" << TopicName() <<
                     "' partition " << Partition <<
                     " part blob sourceId '" << EscapeC(p.Msg.SourceId) <<
                     "' seqNo " << p.Msg.SeqNo << " partNo " << p.Msg.PartNo <<
-                    " result is " << TStringBuf(newWrite->first.Data(), newWrite->first.Size()) <<
-                    " size " << newWrite->second.size()
-        );
+                    " result is " << newWrite->Key.ToString() <<
+                    " size " << newWrite->Value.size()
+                   );
     }
 
     if (lastBlobPart) {
         Y_ABORT_UNLESS(PartitionedBlob.IsComplete());
-        ui32 curWrites = 0;
-        for (ui32 i = 0; i < request->Record.CmdWriteSize(); ++i) { //change keys for yet to be writed KV pairs
-            TKey key(request->Record.GetCmdWrite(i).GetKey());
-            if (key.GetType() == TKeyPrefix::TypeTmpData) {
-                key.SetType(TKeyPrefix::TypeData);
-                request->Record.MutableCmdWrite(i)->SetKey(TString(key.Data(), key.Size()));
-                ++curWrites;
-            }
-        }
+        ui32 curWrites = RenameTmpCmdWrites(request);
         Y_ABORT_UNLESS(curWrites <= PartitionedBlob.GetFormedBlobs().size());
-        auto formedBlobs = PartitionedBlob.GetFormedBlobs();
-        for (ui32 i = 0; i < formedBlobs.size(); ++i) {
-            const auto& x = formedBlobs[i];
-            if (i + curWrites < formedBlobs.size()) { //this KV pair is already writed, rename needed
-                auto rename = request->Record.AddCmdRename();
-                TKey key = x.first;
-                rename->SetOldKey(TString(key.Data(), key.Size()));
-                key.SetType(TKeyPrefix::TypeData);
-                rename->SetNewKey(TString(key.Data(), key.Size()));
-            }
-            if (!DataKeysBody.empty() && CompactedKeys.empty()) {
-                Y_ABORT_UNLESS(DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount() <= x.first.GetOffset(),
-                    "LAST KEY %s, HeadOffset %lu, NEWKEY %s", DataKeysBody.back().Key.ToString().c_str(), Head.Offset, x.first.ToString().c_str());
-            }
-            LOG_DEBUG_S(
-                    ctx, NKikimrServices::PERSQUEUE,
-                    "writing blob: topic '" << TopicName() << "' partition " << Partition
-                        << " " << x.first.ToString() << " size " << x.second << " WTime " << ctx.Now().MilliSeconds()
-            );
-
-            CompactedKeys.push_back(x);
-            CompactedKeys.back().first.SetType(TKeyPrefix::TypeData);
-        }
-        if (PartitionedBlob.HasFormedBlobs()) { //Head and newHead are cleared
-            parameters.HeadCleared = true;
-            NewHead.Clear();
-            NewHead.Offset = PartitionedBlob.GetOffset();
-            NewHead.PartNo = PartitionedBlob.GetHeadPartNo();
-            NewHead.PackedSize = 0;
-        }
+        RenameFormedBlobs(PartitionedBlob.GetFormedBlobs(),
+                          parameters,
+                          curWrites,
+                          request,
+                          ctx);
         ui32 countOfLastParts = 0;
         for (auto& x : PartitionedBlob.GetClientBlobs()) {
             if (NewHead.Batches.empty() || NewHead.Batches.back().Packed) {
@@ -1296,19 +1346,8 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     return true;
 }
 
-std::pair<TKey, ui32> TPartition::GetNewWriteKey(bool headCleared) {
-    bool needCompaction = false;
-    ui32 HeadSize = headCleared ? 0 : Head.PackedSize;
-    if (HeadSize + NewHead.PackedSize > 0 && HeadSize + NewHead.PackedSize
-                                                        >= Min<ui32>(MaxBlobSize, Config.GetPartitionConfig().GetLowWatermark()))
-        needCompaction = true;
-
-    if (PartitionedBlob.IsInited()) { //has active partitioned blob - compaction is forbiden, head and newHead will be compacted when this partitioned blob is finished
-        needCompaction = false;
-    }
-
-    Y_ABORT_UNLESS(NewHead.PackedSize > 0 || needCompaction); //smthing must be here
-
+std::pair<TKey, ui32> TPartition::GetNewWriteKeyImpl(bool headCleared, bool needCompaction, ui32 HeadSize)
+{
     TKey key(TKeyPrefix::TypeData, Partition, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount(), !needCompaction);
 
     if (NewHead.PackedSize > 0)
@@ -1333,6 +1372,22 @@ std::pair<TKey, ui32> TPartition::GetNewWriteKey(bool headCleared) {
     }
     Y_ABORT_UNLESS(res.second <= MaxBlobSize);
     return res;
+}
+
+std::pair<TKey, ui32> TPartition::GetNewWriteKey(bool headCleared) {
+    bool needCompaction = false;
+    ui32 HeadSize = headCleared ? 0 : Head.PackedSize;
+    if (HeadSize + NewHead.PackedSize > 0 && HeadSize + NewHead.PackedSize
+                                                        >= Min<ui32>(MaxBlobSize, Config.GetPartitionConfig().GetLowWatermark()))
+        needCompaction = true;
+
+    if (PartitionedBlob.IsInited()) { //has active partitioned blob - compaction is forbiden, head and newHead will be compacted when this partitioned blob is finished
+        needCompaction = false;
+    }
+
+    Y_ABORT_UNLESS(NewHead.PackedSize > 0 || needCompaction); //smthing must be here
+
+    return GetNewWriteKeyImpl(headCleared, needCompaction, HeadSize);
 }
 
 void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, bool headCleared, const TActorContext& ctx) {
@@ -1615,6 +1670,7 @@ void TPartition::BeginAppendHeadWithNewWrites(const TActorContext& ctx)
 
     WriteCycleSize = 0;
     WriteNewSize = 0;
+    WriteNewSizeUncompressed = 0;
     WriteNewSizeUncompressed = 0;
     WriteNewMessages = 0;
     UpdateWriteBufferIsFullState(ctx.Now());

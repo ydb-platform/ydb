@@ -115,10 +115,12 @@ dir_macroses="list"
 dir_macroses-ITEM="dict"
 dir_macroses-macro="str"
 dir_macroses-args="list"
+dir_includes="set"
 
 [attrs.target]
 # DEPRECATED - Skipped old hardcoded-cmake attributes
 set_target_property="skip"
+append_target_property="skip"
 
 # DEPRECATED - target multiple calls macroses
 generate_enum_serilization="skip"
@@ -263,6 +265,9 @@ add_values=[{attr="includes", values=["cmake/bison.cmake"]}]
 attrs=[
     "conan-requires",
     "conan-tool_requires",
+    "conan-imports",
+    "conan-options",
+    "conan-generators",
 ]
 copy=["cmake/conan.cmake"]
 add_values=[{attr="includes", values=["cmake/conan.cmake"]}]

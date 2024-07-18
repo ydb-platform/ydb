@@ -13,6 +13,7 @@ SRCS(
     mirrorer.cpp
     mirrorer.h
     ownerinfo.cpp
+    offload_actor.cpp
     partition_init.cpp
     partition_monitoring.cpp
     partition_read.cpp
@@ -42,6 +43,7 @@ SRCS(
     write_quoter.cpp
     microseconds_sliding_window.cpp
     dread_cache_service/caching_service.cpp
+    write_id.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(read_balancer__balancing.h)
@@ -51,6 +53,7 @@ PEERDIR(
     ydb/library/actors/core
     library/cpp/html/pcdata
     library/cpp/json
+    ydb/core/backup/impl
     ydb/core/base
     ydb/core/engine/minikql
     ydb/core/keyvalue
@@ -76,4 +79,5 @@ RECURSE_FOR_TESTS(
     ut
     dread_cache_service/ut
     ut/slow
+    ut/ut_with_sdk
 )

@@ -6,11 +6,11 @@
 
 #include <yt/yt/client/misc/workload.h>
 
+#include <yt/yt/client/table_client/versioned_io_options.h>
+
 #include <yt/yt/client/tablet_client/public.h>
 
 #include <yt/yt/core/rpc/public.h>
-
-#include <yt/yt/core/ytree/yson_struct.h>
 
 namespace NYT::NApi {
 
@@ -194,6 +194,8 @@ struct TSelectRowsOptions
     //! Expected schemas for tables in a query (used for replica fallback in replicated tables).
     using TExpectedTableSchemas = THashMap<NYPath::TYPath, NTableClient::TTableSchemaPtr>;
     TExpectedTableSchemas ExpectedTableSchemas;
+    //! Add |$timestamp:columnName| to result if read_mode is latest_timestamp.
+    NTableClient::TVersionedReadOptions VersionedReadOptions;
 };
 
 struct TFallbackReplicaOptions

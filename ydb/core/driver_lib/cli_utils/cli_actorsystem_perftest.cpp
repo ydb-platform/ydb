@@ -1,5 +1,5 @@
 #include "cli.h"
-#include <ydb/core/actorlib_impl/mad_squirrel.h>
+#include "melancholic_gopher.h"
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/core/executor_pool_basic.h>

@@ -490,7 +490,7 @@ class StaticConfigGenerator(object):
 
         if self._yaml_config_enabled:
             normalized_config['yaml_config_enabled'] = True
-        
+
         return normalized_config
 
     def get_yaml_format_config(self, normalized_config):

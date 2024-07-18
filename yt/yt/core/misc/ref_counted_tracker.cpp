@@ -449,7 +449,7 @@ TRefCountedTracker::TLocalSlot* TRefCountedTracker::GetLocalSlot(TRefCountedType
 
     auto index = cookie.Underlying();
     if (index >= std::ssize(*localSlots)) {
-        localSlots->resize(static_cast<size_t>(index) + 1);
+        localSlots->resize(2 * static_cast<size_t>(index) + 1);
     }
 
     localSlotsBegin = localSlots->data();

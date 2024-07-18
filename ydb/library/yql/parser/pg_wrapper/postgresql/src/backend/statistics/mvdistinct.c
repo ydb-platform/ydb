@@ -13,7 +13,7 @@
  * estimates are already available in pg_statistic.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -146,14 +146,15 @@ statext_ndistinct_build(double totalrows, StatsBuildData *data)
  *		Load the ndistinct value for the indicated pg_statistic_ext tuple
  */
 MVNDistinct *
-statext_ndistinct_load(Oid mvoid)
+statext_ndistinct_load(Oid mvoid, bool inh)
 {
 	MVNDistinct *result;
 	bool		isnull;
 	Datum		ndist;
 	HeapTuple	htup;
 
-	htup = SearchSysCache1(STATEXTDATASTXOID, ObjectIdGetDatum(mvoid));
+	htup = SearchSysCache2(STATEXTDATASTXOID,
+						   ObjectIdGetDatum(mvoid), BoolGetDatum(inh));
 	if (!HeapTupleIsValid(htup))
 		elog(ERROR, "cache lookup failed for statistics object %u", mvoid);
 
@@ -260,7 +261,7 @@ statext_ndistinct_deserialize(bytea *data)
 
 	/* we expect at least the basic fields of MVNDistinct struct */
 	if (VARSIZE_ANY_EXHDR(data) < SizeOfHeader)
-		elog(ERROR, "invalid MVNDistinct size %zd (expected at least %zd)",
+		elog(ERROR, "invalid MVNDistinct size %zu (expected at least %zu)",
 			 VARSIZE_ANY_EXHDR(data), SizeOfHeader);
 
 	/* initialize pointer to the data part (skip the varlena header) */
@@ -286,7 +287,7 @@ statext_ndistinct_deserialize(bytea *data)
 	/* what minimum bytea size do we expect for those parameters */
 	minimum_size = MinSizeOfItems(ndist.nitems);
 	if (VARSIZE_ANY_EXHDR(data) < minimum_size)
-		elog(ERROR, "invalid MVNDistinct size %zd (expected at least %zd)",
+		elog(ERROR, "invalid MVNDistinct size %zu (expected at least %zu)",
 			 VARSIZE_ANY_EXHDR(data), minimum_size);
 
 	/*
@@ -488,8 +489,8 @@ ndistinct_for_combination(double totalrows, StatsBuildData *data,
 	}
 
 	/* We can sort the array now ... */
-	qsort_arg((void *) items, numrows, sizeof(SortItem),
-			  multi_sort_compare, mss);
+	qsort_interruptible(items, numrows, sizeof(SortItem),
+						multi_sort_compare, mss);
 
 	/* ... and count the number of distinct combinations */
 

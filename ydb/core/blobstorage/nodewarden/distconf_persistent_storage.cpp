@@ -20,7 +20,12 @@ namespace NKikimr::NStorage {
                     }
                     break;
 
+                case NPDisk::EPDiskMetadataOutcome::NO_METADATA:
+                    ev->NoMetadata.emplace_back(path, guid);
+                    break;
+
                 default:
+                    ev->Errors.emplace_back(path);
                     STLOGX(*actorSystem, PRI_INFO, BS_NODE, NWDC40, "ReadConfig failed to read metadata", (Path, path),
                         (Status, (int)status), (Cookie, cookie));
                     break;
@@ -145,12 +150,8 @@ namespace NKikimr::NStorage {
                 THashMap<TStorageConfigMeta, TEvGather::TCollectConfigs::TPersistentConfig*> proposed;
 
                 auto *res = task.Response.MutableCollectConfigs();
-                for (auto& item : *res->MutableCommittedConfigs()) {
-                    committed.try_emplace(item.GetConfig(), &item);
-                }
-                for (auto& item : *res->MutableProposedConfigs()) {
-                    proposed.try_emplace(item.GetConfig(), &item);
-                }
+                Y_ABORT_UNLESS(!res->CommittedConfigsSize());
+                Y_ABORT_UNLESS(!res->ProposedConfigsSize());
 
                 for (const auto& [path, m, guid] : msg.MetadataPerPath) {
                     auto addConfig = [&, path = path, guid = guid](const auto& config, auto func, auto& set) {
@@ -173,6 +174,21 @@ namespace NKikimr::NStorage {
                     if (m.HasProposedStorageConfig()) {
                         addConfig(m.GetProposedStorageConfig(), &TEvGather::TCollectConfigs::AddProposedConfigs, proposed);
                     }
+                }
+
+                for (const auto& [path, guid] : msg.NoMetadata) {
+                    auto *disk = res->AddNoMetadata();
+                    SelfNode.Serialize(disk->MutableNodeId());
+                    disk->SetPath(path);
+                    if (guid) {
+                        disk->SetGuid(*guid);
+                    }
+                }
+
+                for (const auto& path : msg.Errors) {
+                    auto *disk = res->AddErrors();
+                    SelfNode.Serialize(disk->MutableNodeId());
+                    disk->SetPath(path);
                 }
 
                 FinishAsyncOperation(it->first);

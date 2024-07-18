@@ -194,7 +194,7 @@ typedef struct SEED_T {
 	} seed_t;
 
 
-#if defined(__STDC__)
+#if defined(__STDC__) || defined (WIN32)
 #define PROTO(s) s
 #else
 #define PROTO(s) ()

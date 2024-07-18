@@ -11,6 +11,8 @@
 #include <util/datetime/base.h>
 #include <util/string/builder.h>
 
+#include "kqp_resource_estimation.h"
+
 #include <array>
 #include <bitset>
 #include <functional>
@@ -38,6 +40,7 @@ struct TKqpResourcesRequest {
     EKqpMemoryPool MemoryPool = EKqpMemoryPool::Unspecified;
     ui64 Memory = 0;
     ui64 ExternalMemory = 0;
+    bool ReleaseAllResources = false;
 
     TString ToString() const {
         return TStringBuilder() << "TKqpResourcesRequest{ MemoryPool: " << (ui32) MemoryPool << ", Memory: " << Memory
@@ -50,6 +53,7 @@ struct TKqpRMAllocateResult {
     bool Success = true;
     NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason Status = NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR;
     TString FailReason;
+    ui64 TotalAllocatedQueryMemory = 0;
 
     NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason GetStatus() const {
         return Status;
@@ -85,8 +89,12 @@ public:
 
     using TResourcesAllocatedCallback = std::function<void(NActors::TActorSystem* as)>;
 
+    virtual TTaskResourceEstimation EstimateTaskResources(const NYql::NDqProto::TDqTask& task, const ui32 tasksCount) = 0;
+    virtual void EstimateTaskResources(TTaskResourceEstimation& result, const ui32 tasksCount) = 0;
+
     virtual void FreeResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
     virtual void FreeResources(ui64 txId, ui64 taskId) = 0;
+    virtual TString GetTxResourcesUsageDebugInfo(ui64 txId) = 0;
 
     virtual void NotifyExternalResourcesAllocated(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
 
@@ -94,7 +102,6 @@ public:
 
     virtual TVector<NKikimrKqp::TKqpNodeResources> GetClusterResources() const = 0;
     virtual TKqpLocalNodeResources GetLocalResources() const = 0;
-    virtual NKikimrConfig::TTableServiceConfig::TResourceManager GetConfig() = 0;
 
     virtual std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetPatternCache() = 0;
 
@@ -140,7 +147,8 @@ struct TKqpProxySharedResources {
 
 NActors::IActor* CreateKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
     TIntrusivePtr<TKqpCounters> counters, NActors::TActorId resourceBroker = {},
-    std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources = nullptr);
+    std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources = nullptr,
+    ui32 nodeId = 0);
 
 std::shared_ptr<NRm::IKqpResourceManager> GetKqpResourceManager(TMaybe<ui32> nodeId = Nothing());
 std::shared_ptr<NRm::IKqpResourceManager> TryGetKqpResourceManager(TMaybe<ui32> nodeId = Nothing());

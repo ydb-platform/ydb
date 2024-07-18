@@ -9,6 +9,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 
+#include <google/protobuf/util/time_util.h>
+
 namespace NKikimr::NGRpcService {
 
 using namespace Ydb;
@@ -100,6 +102,7 @@ private:
 
         auto ev = std::make_unique<NReplication::TEvController::TEvDescribeReplication>();
         PathIdFromPathId(pathId, ev->Record.MutablePathId());
+        ev->Record.SetIncludeStats(GetProtoRequest()->include_stats());
 
         NTabletPipe::SendData(SelfId(), ControllerPipeClient, ev.release());
         Become(&TDescribeReplicationRPC::StateDescribeReplication);
@@ -165,12 +168,26 @@ private:
         if (from.HasSrcStreamName()) {
             to.set_source_changefeed_name(from.GetSrcStreamName());
         }
+        if (from.HasLagMilliSeconds()) {
+            *to.mutable_stats()->mutable_lag() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
+                from.GetLagMilliSeconds());
+        }
+        if (from.HasInitialScanProgress()) {
+            to.mutable_stats()->set_initial_scan_progress(from.GetInitialScanProgress());
+        }
     }
 
     static void ConvertState(NKikimrReplication::TReplicationState& from, Ydb::Replication::DescribeReplicationResult& to) {
         switch (from.GetStateCase()) {
         case NKikimrReplication::TReplicationState::kStandBy:
             to.mutable_running();
+            if (from.GetStandBy().HasLagMilliSeconds()) {
+                *to.mutable_running()->mutable_stats()->mutable_lag() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
+                    from.GetStandBy().GetLagMilliSeconds());
+            }
+            if (from.GetStandBy().HasInitialScanProgress()) {
+                to.mutable_running()->mutable_stats()->set_initial_scan_progress(from.GetStandBy().GetInitialScanProgress());
+            }
             break;
         case NKikimrReplication::TReplicationState::kError:
             *to.mutable_error()->mutable_issues() = std::move(*from.MutableError()->MutableIssues());

@@ -4,6 +4,8 @@
 #include "dq_compute_actor_metrics.h"
 #include "dq_compute_actor_watermarks.h"
 
+#include <ydb/library/yql/minikql/mkql_program_builder.h>
+
 //must be included the last
 #include "dq_compute_actor_log.h"
 
@@ -22,6 +24,7 @@ struct TComputeActorAsyncInputHelper {
     const NDqProto::EWatermarksMode WatermarksMode = NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED;
     const NKikimr::NMiniKQL::TType* ValueType = nullptr;
     TMaybe<TInstant> PendingWatermark = Nothing();
+    TMaybe<NKikimr::NMiniKQL::TProgramBuilder> ProgramBuilder;
 public:
     TComputeActorAsyncInputHelper(
         const TString& logPrefix,
@@ -122,4 +125,3 @@ public:
 };
 
 } //namespace NYql::NDq
-

@@ -3,7 +3,9 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/pool_stats_collector.h>
 #include <ydb/core/mon/sync_http_mon.h>
+#include <ydb/core/mon/async_http_mon.h>
 #include <ydb/core/mon_alloc/profiler.h>
 #include <ydb/core/tablet/tablet_impl.h>
 
@@ -40,6 +42,10 @@ namespace NActors {
         SetScheduledEventFilter(&TTestActorRuntime::DefaultScheduledFilterFunc);
         NodeFactory = MakeHolder<TNodeFactory>();
         InitNodes();
+    }
+
+    void TTestActorRuntime::SetupStatsCollectors() {
+        NeedStatsCollectors = true;
     }
 
     TTestActorRuntime::TTestActorRuntime(THeSingleSystemEnv d)
@@ -175,11 +181,19 @@ namespace NActors {
 
             if (NeedMonitoring && !SingleSysEnv) {
                 ui16 port = MonitoringPortOffset ? MonitoringPortOffset + nodeIndex : GetPortManager().GetPort();
-                node->Mon.Reset(new NActors::TSyncHttpMon({
-                    .Port = port,
-                    .Threads = 10,
-                    .Title = "KIKIMR monitoring"
-                }));
+                if (MonitoringTypeAsync) {
+                    node->Mon.Reset(new NActors::TAsyncHttpMon({
+                        .Port = port,
+                        .Threads = 10,
+                        .Title = "KIKIMR monitoring"
+                    }));
+                } else {
+                    node->Mon.Reset(new NActors::TSyncHttpMon({
+                        .Port = port,
+                        .Threads = 10,
+                        .Title = "KIKIMR monitoring"
+                    }));
+                }
                 nodeAppData->Mon = node->Mon.Get();
                 node->Mon->RegisterCountersPage("counters", "Counters", node->DynamicCounters);
                 auto actorsMonPage = node->Mon->RegisterIndexPage("actors", "Actors");
@@ -191,7 +205,7 @@ namespace NActors {
 
             node->ActorSystem->Start();
             if (nodeAppData->Mon) {
-                nodeAppData->Mon->Start();
+                nodeAppData->Mon->Start(node->ActorSystem.Get());
             }
         }
 
@@ -203,7 +217,14 @@ namespace NActors {
         return MonPorts[nodeIndex];
     }
 
-    void TTestActorRuntime::InitActorSystemSetup(TActorSystemSetup& /*setup*/) {
+    void TTestActorRuntime::InitActorSystemSetup(TActorSystemSetup& setup, TNodeDataBase* node) {
+        if (NeedMonitoring && NeedStatsCollectors) {
+            NActors::IActor* statsCollector = NKikimr::CreateStatsCollector(1, setup, node->DynamicCounters);
+            setup.LocalServices.push_back({
+                TActorId(),
+                NActors::TActorSetupCmd(statsCollector, NActors::TMailboxType::HTSwap, node->GetAppData<NKikimr::TAppData>()->SystemPoolId)
+            });
+        }
     }
 
     NKikimr::TAppData& TTestActorRuntime::GetAppData(ui32 nodeIndex) {

@@ -59,7 +59,7 @@ constexpr bool DEFAULT_USE_RPC_READER_IN_DQ = false;
 constexpr size_t DEFAULT_RPC_READER_INFLIGHT = 1;
 constexpr TDuration DEFAULT_RPC_READER_TIMEOUT = TDuration::Seconds(120);
 const TSet<TString> DEFAULT_BLOCK_READER_SUPPORTED_TYPES = {"pg", "tuple"};
-const TSet<NUdf::EDataSlot> DEFAULT_BLOCK_READER_SUPPORTED_DATA_TYPES = 
+const TSet<NUdf::EDataSlot> DEFAULT_BLOCK_READER_SUPPORTED_DATA_TYPES =
     {
         NUdf::EDataSlot::Int8, NUdf::EDataSlot::Uint8,
         NUdf::EDataSlot::Int16, NUdf::EDataSlot::Uint16,
@@ -83,5 +83,10 @@ constexpr ui32 DEFAULT_BATCH_LIST_FOLDER_CONCURRENCY = 5;
 constexpr bool DEFAULT_PARTITION_BY_CONSTANT_KEYS_VIA_MAP = false;
 
 constexpr ui64 DEFAULT_LLVM_NODE_COUNT_LIMIT = 200000;
+
+constexpr ui16 DEFAULT_MIN_COLUMN_GROUP_SIZE = 2;
+constexpr ui16 DEFAULT_MAX_COLUMN_GROUPS = 64;
+
+constexpr bool DEFAULT_DISABLE_FUSE_OPERATIONS = false;
 
 } // NYql

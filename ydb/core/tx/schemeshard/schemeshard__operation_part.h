@@ -609,5 +609,16 @@ ISubOperation::TPtr CreateAlterBlobDepot(TOperationId id, TTxState::ETxState sta
 ISubOperation::TPtr CreateDropBlobDepot(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropBlobDepot(TOperationId id, TTxState::ETxState state);
 
+// Resource Pool
+// Create
+ISubOperation::TPtr CreateNewResourcePool(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewResourcePool(TOperationId id, TTxState::ETxState state);
+// Alter
+ISubOperation::TPtr CreateAlterResourcePool(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateAlterResourcePool(TOperationId id, TTxState::ETxState state);
+// Drop
+ISubOperation::TPtr CreateDropResourcePool(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateDropResourcePool(TOperationId id, TTxState::ETxState state);
+
 }
 }

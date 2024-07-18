@@ -71,7 +71,7 @@ class AbstractExpiringTokenCredentials(credentials.AbstractExpiringTokenCredenti
         try:
             auth_metadata = await self._make_token_request()
             await self._cached_token.update(auth_metadata["access_token"])
-            self.update_expiration_info(auth_metadata)
+            self._update_expiration_info(auth_metadata)
             self.logger.info(
                 "Token refresh successful. current_time %s, refresh_in %s",
                 current_time,
@@ -85,6 +85,10 @@ class AbstractExpiringTokenCredentials(credentials.AbstractExpiringTokenCredenti
             self.last_error = str(e)
             await asyncio.sleep(1)
             self._tp.submit(self._refresh)
+
+        except BaseException as e:
+            self.last_error = str(e)
+            raise
 
     async def token(self):
         current_time = time.time()

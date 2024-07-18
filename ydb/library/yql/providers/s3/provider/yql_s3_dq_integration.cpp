@@ -1,11 +1,15 @@
 #include "yql_s3_dq_integration.h"
 #include "yql_s3_mkql_compiler.h"
 
+#include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_read_actor.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/proto/range.pb.h>
@@ -14,7 +18,7 @@
 #include <ydb/library/yql/providers/s3/range_helpers/file_tree_builder.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/utils/plan/plan_utils.h>
 
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/yson/node/node_io.h>
@@ -291,6 +295,7 @@ public:
                         .Path(s3ReadObject.Path())
                         .Format(s3ReadObject.Object().Format())
                         .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
+                        .FilterPredicate(s3ReadObject.FilterPredicate())
                         .Settings(s3ReadObject.Object().Settings())
                         .Build()
                     .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
@@ -387,6 +392,13 @@ public:
                     // TODO: pass context
                     TExprContext ctx;
                     srcDesc.SetRowType(NCommon::WriteTypeToYson(ctx.MakeType<TStructExprType>(rowTypeItems), NYT::NYson::EYsonFormat::Text));
+                }
+ 
+                if (auto predicate = parseSettings.FilterPredicate(); !IsEmptyFilterPredicate(predicate)) {
+                    TStringBuilder err;
+                    if (!SerializeFilterPredicate(predicate, srcDesc.mutable_predicate(), err)) {
+                        ythrow yexception() << "Failed to serialize filter predicate for source: " << err;
+                    }
                 }
 
                 if (const auto maySettings = parseSettings.Settings()) {
@@ -528,6 +540,7 @@ public:
                         fileQueueBatchSizeLimit,
                         fileQueueBatchObjectCountLimit,
                         State_->Gateway,
+                        State_->GatewayRetryPolicy,
                         connect.Url,
                         GetAuthInfo(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster)),
                         pathPattern,
@@ -621,8 +634,10 @@ public:
                     name = name + '.' + path;
                 }
             }
+
             properties["ExternalDataSource"] = cluster;
             properties["Name"] = name;
+
 
             if (source.Settings().Maybe<TS3SourceSettings>()) {
                 properties["Format"] = "raw";
@@ -634,6 +649,9 @@ public:
                 properties["Format"] = settings.Format().StringValue();
                 if (const auto& compression = GetCompression(settings.Settings().Ref()); !compression.empty()) {
                     properties["Compression"] = TString{compression};
+                }
+                if (auto predicate = settings.FilterPredicate(); !IsEmptyFilterPredicate(predicate)) {
+                    properties["Filter"] = NPlanUtils::PrettyExprStr(predicate);
                 }
                 const TStructExprType* fullRowType = settings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
                 auto rowTypeItems = fullRowType->GetItems();

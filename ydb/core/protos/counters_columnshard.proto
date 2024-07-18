@@ -196,4 +196,5 @@ enum ETxTypes {
     TXTYPE_SAVE_BACKGROUND_SESSION_STATE = 33               [(TxTypeOpts) = {Name: "TxSaveBackgroundSessionState"}];
     TXTYPE_GC_START = 34                                    [(TxTypeOpts) = {Name: "TxGarbageCollectionStart"}];
     TXTYPE_APPLY_NORMALIZER = 35                            [(TxTypeOpts) = {Name: "TxApplyNormalizer"}];
+    TXTYPE_START_INTERNAL_SCAN = 36                         [(TxTypeOpts) = {Name: "TxStartInternalScan"}];
 }

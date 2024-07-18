@@ -36,6 +36,18 @@ namespace {
                 freeText << "  - " << issue << Endl;
             }
         }
+        
+        if (!operation.CreatedBy().Empty()) {
+            freeText << "Created by: " << operation.CreatedBy() << Endl;
+        }
+
+        if (operation.CreateTime() != TInstant::Zero()) {
+            freeText << "Create time: " << operation.CreateTime().ToStringUpToSeconds() << Endl;
+        }
+
+        if (operation.EndTime() != TInstant::Zero()) {
+            freeText << "End time: " << operation.EndTime().ToStringUpToSeconds() << Endl;
+        }
 
         row.FreeText(freeText);
     }
@@ -114,6 +126,18 @@ namespace {
 
         freeText << "TypeV3: " << (settings.UseTypeV3_ ? "true" : "false") << Endl;
 
+        if (!operation.CreatedBy().Empty()) {
+            freeText << "Created by: " << operation.CreatedBy() << Endl;
+        }
+
+        if (operation.CreateTime() != TInstant::Zero()) {
+            freeText << "Create time: " << operation.CreateTime().ToStringUpToSeconds() << Endl;
+        }
+
+        if (operation.EndTime() != TInstant::Zero()) {
+            freeText << "End time: " << operation.EndTime().ToStringUpToSeconds() << Endl;
+        }
+
         row.FreeText(freeText);
     }
 
@@ -168,6 +192,18 @@ namespace {
             freeText << "Number of retries: " << settings.NumberOfRetries_.GetRef() << Endl;
         }
 
+        if (!operation.CreatedBy().Empty()) {
+            freeText << "Created by: " << operation.CreatedBy() << Endl;
+        }
+
+        if (operation.CreateTime() != TInstant::Zero()) {
+            freeText << "Create time: " << operation.CreateTime().ToStringUpToSeconds() << Endl;
+        }
+
+        if (operation.EndTime() != TInstant::Zero()) {
+            freeText << "End time: " << operation.EndTime().ToStringUpToSeconds() << Endl;
+        }
+
         row.FreeText(freeText);
     }
 
@@ -220,6 +256,36 @@ namespace {
         row.FreeText(freeText);
     }
 
+    /// QueryService
+    TPrettyTable MakeTable(const NYdb::NQuery::TScriptExecutionOperation&) {
+        return TPrettyTable({"id", "ready", "status", "execution_id", "exec_status", "exec_mode"});
+    }
+
+    void PrettyPrint(const NYdb::NQuery::TScriptExecutionOperation& operation, TPrettyTable& table) {
+        const auto& status = operation.Status();
+        const auto& metadata = operation.Metadata();
+
+        auto& row = table.AddRow();
+        row
+            .Column(0, ProtoToString(operation.Id()))
+            .Column(1, operation.Ready() ? "true" : "false")
+            .Column(2, status.GetStatus() == NYdb::EStatus::STATUS_UNDEFINED ? "" : ToString(status.GetStatus()))
+            .Column(3, metadata.ExecutionId)
+            .Column(4, metadata.ExecStatus)
+            .Column(5, metadata.ExecMode);
+
+        TStringBuilder freeText;
+
+        if (!status.GetIssues().Empty()) {
+            freeText << "Issues: " << Endl;
+            for (const auto& issue : status.GetIssues()) {
+                freeText << "  - " << issue << Endl;
+            }
+        }
+
+        row.FreeText(freeText);
+    }
+
     // Common
     template <typename T>
     void PrintOperationImpl(const T& operation, EOutputFormat format) {
@@ -256,9 +322,11 @@ namespace {
                 for (const auto& operation : operations.GetList()) {
                     PrettyPrint(operation, table);
                 }
-                Cout << table << Endl;
+                Cout << table;
             }
-            Cout << "Next page token: " << operations.NextPageToken() << Endl;
+            if (operations.NextPageToken()) {
+                Cout << Endl << "Next page token: " << operations.NextPageToken() << Endl;
+            }
             break;
 
         case EOutputFormat::Json:
@@ -318,5 +386,68 @@ void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TBuildI
     PrintOperationsListImpl(operations, format);
 }
 
+/// QueryService
+void PrintOperation(const NYdb::NQuery::TScriptExecutionOperation& operation, EOutputFormat format) {
+    PrintOperationImpl(operation, format);
 }
+
+void PrintOperationsList(const NOperation::TOperationsList<NYdb::NQuery::TScriptExecutionOperation>& operations, EOutputFormat format) {
+    PrintOperationsListImpl(operations, format);
+}
+
+}
+}
+
+template <>
+void Out<NYdb::NQuery::EExecStatus>(IOutputStream& o, NYdb::NQuery::EExecStatus status) {
+    using NYdb::NQuery::EExecStatus;
+    switch (status) {
+        case EExecStatus::Starting:
+            o << TStringBuf("starting");
+            return;
+        case EExecStatus::Aborted:
+            o << TStringBuf("aborted");
+            return;
+        case EExecStatus::Canceled:
+            o << TStringBuf("canceled");
+            return;
+        case EExecStatus::Completed:
+            o << TStringBuf("completed");
+            return;
+        case EExecStatus::Unspecified:
+            o << TStringBuf("unspecified");
+            return;
+        default:
+            o << TStringBuf("unknown");
+            return;
+    }
+
+    Y_ABORT(); // for GCC
+}
+
+template <>
+void Out<NYdb::NQuery::EExecMode>(IOutputStream& o, NYdb::NQuery::EExecMode status) {
+    using NYdb::NQuery::EExecMode;
+    switch (status) {
+        case EExecMode::Parse:
+            o << TStringBuf("parse");
+            return;
+        case EExecMode::Validate:
+            o << TStringBuf("validate");
+            return;
+        case EExecMode::Explain:
+            o << TStringBuf("explain");
+            return;
+        case EExecMode::Execute:
+            o << TStringBuf("execute");
+            return;
+        case EExecMode::Unspecified:
+            o << TStringBuf("unspecified");
+            return;
+        default:
+            o << TStringBuf("unknown");
+            return;
+    }
+
+    Y_ABORT(); // for GCC
 }

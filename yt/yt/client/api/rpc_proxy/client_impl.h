@@ -164,14 +164,13 @@ public:
     TFuture<TCreateQueueProducerSessionResult> CreateQueueProducerSession(
         const NYPath::TRichYPath& producerPath,
         const NYPath::TRichYPath& queuePath,
-        const TString& sessionId,
-        const std::optional<NYson::TYsonString>& userMeta,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
         const TCreateQueueProducerSessionOptions& options = {}) override;
 
     TFuture<void> RemoveQueueProducerSession(
         const NYPath::TRichYPath& producerPath,
         const NYPath::TRichYPath& queuePath,
-        const TString& sessionId,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
         const TRemoveQueueProducerSessionOptions& options = {}) override;
 
     // Files.
@@ -304,6 +303,12 @@ public:
     TFuture<void> AbortJob(
         NJobTrackerClient::TJobId jobId,
         const NApi::TAbortJobOptions& options) override;
+
+    TFuture<void> DumpJobProxyLog(
+        NJobTrackerClient::TJobId jobId,
+        NJobTrackerClient::TOperationId operationId,
+        const NYPath::TYPath& path,
+        const NApi::TDumpJobProxyLogOptions& options) override;
 
     // Metadata.
     TFuture<NApi::TClusterMeta> GetClusterMeta(
@@ -545,9 +550,9 @@ public:
         const NYPath::TYPath& pipelinePath,
         const TPausePipelineOptions& options = {}) override;
 
-    TFuture<TPipelineStatus> GetPipelineStatus(
+    TFuture<TPipelineState> GetPipelineState(
         const NYPath::TYPath& pipelinePath,
-        const TGetPipelineStatusOptions& options) override;
+        const TGetPipelineStateOptions& options) override;
 
     TFuture<TGetFlowViewResult> GetFlowView(
         const NYPath::TYPath& pipelinePath,

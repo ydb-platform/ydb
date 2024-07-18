@@ -213,6 +213,7 @@ void TExecContextBase::SetOutput(TYtOutSection output, const TYtSettings::TConst
     const TString tmpFolder = GetTablesTmpFolder(*settings);
     const auto nativeYtTypeCompatibility = settings->NativeYtTypeCompatibility.Get(Cluster_).GetOrElse(NTCF_LEGACY);
     const bool rowSpecCompactForm = settings->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
+    const bool optimizeForScan = settings->OptimizeFor.Get(Cluster_).GetOrElse(NYT::EOptimizeForAttr::OF_LOOKUP_ATTR) != NYT::EOptimizeForAttr::OF_LOOKUP_ATTR;
     size_t loggedTable = 0;
     TVector<TString> outTablePaths;
     TVector<NYT::TNode> outTableSpecs;
@@ -229,7 +230,8 @@ void TExecContextBase::SetOutput(TYtOutSection output, const TYtSettings::TConst
             outTablePath,
             tableInfo.GetCodecSpecNode(),
             attrSpec,
-            ToYTSortColumns(tableInfo.RowSpec->GetForeignSort())
+            ToYTSortColumns(tableInfo.RowSpec->GetForeignSort()),
+            optimizeForScan ? tableInfo.GetColumnGroups() : NYT::TNode{}
         );
         outTablePaths.push_back(outTablePath);
         outTableSpecs.push_back(std::move(attrSpec));
@@ -251,13 +253,15 @@ void TExecContextBase::SetSingleOutput(const TYtOutTableInfo& outTable, const TY
 
     const auto nativeYtTypeCompatibility = settings->NativeYtTypeCompatibility.Get(Cluster_).GetOrElse(NTCF_LEGACY);
     const bool rowSpecCompactForm = settings->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
+    const bool optimizeForScan = settings->OptimizeFor.Get(Cluster_).GetOrElse(NYT::EOptimizeForAttr::OF_LOOKUP_ATTR) != NYT::EOptimizeForAttr::OF_LOOKUP_ATTR;
 
     OutTables_.emplace_back(
         outTableName,
         outTablePath,
         outTable.GetCodecSpecNode(),
         outTable.GetAttrSpecNode(nativeYtTypeCompatibility, rowSpecCompactForm),
-        ToYTSortColumns(outTable.RowSpec->GetForeignSort())
+        ToYTSortColumns(outTable.RowSpec->GetForeignSort()),
+        optimizeForScan ? outTable.GetColumnGroups() : NYT::TNode{}
     );
 
     YQL_CLOG(INFO, ProviderYt) << "Output: " << Cluster_ << '.' << outTableName;

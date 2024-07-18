@@ -57,6 +57,7 @@ public:
             auto configRowset = db.Table<Schema::State>().Select();
             auto categoryRowset = db.Table<Schema::TabletCategory>().Select();
             auto availabilityRowset = db.Table<Schema::TabletAvailabilityRestrictions>().Select();
+            auto operationsRowset = db.Table<Schema::OperationsLog>().Select();
             if (!tabletRowset.IsReady()
                     || !tabletChannelRowset.IsReady()
                     || !tabletChannelGenRowset.IsReady()
@@ -72,7 +73,8 @@ public:
                     || !nodeRowset.IsReady()
                     || !configRowset.IsReady()
                     || !categoryRowset.IsReady()
-                    || !availabilityRowset.IsReady())
+                    || !availabilityRowset.IsReady()
+                    || !operationsRowset.IsReady())
                 return false;
         }
 
@@ -316,6 +318,11 @@ public:
                 node.Statistics = nodeRowset.GetValueOrDefault<Schema::Node::Statistics>();
                 node.Name = nodeRowset.GetValueOrDefault<Schema::Node::Name>();
                 node.BecomeUpOnRestart = nodeRowset.GetValueOrDefault<Schema::Node::BecomeUpOnRestart>(false);
+                if (node.BecomeUpOnRestart) {
+                    // If a node must become up on restart, it must have been down
+                    // That was not persisted to avoid issues with downgrades
+                    node.Down = true;
+                }
                 if (nodeRowset.HaveValue<Schema::Node::Location>()) {
                     auto location = nodeRowset.GetValue<Schema::Node::Location>();
                     if (location.HasDataCenter()) {
@@ -701,6 +708,14 @@ public:
         BLOG_NOTICE("THive::TTxLoadEverything deleted " << numDeletedNodes << " unnecessary nodes << (and " << numDeletedRestrictions << " restrictions for them)");
 
         TTabletId nextTabletId = Max(maxTabletId + 1, Self->NextTabletId);
+
+        auto operationsRowset = db.Table<Schema::OperationsLog>().All().Reverse().Select();
+        if (!operationsRowset.IsReady()) {
+            return false;
+        }
+        if (operationsRowset.IsValid()) {
+            Self->OperationsLogIndex = operationsRowset.GetValue<Schema::OperationsLog::Index>();
+        }
 
         if (isRootHive) {
             if (numSequences == 0) {

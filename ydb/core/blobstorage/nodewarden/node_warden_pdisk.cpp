@@ -254,7 +254,6 @@ namespace NKikimr::NStorage {
                     StartLocalVDiskActor(value);
                 }
             }
-            SendDiskMetrics(false);
 
             vdisks << "}";
             STLOG(PRI_NOTICE, BS_NODE, NW74, "RestartLocalPDisk has finished",

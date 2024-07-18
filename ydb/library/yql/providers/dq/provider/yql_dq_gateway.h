@@ -29,11 +29,32 @@ public:
         i64 OutputRows = 0;
         i64 InputBytes = 0;
         i64 OutputBytes = 0;
+
+        THashMap<TString, i64> ToMap() const {
+            return {
+                {"input_rows", InputRows},
+                {"output_rows", OutputRows},
+                {"input_bytes", InputBytes},
+                {"output_bytes", OutputBytes},
+            };
+        }
+
+        bool operator == (const TStageStats& other) const = default;
     };
 
     using TPtr = TIntrusivePtr<IDqGateway>;
     using TFileResource = Yql::DqsProto::TFile;
-    using TDqProgressWriter = std::function<void(const TString&, const std::unordered_map<ui64, IDqGateway::TStageStats>&)>;
+
+    struct TProgressWriterState {
+        TString Stage;
+        std::unordered_map<ui64, IDqGateway::TStageStats> Stats;
+        bool empty() const {
+            return Stage.empty();
+        }
+        bool operator == (const TProgressWriterState& rhs) const = default;
+    };
+
+    using TDqProgressWriter = std::function<void(TProgressWriterState state)>;
 
     struct TFileResourceHash {
         std::size_t operator()(const TFileResource& f) const {

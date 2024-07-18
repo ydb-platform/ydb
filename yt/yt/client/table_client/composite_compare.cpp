@@ -12,13 +12,15 @@
 
 #include <util/stream/mem.h>
 
+#include <cmath>
+
 namespace NYT::NTableClient {
 
 using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto Logger = NLogging::TLogger{"YsonCompositeCompare"};
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "YsonCompositeCompare");
 
 ////////////////////////////////////////////////////////////////////////////////
 

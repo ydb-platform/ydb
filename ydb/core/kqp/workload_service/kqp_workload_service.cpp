@@ -84,6 +84,7 @@ public:
         const auto& event = ev->Get()->Record;
 
         EnabledResourcePools = event.GetConfig().GetFeatureFlags().GetEnableResourcePools();
+        EnabledResourcePoolsOnServerLess = event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsOnServerLess();
         if (EnabledResourcePools) {
             LOG_I("Resource pools was enanbled");
             InitializeWorkloadService();
@@ -135,7 +136,7 @@ public:
 
         LOG_D("Recieved new request from " << workerActorId << ", Database: " << ev->Get()->Database << ", PoolId: " << ev->Get()->PoolId << ", SessionId: " << ev->Get()->SessionId);
         bool hasDefaultPool = DatabasesWithDefaultPool.contains(CanonizePath(ev->Get()->Database));
-        Register(CreatePoolResolverActor(std::move(ev), hasDefaultPool));
+        Register(CreatePoolResolverActor(std::move(ev), hasDefaultPool, EnabledResourcePoolsOnServerLess));
     }
 
     void Handle(TEvCleanupRequest::TPtr& ev) {
@@ -520,6 +521,7 @@ private:
     NMonitoring::TDynamicCounterPtr Counters;
 
     bool EnabledResourcePools = false;
+    bool EnabledResourcePoolsOnServerLess = false;
     bool ServiceInitialized = false;
     bool IdleChecksStarted = false;
     ETablesCreationStatus TablesCreationStatus = ETablesCreationStatus::Cleanup;

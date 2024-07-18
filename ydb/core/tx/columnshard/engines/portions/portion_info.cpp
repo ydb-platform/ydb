@@ -696,7 +696,7 @@ std::shared_ptr<NArrow::NAccessor::IChunkedArray> TPortionInfo::TPreparedColumn:
         chunks.emplace_back(batch->column(0));
     }
     if (chunks.size() > 1) {
-        return std::make_shared<NArrow::NAccessor::TTrivialChunkedArray>(chunks);
+        return std::make_shared<NArrow::NAccessor::TTrivialChunkedArray>(NArrow::TStatusValidator::GetValid(arrow::ChunkedArray::Make(chunks)));
     } else {
         return std::make_shared<NArrow::NAccessor::TTrivialArray>(chunks.front());
     }

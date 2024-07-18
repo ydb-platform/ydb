@@ -13,7 +13,7 @@ void TReadPortionInfoWithBlobs::RestoreChunk(const std::shared_ptr<IPortionDataC
     AFL_VERIFY(Chunks.emplace(address, chunk).second)("address", address.DebugString());
 }
 
-std::shared_ptr<NArrow::TGeneralContainer> TReadPortionInfoWithBlobs::GetBatch(
+std::shared_ptr<NArrow::TGeneralContainer> TReadPortionInfoWithBlobs::RestoreBatch(
     const ISnapshotSchema::TPtr& data, const ISnapshotSchema& result, const std::set<std::string>& columnNames) const {
     Y_ABORT_UNLESS(data);
     THashMap<TChunkAddress, TString> blobs;

@@ -17,19 +17,19 @@ std::shared_ptr<NKikimr::NOlap::TColumnLoader> IIndexInfo::GetColumnLoaderVerifi
 void IIndexInfo::AddDeleteFlagsColumn(NArrow::TGeneralContainer& batch, const bool isDelete) {
     const i64 numRows = batch.num_rows();
 
-    batch.AddColumn(arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean()), 
+    batch.AddField(arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean()), 
         NArrow::TThreadSimpleArraysCache::GetConst(arrow::boolean(), std::make_shared<arrow::BooleanScalar>(isDelete), numRows)).Validate();
 }
 
 void IIndexInfo::AddSnapshotColumns(NArrow::TGeneralContainer& batch, const TSnapshot& snapshot) {
     const i64 numRows = batch.num_rows();
 
-    batch.AddColumn(arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()), NArrow::MakeUI64Array(snapshot.GetPlanStep(), numRows)).Validate();
-    batch.AddColumn(arrow::field(SPEC_COL_TX_ID, arrow::uint64()), NArrow::MakeUI64Array(snapshot.GetTxId(), numRows)).Validate();
+    batch.AddField(arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()), NArrow::MakeUI64Array(snapshot.GetPlanStep(), numRows)).Validate();
+    batch.AddField(arrow::field(SPEC_COL_TX_ID, arrow::uint64()), NArrow::MakeUI64Array(snapshot.GetTxId(), numRows)).Validate();
 }
 
 void IIndexInfo::NormalizeDeletionColumn(NArrow::TGeneralContainer& batch) {
-    if (batch.HasField(SPEC_COL_DELETE_FLAG)) {
+    if (batch.HasColumn(SPEC_COL_DELETE_FLAG)) {
         return;
     }
     AddDeleteFlagsColumn(batch, false);

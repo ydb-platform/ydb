@@ -41,7 +41,7 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
         auto columnId = GetIndexInfo().GetColumnId(resultField->name());
         auto oldField = dataSchema.GetFieldByColumnIdOptional(columnId);
         if (oldField) {
-            auto conclusion = result.AddField(resultField, batch->GetAccessorByNameVerified(oldField->name()));
+            auto conclusion = result->AddField(resultField, batch->GetAccessorByNameVerified(oldField->name()));
             if (conclusion.IsFail()) {
                 return conclusion;
             }
@@ -50,7 +50,7 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
             if (conclusion.IsFail()) {
                 return conclusion;
             }
-            result.AddField(resultField, (*conclusion)->column(0)).Validate();
+            result->AddField(resultField, (*conclusion)->column(0)).Validate();
         }
     }
     return result;

@@ -109,8 +109,8 @@ public:
         for (auto&& batch : Batches) {
             auto& forMerge = batch.GetBatch();
             stream.AddSource(forMerge, nullptr);
-            for (ui32 cIdx = 0; cIdx < (ui32)forMerge->num_columns(); ++cIdx) {
-                fieldSizes[forMerge->column_name(cIdx)] += NArrow::GetArrayDataSize(forMerge->column(cIdx));
+            for (ui32 cIdx = 0; cIdx < (ui32)forMerge->GetColumnsCount(); ++cIdx) {
+                fieldSizes[forMerge->GetSchema()->GetFieldVerified(cIdx)->name()] += forMerge->GetColumnVerified(cIdx)->GetRawSize().value_or(0);
             }
             rowsCount += forMerge->num_rows();
         }
@@ -182,7 +182,6 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
         AddSpecials(*batch, indexInfo, inserted);
         batch = resultSchema->NormalizeBatch(*blobSchema, batch).DetachResult();
         pathBatches.Add(inserted, shardingFilterCommit, batch);
-        Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(batch, resultSchema->GetIndexInfo().GetReplaceKey()));
     }
 
     Y_ABORT_UNLESS(Blobs.IsEmpty());
@@ -227,7 +226,6 @@ void TInsertColumnEngineChanges::AddSpecials(
     NArrow::TGeneralContainer& batch, const TIndexInfo& indexInfo, const TInsertedData& inserted) const {
     IIndexInfo::AddSnapshotColumns(batch, inserted.GetSnapshot());
     IIndexInfo::AddDeleteFlagsColumn(batch, inserted.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete);
-    batch.SyncSchemaTo(indexInfo.ArrowSchemaWithSpecials()).Validate();
 }
 
 NColumnShard::ECumulativeCounters TInsertColumnEngineChanges::GetCounterIndex(const bool isSuccess) const {

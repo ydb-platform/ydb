@@ -1,6 +1,7 @@
 #pragma once
 #include "loader.h"
 
+#include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 

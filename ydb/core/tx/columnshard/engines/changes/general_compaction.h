@@ -14,7 +14,7 @@ private:
     void BuildAppendedPortionsByChunks(TConstructionContext& context, std::vector<TReadPortionInfoWithBlobs>&& portions) noexcept;
 
     std::shared_ptr<NArrow::TColumnFilter> BuildPortionFilter(const std::optional<NKikimr::NOlap::TGranuleShardingInfo>& shardingActual,
-        const std::shared_ptr<arrow::RecordBatch>& batch, const TPortionInfo& pInfo, const THashSet<ui64>& portionsInUsage,
+        const std::shared_ptr<NArrow::TGeneralContainer>& batch, const TPortionInfo& pInfo, const THashSet<ui64>& portionsInUsage,
         const ISnapshotSchema::TPtr& resultSchema) const;
 protected:
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept override;

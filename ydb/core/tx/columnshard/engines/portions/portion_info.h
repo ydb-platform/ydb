@@ -65,6 +65,9 @@ public:
     std::shared_ptr<TColumnLoader> Loader;
     std::vector<TChunk> Chunks;
 protected:
+    virtual std::optional<ui64> DoGetRawSize() const override {
+        return {};
+    }
     virtual TCurrentChunkAddress DoGetChunk(const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position) const override;
     virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray() const override {
         AFL_VERIFY(false);

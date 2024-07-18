@@ -240,10 +240,11 @@ void TCommittedDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>&
         AFL_VERIFY(GetStageData().GetBlobs().size() == 1);
         auto bData = MutableStageData().ExtractBlob(GetStageData().GetBlobs().begin()->first);
         auto schema = GetContext()->GetReadMetadata()->GetBlobSchema(CommittedBlob.GetSchemaVersion());
-        auto batch = NArrow::DeserializeBatch(bData, schema);
-        AFL_VERIFY(batch)("schema", schema->ToString());
-        batch = GetContext()->GetReadMetadata()->GetIndexInfo().AddSnapshotColumns(batch, CommittedBlob.GetSnapshot());
-        batch = GetContext()->GetReadMetadata()->GetIndexInfo().AddDeleteFlagsColumn(batch, CommittedBlob.GetIsDelete());
+        auto rBatch = NArrow::DeserializeBatch(bData, schema);
+        AFL_VERIFY(rBatch)("schema", schema->ToString());
+        auto batch = std::make_shared<NArrow::TGeneralContainer>(rBatch);
+        GetContext()->GetReadMetadata()->GetIndexInfo().AddSnapshotColumns(*batch, CommittedBlob.GetSnapshot());
+        GetContext()->GetReadMetadata()->GetIndexInfo().AddDeleteFlagsColumn(*batch, CommittedBlob.GetIsDelete());
         MutableStageData().AddBatch(batch);
     }
     MutableStageData().SyncTableColumns(columns->GetSchema()->fields());

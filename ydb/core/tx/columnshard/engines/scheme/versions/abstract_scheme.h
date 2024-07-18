@@ -1,4 +1,6 @@
 #pragma once
+#include <ydb/core/formats/arrow/common/container.h>
+
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/saver.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/loader.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>

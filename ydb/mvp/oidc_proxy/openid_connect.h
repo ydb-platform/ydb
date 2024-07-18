@@ -32,7 +32,7 @@ struct TOpenIdConnectSettings {
     TString ExchangeEndpoint = DEFAULT_EXCHANGE_ENDPOINT;
 
     TString GetAuthorizationString() const {
-        return Base64Encode(ClientId + ":" + ClientSecret);
+        return "Basic " + Base64Encode(ClientId + ":" + ClientSecret);
     }
 
     TString GetAuthEndpointURL() const {

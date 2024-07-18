@@ -31,7 +31,7 @@ public:
     }
 
     void Handle(TEvPrivate::TEvErrorResponse::TPtr event, const NActors::TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "SessionService.Check(): " << event->Get()->Status);
+        LOG_DEBUG_S(ctx, EService::MVP, "SessionService.Check(): " << event->Get()->Status);
         NHttp::THttpOutgoingResponsePtr httpResponse;
         if (event->Get()->Status == "400") {
             httpResponse = GetHttpOutgoingResponsePtr(event->Get()->Details, Request, Settings, IsAjaxRequest);

@@ -26,7 +26,8 @@ public:
         try {
             Base64StrictDecode(cookies.Get(CreateNameSessionCookie(Settings.ClientId)), sessionToken);
         } catch (std::exception& e) {
-            LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Base64Decode session cookie: " << e.what());
+            LOG_DEBUG_S(ctx, EService::MVP, "Base64Decode session cookie: " << e.what());
+            sessionToken.clear();
         }
 
         if (sessionToken) {
@@ -40,7 +41,7 @@ public:
         NHttp::THttpOutgoingResponsePtr httpResponse;
         if (event->Get()->Response != nullptr) {
             NHttp::THttpIncomingResponsePtr response = event->Get()->Response;
-            LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Incoming response for protected resource: " << response->Status);
+            LOG_DEBUG_S(ctx, EService::MVP, "Incoming response for protected resource: " << response->Status);
             if ((response->Status == "400" || response->Status.empty()) && RequestedPageScheme.empty()) {
                 NHttp::THttpOutgoingRequestPtr request = response->GetRequest();
                 if (!request->Secure) {
@@ -68,38 +69,36 @@ public:
     void HandleExchange(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
         if (!event->Get()->Response) {
             LOG_DEBUG_S(ctx, EService::MVP, "Getting access token: Bad Request");
-            NHttp::THeadersBuilder ResponseHeaders;
-            ResponseHeaders.Set("Content-Type", "text/plain");
-            NHttp::THttpOutgoingResponsePtr httpResponse = Request->CreateResponse("400", "Bad Request", ResponseHeaders, event->Get()->Error);
+            NHttp::THeadersBuilder responseHeaders;
+            responseHeaders.Set("Content-Type", "text/plain");
+            NHttp::THttpOutgoingResponsePtr httpResponse = Request->CreateResponse("400", "Bad Request", responseHeaders, event->Get()->Error);
             ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
             Die(ctx);
         } else {
             NHttp::THttpIncomingResponsePtr response = event->Get()->Response;
-            LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Getting access token: " << response->Status);
+            LOG_DEBUG_S(ctx, EService::MVP, "Getting access token: " << response->Status);
             if (response->Status == "200") {
                 TString iamToken;
-                static NJson::TJsonReaderConfig JsonConfig;
+                static const NJson::TJsonReaderConfig JsonConfig;
                 NJson::TJsonValue requestData;
                 bool success = NJson::ReadJsonTree(response->Body, &JsonConfig, &requestData);
                 if (success) {
                     iamToken = requestData["access_token"].GetStringSafe({});
+                    const TString authHeader = IAM_TOKEN_SCHEME + iamToken;
+                    ForwardUserRequest(authHeader, ctx);
+                    return;
                 }
-
-                const TString authHeader = IAM_TOKEN_SCHEME + iamToken;
-                ForwardUserRequest(authHeader, ctx);
-            } else {
-                if (response->Status == "400" || response->Status == "401") {
-                    StartOidcProcess(ctx);
-                    RequestAuthorizationCode(ctx);
-                } else {
-                    NHttp::THttpOutgoingResponsePtr httpResponse;
-                    NHttp::THeadersBuilder ResponseHeaders;
-                    ResponseHeaders.Parse(response->Headers);
-                    httpResponse = Request->CreateResponse(response->Status, response->Message, ResponseHeaders, response->Body);
-                    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
-                    Die(ctx);
-                }
+            } else if (response->Status == "400" || response->Status == "401") {
+                RequestAuthorizationCode(ctx);
+                return;
             }
+            // don't know what to do, just forward response
+            NHttp::THttpOutgoingResponsePtr httpResponse;
+            NHttp::THeadersBuilder responseHeaders;
+            responseHeaders.Parse(response->Headers);
+            httpResponse = Request->CreateResponse(response->Status, response->Message, responseHeaders, response->Body);
+            ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
+            Die(ctx);
         }
     }
 
@@ -125,18 +124,27 @@ private:
         TString token = "";
         if (tokenator) {
             token = tokenator->GetToken(Settings.SessionServiceTokenName);
+            if (token) {
+                httpRequest->Set("Authorization", token); // Bearer included
+                TStringBuilder body;
+                body << "grant_type=urn:ietf:params:oauth:grant-type:token-exchange"
+                    << "&requested_token_type=urn:ietf:params:oauth:token-type:access_token"
+                    << "&subject_token_type=urn:ietf:params:oauth:token-type:session_token"
+                    << "&subject_token=" << sessionToken;
+                httpRequest->Set<&NHttp::THttpRequest::Body>(body);
+                ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
+                Become(&THandlerSessionServiceCheckNebius::StateExchange);
+                return;
+            }
         }
-        httpRequest->Set("Authorization", token); // Bearer included
-        TStringBuilder body;
-        body << "grant_type=urn:ietf:params:oauth:grant-type:token-exchange"
-             << "&requested_token_type=urn:ietf:params:oauth:token-type:access_token"
-             << "&subject_token_type=urn:ietf:params:oauth:token-type:session_token"
-             << "&subject_token=" << sessionToken;
-        httpRequest->Set<&NHttp::THttpRequest::Body>(body);
 
-        ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
+        LOG_DEBUG_S(ctx, EService::MVP, "Getting access token: Tokenator is not available");
+        NHttp::THeadersBuilder responseHeaders;
+        responseHeaders.Set("Content-Type", "text/plain");
+        NHttp::THttpOutgoingResponsePtr httpResponse = Request->CreateResponse("500", "Internal Server Error", responseHeaders);
+        ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
+        Die(ctx);
 
-        Become(&THandlerSessionServiceCheckNebius::StateExchange);
     }
 
     void RequestAuthorizationCode(const NActors::TActorContext& ctx) {

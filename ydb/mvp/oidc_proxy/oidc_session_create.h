@@ -43,7 +43,7 @@ protected:
     bool IsStateValid(const TString& state, const NHttp::TCookies& cookies, const NActors::TActorContext& ctx) {
         const TString cookieName {CreateNameYdbOidcCookie(Settings.ClientSecret, state)};
         if (!cookies.Has(cookieName)) {
-            LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Check state: Cannot find cookie " << cookieName);
+            LOG_DEBUG_S(ctx, EService::MVP, "Check state: Cannot find cookie " << cookieName);
             return false;
         }
         RemoveAppliedCookie(cookieName);
@@ -160,7 +160,7 @@ public:
         NHttp::THttpOutgoingResponsePtr httpResponse;
         if (event->Get()->Error.empty() && event->Get()->Response) {
             NHttp::THttpIncomingResponsePtr response = event->Get()->Response;
-            LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Incoming response from authorization server: " << response->Status);
+            LOG_DEBUG_S(ctx, EService::MVP, "Incoming response from authorization server: " << response->Status);
             if (response->Status == "200") {
                 TStringBuf jsonError;
                 NJson::TJsonValue jsonValue;

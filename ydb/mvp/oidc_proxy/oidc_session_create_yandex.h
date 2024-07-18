@@ -23,7 +23,7 @@ public:
     void RequestSessionToken(const TString& code, const NActors::TActorContext& ctx) override {
         NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.GetTokenEndpointURL());
         httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/x-www-form-urlencoded");
-        httpRequest->Set("Authorization", "Basic " + Settings.GetAuthorizationString());
+        httpRequest->Set("Authorization", Settings.GetAuthorizationString());
         TStringBuilder body;
         body << "grant_type=authorization_code&code=" << code;
         httpRequest->Set<&NHttp::THttpRequest::Body>(body);
@@ -74,7 +74,7 @@ public:
     }
 
     void HandleError(TEvPrivate::TEvErrorResponse::TPtr event, const NActors::TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "SessionService.Create(): " << event->Get()->Status);
+        LOG_DEBUG_S(ctx, EService::MVP, "SessionService.Create(): " << event->Get()->Status);
         NHttp::THttpOutgoingResponsePtr httpResponse;
         if (event->Get()->Status == "400") {
             httpResponse = GetHttpOutgoingResponsePtr(event->Get()->Details, Request, Settings, ResponseHeaders, IsAjaxRequest);

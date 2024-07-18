@@ -25,16 +25,16 @@ public:
         TStringBuilder body;
         TStringBuf host = Request->Host;
         body << "code=" << code
-                << "&client_id=" << Settings.ClientId
-                << "&grant_type=authorization_code"
-                << "&redirect_uri="
-                << (Request->Endpoint->Secure ? "https://" : "http://")
-                << host
-                << GetAuthCallbackUrl();
+             << "&client_id=" << Settings.ClientId
+             << "&grant_type=authorization_code"
+             << "&redirect_uri="
+             << (Request->Endpoint->Secure ? "https://" : "http://")
+             << host
+             << GetAuthCallbackUrl();
 
         NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.GetTokenEndpointURL());
         httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/x-www-form-urlencoded");
-        httpRequest->Set("Authorization", "Basic " + Settings.GetAuthorizationString());
+        httpRequest->Set("Authorization", Settings.GetAuthorizationString());
         httpRequest->Set<&NHttp::THttpRequest::Body>(body);
 
         ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));

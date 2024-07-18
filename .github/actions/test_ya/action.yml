@@ -414,7 +414,7 @@ runs:
     
     - name: analyze tests results
       shell: bash
-      if: always() && inputs.run_tests
+      if: inputs.run_tests
       env:
         GITHUB_TOKEN: ${{ github.token }}
       run: |

@@ -29,7 +29,7 @@ public:
         return RecordsCount;
     }
 
-    std::shared_ptr<arrow::Table> BuildTable(const std::optional<std::set<std::string>>& columnNames = {}) const;
+    std::shared_ptr<arrow::Table> BuildTableVerified(const std::optional<std::set<std::string>>& columnNames = {}) const;
     std::shared_ptr<arrow::Table> BuildTableOptional(const std::optional<std::set<std::string>>& columnNames = {}) const;
 
     std::shared_ptr<TGeneralContainer> BuildEmptySame() const;
@@ -38,24 +38,14 @@ public:
     [[nodiscard]] TConclusionStatus AddField(const std::shared_ptr<arrow::Field>& f, const std::shared_ptr<NAccessor::IChunkedArray>& data);
 
     TGeneralContainer(const std::shared_ptr<arrow::Table>& table);
-
     TGeneralContainer(const std::shared_ptr<arrow::RecordBatch>& table);
-
     TGeneralContainer(const std::shared_ptr<arrow::Schema>& schema, std::vector<std::shared_ptr<NAccessor::IChunkedArray>>&& columns);
 
     arrow::Status ValidateFull() const {
         return arrow::Status::OK();
     }
 
-    std::shared_ptr<NAccessor::IChunkedArray> GetAccessorByNameOptional(const std::string& fieldId) const {
-        for (i32 i = 0; i < Schema->num_fields(); ++i) {
-            if (Schema->field(i)->name() == fieldId) {
-                return Columns[i];
-            }
-        }
-        return nullptr;
-    }
-
+    std::shared_ptr<NAccessor::IChunkedArray> GetAccessorByNameOptional(const std::string& fieldId) const;
     std::shared_ptr<NAccessor::IChunkedArray> GetAccessorByNameVerified(const std::string& fieldId) const;
 };
 

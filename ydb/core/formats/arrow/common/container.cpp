@@ -4,7 +4,7 @@
 
 namespace NKikimr::NArrow {
 
-NKikimr::TConclusionStatus TGeneralContainer::MergeColumnsStrictly(const TGeneralContainer& container) {
+TConclusionStatus TGeneralContainer::MergeColumnsStrictly(const TGeneralContainer& container) {
     if (RecordsCount != container.RecordsCount) {
         return TConclusionStatus::Fail(TStringBuilder() << "inconsistency records count in additional container: " <<
             container.GetSchema()->ToString() << ". expected: " << RecordsCount << ", reality: " << container.GetRecordsCount());
@@ -18,7 +18,7 @@ NKikimr::TConclusionStatus TGeneralContainer::MergeColumnsStrictly(const TGenera
     return TConclusionStatus::Success();
 }
 
-NKikimr::TConclusionStatus TGeneralContainer::AddField(const std::shared_ptr<arrow::Field>& f, const std::shared_ptr<NAccessor::IChunkedArray>& data) {
+TConclusionStatus TGeneralContainer::AddField(const std::shared_ptr<arrow::Field>& f, const std::shared_ptr<NAccessor::IChunkedArray>& data) {
     AFL_VERIFY(f);
     AFL_VERIFY(data);
     if (data->GetRecordsCount() != RecordsCount) {
@@ -28,23 +28,21 @@ NKikimr::TConclusionStatus TGeneralContainer::AddField(const std::shared_ptr<arr
     if (!data->GetDataType()->Equals(f->type())) {
         return TConclusionStatus::Fail("schema and data type are not equals: " + data->GetDataType()->ToString() + " vs " + f->type()->ToString());
     }
-    if (Schema->GetFieldByName(f->name())) {
-        return TConclusionStatus::Fail("field name duplication: " + f->name());
+    {
+        auto conclusion = Schema->AddField(f);
+        if (conclusion.IsFail()) {
+            return conclusion;
     }
-    auto resultAdd = Schema->AddField(Schema->num_fields(), f);
-    if (!resultAdd.ok()) {
-        return TConclusionStatus::Fail("internal schema error on add field: " + resultAdd.status().ToString());
     }
-    Schema = *resultAdd;
     Columns.emplace_back(data);
     return TConclusionStatus::Success();
 }
 
 TGeneralContainer::TGeneralContainer(const std::shared_ptr<arrow::Schema>& schema, std::vector<std::shared_ptr<NAccessor::IChunkedArray>>&& columns)
-    : Schema(schema)
-    , Columns(std::move(columns))
+    : Columns(std::move(columns))
 {
     AFL_VERIFY(schema);
+    Schema = std::make_shared<NModifier::TSchema>(schema);
     std::optional<ui64> recordsCount;
     AFL_VERIFY(Schema->num_fields() == (i32)Columns.size())("schema", Schema->num_fields())("columns", Columns.size());
     for (i32 i = 0; i < Schema->num_fields(); ++i) {
@@ -63,7 +61,7 @@ TGeneralContainer::TGeneralContainer(const std::shared_ptr<arrow::Schema>& schem
 
 TGeneralContainer::TGeneralContainer(const std::shared_ptr<arrow::Table>& table) {
     AFL_VERIFY(table);
-    Schema = table->schema();
+    Schema = std::make_shared<NModifier::TSchema>(table->schema());
     RecordsCount = table->num_rows();
     for (auto&& i : table->columns()) {
         if (i->num_chunks() == 1) {
@@ -76,7 +74,7 @@ TGeneralContainer::TGeneralContainer(const std::shared_ptr<arrow::Table>& table)
 
 TGeneralContainer::TGeneralContainer(const std::shared_ptr<arrow::RecordBatch>& table) {
     AFL_VERIFY(table);
-    Schema = table->schema();
+    Schema = std::make_shared<NModifier::TSchema>(table->schema());
     RecordsCount = table->num_rows();
     for (auto&& i : table->columns()) {
         Columns.emplace_back(std::make_shared<NAccessor::TTrivialArray>(i));
@@ -113,11 +111,20 @@ std::shared_ptr<arrow::Table> TGeneralContainer::BuildTableOptional(const std::o
     return arrow::Table::Make(std::make_shared<arrow::Schema>(fields), columns, RecordsCount);
 }
 
-std::shared_ptr<arrow::Table> TGeneralContainer::BuildTable(const std::optional<std::set<std::string>>& columnNames /*= {}*/) const {
+std::shared_ptr<arrow::Table> TGeneralContainer::BuildTableVerified(const std::optional<std::set<std::string>>& columnNames /*= {}*/) const {
     auto result = BuildTableOptional(columnNames);
     AFL_VERIFY(result);
     AFL_VERIFY(!columnNames || result->schema()->num_fields() == (i32)columnNames->size());
     return result;
+}
+
+std::shared_ptr<NArrow::NAccessor::IChunkedArray> TGeneralContainer::GetAccessorByNameOptional(const std::string& fieldId) const {
+    int idx = Schema->GetFieldIndex(fieldId);
+    if (idx == -1) {
+        return nullptr;
+    }
+    AFL_VERIFY(idx < Columns.size());
+    return Columns[idx];
 }
 
 }

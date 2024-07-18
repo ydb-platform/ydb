@@ -684,6 +684,24 @@ bool TPortionInfo::NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) 
     return true;
 }
 
+std::shared_ptr<NArrow::NAccessor::IChunkedArray> TPortionInfo::TPreparedColumn::AssembleAccessor() const {
+    Y_ABORT_UNLESS(!Blobs.empty());
+
+    std::vector<std::shared_ptr<arrow::Array>> chunks;
+    chunks.reserve(Blobs.size());
+    for (auto& blob : Blobs) {
+        auto batch = blob.BuildRecordBatch(*Loader);
+        Y_ABORT_UNLESS(batch);
+        AFL_VERIFY(batch->num_columns() == 1);
+        chunks.emplace_back(batch->column(0));
+    }
+    if (chunks.size() > 1) {
+        return std::make_shared<NArrow::NAccessor::TTrivialChunkedArray>(chunks);
+    } else {
+        return std::make_shared<NArrow::NAccessor::TTrivialArray>(chunks.front());
+    }
+}
+
 std::shared_ptr<TDeserializeChunkedArray> TPortionInfo::TPreparedColumn::AssembleForSeqAccess() const {
     Y_ABORT_UNLESS(!Blobs.empty());
 
@@ -752,7 +770,18 @@ std::shared_ptr<NArrow::TGeneralContainer> TPortionInfo::TPreparedBatchData::Ass
         fields.emplace_back(i.GetField());
     }
 
-    return std::make_shared<NArrow::TGeneralContainer>(std::make_shared<arrow::Schema>(fields), std::move(columns));
+    return std::make_shared<NArrow::TGeneralContainer>(fields, std::move(columns));
+}
+
+std::shared_ptr<NArrow::TGeneralContainer> TPortionInfo::TPreparedBatchData::AssembleToGeneralContainer() const {
+    std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> columns;
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    for (auto&& i : Columns) {
+        columns.emplace_back(i.AssembleAccessor());
+        fields.emplace_back(i.GetField());
+    }
+
+    return std::make_shared<NArrow::TGeneralContainer>(fields, std::move(columns));
 }
 
 std::shared_ptr<arrow::Table> TPortionInfo::TPreparedBatchData::AssembleTable(const TAssembleOptions& options) const {

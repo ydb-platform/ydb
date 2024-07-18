@@ -13,33 +13,19 @@ void TReadPortionInfoWithBlobs::RestoreChunk(const std::shared_ptr<IPortionDataC
     AFL_VERIFY(Chunks.emplace(address, chunk).second)("address", address.DebugString());
 }
 
-std::shared_ptr<arrow::RecordBatch> TReadPortionInfoWithBlobs::GetBatch(const ISnapshotSchema::TPtr& data, const ISnapshotSchema& result, const std::set<std::string>& columnNames) const {
+std::shared_ptr<NArrow::TGeneralContainer> TReadPortionInfoWithBlobs::GetBatch(
+    const ISnapshotSchema::TPtr& data, const ISnapshotSchema& result, const std::set<std::string>& columnNames) const {
     Y_ABORT_UNLESS(data);
+    THashMap<TChunkAddress, TString> blobs;
+    for (auto&& i : PortionInfo.Records) {
+        blobs[i.GetAddress()] = GetBlobByAddressVerified(i.ColumnId, i.Chunk);
+        Y_ABORT_UNLESS(blobs[i.GetAddress()].size() == i.BlobRange.Size);
+    }
     if (columnNames.empty()) {
-        if (!CachedBatch) {
-            THashMap<TChunkAddress, TString> blobs;
-            for (auto&& i : PortionInfo.Records) {
-                blobs[i.GetAddress()] = GetBlobByAddressVerified(i.ColumnId, i.Chunk);
-                Y_ABORT_UNLESS(blobs[i.GetAddress()].size() == i.BlobRange.Size);
-            }
-            CachedBatch = PortionInfo.AssembleInBatch(*data, result, blobs);
-            Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(*CachedBatch, result.GetIndexInfo().GetReplaceKey()));
-        }
-        return *CachedBatch;
-    } else if (CachedBatch) {
-        std::vector<TString> columnNamesString;
-        for (auto&& i : columnNames) {
-            columnNamesString.emplace_back(i.data(), i.size());
-        }
-        return NArrow::TColumnOperator().VerifyIfAbsent().Extract(*CachedBatch, columnNamesString);
+        return PortionInfo.PrepareForAssemble(*data, result, blobs).AssembleToGeneralContainer();
     } else {
         auto filteredSchema = std::make_shared<TFilteredSnapshotSchema>(data, columnNames);
-        THashMap<TChunkAddress, TString> blobs;
-        for (auto&& i : PortionInfo.Records) {
-            blobs[i.GetAddress()] = GetBlobByAddressVerified(i.ColumnId, i.Chunk);
-            Y_ABORT_UNLESS(blobs[i.GetAddress()].size() == i.BlobRange.Size);
-        }
-        return PortionInfo.AssembleInBatch(*data, *filteredSchema, blobs);
+        return PortionInfo.PrepareForAssemble(*data, *filteredSchema, blobs).AssembleToGeneralContainer();
     }
 }
 
@@ -143,8 +129,8 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
     TIndexInfo::TSecondaryData secondaryData;
     secondaryData.MutableExternalData() = entityChunksNew;
     for (auto&& i : to->GetIndexInfo().GetIndexes()) {
-            to->GetIndexInfo().AppendIndex(entityChunksNew, i.first, storages, secondaryData).Validate();
-        }
+        to->GetIndexInfo().AppendIndex(entityChunksNew, i.first, storages, secondaryData).Validate();
+    }
 
     const NSplitter::TEntityGroups groups = to->GetIndexInfo().GetEntityGroupsByStorageId(targetTier, *storages);
     auto schemaTo = std::make_shared<TDefaultSchemaDetails>(to, std::make_shared<TSerializationStats>());

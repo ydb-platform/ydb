@@ -683,6 +683,7 @@ public:
 
         std::shared_ptr<arrow::ChunkedArray> Assemble() const;
         std::shared_ptr<TDeserializeChunkedArray> AssembleForSeqAccess() const;
+        std::shared_ptr<NArrow::NAccessor::IChunkedArray> AssembleAccessor() const;
     };
 
     class TPreparedBatchData {
@@ -748,6 +749,7 @@ public:
         }
 
         std::shared_ptr<arrow::RecordBatch> Assemble(const TAssembleOptions& options = {}) const;
+        std::shared_ptr<NArrow::TGeneralContainer> AssembleToGeneralContainer() const;
         std::shared_ptr<arrow::Table> AssembleTable(const TAssembleOptions& options = {}) const;
         std::shared_ptr<NArrow::TGeneralContainer> AssembleForSeqAccess() const;
     };

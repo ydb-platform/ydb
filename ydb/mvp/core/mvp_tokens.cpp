@@ -249,7 +249,7 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
     switch (AuthProfile) {
         case NMVP::EAuthProfile::Yandex: {
             auto algorithm = jwt::algorithm::ps256(jwtInfo->publickey(), jwtInfo->privatekey());
-            auto encoded_token = jwt::create()
+            auto encodedToken = jwt::create()
                     .set_key_id(keyId)
                     .set_issuer(serviceAccountId)
                     .set_audience(audience)
@@ -257,7 +257,7 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
                     .set_expires_at(expiresAt)
                     .sign(algorithm);
             yandex::cloud::priv::iam::v1::CreateIamTokenRequest request;
-            request.set_jwt(TString(encoded_token));
+            request.set_jwt(TString(encodedToken));
             RequestCreateToken<yandex::cloud::priv::iam::v1::IamTokenService,
                                 yandex::cloud::priv::iam::v1::CreateIamTokenRequest,
                                 yandex::cloud::priv::iam::v1::CreateIamTokenResponse,
@@ -267,7 +267,7 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
         }
         case NMVP::EAuthProfile::Nebius: {
             auto algorithm = jwt::algorithm::rs256(jwtInfo->publickey(), jwtInfo->privatekey());
-            auto encoded_token = jwt::create()
+            auto encodedToken = jwt::create()
                     .set_key_id(keyId)
                     .set_issuer(serviceAccountId)
                     .set_subject(serviceAccountId)
@@ -278,7 +278,7 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
             request.set_grant_type("urn:ietf:params:oauth:grant-type:token-exchange");
             request.set_requested_token_type("urn:ietf:params:oauth:token-type:access_token");
             request.set_subject_token_type("urn:ietf:params:oauth:token-type:jwt");
-            request.set_subject_token(TString(encoded_token));
+            request.set_subject_token(TString(encodedToken));
 
             RequestCreateToken<nebius::iam::v1::TokenExchangeService,
                                 nebius::iam::v1::ExchangeTokenRequest,

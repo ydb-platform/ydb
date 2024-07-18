@@ -689,14 +689,6 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
             continue;
         }
 
-        auto generation = partRes.GetGeneration();
-        auto cookie = partRes.GetCookie();
-        for (const auto& consumer : partRes.GetConsumerResult()) {
-            if (consumer.GetReadingFinished()) {
-                Balancer->SetCommittedState(consumer.GetConsumer(), partitionId, generation, cookie, ctx);
-            }
-        }
-
         if (SplitMergeEnabled(TabletConfig) && PartitionsScaleManager) {
             PartitionsScaleManager->HandleScaleStatusChange(partitionId, partRes.GetScaleStatus(), ctx);
         }
@@ -707,6 +699,8 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
         AggregatedStats.Stats[partitionId].Counters = partRes.GetAggregatedCounters();
         AggregatedStats.Stats[partitionId].HasCounters = true;
     }
+
+    Balancer->Handle(ev, ctx);
 
     if (AggregatedStats.Cookies.empty()) {
         CheckStat(ctx);

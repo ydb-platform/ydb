@@ -1855,7 +1855,7 @@ public:
         // If columns list is provided, values in rows will appear in this order.
         // Values should be written in the alphabetical order of the column names,
         // so we create a permutation of the fields.
-        ColumnPermutation_ = NCommon::CreateStructPositions(output.RowType, columns.empty() ? nullptr : &columns);
+        ColumnPermutation_ = NCommon::CreateAlphabeticPositions(output.RowType, columns);
     }
 
 protected:

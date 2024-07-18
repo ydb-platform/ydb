@@ -685,8 +685,7 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
                     DropTable(driver, tmpTablePath);
                 }
             } else if (dbIt.IsDir()) {
-                BackupPermissions(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(),
-                        childFolderPath);
+                BackupPermissions(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
                 MaybeCreateEmptyFile(childFolderPath);
                 if (!avoidCopy) {
                     RemoveClusterDirectory(driver, tmpTablePath);

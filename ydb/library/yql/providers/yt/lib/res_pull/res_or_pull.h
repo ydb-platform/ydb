@@ -135,6 +135,23 @@ protected:
 
     TMkqlIOSpecs Specs;
     TMkqlWriterImpl SkiffWriter;
+
+    TVector<TString> Columns;
+
+    // Rows that are passed to this classed may have different orders of columns in them.
+    // First one contains values in the order of columns that are expected in the output. We call them "shuffled".
+    // Second one contains values in the alphabetical order of column names. We call them "alphabetic".
+    // We assume (and validate in the code) that one instance of the class receives only one type of rows.
+    TMaybe<bool> Shuffled;
+
+    // i-th vector contains the permutation of the columns that should be applied to the rows of i-th
+    // output table to transform it from "shuffled" to "alphabetic" order.
+    // Absense of the vector means that columns were not provided and thus transforming rows
+    // is not possible (and thus is not required).
+    // j-th element of the permutation means that j-th value of the "shuffled" row is p[j]-th value of the "alphabetic" row.
+    TVector<TMaybe<TVector<ui32>>> AlphabeticPermutations;
+
+    void EnsureShuffled(bool shuffled);
 };
 
 }

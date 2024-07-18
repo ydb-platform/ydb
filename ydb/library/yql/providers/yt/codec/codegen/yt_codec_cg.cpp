@@ -91,7 +91,7 @@ public:
         Block_ = BasicBlock::Create(context, "EntryBlock", Func_);
     }
 
-    void AddField(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags) override {
+    void AddField(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, TMaybe<size_t> index) override {
         auto& module = Codegen_->GetModule();
         auto& context = Codegen_->GetContext();
         auto args = Func_->arg_begin();
@@ -100,14 +100,17 @@ public:
         const auto buf = &*args++;
         const auto value = Flat || !valueArg->getType()->isPointerTy() ?
             static_cast<Value*>(valueArg) : new LoadInst(valueType, valueArg, "row", Block_);
-        const auto index = ConstantInt::get(Type::getInt32Ty(context), Index_++);
+        if (!index) {
+            index = Index_++;
+        }
+        const auto valueIndex = ConstantInt::get(Type::getInt32Ty(context), *index);
 
         const auto elemPtr = Flat ?
-            GetElementPtrInst::CreateInBounds(valueType, value, { index }, "elemPtr", Block_):
+            GetElementPtrInst::CreateInBounds(valueType, value, { valueIndex }, "elemPtr", Block_):
             static_cast<Value*>(new AllocaInst(valueType, 0U, "elemPtr", Block_));
 
         if constexpr (!Flat) {
-            CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetElement>(elemPtr, value, *Codegen_, Block_, index);
+            CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetElement>(elemPtr, value, *Codegen_, Block_, valueIndex);
         }
 
         bool isOptional;

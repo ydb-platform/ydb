@@ -1,4 +1,6 @@
 #pragma once
+
+#include <util/generic/maybe.h>
 #include <util/generic/string.h>
 
 namespace llvm {
@@ -35,7 +37,7 @@ void YtCodecAddMappings(NCodegen::ICodegen& codegen);
 class IYtCodecCgWriter {
 public:
     virtual ~IYtCodecCgWriter() = default;
-    virtual void AddField(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags) = 0;
+    virtual void AddField(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, TMaybe<size_t> index = Nothing()) = 0;
     virtual llvm::Function* Build() = 0;
 };
 

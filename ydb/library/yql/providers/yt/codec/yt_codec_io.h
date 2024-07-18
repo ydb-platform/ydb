@@ -139,6 +139,11 @@ protected:
     TMaybe<ui64> WriteLimit;
 };
 
+// If columns list is provided, values in rows will appear in this order.
+// Values should be written in the alphabetical order of the column names,
+// so we create a permutation of the fields.
+TVector<size_t> ComputeColumnPermutation(NKikimr::NMiniKQL::TStructType* rowType, const TVector<TString>& columns);
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 class TMkqlInput: public THoldingStream<NYT::NDetail::TInputStreamProxy, IInputStream> {

@@ -1759,7 +1759,7 @@ public:
             Buf_.WriteVarI32(field.Name.size());
             Buf_.WriteMany(field.Name.data(), field.Name.size());
             Buf_.Write(KeyValueSeparatorSymbol);
-            
+
             bool isOptionalFieldTypeV3 = field.Optional && (NativeYtTypeFlags_ & ENativeTypeCompatFlags::NTCF_COMPLEX);
             bool wrapOptionalTypeV3 = isOptionalFieldTypeV3 && field.Type->GetKind() == TTypeBase::EKind::Optional;
             if (wrapOptionalTypeV3) {
@@ -1842,15 +1842,17 @@ public:
     TSkiffEncoder(TOutputBuf& buf, const TMkqlIOSpecs& specs, size_t tableIndex, const TVector<TString>& columns)
         : TSkiffEncoderBase(buf, specs)
     {
-        Fields_ = GetFields(Specs_.Outputs[tableIndex].RowType, columns);
-        NativeYtTypeFlags_ = Specs_.Outputs[tableIndex].NativeYtTypeFlags;
+        const auto& output = Specs_.Outputs[tableIndex];
+        Fields_ = GetFields(output.RowType);
+        NativeYtTypeFlags_ = output.NativeYtTypeFlags;
+        ColumnPermutation_ = ComputeColumnPermutation(output.RowType, columns);
     }
 
 protected:
     void EncodeData(const NUdf::TUnboxedValuePod row) final {
         for (size_t index = 0; index < Fields_.size(); ++index) {
             const TField& field = Fields_[index];
-            auto value = row.GetElement(index);
+            auto value = row.GetElement(ColumnPermutation_[index]);
             if (field.Optional) {
                 if (!value) {
                     Buf_.Write('\0');
@@ -1866,7 +1868,7 @@ protected:
     void EncodeData(const NUdf::TUnboxedValuePod* row) final {
         for (size_t index = 0; index < Fields_.size(); ++index) {
             const TField& field = Fields_[index];
-            auto value = row[index];
+            auto value = row[ColumnPermutation_[index]];
             if (field.Optional) {
                 if (!value) {
                     Buf_.Write('\0');
@@ -1894,6 +1896,9 @@ protected:
 protected:
     TVector<TField> Fields_;
     ui64 NativeYtTypeFlags_;
+
+    // i-th element is the index of the i-th field in the row.
+    TVector<size_t> ColumnPermutation_;
 };
 
 class TSkiffEmptySchemaEncoder: public TSkiffEncoderBase {
@@ -2010,15 +2015,11 @@ void TMkqlWriterImpl::SetSpecs(const TMkqlIOSpecs& specs, const TVector<TString>
                 const auto writer1 = MakeYtCodecCgWriter<false>(Codegen_, rowType);
                 const auto writer2 = MakeYtCodecCgWriter<true>(Codegen_, rowType);
 
+                auto columnPermutation = ComputeColumnPermutation(rowType, columns);
                 for (ui32 index = 0; index < rowType->GetMembersCount(); ++index) {
-                    ui32 column = index;
-                    if (columns) {
-                        column = rowType->GetMemberIndex(columns[index]);
-                    }
-
-                    auto fieldType = rowType->GetMemberType(column);
-                    writer1->AddField(fieldType, Specs_->Outputs[i].NativeYtTypeFlags);
-                    writer2->AddField(fieldType, Specs_->Outputs[i].NativeYtTypeFlags);
+                    auto fieldType = rowType->GetMemberType(index);
+                    writer1->AddField(fieldType, Specs_->Outputs[i].NativeYtTypeFlags, columnPermutation[index]);
+                    writer2->AddField(fieldType, Specs_->Outputs[i].NativeYtTypeFlags, columnPermutation[index]);
                 }
 
                 llvmFunctions.emplace(rowType, std::make_pair(writer1->Build(), writer2->Build()));
@@ -2127,6 +2128,33 @@ void TMkqlWriterImpl::DoFinish(bool abort) {
 void TMkqlWriterImpl::Report() {
     TimerEncode_.Report(JobStats_);
     TimerWrite_.Report(JobStats_);
+}
+
+TVector<size_t> ComputeColumnPermutation(NKikimr::NMiniKQL::TStructType* rowType, const TVector<TString>& columns) {
+    TVector<size_t> columnPermutation;
+    columnPermutation.resize(rowType->GetMembersCount());
+    YQL_ENSURE(columns.empty() || columns.size() == rowType->GetMembersCount());
+    if (columns.empty()) {
+        for (size_t index = 0; index < rowType->GetMembersCount(); ++index) {
+            columnPermutation[index] = index;
+        }
+    } else {
+        TMap<TString, int> columnOrder;
+        for (size_t index = 0; index < columns.size(); ++index) {
+            columnOrder[columns[index]] = -1;
+        }
+        {
+            int index = 0;
+            for (auto& [column, order] : columnOrder) {
+                order = index++;
+            }
+        }
+        for (size_t index = 0; index < columns.size(); ++index) {
+            columnPermutation[columnOrder[columns[index]]] = index;
+        }
+    }
+
+    return columnPermutation;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////

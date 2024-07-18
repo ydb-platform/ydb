@@ -920,10 +920,6 @@ message TCreateCdcStream {
     optional TCdcStreamDescription StreamDescription = 2;
     optional uint64 RetentionPeriodSeconds = 3 [default = 86400]; // 1d by default
     optional uint32 TopicPartitions = 4;
-    oneof IndexMode {
-        google.protobuf.Empty AllIndexes = 5; // Create topic per each index
-        string IndexName = 6;
-    }
 }
 
 message TAlterCdcStream {
@@ -1650,7 +1646,6 @@ message TIndexBuildControl {
 
 message TLockConfig {
     optional string Name = 1;
-    optional bool AllowIndexImplLock = 2;
 }
 
 message TLockGuard {

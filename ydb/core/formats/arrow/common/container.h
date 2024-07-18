@@ -24,17 +24,12 @@ public:
 
 class TGeneralContainer {
 private:
-    YDB_READONLY(ui64, RecordsCount, 0);
+    YDB_READONLY_DEF(std::optional<ui64>, RecordsCount);
     YDB_READONLY_DEF(std::shared_ptr<NModifier::TSchema>, Schema);
     std::vector<std::shared_ptr<NAccessor::IChunkedArray>> Columns;
     void Initialize();
 public:
-    TString DebugString() const {
-        return TStringBuilder()
-            << "records_count=" << RecordsCount << ";"
-            << "schema=" << Schema->ToString() << ";"
-            ;
-    }
+    TString DebugString() const;
 
     [[nodiscard]] TConclusionStatus SyncSchemaTo(const std::shared_ptr<arrow::Schema>& schema,
         const IFieldsConstructor* defaultFieldsConstructor, const bool forceDefaults);
@@ -48,7 +43,8 @@ public:
     }
 
     ui64 num_rows() const {
-        return RecordsCount;
+        AFL_VERIFY(RecordsCount);
+        return *RecordsCount;
     }
 
     ui32 GetColumnsCount() const {

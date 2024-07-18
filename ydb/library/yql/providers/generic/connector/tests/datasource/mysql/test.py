@@ -1,3 +1,7 @@
+from typing import Set
+from datetime import datetime
+import time
+
 import pytest
 
 import yatest.common
@@ -28,6 +32,23 @@ tc_collection = Collection(
 class OneTimeWaiter:
     __launched: bool = False
 
+    __expected_tables: Set[str] = {
+        'column_selection_A_b_C_d_E',
+        'column_selection_COL1',
+        'column_selection_col1',
+        'column_selection_asterisk',
+        'column_selection_col2_COL1',
+        'column_selection_col2_col1',
+        'column_selection_col2',
+        'column_selection_col3',
+        'primitives',
+        'constant',
+        'count_rows',
+        'pushdown',
+        'json',
+        'datetimes',
+    }
+
     def __init__(self):
         docker_compose_file_relative_path = str(docker_compose_dir / 'docker-compose.yml')
         docker_compose_file_abs_path = yatest.common.source_path(docker_compose_file_relative_path)
@@ -37,8 +58,22 @@ class OneTimeWaiter:
         if self.__launched:
             return
 
-        self.docker_compose_helper.await_mysql()
-        self.__launched = True
+        start = datetime.now()
+        actual_tables: Set[str] = None
+        timeout = 60
+
+        while (datetime.now() - start).total_seconds() < timeout:
+            try:
+                actual_tables = set(self.docker_compose_helper.list_mysql_tables())
+            except Exception as e:
+                LOGGER.error(f"list mysql tables error: {e}")
+                time.sleep(5)
+            else:
+                if self.__expected_tables.issubset(actual_tables):
+                    self.__launched = True
+                    return
+
+        raise RuntimeError(f"No expected tables in MySQL. Latest result: {actual_tables}")
 
 
 one_time_waiter = OneTimeWaiter()

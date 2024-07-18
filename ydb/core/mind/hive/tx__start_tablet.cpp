@@ -10,6 +10,7 @@ class TTxStartTablet : public TTransactionBase<THive> {
     ui64 Cookie;
     bool External;
     TSideEffects SideEffects;
+    bool Success;
 
 public:
     TTxStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external, THive *hive)
@@ -23,10 +24,12 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_START_TABLET; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        Success = false;
         SideEffects.Reset(Self->SelfId());
         BLOG_D("THive::TTxStartTablet::Execute Tablet " << TabletId);
         TTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
+            tablet->BootTime = TActivationContext::Now();
             // finish fast-move operation
             if (tablet->LastNodeId != 0 && tablet->LastNodeId != Local.NodeId()) {
                 TNodeInfo* lastNode = Self->FindNode(tablet->LastNodeId);
@@ -65,6 +68,7 @@ public:
                                 new TEvLocal::TEvBootTablet(*leader.TabletStorageInfo, promotableFollowerId, leader.KnownGeneration),
                                 IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
                                 Cookie);
+                    Success = true;
                     return true;
                 } else {
                     BLOG_W("THive::TTxStartTablet::Execute, ignoring TEvBootTablet(" << leader.ToString() << ") - wrong state or node");
@@ -79,6 +83,7 @@ public:
                              new TEvLocal::TEvBootTablet(*follower.LeaderTablet.TabletStorageInfo, follower.Id),
                              IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
                              Cookie);
+                    Success = true;
                     return true;
                 } else {
                     BLOG_W("THive::TTxStartTablet::Execute, ignoring TEvBootTablet(" << follower.ToString() << ") - wrong state or node");
@@ -108,6 +113,9 @@ public:
     void Complete(const TActorContext& ctx) override {
         BLOG_D("THive::TTxStartTablet::Complete Tablet " << TabletId << " SideEffects: " << SideEffects);
         SideEffects.Complete(ctx);
+        if (Success) {
+            Self->UpdateCounterTabletsStarting(+1);
+        }
     }
 };
 

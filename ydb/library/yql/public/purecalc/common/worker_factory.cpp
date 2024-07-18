@@ -39,6 +39,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     , UserData_(std::move(options.UserData))
     , LLVMSettings_(std::move(options.LLVMSettings))
     , BlockEngineMode_(options.BlockEngineMode)
+    , ExprOutputStream_(options.ExprOutputStream)
     , CountersProvider_(options.CountersProvider_)
     , NativeYtTypeFlags_(options.NativeYtTypeFlags_)
     , DeterministicTimeProviderSeed_(options.DeterministicTimeProviderSeed_)
@@ -304,9 +305,19 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         ythrow TCompileError("", ExprContext_.IssueManager.GetIssues().ToString()) << "Failed to optimize";
     }
 
-    if (ETraceLevel::TRACE_DETAIL <= StdDbgLevel()) {
-        Cdbg << "After optimization:" << Endl;
-        ConvertToAst(*exprRoot, ExprContext_, 0, true).Root->PrettyPrintTo(Cdbg, TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote | TAstPrintFlags::AdaptArbitraryContent);
+    IOutputStream* exprOut = nullptr;
+    if (ExprOutputStream_) {
+        exprOut = ExprOutputStream_;
+    } else if (ETraceLevel::TRACE_DETAIL <= StdDbgLevel()) {
+        exprOut = &Cdbg;
+    }
+
+    if (exprOut) {
+        *exprOut << "After optimization:" << Endl;
+        ConvertToAst(*exprRoot, ExprContext_, 0, true).Root
+            ->PrettyPrintTo(*exprOut, TAstPrintFlags::PerLine
+                                    | TAstPrintFlags::ShortQuote
+                                    | TAstPrintFlags::AdaptArbitraryContent);
     }
     return exprRoot;
 }

@@ -36,7 +36,7 @@ class YdbCluster:
             #    headers['Authorization'] = token
             data = requests.get(url, headers=headers).json()
             nodes = data.get('Nodes', [])
-            nodes_count = data.get('TotalNodes', len(nodes))
+            nodes_count = int(data.get('TotalNodes', len(nodes)))
             return nodes, nodes_count
         except Exception as e:
             LOGGER.error(e)
@@ -120,6 +120,25 @@ class YdbCluster:
     @allure.step('Check if YDB alive')
     def check_if_ydb_alive(cls, timeout=10):
         try:
+            nodes, node_count = cls._get_cluster_nodes()
+            if node_count == 0:
+                return False
+            if len(nodes) < node_count:
+                LOGGER.error(f"{node_count - len(nodes)} nodes from {node_count} don't live")
+                return False
+            for n in nodes:
+                ss = n.get('SystemState', {})
+                name = ss.get("Host")
+                start_time = int(ss.get('StartTime', int(time()) * 1000)) / 1000
+                uptime = int(time()) - start_time
+                if uptime < 15:
+                    LOGGER.error(f'Node {name} too yong: {uptime}')
+                    return False
+                if 'MemoryUsed' in ss and 'MemoryLimit' in ss:
+                    used = int(ss['MemoryUsed'])
+                    limit = int(ss['MemoryLimit'])
+                    if used > 0.9 * limit:
+                        LOGGER.error(f'Node {name} use too many rss: {used} from {limit}')
             cls.execute_single_result_query("select 1", timeout)
             return True
         except BaseException as ex:

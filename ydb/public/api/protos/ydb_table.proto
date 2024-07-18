@@ -409,6 +409,7 @@ message SequenceDescription {
     optional sint64 increment = 6; // increment at each call, defaults to 1
     optional bool cycle = 7; // true when cycle on overflow is allowed
     optional SetVal set_val = 8; // set_val(next_value, next_used) is executed atomically when creating
+    optional Type data_type = 9; // data type of the sequence
 }
 
 message ColumnMeta {

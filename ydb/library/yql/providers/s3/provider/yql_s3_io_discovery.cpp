@@ -88,6 +88,7 @@ public:
               State_->Configuration->RegexpCacheSize))
         , ListingStrategy_(MakeS3ListingStrategy(
               State_->Gateway,
+              State_->GatewayRetryPolicy,
               ListerFactory_,
               State_->Configuration->MinDesiredDirectoriesOfFilesPerQuery,
               State_->Configuration->MaxInflightListsPerQuery,

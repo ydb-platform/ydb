@@ -138,7 +138,7 @@ protected:
     TTokenConfigs TokenConfigs;
     TSpinLock TokensLock;
     NActors::TActorId HttpProxy;
-    NMVP::EAuthProfile AuthProfile;
+    const NMVP::EAuthProfile AuthProfile;
     THashMap<NHttp::THttpRequest*, TString> HttpRequestNames;
 
     template <typename TGRpcService>

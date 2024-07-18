@@ -6,21 +6,20 @@
 namespace NKikimr::NArrow::NModifier {
 class TSchema {
 private:
+    bool Initialized = false;
     THashMap<std::string, ui32> IndexByName;
     std::vector<std::shared_ptr<arrow::Field>> Fields;
     bool Finished = false;
+
+    void Initialize(const std::vector<std::shared_ptr<arrow::Field>>& fields);
 public:
     TSchema() = default;
-    TSchema(const std::shared_ptr<arrow::Schema>& schema)
-        : TSchema(schema->fields())
-    {
-    }
+    TSchema(const std::shared_ptr<TSchema>& schema);
+
+    TSchema(const std::shared_ptr<arrow::Schema>& schema);
 
     TSchema(const std::vector<std::shared_ptr<arrow::Field>>& fields) {
-        for (auto&& i : fields) {
-            IndexByName.emplace(i->name(), Fields.size());
-            Fields.emplace_back(i);
-        }
+        Initialize(fields);
     }
 
     i32 GetFieldIndex(const std::string& fName) const {

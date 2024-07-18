@@ -47,4 +47,23 @@ const std::shared_ptr<arrow::Field>& TSchema::GetFieldVerified(const ui32 index)
     return Fields[index];
 }
 
+void TSchema::Initialize(const std::vector<std::shared_ptr<arrow::Field>>& fields) {
+    AFL_VERIFY(!Initialized);
+    Initialized = true;
+    for (auto&& i : fields) {
+        IndexByName.emplace(i->name(), Fields.size());
+        Fields.emplace_back(i);
+    }
+}
+
+TSchema::TSchema(const std::shared_ptr<TSchema>& schema) {
+    AFL_VERIFY(schema);
+    Initialize(schema->Fields);
+}
+
+TSchema::TSchema(const std::shared_ptr<arrow::Schema>& schema) {
+    AFL_VERIFY(schema);
+    Initialize(schema->fields());
+}
+
 }

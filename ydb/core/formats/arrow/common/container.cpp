@@ -80,16 +80,16 @@ TGeneralContainer::TGeneralContainer(const std::vector<std::shared_ptr<arrow::Fi
 }
 
 TGeneralContainer::TGeneralContainer(const std::shared_ptr<NModifier::TSchema>& schema, std::vector<std::shared_ptr<NAccessor::IChunkedArray>>&& columns)
-    : Columns(std::move(columns)) {
-    Schema = std::make_shared<NModifier::TSchema>(*schema);
+    : Columns(std::move(columns))
+    , Schema = std::make_shared<NModifier::TSchema>(schema)
+{
     Initialize();
 }
 
 TGeneralContainer::TGeneralContainer(const std::shared_ptr<arrow::Schema>& schema, std::vector<std::shared_ptr<NAccessor::IChunkedArray>>&& columns)
     : Columns(std::move(columns))
+    , Schema(std::make_shared<NModifier::TSchema>(schema))
 {
-    AFL_VERIFY(schema);
-    Schema = std::make_shared<NModifier::TSchema>(schema);
     Initialize();
 }
 

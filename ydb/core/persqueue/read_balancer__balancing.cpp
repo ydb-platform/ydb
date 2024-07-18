@@ -1841,7 +1841,7 @@ void TBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorCo
             SetCommittedState(d.Consumer, id, d.Generation, d.Cookie, ctx);
         }
         return true;
-    }, true);
+    });
 }
 
 TString TBalancer::GetPrefix() const {

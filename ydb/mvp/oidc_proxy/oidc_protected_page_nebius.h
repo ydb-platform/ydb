@@ -21,7 +21,13 @@ public:
         LOG_DEBUG_S(ctx, EService::MVP, "Start OIDC process");
 
         NHttp::TCookies cookies(headers.Get("Cookie"));
-        TString sessionToken = Base64Decode(cookies.Get(CreateNameSessionCookie(Settings.ClientId)));
+
+        try {
+            TString sessionToken;
+            Base64StrictDecode(cookies.Get(CreateNameSessionCookie(Settings.ClientId)), sessionToken);
+        } catch (std::exception& e) {
+            LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Base64Decode session cookie: " << e.what());
+        }
 
         if (sessionToken) {
             ExchangeSessionToken(sessionToken, ctx);

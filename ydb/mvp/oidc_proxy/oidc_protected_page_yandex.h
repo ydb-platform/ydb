@@ -26,7 +26,7 @@ public:
         LOG_DEBUG_S(ctx, EService::MVP, "SessionService.Check(): OK");
         auto response = event->Get()->Response;
         const auto& iamToken = response.Getiam_token();
-        const TString authHeader = IAM_TOKEN_SCHEME + iamToken.Getiam_token();
+        const TString authHeader = IAM_TOKEN_SCHEME + iamToken.iam_token();
         ForwardUserRequest(authHeader, ctx);
     }
 

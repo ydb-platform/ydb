@@ -36,7 +36,6 @@ Y_UNIT_TEST_SUITE(TActorSystemTest) {
         auto prevActorId = runtime->RegisterService(myServiceId, actorA);
         UNIT_ASSERT(!prevActorId);
         UNIT_ASSERT_EQUAL(runtime->GetLocalServiceId(myServiceId), actorA);
-        UNIT_ASSERT_EQUAL(420, 42);
 
         prevActorId = runtime->RegisterService(myServiceId, actorB);
         UNIT_ASSERT(prevActorId);

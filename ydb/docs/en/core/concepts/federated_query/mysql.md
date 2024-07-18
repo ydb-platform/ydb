@@ -30,8 +30,8 @@ SELECT * FROM mysql_datasource.<table_name>
 ```
 
 where:
-- `mysql_datasource` - the identifier of the external data source;
-- `<table_name> - the name of the table within the external data source.
+- `mysql_datasource` - the external data source identifier;
+- `<table_name> - the table name within the external data source.
 
 ## Limitations
 

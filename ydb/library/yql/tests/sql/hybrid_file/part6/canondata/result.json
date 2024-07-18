@@ -1917,6 +1917,20 @@
             "uri": "https://{canondata_backend}/1937001/a770b7e950bbaeaf08ef4bbb336b7e3683a914ce/resource.tar.gz#test.test_pg-nullif-default.txt-Plan_/plan.txt"
         }
     ],
+    "test.test[pg-nulls_native-default.txt-Debug]": [
+        {
+            "checksum": "42fd175664a0cb4114f67242cd8cf19c",
+            "size": 4380,
+            "uri": "https://{canondata_backend}/1937150/aa6ebab753c815bad08c1b6b3896a13eb323c6b4/resource.tar.gz#test.test_pg-nulls_native-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg-nulls_native-default.txt-Plan]": [
+        {
+            "checksum": "4b3eb456315f50af908ff2de4e6d47bb",
+            "size": 14344,
+            "uri": "https://{canondata_backend}/1937150/aa6ebab753c815bad08c1b6b3896a13eb323c6b4/resource.tar.gz#test.test_pg-nulls_native-default.txt-Plan_/plan.txt"
+        }
+    ],
     "test.test[pg-order_by_distinct_same_expr-default.txt-Debug]": [
         {
             "checksum": "e01341f460d0a6d02f36a145b54a8e87",

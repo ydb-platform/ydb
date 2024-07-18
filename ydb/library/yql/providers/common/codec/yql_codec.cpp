@@ -2497,7 +2497,7 @@ void WriteYsonValueInTableFormat(TOutputBuf& buf, TType* type, ui64 nativeYtType
 
     case TType::EKind::Pg: {
         auto pgType = static_cast<TPgType*>(type);
-        WriteYsonValueInTableFormatPg(buf, pgType, value);
+        WriteYsonValueInTableFormatPg(buf, pgType, value, topLevel);
         break;
     }
 

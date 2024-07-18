@@ -112,7 +112,7 @@ public:
 
         bool isOptional;
         auto unwrappedType = UnpackOptional(type, isOptional);
-        if (!isOptional && !type->IsPg()) {
+        if (!isOptional) {
             GenerateRequired(elemPtr, buf, type, nativeYtTypeFlags, false);
         } else {
             const auto just = BasicBlock::Create(context, "just", Func_);

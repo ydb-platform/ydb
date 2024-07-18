@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/generic/algorithm.h>
 #include <util/generic/hash_set.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor.h>
@@ -35,6 +36,7 @@ protected:
 
     const static inline TStringBuf NOT_FOUND_HTML_PAGE = "<html><head><title>404 Not Found</title></head><body bgcolor=\"white\"><center><h1>404 Not Found</h1></center></body></html>";
     const static inline TStringBuf IAM_TOKEN_SCHEME = "Bearer ";
+    const static inline TStringBuf IAM_TOKEN_SCHEME_LOWER = to_lower(IAM_TOKEN_SCHEME);
     const static inline TStringBuf AUTH_HEADER_NAME = "Authorization";
 
 public:
@@ -117,7 +119,7 @@ protected:
         if (authHeader.empty()) {
             return false;
         }
-        return authHeader.StartsWith(IAM_TOKEN_SCHEME);
+        return to_lower(authHeader).StartsWith(IAM_TOKEN_SCHEME_LOWER);
     }
 
     virtual void StartOidcProcess(const NActors::TActorContext& ctx) = 0;

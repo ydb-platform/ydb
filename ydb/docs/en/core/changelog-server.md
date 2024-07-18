@@ -11,14 +11,14 @@ Release date: May 14, 2024.
 
 **Bug fixes:**
 
-* [Fixed a bug](https://github.com/ydb-platform/ydb/pull/2169) of possible partial  commit of accumulated changes  when using persistent distributed transactions. This error occurs in the extremely rare combination of events, which includes restarting tablets that service the table partitions involved in the transaction.
-* [Fixed a bug](https://github.com/ydb-platform/ydb/pull/3165) a race between the table merge and garbage collection processes, due to which garbage collection could end with an invariant violation error and, as a result, an abnormal termination of the server 'ydbd' process.
-* [Fixed a bug](https://github.com/ydb-platform/ydb/pull/2696) in Blob Storage, due to which information about changing the composition of a storage group might not be received in a timely manner to individual cluster nodes. As a result, in rare cases, reads and writes of data stored in the affected group could become blocked, requiring manual administrator intervention.
-* [Fixed a bug](https://github.com/ydb-platform/ydb/pull/3002) in Blob Storage, due to which, with the correct configuration, data storage nodes might not start. The error occurred on systems with the experimental "blob depot" feature explicitly enabled (this feature is disabled by default).
-* [Fixed a bug](https://github.com/ydb-platform/ydb/pull/2475) that occurred in some situations of writing to a topic with an empty `producer_id` when deduplication was turned off. It might to abnormal termination of the server `ydbd` process.
-* [Fixed a bug](https://github.com/ydb-platform/ydb/pull/2651) that causes the `ydbd` process to crash due to an erroneous session state for writing to a topic.
-* [Fixed a bug](https://github.com/ydb-platform/ydb/pull/3587) in displaying the number of partitions metric in a topic, previously it displayed an incorrect value.
-* [Fixed a bug](https://github.com/ydb-platform/ydb/pull/2126) of a memory leaks that appeared when copying topic data between clusters{{ ydb-short-name }}. They could cause `ydbd` server processes to terminate due to exhaustion of available RAM.
+* [Fixed a bug](https://github.com/ydb-platform/ydb/pull/2169) of possible partial commit of accumulated changes when using persistent distributed transactions. This error occurs in an extremely rare combination of events, including restarting tablets that service the table partitions involved in the transaction.
+* [Fixed a bug](https://github.com/ydb-platform/ydb/pull/3165) involving a race condition between the table merge and garbage collection processes, which could result in garbage collection ending with an invariant violation error, leading to an abnormal termination of the `ydbd` server process.
+* [Fixed a bug](https://github.com/ydb-platform/ydb/pull/2696) in Blob Storage, where information about changes to the composition of a storage group might not be received in a timely manner by individual cluster nodes. As a result, reads and writes of data stored in the affected group could become blocked in rare cases, requiring manual intervention.
+* [Fixed a bug](https://github.com/ydb-platform/ydb/pull/3002) in Blob Storage, where data storage nodes might not start despite the correct configuration. The error occurred on systems with the experimental "blob depot" feature explicitly enabled (this feature is disabled by default).
+* [Fixed a bug](https://github.com/ydb-platform/ydb/pull/2475) that sometimes occurred when writing to a topic with an empty `producer_id` with turned off deduplication. It could lead to abnormal termination of the `ydbd` server process.
+* [Fixed a bug](https://github.com/ydb-platform/ydb/pull/2651) that caused the `ydbd` process to crash due to an incorrect session state when writing to a topic.
+* [Fixed a bug](https://github.com/ydb-platform/ydb/pull/3587) in displaying the metric of number of partitions in a topic, where it previously displayed an incorrect value.
+* [Fixed a bug](https://github.com/ydb-platform/ydb/pull/2126) causing memory leaks that appeared when copying topic data between clusters. These could cause `ydbd` server processes to terminate due to out-of-memory issues.
 
 ## Version 23.3 {#23-3}
 

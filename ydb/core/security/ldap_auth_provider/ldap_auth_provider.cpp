@@ -2,6 +2,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/security/ticket_parser_log.h>
+#include <queue>
 #include "ldap_auth_provider.h"
 #include "ldap_utils.h"
 
@@ -135,18 +136,30 @@ private:
         }
         LDAPMessage* entry = NKikimrLdap::FirstEntry(ld, searchUserResponse.SearchMessage);
         BerElement* ber = nullptr;
-        std::vector<TString> groupsDn;
+        std::vector<TString> directUserGroups;
         char* attribute = NKikimrLdap::FirstAttribute(ld, entry, &ber);
         if (attribute != nullptr) {
-            groupsDn = NKikimrLdap::GetAllValuesOfAttribute(ld, entry, attribute);
+            directUserGroups = NKikimrLdap::GetAllValuesOfAttribute(ld, entry, attribute);
             NKikimrLdap::MemFree(attribute);
         }
         if (ber) {
             NKikimrLdap::BerFree(ber, 0);
         }
+        std::vector<TString> allUserGroups;
+        if (!directUserGroups.empty()) {
+            // Active Directory has special matching rule to fetch nested groups in one request it is MatchingRuleInChain
+            // We don`t know what is ldap server. Is it Active Directory or OpenLdap or other server?
+            // If using MatchingRuleInChain return empty list of groups it means that ldap server isn`t Active Directory
+            // but it is known that there are groups and we are trying to do tree traversal
+            allUserGroups = TryToGetGroupsUseMatchingRuleInChain(ld, entry);
+            if (allUserGroups.empty()) {
+                allUserGroups = std::move(directUserGroups);
+                GetNestedGroups(ld, &allUserGroups);
+            }
+        }
         NKikimrLdap::MsgFree(entry);
         NKikimrLdap::Unbind(ld);
-        Send(ev->Sender, new TEvLdapAuthProvider::TEvEnrichGroupsResponse(request->Key, request->User, groupsDn));
+        Send(ev->Sender, new TEvLdapAuthProvider::TEvEnrichGroupsResponse(request->Key, request->User, allUserGroups));
     }
 
     TInitAndBindResponse InitAndBind(LDAP** ld, std::function<THolder<IEventBase>(const TEvLdapAuthProvider::EStatus&, const TEvLdapAuthProvider::TError&)> eventFabric) {
@@ -288,6 +301,79 @@ private:
         }
         response.SearchMessage = searchMessage;
         return response;
+    }
+
+    std::vector<TString> TryToGetGroupsUseMatchingRuleInChain(LDAP* ld, LDAPMessage* entry) const {
+        static const TString matchingRuleInChain = "1.2.840.113556.1.4.1941"; // Only Active Directory supports
+        TStringBuilder filter;
+        filter << "(member:" << matchingRuleInChain << ":=" << NKikimrLdap::GetDn(ld, entry) << ')';
+        LDAPMessage* searchMessage = nullptr;
+        int result = NKikimrLdap::Search(ld, Settings.GetBaseDn(), NKikimrLdap::EScope::SUBTREE, filter, NKikimrLdap::noAttributes, 0, &searchMessage);
+        if (!NKikimrLdap::IsSuccess(result)) {
+            return {};
+        }
+        const int countEntries = NKikimrLdap::CountEntries(ld, searchMessage);
+        if (countEntries == 0) {
+            NKikimrLdap::MsgFree(searchMessage);
+            return {};
+        }
+        std::vector<TString> groups;
+        groups.reserve(countEntries);
+        for (LDAPMessage* groupEntry = NKikimrLdap::FirstEntry(ld, searchMessage); groupEntry != nullptr; groupEntry = NKikimrLdap::NextEntry(ld, groupEntry)) {
+            groups.push_back(NKikimrLdap::GetDn(ld, groupEntry));
+        }
+        NKikimrLdap::MsgFree(searchMessage);
+        return groups;
+    }
+
+    void GetNestedGroups(LDAP* ld, std::vector<TString>* groups) {
+        std::unordered_set<TString> viewedGroups(groups->cbegin(), groups->cend());
+        std::queue<TString> queue;
+        for (const auto& group : *groups) {
+            queue.push(group);
+        }
+        while (!queue.empty()) {
+            TStringBuilder filter;
+            filter << "(|";
+            filter << "(entryDn=" << queue.front() << ')';
+            queue.pop();
+            //should filter string is separated into several batches
+            while (!queue.empty()) {
+                // entryDn specific for OpenLdap, may get this value from config
+                filter << "(entryDn=" << queue.front() << ')';
+                queue.pop();
+            }
+            filter << ')';
+            LDAPMessage* searchMessage = nullptr;
+            int result = NKikimrLdap::Search(ld, Settings.GetBaseDn(), NKikimrLdap::EScope::SUBTREE, filter, RequestedAttributes, 0, &searchMessage);
+            if (!NKikimrLdap::IsSuccess(result)) {
+                return;
+            }
+            if (NKikimrLdap::CountEntries(ld, searchMessage) == 0) {
+                NKikimrLdap::MsgFree(searchMessage);
+                return;
+            }
+            for (LDAPMessage* groupEntry = NKikimrLdap::FirstEntry(ld, searchMessage); groupEntry != nullptr; groupEntry = NKikimrLdap::NextEntry(ld, groupEntry)) {
+                BerElement* ber = nullptr;
+                std::vector<TString> foundGroups;
+                char* attribute = NKikimrLdap::FirstAttribute(ld, groupEntry, &ber);
+                if (attribute != nullptr) {
+                    foundGroups = NKikimrLdap::GetAllValuesOfAttribute(ld, groupEntry, attribute);
+                    NKikimrLdap::MemFree(attribute);
+                }
+                if (ber) {
+                    NKikimrLdap::BerFree(ber, 0);
+                }
+                for (const auto& newGroup : foundGroups) {
+                    if (!viewedGroups.contains(newGroup)) {
+                        viewedGroups.insert(newGroup);
+                        queue.push(newGroup);
+                        groups->push_back(newGroup);
+                    }
+                }
+            }
+            NKikimrLdap::MsgFree(searchMessage);
+        }
     }
 
     TInitializeLdapConnectionResponse CheckRequiredSettingsParameters() const {

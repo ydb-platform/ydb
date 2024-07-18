@@ -233,7 +233,7 @@ bool TSkiffExecuteResOrPull::WriteNext(TMkqlIOCache& specsCache, const NUdf::TUn
     YQL_ENSURE(rec.GetListLength() == AlphabeticPermutation->size());
     TUnboxedValueVector alphabeticValues(rec.GetListLength());
     for (size_t index = 0; index < rec.GetListLength(); ++index) {
-        alphabeticValues[index] = std::move(rec.GetElement((*AlphabeticPermutation)[index]));
+        alphabeticValues[index] = rec.GetElement((*AlphabeticPermutation)[index]);
     }
 
     NUdf::TUnboxedValue alphabeticRecord = HolderFactory.RangeAsArray(alphabeticValues.begin(), alphabeticValues.end());

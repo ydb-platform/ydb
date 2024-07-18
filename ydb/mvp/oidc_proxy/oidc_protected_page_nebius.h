@@ -10,15 +10,15 @@ private:
 
 public:
     THandlerSessionServiceCheckNebius(const NActors::TActorId& sender,
-                                const NHttp::THttpIncomingRequestPtr& request,
-                                const NActors::TActorId& httpProxyId,
-                                const TOpenIdConnectSettings& settings)
+                                      const NHttp::THttpIncomingRequestPtr& request,
+                                      const NActors::TActorId& httpProxyId,
+                                      const TOpenIdConnectSettings& settings)
         : THandlerSessionServiceCheck(sender, request, httpProxyId, settings)
-    {}
+        {}
 
     void StartOidcProcess(const NActors::TActorContext& ctx) override {
         NHttp::THeaders headers(Request->Headers);
-        LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Start OIDC process");
+        LOG_DEBUG_S(ctx, EService::MVP, "Start OIDC process");
 
         NHttp::TCookies cookies(headers.Get("Cookie"));
         TString sessionToken = Base64Decode(cookies.Get(CreateNameSessionCookie(Settings.ClientId)));
@@ -70,7 +70,7 @@ public:
         } else {
             NHttp::THttpIncomingResponsePtr response = event->Get()->Response;
             LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Getting access token: " << response->Status);
-            if (response->Status.StartsWith("2")) {
+            if (response->Status == "200") {
                 TString iamToken;
                 static NJson::TJsonReaderConfig JsonConfig;
                 NJson::TJsonValue requestData;

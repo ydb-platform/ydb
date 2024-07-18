@@ -293,6 +293,8 @@ void TMVP::TryGetGenericOptionsFromConfig(
         auto it = AuthProfileByName.find(name);
         if (it != AuthProfileByName.end()) {
             OpenIdConnectSettings.AuthProfile = it->second;
+        } else {
+            ythrow yexception() << "Unknown auth profile: " << name;
         }
     }
 

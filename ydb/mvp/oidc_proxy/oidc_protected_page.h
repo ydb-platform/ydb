@@ -59,32 +59,10 @@ public:
         NHttp::THeaders headers(Request->Headers);
         TStringBuf authHeader = headers.Get(AUTH_HEADER_NAME);
         if (Request->Method == "OPTIONS" || IsAuthorizedRequest(authHeader)) {
-            LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Forward request bypass OIDC");
             ForwardUserRequest(TString(authHeader), ctx);
         } else {
-            LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Start OIDC process");
             StartOidcProcess(ctx);
         }
-    }
-
-    void Handle(TEvPrivate::TEvCheckSessionResponse::TPtr event, const NActors::TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, EService::MVP, "SessionService.Check(): OK");
-        auto response = event->Get()->Response;
-        const auto& iamToken = response.Getiam_token();
-        const TString authHeader = IAM_TOKEN_SCHEME + iamToken.Getiam_token();
-        ForwardUserRequest(authHeader, ctx);
-    }
-
-    void Handle(TEvPrivate::TEvErrorResponse::TPtr event, const NActors::TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "SessionService.Check(): " << event->Get()->Status);
-        NHttp::THttpOutgoingResponsePtr httpResponse;
-        if (event->Get()->Status == "400") {
-            httpResponse = GetHttpOutgoingResponsePtr(event->Get()->Details, Request, Settings, IsAjaxRequest);
-        } else {
-            httpResponse = Request->CreateResponse( event->Get()->Status, event->Get()->Message, "text/plain", event->Get()->Details);
-        }
-        ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
-        Die(ctx);
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
@@ -113,14 +91,6 @@ public:
         }
         ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
         Die(ctx);
-    }
-
-    STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
-            HFunc(TEvPrivate::TEvCheckSessionResponse, Handle);
-            HFunc(TEvPrivate::TEvErrorResponse, Handle);
-        }
     }
 
 protected:
@@ -153,7 +123,7 @@ protected:
     virtual void StartOidcProcess(const NActors::TActorContext& ctx) = 0;
 
     virtual void ForwardUserRequest(TStringBuf authHeader, const NActors::TActorContext& ctx, bool secure = false) {
-        LOG_DEBUG_S(ctx, EService::MVP, TStringBuilder() << "Forward user request");
+        LOG_DEBUG_S(ctx, EService::MVP, "Forward user request bypass OIDC");
         NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequest(Request->Method, ProtectedPageUrl);
         ForwardRequestHeaders(httpRequest);
         if (!authHeader.empty()) {

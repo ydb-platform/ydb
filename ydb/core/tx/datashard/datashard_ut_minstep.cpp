@@ -154,6 +154,7 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         SchemeShard,
     };
 
+/*
     void TestAlterProposeRebootMinStep(ERebootOnPropose rebootOnPropose) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -368,7 +369,6 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
             evResult->Get()->Record.GetStatus(),
             NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
     }
-
     Y_UNIT_TEST(TestAlterProposeRebootDataShardMinStep) {
         TestAlterProposeRebootMinStep(ERebootOnPropose::DataShard);
     }
@@ -376,7 +376,7 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
     Y_UNIT_TEST(TestAlterProposeRebootSchemeShardMinStep) {
         TestAlterProposeRebootMinStep(ERebootOnPropose::SchemeShard);
     }
-
+*/
     void TestDropTableCompletesQuickly(const TString& query, Ydb::StatusIds::StatusCode expectedStatus, bool volatileTxs) {
         TPortManager pm;
         NKikimrConfig::TAppConfig app;

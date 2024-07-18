@@ -253,6 +253,13 @@ public:
             } else if (!buildInfo->InitiateTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo->InitiateTxId)));
             } else {
+                // TODO add vector index filling
+                if (buildInfo->IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+                    ChangeState(BuildId, TIndexBuildInfo::EState::Applying);
+                    Progress(BuildId);
+                    break;
+                }
+
                 ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
                 Progress(BuildId);
             }

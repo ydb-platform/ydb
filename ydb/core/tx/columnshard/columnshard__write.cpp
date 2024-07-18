@@ -42,9 +42,8 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
             Y_ABORT("invalid function usage");
     }
 
-    LOG_S_INFO("Write (overload) " << writeData.GetSize() << " bytes into pathId " << writeData.GetWriteMeta().GetTableId()
-        << " overload reason: [" << overloadReason << "]"
-        << " at tablet " << TabletID());
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "write_overload")("size", writeData.GetSize())
+        ("path_id", writeData.GetWriteMeta().GetTableId())("reason", overloadReason);
 
     ctx.Send(writeData.GetWriteMeta().GetSource(), event.release(), 0, cookie);
 }

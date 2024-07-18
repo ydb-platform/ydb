@@ -234,6 +234,10 @@ public:
         virtual ~IMemoryPredictor() = default;
     };
 
+    virtual bool NeedDiskWriteLimiter() const {
+        return false;
+    }
+
     void OnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context);
 
     ui64 CalcMemoryForUsage() const {

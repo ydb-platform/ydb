@@ -188,6 +188,7 @@ Y_UNIT_TEST_SUITE(StatisticsService) {
         size_t nodeCount = 10;
         auto runtime = TTestActorRuntime(nodeCount, 1, false);
         auto indexToNodeIdMap = InitializeRuntime(runtime, nodeCount);
+        auto nodeIdToIndexMap = ReverseMap(indexToNodeIdMap);
         std::vector<TAggregateStatisticsRequest::TTablets> nodesTablets = {{.NodeId = indexToNodeIdMap[0], .Ids{0}},
             {.NodeId = indexToNodeIdMap[1], .Ids{1}}, {.NodeId = indexToNodeIdMap[2], .Ids{2}},
             {.NodeId = indexToNodeIdMap[3], .Ids{3}}, {.NodeId = indexToNodeIdMap[4], .Ids{4}},
@@ -199,11 +200,15 @@ Y_UNIT_TEST_SUITE(StatisticsService) {
         std::unordered_map<ui64, int> tablets;
         std::vector<TTestActorRuntimeBase::TEventObserverHolder> observers;
         observers.emplace_back(runtime.AddObserver<TEvStatistics::TEvAggregateStatistics>([&](TEvStatistics::TEvAggregateStatistics::TPtr& ev) {
-            ++nodes[ev->Recipient.NodeId()];
+            if (nodeIdToIndexMap.find(ev->Recipient.NodeId()) != nodeIdToIndexMap.end()) {
+                ++nodes[ev->Recipient.NodeId()];
+            }
         }));
-        observers.emplace_back(runtime.AddObserver<TEvPipeCache::TEvGetTabletNode>([&tablets](TEvPipeCache::TEvGetTabletNode::TPtr& ev) {
-            ++tablets[ev->Get()->TabletId];
-            ev.Reset();
+        observers.emplace_back(runtime.AddObserver<TEvPipeCache::TEvGetTabletNode>([&](TEvPipeCache::TEvGetTabletNode::TPtr& ev) {
+            if (nodeIdToIndexMap.find(ev->Sender.NodeId()) != nodeIdToIndexMap.end()) {
+                ++tablets[ev->Get()->TabletId];
+                ev.Reset();
+            }
         }));
 
         auto sender = runtime.AllocateEdgeActor();
@@ -257,17 +262,21 @@ Y_UNIT_TEST_SUITE(StatisticsService) {
         observers.emplace_back(runtime.AddObserver<TEvPipeCache::TEvGetTabletNode>([&](TEvPipeCache::TEvGetTabletNode::TPtr& ev) {
             auto tabletId = ev->Get()->TabletId;
             auto senderNodeId = ev->Sender.NodeId();
-            auto senderNodeIndex = nodeIdToIndexMap[senderNodeId];
+            auto it = nodeIdToIndexMap.find(senderNodeId);
+            if (it == nodeIdToIndexMap.end()) {
+                return;
+            }
+            auto senderNodeIndex = it->second;
 
             if (tabletId <= localTabletsIds.back()) {
                 if (tabletId % 3 == 1) {
-                    runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                    runtime.Send(new IEventHandle(ev->Sender, ev->Sender,
                         new TEvPipeCache::TEvGetTabletNodeResult(tabletId, 10), 0, ev->Cookie), senderNodeIndex, true);
                 } else if(tabletId % 3 == 2) {
-                    runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                    runtime.Send(new IEventHandle(ev->Sender, ev->Sender,
                         new TEvPipeCache::TEvDeliveryProblem(tabletId, true), 0, ev->Cookie), senderNodeIndex, true);
                 } else {
-                    runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                    runtime.Send(new IEventHandle(ev->Sender, ev->Sender,
                         CreateStatisticsResponse(TStatisticsResponse{
                             .TabletId = tabletId,
                             .Status = NKikimrStat::TEvStatisticsResponse::SUCCESS
@@ -327,7 +336,11 @@ Y_UNIT_TEST_SUITE(StatisticsService) {
 
         std::vector<TTestActorRuntimeBase::TEventObserverHolder> observers;
         observers.emplace_back(runtime.AddObserver<TEvPipeCache::TEvGetTabletNode>([&](TEvPipeCache::TEvGetTabletNode::TPtr& ev) {
-            auto senderNodeIndex = nodeIdToIndexMap[ev->Sender.NodeId()];
+            auto it = nodeIdToIndexMap.find(ev->Sender.NodeId());
+            if (it == nodeIdToIndexMap.end()) {
+                return;
+            }
+            auto senderNodeIndex = it->second;
             ++inFlight;
             ++tabletsCount;
             maxInFlight = std::max(maxInFlight, inFlight);
@@ -335,13 +348,13 @@ Y_UNIT_TEST_SUITE(StatisticsService) {
             auto tabletId = ev->Get()->TabletId;
 
             if (tabletId % 3 == 1) { // non local
-                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                runtime.Send(new IEventHandle(ev->Sender, ev->Sender,
                     new TEvPipeCache::TEvGetTabletNodeResult(tabletId, 10), 0, ev->Cookie), senderNodeIndex, true);
             } else if(tabletId % 3 == 2) { // delivery problem
-                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                runtime.Send(new IEventHandle(ev->Sender, ev->Sender,
                     new TEvPipeCache::TEvDeliveryProblem(tabletId, true), 0, ev->Cookie), senderNodeIndex, true);
             } else {
-                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                runtime.Send(new IEventHandle(ev->Sender, ev->Sender,
                     CreateStatisticsResponse(TStatisticsResponse{
                         .TabletId = tabletId,
                         .Status = NKikimrStat::TEvStatisticsResponse::SUCCESS
@@ -349,14 +362,20 @@ Y_UNIT_TEST_SUITE(StatisticsService) {
             }
             ev.Reset();
         }));
-        observers.emplace_back(runtime.AddObserver<TEvPipeCache::TEvDeliveryProblem>([&](TEvPipeCache::TEvDeliveryProblem::TPtr&) {
-            --inFlight;
+        observers.emplace_back(runtime.AddObserver<TEvPipeCache::TEvDeliveryProblem>([&](TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+            if (nodeIdToIndexMap.find(ev->Recipient.NodeId()) != nodeIdToIndexMap.end()) {
+                --inFlight;
+            }
         }));
-        observers.emplace_back(runtime.AddObserver<TEvPipeCache::TEvGetTabletNodeResult>([&](TEvPipeCache::TEvGetTabletNodeResult::TPtr&) {
-            --inFlight;
+        observers.emplace_back(runtime.AddObserver<TEvPipeCache::TEvGetTabletNodeResult>([&](TEvPipeCache::TEvGetTabletNodeResult::TPtr& ev) {
+            if (nodeIdToIndexMap.find(ev->Recipient.NodeId()) != nodeIdToIndexMap.end()) {
+                --inFlight;
+            }
         }));
-        observers.emplace_back(runtime.AddObserver<TEvStatistics::TEvStatisticsResponse>([&](TEvStatistics::TEvStatisticsResponse::TPtr&) {
-            --inFlight;
+        observers.emplace_back(runtime.AddObserver<TEvStatistics::TEvStatisticsResponse>([&](TEvStatistics::TEvStatisticsResponse::TPtr& ev) {
+            if (nodeIdToIndexMap.find(ev->Recipient.NodeId()) != nodeIdToIndexMap.end()) {
+                --inFlight;
+            }
         }));
 
         auto sender = runtime.AllocateEdgeActor();
@@ -384,21 +403,19 @@ Y_UNIT_TEST_SUITE(StatisticsService) {
         std::vector<TAggregateStatisticsRequest::TTablets> nodesTablets = {{.NodeId = indexToNodeIdMap[0], .Ids{localTabletsIds}},
             {.NodeId = indexToNodeIdMap[1], .Ids{4}}, {.NodeId = indexToNodeIdMap[2], .Ids{5}},
             {.NodeId = indexToNodeIdMap[3], .Ids{6}}};
-        
-        std::unordered_map<ui64, ui32> tabletToNode;
-        for (const auto& node : nodesTablets) {
-            for (const auto& tablet : node.Ids) {
-                tabletToNode[tablet] = node.NodeId;
-            }
-        }
 
         std::vector<TTestActorRuntimeBase::TEventObserverHolder> observers;
         observers.emplace_back(runtime.AddObserver<TEvPipeCache::TEvGetTabletNode>([&](TEvPipeCache::TEvGetTabletNode::TPtr& ev) {
             auto tabletId = ev->Get()->TabletId;
             auto senderNodeId = ev->Sender.NodeId();
+            auto senderNodeIndex = nodeIdToIndexMap.find(senderNodeId);
+
+            if (senderNodeIndex == nodeIdToIndexMap.end()) {
+                return;
+            }
 
             if (tabletId <= localTabletsIds.back()) {
-                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                runtime.Send(new IEventHandle(ev->Sender, ev->Sender,
                         CreateStatisticsResponse(TStatisticsResponse{
                             .TabletId = ev->Get()->TabletId,
                             .Columns{
@@ -406,16 +423,16 @@ Y_UNIT_TEST_SUITE(StatisticsService) {
                                 TColumnItem{.Tag = 2, .Cells{"3"}}
                             },
                             .Status = NKikimrStat::TEvStatisticsResponse::SUCCESS
-                        }).release(), 0, ev->Cookie), nodeIdToIndexMap[senderNodeId], true);
+                        }).release(), 0, ev->Cookie), senderNodeIndex->second, true);
             } else {
-                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                runtime.Send(new IEventHandle(ev->Sender, ev->Sender,
                     CreateStatisticsResponse(TStatisticsResponse{
                         .TabletId = ev->Get()->TabletId,
                         .Columns{
                             TColumnItem{.Tag = 2, .Cells{"3"}}
                         },
                         .Status = NKikimrStat::TEvStatisticsResponse::SUCCESS
-                    }).release(), 0, ev->Cookie), nodeIdToIndexMap[tabletToNode[tabletId]], true);
+                    }).release(), 0, ev->Cookie), senderNodeIndex->second, true);
             }
 
             ev.Reset();
@@ -466,8 +483,8 @@ Y_UNIT_TEST_SUITE(StatisticsService) {
         std::vector<TAggregateStatisticsRequest::TTablets> nodesTablets = {{.NodeId = indexToNodeIdMap[0], .Ids{1}},
             {.NodeId = indexToNodeIdMap[1], .Ids{2}}};
 
-        std::unordered_map<ui32, int> ping(3);
-        std::unordered_map<ui32, int> pong(3);
+        std::unordered_map<ui32, int> ping;
+        std::unordered_map<ui32, int> pong;
         std::vector<TTestActorRuntimeBase::TEventObserverHolder> observers;
         observers.emplace_back(runtime.AddObserver<TEvStatistics::TEvAggregateKeepAlive>([&](TEvStatistics::TEvAggregateKeepAlive::TPtr& ev) {
             ++ping[ev->Sender.NodeId()];

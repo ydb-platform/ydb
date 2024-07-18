@@ -67,8 +67,8 @@ enum {
     MTYPE_CLIENT_DRAIN_NODE = 10460,
     MTYPE_CLIENT_FILL_NODE = 10461,
     MTYPE_CLIENT_RESOLVE_NODE = 10462,
-    MTYPE_CLIENT_NODE_REGISTRATION_REQUEST = 10463,
-    MTYPE_CLIENT_NODE_REGISTRATION_RESPONSE = 10464,
+    /*MTYPE_CLIENT_NODE_REGISTRATION_REQUEST*/ MTYPE_CLIENT_DEPRECATED_10463 = 10463,
+    /*MTYPE_CLIENT_NODE_REGISTRATION_RESPONSE*/ MTYPE_CLIENT_DEPRECATED_10464 = 10464,
     MTYPE_CLIENT_CMS_REQUEST = 10465,
     MTYPE_CLIENT_CMS_RESPONSE = 10466,
     MTYPE_CLIENT_RESOURCE_BROKER_SET_CONFIG = 10467,
@@ -124,8 +124,6 @@ struct TBusBlobStorageConfigRequest : TBusMessage<TBusBlobStorageConfigRequest, 
 struct TBusDrainNode : TBusMessage<TBusDrainNode, NKikimrClient::TDrainNodeRequest, MTYPE_CLIENT_DRAIN_NODE> {};
 struct TBusFillNode : TBusMessage<TBusFillNode, NKikimrClient::TFillNodeRequest, MTYPE_CLIENT_FILL_NODE> {};
 struct TBusResolveNode : TBusMessage<TBusResolveNode, NKikimrClient::TResolveNodeRequest, MTYPE_CLIENT_RESOLVE_NODE> {};
-struct TBusNodeRegistrationRequest : TBusMessage<TBusNodeRegistrationRequest, NKikimrClient::TNodeRegistrationRequest, MTYPE_CLIENT_NODE_REGISTRATION_REQUEST> {};
-struct TBusNodeRegistrationResponse : TBusMessage<TBusNodeRegistrationResponse, NKikimrClient::TNodeRegistrationResponse, MTYPE_CLIENT_NODE_REGISTRATION_RESPONSE> {};
 struct TBusCmsRequest : TBusMessage<TBusCmsRequest, NKikimrClient::TCmsRequest, MTYPE_CLIENT_CMS_REQUEST> {};
 struct TBusCmsResponse : TBusMessage<TBusCmsResponse, NKikimrClient::TCmsResponse, MTYPE_CLIENT_CMS_RESPONSE> {};
 struct TBusChooseProxy : TBusMessage<TBusChooseProxy, NKikimrClient::TChooseProxyRequest, MTYPE_CLIENT_CHOOSE_PROXY> {};
@@ -208,8 +206,6 @@ public:
         RegisterType(new TBusDrainNode);
         RegisterType(new TBusFillNode);
         RegisterType(new TBusResolveNode);
-        RegisterType(new TBusNodeRegistrationRequest);
-        RegisterType(new TBusNodeRegistrationResponse);
         RegisterType(new TBusCmsRequest);
         RegisterType(new TBusCmsResponse);
         RegisterType(new TBusChooseProxy);

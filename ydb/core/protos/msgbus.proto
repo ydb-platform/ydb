@@ -481,27 +481,6 @@ message TResolveNodeRequest {
     optional bool ResolveLocalNode = 3; // for compatibility of resolving local '.' node
 };
 
-message TNodeRegistrationRequest {
-    optional string Host = 1;
-    optional uint32 Port = 2;
-    optional string ResolveHost = 3;
-    optional string Address = 4;
-    optional NActorsInterconnect.TNodeLocation Location = 5;
-    optional string DomainPath = 6;
-    optional bool FixedNodeId = 7;
-    optional string Path = 8;
-}
-
-message TNodeRegistrationResponse {
-    optional NKikimrNodeBroker.TStatus Status = 1;
-    optional uint32 NodeId = 2;
-    optional string DomainPath = 3;
-    optional uint64 Expire = 4;
-    repeated NKikimrNodeBroker.TNodeInfo Nodes = 5;
-    optional uint64 ScopeTabletId = 6;
-    optional uint64 ScopePathId = 7;
-}
-
 message TCmsRequest {
     oneof Request {
         NKikimrCms.TClusterStateRequest ClusterStateRequest = 1;
@@ -723,4 +702,3 @@ message TLoginRequest {
     optional string User = 2;
     optional string Password = 3;
 };
-

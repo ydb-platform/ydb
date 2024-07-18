@@ -5,7 +5,6 @@ LIBRARY()
 
 SRCS(
     configurator.cpp
-    dynamic_node.cpp
     error.cpp
     kicli.h
     kikimr.cpp

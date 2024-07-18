@@ -258,8 +258,6 @@ public:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusTabletKillRequest>(&NGRpcProxy::TGRpcClient::TabletKillRequest, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_TABLET_STATE_REQUEST:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusTabletStateRequest>(&NGRpcProxy::TGRpcClient::TabletStateRequest, promise, request);
-        case NMsgBusProxy::MTYPE_CLIENT_NODE_REGISTRATION_REQUEST:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusNodeRegistrationRequest, NMsgBusProxy::TBusNodeRegistrationResponse>(&NGRpcProxy::TGRpcClient::RegisterNode, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_CMS_REQUEST:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusCmsRequest, NMsgBusProxy::TBusCmsResponse>(&NGRpcProxy::TGRpcClient::CmsRequest, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_CHOOSE_PROXY:
@@ -551,33 +549,9 @@ TKikimr::TKikimr(TKikimr&& kikimr)
     , Impl(std::move(kikimr.Impl))
 {}
 
-TNodeRegistrant TKikimr::GetNodeRegistrant()
-{
-    return TNodeRegistrant(*this);
-}
-
 TNodeConfigurator TKikimr::GetNodeConfigurator()
 {
     return TNodeConfigurator(*this);
-}
-
-NThreading::TFuture<TResult> TKikimr::RegisterNode(const TString& domainPath, const TString& host, ui16 port,
-                                                   const TString& address, const TString& resolveHost,
-                                                   const NActors::TNodeLocation& location,
-                                                   bool fixedNodeId, TMaybe<TString> path)
-{
-    TAutoPtr<NMsgBusProxy::TBusNodeRegistrationRequest> request = new NMsgBusProxy::TBusNodeRegistrationRequest;
-    request->Record.SetHost(host);
-    request->Record.SetPort(port);
-    request->Record.SetAddress(address);
-    request->Record.SetResolveHost(resolveHost);
-    location.Serialize(request->Record.MutableLocation(), true);
-    request->Record.SetDomainPath(domainPath);
-    request->Record.SetFixedNodeId(fixedNodeId);
-    if (path) {
-        request->Record.SetPath(*path);
-    }
-    return ExecuteRequest(request.Release());
 }
 
 NThreading::TFuture<TResult> TKikimr::GetNodeConfig(ui32 nodeId,

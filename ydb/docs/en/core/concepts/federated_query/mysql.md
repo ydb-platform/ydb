@@ -1,4 +1,4 @@
-# Working with MySQL Databases
+# Working with MySQL databases
 
 This section provides basic information about working with an external [MySQL](https://www.mysql.com/) databases.
 

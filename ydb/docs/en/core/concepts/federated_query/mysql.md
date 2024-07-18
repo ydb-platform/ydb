@@ -7,7 +7,7 @@ To work with an external MySQL database, you need to follow these steps:
     ```sql
     CREATE OBJECT mysql_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
     ```
-1. Create an [external data source](../datamodel/external_data_source.md) that describes a specific MySQL database. The `LOCATION` parameter contains the network address of the MySQL instance to connect to. The `DATABASE_NAME` specifies the name of the database (for instance, `mysql`). The `LOGIN` and `PASSWORD_SECRET_NAME` parameters are used for authentication to the external database. You can enable encryption for connections to the external database using the `USE_TLS="TRUE"` parameter.
+1. Create an [external data source](../datamodel/external_data_source.md) that describes a specific MySQL database. The `LOCATION` parameter contains the network address of the MySQL instance to connect to. The `DATABASE_NAME` specifies the database name (for example, `mysql`). The `LOGIN` and `PASSWORD_SECRET_NAME` parameters are used for authentication to the external database. You can enable encryption for connections to the external database using the `USE_TLS="TRUE"` parameter.
     ```sql
     CREATE EXTERNAL DATA SOURCE mysql_datasource WITH (
         SOURCE_TYPE="MySQL",

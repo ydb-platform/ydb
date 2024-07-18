@@ -10,7 +10,7 @@ TEST_SRCS(
 )
 
 REQUIREMENTS(
-    cpu:4
+    cpu:2
     ram:6
 )
 

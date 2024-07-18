@@ -7,12 +7,12 @@ IF (WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
     REQUIREMENTS(
-        cpu:4
+        cpu:2
         ram:6
     )
 ELSE()
     REQUIREMENTS(
-        cpu:4
+        cpu:2
         ram:16
     )
     TIMEOUT(600)

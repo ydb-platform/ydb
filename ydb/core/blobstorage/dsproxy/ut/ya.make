@@ -5,7 +5,7 @@ FORK_SUBTESTS(MODULO)
 SPLIT_FACTOR(20)
 
 REQUIREMENTS(
-    cpu:4
+    cpu:2
     ram:6
 )
 

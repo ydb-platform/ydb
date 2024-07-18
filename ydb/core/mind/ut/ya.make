@@ -8,7 +8,7 @@ IF (SANITIZER_TYPE  == "thread" OR WITH_VALGRIND)
     TAG(ya:fat)
     SPLIT_FACTOR(80)
     REQUIREMENTS(
-        cpu:4
+        cpu:2
         ram:6
     )
 ELSE()
@@ -16,7 +16,7 @@ ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
     REQUIREMENTS(
-        cpu:4
+        cpu:2
         ram:16
     )
 ENDIF()

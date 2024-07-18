@@ -11,7 +11,7 @@ ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 REQUIREMENTS(
     ram:6
-    cpu:4
+    cpu:2
 )
 
 DEPENDS(

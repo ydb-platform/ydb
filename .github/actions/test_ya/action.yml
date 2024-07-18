@@ -265,7 +265,7 @@ runs:
             CURRENT_MESSAGE="Builds+Tests $CURRENT_MESSAGE"
             RERUN_FAILED_OPT="-X"
           else
-            CURRENT_MESSAGE="Failed tests rerun (try $RETRY) $CURRENT_MESSAGE (try #$RETRY)"
+            CURRENT_MESSAGE="Failed tests rerun (try $RETRY) $CURRENT_MESSAGE"
             RERUN_FAILED_OPT="-X"
           fi
           echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py

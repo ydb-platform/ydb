@@ -3677,6 +3677,10 @@ NUdf::TUnboxedValue ReadYsonValueInTableFormatPg(TPgType* type, char cmd, TInput
 
     if (cmd == BeginListSymbol) {
         cmd = buf.Read();
+        if (cmd == ListItemSeparatorSymbol) {
+            cmd = buf.Read();
+        }
+
         YQL_ENSURE(cmd == EndListSymbol);
         return NUdf::TUnboxedValuePod();
     }

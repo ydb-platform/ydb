@@ -1748,7 +1748,7 @@ public:
         for (size_t index = 0; index < Fields_.size(); ++index) {
             const TField& field = Fields_[index];
             auto value = row.GetElement(index);
-            if (field.Optional) {
+            if (field.Optional || field.Type->GetKind() == TTypeBase::EKind::Pg) {
                 if (!value) {
                     continue;
                 }
@@ -1761,7 +1761,8 @@ public:
             Buf_.Write(KeyValueSeparatorSymbol);
             
             bool isOptionalFieldTypeV3 = field.Optional && (NativeYtTypeFlags_ & ENativeTypeCompatFlags::NTCF_COMPLEX);
-            bool wrapOptionalTypeV3 = isOptionalFieldTypeV3 && field.Type->GetKind() == TTypeBase::EKind::Optional;
+            bool wrapOptionalTypeV3 = isOptionalFieldTypeV3 &&
+                (field.Type->GetKind() == TTypeBase::EKind::Optional || field.Type->GetKind() == TTypeBase::EKind::Pg);
             if (wrapOptionalTypeV3) {
                 Buf_.Write(BeginListSymbol);
             }

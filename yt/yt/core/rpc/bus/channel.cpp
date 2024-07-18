@@ -923,7 +923,7 @@ private:
                     message = TrackMemory(MemoryUsageTracker_, std::move(message));
                     if (MemoryUsageTracker_->IsExceeded()) {
                         auto error = TError(
-                            NRpc::EErrorCode::MemoryOverflow,
+                            NRpc::EErrorCode::MemoryPressure,
                             "Response is dropped due to high memory pressure");
                         requestControl->ProfileError(error);
                         NotifyError(

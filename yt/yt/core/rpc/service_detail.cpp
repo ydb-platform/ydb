@@ -1717,7 +1717,7 @@ void TServiceBase::HandleRequest(
     message = TrackMemory(MemoryUsageTracker_, std::move(message));
     if (MemoryUsageTracker_ && MemoryUsageTracker_->IsExceeded()) {
         return replyError(TError(
-            NRpc::EErrorCode::MemoryOverflow,
+            NRpc::EErrorCode::MemoryPressure,
             "Request is dropped due to high memory pressure"));
     }
 

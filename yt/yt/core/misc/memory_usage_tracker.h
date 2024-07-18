@@ -93,7 +93,7 @@ private:
     i64 Granularity_ = 0;
 
     void MoveFrom(TMemoryUsageTrackerGuard&& other);
-    TError SetSizeGeneric(i64 size, auto acquirer);
+    TError SetSizeImpl(i64 size, auto acquirer);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

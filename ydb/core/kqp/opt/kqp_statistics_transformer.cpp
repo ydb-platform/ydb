@@ -100,7 +100,7 @@ void InferStatisticsForKqpTable(const TExprNode::TPtr& input, TTypeAnnotationCon
     auto keyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(tableData.Metadata->KeyColumnNames));
     auto stats = std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, nRows, nAttrs, byteSize, 0.0, keyColumns);
     if (kqpCtx.Config->OverrideStatistics.Get()) {
-        stats = OverrideStatistics(*stats, path.Value(), *kqpCtx.Config->OverrideStatistics.Get());
+        stats = OverrideStatistics(*stats, path.Value(), kqpCtx.GetOverrideStatistics());
     }
     if (stats->ColumnStatistics) {
         for (const auto& [columnName, metaData]: tableData.Metadata->Columns) {
@@ -308,11 +308,11 @@ void InferStatisticsForDqSourceWrap(const TExprNode::TPtr& input, TTypeAnnotatio
                 auto path = s3DataSource.Name().Cast().StringValue();
                 if (kqpCtx.Config->OverrideStatistics.Get() && path) {
                     auto stats = std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, 0.0, 0, 0, 0.0, TIntrusivePtr<TOptimizerStatistics::TKeyColumns>());
-                    stats = OverrideStatistics(*stats, path, *kqpCtx.Config->OverrideStatistics.Get());
+                    stats = OverrideStatistics(*stats, path, kqpCtx.GetOverrideStatistics());
                     if (stats->ByteSize == 0.0) {
                         auto n = path.find_last_of('/');
                         if (n != path.npos) {
-                            stats = OverrideStatistics(*stats, path.substr(n + 1), *kqpCtx.Config->OverrideStatistics.Get());
+                            stats = OverrideStatistics(*stats, path.substr(n + 1), kqpCtx.GetOverrideStatistics());
                         }
                     }
                     if (stats->ByteSize != 0.0) {

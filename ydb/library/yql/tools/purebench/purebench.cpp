@@ -22,6 +22,17 @@
 using namespace NYql;
 using namespace NYql::NPureCalc;
 
+TStringStream MakeGenInput(ui64 count) {
+    TStringStream stream;
+    NSkiff::TUncheckedSkiffWriter writer{&stream};
+    for (ui64 i = 0; i < count; ++i) {
+        writer.WriteVariant16Tag(0);
+        writer.WriteInt64(i);
+    }
+    writer.Finish();
+    return stream;
+}
+
 int Main(int argc, const char *argv[])
 {
     Y_UNUSED(NUdf::GetStaticSymbols());
@@ -89,14 +100,7 @@ int Main(int argc, const char *argv[])
         genSql,
         res.Has("pg") ? ETranslationMode::PG : ETranslationMode::SQL);
 
-    TStringStream stream;
-    NSkiff::TUncheckedSkiffWriter writer{&stream};
-    for (ui64 i = 0; i < count; ++i) {
-        writer.WriteVariant16Tag(0);
-        writer.WriteInt64(i);
-    }
-    writer.Finish();
-    auto input1 = TStringStream(stream);
+    auto input1 = MakeGenInput(count);
     Cerr << "Input data size: " << input1.Size() << "\n";
     auto handle1 = genProgram->Apply(&input1);
     TStringStream output1;

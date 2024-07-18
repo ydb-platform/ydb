@@ -1418,13 +1418,9 @@ void TTableInfo::FinishAlter() {
             oldCol->DefaultKind = cinfo.DefaultKind;
             oldCol->DefaultValue = cinfo.DefaultValue;
 
-            if (cinfo.IsCheckingNotNullInProgress) {
-                oldCol->NotNull = true;
-            } else {
+            if (!cinfo.IsCheckingNotNullInProgress) {
                 oldCol->NotNull = cinfo.NotNull;
             }
-
-            oldCol->IsCheckingNotNullInProgress = false;
         } else {
             Columns[col.first] = cinfo;
             if (cinfo.KeyOrder != (ui32)-1) {

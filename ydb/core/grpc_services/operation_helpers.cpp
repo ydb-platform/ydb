@@ -49,6 +49,7 @@ TActorId CreatePipeClient(ui64 id, const TActorContext& ctx) {
 }
 
 Ydb::TOperationId ToOperationId(const NKikimrIndexBuilder::TIndexBuild& build) {
+    std::cerr << "gello!!!" << std::endl;
     Ydb::TOperationId operationId;
     operationId.SetKind(Ydb::TOperationId::BUILD_INDEX);
     NOperationId::AddOptionalValue(operationId, "id", ToString(build.GetId()));
@@ -57,6 +58,11 @@ Ydb::TOperationId ToOperationId(const NKikimrIndexBuilder::TIndexBuild& build) {
 }
 
 void ToOperation(const NKikimrIndexBuilder::TIndexBuild& build, Ydb::Operations::Operation* operation) {
+    std::cerr << "gello!!!" << std::endl;
+    std::cerr << "issues:\n";
+    for (auto s : build.GetIssues()) {
+        std::cerr << s.Getmessage() << std::endl;
+    }
     operation->set_id(NOperationId::ProtoToString(ToOperationId(build)));
     operation->mutable_issues()->CopyFrom(build.GetIssues());
 

@@ -157,21 +157,22 @@ public:
         const TTableInfo::TPtr tableInfo = context.SS->Tables.at(txState->TargetPathId);
         tableInfo->AlterVersion += 1;
 
-        for(auto& column: tableInfo->Columns) {
-            if (column.second.IsDropped())
+        for(auto& [cId, cInfo]: tableInfo->Columns) {
+            if (cInfo.IsDropped())
                 continue;
 
-            if (!column.second.IsBuildInProgress)
+            if (!cInfo.IsBuildInProgress || !cInfo.IsCheckingNotNullInProgress)
                 continue;
 
             LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        DebugHint() << " HandleReply ProgressState"
                                    << " at tablet: " << ssId
                                    << " terminating build column process at column "
-                                   << column.second.Name);
+                                   << cInfo.Name);
 
-            column.second.IsBuildInProgress = false;
-            context.SS->PersistTableFinishColumnBuilding(db, txState->TargetPathId, tableInfo, column.first);
+            cInfo.IsBuildInProgress = false;
+            cInfo.IsCheckingNotNullInProgress = false;
+            context.SS->PersistTableFinishColumnBuilding(db, txState->TargetPathId, tableInfo, cId);
         }
 
         context.SS->PersistTableAlterVersion(db, txState->TargetPathId, tableInfo);

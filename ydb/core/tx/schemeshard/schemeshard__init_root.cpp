@@ -500,7 +500,8 @@ struct TSchemeShard::TTxPublishTenantAsReadOnly : public TSchemeShard::TRwTxBase
 
             Self->IsReadOnlyMode = true;
             db.Table<Schema::SysParams>().Key(Schema::SysParam_IsReadOnlyMode).Update(
-                NIceDb::TUpdate<Schema::SysParams::Value>("1"));
+                NIceDb::TUpdate<Schema::SysParams::Value>("1")
+            );
             break;
         case TTenantInitState::ReadOnlyPreview:
             Reply->Record.SetStatus(NKikimrScheme::StatusAlreadyExists);
@@ -562,7 +563,8 @@ struct TSchemeShard::TTxPublishTenant : public TSchemeShard::TRwTxBase {
 
             Self->IsReadOnlyMode = false;
             db.Table<Schema::SysParams>().Key(Schema::SysParam_IsReadOnlyMode).Update(
-                NIceDb::TUpdate<Schema::SysParams::Value>("0"));
+                NIceDb::TUpdate<Schema::SysParams::Value>("0")
+            );
             break;
         case TTenantInitState::Done:
             break;
@@ -632,12 +634,12 @@ struct TSchemeShard::TTxMigrate : public TSchemeShard::TRwTxBase {
             NIceDb::TUpdate<Schema::MigratedPaths::DirAlterVersion>(pathDescr.GetDirAlterVersion() + 1), // we need to bump version on 1 to override data at SB
             NIceDb::TUpdate<Schema::MigratedPaths::UserAttrsAlterVersion>(pathDescr.GetUserAttrsAlterVersion()),
             NIceDb::TUpdate<Schema::MigratedPaths::ACLVersion>(pathDescr.GetACLVersion())
-         );
+        );
 
         for (auto& userAttr: pathDescr.GetUserAttributes()) {
             db.Table<Schema::MigratedUserAttributes>().Key(pathId.OwnerId, pathId.LocalPathId, userAttr.GetKey()).Update(
                 NIceDb::TUpdate<Schema::MigratedUserAttributes::AttrValue>(userAttr.GetValue())
-                );
+            );
         }
 
 
@@ -664,7 +666,7 @@ struct TSchemeShard::TTxMigrate : public TSchemeShard::TRwTxBase {
                 NIceDb::TUpdate<Schema::MigratedShards::OwnerPathId>(pathId.OwnerId),
                 NIceDb::TUpdate<Schema::MigratedShards::LocalPathId>(pathId.LocalPathId),
                 NIceDb::TUpdate<Schema::MigratedShards::TabletType>(type)
-                );
+            );
 
             for (ui32 channelId = 0; channelId < shard.BindedStoragePoolSize(); ++channelId) {
                 const NKikimrStoragePool::TChannelBind& bind = shard.GetBindedStoragePool(channelId);
@@ -672,7 +674,7 @@ struct TSchemeShard::TTxMigrate : public TSchemeShard::TRwTxBase {
                 db.Table<Schema::MigratedChannelsBinding>().Key(shardIdx.GetOwnerId(), shardIdx.GetLocalId(), channelId).Update(
                     NIceDb::TUpdate<Schema::MigratedChannelsBinding::PoolName>(bind.GetStoragePoolName()),
                     NIceDb::TUpdate<Schema::MigratedChannelsBinding::Binding>(bind.SerializeAsString())
-                    );
+                );
             }
 
             {
@@ -697,7 +699,8 @@ struct TSchemeShard::TTxMigrate : public TSchemeShard::TRwTxBase {
                 NIceDb::TUpdate<Schema::MigratedTables::AlterVersion>(tableDescr.GetAlterVersion()),
                 //NIceDb::TUpdate<Schema::MigratedTables::AlterTable>(),
                 //NIceDb::TUpdate<Schema::MigratedTables::AlterTableFull>(),
-                NIceDb::TUpdate<Schema::MigratedTables::PartitioningVersion>(tableDescr.GetPartitioningVersion()));
+                NIceDb::TUpdate<Schema::MigratedTables::PartitioningVersion>(tableDescr.GetPartitioningVersion())
+            );
 
             for (const NKikimrScheme::TMigrateColumn& colDescr: tableDescr.GetColumns()) {
                 db.Table<Schema::MigratedColumns>().Key(pathId.OwnerId, pathId.LocalPathId, colDescr.GetId()).Update(
@@ -710,7 +713,9 @@ struct TSchemeShard::TTxMigrate : public TSchemeShard::TRwTxBase {
                     NIceDb::TUpdate<Schema::MigratedColumns::DefaultKind>(ETableColumnDefaultKind(colDescr.GetDefaultKind())),
                     NIceDb::TUpdate<Schema::MigratedColumns::DefaultValue>(colDescr.GetDefaultValue()),
                     NIceDb::TUpdate<Schema::MigratedColumns::NotNull>(colDescr.GetNotNull()),
-                    NIceDb::TUpdate<Schema::MigratedColumns::IsBuildInProgress>(colDescr.GetIsBuildInProgress()));
+                    NIceDb::TUpdate<Schema::MigratedColumns::IsBuildInProgress>(colDescr.GetIsBuildInProgress()),
+                    NIceDb::TUpdate<Schema::MigratedColumns::IsCheckingNotNullInProgress>(colDescr.GetIsCheckingNotNullInProgress())
+                );
             }
 
             for (const NKikimrScheme::TMigratePartition& partDescr: tableDescr.GetPartitions()) {
@@ -719,11 +724,13 @@ struct TSchemeShard::TTxMigrate : public TSchemeShard::TRwTxBase {
                 db.Table<Schema::MigratedTablePartitions>().Key(pathId.OwnerId, pathId.LocalPathId, id).Update(
                     NIceDb::TUpdate<Schema::MigratedTablePartitions::RangeEnd>(partDescr.GetRangeEnd()),
                     NIceDb::TUpdate<Schema::MigratedTablePartitions::OwnerShardIdx>(shardIdx.GetOwnerId()),
-                    NIceDb::TUpdate<Schema::MigratedTablePartitions::LocalShardIdx>(shardIdx.GetLocalId()));
+                    NIceDb::TUpdate<Schema::MigratedTablePartitions::LocalShardIdx>(shardIdx.GetLocalId())
+                );
 
                 if (partDescr.HasPartitionConfig()) {
                     db.Table<Schema::MigratedTableShardPartitionConfigs>().Key(shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Update(
-                        NIceDb::TUpdate<Schema::MigratedTableShardPartitionConfigs::PartitionConfig>(partDescr.GetPartitionConfig()));
+                        NIceDb::TUpdate<Schema::MigratedTableShardPartitionConfigs::PartitionConfig>(partDescr.GetPartitionConfig())
+                    );
                 }
             }
         }
@@ -735,11 +742,13 @@ struct TSchemeShard::TTxMigrate : public TSchemeShard::TRwTxBase {
             db.Table<Schema::MigratedTableIndex>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
                 NIceDb::TUpdate<Schema::MigratedTableIndex::AlterVersion>(tableIndexDescr.GetAlterVersion()),
                 NIceDb::TUpdate<Schema::MigratedTableIndex::IndexType>(NKikimrSchemeOp::EIndexType(tableIndexDescr.GetType())),
-                NIceDb::TUpdate<Schema::MigratedTableIndex::State>(NKikimrSchemeOp::EIndexState(tableIndexDescr.GetState())));
+                NIceDb::TUpdate<Schema::MigratedTableIndex::State>(NKikimrSchemeOp::EIndexState(tableIndexDescr.GetState()))
+            );
 
             for (ui32 keyId = 0; keyId < tableIndexDescr.KeysSize(); ++keyId) {
                 db.Table<Schema::MigratedTableIndexKeys>().Key(pathId.OwnerId, pathId.LocalPathId, keyId).Update(
-                    NIceDb::TUpdate<Schema::MigratedTableIndexKeys::KeyName>(tableIndexDescr.GetKeys(keyId)));
+                    NIceDb::TUpdate<Schema::MigratedTableIndexKeys::KeyName>(tableIndexDescr.GetKeys(keyId))
+                );
             }
         }
 
@@ -749,7 +758,8 @@ struct TSchemeShard::TTxMigrate : public TSchemeShard::TRwTxBase {
 
             db.Table<Schema::MigratedKesusInfos>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
                 NIceDb::TUpdate<Schema::MigratedKesusInfos::Config>(kesusDescr.GetConfig()),
-                NIceDb::TUpdate<Schema::MigratedKesusInfos::Version>(kesusDescr.GetVersion()));
+                NIceDb::TUpdate<Schema::MigratedKesusInfos::Version>(kesusDescr.GetVersion())
+            );
         }
 
 //            Topics,

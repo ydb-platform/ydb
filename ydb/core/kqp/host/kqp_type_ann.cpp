@@ -507,7 +507,9 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
             return TStatus::Error;
         }
 
-        if (lookupStrategy->Content() == TKqpStreamLookupJoinStrategyName) {
+        if (lookupStrategy->Content() == TKqpStreamLookupJoinStrategyName 
+            || lookupStrategy->Content() == TKqpStreamLookupSemiJoinStrategyName) {
+
             if (!EnsureTupleType(node->Pos(), *lookupType, ctx)) {
                 return TStatus::Error;
             }
@@ -1687,7 +1689,9 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
 
         node->SetTypeAnn(ctx.MakeType<TStreamExprType>(rowType));
 
-    } else if (lookupStrategy.Value() == TKqpStreamLookupJoinStrategyName) {
+    } else if (lookupStrategy.Value() == TKqpStreamLookupJoinStrategyName 
+        || lookupStrategy.Value() == TKqpStreamLookupSemiJoinStrategyName) {
+        
         if (!EnsureTupleType(node->Pos(), *inputItemType, ctx)) {
             return TStatus::Error;
         }

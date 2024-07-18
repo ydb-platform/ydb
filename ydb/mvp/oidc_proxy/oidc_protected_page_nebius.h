@@ -115,6 +115,7 @@ public:
     }
 
 private:
+
     void ExchangeSessionToken(const TString sessionToken, const NActors::TActorContext& ctx) {
         LOG_DEBUG_S(ctx, EService::MVP, "Exchange session token");
         NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.GetExchangeEndpointURL());
@@ -124,27 +125,18 @@ private:
         TString token = "";
         if (tokenator) {
             token = tokenator->GetToken(Settings.SessionServiceTokenName);
-            if (token) {
-                httpRequest->Set("Authorization", token); // Bearer included
-                TStringBuilder body;
-                body << "grant_type=urn:ietf:params:oauth:grant-type:token-exchange"
-                    << "&requested_token_type=urn:ietf:params:oauth:token-type:access_token"
-                    << "&subject_token_type=urn:ietf:params:oauth:token-type:session_token"
-                    << "&subject_token=" << sessionToken;
-                httpRequest->Set<&NHttp::THttpRequest::Body>(body);
-                ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
-                Become(&THandlerSessionServiceCheckNebius::StateExchange);
-                return;
-            }
         }
+        httpRequest->Set("Authorization", token); // Bearer included
+        TStringBuilder body;
+        body << "grant_type=urn:ietf:params:oauth:grant-type:token-exchange"
+             << "&requested_token_type=urn:ietf:params:oauth:token-type:access_token"
+             << "&subject_token_type=urn:ietf:params:oauth:token-type:session_token"
+             << "&subject_token=" << sessionToken;
+        httpRequest->Set<&NHttp::THttpRequest::Body>(body);
 
-        LOG_DEBUG_S(ctx, EService::MVP, "Getting access token: Tokenator is not available");
-        NHttp::THeadersBuilder responseHeaders;
-        responseHeaders.Set("Content-Type", "text/plain");
-        NHttp::THttpOutgoingResponsePtr httpResponse = Request->CreateResponse("500", "Internal Server Error", responseHeaders);
-        ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
-        Die(ctx);
+        ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
 
+        Become(&THandlerSessionServiceCheckNebius::StateExchange);
     }
 
     void RequestAuthorizationCode(const NActors::TActorContext& ctx) {

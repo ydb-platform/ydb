@@ -4,7 +4,7 @@ import os
 import ymake
 import ytest
 
-from _common import resolve_common_const, get_norm_unit_path, rootrel_arc_src, to_yesno
+from _common import resolve_common_const, get_norm_unit_path, rootrel_arc_src, strip_roots, to_yesno
 
 
 # 1 is 60 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
@@ -118,16 +118,28 @@ def _build_cmd_input_paths(paths, hide=False, disable_include_processor=False):
     return _build_directives("input", [hide_part, disable_ip_part], paths)
 
 
+def _get_pm_type(unit) -> str:
+    resolved = unit.get("PM_TYPE")
+    if not resolved:
+        raise Exception("PM_TYPE is not set yet. Macro _SET_PACKAGE_MANAGER() should be called before.")
+
+    return resolved
+
+
+def _get_source_path(unit):
+    sources_path = unit.get("TS_TEST_FOR_DIR") if unit.get("TS_TEST_FOR") else unit.path()
+    return sources_path
+
+
 def _create_pm(unit):
-    from lib.nots.package_manager import manager
+    from lib.nots.package_manager import get_package_manager_type
 
-    sources_path = unit.path()
-    module_path = unit.get("MODDIR")
-    if unit.get("TS_TEST_FOR"):
-        sources_path = unit.get("TS_TEST_FOR_DIR")
-        module_path = unit.get("TS_TEST_FOR_PATH")
+    sources_path = _get_source_path(unit)
+    module_path = unit.get("TS_TEST_FOR_PATH") if unit.get("TS_TEST_FOR") else unit.get("MODDIR")
 
-    return manager(
+    PackageManager = get_package_manager_type(_get_pm_type(unit))
+
+    return PackageManager(
         sources_path=unit.resolve(sources_path),
         build_root="$B",
         build_path=unit.path().replace("$S", "$B", 1),
@@ -148,6 +160,25 @@ def _create_erm_json(unit):
 
 
 @_with_report_configure_error
+def on_set_package_manager(unit):
+    pm_type = "pnpm"  # projects without any lockfile are processed by pnpm
+
+    source_path = _get_source_path(unit)
+
+    for pm_key, lockfile_name in [("pnpm", "pnpm-lock.yaml"), ("npm", "package-lock.json")]:
+        lf_path = os.path.join(source_path, lockfile_name)
+        lf_path_resolved = unit.resolve_arc_path(strip_roots(lf_path))
+
+        if lf_path_resolved:
+            pm_type = pm_key
+            break
+
+    unit.on_peerdir_ts_resource(pm_type)
+    unit.set(["PM_TYPE", pm_type])
+    unit.set(["PM_SCRIPT", f"${pm_type.upper()}_SCRIPT"])
+
+
+@_with_report_configure_error
 def on_set_append_with_directive(unit, var_name, dir, *values):
     wrapped = ['${{{dir}:"{v}"}}'.format(dir=dir, v=v) for v in values]
     __set_append(unit, var_name, " ".join(wrapped))
@@ -157,6 +188,9 @@ def on_set_append_with_directive(unit, var_name, dir, *values):
 def on_from_npm_lockfiles(unit, *args):
     from lib.nots.package_manager.base import PackageManagerError
 
+    # This is contrib with pnpm-lock.yaml files only
+    # Force set to pnpm
+    unit.set(["PM_TYPE", "pnpm"])
     pm = _create_pm(unit)
     lf_paths = []
 
@@ -192,8 +226,9 @@ def _check_nodejs_version(unit, major):
 
 @_with_report_configure_error
 def on_peerdir_ts_resource(unit, *resources):
-    pm = _create_pm(unit)
-    pj = pm.load_package_json_from_dir(pm.sources_path)
+    from lib.nots.package_manager import BasePackageManager
+
+    pj = BasePackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)))
     erm_json = _create_erm_json(unit)
     dirs = []
 

@@ -4,21 +4,16 @@ PY3_LIBRARY()
 
 STYLE_PYTHON()
 
-
 PY_SRCS(
     __init__.py
+    npm_constants.py
+    npm_lockfile.py
+    npm_package_manager.py
+    npm_utils.py
 )
 
 PEERDIR(
     build/plugins/lib/nots/package_manager/base
-    build/plugins/lib/nots/package_manager/pnpm
-    build/plugins/lib/nots/package_manager/npm
 )
 
 END()
-
-RECURSE(
-    base
-    pnpm
-    npm
-)

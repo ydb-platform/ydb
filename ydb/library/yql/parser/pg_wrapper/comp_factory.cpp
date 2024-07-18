@@ -3593,7 +3593,7 @@ TString PgValueToString(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId) {
 
 void WriteYsonValueInTableFormatPg(TOutputBuf& buf, TPgType* type, const NUdf::TUnboxedValuePod& value, bool topLevel) {
     using namespace NYson::NDetail;
-    if (!value.HasValue()) {
+    if (!value) {
         buf.Write(EntitySymbol);
         return;
     }

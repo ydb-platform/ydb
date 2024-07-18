@@ -253,25 +253,30 @@ protected:
             BLOG_TRACE("Balancer on node " << node->Id <<  ": " << tablets.size() << "/" << nodeTablets.size() << " tablets are suitable for balancing");
             if (!tablets.empty()) {
                 // avoid moving system tablets if possible
-                auto systemIt = std::partition(tablets.begin(), tablets.end(), [](TTabletInfo* tablet) {
-                    return !THive::IsSystemTablet(tablet->GetTabletType());
-                });
+                std::vector<TTabletInfo*>::iterator partitionIt;
+                if (Hive->GetLessSystemTabletsMoves()) {
+                    partitionIt = std::partition(tablets.begin(), tablets.end(), [](TTabletInfo* tablet) {
+                        return !THive::IsSystemTablet(tablet->GetTabletType());
+                    });
+                } else {
+                    partitionIt = tablets.end();
+                }
                 switch (Hive->GetTabletBalanceStrategy()) {
                 case NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM:
-                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>(tablets.begin(), systemIt, Settings.ResourceToBalance);
-                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>(systemIt, tablets.end(), Settings.ResourceToBalance);
+                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>(tablets.begin(), partitionIt, Settings.ResourceToBalance);
+                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>(partitionIt, tablets.end(), Settings.ResourceToBalance);
                     break;
                 case NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM:
-                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM>(tablets.begin(), systemIt, Settings.ResourceToBalance);
-                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM>(systemIt, tablets.end(), Settings.ResourceToBalance);
+                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM>(tablets.begin(), partitionIt, Settings.ResourceToBalance);
+                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM>(partitionIt, tablets.end(), Settings.ResourceToBalance);
                     break;
                 case NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST:
-                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST>(tablets.begin(), systemIt, Settings.ResourceToBalance);
-                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST>(systemIt, tablets.end(), Settings.ResourceToBalance);
+                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST>(tablets.begin(), partitionIt, Settings.ResourceToBalance);
+                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST>(partitionIt, tablets.end(), Settings.ResourceToBalance);
                     break;
                 case NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM:
-                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM>(tablets.begin(), systemIt, Settings.ResourceToBalance);
-                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM>(systemIt, tablets.end(), Settings.ResourceToBalance);
+                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM>(tablets.begin(), partitionIt, Settings.ResourceToBalance);
+                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM>(partitionIt, tablets.end(), Settings.ResourceToBalance);
                     break;
                 }
                 Tablets.clear();

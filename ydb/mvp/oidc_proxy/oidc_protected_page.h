@@ -36,7 +36,7 @@ protected:
 
     const static inline TStringBuf NOT_FOUND_HTML_PAGE = "<html><head><title>404 Not Found</title></head><body bgcolor=\"white\"><center><h1>404 Not Found</h1></center></body></html>";
     const static inline TStringBuf IAM_TOKEN_SCHEME = "Bearer ";
-    const static inline TStringBuf IAM_TOKEN_SCHEME_LOWER = ToString(IAM_TOKEN_SCHEME);
+    const static inline TStringBuf IAM_TOKEN_SCHEME_LOWER = "bearer ";
     const static inline TStringBuf AUTH_HEADER_NAME = "Authorization";
 
 public:

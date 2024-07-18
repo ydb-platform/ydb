@@ -611,8 +611,7 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
                             childFolderPath, schemaOnly, preservePoolKinds, ordered);
                     childFolderPath.Child(INCOMPLETE_FILE_NAME).DeleteIfExists();
                 } else if (dbIt.IsDir()) {
-                    BackupPermissions(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(),
-                            childFolderPath);
+                    BackupPermissions(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
                     childFolderPath.Child(INCOMPLETE_FILE_NAME).DeleteIfExists();
                 }
             } else if (!avoidCopy) {

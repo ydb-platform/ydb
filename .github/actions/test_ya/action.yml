@@ -259,14 +259,20 @@ runs:
 
         for RETRY in {1..3}
         do
+          CURRENT_MESSAGE="Build+Tests **{platform_name}-${BUILD_PRESET}** is running..." | GITHUB_TOKEN="${{ github.token }}"
+          RERUN_FAILED_TESTS=""
+          if [ $RETRY != 1 ]; then
+            CURRENT_MESSAGE="$CURRENT_MESSAGE (try #$RETRY)
+            RERUN_FAILED_OPT="-X"
+          fi
           echo "Build+Tests **{platform_name}-${BUILD_PRESET}** is running..." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
           CURRENT_JUNIT_XML_PATH=$PUBLIC_DIR/junit_try_$RETRY.xml
           set +ex
           (./ya make ${{ inputs.build_target }} "${params[@]}" \
-            --log-file "$PUBLIC_DIR/ya_log.log"  \
+            $RERUN_FAILED_TESTS --log-file "$PUBLIC_DIR/ya_log.log"  \
             --evlog-file "$PUBLIC_DIR/ya_evlog.jsonl" \
             --junit "$CURRENT_JUNIT_XML_PATH" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& tee $YA_MAKE_OUTPUT
-          set -e
+          set -ex
           RC=`cat exit_code`
 
           if [ $RC -ne 0 ]; then
@@ -289,7 +295,6 @@ runs:
             --log_out_dir "artifacts/try_$RETRY/logs/" \
             --test_stuff_out "test_artifacts/try_$RETRY/" \
             "$CURRENT_JUNIT_XML_PATH"
-          # TODO: merge 
           cp $CURRENT_JUNIT_XML_PATH $JUNIT_REPORT_XML
           TESTS_RESULT=0
           .github/scripts/tests/fail-checker.py "$CURRENT_JUNIT_XML_PATH" || TESTS_RESULT=$?
@@ -302,6 +307,8 @@ runs:
         if [ $BUILD_FAILED = 0 ]; then
           echo "status=true" >> $GITHUB_OUTPUT
         fi
+        
+        # TODO: merge tests here 
   
 
     - name: comment-build-status

@@ -312,8 +312,7 @@ TMaybe<TVector<ui32>> CreateStructPositions(TType* inputType, const TVector<TStr
     return structPositions;
 }
 
-TMaybe<TVector<ui32>> CreateAlphabeticPositions(TType* inputType, const TVector<TString>& columns)
-{
+TMaybe<TVector<ui32>> CreateAlphabeticPositions(TType* inputType, const TVector<TString>& columns) {
     if (inputType->GetKind() != TType::EKind::Struct) {
         return Nothing();
     }

@@ -2037,8 +2037,7 @@ void TMkqlWriterImpl::SetSpecs(const TMkqlIOSpecs& specs, const TVector<TString>
     JobStats_ = specs.JobStats_;
 
 #ifndef MKQL_DISABLE_CODEGEN
-    struct TWriterFunctions
-    {
+    struct TWriterFunctions {
         llvm::Function* AlphabeticRowWriter;
         llvm::Function* AlphabeticFlatRowWriter;
         llvm::Function* ShuffledRowWriter;

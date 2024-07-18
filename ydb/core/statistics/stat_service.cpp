@@ -214,11 +214,12 @@ private:
     static const ui64 SecondRoundCookie = 2;
 };
 
-TStatServiceSettings::TStatServiceSettings():
-    AggregateKeepAlivePeriod(DefaultAggregateKeepAlivePeriod),
-    AggregateKeepAliveTimeout(DefaultAggregateKeepAliveTimeout),
-    AggregateKeepAliveAckTimeout(DefaultAggregateKeepAliveAckTimeout),
-    MaxInFlightTabletRequests(DefaultMaxInFlightTabletRequests) {}
+TStatServiceSettings::TStatServiceSettings()
+    : AggregateKeepAlivePeriod(DefaultAggregateKeepAlivePeriod)
+    , AggregateKeepAliveTimeout(DefaultAggregateKeepAliveTimeout)
+    , AggregateKeepAliveAckTimeout(DefaultAggregateKeepAliveAckTimeout)
+    , MaxInFlightTabletRequests(DefaultMaxInFlightTabletRequests)
+{}
 
 struct TAggregationStatistics {
     using TColumnsStatistics = ::google::protobuf::RepeatedPtrField<::NKikimrStat::TColumn>;
@@ -257,6 +258,7 @@ struct TAggregationStatistics {
         size_t NextTablet{ 0 };
         ui32 InFlight{ 0 };
         std::vector<ui64> Ids;
+        std::unordered_set<ui64> FinishedTablets;
     };
 
     struct ColumnStatistics {
@@ -419,11 +421,23 @@ private:
         return false;
     }
 
+    //
+    // returns true if the tablet processing has not been completed yet
+    //
+    bool OnTabletFinished(ui64 tabletId) {
+        auto& localTablets = AggregationStatistics.LocalTablets;
+        auto isFinished = !localTablets.FinishedTablets.emplace(tabletId).second;
+        if (isFinished) {
+            return false;
+        }
+
+        --localTablets.InFlight;
+        return true;
+    }
+
     void SendRequestToNextTablet() {
         auto& localTablets = AggregationStatistics.LocalTablets;
         if (localTablets.NextTablet >= localTablets.Ids.size()) {
-            --localTablets.InFlight;
-
             if (AggregationStatistics.IsCompleted()) {
                 SendAggregateStatisticsResponse();
             }
@@ -432,6 +446,7 @@ private:
 
         const auto tabletId = localTablets.Ids[localTablets.NextTablet];
         ++localTablets.NextTablet;
+        ++localTablets.InFlight;
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvGetTabletNode(tabletId), 0, AggregationStatistics.Round);
     }
 
@@ -450,13 +465,16 @@ private:
         // there is no need for retries, as the tablet must be local
         // no problems are expected in resolving
         if (currentNodeId != msg->NodeId) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Tablet is not local. Table node: " << msg->NodeId << ", current node: " << ev->Recipient.NodeId());
+            auto isFinished = OnTabletFinished(msg->TabletId);
+            if (isFinished) {
+                LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                "Tablet is not local. Table node: " << msg->NodeId << ", current node: " << ev->Recipient.NodeId());
 
-            const auto error = NKikimrStat::TEvAggregateStatisticsResponse::NonLocalTablet;
-            AggregationStatistics.FailedTablets.emplace_back(msg->TabletId, msg->NodeId, error);
+                const auto error = NKikimrStat::TEvAggregateStatisticsResponse::NonLocalTablet;
+                AggregationStatistics.FailedTablets.emplace_back(msg->TabletId, msg->NodeId, error);
 
-            SendRequestToNextTablet();
+                SendRequestToNextTablet();
+            }
             return;
         }
 
@@ -483,11 +501,12 @@ private:
             "Received TEvDeliveryProblem TabletId: " << ev->Get()->TabletId);
 
         const auto round = ev->Cookie;
-        if (IsNotCurrentRound(round)) {
+        const auto tabletId = ev->Get()->TabletId;
+        if (IsNotCurrentRound(round)
+            || !OnTabletFinished(tabletId)) {
             return;
         }
 
-        const auto tabletId = ev->Get()->TabletId;
         const auto nodeId = ev->Recipient.NodeId();
         const auto error = NKikimrStat::TEvAggregateStatisticsResponse::NonLocalTablet;
         AggregationStatistics.FailedTablets.emplace_back(tabletId, nodeId, error);
@@ -523,11 +542,12 @@ private:
             "Received TEvStatisticsResponse TabletId: " << ev->Get()->Record.GetShardTabletId());
 
         const auto round = ev->Cookie;
-        if (IsNotCurrentRound(round)) {
+        const auto& record = ev->Get()->Record;
+        if (IsNotCurrentRound(round)
+            || !OnTabletFinished(record.GetShardTabletId())) {
             return;
         }
 
-        const auto& record = ev->Get()->Record;
         AggregateStatistics(record.GetColumns());
 
         SendRequestToNextTablet();
@@ -855,11 +875,8 @@ private:
         auto& localTablets = AggregationStatistics.LocalTablets;
         const auto count = std::min(Settings.MaxInFlightTabletRequests,
                                     localTablets.Ids.size());
-        while (localTablets.NextTablet < count) {
-            const auto tabletId = localTablets.Ids[localTablets.NextTablet];
-            ++localTablets.NextTablet;
-            ++localTablets.InFlight;
-            Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvGetTabletNode(tabletId), 0, round);
+        for (size_t i = 0; i < count; ++i) {
+            SendRequestToNextTablet();
         }
     }
 

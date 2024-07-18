@@ -136,8 +136,6 @@ protected:
     TMkqlIOSpecs Specs;
     TMkqlWriterImpl SkiffWriter;
 
-    TVector<TString> Columns;
-
     // i-th vector contains the permutation of the columns that should be applied to the rows of i-th
     // output table to transform it from "shuffled" to "alphabetic" order.
     // Absense of the vector means that columns were not provided and thus transforming rows

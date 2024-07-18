@@ -113,18 +113,17 @@ TSkiffExecuteResOrPull::TSkiffExecuteResOrPull(TMaybe<ui64> rowLimit, TMaybe<ui6
     : IExecuteResOrPull(rowLimit, byteLimit, columns)
     , HolderFactory(holderFactory)
     , SkiffWriter(*Out.Get(), 0, 4_MB)
-    , Columns(columns)
 {
     Specs.SetUseSkiff(optLLVM);
     Specs.Init(codecCtx, attrs);
     YQL_ENSURE(Specs.Outputs.size() == 1);
 
-    SkiffWriter.SetSpecs(Specs, Columns);
+    SkiffWriter.SetSpecs(Specs, columns);
 
     AlphabeticPermutations.reserve(Specs.Outputs.size());
     for (size_t index = 0; index < Specs.Outputs.size(); ++index) {
         const auto& output = Specs.Outputs[index];
-        auto columnPermutation = NCommon::CreateAlphabeticPositions(output.RowType, Columns);
+        auto columnPermutation = NCommon::CreateAlphabeticPositions(output.RowType, columns);
         AlphabeticPermutations.push_back(columnPermutation);
     }
 }

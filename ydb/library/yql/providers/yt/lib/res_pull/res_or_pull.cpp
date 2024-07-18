@@ -3,8 +3,6 @@
 #include <ydb/library/yql/providers/common/codec/yql_codec.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
-#include <ydb/library/yql/utils/log/log.h>
-
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 
 #include <util/stream/holder.h>
@@ -120,12 +118,7 @@ TSkiffExecuteResOrPull::TSkiffExecuteResOrPull(TMaybe<ui64> rowLimit, TMaybe<ui6
 
     SkiffWriter.SetSpecs(Specs, columns);
 
-    AlphabeticPermutations.reserve(Specs.Outputs.size());
-    for (size_t index = 0; index < Specs.Outputs.size(); ++index) {
-        const auto& output = Specs.Outputs[index];
-        auto columnPermutation = NCommon::CreateAlphabeticPositions(output.RowType, columns);
-        AlphabeticPermutations.push_back(columnPermutation);
-    }
+    AlphabeticPermutation = NCommon::CreateAlphabeticPositions(Specs.Outputs[0].RowType, columns);
 }
 
 TString TSkiffExecuteResOrPull::Finish() {
@@ -149,7 +142,7 @@ bool TSkiffExecuteResOrPull::WriteNext(const NYT::TNode& item) {
     YQL_ENSURE(item.GetType() == NYT::TNode::EType::List, "Expected list node");
     const auto& listNode = item.UncheckedAsList();
 
-    const auto& permutation = *AlphabeticPermutations[0];
+    const auto& permutation = *AlphabeticPermutation;
     YQL_ENSURE(permutation.size() == listNode.size(), "Expected the same number of columns and values");
 
     // TODO: Node is being copied here. This can be avoided by doing in-place swaps

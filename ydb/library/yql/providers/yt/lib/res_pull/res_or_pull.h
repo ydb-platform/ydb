@@ -136,12 +136,12 @@ protected:
     TMkqlIOSpecs Specs;
     TMkqlWriterImpl SkiffWriter;
 
-    // i-th vector contains the permutation of the columns that should be applied to the rows of i-th
+    // This vector contains the permutation of the columns that should be applied to the rows of a (single)
     // output table to transform it from "shuffled" to "alphabetic" order.
     // Absense of the vector means that columns were not provided and thus transforming rows
     // is not possible (and thus is not required).
-    // j-th element of the permutation means that j-th value of the "shuffled" row is p[j]-th value of the "alphabetic" row.
-    TVector<TMaybe<TVector<ui32>>> AlphabeticPermutations;
+    // i-th element of the permutation means that i-th value of the "shuffled" row is p[i]-th value of the "alphabetic" row.
+    TMaybe<TVector<ui32>> AlphabeticPermutation;
 };
 
 }

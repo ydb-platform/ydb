@@ -40,7 +40,7 @@
     }));
 ```
 
-Метод `CreateTable` не поддерживает создания колоночных таблиц. Их можно создать с помощью метода `ExecuteDataQuery`, который выполняет YQL-запросы:
+Метод `CreateTable` не поддерживает создание колоночных таблиц. Их можно создать с помощью метода `ExecuteDataQuery`, который выполняет произвольные YQL-запросы:
 ```c++
 static TStatus CreateColumnTable(TSession session, const TString& path,
     TMaybe<TResultSet>& resultSet)

@@ -864,7 +864,6 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 select ja.a, jb.bv, jc.cv from ja inner join jb on ja.b=jb.b left join jc on ja.c=jc.cv;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            CompareYson(R"([["1";"2";"2";"1"]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 

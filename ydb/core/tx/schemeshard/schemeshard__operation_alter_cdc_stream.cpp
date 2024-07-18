@@ -139,8 +139,11 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotAsyncReplicaTable()
-                .IsCommonSensePath()
                 .NotUnderOperation();
+
+            if (checks && !tablePath.IsInsideTableIndexPath()) {
+                checks.IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -366,9 +369,12 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotAsyncReplicaTable()
-                .IsCommonSensePath()
                 .NotUnderDeleting()
                 .NotUnderOperation();
+
+            if (checks && !tablePath.IsInsideTableIndexPath()) {
+                checks.IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -511,8 +517,11 @@ TVector<ISubOperation::TPtr> CreateAlterCdcStream(TOperationId opId, const TTxTr
             .NotDeleted()
             .IsTable()
             .NotAsyncReplicaTable()
-            .IsCommonSensePath()
             .NotUnderOperation();
+
+        if (checks && !tablePath.IsInsideTableIndexPath()) {
+            checks.IsCommonSensePath();
+        }
 
         if (!checks) {
             return {CreateReject(opId, checks.GetStatus(), checks.GetError())};

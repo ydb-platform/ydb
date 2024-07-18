@@ -128,8 +128,11 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotAsyncReplicaTable()
-                .IsCommonSensePath()
                 .NotUnderDeleting();
+
+            if (checks && !tablePath.IsInsideTableIndexPath()) {
+                checks.IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -522,9 +525,12 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .IsCommonSensePath()
                 .IsLikeDirectory()
                 .NotUnderDeleting();
+
+            if (checks && !workingDir.IsTableIndex()) {
+                checks.IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -543,10 +549,12 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotAsyncReplicaTable()
-                .IsCommonSensePath()
                 .NotUnderDeleting();
 
             if (checks) {
+                if (!tablePath.IsInsideTableIndexPath()) {
+                    checks.IsCommonSensePath();
+                }
                 if (InitialScan) {
                     checks.IsUnderTheSameOperation(OperationId.GetTxId()); // lock op
                 } else {
@@ -675,9 +683,12 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
             .NotDeleted()
             .IsTable()
             .NotAsyncReplicaTable()
-            .IsCommonSensePath()
             .NotUnderDeleting()
             .NotUnderOperation();
+
+        if (checks && !tablePath.IsInsideTableIndexPath()) {
+            checks.IsCommonSensePath();
+        }
 
         if (!checks) {
             return {CreateReject(opId, checks.GetStatus(), checks.GetError())};

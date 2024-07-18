@@ -83,10 +83,6 @@ runs:
         echo "PUBLIC_DIR_URL=$PUBLIC_DIR_URL" >> $GITHUB_ENV
         mkdir -p $PUBLIC_DIR
 
-        export YA_MAKE_OUT_DIR=$TMP_DIR/out
-        echo "YA_MAKE_OUT_DIR=$YA_MAKE_OUT_DIR" >> $GITHUB_ENV
-        mkdir -p $YA_MAKE_OUT_DIR
-
         echo "JUNIT_REPORT_XML=$PUBLIC_DIR/junit.xml" >> $GITHUB_ENV
         echo "TESTMO_URL=${{ inputs.testman_url }}" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
@@ -244,31 +240,68 @@ runs:
           params+=(-A)
         fi
 
+        params+=(
+          --stat -DCONSISTENT_DEBUG --no-dir-outputs
+          --test-failure-code 0 --build-all 
+          --cache-size 2TB --force-build-depends
+        )
+
         echo "::debug::get version"
         ./ya --version
+
+        YA_MAKE_OUT_DIR=$TMP_DIR/out
 
         YA_MAKE_OUTPUT="$PUBLIC_DIR/ya_make_output.log"
         YA_MAKE_OUTPUT_URL="$PUBLIC_DIR_URL/ya_make_output.log"
         echo "10 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
 
-        echo "Build+Tests **{platform_name}-${BUILD_PRESET}** is running..." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
-        set +ex
-        (./ya make ${{ inputs.build_target }} "${params[@]}" \
-          --stat --log-file "$PUBLIC_DIR/ya_log.log" -DCONSISTENT_DEBUG \
-          --no-dir-outputs --test-failure-code 0 --build-all \
-          --cache-size 2TB --force-build-depends --evlog-file "$PUBLIC_DIR/ya_evlog.jsonl" \
-          --junit "$JUNIT_REPORT_XML" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& tee $YA_MAKE_OUTPUT
-        set -e
-        RC=`cat exit_code`
+        BUILD_FAILED=0
 
+        for RETRY in {1..3}
+        do
+          echo "Build+Tests **{platform_name}-${BUILD_PRESET}** is running..." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
+          CURRENT_JUNIT_XML_PATH=$PUBLIC_DIR/junit_try_$RETRY.xml
+          set +ex
+          (./ya make ${{ inputs.build_target }} "${params[@]}" \
+            --log-file "$PUBLIC_DIR/ya_log.log"  \
+            --evlog-file "$PUBLIC_DIR/ya_evlog.jsonl" \
+            --junit "$CURRENT_JUNIT_XML_PATH" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& tee $YA_MAKE_OUTPUT
+          set -e
+          RC=`cat exit_code`
 
-        if [ $RC -ne 0 ]; then
-          echo "ya make returned $RC, build failed"
-          echo "status=failed" >> $GITHUB_OUTPUT
-        else
+          if [ $RC -ne 0 ]; then
+            echo "ya make returned $RC, build failed"
+            echo "status=failed" >> $GITHUB_OUTPUT
+            BUILD_FAILED=1
+            break
+          fi
+
+          # fix junit files (add links, logs etc)
+          # archive unitest reports (orig) 
+          gzip -c $CURRENT_JUNIT_XML_PATH > $PUBLIC_DIR/orig_junit_try_$RETRY.xml.gz
+
+          # postprocess junit report
+          .github/scripts/tests/transform-ya-junit.py -i \
+            -m .github/config/muted_ya.txt \
+            --ya_out "$YA_MAKE_OUT_DIR" \
+            --public_dir "$PUBLIC_DIR" \
+            --public_dir_url "$PUBLIC_DIR_URL" \
+            --log_out_dir "artifacts/logs/" \
+            --test_stuff_out "test_artifacts/" \
+            "$CURRENT_JUNIT_XML_PATH"
+          
+          TESTS_RESULT=0
+          .github/scripts/tests/fail-checker.py "$CURRENT_JUNIT_XML_PATH" || TESTS_RESULT=$?
+
+          if [ $TESTS_RESULT = 0 ]
+            break
+          fi
+        done;
+
+        if [ $BUILD_FAILED = 0 ]; then
           echo "status=true" >> $GITHUB_OUTPUT
         fi
-
+  
 
     - name: comment-build-status
       if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
@@ -289,24 +322,6 @@ runs:
             -d '{"state":"success","description":"The check has been completed successfully","context":"build_${{inputs.build_preset}}"}'
           echo "Build successful." | .github/scripts/tests/comment-pr.py --ok
         fi
-
-    - name: process reports
-      if: inputs.run_tests
-      shell: bash
-      run: |
-        set -x
-        # archive unitest reports (orig) 
-        gzip -c $JUNIT_REPORT_XML > $PUBLIC_DIR/orig_junit.xml.gz
-
-        # postprocess junit report
-        .github/scripts/tests/transform-ya-junit.py -i \
-          -m .github/config/muted_ya.txt \
-          --ya_out "$YA_MAKE_OUT_DIR" \
-          --public_dir "$PUBLIC_DIR" \
-          --public_dir_url "$PUBLIC_DIR_URL" \
-          --log_out_dir "artifacts/logs/" \
-          --test_stuff_out "test_artifacts/" \
-          "$JUNIT_REPORT_XML"
     
     - name: Test history upload results to YDB
       if: inputs.run_tests

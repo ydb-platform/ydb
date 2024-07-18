@@ -259,17 +259,20 @@ runs:
 
         for RETRY in {1..3}
         do
-          CURRENT_MESSAGE="Build+Tests **{platform_name}-${BUILD_PRESET}** is running..." | GITHUB_TOKEN="${{ github.token }}"
+          CURRENT_MESSAGE="**{platform_name}-${BUILD_PRESET}** is running..." 
           RERUN_FAILED_TESTS=""
-          if [ $RETRY != 1 ]; then
-            CURRENT_MESSAGE="$CURRENT_MESSAGE (try #$RETRY)"
+          if [ $RETRY = 1 ]; then
+            CURRENT_MESSAGE="Builds+Tests $CURRENT_MESSAGE"
+            RERUN_FAILED_OPT="-X"
+          else
+            CURRENT_MESSAGE="Failed tests rerun (try $RETRY) $CURRENT_MESSAGE (try #$RETRY)"
             RERUN_FAILED_OPT="-X"
           fi
           echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
           CURRENT_JUNIT_XML_PATH=$PUBLIC_DIR/junit_try_$RETRY.xml
           set +ex
           (./ya make ${{ inputs.build_target }} "${params[@]}" \
-            $RERUN_FAILED_TESTS --log-file "$PUBLIC_DIR/ya_log.log"  \
+            $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.log"  \
             --evlog-file "$PUBLIC_DIR/ya_evlog.jsonl" \
             --junit "$CURRENT_JUNIT_XML_PATH" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& tee $YA_MAKE_OUTPUT
           set -ex

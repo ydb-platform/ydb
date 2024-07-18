@@ -1213,8 +1213,13 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
               KeyColumnNames: ["key"]
             }
             IndexDescription {
-              Name: "Index"
+              Name: "SyncIndex"
               KeyColumnNames: ["indexed"]
+            }
+            IndexDescription {
+              Name: "AsyncIndex"
+              KeyColumnNames: ["indexed"]
+              Type: EIndexTypeGlobalAsync
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -1228,7 +1233,16 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             }
         )", {NKikimrScheme::StatusPathDoesNotExist});
 
-        TestCreateCdcStream(runtime, ++txId, "/MyRoot/Table/Index", R"(
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot/Table/AsyncIndex", R"(
+            TableName: "indexImplTable"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )", {NKikimrScheme::StatusPreconditionFailed});
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot/Table/SyncIndex", R"(
             TableName: "indexImplTable"
             StreamDescription {
               Name: "Stream"
@@ -1238,10 +1252,10 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Index/indexImplTable/Stream"), {
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable/Stream"), {
             NLs::PathExist,
         });
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Index/indexImplTable/Stream/streamImpl"), {
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable/Stream/streamImpl"), {
             NLs::PathExist,
         });
 
@@ -1251,14 +1265,14 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             Disable {}
         )", {NKikimrScheme::StatusPathDoesNotExist});
 
-        TestAlterCdcStream(runtime, ++txId, "/MyRoot/Table/Index", R"(
+        TestAlterCdcStream(runtime, ++txId, "/MyRoot/Table/SyncIndex", R"(
             TableName: "indexImplTable"
             StreamName: "Stream"
             Disable {}
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Index/indexImplTable/Stream"), {
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable/Stream"), {
             NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateDisabled),
         });
 
@@ -1267,16 +1281,16 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             StreamName: "Stream"
         )", {NKikimrScheme::StatusPathDoesNotExist});
 
-        TestDropCdcStream(runtime, ++txId, "/MyRoot/Table/Index", R"(
+        TestDropCdcStream(runtime, ++txId, "/MyRoot/Table/SyncIndex", R"(
             TableName: "indexImplTable"
             StreamName: "Stream"
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Index/indexImplTable/Stream"), {
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable/Stream"), {
             NLs::PathNotExist,
         });
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Index/indexImplTable/Stream/streamImpl"), {
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable/Stream/streamImpl"), {
             NLs::PathNotExist,
         });
     }

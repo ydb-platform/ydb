@@ -1515,9 +1515,11 @@ void TRequestQueue::RunRequest(TServiceBase::TServiceContextPtr context)
     options.SetHeavy(RuntimeInfo_->Heavy.load(std::memory_order::relaxed));
 
     if (options.Heavy) {
-        BIND(RuntimeInfo_->Descriptor.HeavyHandler)
+        BIND([this, this_ = MakeStrong(this), context, options] {
+            return RuntimeInfo_->Descriptor.HeavyHandler.Run(context, options);
+        })
             .AsyncVia(TDispatcher::Get()->GetHeavyInvoker())
-            .Run(context, options)
+            .Run()
             .Subscribe(BIND(&TServiceBase::TServiceContext::CheckAndRun, std::move(context)));
     } else {
         context->Run(RuntimeInfo_->Descriptor.LiteHandler);

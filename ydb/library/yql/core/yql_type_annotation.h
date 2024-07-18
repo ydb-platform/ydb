@@ -155,6 +155,10 @@ public:
     struct TOrderedItem {
         TString LogicalName;
         TString PhysicalName;
+        TOrderedItem(const TString& logical, const TString& physical) : LogicalName(logical), PhysicalName(physical) {}
+        TOrderedItem(TOrderedItem&&) = default;
+        TOrderedItem(const TOrderedItem&) = default;
+        TOrderedItem& operator=(const TOrderedItem&) = default;
         bool operator==(const TOrderedItem& other) const {
             return LogicalName == other.LogicalName && PhysicalName == other.PhysicalName;
         }

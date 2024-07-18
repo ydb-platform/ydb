@@ -109,8 +109,9 @@ public:
 
     void SetSpecs(const TMkqlIOSpecs& specs, const TVector<TString>& columns = {});
 
-    void AddRow(const NKikimr::NUdf::TUnboxedValuePod row) override;
-    void AddFlatRow(const NUdf::TUnboxedValuePod* row) override;
+    // Refer to IMkqlWriterImpl for shuffled description.
+    void AddRow(const NKikimr::NUdf::TUnboxedValuePod row, bool shuffled = false) override;
+    void AddFlatRow(const NUdf::TUnboxedValuePod* row, bool shuffled = false) override;
 
     void SetWriteLimit(ui64 limit) {
         WriteLimit = limit;

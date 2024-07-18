@@ -117,11 +117,14 @@ TSkiffExecuteResOrPull::TSkiffExecuteResOrPull(TMaybe<ui64> rowLimit, TMaybe<ui6
 {
     Specs.SetUseSkiff(optLLVM);
     Specs.Init(codecCtx, attrs);
+    YQL_ENSURE(Specs.Outputs.size() == 1);
+
+    SkiffWriter.SetSpecs(Specs, Columns);
 
     AlphabeticPermutations.reserve(Specs.Outputs.size());
     for (size_t index = 0; index < Specs.Outputs.size(); ++index) {
         const auto& output = Specs.Outputs[index];
-        auto columnPermutation = NCommon::CreateStructPositions(output.RowType, Columns.empty() ? nullptr : &Columns);
+        auto columnPermutation = NCommon::CreateAlphabeticPositions(output.RowType, Columns);
         AlphabeticPermutations.push_back(columnPermutation);
     }
 }
@@ -134,9 +137,6 @@ TString TSkiffExecuteResOrPull::Finish() {
 }
 
 bool TSkiffExecuteResOrPull::WriteNext(const NYT::TNode& item) {
-    // Row will be made alphabetic below, so for Skiff writer it is always alphabetic.
-    EnsureShuffled(false);
-
     if (IsList) {
         if (!HasCapacity()) {
             Truncated = true;
@@ -169,14 +169,14 @@ bool TSkiffExecuteResOrPull::WriteNext(const NYT::TNode& item) {
     if (!value) {
         throw yexception() << "Could not parse yson node with error: " << err.Str();
     }
-    SkiffWriter.AddRow(*value);
+
+    // Call above produces rows in alphabetic order.
+    SkiffWriter.AddRow(*value, /*shuffled*/ false);
 
     return IsList;
 }
 
 void TSkiffExecuteResOrPull::WriteValue(const NUdf::TUnboxedValue& value, TType* type) {
-    EnsureShuffled(false);
-
     if (type->IsList()) {
         SetListResult();
         const auto it = value.GetListIterator();
@@ -186,16 +186,14 @@ void TSkiffExecuteResOrPull::WriteValue(const NUdf::TUnboxedValue& value, TType*
                 break;
             }
 
-            SkiffWriter.AddRow(item);
+            SkiffWriter.AddRow(item, /*shuffled*/ false);
         }
     } else {
-        SkiffWriter.AddRow(value);
+        SkiffWriter.AddRow(value, /*shuffled*/ false);
     }
 }
 
 bool TSkiffExecuteResOrPull::WriteNext(TMkqlIOCache& specsCache, const NYT::TNode& rec, ui32 tableIndex) {
-    EnsureShuffled(false);
-
     if (!HasCapacity()) {
         Truncated = true;
         return false;
@@ -207,20 +205,17 @@ bool TSkiffExecuteResOrPull::WriteNext(TMkqlIOCache& specsCache, const NYT::TNod
     YQL_ENSURE(rec.GetType() == NYT::TNode::EType::Map, "Expected map node");
 
     TStringStream err;
-    auto value = NCommon::ParseYsonNode(specsCache.GetHolderFactory(), rec, Specs.Outputs[tableIndex].RowType, Specs.Outputs[tableIndex].NativeYtTypeFlags, &err);
+    auto value = NCommon::ParseYsonNode(specsCache.GetHolderFactory(), rec, Specs.Outputs[0].RowType, Specs.Outputs[0].NativeYtTypeFlags, &err);
     if (!value) {
         throw yexception() << "Could not parse yson node with error: " << err.Str();
     }
-    SkiffWriter.AddRow(*value);
+    SkiffWriter.AddRow(*value, /*shuffled*/ false);
 
     ++Row;
     return true;
 }
 
 bool TSkiffExecuteResOrPull::WriteNext(TMkqlIOCache& specsCache, const NYT::TYaMRRow& rec, ui32 tableIndex) {
-    // For YAMR format the order of columns is not actually important.
-    EnsureShuffled(false);
-
     if (!HasCapacity()) {
         Truncated = true;
         return false;
@@ -228,7 +223,7 @@ bool TSkiffExecuteResOrPull::WriteNext(TMkqlIOCache& specsCache, const NYT::TYaM
 
     NUdf::TUnboxedValue node;
     node = DecodeYamr(specsCache, tableIndex, rec);
-    SkiffWriter.AddRow(node);
+    SkiffWriter.AddRow(node, /*shuffled*/ false);
 
     ++Row;
     return true;
@@ -238,14 +233,12 @@ bool TSkiffExecuteResOrPull::WriteNext(TMkqlIOCache& specsCache, const NUdf::TUn
     Y_UNUSED(specsCache);
     Y_UNUSED(tableIndex);
 
-    EnsureShuffled(true);
-
     if (!HasCapacity()) {
         Truncated = true;
         return false;
     }
 
-    SkiffWriter.AddRow(rec);
+    SkiffWriter.AddRow(rec, /*shuffled*/ true);
 
     ++Row;
     return true;
@@ -253,22 +246,6 @@ bool TSkiffExecuteResOrPull::WriteNext(TMkqlIOCache& specsCache, const NUdf::TUn
 
 void TSkiffExecuteResOrPull::SetListResult() {
     IsList = true;
-}
-
-void TSkiffExecuteResOrPull::EnsureShuffled(bool shuffled) {
-    if (Shuffled) {
-        YQL_ENSURE(*Shuffled == shuffled, "Shuffled and alphabetic rows are mixed in the Skiff writer");
-        return;
-    }
-
-    Shuffled = shuffled;
-    if (shuffled) {
-        // Now Skiff writer expects rows with values order corresponding to Columns (i.e. the output order).
-        SkiffWriter.SetSpecs(Specs, Columns);
-    } else {
-        // Now Skiff writer expects rows with values order corresponding to columns in alphabetical order.
-        SkiffWriter.SetSpecs(Specs);
-    }
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////

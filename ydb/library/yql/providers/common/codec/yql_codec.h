@@ -44,6 +44,10 @@ TMaybe<TVector<ui32>> CreateStructPositions(
     const TVector<TString>* columns = nullptr
 );
 
+// Returns a permutation such that i-th column in alphabetic order is at positions[i].
+// If columns is empty, returns an identity permutation.
+TMaybe<TVector<ui32>> CreateAlphabeticPositions(NKikimr::NMiniKQL::TType* inputType, const TVector<TString>& columns);
+
 NYT::TNode ValueToNode(const NKikimr::NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TType* type);
 TExprNode::TPtr NodeToExprLiteral(TPositionHandle pos, const TTypeAnnotationNode& type, const NYT::TNode& node, TExprContext& ctx);
 

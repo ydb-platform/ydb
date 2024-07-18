@@ -39,6 +39,7 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
                     return true;
                 }
                 AFL_VERIFY(false);
+                return false;
             });
             ++sketchIndex;
         }

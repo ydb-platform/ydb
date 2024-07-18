@@ -111,7 +111,9 @@ void TColumnOrder::Shrink(size_t remain) {
         }
         GeneratedToOriginal_.erase(Order_[i].PhysicalName);
     }
-    Order_.resize(remain);
+    while (Order_.size() > remain) {
+        Order_.pop_back(); // No default ctor, can't call .resize()
+    }
 }
 
 void TColumnOrder::Reserve(size_t count) {

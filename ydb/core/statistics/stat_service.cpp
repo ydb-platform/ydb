@@ -598,11 +598,6 @@ private:
 
         const auto nodeId = ev->Get()->NodeId;
         auto& node = AggregationStatistics.GetChildNode(nodeId);
-
-        if (node.Status != TAggregationStatistics::TNode::EStatus::Processing) {
-            return;
-        }
-
         const auto maxDuration = DurationToCycles(Settings.AggregateKeepAliveTimeout);
         const auto deadline = node.LastHeartbeat + maxDuration;
         const auto now = GetCycleCountFast();

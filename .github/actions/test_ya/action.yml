@@ -265,7 +265,7 @@ runs:
             CURRENT_MESSAGE="$CURRENT_MESSAGE (try #$RETRY)"
             RERUN_FAILED_OPT="-X"
           fi
-          echo "Build+Tests **{platform_name}-${BUILD_PRESET}** is running..." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
+          echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
           CURRENT_JUNIT_XML_PATH=$PUBLIC_DIR/junit_try_$RETRY.xml
           set +ex
           (./ya make ${{ inputs.build_target }} "${params[@]}" \

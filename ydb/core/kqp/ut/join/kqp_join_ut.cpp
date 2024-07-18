@@ -816,6 +816,71 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         }
     }
 
+    Y_UNIT_TEST(TwoJoinsWithQueryService) { 
+        NKikimrConfig::TAppConfig appConfig;
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto client = kikimr.GetTableClient();
+        auto db = kikimr.GetQueryClient();
+        auto settings = NYdb::NQuery::TExecuteQuerySettings();
+
+        {
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            const auto query = Q_(R"(
+                CREATE TABLE ta(
+                    a Int64, 
+                    b Int64, 
+                    c Int64, 
+                    PRIMARY KEY(a)
+                );
+            )");
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            const auto query = Q_(R"(
+                CREATE TABLE tb(
+                    b Int64, 
+                    bval Int64, 
+                    PRIMARY KEY(b)
+                );    
+            )");
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            const auto query = Q_(R"(
+                CREATE TABLE tc(
+                    c Int64, 
+                    cval Int64, 
+                    PRIMARY KEY(c)
+                );
+            )");
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                UPSERT INTO ta(a, b, c) VALUES (1, 1001, 2001), (2, 1002, 2002), (3, 1003, 2003);
+                UPSERT INTO tb(b, bval) VALUES (1001, 1001), (1002, 1002), (1003, 1003);
+                UPSERT INTO tc(c, cval) VALUES (2001, 2001), (2002, 2002), (2003, 2003);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT ta.a, tb.bval, tc.cval FROM ta INNER JOIN tb ON ta.b = tb.b LEFT JOIN tc ON ta.c = tc.cval;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([[[1];[1001];[2001]];[[3];[1003];[2003]];[[2];[1002];[2002]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
     // join on key prefix => index-lookup
     Y_UNIT_TEST(RightSemiJoin_KeyPrefix) {
         TKikimrRunner kikimr(SyntaxV1Settings());

@@ -262,7 +262,7 @@ runs:
           CURRENT_MESSAGE="Build+Tests **{platform_name}-${BUILD_PRESET}** is running..." | GITHUB_TOKEN="${{ github.token }}"
           RERUN_FAILED_TESTS=""
           if [ $RETRY != 1 ]; then
-            CURRENT_MESSAGE="$CURRENT_MESSAGE (try #$RETRY)
+            CURRENT_MESSAGE="$CURRENT_MESSAGE (try #$RETRY)"
             RERUN_FAILED_OPT="-X"
           fi
           echo "Build+Tests **{platform_name}-${BUILD_PRESET}** is running..." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py

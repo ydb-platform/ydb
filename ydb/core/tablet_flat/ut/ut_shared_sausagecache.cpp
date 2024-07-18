@@ -99,7 +99,7 @@ void WaitEvent(TMyEnvBase& env, ui32 eventType, ui32 requiredCount = 1) {
     env->DispatchEvents(options);
 }
 
-Y_UNIT_TEST(PageCacheLimits) {
+Y_UNIT_TEST(Limits) {
     TMyEnvBase env;
     auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
 

@@ -188,7 +188,7 @@ private:
             resultingConsumersConsumption += Max(consumer.Consumption, consumer.GetLimit(coefficient));
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Periodic memory stats"
+        LOG_DEBUG_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Periodic memory stats:"
             << " AnonRss: " << processMemoryInfo.AnonRss << " CGroupLimit: " << processMemoryInfo.CGroupLimit << " AllocatedMemory: " << processMemoryInfo.AllocatedMemory
             << " HardLimitBytes: " << hardLimitBytes << " SoftLimitBytes: " << softLimitBytes << " TargetUtilizationBytes: " << targetUtilizationBytes
             << " ConsumersConsumption: " << consumersConsumption << " ExternalConsumption: " << externalConsumption 
@@ -214,7 +214,7 @@ private:
             }
             consumersLimitBytes += limitBytes;
 
-            LOG_DEBUG_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Consumer " << consumer.Kind << " state "
+            LOG_DEBUG_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Consumer " << consumer.Kind << " state:"
                 << " Consumption: " << consumer.Consumption << " LimitBytes: " << limitBytes
                 << " MinBytes: " << consumer.MinBytes << " MaxBytes: " << consumer.MaxBytes);
             auto& counters = GetConsumerCounters(consumer.Kind);

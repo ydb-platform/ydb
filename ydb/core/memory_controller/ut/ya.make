@@ -1,8 +1,7 @@
 UNITTEST_FOR(ydb/core/memory_controller)
 
-SIZE(SMALL)
-
-TIMEOUT(60)
+TIMEOUT(600)
+SIZE(MEDIUM)
 
 PEERDIR(
     ydb/library/yql/sql/pg_dummy

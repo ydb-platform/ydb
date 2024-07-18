@@ -3,7 +3,7 @@
 С помощью [Terraform](https://www.terraform.io/) можно создавать, удалять и изменять следующие объекты внутри кластера {{ ydb-short-name }}:
 
 * [строковые](../concepts/datamodel/table.md#row-oriented-tables) таблицы;
-* [индексы](../concepts/secondary_indexes.md) строковых таблиц;
+* [вторичные индексы](../concepts/secondary_indexes.md) для строковых таблиц;
 * [потоки изменений](../concepts/cdc.md) строковых таблиц;
 * [топики](../concepts/topic.md).
 

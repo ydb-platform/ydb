@@ -3315,7 +3315,6 @@ Y_UNIT_TEST_QUAD(TestShardRestartPlannedCommitShouldSucceed, StreamLookup, EvWri
 Y_UNIT_TEST(TestShardRestartDuringWaitingRead) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetUseRealThreads(false)

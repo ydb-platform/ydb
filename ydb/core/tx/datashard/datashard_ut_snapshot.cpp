@@ -3606,7 +3606,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
     Y_UNIT_TEST(ReadIteratorLocalSnapshotThenRestart) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -3722,7 +3721,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
     Y_UNIT_TEST(ReadIteratorLocalSnapshotThenWrite) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -3807,7 +3805,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
     Y_UNIT_TEST(UncommittedWriteRestartDuringCommit) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));

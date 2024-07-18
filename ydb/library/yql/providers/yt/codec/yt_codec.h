@@ -235,13 +235,8 @@ using IMkqlReaderImplPtr = TIntrusivePtr<IMkqlReaderImpl>;
 class IMkqlWriterImpl : public TThrRefBase {
 public:
     virtual ~IMkqlWriterImpl() = default;
-
-    // Rows that are passed to this writer may have different orders of columns in them.
-    // First one contains values in the order of columns that are expected in the output. We call them "shuffled".
-    // Second one contains values in the alphabetical order of column names. We call them "alphabetic".
-    virtual void AddRow(const NUdf::TUnboxedValuePod row, bool shuffled = false) = 0;
-    virtual void AddFlatRow(const NUdf::TUnboxedValuePod* row, bool shuffled = false) = 0;
-
+    virtual void AddRow(const NUdf::TUnboxedValuePod row) = 0;
+    virtual void AddFlatRow(const NUdf::TUnboxedValuePod* row) = 0;
     virtual void Finish() = 0;
     virtual void Abort() = 0;
 };

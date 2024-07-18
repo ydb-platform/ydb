@@ -1688,8 +1688,8 @@ struct TMkqlWriterImpl::TEncoder {
     }
     virtual ~TEncoder() = default;
 
-    virtual void EncodeNext(const NUdf::TUnboxedValuePod row, bool shuffled) = 0;
-    virtual void EncodeNext(const NUdf::TUnboxedValuePod* row, bool shuffled) = 0;
+    virtual void EncodeNext(const NUdf::TUnboxedValuePod row) = 0;
+    virtual void EncodeNext(const NUdf::TUnboxedValuePod* row) = 0;
 
 protected:
     struct TField {
@@ -1742,10 +1742,7 @@ public:
         NativeYtTypeFlags_ = Specs_.Outputs[tableIndex].NativeYtTypeFlags;
     }
 
-    void EncodeNext(const NUdf::TUnboxedValuePod row, bool shuffled) final {
-        // YSON encoder stores rows as maps, so order is not important
-        Y_UNUSED(shuffled);
-
+    void EncodeNext(const NUdf::TUnboxedValuePod row) final {
         Buf_.Write(BeginMapSymbol);
 
         for (size_t index = 0; index < Fields_.size(); ++index) {
@@ -1762,7 +1759,7 @@ public:
             Buf_.WriteVarI32(field.Name.size());
             Buf_.WriteMany(field.Name.data(), field.Name.size());
             Buf_.Write(KeyValueSeparatorSymbol);
-
+            
             bool isOptionalFieldTypeV3 = field.Optional && (NativeYtTypeFlags_ & ENativeTypeCompatFlags::NTCF_COMPLEX);
             bool wrapOptionalTypeV3 = isOptionalFieldTypeV3 && field.Type->GetKind() == TTypeBase::EKind::Optional;
             if (wrapOptionalTypeV3) {
@@ -1783,10 +1780,7 @@ public:
         Buf_.OnRecordBoundary();
     }
 
-    void EncodeNext(const NUdf::TUnboxedValuePod* row, bool shuffled) final {
-        // YSON encoder stores rows as maps, so order is not important
-        Y_UNUSED(shuffled);
-
+    void EncodeNext(const NUdf::TUnboxedValuePod* row) final {
         Buf_.Write(BeginMapSymbol);
 
         for (size_t index = 0; index < Fields_.size(); ++index) {
@@ -1824,23 +1818,23 @@ public:
     {
     }
 
-    void EncodeNext(const NUdf::TUnboxedValuePod row, bool shuffled) final {
+    void EncodeNext(const NUdf::TUnboxedValuePod row) final {
         const ui16 tableIndexVal = 0; // Always should be zero
         Buf_.WriteMany((const char*)&tableIndexVal, sizeof(tableIndexVal));
-        EncodeData(row, shuffled);
+        EncodeData(row);
         Buf_.OnRecordBoundary();
     }
 
-    void EncodeNext(const NUdf::TUnboxedValuePod* row, bool shuffled) final {
+    void EncodeNext(const NUdf::TUnboxedValuePod* row) final {
         const ui16 tableIndexVal = 0; // Always should be zero
         Buf_.WriteMany((const char*)&tableIndexVal, sizeof(tableIndexVal));
-        EncodeData(row, shuffled);
+        EncodeData(row);
         Buf_.OnRecordBoundary();
     }
 
 protected:
-    virtual void EncodeData(const NUdf::TUnboxedValuePod row, bool shuffled) = 0;
-    virtual void EncodeData(const NUdf::TUnboxedValuePod* row, bool shuffled) = 0;
+    virtual void EncodeData(const NUdf::TUnboxedValuePod row) = 0;
+    virtual void EncodeData(const NUdf::TUnboxedValuePod* row) = 0;
 };
 
 class TSkiffEncoder: public TSkiffEncoderBase {
@@ -1848,25 +1842,15 @@ public:
     TSkiffEncoder(TOutputBuf& buf, const TMkqlIOSpecs& specs, size_t tableIndex, const TVector<TString>& columns)
         : TSkiffEncoderBase(buf, specs)
     {
-        const auto& output = Specs_.Outputs[tableIndex];
-        Fields_ = GetFields(output.RowType);
-        NativeYtTypeFlags_ = output.NativeYtTypeFlags;
-
-        // If columns list is provided, values in rows will appear in this order.
-        // Values should be written in the alphabetical order of the column names,
-        // so we create a permutation of the fields.
-        ColumnPermutation_ = NCommon::CreateAlphabeticPositions(output.RowType, columns);
+        Fields_ = GetFields(Specs_.Outputs[tableIndex].RowType, columns);
+        NativeYtTypeFlags_ = Specs_.Outputs[tableIndex].NativeYtTypeFlags;
     }
 
 protected:
-    void EncodeData(const NUdf::TUnboxedValuePod row, bool shuffled) final {
+    void EncodeData(const NUdf::TUnboxedValuePod row) final {
         for (size_t index = 0; index < Fields_.size(); ++index) {
             const TField& field = Fields_[index];
-            auto columnIndex = index;
-            if (shuffled) {
-                columnIndex = (*ColumnPermutation_)[index];
-            }
-            auto value = row.GetElement(columnIndex);
+            auto value = row.GetElement(index);
             if (field.Optional) {
                 if (!value) {
                     Buf_.Write('\0');
@@ -1879,14 +1863,10 @@ protected:
         }
     }
 
-    void EncodeData(const NUdf::TUnboxedValuePod* row, bool shuffled) final {
+    void EncodeData(const NUdf::TUnboxedValuePod* row) final {
         for (size_t index = 0; index < Fields_.size(); ++index) {
             const TField& field = Fields_[index];
-            auto columnIndex = index;
-            if (shuffled) {
-                columnIndex = (*ColumnPermutation_)[index];
-            }
-            auto value = row[columnIndex];
+            auto value = row[index];
             if (field.Optional) {
                 if (!value) {
                     Buf_.Write('\0');
@@ -1914,9 +1894,6 @@ protected:
 protected:
     TVector<TField> Fields_;
     ui64 NativeYtTypeFlags_;
-
-    // i-th element is the index of the i-th field in the row.
-    TMaybe<TVector<ui32>> ColumnPermutation_;
 };
 
 class TSkiffEmptySchemaEncoder: public TSkiffEncoderBase {
@@ -1927,15 +1904,13 @@ public:
     }
 
 protected:
-    void EncodeData(const NUdf::TUnboxedValuePod row, bool shuffled) final {
+    void EncodeData(const NUdf::TUnboxedValuePod row) final {
         Y_UNUSED(row);
-        Y_UNUSED(shuffled);
         Buf_.Write('\0'); // Empty optional "_yql_fake_column"
     }
 
-    void EncodeData(const NUdf::TUnboxedValuePod* row, bool shuffled) final {
+    void EncodeData(const NUdf::TUnboxedValuePod* row) final {
         Y_UNUSED(row);
-        Y_UNUSED(shuffled);
         Buf_.Write('\0'); // Empty optional "_yql_fake_column"
     }
 };
@@ -1945,38 +1920,23 @@ public:
     typedef void (*TRowWriter)(const NUdf::TUnboxedValuePod, TOutputBuf&);
     typedef void (*TRowFlatWriter)(const NUdf::TUnboxedValuePod*, TOutputBuf&);
 
-    TSkiffLLVMEncoder(TOutputBuf& buf, const TMkqlIOSpecs& specs, TRowWriter alphabeticRowWriter, TRowFlatWriter alphabeticFlatRowWriter,
-        TRowWriter shuffledRowWriter, TRowFlatWriter shuffledFlatRowWriter)
+    TSkiffLLVMEncoder(TOutputBuf& buf, const TMkqlIOSpecs& specs, TRowWriter rowWriter, TRowFlatWriter flatWriter)
         : TSkiffEncoderBase(buf, specs)
-        , AlphabeticRowWriter_(alphabeticRowWriter)
-        , AlphabeticFlatRowWriter_(alphabeticFlatRowWriter)
-        , ShuffledRowWriter_(shuffledRowWriter)
-        , ShuffledFlatRowWriter_(shuffledFlatRowWriter)
+        , RowWriter_(rowWriter), RowFlatWriter_(flatWriter)
     {
     }
 
 protected:
-    void EncodeData(const NUdf::TUnboxedValuePod row, bool shuffled) final {
-        if (shuffled) {
-            ShuffledRowWriter_(row, Buf_);
-        } else {
-            AlphabeticRowWriter_(row, Buf_);
-        }
+    void EncodeData(const NUdf::TUnboxedValuePod row) final {
+        RowWriter_(row, Buf_);
     }
 
-    void EncodeData(const NUdf::TUnboxedValuePod* row, bool shuffled) final {
-        if (shuffled) {
-            ShuffledFlatRowWriter_(row, Buf_);
-        } else {
-            AlphabeticFlatRowWriter_(row, Buf_);
-        }
+    void EncodeData(const NUdf::TUnboxedValuePod* row) final {
+        RowFlatWriter_(row, Buf_);
     }
-
 private:
-    TRowWriter AlphabeticRowWriter_;
-    TRowFlatWriter AlphabeticFlatRowWriter_;
-    TRowWriter ShuffledRowWriter_;
-    TRowFlatWriter ShuffledFlatRowWriter_;
+    TRowWriter RowWriter_;
+    TRowFlatWriter RowFlatWriter_;
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2037,13 +1997,7 @@ void TMkqlWriterImpl::SetSpecs(const TMkqlIOSpecs& specs, const TVector<TString>
     JobStats_ = specs.JobStats_;
 
 #ifndef MKQL_DISABLE_CODEGEN
-    struct TWriterFunctions {
-        llvm::Function* AlphabeticRowWriter;
-        llvm::Function* AlphabeticFlatRowWriter;
-        llvm::Function* ShuffledRowWriter;
-        llvm::Function* ShuffledFlatRowWriter;
-    };
-    THashMap<TStructType*, TWriterFunctions> llvmFunctions;
+    THashMap<TStructType*, std::pair<llvm::Function*, llvm::Function*>> llvmFunctions;
     if (Specs_->UseSkiff_ && Specs_->OptLLVM_ != "OFF" && NCodegen::ICodegen::IsCodegenAvailable()) {
         for (size_t i: xrange(Specs_->Outputs.size())) {
             auto rowType = Specs_->Outputs[i].RowType;
@@ -2053,36 +2007,21 @@ void TMkqlWriterImpl::SetSpecs(const TMkqlIOSpecs& specs, const TVector<TString>
                     Codegen_->LoadBitCode(GetYtCodecBitCode(), "YtCodecFuncs");
                 }
 
-                const auto alphabeticCookie = rowType;
-                const auto alphabeticRowWriter = MakeYtCodecCgWriter<false>(Codegen_, alphabeticCookie);
-                const auto alphabeticFlatRowWriter = MakeYtCodecCgWriter<true>(Codegen_, alphabeticCookie);
+                const auto writer1 = MakeYtCodecCgWriter<false>(Codegen_, rowType);
+                const auto writer2 = MakeYtCodecCgWriter<true>(Codegen_, rowType);
 
-                // This is not a real pointer. It is used to distinguish alphabetic and shuffled function by names.
-                const auto shuffledCookie = reinterpret_cast<const void*>(reinterpret_cast<uintptr_t>(rowType) ^ 1);
-                const auto shuffledRowWriter = MakeYtCodecCgWriter<false>(Codegen_, shuffledCookie);
-                const auto shuffledFlatRowWriter = MakeYtCodecCgWriter<true>(Codegen_, shuffledCookie);
-
-                // If columns list is provided, values in rows will appear in this order.
-                // Values should be written in the alphabetical order of the column names,
-                // so we create a permutation of the fields.
-                auto columnPermutation = NCommon::CreateAlphabeticPositions(rowType, columns);
                 for (ui32 index = 0; index < rowType->GetMembersCount(); ++index) {
-                    auto fieldType = rowType->GetMemberType(index);
-                    alphabeticRowWriter->AddField(fieldType, Specs_->Outputs[i].NativeYtTypeFlags, index);
-                    alphabeticFlatRowWriter->AddField(fieldType, Specs_->Outputs[i].NativeYtTypeFlags, index);
+                    ui32 column = index;
+                    if (columns) {
+                        column = rowType->GetMemberIndex(columns[index]);
+                    }
 
-                    auto columnIndex = columnPermutation.Defined() ? (*columnPermutation)[index] : index;
-                    shuffledRowWriter->AddField(fieldType, Specs_->Outputs[i].NativeYtTypeFlags, columnIndex);
-                    shuffledFlatRowWriter->AddField(fieldType, Specs_->Outputs[i].NativeYtTypeFlags, columnIndex);
+                    auto fieldType = rowType->GetMemberType(column);
+                    writer1->AddField(fieldType, Specs_->Outputs[i].NativeYtTypeFlags);
+                    writer2->AddField(fieldType, Specs_->Outputs[i].NativeYtTypeFlags);
                 }
 
-                TWriterFunctions writerFunctions {
-                    .AlphabeticRowWriter = alphabeticRowWriter->Build(),
-                    .AlphabeticFlatRowWriter = alphabeticFlatRowWriter->Build(),
-                    .ShuffledRowWriter = shuffledRowWriter->Build(),
-                    .ShuffledFlatRowWriter = shuffledFlatRowWriter->Build(),
-                };
-                llvmFunctions.emplace(rowType, writerFunctions);
+                llvmFunctions.emplace(rowType, std::make_pair(writer1->Build(), writer2->Build()));
             }
         }
         if (!llvmFunctions.empty()) {
@@ -2105,12 +2044,10 @@ void TMkqlWriterImpl::SetSpecs(const TMkqlIOSpecs& specs, const TVector<TString>
                 Encoders_.emplace_back(new TSkiffEmptySchemaEncoder(out->Buf_, *Specs_));
             }
 #ifndef MKQL_DISABLE_CODEGEN
-            else if (auto f = llvmFunctions.FindPtr(Specs_->Outputs[i].RowType)) {
+            else if (auto p = llvmFunctions.FindPtr(Specs_->Outputs[i].RowType)) {
                 Encoders_.emplace_back(new TSkiffLLVMEncoder(out->Buf_, *Specs_,
-                    (TSkiffLLVMEncoder::TRowWriter)Codegen_->GetPointerToFunction(f->AlphabeticRowWriter),
-                    (TSkiffLLVMEncoder::TRowFlatWriter)Codegen_->GetPointerToFunction(f->AlphabeticFlatRowWriter),
-                    (TSkiffLLVMEncoder::TRowWriter)Codegen_->GetPointerToFunction(f->ShuffledRowWriter),
-                    (TSkiffLLVMEncoder::TRowFlatWriter)Codegen_->GetPointerToFunction(f->ShuffledFlatRowWriter)
+                    (TSkiffLLVMEncoder::TRowWriter)Codegen_->GetPointerToFunction(p->first),
+                    (TSkiffLLVMEncoder::TRowFlatWriter)Codegen_->GetPointerToFunction(p->second)
                 ));
             }
 #endif
@@ -2124,16 +2061,16 @@ void TMkqlWriterImpl::SetSpecs(const TMkqlIOSpecs& specs, const TVector<TString>
     }
 }
 
-void TMkqlWriterImpl::AddRow(const NUdf::TUnboxedValuePod row, bool shuffled) {
+void TMkqlWriterImpl::AddRow(const NUdf::TUnboxedValuePod row) {
     const auto guard = Guard<TStatTimer>(TimerEncode_);
     if (Encoders_.size() == 1U) {
-        Encoders_.front()->EncodeNext(row, shuffled);
+        Encoders_.front()->EncodeNext(row);
     } else {
         const auto tableIndex = row.GetVariantIndex();
         YQL_ENSURE(tableIndex < Encoders_.size(), "Wrong table index: " << tableIndex
             << ", there are only " << Encoders_.size() << " outputs");
         const auto item = row.GetVariantItem().Release();
-        Encoders_[tableIndex]->EncodeNext(item, shuffled);
+        Encoders_[tableIndex]->EncodeNext(item);
     }
 
     if (WriteLimit) {
@@ -2147,10 +2084,10 @@ void TMkqlWriterImpl::AddRow(const NUdf::TUnboxedValuePod row, bool shuffled) {
     }
 }
 
-void TMkqlWriterImpl::AddFlatRow(const NUdf::TUnboxedValuePod* row, bool shuffled) {
+void TMkqlWriterImpl::AddFlatRow(const NUdf::TUnboxedValuePod* row) {
     YQL_ENSURE(Encoders_.size() == 1U, "Expected single table.");
     const auto guard = Guard<TStatTimer>(TimerEncode_);
-    Encoders_.front()->EncodeNext(row, shuffled);
+    Encoders_.front()->EncodeNext(row);
     if (WriteLimit) {
         ui64 res = 0;
         for (auto& x : Outputs_) {

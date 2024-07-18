@@ -116,7 +116,7 @@ TSkiffExecuteResOrPull::TSkiffExecuteResOrPull(TMaybe<ui64> rowLimit, TMaybe<ui6
     Specs.Init(codecCtx, attrs);
     YQL_ENSURE(Specs.Outputs.size() == 1);
 
-    SkiffWriter.SetSpecs(Specs, columns);
+    SkiffWriter.SetSpecs(Specs);
 
     AlphabeticPermutation = NCommon::CreateAlphabeticPositions(Specs.Outputs[0].RowType, columns);
 }
@@ -163,7 +163,7 @@ bool TSkiffExecuteResOrPull::WriteNext(const NYT::TNode& item) {
     }
 
     // Call above produces rows in alphabetic order.
-    SkiffWriter.AddRow(*value, /*shuffled*/ false);
+    SkiffWriter.AddRow(*value);
 
     return IsList;
 }
@@ -178,10 +178,10 @@ void TSkiffExecuteResOrPull::WriteValue(const NUdf::TUnboxedValue& value, TType*
                 break;
             }
 
-            SkiffWriter.AddRow(item, /*shuffled*/ false);
+            SkiffWriter.AddRow(item);
         }
     } else {
-        SkiffWriter.AddRow(value, /*shuffled*/ false);
+        SkiffWriter.AddRow(value);
     }
 }
 
@@ -201,7 +201,7 @@ bool TSkiffExecuteResOrPull::WriteNext(TMkqlIOCache& specsCache, const NYT::TNod
     if (!value) {
         throw yexception() << "Could not parse yson node with error: " << err.Str();
     }
-    SkiffWriter.AddRow(*value, /*shuffled*/ false);
+    SkiffWriter.AddRow(*value);
 
     ++Row;
     return true;
@@ -215,7 +215,7 @@ bool TSkiffExecuteResOrPull::WriteNext(TMkqlIOCache& specsCache, const NYT::TYaM
 
     NUdf::TUnboxedValue node;
     node = DecodeYamr(specsCache, tableIndex, rec);
-    SkiffWriter.AddRow(node, /*shuffled*/ false);
+    SkiffWriter.AddRow(node);
 
     ++Row;
     return true;
@@ -230,7 +230,14 @@ bool TSkiffExecuteResOrPull::WriteNext(TMkqlIOCache& specsCache, const NUdf::TUn
         return false;
     }
 
-    SkiffWriter.AddRow(rec, /*shuffled*/ true);
+    YQL_ENSURE(rec.GetListLength() == AlphabeticPermutation->size());
+    TUnboxedValueVector alphabeticValues(rec.GetListLength());
+    for (size_t index = 0; index < rec.GetListLength(); ++index) {
+        alphabeticValues[index] = std::move(rec.GetElement((*AlphabeticPermutation)[index]));
+    }
+
+    NUdf::TUnboxedValue alphabeticRecord = HolderFactory.RangeAsArray(alphabeticValues.begin(), alphabeticValues.end());
+    SkiffWriter.AddRow(alphabeticRecord);
 
     ++Row;
     return true;

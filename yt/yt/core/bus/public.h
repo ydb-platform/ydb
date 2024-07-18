@@ -33,7 +33,7 @@ DEFINE_ENUM(EMultiplexingBand,
     ((Control)               (1))
     ((Heavy)                 (2))
     ((Interactive)           (3))
-    ((Journal)               (4))
+    ((RealTime)              (4))
 );
 
 YT_DEFINE_ERROR_ENUM(

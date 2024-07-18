@@ -382,6 +382,12 @@ public:
 
     std::shared_ptr<IWriteSessionConnectionProcessorFactory> CreateWriteSessionConnectionProcessorFactory();
 
+    using IDirectReadSessionConnectionProcessorFactory =
+        ISessionConnectionProcessorFactory<Ydb::Topic::StreamDirectReadMessage::FromClient,
+                                           Ydb::Topic::StreamDirectReadMessage::FromServer>;
+
+    std::shared_ptr<IDirectReadSessionConnectionProcessorFactory> CreateDirectReadSessionConnectionProcessorFactory();
+
     NYdbGrpc::IQueueClientContextPtr CreateContext() {
         return Connections_->CreateContext();
     }

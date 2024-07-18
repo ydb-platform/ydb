@@ -513,7 +513,6 @@ public:
     std::shared_ptr<TCallbackContext<TSingleClusterReadSessionImpl>> CbContext;
     std::shared_ptr<TThreadPool> ThreadPool;
     ::IExecutor::TPtr DefaultExecutor;
-    std::shared_ptr<std::unordered_map<ECodec, THolder<NTopic::ICodec>>> ProvidedCodecs = std::make_shared<std::unordered_map<ECodec, THolder<NTopic::ICodec>>>();
 };
 
 class TReorderingExecutor : public ::IExecutor {
@@ -588,10 +587,6 @@ TReadSessionImplTestSetup::TReadSessionImplTestSetup() {
         .Counters(MakeIntrusive<NYdb::NPersQueue::TReaderCounters>(MakeIntrusive<::NMonitoring::TDynamicCounters>()));
 
     Log.SetFormatter(GetPrefixLogFormatter(""));
-
-    (*ProvidedCodecs)[ECodec::GZIP] = MakeHolder<NTopic::TGzipCodec>();
-    (*ProvidedCodecs)[ECodec::LZOP] = MakeHolder<NTopic::TUnsupportedCodec>();
-    (*ProvidedCodecs)[ECodec::ZSTD] = MakeHolder<NTopic::TZstdCodec>();
 }
 
 TReadSessionImplTestSetup::~TReadSessionImplTestSetup() noexcept(false) {
@@ -632,6 +627,7 @@ TSingleClusterReadSessionImpl* TReadSessionImplTestSetup::GetSession() {
             "sessionid",
             ClusterName,
             Log,
+            TSingleClusterReadSessionImpl::TScheduleCallbackFunc{},
             MockProcessorFactory,
             GetEventsQueue(),
             FakeContext,

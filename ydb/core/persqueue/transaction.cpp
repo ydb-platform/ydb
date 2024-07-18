@@ -1,12 +1,14 @@
 #include "transaction.h"
 #include "utils.h"
 #include "partition_log.h"
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
 TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& tx) :
     TDistributedTransaction()
 {
+    DBGTRACE(" TDistributedTransaction::TDistributedTransaction");
     Kind = tx.GetKind();
     if (tx.HasStep()) {
         Step = tx.GetStep();
@@ -33,6 +35,8 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
     for (ui64 tabletId : tx.GetPredicateRecipients()) {
         PredicateRecipients[tabletId] = false;
     }
+    DBGTRACE_LOG("PredicatesReceived.size=" << PredicatesReceived.size() <<
+                 ", PredicateRecipients.size=" << PredicateRecipients.size());
 
     if (tx.HasPredicate()) {
         SelfDecision =
@@ -162,6 +166,8 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TDataTransac
 void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TConfigTransaction& txBody,
                                                    ui64 extractTabletId)
 {
+    DBGTRACE("TDistributedTransaction::OnProposeTransaction(NKikimrPQ::TConfigTransaction)");
+    DBGTRACE_LOG("extractTabletId=" << extractTabletId);
     Kind = NKikimrPQ::TTransaction::KIND_CONFIG;
 
     TabletConfig = txBody.GetTabletConfig();
@@ -194,6 +200,8 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TConfigTrans
             }
         }
     }
+    DBGTRACE_LOG("PredicatesReceived.size=" << PredicatesReceived.size() <<
+                 ", PredicateRecipients.size=" << PredicateRecipients.size());
 
     InitPartitions();
 }

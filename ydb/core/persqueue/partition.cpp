@@ -914,6 +914,7 @@ void TPartition::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
 
 void TPartition::Handle(TEvPQ::TEvProposePartitionConfig::TPtr& ev, const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::Handle(TEvPQ::TEvProposePartitionConfig)");
     PQ_LOG_D("Handle TEvPQ::TEvProposePartitionConfig" <<
              " Step " << ev->Get()->Step <<
              ", TxId " << ev->Get()->TxId);
@@ -945,6 +946,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContex
 
 void TPartition::HandleOnInit(TEvPQ::TEvProposePartitionConfig::TPtr& ev, const TActorContext&)
 {
+    DBGTRACE("TPartition::HandleOnInit(TEvPQ::TEvProposePartitionConfig)");
     PQ_LOG_D("HandleOnInit TEvPQ::TEvProposePartitionConfig" <<
              " Step " << ev->Get()->Step <<
              ", TxId " << ev->Get()->TxId);

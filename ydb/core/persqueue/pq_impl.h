@@ -504,7 +504,8 @@ private:
                                const TWriteId& writeId) const;
     bool CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBody) const;
 
-    void SendEvTxCalcPredicatesToPartition(const TPartitionId& partitionId, const TActorContext& ctx);
+    void UpdateTopTxState(const TActorContext& ctx);
+    void MoveTopTxToCalculating(TDistributedTransaction& tx, const TActorContext& ctx);
 };
 
 

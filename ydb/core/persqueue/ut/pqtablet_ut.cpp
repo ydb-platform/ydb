@@ -22,6 +22,7 @@
 
 #include "make_config.h"
 #include "pqtablet_mock.h"
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -206,7 +207,9 @@ protected:
     void StartPQWriteTxsObserver();
     void WaitForPQWriteTxs();
 
+    template <class T> void WaitForEvent();
     void WaitForCalcPredicateResult();
+    void WaitForProposePartitionConfigResult();
 
     void TestWaitingForTEvReadSet(size_t senders, size_t receivers);
 
@@ -226,9 +229,6 @@ protected:
 
     std::unique_ptr<TEvPersQueue::TEvRequest> MakeGetOwnershipRequest(const TGetOwnershipRequestParams& params,
                                                                       const TActorId& pipe) const;
-
-    void TestEvTxCommitAfterRestart(ui64 mockTabletId,
-                                    TProposeTransactionParams&& params);
 
     //
     // TODO(abcdef): для тестирования повторных вызовов нужны примитивы Send+Wait
@@ -524,13 +524,14 @@ void TPQTabletFixture::WaitDropTabletReply(const TDropTabletReplyMatcher& matche
     }
 }
 
-void TPQTabletFixture::WaitForCalcPredicateResult()
+template <class T>
+void TPQTabletFixture::WaitForEvent()
 {
     bool found = false;
 
     TTestActorRuntimeBase::TEventObserver prev;
     auto observer = [&found, &prev](TAutoPtr<IEventHandle>& event) {
-        if (auto* msg = event->CastAsLocal<TEvPQ::TEvTxCalcPredicateResult>()) {
+        if (auto* msg = event->CastAsLocal<T>()) {
             found = true;
         }
 
@@ -547,6 +548,17 @@ void TPQTabletFixture::WaitForCalcPredicateResult()
     UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
 
     Ctx->Runtime->SetObserverFunc(prev);
+}
+
+void TPQTabletFixture::WaitForCalcPredicateResult()
+{
+    DBGTRACE("TPQTabletFixture::WaitForCalcPredicateResult");
+    WaitForEvent<TEvPQ::TEvTxCalcPredicateResult>();
+}
+
+void TPQTabletFixture::WaitForProposePartitionConfigResult()
+{
+    WaitForEvent<TEvPQ::TEvProposePartitionConfigResult>();
 }
 
 std::unique_ptr<TEvPersQueue::TEvRequest> TPQTabletFixture::MakeGetOwnershipRequest(const TGetOwnershipRequestParams& params,
@@ -703,9 +715,14 @@ void TPQTabletFixture::WaitWriteResponse(const TWriteResponseMatcher& matcher)
 
 void TPQTabletFixture::StartPQWriteObserver(bool& flag, unsigned cookie)
 {
+    DBGTRACE("TPQTabletFixture::StartPQWriteObserver");
     flag = false;
+
     auto observer = [&flag, cookie](TAutoPtr<IEventHandle>& event) {
         if (auto* kvResponse = event->CastAsLocal<TEvKeyValue::TEvResponse>()) {
+            if (kvResponse->Record.HasCookie()) {
+                DBGTRACE_LOG("cookie=" << kvResponse->Record.GetCookie());
+            }
             if ((event->Sender == event->Recipient) &&
                 kvResponse->Record.HasCookie() &&
                 (kvResponse->Record.GetCookie() == cookie)) {
@@ -715,6 +732,7 @@ void TPQTabletFixture::StartPQWriteObserver(bool& flag, unsigned cookie)
 
         return TTestActorRuntimeBase::EEventAction::PROCESS;
     };
+
     Ctx->Runtime->SetObserverFunc(observer);
 }
 
@@ -747,11 +765,13 @@ void TPQTabletFixture::SendCancelTransactionProposal(const TCancelTransactionPro
 
 void TPQTabletFixture::StartPQWriteTxsObserver()
 {
+    DBGTRACE("TPQTabletFixture::StartPQWriteTxsObserver");
     StartPQWriteObserver(FoundPQWriteTxs, 5); // TPersQueue::WRITE_TX_COOKIE
 }
 
 void TPQTabletFixture::WaitForPQWriteTxs()
 {
+    DBGTRACE("TPQTabletFixture::WaitForPQWriteTxs");
     WaitForPQWriteComplete(FoundPQWriteTxs);
 }
 
@@ -1336,25 +1356,32 @@ Y_UNIT_TEST_F(ProposeTx_Command_After_Propose, TPQTabletFixture)
                      .Status=NMsgBusProxy::MSTATUS_ERROR});
 }
 
-void TPQTabletFixture::TestEvTxCommitAfterRestart(ui64 mockTabletId,
-                                                  TProposeTransactionParams&& params)
+Y_UNIT_TEST_F(Read_TEvTxCommit_After_Restart, TPQTabletFixture)
 {
+    DBGTRACE("Read_TEvTxCommit_After_Restart");
+    const ui64 txId = 67890;
+    const ui64 mockTabletId = 22222;
+
     NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
     PQTabletPrepare({.partitions=1}, {}, *Ctx);
 
-    const ui64 txId = 67890;
-
-    params.TxId = txId;
-
-    SendProposeTransactionRequest(params);
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
 
     SendPlanStep({.Step=100, .TxIds={txId}});
+    WaitPlanStepAck({.Step=100, .TxIds={txId}});
+    WaitPlanStepAccepted({.Step=100});
 
+    DBGTRACE_LOG("pre StartPQWriteTxsObserver");
     StartPQWriteTxsObserver();
     WaitForCalcPredicateResult();
     WaitForPQWriteTxs();
+    DBGTRACE_LOG("post WaitForPQWriteTxs");
 
     PQTabletRestart(*Ctx);
 
@@ -1367,14 +1394,26 @@ void TPQTabletFixture::TestEvTxCommitAfterRestart(ui64 mockTabletId,
     WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=mockTabletId, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
 }
 
-Y_UNIT_TEST_F(Read_TEvTxCommit_After_Restart, TPQTabletFixture)
-{
-    TestEvTxCommitAfterRestart(22222,
-                               {.Senders={22222}, .Receivers={22222},
-                               .TxOps={
-                               {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
-                               }});
-}
+//Y_UNIT_TEST_F(Config_TEvTxCommit_After_Restart, TPQTabletFixture)
+//{
+//    auto tabletConfig = NHelpers::MakeConfig({.Version=2,
+//                                             .Consumers={
+//                                             {.Consumer="client-1", .Generation=0},
+//                                             {.Consumer="client-3", .Generation=7}
+//                                             },
+//                                             .Partitions={
+//                                             {.Id=0}
+//                                             },
+//                                             .AllPartitions={
+//                                             {.Id=0, .TabletId=Ctx->TabletId, .Children={},  .Parents={1}},
+//                                             {.Id=1, .TabletId=22222,         .Children={0}, .Parents={}}
+//                                             }});
+//    TestEvTxCommitAfterRestart(22222,
+//                               {.Configs=NHelpers::TConfigParams{
+//                               .Tablet=tabletConfig,
+//                               .Bootstrap=NHelpers::MakeBootstrapConfig(),
+//                               }});
+//}
 
 }
 

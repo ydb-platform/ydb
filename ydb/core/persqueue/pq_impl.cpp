@@ -909,37 +909,55 @@ void TPersQueue::CreateOriginalPartition(const NKikimrPQ::TPQTabletConfig& confi
                                              GetPartitionKeyRange(config, partition),
                                              *Counters));
     ++OriginalPartitionsCount;
-
-    if (!InitCompleted) {
-        SendEvTxCalcPredicatesToPartition(partitionId, ctx);
-    }
 }
 
-void TPersQueue::SendEvTxCalcPredicatesToPartition(const TPartitionId& partitionId, const TActorContext& ctx)
+void TPersQueue::MoveTopTxToCalculating(TDistributedTransaction& tx,
+                                        const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::SendEvTxCalcPredicatesToPartition");
+    std::tie(ExecStep, ExecTxId) = TxQueue.front();
+    PQ_LOG_D("New ExecStep " << ExecStep << ", ExecTxId " << ExecTxId);
 
-    Y_ABORT_UNLESS(Partitions.contains(partitionId));
-    auto& partition = Partitions.at(partitionId);
-
-    for (auto& [txId, tx] : Txs) {
-        DBGTRACE_LOG(txId <<
-                     " " << NKikimrPQ::TTransaction_EState_Name(tx.State) <<
-                     " " << (tx.Partitions.contains(partitionId.OriginalPartitionId) ? '+' : '-'));
-        if (!tx.Partitions.contains(partitionId.OriginalPartitionId)) {
-            continue;
-        }
-        if (tx.State <= NKikimrPQ::TTransaction::PLANNED) {
-            continue;
-        }
-
-        tx.State = NKikimrPQ::TTransaction::CALCULATING;
-
-        auto event = std::make_unique<TEvPQ::TEvTxCalcPredicate>(tx.Step, tx.TxId);
-        ctx.Send(partition.Actor, event.release());
-
-        ++tx.PartitionRepliesExpected;
+    switch (tx.Kind) {
+    case NKikimrPQ::TTransaction::KIND_DATA:
+        SendEvTxCalcPredicateToPartitions(ctx, tx);
+        break;
+    case NKikimrPQ::TTransaction::KIND_CONFIG: {
+        NPersQueue::TConverterFactoryPtr converterFactory;
+        CreateTopicConverter(tx.TabletConfig,
+                             converterFactory,
+                             tx.TopicConverter,
+                             ctx);
+        CreateNewPartitions(tx.TabletConfig,
+                            tx.TopicConverter,
+                            ctx);
+        SendEvProposePartitionConfig(ctx, tx);
+        break;
     }
+    case NKikimrPQ::TTransaction::KIND_UNKNOWN:
+        Y_ABORT_UNLESS(false);
+    }
+
+    tx.State = NKikimrPQ::TTransaction::CALCULATING;
+    PQ_LOG_D("TxId " << tx.TxId <<
+             ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
+}
+
+void TPersQueue::UpdateTopTxState(const TActorContext& ctx)
+{
+    Y_ABORT_UNLESS(!InitCompleted);
+
+    if (TxQueue.empty()) {
+        return;
+    }
+
+    Y_ABORT_UNLESS(Txs.contains(TxQueue.front().second));
+    auto& tx = Txs.at(TxQueue.front().second);
+
+    if (tx.State <= NKikimrPQ::TTransaction::PLANNED) {
+        return;
+    }
+
+    MoveTopTxToCalculating(tx, ctx);
 }
 
 void TPersQueue::AddSupportivePartition(const TPartitionId& partitionId)
@@ -1081,6 +1099,8 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
                                 false,
                                 ctx);
     }
+
+    UpdateTopTxState(ctx);
 
     ConfigInited = true;
 
@@ -3172,6 +3192,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, co
 
 void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction)");
     PQ_LOG_D("Handle TEvPersQueue::TEvProposeTransaction " << ev->Get()->Record.ShortDebugString());
 
     NKikimrPQ::TEvProposeTransaction& event = ev->Get()->Record;
@@ -3325,6 +3346,7 @@ void TPersQueue::HandleConfigTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransa
 
 void TPersQueue::Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::Handle(TEvTxProcessing::TEvPlanStep)");
     PQ_LOG_D("Handle TEvTxProcessing::TEvPlanStep " << ev->Get()->Record.ShortDebugString());
 
     EvPlanStepQueue.emplace_back(ev->Sender, ev->Release().Release());
@@ -3385,6 +3407,7 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorCo
 
 void TPersQueue::Handle(TEvPQ::TEvTxCalcPredicateResult::TPtr& ev, const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::Handle(TEvPQ::TEvTxCalcPredicateResult)");
     const TEvPQ::TEvTxCalcPredicateResult& event = *ev->Get();
 
     PQ_LOG_D("Handle TEvPQ::TEvTxCalcPredicateResult" <<
@@ -3409,6 +3432,7 @@ void TPersQueue::Handle(TEvPQ::TEvTxCalcPredicateResult::TPtr& ev, const TActorC
 
 void TPersQueue::Handle(TEvPQ::TEvProposePartitionConfigResult::TPtr& ev, const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::Handle(TEvPQ::TEvProposePartitionConfigResult)");
     const TEvPQ::TEvProposePartitionConfigResult& event = *ev->Get();
 
     PQ_LOG_D("Handle TEvPQ::TEvProposePartitionConfigResult" <<
@@ -3506,6 +3530,7 @@ void TPersQueue::CreateSupportivePartitionActors(const TActorContext& ctx)
 
 void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::BeginWriteTxs");
     Y_ABORT_UNLESS(!WriteTxsInProgress);
 
     bool canProcess =
@@ -3535,6 +3560,7 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
     PendingSupportivePartitions = std::move(NewSupportivePartitions);
     NewSupportivePartitions.clear();
 
+    DBGTRACE_LOG("send TEvKeyValue::TEvRequest(WRITE_TX_COOKIE)");
     PQ_LOG_D("Send TEvKeyValue::TEvRequest (WRITE_TX_COOKIE)");
     ctx.Send(ctx.SelfID, request.Release());
 
@@ -3544,6 +3570,7 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
 void TPersQueue::EndWriteTxs(const NKikimrClient::TResponse& resp,
                              const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::EndWriteTxs");
     Y_ABORT_UNLESS(WriteTxsInProgress);
 
     bool ok = (resp.GetStatus() == NMsgBusProxy::MSTATUS_OK);
@@ -3625,6 +3652,7 @@ void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx)
 
 void TPersQueue::ProcessPlanStepQueue(const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::ProcessPlanStepQueue");
     Y_ABORT_UNLESS(!WriteTxsInProgress);
 
     while (CanProcessPlanStepQueue()) {
@@ -3808,6 +3836,7 @@ void TPersQueue::ScheduleProposeTransactionResult(const TDistributedTransaction&
 void TPersQueue::SchedulePlanStepAck(ui64 step,
                                      const THashMap<TActorId, TVector<ui64>>& txAcks)
 {
+    DBGTRACE("TPersQueue::SchedulePlanStepAck");
     for (auto& [actorId, txIds] : txAcks) {
         auto event = std::make_unique<TEvTxProcessing::TEvPlanStepAck>(TabletID(),
                                                                        step,
@@ -3820,6 +3849,7 @@ void TPersQueue::SchedulePlanStepAck(ui64 step,
 void TPersQueue::SchedulePlanStepAccepted(const TActorId& actorId,
                                           ui64 step)
 {
+    DBGTRACE("TPersQueue::SchedulePlanStepAccepted");
     auto event = std::make_unique<TEvTxProcessing::TEvPlanStepAccepted>(TabletID(), step);
 
     RepliesToActor.emplace_back(actorId, std::move(event));
@@ -4105,32 +4135,7 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         PQ_LOG_D("TxQueue.size " << TxQueue.size());
 
         if (!TxQueue.empty() && (TxQueue.front().second == tx.TxId)) {
-            std::tie(ExecStep, ExecTxId) = TxQueue.front();
-            PQ_LOG_D("New ExecStep " << ExecStep << ", ExecTxId " << ExecTxId);
-
-            switch (tx.Kind) {
-            case NKikimrPQ::TTransaction::KIND_DATA:
-                SendEvTxCalcPredicateToPartitions(ctx, tx);
-                break;
-            case NKikimrPQ::TTransaction::KIND_CONFIG: {
-                NPersQueue::TConverterFactoryPtr converterFactory;
-                CreateTopicConverter(tx.TabletConfig,
-                                     converterFactory,
-                                     tx.TopicConverter,
-                                     ctx);
-                CreateNewPartitions(tx.TabletConfig,
-                                    tx.TopicConverter,
-                                    ctx);
-                SendEvProposePartitionConfig(ctx, tx);
-                break;
-            }
-            case NKikimrPQ::TTransaction::KIND_UNKNOWN:
-                Y_ABORT_UNLESS(false);
-            }
-
-            tx.State = NKikimrPQ::TTransaction::CALCULATING;
-            PQ_LOG_D("TxId " << tx.TxId <<
-                     ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
+            MoveTopTxToCalculating(tx, ctx);
         }
 
         break;

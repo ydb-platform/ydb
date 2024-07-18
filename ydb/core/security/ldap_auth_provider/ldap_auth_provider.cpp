@@ -147,6 +147,10 @@ private:
         }
         std::vector<TString> allUserGroups;
         if (!directUserGroups.empty()) {
+            // Active Directory has special matching rule to fetch nested groups in one request it is MatchingRuleInChain
+            // We don`t know what is ldap server. Is it Active Directory or OpenLdap or other server?
+            // If using MatchingRuleInChain return empty list of groups it means that ldap server isn`t Active Directory
+            // but it is known that there are groups and we are trying to do tree traversal
             allUserGroups = TryToGetGroupsUseMatchingRuleInChain(ld, entry);
             if (allUserGroups.empty()) {
                 allUserGroups = std::move(directUserGroups);

@@ -75,11 +75,11 @@ static TStatus CreateColumnTable(TSession session, const TString& path,
 }    
 ```
 
-Подробное использование метода `ExecuteDataQuery` описано в разделе [Запись данных](#write-queries) на примере выполнения YQL-команды `SELECT`. 
+Подробное использование метода `ExecuteDataQuery` описано в разделе [Запись данных](#write-queries).
 
-### Получение структуры строковой таблицы (DescribeTable) {#get-tables-structure}
+### Получение структуры таблиц (DescribeTable) {#get-tables-structure}
 
-С помощью метода `DescribeTable` можно вывести информацию о структуре строковой таблицы и убедиться, что она успешно создалась:
+С помощью метода `DescribeTable` можно вывести информацию о структуре таблицы и убедиться, что она была успешно создана:
 
 ```c++
     TMaybe<TTableDescription> desc;

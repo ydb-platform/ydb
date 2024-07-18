@@ -8,6 +8,7 @@
 namespace NKikimrLdap {
 
 extern char* noAttributes[];
+extern const TString LDAPS_SCHEME;
 
 enum class EScope : int {
     BASE,
@@ -25,7 +26,7 @@ enum class EOption {
 
 int Bind(LDAP* ld, const TString& dn, const TString& password);
 int Unbind(LDAP* ld);
-LDAP* Init(const TString& host, ui32 port);
+int Init(LDAP** ld, const TString& scheme, const TString& uris, ui32 port);
 int Search(LDAP* ld,
            const TString& base,
            const EScope& scope,
@@ -44,7 +45,7 @@ int CountEntries(LDAP *ld, LDAPMessage *chain);
 std::vector<TString> GetAllValuesOfAttribute(LDAP* ld, LDAPMessage* entry, char* target);
 int SetProtocolVersion(LDAP* ld);
 int SetOption(LDAP* ld, const EOption& option, const void* value);
-ui32 GetPort();
+ui32 GetPort(const TString& scheme);
 int GetScope(const EScope& scope);
 bool IsSuccess(int result);
 NKikimr::TEvLdapAuthProvider::EStatus ErrorToStatus(int err);

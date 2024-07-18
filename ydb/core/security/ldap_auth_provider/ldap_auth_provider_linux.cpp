@@ -1,11 +1,11 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/core/base/ticket_parser.h>
-#include "ticket_parser_log.h"
+#include <ydb/core/security/ticket_parser_log.h>
 #include "ldap_auth_provider.h"
 
-#include <winldap.h>
-#include <winber.h>
+#define LDAP_DEPRECATED 1
+#include <ldap.h>
 
 #include "ldap_compat.h"
 
@@ -15,23 +15,42 @@ namespace {
 
 char ldapNoAttribute[] = LDAP_NO_ATTRS;
 
+int ConvertOption(const EOption& option) {
+    switch(option) {
+        case EOption::DEBUG: {
+            return LDAP_OPT_DEBUG_LEVEL;
+        }
+        case EOption::TLS_CACERTDIR: {
+            return LDAP_OPT_X_TLS_CACERTDIR;
+        }
+        case EOption::TLS_CACERTFILE: {
+            return LDAP_OPT_X_TLS_CACERTFILE;
+        }
+        case EOption::TLS_REQUIRE_CERT: {
+            return LDAP_OPT_X_TLS_REQUIRE_CERT;
+        }
+        case EOption::PROTOCOL_VERSION: {
+            return LDAP_OPT_PROTOCOL_VERSION;
+        }
+    }
+}
+
 }
 
 char* noAttributes[] = {ldapNoAttribute, nullptr};
+const TString LDAPS_SCHEME = "ldaps";
 
 int Bind(LDAP* ld, const TString& dn, const TString& password) {
-    char* bindDn = const_cast<char*>(dn.c_str());
-    char* bindPassword = const_cast<char*>(password.c_str());
-    return ldap_simple_bind_s(ld, bindDn, bindPassword);
+    return ldap_simple_bind_s(ld, dn.c_str(), password.c_str());
 }
 
 int Unbind(LDAP* ld) {
     return ldap_unbind(ld);
 }
 
-LDAP* Init(const TString& host, ui32 port) {
-    char* ldapHost = const_cast<char*>(host.c_str());
-    return ldap_init(ldapHost, port);
+int Init(LDAP** ld, const TString& scheme, const TString& uris, ui32 port) {
+    Y_UNUSED(scheme, port);
+    return ldap_initialize(ld, uris.c_str());
 }
 
 int Search(LDAP* ld,
@@ -41,14 +60,13 @@ int Search(LDAP* ld,
            char** attrs,
            int attrsonly,
            LDAPMessage** res) {
-    char* baseDn = const_cast<char*>(base.c_str());
-    char* serachFilter = const_cast<char*>(filter.c_str());
-    return ldap_search_s(ld, baseDn, GetScope(scope), serachFilter, attrs, attrsonly, res);
+    return ldap_search_s(ld, base.c_str(), GetScope(scope), filter.c_str(), attrs, attrsonly, res);
 }
 
 TString LdapError(LDAP* ld) {
-    Y_UNUSED(ld);
-    return TString(ldap_err2string(LdapGetLastError()));
+    int errorCode = LDAP_SUCCESS;
+    ldap_get_option(ld, LDAP_OPT_ERROR_NUMBER, &errorCode);
+    return TString(ldap_err2string(errorCode));
 }
 
 TString ErrorToString(int err) {
@@ -93,7 +111,10 @@ std::vector<TString> GetAllValuesOfAttribute(LDAP* ld, LDAPMessage* entry, char*
     return response;
 }
 
-ui32 GetPort() {
+ui32 GetPort(const TString& scheme) {
+    if (scheme == LDAPS_SCHEME) {
+        return LDAPS_PORT;
+    }
     return LDAP_PORT;
 }
 
@@ -114,7 +135,7 @@ bool IsSuccess(int result) {
 
 int SetProtocolVersion(LDAP* ld) {
     static const ui32 USED_LDAP_VERSION = LDAP_VERSION3;
-    return ldap_set_option(ld, LDAP_OPT_PROTOCOL_VERSION, &USED_LDAP_VERSION);
+    return SetOption(ld, EOption::PROTOCOL_VERSION, &USED_LDAP_VERSION);
 }
 
 NKikimr::TEvLdapAuthProvider::EStatus ErrorToStatus(int err) {
@@ -142,19 +163,32 @@ char* GetDn(LDAP* ld, LDAPMessage* entry) {
     return ldap_get_dn(ld, entry);
 }
 
-int SetOption(LDAP*, const EOption&, const void*) {
-    // stub
-    return LDAP_SUCCESS;
+int SetOption(LDAP* ld, const EOption& option, const void* value) {
+    return ldap_set_option(ld, ConvertOption(option), value);
 }
 
 int StartTLS(LDAP* ld) {
-    // Do not use tls on Windows
-    return LDAP_SERVER_DOWN;
+    return ldap_start_tls_s(ld, nullptr, nullptr);
 }
 
-int ConvertRequireCert(const NKikimrProto::TLdapAuthentication::TUseTls::TCertRequire&) {
-    // stub
-    return LDAP_SUCCESS;
+int ConvertRequireCert(const NKikimrProto::TLdapAuthentication::TUseTls::TCertRequire& requireCertOption) {
+    switch (requireCertOption) {
+        case NKikimrProto::TLdapAuthentication::TUseTls::NEVER: {
+            return LDAP_OPT_X_TLS_NEVER;
+        }
+        case NKikimrProto::TLdapAuthentication::TUseTls::HARD: {
+            return LDAP_OPT_X_TLS_HARD;
+        }
+        case NKikimrProto::TLdapAuthentication::TUseTls::DEMAND: {
+            return LDAP_OPT_X_TLS_DEMAND;
+        }
+        case NKikimrProto::TLdapAuthentication::TUseTls::ALLOW: {
+            return LDAP_OPT_X_TLS_ALLOW;
+        }
+        case NKikimrProto::TLdapAuthentication::TUseTls::TRY: {
+            return LDAP_OPT_X_TLS_TRY;
+        }
+    }
 }
 
 }

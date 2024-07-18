@@ -91,6 +91,8 @@ NKqpProto::EStreamLookupStrategy GetStreamLookupStrategy(const std::string_view 
         lookupStrategy = NKqpProto::EStreamLookupStrategy::LOOKUP;
     } else if (strategy == "LookupJoinRows"sv) {
         lookupStrategy = NKqpProto::EStreamLookupStrategy::JOIN;
+    } else if (strategy == "LookupSemiJoinRows"sv) {
+        lookupStrategy = NKqpProto::EStreamLookupStrategy::SEMI_JOIN;
     }
 
     YQL_ENSURE(lookupStrategy != NKqpProto::EStreamLookupStrategy::UNSPECIFIED,
@@ -1275,7 +1277,8 @@ private:
 
                     break;
                 }
-                case NKqpProto::EStreamLookupStrategy::JOIN: {
+                case NKqpProto::EStreamLookupStrategy::JOIN:
+                case NKqpProto::EStreamLookupStrategy::SEMI_JOIN: {
                     YQL_ENSURE(inputItemType->GetKind() == ETypeAnnotationKind::Tuple);
                     const auto inputTupleType = inputItemType->Cast<TTupleExprType>();
                     YQL_ENSURE(inputTupleType->GetSize() == 2);

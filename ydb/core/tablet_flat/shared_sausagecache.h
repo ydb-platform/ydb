@@ -23,6 +23,10 @@ struct TEvSharedPageCache {
 struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheCounters> {
     using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
 
+    const TCounterPtr FreshBytes;
+    const TCounterPtr StagingBytes;
+    const TCounterPtr WarmBytes;
+
     const TCounterPtr MemLimitBytes;
     const TCounterPtr ConfigLimitBytes;
     const TCounterPtr ActivePages;
@@ -43,9 +47,9 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
 };
 
 struct TSharedPageCacheConfig {
-    TIntrusivePtr<TCacheCacheConfig> CacheConfig;
-    ui64 TotalScanQueueInFlyLimit = 512 * 1024 * 1024;
-    ui64 TotalAsyncQueueInFlyLimit = 512 * 1024 * 1024;
+    std::optional<ui64> LimitBytes;
+    ui64 TotalScanQueueInFlyLimit = 512_MB;
+    ui64 TotalAsyncQueueInFlyLimit = 512_MB;
     TString CacheName = "SharedPageCache";
     TIntrusivePtr<TSharedPageCacheCounters> Counters;
     ui32 ActivePagesReservationPercent = 50;

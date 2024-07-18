@@ -1150,6 +1150,11 @@ void TSharedCacheInitializer::InitializeServices(
         cfg.MergeFrom(Config.GetSharedCacheConfig());
     }
 
+    if (cfg.HasMemoryLimit() && cfg.GetMemoryLimit() != 0) {
+        config->LimitBytes = cfg.GetMemoryLimit();
+    } else {
+        config->LimitBytes = {};
+    }
     config->TotalAsyncQueueInFlyLimit = cfg.GetAsyncQueueInFlyLimit();
     config->TotalScanQueueInFlyLimit = cfg.GetScanQueueInFlyLimit();
 
@@ -1159,11 +1164,6 @@ void TSharedCacheInitializer::InitializeServices(
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
     TIntrusivePtr<::NMonitoring::TDynamicCounters> sausageGroup = tabletGroup->GetSubgroup("type", "S_CACHE");
-
-    config->CacheConfig = new TCacheCacheConfig(cfg.GetMemoryLimit(),
-            sausageGroup->GetCounter("fresh"),
-            sausageGroup->GetCounter("staging"),
-            sausageGroup->GetCounter("warm"));
     config->Counters = new TSharedPageCacheCounters(sausageGroup);
 
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeSharedPageCacheId(0),

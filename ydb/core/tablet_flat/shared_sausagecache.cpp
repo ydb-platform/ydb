@@ -14,7 +14,10 @@
 namespace NKikimr {
 
 TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters> &group)
-    : MemLimitBytes(group->GetCounter("MemLimitBytes"))
+    : FreshBytes(group->GetCounter("fresh"))
+    , StagingBytes(group->GetCounter("staging"))
+    , WarmBytes(group->GetCounter("warm"))
+    , MemLimitBytes(group->GetCounter("MemLimitBytes"))
     , ConfigLimitBytes(group->GetCounter("ConfigLimitBytes"))
     , ActivePages(group->GetCounter("ActivePages"))
     , ActiveBytes(group->GetCounter("ActiveBytes"))
@@ -178,8 +181,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     THolder<TSharedPageCacheConfig> Config;
     TCacheCache<TPage, TPage::TWeight, TCacheCacheConfig::TDefaultGeneration<TPage>> Cache;
 
-    TControlWrapper SizeOverride;
-
     ui64 StatBioReqs = 0;
     ui64 StatHitPages = 0;
     ui64 StatHitBytes = 0;
@@ -192,25 +193,19 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     bool GCScheduled = false;
 
     ui64 MemLimitBytes;
-    ui64 ConfigLimitBytes;
 
     void ActualizeCacheSizeLimit() {
-        if ((ui64)SizeOverride != Config->CacheConfig->Limit) {
-            Config->CacheConfig->SetLimit(SizeOverride);
-        }
-
-        ConfigLimitBytes = Config->CacheConfig->Limit;
-
-        ui64 limit = Min(ConfigLimitBytes, MemLimitBytes);
+        ui64 limitBytes = Min(Config->LimitBytes.value_or(Max<ui64>()), MemLimitBytes);
 
         // limit of cache depends only on config and mem because passive pages may go in and out arbitrary
         // we may have some passive bytes, so if we fully fill this Cache we may exceed the limit
         // because of that DoGC should be called to ensure limits
-        Cache.UpdateCacheSize(limit);
+        // unlimited cache is banned
+        Cache.UpdateCacheSize(Max<ui64>(1, limitBytes));
 
         if (Config->Counters) {
-            Config->Counters->ConfigLimitBytes->Set(ConfigLimitBytes);
-            Config->Counters->ActiveLimitBytes->Set(limit);
+            Config->Counters->ConfigLimitBytes->Set(Config->LimitBytes.value_or(0));
+            Config->Counters->ActiveLimitBytes->Set(limitBytes);
         }
     }
 
@@ -219,11 +214,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         // update StatActiveBytes + StatPassiveBytes
         ProcessGCList();
 
-        ui64 configActiveReservedBytes = ConfigLimitBytes * Config->ActivePagesReservationPercent / 100;
+        // TODO: get rid of active pages reservation
+        ui64 configActiveReservedBytes = Config->LimitBytes.value_or(0) * Config->ActivePagesReservationPercent / 100;
 
         THashSet<TCollection*> recheck;
         while (GetStatAllBytes() > MemLimitBytes
-                || GetStatAllBytes() > ConfigLimitBytes && StatActiveBytes > configActiveReservedBytes) {
+                || GetStatAllBytes() > Config->LimitBytes.value_or(Max<ui64>()) && StatActiveBytes > configActiveReservedBytes) {
             auto page = Cache.EvictNext();
             if (!page) {
                 break;
@@ -263,7 +259,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         Owner = owner;
 
         Logger = new NUtil::TLogger(sys, NKikimrServices::TABLET_SAUSAGECACHE);
-        sys->AppData<TAppData>()->Icb->RegisterSharedControl(SizeOverride, Config->CacheName + "_Size");
     }
 
     void TakePoison()
@@ -310,8 +305,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void Handle(NSharedCache::TEvRequest::TPtr &ev) {
-        ActualizeCacheSizeLimit();
-
         NSharedCache::TEvRequest *msg = ev->Get();
         const auto &pageCollection = *msg->Fetch->PageCollection;
         const TLogoBlobID metaId = pageCollection.Label();
@@ -604,8 +597,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void Handle(NSharedCache::TEvTouch::TPtr &ev) {
-        ActualizeCacheSizeLimit();
-
         NSharedCache::TEvTouch *msg = ev->Get();
         THashMap<TLogoBlobID, NSharedCache::TEvUpdated::TActions> actions;
         for (auto &xpair : msg->Touched) {
@@ -729,8 +720,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void Handle(NBlockIO::TEvData::TPtr &ev) {
-        ActualizeCacheSizeLimit();
-
         auto *msg = ev->Get();
 
         RemoveInFlyPages(msg->Fetch->Pages.size(), msg->Fetch->Cookie);
@@ -1031,11 +1020,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     void Handle(TEvSharedPageCache::TEvConfigure::TPtr& ev) {
         const auto* msg = ev->Get();
 
-        if (msg->Record.GetMemoryLimit() != 0) {
-            Config->CacheConfig->SetLimit(msg->Record.GetMemoryLimit());
-            SizeOverride = Config->CacheConfig->Limit;
-            // limit will be updated with ActualizeCacheSizeLimit call
+        if (msg->Record.HasMemoryLimit() && msg->Record.GetMemoryLimit() != 0) {
+            Config->LimitBytes = msg->Record.GetMemoryLimit();
+        } else {
+            Config->LimitBytes = {};
         }
+        ActualizeCacheSizeLimit();
 
         if (msg->Record.HasActivePagesReservationPercent()) {
             Config->ActivePagesReservationPercent = msg->Record.GetActivePagesReservationPercent();
@@ -1110,17 +1100,15 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 public:
     TSharedPageCache(THolder<TSharedPageCacheConfig> config)
         : Config(std::move(config))
-        , Cache(*Config->CacheConfig)
-        , SizeOverride(Config->CacheConfig->Limit, 1, Max<i64>())
-        , ConfigLimitBytes(Config->CacheConfig->Limit)
+        , Cache(TCacheCacheConfig(1, Config->Counters->FreshBytes, Config->Counters->StagingBytes, Config->Counters->WarmBytes))
     {
         AsyncRequests.Limit = Config->TotalAsyncQueueInFlyLimit;
         ScanRequests.Limit = Config->TotalScanQueueInFlyLimit;
     }
 
     void Bootstrap() {
+        MemLimitBytes = Config->LimitBytes.value_or(10_MB); // soon will be updated by MemoryController
         ActualizeCacheSizeLimit();
-        MemLimitBytes = ConfigLimitBytes;
         Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::SharedCache));
 
         Become(&TThis::StateFunc);

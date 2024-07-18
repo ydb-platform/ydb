@@ -124,14 +124,15 @@ public:
     {}
 
     void Bootstrap(const TActorContext& ctx) {
+        Become(&TThis::StateWork);
+
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), 
             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
                     NKikimrConsole::TConfigItem::MemoryControllerConfigItem}));
 
-        Become(&TThis::StateWork);
-        ctx.Schedule(Interval, new TEvents::TEvWakeup());
+        HandleWakeup(ctx);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Bootstrapped");
+        LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Bootstrapped");
     }
 
 private:
@@ -150,7 +151,7 @@ private:
 
     void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev, const TActorContext& ctx) {
         Config.Swap(ev->Get()->Record.MutableConfig()->MutableMemoryControllerConfig());
-        LOG_DEBUG_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Config updated " << Config.DebugString());
+        LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Config updated " << Config.DebugString());
     }
 
     void HandleWakeup(const TActorContext& ctx) noexcept {
@@ -188,7 +189,7 @@ private:
             resultingConsumersConsumption += Max(consumer.Consumption, consumer.GetLimit(coefficient));
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Periodic memory stats:"
+        LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Periodic memory stats:"
             << " AnonRss: " << processMemoryInfo.AnonRss << " CGroupLimit: " << processMemoryInfo.CGroupLimit << " AllocatedMemory: " << processMemoryInfo.AllocatedMemory
             << " HardLimitBytes: " << hardLimitBytes << " SoftLimitBytes: " << softLimitBytes << " TargetUtilizationBytes: " << targetUtilizationBytes
             << " ConsumersConsumption: " << consumersConsumption << " ExternalConsumption: " << externalConsumption 
@@ -214,7 +215,7 @@ private:
             }
             consumersLimitBytes += limitBytes;
 
-            LOG_DEBUG_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Consumer " << consumer.Kind << " state:"
+            LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Consumer " << consumer.Kind << " state:"
                 << " Consumption: " << consumer.Consumption << " LimitBytes: " << limitBytes
                 << " MinBytes: " << consumer.MinBytes << " MaxBytes: " << consumer.MaxBytes);
             auto& counters = GetConsumerCounters(consumer.Kind);
@@ -236,7 +237,7 @@ private:
         const auto *msg = ev->Get();
         auto consumer = Consumers.emplace(msg->Kind, MakeIntrusive<TMemoryConsumer>(msg->Kind, ev->Sender));
         Y_ABORT_UNLESS(consumer.second, "Consumer kinds should be unique");
-        LOG_DEBUG_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Consumer " << msg->Kind << " " << ev->Sender << " registered");
+        LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Consumer " << msg->Kind << " " << ev->Sender << " registered");
         Send(ev->Sender, new TEvConsumerRegistered(consumer.first->second));
     }
 

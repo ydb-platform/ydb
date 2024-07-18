@@ -274,7 +274,7 @@ runs:
           (./ya make ${{ inputs.build_target }} "${params[@]}" \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.log"  \
             --evlog-file "$PUBLIC_DIR/ya_evlog.jsonl" \
-            --junit "$CURRENT_JUNIT_XML_PATH" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& tee $YA_MAKE_OUTPUT
+            --junit "$CURRENT_JUNIT_XML_PATH" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& tee -a $YA_MAKE_OUTPUT
           set -ex
           RC=`cat exit_code`
 
@@ -299,6 +299,17 @@ runs:
             --test_stuff_out "test_artifacts/try_$RETRY/" \
             "$CURRENT_JUNIT_XML_PATH"
           cp $CURRENT_JUNIT_XML_PATH $JUNIT_REPORT_XML
+
+        if [ "${{ inputs.run_tests }}" = "true" ]; then
+          .github/scripts/tests/generate-summary.py \
+            --summary_links "$SUMMARY_LINKS" \
+            --public_dir "$PUBLIC_DIR" \
+            --public_dir_url "$PUBLIC_DIR_URL" \
+            --build_preset "$BUILD_PRESET" \
+            --status_report_file statusrep.txt \
+            "Tests" ya-test_$RETRY.html "$CURRENT_JUNIT_XML_PATH"
+        fi
+
           TESTS_RESULT=0
           .github/scripts/tests/fail-checker.py "$CURRENT_JUNIT_XML_PATH" || TESTS_RESULT=$?
 
@@ -408,21 +419,7 @@ runs:
         GITHUB_TOKEN: ${{ github.token }}
       run: |
         set -x
-
-        if [ "${{ inputs.run_tests }}" != "true" ]; then
-          # I have no idea why 'always() && inputs.run_tests' not working 
-          # Probably because of implicit bool->str cast? 
-          exit 0
-        fi
-
-        .github/scripts/tests/generate-summary.py \
-          --summary_links "$SUMMARY_LINKS" \
-          --public_dir "$PUBLIC_DIR" \
-          --public_dir_url "$PUBLIC_DIR_URL" \
-          --build_preset "$BUILD_PRESET" \
-          --status_report_file statusrep.txt \
-          "Tests" ya-test.html "$JUNIT_REPORT_XML"
-
+        # TODO
         teststatus=$(cat statusrep.txt)
         if [[ $teststatus == "success" ]];then
           testmessage="The check has been completed successfully"

@@ -62,7 +62,7 @@ int TMVP::Init() {
     ActorSystem.Register(NActors::CreateProcStatCollector(TDuration::Seconds(5), AppData.MetricRegistry = std::make_shared<NMonitoring::TMetricRegistry>()));
 
     HttpProxyId = ActorSystem.Register(NHttp::CreateHttpProxy(AppData.MetricRegistry));
-    ActorSystem.Register(AppData.Tokenator = TMvpTokenator::CreateTokenator(TokensConfig, HttpProxyId));
+    ActorSystem.Register(AppData.Tokenator = TMvpTokenator::CreateTokenator(TokensConfig, HttpProxyId, AuthProfile));
 
     if (Http) {
         auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(HttpPort, TStringBuilder() << FQDNHostName() << ':' << HttpPort);
@@ -221,6 +221,16 @@ void TMVP::TryGetGenericOptionsFromConfig(
 
         if (opts.FindLongOptParseResult("https-port") == nullptr) {
             HttpsPort = server["https_port"].as<ui16>(0);
+        }
+    }
+
+    if (generic["auth_profile"]) {
+        auto name = generic["auth_profile"].as<std::string>("yandex");
+        auto it = AuthProfileByName.find(name);
+        if (it != AuthProfileByName.end()) {
+            AuthProfile = it->second;
+        } else {
+            ythrow yexception() << "Unknown auth profile: " << name;
         }
     }
 }

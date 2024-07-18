@@ -26,6 +26,7 @@ protected:
     NSignals::TSignalHandler<SIGINT, &TMVP::OnTerminate> SignalSIGINT;
     NSignals::TSignalHandler<SIGTERM, &TMVP::OnTerminate> SignalSIGTERM;
     NSignals::TSignalIgnore<SIGPIPE> SignalSIGPIPE;
+    static EAuthProfile AuthProfile;
 
 public:
     ui16 HttpPort = {};

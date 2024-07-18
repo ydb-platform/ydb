@@ -1437,26 +1437,6 @@ Y_UNIT_TEST_F(Config_TEvTxCommit_After_Restart, TPQTabletFixture)
     tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
     WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=mockTabletId, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
 }
-//Y_UNIT_TEST_F(Config_TEvTxCommit_After_Restart, TPQTabletFixture)
-//{
-//    auto tabletConfig = NHelpers::MakeConfig({.Version=2,
-//                                             .Consumers={
-//                                             {.Consumer="client-1", .Generation=0},
-//                                             {.Consumer="client-3", .Generation=7}
-//                                             },
-//                                             .Partitions={
-//                                             {.Id=0}
-//                                             },
-//                                             .AllPartitions={
-//                                             {.Id=0, .TabletId=Ctx->TabletId, .Children={},  .Parents={1}},
-//                                             {.Id=1, .TabletId=22222,         .Children={0}, .Parents={}}
-//                                             }});
-//    TestEvTxCommitAfterRestart(22222,
-//                               {.Configs=NHelpers::TConfigParams{
-//                               .Tablet=tabletConfig,
-//                               .Bootstrap=NHelpers::MakeBootstrapConfig(),
-//                               }});
-//}
 
 }
 

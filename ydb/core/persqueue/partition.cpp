@@ -3374,17 +3374,6 @@ void TPartition::ScheduleNegativeReplies()
                     ScheduleNegativeReply(v);
                 }
             }, event.Event);
-//            if (auto* setInfo = std::get_if<0>(&event.Event)) {
-//                ScheduleNegativeReply(*setInfo->Get());
-//            } else if (auto* tx = std::get_if<1>(&event.Event)) {
-//                if (tx->Get()->ProposeTransaction) {
-//                    ScheduleNegativeReply(*tx->Get()->ProposeTransaction);
-//                } else {
-//                    ScheduleNegativeReply(*tx->Get());
-//                }
-//            } else {
-//                ScheduleNegativeReply(*(std::get_if<2>(&event.Event)));
-//            }
         }
         queue.clear();
     };

@@ -247,7 +247,8 @@ void FormatValue(TStringBuilderBase* builder, const TSpanContext& context, TStri
 TTraceContext::TTraceContext(
     TSpanContext parentSpanContext,
     TString spanName,
-    TTraceContextPtr parentTraceContext)
+    TTraceContextPtr parentTraceContext,
+    std::optional<NProfiling::TCpuInstant> startTime)
     : TraceId_(parentSpanContext.TraceId)
     , SpanId_(NDetail::GenerateSpanId())
     , ParentSpanId_(parentSpanContext.SpanId)
@@ -260,7 +261,7 @@ TTraceContext::TTraceContext(
     , RequestId_(ParentContext_ ? ParentContext_->GetRequestId() : TRequestId{})
     , TargetEndpoint_(ParentContext_ ? ParentContext_->GetTargetEndpoint() : std::nullopt)
     , LoggingTag_(ParentContext_ ? ParentContext_->GetLoggingTag() : TString{})
-    , StartTime_(GetCpuInstant())
+    , StartTime_(startTime.value_or(GetCpuInstant()))
     , Baggage_(ParentContext_ ? ParentContext_->GetBaggage() : TYsonString{})
 {
     NDetail::InitializeTraceContexts();
@@ -364,12 +365,14 @@ void TTraceContext::SetPropagated(bool value)
 }
 
 TTraceContextPtr TTraceContext::CreateChild(
-    TString spanName)
+    TString spanName,
+    std::optional<NProfiling::TCpuInstant> startTime)
 {
     auto child = New<TTraceContext>(
         GetSpanContext(),
         std::move(spanName),
-        /*parentTraceContext*/ this);
+        /*parentTraceContext*/ this,
+        startTime);
 
     auto guard = Guard(Lock_);
     child->ProfilingTags_ = ProfilingTags_;
@@ -551,10 +554,11 @@ bool TTraceContext::IsSampled() const
     return false;
 }
 
-void TTraceContext::Finish()
+void TTraceContext::Finish(
+    std::optional<NProfiling::TCpuInstant> finishTime)
 {
     auto expectedFinishTime = TCpuInstant(0);
-    if (!FinishTime_.compare_exchange_strong(expectedFinishTime, GetCpuInstant())) {
+    if (!FinishTime_.compare_exchange_strong(expectedFinishTime, finishTime.value_or(GetCpuInstant()))) {
         return;
     }
 

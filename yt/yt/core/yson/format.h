@@ -36,13 +36,13 @@ const ETokenType EntityToken = ETokenType::Hash;
 template <class T>
 struct TYsonFormatTraits
 {
-    constexpr static bool UseYsonFormatter = false;
+    static constexpr bool UseYsonFormatter = false;
 };
 
 struct TYsonTextFormatTraits
 {
-    constexpr static bool UseYsonFormatter = true;
-    constexpr static EYsonFormat YsonFormat = EYsonFormat::Text;
+    static constexpr bool UseYsonFormatter = true;
+    static constexpr EYsonFormat YsonFormat = EYsonFormat::Text;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

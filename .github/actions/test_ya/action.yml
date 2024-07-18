@@ -293,7 +293,7 @@ runs:
           TESTS_RESULT=0
           .github/scripts/tests/fail-checker.py "$CURRENT_JUNIT_XML_PATH" || TESTS_RESULT=$?
 
-          if [ $TESTS_RESULT = 0 ]
+          if [ $TESTS_RESULT = 0 ]; then
             break
           fi
         done;

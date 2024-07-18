@@ -301,7 +301,7 @@ runs:
           cp $CURRENT_JUNIT_XML_PATH $JUNIT_REPORT_XML
 
         if [ "${{ inputs.run_tests }}" = "true" ]; then
-          .github/scripts/tests/generate-summary.py \
+          GITHUB_TOKEN=${{ github.token }} .github/scripts/tests/generate-summary.py \
             --summary_links "$SUMMARY_LINKS" \
             --public_dir "$PUBLIC_DIR" \
             --public_dir_url "$PUBLIC_DIR_URL" \

@@ -22,7 +22,6 @@
 
 #include "make_config.h"
 #include "pqtablet_mock.h"
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -552,13 +551,11 @@ void TPQTabletFixture::WaitForEvent()
 
 void TPQTabletFixture::WaitForCalcPredicateResult()
 {
-    DBGTRACE("TPQTabletFixture::WaitForCalcPredicateResult");
     WaitForEvent<TEvPQ::TEvTxCalcPredicateResult>();
 }
 
 void TPQTabletFixture::WaitForProposePartitionConfigResult()
 {
-    DBGTRACE("TPQTabletFixture::TEvProposePartitionConfigResult");
     WaitForEvent<TEvPQ::TEvProposePartitionConfigResult>();
 }
 
@@ -716,13 +713,11 @@ void TPQTabletFixture::WaitWriteResponse(const TWriteResponseMatcher& matcher)
 
 void TPQTabletFixture::StartPQWriteObserver(bool& flag, unsigned cookie)
 {
-    DBGTRACE("TPQTabletFixture::StartPQWriteObserver");
     flag = false;
 
     auto observer = [&flag, cookie](TAutoPtr<IEventHandle>& event) {
         if (auto* kvResponse = event->CastAsLocal<TEvKeyValue::TEvResponse>()) {
             if (kvResponse->Record.HasCookie()) {
-                DBGTRACE_LOG("cookie=" << kvResponse->Record.GetCookie());
             }
             if ((event->Sender == event->Recipient) &&
                 kvResponse->Record.HasCookie() &&
@@ -766,13 +761,11 @@ void TPQTabletFixture::SendCancelTransactionProposal(const TCancelTransactionPro
 
 void TPQTabletFixture::StartPQWriteTxsObserver()
 {
-    DBGTRACE("TPQTabletFixture::StartPQWriteTxsObserver");
     StartPQWriteObserver(FoundPQWriteTxs, 5); // TPersQueue::WRITE_TX_COOKIE
 }
 
 void TPQTabletFixture::WaitForPQWriteTxs()
 {
-    DBGTRACE("TPQTabletFixture::WaitForPQWriteTxs");
     WaitForPQWriteComplete(FoundPQWriteTxs);
 }
 
@@ -1359,7 +1352,6 @@ Y_UNIT_TEST_F(ProposeTx_Command_After_Propose, TPQTabletFixture)
 
 Y_UNIT_TEST_F(Read_TEvTxCommit_After_Restart, TPQTabletFixture)
 {
-    DBGTRACE("Read_TEvTxCommit_After_Restart");
     const ui64 txId = 67890;
     const ui64 mockTabletId = 22222;
 
@@ -1393,7 +1385,6 @@ Y_UNIT_TEST_F(Read_TEvTxCommit_After_Restart, TPQTabletFixture)
 
 Y_UNIT_TEST_F(Config_TEvTxCommit_After_Restart, TPQTabletFixture)
 {
-    DBGTRACE("Config_TEvTxCommit_After_Restart");
     const ui64 txId = 67890;
     const ui64 mockTabletId = 22222;
 

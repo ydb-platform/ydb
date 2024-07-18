@@ -800,8 +800,12 @@ ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPat
         .NotUnderDeleting()
         .NotUnderOperation();
 
-    if (checks && !tablePath.IsInsideTableIndexPath()) {
-        checks.IsCommonSensePath();
+    if (checks) {
+        if (!tablePath.IsInsideTableIndexPath()) {
+            checks.IsCommonSensePath();
+        } else if (!tablePath.Parent().IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobal)) {
+            return CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot add changefeed to index table");
+        }
     }
 
     if (!checks) {

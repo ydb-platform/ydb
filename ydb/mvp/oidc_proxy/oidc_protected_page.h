@@ -31,7 +31,7 @@ protected:
     const TOpenIdConnectSettings Settings;
     TString ProtectedPageUrl;
     TString RequestedPageScheme;
-    bool  IsAjaxRequest = false;
+    bool IsAjaxRequest = false;
 
     const static inline TStringBuf NOT_FOUND_HTML_PAGE = "<html><head><title>404 Not Found</title></head><body bgcolor=\"white\"><center><h1>404 Not Found</h1></center></body></html>";
     const static inline TStringBuf IAM_TOKEN_SCHEME = "Bearer ";

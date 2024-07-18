@@ -1,6 +1,5 @@
 #pragma once
 #include "defs.h"
-#include "immediate_control_board_impl.h"
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <ydb/library/actors/core/actor.h>
@@ -14,7 +13,9 @@ inline NActors::TActorId MakeIcbId(ui32 node) {
 }
 
 class TImmediateControlActor;
+class TExperimentingService;
+class TControlBoard;
 
-NActors::IActor* CreateImmediateControlActor(TIntrusivePtr<TControlBoard> board, const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters);
+NActors::IActor* CreateImmediateControlActor(TIntrusivePtr<TControlBoard> board, TIntrusivePtr<TExperimentingService> expService, const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters);
 
 }

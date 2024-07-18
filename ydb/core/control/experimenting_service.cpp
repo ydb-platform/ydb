@@ -1,0 +1,98 @@
+#include "experimenting_service.h"
+
+#include <util/generic/string.h>
+#include <util/stream/str.h>
+#include <library/cpp/monlib/service/pages/templates.h>
+
+namespace NKikimr {
+
+bool TExperimentingService::RegisterLocalControl(TControlWrapper control, TString name) {
+    bool result = true;
+    if (Board.Has(name)) {
+        result = false;
+    }
+    Board.Insert(name, control.Control);
+    return result;
+}
+
+bool TExperimentingService::RegisterSharedControl(TControlWrapper& control, TString name) {
+    auto& ptr = Board.InsertIfAbsent(name, control.Control);
+    if (control.Control == ptr) {
+        return true;
+    } else {
+        control.Control = ptr;
+        return false;
+    }
+}
+
+void TExperimentingService::RestoreDefaults() {
+    for (auto& bucket : Board.Buckets) {
+        TReadGuard guard(bucket.GetLock());
+        for (auto &control : bucket.GetMap()) {
+            control.second->RestoreDefault();
+        }
+    }
+}
+
+void TExperimentingService::RestoreDefault(TString name) {
+    TIntrusivePtr<TControl> control;
+    if (Board.Get(name, control)) {
+        control->RestoreDefault();
+    }
+}
+
+bool TExperimentingService::SetValue(TString name, TAtomic value, TAtomic &outPrevValue) {
+    TIntrusivePtr<TControl> control;
+    if (Board.Get(name, control)) {
+        outPrevValue = control->SetFromHtmlRequest(value);
+        return control->IsDefault();
+    }
+    return true;
+}
+
+// Only for tests
+void TExperimentingService::GetValue(TString name, TAtomic &outValue, bool &outIsControlExists) const {
+    TIntrusivePtr<TControl> control;
+    outIsControlExists = Board.Get(name, control);
+    if (outIsControlExists) {
+        outValue = control->Get();
+    }
+}
+
+void TExperimentingService::RenderAsHtmlTableRows(TStringStream& str) const {
+    HTML(str) {
+        for (const auto& bucket : Board.Buckets) {
+            TReadGuard guard(bucket.GetLock());
+            for (const auto &item : bucket.GetMap()) {
+                TABLER() {
+                    TABLED() { str << item.first; }
+                    TABLED() { str << item.second->RangeAsString(); }
+                    TABLED() {
+                        if (item.second->IsDefault()) {
+                            str << "<p>" << item.second->Get() << "</p>";
+                        } else {
+                            str << "<p style='color:red;'><b>" << item.second->Get() << " </b></p>";
+                        }
+                    }
+                    TABLED() {
+                        if (item.second->IsDefault()) {
+                            str << "<p>" << item.second->GetDefault() << "</p>";
+                        } else {
+                            str << "<p style='color:red;'><b>" << item.second->GetDefault() << " </b></p>";
+                        }
+                    }
+                    TABLED() {
+                        str << "<form class='form_horizontal' method='post'>";
+                        str << "<input name='" << item.first << "' type='text' value='"
+                            << item.second->Get() << "'/>";
+                        str << "<button type='submit' style='color:red;'><b>Change</b></button>";
+                        str << "</form>";
+                    }
+                    TABLED() { str << !item.second->IsDefault(); }
+                }
+            }
+        }
+    }
+}
+
+}

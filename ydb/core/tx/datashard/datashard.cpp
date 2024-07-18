@@ -296,33 +296,33 @@ void TDataShard::IcbRegister() {
     if (!IcbRegistered) {
         auto* appData = AppData();
 
-        appData->Icb->RegisterSharedControl(DisableByKeyFilter, "DataShardControls.DisableByKeyFilter");
-        appData->Icb->RegisterSharedControl(MaxTxInFly, "DataShardControls.MaxTxInFly");
-        appData->Icb->RegisterSharedControl(MaxTxLagMilliseconds, "DataShardControls.MaxTxLagMilliseconds");
-        appData->Icb->RegisterSharedControl(DataTxProfileLogThresholdMs, "DataShardControls.DataTxProfile.LogThresholdMs");
-        appData->Icb->RegisterSharedControl(DataTxProfileBufferThresholdMs, "DataShardControls.DataTxProfile.BufferThresholdMs");
-        appData->Icb->RegisterSharedControl(DataTxProfileBufferSize, "DataShardControls.DataTxProfile.BufferSize");
+        ICB_REG_SHARED_CONTROL(*appData->Icb, DisableByKeyFilter, DataShardControlsDisableByKeyFilter);
+        ICB_REG_SHARED_CONTROL(*appData->Icb, MaxTxInFly, DataShardControlsMaxTxInFly);
+        ICB_REG_SHARED_CONTROL(*appData->Icb, MaxTxLagMilliseconds, DataShardControlsMaxTxLagMilliseconds);
+        ICB_REG_SHARED_CONTROL(*appData->Icb, DataTxProfileLogThresholdMs, DataShardControlsDataTxProfileLogThresholdMs);
+        ICB_REG_SHARED_CONTROL(*appData->Icb, DataTxProfileBufferThresholdMs, DataShardControlsDataTxProfileBufferThresholdMs);
+        ICB_REG_SHARED_CONTROL(*appData->Icb, DataTxProfileBufferSize, DataShardControlsDataTxProfileBufferSize);
 
-        appData->Icb->RegisterSharedControl(CanCancelROWithReadSets, "DataShardControls.CanCancelROWithReadSets");
-        appData->Icb->RegisterSharedControl(PerShardReadSizeLimit, "TxLimitControls.PerShardReadSizeLimit");
-        appData->Icb->RegisterSharedControl(CpuUsageReportThreshlodPercent, "DataShardControls.CpuUsageReportThreshlodPercent");
-        appData->Icb->RegisterSharedControl(CpuUsageReportIntervalSeconds, "DataShardControls.CpuUsageReportIntervalSeconds");
-        appData->Icb->RegisterSharedControl(HighDataSizeReportThreshlodBytes, "DataShardControls.HighDataSizeReportThreshlodBytes");
-        appData->Icb->RegisterSharedControl(HighDataSizeReportIntervalSeconds, "DataShardControls.HighDataSizeReportIntervalSeconds");
+        ICB_REG_SHARED_CONTROL(*appData->Icb, CanCancelROWithReadSets, DataShardControlsCanCancelROWithReadSets);
+        ICB_REG_SHARED_CONTROL(*appData->Icb, PerShardReadSizeLimit, TxLimitControlsPerShardReadSizeLimit);
+        ICB_REG_SHARED_CONTROL(*appData->Icb, CpuUsageReportThreshlodPercent, DataShardControlsCpuUsageReportThreshlodPercent);
+        ICB_REG_SHARED_CONTROL(*appData->Icb, CpuUsageReportIntervalSeconds, DataShardControlsCpuUsageReportIntervalSeconds);
+        ICB_REG_SHARED_CONTROL(*appData->Icb, HighDataSizeReportThreshlodBytes, DataShardControlsHighDataSizeReportThreshlodBytes);
+        ICB_REG_SHARED_CONTROL(*appData->Icb, HighDataSizeReportIntervalSeconds, DataShardControlsHighDataSizeReportIntervalSeconds);
 
-        appData->Icb->RegisterSharedControl(BackupReadAheadLo, "DataShardControls.BackupReadAheadLo");
-        appData->Icb->RegisterSharedControl(BackupReadAheadHi, "DataShardControls.BackupReadAheadHi");
+        ICB_REG_SHARED_CONTROL(*appData->Icb, BackupReadAheadLo, DataShardControlsBackupReadAheadLo);
+        ICB_REG_SHARED_CONTROL(*appData->Icb, BackupReadAheadHi, DataShardControlsBackupReadAheadHi);
 
-        appData->Icb->RegisterSharedControl(TtlReadAheadLo, "DataShardControls.TtlReadAheadLo");
-        appData->Icb->RegisterSharedControl(TtlReadAheadHi, "DataShardControls.TtlReadAheadHi");
+        ICB_REG_SHARED_CONTROL(*appData->Icb, TtlReadAheadLo, DataShardControlsTtlReadAheadLo);
+        ICB_REG_SHARED_CONTROL(*appData->Icb, TtlReadAheadHi, DataShardControlsTtlReadAheadHi);
 
-        appData->Icb->RegisterSharedControl(EnableLockedWrites, "DataShardControls.EnableLockedWrites");
-        appData->Icb->RegisterSharedControl(MaxLockedWritesPerKey, "DataShardControls.MaxLockedWritesPerKey");
+        ICB_REG_SHARED_CONTROL(*appData->Icb, EnableLockedWrites, DataShardControlsEnableLockedWrites);
+        ICB_REG_SHARED_CONTROL(*appData->Icb, MaxLockedWritesPerKey, DataShardControlsMaxLockedWritesPerKey);
 
-        appData->Icb->RegisterSharedControl(EnableLeaderLeases, "DataShardControls.EnableLeaderLeases");
-        appData->Icb->RegisterSharedControl(MinLeaderLeaseDurationUs, "DataShardControls.MinLeaderLeaseDurationUs");
+        ICB_REG_SHARED_CONTROL(*appData->Icb, EnableLeaderLeases, DataShardControlsEnableLeaderLeases);
+        ICB_REG_SHARED_CONTROL(*appData->Icb, MinLeaderLeaseDurationUs, DataShardControlsMinLeaderLeaseDurationUs);
 
-        appData->Icb->RegisterSharedControl(ChangeRecordDebugPrint, "DataShardControls.ChangeRecordDebugPrint");
+        ICB_REG_SHARED_CONTROL(*appData->Icb, ChangeRecordDebugPrint, DataShardControlsChangeRecordDebugPrint);
 
         IcbRegistered = true;
     }

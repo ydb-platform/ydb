@@ -441,18 +441,24 @@ sudo chmod 700 /opt/ydb/certs
 1. Установите {{ ydb-short-name }} CLI, как описано в [документации](../../reference/ydb-cli/install.md).
 
 1. Создайте тестовую строковую (`test_row_table`) или колоночную таблицу (`test_column_table`):
-   * Строковая таблица:
+
+{% list tabs %}
+
+- Создание строковой таблицы
     ```bash
     ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
         yql -s 'CREATE TABLE `testdir/test_row_table` (id Uint64, title Utf8, PRIMARY KEY (id));'
     ```
-    * Колоночная таблица:
+
+- Создание колоночной таблицы
     ```bash
     ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
         yql -s 'CREATE TABLE `testdir/test_column_table` (id Uint64, title Utf8, PRIMARY KEY (id)) WITH (STORE = COLUMN);'
     ```
 
-   Где `<node.ydb.tech>` - FQDN сервера, на котором запущен динамический узел, обслуживающий базу `/Root/testdb`.
+{% endlist %}
+
+Где `<node.ydb.tech>` - FQDN сервера, на котором запущен динамический узел, обслуживающий базу `/Root/testdb`.
 
 ## Проверка доступа ко встроенному web-интерфейсу
 

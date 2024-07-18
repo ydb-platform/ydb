@@ -17,7 +17,7 @@ REVOKE [GRANT OPTION FOR] {{permission_name} [, ...] | ALL [PRIVILEGES]} ON {pat
 {% include [x](_includes/permissions/permissions_list.md) %}
 
 ## Примеры
-* Отозвать право `ydb.generic.read` на [строковую](../../../concepts/datamodel/table.md#row-oriented-tables) или [колоночную](../../../concepts/datamodel/table.md#column-oriented-tables) таблицу `/shop_db/orders` у пользователя `user1`:
+* Отозвать право `ydb.generic.read` на таблицу `/shop_db/orders` у пользователя `user1`:
   ```
   REVOKE 'ydb.generic.read' ON `/shop_db/orders` FROM user1;
   ```
@@ -31,12 +31,12 @@ REVOKE [GRANT OPTION FOR] {{permission_name} [, ...] | ALL [PRIVILEGES]} ON {pat
   REVOKE LIST, CONNECT ON `/shop_db` FROM user2, group1;
   ```
 
-* Отозвать право `ydb.generic.use` на [строковые](../../../concepts/datamodel/table.md#row-oriented-tables) и [колоночные](../../../concepts/datamodel/table.md#column-oriented-tables) таблицы `/shop_db/orders`, `/shop_db/sellers` у пользователей `user1@domain`, `user2@domain`:
+* Отозвать право `ydb.generic.use` на таблицы `/shop_db/orders` и `/shop_db/sellers` у пользователей `user1@domain`, `user2@domain`:
   ```
   REVOKE 'ydb.generic.use' ON `/shop_db/orders`, `/shop_db/sellers` FROM `user1@domain`, `user2@domain`;
   ```
 
-* Отозвать все права на [строковую](../../../concepts/datamodel/table.md#row-oriented-tables) или [колоночную](../../../concepts/datamodel/table.md#column-oriented-tables) таблицу `/shop_db/sellers` для пользователя `user`:
+* Отозвать все права на таблицу `/shop_db/sellers` для пользователя `user`:
   ```
   REVOKE ALL ON `/shop_db/sellers` FROM user;
   ```

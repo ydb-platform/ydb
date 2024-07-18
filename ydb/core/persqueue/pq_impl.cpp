@@ -914,6 +914,7 @@ void TPersQueue::CreateOriginalPartition(const NKikimrPQ::TPQTabletConfig& confi
 void TPersQueue::MoveTopTxToCalculating(TDistributedTransaction& tx,
                                         const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::MoveTopTxToCalculating");
     std::tie(ExecStep, ExecTxId) = TxQueue.front();
     PQ_LOG_D("New ExecStep " << ExecStep << ", ExecTxId " << ExecTxId);
 
@@ -927,9 +928,11 @@ void TPersQueue::MoveTopTxToCalculating(TDistributedTransaction& tx,
                              converterFactory,
                              tx.TopicConverter,
                              ctx);
-        CreateNewPartitions(tx.TabletConfig,
-                            tx.TopicConverter,
-                            ctx);
+        if (InitCompleted) {
+            CreateNewPartitions(tx.TabletConfig,
+                                tx.TopicConverter,
+                                ctx);
+        }
         SendEvProposePartitionConfig(ctx, tx);
         break;
     }
@@ -938,6 +941,8 @@ void TPersQueue::MoveTopTxToCalculating(TDistributedTransaction& tx,
     }
 
     tx.State = NKikimrPQ::TTransaction::CALCULATING;
+    DBGTRACE_LOG("TxId " << tx.TxId <<
+                 ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
     PQ_LOG_D("TxId " << tx.TxId <<
              ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
 }
@@ -3735,6 +3740,8 @@ void TPersQueue::ProcessWriteTxs(const TActorContext& ctx,
         auto tx = GetTransaction(ctx, txId);
         Y_ABORT_UNLESS(tx);
 
+        DBGTRACE_LOG("write TxId " << txId <<
+                     ", future state " << NKikimrPQ::TTransaction_EState_Name(state));
         tx->AddCmdWrite(request, state);
 
         ChangedTxs.insert(txId);
@@ -3924,6 +3931,7 @@ TMaybe<TPartitionId> TPersQueue::FindPartitionId(const NKikimrPQ::TDataTransacti
 void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
                                                    TDistributedTransaction& tx)
 {
+    DBGTRACE("TPersQueue::SendEvTxCalcPredicateToPartitions");
     THashMap<ui32, std::unique_ptr<TEvPQ::TEvTxCalcPredicate>> events;
 
     for (auto& operation : tx.Operations) {
@@ -3963,6 +3971,7 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
         Y_ABORT_UNLESS(Partitions.contains(partitionId));
         const TPartitionInfo& partition = Partitions.at(partitionId);
 
+        DBGTRACE_LOG("send TEvPQ::TEvTxCalcPredicate to partition " << originalPartitionId);
         ctx.Send(partition.Actor, event.release());
     }
 
@@ -4074,6 +4083,9 @@ TDistributedTransaction* TPersQueue::GetTransaction(const TActorContext& ctx,
 void TPersQueue::CheckTxState(const TActorContext& ctx,
                               TDistributedTransaction& tx)
 {
+    DBGTRACE("TPersQueue::CheckTxState");
+    DBGTRACE_LOG("TxId " << tx.TxId <<
+                 ", State " << NKikimrPQ::TTransaction_EState_Name(tx.State));
     PQ_LOG_D("TxId " << tx.TxId <<
              ", State " << NKikimrPQ::TTransaction_EState_Name(tx.State));
 
@@ -4085,6 +4097,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         ScheduleProposeTransactionResult(tx);
 
         tx.State = NKikimrPQ::TTransaction::PREPARING;
+        DBGTRACE_LOG("TxId " << tx.TxId <<
+                     ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
         PQ_LOG_D("TxId " << tx.TxId <<
                  ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
 
@@ -4100,6 +4114,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         //
 
         tx.State = NKikimrPQ::TTransaction::PREPARED;
+        DBGTRACE_LOG("TxId " << tx.TxId <<
+                     ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
         PQ_LOG_D("TxId " << tx.TxId <<
                  ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
 
@@ -4111,6 +4127,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         WriteTx(tx, NKikimrPQ::TTransaction::PLANNED);
 
         tx.State = NKikimrPQ::TTransaction::PLANNING;
+        DBGTRACE_LOG("TxId " << tx.TxId <<
+                     ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
         PQ_LOG_D("TxId " << tx.TxId <<
                  ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
 
@@ -4126,6 +4144,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         //
 
         tx.State = NKikimrPQ::TTransaction::PLANNED;
+        DBGTRACE_LOG("TxId " << tx.TxId <<
+                     ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
         PQ_LOG_D("TxId " << tx.TxId <<
                  ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
 
@@ -4153,6 +4173,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
                 WriteTx(tx, NKikimrPQ::TTransaction::WAIT_RS);
 
                 tx.State = NKikimrPQ::TTransaction::CALCULATED;
+                DBGTRACE_LOG("TxId " << tx.TxId <<
+                             ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
                 PQ_LOG_D("TxId " << tx.TxId <<
                          ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
 
@@ -4171,6 +4193,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         tx.WriteInProgress = false;
 
         tx.State = NKikimrPQ::TTransaction::WAIT_RS;
+        DBGTRACE_LOG("TxId " << tx.TxId <<
+                     ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
         PQ_LOG_D("TxId " << tx.TxId <<
                  ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
 
@@ -4197,6 +4221,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
             }
 
             tx.State = NKikimrPQ::TTransaction::EXECUTING;
+            DBGTRACE_LOG("TxId " << tx.TxId <<
+                         ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
             PQ_LOG_D("TxId " << tx.TxId <<
                      ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
         } else {
@@ -4230,6 +4256,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
             }
 
             tx.State = NKikimrPQ::TTransaction::EXECUTED;
+            DBGTRACE_LOG("TxId " << tx.TxId <<
+                         ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
             PQ_LOG_D("TxId " << tx.TxId <<
                      ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
         } else {

@@ -1652,23 +1652,23 @@ bool RenamePgSelectColumns(
         insertColumnOrder = *tableColumnOrder;
     }
     YQL_ENSURE(selectorColumnOrder);
-    if (selectorColumnOrder->Order.size() > insertColumnOrder.Order.size()) {
+    if (selectorColumnOrder->Size() > insertColumnOrder.Size()) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << Sprintf(
             "%s have %zu columns, INSERT INTO expects: %zu",
             optionName.Data(),
-            selectorColumnOrder->Order.size(),
-            insertColumnOrder.Order.size()
+            selectorColumnOrder->Size(),
+            insertColumnOrder.Size()
         )));
         return false;
     }
 
-    if (selectorColumnOrder->Order == insertColumnOrder.Order) {
+    if (*selectorColumnOrder == insertColumnOrder) {
         output = node.Ptr();
         return true;
     }
 
     TVector<const TItemExprType*> rowTypeItems;
-    rowTypeItems.reserve(selectorColumnOrder->Order.size());
+    rowTypeItems.reserve(selectorColumnOrder->Size());
     const TTypeAnnotationNode* inputType;
     switch (node.Ref().GetTypeAnn()->GetKind()) {
         case ETypeAnnotationKind::List:
@@ -1685,13 +1685,13 @@ bool RenamePgSelectColumns(
         .Done();
     auto structBuilder = Build<TCoAsStruct>(ctx, node.Pos());
 
-    for (size_t i = 0; i < selectorColumnOrder->Order.size(); i++) {
-        const auto& columnName = selectorColumnOrder->Order.at(i);
+    for (size_t i = 0; i < selectorColumnOrder->Size(); i++) {
+        const auto& columnName = selectorColumnOrder->at(i);
         structBuilder.Add<TCoNameValueTuple>()
-            .Name().Build(insertColumnOrder.Order.at(i).second)
+            .Name().Build(insertColumnOrder.at(i).PhysicalName)
             .Value<TCoMember>()
                 .Struct(rowArg)
-                .Name().Build(columnName.second)
+                .Name().Build(columnName.PhysicalName)
             .Build()
         .Build();
     }

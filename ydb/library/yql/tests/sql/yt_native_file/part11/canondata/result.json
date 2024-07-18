@@ -2207,13 +2207,6 @@
             "uri": "https://{canondata_backend}/1900335/b19e3a88f54bb49e1964c45fd96be88e34fd38d0/resource.tar.gz#test.test_pg_catalog-user-default.txt-Results_/results.txt"
         }
     ],
-    "test.test[pg_duplicated-order_by3--Debug]": [],
-    "test.test[pg_duplicated-order_by3--Plan]": [],
-    "test.test[pg_duplicated-order_by3--Results]": [
-        {
-            "uri": "file://test.test_pg_duplicated-order_by3--Results_/extracted"
-        }
-    ],
     "test.test[produce-process_with_lambda-default.txt-Debug]": [
         {
             "checksum": "5bd748d4fe50799bcdf0d185a92554f6",

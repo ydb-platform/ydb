@@ -58,7 +58,7 @@ class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
             }
 
             if (columns) {
-                for (auto& [column, gen_column] : columns->Order) {
+                for (auto& [column, gen_column] : *columns) {
                     auto it = members.find(gen_column);
                     if (it != members.end()) {
                         Members.emplace_back(column, it->second);
@@ -405,7 +405,7 @@ struct TOrderAwareExprTypeLoader: public TExprTypeLoader {
 
     TMaybe<TType> LoadStructType(const TVector<std::pair<TString, TType>>& members, ui32 level) {
         if (level == 0) {
-            YQL_ENSURE(TopLevelColumns.Order.empty());
+            YQL_ENSURE(TopLevelColumns.Size() == 0);
             for (auto& [column, type] : members) {
                 TopLevelColumns.AddColumn(column);
             }
@@ -420,7 +420,7 @@ const TTypeAnnotationNode* ParseOrderAwareTypeFromYson(const NYT::TNode& node, T
 }
 
 void WriteResOrPullType(NYson::TYsonConsumerBase& writer, const TTypeAnnotationNode* type, const TColumnOrder& columns) {
-    if (columns.Order.empty() ||
+    if (columns.Size() == 0 ||
         type->GetKind() != ETypeAnnotationKind::List ||
         type->Cast<TListExprType>()->GetItemType()->GetKind() != ETypeAnnotationKind::Struct) {
         WriteTypeToYson(writer, type, true);

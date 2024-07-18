@@ -2333,28 +2333,28 @@
         }
     ],
     "test.test[pg_catalog-pg_shdescription-default.txt-Results]": [],
-    "test.test[pg_duplicated-t8-default.txt-Analyze]": [
+    "test.test[pg_duplicated-qualified_star_proj-default.txt-Analyze]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",
             "size": 505,
-            "uri": "https://{canondata_backend}/1880306/722442f8981a3d91a6af555386ad66db87da7ff2/resource.tar.gz#test.test_pg_duplicated-t8-default.txt-Analyze_/plan.txt"
+            "uri": "https://{canondata_backend}/1899731/d2bc375d62c2739c9466376d2ff97d13069fe91a/resource.tar.gz#test.test_pg_duplicated-qualified_star_proj-default.txt-Analyze_/plan.txt"
         }
     ],
-    "test.test[pg_duplicated-t8-default.txt-Debug]": [
+    "test.test[pg_duplicated-qualified_star_proj-default.txt-Debug]": [
         {
-            "checksum": "2a931b62d942a695a1b75c316564b34a",
-            "size": 674,
-            "uri": "https://{canondata_backend}/1880306/722442f8981a3d91a6af555386ad66db87da7ff2/resource.tar.gz#test.test_pg_duplicated-t8-default.txt-Debug_/opt.yql_patched"
+            "checksum": "94a402c7886883c3221092bea9576488",
+            "size": 907,
+            "uri": "https://{canondata_backend}/1899731/d2bc375d62c2739c9466376d2ff97d13069fe91a/resource.tar.gz#test.test_pg_duplicated-qualified_star_proj-default.txt-Debug_/opt.yql_patched"
         }
     ],
-    "test.test[pg_duplicated-t8-default.txt-Plan]": [
+    "test.test[pg_duplicated-qualified_star_proj-default.txt-Plan]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",
             "size": 505,
-            "uri": "https://{canondata_backend}/1880306/722442f8981a3d91a6af555386ad66db87da7ff2/resource.tar.gz#test.test_pg_duplicated-t8-default.txt-Plan_/plan.txt"
+            "uri": "https://{canondata_backend}/1899731/d2bc375d62c2739c9466376d2ff97d13069fe91a/resource.tar.gz#test.test_pg_duplicated-qualified_star_proj-default.txt-Plan_/plan.txt"
         }
     ],
-    "test.test[pg_duplicated-t8-default.txt-Results]": [],
+    "test.test[pg_duplicated-qualified_star_proj-default.txt-Results]": [],
     "test.test[produce-process_streaming_count-default.txt-Analyze]": [
         {
             "checksum": "07d8bcda07bdf212304b6304e3863930",

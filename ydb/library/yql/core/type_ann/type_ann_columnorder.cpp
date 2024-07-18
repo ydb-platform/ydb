@@ -10,13 +10,13 @@ namespace NTypeAnnImpl {
 namespace {
 void FilterColumnOrderByType(TColumnOrder& columnOrder, const TTypeAnnotationNode& type) {
     TSet<TStringBuf> typeColumns = GetColumnsOfStructOrSequenceOfStruct(type);
-    columnOrder.EraseIf([&](const std::pair<TString, TString>& col) { return !typeColumns.contains(col.second); });
+    columnOrder.EraseIf([&](const TColumnOrder::TOrderedItem& col) { return !typeColumns.contains(col.PhysicalName); });
 }
 
 void DivePrefixes(TColumnOrder& columnOrder, const TVector<TString>& prefixes) {
     TColumnOrder outputColumnOrder;
     THashSet<TString> outputSet;
-    for (auto& [col, gen_col] : columnOrder.Order) {
+    for (auto& [col, gen_col] : columnOrder) {
         for (auto& prefix : prefixes) {
             if (col.StartsWith(prefix)) {
                 TString outputColumn = col.substr(prefix.length());
@@ -33,7 +33,7 @@ void DivePrefixes(TColumnOrder& columnOrder, const TVector<TString>& prefixes) {
 
 void AddPrefix(TColumnOrder& columnOrder, const TString& prefix) {
     TColumnOrder newColumnOrder;
-    for (auto& [col, gen_col] : columnOrder.Order) {
+    for (auto& [col, gen_col] : columnOrder) {
         newColumnOrder.AddColumn(prefix + col);
     }
     std::swap(columnOrder, newColumnOrder);
@@ -142,8 +142,8 @@ IGraphTransformer::TStatus OrderForSqlProject(const TExprNode::TPtr& node, TExpr
         }
 
         FilterColumnOrderByType(starOutput, *item->GetTypeAnn());
-        for (auto&e : starOutput.Order) {
-            resultColumnOrder.AddColumn(e.first);
+        for (auto&e : starOutput) {
+            resultColumnOrder.AddColumn(e.LogicalName);
         }
     }
     return ctx.Types.SetColumnOrder(*node, resultColumnOrder, ctx.Expr);
@@ -159,7 +159,7 @@ IGraphTransformer::TStatus OrderForMergeExtend(const TExprNode::TPtr& node, TExp
 
     for (ui32 i = 1; i < node->ChildrenSize(); i++) {
         auto current = ctx.Types.LookupColumnOrder(*node->Child(i));
-        if (!current || current->Order != common->Order) {
+        if (!current || *current != *common) {
             return IGraphTransformer::TStatus::Ok;
         }
     }
@@ -183,21 +183,21 @@ IGraphTransformer::TStatus OrderForUnionAll(const TExprNode::TPtr& node, TExprNo
         }
 
         bool truncated = false;
-        for (size_t i = 0; i < Min(common->Order.size(), current->Order.size()); ++i) {
-            if (current->Order[i].first != common->Order[i].first) {
+        for (size_t i = 0; i < Min(common->Size(), current->Size()); ++i) {
+            if (current->at(i).LogicalName != common->at(i).LogicalName) {
                 common->Shrink(i);
                 truncated = true;
                 break;
             }
         }
-        if (!truncated && current->Order.size() > common->Order.size()) {
+        if (!truncated && current->Size() > common->Size()) {
             common = current;
         }
     }
 
-    if (common->Order.size() > 0) {
+    if (common->Size() > 0) {
         auto allColumns = GetColumnsOfStructOrSequenceOfStruct(*node->GetTypeAnn());
-        for (auto& [col, gen_col] : common->Order) {
+        for (auto& [col, gen_col] : *common) {
             auto it = allColumns.find(gen_col);
             YQL_ENSURE(it != allColumns.end());
             allColumns.erase(it);
@@ -257,7 +257,7 @@ IGraphTransformer::TStatus OrderForEquiJoin(const TExprNode::TPtr& node, TExprNo
             continue;
         }
 
-        for (auto [col, gen_col] : columnOrder->Order) {
+        for (auto [col, gen_col] : *columnOrder) {
             TString fullName = label.FullName(col);
             if (columnTypes.contains(fullName)) {
                 auto it = options.RenameMap.find(fullName);

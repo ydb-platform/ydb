@@ -387,7 +387,7 @@ NKikimrMiniKQL::TResult* KikimrResultToProto(const NKikimrMiniKQL::TResult& resu
             auto* newItem = dataType->MutableList()->MutableItem();
             newItem->SetKind(NKikimrMiniKQL::ETypeKind::Struct);
             auto* newStructType = newItem->MutableStruct();
-            for (auto& [column, gen_col] : order.Order) {
+            for (auto& [column, gen_col] : order) {
                 auto* memberIndex = memberIndices.FindPtr(gen_col);
                 YQL_ENSURE(memberIndex);
 
@@ -406,7 +406,7 @@ NKikimrMiniKQL::TResult* KikimrResultToProto(const NKikimrMiniKQL::TResult& resu
             }
             if (!memberIndices.empty()) {
                 auto* newStruct = dataValue->AddList();
-                for (auto& [column, gen_column] : order.Order) {
+                for (auto& [column, gen_column] : order) {
                     auto* memberIndex = memberIndices.FindPtr(gen_column);
                     YQL_ENSURE(memberIndex);
 

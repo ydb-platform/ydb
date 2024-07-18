@@ -152,6 +152,13 @@ struct TYqlOperationOptions {
 
 class TColumnOrder {
 public:
+    struct TOrderedItem {
+        TString LogicalName;
+        TString PhysicalName;
+        bool operator==(const TOrderedItem& other) const {
+            return LogicalName == other.LogicalName && PhysicalName == other.PhysicalName;
+        }
+    };
     TColumnOrder() = default;
     TColumnOrder(const TColumnOrder&) = default;
     TColumnOrder(TColumnOrder&&) = default;
@@ -165,14 +172,45 @@ public:
 
     void Reserve(size_t);
     void EraseIf(const std::function<bool(const TString&)>& fn);
-    void EraseIf(const std::function<bool(const std::pair<TString, TString>&)>& fn);
+    void EraseIf(const std::function<bool(const TOrderedItem&)>& fn);
     void Clear();
+
+    size_t Size() const;
+
     TString Find(const TString&) const;
 
-    THashMap<TString, TString> GeneratedToOriginal;
-    THashMap<TString, uint64_t> UseCount;
+    TVector<TOrderedItem>::const_pointer begin() const {
+        return Order_.cbegin();
+    }
+
+    TVector<TOrderedItem>::const_pointer end() const {
+        return Order_.cend();
+    }
+
+    const TOrderedItem& operator[](size_t i) const {
+        return Order_[i];
+    }
+
+    bool operator==(const TColumnOrder& other) const {
+        return Order_ == other.Order_;
+    }
+
+    const TOrderedItem& at(size_t i) const {
+        return Order_[i];
+    }
+
+    const TOrderedItem& front() const {
+        return Order_.front();
+    }
+
+    const TOrderedItem& back() const {
+        return Order_.back();
+    }
+private:
+    THashMap<TString, TString> GeneratedToOriginal_;
+    THashMap<TString, uint64_t> UseCount_;
     // (name, generated_name)
-    TVector<std::pair<TString, TString>> Order;
+    TVector<TOrderedItem> Order_;
 };
 
 TString FormatColumnOrder(const TMaybe<TColumnOrder>& columnOrder, TMaybe<size_t> maxColumns = {});

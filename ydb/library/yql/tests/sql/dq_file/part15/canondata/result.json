@@ -2366,28 +2366,28 @@
         }
     ],
     "test.test[pg_catalog-pg_set_config_commit-default.txt-Results]": [],
-    "test.test[pg_duplicated-t6-default.txt-Analyze]": [
+    "test.test[pg_duplicated-qualified_star_from_using-default.txt-Analyze]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",
             "size": 505,
-            "uri": "https://{canondata_backend}/1916746/42457fbfaf3f89d83526d51c337e829ab47b5e9c/resource.tar.gz#test.test_pg_duplicated-t6-default.txt-Analyze_/plan.txt"
+            "uri": "https://{canondata_backend}/1923547/5fccde9e77cd24e0e9edadda2daa7eb56bde0a29/resource.tar.gz#test.test_pg_duplicated-qualified_star_from_using-default.txt-Analyze_/plan.txt"
         }
     ],
-    "test.test[pg_duplicated-t6-default.txt-Debug]": [
+    "test.test[pg_duplicated-qualified_star_from_using-default.txt-Debug]": [
         {
-            "checksum": "8d4836e09efeb2e1f5803e5ca6bcc78d",
-            "size": 1073,
-            "uri": "https://{canondata_backend}/1916746/42457fbfaf3f89d83526d51c337e829ab47b5e9c/resource.tar.gz#test.test_pg_duplicated-t6-default.txt-Debug_/opt.yql_patched"
+            "checksum": "2a931b62d942a695a1b75c316564b34a",
+            "size": 674,
+            "uri": "https://{canondata_backend}/1923547/5fccde9e77cd24e0e9edadda2daa7eb56bde0a29/resource.tar.gz#test.test_pg_duplicated-qualified_star_from_using-default.txt-Debug_/opt.yql_patched"
         }
     ],
-    "test.test[pg_duplicated-t6-default.txt-Plan]": [
+    "test.test[pg_duplicated-qualified_star_from_using-default.txt-Plan]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",
             "size": 505,
-            "uri": "https://{canondata_backend}/1916746/42457fbfaf3f89d83526d51c337e829ab47b5e9c/resource.tar.gz#test.test_pg_duplicated-t6-default.txt-Plan_/plan.txt"
+            "uri": "https://{canondata_backend}/1923547/5fccde9e77cd24e0e9edadda2daa7eb56bde0a29/resource.tar.gz#test.test_pg_duplicated-qualified_star_from_using-default.txt-Plan_/plan.txt"
         }
     ],
-    "test.test[pg_duplicated-t6-default.txt-Results]": [],
+    "test.test[pg_duplicated-qualified_star_from_using-default.txt-Results]": [],
     "test.test[pragma-yson_auto_convert--Analyze]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",

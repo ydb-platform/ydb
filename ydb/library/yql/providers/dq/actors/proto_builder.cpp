@@ -36,7 +36,7 @@ TVector<ui32> BuildColumnOrder(const TVector<TString>& columns, NKikimr::NMiniKQ
     columnOrder.resize(columns.size());
 
     int id = 0;
-    for (const auto& [columnName, generated] : order.Order) {
+    for (const auto& [columnName, generated] : order) {
         columnOrder[id++] = column2id[generated];
     }
     return columnOrder;

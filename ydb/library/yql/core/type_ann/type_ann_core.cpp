@@ -9847,7 +9847,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
 
         }
-        YQL_ENSURE(childColumnOrder->Order.size() == numColumns);
+        YQL_ENSURE(childColumnOrder->Size() == numColumns);
 
         output = ctx.Expr.Builder(input->Pos())
             .Callable("AssumeColumnOrder")
@@ -9863,7 +9863,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                                             .Add(0, input->Child(1)->ChildPtr(i))
                                             .Callable(1, "Member")
                                                 .Arg(0, "item")
-                                                .Atom(1, childColumnOrder->Order[i].second)
+                                                .Atom(1, childColumnOrder->at(i).PhysicalName)
                                             .Seal()
                                         .Seal();
                                 }
@@ -9912,7 +9912,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         TExprNodeList items;
-        for (auto& [col, gen_col] : topLevelColumns.Order) {
+        for (auto& [col, gen_col] : topLevelColumns) {
             items.push_back(ctx.Expr.NewAtom(input->Pos(), col));
         }
 

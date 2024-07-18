@@ -2219,25 +2219,25 @@
             "uri": "https://{canondata_backend}/1871102/8f823df56b0eeffb5bef40f611ec075840ffa0b9/resource.tar.gz#test.test_pg_catalog-pg_set_config_commit-default.txt-Results_/results.txt"
         }
     ],
-    "test.test[pg_duplicated-t6-default.txt-Debug]": [
+    "test.test[pg_duplicated-qualified_star_from_using-default.txt-Debug]": [
         {
-            "checksum": "17f67ead28938e0f2dc09266f200b9d6",
-            "size": 1012,
-            "uri": "https://{canondata_backend}/1920236/b9038c45d4d18d473f96ca1b2b3680260107a2fc/resource.tar.gz#test.test_pg_duplicated-t6-default.txt-Debug_/opt.yql"
+            "checksum": "a70aa18fdfb7691e6afd7788012655b0",
+            "size": 614,
+            "uri": "https://{canondata_backend}/1809005/526b022fd20f09092240ac341729b5c827f4bf06/resource.tar.gz#test.test_pg_duplicated-qualified_star_from_using-default.txt-Debug_/opt.yql"
         }
     ],
-    "test.test[pg_duplicated-t6-default.txt-Plan]": [
+    "test.test[pg_duplicated-qualified_star_from_using-default.txt-Plan]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",
             "size": 505,
-            "uri": "https://{canondata_backend}/1920236/b9038c45d4d18d473f96ca1b2b3680260107a2fc/resource.tar.gz#test.test_pg_duplicated-t6-default.txt-Plan_/plan.txt"
+            "uri": "https://{canondata_backend}/1809005/526b022fd20f09092240ac341729b5c827f4bf06/resource.tar.gz#test.test_pg_duplicated-qualified_star_from_using-default.txt-Plan_/plan.txt"
         }
     ],
-    "test.test[pg_duplicated-t6-default.txt-Results]": [
+    "test.test[pg_duplicated-qualified_star_from_using-default.txt-Results]": [
         {
-            "checksum": "566c30499c9c2acdb3bbec637822536f",
-            "size": 2352,
-            "uri": "https://{canondata_backend}/1920236/b9038c45d4d18d473f96ca1b2b3680260107a2fc/resource.tar.gz#test.test_pg_duplicated-t6-default.txt-Results_/results.txt"
+            "checksum": "f4668a38daf649ee4248aee4549b0958",
+            "size": 1150,
+            "uri": "https://{canondata_backend}/1809005/526b022fd20f09092240ac341729b5c827f4bf06/resource.tar.gz#test.test_pg_duplicated-qualified_star_from_using-default.txt-Results_/results.txt"
         }
     ],
     "test.test[pragma-yson_auto_convert--Debug]": [

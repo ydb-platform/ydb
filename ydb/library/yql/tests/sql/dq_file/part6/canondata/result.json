@@ -2496,6 +2496,11 @@
         }
     ],
     "test.test[pg-uuid_from_pg-default.txt-Results]": [],
+    "test.test[pg_duplicated-ambigous_order_by_from_join--Results]": [
+        {
+            "uri": "file://test.test_pg_duplicated-ambigous_order_by_from_join--Results_/extracted"
+        }
+    ],
     "test.test[produce-process_with_assume--Analyze]": [
         {
             "checksum": "3f29bef99abe4b5924e963f404f353a9",

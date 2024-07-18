@@ -256,7 +256,7 @@ namespace {
         }
         auto l = coStore.Lookup(left.UniqueId());
         auto r = coStore.Lookup(right.UniqueId());
-        if (l && r && l->Order != r->Order) {
+        if (l && r && *l != *r) {
             return false;
         }
 

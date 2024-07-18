@@ -2686,11 +2686,6 @@
         }
     ],
     "test.test[pg_catalog-pg_locks-default.txt-Results]": [],
-    "test.test[pg_duplicated-order_by4--Results]": [
-        {
-            "uri": "file://test.test_pg_duplicated-order_by4--Results_/extracted"
-        }
-    ],
     "test.test[sampling-bind_expr-default.txt-Analyze]": [
         {
             "checksum": "48c500323490b6c607e4a54b8382169a",

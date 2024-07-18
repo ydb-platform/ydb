@@ -2345,11 +2345,6 @@
         }
     ],
     "test.test[pg_catalog-columns-default.txt-Results]": [],
-    "test.test[pg_duplicated-t3--Results]": [
-        {
-            "uri": "file://test.test_pg_duplicated-t3--Results_/extracted"
-        }
-    ],
     "test.test[pragma-config_exec--Analyze]": [
         {
             "checksum": "49226c5ed1226aacf447e83f0de3f342",

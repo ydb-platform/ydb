@@ -304,7 +304,7 @@ TMaybe<TVector<ui32>> CreateStructPositions(TType* inputType, const TVector<TStr
     if (columns) {
         TColumnOrder order(*columns);
         ui32 pos = 0;
-        for (auto& [column, gen_column]: order.Order) {
+        for (auto& [column, gen_column]: order) {
             const ui32* idx = members.FindPtr(gen_column);
             YQL_ENSURE(idx, "Unknown member: " << gen_column);
             structPositions[pos] = *idx;

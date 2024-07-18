@@ -2556,6 +2556,13 @@
             "uri": "https://{canondata_backend}/1689644/a1e3734b9bd90d7ee8a597f60d142b79a8980665/resource.tar.gz#test.test_pg_catalog-pg_namespace_pg_syntax-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[pg_duplicated-ambigous_order_by_from_table--Debug]": [],
+    "test.test[pg_duplicated-ambigous_order_by_from_table--Plan]": [],
+    "test.test[pg_duplicated-ambigous_order_by_from_table--Results]": [
+        {
+            "uri": "file://test.test_pg_duplicated-ambigous_order_by_from_table--Results_/extracted"
+        }
+    ],
     "test.test[produce-process_rows_and_filter--Debug]": [
         {
             "checksum": "7170701254a11b0f0b3e6116a7d7d9df",

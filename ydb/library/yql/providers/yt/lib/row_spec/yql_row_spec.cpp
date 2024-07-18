@@ -263,7 +263,7 @@ bool TYqlRowSpecInfo::ParsePatched(const NYT::TNode& rowSpecAttr, const THashMap
 
             // Patch Columns
             TColumnOrder newColumns;
-            for (auto& [col, gen_col]: Columns->Order) {
+            for (auto& [col, gen_col]: *Columns) {
                 if (!auxFields.contains(col)) {
                     newColumns.AddColumn(col);
                 }
@@ -1115,14 +1115,14 @@ void TYqlRowSpecInfo::CopyTypeOrders(const NYT::TNode& typeNode) {
 
     NYT::TNode members = NYT::TNode::CreateList();
     TColumnOrder columns;
-    if (Columns.Defined() && Columns->Order.size() == Type->GetSize()) {
+    if (Columns.Defined() && Columns->Size() == Type->GetSize()) {
         columns = *Columns;
     } else {
         for (auto& item : Type->GetItems()) {
             columns.AddColumn(TString(item->GetName()));
         }
     }
-    for (auto& [name, gen_name]: columns.Order) {
+    for (auto& [name, gen_name]: columns) {
         if (!StrictSchema && name == YqlOthersColumnName) {
             continue;
         }

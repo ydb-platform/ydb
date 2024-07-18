@@ -1149,7 +1149,7 @@ namespace {
                                 YQL_CLOG(INFO, ProviderResult) << "Setting result column order: " << FormatColumnOrder(dataOrder);
                                 auto settings = RemoveSetting(res.Settings().Ref(), "columns", ctx);
                                 TExprNodeList columnsList;
-                                for (auto& [col, gen_col] : dataOrder->Order) {
+                                for (auto& [col, gen_col] : *dataOrder) {
                                     columnsList.push_back(ctx.NewAtom(settings->Pos(), col));
                                 }
                                 settings = AddSetting(*settings, settings->Pos(), "columns", ctx.NewList(settings->Pos(), std::move(columnsList)), ctx);

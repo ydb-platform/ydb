@@ -2309,18 +2309,32 @@
             "uri": "https://{canondata_backend}/1781765/028f42f897160b53900546b39900217bb2eb9fb1/resource.tar.gz#test.test_pg_catalog-pg_am_pg_syntax-default.txt-Plan_/plan.txt"
         }
     ],
-    "test.test[pg_duplicated-t5-default.txt-Debug]": [
+    "test.test[pg_duplicated-order_by_with_duplicates-default.txt-Debug]": [
         {
-            "checksum": "b117fc9858039f5f0d8d209aa94abebe",
-            "size": 510,
-            "uri": "https://{canondata_backend}/1916746/f481bfe47378ccc02f8baea1aa173e00dce5e3c6/resource.tar.gz#test.test_pg_duplicated-t5-default.txt-Debug_/opt.yql_patched"
+            "checksum": "d5c028539ce9844b18635efeb429d361",
+            "size": 507,
+            "uri": "https://{canondata_backend}/1814674/a5c2cbff45dd20fa22702fa4b2539a64145b10f1/resource.tar.gz#test.test_pg_duplicated-order_by_with_duplicates-default.txt-Debug_/opt.yql_patched"
         }
     ],
-    "test.test[pg_duplicated-t5-default.txt-Plan]": [
+    "test.test[pg_duplicated-order_by_with_duplicates-default.txt-Plan]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",
             "size": 505,
-            "uri": "https://{canondata_backend}/1916746/f481bfe47378ccc02f8baea1aa173e00dce5e3c6/resource.tar.gz#test.test_pg_duplicated-t5-default.txt-Plan_/plan.txt"
+            "uri": "https://{canondata_backend}/1814674/a5c2cbff45dd20fa22702fa4b2539a64145b10f1/resource.tar.gz#test.test_pg_duplicated-order_by_with_duplicates-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg_duplicated-simple_duplicate-default.txt-Debug]": [
+        {
+            "checksum": "6cb0bf413da2fa2e6e79ea35c69cfd49",
+            "size": 420,
+            "uri": "https://{canondata_backend}/1814674/a5c2cbff45dd20fa22702fa4b2539a64145b10f1/resource.tar.gz#test.test_pg_duplicated-simple_duplicate-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg_duplicated-simple_duplicate-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1814674/a5c2cbff45dd20fa22702fa4b2539a64145b10f1/resource.tar.gz#test.test_pg_duplicated-simple_duplicate-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[pragma-config_exec--Debug]": [

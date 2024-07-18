@@ -2482,6 +2482,11 @@
         }
     ],
     "test.test[pg_catalog-pg_namespace_pg_syntax-default.txt-Results]": [],
+    "test.test[pg_duplicated-ambigous_order_by_from_table--Results]": [
+        {
+            "uri": "file://test.test_pg_duplicated-ambigous_order_by_from_table--Results_/extracted"
+        }
+    ],
     "test.test[produce-reduce_lambda-default.txt-Analyze]": [
         {
             "checksum": "e3c30fb055822c3b7989f4938092dd59",

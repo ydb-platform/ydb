@@ -2755,7 +2755,7 @@ namespace {
 
             TTypeAnnotationNode::TListType childTypes;
             const auto structType = itemType->Cast<TStructExprType>();
-            for (const auto& [col, gen_col] : childColumnOrder->Order) {
+            for (const auto& [col, gen_col] : *childColumnOrder) {
                 auto itemIdx = structType->FindItem(gen_col);
                 YQL_ENSURE(itemIdx);
                 childTypes.push_back(structType->GetItems()[*itemIdx]->GetItemType());
@@ -2781,10 +2781,10 @@ namespace {
             idx++;
         }
 
-        YQL_ENSURE(resultColumnOrder.Order.size() == resultTypes.size());
+        YQL_ENSURE(resultColumnOrder.Size() == resultTypes.size());
         TVector<const TItemExprType*> structItems;
         for (size_t i = 0; i < resultTypes.size(); ++i) {
-            structItems.push_back(ctx.Expr.MakeType<TItemExprType>(resultColumnOrder.Order[i].second, resultTypes[i]));
+            structItems.push_back(ctx.Expr.MakeType<TItemExprType>(resultColumnOrder[i].PhysicalName, resultTypes[i]));
         }
 
         resultStructType = ctx.Expr.MakeType<TStructExprType>(structItems);

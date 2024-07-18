@@ -327,18 +327,22 @@ public:
             if (pathInfo.Columns) {
                 auto& renames = pathInfo.Columns->GetRenames();
                 if (renames) {
-                    for (auto& [col, gen_col] : columnOrder->Order) {
+                    TColumnOrder renamedOrder;
+                    for (auto& [col, gen_col] : *columnOrder) {
                         if (auto renamed = renames->FindPtr(col)) {
-                            col = *renamed;
+                            renamedOrder.AddColumn(*renamed);
+                        } else {
+                            renamedOrder.AddColumn(col);
                         }
                     }
+                    *columnOrder = renamedOrder;
                 }
             }
 
             // sync with output type (add weak columns, etc.)
             TSet<TStringBuf> allColumns = GetColumnsOfStructOrSequenceOfStruct(*itemType);
             columnOrder->EraseIf([&](const TString& col) { return !allColumns.contains(col); });
-            for (auto& [col, gen_col] : columnOrder->Order) {
+            for (auto& [col, gen_col] : *columnOrder) {
                 allColumns.erase(allColumns.find(gen_col));
             }
             for (auto& col : allColumns) {
@@ -647,7 +651,7 @@ public:
 
         for (ui32 i = 1; i < paths.size(); ++i) {
             auto current = State_->Types->LookupColumnOrder(*paths[i]);
-            if (!current || common->Order != current->Order) {
+            if (!current || *common != *current) {
                 return TStatus::Ok;
             }
         }

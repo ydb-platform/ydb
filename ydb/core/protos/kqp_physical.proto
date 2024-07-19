@@ -263,6 +263,7 @@ enum EStreamLookupStrategy {
     UNSPECIFIED = 0;
     LOOKUP = 1;
     JOIN = 2;
+    SEMI_JOIN = 3;
 };
 
 message TKqpPhyCnStreamLookup {

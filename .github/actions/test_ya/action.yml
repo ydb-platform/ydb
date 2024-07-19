@@ -247,6 +247,7 @@ runs:
         YA_MAKE_OUTPUT="$PUBLIC_DIR/ya_make_output.log"
         YA_MAKE_OUTPUT_URL="$PUBLIC_DIR_URL/ya_make_output.log"
         echo "10 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
+        echo "YA_MAKE_OUTPUT_URL=$YA_MAKE_OUTPUT_URL" >> $GITHUB_ENV 
 
         BUILD_FAILED=0
 

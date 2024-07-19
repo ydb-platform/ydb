@@ -451,7 +451,7 @@ NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
 {
     NKikimrSchemeOp::TTableDescription implTableDesc;
 
-    implTableDesc.SetName("indexImplTable");
+    implTableDesc.SetName(NTableIndex::ImplTable);
 
     SetImplTablePartitionConfig(baseTableInfo->PartitionConfig(), indexTableDesc, implTableDesc);
 
@@ -467,7 +467,7 @@ NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
 {
     NKikimrSchemeOp::TTableDescription implTableDesc;
 
-    implTableDesc.SetName("indexImplTable");
+    implTableDesc.SetName(NTableIndex::ImplTable);
 
     SetImplTablePartitionConfig(baseTableDescr.GetPartitionConfig(), indexTableDesc, implTableDesc);
 

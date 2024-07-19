@@ -59,9 +59,9 @@ class Daemon(object):
         command,
         cwd,
         timeout,
-        stdin_file=yatest_common.work_path('stdin'),
-        stdout_file=yatest_common.work_path('stdout'),
-        stderr_file=yatest_common.work_path('stderr'),
+        stdin_file='stdin',
+        stdout_file='stdout',
+        stderr_file='stderr',
         stderr_on_error_lines=0,
         core_pattern=None,
     ):
@@ -73,9 +73,21 @@ class Daemon(object):
         self.killed = False
         self.__core_pattern = core_pattern
         self.logger = logger.getChild(self.__class__.__name__)
-        self.__stdout_file = open(stdout_file, mode='w+b')
-        self.__stdin_file = open(stdin_file, mode='w+b')
-        self.__stderr_file = open(stderr_file, mode='w+b')
+
+        if stdout_file == 'stdout':
+            self.__stdout_file = sys.stdout
+        else:
+            self.__stdout_file = open(stdout_file, mode='w+b')
+
+        if stdin_file == 'stdin':
+            self.__stdin_file = sys.stdin
+        else:
+            self.__stdin_file = open(stdin_file, mode='w+b')
+         
+        if stderr_file == 'stderr':
+            self.__stderr_file = sys.stderr
+        else:
+            self.__stderr_file = open(stderr_file, mode='w+b')
 
     @property
     def daemon(self):

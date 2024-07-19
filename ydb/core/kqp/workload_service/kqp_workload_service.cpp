@@ -58,6 +58,7 @@ public:
         CpuQuotaManager = std::make_unique<TCpuQuotaManagerState>(ActorContext(), Counters->GetSubgroup("subcomponent", "CpuQuotaManager"));
 
         EnabledResourcePools = AppData()->FeatureFlags.GetEnableResourcePools();
+        EnabledResourcePoolsOnServerLess = AppData()->FeatureFlags.GetEnableResourcePoolsOnServerLess();
         if (EnabledResourcePools) {
             InitializeWorkloadService();
         }

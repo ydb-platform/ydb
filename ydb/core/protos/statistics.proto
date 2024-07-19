@@ -119,7 +119,6 @@ message TEvStatisticsResponse {
         ERROR = 3;
     }
     optional EStatus Status = 2;
-
     optional fixed64 ShardTabletId = 3;
 }
 
@@ -132,6 +131,14 @@ message TEvAggregateStatistics {
     repeated TNodeMap Nodes = 2;
     optional NKikimrProto.TPathID PathId = 3;
     repeated uint32 ColumnTags = 4;
+}
+
+message TEvAggregateKeepAlive {
+    optional uint64 Round = 1;
+}
+
+message TEvAggregateKeepAliveAck {
+    optional uint64 Round = 1;
 }
 
 message TEvAggregateStatisticsResponse {
@@ -147,12 +154,4 @@ message TEvAggregateStatisticsResponse {
         optional uint32 NodeId = 3;
     }
     repeated TFailedTablet FailedTablets = 3;
-}
-
-message TEvAggregateKeepAlive {
-    optional uint64 Round = 1;
-}
-
-message TEvAggregateKeepAliveAck {
-    optional uint64 Round = 1;
 }

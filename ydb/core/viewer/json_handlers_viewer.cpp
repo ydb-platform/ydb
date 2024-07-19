@@ -44,7 +44,10 @@
 
 namespace NKikimr::NViewer {
 
+void InitViewerCapabilitiesJsonHandler(TJsonHandlers& jsonHandlers);
+
 void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
+    InitViewerCapabilitiesJsonHandler(jsonHandlers);
     jsonHandlers.AddHandler("/viewer/nodelist", new TJsonHandler<TJsonNodeList>);
     jsonHandlers.AddHandler("/viewer/nodeinfo", new TJsonHandler<TJsonNodeInfo>);
     jsonHandlers.AddHandler("/viewer/sysinfo", new TJsonHandler<TJsonSysInfo>);

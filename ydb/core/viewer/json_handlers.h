@@ -52,10 +52,12 @@ public:
 struct TJsonHandlers {
     std::vector<TString> JsonHandlersList;
     THashMap<TString, std::shared_ptr<TJsonHandlerBase>> JsonHandlersIndex;
+    std::map<TString, int> Capabilities;
 
-    void AddHandler(const TString& name, TJsonHandlerBase* handler) {
+    void AddHandler(const TString& name, TJsonHandlerBase* handler, int version = 1) {
         JsonHandlersList.push_back(name);
         JsonHandlersIndex[name] = std::shared_ptr<TJsonHandlerBase>(handler);
+        Capabilities[name] = version;
     }
 
     TJsonHandlerBase* FindHandler(const TString& name) const {

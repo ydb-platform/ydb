@@ -664,9 +664,6 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
 
 } // namespace
 
-
-Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
-
     void LdapFetchGroupsWithDefaultGroupAttributeGood(const ESecurityConnectionType& secureType) {
         TString login = "ldapuser";
         TString password = "ldapUserPassword";
@@ -692,18 +689,6 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
         }
 
         ldapServer.Stop();
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeGood_nonSecure) {
-        LdapFetchGroupsWithDefaultGroupAttributeGood(ESecurityConnectionType::NON_SECURE);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeGood_StartTls) {
-        LdapFetchGroupsWithDefaultGroupAttributeGood(ESecurityConnectionType::START_TLS);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeGood_LdapsScheme) {
-        LdapFetchGroupsWithDefaultGroupAttributeGood(ESecurityConnectionType::LDAPS_SCHEME);
     }
 
     void LdapFetchGroupsFromAdLdapServer(const ESecurityConnectionType& secureType) {
@@ -733,18 +718,6 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
         ldapServer.Stop();
     }
 
-    Y_UNIT_TEST(LdapFetchGroupsFromAdLdapServer_nonSecure) {
-        LdapFetchGroupsFromAdLdapServer(ESecurityConnectionType::NON_SECURE);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsFromAdLdapServer_StartTls) {
-        LdapFetchGroupsFromAdLdapServer(ESecurityConnectionType::START_TLS);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsFromAdLdapServer_LdapsScheme) {
-        LdapFetchGroupsFromAdLdapServer(ESecurityConnectionType::LDAPS_SCHEME);
-    }
-
     void LdapFetchGroupsWithDefaultGroupAttributeGoodUseListOfHosts(const ESecurityConnectionType& secureType) {
         TString login = "ldapuser";
         TString password = "ldapUserPassword";
@@ -772,18 +745,6 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
         ldapServer.Stop();
     }
 
-    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeGoodUseListOfHosts_nonSecure) {
-        LdapFetchGroupsWithDefaultGroupAttributeGoodUseListOfHosts(ESecurityConnectionType::NON_SECURE);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeGoodUseListOfHosts_StartTls) {
-        LdapFetchGroupsWithDefaultGroupAttributeGoodUseListOfHosts(ESecurityConnectionType::START_TLS);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeGoodUseListOfHosts_LdapsScheme) {
-        LdapFetchGroupsWithDefaultGroupAttributeGoodUseListOfHosts(ESecurityConnectionType::LDAPS_SCHEME);
-    }
-
     void LdapFetchGroupsWithCustomGroupAttributeGood(const ESecurityConnectionType& secureType) {
         TString login = "ldapuser";
         TString password = "ldapUserPassword";
@@ -809,18 +770,6 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
         }
 
         ldapServer.Stop();
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithCustomGroupAttributeGood_nonSecure) {
-        LdapFetchGroupsWithCustomGroupAttributeGood(ESecurityConnectionType::NON_SECURE);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithCustomGroupAttributeGood_StartTls) {
-        LdapFetchGroupsWithCustomGroupAttributeGood(ESecurityConnectionType::START_TLS);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithCustomGroupAttributeGood_LdapsScheme) {
-        LdapFetchGroupsWithCustomGroupAttributeGood(ESecurityConnectionType::LDAPS_SCHEME);
     }
 
     void LdapFetchGroupsWithDontExistGroupAttribute(const ESecurityConnectionType& secureType) {
@@ -870,18 +819,6 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
         ldapServer.Stop();
     }
 
-    Y_UNIT_TEST(LdapFetchGroupsWithDontExistGroupAttribute_nonSecure) {
-        LdapFetchGroupsWithDontExistGroupAttribute(ESecurityConnectionType::NON_SECURE);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithDontExistGroupAttribute_StartTls) {
-        LdapFetchGroupsWithDontExistGroupAttribute(ESecurityConnectionType::START_TLS);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithDontExistGroupAttribute_LdapsScheme) {
-        LdapFetchGroupsWithDontExistGroupAttribute(ESecurityConnectionType::LDAPS_SCHEME);
-    }
-
     void LdapFetchGroupsWithInvalidRobotUserLoginBad(const ESecurityConnectionType& secureType) {
         TString login = "ldapuser";
         TString password = "ldapUserPassword";
@@ -905,18 +842,6 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
         ldapServer.Stop();
     }
 
-    Y_UNIT_TEST(LdapFetchGroupsWithInvalidRobotUserLoginBad_nonSecure) {
-        LdapFetchGroupsWithInvalidRobotUserLoginBad(ESecurityConnectionType::NON_SECURE);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithInvalidRobotUserLoginBad_StartTls) {
-        LdapFetchGroupsWithInvalidRobotUserLoginBad(ESecurityConnectionType::START_TLS);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithInvalidRobotUserLoginBad_LdapsScheme) {
-        LdapFetchGroupsWithInvalidRobotUserLoginBad(ESecurityConnectionType::LDAPS_SCHEME);
-    }
-
     void LdapFetchGroupsWithInvalidRobotUserPasswordBad(const ESecurityConnectionType& secureType) {
         TString login = "ldapuser";
         TString password = "ldapUserPassword";
@@ -938,18 +863,6 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
         UNIT_ASSERT(ticketParserResult->Token == nullptr);
 
         ldapServer.Stop();
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithInvalidRobotUserPasswordBad_nonSecure) {
-        LdapFetchGroupsWithInvalidRobotUserPasswordBad(ESecurityConnectionType::NON_SECURE);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithInvalidRobotUserPasswordBad_StartTls) {
-        LdapFetchGroupsWithInvalidRobotUserPasswordBad(ESecurityConnectionType::START_TLS);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithInvalidRobotUserPasswordBad_LdapsScheme) {
-        LdapFetchGroupsWithInvalidRobotUserPasswordBad(ESecurityConnectionType::LDAPS_SCHEME);
     }
 
     void LdapFetchGroupsWithRemovedUserCredentialsBad(const ESecurityConnectionType& secureType) {
@@ -990,18 +903,6 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
         ldapServer.Stop();
     }
 
-    Y_UNIT_TEST(LdapFetchGroupsWithRemovedUserCredentialsBad_nonSecure) {
-        LdapFetchGroupsWithRemovedUserCredentialsBad(ESecurityConnectionType::NON_SECURE);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithRemovedUserCredentialsBad_StartTls) {
-        LdapFetchGroupsWithRemovedUserCredentialsBad(ESecurityConnectionType::START_TLS);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithRemovedUserCredentialsBad_LdapsScheme) {
-        LdapFetchGroupsWithRemovedUserCredentialsBad(ESecurityConnectionType::LDAPS_SCHEME);
-    }
-
     void LdapFetchGroupsUseInvalidSearchFilterBad(const ESecurityConnectionType& secureType) {
         TString login = "ldapuser";
         TString password = "ldapUserPassword";
@@ -1021,38 +922,6 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
         UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, expectedErrorMessage);
 
         ldapServer.Stop();
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsUseInvalidSearchFilterBad_nonSecure) {
-        LdapFetchGroupsUseInvalidSearchFilterBad(ESecurityConnectionType::NON_SECURE);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsUseInvalidSearchFilterBad_StartTls) {
-        LdapFetchGroupsUseInvalidSearchFilterBad(ESecurityConnectionType::START_TLS);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsUseInvalidSearchFilterBad_LdapsScheme) {
-        LdapFetchGroupsUseInvalidSearchFilterBad(ESecurityConnectionType::LDAPS_SCHEME);
-    }
-
-    Y_UNIT_TEST(LdapServerIsUnavailable) {
-        CheckRequiredLdapSettings(InitLdapSettingsWithUnavailableHost, "Could not start TLS\nCan't contact LDAP server", ESecurityConnectionType::START_TLS);
-    }
-
-    Y_UNIT_TEST(LdapRequestWithEmptyHost) {
-        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyHost, "List of ldap server hosts is empty");
-    }
-
-    Y_UNIT_TEST(LdapRequestWithEmptyBaseDn) {
-        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBaseDn, "Parameter BaseDn is empty");
-    }
-
-    Y_UNIT_TEST(LdapRequestWithEmptyBindDn) {
-        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBindDn, "Parameter BindDn is empty");
-    }
-
-    Y_UNIT_TEST(LdapRequestWithEmptyBindPassword) {
-        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBindPassword, "Parameter BindPassword is empty");
     }
 
     void LdapRefreshGroupsInfoGood(const ESecurityConnectionType& secureType) {
@@ -1111,18 +980,6 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
         ldapServer.Stop();
     }
 
-    Y_UNIT_TEST(LdapRefreshGroupsInfoGood_nonSecure) {
-        LdapRefreshGroupsInfoGood(ESecurityConnectionType::NON_SECURE);
-    }
-
-    Y_UNIT_TEST(LdapRefreshGroupsInfoGood_StartTls) {
-        LdapRefreshGroupsInfoGood(ESecurityConnectionType::START_TLS);
-    }
-
-    Y_UNIT_TEST(LdapRefreshGroupsInfoGood_LdapsScheme) {
-        LdapRefreshGroupsInfoGood(ESecurityConnectionType::LDAPS_SCHEME);
-    }
-
     void LdapRefreshRemoveUserBad(const ESecurityConnectionType& secureType) {
         TString login = "ldapuser";
         TString password = "ldapUserPassword";
@@ -1179,18 +1036,164 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
         ldapServer.Stop();
     }
 
-    Y_UNIT_TEST(LdapRefreshRemoveUserBad_nonSecure) {
-        LdapRefreshRemoveUserBad(ESecurityConnectionType::NON_SECURE);
+Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
+    Y_UNIT_TEST(LdapServerIsUnavailable) {
+        CheckRequiredLdapSettings(InitLdapSettingsWithUnavailableHost, "Could not start TLS\nCan't contact LDAP server", ESecurityConnectionType::START_TLS);
     }
 
-    Y_UNIT_TEST(LdapRefreshRemoveUserBad_StartTls) {
-        LdapRefreshRemoveUserBad(ESecurityConnectionType::START_TLS);
+    Y_UNIT_TEST(LdapRequestWithEmptyHost) {
+        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyHost, "List of ldap server hosts is empty");
     }
 
-    Y_UNIT_TEST(LdapRefreshRemoveUserBad_LdapsScheme) {
+    Y_UNIT_TEST(LdapRequestWithEmptyBaseDn) {
+        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBaseDn, "Parameter BaseDn is empty");
+    }
+
+    Y_UNIT_TEST(LdapRequestWithEmptyBindDn) {
+        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBindDn, "Parameter BindDn is empty");
+    }
+
+    Y_UNIT_TEST(LdapRequestWithEmptyBindPassword) {
+        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBindPassword, "Parameter BindPassword is empty");
+    }
+}
+
+Y_UNIT_TEST_SUITE(LdapAuthProviderTest_LdapsScheme) {
+    Y_UNIT_TEST(LdapFetchGroupsFromAdLdapServer) {
+        LdapFetchGroupsFromAdLdapServer(ESecurityConnectionType::LDAPS_SCHEME);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeGood) {
+        LdapFetchGroupsWithDefaultGroupAttributeGood(ESecurityConnectionType::LDAPS_SCHEME);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeGoodUseListOfHosts) {
+        LdapFetchGroupsWithDefaultGroupAttributeGoodUseListOfHosts(ESecurityConnectionType::LDAPS_SCHEME);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithCustomGroupAttributeGood) {
+        LdapFetchGroupsWithCustomGroupAttributeGood(ESecurityConnectionType::LDAPS_SCHEME);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithDontExistGroupAttribute) {
+        LdapFetchGroupsWithDontExistGroupAttribute(ESecurityConnectionType::LDAPS_SCHEME);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithInvalidRobotUserLoginBad) {
+        LdapFetchGroupsWithInvalidRobotUserLoginBad(ESecurityConnectionType::LDAPS_SCHEME);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithInvalidRobotUserPasswordBad) {
+        LdapFetchGroupsWithInvalidRobotUserPasswordBad(ESecurityConnectionType::LDAPS_SCHEME);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithRemovedUserCredentialsBad) {
+        LdapFetchGroupsWithRemovedUserCredentialsBad(ESecurityConnectionType::LDAPS_SCHEME);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsUseInvalidSearchFilterBad) {
+        LdapFetchGroupsUseInvalidSearchFilterBad(ESecurityConnectionType::LDAPS_SCHEME);
+    }
+
+    Y_UNIT_TEST(LdapRefreshGroupsInfoGood) {
+        LdapRefreshGroupsInfoGood(ESecurityConnectionType::LDAPS_SCHEME);
+    }
+
+    Y_UNIT_TEST(LdapRefreshRemoveUserBad) {
         LdapRefreshRemoveUserBad(ESecurityConnectionType::LDAPS_SCHEME);
     }
+}
 
+Y_UNIT_TEST_SUITE(LdapAuthProviderTest_StartTls) {
+    Y_UNIT_TEST(LdapFetchGroupsFromAdLdapServer) {
+        LdapFetchGroupsFromAdLdapServer(ESecurityConnectionType::START_TLS);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeGood) {
+        LdapFetchGroupsWithDefaultGroupAttributeGood(ESecurityConnectionType::START_TLS);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeGoodUseListOfHosts) {
+        LdapFetchGroupsWithDefaultGroupAttributeGoodUseListOfHosts(ESecurityConnectionType::START_TLS);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithCustomGroupAttributeGood) {
+        LdapFetchGroupsWithCustomGroupAttributeGood(ESecurityConnectionType::START_TLS);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithDontExistGroupAttribute) {
+        LdapFetchGroupsWithDontExistGroupAttribute(ESecurityConnectionType::START_TLS);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithInvalidRobotUserLoginBad) {
+        LdapFetchGroupsWithInvalidRobotUserLoginBad(ESecurityConnectionType::START_TLS);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithInvalidRobotUserPasswordBad) {
+        LdapFetchGroupsWithInvalidRobotUserPasswordBad(ESecurityConnectionType::START_TLS);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithRemovedUserCredentialsBad) {
+        LdapFetchGroupsWithRemovedUserCredentialsBad(ESecurityConnectionType::START_TLS);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsUseInvalidSearchFilterBad) {
+        LdapFetchGroupsUseInvalidSearchFilterBad(ESecurityConnectionType::START_TLS);
+    }
+
+    Y_UNIT_TEST(LdapRefreshGroupsInfoGood) {
+        LdapRefreshGroupsInfoGood(ESecurityConnectionType::START_TLS);
+    }
+
+    Y_UNIT_TEST(LdapRefreshRemoveUserBad) {
+        LdapRefreshRemoveUserBad(ESecurityConnectionType::START_TLS);
+    }
+}
+
+Y_UNIT_TEST_SUITE(LdapAuthProviderTest_nonSecure) {
+    Y_UNIT_TEST(LdapFetchGroupsFromAdLdapServer) {
+        LdapFetchGroupsFromAdLdapServer(ESecurityConnectionType::NON_SECURE);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeGood) {
+        LdapFetchGroupsWithDefaultGroupAttributeGood(ESecurityConnectionType::NON_SECURE);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeGoodUseListOfHosts) {
+        LdapFetchGroupsWithDefaultGroupAttributeGoodUseListOfHosts(ESecurityConnectionType::NON_SECURE);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithCustomGroupAttributeGood) {
+        LdapFetchGroupsWithCustomGroupAttributeGood(ESecurityConnectionType::NON_SECURE);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithDontExistGroupAttribute) {
+        LdapFetchGroupsWithDontExistGroupAttribute(ESecurityConnectionType::NON_SECURE);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithInvalidRobotUserLoginBad) {
+        LdapFetchGroupsWithInvalidRobotUserLoginBad(ESecurityConnectionType::NON_SECURE);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithInvalidRobotUserPasswordBad) {
+        LdapFetchGroupsWithInvalidRobotUserPasswordBad(ESecurityConnectionType::NON_SECURE);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithRemovedUserCredentialsBad) {
+        LdapFetchGroupsWithRemovedUserCredentialsBad(ESecurityConnectionType::NON_SECURE);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsUseInvalidSearchFilterBad) {
+        LdapFetchGroupsUseInvalidSearchFilterBad(ESecurityConnectionType::NON_SECURE);
+    }
+
+    Y_UNIT_TEST(LdapRefreshGroupsInfoGood) {
+        LdapRefreshGroupsInfoGood(ESecurityConnectionType::NON_SECURE);
+    }
+
+    Y_UNIT_TEST(LdapRefreshRemoveUserBad) {
+        LdapRefreshRemoveUserBad(ESecurityConnectionType::NON_SECURE);
+    }
 }
 
 } // NKikimr

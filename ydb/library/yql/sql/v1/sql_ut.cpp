@@ -2494,7 +2494,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(AlterTableAddIndexWithIsNotSupported) {
         ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx LOCAL WITH (a=b, c=d, e=f) ON (col)",
-            "<main>:1:40: Error: local: alternative is not implemented yet: 725:7: local_index\n");
+            "<main>:1:40: Error: local: alternative is not implemented yet: 727:7: local_index\n");
     }
 
     Y_UNIT_TEST(AlterTableAlterIndexSetPartitioningIsCorrect) {
@@ -2513,6 +2513,35 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         ExpectFailWithError("USE plato; ALTER TABLE table ALTER INDEX index RESET (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT)",
             "<main>:1:55: Error: AUTO_PARTITIONING_MIN_PARTITIONS_COUNT reset is not supported\n"
         );
+    }
+
+    Y_UNIT_TEST(AlterTableAlterColumnDropNotNullAstCorrect) {
+        auto reqSetNull = SqlToYql(R"(
+            USE plato;
+            CREATE TABLE tableName (
+                id Uint32,
+                val Uint32 NOT NULL,
+                PRIMARY KEY (id)
+            );
+
+            COMMIT;
+            ALTER TABLE tableName ALTER COLUMN val DROP NOT NULL;
+        )");
+
+        UNIT_ASSERT(reqSetNull.IsOk());
+        UNIT_ASSERT(reqSetNull.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            Y_UNUSED(word);
+
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(
+                R"(let world (Write! world sink (Key '('tablescheme (String '"tableName"))) (Void) '('('mode 'alter) '('actions '('('alterColumns '('('"val" '('changeColumnConstraints '('('drop_not_null)))))))))))"
+            ));
+        };
+
+        TWordCountHive elementStat({TString("\'mode \'alter")});
+        VerifyProgram(reqSetNull, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
     }
 
     Y_UNIT_TEST(OptionalAliases) {

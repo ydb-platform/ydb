@@ -109,12 +109,12 @@ public:
             break;
 
         case EOp::Attribute:
-            PrepareAlterUserAttrubutes();
+        case EOp::AddChangefeed:
+        case EOp::DropChangefeed:
+            GetProxyServices();
             break;
 
-        case EOp::AddChangefeed:
         case EOp::DropIndex:
-        case EOp::DropChangefeed:
         case EOp::RenameIndex:
             AlterTable(ctx);
             break;
@@ -197,7 +197,7 @@ private:
         Navigate(msg->Services.SchemeCache, ctx);
     }
 
-    void PrepareAlterUserAttrubutes() {
+    void GetProxyServices() {
         using namespace NTxProxy;
         Send(MakeTxProxyID(), new TEvTxUserProxy::TEvGetProxyServicesRequest);
     }
@@ -222,11 +222,36 @@ private:
         auto ev = CreateNavigateForPath(DatabaseName);
         {
             auto& entry = static_cast<TEvTxProxySchemeCache::TEvNavigateKeySet*>(ev)->Request->ResultSet.emplace_back();
-            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
             entry.Path = paths;
         }
 
         Send(schemeCache, ev);
+    }
+
+    void Navigate(const TTableId& pathId, const TActorContext& ctx) {
+        DatabaseName = Request_->GetDatabaseName()
+            .GetOrElse(DatabaseFromDomain(AppData()));
+
+        auto ev = CreateNavigateForPath(DatabaseName);
+        {
+            auto& entry = static_cast<TEvTxProxySchemeCache::TEvNavigateKeySet*>(ev)->Request->ResultSet.emplace_back();
+            entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+            entry.TableId = pathId;
+            entry.ShowPrivatePath = true;
+            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
+        }
+
+        Send(MakeSchemeCacheID(), ev);
+    }
+
+    static bool IsChangefeedOperation(EOp type) {
+        switch (type) {
+        case EOp::AddChangefeed:
+        case EOp::DropChangefeed:
+            return true;
+        default:
+            return false;
+        }
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
@@ -251,13 +276,48 @@ private:
             return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
         }
 
+        Y_ABORT_UNLESS(!resp->ResultSet.empty());
+        const auto& entry = resp->ResultSet.back();
+
+        switch (entry.Kind) {
+        case NSchemeCache::TSchemeCacheNavigate::KindTable:
+        case NSchemeCache::TSchemeCacheNavigate::KindColumnTable:
+        case NSchemeCache::TSchemeCacheNavigate::KindExternalTable:
+        case NSchemeCache::TSchemeCacheNavigate::KindExternalDataSource:
+        case NSchemeCache::TSchemeCacheNavigate::KindView:
+            break; // table
+        case NSchemeCache::TSchemeCacheNavigate::KindIndex:
+            if (IsChangefeedOperation(OpType)) {
+                break;
+            }
+            [[fallthrough]];
+        default:
+            Request_->RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, TStringBuilder()
+                << "Unable to nagivate: " << JoinPath(entry.Path) << " status: PathNotTable"));
+            return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
+        }
+
         switch (OpType) {
         case EOp::AddIndex:
             return AlterTableAddIndexOp(resp, ctx);
         case EOp::Attribute:
-            Y_ABORT_UNLESS(!resp->ResultSet.empty());
             ResolvedPathId = resp->ResultSet.back().TableId.PathId;
             return AlterTable(ctx);
+        case EOp::AddChangefeed:
+        case EOp::DropChangefeed:
+            if (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindIndex) {
+                AlterTable(ctx);
+            } else if (auto list = entry.ListNodeEntry) {
+                if (list->Children.size() != 1) {
+                    return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
+                }
+
+                const auto& child = list->Children.at(0);
+                AlterTable(ctx, CanonizePath(ChildPath(NKikimr::SplitPath(GetProtoRequest()->path()), child.Name)));
+            } else {
+                Navigate(entry.TableId, ctx);
+            }
+            break;
         default:
             TXLOG_E("Got unexpected cache response");
             return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
@@ -351,13 +411,14 @@ private:
         Die(ctx);
     }
 
-    void AlterTable(const TActorContext &ctx) { 
+    void AlterTable(const TActorContext &ctx, const TMaybe<TString>& overridePath = {}) { 
         const auto req = GetProtoRequest();
         std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
         auto modifyScheme = proposeRequest->Record.MutableTransaction()->MutableModifyScheme();
+        modifyScheme->SetAllowAccessToPrivatePaths(overridePath.Defined());
         Ydb::StatusIds::StatusCode code;
         TString error;
-        if (!BuildAlterTableModifyScheme(req, modifyScheme, Profiles, ResolvedPathId, code, error)) {
+        if (!BuildAlterTableModifyScheme(overridePath.GetOrElse(req->path()), req, modifyScheme, Profiles, ResolvedPathId, code, error)) {
             NYql::TIssues issues;
             issues.AddIssue(NYql::TIssue(error));
             return Reply(code, issues, ctx);

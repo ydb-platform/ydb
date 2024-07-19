@@ -89,75 +89,6 @@ runs:
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
     
 
-    - name: Upload tests result to testmo
-      id: th
-      if: inputs.testman_token && inputs.run_tests
-      shell: bash
-      run: |
-        set -x
-        TESTMO_RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-        TESTMO_BRANCH_TAG="$GITHUB_REF_NAME"
-        TESTMO_ARCH="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
-        TESTMO_PR_NUMBER=${{ github.event.number }}
-        
-        
-        # install test mo
-        npm install -g @testmo/testmo-cli
-
-        case "$BUILD_PRESET" in
-          relwithdebinfo)
-            TESTMO_SOURCE="ya-${TESTMO_ARCH}"
-            ;;
-          debug)
-            TESTMO_SOURCE="ya-${TESTMO_ARCH}-debug"
-            ;;
-          release-*)
-            TESTMO_SOURCE="ya-${TESTMO_ARCH}-${BUILD_PRESET/release-/}"
-            ;;
-          *)
-            echo "Invalid preset: $BUILD_PRESET"
-            exit 1
-            ;;
-        esac
-        
-        case $GITHUB_EVENT_NAME in
-          workflow_dispatch)
-            TESTMO_RUN_NAME="${{ github.run_id }} manual"
-            TESTMO_EXTRA_TAG="manual"
-            ;;
-          pull_request | pull_request_target)
-            TESTMO_RUN_NAME="${{ github.run_id }} PR #${TESTMO_PR_NUMBER}"
-            EXTRA_TAG="pr"
-            TESTMO_BRANCH_TAG=""
-            ;;
-          schedule)
-            TESTMO_RUN_NAME="${{ github.run_id }} schedule"
-            TESTMO_EXTRA_TAG="schedule"
-            ;;
-          push)
-            TESTMO_RUN_NAME="${{ github.run_id }} POST"
-            TESTMO_EXTRA_TAG="post-commit"
-            ;;
-          *)
-            TESTMO_RUN_NAME="${{ github.run_id }}"
-            TESTMO_EXTRA_TAG=""
-            ;;
-        esac
-        echo "TESTMO_RUN_NAME=$TESTMO_RUN_NAME" >> $GITHUB_ENV 
-        TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-link --name build --url "$TESTMO_RUN_URL" --resources testmo.json
-        TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-field --name git-sha --type string --value "${GITHUB_SHA:0:7}" --resources testmo.json
-        TESTMO_RUN_ID=$(
-          TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:create --instance "$TESTMO_URL" --project-id ${{ inputs.testman_project_id }} \
-            --name "$TESTMO_RUN_NAME" --source "$TESTMO_SOURCE" --resources testmo.json \
-            --tags "$TESTMO_BRANCH_TAG" --tags "$TESTMO_EXTRA_TAG"
-        )
-        echo "runid=${TESTMO_RUN_ID}" >> $GITHUB_OUTPUT
-        TESTMO_HISTORY_URL="${TESTMO_URL}/automation/runs/view/${TESTMO_RUN_ID}"
-        echo "TESTMO_HISTORY_URL=$TESTMO_HISTORY_URL" >> $GITHUB_ENV
-
-        # Print test history link
-        echo "10 [Test history](${TESTMO_HISTORY_URL})" >> $SUMMARY_LINKS
-
     - name: set environment variables required by some tests
       if: inputs.run_tests
       shell: bash
@@ -245,6 +176,69 @@ runs:
           --cache-size 2TB --force-build-depends
         )
 
+
+        TESTMO_RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+        TESTMO_BRANCH_TAG="$GITHUB_REF_NAME"
+        TESTMO_ARCH="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
+        TESTMO_PR_NUMBER=${{ github.event.number }}
+        
+        # install test mo
+        npm install -g @testmo/testmo-cli
+
+        case "$BUILD_PRESET" in
+          relwithdebinfo)
+            TESTMO_SOURCE="ya-${TESTMO_ARCH}"
+            ;;
+          debug)
+            TESTMO_SOURCE="ya-${TESTMO_ARCH}-debug"
+            ;;
+          release-*)
+            TESTMO_SOURCE="ya-${TESTMO_ARCH}-${BUILD_PRESET/release-/}"
+            ;;
+          *)
+            echo "Invalid preset: $BUILD_PRESET"
+            exit 1
+            ;;
+        esac
+        
+        case $GITHUB_EVENT_NAME in
+          workflow_dispatch)
+            TESTMO_RUN_NAME="${{ github.run_id }} manual"
+            TESTMO_EXTRA_TAG="manual"
+            ;;
+          pull_request | pull_request_target)
+            TESTMO_RUN_NAME="${{ github.run_id }} PR #${TESTMO_PR_NUMBER}"
+            EXTRA_TAG="pr"
+            TESTMO_BRANCH_TAG=""
+            ;;
+          schedule)
+            TESTMO_RUN_NAME="${{ github.run_id }} schedule"
+            TESTMO_EXTRA_TAG="schedule"
+            ;;
+          push)
+            TESTMO_RUN_NAME="${{ github.run_id }} POST"
+            TESTMO_EXTRA_TAG="post-commit"
+            ;;
+          *)
+            TESTMO_RUN_NAME="${{ github.run_id }}"
+            TESTMO_EXTRA_TAG=""
+            ;;
+        esac
+        echo "TESTMO_RUN_NAME=$TESTMO_RUN_NAME" >> $GITHUB_ENV 
+        TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-link --name build --url "$TESTMO_RUN_URL" --resources testmo.json
+        TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-field --name git-sha --type string --value "${GITHUB_SHA:0:7}" --resources testmo.json
+        TESTMO_RUN_ID=$(
+          TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:create --instance "$TESTMO_URL" --project-id ${{ inputs.testman_project_id }} \
+            --name "$TESTMO_RUN_NAME" --source "$TESTMO_SOURCE" --resources testmo.json \
+            --tags "$TESTMO_BRANCH_TAG" --tags "$TESTMO_EXTRA_TAG"
+        )
+        echo "runid=${TESTMO_RUN_ID}" >> $GITHUB_OUTPUT
+        TESTMO_HISTORY_URL="${TESTMO_URL}/automation/runs/view/${TESTMO_RUN_ID}"
+        echo "TESTMO_HISTORY_URL=$TESTMO_HISTORY_URL" >> $GITHUB_ENV
+
+        # Print test history link
+        echo "10 [Test history](${TESTMO_HISTORY_URL})" >> $SUMMARY_LINKS
+
         echo "::debug::get version"
         ./ya --version
 
@@ -325,6 +319,34 @@ runs:
         fi
         
         # TODO: merge tests here 
+
+        # split large junit_report
+        export TESTMO_JUNIT_REPORT_PARTS=$TMP_DIR/junit-split
+        mkdir -p $TESTMO_JUNIT_REPORT_PARTS
+        .github/scripts/tests/split-junit.py -o "$TESTMO_JUNIT_REPORT_PARTS" "$JUNIT_REPORT_XML"
+        # archive unitest reports (transformed)
+        tar -C $TESTMO_JUNIT_REPORT_PARTS/.. -czf $PUBLIC_DIR/junit_parts.xml.tar.gz $(basename $TESTMO_JUNIT_REPORT_PARTS)
+
+        TESTMO_PROXY_ADDR=127.0.0.1:8888
+
+        openssl req -x509 -newkey rsa:2048 \
+          -keyout $TMP_DIR/key.pem -out $TMP_DIR/cert.pem \
+          -sha256 -days 1 -nodes -subj "/CN=127.0.0.1"
+        
+        TESTMO_TOKEN=${{ inputs.testman_token }} ./ydb/ci/testmo-proxy/testmo-proxy.py -l $TESTMO_PROXY_ADDR \
+          --cert-file "$TMP_DIR/cert.pem" \
+          --cert-key "$TMP_DIR/key.pem" \
+          --target-timeout 3,10 \
+          --max-request-time 55 \
+          "$TESTMO_URL" &
+        
+        testmo_proxy_pid=$!
+        
+        TESTMO_TOKEN=${{ inputs.testman_token }} NODE_TLS_REJECT_UNAUTHORIZED=0 testmo automation:run:submit-thread \
+          --instance "https://$TESTMO_PROXY_ADDR" --run-id "${{ steps.th.outputs.runid }}" \
+          --results "$TESTMO_JUNIT_REPORT_PARTS/*.xml"
+        
+        kill $testmo_proxy_pid
   
 
     - name: comment-build-status
@@ -370,41 +392,6 @@ runs:
         run_name="${TESTMO_RUN_NAME// /"_"}"
         result=`.github/scripts/upload_tests_results.py --test-results-file ${JUNIT_REPORT_XML} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull $run_name --job-name ${JOB_NAME} --job-id ${JOB_ID} --branch ${GITHUB_REF_NAME}`
 
-    - name: Unit test history upload results
-      if: inputs.testman_token && inputs.run_tests
-      shell: bash
-      env:
-        TESTMO_TOKEN: ${{ inputs.testman_token }}
-      run: |
-        set -x
-
-        # split large junit_report
-        export JUNIT_REPORT_PARTS=$TMP_DIR/junit-split
-        mkdir -p $JUNIT_REPORT_PARTS
-        .github/scripts/tests/split-junit.py -o "$JUNIT_REPORT_PARTS" "$JUNIT_REPORT_XML"
-        # archive unitest reports (transformed)
-        tar -C $JUNIT_REPORT_PARTS/.. -czf $PUBLIC_DIR/junit_parts.xml.tar.gz $(basename $JUNIT_REPORT_PARTS)
-
-        PROXY_ADDR=127.0.0.1:8888
-
-        openssl req -x509 -newkey rsa:2048 \
-          -keyout $TMP_DIR/key.pem -out $TMP_DIR/cert.pem \
-          -sha256 -days 1 -nodes -subj "/CN=127.0.0.1"
-        
-        TESTMO_TOKEN=${{ inputs.testman_token }} ./ydb/ci/testmo-proxy/testmo-proxy.py -l $PROXY_ADDR \
-          --cert-file "$TMP_DIR/cert.pem" \
-          --cert-key "$TMP_DIR/key.pem" \
-          --target-timeout 3,10 \
-          --max-request-time 55 \
-          "$TESTMO_URL" &
-        
-        proxy_pid=$!
-        
-        TESTMO_TOKEN=${{ inputs.testman_token }} NODE_TLS_REJECT_UNAUTHORIZED=0 testmo automation:run:submit-thread \
-          --instance "https://$PROXY_ADDR" --run-id "${{ steps.th.outputs.runid }}" \
-          --results "$JUNIT_REPORT_PARTS/*.xml"
-        
-        kill $proxy_pid
 
     - name: Test history run complete
       if: always() && inputs.testman_token && inputs.run_tests

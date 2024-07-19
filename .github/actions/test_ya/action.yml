@@ -296,15 +296,15 @@ runs:
             "$CURRENT_JUNIT_XML_PATH"
           cp $CURRENT_JUNIT_XML_PATH $JUNIT_REPORT_XML
 
-        if [ "${{ inputs.run_tests }}" = "true" ]; then
-          GITHUB_TOKEN=${{ github.token }} .github/scripts/tests/generate-summary.py \
-            --summary_links "$SUMMARY_LINKS" \
-            --public_dir "$PUBLIC_DIR" \
-            --public_dir_url "$PUBLIC_DIR_URL" \
-            --build_preset "$BUILD_PRESET" \
-            --status_report_file statusrep.txt \
-            "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_JUNIT_XML_PATH"
-        fi
+          if [ "${{ inputs.run_tests }}" = "true" ]; then
+            GITHUB_TOKEN=${{ github.token }} .github/scripts/tests/generate-summary.py \
+              --summary_links "$SUMMARY_LINKS" \
+              --public_dir "$PUBLIC_DIR" \
+              --public_dir_url "$PUBLIC_DIR_URL" \
+              --build_preset "$BUILD_PRESET" \
+              --status_report_file statusrep.txt \
+              "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_JUNIT_XML_PATH"
+          fi
 
           TESTS_RESULT=0
           .github/scripts/tests/fail-checker.py "$CURRENT_JUNIT_XML_PATH" || TESTS_RESULT=$?

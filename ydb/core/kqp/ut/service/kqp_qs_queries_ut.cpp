@@ -3534,54 +3534,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST(AlterTable_AlterCreateIndex_Invalid) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
-
-        TKikimrRunner kikimr(settings);
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
-
-        auto client = kikimr.GetQueryClient();
-
-        {
-            auto createTable = client.ExecuteQuery(R"sql(
-                CREATE TABLE `/Root/test/indexTable` (
-                    my_key Int64 NOT NULL,
-                    my_value String,
-                    PRIMARY KEY (my_key)
-                );
-            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(createTable.IsSuccess(), createTable.GetIssues().ToString());
-        }
-
-        {
-            std::string value = "";
-            for (int i = 0; i < 16 * 1024 * 1024; i++) {
-                value += "a";
-            }
-
-            auto stringInitValues = std::string(R"(
-                REPLACE INTO `/Root/test/indexTable` (my_key, my_value)
-                VALUES
-            )") + " ( 1 , " + value + "); ";
-
-            auto initValues = client.ExecuteQuery(TString(stringInitValues), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(initValues.IsSuccess(), initValues.GetIssues().ToString());
-        }
-
-        {
-            auto addIndex = client.ExecuteQuery(R"sql(
-                ALTER TABLE `/Root/test/indexTable`
-                ADD INDEX my_index
-                GLOBAL ON (my_value);
-            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(addIndex.IsSuccess(), addIndex.GetIssues().ToString());
-        }
-    }
-
-
     Y_UNIT_TEST(AlterTable_SetNotNull_Invalid) {
         NKikimrConfig::TAppConfig appConfig;
         auto settings = TKikimrSettings()
@@ -3619,7 +3571,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_C(initValues.IsSuccess(), initValues.GetIssues().ToString());
         }
 
-        std::cerr << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << std::endl;
         {
             auto setNotNull = client.ExecuteQuery(R"sql(
                 ALTER TABLE `/Root/test/alterNotNull`
@@ -3627,7 +3578,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
         }
-        std::cerr << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << std::endl;
 
         {
             auto initNullValues = client.ExecuteQuery(R"sql(

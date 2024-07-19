@@ -49,7 +49,7 @@ public:
 
         if (indexBuildInfo->State == TIndexBuildInfo::EState::Rejected) {
             return Reply(
-                Ydb::StatusIds_StatusCode_INTERNAL_ERROR,
+                Ydb::StatusIds_StatusCode_GENERIC_ERROR,
                 TStringBuilder() << indexBuildInfo->Issue
             );
         } else {

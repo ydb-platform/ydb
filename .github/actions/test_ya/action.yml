@@ -269,7 +269,11 @@ runs:
             RERUN_FAILED_OPT="-X"
           fi
           echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
-          CURRENT_JUNIT_XML_PATH=$PUBLIC_DIR/junit_try_$RETRY.xml
+
+          CURRENT_PUBLIC_DIR=$PUBLIC_DIR/try_$RETRY
+          mkdir $CURRENT_PUBLIC_DIR
+
+          CURRENT_JUNIT_XML_PATH=$CURRENT_PUBLIC_DIR/junit.xml
           set +ex
           (./ya make ${{ inputs.build_target }} "${params[@]}" \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.log"  \
@@ -287,7 +291,7 @@ runs:
 
           # fix junit files (add links, logs etc)
           # archive unitest reports (orig) 
-          gzip -c $CURRENT_JUNIT_XML_PATH > $PUBLIC_DIR/orig_junit_try_$RETRY.xml.gz
+          gzip -c $CURRENT_JUNIT_XML_PATH > $CURRENT_PUBLIC_DIR/orig_junit.xml.gz
 
           # postprocess junit report
           .github/scripts/tests/transform-ya-junit.py -i \
@@ -295,8 +299,8 @@ runs:
             --ya_out "$YA_MAKE_OUT_DIR" \
             --public_dir "$PUBLIC_DIR" \
             --public_dir_url "$PUBLIC_DIR_URL" \
-            --log_out_dir "artifacts/try_$RETRY/logs/" \
-            --test_stuff_out "test_artifacts/try_$RETRY/" \
+            --log_out_dir "$CURRENT_PUBLIC_DIR/artifacts/logs/" \
+            --test_stuff_out "$CURRENT_PUBLIC_DIR/test_artifacts/" \
             "$CURRENT_JUNIT_XML_PATH"
           cp $CURRENT_JUNIT_XML_PATH $JUNIT_REPORT_XML
 
@@ -307,7 +311,7 @@ runs:
             --public_dir_url "$PUBLIC_DIR_URL" \
             --build_preset "$BUILD_PRESET" \
             --status_report_file statusrep.txt \
-            "Tests" ya-test_$RETRY.html "$CURRENT_JUNIT_XML_PATH"
+            "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_JUNIT_XML_PATH"
         fi
 
           TESTS_RESULT=0

@@ -26,7 +26,7 @@ ALTER TABLE series_with_families ADD FAMILY family_small (
 ALTER TABLE series_with_families ALTER COLUMN release_date SET FAMILY family_small;
 ```
 
-Две предыдущие команды из листингов 8 и 9 можно объединить в один вызов ```ALTER TABLE```. Приведенный ниже код создаст в таблице ```series_with_families``` группу колонок ```family_small``` и установит её для колонки ```release_date```.
+Две предыдущие команды можно объединить в один вызов ```ALTER TABLE```. Приведенный ниже код создаст в таблице ```series_with_families``` группу колонок ```family_small``` и установит её для колонки ```release_date```.
 
 ```sql
 ALTER TABLE series_with_families

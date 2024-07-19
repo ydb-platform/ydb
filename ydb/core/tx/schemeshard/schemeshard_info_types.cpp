@@ -334,7 +334,9 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
 
-            if (!columnFamily && !col.HasDefaultFromSequence() && !col.HasEmptyDefault()) {
+            bool isDropNotNull = col.HasNotNull(); // if has, then always false
+
+            if (!isDropNotNull && !columnFamily && !col.HasDefaultFromSequence() && !col.HasEmptyDefault()) {
                 errStr = Sprintf("Nothing to alter for column '%s'", colName.data());
                 return nullptr;
             }
@@ -408,6 +410,11 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
             TTableInfo::TColumn& column = alterData->Columns[colId];
             column = sourceColumn;
+
+            if (isDropNotNull) {
+                column.NotNull = false;
+            }
+
             if (columnFamily) {
                 column.Family = columnFamily->GetId();
             }
@@ -1447,18 +1454,20 @@ void TTableInfo::FinishAlter() {
     AlterVersion = AlterData->AlterVersion;
     NextColumnId = AlterData->NextColumnId;
     for (const auto& col : AlterData->Columns) {
+        const auto& cinfo = col.second;
         TColumn * oldCol = Columns.FindPtr(col.first);
         if (oldCol) {
-            //oldCol->CreateVersion = col.second.CreateVersion;
-            oldCol->DeleteVersion = col.second.DeleteVersion;
-            oldCol->Family = col.second.Family;
-            oldCol->DefaultKind = col.second.DefaultKind;
-            oldCol->DefaultValue = col.second.DefaultValue;
+            //oldCol->CreateVersion = cinfo.CreateVersion;
+            oldCol->DeleteVersion = cinfo.DeleteVersion;
+            oldCol->Family = cinfo.Family;
+            oldCol->DefaultKind = cinfo.DefaultKind;
+            oldCol->DefaultValue = cinfo.DefaultValue;
+            oldCol->NotNull = cinfo.NotNull;
         } else {
-            Columns[col.first] = col.second;
-            if (col.second.KeyOrder != (ui32)-1) {
-                KeyColumnIds.resize(Max<ui32>(KeyColumnIds.size(), col.second.KeyOrder + 1));
-                KeyColumnIds[col.second.KeyOrder] = col.first;
+            Columns[col.first] = cinfo;
+            if (cinfo.KeyOrder != (ui32)-1) {
+                KeyColumnIds.resize(Max<ui32>(KeyColumnIds.size(), cinfo.KeyOrder + 1));
+                KeyColumnIds[cinfo.KeyOrder] = col.first;
             }
         }
     }

@@ -6,6 +6,8 @@
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 
+#include <ydb/library/yql/minikql/computation/mock_spiller_factory_ut.h>
+
 #include <cstring>
 #include <random>
 #include <algorithm>
@@ -27,7 +29,9 @@ public:
 
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx)
             : TBase(memInfo), CompCtx(compCtx)
-        {}
+        {
+            CompCtx.SpillerFactory = std::make_shared<TMockSpillerFactory>();
+        }
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
             constexpr auto size = Y_ARRAY_SIZE(g_TestYieldStreamData);
@@ -47,6 +51,7 @@ public:
             items[1] =  NUdf::TUnboxedValuePod(MakeString(ToString(val)));
 
             ++Index;
+
             return NUdf::EFetchStatus::Ok;
         }
 
@@ -60,6 +65,7 @@ public:
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        ctx.SpillerFactory = std::make_shared<TMockSpillerFactory>();
         return ctx.HolderFactory.Create<TStreamValue>(ctx);
     }
 private:
@@ -997,7 +1003,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerPerfTest) {
 #if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 29u
 Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
     Y_UNIT_TEST_LLVM(TestLongStringsRefCounting) {
-        TSetup<LLVM> setup;
+        TSetup<LLVM> setup(GetTestFactory(), {}, true);
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         const auto dataType = pb.NewDataType(NUdf::TDataType<const char*>::Id);
@@ -1035,7 +1041,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
 
         const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
 
-        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(list),
+        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombinerWithSpilling(pb.ExpandMap(pb.ToFlow(list),
             [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
             [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
             [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) -> TRuntimeNode::TList {

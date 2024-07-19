@@ -298,12 +298,8 @@ bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKiki
             column->SetName(alter.name());
 
             if (alter.Hasnot_null()) {
-<<<<<<< HEAD
                 // always sets false, because in reality there is DROP NOT NULL
                 column->SetNotNull(false);
-=======
-                column->SetNotNull(alter.Getnot_null());
->>>>>>> 893f325416106c7d047799b1f7400d80aa7c8998
             }
 
             if (!alter.family().empty()) {

@@ -196,7 +196,8 @@ static int start_accept_listen(struct sockaddr_in *addr, int port_off,
 
 	addr->sin_family = AF_INET;
 	addr->sin_addr.s_addr = inet_addr("127.0.0.1");
-	assert(!t_bind_ephemeral_port(fd, addr));
+	ret = t_bind_ephemeral_port(fd, addr);
+	assert(!ret);
 	ret = listen(fd, 128);
 	assert(ret != -1);
 
@@ -310,6 +311,9 @@ static int test_loop(struct io_uring *ring,
 				fixed ? "Fixed" : "",
 				multishot ? "Multishot" : "",
 				i, s_fd[i]);
+			goto err;
+		} else if (s_fd[i] == 195 && args.overflow) {
+			fprintf(stderr, "Broken overflow handling\n");
 			goto err;
 		}
 
@@ -555,6 +559,9 @@ static int test_accept_cancel(unsigned usecs, unsigned int nr, bool multishot)
 			fprintf(stderr, "unexpected 0 user data\n");
 			goto err;
 		} else if (cqe->user_data <= nr) {
+			/* no multishot */
+			if (cqe->res == -EINVAL)
+				return T_EXIT_SKIP;
 			if (cqe->res != -EINTR && cqe->res != -ECANCELED) {
 				fprintf(stderr, "Cancelled accept got %d\n", cqe->res);
 				goto err;
@@ -679,7 +686,12 @@ static int test_accept_fixed(void)
 	ret = io_uring_queue_init(32, &m_io_uring, 0);
 	assert(ret >= 0);
 	ret = io_uring_register_files(&m_io_uring, &fd, 1);
-	assert(ret == 0);
+	if (ret) {
+		/* kernel doesn't support sparse registered files, skip */
+		if (ret == -EBADF || ret == -EINVAL)
+			return T_EXIT_SKIP;
+		return T_EXIT_FAIL;
+	}
 	ret = test(&m_io_uring, args);
 	io_uring_queue_exit(&m_io_uring);
 	return ret;
@@ -701,7 +713,12 @@ static int test_multishot_fixed_accept(void)
 	ret = io_uring_queue_init(MAX_FDS + 10, &m_io_uring, 0);
 	assert(ret >= 0);
 	ret = io_uring_register_files(&m_io_uring, fd, MAX_FDS);
-	assert(ret == 0);
+	if (ret) {
+		/* kernel doesn't support sparse registered files, skip */
+		if (ret == -EBADF || ret == -EINVAL)
+			return T_EXIT_SKIP;
+		return T_EXIT_FAIL;
+	}
 	ret = test(&m_io_uring, args);
 	io_uring_queue_exit(&m_io_uring);
 	return ret;

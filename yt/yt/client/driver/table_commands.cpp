@@ -291,7 +291,7 @@ void TWriteTableCommand::DoExecute(ICommandContextPtr context)
         context->GetInputFormat(),
         &valueConsumer));
 
-    PipeInputToOutput(context->Request().InputStream, &output, MaxRowBufferSize);
+    PipeInputToOutput(context->Request().InputStream, &output);
 
     WaitFor(valueConsumer.Flush())
         .ThrowOnError();
@@ -875,7 +875,7 @@ static std::vector<TUnversionedRow> ParseRows(
         context->GetInputFormat(),
         valueConsumer));
 
-    PipeInputToOutput(context->Request().InputStream, &output, 64_KB);
+    PipeInputToOutput(context->Request().InputStream, &output);
     return valueConsumer->GetRows();
 }
 

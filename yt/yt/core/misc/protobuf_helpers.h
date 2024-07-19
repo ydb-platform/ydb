@@ -214,6 +214,11 @@ TSharedRef PopEnvelope(const TSharedRef& data);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <std::derived_from<::google::protobuf::MessageLite> T>
+void FormatValue(TStringBuilderBase* builder, const T& message, TStringBuf /*spec*/);
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TBinaryProtoSerializer
 {
     //! Serializes a given protobuf message into a given stream.
@@ -465,6 +470,26 @@ public:
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
+
+namespace google::protobuf {
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+void FormatValue(
+    NYT::TStringBuilderBase* builder,
+    const ::google::protobuf::RepeatedField<T>& collection,
+    TStringBuf /*spec*/);
+
+template <class T>
+void FormatValue(
+    NYT::TStringBuilderBase* builder,
+    const ::google::protobuf::RepeatedPtrField<T>& collection,
+    TStringBuf /*spec*/);
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace google::protobuf
 
 #define PROTOBUF_HELPERS_INL_H_
 #include "protobuf_helpers-inl.h"

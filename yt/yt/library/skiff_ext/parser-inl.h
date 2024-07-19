@@ -41,8 +41,7 @@ public:
                     denseFieldDescription.Name(),
                     denseFieldDescription.ValidatedSimplify(),
                     tablesColumnIds[tableIndex].DenseFieldColumnIds[fieldIndex],
-                    denseFieldDescription.IsRequired()
-                );
+                    denseFieldDescription.IsRequired());
             }
 
             YT_VERIFY(tablesColumnIds[tableIndex].SparseFieldColumnIds.size() == genericTableDescriptions[tableIndex].SparseFieldDescriptionList.size());
@@ -56,8 +55,7 @@ public:
                     fieldDescription.Name(),
                     fieldDescription.ValidatedSimplify(),
                     tablesColumnIds[tableIndex].SparseFieldColumnIds[fieldIndex],
-                    true
-                );
+                    true);
             }
         }
     }

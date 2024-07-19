@@ -174,8 +174,7 @@ protected:
         method, \
         { \
             tokenizer.ThrowUnexpected(); \
-        } \
-    ) \
+        }) \
     \
     void TSupports##method::method##Attribute(const NYPath::TYPath& /*path*/, TReq##method* /*request*/, TRsp##method* /*response*/, const TCtx##method##Ptr& context) \
     { \

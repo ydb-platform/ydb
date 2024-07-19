@@ -1,9 +1,9 @@
 LIBRARY()
 
 SRCS(
-#    driver.c
-#    driver.cpp
-#    GLOBAL data_generator.cpp
+    driver.c
+    driver.cpp
+    GLOBAL data_generator.cpp
     GLOBAL registrar.cpp
     tpch.cpp
 )
@@ -39,7 +39,7 @@ PEERDIR(
     contrib/libs/fmt
     ydb/library/accessor
     library/cpp/resource
-#    ydb/library/benchmarks/gen/tpch-dbgen
+    ydb/library/benchmarks/gen/tpch-dbgen
     ydb/library/workload/benchmark_base
 )
 

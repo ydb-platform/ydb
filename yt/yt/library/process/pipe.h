@@ -91,7 +91,7 @@ private:
     friend class TPipeFactory;
 };
 
-TString ToString(const TPipe& pipe);
+void FormatValue(TStringBuilderBase* builder, const TPipe& pipe, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 

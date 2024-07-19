@@ -1,4 +1,5 @@
 #include "ydb_workload.h"
+#include "ydb_workload_import.h"
 
 #include "topic_workload/topic_workload.h"
 #include "transfer_workload/transfer_workload.h"
@@ -409,6 +410,12 @@ TWorkloadCommandRoot::TWorkloadCommandRoot(const TString& key)
     , Params(NYdbWorkload::TWorkloadFactory::MakeHolder(key))
 {
     AddCommand(std::make_unique<TWorkloadCommandInit>(*Params));
+    {
+        auto initializers = Params->CreateDataInitializers();
+        if (!initializers.empty()) {
+            AddCommand(std::make_unique<TWorkloadCommandImport>(*Params, std::move(initializers)));
+        }
+    }
     auto supportedWorkloads = Params->CreateGenerator()->GetSupportedWorkloadTypes();
     switch (supportedWorkloads.size()) {
     case 0:
@@ -440,10 +447,12 @@ int TWorkloadCommandInit::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadG
     }
     auto ddlQueries = workloadGen.GetDDLQueries();
     if (!ddlQueries.empty()) {
+        Cout << "Init tables " << "..."  << Endl;
         auto result = TableClient->RetryOperationSync([ddlQueries](NTable::TSession session) {
             return session.ExecuteSchemeQuery(ddlQueries.c_str()).GetValueSync();
         });
         ThrowOnError(result);
+        Cout << "Init tables " << "...Ok"  << Endl;
     }
 
     auto session = GetSession();

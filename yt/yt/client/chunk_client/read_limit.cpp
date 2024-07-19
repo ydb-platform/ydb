@@ -288,6 +288,11 @@ TString ToString(const TLegacyReadLimit& limit)
     return builder.Flush();
 }
 
+void FormatValue(TStringBuilderBase* builder, const TLegacyReadLimit& limit, TStringBuf spec)
+{
+    FormatValue(builder, ToString(limit), spec);
+}
+
 bool IsTrivial(const TLegacyReadLimit& limit)
 {
     return limit.IsTrivial();
@@ -438,9 +443,9 @@ void TLegacyReadRange::InitMove(NProto::TReadRange&& range)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TLegacyReadRange& range)
+void FormatValue(TStringBuilderBase* builder, const TLegacyReadRange& range, TStringBuf spec)
 {
-    return Format("[<%v> : <%v>]", range.LowerLimit(), range.UpperLimit());
+    FormatValue(builder, Format("[<%v> : <%v>]", range.LowerLimit(), range.UpperLimit()), spec);
 }
 
 void ToProto(NProto::TReadRange* protoReadRange, const TLegacyReadRange& readRange)
@@ -725,6 +730,11 @@ TString ToString(const TReadLimit& readLimit)
     return builder.Flush();
 }
 
+void FormatValue(TStringBuilderBase* builder, const TReadLimit& readLimit, TStringBuf spec)
+{
+    FormatValue(builder, ToString(readLimit), spec);
+}
+
 void ToProto(NProto::TReadLimit* protoReadLimit, const TReadLimit& readLimit)
 {
     if (readLimit.KeyBound()) {
@@ -888,9 +898,9 @@ TReadRange TReadRange::MakeEmpty()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TReadRange& readRange)
+void FormatValue(TStringBuilderBase* builder, const TReadRange& readRange, TStringBuf spec)
 {
-    return Format("[<%v> : <%v>]", readRange.LowerLimit(), readRange.UpperLimit());
+    FormatValue(builder, Format("[<%v> : <%v>]", readRange.LowerLimit(), readRange.UpperLimit()), spec);
 }
 
 void ToProto(NProto::TReadRange* protoReadRange, const TReadRange& readRange)

@@ -8,8 +8,6 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb/core/protos/pqconfig.pb.h>
-
 struct TEnvironmentSetup {
     std::unique_ptr<TTestActorSystem> Runtime;
     static constexpr ui32 DrivesPerNode = 5;

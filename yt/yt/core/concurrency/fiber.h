@@ -87,13 +87,16 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 class TFiberBase
-    : public TIntrusiveListItem<TFiber, NDetail::TFiberRegisterTag>
-    , public TIntrusiveListItem<TFiber, NDetail::TFiberUnregisterTag>
+    : public TIntrusiveListItem<TFiberBase, NDetail::TFiberRegisterTag>
+    , public TIntrusiveListItem<TFiberBase, NDetail::TFiberUnregisterTag>
     , public TFiberIntrospectionBase
 {
+public:
+    TFiber* AsFiber() noexcept;
+
 protected:
-    using TRegisterBase = TIntrusiveListItem<TFiber, NDetail::TFiberRegisterTag>;
-    using TUnregisterBase = TIntrusiveListItem<TFiber, NDetail::TFiberUnregisterTag>;
+    using TRegisterBase = TIntrusiveListItem<TFiberBase, NDetail::TFiberRegisterTag>;
+    using TUnregisterBase = TIntrusiveListItem<TFiberBase, NDetail::TFiberUnregisterTag>;
 };
 
 } // namespace NDetail
@@ -107,7 +110,7 @@ class TFiber
     , public ITrampoLine
 {
 public:
-    using TFiberList = TIntrusiveList<TFiber, NDetail::TFiberRegisterTag>;
+    using TFiberList = TIntrusiveList<TFiberBase, NDetail::TFiberRegisterTag>;
 
     static TFiber* CreateFiber(EExecutionStackKind stackKind = EExecutionStackKind::Small);
 

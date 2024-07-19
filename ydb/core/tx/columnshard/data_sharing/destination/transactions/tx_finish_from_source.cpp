@@ -26,7 +26,7 @@ void TTxFinishFromSource::DoComplete(const TActorContext& ctx) {
             Self->GetProgressTxController().FinishProposeOnComplete(*Session->GetTransferContext().GetTxId(), ctx);
         }
         NYDBTest::TControllers::GetColumnShardController()->OnDataSharingFinished(Self->TabletID(), Session->GetSessionId());
-        Session->Finish(Self->GetDataLocksManager());
+        Session->Finish(*Self, Self->GetDataLocksManager());
         Session->GetInitiatorController().Finished(Session->GetSessionId());
     }
 }

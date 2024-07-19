@@ -1,9 +1,10 @@
-
 #include "msgbus_server.h"
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/api/protos/ydb_auth.pb.h>
+
+#include <ydb/core/protos/auth.pb.h>
 
 namespace NKikimr {
 namespace NMsgBusProxy {

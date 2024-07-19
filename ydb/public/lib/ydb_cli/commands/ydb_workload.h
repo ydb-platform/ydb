@@ -124,7 +124,7 @@ protected:
     int DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config) override;
 };
 
-class TWorkloadCommandRoot : public TClientCommandTree {
+class TWorkloadCommandRoot final: public TClientCommandTree {
 public:
     TWorkloadCommandRoot(const TString& key);
     virtual void Config(TConfig& config) override;

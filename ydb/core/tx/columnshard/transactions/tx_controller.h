@@ -187,7 +187,7 @@ public:
     private:
         friend class TTxController;
         virtual bool DoParse(TColumnShard& owner, const TString& data) = 0;
-        virtual TTxController::TProposeResult DoStartProposeOnExecute(TColumnShard & owner, NTabletFlatExecutor::TTransactionContext & txc) = 0;
+        virtual TTxController::TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) = 0;
         virtual void DoStartProposeOnComplete(TColumnShard& owner, const TActorContext& ctx) = 0;
         virtual void DoFinishProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) = 0;
         virtual void DoFinishProposeOnComplete(TColumnShard& owner, const TActorContext& ctx) = 0;
@@ -208,6 +208,9 @@ public:
         }
 
         virtual TString DoDebugString() const = 0;
+        virtual void DoOnStart(TColumnShard& /*owner*/) {
+
+        }
 
     public:
         using TPtr = std::shared_ptr<ITransactionOperator>;
@@ -215,6 +218,10 @@ public:
 
         bool CheckTxInfoForReply(const TFullTxInfo& originalTxInfo) const {
             return DoCheckTxInfoForReply(originalTxInfo);
+        }
+
+        void OnStart(TColumnShard& owner) {
+            return DoOnStart(owner);
         }
 
         TString DebugString() const {
@@ -352,12 +359,19 @@ private:
 
     TTxInfo RegisterTx(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc);
     TTxInfo RegisterTxWithDeadline(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc);
-
+    bool StartedFlag = false;
 public:
     TTxController(TColumnShard& owner);
 
     ITransactionOperator::TPtr GetTxOperator(const ui64 txId) const;
     ITransactionOperator::TPtr GetVerifiedTxOperator(const ui64 txId) const;
+    void StartOperators() {
+        AFL_VERIFY(!StartedFlag);
+        StartedFlag = true;
+        for (auto&& i : Operators) {
+            i.second->OnStart(Owner);
+        }
+    }
 
     ui64 GetMemoryUsage() const;
     bool HaveOutdatedTxs() const;

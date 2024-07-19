@@ -22,6 +22,13 @@ namespace NKikimr::NOlap::NDataSharing {
 
 class TCommonSession {
 private:
+    enum class EState {
+        Created,
+        Prepared,
+        InProgress,
+        Finished
+    };
+
     static ui64 GetNextRuntimeId() {
         static TAtomicCounter Counter = 0;
         return (ui64)Counter.Inc();
@@ -31,9 +38,7 @@ private:
     const TString Info;
     YDB_READONLY(ui64, RuntimeId, GetNextRuntimeId());
     std::shared_ptr<NDataLocks::TManager::TGuard> LockGuard;
-    bool IsStartedFlag = false;
-    bool IsStartingFlag = false;
-    bool IsFinishedFlag = false;
+    EState State = EState::Created;
 protected:
     TTransferContext TransferContext;
     virtual bool DoStart(const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions) = 0;
@@ -57,24 +62,25 @@ public:
         return TransferContext;
     }
 
-    bool IsFinished() const {
-        return IsFinishedFlag;
+    bool IsReadyForStarting() const {
+        return State == EState::Created;
     }
 
-    bool IsStarted() const {
-        return IsStartedFlag;
+    bool IsPrepared() const {
+        return State == EState::Prepared;
     }
 
-    bool IsStarting() const {
-        return IsStartingFlag;
+    bool IsInProgress() const {
+        return State == EState::InProgress;
     }
 
     bool IsEqualTo(const TCommonSession& item) const {
         return SessionId == item.SessionId && TransferContext.IsEqualTo(item.TransferContext);
     }
 
-    bool Start(const NColumnShard::TColumnShard& shard);
-    void Finish(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager);
+    void PrepareToStart(const NColumnShard::TColumnShard& shard);
+    bool TryStart(const NColumnShard::TColumnShard& shard);
+    void Finish(const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager);
 
     const TSnapshot& GetSnapshotBarrier() const {
         return TransferContext.GetSnapshotBarrierVerified();

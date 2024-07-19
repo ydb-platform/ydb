@@ -57,7 +57,8 @@ TRunActorParams::TRunActorParams(
     const TString& operationId,
     const NFq::NConfig::TYdbStorageConfig& computeConnection,
     TDuration resultTtl,
-    std::map<TString, Ydb::TypedValue>&& queryParameters
+    std::map<TString, Ydb::TypedValue>&& queryParameters,
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory
     )
     : YqSharedResources(yqSharedResources)
     , CredentialsProviderFactory(credentialsProviderFactory)
@@ -111,6 +112,7 @@ TRunActorParams::TRunActorParams(
     , ComputeConnection(computeConnection)
     , ResultTtl(resultTtl)
     , QueryParameters(std::move(queryParameters))
+    , S3ActorsFactory(std::move(s3ActorsFactory))
     {
     }
 

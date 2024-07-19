@@ -14,7 +14,7 @@ template <class... TArgs>
 void IServiceContext::SetRequestInfo(const char* format, TArgs&&... args)
 {
     if (IsLoggingEnabled()) {
-        SetRawRequestInfo(Format(format, std::forward<TArgs>(args)...), /*incremental*/ false);
+        SetRawRequestInfo(Format(TRuntimeFormat{format}, std::forward<TArgs>(args)...), /*incremental*/ false);
     } else {
         SuppressMissingRequestInfoCheck();
     }
@@ -24,7 +24,7 @@ template <class... TArgs>
 void IServiceContext::SetIncrementalRequestInfo(const char* format, TArgs&&... args)
 {
     if (IsLoggingEnabled()) {
-        SetRawRequestInfo(Format(format, std::forward<TArgs>(args)...), /*incremental*/ true);
+        SetRawRequestInfo(Format(TRuntimeFormat{format}, std::forward<TArgs>(args)...), /*incremental*/ true);
     } else {
         SuppressMissingRequestInfoCheck();
     }
@@ -34,7 +34,7 @@ template <class... TArgs>
 void IServiceContext::SetResponseInfo(const char* format, TArgs&&... args)
 {
     if (IsLoggingEnabled()) {
-        SetRawResponseInfo(Format(format, std::forward<TArgs>(args)...), /*incremental*/ false);
+        SetRawResponseInfo(Format(TRuntimeFormat{format}, std::forward<TArgs>(args)...), /*incremental*/ false);
     }
 }
 
@@ -42,7 +42,7 @@ template <class... TArgs>
 void IServiceContext::SetIncrementalResponseInfo(const char* format, TArgs&&... args)
 {
     if (IsLoggingEnabled()) {
-        SetRawResponseInfo(Format(format, std::forward<TArgs>(args)...), /*incremental*/ true);
+        SetRawResponseInfo(Format(TRuntimeFormat{format}, std::forward<TArgs>(args)...), /*incremental*/ true);
     }
 }
 

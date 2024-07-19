@@ -20,7 +20,7 @@ std::shared_ptr<IBlobsDeclareRemovingAction> TOperator::DoStartDeclareRemovingAc
 }
 
 std::shared_ptr<IBlobsWritingAction> TOperator::DoStartWritingAction() {
-    return std::make_shared<TWriteAction>(GetStorageId(), GetCurrentOperator(), (ui64)GetSelfTabletId(), GCInfo);
+    return std::make_shared<TWriteAction>(GetStorageId(), GetCurrentOperator(), (ui64)GetSelfTabletId(), Generation, StepCounter.Inc(), GCInfo);
 }
 
 std::shared_ptr<IBlobsReadingAction> TOperator::DoStartReadingAction() {
@@ -86,14 +86,16 @@ void TOperator::InitNewExternalOperator() {
 TOperator::TOperator(const TString& storageId, const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager)
     : TBase(storageId, storageSharedBlobsManager)
     , TabletActorId(shard.SelfId())
+    , Generation(shard.Executor()->Generation())
 {
     InitNewExternalOperator(shard.GetTierManagerPointer(storageId));
 }
 
 TOperator::TOperator(const TString& storageId, const TActorId& shardActorId, const std::shared_ptr<NWrappers::IExternalStorageConfig>& storageConfig,
-    const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager)
+    const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager, const ui64 generation)
     : TBase(storageId, storageSharedBlobsManager)
     , TabletActorId(shardActorId)
+    , Generation(generation)
     , InitializationConfig(storageConfig)
 {
     InitNewExternalOperator();

@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/common.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <ydb/core/util/gen_step.h>
 
 namespace NKikimr::NOlap {
 class TTabletsByBlob;
@@ -53,7 +54,7 @@ public:
         KeepMarkerBytes->Add(size);
     }
 
-    void OnBlobsKeep(const TSet<TLogoBlobID>& blobs) const;
+    void OnBlobsKeep(const std::map<::NKikimr::TGenStep, std::set<TLogoBlobID>>& blobs) const;
 
     void OnBlobsDelete(const NOlap::TTabletsByBlob& blobs) const;
 

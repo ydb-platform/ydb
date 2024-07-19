@@ -1,6 +1,8 @@
 #include "selector.h"
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 
+#include <ydb/core/protos/kqp.pb.h>
+
 namespace NKikimr::NOlap::NExport {
 
 std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TBackupSelector::DoBuildRequestInitiator(const TCursor& cursor) const {

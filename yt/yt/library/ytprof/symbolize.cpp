@@ -192,8 +192,7 @@ public:
 
         if (!programHeaderOffset ||
             !programHeaderNumEntries ||
-            programHeaderOffset + programHeaderNumEntries * sizeof(TElfPhdr) > ElfSize_
-        ) {
+            programHeaderOffset + programHeaderNumEntries * sizeof(TElfPhdr) > ElfSize_) {
             throw yexception() << "The ELF is truncated (program header points after end of file)";
         }
 

@@ -107,7 +107,8 @@ void TQueryBuilder::AddJoinExpression(
         std::move(table),
         std::move(alias),
         std::move(onExpression),
-        type});
+        type,
+    });
 }
 
 TString TQueryBuilder::Build()

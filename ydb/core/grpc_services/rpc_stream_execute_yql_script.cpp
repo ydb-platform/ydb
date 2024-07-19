@@ -13,6 +13,7 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
+#include <ydb/core/protos/stream.pb.h>
 
 namespace NKikimr {
 namespace NGRpcService {

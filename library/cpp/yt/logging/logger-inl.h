@@ -24,7 +24,7 @@ inline bool TLogger::IsAnchorUpToDate(const TLoggingAnchor& position) const
 template <class... TArgs>
 void TLogger::AddTag(const char* format, TArgs&&... args)
 {
-    AddRawTag(Format(format, std::forward<TArgs>(args)...));
+    AddRawTag(Format(TRuntimeFormat{format}, std::forward<TArgs>(args)...));
 }
 
 template <class TType>

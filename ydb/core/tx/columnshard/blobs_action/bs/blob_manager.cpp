@@ -164,7 +164,7 @@ bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
         TGenStep genStep(blobId);
         Y_ABORT_UNLESS(LastCollectedGenStep < genStep);
 
-        BlobsToKeep.insert(blobId);
+        AFL_VERIFY(BlobsToKeep[genStep].emplace(blobId).second);
         BlobsManagerCounters.OnKeepMarker(blobId.BlobSize());
         const ui64 groupId = dsGroupSelector.GetGroup(blobId);
         // Keep + DontKeep (probably in different gen:steps)
@@ -218,7 +218,6 @@ std::deque<TGenStep> TBlobManager::FindNewGCBarriers() {
 
 class TBlobManager::TGCContext {
 private:
-    static inline const ui32 channelIdx = BLOB_CHANNEL;
     static inline const ui32 BlobsGCCountLimit = 50000;
     YDB_ACCESSOR_DEF(NBlobOperations::NBlobStorage::TGCTask::TGCListsByGroup, PerGroupGCListsInFlight);
     YDB_ACCESSOR_DEF(TTabletsByBlob, ExtractedToRemoveFromDB);
@@ -234,10 +233,12 @@ public:
     void InitializeFirst(const TIntrusivePtr<TTabletStorageInfo>& tabletInfo) {
         // Clear all possibly not kept trash in channel's groups: create an event for each group
         // TODO: we need only actual channel history here
-        const auto& channelHistory = tabletInfo->ChannelInfo(channelIdx)->History;
+        for (ui32 channelIdx = 2; channelIdx < tabletInfo->Channels.size(); ++channelIdx) {
+            const auto& channelHistory = tabletInfo->ChannelInfo(channelIdx)->History;
 
-        for (auto it = channelHistory.begin(); it != channelHistory.end(); ++it) {
-            PerGroupGCListsInFlight[it->GroupID];
+            for (auto it = channelHistory.begin(); it != channelHistory.end(); ++it) {
+                PerGroupGCListsInFlight[TBlobAddress(it->GroupID, channelIdx)];
+            }
         }
     }
 
@@ -267,10 +268,11 @@ void TBlobManager::DrainDeleteTo(const TGenStep& dest, TGCContext& gcContext) {
     TTabletId tabletId;
     TUnifiedBlobId unifiedBlobId;
     while (extractedOld.ExtractFront(tabletId, unifiedBlobId)) {
+        TBlobAddress bAddress(unifiedBlobId.GetDsGroup(), unifiedBlobId.GetLogoBlobId().Channel());
         auto logoBlobId = unifiedBlobId.GetLogoBlobId();
         if (!gcContext.GetSharedBlobsManager()->BuildStoreCategories({ unifiedBlobId }).GetDirect().IsEmpty()) {
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("to_delete_gc", unifiedBlobId.ToStringNew());
-            NBlobOperations::NBlobStorage::TGCTask::TGCLists& gl = gcContext.MutablePerGroupGCListsInFlight()[unifiedBlobId.GetDsGroup()];
+            NBlobOperations::NBlobStorage::TGCTask::TGCLists& gl = gcContext.MutablePerGroupGCListsInFlight()[bAddress];
             gl.DontKeepList.insert(logoBlobId);
         } else {
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("to_delete_gc", unifiedBlobId.ToStringNew())("skip_reason", "not_direct");
@@ -279,34 +281,36 @@ void TBlobManager::DrainDeleteTo(const TGenStep& dest, TGCContext& gcContext) {
 }
 
 void TBlobManager::DrainKeepTo(const TGenStep& dest, TGCContext& gcContext) {
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("event", "PreparePerGroupGCRequests")("gen_step", dest)("blobs_to_keep_count", BlobsToKeep.size());
-    auto keepBlobIt = BlobsToKeep.begin();
-    for (; keepBlobIt != BlobsToKeep.end(); ++keepBlobIt) {
-        TGenStep genStep{ keepBlobIt->Generation(), keepBlobIt->Step() };
-        AFL_VERIFY(LastCollectedGenStep < genStep);
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("event", "PreparePerGroupGCRequests")("gen_step", dest)("gs_blobs_to_keep_count", BlobsToKeep.size());
+    for (; BlobsToKeep.size(); BlobsToKeep.erase(BlobsToKeep.begin())) {
+        auto gsBlobs = BlobsToKeep.begin();
+        TGenStep genStep = gsBlobs->first;
+        AFL_VERIFY(LastCollectedGenStep < genStep)("last", LastCollectedGenStep.ToString())("gen", genStep.ToString());
         if (dest < genStep) {
             break;
         }
-        const ui32 blobGroup = TabletInfo->GroupFor(keepBlobIt->Channel(), keepBlobIt->Generation());
-        const TUnifiedBlobId keepUnified(blobGroup, *keepBlobIt);
-        gcContext.MutableKeepsToErase().emplace_back(keepUnified);
-        if (BlobsToDelete.ExtractBlobTo(keepUnified, gcContext.MutableExtractedToRemoveFromDB())) {
-            if (keepBlobIt->Generation() == CurrentGen) {
-                AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("to_not_keep", keepUnified.ToStringNew());
-                continue;
+        for (auto&& keepBlobIt : gsBlobs->second) {
+            const ui32 blobGroup = TabletInfo->GroupFor(keepBlobIt.Channel(), keepBlobIt.Generation());
+            TBlobAddress bAddress(blobGroup, keepBlobIt.Channel());
+            const TUnifiedBlobId keepUnified(blobGroup, keepBlobIt);
+            gcContext.MutableKeepsToErase().emplace_back(keepUnified);
+            if (BlobsToDelete.ExtractBlobTo(keepUnified, gcContext.MutableExtractedToRemoveFromDB())) {
+                if (keepBlobIt.Generation() == CurrentGen) {
+                    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("to_not_keep", keepUnified.ToStringNew());
+                    continue;
+                }
+                if (gcContext.GetSharedBlobsManager()->BuildStoreCategories({ keepUnified }).GetDirect().IsEmpty()) {
+                    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("to_not_keep_not_direct", keepUnified.ToStringNew());
+                    continue;
+                }
+                AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("to_not_keep_old", keepUnified.ToStringNew());
+                gcContext.MutablePerGroupGCListsInFlight()[bAddress].DontKeepList.insert(keepBlobIt);
+            } else {
+                AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("to_keep", keepUnified.ToStringNew());
+                gcContext.MutablePerGroupGCListsInFlight()[bAddress].KeepList.insert(keepBlobIt);
             }
-            if (gcContext.GetSharedBlobsManager()->BuildStoreCategories({ keepUnified }).GetDirect().IsEmpty()) {
-                AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("to_not_keep_not_direct", keepUnified.ToStringNew());
-                continue;
-            }
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("to_not_keep_old", keepUnified.ToStringNew());
-            gcContext.MutablePerGroupGCListsInFlight()[blobGroup].DontKeepList.insert(*keepBlobIt);
-        } else {
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("to_keep", keepUnified.ToStringNew());
-            gcContext.MutablePerGroupGCListsInFlight()[blobGroup].KeepList.insert(*keepBlobIt);
         }
     }
-    BlobsToKeep.erase(BlobsToKeep.begin(), keepBlobIt);
 }
 
 std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTask(const TString& storageId,
@@ -374,13 +378,14 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
     return result;
 }
 
-TBlobBatch TBlobManager::StartBlobBatch(ui32 channel) {
-    ++CountersUpdate.BatchesStarted;
-    Y_ABORT_UNLESS(channel == BLOB_CHANNEL, "Support for multiple blob channels is not implemented yet");
+TBlobBatch TBlobManager::StartBlobBatch() {
     ++CurrentStep;
+    AFL_VERIFY(TabletInfo->Channels.size() > 2);
+    const auto& channel = TabletInfo->Channels[(CurrentStep % (TabletInfo->Channels.size() - 2)) + 2];
+    ++CountersUpdate.BatchesStarted;
     TAllocatedGenStepConstPtr genStepRef = new TAllocatedGenStep({ CurrentGen, CurrentStep });
     AllocatedGenSteps.push_back(genStepRef);
-    auto batchInfo = std::make_unique<TBlobBatch::TBatchInfo>(TabletInfo, genStepRef, channel, BlobsManagerCounters);
+    auto batchInfo = std::make_unique<TBlobBatch::TBatchInfo>(TabletInfo, genStepRef, channel.Channel, BlobsManagerCounters);
     return TBlobBatch(std::move(batchInfo));
 }
 
@@ -403,7 +408,7 @@ void TBlobManager::DoSaveBlobBatchOnComplete(TBlobBatch&& blobBatch) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("to_keep", logoBlobId.ToString());
 
         BlobsManagerCounters.OnKeepMarker(logoBlobId.BlobSize());
-        BlobsToKeep.insert(std::move(logoBlobId));
+        AFL_VERIFY(BlobsToKeep[genStep].emplace(logoBlobId).second);
     }
     BlobsManagerCounters.OnBlobsKeep(BlobsToKeep);
 

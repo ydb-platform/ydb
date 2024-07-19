@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(69.5.1)
+VERSION(70.0.0)
 
 LICENSE(MIT)
 
@@ -68,7 +68,6 @@ PY_SRCS(
     pkg_resources/_vendor/platformdirs/unix.py
     pkg_resources/_vendor/platformdirs/version.py
     pkg_resources/_vendor/platformdirs/windows.py
-    pkg_resources/_vendor/typing_extensions.py
     pkg_resources/_vendor/zipp.py
     pkg_resources/extern/__init__.py
     setuptools/__init__.py
@@ -192,7 +191,6 @@ PY_SRCS(
     setuptools/_vendor/tomli/_parser.py
     setuptools/_vendor/tomli/_re.py
     setuptools/_vendor/tomli/_types.py
-    setuptools/_vendor/typing_extensions.py
     setuptools/_vendor/zipp.py
     setuptools/archive_util.py
     setuptools/build_meta.py
@@ -237,7 +235,6 @@ PY_SRCS(
     setuptools/config/expand.py
     setuptools/config/pyprojecttoml.py
     setuptools/config/setupcfg.py
-    setuptools/dep_util.py
     setuptools/depends.py
     setuptools/discovery.py
     setuptools/dist.py

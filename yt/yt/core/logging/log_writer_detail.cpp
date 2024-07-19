@@ -189,8 +189,7 @@ TRateLimitCounter* TStreamLogWriterBase::GetCategoryRateLimitCounter(TStringBuf 
         it = CategoryToRateLimit_.insert({category, TRateLimitCounter(
             std::nullopt,
             r.Counter("/bytes_written"),
-            r.Counter("/events_skipped_by_category_limit")
-        )}).first;
+            r.Counter("/events_skipped_by_category_limit"))}).first;
     }
     return &it->second;
 }

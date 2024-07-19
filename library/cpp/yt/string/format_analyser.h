@@ -1,13 +1,13 @@
 #pragma once
 
+#include <util/generic/strbuf.h>
+
 #include <array>
 #include <string_view>
 
-namespace NYT {
+namespace NYT::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
-
-namespace NDetail {
 
 struct TFormatAnalyser
 {
@@ -18,6 +18,9 @@ public:
 private:
     // Non-constexpr function call will terminate compilation.
     // Purposefully undefined and non-constexpr/consteval
+    template <class T>
+    static void CrashCompilerNotFormattable(std::string_view /*msg*/)
+    { /*Suppress "internal linkage but undefined" warning*/ }
     static void CrashCompilerNotEnoughArguments(std::string_view msg);
     static void CrashCompilerTooManyArguments(std::string_view msg);
     static void CrashCompilerWrongTermination(std::string_view msg);
@@ -35,67 +38,9 @@ private:
     static constexpr char IntroductorySymbol = '%';
 };
 
-} // namespace NDetail
-
 ////////////////////////////////////////////////////////////////////////////////
 
-// Base used for flag checks for each type independently.
-// Use it for overrides.
-struct TFormatArgBase
-{
-public:
-    // TODO(arkady-e1ppa): Consider more strict formatting rules.
-    static constexpr std::array ConversionSpecifiers = {
-            'v', '1', 'c', 's', 'd', 'i', 'o',
-            'x', 'X', 'u', 'f', 'F', 'e', 'E',
-            'a', 'A', 'g', 'G', 'n', 'p'
-        };
-
-    static constexpr std::array FlagSpecifiers = {
-        '-', '+', ' ', '#', '0',
-        '1', '2', '3', '4', '5',
-        '6', '7', '8', '9',
-        '*', '.', 'h', 'l', 'j',
-        'z', 't', 'L', 'q', 'Q'
-    };
-
-    template <class T>
-    static constexpr bool IsSpecifierList = requires (T t) {
-        [] <size_t N> (std::array<char, N>) { } (t);
-    };
-
-    // Hot = |true| adds specifiers to the beggining
-    // of a new array.
-    template <bool Hot, size_t N, std::array<char, N> List, class TFrom = TFormatArgBase>
-    static consteval auto ExtendConversion();
-
-    template <bool Hot, size_t N, std::array<char, N> List, class TFrom = TFormatArgBase>
-    static consteval auto ExtendFlags();
-
-private:
-    template <bool Hot, size_t N, std::array<char, N> List, auto* From>
-    static consteval auto AppendArrays();
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-template <class T>
-struct TFormatArg
-    : public TFormatArgBase
-{ };
-
-// Semantic requirement:
-// Said field must be constexpr.
-template <class T>
-concept CFormattable = requires {
-    TFormatArg<T>::ConversionSpecifiers;
-    requires TFormatArgBase::IsSpecifierList<decltype(TFormatArg<T>::ConversionSpecifiers)>;
-
-    TFormatArg<T>::FlagSpecifiers;
-    requires TFormatArgBase::IsSpecifierList<decltype(TFormatArg<T>::FlagSpecifiers)>;
-};
-
-} // namespace NYT
+} // namespace NYT::NDetail
 
 #define FORMAT_ANALYSER_INL_H_
 #include "format_analyser-inl.h"

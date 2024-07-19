@@ -44,7 +44,7 @@ int main(int argc, char *argv[])
 		return T_EXIT_FAIL;
 	}
 
-	/* Check that registrering again will get -EBUSY */
+	/* Check that registering again will get -EBUSY */
 	ret = io_uring_register_eventfd(&ring, evfd[1]);
 	if (ret != -EBUSY) {
 		fprintf(stderr, "unexpected 2nd register: %d\n", ret);

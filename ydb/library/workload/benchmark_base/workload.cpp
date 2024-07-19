@@ -74,14 +74,27 @@ TVector<std::string> TWorkloadGeneratorBase::GetCleanPaths() const {
     return { Params.GetPath().c_str() };
 }
 
-TBulkDataGeneratorList TWorkloadGeneratorBase::GetBulkInitialData() const {
-    return TBulkDataGeneratorList();
+TWorkloadDataInitializerBase::TWorkloadDataInitializerBase(const TString& name, const TString& description, const TWorkloadBaseParams& params)
+    : TWorkloadDataInitializer(name, description)
+    , Params(params)
+{}
+
+void TWorkloadDataInitializerBase::ConfigureOpts(NLastGetopt::TOpts& opts) {
+    opts.AddLongOption("clear-state", "Clear tables before init").NoArgument()
+        .Optional().StoreResult(&Clear, true);
+        opts.AddLongOption("state", "Path for save generation state.").StoreResult(&StatePath);
+}
+
+TBulkDataGeneratorList TWorkloadDataInitializerBase::GetBulkInitialData() {
+    if (StatePath.IsDefined()) {
+        StateProcessor = MakeHolder<TGeneratorStateProcessor>(StatePath, Clear);
+    }
+    return DoGetBulkInitialData();
 }
 
 void TWorkloadBaseParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int /*workloadType*/) {
     switch (commandType) {
-    case TWorkloadParams::ECommandType::Run:
-    case TWorkloadParams::ECommandType::Clean:
+    default:
         break;
     case TWorkloadParams::ECommandType::Init:
         opts.AddLongOption("store", "Storage type."

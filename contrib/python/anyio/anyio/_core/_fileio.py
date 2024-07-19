@@ -100,12 +100,10 @@ class AsyncFile(AsyncResource, Generic[AnyStr]):
         return await to_thread.run_sync(self._fp.readinto1, b)
 
     @overload
-    async def write(self: AsyncFile[bytes], b: ReadableBuffer) -> int:
-        ...
+    async def write(self: AsyncFile[bytes], b: ReadableBuffer) -> int: ...
 
     @overload
-    async def write(self: AsyncFile[str], b: str) -> int:
-        ...
+    async def write(self: AsyncFile[str], b: str) -> int: ...
 
     async def write(self, b: ReadableBuffer | str) -> int:
         return await to_thread.run_sync(self._fp.write, b)
@@ -113,12 +111,10 @@ class AsyncFile(AsyncResource, Generic[AnyStr]):
     @overload
     async def writelines(
         self: AsyncFile[bytes], lines: Iterable[ReadableBuffer]
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @overload
-    async def writelines(self: AsyncFile[str], lines: Iterable[str]) -> None:
-        ...
+    async def writelines(self: AsyncFile[str], lines: Iterable[str]) -> None: ...
 
     async def writelines(self, lines: Iterable[ReadableBuffer] | Iterable[str]) -> None:
         return await to_thread.run_sync(self._fp.writelines, lines)
@@ -146,8 +142,7 @@ async def open_file(
     newline: str | None = ...,
     closefd: bool = ...,
     opener: Callable[[str, int], int] | None = ...,
-) -> AsyncFile[bytes]:
-    ...
+) -> AsyncFile[bytes]: ...
 
 
 @overload
@@ -160,8 +155,7 @@ async def open_file(
     newline: str | None = ...,
     closefd: bool = ...,
     opener: Callable[[str, int], int] | None = ...,
-) -> AsyncFile[str]:
-    ...
+) -> AsyncFile[str]: ...
 
 
 async def open_file(
@@ -476,8 +470,7 @@ class Path:
         encoding: str | None = ...,
         errors: str | None = ...,
         newline: str | None = ...,
-    ) -> AsyncFile[bytes]:
-        ...
+    ) -> AsyncFile[bytes]: ...
 
     @overload
     async def open(
@@ -487,8 +480,7 @@ class Path:
         encoding: str | None = ...,
         errors: str | None = ...,
         newline: str | None = ...,
-    ) -> AsyncFile[str]:
-        ...
+    ) -> AsyncFile[str]: ...
 
     async def open(
         self,

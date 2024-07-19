@@ -104,6 +104,7 @@ private:
 DEFINE_REFCOUNTED_TYPE(TLogicalType)
 
 TString ToString(const TLogicalType& logicalType);
+void FormatValue(TStringBuilderBase* builder, const TLogicalType& logicalType, TStringBuf /*spec*/);
 
 //! Debug printers for Gtest unittests.
 void PrintTo(ELogicalMetatype type, std::ostream* os);

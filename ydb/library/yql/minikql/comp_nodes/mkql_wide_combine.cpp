@@ -1541,15 +1541,10 @@ private:
 #endif
 };
 
-bool IsTypeSerializable(const TType* type) {
-    return ! (type->IsResource() || type->IsType() || type->IsStream() || type->IsCallable()
-        || type->IsAny() || type->IsFlow() || type->IsReservedKind());
-}
-
 }
 
 template<bool Last>
-IComputationNode* WrapWideCombinerT(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+IComputationNode* WrapWideCombinerT(TCallable& callable, const TComputationNodeFactoryContext& ctx, bool allowSpilling) {
     MKQL_ENSURE(callable.GetInputsCount() >= (Last ? 3U : 4U), "Expected more arguments.");
 
     const auto inputType = AS_TYPE(TFlowType, callable.GetInput(0U).GetStaticType());
@@ -1565,8 +1560,6 @@ IComputationNode* WrapWideCombinerT(TCallable& callable, const TComputationNodeF
 
     ++index += inputWidth;
 
-    bool allowSpilling = true;
-
     std::vector<TType*> keyAndStateItemTypes;
     keyAndStateItemTypes.reserve(keysSize + stateSize);
 
@@ -1574,7 +1567,6 @@ IComputationNode* WrapWideCombinerT(TCallable& callable, const TComputationNodeF
     keyTypes.reserve(keysSize);
     for (ui32 i = index; i < index + keysSize; ++i) {
         TType *type = callable.GetInput(i).GetStaticType();
-        allowSpilling = allowSpilling && IsTypeSerializable(type);
 		keyAndStateItemTypes.push_back(type);
         bool optional;
         keyTypes.emplace_back(*UnpackOptionalData(callable.GetInput(i).GetStaticType(), optional)->GetDataSlot(), optional);
@@ -1588,12 +1580,9 @@ IComputationNode* WrapWideCombinerT(TCallable& callable, const TComputationNodeF
     nodes.InitResultNodes.reserve(stateSize);
     for (size_t i = 0; i != stateSize; ++i) {
         TType *type = callable.GetInput(index).GetStaticType();
-        allowSpilling = allowSpilling && IsTypeSerializable(type);
         keyAndStateItemTypes.push_back(type);
         nodes.InitResultNodes.push_back(LocateNode(ctx.NodeLocator, callable, index++));
     }
-
-    YQL_LOG_IF(INFO, !allowSpilling) << "Found non-serializable type, spilling disabled";
 
     index += stateSize;
     nodes.UpdateResultNodes.reserve(stateSize);
@@ -1628,7 +1617,6 @@ IComputationNode* WrapWideCombinerT(TCallable& callable, const TComputationNodeF
             usedInputItemTypes.reserve(inputItemTypes.size());
             for (size_t i = 0; i != inputItemTypes.size(); ++i) {
                 if (nodes.IsInputItemNodeUsed(i)) {
-                    allowSpilling = allowSpilling && IsTypeSerializable(inputItemTypes[i]);
                     usedInputItemTypes.push_back(inputItemTypes[i]);
                 }
             }
@@ -1664,11 +1652,16 @@ IComputationNode* WrapWideCombinerT(TCallable& callable, const TComputationNodeF
 }
 
 IComputationNode* WrapWideCombiner(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    return WrapWideCombinerT<false>(callable, ctx);
+    return WrapWideCombinerT<false>(callable, ctx, false);
 }
 
 IComputationNode* WrapWideLastCombiner(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    return WrapWideCombinerT<true>(callable, ctx);
+    YQL_LOG(INFO) << "Found non-serializable type, spilling is disabled";
+    return WrapWideCombinerT<true>(callable, ctx, false);
+}
+
+IComputationNode* WrapWideLastCombinerWithSpilling(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    return WrapWideCombinerT<true>(callable, ctx, true);
 }
 
 }

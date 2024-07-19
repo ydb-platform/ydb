@@ -52,8 +52,8 @@ std::shared_ptr<arrow::DataType> MakeTzLayoutArrowType() {
 template<NUdf::EDataSlot slot>
 std::shared_ptr<arrow::StructType> MakeTzDateArrowType() {
     std::vector<std::shared_ptr<arrow::Field>> fields {
-        std::make_shared<arrow::Field>("datetime", MakeTzLayoutArrowType<slot>()),
-        std::make_shared<arrow::Field>("timezoneId", arrow::uint16()),
+        std::make_shared<arrow::Field>("datetime", MakeTzLayoutArrowType<slot>(), false),
+        std::make_shared<arrow::Field>("timezoneId", arrow::uint16(), false),
     };
     return std::make_shared<arrow::StructType>(fields);
 }

@@ -20,7 +20,7 @@ private:
     }
 public:
     TGarbageCollectionActor(const std::shared_ptr<TGCTask>& task, const NActors::TActorId& tabletActorId, const TTabletId selfTabletId)
-        : TBase(task->GetStorageId(), selfTabletId, task->GetBlobsToRemove().GetBorrowed())
+        : TBase(task->GetStorageId(), selfTabletId, task->GetBlobsToRemove().GetBorrowed(), task)
         , TabletActorId(tabletActorId)
         , GCTask(task)
     {
@@ -42,7 +42,7 @@ public:
         for (auto&& i : GCTask->GetListsByGroupId()) {
             auto request = GCTask->BuildRequest(i.first);
             AFL_VERIFY(request);
-            SendToBSProxy(ctx, i.first, request.release(), i.first);
+            SendToBSProxy(ctx, i.first.GetGroupId(), request.release(), i.first.GetGroupId());
         }
         TBase::Bootstrap(ctx);
         Become(&TGarbageCollectionActor::StateWork);

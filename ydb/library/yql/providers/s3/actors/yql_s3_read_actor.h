@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
+#include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_list.h>
 #include <ydb/library/yql/providers/s3/proto/retry_config.pb.h>
 #include <ydb/library/yql/providers/s3/proto/source.pb.h>
@@ -11,8 +12,6 @@
 #include <ydb/library/actors/core/actor.h>
 
 namespace NYql::NDq {
-
-struct TS3ReadActorFactoryConfig;
 
 NActors::IActor* CreateS3FileQueueActor(
         TTxId txId,

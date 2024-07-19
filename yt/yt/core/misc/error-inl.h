@@ -55,7 +55,7 @@ namespace NDetail {
 template <size_t Length, class... TArgs>
 TString FormatErrorMessage(const char (&format)[Length], TArgs&&... args)
 {
-    return Format(format, std::forward<TArgs>(args)...);
+    return Format(TRuntimeFormat{format}, std::forward<TArgs>(args)...);
 }
 
 template <size_t Length>
@@ -231,7 +231,7 @@ TErrorOr<T>& TErrorOr<T>::operator = (TErrorOr<T>&& other) noexcept
 
 template <class T>
 template <class... TArgs>
-T&& TErrorOr<T>::ValueOrThrow(TArgs&&... args) &&
+T&& TErrorOr<T>::ValueOrThrow(TArgs&&... args) && Y_LIFETIME_BOUND
 {
     if (!IsOK()) {
         THROW_ERROR std::move(*this).Wrap(std::forward<TArgs>(args)...);
@@ -241,7 +241,7 @@ T&& TErrorOr<T>::ValueOrThrow(TArgs&&... args) &&
 
 template <class T>
 template <class... TArgs>
-T& TErrorOr<T>::ValueOrThrow(TArgs&&... args) &
+T& TErrorOr<T>::ValueOrThrow(TArgs&&... args) & Y_LIFETIME_BOUND
 {
     if (!IsOK()) {
         THROW_ERROR Wrap(std::forward<TArgs>(args)...);
@@ -251,7 +251,7 @@ T& TErrorOr<T>::ValueOrThrow(TArgs&&... args) &
 
 template <class T>
 template <class... TArgs>
-const T& TErrorOr<T>::ValueOrThrow(TArgs&&... args) const &
+const T& TErrorOr<T>::ValueOrThrow(TArgs&&... args) const & Y_LIFETIME_BOUND
 {
     if (!IsOK()) {
         THROW_ERROR Wrap(std::forward<TArgs>(args)...);
@@ -260,34 +260,34 @@ const T& TErrorOr<T>::ValueOrThrow(TArgs&&... args) const &
 }
 
 template <class T>
-T&& TErrorOr<T>::Value() &&
+T&& TErrorOr<T>::Value() && Y_LIFETIME_BOUND
 {
     YT_ASSERT(IsOK());
     return std::move(*Value_);
 }
 
 template <class T>
-T& TErrorOr<T>::Value() &
+T& TErrorOr<T>::Value() & Y_LIFETIME_BOUND
 {
     YT_ASSERT(IsOK());
     return *Value_;
 }
 
 template <class T>
-const T& TErrorOr<T>::Value() const &
+const T& TErrorOr<T>::Value() const & Y_LIFETIME_BOUND
 {
     YT_ASSERT(IsOK());
     return *Value_;
 }
 
 template <class T>
-const T& TErrorOr<T>::ValueOrDefault(const T& defaultValue) const &
+const T& TErrorOr<T>::ValueOrDefault(const T& defaultValue Y_LIFETIME_BOUND) const & Y_LIFETIME_BOUND
 {
     return IsOK() ? *Value_ : defaultValue;
 }
 
 template <class T>
-T& TErrorOr<T>::ValueOrDefault(T& defaultValue) &
+T& TErrorOr<T>::ValueOrDefault(T& defaultValue Y_LIFETIME_BOUND) & Y_LIFETIME_BOUND
 {
     return IsOK() ? *Value_ : defaultValue;
 }

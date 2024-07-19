@@ -306,7 +306,7 @@ static int test_sparse(struct io_uring *ring)
 	files = open_files(100, 100, 0);
 	ret = io_uring_register_files(ring, files, 200);
 	if (ret) {
-		if (ret == -EBADF) {
+		if (ret == -EBADF || ret == -EINVAL) {
 			fprintf(stdout, "Sparse files not supported, skipping\n");
 			no_update = 1;
 			goto done;
@@ -353,10 +353,14 @@ err:
 static int test_basic(struct io_uring *ring, int fail)
 {
 	int *files;
-	int ret;
+	int ret, i;
 	int nr_files = fail ? 10 : 100;
 
-	files = open_files(nr_files, 0, 0);
+	files = open_files(nr_files, fail ? 90 : 0, 0);
+	if (fail) {
+		for (i = nr_files; i < nr_files + 90; i++)
+			files[i] = -2;
+	}
 	ret = io_uring_register_files(ring, files, 100);
 	if (ret) {
 		if (fail) {

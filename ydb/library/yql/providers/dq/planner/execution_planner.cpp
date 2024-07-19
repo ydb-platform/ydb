@@ -592,10 +592,15 @@ namespace NYql::NDqs {
         for (const auto& k: streamLookup.RightJoinKeyNames()) {
             *settings.AddRightJoinKeyNames() = k.StringValue();
         }
+        const auto narrowInputRowType = GetSeqItemType(streamLookup.Output().Ptr()->GetTypeAnn());
+        Y_ABORT_UNLESS(narrowInputRowType->GetKind() == ETypeAnnotationKind::Struct);
+        settings.SetNarrowInputRowType(NYql::NCommon::GetSerializedTypeAnnotation(narrowInputRowType));
+        const auto narrowOutputRowType = GetSeqItemType(streamLookup.Ptr()->GetTypeAnn());
+        Y_ABORT_UNLESS(narrowOutputRowType->GetKind() == ETypeAnnotationKind::Struct);
+        settings.SetNarrowOutputRowType(NYql::NCommon::GetSerializedTypeAnnotation(narrowOutputRowType));
 
-        const auto inputRowType = GetSeqItemType(streamLookup.Output().Ptr()->GetTypeAnn());
-        const auto outputRowType = GetSeqItemType(streamLookup.Ptr()->GetTypeAnn());
-
+        const auto inputRowType = GetSeqItemType(streamLookup.Output().Stage().Program().Ref().GetTypeAnn());
+        const auto outputRowType = GetSeqItemType(stage.Program().Args().Arg(inputIndex).Ref().GetTypeAnn());
         TTransform streamLookupTransform {
             .Type = "StreamLookupInputTransform",
             .InputType = NYql::NCommon::GetSerializedTypeAnnotation(inputRowType),

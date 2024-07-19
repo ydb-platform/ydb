@@ -180,7 +180,9 @@ message TDqInputTransformLookupSettings {
     string JoinType = 4; //Inner, Left, LeftSemi
     repeated string LeftJoinKeyNames = 5; //Join column names in the left hand, in the same order as the next
     repeated string RightJoinKeyNames = 6; //Join column names in the right hand, in the same order as previous
-    //TODO add lookup timings and cache paramters
+    bytes NarrowInputRowType = 7; //Serialized struct type
+    bytes NarrowOutputRowType = 8; //Serialized struct type
+    //TODO add lookup cache parameters
 }
 
 message TDqTask {

@@ -42,7 +42,7 @@ TBlobsManagerCounters::TBlobsManagerCounters(const TString& module)
     KeepMarkerBytes = TBase::GetDeriviative("GC/KeepMarker/Bytes");
 }
 
-void TBlobsManagerCounters::OnBlobsKeep(const TSet<TLogoBlobID>& blobs) const {
+void TBlobsManagerCounters::OnBlobsKeep(const std::map<::NKikimr::TGenStep, std::set<TLogoBlobID>>& blobs) const {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnBlobsKeep")("count", blobs.size());
 //    BlobsKeepCount->Set(blobs.size());
 //    ui64 size = 0;

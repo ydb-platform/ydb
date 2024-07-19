@@ -11,7 +11,11 @@
 #include <ydb/library/actors/core/executor_pool_io.h>
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
 
+#include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/key.pb.h>
+#include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/stream.pb.h>
 
 /**** ACHTUNG: Do not make here any new dependecies on kikimr ****/
 

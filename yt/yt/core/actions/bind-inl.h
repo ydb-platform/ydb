@@ -478,8 +478,7 @@ struct TCheckNoRawPtrToRefCountedType
     static_assert(
         !(std::is_pointer_v<T> && (
             std::is_convertible_v<T, const TRefCounted*> ||
-            std::is_convertible_v<T, TRefCounted*>
-        )),
+            std::is_convertible_v<T, TRefCounted*>)),
         "T has reference-counted type and should not be bound by the raw pointer");
 };
 

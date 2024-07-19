@@ -17,8 +17,6 @@
 #include <util/system/file.h>
 #include <util/system/sanitizers.h>
 
-#include <ydb/core/protos/pqconfig.pb.h>
-
 namespace NKikimr {
 
 class TWriter : public NPDisk::TCompletionAction {

@@ -5,6 +5,7 @@ import threading
 from collections.abc import Awaitable, Callable, Generator
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from contextlib import AbstractContextManager, contextmanager
+from dataclasses import dataclass, field
 from inspect import isawaitable
 from types import TracebackType
 from typing import (
@@ -261,14 +262,12 @@ class BlockingPortal:
         self,
         func: Callable[[Unpack[PosArgsT]], Awaitable[T_Retval]],
         *args: Unpack[PosArgsT],
-    ) -> T_Retval:
-        ...
+    ) -> T_Retval: ...
 
     @overload
     def call(
         self, func: Callable[[Unpack[PosArgsT]], T_Retval], *args: Unpack[PosArgsT]
-    ) -> T_Retval:
-        ...
+    ) -> T_Retval: ...
 
     def call(
         self,
@@ -293,8 +292,7 @@ class BlockingPortal:
         func: Callable[[Unpack[PosArgsT]], Awaitable[T_Retval]],
         *args: Unpack[PosArgsT],
         name: object = None,
-    ) -> Future[T_Retval]:
-        ...
+    ) -> Future[T_Retval]: ...
 
     @overload
     def start_task_soon(
@@ -302,8 +300,7 @@ class BlockingPortal:
         func: Callable[[Unpack[PosArgsT]], T_Retval],
         *args: Unpack[PosArgsT],
         name: object = None,
-    ) -> Future[T_Retval]:
-        ...
+    ) -> Future[T_Retval]: ...
 
     def start_task_soon(
         self,
@@ -393,6 +390,63 @@ class BlockingPortal:
 
         """
         return _BlockingAsyncContextManager(cm, self)
+
+
+@dataclass
+class BlockingPortalProvider:
+    """
+    A manager for a blocking portal. Used as a context manager. The first thread to
+    enter this context manager causes a blocking portal to be started with the specific
+    parameters, and the last thread to exit causes the portal to be shut down. Thus,
+    there will be exactly one blocking portal running in this context as long as at
+    least one thread has entered this context manager.
+
+    The parameters are the same as for :func:`~anyio.run`.
+
+    :param backend: name of the backend
+    :param backend_options: backend options
+
+    .. versionadded:: 4.4
+    """
+
+    backend: str = "asyncio"
+    backend_options: dict[str, Any] | None = None
+    _lock: threading.Lock = field(init=False, default_factory=threading.Lock)
+    _leases: int = field(init=False, default=0)
+    _portal: BlockingPortal = field(init=False)
+    _portal_cm: AbstractContextManager[BlockingPortal] | None = field(
+        init=False, default=None
+    )
+
+    def __enter__(self) -> BlockingPortal:
+        with self._lock:
+            if self._portal_cm is None:
+                self._portal_cm = start_blocking_portal(
+                    self.backend, self.backend_options
+                )
+                self._portal = self._portal_cm.__enter__()
+
+            self._leases += 1
+            return self._portal
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        portal_cm: AbstractContextManager[BlockingPortal] | None = None
+        with self._lock:
+            assert self._portal_cm
+            assert self._leases > 0
+            self._leases -= 1
+            if not self._leases:
+                portal_cm = self._portal_cm
+                self._portal_cm = None
+                del self._portal
+
+        if portal_cm:
+            portal_cm.__exit__(None, None, None)
 
 
 @contextmanager

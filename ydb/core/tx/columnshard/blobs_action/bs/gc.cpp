@@ -46,8 +46,9 @@ TGCTask::TGCTask(const TString& storageId, TGCListsByGroup&& listsByGroupId, con
 
 void TGCTask::OnGCResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev) {
     AFL_VERIFY(ev->Get()->Status == NKikimrProto::OK)("status", ev->Get()->Status)("details", ev->Get()->ToString())("action_id", GetActionGuid());
-    auto itGroup = ListsByGroupId.find(ev->Cookie);
-    Y_ABORT_UNLESS(itGroup != ListsByGroupId.end());
+    TBlobAddress bAddress(ev->Cookie, ev->Get()->Channel);
+    auto itGroup = ListsByGroupId.find(bAddress);
+    AFL_VERIFY(itGroup != ListsByGroupId.end())("address", bAddress.DebugString());
     ListsByGroupId.erase(itGroup);
 }
 
@@ -55,17 +56,16 @@ namespace {
 static TAtomicCounter PerGenerationCounter = 1;
 }
 
-std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> TGCTask::BuildRequest(const ui64 groupId) const {
-    const ui32 channelIdx = IBlobManager::BLOB_CHANNEL;
-    auto it = ListsByGroupId.find(groupId);
+std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> TGCTask::BuildRequest(const TBlobAddress& address) const {
+    auto it = ListsByGroupId.find(address);
     AFL_VERIFY(it != ListsByGroupId.end());
-    AFL_VERIFY(++it->second.RequestsCount < 10)("event", "build_gc_request")("group_id", groupId)("current_gen", CurrentGen)("gen", CollectGenStepInFlight)
+    AFL_VERIFY(++it->second.RequestsCount < 10)("event", "build_gc_request")("address", address.DebugString())("current_gen", CurrentGen)("gen", CollectGenStepInFlight)
         ("count", it->second.RequestsCount);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "build_gc_request")("group_id", groupId)("current_gen", CurrentGen)("gen", CollectGenStepInFlight)
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "build_gc_request")("address", address.DebugString())("current_gen", CurrentGen)("gen", CollectGenStepInFlight)
         ("count", it->second.RequestsCount);
     auto result = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(
         TabletId, CurrentGen, PerGenerationCounter.Val(),
-        channelIdx, true,
+        address.GetChannelId(), true,
         CollectGenStepInFlight.Generation(), CollectGenStepInFlight.Step(),
         new TVector<TLogoBlobID>(it->second.KeepList.begin(), it->second.KeepList.end()),
         new TVector<TLogoBlobID>(it->second.DontKeepList.begin(), it->second.DontKeepList.end()),

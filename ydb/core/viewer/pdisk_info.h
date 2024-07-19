@@ -93,6 +93,7 @@ public:
             hFunc(NSysView::TEvSysView::TEvGetPDisksResponse, Handle);
             cFunc(TEvRetryNodeRequest::EventType, HandleRetry);
             cFunc(TEvents::TEvUndelivered::EventType, Undelivered);
+            hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
@@ -118,6 +119,12 @@ public:
     }
 
     void Undelivered() {
+        if (!RetryRequest()) {
+            TBase::RequestDone();
+        }
+    }
+
+    void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr&) {
         if (!RetryRequest()) {
             TBase::RequestDone();
         }
@@ -153,7 +160,12 @@ public:
         NKikimrViewer::TPDiskInfo proto;
         TStringStream json;
         if (WhiteboardResponse != nullptr && WhiteboardResponse->Record.PDiskStateInfoSize() > 0) {
-            proto.MutableWhiteboard()->CopyFrom(WhiteboardResponse->Record.GetPDiskStateInfo(0));
+            for (const auto& pdisk : WhiteboardResponse->Record.GetPDiskStateInfo()) {
+                if (pdisk.GetPDiskId() == PDiskId) {
+                    proto.MutableWhiteboard()->CopyFrom(pdisk);
+                    break;
+                }
+            }
         }
         if (BSCResponse != nullptr && BSCResponse->Record.EntriesSize() > 0) {
             proto.MutableBSC()->CopyFrom(BSCResponse->Record.GetEntries(0).GetInfo());

@@ -8,16 +8,22 @@ private:
     using TBase = ILock;
     std::vector<std::shared_ptr<ILock>> Locks;
 protected:
-    virtual std::optional<TString> DoIsLocked(const TPortionInfo& portion) const override {
+    virtual std::optional<TString> DoIsLocked(const TPortionInfo& portion, const THashSet<TString>& excludedLocks) const override {
         for (auto&& i : Locks) {
+            if (excludedLocks.contains(i->GetLockName())) {
+                continue;
+            }
             if (auto lockName = i->IsLocked(portion)) {
                 return lockName;
             }
         }
         return {};
     }
-    virtual std::optional<TString> DoIsLocked(const TGranuleMeta& granule) const override {
+    virtual std::optional<TString> DoIsLocked(const TGranuleMeta& granule, const THashSet<TString>& excludedLocks) const override {
         for (auto&& i : Locks) {
+            if (excludedLocks.contains(i->GetLockName())) {
+                continue;
+            }
             if (auto lockName = i->IsLocked(granule)) {
                 return lockName;
             }

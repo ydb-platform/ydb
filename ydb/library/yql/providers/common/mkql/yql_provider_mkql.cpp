@@ -754,10 +754,20 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             return MkqlBuildWideLambda(node.Tail(), ctx, keys);
         };
 
-        if (withLimit)
+        bool isStatePersistable = true;
+        // Traverse through childs skipping input and limit children
+        for (size_t i = 2U; i < node.ChildrenSize(); ++i) {
+            isStatePersistable = isStatePersistable && node.Child(i)->GetTypeAnn()->IsPersistable();
+        }
+
+        if (withLimit) {
             return ctx.ProgramBuilder.WideCombiner(flow, memLimit, keyExtractor, init, update, finish);
-        else
-            return ctx.ProgramBuilder.WideLastCombiner(flow, keyExtractor, init, update, finish);
+        }
+
+        if (isStatePersistable) {
+            return ctx.ProgramBuilder.WideLastCombinerWithSpilling(flow, keyExtractor, init, update, finish);
+        }
+        return ctx.ProgramBuilder.WideLastCombiner(flow, keyExtractor, init, update, finish);
     });
 
     AddCallable("WideChopper", [](const TExprNode& node, TMkqlBuildContext& ctx) {

@@ -37,9 +37,8 @@
 #include <ydb/library/yql/providers/ydb/comp_nodes/yql_ydb_dq_transform.h>
 #include <ydb/library/yql/providers/function/gateway/dq_function_gateway.h>
 #include <ydb/library/yql/providers/function/provider/dq_function_provider.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_sink_factory.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
 #include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 #include <ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
 #include <ydb/library/yql/providers/pg/provider/yql_pg_provider.h>
@@ -271,12 +270,13 @@ NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(
     RegisterDqInputTransformLookupActorFactory(*factory);
     RegisterDqPqReadActorFactory(*factory, driver, nullptr);
     RegisterYdbReadActorFactory(*factory, driver, nullptr);
-    RegisterS3ReadActorFactory(*factory, nullptr, httpGateway, GetHTTPDefaultRetryPolicy(TDuration::Seconds(HTTPmaxTimeSeconds), maxRetriesCount), {}, nullptr);
-    RegisterS3WriteActorFactory(*factory, nullptr, httpGateway);
     RegisterClickHouseReadActorFactory(*factory, nullptr, httpGateway);
     RegisterGenericProviderFactories(*factory, credentialsFactory, genericClient);
-
     RegisterDqPqWriteActorFactory(*factory, driver, nullptr);
+
+    auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+    s3ActorsFactory->RegisterS3WriteActorFactory(*factory, nullptr, httpGateway, GetHTTPDefaultRetryPolicy());
+    s3ActorsFactory->RegisterS3ReadActorFactory(*factory, nullptr, httpGateway, GetHTTPDefaultRetryPolicy(TDuration::Seconds(HTTPmaxTimeSeconds), maxRetriesCount));
 
     return factory;
 }

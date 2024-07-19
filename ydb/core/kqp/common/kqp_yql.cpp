@@ -282,6 +282,9 @@ TKqpUpsertRowsSettings TKqpUpsertRowsSettings::Parse(const TCoNameValueTupleList
         } else if (name == TKqpUpsertRowsSettings::IsUpdateSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
             settings.IsUpdate = true; 
+        } else if (name == TKqpUpsertRowsSettings::AllowInconsistentWritesSettingName) {
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
+            settings.AllowInconsistentWrites = true;
         } else {
             YQL_ENSURE(false, "Unknown KqpUpsertRows setting name '" << name << "'");
         }
@@ -308,6 +311,12 @@ NNodes::TCoNameValueTupleList TKqpUpsertRowsSettings::BuildNode(TExprContext& ct
         settings.emplace_back(
             Build<TCoNameValueTuple>(ctx, pos)
                 .Name().Build(IsUpdateSettingName)
+                .Done());
+    }
+    if (AllowInconsistentWrites) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(AllowInconsistentWritesSettingName)
                 .Done());
     }
 

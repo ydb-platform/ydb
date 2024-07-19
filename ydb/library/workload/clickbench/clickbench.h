@@ -10,6 +10,7 @@ public:
     TClickbenchWorkloadParams();
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
     THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
+    TWorkloadDataInitializer::TList CreateDataInitializers() const override;
     TString GetWorkloadName() const override;
     YDB_READONLY_DEF(TString, ExternalQueries);
     YDB_READONLY_DEF(TFsPath, ExternalQueriesFile);

@@ -80,12 +80,12 @@ namespace NKikimr::NOlap {
 std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> TTestStoragesManager::DoBuildOperator(const TString& storageId) {
     if (storageId == TBase::DefaultStorageId) {
         return std::make_shared<NOlap::NBlobOperations::NBlobStorage::TOperator>(storageId, NActors::TActorId(), TabletInfo,
-            1, SharedBlobsManager->GetStorageManagerGuarantee(TBase::DefaultStorageId));
+            GetGeneration(), SharedBlobsManager->GetStorageManagerGuarantee(TBase::DefaultStorageId));
     } else if (storageId == TBase::MemoryStorageId) {
 #ifndef KIKIMR_DISABLE_S3_OPS
         Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
         return std::make_shared<NOlap::NBlobOperations::NTier::TOperator>(storageId, NActors::TActorId(), std::make_shared<NWrappers::NExternalStorage::TFakeExternalStorageConfig>("fakeBucket", "fakeSecret"),
-            SharedBlobsManager->GetStorageManagerGuarantee(storageId));
+            SharedBlobsManager->GetStorageManagerGuarantee(storageId), GetGeneration());
 #endif
     }
     return nullptr;

@@ -29,7 +29,7 @@
 #define MAX_VECS	16
 
 /*
- * Can be anything, let's just do something for a bit of parallellism
+ * Can be anything, let's just do something for a bit of parallelism
  */
 #define READ_BATCH	16
 

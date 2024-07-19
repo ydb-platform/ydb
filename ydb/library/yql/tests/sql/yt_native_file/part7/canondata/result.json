@@ -483,6 +483,62 @@
             "uri": "https://{canondata_backend}/1871102/ae8b5d002551349280cb6bef50e922859b127b33/resource.tar.gz#test.test_blocks-combine_hashed_minmax_nested--Results_/results.txt"
         }
     ],
+    "test.test[blocks-date_sub_interval--Debug]": [
+        {
+            "checksum": "ab58ccf75ab84de1df8165b435764ea9",
+            "size": 5833,
+            "uri": "https://{canondata_backend}/1900335/bd6c7c57c7cbffe4c815a9e399efee57e9f68a68/resource.tar.gz#test.test_blocks-date_sub_interval--Debug_/opt.yql"
+        }
+    ],
+    "test.test[blocks-date_sub_interval--Peephole]": [
+        {
+            "checksum": "4682805abc4343a65faba5c0c58792c5",
+            "size": 6041,
+            "uri": "https://{canondata_backend}/1900335/bd6c7c57c7cbffe4c815a9e399efee57e9f68a68/resource.tar.gz#test.test_blocks-date_sub_interval--Peephole_/opt.yql"
+        }
+    ],
+    "test.test[blocks-date_sub_interval--Plan]": [
+        {
+            "checksum": "aae45f9035acd48ed1e089d2e39f13f0",
+            "size": 7241,
+            "uri": "https://{canondata_backend}/1900335/bd6c7c57c7cbffe4c815a9e399efee57e9f68a68/resource.tar.gz#test.test_blocks-date_sub_interval--Plan_/plan.txt"
+        }
+    ],
+    "test.test[blocks-date_sub_interval--Results]": [
+        {
+            "checksum": "b8a07b38d67c42796cf54d342ddad081",
+            "size": 6138,
+            "uri": "https://{canondata_backend}/1900335/bd6c7c57c7cbffe4c815a9e399efee57e9f68a68/resource.tar.gz#test.test_blocks-date_sub_interval--Results_/results.txt"
+        }
+    ],
+    "test.test[blocks-date_sub_interval_scalar--Debug]": [
+        {
+            "checksum": "a58ecd112fc6be225db7313e1ccd5e4b",
+            "size": 5741,
+            "uri": "https://{canondata_backend}/1900335/bd6c7c57c7cbffe4c815a9e399efee57e9f68a68/resource.tar.gz#test.test_blocks-date_sub_interval_scalar--Debug_/opt.yql"
+        }
+    ],
+    "test.test[blocks-date_sub_interval_scalar--Peephole]": [
+        {
+            "checksum": "ffd40cfa106b6714055e9d484f88ee00",
+            "size": 7072,
+            "uri": "https://{canondata_backend}/1900335/bd6c7c57c7cbffe4c815a9e399efee57e9f68a68/resource.tar.gz#test.test_blocks-date_sub_interval_scalar--Peephole_/opt.yql"
+        }
+    ],
+    "test.test[blocks-date_sub_interval_scalar--Plan]": [
+        {
+            "checksum": "abde8bbc01ab049101cb5673bad50a1c",
+            "size": 6872,
+            "uri": "https://{canondata_backend}/1900335/bd6c7c57c7cbffe4c815a9e399efee57e9f68a68/resource.tar.gz#test.test_blocks-date_sub_interval_scalar--Plan_/plan.txt"
+        }
+    ],
+    "test.test[blocks-date_sub_interval_scalar--Results]": [
+        {
+            "checksum": "2bdacd094bfd3374a6cf60342b8de137",
+            "size": 18314,
+            "uri": "https://{canondata_backend}/1900335/bd6c7c57c7cbffe4c815a9e399efee57e9f68a68/resource.tar.gz#test.test_blocks-date_sub_interval_scalar--Results_/results.txt"
+        }
+    ],
     "test.test[column_order-insert--Debug]": [
         {
             "checksum": "e4030a85259a67fc2ab749b257ad91e9",
@@ -2280,20 +2336,6 @@
             "checksum": "36fe7e20767b0bd908f1668222a3178e",
             "size": 671,
             "uri": "https://{canondata_backend}/1946324/6707647cfa387ec829af2d598f1608a04da08a21/resource.tar.gz#test.test_produce-reduce_all_expr-default.txt-Results_/results.txt"
-        }
-    ],
-    "test.test[sampling-io_block_size_pragma--Debug]": [
-        {
-            "checksum": "8aabd819e14ea1c4b3f60fe827652486",
-            "size": 4995,
-            "uri": "https://{canondata_backend}/1777230/1eefebeaa3ca9cd9cdd1b5dfe63e67427f585bf2/resource.tar.gz#test.test_sampling-io_block_size_pragma--Debug_/opt.yql"
-        }
-    ],
-    "test.test[sampling-io_block_size_pragma--Plan]": [
-        {
-            "checksum": "730916bb057194448f8d9e0a47b31c96",
-            "size": 33258,
-            "uri": "https://{canondata_backend}/1871182/f4625d50a46161e5b24e60410bd7824808885254/resource.tar.gz#test.test_sampling-io_block_size_pragma--Plan_/plan.txt"
         }
     ],
     "test.test[sampling-map-dynamic-Debug]": [

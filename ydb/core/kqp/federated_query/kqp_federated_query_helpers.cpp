@@ -18,6 +18,8 @@
 #include <util/system/file.h>
 #include <util/stream/file.h>
 
+#include <ydb/core/protos/auth.pb.h>
+
 namespace NKikimr::NKqp {
     NYql::IYtGateway::TPtr MakeYtGateway(const NMiniKQL::IFunctionRegistry* functionRegistry, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig) {
         NYql::TYtNativeServices ytServices;

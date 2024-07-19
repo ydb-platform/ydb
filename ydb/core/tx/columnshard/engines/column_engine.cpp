@@ -3,6 +3,8 @@
 #include <ydb/core/base/appdata.h>
 #include <util/system/info.h>
 
+#include <ydb/core/protos/config.pb.h>
+
 namespace NKikimr::NOlap {
 
 const std::shared_ptr<arrow::Schema>& IColumnEngine::GetReplaceKey() const {

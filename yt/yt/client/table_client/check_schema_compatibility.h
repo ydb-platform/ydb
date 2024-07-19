@@ -15,7 +15,8 @@ namespace NYT::NTableClient {
 std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibility(
     const TTableSchema& inputSchema,
     const TTableSchema& outputSchema,
-    bool ignoreSortOrder);
+    bool ignoreSortOrder,
+    bool forbidExtraComputedColumns = true);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -202,8 +202,7 @@ TEST(TTableSchemaTest, ColumnTypeV3Deserialization)
               required=%true;
             }
         )"),
-        R"("type_v3" does not match "required")"
-    );
+        R"("type_v3" does not match "required")");
 
     EXPECT_THROW_WITH_SUBSTRING(
         ColumnFromYson(R"(
@@ -219,8 +218,7 @@ TEST(TTableSchemaTest, ColumnTypeV3Deserialization)
               type=utf8;
             }
         )"),
-        R"("type_v3" does not match "type")"
-    );
+        R"("type_v3" does not match "type")");
 }
 
 TEST(TTableSchemaTest, MaxInlineHunkSizeSerialization)
@@ -345,49 +343,40 @@ TEST(TTableSchemaTest, ColumnSchemaValidation)
         })));
 
     ValidateColumnSchema(
-        TColumnSchema("Column", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int8)), ESortOrder::Ascending)
-    );
+        TColumnSchema("Column", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int8)), ESortOrder::Ascending));
 
     expectBad(
-        TColumnSchema("Column", ListLogicalType(OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Any))), ESortOrder::Ascending)
-    );
-
-    expectBad(
-        TColumnSchema("Column", EValueType::String)
-            .SetMaxInlineHunkSize(0)
-    );
+        TColumnSchema("Column", ListLogicalType(OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Any))), ESortOrder::Ascending));
 
     expectBad(
         TColumnSchema("Column", EValueType::String)
-            .SetMaxInlineHunkSize(-1)
-    );
+            .SetMaxInlineHunkSize(0));
+
+    expectBad(
+        TColumnSchema("Column", EValueType::String)
+            .SetMaxInlineHunkSize(-1));
 
     expectBad(
         TColumnSchema("Column", EValueType::Int64)
-            .SetMaxInlineHunkSize(100)
-    );
+            .SetMaxInlineHunkSize(100));
 
     expectBad(
         TColumnSchema("Column", EValueType::String, ESortOrder::Ascending)
-            .SetMaxInlineHunkSize(100)
-    );
+            .SetMaxInlineHunkSize(100));
 
     ValidateColumnSchema(
         TColumnSchema("Column", EValueType::String)
-            .SetMaxInlineHunkSize(100)
-    );
+            .SetMaxInlineHunkSize(100));
 
     ValidateColumnSchema(
         TColumnSchema("Column", EValueType::Any)
-            .SetMaxInlineHunkSize(100)
-    );
+            .SetMaxInlineHunkSize(100));
 
     expectBad(
         TColumnSchema("Column", StructLogicalType({
             {"foo", SimpleLogicalType(ESimpleLogicalValueType::Int64)},
             {"bar", SimpleLogicalType(ESimpleLogicalValueType::String)},
-        }), ESortOrder::Ascending)
-    );
+        }), ESortOrder::Ascending));
 }
 
 TEST(TTableSchemaTest, ValidateTableSchemaTest)

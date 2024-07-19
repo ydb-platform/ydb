@@ -9,8 +9,6 @@
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 
-#include <ydb/core/protos/pqconfig.pb.h>
-
 namespace NKikimr {
 
 TString PrepareData(ui32 size, ui32 flavor) {

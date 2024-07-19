@@ -19,6 +19,7 @@
 
 #include <library/cpp/yt/misc/property.h>
 
+#include <util/system/compiler.h>
 #include <util/system/getpid.h>
 
 #include <util/generic/size_literals.h>
@@ -402,21 +403,21 @@ public:
     TErrorOr<T>& operator = (TErrorOr<T>&& other) noexcept
         requires std::is_nothrow_move_assignable_v<T>;
 
-    const T& Value() const &;
-    T& Value() &;
-    T&& Value() &&;
+    const T& Value() const & Y_LIFETIME_BOUND;
+    T& Value() & Y_LIFETIME_BOUND;
+    T&& Value() && Y_LIFETIME_BOUND;
 
     template <class... TArgs>
-    const T& ValueOrThrow(TArgs&&... args) const &;
+    const T& ValueOrThrow(TArgs&&... args) const & Y_LIFETIME_BOUND;
 
     template <class... TArgs>
-    T& ValueOrThrow(TArgs&&... args) &;
+    T& ValueOrThrow(TArgs&&... args) & Y_LIFETIME_BOUND;
 
     template <class... TArgs>
-    T&& ValueOrThrow(TArgs&&... args) &&;
+    T&& ValueOrThrow(TArgs&&... args) && Y_LIFETIME_BOUND;
 
-    const T& ValueOrDefault(const T& defaultValue) const &;
-    T& ValueOrDefault(T& defaultValue) &;
+    const T& ValueOrDefault(const T& defaultValue Y_LIFETIME_BOUND) const & Y_LIFETIME_BOUND;
+    T& ValueOrDefault(T& defaultValue Y_LIFETIME_BOUND) & Y_LIFETIME_BOUND;
     constexpr T ValueOrDefault(T&& defaultValue) const &;
     constexpr T ValueOrDefault(T&& defaultValue) &&;
 

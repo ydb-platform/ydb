@@ -18,37 +18,81 @@ public:
         : Data_(std::move(data))
     { }
 
+    bool ReadBool() override
+    {
+        auto value = ReadByte();
+        return value > 0;
+    }
+
     char ReadByte() override
     {
         return DoReadInt<char>();
     }
 
-    int16_t ReadInt16() override
+    i16 ReadInt16() override
     {
-        return DoReadInt<int16_t>();
+        return DoReadInt<i16>();
     }
 
-    int32_t ReadInt32() override
+    i32 ReadInt32() override
     {
-        return DoReadInt<int32_t>();
+        return DoReadInt<i32>();
     }
 
-    int64_t ReadInt64() override
+    i64 ReadInt64() override
     {
-        return DoReadInt<int64_t>();
+        return DoReadInt<i64>();
     }
 
-    ui64 ReadUnsignedVarInt() override
+    ui32 ReadUint32() override
     {
-        ui64 result;
-        Offset_ += ReadVarUint64(Data_.begin() + Offset_, &result);
+        return DoReadInt<ui32>();
+    }
+
+    i32 ReadVarInt() override
+    {
+        i32 result;
+        Offset_ += ReadVarInt32(Data_.begin() + Offset_, &result);
         return result;
     }
 
-    bool ReadBool() override
+    i64 ReadVarLong() override
     {
-        auto value = ReadByte();
-        return value > 0;
+        i64 result;
+        Offset_ += ReadVarInt64(Data_.begin() + Offset_, &result);
+        return result;
+    }
+
+    ui32 ReadUnsignedVarInt() override
+    {
+        ui32 result;
+        Offset_ += ReadVarUint32(Data_.begin() + Offset_, &result);
+        return result;
+    }
+
+    std::optional<TString> ReadNullableString() override
+    {
+        auto length = ReadInt16();
+        if (length == -1) {
+            return {};
+        }
+
+        TString result;
+        ReadString(&result, length);
+        return result;
+    }
+
+    std::optional<TString> ReadCompactNullableString() override
+    {
+        auto length = ReadUnsignedVarInt();
+        if (length == 0) {
+            return {};
+        }
+
+        TString result;
+        ReadString(&result, length - 1);
+
+        return result;
     }
 
     TString ReadCompactString() override
@@ -110,11 +154,37 @@ public:
         Offset_ += length;
     }
 
-    i32 StartReadBytes() override
+    TString ReadCompactBytes() override
     {
-        auto count = ReadInt32();
+        TString result;
+
+        auto length = ReadUnsignedVarInt();
+        if (length == 0) {
+            return result;
+        }
+
+        ReadString(&result, length - 1);
+        return result;
+    }
+
+    i32 StartReadBytes(bool needReadCount) override
+    {
+        i32 size = 0;
+        if (needReadCount) {
+            size = ReadInt32();
+        }
         BytesBegins_.push_back(Offset_);
-        return count;
+        return size;
+    }
+
+    i32 StartReadCompactBytes(bool needReadCount) override
+    {
+        i32 size = 0;
+        if (needReadCount) {
+            size = ReadUnsignedVarInt() - 1;
+        }
+        BytesBegins_.push_back(Offset_);
+        return size;
     }
 
     i32 GetReadBytesCount() override
@@ -199,29 +269,54 @@ public:
         : Buffer_(AllocateBuffer(InitialBufferSize))
     { }
 
+    void WriteBool(bool value) override
+    {
+        WriteByte(value ? 1 : 0);
+    }
+
     void WriteByte(char value) override
     {
         DoWriteInt(value);
     }
 
-    void WriteInt16(int16_t value) override
+    void WriteInt16(i16 value) override
     {
         DoWriteInt(value);
     }
 
-    void WriteInt32(int32_t value) override
+    void WriteInt32(i32 value) override
     {
         DoWriteInt(value);
     }
 
-    void WriteInt64(int64_t value) override
+    void WriteInt64(i64 value) override
     {
         DoWriteInt(value);
     }
 
-    void WriteUnsignedVarInt(uint64_t value) override
+    void WriteUint32(ui32 value) override
     {
-        Size_ += WriteVarUint64(Buffer_.begin() + Size_, value);
+        DoWriteInt(value);
+    }
+
+    void WriteVarInt(i32 value) override
+    {
+        Size_ += WriteVarInt32(Buffer_.begin() + Size_, value);
+    }
+
+    void WriteVarLong(i64 value) override
+    {
+        Size_ += WriteVarInt64(Buffer_.begin() + Size_, value);
+    }
+
+    void WriteUnsignedVarInt(ui32 value) override
+    {
+        Size_ += WriteVarUint32(Buffer_.begin() + Size_, value);
+    }
+
+    void WriteUuid(TGUID value) override
+    {
+        WriteString(value.AsUuidString());
     }
 
     void WriteErrorCode(EErrorCode value) override
@@ -229,9 +324,10 @@ public:
         DoWriteInt(static_cast<int16_t>(value));
     }
 
-    void WriteBool(bool value) override
+    void WriteString(const TString& value) override
     {
-        WriteByte(value ? 1 : 0);
+        WriteInt16(value.size());
+        WriteData(value);
     }
 
     void WriteNullableString(const std::optional<TString>& value) override
@@ -244,30 +340,35 @@ public:
         WriteString(*value);
     }
 
-    void WriteString(const TString& value) override
-    {
-        WriteInt16(value.size());
-
-        EnsureFreeSpace(value.size());
-
-        std::copy(value.begin(), value.end(), Buffer_.begin() + Size_);
-        Size_ += value.size();
-    }
-
     void WriteCompactString(const TString& value) override
     {
-        WriteUnsignedVarInt(value.size());
+        WriteUnsignedVarInt(value.size() + 1);
+        WriteData(value);
+    }
 
-        EnsureFreeSpace(value.size());
-
-        std::copy(value.begin(), value.end(), Buffer_.begin() + Size_);
-        Size_ += value.size();
+    void WriteCompactNullableString(const std::optional<TString>& value) override
+    {
+        if (!value) {
+            WriteUnsignedVarInt(0);
+            return;
+        }
+        WriteCompactString(*value);
     }
 
     void WriteBytes(const TString& value) override
     {
         WriteInt32(value.size());
+        WriteData(value);
+    }
 
+    void WriteCompactBytes(const TString& value) override
+    {
+        WriteUnsignedVarInt(value.size() + 1);
+        WriteData(value);
+    }
+
+    void WriteData(const TString& value) override
+    {
         EnsureFreeSpace(value.size());
 
         std::copy(value.begin(), value.end(), Buffer_.begin() + Size_);

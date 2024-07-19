@@ -51,6 +51,7 @@ const TTypeAnnotationNode* RemoveOptionalType(const TTypeAnnotationNode* type);
 const TTypeAnnotationNode* RemoveAllOptionals(const TTypeAnnotationNode* type);
 
 TExprNode::TPtr GetSetting(const TExprNode& settings, const TStringBuf& name);
+TExprNode::TPtr FilterSettings(const TExprNode& settings, const THashSet<TStringBuf>& names, TExprContext& ctx);
 bool HasSetting(const TExprNode& settings, const TStringBuf& name);
 bool HasAnySetting(const TExprNode& settings, const THashSet<TString>& names);
 TExprNode::TPtr RemoveSetting(const TExprNode& settings, const TStringBuf& name, TExprContext& ctx);

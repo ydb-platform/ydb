@@ -13,6 +13,8 @@
 
 #include <library/cpp/logger/global/global.h>
 
+#include <ydb/core/protos/auth.pb.h>
+
 namespace NKikimr::NSQS {
 
 bool UseMockedVersion(const NKikimrConfig::TSqsConfig& config) {

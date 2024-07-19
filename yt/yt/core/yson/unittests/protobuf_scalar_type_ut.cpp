@@ -19,8 +19,7 @@ using namespace google::protobuf;
         auto element = ResolveProtobufElementByYPath(type, path).Element; \
         EXPECT_TRUE(std::holds_alternative<std::unique_ptr<TProtobufScalarElement>>(element)); \
         int fieldType = static_cast<int>( \
-            std::get<std::unique_ptr<TProtobufScalarElement>>(element)->Type \
-        ); \
+            std::get<std::unique_ptr<TProtobufScalarElement>>(element)->Type); \
         EXPECT_EQ(fieldType, expectedType); \
     } while (false);
 

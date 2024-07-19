@@ -16,12 +16,13 @@ namespace {
 enum class EOutputRowItemSource{None, InputKey, InputOther, LookupKey, LookupOther};
 using TOutputRowColumnOrder = std::vector<std::pair<EOutputRowItemSource, ui64>>; //i -> {source, indexInSource}
 
-class TInputTransformStreamLookup
-        : public NActors::TActorBootstrapped<TInputTransformStreamLookup>
+//Design note: Base implementation is optimized for wide channels
+class TInputTransformStreamLookupBase
+        : public NActors::TActorBootstrapped<TInputTransformStreamLookupBase>
         , public NYql::NDq::IDqComputeActorAsyncInput
 {
 public:
-    TInputTransformStreamLookup(
+    TInputTransformStreamLookupBase(
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const NMiniKQL::THolderFactory& holderFactory,
         ui64 inputIndex,
@@ -30,6 +31,8 @@ public:
         NDqProto::TDqInputTransformLookupSettings&& settings,
         TVector<size_t>&& inputJoinColumns,
         TVector<size_t>&& lookupJoinColumns,
+        const NMiniKQL::TMultiType* const inputRowType,
+        const NMiniKQL::TMultiType* const outputRowType,
         const TOutputRowColumnOrder& outputRowColumnOrder
     )
         : Alloc(alloc)
@@ -40,8 +43,12 @@ public:
         , Settings(std::move(settings))
         , InputJoinColumns(std::move(inputJoinColumns))
         , LookupJoinColumns(std::move(lookupJoinColumns))
+        , InputRowType(inputRowType)
+        , OutputRowType(outputRowType)
         , OutputRowColumnOrder(outputRowColumnOrder)
         , InputFlowFetchStatus(NUdf::EFetchStatus::Yield)
+        , AwaitingQueue(InputRowType)
+        , ReadyQueue(OutputRowType)
     {
         Y_ABORT_UNLESS(Alloc);
     }
@@ -49,37 +56,30 @@ public:
     void Bootstrap() {
         //TODO implement me
     }
+protected:
+    virtual NUdf::EFetchStatus FetchWideInputValue(NUdf::TUnboxedValue* inputRowItems) = 0;
+    virtual void PushOutputValue(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, NUdf::TUnboxedValue* outputRowItems) = 0;
 
-private: //IDqComputeActorAsyncInput
-    ui64 GetInputIndex() const final {
-        return InputIndex;
-    }
-
-    const NYql::NDq::TDqAsyncStats& GetIngressStats() const final {
-        return IngressStats;
-    }
-
-
-    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
-        Y_UNUSED(freeSpace);
-        YQL_ENSURE(!batch.IsWide(), "Wide stream is not supported");
+private:
+    void HandleLookup() {
+        //TODO fixme. Temp passthrow mode
         auto guard = BindAllocator();
         while(!AwaitingQueue.empty()) {
-            const auto& row = AwaitingQueue.front();
+            const auto wideInputRow = AwaitingQueue.Head();
             NUdf::TUnboxedValue* outputRowItems;
-            auto outputRow = HolderFactory.CreateDirectArrayHolder(OutputRowColumnOrder.size(), outputRowItems);
+            NUdf::TUnboxedValue outputRow = HolderFactory.CreateDirectArrayHolder(OutputRowColumnOrder.size(), outputRowItems);
             for (size_t i = 0; i != OutputRowColumnOrder.size(); ++i) {
                 const auto& [source, index] = OutputRowColumnOrder[i];
                 switch(source) {
                     case EOutputRowItemSource::InputKey:
                     case EOutputRowItemSource::InputOther:
-                        outputRowItems[i] = row.GetElement(index);
+                        outputRowItems[i] = wideInputRow[index];
                         break;
                     case EOutputRowItemSource::LookupKey:
                         //TODO fixme. Switch to values from lookup table
                         for (size_t k = 0; k != LookupJoinColumns.size(); ++k) {
                             if (LookupJoinColumns[k] == index) {
-                                outputRowItems[i] = row.GetElement(InputJoinColumns[k]);
+                                outputRowItems[i] = wideInputRow[InputJoinColumns[k]];
                                 break;        
                             }
                         }
@@ -93,34 +93,56 @@ private: //IDqComputeActorAsyncInput
                         break;
                 }
             }
-            batch.push_back(std::move(outputRow));
-            AwaitingQueue.pop_front();
-            //TODO check space
+            AwaitingQueue.Pop();
+            ReadyQueue.PushRow(outputRowItems, OutputRowType->GetElementsCount());
         }
-        if (InputFlowFetchStatus != NUdf::EFetchStatus::Finish) {
-            NUdf::TUnboxedValue row;
-            while ((InputFlowFetchStatus = InputFlow.Fetch(row)) == NUdf::EFetchStatus::Ok) {
-                AwaitingQueue.push_back(std::move(row));
-            }
-        }
-        //TODO fixme. Temp passthrow mode
-        if (!AwaitingQueue.empty()) {
-            Send(ComputeActorId, new TEvNewAsyncInputDataArrived{InputIndex});
-        }
-        finished = IsFinished();
-        return 0;
+        Send(ComputeActorId, new TEvNewAsyncInputDataArrived{InputIndex});
     }
 
-        //No checkpointg required
+    //TODO implement checkpoints
     void SaveState(const NYql::NDqProto::TCheckpoint&, NYql::NDq::TSourceState&) final {}
     void LoadState(const NYql::NDq::TSourceState&) final {}
     void CommitState(const NYql::NDqProto::TCheckpoint&) final {}
+
+private: //IDqComputeActorAsyncInput
+    ui64 GetInputIndex() const final {
+        return InputIndex;
+    }
+
+    const NYql::NDq::TDqAsyncStats& GetIngressStats() const final {
+        return IngressStats;
+    }
 
     void PassAway() final {
         auto guard = BindAllocator();
         //All resources, hold by this class, that have been created with mkql allocator, must be deallocated here
         InputFlow.Clear();
-        NMiniKQL::TUnboxedValueDeque{}.swap(AwaitingQueue);
+        NMiniKQL::TUnboxedValueBatch{}.swap(AwaitingQueue);
+        NMiniKQL::TUnboxedValueBatch{}.swap(ReadyQueue);
+    }
+
+    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
+        Y_UNUSED(freeSpace);
+        auto guard = BindAllocator();
+        while (!ReadyQueue.empty()) {
+            PushOutputValue(batch, ReadyQueue.Head());
+            ReadyQueue.Pop();
+        }
+
+        if (InputFlowFetchStatus != NUdf::EFetchStatus::Finish) {
+            NUdf::TUnboxedValue* inputRowItems;
+            NUdf::TUnboxedValue inputRow = HolderFactory.CreateDirectArrayHolder(InputRowType->GetElementsCount(), inputRowItems);
+            while (
+                (InputFlowFetchStatus = FetchWideInputValue(inputRowItems)) == NUdf::EFetchStatus::Ok
+            ) {
+                AwaitingQueue.PushRow(inputRowItems, InputRowType->GetElementsCount());
+            }
+        }
+        if (!AwaitingQueue.empty()) {
+            HandleLookup();
+        }
+        finished = IsFinished() && ReadyQueue.empty();
+        return 0;
     }
 
 private:
@@ -131,7 +153,7 @@ private:
     bool IsFinished() const {
         return NUdf::EFetchStatus::Finish == InputFlowFetchStatus && AwaitingQueue.empty();
     }
-private:
+protected:
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     const NMiniKQL::THolderFactory& HolderFactory;
     ui64 InputIndex; // NYql::NDq::IDqComputeActorAsyncInput
@@ -141,18 +163,95 @@ private:
     NDqProto::TDqInputTransformLookupSettings Settings;
     const TVector<size_t> InputJoinColumns;
     const TVector<size_t> LookupJoinColumns;
+    const NMiniKQL::TMultiType* const InputRowType;
+    const NMiniKQL::TMultiType* const OutputRowType;
     const TOutputRowColumnOrder OutputRowColumnOrder;
 
     NUdf::EFetchStatus InputFlowFetchStatus;
-    NMiniKQL::TUnboxedValueDeque AwaitingQueue;
+    NKikimr::NMiniKQL::TUnboxedValueBatch AwaitingQueue;
+    NKikimr::NMiniKQL::TUnboxedValueBatch ReadyQueue;
     NYql::NDq::TDqAsyncStats IngressStats;
 };
 
-const NMiniKQL::TStructType* DeserializeStructType(TStringBuf s, const NMiniKQL::TTypeEnvironment& env) {
+class TInputTransformStreamLookupWide: public TInputTransformStreamLookupBase {
+    using TBase = TInputTransformStreamLookupBase;
+public:
+    using TBase::TBase;
+protected:
+    NUdf::EFetchStatus FetchWideInputValue(NUdf::TUnboxedValue* inputRowItems) override {
+        return InputFlow.WideFetch(inputRowItems, InputRowType->GetElementsCount());
+    }
+    void PushOutputValue(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, NUdf::TUnboxedValue* outputRowItems) override {
+        batch.PushRow(outputRowItems, OutputRowType->GetElementsCount());
+    }
+};
+
+class TInputTransformStreamLookupNarrow: public TInputTransformStreamLookupBase {
+    using TBase = TInputTransformStreamLookupBase;
+public:
+    using TBase::TBase;
+protected:
+    NUdf::EFetchStatus FetchWideInputValue(NUdf::TUnboxedValue* inputRowItems) override {
+        NUdf::TUnboxedValue row;
+        auto result = InputFlow.Fetch(row);
+        if (NUdf::EFetchStatus::Ok == result) {
+            for (size_t i = 0; i != row.GetListLength(); ++i) {
+                inputRowItems[i] = row.GetElement(i);
+            }
+        }
+        return result;
+    }
+    void PushOutputValue(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, NUdf::TUnboxedValue* outputRowItems) override {
+        NUdf::TUnboxedValue* narrowOutputRowItems;
+        NUdf::TUnboxedValue narrowOutputRow = HolderFactory.CreateDirectArrayHolder(OutputRowType->GetElementsCount(), narrowOutputRowItems);
+        for (size_t i = 0; i != OutputRowType->GetElementsCount(); ++i) {
+            narrowOutputRowItems[i] = std::move(outputRowItems[i]);
+        }
+        batch.emplace_back(std::move(narrowOutputRow));
+    }
+};
+
+
+const NMiniKQL::TType* DeserializeType(TStringBuf s, const NMiniKQL::TTypeEnvironment& env) {
     const auto node = NMiniKQL::DeserializeNode(s, env);
-    auto type = static_cast<const  NMiniKQL::TType*>(node);
+    return static_cast<const  NMiniKQL::TType*>(node);
+}
+
+const NMiniKQL::TStructType* DeserializeStructType(TStringBuf s, const NMiniKQL::TTypeEnvironment& env) {
+    const auto type = DeserializeType(s, env);
     MKQL_ENSURE(type->IsStruct(), "Expected struct type");
     return static_cast<const NMiniKQL::TStructType*>(type);
+}
+
+std::tuple<const NMiniKQL::TMultiType*, const NMiniKQL::TMultiType*, bool> DeserializeAsMulti(TStringBuf input, TStringBuf output, const NMiniKQL::TTypeEnvironment& env) {
+    const auto inputType = DeserializeType(input, env);
+    const auto outputType = DeserializeType(output, env);
+    Y_ABORT_UNLESS(inputType->IsMulti() == outputType->IsMulti());
+    if (inputType->IsMulti()) {
+        return {
+            static_cast<const NMiniKQL::TMultiType*>(inputType),
+            static_cast<const NMiniKQL::TMultiType*>(outputType),
+            true
+        };
+    } else {
+        Y_ABORT_UNLESS(inputType->IsStruct() && outputType->IsStruct());
+        const auto inputStruct = static_cast<const NMiniKQL::TStructType*>(inputType);
+        std::vector<const NMiniKQL::TType*> inputItems(inputStruct->GetMembersCount());
+        for(size_t i = 0; i != inputItems.size(); ++i) {
+            inputItems[i] = inputStruct->GetMemberType(i);
+        }
+        const auto outputStruct = static_cast<const NMiniKQL::TStructType*>(outputType);
+        std::vector<const NMiniKQL::TType*> outputItems(outputStruct->GetMembersCount());
+        for(size_t i = 0; i != outputItems.size(); ++i) {
+            outputItems[i] = outputStruct->GetMemberType(i);
+        }
+
+        return {
+            NMiniKQL::TMultiType::Create(inputItems.size(), const_cast<NMiniKQL::TType *const*>(inputItems.data()), env),
+            NMiniKQL::TMultiType::Create(outputItems.size(), const_cast<NMiniKQL::TType *const*>(outputItems.data()), env),
+            false
+        };
+    }
 }
 
 TOutputRowColumnOrder CategorizeOutputRowItems(
@@ -213,38 +312,58 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
     IDqAsyncIoFactory::TInputTransformArguments&& args //TODO expand me
 )
 {
+    const auto narrowInputRowType = DeserializeStructType(settings.GetNarrowInputRowType(), args.TypeEnv);
+    const auto narrowOutputRowType = DeserializeStructType(settings.GetNarrowOutputRowType(), args.TypeEnv);
+
     const auto& transform = args.InputDesc.transform();
-    const auto inputRowType = DeserializeStructType(transform.GetInputType(), args.TypeEnv);
-    const auto outputRowType = DeserializeStructType(transform.GetOutputType(), args.TypeEnv);
+    const auto [inputRowType, outputRowType, isWide] = DeserializeAsMulti(transform.GetInputType(), transform.GetOutputType(), args.TypeEnv);
+
     const auto rightRowType = DeserializeStructType(settings.GetRightSource().GetSerializedRowType(), args.TypeEnv);
 
     auto leftJoinColumns = GetNameToIndex(settings.GetLeftJoinKeyNames());
     auto rightJoinColumns = GetNameToIndex(settings.GetRightJoinKeyNames());
     Y_ABORT_UNLESS(leftJoinColumns.size() == rightJoinColumns.size());
 
-    auto leftJoinColumnIndexes = GetJoinColumnIndexes(inputRowType, leftJoinColumns);
+    auto leftJoinColumnIndexes = GetJoinColumnIndexes(narrowInputRowType, leftJoinColumns);
     Y_ABORT_UNLESS(leftJoinColumnIndexes.size() == leftJoinColumns.size());
     auto rightJoinColumnIndexes  = GetJoinColumnIndexes(rightRowType, rightJoinColumns);
     Y_ABORT_UNLESS(rightJoinColumnIndexes.size() == rightJoinColumns.size());
-    auto columnOrder = CategorizeOutputRowItems(
-        outputRowType, 
+    const auto& outputColumnsOrder = CategorizeOutputRowItems(
+        narrowOutputRowType,
         settings.GetLeftLabel(),
         settings.GetRightLabel(),
         {settings.GetLeftJoinKeyNames().cbegin(), settings.GetLeftJoinKeyNames().cend()},
         {settings.GetRightJoinKeyNames().cbegin(), settings.GetRightJoinKeyNames().cend()}
     );
-
-    auto actor = new TInputTransformStreamLookup(
-        args.Alloc,
-        args.HolderFactory,
-        args.InputIndex,
-        args.TransformInput,
-        args.ComputeActorId,
-        std::move(settings),
-        std::move(leftJoinColumnIndexes),
-        std::move(rightJoinColumnIndexes),
-        std::move(columnOrder)
-    );
+    auto actor = isWide ?
+        (TInputTransformStreamLookupBase*)new TInputTransformStreamLookupWide(
+            args.Alloc,
+            args.HolderFactory,
+            //args.TypeEnv,
+            args.InputIndex,
+            args.TransformInput,
+            args.ComputeActorId,
+            std::move(settings),
+            std::move(leftJoinColumnIndexes),
+            std::move(rightJoinColumnIndexes),
+            inputRowType,
+            outputRowType,
+            outputColumnsOrder
+        ) :
+        (TInputTransformStreamLookupBase*)new TInputTransformStreamLookupNarrow(
+            args.Alloc,
+            args.HolderFactory,
+            //args.TypeEnv,
+            args.InputIndex,
+            args.TransformInput,
+            args.ComputeActorId,
+            std::move(settings),
+            std::move(leftJoinColumnIndexes),
+            std::move(rightJoinColumnIndexes),
+            inputRowType,
+            outputRowType,
+            outputColumnsOrder
+        );
     return {actor, actor};
 }
 

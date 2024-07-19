@@ -73,6 +73,15 @@ struct TSetPipelineDynamicSpecResult
     NFlow::TVersion Version;
 };
 
+struct TGetFlowViewOptions
+    : public TTimeoutOptions
+{ };
+
+struct TGetFlowViewResult
+{
+    NYson::TYsonString FlowViewPart;
+};
+
 struct IFlowClient
 {
     ~IFlowClient() = default;
@@ -110,6 +119,11 @@ struct IFlowClient
     virtual TFuture<TPipelineStatus> GetPipelineStatus(
         const NYPath::TYPath& pipelinePath,
         const TGetPipelineStatusOptions& options = {}) = 0;
+
+    virtual TFuture<TGetFlowViewResult> GetFlowView(
+        const NYPath::TYPath& pipelinePath,
+        const NYPath::TYPath& viewPath,
+        const TGetFlowViewOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

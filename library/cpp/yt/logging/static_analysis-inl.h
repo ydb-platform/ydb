@@ -6,7 +6,7 @@
 
 #include <library/cpp/yt/misc/preprocessor.h>
 
-#include <library/cpp/yt/string/format_analyser.h>
+#include <library/cpp/yt/string/format.h>
 
 #include <string_view>
 #include <variant> // monostate
@@ -20,6 +20,12 @@ template <class T>
 struct TLoggerFormatArg
 { };
 
+// Required for TLoggerFormatArg to inherit CFormattable concept
+// from T.
+template <class T>
+    requires CFormattable<T>
+void FormatValue(TStringBuilderBase*, const TLoggerFormatArg<T>&, TStringBuf);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // Stateless constexpr way of capturing arg types
@@ -32,7 +38,8 @@ struct TLoggerFormatArgs
 
 // Used for macro conversion. Purposefully undefined.
 template <class... TArgs>
-TLoggerFormatArgs<TArgs...> AsFormatArgs(TArgs&&...);
+TLoggerFormatArgs<std::remove_cvref_t<TArgs>...>
+AsFormatArgs(TArgs&&...);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -135,5 +142,5 @@ struct NYT::TFormatArg<NYT::NLogging::NDetail::TLoggerFormatArg<T>>
     // "\"Value: %\" \"u\""
     // Thus adding a \" \" sequence.
     static constexpr auto FlagSpecifiers
-        = TFormatArgBase::ExtendFlags</*Hot*/ false, 2, std::array{'\"', ' '}, /*TFrom*/ NYT::TFormatArg<T>>();
+        = TFormatArgBase::ExtendFlags</*Hot*/ false, 2, std::array{'\"', ' '}, /*TFrom*/ T>();
 };

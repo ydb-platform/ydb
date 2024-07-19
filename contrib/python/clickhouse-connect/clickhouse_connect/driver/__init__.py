@@ -79,7 +79,8 @@ def create_client(*,
         if parsed.path and (not database or database == '__default__'):
             database = parsed.path[1:].split('/')[0]
         database = database or parsed.path
-        kwargs.update(dict(parse_qs(parsed.query)))
+        for k, v in parse_qs(parsed.query).items():
+            kwargs[k] = v[0]
     use_tls = str(secure).lower() == 'true' or interface == 'https' or (not interface and port in (443, 8443))
     if not host:
         host = 'localhost'

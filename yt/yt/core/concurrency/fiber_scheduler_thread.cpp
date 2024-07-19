@@ -1,7 +1,8 @@
 #include "fiber_scheduler_thread.h"
 
-#include "private.h"
 #include "fiber.h"
+#include "moody_camel_concurrent_queue.h"
+#include "private.h"
 
 #include <yt/yt/library/profiling/producer.h>
 
@@ -36,10 +37,6 @@
 #endif
 
 namespace NYT::NConcurrency {
-
-// NB(arkady-e1ppa): Please run core tests with this macro undefined
-// if you are changing fibers.
-#define YT_REUSE_FIBERS
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -140,7 +137,7 @@ struct TFiberContext
     TFiber* CurrentFiber = nullptr;
 };
 
-YT_DEFINE_THREAD_LOCAL(TFiberContext*, FiberContext);
+YT_DEFINE_THREAD_LOCAL(TFiberContext*, FiberContext, nullptr);
 
 // Forbid inlining these accessors to prevent the compiler from
 // miss-optimizing TLS access in presence of fiber context switches.
@@ -160,17 +157,21 @@ class TFiberContextGuard
 {
 public:
     explicit TFiberContextGuard(TFiberContext* context)
+        : Prev_(TryGetFiberContext())
     {
         SetFiberContext(context);
     }
 
     ~TFiberContextGuard()
     {
-        SetFiberContext(nullptr);
+        SetFiberContext(Prev_);
     }
 
     TFiberContextGuard(const TFiberContextGuard&) = delete;
     TFiberContextGuard operator=(const TFiberContextGuard&) = delete;
+
+private:
+    TFiberContext* Prev_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -357,8 +358,6 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifdef YT_REUSE_FIBERS
-
 class TIdleFiberPool
 {
 public:
@@ -371,6 +370,8 @@ public:
     // Save fiber in AfterSwitch because it can be immediately concurrently reused.
     void SwichFromFiberAndMakeItIdle(TFiber* currentFiber, TFiber* targetFiber)
     {
+        RemoveOverdraftedIdleFibers();
+
         auto afterSwitch = MakeAfterSwitch([currentFiber, this] {
             currentFiber->SetIdle();
             EnqueueIdleFiber(currentFiber);
@@ -388,50 +389,24 @@ public:
         return TFiber::CreateFiber();
     }
 
+    void UpdateMaxIdleFibers(ui64 maxIdleFibers)
+    {
+        MaxIdleFibers_.store(maxIdleFibers, std::memory_order::relaxed);
+    }
+
 private:
+    moodycamel::ConcurrentQueue<TFiber*> IdleFibers_;
+    std::atomic<ui64> MaxIdleFibers_ = DefaultMaxIdleFibers;
+
+    // NB(arkady-e1ppa): Construct this last so that every other
+    // field is initialized if this callback is ran concurrently.
     const TShutdownCookie ShutdownCookie_ = RegisterShutdownCallback(
-        "FiberManager",
-        BIND_NO_PROPAGATE(&TIdleFiberPool::DestroyIdleFibers, this),
-        /*priority*/ -100);
+        "IdleFiberPool",
+        BIND_NO_PROPAGATE(&TIdleFiberPool::Shutdown, this),
+        /*priority*/std::numeric_limits<int>::min() + 1);
 
-    TLockFreeStack<TFiber*> IdleFibers_;
-    std::atomic<bool> DestroyingIdleFibers_ = false;
-
-    void EnqueueIdleFiber(TFiber* fiber)
+    void Shutdown()
     {
-        IdleFibers_.Enqueue(fiber);
-        if (DestroyingIdleFibers_.load()) {
-            DoDestroyIdleFibers();
-        }
-    }
-
-    TFiber* TryDequeueIdleFiber()
-    {
-        TFiber* fiber = nullptr;
-        IdleFibers_.Dequeue(&fiber);
-        return fiber;
-    }
-
-    void DestroyIdleFibers()
-    {
-        DestroyingIdleFibers_.store(true);
-        DoDestroyIdleFibers();
-    }
-
-    void DoDestroyIdleFibers()
-    {
-        auto destroyFibers = [&] {
-            TFiberContext fiberContext;
-            TFiberContextGuard fiberContextGuard(&fiberContext);
-
-            std::vector<TFiber*> fibers;
-            IdleFibers_.DequeueAll(&fibers);
-
-            for (auto fiber : fibers) {
-                SwitchFromThread(fiber);
-            }
-        };
-
     #ifdef _unix_
         // The current thread could be already exiting and MacOS has some issues
         // with registering new thread-local terminators in this case:
@@ -441,21 +416,82 @@ private:
         std::thread thread([&] {
             ::TThread::SetCurrentThreadName("IdleFiberDtor");
 
-            destroyFibers();
+            JoinAllFibers();
         });
         thread.join();
     #else
         // Starting threads in exit handlers on Windows causes immediate calling exit
         // so the routine will not be executed. Moreover, if we try to join this thread we'll get deadlock
         // because this thread will try to acquire atexit lock which is owned by this thread.
-        destroyFibers();
+        JoinAllFibers();
     #endif
+    }
+
+    void JoinAllFibers()
+    {
+        std::vector<TFiber*> fibers;
+
+        while (true) {
+            auto size = std::max<size_t>(1, IdleFibers_.size_approx());
+
+            DequeueBulk(&fibers, size);
+            if (fibers.empty()) {
+                break;
+            }
+            JoinFibers(std::move(fibers));
+        }
+    }
+
+    void JoinFibers(std::vector<TFiber*>&& fibers)
+    {
+        TFiberContext fiberContext;
+        TFiberContextGuard fiberContextGuard(&fiberContext);
+
+        for (auto fiber : fibers) {
+            // Fibers will observe nullptr fiberThread
+            // and switch back with deleter in afterSwitch.
+            SwitchFromThread(fiber);
+        }
+    }
+
+    void RemoveOverdraftedIdleFibers()
+    {
+        auto size = IdleFibers_.size_approx();
+        if (size <= MaxIdleFibers_.load(std::memory_order::relaxed)) {
+            return;
+        }
+
+        auto targetSize = std::max<size_t>(1, MaxIdleFibers_ / 2);
+
+        std::vector<TFiber*> fibers;
+        DequeueBulk(&fibers, size - targetSize);
+        if (fibers.empty()) {
+            return;
+        }
+        JoinFibers(std::move(fibers));
+    }
+
+    void DequeueBulk(std::vector<TFiber*>* fibers, ui64 count)
+    {
+        fibers->resize(count);
+        auto dequeued = IdleFibers_.try_dequeue_bulk(std::begin(*fibers), count);
+        fibers->resize(dequeued);
+    }
+
+    void EnqueueIdleFiber(TFiber* fiber)
+    {
+        IdleFibers_.enqueue(fiber);
+    }
+
+    TFiber* TryDequeueIdleFiber()
+    {
+        TFiber* fiber = nullptr;
+        IdleFibers_.try_dequeue(fiber);
+        return fiber;
     }
 
     DECLARE_LEAKY_SINGLETON_FRIEND()
 };
-
-#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -502,26 +538,14 @@ void FiberTrampoline()
         // not necessarily null. Check them after switch from and returning into current fiber.
         if (successorFiber = ExtractResumerFiber()) {
             // Suspend current fiber.
-#ifdef YT_REUSE_FIBERS
             TIdleFiberPool::Get()->SwichFromFiberAndMakeItIdle(currentFiber, successorFiber);
-#else
-            break;
-#endif
         }
     }
 
     YT_LOG_DEBUG("Fiber finished");
 
-    auto afterSwitch = MakeAfterSwitch([currentFiber, successorFiber] () mutable {
+    auto afterSwitch = MakeAfterSwitch([currentFiber] () mutable {
         TFiber::ReleaseFiber(currentFiber);
-
-#ifdef YT_REUSE_FIBERS
-        Y_UNUSED(successorFiber);
-#else
-        if (successorFiber != nullptr) {
-            SwitchFromThread(successorFiber);
-        }
-#endif
     });
 
     // All allocated objects in this frame must be destroyed here.
@@ -536,14 +560,8 @@ void YieldFiber(TAfterSwitch afterSwitch)
     auto targetFiber = ExtractResumerFiber();
 
     // If there is no resumer switch to idle fiber. Or switch to thread main.
-#ifdef YT_REUSE_FIBERS
     if (!targetFiber) {
         targetFiber = TIdleFiberPool::Get()->GetFiber();
-    }
-#endif
-
-    if (!targetFiber) {
-        targetFiber = TFiber::CreateFiber();
     }
 
     auto waitingFibersCounter = GetWaitingFibersCounter();
@@ -1047,6 +1065,13 @@ void TFiberSchedulerThread::ThreadMain()
         YT_LOG_FATAL(ex, "Unhandled exception in thread main (Name: %v)",
             GetThreadName());
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void UpdateMaxIdleFibers(ui64 maxIdleFibers)
+{
+    NDetail::TIdleFiberPool::Get()->UpdateMaxIdleFibers(maxIdleFibers);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

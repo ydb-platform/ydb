@@ -168,12 +168,12 @@ void ValidateColumnFilter(const TColumnFilter& columnFilter, int schemaColumnCou
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TColumnFilter& columnFilter)
+void FormatValue(TStringBuilderBase* builder, const TColumnFilter& columnFilter, TStringBuf spec)
 {
     if (columnFilter.IsUniversal()) {
-        return TString("{All}");
+        FormatValue(builder, TStringBuf{"{All}"}, spec);
     } else {
-        return Format("{%v}", columnFilter.GetIndexes());
+        FormatValue(builder, Format("{%v}", columnFilter.GetIndexes()), spec);
     }
 }
 

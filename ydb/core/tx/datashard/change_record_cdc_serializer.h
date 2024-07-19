@@ -21,8 +21,8 @@ public:
 };
 
 struct TChangeRecordSerializerOpts {
-    TUserTable::TCdcStream::EFormat StreamFormat;
-    TUserTable::TCdcStream::EMode StreamMode;
+    TUserTable::TCdcStream::EFormat StreamFormat = NKikimrSchemeOp::ECdcStreamFormatInvalid;
+    TUserTable::TCdcStream::EMode StreamMode = NKikimrSchemeOp::ECdcStreamModeInvalid;
     TString AwsRegion;
     bool VirtualTimestamps = false;
     ui64 ShardId = 0;

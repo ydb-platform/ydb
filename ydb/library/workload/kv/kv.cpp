@@ -569,8 +569,7 @@ void TKvWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandTy
                 .DefaultValue((ui64)KvWorkloadConstants::MIXED_DO_READ_ROWS).StoreResult(&MixedDoReadRows);
         }
         break;
-    case TWorkloadParams::ECommandType::Clean:
-    case TWorkloadParams::ECommandType::Root:
+    default:
         break;
     }
 }

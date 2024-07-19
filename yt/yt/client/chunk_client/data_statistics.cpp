@@ -211,16 +211,11 @@ TDuration TCodecStatistics::GetTotalDuration() const
 
 void FormatValue(TStringBuilderBase* builder, const TCodecStatistics& statistics, TStringBuf /* spec */)
 {
-    FormatKeyValueRange(builder, statistics.CodecToDuration(), TDefaultFormatter());
+    ::NYT::FormatKeyValueRange(builder, statistics.CodecToDuration(), TDefaultFormatter());
     if (statistics.ValueDictionaryCompressionDuration() != TDuration::Zero()) {
         builder->AppendFormat(", ValueDictionaryCompressionDuration: %v",
             statistics.ValueDictionaryCompressionDuration());
     }
-}
-
-TString ToString(const TCodecStatistics& statistics)
-{
-    return ToStringViaBuilder(statistics);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

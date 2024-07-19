@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: anyio
-Version: 4.3.0
+Version: 4.4.0
 Summary: High level compatibility layer for multiple asynchronous event loop implementations
 Author-email: Alex Grönholm <alex.gronholm@nextday.fi>
 License: MIT

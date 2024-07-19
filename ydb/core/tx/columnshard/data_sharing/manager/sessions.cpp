@@ -10,15 +10,26 @@ namespace NKikimr::NOlap::NDataSharing {
 void TSessionsManager::Start(const NColumnShard::TColumnShard& shard) const {
     NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build()("sessions", "start")("tablet_id", shard.TabletID());
     for (auto&& i : SourceSessions) {
-        if (!i.second->IsStarted()) {
-            i.second->Start(shard);
+        if (i.second->IsReadyForStarting()) {
+            i.second->PrepareToStart(shard);
         }
     }
     for (auto&& i : DestSessions) {
-        if (!i.second->IsStarted() && i.second->IsConfirmed()) {
-            i.second->Start(shard);
+        if (i.second->IsReadyForStarting() && i.second->IsConfirmed()) {
+            i.second->PrepareToStart(shard);
+        }
+    }
+
+    for (auto&& i : SourceSessions) {
+        if (i.second->IsPrepared()) {
+            i.second->TryStart(shard);
+        }
+    }
+    for (auto&& i : DestSessions) {
+        if (i.second->IsPrepared() && i.second->IsConfirmed()) {
+            i.second->TryStart(shard);
             if (!i.second->GetSourcesInProgressCount()) {
-                i.second->Finish(shard.GetDataLocksManager());
+                i.second->Finish(shard, shard.GetDataLocksManager());
             }
         }
     }
@@ -31,7 +42,7 @@ void TSessionsManager::InitializeEventsExchange(const NColumnShard::TColumnShard
         if (sessionCookie && *sessionCookie != i.second->GetRuntimeId()) {
             continue;
         }
-        i.second->ActualizeDestination(shard.GetDataLocksManager());
+        i.second->ActualizeDestination(shard, shard.GetDataLocksManager());
     }
     for (auto&& i : DestSessions) {
         if (sessionCookie && *sessionCookie != i.second->GetRuntimeId()) {

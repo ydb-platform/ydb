@@ -52,7 +52,7 @@ public:
     TImage GetImage(TKeyBound keyBound) const;
 
 private:
-    TComparator Comparator_;
+    const TComparator Comparator_;
 
     THashSet<TKeyBound> AddedKeyBounds_;
 
@@ -62,10 +62,10 @@ private:
     THashMap<TKeyBound, TImage> Mapping_;
     bool MappingInitialized_ = false;
 
-    TRowBufferPtr RowBuffer_ = New<TRowBuffer>();
+    const TRowBufferPtr RowBuffer_ = New<TRowBuffer>();
 
     //! Recursive method for calculating component-wise images.
-    void CalculateComponentWise(ssize_t fromIndex, ssize_t toIndex, ssize_t componentIndex);
+    void CalculateComponentWise(int fromIndex, int toIndex, int componentIndex);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

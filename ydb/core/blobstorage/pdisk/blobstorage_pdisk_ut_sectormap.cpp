@@ -9,8 +9,6 @@
 
 #include <util/system/hp_timer.h>
 
-#include <ydb/core/protos/pqconfig.pb.h>
-
 namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(TSectorMapPerformance) {

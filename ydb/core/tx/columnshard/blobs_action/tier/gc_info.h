@@ -11,6 +11,10 @@ private:
     YDB_ACCESSOR_DEF(std::deque<TUnifiedBlobId>, DraftBlobIdsToRemove);
     YDB_ACCESSOR_DEF(TTabletsByBlob, BlobsToDeleteInFuture);
 public:
+    bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) const {
+        return BlobsToDelete.Contains(tabletId, blobId) || BlobsToDeleteInFuture.Contains(tabletId, blobId);
+    }
+
     virtual void OnBlobFree(const TUnifiedBlobId& blobId) override {
         BlobsToDeleteInFuture.ExtractBlobTo(blobId, BlobsToDelete);
     }
@@ -30,6 +34,7 @@ public:
         while (BlobsToDelete.ExtractFrontTo(deleteBlobIdsLocal) && count < blobsCountLimit) {
             ++count;
         }
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "extract_blobs_to_gc")("blob_ids", deleteBlobIdsLocal.DebugString());
         std::swap(deleteBlobIdsLocal, deleteBlobIds);
         return true;
     }

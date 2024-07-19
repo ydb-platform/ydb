@@ -71,6 +71,7 @@ namespace {
     const NTest::TMass Mass0(new NTest::TModelStd(false), 24000);
     const NTest::TMass Mass1(new NTest::TModelStd(true), 24000);
     const NTest::TMass Mass2(new NTest::TModelStd(false), 240000);
+    const NTest::TMass Mass3(new NTest::TModelStd(false), 500);
 
     void CheckMixedIndex(const TSubset& subset, ui64 expectedRows, ui64 expectedData, ui64 expectedIndex, ui64 rowCountResolution = 531, ui64 dataSizeResolution = 53105) {
         TStats stats;
@@ -95,9 +96,9 @@ namespace {
         TStats stats;
         TTouchEnv env;
 
-        const ui32 attempts = 10;
+        const ui32 attempts = 25;
         for (ui32 attempt : xrange(attempts)) {
-            if (NTable::BuildStatsBTreeIndex(subset, stats, rowCountResolution, dataSizeResolution, &env)) {
+            if (NTable::BuildStatsBTreeIndex(subset, stats, rowCountResolution, dataSizeResolution, &env, [](){})) {
                 break;
             }
             UNIT_ASSERT_C(attempt + 1 < attempts, "Too many attempts");
@@ -458,7 +459,9 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         for (auto &part : subset.Flatten) {
             TTestEnv env;
             auto index = CreateIndexIter(part.Part.Get(), &env, {});
-            Cerr << "  " << index->GetEndRowId() << " rows, " << part->IndexPages.GetBTree({}).LevelCount << " levels: ";
+            Cerr << "  " << index->GetEndRowId() << " rows, " 
+                << IndexTools::CountMainPages(*part.Part) << " pages, "
+                << (part->IndexPages.HasBTree() ? part->IndexPages.GetBTree({}).LevelCount : -1) << " levels: ";
             for (ui32 sample : xrange(samples + 1)) {
                 TRowId rowId((index->GetEndRowId() - 1) * sample / samples);
                 Y_ABORT_UNLESS(index->Seek(rowId) == EReady::Data);
@@ -472,17 +475,21 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
                 }
                 Cerr << ") ";
             }
+            // Cerr << DumpPart(*part.As<TPartStore>(), 2) << Endl;
             Cerr << Endl;
         }
     }
 
     TString FormatPercent(double value, ui64 total) {
+        if (total == 0) {
+            return "0%";
+        }
         return TStringBuilder() << static_cast<int>(100.0 * value / total) << "%";
     }
 
     void VerifyPercent(double value, ui64 total, int allowed) {
         auto percent = static_cast<int>(100.0 * value / total);
-        UNIT_ASSERT_LE(percent, allowed);
+        UNIT_ASSERT_LE(std::abs(percent), allowed);
     }
 
     void CalcDataBefore(const TSubset& subset, TSerializedCellVec key, ui64& bytes, ui64& rows) {
@@ -506,7 +513,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         rows = env.TouchedRows;
     }
 
-    void CheckHistogram(const TSubset& subset, THistogram histogram, bool isBytes, ui64 total) {
+    void CheckHistogram(const TSubset& subset, THistogram histogram, bool isBytes, ui64 total, bool verifyPercents) {
         Cerr << "  " << (isBytes ? "DataSizeHistogram:" : "RowCountHistogram:") << Endl;
 
         ui64 prevValue = 0, prevActualValue = 0;
@@ -517,10 +524,9 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             CalcDataBefore(subset, key, actualBytes, actualRows);
             ui64 actualValue = isBytes ? actualBytes : actualRows;
 
-            UNIT_ASSERT_GT(bucket.Value, prevValue);
             ui64 delta = bucket.Value - prevValue, actualDelta = actualValue - prevActualValue;
             Cerr << "    " << FormatPercent(delta, total) << " (actual " << FormatPercent(actualDelta, total) << ")" << Endl;
-            VerifyPercent(delta, total, 20);
+            if (verifyPercents) VerifyPercent(delta, total, 20);
 
             Cerr << "    key = (";
             for (auto off : xrange(key.GetCells().size())) {
@@ -533,51 +539,49 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             Cerr << "value = " << bucket.Value << " (actual " << actualValue << " - ";
             i64 bucketError = static_cast<i64>(bucket.Value) - static_cast<i64>(actualValue);
             Cerr << FormatPercent(bucketError, total) << " error)" << Endl;
-            VerifyPercent(bucketError, total, 10);
+            if (verifyPercents) VerifyPercent(bucketError, total, 10);
 
+            UNIT_ASSERT_GT(bucket.Value, prevValue);
             prevValue = bucket.Value;
             prevActualValue = actualValue;
         }
 
         {
-            UNIT_ASSERT_GT(total, prevValue);
             ui64 delta = total - prevValue, actualDelta = total - prevActualValue;
             Cerr << "    " << FormatPercent(delta, total) << " (actual " << FormatPercent(actualDelta, total) << ")" << Endl;
-            // TODO: implement B-Tree index histogram
-            if (histogram.size()) {
-                VerifyPercent(delta, total, 20);
-            }
+            if (verifyPercents) VerifyPercent(delta, total, 20);
+            UNIT_ASSERT_GT(total, prevValue);
         }
     }
 
-    void Check(const TSubset& subset, TMode mode) {
+    void Check(const TSubset& subset, TMode mode, ui32 buckets = 10, bool verifyPercents = true) {
         if (mode == 0) {
             Dump(subset);
         }
 
         Cerr << "Checking " << (mode == FlatIndex ? "Flat" : (mode == MixedIndex ? "Mixed" : "BTree")) << ":" << Endl;
 
-        TStats stats;
-        TTouchEnv env;
-        ui64 rowCountResolution = 1, dataSizeResolution = 1;
+        ui64 totalRows = 0, totalBytes = 0;
+        {
+            TVector<TCell> emptyKey;
+            CalcDataBefore(subset, TSerializedCellVec(emptyKey), totalBytes, totalRows);
+        }
 
+        ui64 rowCountResolution = totalRows / buckets;
+        ui64 dataSizeResolution = totalBytes / buckets;
+
+        TTouchEnv env;
+        // env.Faulty = false; // uncomment for debug
+        TStats stats;
         auto buildStats = [&]() {
             if (mode == BTreeIndex) {
-                return NTable::BuildStatsBTreeIndex(subset, stats, rowCountResolution, dataSizeResolution, &env);
+                return NTable::BuildStatsBTreeIndex(subset, stats, rowCountResolution, dataSizeResolution, &env, [](){});
             } else {
                 return NTable::BuildStatsMixedIndex(subset, stats, rowCountResolution, dataSizeResolution, &env, [](){});
             }
         };
 
-        env.Faulty = false;
-        buildStats();
-        ui64 totalRows = stats.RowCount, totalBytes = stats.DataSize.Size;
-        rowCountResolution = totalRows / 10;
-        dataSizeResolution = totalBytes / 10;
-
-        const ui32 attempts = 10;
-        env = {};
-        env.Faulty = false;
+        const ui32 attempts = 25;
         for (ui32 attempt : xrange(attempts)) {
             if (buildStats()) {
                 break;
@@ -587,8 +591,8 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
 
         Cerr << " Touched " << FormatPercent(env.TouchedIndexBytes, stats.IndexSize.Size) << " bytes, " << env.TouchedIndexPages << " pages" << Endl;
 
-        CheckHistogram(subset, stats.RowCountHistogram, false, totalRows);
-        CheckHistogram(subset, stats.DataSizeHistogram, true, totalBytes);
+        CheckHistogram(subset, stats.RowCountHistogram, false, totalRows, verifyPercents);
+        CheckHistogram(subset, stats.DataSizeHistogram, true, totalBytes, verifyPercents);
     }
 
     Y_UNIT_TEST(Single)
@@ -890,6 +894,119 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
             TMixer mixer(10, Mass2.Saved.Size());
             auto subset = TMake(Mass2, PageConf(Mass2.Model->Scheme->Families.size(), mode)).Mixed(0, 10, mixer);
+            Check(*subset, mode);
+        }
+    }
+
+    Y_UNIT_TEST(Single_Small_2_Levels)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            auto subset = TMake(Mass3, PageConf(Mass3.Model->Scheme->Families.size(), mode)).Mixed(0, 1, TMixerOne{ });   
+            Check(*subset, mode, 1000);
+        }
+    }
+
+    Y_UNIT_TEST(Single_Small_1_Level)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            auto conf = PageConf(Mass3.Model->Scheme->Families.size(), mode);
+            for (auto& group : conf.Groups) {
+                group.BTreeIndexNodeKeysMin = group.BTreeIndexNodeKeysMax = Max<ui32>();
+            }
+            auto subset = TMake(Mass3, conf).Mixed(0, 1, TMixerOne{ });   
+            Check(*subset, mode, 1000);
+        }
+    }
+
+    Y_UNIT_TEST(Single_Small_0_Levels)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            auto conf = PageConf(Mass3.Model->Scheme->Families.size(), mode);
+            for (auto& group : conf.Groups) {
+                group.PageSize = group.PageRows = Max<ui32>();
+            }
+            auto subset = TMake(Mass3, conf).Mixed(0, 1, TMixerOne{ });   
+            Check(*subset, mode, 1000, false);
+        }
+    }
+
+    Y_UNIT_TEST(Three_Mixed_Small_2_Levels)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            auto subset = TMake(Mass3, PageConf(Mass3.Model->Scheme->Families.size(), mode)).Mixed(0, 3, TMixerRnd(3));   
+            Check(*subset, mode, 1000, false);
+        }
+    }
+
+    Y_UNIT_TEST(Three_Mixed_Small_1_Level)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            auto conf = PageConf(Mass3.Model->Scheme->Families.size(), mode);
+            for (auto& group : conf.Groups) {
+                group.BTreeIndexNodeKeysMin = group.BTreeIndexNodeKeysMax = Max<ui32>();
+            }
+            auto subset = TMake(Mass3, conf).Mixed(0, 3, TMixerRnd(3));
+            Check(*subset, mode, 1000, false);
+        }
+    }
+
+    Y_UNIT_TEST(Three_Mixed_Small_0_Levels)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            auto conf = PageConf(Mass3.Model->Scheme->Families.size(), mode);
+            for (auto& group : conf.Groups) {
+                group.PageSize = group.PageRows = Max<ui32>();
+            }
+            auto subset = TMake(Mass3, conf).Mixed(0, 3, TMixerRnd(3));
+            Check(*subset, mode, 1000, false);
+        }
+    }
+
+    Y_UNIT_TEST(Three_Serial_Small_2_Levels)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            auto subset = TMake(Mass3, PageConf(Mass3.Model->Scheme->Families.size(), mode)).Mixed(0, 3, TMixerSeq(3, Mass3.Saved.Size()));   
+            Check(*subset, mode, 1000, false);
+        }
+    }
+
+    Y_UNIT_TEST(Three_Serial_Small_1_Level)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            auto conf = PageConf(Mass3.Model->Scheme->Families.size(), mode);
+            for (auto& group : conf.Groups) {
+                group.BTreeIndexNodeKeysMin = group.BTreeIndexNodeKeysMax = Max<ui32>();
+            }
+            auto subset = TMake(Mass3, conf).Mixed(0, 3, TMixerSeq(3, Mass3.Saved.Size()));
+            Check(*subset, mode, 1000, false);
+        }
+    }
+
+    Y_UNIT_TEST(Three_Serial_Small_0_Levels)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            auto conf = PageConf(Mass3.Model->Scheme->Families.size(), mode);
+            for (auto& group : conf.Groups) {
+                group.PageSize = group.PageRows = Max<ui32>();
+            }
+            auto subset = TMake(Mass3, conf).Mixed(0, 3, TMixerSeq(3, Mass3.Saved.Size()));
+            Check(*subset, mode, 1000, false);
+        }
+    }
+
+    Y_UNIT_TEST(Mixed_Groups_History)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), mode)).Mixed(0, 4, TMixerRnd(4), 0.3);
+            Check(*subset, mode);
+        }
+    }
+
+    Y_UNIT_TEST(Serial_Groups_History)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            TMixerSeq mixer(4, Mass1.Saved.Size());
+            auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), mode)).Mixed(0, 4, mixer, 0.3);
             Check(*subset, mode);
         }
     }

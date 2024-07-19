@@ -2,7 +2,7 @@
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 2008-2022 The OpenLDAP Foundation.
+ * Copyright 2008-2024 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -54,7 +54,9 @@
 
 #if OPENSSL_VERSION_MAJOR >= 3
 #define ERR_get_error_line( a, b )	ERR_get_error_all( a, b, NULL, NULL, NULL )
+#ifndef SSL_get_peer_certificate
 #define SSL_get_peer_certificate( s )	SSL_get1_peer_certificate( s )
+#endif
 #endif
 typedef SSL_CTX tlso_ctx;
 typedef SSL tlso_session;
@@ -225,7 +227,12 @@ tlso_init( void )
 	SSL_library_init();
 	OpenSSL_add_all_digests();
 #else
-	OPENSSL_init_ssl(0, NULL);
+#ifdef OPENSSL_INIT_NO_ATEXIT
+#define	OPENSSL_FLAGS	OPENSSL_INIT_NO_ATEXIT
+#else
+#define	OPENSSL_FLAGS	0
+#endif
+	OPENSSL_init_ssl(OPENSSL_FLAGS, NULL);
 #endif
 
 	/* FIXME: mod_ssl does this */
@@ -1063,7 +1070,12 @@ tlso_session_endpoint( tls_session *sess, struct berval *buf, int is_server )
 		return 0;
 
 #if OPENSSL_VERSION_NUMBER >= 0x10100000
-	md = EVP_get_digestbynid( X509_get_signature_nid( cert ));
+	{
+		int mdnid;
+		if ( !OBJ_find_sigid_algs( X509_get_signature_nid( cert ), &mdnid, NULL ))
+			return 0;
+		md = EVP_get_digestbynid( mdnid );
+	}
 #else
 	md = EVP_get_digestbynid(OBJ_obj2nid( cert->sig_alg->algorithm ));
 #endif

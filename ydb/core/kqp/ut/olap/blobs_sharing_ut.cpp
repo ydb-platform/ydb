@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             Controller->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
             Controller->SetReadTimeoutClean(TDuration::Seconds(1));
 
-            Tests::NCommon::TLoggerInit(Kikimr).SetComponents({NKikimrServices::TX_COLUMNSHARD}, "CS").Initialize();
+            Tests::NCommon::TLoggerInit(Kikimr).SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").Initialize();
 
             Helper.CreateTestOlapTable(ShardsCount, ShardsCount);
             ShardIds = Controller->GetShardActualIds();
@@ -190,14 +190,13 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             AFL_VERIFY(!Controller->IsTrivialLinks());
         }
     };
-
     Y_UNIT_TEST(BlobsSharingSplit1_1) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         TSharingDataTestCase tester(4, kikimr);
         tester.AddRecords(800000);
         Sleep(TDuration::Seconds(1));
-        tester.Execute(0, {1}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
+        tester.Execute(0, { 1 }, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), { 0 });
     }
 
     Y_UNIT_TEST(BlobsSharingSplit1_1_clean) {
@@ -207,7 +206,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         tester.AddRecords(80000);
         CompareYson(tester.GetHelper().GetQueryResult("SELECT COUNT(*) FROM `/Root/olapStore12/olapTable`"), R"([[80000u;]])");
         Sleep(TDuration::Seconds(1));
-        tester.Execute(0, {1}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
+        tester.Execute(0, { 1 }, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), { 0 });
         CompareYson(tester.GetHelper().GetQueryResult("SELECT COUNT(*) FROM `/Root/olapStore12/olapTable`"), R"([[119928u;]])");
         tester.AddRecords(80000, 0.8);
         tester.WaitNormalization();
@@ -222,7 +221,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         tester.AddRecords(80000);
         CompareYson(tester.GetHelper().GetQueryResult("SELECT COUNT(*) FROM `/Root/olapStore12/olapTable`"), R"([[80000u;]])");
         Sleep(TDuration::Seconds(1));
-        tester.Execute(0, {1}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
+        tester.Execute(0, { 1 }, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), { 0 });
         CompareYson(tester.GetHelper().GetQueryResult("SELECT COUNT(*) FROM `/Root/olapStore12/olapTable`"), R"([[119928u;]])");
         tester.AddRecords(80000, 0.8);
         tester.WaitNormalization();
@@ -235,7 +234,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         TSharingDataTestCase tester(4, kikimr);
         tester.AddRecords(800000);
         Sleep(TDuration::Seconds(1));
-        tester.Execute(0, {1, 2, 3}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
+        tester.Execute(0, { 1, 2, 3 }, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), { 0 });
     }
 
     Y_UNIT_TEST(BlobsSharingSplit1_3_1) {
@@ -244,10 +243,10 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         TSharingDataTestCase tester(4, kikimr);
         tester.AddRecords(800000);
         Sleep(TDuration::Seconds(1));
-        tester.Execute(1, {0}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
-        tester.Execute(2, {0}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
-        tester.Execute(3, {0}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
-        tester.Execute(0, {1, 2, 3}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
+        tester.Execute(1, { 0 }, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), { 0 });
+        tester.Execute(2, { 0 }, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), { 0 });
+        tester.Execute(3, { 0 }, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), { 0 });
+        tester.Execute(0, { 1, 2, 3 }, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), { 0 });
     }
 
     Y_UNIT_TEST(BlobsSharingSplit1_3_2_1_clean) {
@@ -256,13 +255,13 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         TSharingDataTestCase tester(4, kikimr);
         tester.AddRecords(800000);
         Sleep(TDuration::Seconds(1));
-        tester.Execute(1, {0}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
-        tester.Execute(2, {0}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
-        tester.Execute(3, {0}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
+        tester.Execute(1, { 0 }, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), { 0 });
+        tester.Execute(2, { 0 }, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), { 0 });
+        tester.Execute(3, { 0 }, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), { 0 });
         tester.AddRecords(800000, 0.9);
         Sleep(TDuration::Seconds(1));
-        tester.Execute(3, {2}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
-        tester.Execute(0, {1, 2}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
+        tester.Execute(3, { 2 }, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), { 0 });
+        tester.Execute(0, { 1, 2 }, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), { 0 });
         tester.WaitNormalization();
     }
 
@@ -308,8 +307,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
     public:
 
         TReshardingTest()
-            : Kikimr(TKikimrSettings().SetWithSampleTables(false))
-        {
+            : Kikimr(TKikimrSettings().SetWithSampleTables(false)) {
 
         }
 
@@ -387,7 +385,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
                     UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
                 }
                 WaitResharding();
-                csController->WaitCleaning(TDuration::Seconds(5));
+                //            csController->WaitCleaning(TDuration::Seconds(5));
 
                 CheckCount(230000);
                 AFL_VERIFY(count + portionsCount == csController->GetShardingFiltersCount().Val())("count", count)("val", csController->GetShardingFiltersCount().Val());
@@ -409,7 +407,5 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
     Y_UNIT_TEST(TableReshardingModuloN) {
         TReshardingTest().SetShardingType("HASH_FUNCTION_MODULO_N").Execute();
     }
-
 }
-
 }

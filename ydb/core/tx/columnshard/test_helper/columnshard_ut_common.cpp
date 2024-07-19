@@ -417,7 +417,7 @@ namespace NKikimr::NColumnShard {
         }
 
         auto storage = std::make_shared<NOlap::TTestStoragesManager>();
-        storage->Initialize();
+        storage->Initialize(TInstant::Now().Seconds());
         indexInfo.SetAllKeys(NOlap::TTestStoragesManager::GetInstance());
         return indexInfo;
     }

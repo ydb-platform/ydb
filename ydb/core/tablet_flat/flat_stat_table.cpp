@@ -17,13 +17,12 @@ bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, u
         }
     }
 
-    // TODO: call BuildStatsBTreeIndex when histogram is done
-    // return mixedIndex
-    //     ? BuildStatsMixedIndex(subset, stats, rowCountResolution, dataSizeResolution, env, yieldHandler)
-    //     : BuildStatsBTreeIndex(subset, stats, rowCountResolution, dataSizeResolution, env);
-    Y_UNUSED(mixedIndex);
+    // TODO: enable b-tree index after benchmarks
+    mixedIndex = true;
 
-    return BuildStatsMixedIndex(subset, stats, rowCountResolution, dataSizeResolution, env, yieldHandler);
+    return mixedIndex
+        ? BuildStatsMixedIndex(subset, stats, rowCountResolution, dataSizeResolution, env, yieldHandler)
+        : BuildStatsBTreeIndex(subset, stats, rowCountResolution, dataSizeResolution, env, yieldHandler);
 }
 
 void GetPartOwners(const TSubset& subset, THashSet<ui64>& partOwners) {

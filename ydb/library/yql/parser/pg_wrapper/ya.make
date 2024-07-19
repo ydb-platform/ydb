@@ -39,6 +39,7 @@ SRCS(
     syscache.cpp
     pg_utils_wrappers.cpp
     utils.cpp
+    ctors.cpp
 )
 
 IF (ARCH_X86_64)

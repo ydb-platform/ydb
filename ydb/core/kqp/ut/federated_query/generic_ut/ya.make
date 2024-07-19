@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/kqp/ut/common
     ydb/core/kqp/ut/federated_query/common
     ydb/library/yql/providers/generic/connector/libcpp/ut_helpers
+    ydb/library/yql/providers/s3/actors
     ydb/library/yql/sql/pg_dummy
 )
 

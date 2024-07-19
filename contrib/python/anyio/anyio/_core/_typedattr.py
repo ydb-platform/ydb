@@ -50,12 +50,10 @@ class TypedAttributeProvider:
         return {}
 
     @overload
-    def extra(self, attribute: T_Attr) -> T_Attr:
-        ...
+    def extra(self, attribute: T_Attr) -> T_Attr: ...
 
     @overload
-    def extra(self, attribute: T_Attr, default: T_Default) -> T_Attr | T_Default:
-        ...
+    def extra(self, attribute: T_Attr, default: T_Default) -> T_Attr | T_Default: ...
 
     @final
     def extra(self, attribute: Any, default: object = undefined) -> object:
@@ -73,9 +71,11 @@ class TypedAttributeProvider:
 
         """
         try:
-            return self.extra_attributes[attribute]()
+            getter = self.extra_attributes[attribute]
         except KeyError:
             if default is undefined:
                 raise TypedAttributeLookupError("Attribute not found") from None
             else:
                 return default
+
+        return getter()

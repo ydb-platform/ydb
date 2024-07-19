@@ -11,6 +11,10 @@
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_gateway.h>
 
+namespace NKikimrConfig {
+    class TQueryServiceConfig;
+}
+
 namespace NKikimr::NKqp {
     NYql::IYtGateway::TPtr MakeYtGateway(const NMiniKQL::IFunctionRegistry* functionRegistry, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig);
 

@@ -1,7 +1,5 @@
 #include "blobstorage_pdisk_driveestimator.h"
 
-#include <ydb/core/protos/pqconfig.pb.h>
-
 #include <ydb/library/pdisk_io/aio.h>
 #include <ydb/library/pdisk_io/wcache.h>
 

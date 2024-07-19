@@ -259,8 +259,7 @@ void ValidateDuplicateAndRequiredValueColumns(
                 valueGroupEndIt,
                 [] (TTimestamp expected, const TVersionedValue& actual) {
                     return expected == actual.Timestamp;
-                }
-            );
+                });
             if (mismatch.first == writeTimestamps + writeTimestampCount) {
                 if (mismatch.second != valueGroupEndIt) {
                     THROW_ERROR_EXCEPTION(

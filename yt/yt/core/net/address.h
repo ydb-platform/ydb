@@ -93,6 +93,7 @@ struct TNetworkAddressFormatOptions
     bool IncludeTcpProtocol = true;
 };
 
+void FormatValue(TStringBuilderBase* builder, const TNetworkAddress& address, TStringBuf spec);
 TString ToString(const TNetworkAddress& address, const TNetworkAddressFormatOptions& options = {});
 
 bool operator == (const TNetworkAddress& lhs, const TNetworkAddress& rhs);

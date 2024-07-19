@@ -12,8 +12,6 @@
 #include <util/system/env.h>
 #include <random>
 
-#include <ydb/core/protos/pqconfig.pb.h>
-
 namespace NKikimr {
 namespace NPDisk {
     extern const ui64 YdbDefaultPDiskSequence = 0x7e5700007e570000;

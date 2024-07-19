@@ -314,7 +314,7 @@ public:
                 .WithSource(TChangeRecord::ESource::InitialScan)
                 .Build();
 
-            const auto& record = *recordPtr->Get<TChangeRecord>();
+            const auto& record = *recordPtr;
             Self->PersistChangeRecord(db, record);
 
             ChangeRecords.push_back(IDataShardChangeCollector::TChange{

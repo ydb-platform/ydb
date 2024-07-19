@@ -13,8 +13,6 @@
 #include <util/system/sanitizers.h>
 #include <util/system/valgrind.h>
 
-#include <ydb/core/protos/pqconfig.pb.h>
-
 using namespace NActors;
 using namespace NKikimr;
 using namespace NKikimr::NIncrHuge;

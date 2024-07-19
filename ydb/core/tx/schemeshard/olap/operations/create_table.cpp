@@ -174,7 +174,7 @@ private:
 
 class TOlapTableConstructor : public TTableConstructorBase {
     TOlapSchema TableSchema;
-    bool HasDataChannels = false;
+    ui32 ChannelsCount = 64;
 private:
     bool DoDeserialize(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) override {
         if (description.HasSchemaPresetName() || description.HasSchemaPresetId()) {
@@ -187,7 +187,9 @@ private:
             return false;
         }
 
-        HasDataChannels = description.GetStorageConfig().HasDataChannelCount();
+        if (description.GetStorageConfig().HasDataChannelCount()) {
+            ChannelsCount = description.GetStorageConfig().GetDataChannelCount();
+        }
 
         TOlapSchemaUpdate schemaDiff;
         if (!schemaDiff.Parse(description.GetSchema(), errors)) {
@@ -203,9 +205,7 @@ private:
 private:
     TConclusionStatus BuildDescription(const TOperationContext& /*context*/, TColumnTableInfo::TPtr& table) const override {
         auto& description = table->Description;
-        if (HasDataChannels) {
-            description.MutableStorageConfig()->SetDataChannelCount(1);
-        }
+        description.MutableStorageConfig()->SetDataChannelCount(ChannelsCount);
         TableSchema.Serialize(*description.MutableSchema());
         return TConclusionStatus::Success();
     }

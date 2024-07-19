@@ -1,7 +1,6 @@
 #include "s3_recipe_ut_helpers.h"
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
@@ -26,7 +25,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
 
         CreateBucketWithObject("CreateExternalDataSourceBucket", "obj", TEST_CONTENT);
 
-        auto kikimr = MakeKikimrRunner(true);
+        auto kikimr = NTestUtils::MakeKikimrRunner();
 
         auto queryClient = kikimr->GetQueryClient();
 
@@ -197,7 +196,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
     }
 
     Y_UNIT_TEST(InvalidDropForExternalTableWithAuth) {
-        auto kikimr = MakeKikimrRunner(true);
+        auto kikimr = NTestUtils::MakeKikimrRunner();
 
         auto driver = kikimr->GetDriver();
         NScripting::TScriptingClient yqlScriptClient(driver);

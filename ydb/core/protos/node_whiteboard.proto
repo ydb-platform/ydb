@@ -64,6 +64,7 @@ message TTabletStateInfo {
     optional EFlag Overall = 15; // filled during merge
     optional NKikimrSubDomains.TDomainKey TenantId = 16;
     optional fixed64 HiveId = 17;
+    optional string EndOfRangeKeyPrefix = 18; // filled during merge
 }
 
 message TEvTabletStateRequest {

@@ -60,9 +60,9 @@ TCrossClusterReference TCrossClusterReference::FromRichYPath(const TRichYPath& p
     };
 }
 
-TString ToString(const TCrossClusterReference& queueRef)
+void FormatValue(TStringBuilderBase* builder, const TCrossClusterReference& queueRef, TStringBuf spec)
 {
-    return Format("%v:%v", queueRef.Cluster, queueRef.Path);
+    FormatValue(builder, Format("%v:%v", queueRef.Cluster, queueRef.Path), spec);
 }
 
 void Serialize(const TCrossClusterReference& queueRef, IYsonConsumer* consumer)

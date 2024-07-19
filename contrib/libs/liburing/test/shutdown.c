@@ -48,7 +48,8 @@ int main(int argc, char *argv[])
 	addr.sin_family = AF_INET;
 	addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
-	assert(!t_bind_ephemeral_port(recv_s0, &addr));
+	ret = t_bind_ephemeral_port(recv_s0, &addr);
+	assert(!ret);
 	ret = listen(recv_s0, 128);
 	assert(ret != -1);
 

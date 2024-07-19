@@ -4,8 +4,6 @@
 
 #include <util/system/sanitizers.h>
 
-#include <ydb/core/protos/pqconfig.pb.h>
-
 class TWatchdogThread : public ISimpleThread {
     TMutex Mutex;
     TCondVar Stop;

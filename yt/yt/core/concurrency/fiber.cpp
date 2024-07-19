@@ -17,7 +17,7 @@
 
 #include <util/random/random.h>
 
-#ifndef NDEBUG
+#if defined(_asan_enabled_)
     #include <yt/yt/core/misc/shutdown.h>
 #endif
 
@@ -139,7 +139,7 @@ public:
 
 private:
     template <class Tag>
-    using TFiberStack = TIntrusiveMpscStack<TFiber, Tag>;
+    using TFiberStack = TIntrusiveMpscStack<NDetail::TFiberBase, Tag>;
 
     TFiberStack<NDetail::TFiberRegisterTag> RegisterQueue_;
     TFiberStack<NDetail::TFiberUnregisterTag> UnregisterQueue_;
@@ -154,9 +154,9 @@ private:
 // cause realistically this is a "problem"
 // only during the shutdown which means that
 // process is going to be killed shortly after.
-// In debug we cleanup properly so that
+// In for asan we cleanup properly so that
 // there are no actual leaks.
-#ifndef NDEBUG
+#if defined(_asan_enabled_)
     TShutdownCookie ShutdownCookie_;
 
     void InitializeShutdownCookie()
@@ -176,7 +176,7 @@ private:
     // were observed empty.
     bool GuardedProcessQueues()
     {
-#ifndef NDEBUG
+#if defined(_asan_enabled_)
         if (!ShutdownCookie_) {
             InitializeShutdownCookie();
         }
@@ -212,7 +212,7 @@ private:
         // We have to check ourselves that
         // PopBack return is a valid one.
         while (!toUnregister.Empty()) {
-            toUnregister.PopBack()->DeleteFiber();
+            toUnregister.PopBack()->AsFiber()->DeleteFiber();
         }
 
         // NB: Around this line guard is released. We do not properly double check
@@ -229,12 +229,10 @@ private:
         Cerr << "Debug print begin\n";
         Cerr << "---------------------------------------------------------------" << '\n';
         for (auto& iter : Fibers_) {
-            auto* ptr = &iter;
-            auto* fiber = static_cast<TFiber*>(ptr);
-            auto* regNode = static_cast<TIntrusiveListItem<TFiber, NDetail::TFiberRegisterTag>*>(fiber);
-            auto* delNode = static_cast<TIntrusiveListItem<TFiber, NDetail::TFiberUnregisterTag>*>(fiber);
+            auto* fiber = iter.AsFiber();
+            auto* regNode = static_cast<TIntrusiveListItem<NDetail::TFiberBase, NDetail::TFiberRegisterTag>*>(fiber);
+            auto* delNode = static_cast<TIntrusiveListItem<NDetail::TFiberBase, NDetail::TFiberUnregisterTag>*>(fiber);
 
-            Cerr << Format("Fiber node at %v", iter) << '\n';
             Cerr << Format("Fiber address after cast is %v", fiber) << '\n';
             Cerr << Format("Fiber registration queue status: Next: %v, Prev: %v", regNode->Next(), regNode->Prev()) << '\n';
             // NB: Reading deletion queue is data race. Don't do this under tsan.
@@ -412,6 +410,11 @@ void TFiberIntrospectionBase::SetFinished()
 EFiberState TFiberIntrospectionBase::GetState() const
 {
     return State_.load(std::memory_order::relaxed);
+}
+
+TFiber* TFiberBase::AsFiber() noexcept
+{
+    return static_cast<TFiber*>(this);
 }
 
 } // namespace NDetail

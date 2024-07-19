@@ -4,6 +4,7 @@ NO_CHECK_IMPORTS()
 
 DATA(arcadia/ydb/core/external_sources/hive_metastore/ut/docker-compose.yml)
 ENV(COMPOSE_PROJECT_NAME=hivemetastore)
+ENV(COMPOSE_HTTP_TIMEOUT=240)
 
 IF (AUTOCHECK) 
     # Temporarily disable these tests due to infrastructure incompatibility

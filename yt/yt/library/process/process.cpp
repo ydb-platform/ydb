@@ -756,7 +756,7 @@ TFuture<void> TProcessBase::Spawn()
         DoSpawn();
     } catch (const std::exception& ex) {
         FinishedPromise_.TrySet(TError(EProcessErrorCode::CannotStartProcess,
-            "Cannot spawn child process (Path: %v)",
+            "Cannot spawn child process %v",
             ResolvedPath_)
             << ex);
     }

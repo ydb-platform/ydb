@@ -254,7 +254,8 @@ void TTablesManager::RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db) {
 
     Schema::SaveTableInfo(db, table.GetPathId(), table.GetTieringUsage());
     const ui64 pathId = table.GetPathId();
-    AFL_VERIFY(Tables.emplace(pathId, std::move(table)).second);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("method", "RegisterTable")("path_id", pathId);
+    AFL_VERIFY(Tables.emplace(pathId, std::move(table)).second)("path_id", pathId)("size", Tables.size());
     if (PrimaryIndex) {
         PrimaryIndex->RegisterTable(pathId);
     }
@@ -363,6 +364,7 @@ bool TTablesManager::TryFinalizeDropPathOnComplete(const ui64 pathId) {
     const auto& itTable = Tables.find(pathId);
     AFL_VERIFY(itTable != Tables.end())("problem", "No schema for path")("path_id", pathId);
     Tables.erase(itTable);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("method", "TryFinalizeDropPathOnComplete")("path_id", pathId)("size", Tables.size());
     return true;
 }
 

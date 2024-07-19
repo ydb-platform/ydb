@@ -34,7 +34,7 @@ public:
         static bool initialized = false;
         TGuard<TMutex> g(mutex);
         if (!initialized) {
-            result->Initialize();
+            result->Initialize(TInstant::Now().Seconds());
         }
         initialized = true;
         return result;

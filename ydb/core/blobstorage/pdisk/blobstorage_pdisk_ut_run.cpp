@@ -10,8 +10,6 @@
 
 #include <util/folder/tempdir.h>
 
-#include <ydb/core/protos/pqconfig.pb.h>
-
 namespace NKikimr {
 
 namespace NPDisk {

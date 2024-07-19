@@ -329,8 +329,8 @@ public:
             return true;
         }
 
-        if (HasSinkInTx(tx)) {
-            // At current time sinks require separate tnx with commit.
+        if (HasTxSinkInTx(tx)) {
+            // At current time transactional internal sinks require separate tnx with commit.
             return false;
         }
 
@@ -392,7 +392,7 @@ public:
 
         if (TxCtx->CanDeferEffects()) {
             // At current time sinks require separate tnx with commit.
-            while (tx && tx->GetHasEffects() && !HasSinkInTx(tx)) {
+            while (tx && tx->GetHasEffects() && !HasTxSinkInTx(tx)) {
                 QueryData->CreateKqpValueMap(tx);
                 bool success = TxCtx->AddDeferredEffect(tx, QueryData);
                 YQL_ENSURE(success);
@@ -409,10 +409,16 @@ public:
         return tx;
     }
 
-    bool HasSinkInTx(const TKqpPhyTxHolder::TConstPtr& tx) const {
+    bool HasTxSinkInTx(const TKqpPhyTxHolder::TConstPtr& tx) const {
         for (const auto& stage : tx->GetStages()) {
-            if (!stage.GetSinks().empty()) {
-                return true;
+            for (const auto& sink : stage.GetSinks()) {
+                if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                    NKikimrKqp::TKqpTableSinkSettings settings;
+                    YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+                    if (!settings.GetInconsistentTx()) {
+                        return true;
+                    }
+                }
             }
         }
         return false;

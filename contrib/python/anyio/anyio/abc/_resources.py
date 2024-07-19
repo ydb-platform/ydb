@@ -15,6 +15,8 @@ class AsyncResource(metaclass=ABCMeta):
     and calls :meth:`aclose` on exit.
     """
 
+    __slots__ = ()
+
     async def __aenter__(self: T) -> T:
         return self
 

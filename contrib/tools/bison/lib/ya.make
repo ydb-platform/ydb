@@ -21,10 +21,6 @@ IF (OS_WINDOWS)
     ADDINCL(
         GLOBAL contrib/tools/bison/lib/platform/win64
     )
-ELSE()
-    ADDINCL(
-        GLOBAL contrib/tools/bison/lib/platform/posix
-    )
 ENDIF()
 
 IF (NOT OS_WINDOWS)
@@ -63,22 +59,18 @@ SRCS(
     error.c
     exitfail.c
     fatal-signal.c
-    fcntl.c
     fd-hook.c
     fd-safer-flag.c
     fd-safer.c
     fopen-safer.c
     get-errno.c
     getdtablesize.c
-    getopt.c
-    getopt1.c
     hash.c
     isnanl.c
     isnand.c
     lbitset.c
     localcharset.c
     mbswidth.c
-    nl_langinfo.c
     pipe-safer.c
     pipe2-safer.c
     printf-args.c
@@ -120,14 +112,15 @@ ENDIF()
 
 IF (OS_WINDOWS)
     SRCS(
-        frexp.c
+        fcntl.c
+        getopt.c
+        getopt1.c
         msvc-inval.c
         msvc-nothrow.c
         open.c
         raise.c
         sigaction.c
         sigprocmask.c
-        snprintf.c
         strndup.c
         waitpid.c
         wcwidth.c

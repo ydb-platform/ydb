@@ -139,7 +139,17 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
             if (TDqConnection::Match(input.Get())) {
                 TDqConnection conn(input);
                 if (TDqStageSettings::Parse(conn.Output().Stage()).WideChannels) {
-                    argType = conn.Output().Stage().Program().Ref().GetTypeAnn();
+                    if (TDqCnStreamLookup::Match(input.Get())) {
+                        auto narrowType = GetSequenceItemType(input->Pos(), input->GetTypeAnn(), false, ctx);
+                        YQL_ENSURE(narrowType->GetKind() == ETypeAnnotationKind::Struct);
+                        TTypeAnnotationNode::TListType items;
+                        for(const auto& item: narrowType->Cast<TStructExprType>()->GetItems()) {
+                            items.push_back(item->GetItemType());
+                        }
+                        argType = ctx.MakeType<TStreamExprType>(ctx.MakeType<TMultiExprType>(items));
+                    } else {
+                        argType = conn.Output().Stage().Program().Ref().GetTypeAnn();
+                    }
                 }
             }
         }

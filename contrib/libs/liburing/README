@@ -54,7 +54,7 @@ Building liburing
     # Prepare build config (optional).
     #
     #  --cc  specifies the C   compiler.
-    #  --cxx speficies the C++ compiler.
+    #  --cxx specifies the C++ compiler.
     #
     ./configure --cc=gcc --cxx=g++;
 

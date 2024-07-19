@@ -48,7 +48,7 @@ std::vector<TFiberIntrospectionInfo> IntrospectFibers()
 
     auto introspectionAction = [&] (NYT::NConcurrency::TFiber::TFiberList& fibers) {
         for (auto& fiberRef : fibers) {
-            auto* fiber = &fiberRef;
+            auto* fiber = fiberRef.AsFiber();
 
             auto fiberId = fiber->GetFiberId();
             if (fiberId == InvalidFiberId) {

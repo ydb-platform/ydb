@@ -8,7 +8,7 @@ on:
 jobs:
   build-docs:
     concurrency:
-      group: docs-build-${{ github.ref }}
+      group: docs-build-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:

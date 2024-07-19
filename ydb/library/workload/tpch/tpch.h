@@ -10,6 +10,7 @@ public:
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
     THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
     TString GetWorkloadName() const override;
+    TWorkloadDataInitializer::TList CreateDataInitializers() const override;
     YDB_READONLY(ui64, Scale, 1);
     YDB_READONLY_DEF(TSet<TString>, Tables);
     YDB_READONLY(ui32, ProcessIndex, 0);
@@ -23,7 +24,6 @@ public:
     TQueryInfoList GetWorkload(int type) override;
     TVector<TWorkloadType> GetSupportedWorkloadTypes() const override;
 
-    class TBulkDataGenerator;
 protected:
     TString DoGetDDLQueries() const override;
     TQueryInfoList GetInitialData() override;

@@ -5,8 +5,6 @@
 #include "dsproxy_fault_tolerance_ut_range.h"
 #include "dsproxy_fault_tolerance_ut_put.h"
 
-#include <ydb/core/protos/pqconfig.pb.h>
-
 using namespace NActors;
 using namespace NKikimr;
 

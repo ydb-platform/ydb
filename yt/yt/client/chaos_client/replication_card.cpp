@@ -111,11 +111,6 @@ void FormatValue(TStringBuilderBase* builder, const TReplicationCardFetchOptions
         options.IncludeHistory);
 }
 
-TString ToString(const TReplicationCardFetchOptions& options)
-{
-    return ToStringViaBuilder(options);
-}
-
 bool TReplicationCardFetchOptions::Contains(const TReplicationCardFetchOptions& other) const
 {
     auto selfMask = NDetail::ToBitMask(*this);
@@ -144,11 +139,6 @@ void FormatValue(
 
 }
 
-TString ToString(const TReplicationProgress& replicationProgress)
-{
-    return ToStringViaBuilder(replicationProgress);
-}
-
 void FormatValue(TStringBuilderBase* builder, const TReplicaHistoryItem& replicaHistoryItem, TStringBuf /*spec*/)
 {
     builder->AppendFormat("{Era: %v, Timestamp: %v, Mode: %v, State: %v}",
@@ -156,11 +146,6 @@ void FormatValue(TStringBuilderBase* builder, const TReplicaHistoryItem& replica
         replicaHistoryItem.Timestamp,
         replicaHistoryItem.Mode,
         replicaHistoryItem.State);
-}
-
-TString ToString(const TReplicaHistoryItem& replicaHistoryItem)
-{
-    return ToStringViaBuilder(replicaHistoryItem);
 }
 
 void FormatValue(
@@ -179,11 +164,6 @@ void FormatValue(
     FormatValue(builder, replicaInfo.ReplicationProgress, TStringBuf(), replicationProgressProjection);
 
     builder->AppendFormat(", History: %v}", replicaInfo.History);
-}
-
-TString ToString(const TReplicaInfo& replicaInfo)
-{
-    return ToStringViaBuilder(replicaInfo);
 }
 
 void FormatValue(

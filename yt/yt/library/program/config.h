@@ -156,6 +156,7 @@ class TSingletonsDynamicConfig
 {
 public:
     std::optional<TDuration> SpinWaitSlowPathLoggingThreshold;
+    ui64 MaxIdleFibers;
     NYTAlloc::TYTAllocConfigPtr YTAlloc;
     NBus::TTcpDispatcherDynamicConfigPtr TcpDispatcher;
     NRpc::TDispatcherDynamicConfigPtr RpcDispatcher;

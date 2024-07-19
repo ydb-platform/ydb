@@ -349,7 +349,8 @@ public:
         REGISTER    (TUnregisterQueueConsumerCommand,      "unregister_queue_consumer",       Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TListQueueConsumerRegistrationsCommand, "list_queue_consumer_registrations", Null,   Structured, false, false, ApiVersion4);
         REGISTER    (TPullQueueCommand,                    "pull_queue",                      Null,       Tabular,    false, true , ApiVersion4);
-        REGISTER    (TPullConsumerCommand,                 "pull_consumer",                   Null,       Tabular,    false, true , ApiVersion4);
+        REGISTER    (TPullQueueConsumerCommand,            "pull_consumer",                   Null,       Tabular,    false, true , ApiVersion4);
+        REGISTER    (TPullQueueConsumerCommand,            "pull_queue_consumer",             Null,       Tabular,    false, true , ApiVersion4);
         REGISTER    (TAdvanceConsumerCommand,              "advance_consumer",                Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TCreateQueueProducerSessionCommand,   "create_queue_producer_session",   Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TRemoveQueueProducerSessionCommand,   "remove_queue_producer_session",   Null,       Structured, true,  false, ApiVersion4);
@@ -375,6 +376,8 @@ public:
         REGISTER    (TStartPipelineCommand,                "start_pipeline",                  Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TStopPipelineCommand,                 "stop_pipeline",                   Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TPausePipelineCommand,                "pause_pipeline",                  Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TGetPipelineStatusCommand,            "get_pipeline_status",             Null,       Structured, false, false, ApiVersion4);
+        REGISTER    (TGetFlowViewCommand,                  "get_flow_view",                   Null,       Structured, false, false, ApiVersion4);
 
         if (Config_->EnableInternalCommands) {
             REGISTER_ALL(TReadHunksCommand,                "read_hunks",                      Null,       Structured, false, true );
@@ -641,7 +644,7 @@ private:
         TYsonString ConsumeInputValue() override
         {
             YT_VERIFY(Request_.InputStream);
-            auto syncInputStream = CreateSyncAdapter(Request_.InputStream);
+            auto syncInputStream = CreateSyncAdapter(CreateCopyingAdapter(Request_.InputStream));
 
             auto producer = CreateProducerForFormat(
                 GetInputFormat(),

@@ -7,8 +7,6 @@
 #include <ydb/core/mind/bscontroller/layout_helpers.h>
 #include <ydb/core/util/pb.h>
 
-#include <ydb/core/protos/pqconfig.pb.h>
-
 Y_UNIT_TEST_SUITE(BsControllerTest) {
 
     struct TTestSelfHeal {

@@ -30,18 +30,18 @@ struct TComputeActorAsyncInputHelperAsync : public TComputeActorAsyncInputHelper
 {
 public:
     TComputeActorAsyncInputHelperAsync(
-            const TString& logPrefix,
-            ui64 index,
-            NDqProto::EWatermarksMode watermarksMode,
-            ui64& cookie,
-            int& inflight
+        const TString& logPrefix,
+        ui64 index,
+        NDqProto::EWatermarksMode watermarksMode,
+        ui64& cookie,
+        int& inflight
     )
-        : TComputeActorAsyncInputHelper(logPrefix, index, watermarksMode)
-        , TaskRunnerActor(nullptr)
-        , Cookie(cookie)
-        , Inflight(inflight)
-        , FreeSpace(1)
-        , PushStarted(false)
+    : TComputeActorAsyncInputHelper(logPrefix, index, watermarksMode)
+    , TaskRunnerActor(nullptr)
+    , Cookie(cookie)
+    , Inflight(inflight)
+    , FreeSpace(1)
+    , PushStarted(false)
     {}
 
     i64 GetFreeSpace() const override

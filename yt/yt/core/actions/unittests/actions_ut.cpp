@@ -12,7 +12,7 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TestCancelableRunWithBoundedConcurrency, TestSimple)
+TEST(TCancelableRunWithBoundedConcurrencyTest, TestSimple)
 {
     int x = 0;
 
@@ -30,7 +30,7 @@ TEST(TestCancelableRunWithBoundedConcurrency, TestSimple)
     EXPECT_EQ(x, 1);
 }
 
-TEST(TestCancelableRunWithBoundedConcurrency, TestManyCallbacks)
+TEST(TCancelableRunWithBoundedConcurrencyTest, TestManyCallbacks)
 {
     auto threadPool = CreateThreadPool(4, "ThreadPool");
 
@@ -55,7 +55,7 @@ TEST(TestCancelableRunWithBoundedConcurrency, TestManyCallbacks)
     EXPECT_EQ(x, callbackCount);
 }
 
-TEST(TestCancelableRunWithBoundedConcurrency, TestCancelation)
+TEST(TCancelableRunWithBoundedConcurrencyTest, TestCancelation)
 {
     auto threadPool = CreateThreadPool(4, "ThreadPool");
 

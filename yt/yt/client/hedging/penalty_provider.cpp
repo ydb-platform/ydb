@@ -156,8 +156,7 @@ public:
                     "Finish penalty updater check (%v: %v/%v tablets lagging => penalty %v ms) for: %v",
                     cluster, curTabletsWithLag, tabletsCount,
                     NProfiling::CpuDurationToDuration(newLagPenalty).MilliSeconds(),
-                    TablePath_
-                );
+                    TablePath_);
             }
 
             Counters_->SuccessRequestCount.Increment();

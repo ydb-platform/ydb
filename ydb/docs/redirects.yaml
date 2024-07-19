@@ -60,15 +60,21 @@ common:
   - from: /administration/production-storage-config.md
     to: /deploy/configuration/config.md
   - from: /administration/decommissioning.md
-    to: /deploy/manual/decommissioning.md
+    to: /devops/manual/decommissioning.md
+  - from: /deploy/manual/decommissioning.md
+    to: /devops/manual/decommissioning.md
   - from: /administration/monitoring.md
-    to: /deploy/manual/monitoring.md
+    to: /devops/manual/monitoring.md
+  - from: /deploy/manual/monitoring.md
+    to: /devops/manual/monitoring.md
   - from: /administration/state-storage-move.md
-    to: /deploy/manual/state-storage-move.md
-  - from: /administration/static-group-move.md
-    to: /deploy/manual/static-group-move.md
+    to: /devops/manual/state-storage-move.md
+  - from: /deploy/manual/static-group-move.md
+    to: /devops/manual/static-group-move.md
   - from: /administration/upgrade.md
-    to: /deploy/manual/upgrade.md
+    to: /devops/manual/upgrade.md
+  - from: /deploy/manual/upgrade.md
+    to: /devops/manual/upgrade.md
   - from: /maintenance/backup_and_recovery.md
     to: /devops/manual/backup-and-recovery.md
 

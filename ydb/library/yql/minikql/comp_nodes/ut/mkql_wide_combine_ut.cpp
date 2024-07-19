@@ -34,6 +34,7 @@ public:
         }
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
+            CompCtx.SpillerFactory = std::make_shared<TMockSpillerFactory>();
             constexpr auto size = Y_ARRAY_SIZE(g_TestYieldStreamData);
             if (Index == size) {
                 return NUdf::EFetchStatus::Finish;

@@ -1066,16 +1066,26 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
         ));
 
         const auto graph = setup.BuildGraph(pgmReturn);
+        graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
         const auto iterator = graph->GetValue().GetListIterator();
+
+        std::unordered_set<TString> expected {
+            "key one",
+            "very long value 2 / key two",
+            "very long key one",
+            "very long value 8 / very long value 7 / very long value 6"
+        };
+
         NUdf::TUnboxedValue item;
-        UNIT_ASSERT(iterator.Next(item));
-        UNBOXED_VALUE_STR_EQUAL(item, "key one");
-        UNIT_ASSERT(iterator.Next(item));
-        UNBOXED_VALUE_STR_EQUAL(item, "very long value 2 / key two");
-        UNIT_ASSERT(iterator.Next(item));
-        UNBOXED_VALUE_STR_EQUAL(item, "very long key one");
-        UNIT_ASSERT(iterator.Next(item));
-        UNBOXED_VALUE_STR_EQUAL(item, "very long value 8 / very long value 7 / very long value 6");
+        while (!expected.empty()) {
+            UNIT_ASSERT(iterator.Next(item));
+            // const auto actual = item.AsStringRef();
+            TString actual = item.AsStringRef().Data();
+
+            auto it = expected.find(actual);
+            UNIT_ASSERT(it != expected.end());
+            expected.erase(it);
+        }
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }

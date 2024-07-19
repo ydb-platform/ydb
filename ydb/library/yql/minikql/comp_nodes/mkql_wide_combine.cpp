@@ -542,10 +542,10 @@ private:
         std::cerr << std::format("MISHA: {} {} {}\n", AllowSpilling, (bool)Ctx.SpillerFactory, IsSwitchToSpillingModeCondition());
         if (AllowSpilling && Ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
             std::cerr << "MISHA spilling enabled" << std::endl;
-            const auto used = TlsAllocState->GetUsed();
-            const auto limit = TlsAllocState->GetLimit();
+            // const auto used = TlsAllocState->GetUsed();
+            // const auto limit = TlsAllocState->GetLimit();
 
-            YQL_LOG(INFO) << "yellow zone reached " << (used*100/limit) << "%=" << used << "/" << limit;
+            // YQL_LOG(INFO) << "yellow zone reached " << (used*100/limit) << "%=" << used << "/" << limit;
             YQL_LOG(INFO) << "switching Memory mode to Spilling";
 
             SwitchMode(EOperatingMode::Spilling);

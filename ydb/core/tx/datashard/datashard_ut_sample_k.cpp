@@ -143,17 +143,13 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
     Y_UNIT_TEST (RunScan) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(true);
+        serverSettings.SetDomainName("Root");
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
-
-        // Allow manipulating shadow data using normal schemeshard operations
-        runtime.GetAppData().AllowShadowDataInSchemeShardForTests = true;
 
         InitRoot(server, sender);
 
@@ -218,17 +214,13 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
     Y_UNIT_TEST (ScanBadParameters) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(true);
+        serverSettings.SetDomainName("Root");
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
-
-        // Allow manipulating shadow data using normal schemeshard operations
-        runtime.GetAppData().AllowShadowDataInSchemeShardForTests = true;
 
         InitRoot(server, sender);
 

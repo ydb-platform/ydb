@@ -1,6 +1,5 @@
 USE plato;
 
-pragma UseBlocks;
 pragma yt.DisableOptimizers="OutHorizontalJoin,HorizontalJoin,MultiHorizontalJoin";
 
 

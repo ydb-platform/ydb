@@ -23,14 +23,14 @@ std::shared_ptr<NKikimr::NOlap::IBlobsReadingAction> TOperator::DoStartReadingAc
 void TOperator::DoStartGCAction(const std::shared_ptr<IBlobsGCAction>& action) const {
     auto gcTask = dynamic_pointer_cast<TGCTask>(action);
     AFL_VERIFY(!!gcTask);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartGC")("requests_count", gcTask->GetListsByGroupId().size());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("event", "StartGC")("requests_count", gcTask->GetListsByGroupId().size());
     TActorContext::AsActorContext().Register(new TGarbageCollectionActor(gcTask, TabletActorId, GetSelfTabletId()));
 }
 
 std::shared_ptr<IBlobsGCAction> TOperator::DoCreateGCAction(const std::shared_ptr<TRemoveGCCounters>& counters) const {
     auto gcTask = Manager->BuildGCTask(GetStorageId(), Manager, GetSharedBlobs(), counters);
     if (!gcTask) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartGCSkipped");
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("event", "StartGCSkipped");
         return nullptr;
     } else {
         AFL_VERIFY(!gcTask->IsEmpty());

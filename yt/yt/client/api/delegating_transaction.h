@@ -225,23 +225,27 @@ public:
 
     // Queues
     void AdvanceConsumer(
-        const NYPath::TYPath& path,
-        int partitionIndex,
-        std::optional<i64> oldOffset,
-        i64 newOffset) override;
-    void AdvanceConsumer(
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
         int partitionIndex,
         std::optional<i64> oldOffset,
         i64 newOffset) override;
-    TFuture<void> AdvanceConsumer(
+    TFuture<void> AdvanceQueueConsumer(
         const NYT::NYPath::TRichYPath& consumer,
         const NYT::NYPath::TRichYPath& queue,
         int partitionIndex,
         std::optional<i64> oldOffset,
         i64 newOffset,
-        const NYT::NApi::TAdvanceConsumerOptions& options) override;
+        const NYT::NApi::TAdvanceQueueConsumerOptions& options) override;
+
+    TFuture<TPushQueueProducerResult> PushQueueProducer(
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
+        NQueueClient::TQueueProducerEpoch epoch,
+        NTableClient::TNameTablePtr nameTable,
+        TSharedRange<NTableClient::TUnversionedRow> rows,
+        const TPushQueueProducerOptions& options) override;
 
 protected:
     const ITransactionPtr Underlying_;

@@ -262,7 +262,10 @@ public:
         }
         auto ctx = ExecutionContext;
         ctx.FuncProvider = TaskTransformFactory(settings.TaskParams, ctx.FuncRegistry);
-        return MakeDqTaskRunner(alloc, ctx, settings, { });
+        return MakeDqTaskRunner(alloc, ctx, settings, [taskId = task.GetId(), traceId = traceId](const TString& message) {
+            YQL_LOG_CTX_ROOT_SESSION_SCOPE(traceId, ToString(taskId));
+            YQL_CLOG(DEBUG, ProviderDq) << message;
+        });
     }
 
 private:

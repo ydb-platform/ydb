@@ -32,6 +32,7 @@ extern "C" {
 #include "utils/memdebug.h"
 #include "utils/resowner.h"
 #include "utils/timestamp.h"
+#include "utils/guc_hooks.h"
 #include "port/pg_bitutils.h"
 #include "port/pg_crc32c.h"
 #include "postmaster/postmaster.h"

@@ -104,7 +104,6 @@ Y_UNIT_TEST_SUITE(KqpIndexLookupJoin) {
 void Test(const TString& query, const TString& answer, size_t rightTableReads, bool useStreamLookup = false) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookup);
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
 
     auto settings = TKikimrSettings().SetAppConfig(appConfig);
     TKikimrRunner kikimr(settings);
@@ -126,10 +125,24 @@ void Test(const TString& query, const TString& answer, size_t rightTableReads, b
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 2);
+        for (const auto& tableStat : stats.query_phases(0).table_access()) {
+            if (tableStat.name() == "/Root/Left") {
+                UNIT_ASSERT_VALUES_EQUAL(tableStat.reads().rows(), 7);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(tableStat.name(), "/Root/Right");
+                UNIT_ASSERT_VALUES_EQUAL(tableStat.reads().rows(), rightTableReads);
+            }
+        }
+    } else if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Left");
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 7);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).name(), "/Root/Right");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().rows(), rightTableReads);
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/Right");
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), rightTableReads);
     } else {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
 
@@ -537,6 +550,39 @@ Y_UNIT_TEST_TWIN(LeftJoinSkipNullFilter, StreamLookup) {
         ])", 4, StreamLookup);
 }
 
+Y_UNIT_TEST_TWIN(SimpleLeftSemiJoin, StreamLookup) {
+    Test(
+        R"(
+            SELECT l.Value
+            FROM `/Root/Left` AS l
+            LEFT SEMI JOIN `/Root/Right` AS r
+                ON l.Fk = r.Key
+            ORDER BY l.Value
+        )",
+        R"([
+            [["Value1"]];
+            [["Value1"]];
+            [["Value2"]];
+            [["Value2"]]
+        ])", 4, StreamLookup);
+}
+
+Y_UNIT_TEST_TWIN(LeftSemiJoinWithLeftFilter, StreamLookup) {
+    Test(
+        R"(
+            SELECT l.Value
+            FROM `/Root/Left` AS l
+            LEFT SEMI JOIN `/Root/Right` AS r
+                ON l.Fk = r.Key
+            WHERE l.Value != 'Value1'  
+            ORDER BY l.Value
+        )",
+        R"([
+            [["Value2"]];
+            [["Value2"]]
+        ])", 2, StreamLookup);
+}
+
 void CreateSimpleTableWithKeyType(TSession session, const TString& tableName, const TString& columnType) {
     const TString query = fmt::format(R"(
             CREATE TABLE `/Root/{tableName}` (
@@ -601,7 +647,10 @@ void TestKeyCastForAllJoinTypes(TSession session, const TString& leftTable, cons
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
             return;
         }
-        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+
+        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin()) {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+        } else if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
         } else {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
@@ -959,8 +1008,22 @@ Y_UNIT_TEST_TWIN(JoinByComplexKeyWithNullComponents, StreamLookupJoin) {
 Y_UNIT_TEST_TWIN(JoinWithComplexCondition, StreamLookupJoin) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
-    auto settings = TKikimrSettings().SetAppConfig(appConfig);
-    TKikimrRunner kikimr(settings);
+
+   TString stats = R"(
+        {"/Root/Left":{"n_rows":3}, "/Root/Right":{"n_rows":3}}
+    )";
+
+    TVector<NKikimrKqp::TKqpSetting> settings;
+
+    NKikimrKqp::TKqpSetting setting;
+    setting.SetName("OverrideStatistics");
+    setting.SetValue(stats);
+    settings.push_back(setting);
+
+    TKikimrSettings serverSettings = TKikimrSettings().SetAppConfig(appConfig);;
+    serverSettings.SetKqpSettings(settings);
+
+    TKikimrRunner kikimr(serverSettings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1019,7 +1082,37 @@ Y_UNIT_TEST_TWIN(JoinWithComplexCondition, StreamLookupJoin) {
             [[1];[1];[1];[1]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
 
-        const ui32 index = (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin() ? 0 : 1);
+        const ui32 index = (serverSettings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin() ? 0 : 1);
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        for (const auto& tableStats : stats.query_phases(index).table_access()) {
+            if (tableStats.name() == "/Root/Right") {
+                UNIT_ASSERT_VALUES_EQUAL(tableStats.reads().rows(), 1);
+            }
+        }
+    }
+
+    {  // execute left join with left filter for join keys before lookup join: l.Key1 = l.Key2 = l.Fk
+        TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
+
+        const TString query = R"(
+            SELECT l.Key1, l.Key2, l.Fk, r.Key1
+            FROM `/Root/Left` AS l
+            LEFT JOIN `/Root/Right` AS r
+                ON l.Key1 = r.Key1
+                AND l.Key2 = r.Key1
+                AND l.Fk = r.Key1
+            ORDER BY l.Key1, l.Key2, l.Fk, r.Key1
+        )";
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+        CompareYson(R"([
+            [#;[3];#;#];
+            [[1];[1];[1];[1]];
+            [[2];[2];[20];#]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+
+        const ui32 index = (serverSettings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin() ? 0 : 1);
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         for (const auto& tableStats : stats.query_phases(index).table_access()) {
             if (tableStats.name() == "/Root/Right") {
@@ -1048,13 +1141,106 @@ Y_UNIT_TEST_TWIN(JoinWithComplexCondition, StreamLookupJoin) {
             [[2];[2];[2];["two"];["two"];["two"]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
 
-        const ui32 index = (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin() ? 0 : 1);
+        const ui32 index = (serverSettings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin() ? 0 : 1);
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         for (const auto& tableStats : stats.query_phases(index).table_access()) {
             if (tableStats.name() == "/Root/Right") {
                 UNIT_ASSERT_VALUES_EQUAL(tableStats.reads().rows(), 1);
             }
         }
+    }
+
+    {  // execute left join with left filter for join keys before lookup join: l.Key1 = l.Key2 AND l.Value1 = l.Value2
+        TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
+
+        const TString query = R"(
+            SELECT l.Key1, l.Key2, r.Key1, l.Value1, l.Value2, r.Key2
+            FROM `/Root/Left` AS l
+            LEFT JOIN `/Root/Right` AS r
+                ON l.Key1 = r.Key1
+                AND l.Key2 = r.Key1
+                AND l.Value1 = r.Key2
+                AND l.Value2 = r.Key2
+            ORDER BY l.Key1, l.Key2, r.Key1
+        )";
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+        CompareYson(R"([
+            [#;[3];#;["three"];["value3"];#];
+            [[1];[1];#;["one"];["value1"];#];
+            [[2];[2];[2];["two"];["two"];["two"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+
+        const ui32 index = (serverSettings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin() ? 0 : 1);
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        for (const auto& tableStats : stats.query_phases(index).table_access()) {
+            if (tableStats.name() == "/Root/Right") {
+                UNIT_ASSERT_VALUES_EQUAL(tableStats.reads().rows(), 1);
+            }
+        }
+    }
+}
+
+Y_UNIT_TEST_TWIN(LeftSemiJoinWithDuplicatesInRightTable, StreamLookupJoin) {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
+    auto settings = TKikimrSettings().SetAppConfig(appConfig);
+    TKikimrRunner kikimr(settings);
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    {  // create tables
+        const TString query = R"(
+            CREATE TABLE `/Root/Left` (
+                Key1 Int64,
+                Key2 Int64,
+                Value String,
+                PRIMARY KEY (Key1, Key2)
+            );
+
+            CREATE TABLE `/Root/Right` (
+                Key1 Int64,
+                Key2 Int64,
+                Value String,
+                PRIMARY KEY (Key1, Key2)
+            );
+        )";
+        UNIT_ASSERT(session.ExecuteSchemeQuery(query).GetValueSync().IsSuccess());
+    }
+
+    {  // fill tables
+        const TString query = R"(
+            REPLACE INTO `/Root/Left` (Key1, Key2, Value) VALUES
+                (1, 10, "value1"),
+                (2, 20, "value2"),
+                (3, 30, "value3");
+        
+            REPLACE INTO `/Root/Right` (Key1, Key2, Value) VALUES
+                (10, 100, "value1"),
+                (10, 101, "value1"),
+                (10, 102, "value1"),
+                (20, 200, "value2"),
+                (20, 201, "value2"),
+                (30, 300, "value3");
+        )";
+        UNIT_ASSERT(session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync().IsSuccess());
+    }
+
+    {
+        const TString query = R"(
+            SELECT l.Key1, l.Key2, l.Value
+            FROM `/Root/Left` AS l
+            LEFT SEMI JOIN `/Root/Right` AS r
+                ON l.Key2 = r.Key1 ORDER BY l.Key1, l.Key2, l.Value
+        )";
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        CompareYson(R"([
+            [[1];[10];["value1"]];
+            [[2];[20];["value2"]];
+            [[3];[30];["value3"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 }
 

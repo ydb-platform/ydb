@@ -342,7 +342,6 @@ private:
 
     void OnDqStats(TEvDqStats::TPtr& ev) {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
-        YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
         LatestStats = ev->Get()->Record;
         Send(PrinterId, ev->Release().Release());
     }

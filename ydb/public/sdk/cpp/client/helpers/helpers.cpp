@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/client/resources/ydb_ca.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/parser.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/getenv.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/from_file.h>
 #include <util/stream/file.h>
 
 namespace NYdb {
@@ -37,7 +38,7 @@ TDriverConfig CreateFromEnvironment(const TStringType& connectionString) {
     }
 
     bool useMetadataCredentials = GetStrFromEnv("YDB_METADATA_CREDENTIALS", "0") == "1";
-    if (useMetadataCredentials){
+    if (useMetadataCredentials) {
         auto factory = CreateIamCredentialsProviderFactory();
         try {
             factory->CreateProvider();
@@ -49,8 +50,15 @@ TDriverConfig CreateFromEnvironment(const TStringType& connectionString) {
     }
 
     TStringType accessToken = GetStrFromEnv("YDB_ACCESS_TOKEN_CREDENTIALS", "");
-    if (accessToken != ""){
+    if (accessToken != "") {
         driverConfig.SetAuthToken(accessToken);
+        return driverConfig;
+    }
+
+    TStringType oauth2KeyFile = GetStrFromEnv("YDB_OAUTH2_KEY_FILE", "");
+    if (!oauth2KeyFile.empty()) {
+        driverConfig.SetCredentialsProviderFactory(
+            CreateOauth2TokenExchangeFileCredentialsProviderFactory(oauth2KeyFile));
         return driverConfig;
     }
 
@@ -65,4 +73,3 @@ TDriverConfig CreateFromSaKeyFile(const TStringType& saKeyFile, const TStringTyp
 }
 
 } // namespace NYdb
-

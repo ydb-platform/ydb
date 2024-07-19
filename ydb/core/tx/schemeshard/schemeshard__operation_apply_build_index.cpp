@@ -30,7 +30,10 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         op->SetTableName(table.LeafName());
         op->SetSnapshotTxId(config.GetSnaphotTxId());  //TODO: fix spelling error in flat_scheme_op.proto first
         op->SetBuildIndexId(config.GetBuildIndexId());
-        op->MutableOutcome()->MutableApply();
+        if (!indexName.empty()) {
+            TPath index = table.Child(indexName);
+            PathIdFromPathId(index.Base()->PathId, op->MutableOutcome()->MutableApply()->MutableIndexPathId());
+        }
 
         result.push_back(CreateFinalizeBuildIndexMainTable(NextPartId(nextId, result), finalize));
     }
@@ -49,17 +52,25 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
 
     if (!indexName.empty())
     {
-        TPath index = table.Child(indexName);
-        TPath implIndexTable = index.Child("indexImplTable");
-        TTableInfo::TPtr implIndexTableInfo = context.SS->Tables.at(implIndexTable.Base()->PathId);
-        auto indexImplTableAltering = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexImplTable);
-        auto alterTable = indexImplTableAltering.MutableAlterTable();
-        alterTable->SetName(implIndexTable.LeafName());
-        alterTable->MutablePartitionConfig()->MutableCompactionPolicy()->CopyFrom(implIndexTableInfo->PartitionConfig().GetCompactionPolicy());
-        alterTable->MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(false);
-        alterTable->MutablePartitionConfig()->SetShadowData(false);
+        auto alterImplTableTransactionTemplate = [] (TPath index, TPath implIndexTable, TTableInfo::TPtr implIndexTableInfo) {
+            auto indexImplTableAltering = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexImplTable);
+            auto alterTable = indexImplTableAltering.MutableAlterTable();
+            alterTable->SetName(implIndexTable.LeafName());
+            alterTable->MutablePartitionConfig()->MutableCompactionPolicy()->CopyFrom(implIndexTableInfo->PartitionConfig().GetCompactionPolicy());
+            alterTable->MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(false);
+            alterTable->MutablePartitionConfig()->SetShadowData(false);
+            return indexImplTableAltering;
+        };
 
-        result.push_back(CreateFinalizeBuildIndexImplTable(NextPartId(nextId, result), indexImplTableAltering));
+        TPath index = table.Child(indexName);
+        for (const std::string_view implTable : NTableIndex::ImplTables) {
+            TPath implIndexTable = index.Child(implTable.data());
+            if (!implIndexTable.IsResolved()) {
+                continue;
+            }
+            TTableInfo::TPtr implIndexTableInfo = context.SS->Tables.at(implIndexTable.Base()->PathId);
+            result.push_back(CreateFinalizeBuildIndexImplTable(NextPartId(nextId, result), alterImplTableTransactionTemplate(index, implIndexTable, implIndexTableInfo)));
+        }
     }
 
     return result;
@@ -103,10 +114,10 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
 
     if (!indexName.empty()) {
         TPath index = table.Child(indexName);
-        Y_ABORT_UNLESS(index.Base()->GetChildren().size() == 1);
+        Y_ABORT_UNLESS(index.Base()->GetChildren().size() >= 1);
         for (auto& indexChildItems: index.Base()->GetChildren()) {
             const TString& implTableName = indexChildItems.first;
-            Y_ABORT_UNLESS(implTableName == "indexImplTable", "unexpected name %s", implTableName.c_str());
+            Y_ABORT_UNLESS(NTableIndex::IsImplTable(implTableName), "unexpected name %s", implTableName.c_str());
 
             TPath implTable = index.Child(implTableName);
             {

@@ -26,14 +26,14 @@ TCommandTable::TCommandTable()
 {
     //AddCommand(std::make_unique<TCommandCreateTable>());
     AddCommand(std::make_unique<TCommandDropTable>());
-    AddCommand(std::make_unique<TCommandQuery>());
+    AddCommand(std::make_unique<TCommandTableQuery>());
     AddCommand(std::make_unique<TCommandReadTable>());
     AddCommand(std::make_unique<TCommandIndex>());
     AddCommand(std::make_unique<TCommandAttribute>());
     AddCommand(std::make_unique<TCommandTtl>());
 }
 
-TCommandQuery::TCommandQuery()
+TCommandTableQuery::TCommandTableQuery()
     : TClientCommandTree("query", {}, "Query operations")
 {
     AddCommand(std::make_unique<TCommandExecuteQuery>());
@@ -102,6 +102,10 @@ namespace {
         {"Datetime", EPrimitiveType::Datetime},
         {"Timestamp", EPrimitiveType::Timestamp},
         {"Interval", EPrimitiveType::Interval},
+        {"Date32", EPrimitiveType::Date32},
+        {"Datetime64", EPrimitiveType::Datetime64},
+        {"Timestamp64", EPrimitiveType::Timestamp64},
+        {"Interval64", EPrimitiveType::Interval64},
         {"TzDate", EPrimitiveType::TzDate},
         {"TzDatetime", EPrimitiveType::TzDatetime},
         {"TzTimestamp", EPrimitiveType::TzTimestamp},

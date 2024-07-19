@@ -7,7 +7,9 @@ PEERDIR(
     ydb/tests/tools/fq_runner
 )
 
-DEPENDS(ydb/tests/tools/pq_read)
+DEPENDS(
+    ydb/tests/tools/pq_read
+)
 
 TEST_SRCS(
     test_cp_ic.py
@@ -16,6 +18,7 @@ TEST_SRCS(
 )
 
 TIMEOUT(600)
+
 SIZE(MEDIUM)
 
 END()

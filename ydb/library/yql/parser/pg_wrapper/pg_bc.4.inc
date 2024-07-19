@@ -1,11 +1,12 @@
 LLVM_BC(
-    postgresql/src/backend/access/brin/brin.c
     postgresql/src/backend/access/nbtree/nbtcompare.c
     postgresql/src/backend/access/transam/commit_ts.c
     postgresql/src/backend/catalog/pg_proc.c
     postgresql/src/backend/utils/adt/arraysubs.c
     postgresql/src/backend/utils/adt/char.c
+    postgresql/src/backend/utils/adt/jsonb.c
     postgresql/src/backend/utils/adt/jsonpath.c
+    postgresql/src/backend/utils/adt/oid.c
     postgresql/src/backend/utils/adt/rangetypes.c
     postgresql/src/backend/utils/adt/tsquery.c
     pg_kernels.4.cpp
@@ -14,10 +15,6 @@ LLVM_BC(
 
     SYMBOLS
     arrow_array_subscript_handler
-    arrow_brin_desummarize_range
-    arrow_brin_summarize_new_values
-    arrow_brin_summarize_range
-    arrow_brinhandler
     arrow_btboolcmp
     arrow_btcharcmp
     arrow_btint24cmp
@@ -60,11 +57,59 @@ LLVM_BC(
     arrow_int4range_subdiff
     arrow_int8range_canonical
     arrow_int8range_subdiff
+    arrow_jsonb_agg_finalfn
+    arrow_jsonb_agg_strict_transfn
+    arrow_jsonb_agg_transfn
+    arrow_jsonb_bool
+    arrow_jsonb_build_array
+    arrow_jsonb_build_array_noargs
+    arrow_jsonb_build_object
+    arrow_jsonb_build_object_noargs
+    arrow_jsonb_float4
+    arrow_jsonb_float8
+    arrow_jsonb_in
+    arrow_jsonb_int2
+    arrow_jsonb_int4
+    arrow_jsonb_int8
+    arrow_jsonb_numeric
+    arrow_jsonb_object
+    arrow_jsonb_object_agg_finalfn
+    arrow_jsonb_object_agg_strict_transfn
+    arrow_jsonb_object_agg_transfn
+    arrow_jsonb_object_agg_unique_strict_transfn
+    arrow_jsonb_object_agg_unique_transfn
+    arrow_jsonb_object_two_arg
+    arrow_jsonb_out
+    arrow_jsonb_recv
+    arrow_jsonb_send
+    arrow_jsonb_typeof
     arrow_jsonpath_in
     arrow_jsonpath_out
     arrow_jsonpath_recv
     arrow_jsonpath_send
     arrow_numrange_subdiff
+    arrow_oideq
+    arrow_oidge
+    arrow_oidgt
+    arrow_oidin
+    arrow_oidlarger
+    arrow_oidle
+    arrow_oidlt
+    arrow_oidne
+    arrow_oidout
+    arrow_oidrecv
+    arrow_oidsend
+    arrow_oidsmaller
+    arrow_oidvectoreq
+    arrow_oidvectorge
+    arrow_oidvectorgt
+    arrow_oidvectorin
+    arrow_oidvectorle
+    arrow_oidvectorlt
+    arrow_oidvectorne
+    arrow_oidvectorout
+    arrow_oidvectorrecv
+    arrow_oidvectorsend
     arrow_pg_last_committed_xact
     arrow_pg_xact_commit_timestamp
     arrow_pg_xact_commit_timestamp_origin
@@ -104,6 +149,7 @@ LLVM_BC(
     arrow_range_upper_inf
     arrow_raw_array_subscript_handler
     arrow_text_char
+    arrow_to_jsonb
     arrow_tsqueryin
     arrow_tsqueryout
     arrow_tsqueryrecv

@@ -3,13 +3,13 @@
 -- NB: Subquerys
 -- start query 1 in stream 0 using template query43.tpl and seed 1819994127
 select  store.s_store_name, store.s_store_id,
-        sum(case when (d_day_name='Sunday') then ss_sales_price else 0.0 end) sun_sales,
-        sum(case when (d_day_name='Monday') then ss_sales_price else 0.0 end) mon_sales,
-        sum(case when (d_day_name='Tuesday') then ss_sales_price else 0.0 end) tue_sales,
-        sum(case when (d_day_name='Wednesday') then ss_sales_price else 0.0 end) wed_sales,
-        sum(case when (d_day_name='Thursday') then ss_sales_price else 0.0 end) thu_sales,
-        sum(case when (d_day_name='Friday') then ss_sales_price else 0.0 end) fri_sales,
-        sum(case when (d_day_name='Saturday') then ss_sales_price else 0.0 end) sat_sales
+        sum(case when (d_day_name='Sunday') then ss_sales_price else $z0 end) sun_sales,
+        sum(case when (d_day_name='Monday') then ss_sales_price else $z0 end) mon_sales,
+        sum(case when (d_day_name='Tuesday') then ss_sales_price else $z0 end) tue_sales,
+        sum(case when (d_day_name='Wednesday') then ss_sales_price else $z0 end) wed_sales,
+        sum(case when (d_day_name='Thursday') then ss_sales_price else $z0 end) thu_sales,
+        sum(case when (d_day_name='Friday') then ss_sales_price else $z0 end) fri_sales,
+        sum(case when (d_day_name='Saturday') then ss_sales_price else $z0 end) sat_sales
  from {{date_dim}} as date_dim 
  cross join {{store_sales}} as store_sales
  cross join {{store}} as store

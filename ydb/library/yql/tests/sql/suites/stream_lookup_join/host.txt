@@ -1,0 +1,11 @@
+{"hostname"="host1";"fqdn"="fqdn1.net";"ip4"="192.168.0.1"; "ip6"="[xxxx:xxxx:xxxx:1111]"};
+{"hostname"="host2";"fqdn"="fqdn2.net";"ip4"="192.168.0.2"; "ip6"="[xxxx:xxxx:xxxx:2222]"};
+{"hostname"="host3";"fqdn"="fqdn3.net";"ip4"="192.168.0.3"; "ip6"="[xxxx:xxxx:xxxx:3333]"};
+{"hostname"="host4";"fqdn"="fqdn4.net";"ip4"="192.168.0.4"; "ip6"="[xxxx:xxxx:xxxx:4444]"};
+{"hostname"="host5";"fqdn"="fqdn5.net";"ip4"="192.168.0.5"; "ip6"="[xxxx:xxxx:xxxx:5555]"};
+{"hostname"="host6";"fqdn"="fqdn6.net";"ip4"="192.168.0.6"; "ip6"="[xxxx:xxxx:xxxx:6666]"};
+{"hostname"="host7";"fqdn"="fqdn7.net";"ip4"="192.168.0.7"; "ip6"="[xxxx:xxxx:xxxx:7777]"};
+{"hostname"="host8";"fqdn"="fqdn8.net";"ip4"="192.168.0.8"; "ip6"="[xxxx:xxxx:xxxx:8888]"};
+{"hostname"="very very long hostname to for test 1";"fqdn"="very very long fqdn for test 1";"ip4"="192.168.100.1"; "ip6"="[xxxx:xxxx:XXXX:1111]"};
+{"hostname"="very very long hostname to for test 2";"fqdn"="very very long fqdn for test 2";"ip4"="192.168.100.2"; "ip6"="[xxxx:xxxx:XXXX:2222]"};
+

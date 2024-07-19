@@ -69,4 +69,9 @@ bool FillTtlSettings(TTtlSettingsEnabled& out, const Ydb::Table::TtlSettings& in
     return true;
 }
 
+bool FillIndexTablePartitioning(
+    std::vector<NKikimrSchemeOp::TTableDescription>& indexImplTableDescriptions,
+    const Ydb::Table::TableIndex& index,
+    Ydb::StatusIds::StatusCode& code, TString& error);
+
 } // namespace NKikimr

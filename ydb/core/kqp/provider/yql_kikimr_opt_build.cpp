@@ -445,7 +445,9 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
                     .Update(node)
                     .Columns(write.ReturningColumns())
                     .Build()
-                .Settings().Build()
+                .Settings()
+                    .Add().Name().Value("columns").Build().Value(write.ReturningColumns()).Build()
+                .Build()
                 .Done());
         }
 
@@ -491,7 +493,9 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
                     .Update(node)
                     .Columns(update.ReturningColumns())
                     .Build()
-                .Settings().Build()
+                .Settings()
+                    .Add().Name().Value("columns").Build().Value(update.ReturningColumns()).Build()
+                .Build()
                 .Done());
         }
 
@@ -524,7 +528,9 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
                     .Update(node)
                     .Columns(del.ReturningColumns())
                     .Build()
-                .Settings().Build()
+                .Settings()
+                    .Add().Name().Value("columns").Build().Value(del.ReturningColumns()).Build()
+                .Build()
                 .Done());
         }
 
@@ -844,7 +850,7 @@ TVector<TKiDataQueryBlock> MakeKiDataQueryBlocks(TExprBase node, const TKiExplor
 
 } // namespace
 
-TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TIntrusivePtr<TKikimrTablesData> tablesData,
+TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf database, TIntrusivePtr<TKikimrTablesData> tablesData,
     TTypeAnnotationContext& types, bool concurrentResults) {
     if (!node.Maybe<TCoCommit>().DataSink().Maybe<TKiDataSink>()) {
         return node.Ptr();
@@ -853,6 +859,53 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TIntrusivePtr<TK
     auto commit = node.Cast<TCoCommit>();
     auto settings = NCommon::ParseCommitSettings(commit, ctx);
     auto kiDataSink = commit.DataSink().Cast<TKiDataSink>();
+
+    TNodeOnNodeOwnedMap replaces;
+    VisitExpr(node.Ptr(), [&replaces](const TExprNode::TPtr& input) -> bool {
+        if (input->IsCallable("PgTableContent")) {
+            TPgTableContent content(input);
+            if (content.Table().StringValue() == "pg_tables") {
+                replaces[input.Get()] = nullptr;
+            }
+        }
+        return true;
+    });
+    if (!replaces.empty()) {
+        TExprNode::TPtr path = ctx.NewCallable(node.Pos(), "String", { ctx.NewAtom(node.Pos(), TStringBuilder() << "/" << database << "/.sys/pg_tables") });
+        auto table = ctx.NewList(node.Pos(), {ctx.NewAtom(node.Pos(), "table"), path});
+        auto newKey = ctx.NewCallable(node.Pos(), "Key", {table});
+
+        for (auto& [key, _] : replaces) {
+            auto ydbSysTableRead = Build<TCoRead>(ctx, node.Pos())
+                .World<TCoWorld>().Build()
+                .DataSource<TCoDataSource>()
+                    .Category(ctx.NewAtom(node.Pos(), KikimrProviderName))
+                    .FreeArgs()
+                        .Add(ctx.NewAtom(node.Pos(), "db"))
+                    .Build()
+                .Build()
+                .FreeArgs()
+                    .Add(newKey)
+                    .Add(ctx.NewCallable(node.Pos(), "Void", {}))
+                    .Add(ctx.NewList(node.Pos(), {}))
+                .Build()
+            .Done().Ptr();
+
+            auto readData = Build<TCoRight>(ctx, node.Pos())
+                .Input(ydbSysTableRead)
+            .Done().Ptr();
+            replaces[key] = readData;
+        }
+        ctx.Step
+            .Repeat(TExprStep::ExprEval)
+            .Repeat(TExprStep::DiscoveryIO)
+            .Repeat(TExprStep::Epochs)
+            .Repeat(TExprStep::Intents)
+            .Repeat(TExprStep::LoadTablesMetadata)
+            .Repeat(TExprStep::RewriteIO);
+        auto res = ctx.ReplaceNodes(std::move(node.Ptr()), replaces);
+        return res;
+    }
 
     TKiExploreTxResults txExplore;
     txExplore.ConcurrentResults = concurrentResults;

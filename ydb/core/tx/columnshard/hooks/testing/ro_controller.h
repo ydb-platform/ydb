@@ -63,6 +63,10 @@ protected:
     }
 
 public:
+    virtual TDuration GetOverridenGCPeriod(const TDuration /*def*/) const override {
+        return TDuration::Zero();
+    }
+
     void WaitCompactions(const TDuration d) const {
         TInstant start = TInstant::Now();
         ui32 compactionsStart = GetCompactionStartedCounter().Val();

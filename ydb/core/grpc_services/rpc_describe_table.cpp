@@ -6,6 +6,7 @@
 
 #include "service_table.h"
 #include "rpc_common/rpc_common.h"
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -92,7 +93,14 @@ private:
                     return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
                 }
 
-                FillIndexDescription(describeTableResult, tableDescription);
+                try {
+                    FillIndexDescription(describeTableResult, tableDescription);
+                } catch (const std::exception& ex) {
+                    LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, "Unable to fill index description: %s", ex.what());
+                    Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
+                    return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
+                }
+
                 FillChangefeedDescription(describeTableResult, tableDescription);
 
                 if (GetProtoRequest()->include_table_stats()) {
@@ -146,7 +154,7 @@ private:
             record->MutableOptions()->SetReturnPartitionStats(true);
         }
 
-        if (AppData(ctx)->AllowPrivateTableDescribeForTest || path.EndsWith("/indexImplTable")) {
+        if (AppData(ctx)->AllowPrivateTableDescribeForTest || path.EndsWith(TStringBuilder() << "/" << NTableIndex::ImplTable)) {
             record->MutableOptions()->SetShowPrivateTable(true);
         }
 

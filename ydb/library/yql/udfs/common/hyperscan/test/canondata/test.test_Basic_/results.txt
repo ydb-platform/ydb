@@ -156,6 +156,13 @@
                                         "String"
                                     ]
                                 ]
+                            ];
+                            [
+                                "backtracking";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
                             ]
                         ]
                     ]
@@ -190,7 +197,8 @@
                         #;
                         [
                             ""
-                        ]
+                        ];
+                        %false
                     ];
                     [
                         "a";
@@ -221,7 +229,8 @@
                         #;
                         [
                             "a"
-                        ]
+                        ];
+                        %false
                     ];
                     [
                         "aax";
@@ -254,7 +263,8 @@
                         #;
                         [
                             "aax"
-                        ]
+                        ];
+                        %true
                     ];
                     [
                         "xaax";
@@ -289,7 +299,8 @@
                         ];
                         [
                             "bax"
-                        ]
+                        ];
+                        %false
                     ];
                     [
                         "xaaxaaxaa";
@@ -324,7 +335,8 @@
                         ];
                         [
                             "bababa"
-                        ]
+                        ];
+                        %false
                     ];
                     [
                         "XAXA";
@@ -355,7 +367,8 @@
                         #;
                         [
                             "XAXA"
-                        ]
+                        ];
+                        %false
                     ];
                     [
                         "7";
@@ -386,7 +399,8 @@
                         #;
                         [
                             "7"
-                        ]
+                        ];
+                        %false
                     ];
                     [
                         "QC transfer task JAVA";
@@ -417,7 +431,8 @@
                         #;
                         [
                             "QC transfer task JAVA"
-                        ]
+                        ];
+                        %false
                     ]
                 ]
             }

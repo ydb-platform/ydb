@@ -21,8 +21,8 @@ namespace NKikimr::NOlap {
 class TColumnEngineChanges;
 class IBlobsGCAction;
 class TPortionInfo;
-namespace NStatistics {
-class TOperatorContainer;
+namespace NIndexes {
+class TIndexMetaContainer;
 }
 }
 namespace arrow {
@@ -88,6 +88,10 @@ public:
     using TPtr = std::shared_ptr<ICSController>;
     virtual ~ICSController() = default;
 
+    virtual TDuration GetOverridenGCPeriod(const TDuration def) const {
+        return def;
+    }
+
     virtual void OnSelectShardingFilter() {
     
     }
@@ -139,7 +143,7 @@ public:
     void OnDataSharingStarted(const ui64 tabletId, const TString& sessionId) {
         return DoOnDataSharingStarted(tabletId, sessionId);
     }
-    virtual void OnStatisticsUsage(const NOlap::NStatistics::TOperatorContainer& /*statOperator*/) {
+    virtual void OnStatisticsUsage(const NOlap::NIndexes::TIndexMetaContainer& /*statOperator*/) {
 
     }
     virtual void OnPortionActualization(const NOlap::TPortionInfo& /*info*/) {
@@ -182,7 +186,7 @@ public:
         return def;
     }
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const {
-        return EOptimizerCompactionWeightControl::Default;
+        return EOptimizerCompactionWeightControl::Force;
     }
     virtual TDuration GetTTLDefaultWaitingDuration(const TDuration defaultValue) const {
         return defaultValue;

@@ -7,6 +7,7 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/base/hive.h>
+#include <ydb/core/grpc_services/db_metadata_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
@@ -28,6 +29,7 @@ class TJsonTenantInfo : public TViewerPipeClient<TJsonTenantInfo> {
     IViewer* Viewer;
     THashMap<TString, NKikimrViewer::TTenant> TenantByPath;
     THashMap<TPathId, NKikimrViewer::TTenant> TenantBySubDomainKey;
+    THashMap<TString, NKikimrViewer::EFlag> HcOverallByTenantPath;
     THashMap<TString, THolder<NSchemeCache::TSchemeCacheNavigate>> NavigateResult;
     THashMap<TTabletId, THolder<TEvHive::TEvResponseHiveDomainStats>> HiveDomainStats;
     THashMap<TTabletId, THolder<TEvHive::TEvResponseHiveStorageStats>> HiveStorageStats;
@@ -35,6 +37,7 @@ class TJsonTenantInfo : public TViewerPipeClient<TJsonTenantInfo> {
     THashSet<TNodeId> Subscribers;
     THashSet<TNodeId> WhiteboardNodesRequested;
     THashSet<TString> OffloadTenantsRequested;
+    THashSet<TString> MetadataCacheRequested;
     THashMap<TNodeId, TString> NodeIdsToTenant; // for tablet info
     TMap<TNodeId, NKikimrWhiteboard::TEvSystemStateResponse> WhiteboardSystemStateResponse;
     THashMap<TString, TMap<TNodeId, NKikimrWhiteboard::TEvTabletStateResponse>> WhiteboardTabletStateResponse;
@@ -165,6 +168,8 @@ public:
             hFunc(TEvents::TEvUndelivered, Undelivered);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             hFunc(TEvTabletPipe::TEvClientConnected, TBase::Handle);
+            hFunc(TEvStateStorage::TEvBoardInfo, Handle);
+            hFunc(NHealthCheck::TEvSelfCheckResultProto, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
@@ -179,6 +184,10 @@ public:
             }
             RequestConsoleGetTenantStatus(path);
             RequestSchemeCacheNavigate(path);
+
+            if (AppData()->FeatureFlags.GetEnableDbMetadataCache()) {
+                RequestStateStorageMetadataCacheEndpointsLookup(path);
+            }
         }
         RequestDone();
     }
@@ -385,6 +394,28 @@ public:
         RequestDone();
     }
 
+    void Handle(NHealthCheck::TEvSelfCheckResultProto::TPtr& ev) {
+        auto result = std::move(ev->Get()->Record);
+        if (result.database_status_size() == 1) {
+            HcOverallByTenantPath.emplace(result.database_status(0).name(), GetViewerFlag(result.database_status(0).overall()));
+        }
+
+        RequestDone();
+    }
+
+    void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
+        auto activeNode = TDatabaseMetadataCache::PickActiveNode(ev->Get()->InfoEntries);
+        if (activeNode != 0) {
+            Subscribers.insert(activeNode);
+            std::optional<TActorId> cache = MakeDatabaseMetadataCacheId(activeNode);
+            auto request = MakeHolder<NHealthCheck::TEvSelfCheckRequestProto>();
+            if (MetadataCacheRequested.insert(ev->Get()->Path).second) {
+                SendRequest(*cache, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, activeNode);
+            }
+        }
+        RequestDone();
+    }
+
     void Handle(TEvViewer::TEvViewerResponse::TPtr& ev) {
         ui32 nodeId = ev.Get()->Cookie;
         auto tenantId = NodeIdsToTenant[nodeId];
@@ -407,6 +438,14 @@ public:
     }
 
     void Undelivered(TEvents::TEvUndelivered::TPtr &ev) {
+        if (ev->Get()->SourceType == NHealthCheck::EvSelfCheckRequestProto) {
+            ui32 nodeId = ev.Get()->Cookie;
+            BLOG_TRACE("Undelivered for node " << nodeId << " event " << ev->Get()->SourceType);
+            auto tenantId = NodeIdsToTenant[nodeId];
+            if (HcOverallByTenantPath.emplace(tenantId, NKikimrViewer::EFlag::Grey).second) {
+                RequestDone();
+            }
+        }
         if (ev->Get()->SourceType == NNodeWhiteboard::TEvWhiteboard::EvSystemStateRequest) {
             ui32 nodeId = ev.Get()->Cookie;
             BLOG_TRACE("Undelivered for node " << nodeId << " event " << ev->Get()->SourceType);
@@ -478,6 +517,11 @@ public:
                 RequestDone();
             }
             if (Tablets && WhiteboardTabletStateResponse[tenantId].emplace(nodeId, NKikimrWhiteboard::TEvTabletStateResponse{}).second) {
+                RequestDone();
+            }
+        }
+        if (MetadataCacheRequested.count(tenantId) > 0) {
+            if (HcOverallByTenantPath.emplace(tenantId, NKikimrViewer::EFlag::Grey).second) {
                 RequestDone();
             }
         }
@@ -747,8 +791,13 @@ public:
                         tablet.SetCount(prTabletCount);
                     }
                 }
-                tenant.SetOverall(overall);
-                OverallByDomainId[tenant.GetId()] = overall;
+                if (HcOverallByTenantPath.count(path) > 0 && HcOverallByTenantPath[path] != NKikimrViewer::EFlag::Grey) {
+                    tenant.SetOverall(HcOverallByTenantPath[path]);
+                    OverallByDomainId[tenant.GetId()] = HcOverallByTenantPath[path];
+                } else {
+                    tenant.SetOverall(overall);
+                    OverallByDomainId[tenant.GetId()] = overall;
+                }
             }
         }
         for (const std::pair<const TString, NKikimrViewer::TTenant>& prTenant : TenantByPath) {

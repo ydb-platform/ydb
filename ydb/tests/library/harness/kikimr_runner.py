@@ -5,7 +5,7 @@ import shutil
 import tempfile
 import time
 import itertools
-from pkg_resources import resource_string
+from importlib_resources import read_binary
 from google.protobuf import text_format
 
 import ydb.tests.library.common.yatest_common as yatest_common
@@ -346,12 +346,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         logger.info("Cluster started and initialized")
 
         if bs_needed:
-            self.client.add_config_item(
-                resource_string(
-                    __name__,
-                    "resources/default_profile.txt"
-                )
-            )
+            self.client.add_config_item(read_binary(__name__, "resources/default_profile.txt"))
 
     def __run_node(self, node_id):
         """
@@ -421,10 +416,13 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         for i in slots:
             i.stop()
 
-    def __stop_node(self, node):
+    def __stop_node(self, node, kill=False):
         ret = None
         try:
-            node.stop()
+            if kill:
+                node.kill()
+            else:
+                node.stop()
         except daemon.DaemonError as exceptions:
             ret = exceptions
         else:
@@ -434,16 +432,16 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 shutil.rmtree(self.__common_udfs_dir, ignore_errors=True)
         return ret
 
-    def stop(self):
+    def stop(self, kill=False):
         saved_exceptions = []
 
         for slot in self.slots.values():
-            exception = self.__stop_node(slot)
+            exception = self.__stop_node(slot, kill)
             if exception is not None:
                 saved_exceptions.append(exception)
 
         for node in self.nodes.values():
-            exception = self.__stop_node(node)
+            exception = self.__stop_node(node, kill)
             if exception is not None:
                 saved_exceptions.append(exception)
 

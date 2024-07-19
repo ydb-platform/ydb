@@ -18,8 +18,10 @@ NKikimrSchemeOp::TModifyScheme CreateTransaction(const TString& parentPath, ::NK
 TEvTx* CreateRequest(ui64 txId, NKikimrSchemeOp::TModifyScheme&& tx);
 
 void DoRequest(TTopicSdkTestSetup& setup, ui64& txId, NKikimrSchemeOp::TPersQueueGroupDescription& scheme);
+void DoRequest(NActors::TTestActorRuntime& runtime, ui64& txId, NKikimrSchemeOp::TPersQueueGroupDescription& scheme);
 
 void SplitPartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partition, TString boundary);
+void SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const ui32 partition, TString boundary);
 
 void MergePartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partitionLeft, const ui32 partitionRight);
 
@@ -27,7 +29,7 @@ TWriteMessage Msg(const TString& data, ui64 seqNo);
 
 TTopicSdkTestSetup CreateSetup();
 
-std::shared_ptr<ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& client, const TString& producer, std::optional<ui32> partition = std::nullopt, TString topic = TEST_TOPIC);
+std::shared_ptr<ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& client, const TString& producer, std::optional<ui32> partition = std::nullopt, TString topic = TEST_TOPIC, bool useCodec = true);
 
 struct TTestReadSession {
     struct MsgInfo {
@@ -42,7 +44,7 @@ struct TTestReadSession {
 
     static constexpr size_t SemCount = 1;
 
-    TTestReadSession(const TString& name, TTopicClient& client, size_t expectedMessagesCount = Max<size_t>(), bool autoCommit = true, std::set<ui32> partitions = {}, bool autoscalingSupport = true);
+    TTestReadSession(const TString& name, TTopicClient& client, size_t expectedMessagesCount = Max<size_t>(), bool autoCommit = true, std::set<ui32> partitions = {}, bool autoPartitioningSupport = true);
 
     void WaitAllMessages();
 

@@ -481,6 +481,13 @@ def is_canonize_peephole(cfg):
     return False
 
 
+def is_peephole_use_blocks(cfg):
+    for item in cfg:
+        if item[0] == 'peephole_use_blocks':
+            return True
+    return False
+
+
 def is_canonize_lineage(cfg):
     for item in cfg:
         if item[0] == 'canonize_lineage':

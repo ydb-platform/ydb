@@ -6,6 +6,7 @@ SRCS(
     enum.cpp
     guid.cpp
     string.cpp
+    format_string.cpp
     format.cpp
 )
 

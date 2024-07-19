@@ -1,6 +1,12 @@
 #pragma once
 
+#include <ydb/library/minsketch/count_min_sketch.h>
+
+#include <library/cpp/json/json_reader.h>
+
 #include <util/generic/vector.h>
+#include <util/generic/hash.h>
+
 #include <util/generic/string.h>
 #include <optional>
 #include <iostream>
@@ -19,6 +25,15 @@ struct IProviderStatistics {
     virtual ~IProviderStatistics() {}
 };
 
+struct TColumnStatistics {
+    std::optional<double> NumUniqueVals;
+    std::optional<double> HyperLogLog;
+    std::shared_ptr<NKikimr::TCountMinSketch> CountMinSketch;
+    TString Type;
+
+    TColumnStatistics() {}
+};
+
 /**
  * Optimizer Statistics struct records per-table and per-column statistics
  * for the current operator in the plan. Currently, only Nrows and Ncols are
@@ -27,17 +42,29 @@ struct IProviderStatistics {
  * all of the time.
 */
 struct TOptimizerStatistics {
+    struct TKeyColumns : public TSimpleRefCount<TKeyColumns> {
+        TVector<TString> Data;
+        TKeyColumns(const TVector<TString>& vec) : Data(vec) {}
+    };
+
+    struct TColumnStatMap : public TSimpleRefCount<TColumnStatMap> {
+        THashMap<TString,TColumnStatistics> Data;
+        TColumnStatMap() {}
+        TColumnStatMap(const THashMap<TString,TColumnStatistics>& map) : Data(map) {}
+    };
+
     EStatisticsType Type = BaseTable;
     double Nrows = 0;
     int Ncols = 0;
     double ByteSize = 0;
     double Cost = 0;
     double Selectivity = 1.0;
-    const TVector<TString>& KeyColumns;
+    TIntrusivePtr<TKeyColumns> KeyColumns;
+    TIntrusivePtr<TColumnStatMap> ColumnStatistics;
     std::unique_ptr<const IProviderStatistics> Specific;
 
     TOptimizerStatistics(TOptimizerStatistics&&) = default;
-    TOptimizerStatistics() : KeyColumns(EmptyColumns) {}
+    TOptimizerStatistics() {}
 
     TOptimizerStatistics(
         EStatisticsType type,
@@ -45,14 +72,16 @@ struct TOptimizerStatistics {
         int ncols = 0,
         double byteSize = 0.0,
         double cost = 0.0,
-        const TVector<TString>& keyColumns = EmptyColumns,
+        TIntrusivePtr<TKeyColumns> keyColumns = {},
+        TIntrusivePtr<TColumnStatMap> columnMap = {},
         std::unique_ptr<IProviderStatistics> specific = nullptr);
 
     TOptimizerStatistics& operator+=(const TOptimizerStatistics& other);
     bool Empty() const;
 
     friend std::ostream& operator<<(std::ostream& os, const TOptimizerStatistics& s);
-
-    static const TVector<TString>& EmptyColumns;
 };
+
+std::shared_ptr<TOptimizerStatistics> OverrideStatistics(const TOptimizerStatistics& s, const TStringBuf& tablePath, const std::shared_ptr<NJson::TJsonValue>& stats);
+
 }

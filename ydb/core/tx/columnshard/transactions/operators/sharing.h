@@ -26,7 +26,8 @@ private:
     virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
     }
     virtual bool DoIsAsync() const override {
-        return true;
+        AFL_VERIFY(SharingTask);
+        return !SharingTask->IsFinished();
     }
     virtual bool DoParse(TColumnShard& owner, const TString& data) override;
     virtual TString DoDebugString() const override {
@@ -39,9 +40,9 @@ public:
         NotifySubscribers.insert(actorId);
     }
 
-    virtual bool ExecuteOnProgress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override;
+    virtual bool ProgressOnExecute(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override;
 
-    virtual bool CompleteOnProgress(TColumnShard& owner, const TActorContext& ctx) override;
+    virtual bool ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) override;
 
     virtual bool ExecuteOnAbort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override;
     virtual bool CompleteOnAbort(TColumnShard& owner, const TActorContext& ctx) override;

@@ -1,6 +1,6 @@
 ## EvaluateExpr, EvaluateAtom {#evaluate_expr_atom}
 
-Evaluate an expression before the start of the main calculation and input its result to the query as a literal (constant). In many contexts, where only a constant would be expected in standard SQL (for example, in table names, in the number of rows in [LIMIT](../../../syntax/select.md#limit), and so on), this functionality is implicitly enabled automatically.
+Evaluate an expression before the start of the main calculation and input its result to the query as a literal (constant). In many contexts, where only a constant would be expected in standard SQL (for example, in table names, in the number of rows in [LIMIT](../../../syntax/select/limit_offset.md), and so on), this functionality is implicitly enabled automatically.
 
 EvaluateExpr can be used where the grammar already expects an expression. For example, you can use it to:
 

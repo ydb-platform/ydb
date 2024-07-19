@@ -45,6 +45,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"WarnOnAnsiAliasShadowing", &TContext::WarnOnAnsiAliasShadowing},
     {"PullUpFlatMapOverJoin", &TContext::PragmaPullUpFlatMapOverJoin},
     {"FilterPushdownOverJoinOptionalSide", &TContext::FilterPushdownOverJoinOptionalSide},
+    {"RotateJoinTree", &TContext::RotateJoinTree},
     {"DqEngineEnable", &TContext::DqEngineEnable},
     {"DqEngineForce", &TContext::DqEngineForce},
     {"RegexUseRe2", &TContext::PragmaRegexUseRe2},
@@ -361,7 +362,7 @@ TString TContext::AddImport(const TVector<TString>& modulePath) {
     if (!path.StartsWith('/')) {
         path = Settings.FileAliasPrefix + path;
     }
-    
+
     auto iter = ImportModuleAliases.find(path);
     if (iter == ImportModuleAliases.end()) {
         const TString alias = MakeName(TStringBuilder() << modulePath.back() << "_module");

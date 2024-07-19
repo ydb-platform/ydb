@@ -62,7 +62,6 @@ private:
 };
 
 void FormatValue(TStringBuilderBase* builder, TErrorCode code, TStringBuf spec);
-TString ToString(TErrorCode code);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -167,6 +166,7 @@ public:
     TInstant GetDatetime() const;
 
     bool HasTracingAttributes() const;
+    void SetTracingAttributes(NTracing::TTracingAttributes tracingAttributes);
     NTracing::TTraceId GetTraceId() const;
     NTracing::TSpanId GetSpanId() const;
 
@@ -281,7 +281,6 @@ void Deserialize(
     const NYTree::INodePtr& node);
 
 void FormatValue(TStringBuilderBase* builder, const TError& error, TStringBuf spec);
-TString ToString(const TError& error);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -427,9 +426,6 @@ private:
 
 template <class T>
 void FormatValue(TStringBuilderBase* builder, const TErrorOr<T>& error, TStringBuf spec);
-
-template <class T>
-TString ToString(const TErrorOr<T>& valueOrError);
 
 ////////////////////////////////////////////////////////////////////////////////
 

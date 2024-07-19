@@ -654,6 +654,12 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
             return TTraits::template MakeTzDate<TTzDatetime>(isOptional);
         case NUdf::EDataSlot::TzTimestamp:
             return TTraits::template MakeTzDate<TTzTimestamp>(isOptional);
+        case NUdf::EDataSlot::TzDate32:
+            return TTraits::template MakeTzDate<TTzDate32>(isOptional);
+        case NUdf::EDataSlot::TzDatetime64:
+            return TTraits::template MakeTzDate<TTzDatetime64>(isOptional);
+        case NUdf::EDataSlot::TzTimestamp64:
+            return TTraits::template MakeTzDate<TTzTimestamp64>(isOptional);
         case NUdf::EDataSlot::Uuid:
         case NUdf::EDataSlot::Decimal:
         case NUdf::EDataSlot::DyNumber:

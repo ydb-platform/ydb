@@ -33,6 +33,8 @@ struct TNumMulInterval {
     static_assert(std::is_integral_v<typename TLeft::TLayout>, "Left must be integral");
     static_assert(std::is_integral_v<typename TRight::TLayout>, "Right must be integral");
 
+    static constexpr auto NullMode = TKernel::ENullMode::AlwaysNull;
+
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
     {
         const auto lv = static_cast<typename TOutput::TLayout>(left.template Get<typename TLeft::TLayout>());
@@ -159,8 +161,37 @@ void RegisterMul(IBuiltinFunctionRegistry& registry) {
     RegisterIntervalMul<NUdf::TDataType<NUdf::TInterval64>>(registry);
 }
 
+template <typename TInterval>
+void RegisterIntervalMul(TKernelFamilyBase& owner) {
+    AddBinaryKernelPoly<NUdf::TDataType<i8>, TInterval, TInterval, TNumMulInterval>(owner);
+    AddBinaryKernelPoly<NUdf::TDataType<ui8>, TInterval, TInterval, TNumMulInterval>(owner);
+    AddBinaryKernelPoly<NUdf::TDataType<i16>, TInterval, TInterval, TNumMulInterval>(owner);
+    AddBinaryKernelPoly<NUdf::TDataType<ui16>, TInterval, TInterval, TNumMulInterval>(owner);
+    AddBinaryKernelPoly<NUdf::TDataType<i32>, TInterval, TInterval, TNumMulInterval>(owner);
+    AddBinaryKernelPoly<NUdf::TDataType<ui32>, TInterval, TInterval, TNumMulInterval>(owner);
+    AddBinaryKernelPoly<NUdf::TDataType<i64>, TInterval, TInterval, TNumMulInterval>(owner);
+    AddBinaryKernelPoly<NUdf::TDataType<ui64>, TInterval, TInterval, TNumMulInterval>(owner);
+
+    AddBinaryKernelPoly<TInterval, NUdf::TDataType<i8>, TInterval, TNumMulInterval>(owner);
+    AddBinaryKernelPoly<TInterval, NUdf::TDataType<ui8>, TInterval, TNumMulInterval>(owner);
+    AddBinaryKernelPoly<TInterval, NUdf::TDataType<i16>, TInterval, TNumMulInterval>(owner);
+    AddBinaryKernelPoly<TInterval, NUdf::TDataType<ui16>, TInterval, TNumMulInterval>(owner);
+    AddBinaryKernelPoly<TInterval, NUdf::TDataType<i32>, TInterval, TNumMulInterval>(owner);
+    AddBinaryKernelPoly<TInterval, NUdf::TDataType<ui32>, TInterval, TNumMulInterval>(owner);
+    AddBinaryKernelPoly<TInterval, NUdf::TDataType<i64>, TInterval, TNumMulInterval>(owner);
+    AddBinaryKernelPoly<TInterval, NUdf::TDataType<ui64>, TInterval, TNumMulInterval>(owner);
+}
+
 void RegisterMul(TKernelFamilyMap& kernelFamilyMap) {
-    kernelFamilyMap["Mul"] = std::make_unique<TBinaryNumericKernelFamily<TMul, TMul>>();
+    auto family = std::make_unique<TKernelFamilyBase>();
+
+    AddBinaryIntegralKernels<TMul>(*family);
+    AddBinaryRealKernels<TMul>(*family);
+
+    RegisterIntervalMul<NUdf::TDataType<NUdf::TInterval>>(*family);
+    RegisterIntervalMul<NUdf::TDataType<NUdf::TInterval64>>(*family);
+
+    kernelFamilyMap["Mul"] = std::move(family);
 }
 
 } // namespace NMiniKQL

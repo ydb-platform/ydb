@@ -44,7 +44,11 @@ from hypothesis.errors import Frozen, InvalidArgument, StopTest
 from hypothesis.internal.cache import LRUReusedCache
 from hypothesis.internal.compat import add_note, floor, int_from_bytes, int_to_bytes
 from hypothesis.internal.conjecture.floats import float_to_lex, lex_to_float
-from hypothesis.internal.conjecture.junkdrawer import IntList, uniform
+from hypothesis.internal.conjecture.junkdrawer import (
+    IntList,
+    gc_cumulative_time,
+    uniform,
+)
 from hypothesis.internal.conjecture.utils import (
     INT_SIZES,
     INT_SIZES_SAMPLER,
@@ -81,20 +85,7 @@ else:
         return wrapper
 
 
-ONE_BOUND_INTEGERS_LABEL = calc_label_from_name("trying a one-bound int allowing 0")
-INTEGER_RANGE_DRAW_LABEL = calc_label_from_name("another draw in integer_range()")
-BIASED_COIN_LABEL = calc_label_from_name("biased_coin()")
-
 TOP_LABEL = calc_label_from_name("top")
-DRAW_BYTES_LABEL = calc_label_from_name("draw_bytes() in ConjectureData")
-DRAW_FLOAT_LABEL = calc_label_from_name("drawing a float")
-FLOAT_STRATEGY_DO_DRAW_LABEL = calc_label_from_name(
-    "getting another float in FloatStrategy"
-)
-INTEGER_WEIGHTED_DISTRIBUTION = calc_label_from_name(
-    "drawing from a weighted distribution in integers"
-)
-
 InterestingOrigin = Tuple[
     Type[BaseException], str, int, Tuple[Any, ...], Tuple[Tuple[Any, ...], ...]
 ]
@@ -366,11 +357,9 @@ class ExampleProperty:
         blocks = self.examples.blocks
         for record in self.examples.trail:
             if record == DRAW_BITS_RECORD:
-                self.__push(0)
                 self.bytes_read = blocks.endpoints[self.block_count]
                 self.block(self.block_count)
                 self.block_count += 1
-                self.__pop(discarded=False)
             elif record == IR_NODE_RECORD:
                 data = self.examples.ir_nodes[self.ir_node_count]
                 self.ir_node(data)
@@ -465,8 +454,8 @@ class ExampleRecord:
     """
 
     def __init__(self) -> None:
-        self.labels = [DRAW_BYTES_LABEL]
-        self.__index_of_labels: "Optional[Dict[int, int]]" = {DRAW_BYTES_LABEL: 0}
+        self.labels: List[int] = []
+        self.__index_of_labels: "Optional[Dict[int, int]]" = {}
         self.trail = IntList()
         self.ir_nodes: List[IRNode] = []
 
@@ -518,11 +507,9 @@ class Examples:
         self.trail = record.trail
         self.ir_nodes = record.ir_nodes
         self.labels = record.labels
-        self.__length = (
-            self.trail.count(STOP_EXAMPLE_DISCARD_RECORD)
-            + record.trail.count(STOP_EXAMPLE_NO_DISCARD_RECORD)
-            + record.trail.count(DRAW_BITS_RECORD)
-        )
+        self.__length = self.trail.count(
+            STOP_EXAMPLE_DISCARD_RECORD
+        ) + record.trail.count(STOP_EXAMPLE_NO_DISCARD_RECORD)
         self.blocks = blocks
         self.__children: "Optional[List[Sequence[int]]]" = None
 
@@ -645,18 +632,23 @@ class Examples:
 
     class _mutator_groups(ExampleProperty):
         def begin(self) -> None:
-            self.groups: "Dict[Tuple[int, int], List[int]]" = defaultdict(list)
+            self.groups: "Dict[int, Set[Tuple[int, int]]]" = defaultdict(set)
 
         def start_example(self, i: int, label_index: int) -> None:
-            depth = len(self.example_stack)
-            self.groups[label_index, depth].append(i)
+            # TODO should we discard start == end cases? occurs for eg st.data()
+            # which is conditionally or never drawn from. arguably swapping
+            # nodes with the empty list is a useful mutation enabled by start == end?
+            key = (self.examples[i].ir_start, self.examples[i].ir_end)
+            self.groups[label_index].add(key)
 
-        def finish(self) -> Iterable[Iterable[int]]:
+        def finish(self) -> Iterable[Set[Tuple[int, int]]]:
             # Discard groups with only one example, since the mutator can't
             # do anything useful with them.
             return [g for g in self.groups.values() if len(g) >= 2]
 
-    mutator_groups: List[List[int]] = calculated_example_property(_mutator_groups)
+    mutator_groups: List[Set[Tuple[int, int]]] = calculated_example_property(
+        _mutator_groups
+    )
 
     @property
     def children(self) -> List[Sequence[int]]:
@@ -778,10 +770,6 @@ class Blocks:
     def end(self, i: int) -> int:
         """Equivalent to self[i].end."""
         return self.endpoints[i]
-
-    def bounds(self, i: int) -> Tuple[int, int]:
-        """Equivalent to self[i].bounds."""
-        return (self.start(i), self.end(i))
 
     def all_bounds(self) -> Iterable[Tuple[int, int]]:
         """Equivalent to [(b.start, b.end) for b in self]."""
@@ -970,7 +958,12 @@ class IRNode:
     was_forced: bool = attr.ib()
     index: Optional[int] = attr.ib(default=None)
 
-    def copy(self, *, with_value: IRType) -> "IRNode":
+    def copy(
+        self,
+        *,
+        with_value: Optional[IRType] = None,
+        with_kwargs: Optional[IRKWargsType] = None,
+    ) -> "IRNode":
         # we may want to allow this combination in the future, but for now it's
         # a footgun.
         assert not self.was_forced, "modifying a forced node doesn't make sense"
@@ -979,8 +972,8 @@ class IRNode:
         # after copying.
         return IRNode(
             ir_type=self.ir_type,
-            value=with_value,
-            kwargs=self.kwargs,
+            value=self.value if with_value is None else with_value,
+            kwargs=self.kwargs if with_kwargs is None else with_kwargs,
             was_forced=self.was_forced,
         )
 
@@ -1071,9 +1064,17 @@ class IRNode:
 
 def ir_value_permitted(value, ir_type, kwargs):
     if ir_type == "integer":
-        if kwargs["min_value"] is not None and value < kwargs["min_value"]:
+        min_value = kwargs["min_value"]
+        max_value = kwargs["max_value"]
+        shrink_towards = kwargs["shrink_towards"]
+        if min_value is not None and value < min_value:
             return False
-        if kwargs["max_value"] is not None and value > kwargs["max_value"]:
+        if max_value is not None and value > max_value:
+            return False
+
+        if (max_value is None or min_value is None) and (
+            value - shrink_towards
+        ).bit_length() >= 128:
             return False
 
         return True
@@ -1144,14 +1145,22 @@ class ConjectureResult:
     status: Status = attr.ib()
     interesting_origin: Optional[InterestingOrigin] = attr.ib()
     buffer: bytes = attr.ib()
-    blocks: Blocks = attr.ib()
+    # some ConjectureDatas pass through the ir and some pass through buffers.
+    # the ir does not drive its result through the buffer, which means blocks/examples
+    # may differ (I think for forced values?) even when the buffer is the same.
+    # I don't *think* anything was relying on anything but .buffer for result equality,
+    # though that assumption may be leaning on flakiness detection invariants.
+    #
+    # If we consider blocks or examples in equality checks, multiple semantically equal
+    # results get stored in e.g. the pareto front.
+    blocks: Blocks = attr.ib(eq=False)
     output: str = attr.ib()
     extra_information: Optional[ExtraInformation] = attr.ib()
     has_discards: bool = attr.ib()
     target_observations: TargetObservations = attr.ib()
     tags: FrozenSet[StructuralCoverageTag] = attr.ib()
     forced_indices: FrozenSet[int] = attr.ib(repr=False)
-    examples: Examples = attr.ib(repr=False)
+    examples: Examples = attr.ib(repr=False, eq=False)
     arg_slices: Set[Tuple[int, int]] = attr.ib(repr=False)
     slice_comments: Dict[Tuple[int, int], str] = attr.ib(repr=False)
     invalid_at: Optional[InvalidAt] = attr.ib(repr=False)
@@ -1317,7 +1326,6 @@ class HypothesisProvider(PrimitiveProvider):
 
         size = 2**bits
 
-        self._cd.start_example(BIASED_COIN_LABEL)
         while True:
             # The logic here is a bit complicated and special cased to make it
             # play better with the shrinker.
@@ -1388,7 +1396,6 @@ class HypothesisProvider(PrimitiveProvider):
                     result = i > falsey
 
             break
-        self._cd.stop_example()
         return result
 
     def draw_integer(
@@ -1439,24 +1446,20 @@ class HypothesisProvider(PrimitiveProvider):
             assert max_value is not None  # make mypy happy
             probe = max_value + 1
             while max_value < probe:
-                self._cd.start_example(ONE_BOUND_INTEGERS_LABEL)
                 probe = shrink_towards + self._draw_unbounded_integer(
                     forced=None if forced is None else forced - shrink_towards,
                     fake_forced=fake_forced,
                 )
-                self._cd.stop_example()
             return probe
 
         if max_value is None:
             assert min_value is not None
             probe = min_value - 1
             while probe < min_value:
-                self._cd.start_example(ONE_BOUND_INTEGERS_LABEL)
                 probe = shrink_towards + self._draw_unbounded_integer(
                     forced=None if forced is None else forced - shrink_towards,
                     fake_forced=fake_forced,
                 )
-                self._cd.stop_example()
             return probe
 
         return self._draw_bounded_integer(
@@ -1497,7 +1500,6 @@ class HypothesisProvider(PrimitiveProvider):
         assert self._cd is not None
 
         while True:
-            self._cd.start_example(FLOAT_STRATEGY_DO_DRAW_LABEL)
             # If `forced in nasty_floats`, then `forced` was *probably*
             # generated by drawing a nonzero index from the sampler. However, we
             # have no obligation to generate it that way when forcing. In particular,
@@ -1509,7 +1511,6 @@ class HypothesisProvider(PrimitiveProvider):
                 if sampler
                 else 0
             )
-            self._cd.start_example(DRAW_FLOAT_LABEL)
             if i == 0:
                 result = self._draw_float(
                     forced_sign_bit=forced_sign_bit,
@@ -1525,8 +1526,6 @@ class HypothesisProvider(PrimitiveProvider):
                     assert pos_clamper is not None
                     clamped = pos_clamper(result)
                 if clamped != result and not (math.isnan(result) and allow_nan):
-                    self._cd.stop_example()
-                    self._cd.start_example(DRAW_FLOAT_LABEL)
                     self._draw_float(forced=clamped, fake_forced=fake_forced)
                     result = clamped
             else:
@@ -1555,8 +1554,6 @@ class HypothesisProvider(PrimitiveProvider):
 
                 self._draw_float(forced=result, fake_forced=fake_forced)
 
-            self._cd.stop_example()  # (DRAW_FLOAT_LABEL)
-            self._cd.stop_example()  # (FLOAT_STRATEGY_DO_DRAW_LABEL)
             return result
 
     def draw_string(
@@ -1750,7 +1747,6 @@ class HypothesisProvider(PrimitiveProvider):
                 7 / 8, forced=None if forced is None else False, fake_forced=fake_forced
             )
         ):
-            self._cd.start_example(INTEGER_WEIGHTED_DISTRIBUTION)
             # For large ranges, we combine the uniform random distribution from draw_bits
             # with a weighting scheme with moderate chance.  Cutoff at 2 ** 24 so that our
             # choice of unicode characters is uniform but the 32bit distribution is not.
@@ -1761,18 +1757,15 @@ class HypothesisProvider(PrimitiveProvider):
                 upper=center if not above else min(upper, center + 2**force_bits - 1),
                 _vary_effective_size=False,
             )
-            self._cd.stop_example()
 
             assert lower <= forced <= upper
 
         while probe > gap:
-            self._cd.start_example(INTEGER_RANGE_DRAW_LABEL)
             probe = self._cd.draw_bits(
                 bits,
                 forced=None if forced is None else abs(forced - center),
                 fake_forced=fake_forced,
             )
-            self._cd.stop_example()
 
         if above:
             result = center + probe
@@ -1917,12 +1910,13 @@ class ConjectureData:
         *,
         observer: Optional[DataObserver] = None,
         provider: Union[type, PrimitiveProvider] = HypothesisProvider,
+        max_length: Optional[int] = None,
     ) -> "ConjectureData":
         from hypothesis.internal.conjecture.engine import BUFFER_SIZE
 
         return cls(
-            BUFFER_SIZE,
-            b"",
+            max_length=BUFFER_SIZE if max_length is None else max_length,
+            prefix=b"",
             random=None,
             ir_tree_prefix=ir_tree_prefix,
             observer=observer,
@@ -1963,6 +1957,7 @@ class ConjectureData:
         self.testcounter = global_test_counter
         global_test_counter += 1
         self.start_time = time.perf_counter()
+        self.gc_start_time = gc_cumulative_time()
         self.events: Dict[str, Union[str, int, float]] = {}
         self.forced_indices: "Set[int]" = set()
         self.interesting_origin: Optional[InterestingOrigin] = None
@@ -2403,6 +2398,7 @@ class ConjectureData:
             # where we cache something expensive, this led to Flaky deadline errors!
             # See https://github.com/HypothesisWorks/hypothesis/issues/2108
             start_time = time.perf_counter()
+            gc_start_time = gc_cumulative_time()
 
         strategy.validate()
 
@@ -2426,7 +2422,10 @@ class ConjectureData:
                 try:
                     return strategy.do_draw(self)
                 finally:
-                    self.draw_times[key] = time.perf_counter() - start_time
+                    # Subtract the time spent in GC to avoid overcounting, as it is
+                    # accounted for at the overall example level.
+                    in_gctime = gc_cumulative_time() - gc_start_time
+                    self.draw_times[key] = time.perf_counter() - start_time - in_gctime
             except Exception as err:
                 add_note(err, f"while generating {key[9:]!r} from {strategy!r}")
                 raise
@@ -2503,6 +2502,7 @@ class ConjectureData:
             assert isinstance(self.buffer, bytes)
             return
         self.finish_time = time.perf_counter()
+        self.gc_finish_time = gc_cumulative_time()
         assert len(self.buffer) == self.index
 
         # Always finish by closing all remaining examples so that we have a

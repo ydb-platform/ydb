@@ -24,7 +24,7 @@ i_brand in ('amalgimporto #1','edu packscholar #1','exportiimporto #1',
 group by item.i_manufact_id, date_dim.d_qoy ) tmp1
 where case when avg_quarterly_sales > 0
 	then abs (sum_sales - avg_quarterly_sales)/ avg_quarterly_sales
-	else null end > 0.1
+	else null end > $z0_1_35
 order by avg_quarterly_sales,
 	 sum_sales,
 	 i_manufact_id

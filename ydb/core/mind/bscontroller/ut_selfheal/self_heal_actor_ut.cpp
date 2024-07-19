@@ -1,6 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/util/testactorsys.h>
 #include <ydb/core/mind/bscontroller/self_heal.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/mind/bscontroller/impl.h>
 #include <ydb/core/mind/bscontroller/layout_helpers.h>
 
@@ -52,7 +53,7 @@ TIntrusivePtr<TBlobStorageGroupInfo> CreateGroup() {
         actorIds.push_back(MakeBlobStorageVDiskID(1, 1000 + i, 1000));
     }
     return MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::Erasure4Plus2Block, 1u, 0u, 1u, &actorIds,
-        TBlobStorageGroupInfo::EEM_NONE, TBlobStorageGroupInfo::ELCP_INITIAL, TCypherKey(), 0x82000000);
+        TBlobStorageGroupInfo::EEM_NONE, TBlobStorageGroupInfo::ELCP_INITIAL, TCypherKey(), TGroupId::FromValue(0x82000000));
 }
 
 TEvControllerUpdateSelfHealInfo::TGroupContent Convert(const TIntrusivePtr<TBlobStorageGroupInfo>& info,

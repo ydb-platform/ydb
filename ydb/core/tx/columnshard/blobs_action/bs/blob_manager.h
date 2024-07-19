@@ -134,8 +134,7 @@ struct TBlobManagerCounters {
 // The implementation of BlobManager that hides all GC-related details
 class TBlobManager : public IBlobManager, public TCommonBlobsTracker {
 private:
-    static constexpr size_t BLOB_COUNT_TO_TRIGGER_GC_DEFAULT = 1000;
-    static constexpr ui64 GC_INTERVAL_SECONDS_DEFAULT = 60;
+    static constexpr ui64 GC_INTERVAL_SECONDS = 30;
 
 private:
     using TBlobAddress = NBlobOperations::NBlobStorage::TBlobAddress;
@@ -144,11 +143,9 @@ private:
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
     const ui32 CurrentGen;
     ui32 CurrentStep;
-    TControlWrapper BlobCountToTriggerGC;
-    TControlWrapper GCIntervalSeconds;
     std::optional<TGenStep> CollectGenStepInFlight;
     // Lists of blobs that need Keep flag to be set
-    std::map<TGenStep, std::set<TLogoBlobID>> BlobsToKeep;
+    TBlobsByGenStep BlobsToKeep;
     // Lists of blobs that need DoNotKeep flag to be set
     TTabletsByBlob BlobsToDelete;
 
@@ -159,8 +156,8 @@ private:
     TDeque<TAllocatedGenStepConstPtr> AllocatedGenSteps;
 
     // The Gen:Step that has been acknowledged by the Distributed Storage
-    TGenStep LastCollectedGenStep = {0, 0};
-    TGenStep GCBarrierPreparation = { 0, 0 };
+    TGenStep LastCollectedGenStep;
+    TGenStep GCBarrierPreparation;
 
     // The barrier in the current in-flight GC request(s)
     bool FirstGC = true;
@@ -176,7 +173,7 @@ private:
     virtual void DoSaveBlobBatchOnExecute(const TBlobBatch& blobBatch, IBlobManagerDb& db) override;
     virtual void DoSaveBlobBatchOnComplete(TBlobBatch&& blobBatch) override;
     void DrainDeleteTo(const TGenStep& dest, TGCContext& gcContext);
-    void DrainKeepTo(const TGenStep& dest, TGCContext& gcContext);
+    [[nodiscard]] bool DrainKeepTo(const TGenStep& dest, TGCContext& gcContext);
 public:
     TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, const ui32 gen, const TTabletId selfTabletId);
 
@@ -218,11 +215,11 @@ public:
         const std::shared_ptr<TBlobManager>& manager, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobsInfo,
         const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters) noexcept;
 
-    void OnGCFinishedOnExecute(const TGenStep& genStep, IBlobManagerDb& db);
-    void OnGCFinishedOnComplete(const TGenStep& genStep);
+    void OnGCFinishedOnExecute(const std::optional<TGenStep>& genStep, IBlobManagerDb& db);
+    void OnGCFinishedOnComplete(const std::optional<TGenStep>& genStep);
 
-    void OnGCStartOnExecute(const TGenStep& genStep, IBlobManagerDb& db);
-    void OnGCStartOnComplete(const TGenStep& genStep);
+    void OnGCStartOnExecute(const std::optional<TGenStep>& genStep, IBlobManagerDb& db);
+    void OnGCStartOnComplete(const std::optional<TGenStep>& genStep);
 
     TBlobManagerCounters GetCountersUpdate() {
         TBlobManagerCounters res = CountersUpdate;
@@ -242,7 +239,7 @@ private:
     bool ExtractEvicted(TEvictedBlob& evict, TEvictMetadata& meta, bool fromDropped = false);
 
     TGenStep EdgeGenStep() const {
-        return CollectGenStepInFlight ? *CollectGenStepInFlight : LastCollectedGenStep;
+        return CollectGenStepInFlight ? *CollectGenStepInFlight : std::max(GCBarrierPreparation, LastCollectedGenStep);
     }
 };
 

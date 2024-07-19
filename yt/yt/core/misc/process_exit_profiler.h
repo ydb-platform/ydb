@@ -25,10 +25,10 @@ public:
         std::optional<TDuration> delay = {});
 
 private:
-    NProfiling::TProfiler Profiler_;
+    const NProfiling::TProfiler Profiler_;
 
     NProfiling::TEventTimer ExitDelayTimer_;
-    NProfiling::TCounter ExitOkCounter_;
+    NProfiling::TCounter ExitOKCounter_;
     NProfiling::TCounter ExitUnknownCounter_;
     THashMap<int, NProfiling::TCounter> NonZeroExitCounters_;
     THashMap<int, NProfiling::TCounter> SignalExitCounters_;
@@ -41,7 +41,7 @@ private:
 
     NProfiling::TCounter MakeSignalExitCounter(int signal);
 
-    static TString SignalName(int signal);
+    static TString GetSignalName(int signal);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

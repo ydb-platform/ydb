@@ -170,7 +170,9 @@ message TDqTransform {
 
 message TDqStreamLookupSource {
     bytes SerializedRowType = 1; //Serialized TStructType
-    //TODO Add provider-specific data source info
+    string ProviderName = 2;
+    google.protobuf.Any LookupSource = 3; //Provider specific DataSource
+    string Table = 4; //Table name to look up in
 }
 
 message TDqInputTransformLookupSettings {

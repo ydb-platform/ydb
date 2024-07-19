@@ -122,6 +122,13 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
     auto options = joinTuple.Options();
     auto linkSettings = GetEquiJoinLinkSettings(options.Ref());
     YQL_ENSURE(linkSettings.JoinAlgo != EJoinAlgoType::StreamLookupJoin || typeCtx.StreamLookupJoin, "Unsupported join strategy: streamlookup");
+
+    if (linkSettings.JoinAlgo == EJoinAlgoType::MapJoin) {
+        mode = EHashJoinMode::Map;
+    } else if (linkSettings.JoinAlgo == EJoinAlgoType::GraceJoin) {
+        mode = EHashJoinMode::GraceAndSelf;
+    }
+
     bool leftAny = linkSettings.LeftHints.contains("any");
     bool rightAny = linkSettings.RightHints.contains("any");
 
@@ -369,12 +376,17 @@ bool CheckJoinColumns(const TExprBase& node) {
     }
 }
 
+TExprBase DqRewriteEquiJoin(const TExprBase& node, EHashJoinMode mode, bool useCBO, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
+    int dummyJoinCounter;
+    return DqRewriteEquiJoin(node, mode, useCBO, ctx, typeCtx, dummyJoinCounter);
+}
+
 /**
  * Rewrite `EquiJoin` to a number of `DqJoin` callables. This is done to simplify next step of building
  * physical stages with join operators.
  * Potentially this optimizer can also perform joins reorder given cardinality information.
  */
-TExprBase DqRewriteEquiJoin(const TExprBase& node, EHashJoinMode mode, bool useCBO, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
+TExprBase DqRewriteEquiJoin(const TExprBase& node, EHashJoinMode mode, bool useCBO, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, int& joinCounter) {
     if (!node.Maybe<TCoEquiJoin>()) {
         return node;
     }
@@ -403,6 +415,8 @@ TExprBase DqRewriteEquiJoin(const TExprBase& node, EHashJoinMode mode, bool useC
     if (columnsToRename.empty() && columnsToDrop.empty()) {
         return result->Input;
     }
+
+    joinCounter += equiJoin.ArgCount() - 2;
 
     auto row = Build<TCoArgument>(ctx, node.Pos())
             .Name("row")
@@ -553,7 +567,7 @@ TExprBase DqRewriteLeftPureJoin(const TExprBase node, TExprContext& ctx, const T
         return node;
     }
 
-    if (!IsDqPureExpr(join.LeftInput())) {
+    if (!IsDqCompletePureExpr(join.LeftInput())) {
         return node;
     }
 
@@ -592,7 +606,7 @@ TExprBase DqRewriteLeftPureJoin(const TExprBase node, TExprContext& ctx, const T
         .JoinType().Build(joinType)
         .LeftJoinKeyNames(join.LeftJoinKeyNames())
         .RightJoinKeyNames(join.RightJoinKeyNames())
-        .Done();  
+        .Done();
 }
 
 TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx) {
@@ -614,7 +628,7 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
     TDqCnUnionAll leftCn = join.LeftInput().Cast<TDqCnUnionAll>();
 
     TMaybeNode<TDqCnUnionAll> rightCn = join.RightInput().Maybe<TDqCnUnionAll>();
-    YQL_ENSURE(rightCn || IsDqPureExpr(join.RightInput(), /* isPrecomputePure */ true));
+    YQL_ENSURE(rightCn || IsDqCompletePureExpr(join.RightInput(), /* isPrecomputePure */ true));
 
     TMaybeNode<TDqCnBroadcast> rightBroadcast;
     TNodeOnNodeOwnedMap rightPrecomputes;
@@ -868,7 +882,7 @@ TExprBase DqBuildJoinDict(const TDqJoin& join, TExprContext& ctx) {
     }
 
     // join stream with pure expr
-    else if (leftIsUnionAll && IsDqPureExpr(join.RightInput(), /* isPrecomputePure */ true)) {
+    else if (leftIsUnionAll && IsDqCompletePureExpr(join.RightInput(), /* isPrecomputePure */ true)) {
         auto leftCn = join.LeftInput().Cast<TDqCnUnionAll>();
 
         auto [leftJoinKeys, _] = GetJoinKeys(join, ctx);
@@ -902,7 +916,7 @@ TExprBase DqBuildJoinDict(const TDqJoin& join, TExprContext& ctx) {
     }
 
     // join pure expr with stream
-    else if (IsDqPureExpr(join.RightInput(), /* isPrecomputePure */ true) && rightIsUnionAll) {
+    else if (IsDqCompletePureExpr(join.RightInput(), /* isPrecomputePure */ true) && rightIsUnionAll) {
         auto rightCn = join.RightInput().Cast<TDqCnUnionAll>();
 
         auto [_, rightJoinKeys] = GetJoinKeys(join, ctx);
@@ -1119,25 +1133,9 @@ TExprNode::TPtr ReplaceJoinOnSide(TExprNode::TPtr&& input, const TTypeAnnotation
 
 }
 
-TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, bool useCBO, TExprContext& ctx, IOptimizationContext& optCtx) {
+TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext& ctx, IOptimizationContext& optCtx) {
     const auto joinType = join.JoinType().Value();
     YQL_ENSURE(joinType != "Cross"sv);
-
-    if (useCBO) {
-        auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
-        switch (joinAlgo) {
-            case EJoinAlgoType::LookupJoin:
-            case EJoinAlgoType::MapJoin:
-                mode = EHashJoinMode::Map;
-                break;
-            case EJoinAlgoType::GraceJoin:
-                mode = EHashJoinMode::GraceAndSelf;
-                break;
-            default:
-                break;
-        }
-
-    }
 
     const auto leftIn = join.LeftInput().Cast<TDqCnUnionAll>().Output();
     const auto rightIn = join.RightInput().Cast<TDqCnUnionAll>().Output();

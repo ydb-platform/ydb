@@ -223,9 +223,6 @@ bool IsRoundingSupported(const TExprNode& op, bool negated) {
         EDataSlot keySlot = item.KeyBaseType->Cast<TDataExprType>()->GetSlot();
 
         auto maybeCastoptions = NUdf::GetCastResult(valueSlot, keySlot);
-        if (!maybeCastoptions) {
-            return IsSameAnnotation(*item.KeyBaseType, *item.ValueBaseType);
-        }
         if (*maybeCastoptions & (NUdf::ECastOptions::MayLoseData | NUdf::ECastOptions::MayFail)) {
             auto valueTypeInfo = NUdf::GetDataTypeInfo(valueSlot);
             auto keyTypeInfo = NUdf::GetDataTypeInfo(keySlot);
@@ -1994,7 +1991,7 @@ IGraphTransformer::TStatus ConvertLiteral(TExprNode::TPtr& node, const NYql::TTy
             }
 
             auto castResult = NKikimr::NUdf::GetCastResult(from, to);
-            if (!castResult || *castResult & NKikimr::NUdf::Impossible) {
+            if (*castResult & NKikimr::NUdf::Impossible) {
                 return IGraphTransformer::TStatus::Error;
             }
 

@@ -23,16 +23,6 @@ bool TFieldDescriptor::IsDeprecated() const
     return Deprecated_;
 }
 
-int TFieldDescriptor::GetMinVersion() const
-{
-    return MinVersion_;
-}
-
-int TFieldDescriptor::GetMaxVersion() const
-{
-    return MaxVersion_;
-}
-
 const TFieldSchemaPtr& TFieldDescriptor::GetSchema() const
 {
     std::call_once(
@@ -41,8 +31,6 @@ const TFieldSchemaPtr& TFieldDescriptor::GetSchema() const
             Schema_ = New<TFieldSchema>();
             Schema_->Name = Name_;
             Schema_->Tag = Tag_;
-            Schema_->MinVersion = MinVersion_;
-            Schema_->MaxVersion = MaxVersion_;
             Schema_->Deprecated = Deprecated_;
         });
     return Schema_;

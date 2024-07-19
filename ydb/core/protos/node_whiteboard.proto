@@ -131,6 +131,7 @@ message TPDiskStateInfo {
     optional uint64 LogTotalSize = 21;
     optional uint32 ExpectedSlotCount = 22;
     optional uint64 EnforcedDynamicSlotSize = 23;
+    optional uint32 NumActiveSlots = 24;
 }
 
 message TEvPDiskStateRequest {
@@ -277,6 +278,7 @@ message TSystemStateInfo {
         optional string Name = 1;
         optional double Usage = 2 [(InsignificantChangePercent) = 30];
         optional uint32 Threads = 3;
+        optional uint32 Limit = 4;
     }
 
     message TEndpoint {

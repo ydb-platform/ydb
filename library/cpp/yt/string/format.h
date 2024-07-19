@@ -1,6 +1,8 @@
 #pragma once
 
-#include "string_builder.h"
+#include "format_string.h"
+
+#include <util/generic/string.h>
 
 namespace NYT {
 
@@ -55,14 +57,76 @@ namespace NYT {
  */
 
 template <class... TArgs>
-void Format(TStringBuilderBase* builder, TStaticFormat<TArgs...> fmt, TArgs&&... args);
-template <class... TArgs>
-void Format(TStringBuilderBase* builder, TRuntimeFormat fmt, TArgs&&... args);
+TString Format(TFormatString<TArgs...> format, TArgs&&... args);
+
+////////////////////////////////////////////////////////////////////////////////
+
+// StringBuilder(Base) definition.
+
+//! A simple helper for constructing strings by a sequence of appends.
+class TStringBuilderBase
+{
+public:
+    virtual ~TStringBuilderBase() = default;
+
+    char* Preallocate(size_t size);
+
+    void Reserve(size_t size);
+
+    size_t GetLength() const;
+
+    TStringBuf GetBuffer() const;
+
+    void Advance(size_t size);
+
+    void AppendChar(char ch);
+    void AppendChar(char ch, int n);
+
+    void AppendString(TStringBuf str);
+    void AppendString(const char* str);
+
+    template <size_t Length, class... TArgs>
+    void AppendFormat(const char (&format)[Length], TArgs&&... args);
+    template <class... TArgs>
+    void AppendFormat(TStringBuf format, TArgs&&... args);
+
+    void Reset();
+
+protected:
+    char* Begin_ = nullptr;
+    char* Current_ = nullptr;
+    char* End_ = nullptr;
+
+    virtual void DoReset() = 0;
+    virtual void DoReserve(size_t newLength) = 0;
+
+    static constexpr size_t MinBufferLength = 128;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TStringBuilder
+    : public TStringBuilderBase
+{
+public:
+    TString Flush();
+
+protected:
+    TString Buffer_;
+
+    void DoReset() override;
+    void DoReserve(size_t size) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
 
 template <class... TArgs>
-TString Format(TStaticFormat<TArgs...> fmt, TArgs&&... args);
-template <class... TArgs>
-TString Format(TRuntimeFormat fmt, TArgs&&... args);
+void Format(TStringBuilderBase* builder, TFormatString<TArgs...> format, TArgs&&... args);
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+TString ToStringViaBuilder(const T& value, TStringBuf spec = TStringBuf("v"));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -104,11 +168,11 @@ struct TFormatterWrapper
 // Allows insertion of text conditionally.
 // Usage:
 /*
- NYT::Format(
+NYT::Format(
     "Value is %v%v",
     42,
     MakeFormatterWrapper([&] (auto* builder) {
-        If (PossiblyMissingInfo_) {
+        if (PossiblyMissingInfo_) {
             builder->AppendString(", PossiblyMissingInfo: ");
             FormatValue(builder, PossiblyMissingInfo_, "v");
         }
@@ -142,7 +206,7 @@ class TLazyMultiValueFormatter
     : private TNonCopyable
 {
 public:
-    TLazyMultiValueFormatter(TStringBuf fmt, TArgs&&... args);
+    TLazyMultiValueFormatter(TStringBuf format, TArgs&&... args);
 
     // NB(arkady-e1ppa): We actually have to
     // forward declare this method as above
@@ -162,7 +226,7 @@ private:
 };
 
 template <class ... Args>
-auto MakeLazyMultiValueFormatter(TStringBuf fmt, Args&&... args);
+auto MakeLazyMultiValueFormatter(TStringBuf format, Args&&... args);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -175,23 +239,23 @@ auto MakeLazyMultiValueFormatter(TStringBuf fmt, Args&&... args);
 template <size_t Length, class TVector>
 void FormatVector(
     TStringBuilderBase* builder,
-    const char (&fmt)[Length],
+    const char (&format)[Length],
     const TVector& vec);
 
 template <class TVector>
 void FormatVector(
     TStringBuilderBase* builder,
-    TStringBuf fmt,
+    TStringBuf format,
     const TVector& vec);
 
 template <size_t Length, class TVector>
 TString FormatVector(
-    const char (&fmt)[Length],
+    const char (&format)[Length],
     const TVector& vec);
 
 template <class TVector>
 TString FormatVector(
-    TStringBuf fmt,
+    TStringBuf format,
     const TVector& vec);
 
 ////////////////////////////////////////////////////////////////////////////////

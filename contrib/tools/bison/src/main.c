@@ -1,7 +1,7 @@
 /* Top level entry point of Bison.
 
-   Copyright (C) 1984, 1986, 1989, 1992, 1995, 2000-2002, 2004-2013 Free
-   Software Foundation, Inc.
+   Copyright (C) 1984, 1986, 1989, 1992, 1995, 2000-2002, 2004-2015,
+   2018-2019 Free Software Foundation, Inc.
 
    This file is part of Bison, the GNU Compiler Compiler.
 
@@ -21,11 +21,12 @@
 #include <config.h>
 #include "system.h"
 
-#include <bitset_stats.h>
 #include <bitset.h>
+#include <bitset/stats.h>
 #include <configmake.h>
 #include <progname.h>
 #include <quotearg.h>
+#include <relocatable.h> /* relocate2 */
 #include <timevar.h>
 
 #include "LR0.h"
@@ -34,6 +35,7 @@
 #include "conflicts.h"
 #include "derives.h"
 #include "files.h"
+#include "fixits.h"
 #include "getargs.h"
 #include "gram.h"
 #include "lalr.h"
@@ -58,13 +60,9 @@
 int
 main (int argc, char *argv[])
 {
+#define DEPENDS_ON_LIBINTL 1
   set_program_name (argv[0]);
   setlocale (LC_ALL, "");
-#if 0
-  (void) bindtextdomain (PACKAGE, LOCALEDIR);
-  (void) bindtextdomain ("bison-runtime", LOCALEDIR);
-  (void) textdomain (PACKAGE);
-#endif
 
   {
     char const *cp = getenv ("LC_CTYPE");
@@ -82,9 +80,9 @@ main (int argc, char *argv[])
 
   getargs (argc, argv);
 
-  timevar_report = trace_flag & trace_time;
-  init_timevar ();
-  timevar_start (TV_TOTAL);
+  timevar_enabled = trace_flag & trace_time;
+  timevar_init ();
+  timevar_start (tv_total);
 
   if (trace_flag & trace_bitsets)
     bitset_stats_enable ();
@@ -93,29 +91,29 @@ main (int argc, char *argv[])
      and FATTRS.  In file reader.c.  The other parts are recorded in
      the grammar; see gram.h.  */
 
-  timevar_push (TV_READER);
+  timevar_push (tv_reader);
   reader ();
-  timevar_pop (TV_READER);
+  timevar_pop (tv_reader);
 
   if (complaint_status == status_complaint)
     goto finish;
 
   /* Find useless nonterminals and productions and reduce the grammar. */
-  timevar_push (TV_REDUCE);
+  timevar_push (tv_reduce);
   reduce_grammar ();
-  timevar_pop (TV_REDUCE);
+  timevar_pop (tv_reduce);
 
   /* Record other info about the grammar.  In files derives and
      nullable.  */
-  timevar_push (TV_SETS);
+  timevar_push (tv_sets);
   derives_compute ();
   nullable_compute ();
-  timevar_pop (TV_SETS);
+  timevar_pop (tv_sets);
 
   /* Compute LR(0) parser states.  See state.h for more info.  */
-  timevar_push (TV_LR0);
+  timevar_push (tv_lr0);
   generate_states ();
-  timevar_pop (TV_LR0);
+  timevar_pop (tv_lr0);
 
   /* Add lookahead sets to parser states.  Except when LALR(1) is
      requested, split states to eliminate LR(1)-relative
@@ -126,7 +124,7 @@ main (int argc, char *argv[])
      lookahead is not enough to disambiguate the parsing.  In file
      conflicts.  Also resolve s/r conflicts based on precedence
      declarations.  */
-  timevar_push (TV_CONFLICTS);
+  timevar_push (tv_conflicts);
   conflicts_solve ();
   if (!muscle_percent_define_flag_if ("lr.keep-unreachable-state"))
     {
@@ -138,42 +136,45 @@ main (int argc, char *argv[])
       free (old_to_new);
     }
   conflicts_print ();
-  timevar_pop (TV_CONFLICTS);
+  timevar_pop (tv_conflicts);
 
   /* Compute the parser tables.  */
-  timevar_push (TV_ACTIONS);
+  timevar_push (tv_actions);
   tables_generate ();
-  timevar_pop (TV_ACTIONS);
+  timevar_pop (tv_actions);
 
   grammar_rules_useless_report (_("rule useless in parser due to conflicts"));
 
   print_precedence_warnings ();
 
-  /* Output file names. */
-  compute_output_file_names ();
-
-  /* Output the detailed report on the grammar.  */
-  if (report_flag)
+  if (!update_flag)
     {
-      timevar_push (TV_REPORT);
-      print_results ();
-      timevar_pop (TV_REPORT);
-    }
+      /* Output file names. */
+      compute_output_file_names ();
 
-  /* Output the graph.  */
-  if (graph_flag)
-    {
-      timevar_push (TV_GRAPH);
-      print_graph ();
-      timevar_pop (TV_GRAPH);
-    }
+      /* Output the detailed report on the grammar.  */
+      if (report_flag)
+        {
+          timevar_push (tv_report);
+          print_results ();
+          timevar_pop (tv_report);
+        }
 
-  /* Output xml.  */
-  if (xml_flag)
-    {
-      timevar_push (TV_XML);
-      print_xml ();
-      timevar_pop (TV_XML);
+      /* Output the graph.  */
+      if (graph_flag)
+        {
+          timevar_push (tv_graph);
+          print_graph ();
+          timevar_pop (tv_graph);
+        }
+
+      /* Output xml.  */
+      if (xml_flag)
+        {
+          timevar_push (tv_xml);
+          print_xml ();
+          timevar_pop (tv_xml);
+        }
     }
 
   /* Stop if there were errors, to avoid trashing previous output
@@ -182,16 +183,19 @@ main (int argc, char *argv[])
     goto finish;
 
   /* Lookahead tokens are no longer needed. */
-  timevar_push (TV_FREE);
+  timevar_push (tv_free);
   lalr_free ();
-  timevar_pop (TV_FREE);
+  timevar_pop (tv_free);
 
   /* Output the tables and the parser to ftable.  In file output.  */
-  timevar_push (TV_PARSER);
-  output ();
-  timevar_pop (TV_PARSER);
+  if (!update_flag)
+    {
+      timevar_push (tv_parser);
+      output ();
+      timevar_pop (tv_parser);
+    }
 
-  timevar_push (TV_FREE);
+  timevar_push (tv_free);
   nullable_free ();
   derives_free ();
   tables_free ();
@@ -205,11 +209,10 @@ main (int argc, char *argv[])
      contains things such as user actions, prologue, epilogue etc.  */
   gram_scanner_free ();
   muscle_free ();
-  uniqstrs_free ();
   code_scanner_free ();
   skel_scanner_free ();
   quotearg_free ();
-  timevar_pop (TV_FREE);
+  timevar_pop (tv_free);
 
   if (trace_flag & trace_bitsets)
     bitset_stats_dump (stderr);
@@ -217,10 +220,23 @@ main (int argc, char *argv[])
  finish:
 
   /* Stop timing and print the times.  */
-  timevar_stop (TV_TOTAL);
+  timevar_stop (tv_total);
   timevar_print (stderr);
 
   cleanup_caret ();
+
+  /* Fix input file now, even if there are errors: that's less
+     warnings in the following runs.  */
+  if (!fixits_empty ())
+    {
+      if (update_flag)
+        fixits_run ();
+      else
+        complain (NULL, Wother,
+                  _("fix-its can be applied.  Rerun with option '--update'."));
+      fixits_free ();
+    }
+  uniqstrs_free ();
 
   return complaint_status ? EXIT_FAILURE : EXIT_SUCCESS;
 }

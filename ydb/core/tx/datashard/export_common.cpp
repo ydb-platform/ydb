@@ -55,18 +55,23 @@ TMaybe<Ydb::Table::CreateTableRequest> GenYdbScheme(
 
     try {
         FillTableBoundary(scheme, tableDesc, mkqlKeyType);
+        FillIndexDescription(scheme, tableDesc);
     } catch (const yexception&) {
         return Nothing();
     }
 
-    FillIndexDescription(scheme, tableDesc);
     FillStorageSettings(scheme, tableDesc);
     FillColumnFamilies(scheme, tableDesc);
     FillAttributes(scheme, pathDesc);
     FillPartitioningSettings(scheme, tableDesc);
     FillKeyBloomFilter(scheme, tableDesc);
     FillReadReplicasSettings(scheme, tableDesc);
-    FillSequenceDescription(scheme, tableDesc);
+
+    TString error;
+    Ydb::StatusIds::StatusCode status;
+    if (!FillSequenceDescription(scheme, tableDesc, status, error)) {
+        return Nothing();
+    }
 
     return scheme;
 }

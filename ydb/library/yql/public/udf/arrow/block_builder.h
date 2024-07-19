@@ -1416,6 +1416,12 @@ inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderImpl(
             return std::make_unique<TTzDateArrayBuilder<TTzDatetime, Nullable>>(typeInfoHelper, type, pool, maxLen);
         case NUdf::EDataSlot::TzTimestamp:
             return std::make_unique<TTzDateArrayBuilder<TTzTimestamp, Nullable>>(typeInfoHelper, type, pool, maxLen);
+        case NUdf::EDataSlot::TzDate32:
+            return std::make_unique<TTzDateArrayBuilder<TTzDate32, Nullable>>(typeInfoHelper, type, pool, maxLen);
+        case NUdf::EDataSlot::TzDatetime64:
+            return std::make_unique<TTzDateArrayBuilder<TTzDatetime64, Nullable>>(typeInfoHelper, type, pool, maxLen);
+        case NUdf::EDataSlot::TzTimestamp64:
+            return std::make_unique<TTzDateArrayBuilder<TTzTimestamp64, Nullable>>(typeInfoHelper, type, pool, maxLen);
         default:
             Y_ENSURE(false, "Unsupported data slot");
         }

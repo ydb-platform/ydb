@@ -65,6 +65,10 @@ public:
 
     TRequestResult ForgetScriptExecutionOperationRequest(const TString& operation) const;
 
+    void QueryRequestAsync(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const;
+
+    void WaitAsyncQueries() const;
+
     void StartTraceOpt() const;
 
     static void StopTraceOpt();

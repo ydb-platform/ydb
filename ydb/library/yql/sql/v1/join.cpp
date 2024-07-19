@@ -503,6 +503,10 @@ public:
                 linkOptions = L(linkOptions, Q(Y(Q("forceSortedMerge"))));
             } else if (TJoinLinkSettings::EStrategy::StreamLookup == descr.LinkSettings.Strategy) {
                 linkOptions = L(linkOptions, Q(Y(Q("forceStreamLookup"))));
+            } else if (TJoinLinkSettings::EStrategy::ForceMap == descr.LinkSettings.Strategy) {
+                linkOptions = L(linkOptions, Q(Y(Q("join_algo"), Q("MapJoin"))));
+            } else if (TJoinLinkSettings::EStrategy::ForceGrace == descr.LinkSettings.Strategy) {
+                linkOptions = L(linkOptions, Q(Y(Q("join_algo"), Q("GraceJoin"))));
             }
             if (leftAny) {
                 linkOptions = L(linkOptions, Q(Y(Q("left"), Q("any"))));

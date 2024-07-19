@@ -46,7 +46,6 @@ ELSEIF (PY3)
         build_dll_and_java.py
         build_info_gen.py
         build_java_codenav_index.py
-        build_java_with_error_prone.py
         build_java_with_error_prone2.py
         cat.py
         cgo1_wrapper.py
@@ -90,6 +89,7 @@ ELSEIF (PY3)
         generate_pom.py
         generate_win_vfs.py
         go_proto_wrapper.py
+        java_command_file.py
         java_pack_to_file.py
         jni_swig.py
         kt_copy.py

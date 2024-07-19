@@ -19,12 +19,6 @@ using namespace Ydb::Import;
 /// Common
 namespace {
 
-TInstant ProtoTimestampToInstant(const NProtoBuf::Timestamp& timestamp) {
-    ui64 us = timestamp.seconds() * 1000000;
-    us += timestamp.nanos() / 1000;
-    return TInstant::MicroSeconds(us);
-}
-
 TVector<TImportItemProgress> ItemsProgressFromProto(const google::protobuf::RepeatedPtrField<Ydb::Import::ImportItemProgress>& proto) {
     TVector<TImportItemProgress> result(Reserve(proto.size()));
 

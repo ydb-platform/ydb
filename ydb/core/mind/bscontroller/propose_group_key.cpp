@@ -8,7 +8,7 @@ protected:
     TEvBlobStorage::TEvControllerProposeGroupKey::TPtr Event;
     NKikimrProto::EReplyStatus Status = NKikimrProto::OK;
     ui32 NodeId = 0;
-    ui32 GroupId = 0;
+    TGroupId GroupId = TGroupId::Zero();
     ui32 LifeCyclePhase = 0;
     TString MainKeyId = "";
     TString EncryptedGroupKey = "";
@@ -23,7 +23,7 @@ public:
     {
         const auto& proto = Event->Get()->Record;
         NodeId = proto.GetNodeId();
-        GroupId = proto.GetGroupId();
+        GroupId = TGroupId::FromProto(&proto, &NKikimrBlobStorage::TEvControllerProposeGroupKey::GetGroupId);
         LifeCyclePhase = proto.GetLifeCyclePhase();
         MainKeyId =  proto.GetMainKeyId();
         EncryptedGroupKey = proto.GetEncryptedGroupKey();
@@ -37,22 +37,22 @@ public:
         const auto prevStatus = std::exchange(Status, NKikimrProto::ERROR); // assume error
         TGroupInfo *group = Self->FindGroup(GroupId);
         if (TGroupID(GroupId).ConfigurationType() != EGroupConfigurationType::Dynamic) {
-            STLOG(PRI_CRIT, BS_CONTROLLER, BSCTXPGK01, "Can't propose key for non-dynamic group", (GroupId, GroupId));
+            STLOG(PRI_CRIT, BS_CONTROLLER, BSCTXPGK01, "Can't propose key for non-dynamic group", (GroupId.GetRawId(), GroupId.GetRawId()));
         } else if (!group) {
-            STLOG(PRI_CRIT, BS_CONTROLLER, BSCTXPGK02, "Can't read group info", (GroupId, GroupId));
+            STLOG(PRI_CRIT, BS_CONTROLLER, BSCTXPGK02, "Can't read group info", (GroupId.GetRawId(), GroupId.GetRawId()));
         } else if (group->EncryptionMode.GetOrElse(0) == 0) {
-            STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK03, "Group is not encrypted", (GroupId, GroupId));
+            STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK03, "Group is not encrypted", (GroupId.GetRawId(), GroupId.GetRawId()));
         } else if (group->LifeCyclePhase.GetOrElse(0) != TBlobStorageGroupInfo::ELCP_INITIAL) {
             STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK04, "Group LifeCyclePhase does not match ELCP_INITIAL",
-                (GroupId, GroupId), (LifeCyclePhase, group->LifeCyclePhase.GetOrElse(0)));
+                (GroupId.GetRawId(), GroupId.GetRawId()), (LifeCyclePhase, group->LifeCyclePhase.GetOrElse(0)));
             IsAnotherTxInProgress = (group->LifeCyclePhase.GetOrElse(0) == TBlobStorageGroupInfo::ELCP_IN_TRANSITION);
         } else if (group->MainKeyVersion.GetOrElse(0) != (MainKeyVersion - 1)) {
             STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK05, "Group MainKeyVersion does not match required MainKeyVersion",
-                (GroupId, GroupId), (MainKeyVersion, group->MainKeyVersion.GetOrElse(0)),
+                (GroupId.GetRawId(), GroupId.GetRawId()), (MainKeyVersion, group->MainKeyVersion.GetOrElse(0)),
                 (RequiredMainKeyVersion, MainKeyVersion - 1));
         } else if (EncryptedGroupKey.size() != 32 + sizeof(ui32)) {
             STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXPGK06, "Group does not accept EncryptedGroupKey size",
-                (GroupId, GroupId), (EncryptedGroupKeySize, EncryptedGroupKey.size()),
+                (GroupId.GetRawId(), GroupId.GetRawId()), (EncryptedGroupKeySize, EncryptedGroupKey.size()),
                 (ExpectedEncryptedGroupKeySize, 32 + sizeof(ui32)));
         } else {
             Status = prevStatus; // return old status
@@ -70,7 +70,7 @@ public:
         group->EncryptedGroupKey = EncryptedGroupKey;
         group->GroupKeyNonce = GroupKeyNonce;
         group->MainKeyVersion = MainKeyVersion;
-        db.Table<Schema::Group>().Key(GroupId).Update(
+        db.Table<Schema::Group>().Key(GroupId.GetRawId()).Update(
             NIceDb::TUpdate<Schema::Group::LifeCyclePhase>(TBlobStorageGroupInfo::ELCP_IN_USE),
             NIceDb::TUpdate<Schema::Group::MainKeyId>(MainKeyId),
             NIceDb::TUpdate<Schema::Group::EncryptedGroupKey>(EncryptedGroupKey),
@@ -109,7 +109,7 @@ public:
         }
         if (!IsAnotherTxInProgress) {
             // Get groupinfo for the group and send it to all whom it may concern.
-            Self->NotifyNodesAwaitingKeysForGroups(GroupId);
+            Self->NotifyNodesAwaitingKeysForGroups(GroupId.GetRawId());
         }
     }
 };

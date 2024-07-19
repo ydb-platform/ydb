@@ -48,7 +48,7 @@ void TPDisk::InitSysLogger() {
     SysLogger.Reset(new TSysLogWriter(Mon, *BlockDevice.Get(), Format,
         SysLogRecord.Nonces.Value[NonceSysLog], Format.SysLogKey, BufferPool.Get(),
         beginSectorIdx, endSectorIdx, Format.MagicSysLogChunk, 0, nullptr, writeSectorIdx, nullptr, ActorSystem, PDiskId,
-        &DriveModel, Cfg->UseT1ha0HashInFooter, Cfg->EnableSectorEncryption));
+        &DriveModel, Cfg->EnableSectorEncryption));
 }
 
 bool TPDisk::InitCommonLogger() {
@@ -67,7 +67,7 @@ bool TPDisk::InitCommonLogger() {
     CommonLogger.Reset(new TLogWriter(Mon, *BlockDevice.Get(), Format,
             SysLogRecord.Nonces.Value[NonceLog], Format.LogKey, BufferPool.Get(), 0, UsableSectorsPerLogChunk(),
             Format.MagicLogChunk, chunkIdx, info, std::min(sectorIdx, UsableSectorsPerLogChunk()),
-            InitialTailBuffer, ActorSystem, PDiskId, &DriveModel, Cfg->UseT1ha0HashInFooter, Cfg->EnableSectorEncryption));
+            InitialTailBuffer, ActorSystem, PDiskId, &DriveModel, Cfg->EnableSectorEncryption));
     InitialTailBuffer = nullptr;
     if (sectorIdx >= UsableSectorsPerLogChunk()) {
         if (!AllocateLogChunks(1, 0, OwnerSystem, 0, EOwnerGroupType::Static, true)) {
@@ -1290,7 +1290,7 @@ void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
         ui32 dataChunkSizeSectors = Format.ChunkSize / Format.SectorSize;
         TLogWriter writer(Mon, *BlockDevice.Get(), Format, nonce, Format.LogKey, BufferPool.Get(), desiredSectorIdx,
                 dataChunkSizeSectors, Format.MagicLogChunk, req.GapStart->ChunkIdx, nullptr, desiredSectorIdx,
-                nullptr, ActorSystem, PDiskId, &DriveModel, Cfg->UseT1ha0HashInFooter, Cfg->EnableSectorEncryption);
+                nullptr, ActorSystem, PDiskId, &DriveModel, Cfg->EnableSectorEncryption);
 
         Y_VERIFY_S(req.GapEnd->DesiredPrevChunkLastNonce, "PDiskId# " << PDiskId
             << "Zero GapEnd->DesiredPrevChunkLastNonce, chunkInfo# " << *req.GapEnd);

@@ -89,6 +89,7 @@ bool IsVersionedType(EObjectType type)
         type == EObjectType::AccountResourceUsageLeaseMap ||
         type == EObjectType::SchedulerPoolTreeMap ||
         type == EObjectType::Link ||
+        type == EObjectType::SequoiaLink ||
         type == EObjectType::Document ||
         type == EObjectType::LockMap ||
         type == EObjectType::TabletMap ||
@@ -282,6 +283,11 @@ bool IsUploadTransactionType(EObjectType type)
     return
         type == EObjectType::UploadTransaction ||
         type == EObjectType::UploadNestedTransaction;
+}
+
+bool IsCompositeNodeType(EObjectType type)
+{
+    return type == EObjectType::MapNode || type == EObjectType::ListNode;
 }
 
 bool HasSchema(EObjectType type)

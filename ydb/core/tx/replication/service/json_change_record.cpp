@@ -1,9 +1,7 @@
 #include "json_change_record.h"
 
-#include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/io_formats/cell_maker/cell_maker.h>
-
-#include <util/memory/pool.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 
 namespace NKikimr::NReplication::NService {
 
@@ -71,7 +69,9 @@ static bool ParseValue(TVector<NTable::TTag>& tags, TVector<TCell>& cells,
     return true;
 }
 
-void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record, TMemoryPool& pool) const {
+void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TChange& record, TSerializationContext& ctx) const {
+    auto& pool = ctx.MemoryPool;
+    pool.Clear();
     record.SetSourceOffset(GetOrder());
     // TODO: fill WriteTxId
 
@@ -107,9 +107,9 @@ void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TC
     }
 }
 
-void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record) const {
-    TMemoryPool pool(256);
-    Serialize(record, pool);
+void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TChange& record) const {
+    TSerializationContext ctx;
+    Serialize(record, ctx);
 }
 
 TConstArrayRef<TCell> TChangeRecord::GetKey(TMemoryPool& pool) const {

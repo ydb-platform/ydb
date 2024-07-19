@@ -619,6 +619,22 @@ void FromProto(
     FromProto(&statistics->InnerStatistics, protoStatistics.inner_statistics());
 }
 
+void ToProto(
+    NProto::TVersionedReadOptions* protoOptions,
+    const NTableClient::TVersionedReadOptions& options)
+{
+    protoOptions->set_read_mode(static_cast<i32>(options.ReadMode));
+}
+
+void FromProto(
+    NTableClient::TVersionedReadOptions* options,
+    const NProto::TVersionedReadOptions& protoOptions)
+{
+    if (protoOptions.has_read_mode()) {
+        options->ReadMode = CheckedEnumCast<EVersionedIOMode>(protoOptions.read_mode());
+    }
+}
+
 void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operation)
 {
     protoOperation->Clear();
@@ -947,6 +963,9 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     if (job.JobCookie) {
         protoJob->set_job_cookie(*job.JobCookie);
     }
+    if (job.ArchiveFeatures) {
+        protoJob->set_archive_features(job.ArchiveFeatures.ToString());
+    }
 }
 
 void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
@@ -1085,6 +1104,11 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
         job->JobCookie = protoJob.job_cookie();
     } else {
         job->JobCookie.reset();
+    }
+    if (protoJob.has_archive_features()) {
+        job->ArchiveFeatures = TYsonString(protoJob.archive_features());
+    } else {
+        job->ArchiveFeatures = TYsonString();
     }
 }
 
@@ -1355,7 +1379,7 @@ void ToProto(
         protoQuery->set_start_time(NYT::ToProto<i64>(*query.StartTime));
     }
     if (query.FinishTime) {
-        protoQuery->set_start_time(NYT::ToProto<i64>(*query.FinishTime));
+        protoQuery->set_finish_time(NYT::ToProto<i64>(*query.FinishTime));
     }
     if (query.Settings) {
         protoQuery->set_settings(query.Settings.ToString());
@@ -1366,6 +1390,8 @@ void ToProto(
     if (query.AccessControlObject) {
         protoQuery->set_access_control_object(*query.AccessControlObject);
     }
+    protoQuery->set_access_control_objects(query.AccessControlObjects->ToString());
+
     if (query.State) {
         protoQuery->set_state(ConvertQueryStateToProto(*query.State));
     }
@@ -1431,6 +1457,11 @@ void FromProto(
         query->AccessControlObject = protoQuery.access_control_object();
     } else {
         query->AccessControlObject.reset();
+    }
+    if (protoQuery.has_access_control_objects()) {
+        query->AccessControlObjects = TYsonString(protoQuery.access_control_objects());
+    } else {
+        query->AccessControlObjects.reset();
     }
     if (protoQuery.has_state()) {
         query->State = ConvertQueryStateFromProto(protoQuery.state());

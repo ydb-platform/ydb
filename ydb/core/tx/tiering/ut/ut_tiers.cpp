@@ -555,7 +555,6 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
-            .SetEnableBackgroundTasks(true)
         ;
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
@@ -862,7 +861,6 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
-            .SetEnableBackgroundTasks(true)
         ;
         auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();
         csControllerGuard->SetCompactionsLimit(5);

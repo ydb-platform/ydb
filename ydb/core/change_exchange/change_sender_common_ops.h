@@ -238,7 +238,7 @@ class TBaseChangeSender {
                 EraseNodesIf(broadcast.PendingPartitions, [&](ui64 partitionId) {
                     if (Senders.contains(partitionId)) {
                         auto& sender = Senders.at(partitionId);
-                        sender.Prepared.push_back(std::move(it->second));
+                        sender.Prepared.push_back(it->second);
                         if (!sender.ActorId) {
                             Y_ABORT_UNLESS(!sender.Ready);
                             registrations.insert(partitionId);
@@ -336,7 +336,7 @@ class TBaseChangeSender {
         Y_ABORT_UNLESS(it != Broadcasting.end());
 
         auto& broadcast = it->second;
-        if (broadcast.Partitions.contains(partitionId)) {
+        if (broadcast.CompletedPartitions.contains(partitionId)) {
             return false;
         }
 

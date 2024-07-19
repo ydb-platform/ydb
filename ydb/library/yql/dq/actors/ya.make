@@ -15,6 +15,7 @@ END()
 
 RECURSE(
     compute
+    input_transforms
     spilling
     task_runner
 )

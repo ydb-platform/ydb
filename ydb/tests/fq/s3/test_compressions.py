@@ -15,7 +15,9 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
 
 class TestS3Compressions:
     def create_bucket_and_upload_file(self, filename, s3, kikimr):
-        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", "ydb/tests/fq/s3/test_compression_data")
+        s3_helpers.create_bucket_and_upload_file(
+            filename, s3.s3_url, "fbucket", "ydb/tests/fq/s3/test_compression_data"
+        )
         kikimr.control_plane.wait_bootstrap(1)
 
     def validate_result(self, result_set):
@@ -33,14 +35,17 @@ class TestS3Compressions:
         assert result_set.rows[0].items[2].bytes_value == b"abc"
 
     @yq_all
-    @pytest.mark.parametrize("filename, compression", [
-        ("test.json.gz", "gzip"),
-        ("test.json.lz4", "lz4"),
-        ("test.json.br", "brotli"),
-        ("test.json.bz2", "bzip2"),
-        ("test.json.zst", "zstd"),
-        ("test.json.xz", "xz")
-    ])
+    @pytest.mark.parametrize(
+        "filename, compression",
+        [
+            ("test.json.gz", "gzip"),
+            ("test.json.lz4", "lz4"),
+            ("test.json.br", "brotli"),
+            ("test.json.bz2", "bzip2"),
+            ("test.json.zst", "zstd"),
+            ("test.json.xz", "xz"),
+        ],
+    )
     def test_compression(self, kikimr, s3, client, filename, compression, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
         storage_connection_name = unique_prefix + "fruitbucket"
@@ -54,7 +59,9 @@ class TestS3Compressions:
                 description String NOT NULL,
                 info String NOT NULL
             ));
-            '''.format(storage_connection_name, filename, compression)
+            '''.format(
+            storage_connection_name, filename, compression
+        )
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -64,14 +71,17 @@ class TestS3Compressions:
         self.validate_result(result_set)
 
     @yq_all
-    @pytest.mark.parametrize("filename, compression", [
-        ("big.json.gz", "gzip"),
-        ("big.json.lz4", "lz4"),
-        ("big.json.br", "brotli"),
-        ("big.json.bz2", "bzip2"),
-        ("big.json.zst", "zstd"),
-        ("big.json.xz", "xz")
-    ])
+    @pytest.mark.parametrize(
+        "filename, compression",
+        [
+            ("big.json.gz", "gzip"),
+            ("big.json.lz4", "lz4"),
+            ("big.json.br", "brotli"),
+            ("big.json.bz2", "bzip2"),
+            ("big.json.zst", "zstd"),
+            ("big.json.xz", "xz"),
+        ],
+    )
     def test_big_compression(self, kikimr, s3, client, filename, compression, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
         storage_connection_name = unique_prefix + "fruitbucket"
@@ -83,7 +93,9 @@ class TestS3Compressions:
             WITH (format=json_each_row, compression="{}", SCHEMA (
                 a String NOT NULL
             ));
-            '''.format(storage_connection_name, filename, compression)
+            '''.format(
+            storage_connection_name, filename, compression
+        )
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -102,20 +114,14 @@ class TestS3Compressions:
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_invalid_compression(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("fbucket")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         fruits = R'''Fruit,Price,Weight
@@ -143,4 +149,6 @@ Pear,15,33'''
         describe_result = client.describe_query(query_id).result
         logging.debug("Describe result: {}".format(describe_result))
         describe_string = "{}".format(describe_result)
-        assert "Unknown compression: some_compression. Use one of: gzip, zstd, lz4, brotli, bzip2, xz" in describe_string
+        assert (
+            "Unknown compression: some_compression. Use one of: gzip, zstd, lz4, brotli, bzip2, xz" in describe_string
+        )

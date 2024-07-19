@@ -1,0 +1,81 @@
+{
+    "test.test[solomon-BadDownsamplingAggregation-]": [
+        {
+            "uri": "file://test.test_solomon-BadDownsamplingAggregation-_/extracted"
+        }
+    ],
+    "test.test[solomon-BadDownsamplingDisabled-]": [
+        {
+            "uri": "file://test.test_solomon-BadDownsamplingDisabled-_/extracted"
+        }
+    ],
+    "test.test[solomon-BadDownsamplingFill-]": [
+        {
+            "uri": "file://test.test_solomon-BadDownsamplingFill-_/extracted"
+        }
+    ],
+    "test.test[solomon-BadDownsamplingInterval-]": [
+        {
+            "uri": "file://test.test_solomon-BadDownsamplingInterval-_/extracted"
+        }
+    ],
+    "test.test[solomon-Basic-default.txt]": [
+        {
+            "uri": "file://test.test_solomon-Basic-default.txt_/results.txt"
+        },
+        {
+            "uri": "file://test.test_solomon-Basic-default.txt_/opt.yql"
+        },
+        {
+            "uri": "file://test.test_solomon-Basic-default.txt_/plan.txt"
+        }
+    ],
+    "test.test[solomon-BrokenJsonResponse-]": [
+        {
+            "uri": "file://test.test_solomon-BrokenJsonResponse-_/extracted"
+        }
+    ],
+    "test.test[solomon-Downsampling-default.txt]": [
+        {
+            "uri": "file://test.test_solomon-Downsampling-default.txt_/results.txt"
+        },
+        {
+            "uri": "file://test.test_solomon-Downsampling-default.txt_/opt.yql"
+        },
+        {
+            "uri": "file://test.test_solomon-Downsampling-default.txt_/plan.txt"
+        }
+    ],
+    "test.test[solomon-DownsamplingValidSettings-default.txt]": [
+        {
+            "uri": "file://test.test_solomon-DownsamplingValidSettings-default.txt_/results.txt"
+        },
+        {
+            "uri": "file://test.test_solomon-DownsamplingValidSettings-default.txt_/opt.yql"
+        },
+        {
+            "uri": "file://test.test_solomon-DownsamplingValidSettings-default.txt_/plan.txt"
+        }
+    ],
+    "test.test[solomon-InvalidProject-]": [
+        {
+            "uri": "file://test.test_solomon-InvalidProject-_/extracted"
+        }
+    ],
+    "test.test[solomon-LabelColumns-default.txt]": [
+        {
+            "uri": "file://test.test_solomon-LabelColumns-default.txt_/results.txt"
+        },
+        {
+            "uri": "file://test.test_solomon-LabelColumns-default.txt_/opt.yql"
+        },
+        {
+            "uri": "file://test.test_solomon-LabelColumns-default.txt_/plan.txt"
+        }
+    ],
+    "test.test[solomon-UnknownSetting-]": [
+        {
+            "uri": "file://test.test_solomon-UnknownSetting-_/extracted"
+        }
+    ]
+}

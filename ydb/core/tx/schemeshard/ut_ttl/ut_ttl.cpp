@@ -155,6 +155,29 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         )", {NKikimrScheme::StatusSchemeError});
     }
 
+    Y_UNIT_TEST(CreateTableShouldFailOnBeforeEpochTTL) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // An attempt to create 100-year TTL.
+        // The TTL behaviour is undefined before 1970,
+        // so it's forbidden.
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLEnabledTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "modified_at" Type: "Timestamp" }
+            KeyColumnNames: ["key"]
+            TTLSettings {
+              Enabled {
+                ColumnName: "modified_at"
+                ExpireAfterSeconds: 3153600000
+              }
+            }
+        )", {NKikimrScheme::StatusSchemeError});
+    }    
+
     void CreateTableOnIndexedTable(NKikimrSchemeOp::EIndexType indexType) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

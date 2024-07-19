@@ -3,7 +3,6 @@ import "ydb/library/actors/protos/interconnect.proto";
 import "ydb/core/protos/console_base.proto";
 import "ydb/core/protos/console_config.proto";
 import "ydb/core/protos/console_tenant.proto";
-import "ydb/core/protos/datashard_load.proto";
 import "ydb/core/protos/tablet_counters.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/tx_proxy.proto";
@@ -13,7 +12,6 @@ import "ydb/core/protos/bind_channel_storage_pool.proto";
 import "ydb/core/protos/msgbus_kv.proto";
 import "ydb/core/protos/msgbus_pq.proto";
 import "ydb/core/protos/scheme_log.proto";
-import "ydb/core/protos/base.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/blobstorage_config.proto";
 import "ydb/core/protos/node_broker.proto";
@@ -21,7 +19,6 @@ import "ydb/core/protos/cms.proto";
 import "ydb/core/protos/sqs.proto";
 import "ydb/core/protos/query_stats.proto";
 import "ydb/core/protos/subdomains.proto";
-import "ydb/core/protos/load_test.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
@@ -244,13 +241,6 @@ message TResponse {
     // TChooseProxyRequest
     optional string ProxyName = 1050;
     optional uint64 ProxyCookie = 1051;
-
-    // TWhoAmI
-    optional string UserName = 1100;
-    repeated string Groups = 1101;
-
-    // Login
-    optional string UserToken = 1102;
 }
 
 message TFakeConfigDummy {
@@ -332,6 +322,7 @@ message THiveCreateTablet {
     repeated TCmdCreateTablet CmdCreateTablet = 1;
     repeated TCmdLookupTablet CmdLookupTablet = 3;
     optional uint32 DomainUid = 2; // mandatory, Domain unique id, in most cases 1
+    optional uint64 HiveId = 4;
 }
 
 message THiveCreateTabletResult {
@@ -463,11 +454,6 @@ message TChooseProxyRequest {
     optional uint32 DataCenterNum = 1;
     optional string DataCenter = 3;
     optional bool PreferLocalProxy = 2 [default = false];
-}
-
-message TWhoAmI {
-    optional bool ReturnGroups = 1;
-    optional string SecurityToken = 5;
 }
 
 message TBlobStorageConfigRequest {
@@ -716,6 +702,8 @@ message TTestShardControlRequest {
         repeated TTimeInterval WritePeriods = 7; // time between two events
         repeated TTimeInterval RestartPeriods = 8; // time between automatic restarts
         optional uint32 PatchRequestsFractionPPM = 12;
+        optional uint32 PutTraceFractionPPM = 13;
+        optional uint32 PutTraceVerbosity = 14 [default = 15];
     }
 
     optional uint64 TabletId = 1;
@@ -726,10 +714,3 @@ message TTestShardControlRequest {
 
 message TTestShardControlResponse {
 }
-
-message TLoginRequest {
-    optional string Database = 1;
-    optional string User = 2;
-    optional string Password = 3;
-};
-

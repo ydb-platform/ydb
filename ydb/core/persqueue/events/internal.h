@@ -5,9 +5,11 @@
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/persqueue/blob.h>
+#include <ydb/core/persqueue/percentile_counter.h>
 #include <ydb/core/persqueue/key.h>
 #include <ydb/core/persqueue/sourceid_info.h>
 #include <ydb/core/persqueue/metering_sink.h>
+#include <ydb/core/persqueue/write_id.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
@@ -1080,6 +1082,7 @@ struct TEvPQ {
         ui64 MessagesWrittenTotal;
         ui64 MessagesWrittenGrpc;
         TVector<ui64> MessagesSizes;
+        THolder<NPQ::TMultiBucketCounter> InputLags;
     };
 
     struct TEvGetWriteInfoError : public TEventLocal<TEvGetWriteInfoError, EvGetWriteInfoError> {
@@ -1156,12 +1159,12 @@ struct TEvPQ {
     };
 
     struct TEvTransactionCompleted : TEventLocal<TEvTransactionCompleted, EvTransactionCompleted> {
-        explicit TEvTransactionCompleted(TMaybe<ui64> writeId) :
+        explicit TEvTransactionCompleted(const TMaybe<NPQ::TWriteId>& writeId) :
             WriteId(writeId)
         {
         }
 
-        TMaybe<ui64> WriteId;
+        TMaybe<NPQ::TWriteId> WriteId;
     };
 };
 

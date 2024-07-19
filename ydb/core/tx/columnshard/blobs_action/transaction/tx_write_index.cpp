@@ -9,7 +9,7 @@ namespace NKikimr::NColumnShard {
 bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     auto changes = Ev->Get()->IndexChanges;
     TMemoryProfileGuard mpg("TTxWriteIndex::Execute::" + changes->TypeString());
-    TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("external_task_id", changes->GetTaskIdentifier());
+    TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())("external_task_id", changes->GetTaskIdentifier());
     Y_ABORT_UNLESS(Self->InsertTable);
     Y_ABORT_UNLESS(Self->TablesManager.HasPrimaryIndex());
     txc.DB.NoMoreReadsForTx();
@@ -35,8 +35,8 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         NOlap::TBlobManagerDb blobsDb(txc.DB);
         changes->MutableBlobsAction().OnExecuteTxAfterAction(*Self, blobsDb, false);
         for (ui32 i = 0; i < changes->GetWritePortionsCount(); ++i) {
-            auto& portion = changes->GetWritePortionInfo(i)->GetPortionResult();
-            LOG_S_WARN(TxPrefix() << "(" << changes->TypeString() << ":" << portion.DebugString() << ") blob cannot apply changes: " << TxSuffix());
+            const auto* portion = changes->GetWritePortionInfo(i);
+            LOG_S_WARN(TxPrefix() << "(" << changes->TypeString() << ":" << portion->DebugString() << ") blob cannot apply changes: " << TxSuffix());
         }
         NOlap::TChangesFinishContext context("cannot write index blobs: " + ::ToString(Ev->Get()->GetPutStatus()));
         changes->Abort(*Self, context);
@@ -48,7 +48,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
 }
 
 void TTxWriteIndex::Complete(const TActorContext& ctx) {
-    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID()));
+    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID()));
     CompleteReady = true;
     auto changes = Ev->Get()->IndexChanges;
     TMemoryProfileGuard mpg("TTxWriteIndex::Complete::" + changes->TypeString());
@@ -81,10 +81,13 @@ TTxWriteIndex::TTxWriteIndex(TColumnShard* self, TEvPrivate::TEvWriteIndex::TPtr
     , Ev(ev)
     , TabletTxNo(++Self->TabletTxCounter)
 {
+    AFL_VERIFY(Ev && Ev->Get()->IndexChanges);
+
     NOlap::TSnapshot snapshot(Self->LastPlannedStep, Self->LastPlannedTxId);
     auto changes = Ev->Get()->IndexChanges;
-    AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnTxCreate(changes, snapshot));
-    Y_ABORT_UNLESS(Ev && Ev->Get()->IndexChanges);
+    if (Ev->Get()->GetPutStatus() == NKikimrProto::OK) {
+        AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnTxCreate(changes, snapshot));
+    }
 }
 
 void TTxWriteIndex::Describe(IOutputStream& out) const noexcept {

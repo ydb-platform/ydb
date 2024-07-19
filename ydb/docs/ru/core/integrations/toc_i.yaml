@@ -3,6 +3,8 @@ items:
   href: fluent-bit.md
 - name: Плагин-источник данных Grafana
   href: grafana.md
+- name: Плагины Logstash
+  href: logstash.md
 - name: Миграции с помощью goose
   href: goose.md
 - name: Миграции с помощью Liquibase

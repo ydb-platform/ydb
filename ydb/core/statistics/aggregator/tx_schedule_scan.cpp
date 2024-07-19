@@ -11,30 +11,30 @@ struct TStatisticsAggregator::TTxScheduleScan : public TTxBase {
 
     TTxType GetTxType() const override { return TXTYPE_SCHEDULE_SCAN; }
 
-    bool Execute(TTransactionContext&, const TActorContext&) override {
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxScheduleScan::Execute");
+
+        Self->Schedule(Self->ScheduleScanIntervalTime, new TEvPrivate::TEvScheduleScan());
+
+        if (!Self->EnableColumnStatistics) {
+            return true;
+        }
+
+        if (Self->ScanTableId.PathId) {
+            return true; // scan is in progress
+        }
+
+        NIceDb::TNiceDb db(txc.DB);
+        Self->ScheduleNextScan(db);
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext&) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxScheduleScan::Complete");
-
-        if (Self->ScanTablesByTime.empty()) {
-            return;
-        }
-
-        auto& topTable = Self->ScanTablesByTime.top();
-        auto evScan = std::make_unique<TEvStatistics::TEvScanTable>();
-        PathIdFromPathId(topTable.PathId, evScan->Record.MutablePathId());
-
-        ctx.Send(Self->SelfId(), evScan.release());
     }
 };
 
 void TStatisticsAggregator::Handle(TEvPrivate::TEvScheduleScan::TPtr&) {
-    if (ScanTableId.PathId) {
-        return; // scan is in progress
-    }
     Execute(new TTxScheduleScan(this), TActivationContext::AsActorContext());
 }
 

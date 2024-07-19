@@ -336,6 +336,7 @@ public:
     const ::NMonitoring::TDynamicCounters::TCounterPtr RecompileRequestGet() const;
     ::NMonitoring::TDynamicCounterPtr GetKqpCounters() const;
     ::NMonitoring::TDynamicCounterPtr GetQueryReplayCounters() const;
+    ::NMonitoring::TDynamicCounterPtr GetWorkloadManagerCounters() const;
     const ::NMonitoring::TDynamicCounters::TCounterPtr GetActiveSessionActors() const;
     const ::NMonitoring::TDynamicCounters::TCounterPtr GetTxReplySizeExceededError() const;
     const ::NMonitoring::TDynamicCounters::TCounterPtr GetDataShardTxReplySizeExceededError() const;
@@ -346,6 +347,8 @@ public:
     void RemoveDbCounters(const TString& database);
 
 public:
+    ::NMonitoring::TDynamicCounterPtr WorkloadManagerGroup;
+
     ::NMonitoring::TDynamicCounters::TCounterPtr FullScansExecuted;
     
     // Lease updates counters

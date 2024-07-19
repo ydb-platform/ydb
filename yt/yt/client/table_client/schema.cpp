@@ -749,7 +749,7 @@ bool TTableSchema::IsEmpty() const
     return Columns().empty();
 }
 
-bool TTableSchema::IsCGCompatarorApplicable() const
+bool TTableSchema::IsCGComparatorApplicable() const
 {
     auto keyTypes = GetKeyColumnTypes();
     return std::none_of(keyTypes.begin(), keyTypes.end(), [] (auto type) {
@@ -962,6 +962,35 @@ TTableSchemaPtr TTableSchema::ToQuery() const
     }
 }
 
+TTableSchemaPtr TTableSchema::ToWriteViaQueueProducer() const
+{
+    std::vector<TColumnSchema> columns;
+    if (IsSorted()) {
+        for (const auto& column : Columns()) {
+            if (!column.Expression()) {
+                columns.push_back(column);
+            }
+        }
+    } else {
+        columns.push_back(TColumnSchema(TabletIndexColumnName, ESimpleLogicalValueType::Int64)
+            .SetSortOrder(ESortOrder::Ascending));
+        columns.push_back(TColumnSchema(SequenceNumberColumnName, ESimpleLogicalValueType::Int64));
+        for (const auto& column : Columns()) {
+            if (column.StableName().Underlying() != TimestampColumnName &&
+                column.StableName().Underlying() != CumulativeDataWeightColumnName)
+            {
+                columns.push_back(column);
+            }
+        }
+    }
+    return New<TTableSchema>(
+        std::move(columns),
+        Strict_,
+        UniqueKeys_,
+        ETableSchemaModification::None,
+        DeletedColumns());
+}
+
 TTableSchemaPtr TTableSchema::ToWrite() const
 {
     std::vector<TColumnSchema> columns;
@@ -982,8 +1011,12 @@ TTableSchemaPtr TTableSchema::ToWrite() const
             }
         }
     }
-    return New<TTableSchema>(std::move(columns), Strict_, UniqueKeys_,
-        ETableSchemaModification::None, DeletedColumns());
+    return New<TTableSchema>(
+        std::move(columns),
+        Strict_,
+        UniqueKeys_,
+        ETableSchemaModification::None,
+        DeletedColumns());
 }
 
 TTableSchemaPtr TTableSchema::WithTabletIndex() const
@@ -994,8 +1027,12 @@ TTableSchemaPtr TTableSchema::WithTabletIndex() const
         auto columns = Columns();
         // XXX: Is it ok? $tablet_index is usually a key column.
         columns.push_back(TColumnSchema(TabletIndexColumnName, ESimpleLogicalValueType::Int64));
-        return New<TTableSchema>(std::move(columns), Strict_, UniqueKeys_,
-            ETableSchemaModification::None, DeletedColumns());
+        return New<TTableSchema>(
+            std::move(columns),
+            Strict_,
+            UniqueKeys_,
+            ETableSchemaModification::None,
+            DeletedColumns());
     }
 }
 
@@ -1007,8 +1044,12 @@ TTableSchemaPtr TTableSchema::ToVersionedWrite() const
         auto columns = Columns();
         columns.insert(columns.begin(), TColumnSchema(TabletIndexColumnName, ESimpleLogicalValueType::Int64)
             .SetSortOrder(ESortOrder::Ascending));
-        return New<TTableSchema>(std::move(columns), Strict_, UniqueKeys_,
-            ETableSchemaModification::None, DeletedColumns());
+        return New<TTableSchema>(
+            std::move(columns),
+            Strict_,
+            UniqueKeys_,
+            ETableSchemaModification::None,
+            DeletedColumns());
     }
 }
 
@@ -1050,8 +1091,12 @@ TTableSchemaPtr TTableSchema::ToKeys() const
     }
     const auto& info = *ColumnInfo_;
     std::vector<TColumnSchema> columns(info.Columns.begin(), info.Columns.begin() + KeyColumnCount_);
-    return New<TTableSchema>(std::move(columns), Strict_, UniqueKeys_,
-        ETableSchemaModification::None, info.DeletedColumns);
+    return New<TTableSchema>(
+        std::move(columns),
+        Strict_,
+        UniqueKeys_,
+        ETableSchemaModification::None,
+        info.DeletedColumns);
 }
 
 TTableSchemaPtr TTableSchema::ToUniqueKeys() const
@@ -1065,8 +1110,12 @@ TTableSchemaPtr TTableSchema::ToUniqueKeys() const
             std::vector<TDeletedColumn>());
     }
     const auto& info = *ColumnInfo_;
-    return New<TTableSchema>(info.Columns, Strict_, /*uniqueKeys*/ true,
-        ETableSchemaModification::None, info.DeletedColumns);
+    return New<TTableSchema>(
+        info.Columns,
+        Strict_,
+        /*uniqueKeys*/ true,
+        ETableSchemaModification::None,
+        info.DeletedColumns);
 }
 
 TTableSchemaPtr TTableSchema::ToStrippedColumnAttributes() const
@@ -1085,8 +1134,12 @@ TTableSchemaPtr TTableSchema::ToStrippedColumnAttributes() const
         auto& strippedColumn = strippedColumns.emplace_back(column.Name(), column.LogicalType());
         strippedColumn.SetStableName(column.StableName());
     }
-    return New<TTableSchema>(std::move(strippedColumns), Strict_, /*uniqueKeys*/ false,
-        ETableSchemaModification::None, info.DeletedColumns);
+    return New<TTableSchema>(
+        std::move(strippedColumns),
+        Strict_,
+        /*uniqueKeys*/ false,
+        ETableSchemaModification::None,
+        info.DeletedColumns);
 }
 
 TTableSchemaPtr TTableSchema::ToSortedStrippedColumnAttributes() const
@@ -1105,8 +1158,12 @@ TTableSchemaPtr TTableSchema::ToSortedStrippedColumnAttributes() const
         auto& strippedColumn = strippedColumns.emplace_back(column.Name(), column.LogicalType(), column.SortOrder());
         strippedColumn.SetStableName(column.StableName());
     }
-    return New<TTableSchema>(std::move(strippedColumns), Strict_, UniqueKeys_,
-        ETableSchemaModification::None, info.DeletedColumns);
+    return New<TTableSchema>(
+        std::move(strippedColumns),
+        Strict_,
+        UniqueKeys_,
+        ETableSchemaModification::None,
+        info.DeletedColumns);
 }
 
 TTableSchemaPtr TTableSchema::ToCanonical() const
@@ -1127,8 +1184,12 @@ TTableSchemaPtr TTableSchema::ToCanonical() const
         [] (const TColumnSchema& lhs, const TColumnSchema& rhs) {
             return lhs.Name() < rhs.Name();
         });
-    return New<TTableSchema>(columns, Strict_, UniqueKeys_,
-        ETableSchemaModification::None, info.DeletedColumns);
+    return New<TTableSchema>(
+        columns,
+        Strict_,
+        UniqueKeys_,
+        ETableSchemaModification::None,
+        info.DeletedColumns);
 }
 
 TTableSchemaPtr TTableSchema::ToSorted(const TKeyColumns& keyColumns) const
@@ -1227,11 +1288,11 @@ TTableSchemaPtr TTableSchema::ToReplicationLog() const
         columns.push_back(TColumnSchema(TReplicationLogTable::ValueColumnNamePrefix + TabletIndexColumnName, ESimpleLogicalValueType::Int64));
     }
     return New<TTableSchema>(
-            std::move(columns),
-            /* strict */ true,
-            /* uniqueKeys */ false,
-            ETableSchemaModification::None,
-            DeletedColumns());
+        std::move(columns),
+        /* strict */ true,
+        /* uniqueKeys */ false,
+        ETableSchemaModification::None,
+        DeletedColumns());
 }
 
 TTableSchemaPtr TTableSchema::ToUnversionedUpdate(bool sorted) const
@@ -1269,11 +1330,11 @@ TTableSchemaPtr TTableSchema::ToUnversionedUpdate(bool sorted) const
     }
 
     return New<TTableSchema>(
-            std::move(columns),
-            /*strict*/ true,
-            /*uniqueKeys*/ sorted,
-            ETableSchemaModification::None,
-            info.DeletedColumns);
+        std::move(columns),
+        /*strict*/ true,
+        /*uniqueKeys*/ sorted,
+        ETableSchemaModification::None,
+        info.DeletedColumns);
 }
 
 TTableSchemaPtr TTableSchema::ToModifiedSchema(ETableSchemaModification schemaModification) const
@@ -1539,6 +1600,16 @@ void ValidateKeyColumns(const TKeyColumns& keyColumns)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void ValidateDynamicTableKeyColumnCount(int count)
+{
+    THROW_ERROR_EXCEPTION_IF(count > MaxKeyColumnCountInDynamicTable,
+        "Too many key columns: expected <= %v, got %v",
+        MaxKeyColumnCountInDynamicTable,
+        count);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void ValidateSystemColumnSchema(
     const TColumnSchema& columnSchema,
     bool isTableSorted,
@@ -1741,11 +1812,7 @@ void ValidateDynamicTableConstraints(const TTableSchema& schema)
         THROW_ERROR_EXCEPTION("There must be at least one non-key column");
     }
 
-    if (schema.GetKeyColumnCount() > MaxKeyColumnCountInDynamicTable) {
-        THROW_ERROR_EXCEPTION("Too many key columns: limit %v, actual: %v",
-            MaxKeyColumnCountInDynamicTable,
-            schema.GetKeyColumnCount());
-    }
+    ValidateDynamicTableKeyColumnCount(schema.GetKeyColumnCount());
 
     for (const auto& column : schema.Columns()) {
         try {

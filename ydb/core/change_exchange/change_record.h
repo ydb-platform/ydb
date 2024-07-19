@@ -4,6 +4,16 @@
 #include <util/generic/string.h>
 #include <util/stream/output.h>
 
+namespace NKikimr {
+
+template <class TChangeRecord>
+struct TChangeRecordBuilderTrait;
+
+template <class TChangeRecord>
+struct TChangeRecordBuilderContextTrait {};
+
+} // namespace NKikimr
+
 namespace NKikimr::NChangeExchange {
 
 class IChangeSenderResolver;

@@ -47,6 +47,10 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
                     newStrategy = TJoinLinkSettings::EStrategy::SortedMerge;
                 } else if (canonizedName == "streamlookup") {
                     newStrategy = TJoinLinkSettings::EStrategy::StreamLookup;
+                } else if (canonizedName == "map") {
+                    newStrategy = TJoinLinkSettings::EStrategy::ForceMap;
+                } else if (canonizedName == "grace") {
+                    newStrategy = TJoinLinkSettings::EStrategy::ForceGrace;
                 } else {
                     Ctx.Warning(hint.Pos, TIssuesIds::YQL_UNUSED_HINT) << "Unsupported join strategy: " << hint.Name;
                 }
@@ -406,7 +410,7 @@ bool TSqlSelect::SelectTerm(TVector<TNodePtr>& terms, const TRule_result_column&
                 bool implicitLabel = false;
                 switch (alt.GetBlock2().Alt_case()) {
                     case TRule_result_column_TAlt2_TBlock2::kAlt1:
-                        label = Id(alt.GetBlock2().GetAlt1().GetBlock1().GetRule_an_id_or_type2(), *this);
+                        label = Id(alt.GetBlock2().GetAlt1().GetRule_an_id_or_type2(), *this);
                         break;
                     case TRule_result_column_TAlt2_TBlock2::kAlt2:
                         label = Id(alt.GetBlock2().GetAlt2().GetRule_an_id_as_compat1(), *this);
@@ -560,7 +564,7 @@ TSourcePtr TSqlSelect::NamedSingleSource(const TRule_named_single_source& node, 
         TString label;
         switch (node.GetBlock3().GetBlock1().Alt_case()) {
             case TRule_named_single_source_TBlock3_TBlock1::kAlt1:
-                label = Id(node.GetBlock3().GetBlock1().GetAlt1().GetBlock1().GetRule_an_id2(), *this);
+                label = Id(node.GetBlock3().GetBlock1().GetAlt1().GetRule_an_id2(), *this);
                 break;
             case TRule_named_single_source_TBlock3_TBlock1::kAlt2:
                 label = Id(node.GetBlock3().GetBlock1().GetAlt2().GetRule_an_id_as_compat1(), *this);
@@ -659,8 +663,8 @@ bool TSqlSelect::ColumnName(TVector<TNodePtr>& keys, const TRule_without_column_
     TString columnName;
     switch (node.Alt_case()) {
         case TRule_without_column_name::kAltWithoutColumnName1:
-            sourceName = Id(node.GetAlt_without_column_name1().GetBlock1().GetRule_an_id1(), *this);
-            columnName = Id(node.GetAlt_without_column_name1().GetBlock1().GetRule_an_id3(), *this);
+            sourceName = Id(node.GetAlt_without_column_name1().GetRule_an_id1(), *this);
+            columnName = Id(node.GetAlt_without_column_name1().GetRule_an_id3(), *this);
             break;
         case TRule_without_column_name::kAltWithoutColumnName2:
             columnName = Id(node.GetAlt_without_column_name2().GetRule_an_id_without1(), *this);

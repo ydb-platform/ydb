@@ -44,13 +44,45 @@
             ]
         },
         {
-            "Name": "TSoReadShardMeta",
+            "Name": "TSoSourceSettings",
             "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "SoReadShardMeta!"},
+            "Match": {"Type": "Callable", "Name": "SoSourceSettings"},
+            "Children": [
+                {"Index": 0, "Name": "Project", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Token", "Type": "TCoSecureParam"},
+                {"Index": 2, "Name": "RowType", "Type": "TExprBase"},
+                {"Index": 3, "Name": "SystemColumns", "Type": "TCoAtomList"},
+                {"Index": 4, "Name": "LabelNames", "Type": "TCoAtomList"},
+                {"Index": 5, "Name": "From", "Type": "TCoAtom"},
+                {"Index": 6, "Name": "To", "Type": "TCoAtom"},
+                {"Index": 7, "Name": "Program", "Type": "TCoAtom"},
+                {"Index": 8, "Name": "DownsamplingDisabled", "Type": "TCoBool"},
+                {"Index": 9, "Name": "DownsamplingAggregation", "Type": "TCoAtom"},
+                {"Index": 10, "Name": "DownsamplingFill", "Type": "TCoAtom"},
+                {"Index": 11, "Name": "DownsamplingGridSec", "Type": "TCoUint32"}
+            ]
+        },
+        {
+            "Name": "TSoObject",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "SoObject"},
+            "Children": [
+                {"Index": 0, "Name": "Project", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Settings", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TSoReadObject",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "SoReadObject!"},
             "Children": [
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSource", "Type": "TSoDataSource"},
-                {"Index": 2, "Name": "Shard", "Type": "TCoAtom"}
+                {"Index": 2, "Name": "Object", "Type": "TSoObject"},
+                {"Index": 3, "Name": "SystemColumns", "Type": "TCoAtomList"},
+                {"Index": 4, "Name": "LabelNames", "Type": "TCoAtomList"},
+                {"Index": 5, "Name": "RowType", "Type": "TExprBase"},
+                {"Index": 6, "Name": "ColumnOrder", "Type": "TExprBase", "Optional": true}
             ]
         },
         {
@@ -73,17 +105,8 @@
                 {"Index": 1, "Name": "Project", "Type": "TCoAtom"},
                 {"Index": 2, "Name": "Cluster", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Service", "Type": "TCoAtom"},
-                {"Index": 4, "Name": "Token", "Type": "TCoSecureParam", "Optional": true}
-            ]
-        },
-        {
-            "Name": "TDqSoShardSink",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "DqSoShardSink"},
-            "Children": [
-                {"Index": 0, "Name": "Shard", "Type": "TSoShard"},
-                {"Index": 1, "Name": "Settings", "Type": "TCoNameValueTupleList"},
-                {"Index": 2, "Name": "Token", "Type": "TCoSecureParam", "Optional": true}
+                {"Index": 4, "Name": "RowType", "Type": "TExprBase"},
+                {"Index": 5, "Name": "Token", "Type": "TCoSecureParam", "Optional": true}
             ]
         }
     ]

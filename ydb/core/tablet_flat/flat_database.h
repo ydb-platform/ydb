@@ -304,7 +304,6 @@ private:
     TVector<TUpdateOp> ModifiedOps;
 
     mutable TDeque<TPartIter> TempIterators; // Keeps the last result of Select() valid
-    mutable THashSet<ui32> IteratedTables;
 
     TVector<std::function<void()>> OnCommit_;
     TVector<std::function<void()>> OnRollback_;

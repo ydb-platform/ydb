@@ -4,7 +4,7 @@
  *	  POSTGRES public predicate locking definitions.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/storage/predicate.h
@@ -22,9 +22,9 @@
 /*
  * GUC variables
  */
-extern __thread int	max_predicate_locks_per_xact;
-extern __thread int	max_predicate_locks_per_relation;
-extern __thread int	max_predicate_locks_per_page;
+extern __thread PGDLLIMPORT int max_predicate_locks_per_xact;
+extern __thread PGDLLIMPORT int max_predicate_locks_per_relation;
+extern __thread PGDLLIMPORT int max_predicate_locks_per_page;
 
 
 /* Number of SLRU buffers to use for Serial SLRU */
@@ -58,7 +58,7 @@ extern void RegisterPredicateLockingXid(TransactionId xid);
 extern void PredicateLockRelation(Relation relation, Snapshot snapshot);
 extern void PredicateLockPage(Relation relation, BlockNumber blkno, Snapshot snapshot);
 extern void PredicateLockTID(Relation relation, ItemPointer tid, Snapshot snapshot,
-							 TransactionId insert_xid);
+							 TransactionId tuple_xid);
 extern void PredicateLockPageSplit(Relation relation, BlockNumber oldblkno, BlockNumber newblkno);
 extern void PredicateLockPageCombine(Relation relation, BlockNumber oldblkno, BlockNumber newblkno);
 extern void TransferPredicateLocksToHeapRelation(Relation relation);

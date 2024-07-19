@@ -726,13 +726,14 @@ void TKqpCounters::UpdateTxCounters(const TKqpTransactionInfo& txInfo,
 }
 
 TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, const TActorContext* ctx)
-    : NYql::NDq::TSpillingCounters(counters)
+    : NYql::NDq::TSpillingCounters(GetServiceCounters(counters, "kqp"))
     , AllocCounters(counters, "kqp")
 {
     Counters = counters;
     KqpGroup = GetServiceCounters(counters, "kqp");
     YdbGroup = GetServiceCounters(counters, "ydb");
     QueryReplayGroup = KqpGroup->GetSubgroup("subsystem", "unified_agent_query_replay");
+    WorkloadManagerGroup = KqpGroup->GetSubgroup("subsystem", "workload_manager");
 
     Init();
 
@@ -833,6 +834,10 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
 
 ::NMonitoring::TDynamicCounterPtr TKqpCounters::GetQueryReplayCounters() const {
     return QueryReplayGroup;
+}
+
+::NMonitoring::TDynamicCounterPtr TKqpCounters::GetWorkloadManagerCounters() const {
+    return WorkloadManagerGroup;
 }
 
 

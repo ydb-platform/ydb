@@ -1,0 +1,9 @@
+items:
+  - name: Обзор
+    href: index.md
+  - name: Установка
+    href: install.md
+  - name: Настройка
+    href: configuration.md
+  - name: Сценарий перезапуска кластера
+    href: rolling-restart-scenario.md

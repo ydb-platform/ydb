@@ -4,7 +4,7 @@
  *	  routines to support running postgres in 'bootstrap' mode
  *	bootstrap mode is used to create the initial template database
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -33,11 +33,6 @@
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "pg_getopt.h"
-#include "pgstat.h"
-#include "postmaster/bgwriter.h"
-#include "postmaster/startup.h"
-#include "postmaster/walwriter.h"
-#include "replication/walreceiver.h"
 #include "storage/bufmgr.h"
 #include "storage/bufpage.h"
 #include "storage/condition_variable.h"
@@ -47,7 +42,6 @@
 #include "utils/builtins.h"
 #include "utils/fmgroids.h"
 #include "utils/memutils.h"
-#include "utils/ps_status.h"
 #include "utils/rel.h"
 #include "utils/relmapper.h"
 
@@ -55,9 +49,7 @@ __thread uint32		bootstrap_data_checksum_version = 0;	/* No checksum */
 
 
 static void CheckerModeMain(void);
-static void BootstrapModeMain(void);
 static void bootstrap_signals(void);
-static void ShutdownAuxiliaryProcess(int code, Datum arg);
 static Form_pg_attribute AllocateAttribute(void);
 static void populate_typ_list(void);
 static Oid	gettype(char *type);
@@ -67,8 +59,6 @@ static void cleanup(void);
  *		global variables
  * ----------------
  */
-
-__thread AuxProcType MyAuxProcType = NotAnAuxProcess;	/* declared in miscadmin.h */
 
 __thread Relation	boot_reldesc;		/* current relation descriptor */
 
@@ -186,52 +176,84 @@ static __thread IndexList *ILHead = NULL;
 
 
 /*
- *	 AuxiliaryProcessMain
+ * In shared memory checker mode, all we really want to do is create shared
+ * memory and semaphores (just to prove we can do it with the current GUC
+ * settings).  Since, in fact, that was already done by
+ * CreateSharedMemoryAndSemaphores(), we have nothing more to do here.
+ */
+static void
+CheckerModeMain(void)
+{
+	proc_exit(0);
+}
+
+/*
+ *	 The main entry point for running the backend in bootstrap mode
  *
- *	 The main entry point for auxiliary processes, such as the bgwriter,
- *	 walwriter, walreceiver, bootstrapper and the shared memory checker code.
+ *	 The bootstrap mode is used to initialize the template database.
+ *	 The bootstrap backend doesn't speak SQL, but instead expects
+ *	 commands in a special bootstrap language.
  *
- *	 This code is here just because of historical reasons.
+ *	 When check_only is true, startup is done only far enough to verify that
+ *	 the current configuration, particularly the passed in options pertaining
+ *	 to shared memory sizing, options work (or at least do not cause an error
+ *	 up to shared memory creation).
  */
 void
-AuxiliaryProcessMain(int argc, char *argv[])
+BootstrapModeMain(int argc, char *argv[], bool check_only)
 {
+	int			i;
 	char	   *progname = argv[0];
 	int			flag;
 	char	   *userDoption = NULL;
 
-	/*
-	 * Initialize process environment (already done if under postmaster, but
-	 * not if standalone).
-	 */
-	if (!IsUnderPostmaster)
-		InitStandaloneProcess(argv[0]);
+	Assert(!IsUnderPostmaster);
 
-	/*
-	 * process command arguments
-	 */
+	InitStandaloneProcess(argv[0]);
 
 	/* Set defaults, to be overridden by explicit options below */
-	if (!IsUnderPostmaster)
-		InitializeGUCOptions();
+	InitializeGUCOptions();
 
-	/* Ignore the initial --boot argument, if present */
-	if (argc > 1 && strcmp(argv[1], "--boot") == 0)
-	{
-		argv++;
-		argc--;
-	}
+	/* an initial --boot or --check should be present */
+	Assert(argc > 1
+		   && (strcmp(argv[1], "--boot") == 0
+			   || strcmp(argv[1], "--check") == 0));
+	argv++;
+	argc--;
 
-	/* If no -x argument, we are a CheckerProcess */
-	MyAuxProcType = CheckerProcess;
-
-	while ((flag = getopt(argc, argv, "B:c:d:D:Fkr:x:X:-:")) != -1)
+	while ((flag = getopt(argc, argv, "B:c:d:D:Fkr:X:-:")) != -1)
 	{
 		switch (flag)
 		{
 			case 'B':
 				SetConfigOption("shared_buffers", optarg, PGC_POSTMASTER, PGC_S_ARGV);
 				break;
+			case 'c':
+			case '-':
+				{
+					char	   *name,
+							   *value;
+
+					ParseLongOption(optarg, &name, &value);
+					if (!value)
+					{
+						if (flag == '-')
+							ereport(ERROR,
+									(errcode(ERRCODE_SYNTAX_ERROR),
+									 errmsg("--%s requires a value",
+											optarg)));
+						else
+							ereport(ERROR,
+									(errcode(ERRCODE_SYNTAX_ERROR),
+									 errmsg("-c %s requires a value",
+											optarg)));
+					}
+
+					SetConfigOption(name, value, PGC_POSTMASTER, PGC_S_ARGV);
+					pfree(name);
+					pfree(value);
+					break;
+				}
 			case 'D':
 				userDoption = pstrdup(optarg);
 				break;
@@ -257,9 +279,6 @@ AuxiliaryProcessMain(int argc, char *argv[])
 			case 'r':
 				strlcpy(OutputFileName, optarg, MAXPGPATH);
 				break;
-			case 'x':
-				MyAuxProcType = atoi(optarg);
-				break;
 			case 'X':
 				{
 					int			WalSegSz = strtoul(optarg, NULL, 0);
@@ -269,36 +288,9 @@ AuxiliaryProcessMain(int argc, char *argv[])
 								(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 								 errmsg("-X requires a power of two value between 1 MB and 1 GB")));
 					SetConfigOption("wal_segment_size", optarg, PGC_INTERNAL,
-									PGC_S_OVERRIDE);
+									PGC_S_DYNAMIC_DEFAULT);
 				}
 				break;
-			case 'c':
-			case '-':
-				{
-					char	   *name,
-							   *value;
-
-					ParseLongOption(optarg, &name, &value);
-					if (!value)
-					{
-						if (flag == '-')
-							ereport(ERROR,
-									(errcode(ERRCODE_SYNTAX_ERROR),
-									 errmsg("--%s requires a value",
-											optarg)));
-						else
-							ereport(ERROR,
-									(errcode(ERRCODE_SYNTAX_ERROR),
-									 errmsg("-c %s requires a value",
-											optarg)));
-					}
-
-					SetConfigOption(name, value, PGC_POSTMASTER, PGC_S_ARGV);
-					free(name);
-					if (value)
-						free(value);
-					break;
-				}
 			default:
 				write_stderr("Try \"%s --help\" for more information.\n",
 							 progname);
@@ -313,193 +305,47 @@ AuxiliaryProcessMain(int argc, char *argv[])
 		proc_exit(1);
 	}
 
-	switch (MyAuxProcType)
-	{
-		case StartupProcess:
-			MyBackendType = B_STARTUP;
-			break;
-		case ArchiverProcess:
-			MyBackendType = B_ARCHIVER;
-			break;
-		case BgWriterProcess:
-			MyBackendType = B_BG_WRITER;
-			break;
-		case CheckpointerProcess:
-			MyBackendType = B_CHECKPOINTER;
-			break;
-		case WalWriterProcess:
-			MyBackendType = B_WAL_WRITER;
-			break;
-		case WalReceiverProcess:
-			MyBackendType = B_WAL_RECEIVER;
-			break;
-		default:
-			MyBackendType = B_INVALID;
-	}
-	if (IsUnderPostmaster)
-		init_ps_display(NULL);
-
-	/* Acquire configuration parameters, unless inherited from postmaster */
-	if (!IsUnderPostmaster)
-	{
-		if (!SelectConfigFiles(userDoption, progname))
-			proc_exit(1);
-	}
+	/* Acquire configuration parameters */
+	if (!SelectConfigFiles(userDoption, progname))
+		proc_exit(1);
 
 	/*
 	 * Validate we have been given a reasonable-looking DataDir and change
-	 * into it (if under postmaster, should be done already).
+	 * into it
 	 */
-	if (!IsUnderPostmaster)
-	{
-		checkDataDir();
-		ChangeToDataDir();
-	}
+	checkDataDir();
+	ChangeToDataDir();
 
-	/* If standalone, create lockfile for data directory */
-	if (!IsUnderPostmaster)
-		CreateDataDirLockFile(false);
+	CreateDataDirLockFile(false);
 
 	SetProcessingMode(BootstrapProcessing);
 	IgnoreSystemIndexes = true;
 
-	/* Initialize MaxBackends (if under postmaster, was done already) */
-	if (!IsUnderPostmaster)
-		InitializeMaxBackends();
+	InitializeMaxBackends();
+
+	CreateSharedMemoryAndSemaphores();
+
+	/*
+	 * XXX: It might make sense to move this into its own function at some
+	 * point. Right now it seems like it'd cause more code duplication than
+	 * it's worth.
+	 */
+	if (check_only)
+	{
+		SetProcessingMode(NormalProcessing);
+		CheckerModeMain();
+		abort();
+	}
+
+	/*
+	 * Do backend-like initialization for bootstrap mode
+	 */
+	InitProcess();
 
 	BaseInit();
 
-	/*
-	 * When we are an auxiliary process, we aren't going to do the full
-	 * InitPostgres pushups, but there are a couple of things that need to get
-	 * lit up even in an auxiliary process.
-	 */
-	if (IsUnderPostmaster)
-	{
-		/*
-		 * Create a PGPROC so we can use LWLocks.  In the EXEC_BACKEND case,
-		 * this was already done by SubPostmasterMain().
-		 */
-#ifndef EXEC_BACKEND
-		InitAuxiliaryProcess();
-#endif
-
-		/*
-		 * Assign the ProcSignalSlot for an auxiliary process.  Since it
-		 * doesn't have a BackendId, the slot is statically allocated based on
-		 * the auxiliary process type (MyAuxProcType).  Backends use slots
-		 * indexed in the range from 1 to MaxBackends (inclusive), so we use
-		 * MaxBackends + AuxProcType + 1 as the index of the slot for an
-		 * auxiliary process.
-		 *
-		 * This will need rethinking if we ever want more than one of a
-		 * particular auxiliary process type.
-		 */
-		ProcSignalInit(MaxBackends + MyAuxProcType + 1);
-
-		/* finish setting up bufmgr.c */
-		InitBufferPoolBackend();
-
-		/*
-		 * Auxiliary processes don't run transactions, but they may need a
-		 * resource owner anyway to manage buffer pins acquired outside
-		 * transactions (and, perhaps, other things in future).
-		 */
-		CreateAuxProcessResourceOwner();
-
-		/* Initialize statistics reporting */
-		pgstat_initialize();
-
-		/* Initialize backend status information */
-		pgstat_beinit();
-		pgstat_bestart();
-
-		/* register a before-shutdown callback for LWLock cleanup */
-		before_shmem_exit(ShutdownAuxiliaryProcess, 0);
-	}
-
-	/*
-	 * XLOG operations
-	 */
-	SetProcessingMode(NormalProcessing);
-
-	switch (MyAuxProcType)
-	{
-		case CheckerProcess:
-			/* don't set signals, they're useless here */
-			CheckerModeMain();
-			proc_exit(1);		/* should never return */
-
-		case BootstrapProcess:
-
-			/*
-			 * There was a brief instant during which mode was Normal; this is
-			 * okay.  We need to be in bootstrap mode during BootStrapXLOG for
-			 * the sake of multixact initialization.
-			 */
-			SetProcessingMode(BootstrapProcessing);
-			bootstrap_signals();
-			BootStrapXLOG();
-			BootstrapModeMain();
-			proc_exit(1);		/* should never return */
-
-		case StartupProcess:
-			StartupProcessMain();
-			proc_exit(1);
-
-		case ArchiverProcess:
-			PgArchiverMain();
-			proc_exit(1);
-
-		case BgWriterProcess:
-			BackgroundWriterMain();
-			proc_exit(1);
-
-		case CheckpointerProcess:
-			CheckpointerMain();
-			proc_exit(1);
-
-		case WalWriterProcess:
-			InitXLOGAccess();
-			WalWriterMain();
-			proc_exit(1);
-
-		case WalReceiverProcess:
-			WalReceiverMain();
-			proc_exit(1);
-
-		default:
-			elog(PANIC, "unrecognized process type: %d", (int) MyAuxProcType);
-			proc_exit(1);
-	}
-}
-
-/*
- * In shared memory checker mode, all we really want to do is create shared
- * memory and semaphores (just to prove we can do it with the current GUC
- * settings).  Since, in fact, that was already done by BaseInit(),
- * we have nothing more to do here.
- */
-static void
-CheckerModeMain(void)
-{
-	proc_exit(0);
-}
-
-/*
- *	 The main entry point for running the backend in bootstrap mode
- *
- *	 The bootstrap mode is used to initialize the template database.
- *	 The bootstrap backend doesn't speak SQL, but instead expects
- *	 commands in a special bootstrap language.
- */
-static void
-BootstrapModeMain(void)
-{
-	int			i;
-
-	Assert(!IsUnderPostmaster);
-	Assert(IsBootstrapProcessingMode());
+	bootstrap_signals();
+	BootStrapXLOG();
 
 	/*
 	 * To ensure that src/common/link-canary.c is linked into the backend, we
@@ -508,12 +354,7 @@ BootstrapModeMain(void)
 	if (pg_link_canary_is_frontend())
 		elog(ERROR, "backend is incorrectly linked to frontend functions");
 
-	/*
-	 * Do backend-like initialization for bootstrap mode
-	 */
-	InitProcess();
-
-	InitPostgres(NULL, InvalidOid, NULL, InvalidOid, NULL, false);
+	InitPostgres(NULL, InvalidOid, NULL, InvalidOid, false, false, NULL);
 
 	/* Initialize stuff for bootstrap-file processing */
 	for (i = 0; i < MAXATTR; i++)
@@ -563,21 +404,6 @@ bootstrap_signals(void)
 	pqsignal(SIGINT, SIG_DFL);
 	pqsignal(SIGTERM, SIG_DFL);
 	pqsignal(SIGQUIT, SIG_DFL);
-}
-
-/*
- * Begin shutdown of an auxiliary process.  This is approximately the equivalent
- * of ShutdownPostgres() in postinit.c.  We can't run transactions in an
- * auxiliary process, so most of the work of AbortTransaction() is not needed,
- * but we do need to make sure we've released any LWLocks we are holding.
- * (This is only critical during an error exit.)
- */
-static void
-ShutdownAuxiliaryProcess(int code, Datum arg)
-{
-	LWLockReleaseAll();
-	ConditionVariableCancelSleep();
-	pgstat_report_wait_end();
 }
 
 /* ----------------------------------------------------------------
@@ -637,19 +463,19 @@ boot_openrel(char *relname)
  * ----------------
  */
 void
-closerel(char *name)
+closerel(char *relname)
 {
-	if (name)
+	if (relname)
 	{
 		if (boot_reldesc)
 		{
-			if (strcmp(RelationGetRelationName(boot_reldesc), name) != 0)
+			if (strcmp(RelationGetRelationName(boot_reldesc), relname) != 0)
 				elog(ERROR, "close of %s when %s was expected",
-					 name, RelationGetRelationName(boot_reldesc));
+					 relname, RelationGetRelationName(boot_reldesc));
 		}
 		else
 			elog(ERROR, "close of %s before any relation was opened",
-				 name);
+				 relname);
 	}
 
 	if (boot_reldesc == NULL)
@@ -822,7 +648,7 @@ InsertOneValue(char *value, int i)
 	Oid			typinput;
 	Oid			typoutput;
 
-	AssertArg(i >= 0 && i < MAXATTR);
+	Assert(i >= 0 && i < MAXATTR);
 
 	elog(DEBUG4, "inserting column %d value \"%s\"", i, value);
 

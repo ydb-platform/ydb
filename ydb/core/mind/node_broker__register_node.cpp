@@ -10,12 +10,11 @@ using namespace NKikimrNodeBroker;
 
 class TNodeBroker::TTxRegisterNode : public TTransactionBase<TNodeBroker> {
 public:
-    TTxRegisterNode(TNodeBroker *self, TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
-                    const NActors::TScopeId& scopeId, const TSubDomainKey& servicedSubDomain)
+    TTxRegisterNode(TNodeBroker *self, TEvPrivate::TEvResolvedRegistrationRequest::TPtr &resolvedEv)
         : TBase(self)
-        , Event(ev)
-        , ScopeId(scopeId)
-        , ServicedSubDomain(servicedSubDomain)
+        , Event(resolvedEv->Get()->Request)
+        , ScopeId(resolvedEv->Get()->ScopeId)
+        , ServicedSubDomain(resolvedEv->Get()->ServicedSubDomain)
         , NodeId(0)
         , ExtendLease(false)
         , FixNodeId(false)
@@ -62,7 +61,7 @@ public:
                          ctx);
         }
 
-        if (Self->EnableDynamicNodeNameGeneration && rec.HasPath() && ServicedSubDomain == InvalidSubDomainKey) {
+        if (Self->EnableStableNodeNames && rec.HasPath() && ServicedSubDomain == InvalidSubDomainKey) {
             return Error(TStatus::ERROR,
                          TStringBuilder() << "Cannot resolve subdomain key for path " << rec.GetPath(),
                          ctx);
@@ -100,7 +99,7 @@ public:
             }
             node.AuthorizedByCertificate = rec.GetAuthorizedByCertificate();
             
-            if (Self->EnableDynamicNodeNameGeneration) {
+            if (Self->EnableStableNodeNames) {
                 if (ServicedSubDomain != node.ServicedSubDomain) {
                     if (node.SlotIndex.has_value()) {
                         Self->SlotIndexesPools[node.ServicedSubDomain].Release(node.SlotIndex.value());
@@ -131,7 +130,7 @@ public:
         Node->Lease = 1;
         Node->Expire = expire;
 
-        if (Self->EnableDynamicNodeNameGeneration) {
+        if (Self->EnableStableNodeNames) {
             Node->ServicedSubDomain = ServicedSubDomain;
             Node->SlotIndex = Self->SlotIndexesPools[Node->ServicedSubDomain].AcquireLowestFreeIndex();
         }
@@ -186,11 +185,9 @@ private:
     bool FixNodeId;
 };
 
-ITransaction *TNodeBroker::CreateTxRegisterNode(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
-                                                const NActors::TScopeId& scopeId,
-                                                const TSubDomainKey& servicedSubDomain)
+ITransaction *TNodeBroker::CreateTxRegisterNode(TEvPrivate::TEvResolvedRegistrationRequest::TPtr &ev)
 {
-    return new TTxRegisterNode(this, ev, scopeId, servicedSubDomain);
+    return new TTxRegisterNode(this, ev);
 }
 
 } // NNodeBroker

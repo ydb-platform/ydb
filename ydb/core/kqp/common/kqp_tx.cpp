@@ -141,6 +141,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     size_t readPhases = 0;
     bool hasEffects = false;
     bool hasSourceRead = false;
+    bool hasStreamLookup = false;
     bool hasSinkWrite = false;
 
     for (const auto &tx : physicalQuery.GetTransactions()) {
@@ -161,15 +162,25 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
         for (const auto &stage : tx.GetStages()) {
             hasSourceRead |= !stage.GetSources().empty();
             hasSinkWrite |= !stage.GetSinks().empty();
+
+            for (const auto &input : stage.GetInputs()) {
+                hasStreamLookup |= input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup;
+            }
+
+            for (const auto &tableOp : stage.GetTableOps()) {
+                if (tableOp.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
+                    // always need snapshot for OLAP reads
+                    return true;
+                }
+            }
         }
     }
 
     if (txCtx.HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
-        YQL_ENSURE(txCtx.EnableImmediateEffects);
         return true;
     }
 
-    if (hasSourceRead && hasSinkWrite) {
+    if ((hasSourceRead || hasStreamLookup) && hasSinkWrite) {
         return true;
     }
 

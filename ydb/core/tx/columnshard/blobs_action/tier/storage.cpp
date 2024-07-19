@@ -34,14 +34,14 @@ std::shared_ptr<IBlobsGCAction> TOperator::DoCreateGCAction(const std::shared_pt
     {
         TTabletsByBlob deleteBlobIds;
         if (!GCInfo->ExtractForGC(draftBlobIds, deleteBlobIds, 100000)) {
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD_TIER)("event", "start_gc_skipped")("reason", "cannot_extract");
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("event", "start_gc_skipped")("reason", "cannot_extract");
             return nullptr;
         }
         categories = GetSharedBlobs()->BuildRemoveCategories(std::move(deleteBlobIds));
     }
     auto gcTask = std::make_shared<TGCTask>(GetStorageId(), std::move(draftBlobIds), GetCurrentOperator(), std::move(categories), counters);
     if (gcTask->IsEmpty()) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_TIER)("event", "start_gc_skipped")("reason", "task_empty");
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("event", "start_gc_skipped")("reason", "task_empty");
         return nullptr;
     }
     return gcTask;

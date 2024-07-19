@@ -14,6 +14,17 @@ struct TStatisticsAggregator::TTxInitSchema : public TTxBase {
 
         NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
 
+        static constexpr NIceDb::TTableId bigTableIds[] = {
+            Schema::BaseStats::TableId,
+        };
+
+        for (auto id : bigTableIds) {
+            const auto* tableInfo = txc.DB.GetScheme().GetTableInfo(id);
+            if (!tableInfo || !tableInfo->CompactionPolicy) {
+                txc.DB.Alter().SetCompactionPolicy(id, *NLocalDb::CreateDefaultUserTablePolicy());
+            }
+        }
+
         return true;
     }
 

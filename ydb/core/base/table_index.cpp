@@ -13,20 +13,24 @@ TVector<TString>::const_iterator IsUniq(const TVector<TString>& names) {
     return names.end();
 }
 
+bool Contains(const TVector<TString>& names, TString str) {
+    return std::find(names.begin(), names.end(), str) != names.end();
+}
+
 namespace NKikimr {
 namespace NTableIndex {
 
-TTableColumns CalcTableImplDescription(const TTableColumns& table, const TIndexColumns& index) {
-    {
-        TString explain;
-        Y_ABORT_UNLESS(IsCompatibleIndex(table, index, explain), "explain is %s", explain.c_str());
-    }
-
+TTableColumns CalcTableImplDescription(const NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index) {
     TTableColumns result;
 
-    for (const auto& ik: index.KeyColumns) {
-        result.Keys.push_back(ik);
-        result.Columns.insert(ik);
+    if (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+        result.Keys.push_back(NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn);
+        result.Columns.insert(NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn);
+    } else {
+        for (const auto& ik: index.KeyColumns) {
+            result.Keys.push_back(ik);
+            result.Columns.insert(ik);
+        }
     }
 
     for (const auto& tk: table.Keys) {
@@ -43,7 +47,9 @@ TTableColumns CalcTableImplDescription(const TTableColumns& table, const TIndexC
     return result;
 }
 
-bool IsCompatibleIndex(const TTableColumns& table, const TIndexColumns& index, TString& explain) {
+bool IsCompatibleIndex(const NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index, TString& explain) {
+    const bool isVectorIndex = indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
+
     {
         auto brokenAt = IsUniq(table.Keys);
         if (brokenAt != table.Keys.end()) {
@@ -71,6 +77,23 @@ bool IsCompatibleIndex(const TTableColumns& table, const TIndexColumns& index, T
         }
     }
 
+    if (isVectorIndex) {
+        if (index.KeyColumns.size() != 1) {
+            explain = "Only single key column is supported for vector index";
+            return false;
+        }
+
+        if (Contains(index.KeyColumns, NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn)) {
+            explain = TStringBuilder() << "Key column should not have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn;
+            return false;
+        }
+
+        if (Contains(index.DataColumns, NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn)) {
+            explain = TStringBuilder() << "Data column should not have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn;
+            return false;
+        }
+    }
+
     THashSet<TString> indexKeys;
 
     for (const auto& tableKeyName: table.Keys) {
@@ -84,7 +107,8 @@ bool IsCompatibleIndex(const TTableColumns& table, const TIndexColumns& index, T
     }
 
     for (const auto& indexKeyName: index.KeyColumns) {
-        indexKeys.insert(indexKeyName);
+        if (!isVectorIndex)
+            indexKeys.insert(indexKeyName);
         if (!table.Columns.contains(indexKeyName)) {
             explain = TStringBuilder()
                     << "all index keys should be in table columns"
@@ -93,9 +117,9 @@ bool IsCompatibleIndex(const TTableColumns& table, const TIndexColumns& index, T
         }
     }
 
-    if (index.KeyColumns == table.Keys) {
+    if (index.KeyColumns == table.Keys && !isVectorIndex) {
         explain = TStringBuilder()
-            << "table and index keys are the same";
+                    << "table and index keys are the same";
         return false;
     }
 
@@ -114,6 +138,10 @@ bool IsCompatibleIndex(const TTableColumns& table, const TIndexColumns& index, T
     }
 
     return true;
+}
+
+bool IsImplTable(std::string_view tableName) {
+    return std::find(std::begin(ImplTables), std::end(ImplTables), tableName) != std::end(ImplTables);
 }
 
 }

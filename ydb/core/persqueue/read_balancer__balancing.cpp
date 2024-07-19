@@ -680,6 +680,9 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
     std::vector<TPartitionFamily*> newFamilies;
 
     if (!family->IsLonely()) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                GetPrefix() << "break up " << family->DebugStr() << " partition=" << partitionId);
+
         std::unordered_set<ui32> partitions;
         partitions.insert(family->Partitions.begin(), family->Partitions.end());
 
@@ -748,10 +751,10 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
                     }
                 }
             }
+        } else {
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                    GetPrefix() << "can't break up " << family->DebugStr() << " because partition=" << partitionId << " is not root of family");
         }
-    } else {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
-                GetPrefix() << "can't break up " << family->DebugStr() << " because partition is not root of family " << family->DebugStr());
     }
 
     family->WantedPartitions.clear();
@@ -1813,6 +1816,32 @@ void TBalancer::Handle(TEvPQ::TEvBalanceConsumer::TPtr& ev, const TActorContext&
         consumer->BalanceScheduled = false;
         consumer->Balance(ctx);
     }
+}
+
+void TBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) {
+    struct TData {
+        ui32 Generation;
+        ui64 Cookie;
+        const TString& Consumer;
+    };
+
+    std::unordered_map<ui32, std::vector<TData>> index;
+
+    const auto& record = ev->Get()->Record;
+    for (const auto& partResult : record.GetPartResult()) {
+        for (const auto& consumerResult : partResult.GetConsumerResult()) {
+            if (consumerResult.GetReadingFinished()) {
+                index[partResult.GetPartition()].push_back(TData{partResult.GetGeneration(), partResult.GetCookie(), consumerResult.GetConsumer()});
+            }
+        }
+    }
+
+    GetPartitionGraph().Travers([&](ui32 id) {
+        for (auto& d : index[id]) {
+            SetCommittedState(d.Consumer, id, d.Generation, d.Cookie, ctx);
+        }
+        return true;
+    });
 }
 
 TString TBalancer::GetPrefix() const {

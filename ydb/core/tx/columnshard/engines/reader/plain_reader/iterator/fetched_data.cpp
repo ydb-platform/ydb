@@ -10,8 +10,8 @@ void TFetchedData::SyncTableColumns(const std::vector<std::shared_ptr<arrow::Fie
         if (Table->GetSchema()->GetFieldByName(i->name())) {
             continue;
         }
-        Table->AddField(i, std::make_shared<NArrow::NAccessor::TTrivialArray>(NArrow::TThreadSimpleArraysCache::GetNull(i->type(), Table->num_rows())))
-            .Validate();
+        Table->AddField(i, std::make_shared<NArrow::NAccessor::TTrivialArray>(
+            NArrow::TThreadSimpleArraysCache::GetNull(i->type(), Table->num_rows()))).Validate();
     }
 }
 

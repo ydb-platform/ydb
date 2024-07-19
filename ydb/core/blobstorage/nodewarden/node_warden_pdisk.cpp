@@ -251,10 +251,9 @@ namespace NKikimr::NStorage {
                         key.PDiskId, key.VDiskSlotId));
                     it->second = round;
                 } else {
-                    StartLocalVDiskActor(value, TDuration::Zero());
+                    StartLocalVDiskActor(value);
                 }
             }
-            SendDiskMetrics(false);
 
             vdisks << "}";
             STLOG(PRI_NOTICE, BS_NODE, NW74, "RestartLocalPDisk has finished",
@@ -263,7 +262,7 @@ namespace NKikimr::NStorage {
             for (auto it = LocalVDisks.lower_bound(from); it != LocalVDisks.end() && it->first <= to; ++it) {
                 auto& [key, value] = *it;
                 if (!value.RuntimeData && !SlayInFlight.contains(key)) {
-                    StartLocalVDiskActor(value, TDuration::Zero());
+                    StartLocalVDiskActor(value);
                 }
             }
         }

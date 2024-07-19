@@ -23,7 +23,7 @@ namespace NYT::NProfiling {
 class TSensorsOwner
 {
 public:
-    //! Returns no-op sensors owner, should be singleton to avoid memory leaks.
+    //! Returns no-op sensors owner. Note that is still holds the owned structs created with Get* methods.
     TSensorsOwner();
     explicit TSensorsOwner(const TProfiler& profiler);
 

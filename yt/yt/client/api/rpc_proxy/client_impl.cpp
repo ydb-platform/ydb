@@ -778,7 +778,7 @@ TFuture<IQueueRowsetPtr> TClient::PullQueueConsumer(
 {
     auto proxy = CreateApiServiceProxy();
 
-    // Use PullConsumer (not PullQueueConsumer) for backward compatibility.
+    // COMPAT(nadya73): Use PullConsumer (not PullQueueConsumer) for compatibility with old clusters.
     auto req = proxy.PullConsumer();
     req->SetResponseHeavy(true);
     SetTimeoutOptions(*req, options);
@@ -877,8 +877,7 @@ TFuture<std::vector<TListQueueConsumerRegistrationsResult>> TClient::ListQueueCo
 TFuture<TCreateQueueProducerSessionResult> TClient::CreateQueueProducerSession(
     const TRichYPath& producerPath,
     const TRichYPath& queuePath,
-    const TString& sessionId,
-    const std::optional<TYsonString>& userMeta,
+    const NQueueClient::TQueueProducerSessionId& sessionId,
     const TCreateQueueProducerSessionOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -889,19 +888,19 @@ TFuture<TCreateQueueProducerSessionResult> TClient::CreateQueueProducerSession(
     ToProto(req->mutable_producer_path(), producerPath);
     ToProto(req->mutable_queue_path(), queuePath);
     ToProto(req->mutable_session_id(), sessionId);
-    if (userMeta) {
-        ToProto(req->mutable_user_meta(), userMeta->AsStringBuf());
+    if (options.UserMeta) {
+        ToProto(req->mutable_user_meta(), ConvertToYsonString(options.UserMeta).ToString());
     }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspCreateQueueProducerSessionPtr& rsp) {
-        std::optional<TYsonString> userMeta;
+        INodePtr userMeta;
         if (rsp->has_user_meta()) {
-            userMeta = TYsonString(FromProto<TString>(rsp->user_meta()));
+            userMeta = ConvertTo<INodePtr>(TYsonString(FromProto<TString>(rsp->user_meta())));
         }
 
         return TCreateQueueProducerSessionResult{
-            .SequenceNumber = FromProto<ui64>(rsp->sequence_number()),
-            .Epoch = FromProto<ui64>(rsp->epoch()),
+            .SequenceNumber = FromProto<TQueueProducerSequenceNumber>(rsp->sequence_number()),
+            .Epoch = FromProto<TQueueProducerEpoch>(rsp->epoch()),
             .UserMeta = std::move(userMeta),
         };
     }));
@@ -910,7 +909,7 @@ TFuture<TCreateQueueProducerSessionResult> TClient::CreateQueueProducerSession(
 TFuture<void> TClient::RemoveQueueProducerSession(
     const NYPath::TRichYPath& producerPath,
     const NYPath::TRichYPath& queuePath,
-    const TString& sessionId,
+    const NQueueClient::TQueueProducerSessionId& sessionId,
     const TRemoveQueueProducerSessionOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -1509,6 +1508,24 @@ TFuture<void> TClient::AbortJob(
     if (options.InterruptTimeout) {
         req->set_interrupt_timeout(NYT::ToProto<i64>(*options.InterruptTimeout));
     }
+
+    return req->Invoke().As<void>();
+}
+
+TFuture<void> TClient::DumpJobProxyLog(
+    NJobTrackerClient::TJobId jobId,
+    NJobTrackerClient::TOperationId operationId,
+    const NYPath::TYPath& path,
+    const TDumpJobProxyLogOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.DumpJobProxyLog();
+    SetTimeoutOptions(*req, options);
+
+    ToProto(req->mutable_job_id(), jobId);
+    ToProto(req->mutable_operation_id(), operationId);
+    ToProto(req->mutable_path(), path);
 
     return req->Invoke().As<void>();
 }
@@ -2136,6 +2153,12 @@ TFuture<NQueryTrackerClient::TQueryId> TClient::StartQuery(
     if (options.AccessControlObject) {
         req->set_access_control_object(*options.AccessControlObject);
     }
+    if (options.AccessControlObjects) {
+        auto* protoAccessControlObjects = req->mutable_access_control_objects();
+        for (const auto& aco : *options.AccessControlObjects) {
+            protoAccessControlObjects->add_items(aco);
+        }
+    }
 
     for (const auto& file : options.Files) {
         auto* protoFile = req->add_files();
@@ -2318,6 +2341,12 @@ TFuture<void> TClient::AlterQuery(
     }
     if (options.AccessControlObject) {
         req->set_access_control_object(*options.AccessControlObject);
+    }
+    if (options.AccessControlObjects) {
+        auto* protoAccessControlObjects = req->mutable_access_control_objects();
+        for (const auto& aco : *options.AccessControlObjects) {
+            protoAccessControlObjects->add_items(aco);
+        }
     }
 
     return req->Invoke().AsVoid();
@@ -2522,19 +2551,19 @@ TFuture<void> TClient::PausePipeline(
     return req->Invoke().AsVoid();
 }
 
-TFuture<TPipelineStatus> TClient::GetPipelineStatus(
+TFuture<TPipelineState> TClient::GetPipelineState(
     const NYPath::TYPath& pipelinePath,
-    const TGetPipelineStatusOptions& options)
+    const TGetPipelineStateOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
 
-    auto req = proxy.GetPipelineStatus();
+    auto req = proxy.GetPipelineState();
     SetTimeoutOptions(*req, options);
 
     req->set_pipeline_path(pipelinePath);
 
-    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetPipelineStatusPtr& rsp) {
-        return TPipelineStatus{
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetPipelineStatePtr& rsp) {
+        return TPipelineState{
             .State = FromProto<NFlow::EPipelineState>(rsp->state()),
         };
     }));

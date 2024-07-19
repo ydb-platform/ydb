@@ -629,6 +629,23 @@ void TAbortJobCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TDumpJobProxyLogCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("job_id", &TThis::JobId);
+    registrar.Parameter("operation_id", &TThis::OperationId);
+    registrar.Parameter("path", &TThis::Path);
+}
+
+void TDumpJobProxyLogCommand::DoExecute(ICommandContextPtr context)
+{
+    WaitFor(context->GetClient()->DumpJobProxyLog(JobId, OperationId, Path))
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TStartOperationCommand::Register(TRegistrar registrar)
 {
     registrar.BaseClassParameter("operation_type", &TThis::OperationType);

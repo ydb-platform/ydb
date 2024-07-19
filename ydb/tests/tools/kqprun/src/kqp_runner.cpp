@@ -38,11 +38,11 @@ void PrintStatistics(const TString& fullStat, const THashMap<TString, i64>& flat
     output << "\nFlat statistics:" << Endl;
     for (const auto& [propery, value] : flatStat) {
         TString valueString = ToString(value);
-        if (propery.find("Bytes") != TString::npos || propery.find("Source") != TString::npos) {
+        if (propery.Contains("Bytes")) {
             valueString = NKikimr::NBlobDepot::FormatByteSize(value);
-        } else if (propery.find("TimeUs") != TString::npos) {
+        } else if (propery.Contains("TimeUs")) {
             valueString = NFq::FormatDurationUs(value);
-        } else if (propery.find("TimeMs") != TString::npos) {
+        } else if (propery.Contains("TimeMs")) {
             valueString = NFq::FormatDurationMs(value);
         } else {
             valueString = FormatNumber(value);
@@ -89,7 +89,8 @@ class TKqpRunner::TImpl {
 public:
     enum class EQueryType {
         ScriptQuery,
-        YqlScriptQuery
+        YqlScriptQuery,
+        AsyncQuery
     };
 
     explicit TImpl(const TRunnerOptions& options)
@@ -143,6 +144,10 @@ public:
         case EQueryType::YqlScriptQuery:
             status = YdbSetup_.YqlScriptRequest(query, action, traceId, meta, ResultSets_);
             break;
+
+        case EQueryType::AsyncQuery:
+            YdbSetup_.QueryRequestAsync(query, action, traceId);
+            return true;
         }
 
         TYdbSetup::StopTraceOpt();
@@ -161,6 +166,10 @@ public:
         }
 
         return true;
+    }
+
+    void WaitAsyncQueries() const {
+        YdbSetup_.WaitAsyncQueries();
     }
 
     bool FetchScriptResults() {
@@ -190,16 +199,22 @@ public:
             return false;
         }
 
+        if (!status.Issues.Empty()) {
+            Cerr << CerrColors_.Red() << "Forget operation finished with issues:" << CerrColors_.Default() << Endl << status.Issues.ToString() << Endl;
+        }
+
         return true;
     }
 
     void PrintScriptResults() const {
-        Cout << CoutColors_.Cyan() << "Writing script query results" << CoutColors_.Default() << Endl;
-        for (size_t i = 0; i < ResultSets_.size(); ++i) {
-            if (ResultSets_.size() > 1) {
-                *Options_.ResultOutput << CoutColors_.Cyan() << "Result set " << i + 1 << ":" << CoutColors_.Default() << Endl;
+        if (Options_.ResultOutput) {
+            Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Writing script query results..." << CoutColors_.Default() << Endl;
+            for (size_t i = 0; i < ResultSets_.size(); ++i) {
+                if (ResultSets_.size() > 1) {
+                    *Options_.ResultOutput << CoutColors_.Cyan() << "Result set " << i + 1 << ":" << CoutColors_.Default() << Endl;
+                }
+                PrintScriptResult(ResultSets_[i]);
             }
-            PrintScriptResult(ResultSets_[i]);
         }
     }
 
@@ -295,7 +310,7 @@ private:
 
     void PrintScriptProgress(const TString& plan) const {
         if (Options_.InProgressStatisticsOutputFile) {
-            TFileOutput outputStream(*Options_.InProgressStatisticsOutputFile);
+            TFileOutput outputStream(Options_.InProgressStatisticsOutputFile);
             outputStream << TInstant::Now().ToIsoStringLocal() << " Script in progress statistics" << Endl;
 
             auto convertedPlan = plan;
@@ -396,6 +411,14 @@ bool TKqpRunner::ExecuteQuery(const TString& query, NKikimrKqp::EQueryAction act
 
 bool TKqpRunner::ExecuteYqlScript(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const {
     return Impl_->ExecuteQuery(query, action, traceId, TImpl::EQueryType::YqlScriptQuery);
+}
+
+void TKqpRunner::ExecuteQueryAsync(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const {
+    Impl_->ExecuteQuery(query, action, traceId, TImpl::EQueryType::AsyncQuery);
+}
+
+void TKqpRunner::WaitAsyncQueries() const {
+    Impl_->WaitAsyncQueries();
 }
 
 bool TKqpRunner::FetchScriptResults() {

@@ -24,6 +24,19 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     const NYql::TKikimrConfiguration::TPtr Config;
     const TIntrusivePtr<NYql::TKikimrQueryContext> QueryCtx;
     const TIntrusivePtr<NYql::TKikimrTablesData> Tables;
+    int JoinsCount{};
+    int EquiJoinsCount{};
+    std::shared_ptr<NJson::TJsonValue> OverrideStatistics{};
+
+    std::shared_ptr<NJson::TJsonValue> GetOverrideStatistics() const {
+        if (Config->OverrideStatistics.Get()) {
+            auto jsonValue = new NJson::TJsonValue();
+            NJson::ReadJsonTree(*Config->OverrideStatistics.Get(), jsonValue, true);
+            return std::shared_ptr<NJson::TJsonValue>(jsonValue);
+        } else {
+            return std::shared_ptr<NJson::TJsonValue>();
+        }
+    }
 
     bool IsDataQuery() const {
         return QueryCtx->Type == NYql::EKikimrQueryType::Dml;
@@ -51,6 +64,7 @@ struct TKqpBuildQueryContext : TThrRefBase {
 };
 
 bool IsKqpEffectsStage(const NYql::NNodes::TDqStageBase& stage);
+bool NeedSinks(const NYql::TKikimrTableDescription& table, const TKqpOptimizeContext& kqpCtx);
 
 TMaybe<NYql::NNodes::TKqlQueryList> BuildKqlQuery(NYql::NNodes::TKiDataQueryBlocks queryBlocks,
     const NYql::TKikimrTablesData& tablesData, NYql::TExprContext& ctx, bool withSystemColumns,

@@ -131,6 +131,9 @@ void TSchemaObject::Drop() {
     case EPathType::View:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropView);
         break;
+    case EPathType::ResourcePool:
+        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool);
+        break;
     case EPathType::Unknown:
     case EPathType::SubDomain:
     case EPathType::RtmrVolume:
@@ -222,6 +225,8 @@ static TSchemaObject::EPathType GetType(const NKikimrSchemeOp::TDirEntry& entry)
         return TSchemaObject::EPathType::ExternalDataSource;
     case NKikimrSchemeOp::EPathTypeView:
         return TSchemaObject::EPathType::View;
+    case NKikimrSchemeOp::EPathTypeResourcePool:
+        return TSchemaObject::EPathType::ResourcePool;
     case NKikimrSchemeOp::EPathTypeTableIndex:
     case NKikimrSchemeOp::EPathTypeExtSubDomain:
     case NKikimrSchemeOp::EPathTypeCdcStream:

@@ -13,7 +13,7 @@ NKikimr::TConclusionStatus TInStoreShardsTransfer::DoInitializeImpl(const TUpdat
     auto sharding = table.GetTableInfo()->GetShardingVerified(table.GetTableSchemaVerified());
     for (auto&& alter : context.GetModification()->GetAlterColumnTable().GetAlterShards().GetTransfer().GetTransfers()) {
         NKikimrColumnShardDataSharingProto::TDestinationSession destinationSession;
-        destinationSession.SetSessionId("SHARE_TO_SHARD::" + ::ToString(alter.GetDestinationTabletId()));
+        destinationSession.SetSessionId(alter.GetSessionId());
         *destinationSession.MutableInitiatorController() = NKikimr::NOlap::NDataSharing::TInitiatorControllerContainer(
             std::make_shared<NKikimr::NOlap::NDataSharing::TSSInitiatorController>(context.GetSSOperationContext()->SS->TabletID(), 0)).SerializeToProto();
         {
@@ -30,7 +30,7 @@ NKikimr::TConclusionStatus TInStoreShardsTransfer::DoInitializeImpl(const TUpdat
         for (auto&& i : alter.GetSourceTabletIds()) {
             destinationSession.MutableTransferContext()->AddSourceTabletIds(i);
         }
-        DestinationSessions.emplace_back(destinationSession);
+        AFL_VERIFY(DestinationSessions.emplace(destinationSession.GetTransferContext().GetDestinationTabletId(), destinationSession).second);
         AFL_VERIFY(ShardIdsUsage.emplace(alter.GetDestinationTabletId()).second);
     }
     const auto& inStoreOriginal = context.GetOriginalEntityAsVerified<TInStoreTable>();

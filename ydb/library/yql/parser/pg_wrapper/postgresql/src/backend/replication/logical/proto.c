@@ -3,7 +3,7 @@
  * proto.c
  *		logical replication protocol functions
  *
- * Copyright (c) 2015-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2015-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *		src/backend/replication/logical/proto.c
@@ -29,15 +29,29 @@
 #define TRUNCATE_CASCADE		(1<<0)
 #define TRUNCATE_RESTART_SEQS	(1<<1)
 
-static void logicalrep_write_attrs(StringInfo out, Relation rel);
+static void logicalrep_write_attrs(StringInfo out, Relation rel,
+								   Bitmapset *columns);
 static void logicalrep_write_tuple(StringInfo out, Relation rel,
-								   HeapTuple tuple, bool binary);
-
+								   TupleTableSlot *slot,
+								   bool binary, Bitmapset *columns);
 static void logicalrep_read_attrs(StringInfo in, LogicalRepRelation *rel);
 static void logicalrep_read_tuple(StringInfo in, LogicalRepTupleData *tuple);
 
 static void logicalrep_write_namespace(StringInfo out, Oid nspid);
 static const char *logicalrep_read_namespace(StringInfo in);
+
+/*
+ * Check if a column is covered by a column list.
+ *
+ * Need to be careful about NULL, which is treated as a column list covering
+ * all columns.
+ */
+static bool
+column_in_column_list(int attnum, Bitmapset *columns)
+{
+	return (columns == NULL || bms_is_member(attnum, columns));
+}
+
 
 /*
  * Write BEGIN to the output stream.
@@ -49,7 +63,7 @@ logicalrep_write_begin(StringInfo out, ReorderBufferTXN *txn)
 
 	/* fixed fields */
 	pq_sendint64(out, txn->final_lsn);
-	pq_sendint64(out, txn->commit_time);
+	pq_sendint64(out, txn->xact_time.commit_time);
 	pq_sendint32(out, txn->xid);
 }
 
@@ -85,7 +99,7 @@ logicalrep_write_commit(StringInfo out, ReorderBufferTXN *txn,
 	/* send fields */
 	pq_sendint64(out, commit_lsn);
 	pq_sendint64(out, txn->end_lsn);
-	pq_sendint64(out, txn->commit_time);
+	pq_sendint64(out, txn->xact_time.commit_time);
 }
 
 /*
@@ -104,6 +118,264 @@ logicalrep_read_commit(StringInfo in, LogicalRepCommitData *commit_data)
 	commit_data->commit_lsn = pq_getmsgint64(in);
 	commit_data->end_lsn = pq_getmsgint64(in);
 	commit_data->committime = pq_getmsgint64(in);
+}
+
+/*
+ * Write BEGIN PREPARE to the output stream.
+ */
+void
+logicalrep_write_begin_prepare(StringInfo out, ReorderBufferTXN *txn)
+{
+	pq_sendbyte(out, LOGICAL_REP_MSG_BEGIN_PREPARE);
+
+	/* fixed fields */
+	pq_sendint64(out, txn->final_lsn);
+	pq_sendint64(out, txn->end_lsn);
+	pq_sendint64(out, txn->xact_time.prepare_time);
+	pq_sendint32(out, txn->xid);
+
+	/* send gid */
+	pq_sendstring(out, txn->gid);
+}
+
+/*
+ * Read transaction BEGIN PREPARE from the stream.
+ */
+void
+logicalrep_read_begin_prepare(StringInfo in, LogicalRepPreparedTxnData *begin_data)
+{
+	/* read fields */
+	begin_data->prepare_lsn = pq_getmsgint64(in);
+	if (begin_data->prepare_lsn == InvalidXLogRecPtr)
+		elog(ERROR, "prepare_lsn not set in begin prepare message");
+	begin_data->end_lsn = pq_getmsgint64(in);
+	if (begin_data->end_lsn == InvalidXLogRecPtr)
+		elog(ERROR, "end_lsn not set in begin prepare message");
+	begin_data->prepare_time = pq_getmsgint64(in);
+	begin_data->xid = pq_getmsgint(in, 4);
+
+	/* read gid (copy it into a pre-allocated buffer) */
+	strlcpy(begin_data->gid, pq_getmsgstring(in), sizeof(begin_data->gid));
+}
+
+/*
+ * The core functionality for logicalrep_write_prepare and
+ * logicalrep_write_stream_prepare.
+ */
+static void
+logicalrep_write_prepare_common(StringInfo out, LogicalRepMsgType type,
+								ReorderBufferTXN *txn, XLogRecPtr prepare_lsn)
+{
+	uint8		flags = 0;
+
+	pq_sendbyte(out, type);
+
+	/*
+	 * This should only ever happen for two-phase commit transactions, in
+	 * which case we expect to have a valid GID.
+	 */
+	Assert(txn->gid != NULL);
+	Assert(rbtxn_prepared(txn));
+	Assert(TransactionIdIsValid(txn->xid));
+
+	/* send the flags field */
+	pq_sendbyte(out, flags);
+
+	/* send fields */
+	pq_sendint64(out, prepare_lsn);
+	pq_sendint64(out, txn->end_lsn);
+	pq_sendint64(out, txn->xact_time.prepare_time);
+	pq_sendint32(out, txn->xid);
+
+	/* send gid */
+	pq_sendstring(out, txn->gid);
+}
+
+/*
+ * Write PREPARE to the output stream.
+ */
+void
+logicalrep_write_prepare(StringInfo out, ReorderBufferTXN *txn,
+						 XLogRecPtr prepare_lsn)
+{
+	logicalrep_write_prepare_common(out, LOGICAL_REP_MSG_PREPARE,
+									txn, prepare_lsn);
+}
+
+/*
+ * The core functionality for logicalrep_read_prepare and
+ * logicalrep_read_stream_prepare.
+ */
+static void
+logicalrep_read_prepare_common(StringInfo in, char *msgtype,
+							   LogicalRepPreparedTxnData *prepare_data)
+{
+	/* read flags */
+	uint8		flags = pq_getmsgbyte(in);
+
+	if (flags != 0)
+		elog(ERROR, "unrecognized flags %u in %s message", flags, msgtype);
+
+	/* read fields */
+	prepare_data->prepare_lsn = pq_getmsgint64(in);
+	if (prepare_data->prepare_lsn == InvalidXLogRecPtr)
+		elog(ERROR, "prepare_lsn is not set in %s message", msgtype);
+	prepare_data->end_lsn = pq_getmsgint64(in);
+	if (prepare_data->end_lsn == InvalidXLogRecPtr)
+		elog(ERROR, "end_lsn is not set in %s message", msgtype);
+	prepare_data->prepare_time = pq_getmsgint64(in);
+	prepare_data->xid = pq_getmsgint(in, 4);
+	if (prepare_data->xid == InvalidTransactionId)
+		elog(ERROR, "invalid two-phase transaction ID in %s message", msgtype);
+
+	/* read gid (copy it into a pre-allocated buffer) */
+	strlcpy(prepare_data->gid, pq_getmsgstring(in), sizeof(prepare_data->gid));
+}
+
+/*
+ * Read transaction PREPARE from the stream.
+ */
+void
+logicalrep_read_prepare(StringInfo in, LogicalRepPreparedTxnData *prepare_data)
+{
+	logicalrep_read_prepare_common(in, "prepare", prepare_data);
+}
+
+/*
+ * Write COMMIT PREPARED to the output stream.
+ */
+void
+logicalrep_write_commit_prepared(StringInfo out, ReorderBufferTXN *txn,
+								 XLogRecPtr commit_lsn)
+{
+	uint8		flags = 0;
+
+	pq_sendbyte(out, LOGICAL_REP_MSG_COMMIT_PREPARED);
+
+	/*
+	 * This should only ever happen for two-phase commit transactions, in
+	 * which case we expect to have a valid GID.
+	 */
+	Assert(txn->gid != NULL);
+
+	/* send the flags field */
+	pq_sendbyte(out, flags);
+
+	/* send fields */
+	pq_sendint64(out, commit_lsn);
+	pq_sendint64(out, txn->end_lsn);
+	pq_sendint64(out, txn->xact_time.commit_time);
+	pq_sendint32(out, txn->xid);
+
+	/* send gid */
+	pq_sendstring(out, txn->gid);
+}
+
+/*
+ * Read transaction COMMIT PREPARED from the stream.
+ */
+void
+logicalrep_read_commit_prepared(StringInfo in, LogicalRepCommitPreparedTxnData *prepare_data)
+{
+	/* read flags */
+	uint8		flags = pq_getmsgbyte(in);
+
+	if (flags != 0)
+		elog(ERROR, "unrecognized flags %u in commit prepared message", flags);
+
+	/* read fields */
+	prepare_data->commit_lsn = pq_getmsgint64(in);
+	if (prepare_data->commit_lsn == InvalidXLogRecPtr)
+		elog(ERROR, "commit_lsn is not set in commit prepared message");
+	prepare_data->end_lsn = pq_getmsgint64(in);
+	if (prepare_data->end_lsn == InvalidXLogRecPtr)
+		elog(ERROR, "end_lsn is not set in commit prepared message");
+	prepare_data->commit_time = pq_getmsgint64(in);
+	prepare_data->xid = pq_getmsgint(in, 4);
+
+	/* read gid (copy it into a pre-allocated buffer) */
+	strlcpy(prepare_data->gid, pq_getmsgstring(in), sizeof(prepare_data->gid));
+}
+
+/*
+ * Write ROLLBACK PREPARED to the output stream.
+ */
+void
+logicalrep_write_rollback_prepared(StringInfo out, ReorderBufferTXN *txn,
+								   XLogRecPtr prepare_end_lsn,
+								   TimestampTz prepare_time)
+{
+	uint8		flags = 0;
+
+	pq_sendbyte(out, LOGICAL_REP_MSG_ROLLBACK_PREPARED);
+
+	/*
+	 * This should only ever happen for two-phase commit transactions, in
+	 * which case we expect to have a valid GID.
+	 */
+	Assert(txn->gid != NULL);
+
+	/* send the flags field */
+	pq_sendbyte(out, flags);
+
+	/* send fields */
+	pq_sendint64(out, prepare_end_lsn);
+	pq_sendint64(out, txn->end_lsn);
+	pq_sendint64(out, prepare_time);
+	pq_sendint64(out, txn->xact_time.commit_time);
+	pq_sendint32(out, txn->xid);
+
+	/* send gid */
+	pq_sendstring(out, txn->gid);
+}
+
+/*
+ * Read transaction ROLLBACK PREPARED from the stream.
+ */
+void
+logicalrep_read_rollback_prepared(StringInfo in,
+								  LogicalRepRollbackPreparedTxnData *rollback_data)
+{
+	/* read flags */
+	uint8		flags = pq_getmsgbyte(in);
+
+	if (flags != 0)
+		elog(ERROR, "unrecognized flags %u in rollback prepared message", flags);
+
+	/* read fields */
+	rollback_data->prepare_end_lsn = pq_getmsgint64(in);
+	if (rollback_data->prepare_end_lsn == InvalidXLogRecPtr)
+		elog(ERROR, "prepare_end_lsn is not set in rollback prepared message");
+	rollback_data->rollback_end_lsn = pq_getmsgint64(in);
+	if (rollback_data->rollback_end_lsn == InvalidXLogRecPtr)
+		elog(ERROR, "rollback_end_lsn is not set in rollback prepared message");
+	rollback_data->prepare_time = pq_getmsgint64(in);
+	rollback_data->rollback_time = pq_getmsgint64(in);
+	rollback_data->xid = pq_getmsgint(in, 4);
+
+	/* read gid (copy it into a pre-allocated buffer) */
+	strlcpy(rollback_data->gid, pq_getmsgstring(in), sizeof(rollback_data->gid));
+}
+
+/*
+ * Write STREAM PREPARE to the output stream.
+ */
+void
+logicalrep_write_stream_prepare(StringInfo out,
+								ReorderBufferTXN *txn,
+								XLogRecPtr prepare_lsn)
+{
+	logicalrep_write_prepare_common(out, LOGICAL_REP_MSG_STREAM_PREPARE,
+									txn, prepare_lsn);
+}
+
+/*
+ * Read STREAM PREPARE from the stream.
+ */
+void
+logicalrep_read_stream_prepare(StringInfo in, LogicalRepPreparedTxnData *prepare_data)
+{
+	logicalrep_read_prepare_common(in, "stream prepare", prepare_data);
 }
 
 /*
@@ -140,7 +412,7 @@ logicalrep_read_origin(StringInfo in, XLogRecPtr *origin_lsn)
  */
 void
 logicalrep_write_insert(StringInfo out, TransactionId xid, Relation rel,
-						HeapTuple newtuple, bool binary)
+						TupleTableSlot *newslot, bool binary, Bitmapset *columns)
 {
 	pq_sendbyte(out, LOGICAL_REP_MSG_INSERT);
 
@@ -152,7 +424,7 @@ logicalrep_write_insert(StringInfo out, TransactionId xid, Relation rel,
 	pq_sendint32(out, RelationGetRelid(rel));
 
 	pq_sendbyte(out, 'N');		/* new tuple follows */
-	logicalrep_write_tuple(out, rel, newtuple, binary);
+	logicalrep_write_tuple(out, rel, newslot, binary, columns);
 }
 
 /*
@@ -184,7 +456,8 @@ logicalrep_read_insert(StringInfo in, LogicalRepTupleData *newtup)
  */
 void
 logicalrep_write_update(StringInfo out, TransactionId xid, Relation rel,
-						HeapTuple oldtuple, HeapTuple newtuple, bool binary)
+						TupleTableSlot *oldslot, TupleTableSlot *newslot,
+						bool binary, Bitmapset *columns)
 {
 	pq_sendbyte(out, LOGICAL_REP_MSG_UPDATE);
 
@@ -199,17 +472,17 @@ logicalrep_write_update(StringInfo out, TransactionId xid, Relation rel,
 	/* use Oid as relation identifier */
 	pq_sendint32(out, RelationGetRelid(rel));
 
-	if (oldtuple != NULL)
+	if (oldslot != NULL)
 	{
 		if (rel->rd_rel->relreplident == REPLICA_IDENTITY_FULL)
 			pq_sendbyte(out, 'O');	/* old tuple follows */
 		else
 			pq_sendbyte(out, 'K');	/* old key follows */
-		logicalrep_write_tuple(out, rel, oldtuple, binary);
+		logicalrep_write_tuple(out, rel, oldslot, binary, columns);
 	}
 
 	pq_sendbyte(out, 'N');		/* new tuple follows */
-	logicalrep_write_tuple(out, rel, newtuple, binary);
+	logicalrep_write_tuple(out, rel, newslot, binary, columns);
 }
 
 /*
@@ -258,7 +531,8 @@ logicalrep_read_update(StringInfo in, bool *has_oldtuple,
  */
 void
 logicalrep_write_delete(StringInfo out, TransactionId xid, Relation rel,
-						HeapTuple oldtuple, bool binary)
+						TupleTableSlot *oldslot, bool binary,
+						Bitmapset *columns)
 {
 	Assert(rel->rd_rel->relreplident == REPLICA_IDENTITY_DEFAULT ||
 		   rel->rd_rel->relreplident == REPLICA_IDENTITY_FULL ||
@@ -278,7 +552,7 @@ logicalrep_write_delete(StringInfo out, TransactionId xid, Relation rel,
 	else
 		pq_sendbyte(out, 'K');	/* old key follows */
 
-	logicalrep_write_tuple(out, rel, oldtuple, binary);
+	logicalrep_write_tuple(out, rel, oldslot, binary, columns);
 }
 
 /*
@@ -393,7 +667,8 @@ logicalrep_write_message(StringInfo out, TransactionId xid, XLogRecPtr lsn,
  * Write relation description to the output stream.
  */
 void
-logicalrep_write_rel(StringInfo out, TransactionId xid, Relation rel)
+logicalrep_write_rel(StringInfo out, TransactionId xid, Relation rel,
+					 Bitmapset *columns)
 {
 	char	   *relname;
 
@@ -415,7 +690,7 @@ logicalrep_write_rel(StringInfo out, TransactionId xid, Relation rel)
 	pq_sendbyte(out, rel->rd_rel->relreplident);
 
 	/* send the attribute info */
-	logicalrep_write_attrs(out, rel);
+	logicalrep_write_attrs(out, rel, columns);
 }
 
 /*
@@ -491,11 +766,12 @@ logicalrep_read_typ(StringInfo in, LogicalRepTyp *ltyp)
  * Write a tuple to the outputstream, in the most efficient format possible.
  */
 static void
-logicalrep_write_tuple(StringInfo out, Relation rel, HeapTuple tuple, bool binary)
+logicalrep_write_tuple(StringInfo out, Relation rel, TupleTableSlot *slot,
+					   bool binary, Bitmapset *columns)
 {
 	TupleDesc	desc;
-	Datum		values[MaxTupleAttributeNumber];
-	bool		isnull[MaxTupleAttributeNumber];
+	Datum	   *values;
+	bool	   *isnull;
 	int			i;
 	uint16		nliveatts = 0;
 
@@ -503,17 +779,21 @@ logicalrep_write_tuple(StringInfo out, Relation rel, HeapTuple tuple, bool binar
 
 	for (i = 0; i < desc->natts; i++)
 	{
-		if (TupleDescAttr(desc, i)->attisdropped || TupleDescAttr(desc, i)->attgenerated)
+		Form_pg_attribute att = TupleDescAttr(desc, i);
+
+		if (att->attisdropped || att->attgenerated)
 			continue;
+
+		if (!column_in_column_list(att->attnum, columns))
+			continue;
+
 		nliveatts++;
 	}
 	pq_sendint16(out, nliveatts);
 
-	/* try to allocate enough memory from the get-go */
-	enlargeStringInfo(out, tuple->t_len +
-					  nliveatts * (1 + 4));
-
-	heap_deform_tuple(tuple, desc, values, isnull);
+	slot_getallattrs(slot);
+	values = slot->tts_values;
+	isnull = slot->tts_isnull;
 
 	/* Write the values */
 	for (i = 0; i < desc->natts; i++)
@@ -523,6 +803,9 @@ logicalrep_write_tuple(StringInfo out, Relation rel, HeapTuple tuple, bool binar
 		Form_pg_attribute att = TupleDescAttr(desc, i);
 
 		if (att->attisdropped || att->attgenerated)
+			continue;
+
+		if (!column_in_column_list(att->attnum, columns))
 			continue;
 
 		if (isnull[i])
@@ -612,25 +895,19 @@ logicalrep_read_tuple(StringInfo in, LogicalRepTupleData *tuple)
 				/* we don't receive the value of an unchanged column */
 				break;
 			case LOGICALREP_COLUMN_TEXT:
-				len = pq_getmsgint(in, 4);	/* read length */
-
-				/* and data */
-				value->data = palloc(len + 1);
-				pq_copymsgbytes(in, value->data, len);
-				value->data[len] = '\0';
-				/* make StringInfo fully valid */
-				value->len = len;
-				value->cursor = 0;
-				value->maxlen = len;
-				break;
 			case LOGICALREP_COLUMN_BINARY:
 				len = pq_getmsgint(in, 4);	/* read length */
 
 				/* and data */
 				value->data = palloc(len + 1);
 				pq_copymsgbytes(in, value->data, len);
-				/* not strictly necessary but per StringInfo practice */
+
+				/*
+				 * Not strictly necessary for LOGICALREP_COLUMN_BINARY, but
+				 * per StringInfo practice.
+				 */
 				value->data[len] = '\0';
+
 				/* make StringInfo fully valid */
 				value->len = len;
 				value->cursor = 0;
@@ -646,7 +923,7 @@ logicalrep_read_tuple(StringInfo in, LogicalRepTupleData *tuple)
  * Write relation attribute metadata to the stream.
  */
 static void
-logicalrep_write_attrs(StringInfo out, Relation rel)
+logicalrep_write_attrs(StringInfo out, Relation rel, Bitmapset *columns)
 {
 	TupleDesc	desc;
 	int			i;
@@ -659,8 +936,14 @@ logicalrep_write_attrs(StringInfo out, Relation rel)
 	/* send number of live attributes */
 	for (i = 0; i < desc->natts; i++)
 	{
-		if (TupleDescAttr(desc, i)->attisdropped || TupleDescAttr(desc, i)->attgenerated)
+		Form_pg_attribute att = TupleDescAttr(desc, i);
+
+		if (att->attisdropped || att->attgenerated)
 			continue;
+
+		if (!column_in_column_list(att->attnum, columns))
+			continue;
+
 		nliveatts++;
 	}
 	pq_sendint16(out, nliveatts);
@@ -677,6 +960,9 @@ logicalrep_write_attrs(StringInfo out, Relation rel)
 		uint8		flags = 0;
 
 		if (att->attisdropped || att->attgenerated)
+			continue;
+
+		if (!column_in_column_list(att->attnum, columns))
 			continue;
 
 		/* REPLICA IDENTITY FULL means all columns are sent as part of key. */
@@ -816,7 +1102,7 @@ logicalrep_read_stream_start(StringInfo in, bool *first_segment)
 void
 logicalrep_write_stream_stop(StringInfo out)
 {
-	pq_sendbyte(out, LOGICAL_REP_MSG_STREAM_END);
+	pq_sendbyte(out, LOGICAL_REP_MSG_STREAM_STOP);
 }
 
 /*
@@ -841,7 +1127,7 @@ logicalrep_write_stream_commit(StringInfo out, ReorderBufferTXN *txn,
 	/* send fields */
 	pq_sendint64(out, commit_lsn);
 	pq_sendint64(out, txn->end_lsn);
-	pq_sendint64(out, txn->commit_time);
+	pq_sendint64(out, txn->xact_time.commit_time);
 }
 
 /*
@@ -872,10 +1158,14 @@ logicalrep_read_stream_commit(StringInfo in, LogicalRepCommitData *commit_data)
 /*
  * Write STREAM ABORT to the output stream. Note that xid and subxid will be
  * same for the top-level transaction abort.
+ *
+ * If write_abort_info is true, send the abort_lsn and abort_time fields,
+ * otherwise don't.
  */
 void
 logicalrep_write_stream_abort(StringInfo out, TransactionId xid,
-							  TransactionId subxid)
+							  TransactionId subxid, XLogRecPtr abort_lsn,
+							  TimestampTz abort_time, bool write_abort_info)
 {
 	pq_sendbyte(out, LOGICAL_REP_MSG_STREAM_ABORT);
 
@@ -884,17 +1174,98 @@ logicalrep_write_stream_abort(StringInfo out, TransactionId xid,
 	/* transaction ID */
 	pq_sendint32(out, xid);
 	pq_sendint32(out, subxid);
+
+	if (write_abort_info)
+	{
+		pq_sendint64(out, abort_lsn);
+		pq_sendint64(out, abort_time);
+	}
 }
 
 /*
  * Read STREAM ABORT from the output stream.
+ *
+ * If read_abort_info is true, read the abort_lsn and abort_time fields,
+ * otherwise don't.
  */
 void
-logicalrep_read_stream_abort(StringInfo in, TransactionId *xid,
-							 TransactionId *subxid)
+logicalrep_read_stream_abort(StringInfo in,
+							 LogicalRepStreamAbortData *abort_data,
+							 bool read_abort_info)
 {
-	Assert(xid && subxid);
+	Assert(abort_data);
 
-	*xid = pq_getmsgint(in, 4);
-	*subxid = pq_getmsgint(in, 4);
+	abort_data->xid = pq_getmsgint(in, 4);
+	abort_data->subxid = pq_getmsgint(in, 4);
+
+	if (read_abort_info)
+	{
+		abort_data->abort_lsn = pq_getmsgint64(in);
+		abort_data->abort_time = pq_getmsgint64(in);
+	}
+	else
+	{
+		abort_data->abort_lsn = InvalidXLogRecPtr;
+		abort_data->abort_time = 0;
+	}
+}
+
+/*
+ * Get string representing LogicalRepMsgType.
+ */
+const char *
+logicalrep_message_type(LogicalRepMsgType action)
+{
+	static __thread char	err_unknown[20];
+
+	switch (action)
+	{
+		case LOGICAL_REP_MSG_BEGIN:
+			return "BEGIN";
+		case LOGICAL_REP_MSG_COMMIT:
+			return "COMMIT";
+		case LOGICAL_REP_MSG_ORIGIN:
+			return "ORIGIN";
+		case LOGICAL_REP_MSG_INSERT:
+			return "INSERT";
+		case LOGICAL_REP_MSG_UPDATE:
+			return "UPDATE";
+		case LOGICAL_REP_MSG_DELETE:
+			return "DELETE";
+		case LOGICAL_REP_MSG_TRUNCATE:
+			return "TRUNCATE";
+		case LOGICAL_REP_MSG_RELATION:
+			return "RELATION";
+		case LOGICAL_REP_MSG_TYPE:
+			return "TYPE";
+		case LOGICAL_REP_MSG_MESSAGE:
+			return "MESSAGE";
+		case LOGICAL_REP_MSG_BEGIN_PREPARE:
+			return "BEGIN PREPARE";
+		case LOGICAL_REP_MSG_PREPARE:
+			return "PREPARE";
+		case LOGICAL_REP_MSG_COMMIT_PREPARED:
+			return "COMMIT PREPARED";
+		case LOGICAL_REP_MSG_ROLLBACK_PREPARED:
+			return "ROLLBACK PREPARED";
+		case LOGICAL_REP_MSG_STREAM_START:
+			return "STREAM START";
+		case LOGICAL_REP_MSG_STREAM_STOP:
+			return "STREAM STOP";
+		case LOGICAL_REP_MSG_STREAM_COMMIT:
+			return "STREAM COMMIT";
+		case LOGICAL_REP_MSG_STREAM_ABORT:
+			return "STREAM ABORT";
+		case LOGICAL_REP_MSG_STREAM_PREPARE:
+			return "STREAM PREPARE";
+	}
+
+	/*
+	 * This message provides context in the error raised when applying a
+	 * logical message. So we can't throw an error here. Return an unknown
+	 * indicator value so that the original error is still reported.
+	 */
+	snprintf(err_unknown, sizeof(err_unknown), "??? (%d)", action);
+
+	return err_unknown;
 }

@@ -236,7 +236,7 @@ public:
             } else if (!buildInfo->LockTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo->LockTxId)));
             } else {
-                ChangeState(BuildId, TIndexBuildInfo::EState::GatheringStatistics);
+                ChangeState(BuildId, TIndexBuildInfo::EState::Initiating);
                 Progress(BuildId);
             }
 
@@ -253,6 +253,13 @@ public:
             } else if (!buildInfo->InitiateTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo->InitiateTxId)));
             } else {
+                // TODO add vector index filling
+                if (buildInfo->IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+                    ChangeState(BuildId, TIndexBuildInfo::EState::Applying);
+                    Progress(BuildId);
+                    break;
+                }
+
                 ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
                 Progress(BuildId);
             }
@@ -314,7 +321,7 @@ public:
             }
 
             if (buildInfo->ImplTablePath.Empty() && buildInfo->IsBuildIndex()) {
-                TPath implTable = TPath::Init(buildInfo->TablePathId, Self).Dive(buildInfo->IndexName).Dive("indexImplTable");
+                TPath implTable = TPath::Init(buildInfo->TablePathId, Self).Dive(buildInfo->IndexName).Dive(NTableIndex::ImplTable);
                 buildInfo->ImplTablePath = implTable.PathString();
 
                 TTableInfo::TPtr implTableInfo = Self->Tables.at(implTable.Base()->PathId);

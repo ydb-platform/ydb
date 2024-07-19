@@ -78,8 +78,37 @@ struct TEvStatistics {
         EvStatisticsRequest,
         EvStatisticsResponse,
 
+        EvAggregateStatistics,
+        EvAggregateStatisticsResponse,
+        EvAggregateKeepAlive,
+        EvAggregateKeepAliveAck,
+
         EvEnd
     };
+
+    struct TEvAggregateKeepAlive : public TEventPB<
+        TEvAggregateKeepAlive,
+        NKikimrStat::TEvAggregateKeepAlive,
+        EvAggregateKeepAlive>
+    {};
+
+    struct TEvAggregateKeepAliveAck : public TEventPB<
+        TEvAggregateKeepAliveAck,
+        NKikimrStat::TEvAggregateKeepAliveAck,
+        EvAggregateKeepAliveAck>
+    {};
+
+    struct TEvAggregateStatistics : public TEventPB<
+        TEvAggregateStatistics,
+        NKikimrStat::TEvAggregateStatistics,
+        EvAggregateStatistics>
+    {};
+
+    struct TEvAggregateStatisticsResponse : public TEventPB<
+        TEvAggregateStatisticsResponse,
+        NKikimrStat::TEvAggregateStatisticsResponse,
+        EvAggregateStatisticsResponse>
+    {};
 
     struct TEvGetStatistics : public TEventLocal<TEvGetStatistics, EvGetStatistics> {
         EStatType StatType;

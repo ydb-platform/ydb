@@ -21,8 +21,13 @@ struct TIndexColumns {
     TVector<TString> DataColumns;
 };
 
+inline constexpr const char* ImplTable = "indexImplTable";
+inline constexpr std::string_view ImplTables[] = {ImplTable, NTableVectorKmeansTreeIndex::LevelTable, NTableVectorKmeansTreeIndex::PostingTable};
+
 bool IsCompatibleIndex(const NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index, TString& explain);
 TTableColumns CalcTableImplDescription(const NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index);
+
+bool IsImplTable(std::string_view tableName);
 
 }
 }

@@ -152,10 +152,8 @@ ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& resul
         }
 
         for (auto& [implName, implPathId] : child.Base()->GetChildren()) {
-            Y_ABORT_UNLESS(implName == "indexImplTable" 
+            Y_ABORT_UNLESS(NTableIndex::IsImplTable(implName) 
                         || implName == "streamImpl"
-                        || implName == NTableIndex::NTableVectorKmeansTreeIndex::LevelTable
-                        || implName == NTableIndex::NTableVectorKmeansTreeIndex::PostingTable
                 , "unexpected name %s", implName.c_str());
 
             TPath implPath = child.Child(implName);

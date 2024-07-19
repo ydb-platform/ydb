@@ -97,7 +97,7 @@ message TColumnDescription {
     // flag that indicates that column is currently under the build
     // operation.
     optional bool IsBuildInProgress = 11 [default = false];
-    optional bool IsCheckingNotNullInProgress = 12 [default = false];
+    optional bool IsCheckingNotNullInProgress = 13 [default = false];
 }
 
 message TStorageSettings {

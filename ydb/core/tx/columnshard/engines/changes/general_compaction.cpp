@@ -214,11 +214,10 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
             if (!p.ExtractColumnChunks(columnId, records, chunks)) {
                 if (!loader) {
                     loader = resultSchema->GetColumnLoaderVerified(columnId);
-                } else {
-                    AFL_VERIFY(dataSchema->IsSpecialColumnId(columnId));
                 }
+                auto f = resultSchema->GetFieldByColumnIdVerified(columnId);
                 chunks.emplace_back(std::make_shared<NChunks::TDefaultChunkPreparation>(columnId, p.GetPortionInfo().GetRecordsCount(),
-                    p.GetPortionInfo().GetColumnRawBytes({ columnId }), resultField, resultSchema->GetDefaultValueVerified(columnId),
+                    resultField, resultSchema->GetDefaultValueVerified(columnId),
                     resultSchema->GetColumnSaver(columnId)));
                 records = { nullptr };
             }

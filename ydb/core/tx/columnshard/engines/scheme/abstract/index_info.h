@@ -100,9 +100,6 @@ public:
         return result;
     }
 
-
-
-
     std::optional<ui32> GetColumnIdOptional(const std::string& name) const;
     TString GetColumnName(ui32 id, bool required) const;
     static std::shared_ptr<arrow::Field> GetColumnFieldOptional(const ui32 columnId);

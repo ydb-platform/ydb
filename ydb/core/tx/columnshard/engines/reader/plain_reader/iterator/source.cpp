@@ -247,7 +247,7 @@ void TCommittedDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>&
         GetContext()->GetReadMetadata()->GetIndexInfo().AddDeleteFlagsColumn(*batch, CommittedBlob.GetIsDelete());
         MutableStageData().AddBatch(batch);
     }
-    MutableStageData().SyncTableColumns(columns->GetSchema()->fields());
+    MutableStageData().SyncTableColumns(columns->GetSchema()->fields(), *GetContext()->GetReadMetadata()->GetResultSchema());
 }
 
 }   // namespace NKikimr::NOlap::NReader::NPlain

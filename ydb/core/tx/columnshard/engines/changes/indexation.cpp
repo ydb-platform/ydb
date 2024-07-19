@@ -101,9 +101,9 @@ public:
         }
     }
 
-    std::shared_ptr<arrow::RecordBatch> Merge(const TIndexInfo& indexInfo) const {
-        auto fullSchema = indexInfo.ArrowSchemaWithSpecials();
-        NArrow::NMerger::TMergePartialStream stream(indexInfo.GetReplaceKey(), fullSchema, false, IIndexInfo::GetSnapshotColumnNames());
+    std::shared_ptr<arrow::RecordBatch> Merge(
+        const std::shared_ptr<arrow::Schema>& sortSchema, const std::shared_ptr<arrow::Schema>& dataSchema) const {
+        NArrow::NMerger::TMergePartialStream stream(sortSchema, dataSchema, false, IIndexInfo::GetSnapshotColumnNames());
         THashMap<std::string, ui64> fieldSizes;
         ui64 rowsCount = 0;
         for (auto&& batch : Batches) {
@@ -115,7 +115,7 @@ public:
             rowsCount += forMerge->num_rows();
         }
 
-        NArrow::NMerger::TRecordBatchBuilder builder(fullSchema->fields(), rowsCount, fieldSizes);
+        NArrow::NMerger::TRecordBatchBuilder builder(dataSchema->fields(), rowsCount, fieldSizes);
         stream.SetPossibleSameVersion(true);
         stream.DrainAll(builder);
         return builder.Finalize();
@@ -186,6 +186,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
 
         IIndexInfo::AddSnapshotColumns(*batch, inserted.GetSnapshot());
         IIndexInfo::AddDeleteFlagsColumn(*batch, inserted.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete);
+        usageColumnIds.insert(IIndexInfo::GetSystemColumnIds().begin(), IIndexInfo::GetSystemColumnIds().end());
 
         batch = resultSchema->NormalizeBatch(*blobSchema, batch, usageColumnIds).DetachResult();
         pathBatches.Add(inserted, shardingFilterCommit, batch);
@@ -193,9 +194,10 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
 
     Y_ABORT_UNLESS(Blobs.IsEmpty());
     const std::vector<std::string> comparableColumns = resultSchema->GetIndexInfo().GetReplaceKey()->field_names();
+    auto filteredSchema = resultSchema->GetIndexInfo().GetColumnsSchema(usageColumnIds);
     for (auto& [pathId, pathInfo] : pathBatches.GetData()) {
         auto shardingFilter = context.SchemaVersions.GetShardingInfoActual(pathId);
-        auto mergedBatch = pathInfo.Merge(resultSchema->GetIndexInfo());
+        auto mergedBatch = pathInfo.Merge(resultSchema->GetIndexInfo().GetReplaceKey(), filteredSchema);
         Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(mergedBatch, resultSchema->GetIndexInfo().GetReplaceKey()));
 
         auto itGranule = PathToGranule.find(pathId);

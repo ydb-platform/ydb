@@ -1003,8 +1003,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerPerfTest) {
 #endif
 #if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 29u
 Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
-    Y_UNIT_TEST_LLVM(TestLongStringsRefCounting) {
-        TSetup<LLVM> setup(GetTestFactory(), {}, true);
+    Y_UNIT_TEST_LLVM_SPILLING(TestLongStringsRefCounting) {
+        // Currently LLVM version doesn't support spilling.
+        if (LLVM && SPILLING) return;
+        // callable WideLastCombinerWithSpilling was introduced in 49 version of runtime
+        if (MKQL_RUNTIME_VERSION < 49U && SPILLING) return;
+
+        TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         const auto dataType = pb.NewDataType(NUdf::TDataType<const char*>::Id);
@@ -1042,7 +1047,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
 
         const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
 
-        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombinerWithSpilling(pb.ExpandMap(pb.ToFlow(list),
+        auto wideLastCombinerCollable = &TProgramBuilder::WideLastCombiner;
+        if (SPILLING) {
+            wideLastCombinerCollable = &TProgramBuilder::WideLastCombinerWithSpilling;
+        }
+
+        const auto pgmReturn = pb.Collect(pb.NarrowMap((pb.*wideLastCombinerCollable)(pb.ExpandMap(pb.ToFlow(list),
             [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
             [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
             [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) -> TRuntimeNode::TList {
@@ -1066,7 +1076,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
         ));
 
         const auto graph = setup.BuildGraph(pgmReturn);
-        graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+        if (SPILLING) {
+            graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+        }
         const auto iterator = graph->GetValue().GetListIterator();
 
         std::unordered_set<TString> expected {
@@ -1079,7 +1091,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
         NUdf::TUnboxedValue item;
         while (!expected.empty()) {
             UNIT_ASSERT(iterator.Next(item));
-            // const auto actual = item.AsStringRef();
             TString actual = item.AsStringRef().Data();
 
             auto it = expected.find(actual);
@@ -1090,8 +1101,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestLongStringsPasstroughtRefCounting) {
-        TSetup<LLVM> setup;
+    Y_UNIT_TEST_LLVM_SPILLING(TestLongStringsPasstroughtRefCounting) {
+        // Currently LLVM version doesn't support spilling.
+        if (LLVM && SPILLING) return;
+        // callable WideLastCombinerWithSpilling was introduced in 49 version of runtime
+        if (MKQL_RUNTIME_VERSION < 49U && SPILLING) return;
+        TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         const auto dataType = pb.NewDataType(NUdf::TDataType<const char*>::Id);
@@ -1128,7 +1143,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
 
         const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
 
-        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(list),
+        auto wideLastCombinerCollable = &TProgramBuilder::WideLastCombiner;
+        if (SPILLING) {
+            wideLastCombinerCollable = &TProgramBuilder::WideLastCombinerWithSpilling;
+        }
+        const auto pgmReturn = pb.Collect(pb.NarrowMap((pb.*wideLastCombinerCollable)(pb.ExpandMap(pb.ToFlow(list),
             [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
             [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
             [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) -> TRuntimeNode::TList {
@@ -1151,22 +1170,37 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
         ));
 
         const auto graph = setup.BuildGraph(pgmReturn);
+        if (SPILLING) {
+            graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+        }
         const auto iterator = graph->GetValue().GetListIterator();
+
+        std::unordered_set<TString> expected {
+            "very long value 1 / key one / very long value 1 / key one",
+            "very long value 3 / key two / very long value 2 / key two",
+            "very long value 4 / very long key one / very long value 4 / very long key one",
+            "very long value 9 / very long key two / very long value 5 / very long key two"
+        };
+
         NUdf::TUnboxedValue item;
-        UNIT_ASSERT(iterator.Next(item));
-        UNBOXED_VALUE_STR_EQUAL(item, "very long value 1 / key one / very long value 1 / key one");
-        UNIT_ASSERT(iterator.Next(item));
-        UNBOXED_VALUE_STR_EQUAL(item, "very long value 3 / key two / very long value 2 / key two");
-        UNIT_ASSERT(iterator.Next(item));
-        UNBOXED_VALUE_STR_EQUAL(item, "very long value 4 / very long key one / very long value 4 / very long key one");
-        UNIT_ASSERT(iterator.Next(item));
-        UNBOXED_VALUE_STR_EQUAL(item, "very long value 9 / very long key two / very long value 5 / very long key two");
+        while (!expected.empty()) {
+            UNIT_ASSERT(iterator.Next(item));
+            TString actual = item.AsStringRef().Data();
+
+            auto it = expected.find(actual);
+            UNIT_ASSERT(it != expected.end());
+            expected.erase(it);
+        }
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestDoNotCalculateUnusedInput) {
-        TSetup<LLVM> setup;
+    Y_UNIT_TEST_LLVM_SPILLING(TestDoNotCalculateUnusedInput) {
+        // Currently LLVM version doesn't support spilling.
+        if (LLVM && SPILLING) return;
+        // callable WideLastCombinerWithSpilling was introduced in 49 version of runtime
+        if (MKQL_RUNTIME_VERSION < 49U && SPILLING) return;
+        TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         const auto dataType = pb.NewDataType(NUdf::TDataType<const char*>::Id);
@@ -1200,7 +1234,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
 
         const auto landmine = pb.NewDataLiteral<NUdf::EDataSlot::String>("ACHTUNG MINEN!");
 
-        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(list),
+        auto wideLastCombinerCollable = &TProgramBuilder::WideLastCombiner;
+        if (SPILLING) {
+            wideLastCombinerCollable = &TProgramBuilder::WideLastCombinerWithSpilling;
+        }
+        const auto pgmReturn = pb.Collect(pb.NarrowMap((pb.*wideLastCombinerCollable)(pb.ExpandMap(pb.ToFlow(list),
             [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Unwrap(pb.Nth(item, 1U), landmine, __FILE__, __LINE__, 0), pb.Nth(item, 2U)}; }),
             [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
             [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) -> TRuntimeNode::TList {
@@ -1224,12 +1262,24 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
         ));
 
         const auto graph = setup.BuildGraph(pgmReturn);
+        if (SPILLING) {
+            graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+        }
+        std::unordered_set<TString> expected {
+            "key one / value 2 / value 1 / value 5 / value 4",
+            "key two / value 4 / value 3 / value 3 / value 2"
+        };
+
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
-        UNIT_ASSERT(iterator.Next(item));
-        UNBOXED_VALUE_STR_EQUAL(item, "key one / value 2 / value 1 / value 5 / value 4");
-        UNIT_ASSERT(iterator.Next(item));
-        UNBOXED_VALUE_STR_EQUAL(item, "key two / value 4 / value 3 / value 3 / value 2");
+        while (!expected.empty()) {
+            UNIT_ASSERT(iterator.Next(item));
+            TString actual = item.AsStringRef().Data();
+
+            auto it = expected.find(actual);
+            UNIT_ASSERT(it != expected.end());
+            expected.erase(it);
+        }
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }

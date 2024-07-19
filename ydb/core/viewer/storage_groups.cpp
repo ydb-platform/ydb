@@ -1700,7 +1700,7 @@ YAML::Node TJsonRequestSwagger<TStorageGroups>::GetSwagger() {
     YAML::Node node = YAML::Load(R"___(
         post:
           tags:
-          - viewer
+          - storage
           summary: Storage groups
           description: Information about storage groups
           parameters:

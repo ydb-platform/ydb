@@ -898,8 +898,6 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 default:
                     return false;
                 }
-            case NKikimrSchemeOp::EPathTypeTableIndex:
-                return true;
             default:
                 return false;
             }

@@ -337,7 +337,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             meta->DataSourceLocation,
             httpGateway,
             NYql::IHTTPGateway::TRetryPolicy::GetNoRetryPolicy(),
-            std::move(credentials.GetAuthInfo())
+            credentials
         ));
 
         meta->Attributes.erase("withinfer");

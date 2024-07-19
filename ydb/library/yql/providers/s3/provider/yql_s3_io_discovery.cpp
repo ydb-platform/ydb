@@ -586,7 +586,7 @@ private:
         const auto& connect = State_->Configuration->Clusters.at(dataSource.Cluster().StringValue());
         const auto& token = State_->Configuration->Tokens.at(dataSource.Cluster().StringValue());
 
-        const TS3Credentials credentials(State_->CredentialsFactory, token);
+        const auto& credentials = GetOrCreateCredentials(token);
         const TString url = connect.Url;
         auto s3ParseSettings = source.Input().Maybe<TS3ParseSettings>().Cast();
         TString filePattern;
@@ -742,7 +742,7 @@ private:
         const auto& connect = State_->Configuration->Clusters.at(read.DataSource().Cluster().StringValue());
         const auto& token = State_->Configuration->Tokens.at(read.DataSource().Cluster().StringValue());
 
-        const TS3Credentials credentials(State_->CredentialsFactory, token);
+        const auto& credentials = GetOrCreateCredentials(token);
         const TString url = connect.Url;
 
         TGeneratedColumnsConfig config;
@@ -878,6 +878,14 @@ private:
         return true;
     }
 
+    TS3Credentials GetOrCreateCredentials(const TString& token) {
+        auto it = S3Credentials_.find(token);
+        if (it != S3Credentials_.end()) {
+            return it->second;
+        }
+        return S3Credentials_.insert({token, TS3Credentials(State_->CredentialsFactory, token)}).first->second;
+    }
+
     const TS3State::TPtr State_;
     const NS3Lister::IS3ListerFactory::TPtr ListerFactory_;
     const IS3ListingStrategy::TPtr ListingStrategy_;
@@ -885,6 +893,7 @@ private:
     TPendingRequests PendingRequests_;
     TNodeMap<TVector<TListRequest>> RequestsByNode_;
     TNodeMap<TGeneratedColumnsConfig> GenColumnsByNode_;
+    std::unordered_map<TString, TS3Credentials> S3Credentials_;
     NThreading::TFuture<void> AllFuture_;
 };
 

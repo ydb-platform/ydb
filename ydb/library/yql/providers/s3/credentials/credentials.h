@@ -33,8 +33,6 @@ private:
     TS3Credentials::TAuthInfo AuthInfo;
 };
 
-IOutputStream& operator<<(IOutputStream& stream, const TS3Credentials& credentials);
-
 TS3Credentials::TAuthInfo GetAuthInfo(ISecuredServiceAccountCredentialsFactory::TPtr factory, const TString& structuredTokenJson);
 
 }

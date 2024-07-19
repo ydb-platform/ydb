@@ -122,7 +122,7 @@ public:
                     if (tokenator) {
                         token = tokenator->GetToken(token);
                         if (token) {
-                            Request.SetHeader(meta, "authorization", token);
+                            Request.SetHeader(meta, "Authorization", token);
                         }
                     }
                     meta.Timeout = GetClientTimeout();

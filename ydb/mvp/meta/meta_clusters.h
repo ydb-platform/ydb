@@ -62,6 +62,8 @@ public:
 
         CreateLoadVersionsActor(actorId, Client, Location.RootDomain, ctx);
 
+
+        Cerr << "iiii Bootstrap 1 " << Endl;
         Client->CreateSession().Subscribe([actorId, actorSystem](const NYdb::NTable::TAsyncCreateSessionResult& result) {
             NYdb::NTable::TAsyncCreateSessionResult res(result);
             actorSystem->Send(actorId, new TEvPrivate::TEvCreateSessionResult(res.ExtractValue()));
@@ -71,6 +73,7 @@ public:
     }
 
     void Handle(TEvPrivate::TEvCreateSessionResult::TPtr event, const NActors::TActorContext& ctx) {
+        Cerr << "iiii TEvCreateSessionResult " << Endl;
         const NYdb::NTable::TCreateSessionResult& result(event->Get()->Result);
         if (result.IsSuccess()) {
             LOG_DEBUG_S(ctx, EService::MVP, "MetaClusters: got session, making query");
@@ -181,6 +184,7 @@ public:
     }
 
     void CollectClustersData(const NActors::TActorContext& ctx) {
+        Cerr << "iiii CollectClustersData" << Endl;
         LOG_DEBUG_S(ctx, EService::MVP, "MetaClusters: collecting clusters data");
 
         NJson::TJsonValue root;
@@ -209,6 +213,7 @@ public:
                 }
             }
             if (name && balancer) {
+                Cerr << "iiii name && balancer" << Endl;
                 TString authHeaderValue = GetAuthHeaderValue(ColumnValueToString(rsParser.GetValue("api_user_token")));
                 {
                     TJsonMergePeer& peer = peers.emplace_back();

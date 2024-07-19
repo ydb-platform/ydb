@@ -226,7 +226,7 @@ runs:
         echo "TESTMO_RUN_NAME=$TESTMO_RUN_NAME" >> $GITHUB_ENV 
 
         # custom
-        TESTMO_RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+        TESTMO_RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID_$RETRY"
         TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-link --name build --url "$TESTMO_RUN_URL" --resources testmo.json
         TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-field --name git-sha --type string --value "${GITHUB_SHA:0:7}" --resources testmo.json
         TESTMO_RUN_ID=$(
@@ -234,12 +234,6 @@ runs:
             --name "$TESTMO_RUN_NAME" --source "$TESTMO_SOURCE" --resources testmo.json \
             --tags "$TESTMO_BRANCH_TAG" --tags "$TESTMO_EXTRA_TAG"
         )
-        echo "runid=${TESTMO_RUN_ID}" >> $GITHUB_OUTPUT
-        TESTMO_HISTORY_URL="${TESTMO_URL}/automation/runs/view/${TESTMO_RUN_ID}"
-
-        # Print test history link
-        echo "10 [Test history](${TESTMO_HISTORY_URL})" >> $SUMMARY_LINKS
-
         echo "::debug::get version"
         ./ya --version
 
@@ -254,6 +248,15 @@ runs:
 
         for RETRY in {1..3}
         do
+          if [ ${{ inputs.testman_token }} ]; then
+            # inititalize testme session
+            echo "runid=${TESTMO_RUN_ID}" >> $GITHUB_OUTPUT
+            TESTMO_HISTORY_URL="${TESTMO_URL}/automation/runs/view/${TESTMO_RUN_ID}"
+
+            # Print test history link
+            echo "10 [Test history](${TESTMO_HISTORY_URL})" >> $SUMMARY_LINKS
+          fi
+
           CURRENT_MESSAGE="**{platform_name}-${BUILD_PRESET}** is running..." 
           RERUN_FAILED_TESTS=""
           if [ $RETRY = 1 ]; then
@@ -308,6 +311,42 @@ runs:
               "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_JUNIT_XML_PATH"
           fi
 
+
+          if [ ${{ inputs.testman_token }} ]; then
+            # finish testme session
+
+            # split large junit_report
+            export TESTMO_JUNIT_REPORT_PARTS=$TMP_DIR/junit-split
+            mkdir -p $TESTMO_JUNIT_REPORT_PARTS
+            .github/scripts/tests/split-junit.py -o "$TESTMO_JUNIT_REPORT_PARTS" "$JUNIT_REPORT_XML"
+            # archive unitest reports (transformed)
+            tar -C $TESTMO_JUNIT_REPORT_PARTS/.. -czf $PUBLIC_DIR/junit_parts.xml.tar.gz $(basename $TESTMO_JUNIT_REPORT_PARTS)
+
+            TESTMO_PROXY_ADDR=127.0.0.1:8888
+
+            openssl req -x509 -newkey rsa:2048 \
+              -keyout $TMP_DIR/key.pem -out $TMP_DIR/cert.pem \
+              -sha256 -days 1 -nodes -subj "/CN=127.0.0.1"
+            
+            TESTMO_TOKEN=${{ inputs.testman_token }} ./ydb/ci/testmo-proxy/testmo-proxy.py -l $TESTMO_PROXY_ADDR \
+              --cert-file "$TMP_DIR/cert.pem" \
+              --cert-key "$TMP_DIR/key.pem" \
+              --target-timeout 3,10 \
+              --max-request-time 55 \
+              "$TESTMO_URL" &
+            
+            testmo_proxy_pid=$!
+            
+            TESTMO_TOKEN=${{ inputs.testman_token }} NODE_TLS_REJECT_UNAUTHORIZED=0 testmo automation:run:submit-thread \
+              --instance "https://$TESTMO_PROXY_ADDR" --run-id "$TESTMO_RUN_ID" \
+              --results "$TESTMO_JUNIT_REPORT_PARTS/*.xml"
+            
+            kill $testmo_proxy_pid
+
+            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{ steps.build.outputs.runid }}
+            echo "runid=" >> $GITHUB_OUTPUT
+          fi
+
           TESTS_RESULT=0
           .github/scripts/tests/fail-checker.py "$CURRENT_JUNIT_XML_PATH" || TESTS_RESULT=$?
 
@@ -320,36 +359,6 @@ runs:
           echo "status=true" >> $GITHUB_OUTPUT
         fi
         
-        # TODO: merge tests here 
-
-        # split large junit_report
-        export TESTMO_JUNIT_REPORT_PARTS=$TMP_DIR/junit-split
-        mkdir -p $TESTMO_JUNIT_REPORT_PARTS
-        .github/scripts/tests/split-junit.py -o "$TESTMO_JUNIT_REPORT_PARTS" "$JUNIT_REPORT_XML"
-        # archive unitest reports (transformed)
-        tar -C $TESTMO_JUNIT_REPORT_PARTS/.. -czf $PUBLIC_DIR/junit_parts.xml.tar.gz $(basename $TESTMO_JUNIT_REPORT_PARTS)
-
-        TESTMO_PROXY_ADDR=127.0.0.1:8888
-
-        openssl req -x509 -newkey rsa:2048 \
-          -keyout $TMP_DIR/key.pem -out $TMP_DIR/cert.pem \
-          -sha256 -days 1 -nodes -subj "/CN=127.0.0.1"
-        
-        TESTMO_TOKEN=${{ inputs.testman_token }} ./ydb/ci/testmo-proxy/testmo-proxy.py -l $TESTMO_PROXY_ADDR \
-          --cert-file "$TMP_DIR/cert.pem" \
-          --cert-key "$TMP_DIR/key.pem" \
-          --target-timeout 3,10 \
-          --max-request-time 55 \
-          "$TESTMO_URL" &
-        
-        testmo_proxy_pid=$!
-        
-        TESTMO_TOKEN=${{ inputs.testman_token }} NODE_TLS_REJECT_UNAUTHORIZED=0 testmo automation:run:submit-thread \
-          --instance "https://$TESTMO_PROXY_ADDR" --run-id "$TESTMO_RUN_ID" \
-          --results "$TESTMO_JUNIT_REPORT_PARTS/*.xml"
-        
-        kill $testmo_proxy_pid
-  
 
     - name: comment-build-status
       if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
@@ -395,12 +404,13 @@ runs:
         result=`.github/scripts/upload_tests_results.py --test-results-file ${JUNIT_REPORT_XML} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull $run_name --job-name ${JOB_NAME} --job-id ${JOB_ID} --branch ${GITHUB_REF_NAME}`
 
 
-    - name: Test history run complete
-      if: always() && inputs.testman_token && inputs.run_tests
+    - name: Clean up unfinished testmo sessions
+      if: always()
       shell: bash
       run: |
-        TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{ steps.build.outputs.runid }}
-    
+        if [ ${{ steps.build.outputs.runid }} ]; then
+          TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{ steps.build.outputs.runid }}
+        fi
     - name: analyze tests results
       shell: bash
       if: inputs.run_tests

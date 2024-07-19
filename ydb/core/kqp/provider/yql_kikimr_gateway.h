@@ -84,8 +84,12 @@ struct TIndexDescription {
     const ui64 LocalPathId;
     const ui64 PathOwnerId;
 
+    using TSpecializedIndexDescription = std::variant<std::monostate, NKikimrKqp::TVectorIndexKmeansTreeDescription>;
+    TSpecializedIndexDescription SpecializedIndexDescription;
+
     TIndexDescription(const TString& name, const TVector<TString>& keyColumns, const TVector<TString>& dataColumns,
-        EType type, EIndexState state, ui64 schemaVersion, ui64 localPathId, ui64 pathOwnerId)
+        EType type, EIndexState state, ui64 schemaVersion, ui64 localPathId, ui64 pathOwnerId,
+        const TSpecializedIndexDescription& specializedIndexDescription)
         : Name(name)
         , KeyColumns(keyColumns)
         , DataColumns(dataColumns)
@@ -94,6 +98,7 @@ struct TIndexDescription {
         , SchemaVersion(schemaVersion)
         , LocalPathId(localPathId)
         , PathOwnerId(pathOwnerId)
+        , SpecializedIndexDescription(specializedIndexDescription)
     {}
 
     TIndexDescription(const NKikimrSchemeOp::TIndexDescription& index)
@@ -105,7 +110,13 @@ struct TIndexDescription {
         , SchemaVersion(index.GetSchemaVersion())
         , LocalPathId(index.GetLocalPathId())
         , PathOwnerId(index.HasPathOwnerId() ? index.GetPathOwnerId() : 0ul)
-    {}
+    {
+        if (Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+            NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexDescription;
+            *vectorIndexDescription.MutableSettings() = index.GetVectorIndexKmeansTreeDescription().GetSettings();
+            SpecializedIndexDescription = vectorIndexDescription;
+        }
+    }
 
     TIndexDescription(const NKikimrKqp::TIndexDescriptionProto* message)
         : Name(message->GetName())
@@ -116,7 +127,11 @@ struct TIndexDescription {
         , SchemaVersion(message->GetSchemaVersion())
         , LocalPathId(message->GetLocalPathId())
         , PathOwnerId(message->GetPathOwnerId())
-    {}
+    {
+        if (Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+            SpecializedIndexDescription = message->GetVectorIndexKmeansTreeDescription();
+        }
+    }
 
     static TIndexDescription::EType ConvertIndexType(const NKikimrSchemeOp::EIndexType indexType) {
         switch (indexType) {
@@ -161,6 +176,11 @@ struct TIndexDescription {
         for(auto& data: DataColumns) {
             message->AddDataColumns(data);
         }
+
+        if (Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+            *message->MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
+        }
+
     }
 
     bool IsSameIndex(const TIndexDescription& other) const {

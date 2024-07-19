@@ -816,6 +816,65 @@ private:
         return TStatus::Ok;
     }
 
+Ydb::Table::VectorIndexSettings SerializeVectorIndexSettingsToProto(const TCoNameValueTupleList& indexSettings) {
+    auto parseDistance = [] (std::string_view distance) -> auto {
+        if (distance == "cosine")
+            return Ydb::Table::VectorIndexSettings::DISTANCE_COSINE;
+        else if (distance == "manhattan")
+            return Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN;
+        else if (distance == "euclidean")
+            return Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN;
+        else 
+            YQL_ENSURE(false, "Wrong index setting distance: " << distance);
+    };
+
+    auto parseSimilarity = [] (std::string_view similarity) -> auto {
+        if (similarity == "cosine")
+            return Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE;
+        else if (similarity == "inner_product")
+            return Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT;
+        else
+            YQL_ENSURE(false, "Wrong index setting similarity: " << similarity);
+    };
+
+    auto parseVectorType = [] (std::string_view vectorType) -> auto {
+        if (vectorType == "float")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
+        else if (vectorType == "uint8")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
+        else if (vectorType == "int8")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8;
+        else if (vectorType == "bit")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT;
+        else
+            YQL_ENSURE(false, "Wrong index setting vector_type: " << vectorType);
+    };
+    
+    Ydb::Table::VectorIndexSettings proto;
+
+    for (const auto& indexSetting : indexSettings) {
+        const auto& name = indexSetting.Name().Value();
+        const auto& value = indexSetting.Value().Cast<TCoAtom>().StringValue();
+
+        if (name == "distance")
+            proto.set_distance(parseDistance(value));
+        else if (name =="similarity")
+            proto.set_similarity(parseSimilarity(value));
+        else if (name =="vector_type")
+            proto.set_vector_type(parseVectorType(value));
+        else if (name =="vector_dimension")
+            proto.set_vector_dimension(FromString<ui32>(value));
+        else
+            YQL_ENSURE(false, "Wrong index setting name: " << name);
+    }
+
+    YQL_ENSURE(proto.metric_case() != Ydb::Table::VectorIndexSettings::METRIC_NOT_SET, "Missed index setting distance or similarity");
+    YQL_ENSURE(proto.vector_type() != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED, "Missed index setting vector_type");
+    YQL_ENSURE(proto.vector_dimension(), "Missed index setting vector_dimension");
+
+    return proto;
+}    
+
 virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) override {
         TString cluster = TString(create.DataSink().Cluster());
         TString table = TString(create.Table());
@@ -927,6 +986,8 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 indexType = TIndexDescription::EType::GlobalAsync;
             } else if (type == "syncGlobalUnique") {
                 indexType = TIndexDescription::EType::GlobalSyncUnique;
+            } else if (type == "globalVectorKmeansTree") {
+                indexType = TIndexDescription::EType::GlobalSyncVectorKMeansTree;
             } else {
                 YQL_ENSURE(false, "Unknown index type: " << type);
             }
@@ -952,6 +1013,13 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 dataColums.emplace_back(TString(dataCol.Value()));
             }
 
+            TIndexDescription::TSpecializedIndexDescription specializedIndexDescription;
+            if (indexType == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexDescription;
+                *vectorIndexDescription.MutableSettings() = SerializeVectorIndexSettingsToProto(index.IndexSettings());
+                specializedIndexDescription = vectorIndexDescription;
+            }
+
             // IndexState and version, pathId are ignored for create table with index request
             TIndexDescription indexDesc(
                 TString(index.Name().Value()),
@@ -961,7 +1029,8 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 TIndexDescription::EIndexState::Ready,
                 0,
                 0,
-                0
+                0,
+                specializedIndexDescription
             );
 
             meta->Indexes.push_back(indexDesc);

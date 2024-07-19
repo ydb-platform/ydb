@@ -1597,6 +1597,8 @@ public:
                                 add_index->mutable_global_index();
                             } else if (type == "asyncGlobal") {
                                 add_index->mutable_global_async_index();
+                            } else if (type == "globalVectorKmeansTree") {
+                                add_index->mutable_global_vector_kmeans_tree_index();
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                     TStringBuilder() << "Unknown index type: " << type));
@@ -1628,22 +1630,69 @@ public:
                                     return SyncError();
                                 }
                             }
-                        } else {
-                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
-                                TStringBuilder() << "Unknown add index setting: " << name));
+                        } else if (name == "indexSettings") {
+                            YQL_ENSURE(add_index->type_case() == Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex);
+                            auto& protoVectorSettings = *add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
+                            auto indexSettings = columnTuple.Item(1).Cast<TCoAtomList>();
+                            YQL_ENSURE(indexSettings.Maybe<TCoNameValueTupleList>());
+                            for (const auto& vectorSetting : indexSettings.Cast<TCoNameValueTupleList>()) {
+                                YQL_ENSURE(vectorSetting.Value().Maybe<TCoAtom>());
+                                if (vectorSetting.Name().Value() == "distance") {
+                                    auto parseEnum = [] (const TString distance) {
+                                        if (distance == "cosine")
+                                            return Ydb::Table::VectorIndexSettings_Distance_DISTANCE_COSINE;
+                                        else if (distance == "manhattan")
+                                            return Ydb::Table::VectorIndexSettings_Distance_DISTANCE_MANHATTAN;
+                                        else if (distance == "euclidean")
+                                            return Ydb::Table::VectorIndexSettings_Distance_DISTANCE_EUCLIDEAN;
+                                        else
+                                            YQL_ENSURE(false, "Wrong distance: " << distance);
+                                    };
+                                    protoVectorSettings.set_distance(parseEnum(vectorSetting.Value().Cast<TCoAtom>().StringValue()));
+                                } else if (vectorSetting.Name().Value() == "similarity") {
+                                    auto parseEnum = [] (const TString similarity) {
+                                        if (similarity == "cosine")
+                                            return Ydb::Table::VectorIndexSettings_Similarity_SIMILARITY_COSINE;
+                                        else if (similarity == "inner_product")
+                                            return Ydb::Table::VectorIndexSettings_Similarity_SIMILARITY_INNER_PRODUCT;
+                                        else
+                                            YQL_ENSURE(false, "Wrong similarity: " << similarity);
+                                    };
+                                    protoVectorSettings.set_similarity(parseEnum(vectorSetting.Value().Cast<TCoAtom>().StringValue()));
+                                } else if (vectorSetting.Name().Value() == "vector_type") {
+                                    auto parseEnum = [] (const TString vectorType) {
+                                        if (vectorType == "float")
+                                            return Ydb::Table::VectorIndexSettings_VectorType_VECTOR_TYPE_FLOAT;
+                                        else if (vectorType == "uint8")
+                                            return Ydb::Table::VectorIndexSettings_VectorType_VECTOR_TYPE_UINT8;
+                                        else if (vectorType == "int8")
+                                            return Ydb::Table::VectorIndexSettings_VectorType_VECTOR_TYPE_INT8;
+                                        else if (vectorType == "bit")
+                                            return Ydb::Table::VectorIndexSettings_VectorType_VECTOR_TYPE_BIT;
+                                        else
+                                            YQL_ENSURE(false, "Wrong vector_type: " << vectorType);
+                                    };
+                                    protoVectorSettings.set_vector_type(parseEnum(vectorSetting.Value().Cast<TCoAtom>().StringValue()));
+                                } else if (vectorSetting.Name().Value() == "vector_dimension") {
+                                    auto parseInt = [] (const TString vectorDimensionStr) {
+                                        ui32 vectorDimension;
+                                        YQL_ENSURE(TryFromString(vectorDimensionStr, vectorDimension), "Wrong vector_dimension: " << vectorDimensionStr);
+                                        return vectorDimension;
+                                    };
+                                    protoVectorSettings.set_vector_dimension(parseInt(vectorSetting.Value().Cast<TCoAtom>().StringValue()));
+                                } else {
+                                    YQL_ENSURE(false, "Wrong vector setting name: " << vectorSetting.Name().Value());
+                                }
+                            }
+                        }
+                        else {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() << "Unknown add vector index setting: " << name));
                             return SyncError();
                         }
                     }
-                    switch (add_index->type_case()) {
-                        case Ydb::Table::TableIndex::kGlobalIndex:
-                            *add_index->mutable_global_index() = Ydb::Table::GlobalIndex();
-                            break;
-                        case Ydb::Table::TableIndex::kGlobalAsyncIndex:
-                            *add_index->mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex();
-                            break;
-                        default:
-                            YQL_ENSURE(false, "Unknown index type: " << (ui32)add_index->type_case());
-                    }
+                    YQL_ENSURE(add_index->name());
+                    YQL_ENSURE(add_index->type_case() != Ydb::Table::TableIndex::TYPE_NOT_SET);
+                    YQL_ENSURE(add_index->index_columns_size());
                 } else if (name == "alterIndex") {
                     if (maybeAlter.Cast().Actions().Size() > 1) {
                         ctx.AddError(

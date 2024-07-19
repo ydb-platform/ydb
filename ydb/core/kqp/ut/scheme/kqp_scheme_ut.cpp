@@ -2340,13 +2340,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateSampleTablesWithIndex(session);
 
-        const auto typeStr = IndexTypeSqlString(type);
+        const auto typeStr = IndexTypeSqlString(type).data();
+        const auto subtypeStr = IndexSubtypeSqlString(type).data();
+        const auto withStr = IndexWithSqlString(type).data();
 
+        // Non-covered index
         {
             auto status = session.ExecuteSchemeQuery(Sprintf(R"(
                 --!syntax_v1
-                ALTER TABLE `/Root/Test` ADD INDEX NameIndex %s ON (Name);
-            )", typeStr.data())).ExtractValueSync();
+                ALTER TABLE `/Root/Test` ADD INDEX NameIndex %s %s %s ON (Name);
+            )", typeStr, subtypeStr, withStr)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
         }
 
@@ -2360,6 +2363,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexType(), IndexTypeSqlToIndexType(type));
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns().size(), 0);
+
+            if (type == EIndexTypeSql::GlobalVectorKMeansTree) {
+                const TVectorIndexSettings& vectorIndexSettings = *indexDesc.back().GetVectorIndexSettings();
+                UNIT_ASSERT_VALUES_EQUAL(std::get<TVectorIndexSettings::ESimilarity>(vectorIndexSettings.Metric), TVectorIndexSettings::ESimilarity::InnerProduct);
+                UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Float);
+                UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
+            }
         }
 
         {
@@ -2377,11 +2387,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 0);
         }
 
+        // Covered index
         {
             auto status = session.ExecuteSchemeQuery(Sprintf(R"(
                 --!syntax_v1
-                ALTER TABLE `/Root/Test` ADD INDEX NameIndex %s ON (Name) COVER (Amount);
-            )", typeStr.data())).ExtractValueSync();
+                ALTER TABLE `/Root/Test` ADD INDEX NameIndex %s %s %s ON (Name) COVER (Amount);
+            )", typeStr, subtypeStr, withStr)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
         }
 
@@ -2394,6 +2405,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexType(), IndexTypeSqlToIndexType(type));
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns().size(), 1);
+
+            if (type == EIndexTypeSql::GlobalVectorKMeansTree) {
+                const TVectorIndexSettings& vectorIndexSettings = *indexDesc.back().GetVectorIndexSettings();
+                UNIT_ASSERT_VALUES_EQUAL(std::get<TVectorIndexSettings::ESimilarity>(vectorIndexSettings.Metric), TVectorIndexSettings::ESimilarity::InnerProduct);
+                UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Float);
+                UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
+            }            
         }
     }
 
@@ -2407,6 +2425,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(AlterTableAddExplicitAsyncIndex) {
         AlterTableAddIndex(EIndexTypeSql::GlobalAsync);
+    }
+
+    Y_UNIT_TEST(AlterTableAddExplicitSyncVectorKMeansTreeIndex) {
+        AlterTableAddIndex(EIndexTypeSql::GlobalVectorKMeansTree);
     }
 
     Y_UNIT_TEST(AlterTableAlterIndex) {
@@ -2650,6 +2672,88 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(CreateTableWithVectorIndex) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            TString create_index_query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Embedding String,
+                    PRIMARY KEY (Key),
+                    INDEX vector_idx 
+                        GLOBAL USING vector_kmeans_tree 
+                        WITH (similarity=inner_product, vector_type=float, vector_dimension=1024)
+                        ON (Embedding)
+                );
+            )";
+            auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTableDescription().GetIndexDescriptions().size(), 1);
+            auto indexDesc = result.GetTableDescription().GetIndexDescriptions()[0];
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexName(), "vector_idx");
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexType(), EIndexType::GlobalVectorKMeansTree);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns()[0], "Embedding");
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns().size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<NYdb::NTable::TVectorIndexSettings::ESimilarity>(indexDesc.GetVectorIndexSettings()->Metric), NYdb::NTable::TVectorIndexSettings::ESimilarity::InnerProduct);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetVectorIndexSettings()->VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetVectorIndexSettings()->VectorDimension, 1024);
+        }
+    } 
+
+    Y_UNIT_TEST(CreateTableWithVectorIndexCovered) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            TString create_index_query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Embedding String,
+                    Covered String,
+                    PRIMARY KEY (Key),
+                    INDEX vector_idx 
+                        GLOBAL USING vector_kmeans_tree 
+                        WITH (similarity=inner_product, vector_type=float, vector_dimension=1024)
+                        ON (Embedding)
+                        COVER (Covered)
+                );
+            )";
+            auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTableDescription().GetIndexDescriptions().size(), 1);
+            auto indexDesc = result.GetTableDescription().GetIndexDescriptions()[0];
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexName(), "vector_idx");
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexType(), EIndexType::GlobalVectorKMeansTree);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns()[0], "Embedding");
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns()[0], "Covered");
+            UNIT_ASSERT_VALUES_EQUAL(std::get<NYdb::NTable::TVectorIndexSettings::ESimilarity>(indexDesc.GetVectorIndexSettings()->Metric), NYdb::NTable::TVectorIndexSettings::ESimilarity::InnerProduct);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetVectorIndexSettings()->VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetVectorIndexSettings()->VectorDimension, 1024);
+        }
+    } 
+   
     Y_UNIT_TEST(CreateTableWithVectorIndexPublicApi) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

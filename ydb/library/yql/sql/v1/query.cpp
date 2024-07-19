@@ -272,6 +272,28 @@ static INode::TPtr CreateTableSettings(const TTableSettings& tableSettings, ETab
     return settings;
 }
 
+static INode::TPtr CreateVectorIndexSettings(const TVectorIndexSettings& vectorIndexSettings, const INode& node) {
+    // short aliases for member function calls
+    auto Y = [&node](auto&&... args) { return node.Y(std::forward<decltype(args)>(args)...); };
+    auto Q = [&node](auto&&... args) { return node.Q(std::forward<decltype(args)>(args)...); };
+    auto L = [&node](auto&&... args) { return node.L(std::forward<decltype(args)>(args)...); };
+
+    auto settings = Y();
+
+    if (const auto* distance = std::get_if<TVectorIndexSettings::EDistance>(&vectorIndexSettings.Metric)) {
+        settings = L(settings, Q(Y(Q("distance"), Q(ToString(*distance)))));
+    } else if (const auto* similarity = std::get_if<TVectorIndexSettings::ESimilarity>(&vectorIndexSettings.Metric)) {
+        settings = L(settings, Q(Y(Q("similarity"), Q(ToString(*similarity)))));
+    } else {
+        Y_ENSURE(false, "Metric should be set");
+    }
+
+    settings = L(settings, Q(Y(Q("vector_type"), Q(ToString(*vectorIndexSettings.VectorType)))));
+    settings = L(settings, Q(Y(Q("vector_dimension"), Q(ToString(*vectorIndexSettings.VectorDimension)))));
+    
+    return settings;
+}
+
 static INode::TPtr CreateIndexDesc(const TIndexDescription& index, ETableSettingsParsingMode parsingMode, const INode& node) {
     auto indexColumns = node.Y();
     for (const auto& col : index.IndexColumns) {
@@ -295,6 +317,12 @@ static INode::TPtr CreateIndexDesc(const TIndexDescription& index, ETableSetting
             node.Q(CreateTableSettings(index.TableSettings, parsingMode, node))
         );
         indexNode = node.L(indexNode, tableSettings);
+    }
+    if (const auto* indexSettingsPtr = std::get_if<TVectorIndexSettings>(&index.IndexSettings)) {
+        const auto& indexSettings = node.Q(node.Y(
+            node.Q("indexSettings"), 
+            node.Q(CreateVectorIndexSettings(*indexSettingsPtr, node))));
+        indexNode = node.L(indexNode, indexSettings);
     }
     return indexNode;
 }

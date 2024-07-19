@@ -14,36 +14,25 @@ std::shared_ptr<NKikimr::NOlap::TColumnLoader> IIndexInfo::GetColumnLoaderVerifi
     return result;
 }
 
-std::shared_ptr<arrow::RecordBatch> IIndexInfo::AddDeleteFlagsColumn(const std::shared_ptr<arrow::RecordBatch>& batch, const bool isDelete) {
-    Y_ABORT_UNLESS(batch);
-    i64 numColumns = batch->num_columns();
-    i64 numRows = batch->num_rows();
+void IIndexInfo::AddDeleteFlagsColumn(NArrow::TGeneralContainer& batch, const bool isDelete) {
+    const i64 numRows = batch.num_rows();
 
-    AFL_VERIFY(!batch->GetColumnByName(SPEC_COL_DELETE_FLAG));
-    return NArrow::TStatusValidator::GetValid(batch->AddColumn(numColumns, arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean()),
-        NArrow::TThreadSimpleArraysCache::GetConst(arrow::boolean(), std::make_shared<arrow::BooleanScalar>(isDelete), numRows)));
+    batch.AddField(arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean()), 
+        NArrow::TThreadSimpleArraysCache::GetConst(arrow::boolean(), std::make_shared<arrow::BooleanScalar>(isDelete), numRows)).Validate();
 }
 
-std::shared_ptr<arrow::RecordBatch> IIndexInfo::AddSnapshotColumns(const std::shared_ptr<arrow::RecordBatch>& batch, const TSnapshot& snapshot) {
-    Y_ABORT_UNLESS(batch);
-    i64 numColumns = batch->num_columns();
-    i64 numRows = batch->num_rows();
+void IIndexInfo::AddSnapshotColumns(NArrow::TGeneralContainer& batch, const TSnapshot& snapshot) {
+    const i64 numRows = batch.num_rows();
 
-    auto res = batch->AddColumn(numColumns, arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()),
-        NArrow::MakeUI64Array(snapshot.GetPlanStep(), numRows));
-    Y_ABORT_UNLESS(res.ok());
-    res = (*res)->AddColumn(numColumns + 1, arrow::field(SPEC_COL_TX_ID, arrow::uint64()),
-        NArrow::MakeUI64Array(snapshot.GetTxId(), numRows));
-    Y_ABORT_UNLESS(res.ok());
-    Y_ABORT_UNLESS((*res)->num_columns() == numColumns + 2);
-    return *res;
+    batch.AddField(arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()), NArrow::MakeUI64Array(snapshot.GetPlanStep(), numRows)).Validate();
+    batch.AddField(arrow::field(SPEC_COL_TX_ID, arrow::uint64()), NArrow::MakeUI64Array(snapshot.GetTxId(), numRows)).Validate();
 }
 
-std::shared_ptr<arrow::RecordBatch> IIndexInfo::NormalizeDeletionColumn(const std::shared_ptr<arrow::RecordBatch>& batch) {
-    if (batch->schema()->GetFieldIndex(SPEC_COL_DELETE_FLAG) >= 0) {
-        return batch;
+void IIndexInfo::NormalizeDeletionColumn(NArrow::TGeneralContainer& batch) {
+    if (batch.HasColumn(SPEC_COL_DELETE_FLAG)) {
+        return;
     }
-    return AddDeleteFlagsColumn(batch, false);
+    AddDeleteFlagsColumn(batch, false);
 }
 
 std::optional<ui32> IIndexInfo::GetColumnIdOptional(const std::string& name) const {

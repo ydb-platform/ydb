@@ -1,4 +1,6 @@
 #pragma once
+#include <ydb/core/formats/arrow/common/container.h>
+
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/saver.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/loader.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
@@ -64,7 +66,8 @@ public:
 
     std::set<ui32> GetPkColumnsIds() const;
 
-    [[nodiscard]] TConclusion<std::shared_ptr<arrow::RecordBatch>> NormalizeBatch(const ISnapshotSchema& dataSchema, const std::shared_ptr<arrow::RecordBatch> batch) const;
+    [[nodiscard]] TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> NormalizeBatch(
+        const ISnapshotSchema& dataSchema, const std::shared_ptr<NArrow::TGeneralContainer>& batch) const;
     [[nodiscard]] TConclusion<std::shared_ptr<arrow::RecordBatch>> PrepareForModification(
         const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType) const;
 };

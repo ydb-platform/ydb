@@ -106,7 +106,7 @@ code { white-space: pre; }
         assert len(set(map(len, filelists))) == 1, "All dirs must have same layout"
         print('<tr><th>' + ''.join('<th colspan="{}">{}'.format(7*len(rdirs), html.escape(name[len(rdirs[0]) + 1:])) for name in filelists[0]))
     else:
-        print('<tr><th>' + ''.join('<th colspan="{}">'.format(7*len(filelist)) + html.escape(dirname) for dirname, filelist in zip(rdirs, filelists)))
+        print('<tr><th>' + ''.join('<th colspan="{}">{}'.format(7*len(filelist), html.escape(dirname)) for dirname, filelist in zip(rdirs, filelists) if len(filelist)))
     print('<tr><th>')
     if args.by_side:
         dirfiles = map(lambda x: [x[0], [x[1]]], itertools.chain(*map(lambda x: zip(rdirs, x), zip(*filelists))))

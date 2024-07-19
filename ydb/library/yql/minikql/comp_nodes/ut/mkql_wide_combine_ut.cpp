@@ -1284,8 +1284,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestDoNotCalculateUnusedOutput) {
-        TSetup<LLVM> setup;
+    Y_UNIT_TEST_LLVM_SPILLING(TestDoNotCalculateUnusedOutput) {
+        // Currently LLVM version doesn't support spilling.
+        if (LLVM && SPILLING) return;
+        // callable WideLastCombinerWithSpilling was introduced in 49 version of runtime
+        if (MKQL_RUNTIME_VERSION < 49U && SPILLING) return;
+        TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         const auto dataType = pb.NewDataType(NUdf::TDataType<const char*>::Id);
@@ -1319,7 +1323,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
 
         const auto landmine = pb.NewDataLiteral<NUdf::EDataSlot::String>("ACHTUNG MINEN!");
 
-        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(list),
+        auto wideLastCombinerCollable = &TProgramBuilder::WideLastCombiner;
+        if (SPILLING) {
+            wideLastCombinerCollable = &TProgramBuilder::WideLastCombinerWithSpilling;
+        }
+        const auto pgmReturn = pb.Collect(pb.NarrowMap((pb.*wideLastCombinerCollable)(pb.ExpandMap(pb.ToFlow(list),
             [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
             [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
             [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList {
@@ -1335,18 +1343,34 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
         ));
 
         const auto graph = setup.BuildGraph(pgmReturn);
+        if (SPILLING) {
+            graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+        }
+        std::unordered_set<TString> expected {
+            "key one: value 1, value 4, value 5, value 1, value 2",
+            "key two: value 2, value 3, value 3, value 4"
+        };
+
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
-        UNIT_ASSERT(iterator.Next(item));
-        UNBOXED_VALUE_STR_EQUAL(item, "key one: value 1, value 4, value 5, value 1, value 2");
-        UNIT_ASSERT(iterator.Next(item));
-        UNBOXED_VALUE_STR_EQUAL(item, "key two: value 2, value 3, value 3, value 4");
+        while (!expected.empty()) {
+            UNIT_ASSERT(iterator.Next(item));
+            TString actual = item.AsStringRef().Data();
+
+            auto it = expected.find(actual);
+            UNIT_ASSERT(it != expected.end());
+            expected.erase(it);
+        }
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestThinAllLambdas) {
-        TSetup<LLVM> setup;
+    Y_UNIT_TEST_LLVM_SPILLING(TestThinAllLambdas) {
+        // Currently LLVM version doesn't support spilling.
+        if (LLVM && SPILLING) return;
+        // callable WideLastCombinerWithSpilling was introduced in 49 version of runtime
+        if (MKQL_RUNTIME_VERSION < 49U && SPILLING) return;
+        TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         const auto tupleType = pb.NewTupleType({});
@@ -1354,7 +1378,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
 
         const auto list = pb.NewList(tupleType, {data, data, data, data});
 
-        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideLastCombiner(pb.ExpandMap(pb.ToFlow(list),
+        auto wideLastCombinerCollable = &TProgramBuilder::WideLastCombiner;
+        if (SPILLING) {
+            wideLastCombinerCollable = &TProgramBuilder::WideLastCombinerWithSpilling;
+        }
+        const auto pgmReturn = pb.Collect(pb.NarrowMap((pb.*wideLastCombinerCollable)(pb.ExpandMap(pb.ToFlow(list),
             [](TRuntimeNode) -> TRuntimeNode::TList { return {}; }),
             [](TRuntimeNode::TList items) { return items; },
             [](TRuntimeNode::TList, TRuntimeNode::TList items) { return items; },

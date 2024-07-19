@@ -343,7 +343,7 @@ runs:
             
             kill $testmo_proxy_pid
 
-            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{ steps.build.outputs.runid }}
+            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:complete --instance "$TESTMO_URL" --run-id $TESTMO_RUN_ID
             echo "runid=" >> $GITHUB_OUTPUT
           fi
 

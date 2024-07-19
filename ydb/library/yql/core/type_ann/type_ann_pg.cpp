@@ -2918,14 +2918,14 @@ bool ValidateByProjection(TExtContext& ctx, const TExprNodePtr lambda, const THa
                     return false;
                 }
             }
-        } else if (EnsureListType(*columnOrder, ctx.Expr)) {
+        } else if (EnsureTuple(*columnOrder, ctx.Expr)) {
             // if has duplicates on columns used in refs, throw error
             THashSet<TString> outputProjectionNames;
             for (auto& e: columnOrder->Children()) {
                 TString nameLCase;
                 if (e->IsAtom()) {
                     nameLCase = to_lower(TString(e->Content()));
-                } else if (EnsureListType(*e, ctx.Expr)) {
+                } else if (EnsureTuple(*e, ctx.Expr)) {
                     nameLCase = to_lower(TString(e->HeadPtr()->Content()));
                 } else {
                     return false;

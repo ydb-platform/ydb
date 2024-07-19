@@ -61,15 +61,12 @@ TString TIndexInfo::GetColumnName(ui32 id, bool required) const {
     return IIndexInfo::GetColumnName(id, required);
 }
 
-std::vector<ui32> TIndexInfo::GetColumnIds(const bool withSpecial) const {
-    std::vector<ui32> result;
-    for (auto&& i : Columns) {
-        result.emplace_back(i.first);
-    }
+const std::vector<ui32>& TIndexInfo::GetColumnIds(const bool withSpecial) const {
     if (withSpecial) {
-        IIndexInfo::AddSpecialFieldIds(result);
+        return SchemaColumnIdsWithSpecials;
+    } else {
+        return SchemaColumnIds;
     }
-    return result;
 }
 
 std::vector<TString> TIndexInfo::GetColumnNames(const std::vector<ui32>& ids) const {
@@ -305,17 +302,10 @@ std::optional<TIndexInfo> TIndexInfo::BuildFromProto(const NKikimrSchemeOp::TCol
     return result;
 }
 
-std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, const bool withSpecials) {
+std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids) {
     std::vector<std::shared_ptr<arrow::Field>> fields;
-    if (withSpecials) {
-        IIndexInfo::AddSpecialFields(fields);
-    }
-
     for (const ui32 id : ids) {
-        if (TIndexInfo::IsSpecialColumn(id)) {
-            AFL_VERIFY(withSpecials);
-            continue;
-        }
+        AFL_VERIFY(!TIndexInfo::IsSpecialColumn(id));
         auto it = columns.find(id);
         AFL_VERIFY(it != columns.end());
 
@@ -332,17 +322,16 @@ std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSche
 void TIndexInfo::InitializeCaches(const std::shared_ptr<IStoragesManager>& operators) {
     {
         AFL_VERIFY(!Schema);
-        std::vector<ui32> ids;
-        ids.reserve(Columns.size());
+        SchemaColumnIds.reserve(Columns.size());
         for (const auto& [id, _] : Columns) {
-            ids.push_back(id);
+            SchemaColumnIds.push_back(id);
         }
 
-        // The ids had a set type before so we keep them sorted.
-        std::sort(ids.begin(), ids.end());
-        Schema = MakeArrowSchema(Columns, ids);
+        std::sort(SchemaColumnIds.begin(), SchemaColumnIds.end());
+        Schema = MakeArrowSchema(Columns, SchemaColumnIds);
     }
-    SchemaWithSpecials = IIndexInfo::AddSpecialFields(ArrowSchema());
+    SchemaWithSpecials = IIndexInfo::AddSpecialFields(Schema);
+    SchemaColumnIdsWithSpecials = IIndexInfo::AddSpecialFieldIds(SchemaColumnIds);
 
     for (auto&& c : Columns) {
         AFL_VERIFY(ArrowColumnByColumnIdCache.emplace(c.first, GetColumnFieldVerified(c.first)).second);
@@ -432,6 +421,14 @@ std::shared_ptr<NIndexes::NMax::TIndexMeta> TIndexInfo::GetIndexMax(const ui32 c
         }
     }
     return nullptr;
+}
+
+std::vector<ui32> TIndexInfo::GetEntityIds() const {
+    auto result = GetColumnIds(true);
+    for (auto&& i : Indexes) {
+        result.emplace_back(i.first);
+    }
+    return result;
 }
 
 } // namespace NKikimr::NOlap

@@ -30,14 +30,23 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByFullBatches(
             resultSchema->GetIndexInfo().GetReplaceKey(), resultDataSchema, false, IIndexInfo::GetSnapshotColumnNames());
 
         THashSet<ui64> portionsInUsage;
+        std::set<ui32> columnIds;
         for (auto&& i : portions) {
+            if (columnIds.size() != resultSchema->GetColumnsCount()) {
+                for (auto id : i.GetColumnIds(columnIds)) {
+                    if (resultSchema->GetFieldIndex(id) > 0) {
+                        columnIds.emplace(id);
+                    }
+                }
+            }
             AFL_VERIFY(portionsInUsage.emplace(i.GetPortionInfo().GetPortionId()).second);
         }
+        AFL_VERIFY(columnIds.size() <= resultSchema->GetColumnsCount());
 
         for (auto&& i : portions) {
             auto dataSchema = i.GetPortionInfo().GetSchema(context.SchemaVersions);
             auto batch = i.RestoreBatch(dataSchema, *resultSchema);
-            batch = resultSchema->NormalizeBatch(*dataSchema, batch).DetachResult();
+            batch = resultSchema->NormalizeBatch(*dataSchema, batch, columnIds).DetachResult();
             IIndexInfo::NormalizeDeletionColumn(*batch);
             auto filter = BuildPortionFilter(shardingActual, batch, i.GetPortionInfo(), portionsInUsage, resultSchema);
             mergeStream.AddSource(batch, filter);
@@ -175,13 +184,22 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
     }
 
     std::shared_ptr<TSerializationStats> stats = std::make_shared<TSerializationStats>();
+    std::set<ui32> columnIds;
     for (auto&& i : SwitchedPortions) {
         stats->Merge(i.GetSerializationStat(*resultSchema));
+        if (columnIds.size() != resultSchema->GetColumnsCount()) {
+            for (auto id : i.GetColumnIds(columnIds)) {
+                if (resultSchema->GetFieldIndex(id) > 0) {
+                    columnIds.emplace(id);
+                }
+            }
+        }
     }
+    AFL_VERIFY(columnIds.size() <= resultSchema->GetColumnsCount());
 
     std::vector<std::map<ui32, std::vector<TColumnPortionResult>>> chunkGroups;
     chunkGroups.resize(batchResults.size());
-    for (auto&& columnId : resultSchema->GetIndexInfo().GetColumnIds()) {
+    for (auto&& columnId : columnIds) {
         NActors::TLogContextGuard logGuard(
             NActors::TLogContextBuilder::Build()("field_name", resultSchema->GetIndexInfo().GetColumnName(columnId)));
         auto columnInfo = stats->GetColumnInfo(columnId);

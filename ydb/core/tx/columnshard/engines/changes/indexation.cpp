@@ -73,6 +73,7 @@ class TPathData {
 private:
     std::vector<TBatchInfo> Batches;
     YDB_READONLY_DEF(std::optional<TGranuleShardingInfo>, ShardingInfo);
+    std::set<std::string> MergeFieldNames;
     bool HasDeletionFlag = false;
 public:
     TPathData(const std::optional<TGranuleShardingInfo>& shardingInfo)
@@ -90,6 +91,9 @@ public:
             HasDeletionFlag = true;
         }
         AFL_VERIFY(batch);
+        for (auto&& i : batch->schema()->fields()) {
+            MergeFieldNames.emplace(i->name());
+        }
         Batches.emplace_back(batch, data.GetMeta().GetModificationType());
     }
 
@@ -161,26 +165,33 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
     Y_ABORT_UNLESS(resultSchema->GetIndexInfo().IsSorted());
 
     TPathesData pathBatches;
+    std::set<ui32> usageColumnIds;
+    for (auto& inserted : DataToIndex) {
+        auto blobSchema = context.SchemaVersions.GetSchemaVerified(inserted.GetSchemaVersion());
+        std::vector<ui32> filteredIds = inserted.GetMeta().GetSchemaSubset().Apply(blobSchema->GetIndexInfo().GetColumnIds(true));
+        usageColumnIds.insert(filteredIds.begin(), filteredIds.end());
+        if (usageColumnIds.size() == resultSchema->GetIndexInfo().GetColumnIds(true).size()) {
+            break;
+        }
+    }
+
     for (auto& inserted : DataToIndex) {
         const TBlobRange& blobRange = inserted.GetBlobRange();
-
         auto shardingFilterCommit = context.SchemaVersions.GetShardingInfoOptional(inserted.PathId, inserted.GetSnapshot());
-
         auto blobSchema = context.SchemaVersions.GetSchemaVerified(inserted.GetSchemaVersion());
-        auto& indexInfo = blobSchema->GetIndexInfo();
-        Y_ABORT_UNLESS(indexInfo.IsSorted());
 
         std::shared_ptr<NArrow::TGeneralContainer> batch;
         {
             const auto blobData = Blobs.Extract(IStoragesManager::DefaultStorageId, blobRange);
-            Y_ABORT_UNLESS(blobData.size(), "Blob data not present");
-            // Prepare batch
-            batch = std::make_shared<NArrow::TGeneralContainer>(NArrow::DeserializeBatch(blobData, indexInfo.ArrowSchema()));
-            AFL_VERIFY(batch)("event", "cannot_parse")("data_snapshot", inserted.GetSnapshot())("index_snapshot", blobSchema->GetSnapshot());
+            auto batchSchema =
+                std::make_shared<arrow::Schema>(inserted.GetMeta().GetSchemaSubset().Apply(blobSchema->GetIndexInfo().ArrowSchema()->fields()));
+            batch = std::make_shared<NArrow::TGeneralContainer>(NArrow::DeserializeBatch(blobData, batchSchema));
         }
 
-        AddSpecials(*batch, indexInfo, inserted);
-        batch = resultSchema->NormalizeBatch(*blobSchema, batch).DetachResult();
+        IIndexInfo::AddSnapshotColumns(*batch, inserted.GetSnapshot());
+        IIndexInfo::AddDeleteFlagsColumn(*batch, inserted.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete);
+
+        batch = resultSchema->NormalizeBatch(*blobSchema, batch, usageColumnIds).DetachResult();
         pathBatches.Add(inserted, shardingFilterCommit, batch);
     }
 
@@ -220,12 +231,6 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
 
     Y_ABORT_UNLESS(PathToGranule.size() == pathBatches.GetData().size());
     return TConclusionStatus::Success();
-}
-
-void TInsertColumnEngineChanges::AddSpecials(
-    NArrow::TGeneralContainer& batch, const TIndexInfo& indexInfo, const TInsertedData& inserted) const {
-    IIndexInfo::AddSnapshotColumns(batch, inserted.GetSnapshot());
-    IIndexInfo::AddDeleteFlagsColumn(batch, inserted.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete);
 }
 
 NColumnShard::ECumulativeCounters TInsertColumnEngineChanges::GetCounterIndex(const bool isSuccess) const {

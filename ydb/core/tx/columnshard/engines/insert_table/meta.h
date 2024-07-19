@@ -14,6 +14,7 @@ private:
     YDB_READONLY(ui32, NumRows, 0);
     YDB_READONLY(ui64, RawBytes, 0);
     YDB_READONLY(NEvWrite::EModificationType, ModificationType, NEvWrite::EModificationType::Upsert);
+    YDB_READONLY_DEF(NArrow::TSchemaSubset, SchemaSubset);
 
     mutable bool KeysParsed = false;
     mutable std::optional<NArrow::TFirstLastSpecialKeys> SpecialKeysParsed;
@@ -35,6 +36,9 @@ public:
         RawBytes = proto.GetRawBytes();
         if (proto.HasModificationType()) {
             ModificationType = TEnumOperator<NEvWrite::EModificationType>::DeserializeFromProto(proto.GetModificationType());
+        }
+        if (proto.HasSchemaSubset()) {
+            SchemaSubset.DeserializeFromProto(proto.GetSchemaSubset()).Validate();
         }
     }
 

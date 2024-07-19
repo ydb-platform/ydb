@@ -28,7 +28,7 @@ std::set<ui32> ISnapshotSchema::GetPkColumnsIds() const {
 }
 
 TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::NormalizeBatch(
-    const ISnapshotSchema& dataSchema, const std::shared_ptr<NArrow::TGeneralContainer>& batch) const {
+    const ISnapshotSchema& dataSchema, const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::set<ui32>& restoreColumnIds) const {
     if (dataSchema.GetSnapshot() == GetSnapshot()) {
         return batch;
     }
@@ -45,12 +45,10 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
             if (conclusion.IsFail()) {
                 return conclusion;
             }
-        } else {
-            auto conclusion = BuildDefaultBatch({ resultField }, batch->num_rows());
-            if (conclusion.IsFail()) {
-                return conclusion;
-            }
-            result->AddField(resultField, (*conclusion)->column(0)).Validate();
+        } else if (restoreColumnIds.contains(columnId)) {
+            result->AddField(resultField,
+                    NArrow::TThreadSimpleArraysCache::Get(resultField->type(), GetDefaultValueVerified(columnId), batch->num_rows()))
+                .Validate();
         }
     }
     return result;
@@ -109,11 +107,6 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
     Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(batch, GetIndexInfo().GetPrimaryKey()));
 
     switch (mType) {
-        case NEvWrite::EModificationType::Delete:
-            return AddDefault(batch, true);
-        case NEvWrite::EModificationType::Replace:
-        case NEvWrite::EModificationType::Insert:
-            return AddDefault(batch, false);
         case NEvWrite::EModificationType::Upsert: {
             AFL_VERIFY(batch->num_columns() <= dstSchema->num_fields());
             if (batch->num_columns() < dstSchema->num_fields()) {
@@ -131,6 +124,9 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
             }
             return batch;
         }
+        case NEvWrite::EModificationType::Delete:
+        case NEvWrite::EModificationType::Replace:
+        case NEvWrite::EModificationType::Insert:
         case NEvWrite::EModificationType::Update:
             return batch;
     }

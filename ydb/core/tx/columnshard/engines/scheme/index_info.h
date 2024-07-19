@@ -251,13 +251,7 @@ public:
     std::vector<TString> GetColumnNames(const std::vector<ui32>& ids) const;
     std::vector<std::string> GetColumnSTLNames(const std::vector<ui32>& ids) const;
     std::vector<ui32> GetColumnIds(const bool withSpecial = true) const;
-    std::vector<ui32> GetEntityIds() const {
-        auto result = GetColumnIds();
-        for (auto&& i : Indexes) {
-            result.emplace_back(i.first);
-        }
-        return result;
-    }
+    std::vector<ui32> GetEntityIds() const;
 
     /// Returns info of columns defined by specific ids.
     std::vector<TNameTypeInfo> GetColumns(const std::vector<ui32>& ids) const;
@@ -320,6 +314,8 @@ public:
 private:
     ui64 Version = 0;
     TString Name;
+    std::vector<ui32> SchemaColumnIds;
+    std::vector<ui32> SchemaColumnIdsWithSpecials;
     std::shared_ptr<arrow::Schema> Schema;
     std::shared_ptr<arrow::Schema> SchemaWithSpecials;
     std::shared_ptr<arrow::Schema> PrimaryKey;
@@ -328,7 +324,7 @@ private:
     NArrow::NSerialization::TSerializerContainer DefaultSerializer = NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
 };
 
-std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, const bool withSpecials = false);
+std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids);
 
 /// Extracts columns with the specific ids from the schema.
 std::vector<TNameTypeInfo> GetColumns(const NTable::TScheme::TTableSchema& tableSchema, const std::vector<ui32>& ids);

@@ -98,6 +98,16 @@ public:
         return result;
     }
 
+    static std::vector<ui32> AddSpecialFieldIds(const std::vector<ui32>& baseColumnIds) {
+        std::vector<ui32> result = baseColumnIds;
+        for (auto&& i : GetSystemColumnIds()) {
+            result.emplace_back(i);
+        }
+        return result;
+    }
+
+
+
 
     std::optional<ui32> GetColumnIdOptional(const std::string& name) const;
     TString GetColumnName(ui32 id, bool required) const;

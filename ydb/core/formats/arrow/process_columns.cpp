@@ -28,16 +28,23 @@ std::shared_ptr<TDataContainer> ExtractColumnsValidateImpl(const std::shared_ptr
 
 template <class TDataContainer>
 TConclusion<std::shared_ptr<TDataContainer>> AdaptColumnsImpl(const std::shared_ptr<TDataContainer>& srcBatch,
-    const std::shared_ptr<arrow::Schema>& dstSchema) {
+    const std::shared_ptr<arrow::Schema>& dstSchema, const TSchemaSubset* subset) {
     AFL_VERIFY(srcBatch);
     AFL_VERIFY(dstSchema);
     std::vector<std::shared_ptr<typename NAdapter::TDataBuilderPolicy<TDataContainer>::TColumn>> columns;
     columns.reserve(dstSchema->num_fields());
-
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    fields.reserve(dstSchema->num_fields());
+    std::set<ui32> fieldIdx;
+    ui32 idx = 0;
     for (auto& field : dstSchema->fields()) {
         const int index = srcBatch->schema()->GetFieldIndex(field->name());
         if (index > -1) {
+            if (subset) {
+                fieldIdx.emplace(idx);
+            }
             columns.push_back(srcBatch->column(index));
+            fields.emplace_back(field);
             auto srcField = srcBatch->schema()->field(index);
             if (field->Equals(srcField)) {
                 AFL_VERIFY(columns.back()->type()->Equals(field->type()))("event", "cannot_use_incoming_batch")("reason", "invalid_column_type")("column", field->name())
@@ -47,14 +54,17 @@ TConclusion<std::shared_ptr<TDataContainer>> AdaptColumnsImpl(const std::shared_
                     ("column_type", field->ToString(true))("incoming_type", srcField->ToString(true));
                 return TConclusionStatus::Fail("incompatible column types");
             }
-        } else {
+        } else if (!subset) {
             AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "not_found_column")("column", field->name())
                 ("column_type", field->type()->ToString())("columns", JoinSeq(",", srcBatch->schema()->field_names()));
             return TConclusionStatus::Fail("not found column '" + field->name() + "'");
         }
+        ++idx;
     }
-
-    return NAdapter::TDataBuilderPolicy<TDataContainer>::Build(dstSchema, std::move(columns), srcBatch->num_rows());
+    if (subset) {
+        *subset = TSchemaSubset(fieldIdx);
+    }
+    return NAdapter::TDataBuilderPolicy<TDataContainer>::Build(std::make_shared<arrow::Schema>(fields), std::move(columns), srcBatch->num_rows());
 }
 
 template <class TDataContainer, class TStringType>
@@ -114,12 +124,12 @@ std::shared_ptr<arrow::Table> TColumnOperator::Extract(const std::shared_ptr<arr
     return ExtractImpl(AbsentColumnPolicy, incoming, columnNames);
 }
 
-NKikimr::TConclusion<std::shared_ptr<arrow::RecordBatch>> TColumnOperator::Adapt(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<arrow::Schema>& dstSchema) {
-    return AdaptColumnsImpl(incoming, dstSchema);
+NKikimr::TConclusion<std::shared_ptr<arrow::RecordBatch>> TColumnOperator::Adapt(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<arrow::Schema>& dstSchema, const TSchemaSubset* subset) {
+    return AdaptColumnsImpl(incoming, dstSchema, subset);
 }
 
-NKikimr::TConclusion<std::shared_ptr<arrow::Table>> TColumnOperator::Adapt(const std::shared_ptr<arrow::Table>& incoming, const std::shared_ptr<arrow::Schema>& dstSchema) {
-    return AdaptColumnsImpl(incoming, dstSchema);
+NKikimr::TConclusion<std::shared_ptr<arrow::Table>> TColumnOperator::Adapt(const std::shared_ptr<arrow::Table>& incoming, const std::shared_ptr<arrow::Schema>& dstSchema, const TSchemaSubset* subset) {
+    return AdaptColumnsImpl(incoming, dstSchema, subset);
 }
 
 NKikimr::TConclusion<std::shared_ptr<arrow::RecordBatch>> TColumnOperator::Reorder(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::vector<std::string>& columnNames) {

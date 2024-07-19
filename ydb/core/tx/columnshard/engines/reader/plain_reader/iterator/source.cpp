@@ -240,7 +240,7 @@ void TCommittedDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>&
         AFL_VERIFY(GetStageData().GetBlobs().size() == 1);
         auto bData = MutableStageData().ExtractBlob(GetStageData().GetBlobs().begin()->first);
         auto schema = GetContext()->GetReadMetadata()->GetBlobSchema(CommittedBlob.GetSchemaVersion());
-        auto rBatch = NArrow::DeserializeBatch(bData, schema);
+        auto rBatch = NArrow::DeserializeBatch(bData, CommittedBlob.GetSchemaSubset().Apply(schema));
         AFL_VERIFY(rBatch)("schema", schema->ToString());
         auto batch = std::make_shared<NArrow::TGeneralContainer>(rBatch);
         GetContext()->GetReadMetadata()->GetIndexInfo().AddSnapshotColumns(*batch, CommittedBlob.GetSnapshot());

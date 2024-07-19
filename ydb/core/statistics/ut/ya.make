@@ -25,6 +25,7 @@ SRCS(
     ut_aggregator.cpp
     ut_statistics.cpp
     ut_save_load_stats.cpp
+    ut_statistics_service.cpp
 )
 
 END()

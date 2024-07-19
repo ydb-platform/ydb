@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/computation/mock_spiller_factory_ut.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 
@@ -51,6 +52,7 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        ctx.SpillerFactory = std::make_shared<TMockSpillerFactory>();
         return ctx.HolderFactory.Create<TStreamValue>(Count);
     }
 
@@ -70,7 +72,9 @@ public:
 
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx)
             : TBase(memInfo)
-            , CompCtx(compCtx) {}
+            , CompCtx(compCtx) {
+                CompCtx.SpillerFactory = std::make_shared<TMockSpillerFactory>();
+            }
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
@@ -102,6 +106,7 @@ public:
         : TBaseComputation(mutables) {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        
         return ctx.HolderFactory.Create<TStreamValue>(ctx);
     }
 

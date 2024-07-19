@@ -1,6 +1,7 @@
 #include "mkql_wide_combine.h"
 #include "mkql_rh_hash.h"
 
+#include <format>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/computation/mkql_llvm_base.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
@@ -550,7 +551,9 @@ private:
     }
 
     bool CheckMemoryAndSwitchToSpilling() {
+        std::cerr << std::format("MISHA: {} {} {}\n", AllowSpilling, (bool)Ctx.SpillerFactory, IsSwitchToSpillingModeCondition());
         if (AllowSpilling && Ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
+            std::cerr << "MISHA spilling enabled" << std::endl;
             const auto used = TlsAllocState->GetUsed();
             const auto limit = TlsAllocState->GetLimit();
 
@@ -560,7 +563,7 @@ private:
             SwitchMode(EOperatingMode::Spilling);
             return true;
         }
-
+        std::cerr << "MISHA spilling not enabled" << std::endl;
         return false;
     }
 
@@ -722,9 +725,7 @@ private:
     }
 
     bool IsSwitchToSpillingModeCondition() const {
-        return false;
-        // TODO: YQL-18033
-        // return !HasMemoryForProcessing();
+        return !HasMemoryForProcessing();
     }
 
 public:

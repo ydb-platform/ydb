@@ -66,17 +66,6 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-class MockedYellowZoneAllocator : public TScopedAlloc {
-public:
-    MockedYellowZoneAllocator(const TSourceLocation& location, bool enableYellowZone=false) : TScopedAlloc(location), EnableYellowZone(enableYellowZone){}
-    bool IsMemoryYellowZoneEnabled() const noexcept  {
-        return EnableYellowZone;
-    }
-
-private:
-    bool EnableYellowZone = false;
-};
-
 TComputationNodeFactory GetTestFactory(TComputationNodeFactory customFactory = {});
 
 template<typename T>
@@ -93,7 +82,7 @@ struct TUdfModuleInfo {
 template<bool UseLLVM>
 struct TSetup {
     explicit TSetup(TComputationNodeFactory nodeFactory = GetTestFactory(), TVector<TUdfModuleInfo>&& modules = {}, bool withSpilling = false)
-        : Alloc(__LOCATION__, withSpilling)
+        : Alloc(__LOCATION__)
         , StatsRegistry(CreateDefaultStatsRegistry())
     {
         NodeFactory = nodeFactory;
@@ -106,11 +95,8 @@ struct TSetup {
 
             FunctionRegistry = mutableRegistry;
         }
-        if (withSpilling) {
-            Alloc.SetLimit(0);
-            Alloc.SetMaximumLimitValueReached(true);
-            Alloc.Ref();
-        }
+
+        Alloc.Ref().ForcefullySetMemoryYellowZone(withSpilling);
 
         RandomProvider = CreateDeterministicRandomProvider(1);
         TimeProvider = CreateDeterministicTimeProvider(10000000);
@@ -144,7 +130,7 @@ struct TSetup {
         Pattern.Reset();
     }
 
-    MockedYellowZoneAllocator Alloc;
+    TScopedAlloc Alloc;
     TComputationNodeFactory NodeFactory;
     TIntrusivePtr<IFunctionRegistry> FunctionRegistry;
     TIntrusivePtr<IRandomProvider> RandomProvider;

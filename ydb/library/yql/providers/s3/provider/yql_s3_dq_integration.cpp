@@ -437,6 +437,7 @@ public:
             }
 
             srcDesc.SetAsyncDecoding(State_->Configuration->AsyncDecoding.Get().GetOrElse(false));
+            srcDesc.SetAsyncDecompressing(State_->Configuration->AsyncDecompressing.Get().GetOrElse(false));
 
 #if defined(_linux_) || defined(_darwin_)
 
@@ -540,6 +541,7 @@ public:
                         fileQueueBatchSizeLimit,
                         fileQueueBatchObjectCountLimit,
                         State_->Gateway,
+                        State_->GatewayRetryPolicy,
                         connect.Url,
                         GetAuthInfo(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster)),
                         pathPattern,

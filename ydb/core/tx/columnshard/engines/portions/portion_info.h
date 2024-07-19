@@ -65,6 +65,9 @@ public:
     std::shared_ptr<TColumnLoader> Loader;
     std::vector<TChunk> Chunks;
 protected:
+    virtual std::optional<ui64> DoGetRawSize() const override {
+        return {};
+    }
     virtual TCurrentChunkAddress DoGetChunk(const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position) const override;
     virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray() const override {
         AFL_VERIFY(false);
@@ -197,7 +200,7 @@ public:
         SetRemoveSnapshot(TSnapshot(planStep, txId));
     }
 
-    std::vector<TString> GetIndexInplaceData(const ui32 indexId) const {
+    std::vector<TString> GetIndexInplaceDataVerified(const ui32 indexId) const {
         std::vector<TString> result;
         for (auto&& i : Indexes) {
             if (i.GetEntityId() == indexId) {
@@ -683,6 +686,7 @@ public:
 
         std::shared_ptr<arrow::ChunkedArray> Assemble() const;
         std::shared_ptr<TDeserializeChunkedArray> AssembleForSeqAccess() const;
+        std::shared_ptr<NArrow::NAccessor::IChunkedArray> AssembleAccessor() const;
     };
 
     class TPreparedBatchData {
@@ -748,6 +752,7 @@ public:
         }
 
         std::shared_ptr<arrow::RecordBatch> Assemble(const TAssembleOptions& options = {}) const;
+        std::shared_ptr<NArrow::TGeneralContainer> AssembleToGeneralContainer() const;
         std::shared_ptr<arrow::Table> AssembleTable(const TAssembleOptions& options = {}) const;
         std::shared_ptr<NArrow::TGeneralContainer> AssembleForSeqAccess() const;
     };

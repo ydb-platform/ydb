@@ -89,13 +89,14 @@ ui64 TFilterProgramStep::DoPredictRawBytes(const std::shared_ptr<IDataSource>& s
 }
 
 TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(source->GetStageData().GetTable()->BuildTable());
+    auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(source->GetStageData().GetTable()->BuildTableVerified());
     source->MutableStageData().AddFilter(filter);
     return true;
 }
 
 TConclusion<bool> TSnapshotFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    auto filter = MakeSnapshotFilter(source->GetStageData().GetTable()->BuildTable(), source->GetContext()->GetReadMetadata()->GetRequestSnapshot());
+    auto filter = MakeSnapshotFilter(
+        source->GetStageData().GetTable()->BuildTableVerified(), source->GetContext()->GetReadMetadata()->GetRequestSnapshot());
     source->MutableStageData().AddFilter(filter);
     return true;
 }
@@ -119,7 +120,8 @@ TConclusion<bool> TDeletionFilter::DoExecuteInplace(const std::shared_ptr<IDataS
 
 TConclusion<bool> TShardingFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     NYDBTest::TControllers::GetColumnShardController()->OnSelectShardingFilter();
-    auto filter = source->GetContext()->GetReadMetadata()->GetRequestShardingInfo()->GetShardingInfo()->GetFilter(source->GetStageData().GetTable()->BuildTable());
+    auto filter = source->GetContext()->GetReadMetadata()->GetRequestShardingInfo()->GetShardingInfo()->GetFilter(
+        source->GetStageData().GetTable()->BuildTableVerified());
     source->MutableStageData().AddFilter(filter);
     return true;
 }

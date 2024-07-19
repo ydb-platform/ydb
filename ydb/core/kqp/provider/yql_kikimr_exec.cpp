@@ -313,6 +313,7 @@ namespace {
         createSequenceSettings.Name = TString(createSequence.Sequence());
         createSequenceSettings.Temporary = TString(createSequence.Temporary()) == "true" ? true : false;
         createSequenceSettings.SequenceSettings = ParseSequenceSettings(createSequence.SequenceSettings());
+        createSequenceSettings.SequenceSettings.DataType = TString(createSequence.ValueType());  
 
         return createSequenceSettings;
     }
@@ -327,6 +328,9 @@ namespace {
         TAlterSequenceSettings alterSequenceSettings;
         alterSequenceSettings.Name = TString(alterSequence.Sequence());
         alterSequenceSettings.SequenceSettings = ParseSequenceSettings(alterSequence.SequenceSettings());
+        if (TString(alterSequence.ValueType()) != "Null") {
+            alterSequenceSettings.SequenceSettings.DataType = TString(alterSequence.ValueType());
+        }
 
         return alterSequenceSettings;
     }
@@ -761,10 +765,11 @@ private:
 
         TVector<TExprBase> fakeReads;
         auto paramsType = NDq::CollectParameters(programLambda, ctx);
+        NDq::TSpillingSettings spillingSettings{SessionCtx->Config().GetEnabledSpillingNodes()};
         lambda = NDq::BuildProgram(
             programLambda, *paramsType, compiler, SessionCtx->Query().QueryData->GetAllocState()->TypeEnv,
                 *SessionCtx->Query().QueryData->GetAllocState()->HolderFactory.GetFunctionRegistry(),
-                ctx, fakeReads, {});
+                ctx, fakeReads, spillingSettings);
 
         NKikimr::NMiniKQL::TProgramBuilder programBuilder(SessionCtx->Query().QueryData->GetAllocState()->TypeEnv,
             *SessionCtx->Query().QueryData->GetAllocState()->HolderFactory.GetFunctionRegistry());

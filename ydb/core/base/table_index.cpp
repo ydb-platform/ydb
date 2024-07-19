@@ -140,5 +140,9 @@ bool IsCompatibleIndex(const NKikimrSchemeOp::EIndexType indexType, const TTable
     return true;
 }
 
+bool IsImplTable(std::string_view tableName) {
+    return std::find(std::begin(ImplTables), std::end(ImplTables), tableName) != std::end(ImplTables);
+}
+
 }
 }

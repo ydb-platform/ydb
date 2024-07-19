@@ -1498,6 +1498,15 @@ public:
             if (settings.SequenceSettings.Cycle) {
                 seqDesc->SetCycle(*settings.SequenceSettings.Cycle);
             }
+            if (settings.SequenceSettings.DataType) {
+                if (settings.SequenceSettings.DataType == "int8") {
+                    seqDesc->SetDataType("pgint8");
+                } else if (settings.SequenceSettings.DataType == "int4") {
+                    seqDesc->SetDataType("pgint4");
+                } else if (settings.SequenceSettings.DataType == "int2") {
+                    seqDesc->SetDataType("pgint2");
+                }
+            }
 
             if (IsPrepare()) {
                 auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
@@ -1617,6 +1626,15 @@ public:
             }
             if (settings.SequenceSettings.Cycle) {
                 seqDesc->SetCycle(*settings.SequenceSettings.Cycle);
+            }
+            if (settings.SequenceSettings.DataType) {
+                if (settings.SequenceSettings.DataType == "int8") {
+                    seqDesc->SetDataType("pgint8");
+                } else if (settings.SequenceSettings.DataType == "int4") {
+                    seqDesc->SetDataType("pgint4");
+                } else if (settings.SequenceSettings.DataType == "int2") {
+                    seqDesc->SetDataType("pgint2");
+                }
             }
 
             if (IsPrepare()) {

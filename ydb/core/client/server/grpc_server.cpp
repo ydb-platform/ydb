@@ -453,7 +453,6 @@ void TGRpcService::SetupIncomingRequests() {
     ADD_ACTOR_REQUEST(DrainNode,                 TDrainNodeRequest,                 MTYPE_CLIENT_DRAIN_NODE)
     ADD_ACTOR_REQUEST(InterconnectDebug,         TInterconnectDebug,                MTYPE_CLIENT_INTERCONNECT_DEBUG)
     ADD_ACTOR_REQUEST(TestShardControl,          TTestShardControlRequest,          MTYPE_CLIENT_TEST_SHARD_CONTROL)
-    ADD_ACTOR_REQUEST(LoginRequest,              TLoginRequest,                     MTYPE_CLIENT_LOGIN_REQUEST)
 
     // dynamic node registration
     ADD_REQUEST(RegisterNode, TNodeRegistrationRequest, TNodeRegistrationResponse, {

@@ -91,6 +91,8 @@ NKqpProto::EStreamLookupStrategy GetStreamLookupStrategy(const std::string_view 
         lookupStrategy = NKqpProto::EStreamLookupStrategy::LOOKUP;
     } else if (strategy == "LookupJoinRows"sv) {
         lookupStrategy = NKqpProto::EStreamLookupStrategy::JOIN;
+    } else if (strategy == "LookupSemiJoinRows"sv) {
+        lookupStrategy = NKqpProto::EStreamLookupStrategy::SEMI_JOIN;
     }
 
     YQL_ENSURE(lookupStrategy != NKqpProto::EStreamLookupStrategy::UNSPECIFIED,
@@ -777,8 +779,9 @@ private:
         stageProto.SetIsEffectsStage(hasEffects || hasTxTableSink);
 
         auto paramsType = CollectParameters(stage, ctx);
+        NDq::TSpillingSettings spillingSettings{Config->GetEnabledSpillingNodes()};
         auto programBytecode = NDq::BuildProgram(stage.Program(), *paramsType, *KqlCompiler, TypeEnv, FuncRegistry,
-            ctx, {}, {});
+            ctx, {}, spillingSettings);
 
         auto& programProto = *stageProto.MutableProgram();
         programProto.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
@@ -1274,7 +1277,8 @@ private:
 
                     break;
                 }
-                case NKqpProto::EStreamLookupStrategy::JOIN: {
+                case NKqpProto::EStreamLookupStrategy::JOIN:
+                case NKqpProto::EStreamLookupStrategy::SEMI_JOIN: {
                     YQL_ENSURE(inputItemType->GetKind() == ETypeAnnotationKind::Tuple);
                     const auto inputTupleType = inputItemType->Cast<TTupleExprType>();
                     YQL_ENSURE(inputTupleType->GetSize() == 2);

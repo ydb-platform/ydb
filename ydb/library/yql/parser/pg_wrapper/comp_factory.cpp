@@ -435,7 +435,7 @@ public:
                     {"rolname", [](ui32 index) {
                         return PointerDatumToPod((Datum)MakeFixedString(index == 1 ? "postgres" : *PGGetGUCSetting("ydb_user"), NAMEDATALEN));
                     }},
-                    {"oid", [](ui32) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
+                    {"oid", [](ui32 index) { return ScalarDatumToPod(ObjectIdGetDatum(index)); }},
                     {"rolbypassrls", [](ui32) { return ScalarDatumToPod(BoolGetDatum(true)); }},
                     {"rolsuper", [](ui32) { return ScalarDatumToPod(BoolGetDatum(true)); }},
                     {"rolinherit", [](ui32) { return ScalarDatumToPod(BoolGetDatum(true)); }},
@@ -453,6 +453,26 @@ public:
                 };
 
                 ApplyFillers(AllPgRolesFillers, Y_ARRAY_SIZE(AllPgRolesFillers), PgRolesFillers_);
+            } else if (Table_ == "pg_user") {
+                static const std::pair<const char*, TPgUserFiller> AllPgUserFillers[] = {
+                    {"usename", [](ui32 index) {
+                        return PointerDatumToPod((Datum)MakeFixedString(index == 1 ? "postgres" : *PGGetGUCSetting("ydb_user"), NAMEDATALEN));
+                    }},
+                    {"usesysid", [](ui32 index) { return ScalarDatumToPod(ObjectIdGetDatum(index)); }},
+                    {"usecreatedb", [](ui32) { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"usesuper", [](ui32) { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"userepl", [](ui32) { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"usebypassrls", [](ui32) { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"passwd", [](ui32) { return NUdf::TUnboxedValuePod(); }},
+                    {"valuntil", [](ui32) { return NUdf::TUnboxedValuePod(); }},
+                    {"useconfig", [](ui32) { return PointerDatumToPod(MakeArrayOfText({
+                        "search_path=public",
+                        "default_transaction_isolation=serializable",
+                        "standard_conforming_strings=on",
+                    })); }},
+                };
+
+                ApplyFillers(AllPgUserFillers, Y_ARRAY_SIZE(AllPgUserFillers), PgUserFillers_);
             } else if (Table_ == "pg_stat_database") {
                 static const std::pair<const char*, TPgDatabaseStatFiller> AllPgDatabaseStatFillers[] = {
                     {"datid", [](ui32 index) { return ScalarDatumToPod(ObjectIdGetDatum(index ? 3 : 0)); }},
@@ -804,6 +824,20 @@ public:
                     sysFiller.Fill(items);
                     rows.emplace_back(row);
                 }
+            } else if (Table_ == "pg_user") {
+                ui32 tableSize = PGGetGUCSetting("ydb_user") ? 2 : 1;
+                for (ui32 index = 1; index <= tableSize; ++index) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgUserFillers_.size(), items);
+                    for (ui32 i = 0; i < PgUserFillers_.size(); ++i) {
+                        if (PgUserFillers_[i]) {
+                            items[i] = PgUserFillers_[i](index);
+                        }
+                    }
+
+                    sysFiller.Fill(items);
+                    rows.emplace_back(row);
+                }
             } else if (Table_ == "pg_stat_database") {
                 for (ui32 index = 0; index <= 1; ++index) {
                     NUdf::TUnboxedValue* items;
@@ -956,6 +990,8 @@ private:
     TVector<TPgAmFiller> PgAmFillers_;
     using TPgRolesFiller = NUdf::TUnboxedValuePod(*)(ui32 index);
     TVector<TPgRolesFiller> PgRolesFillers_;
+    using TPgUserFiller = NUdf::TUnboxedValuePod(*)(ui32 index);
+    TVector<TPgUserFiller> PgUserFillers_;
     using TPgDatabaseStatFiller = NUdf::TUnboxedValuePod(*)(ui32 index);
     TVector<TPgDatabaseStatFiller> PgDatabaseStatFillers_;
 
@@ -3555,10 +3591,15 @@ TString PgValueToString(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId) {
     }
 }
 
-void WriteYsonValueInTableFormatPg(TOutputBuf& buf, TPgType* type, const NUdf::TUnboxedValuePod& value) {
+void WriteYsonValueInTableFormatPg(TOutputBuf& buf, TPgType* type, const NUdf::TUnboxedValuePod& value, bool topLevel) {
     using namespace NYson::NDetail;
     if (!value) {
-        buf.Write(EntitySymbol);
+        if (topLevel) {
+            buf.Write(BeginListSymbol);
+            buf.Write(EndListSymbol);
+        } else {
+            buf.Write(EntitySymbol);
+        }
         return;
     }
 
@@ -3631,6 +3672,16 @@ void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& v
 NUdf::TUnboxedValue ReadYsonValueInTableFormatPg(TPgType* type, char cmd, TInputBuf& buf) {
     using namespace NYson::NDetail;
     if (cmd == EntitySymbol) {
+        return NUdf::TUnboxedValuePod();
+    }
+
+    if (cmd == BeginListSymbol) {
+        cmd = buf.Read();
+        if (cmd == ListItemSeparatorSymbol) {
+            cmd = buf.Read();
+        }
+
+        YQL_ENSURE(cmd == EndListSymbol);
         return NUdf::TUnboxedValuePod();
     }
 

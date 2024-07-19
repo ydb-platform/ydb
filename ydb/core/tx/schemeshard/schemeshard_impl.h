@@ -187,6 +187,9 @@ public:
     TControlWrapper DisablePublicationsOfDropping;
     TControlWrapper FillAllocatePQ;
 
+    // Shared with NTabletFlatExecutor::TExecutor
+    TControlWrapper MaxCommitRedoMB;
+
     TSplitSettings SplitSettings;
 
     struct TTenantInitState {
@@ -370,6 +373,8 @@ public:
     NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory{NExternalSource::CreateExternalSourceFactory({})};
 
     THolder<TProposeResponse> IgniteOperation(TProposeRequest& request, TOperationContext& context);
+    void AbortOperationPropose(const TTxId txId, TOperationContext& context);
+
     THolder<TEvDataShard::TEvProposeTransaction> MakeDataShardProposal(const TPathId& pathId, const TOperationId& opId,
         const TString& body, const TActorContext& ctx) const;
 
@@ -419,7 +424,7 @@ public:
         return MakeLocalId(NextLocalPathId);
     }
 
-    TPathId AllocatePathId () {
+    TPathId AllocatePathId() {
        TPathId next = PeekNextPathId();
        ++NextLocalPathId;
        return next;
@@ -1015,7 +1020,7 @@ public:
     void FillAsyncIndexInfo(const TPathId& tableId, NKikimrTxDataShard::TFlatSchemeTransaction& tx);
 
     void DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme::TTypeRegistry* typeRegistry,
-                       bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TTableDescription* entry) const;
+                       bool fillConfig, NKikimrSchemeOp::TTableDescription* entry) const;
     void DescribeTableIndex(const TPathId& pathId, const TString& name,
         bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TIndexDescription& entry
     ) const;
@@ -1031,7 +1036,6 @@ public:
     void DescribeReplication(const TPathId& pathId, const TString& name, NKikimrSchemeOp::TReplicationDescription& desc);
     void DescribeReplication(const TPathId& pathId, const TString& name, TReplicationInfo::TPtr info, NKikimrSchemeOp::TReplicationDescription& desc);
     void DescribeBlobDepot(const TPathId& pathId, const TString& name, NKikimrSchemeOp::TBlobDepotDescription& desc);
-    static void FillTableBoundaries(const TTableInfo::TPtr tableInfo, google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TSplitBoundary>& boundaries);
 
     void Handle(NKikimr::NOlap::NBackground::TEvExecuteGeneralLocalTransaction::TPtr& ev, const TActorContext& ctx);
     void Handle(NKikimr::NOlap::NBackground::TEvRemoveSession::TPtr& ev, const TActorContext& ctx);

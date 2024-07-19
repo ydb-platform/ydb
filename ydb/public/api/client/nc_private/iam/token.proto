@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package nebius.iam.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// DO NOT REMOVE! THESE OPTIONS ARE NEEDED FOR Bazel BUILD TO CORRESPOND TO buf generate:
+option java_multiple_files = true;
+option java_outer_classname = "TokenProto";
+option java_package = "ai.nebius.iam.token.v1";
+// END
+
+// Public payload has an payload in encrypted format, key and public data
+message AccessTokenPublicPayload {
+  bytes encrypted_payload = 1; // encrypted data
+  string encrypt_key_id = 2; // key id to process decrypt of pub
+}
+
+message AccessTokenPayload {
+  string id = 1; // id of the token
+  string subject_id = 2; // id of the subject
+  Actor act = 3; // actor who init a token
+  repeated string scopes = 4; // scopes
+  string aud = 5; // audience - client id, which will use a token
+  google.protobuf.Timestamp issued_at = 6;
+  google.protobuf.Timestamp expires_in = 7;
+  TokenType token_type = 8;
+  int64 active_session_version = 9; // current user session version
+}
+
+message SignaturePublicKey {
+  int64 key_id = 1;
+  int64 salt = 2;
+  bytes data = 3;
+}
+
+message Actor {
+  string sub = 1; // id of person who issue token (impersonator/token/key)
+  ActorType type = 2; //type of the subject
+  Actor act = 3; // inner actor, in case of token is created under a few inner flow
+  int64 active_session_version = 4; // identify current session version, it is unique per account/key
+}
+
+enum ActorType {
+  UNSPECIFIED = 0; // by default unspecified
+  KEY = 1; // if it is created using service keys (self signed JWT)
+  TOKEN = 2; // if it is created under us (created by other token)
+  SUBJECT = 3; //if it is impersonated by some user
+  SESSION = 4; //if it is created from session
+}
+
+enum TokenType {
+  ACCESS_TOKEN = 0; // by default token is an access token
+  SESSION_TOKEN = 1; // session token
+}

@@ -99,6 +99,6 @@ message TDataSourceInstance {
         TClickhouseDataSourceOptions ch_options = 8;
         TS3DataSourceOptions s3_options = 9;
         TGreenplumDataSourceOptions gp_options = 10;
-        TOracleDataSourceOptions ora_options = 11;
+        TOracleDataSourceOptions oracle_options = 11;
     }
 }

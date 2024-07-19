@@ -23,9 +23,9 @@
 namespace NKikimr {
 namespace NStat {
 
-static constexpr TDuration DefaultAggregateKeepAlivePeriod = TDuration::MilliSeconds(3000);
-static constexpr TDuration DefaultAggregateKeepAliveTimeout = TDuration::MilliSeconds(10000);
-static constexpr TDuration DefaultAggregateKeepAliveAckTimeout = TDuration::MilliSeconds(10000);
+static constexpr TDuration DefaultAggregateKeepAlivePeriod = TDuration::MilliSeconds(500);
+static constexpr TDuration DefaultAggregateKeepAliveTimeout = TDuration::Seconds(3);
+static constexpr TDuration DefaultAggregateKeepAliveAckTimeout = TDuration::Seconds(3);
 static constexpr size_t DefaultMaxInFlightTabletRequests = 5;
 static constexpr size_t DefaultFanOutFactor = 5;
 

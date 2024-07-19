@@ -48,6 +48,7 @@
     void N(NUnitTest::TTestContext&)
 
 #define Y_UNIT_TEST_LLVM(N) Y_UNIT_TEST_TWIN(N, LLVM)
+#define Y_UNIT_TEST_LLVM_SPILLING(N) Y_UNIT_TEST_QUAD(N, LLVM, SPILLING)
 
 #define Y_UNIT_TEST_QUAD(N, OPT1, OPT2)                                                                                              \
     template<bool OPT1, bool OPT2> void N(NUnitTest::TTestContext&);                                                                 \
@@ -79,9 +80,9 @@ struct TUdfModuleInfo {
     NUdf::TUniquePtr<NUdf::IUdfModule> Module;
 };
 
-template<bool UseLLVM>
+template<bool UseLLVM, bool EnableSpilling = false>
 struct TSetup {
-    explicit TSetup(TComputationNodeFactory nodeFactory = GetTestFactory(), TVector<TUdfModuleInfo>&& modules = {}, bool withSpilling = false)
+    explicit TSetup(TComputationNodeFactory nodeFactory = GetTestFactory(), TVector<TUdfModuleInfo>&& modules = {})
         : Alloc(__LOCATION__)
         , StatsRegistry(CreateDefaultStatsRegistry())
     {
@@ -96,7 +97,7 @@ struct TSetup {
             FunctionRegistry = mutableRegistry;
         }
 
-        Alloc.Ref().ForcefullySetMemoryYellowZone(withSpilling);
+        Alloc.Ref().ForcefullySetMemoryYellowZone(EnableSpilling);
 
         RandomProvider = CreateDeterministicRandomProvider(1);
         TimeProvider = CreateDeterministicTimeProvider(10000000);

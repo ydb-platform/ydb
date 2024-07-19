@@ -86,6 +86,7 @@ PY_SRCS(
     ydb/scheme.py
     ydb/scripting.py
     ydb/settings.py
+    ydb/storage_config.py
     ydb/sqlalchemy/__init__.py
     ydb/sqlalchemy/types.py
     ydb/table.py

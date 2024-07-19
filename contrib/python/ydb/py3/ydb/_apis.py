@@ -9,6 +9,7 @@ try:
         ydb_table_v1_pb2_grpc,
         ydb_operation_v1_pb2_grpc,
         ydb_topic_v1_pb2_grpc,
+        ydb_bsconfig_v1_pb2_grpc
     )
 
     from ydb.public.api.grpc.draft import (
@@ -23,6 +24,7 @@ try:
         ydb_value_pb2,
         ydb_operation_pb2,
         ydb_common_pb2,
+        ydb_bsconfig_pb2
     )
 
     from ydb.public.api.protos.draft import (
@@ -36,6 +38,7 @@ except ImportError:
         ydb_table_v1_pb2_grpc,
         ydb_operation_v1_pb2_grpc,
         ydb_topic_v1_pb2_grpc,
+        ydb_bsconfig_v1_pb2_grpc
     )
 
     from contrib.ydb.public.api.grpc.draft import (
@@ -50,6 +53,7 @@ except ImportError:
         ydb_value_pb2,
         ydb_operation_pb2,
         ydb_common_pb2,
+        ydb_bsconfig_pb2
     )
 
     from contrib.ydb.public.api.protos.draft import (
@@ -66,6 +70,7 @@ ydb_table = ydb_table_pb2
 ydb_discovery = ydb_discovery_pb2
 ydb_operation = ydb_operation_pb2
 ydb_dynamic_config = ydb_dynamic_config_pb2
+ydb_bsconfig = ydb_bsconfig_pb2
 
 
 class CmsService(object):
@@ -126,11 +131,8 @@ class TopicService(object):
     StreamRead = "StreamRead"
     StreamWrite = "StreamWrite"
 
+class BSConfigService(object):
+    Stub = ydb_bsconfig_v1_pb2_grpc.BSConfigServiceStub
 
-class DynamicConfigService(object):
-    Stub = ydb_dynamic_config_v1_pb2_grpc.DynamicConfigServiceStub
-
-    ReplaceConfig = "ReplaceConfig"
-    SetConfig = "SetConfig"
-    GetConfig = "GetConfig"
-    GetNodeLabels = "GetNodeLabels"
+    ReplaceStorageConfig = "ReplaceStorageConfig"
+    FetchStorageConfig = "FetchStorageConfig"

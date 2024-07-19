@@ -94,7 +94,7 @@ message DatabaseQuotas {
     // A minimum value of `TtlSettings.run_interval_seconds` that can be specified.
     // Default is 1800 (15 minutes).
     uint32 ttl_min_run_internal_seconds = 4;
-    
+
     message StorageQuotas {
         // in theory an arbitrary string, but in practice "hdd" or "ssd"
         string unit_kind = 1;

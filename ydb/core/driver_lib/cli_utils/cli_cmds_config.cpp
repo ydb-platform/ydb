@@ -1,13 +1,26 @@
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
+#include <ydb/public/api/protos/ydb_bsconfig.pb.h>
 #include <ydb/library/yaml_config/yaml_config_parser.h>
+#include <ydb/library/yaml_config/public/yaml_config.h>
+#include <ydb/public/api/grpc/ydb_bsconfig_v1.grpc.pb.h>
 #include "cli.h"
 #include "cli_cmds.h"
 #include "proto_common.h"
 
 namespace NKikimr {
 namespace NDriverClient {
+
+TString WrapYaml(const TString& yaml) {
+    auto doc = NFyaml::TDocument::Parse(yaml);
+
+    TStringStream out;
+    out << (doc.HasExplicitDocumentStart() ? "" : "---\n")
+        << doc << (yaml[yaml.size() - 1] != '\n' ? "\n" : "");
+
+    return out.Str();
+}
 
 class TProposeStoragePools : public TClientCommand {
     ui32 AvailabilityDomain = 1;
@@ -148,6 +161,99 @@ public:
     }
 };
 
+class TReplace : public TClientCommand {
+    TString YamlFile;
+public:
+    TReplace()
+        : TClientCommand("replace", {}, "Replace storage config using yaml description")
+    {}
+
+    void Config(TConfig& config) override {
+        TClientCommand::Config(config);
+
+        config.Opts->AddLongOption("yaml-file", "read storage config from yaml file")
+            .Required()
+            .RequiredArgument("PATH")
+            .StoreResult(&YamlFile);
+    }
+
+    int Run(TConfig& config) override {
+        TString data;
+
+        try {
+            data = TUnbufferedFileInput(YamlFile).ReadAll();
+        } catch (const yexception& ex) {
+            Cerr << "failed to read config from file: " << ex.what() << Endl;
+            return EXIT_FAILURE;
+        }
+        std::unique_ptr<Ydb::BSConfig::V1::BSConfigService::Stub> stub;
+        std::shared_ptr<grpc::Channel> channel;
+
+        TString fqdn = (TStringBuilder() << config.Address << ":2135");
+        channel = grpc::CreateChannel(fqdn, grpc::InsecureChannelCredentials());
+        stub = Ydb::BSConfig::V1::BSConfigService::NewStub(channel);
+        Ydb::BSConfig::ReplaceStorageConfigRequest replaceRequest = NKikimr::NYaml::BuildReplaceDistributedStorageCommand(data);
+        grpc::ClientContext replaceCtx;
+        replaceCtx.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, "root@builtin");
+        Ydb::BSConfig::ReplaceStorageConfigResponse replaceResponse;
+        stub->ReplaceStorageConfig(&replaceCtx, replaceRequest, &replaceResponse);
+        Ydb::BSConfig::ReplaceStorageConfigResult replaceResultFirst;
+        replaceResponse.operation().result().UnpackTo(&replaceResultFirst);
+        auto protoCopy = NYaml::BuildReplaceProtoConfig(replaceRequest.yaml_config());
+        Cout << replaceResponse << Endl;
+        if (replaceResponse.operation().status() == Ydb::StatusIds::SUCCESS) {
+            Ydb::BSConfig::ReplaceStorageConfigResult replaceResult;
+            replaceResponse.operation().result().UnpackTo(&replaceResult);
+            TString data;
+            if (google::protobuf::TextFormat::PrintToString(replaceResult, &data)) {
+                Cout << data;
+            } else {
+                Cerr << "failed to print protobuf" << Endl;
+                return EXIT_FAILURE;
+            }
+            return 0;
+        }
+        return 1;
+    }
+};
+
+class TFetch : public TClientCommand {
+public:
+    TFetch()
+        : TClientCommand("fetch", {}, "Fetch yaml storage config")
+    {}
+
+    void Config(TConfig& config) override {
+        TClientCommand::Config(config);
+    }
+
+    int Run(TConfig& config) override {
+        std::unique_ptr<Ydb::BSConfig::V1::BSConfigService::Stub> stub;
+        std::shared_ptr<grpc::Channel> channel;
+
+        TString fqdn = (TStringBuilder() << config.Address << ":2135");
+        channel = grpc::CreateChannel(fqdn, grpc::InsecureChannelCredentials());
+        stub = Ydb::BSConfig::V1::BSConfigService::NewStub(channel);
+        Ydb::BSConfig::FetchStorageConfigRequest fetchRequest;
+        grpc::ClientContext fetchCtx;
+        fetchCtx.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, "root@builtin");
+        Ydb::BSConfig::FetchStorageConfigResponse fetchResponse;
+        stub->FetchStorageConfig(&fetchCtx, fetchRequest, &fetchResponse);
+        if (fetchResponse.operation().status() == Ydb::StatusIds::SUCCESS) {
+            Ydb::BSConfig::FetchStorageConfigResult fetchResult;
+            fetchResponse.operation().result().UnpackTo(&fetchResult);
+            TString data;
+            auto yamlConfig = fetchResult.yaml_config();
+            if (!yamlConfig) {
+                Cerr << "YAML config is absent on this cluster." << Endl;
+                return EXIT_FAILURE;
+            }
+            Cout << WrapYaml(yamlConfig);
+            return 0;
+        }
+        return EXIT_FAILURE;
+    }
+};
 
 class TInvoke : public TClientCommand {
     ui32 AvailabilityDomain = 1;
@@ -255,6 +361,8 @@ public:
         AddCommand(std::make_unique<TPropose>());
         AddCommand(std::make_unique<TInvoke>());
         AddCommand(std::make_unique<TInit>());
+        AddCommand(std::make_unique<TReplace>());
+        AddCommand(std::make_unique<TFetch>());
     }
 };
 

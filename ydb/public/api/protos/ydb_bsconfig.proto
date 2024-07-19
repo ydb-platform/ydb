@@ -1,0 +1,138 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.BSConfig;
+
+option java_package = "com.yandex.ydb.bsconfig.proto";
+option java_outer_classname = "BSConfigProtos";
+option java_multiple_files = true;
+
+import "ydb/public/api/protos/ydb_operation.proto";
+
+//
+// BSConfig API.
+//
+
+message DriveInfo {
+    message Drive {
+        // path to the device on the host node
+        string path = 1;
+        // drive type (rotational or solid state)
+        PDiskType type = 2;
+    }
+    message Host {
+        // fully qualified domain name of the host
+        string fqdn = 1;
+        // interconnect port to use
+        int32 port = 2;
+    }
+    oneof host_id {
+        Host host = 1;
+        // may be set instead of Fqdn/IcPort to specify explicit NodeId
+        uint32 node_id = 2;
+    }
+    repeated Drive drive = 3;
+}
+
+// Enum defining PDisk underlying drive type (rotational or solid state)
+enum PDiskType {
+    // rotational drives (HDD)
+    ROT = 0;
+    // solid state drives (SSD)
+    SSD = 1;
+    // PCIe-connected solid state drives (NVMe SSD)
+    NVME = 2;
+}
+
+// Host key structure defines node by providing its FQDN and Interconnect port. There must be unique mapping from
+// FQDN:port to NodeId.
+message HostKey {
+    message Endpoint {
+        // fully qualified domain name of the host
+        string fqdn = 1;
+        // interconnect port to use
+        int32 ic_port = 2;
+    }
+    oneof key {
+        Endpoint endpoint = 1;
+        // may be set instead of endpoint to specify explicit node_id
+        uint32 node_id = 2;
+    }
+}
+
+message Host {
+    // unique host key defining its location
+    HostKey key = 1;
+    // reference to typical host configuration table
+    uint64 host_config_id = 2;
+}
+
+message Drive {
+    // path to the device on the host node
+    string path = 1;
+    // drive type (rotational or solid state)
+    string type = 2;
+    // is this drive shared with OS in any way? (i.e. has OS partitions)
+    bool shared_with_os = 3;
+    // is this drive read-centric?
+    bool read_centric = 4;
+    // nontransparent user-defined kind used for filtering when picking up groups
+    uint64 kind = 5;
+    // Number of slots to calculate per-vdisk disk space limit.
+    uint64 expected_slot_count = 6;
+}
+
+message HostConfig {
+    // unique host configuration integer id (key)
+    uint64 host_config_id = 1;
+    // a full set of drives on every host
+    repeated Drive drive = 2;
+}
+
+message StorageConfig {
+    repeated HostConfig host_config = 1;
+    repeated Host host = 2;
+    uint64 item_config_generation = 3;
+}
+
+message ReplaceStorageConfigRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string yaml_config = 2;
+}
+
+message ReplaceStorageConfigResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ReplaceStorageConfigResult {
+}
+
+message FetchStorageConfigRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message FetchStorageConfigResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message FetchStorageConfigResult {
+    string yaml_config = 1;
+}
+
+message EvictRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    uint32 group_id = 2;
+    uint32 group_generation = 3;
+    uint32 fail_realm_idx = 4;
+    uint32 fail_domain_idx = 5;
+    uint32 vdisk_idx = 6;
+    // when set, donor mode is not used even if it is enabled through BSC
+    bool supress_donor_mode = 7;
+}
+
+message EvictResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message EvictResult {
+}

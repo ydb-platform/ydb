@@ -11,6 +11,9 @@ namespace NKikimr::NJaegerTracing {
 
 enum class ERequestType: size_t {
     UNSPECIFIED,
+    
+    BSCONFIG_REPLACESTORAGECONFIG,
+    BSCONFIG_FETCHSTORAGECONFIG,
 
     KEYVALUE_CREATEVOLUME,
     KEYVALUE_DROPVOLUME,

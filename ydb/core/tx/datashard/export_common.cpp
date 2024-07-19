@@ -71,9 +71,7 @@ TMaybe<Ydb::Table::CreateTableRequest> GenYdbScheme(
     return scheme;
 }
 
-TMaybe<Ydb::Scheme::ModifyPermissionsRequest> GenYdbPermissions(
-        const NKikimrSchemeOp::TPathDescription& pathDesc)
-{
+TMaybe<Ydb::Scheme::ModifyPermissionsRequest> GenYdbPermissions(const NKikimrSchemeOp::TPathDescription& pathDesc) {
     if (!pathDesc.HasSelf()) {
         return Nothing();
     }

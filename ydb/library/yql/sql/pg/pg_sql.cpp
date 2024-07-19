@@ -3517,18 +3517,21 @@ public:
 
             return L(A("PgConst"), QA(database ? *database : "postgres"), L(A("PgType"), QA("name")));
         }
-        case SVFOP_CURRENT_SCHEMA: {
-            std::optional<TString> searchPath;
-            if (Settings.GUCSettings) {
-                searchPath = Settings.GUCSettings->Get("search_path");
-            }
-
-            return L(A("PgConst"), QA(searchPath ? *searchPath : "public"), L(A("PgType"), QA("name")));
-        }
+        case SVFOP_CURRENT_SCHEMA:
+            return GetCurrentSchema();
         default:
             AddError(TStringBuilder() << "Usupported SQLValueFunction: " << (int)value->op);
             return nullptr;
         }
+    }
+
+    TAstNode* GetCurrentSchema() {
+        std::optional<TString> searchPath;
+        if (Settings.GUCSettings) {
+            searchPath = Settings.GUCSettings->Get("search_path");
+        }
+
+        return L(A("PgConst"), QA(searchPath ? *searchPath : "public"), L(A("PgType"), QA("name")));
     }
 
     TAstNode* ParseBooleanTest(const BooleanTest* value, const TExprSettings& settings) {
@@ -3995,6 +3998,10 @@ public:
         if (name == "shobj_description" || name == "obj_description") {
             AddWarning(TIssuesIds::PG_COMPAT, name + " function forced to NULL");
             return L(A("Null"));
+        }
+
+        if (name == "current_schema") {
+            return GetCurrentSchema();
         }
 
         // for zabbix https://github.com/ydb-platform/ydb/issues/2904

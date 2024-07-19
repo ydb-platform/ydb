@@ -177,7 +177,6 @@ runs:
         )
 
 
-        TESTMO_RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
         TESTMO_BRANCH_TAG="$GITHUB_REF_NAME"
         TESTMO_ARCH="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
         TESTMO_PR_NUMBER=${{ github.event.number }}
@@ -208,7 +207,7 @@ runs:
             ;;
           pull_request | pull_request_target)
             TESTMO_RUN_NAME="${{ github.run_id }} PR #${TESTMO_PR_NUMBER}"
-            EXTRA_TAG="pr"
+            TESTMO_EXTRA_TAG="pr"
             TESTMO_BRANCH_TAG=""
             ;;
           schedule)
@@ -225,6 +224,9 @@ runs:
             ;;
         esac
         echo "TESTMO_RUN_NAME=$TESTMO_RUN_NAME" >> $GITHUB_ENV 
+
+        # custom
+        TESTMO_RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
         TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-link --name build --url "$TESTMO_RUN_URL" --resources testmo.json
         TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-field --name git-sha --type string --value "${GITHUB_SHA:0:7}" --resources testmo.json
         TESTMO_RUN_ID=$(
@@ -234,7 +236,6 @@ runs:
         )
         echo "runid=${TESTMO_RUN_ID}" >> $GITHUB_OUTPUT
         TESTMO_HISTORY_URL="${TESTMO_URL}/automation/runs/view/${TESTMO_RUN_ID}"
-        echo "TESTMO_HISTORY_URL=$TESTMO_HISTORY_URL" >> $GITHUB_ENV
 
         # Print test history link
         echo "10 [Test history](${TESTMO_HISTORY_URL})" >> $SUMMARY_LINKS

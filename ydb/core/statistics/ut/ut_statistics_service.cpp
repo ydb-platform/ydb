@@ -135,6 +135,7 @@ TStatServiceSettings GetDefaultSettings() {
     settings.AggregateKeepAlivePeriod = TDuration::Seconds(15);
     settings.AggregateKeepAliveTimeout = TDuration::Seconds(30);
     settings.AggregateKeepAliveAckTimeout = TDuration::Seconds(30);
+    settings.FanOutFactor = 2;
     return settings;
 }
 

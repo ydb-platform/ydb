@@ -11,6 +11,7 @@ struct TStatServiceSettings {
     TDuration AggregateKeepAliveTimeout;
     TDuration AggregateKeepAliveAckTimeout;
     size_t MaxInFlightTabletRequests;
+    size_t FanOutFactor;
 
     TStatServiceSettings();
 
@@ -31,6 +32,11 @@ struct TStatServiceSettings {
 
     TStatServiceSettings& SetMaxInFlightTabletRequests(size_t val) {
         MaxInFlightTabletRequests = val;
+        return *this;
+    }
+
+    TStatServiceSettings& SetFanOutFactor(size_t val) {
+        FanOutFactor = val;
         return *this;
     }
 };

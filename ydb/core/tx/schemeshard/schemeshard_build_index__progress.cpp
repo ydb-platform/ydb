@@ -321,7 +321,7 @@ public:
             }
 
             if (buildInfo->ImplTablePath.Empty() && buildInfo->IsBuildIndex()) {
-                TPath implTable = TPath::Init(buildInfo->TablePathId, Self).Dive(buildInfo->IndexName).Dive("indexImplTable");
+                TPath implTable = TPath::Init(buildInfo->TablePathId, Self).Dive(buildInfo->IndexName).Dive(NTableIndex::ImplTable);
                 buildInfo->ImplTablePath = implTable.PathString();
 
                 TTableInfo::TPtr implTableInfo = Self->Tables.at(implTable.Base()->PathId);

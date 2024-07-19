@@ -308,6 +308,11 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
         return;
     }
 
+    if (record.ColumnsSize() < 1) {
+        badRequest(TStringBuilder() << "Should be requested at least single column");
+        return;
+    }
+
     TScanOptions scanOpts;
     scanOpts.SetSnapshotRowVersion(rowVersion);
     scanOpts.SetResourceBroker("build_index", 10); // TODO(mbkkt) Should be different group?

@@ -1,23 +1,23 @@
-#include "scan_common.h"
 #include "datashard_impl.h"
-#include "upload_stats.h"
 #include "range_ops.h"
+#include "scan_common.h"
+#include "upload_stats.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
-#include <ydb/core/kqp/common/kqp_types.h>
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
 
+#include <ydb/core/ydb_convert/table_description.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
-#include <ydb/core/ydb_convert/ydb_convert.h>
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
-#include <ydb/core/ydb_convert/table_description.h>
 
 namespace NKikimr::NDataShard {
 
@@ -250,10 +250,10 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
         return;
     }
 
-    const TTableId tableId{record.GetOwnerId(), record.GetPathId()};
-    const auto* userTableIt = GetUserTables().FindPtr(tableId.PathId.LocalPathId);
+    const auto pathId = PathIdFromPathId(record.GetPathId());
+    const auto* userTableIt = GetUserTables().FindPtr(pathId.LocalPathId);
     if (!userTableIt) {
-        badRequest(TStringBuilder() << "Unknown table id: " << tableId.PathId.LocalPathId);
+        badRequest(TStringBuilder() << "Unknown table id: " << pathId.LocalPathId);
         return;
     }
     Y_ABORT_UNLESS(*userTableIt);
@@ -287,12 +287,12 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
         return;
     }
 
-    const TSnapshotKey snapshotKey(tableId.PathId, rowVersion.Step, rowVersion.TxId);
+    const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
     const TSnapshot* snapshot = SnapshotManager.FindAvailable(snapshotKey);
     if (!snapshot) {
         badRequest(TStringBuilder()
                    << "no snapshot has been found"
-                   << " , path id is " << tableId.PathId.OwnerId << ":" << tableId.PathId.LocalPathId
+                   << " , path id is " << pathId.OwnerId << ":" << pathId.LocalPathId
                    << " , snapshot step is " << snapshotKey.Step
                    << " , snapshot tx is " << snapshotKey.TxId);
         return;

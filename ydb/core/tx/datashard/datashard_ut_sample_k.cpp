@@ -1,8 +1,8 @@
 #include "defs.h"
-#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include "datashard_ut_common_kqp.h"
 
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
@@ -47,11 +47,9 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
             if (!rec.HasTabletId()) {
                 rec.SetTabletId(tid);
             }
-            if (!rec.HasOwnerId()) {
-                rec.SetOwnerId(tableId.PathId.OwnerId);
-            }
+
             if (!rec.HasPathId()) {
-                rec.SetPathId(tableId.PathId.LocalPathId);
+                PathIdFromPathId(tableId.PathId, rec.MutablePathId());
             }
 
             if (rec.ColumnsSize() == 0) {
@@ -98,8 +96,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
                 rec.SetSeqNoRound(1);
 
                 rec.SetTabletId(tid);
-                rec.SetOwnerId(tableId.PathId.OwnerId);
-                rec.SetPathId(tableId.PathId.LocalPathId);
+                PathIdFromPathId(tableId.PathId, rec.MutablePathId());
 
                 rec.AddColumns("value");
                 rec.AddColumns("key");
@@ -253,14 +250,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
             auto ev = std::make_unique<TEvDataShard::TEvSampleKRequest>();
             auto& rec = ev->Record;
 
-            rec.SetOwnerId(0);
-            DoSampleKBad(server, sender, "/Root/table-1", snapshot, ev);
-        }
-        {
-            auto ev = std::make_unique<TEvDataShard::TEvSampleKRequest>();
-            auto& rec = ev->Record;
-
-            rec.SetPathId(0);
+            PathIdFromPathId({0, 0}, rec.MutablePathId());
             DoSampleKBad(server, sender, "/Root/table-1", snapshot, ev);
         }
         {

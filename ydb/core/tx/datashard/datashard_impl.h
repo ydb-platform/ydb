@@ -13,7 +13,6 @@
 #include "datashard_repl_offsets_client.h"
 #include "datashard_repl_offsets_server.h"
 #include "datashard_write.h"
-#include "scan_common.h"
 #include "cdc_stream_heartbeat.h"
 #include "cdc_stream_scan.h"
 #include "change_exchange.h"
@@ -24,6 +23,7 @@
 #include "volatile_tx.h"
 #include "conflicts_cache.h"
 #include "reject_reason.h"
+#include "scan_common.h"
 
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>

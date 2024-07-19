@@ -1,10 +1,6 @@
 # Добавление, удаление и переименование вторичного индекса
 
-{% if backend_name == "YDB" %}
-
 {% include [OLAP_not_allow_note](../../../../_includes/not_allow_for_olap_note.md) %}
-
-{% endif %}
 
 ### Добавление индекса
 

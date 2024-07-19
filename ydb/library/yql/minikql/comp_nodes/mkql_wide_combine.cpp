@@ -565,7 +565,7 @@ private:
         TStringBuilder logmsg;
         logmsg << "Memory usage: ";
         if (limit) {
-            logmsg << (used*100/limit) << "% =";
+            logmsg << (used*100/limit) << "%=";
         }
         logmsg << (used/1_MB) << "MB/" << (limit/1_MB) << "MB";
 

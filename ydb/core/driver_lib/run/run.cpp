@@ -91,6 +91,7 @@
 #include <ydb/library/grpc/server/actors/logger.h>
 
 #include <ydb/services/auth/grpc_service.h>
+#include <ydb/services/bsconfig/grpc_service.h>
 #include <ydb/services/cms/grpc_service.h>
 #include <ydb/services/dynamic_config/grpc_service.h>
 #include <ydb/services/datastreams/grpc_service.h>
@@ -596,6 +597,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["keyvalue"] = &hasKeyValue;
         TServiceCfg hasReplication = services.empty();
         names["replication"] = &hasReplication;
+        TServiceCfg hasBSConfig = services.empty();
+        names["bsconfig"] = &hasBSConfig;
 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
@@ -869,6 +872,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasReplication) {
             server.AddService(new NGRpcService::TGRpcReplicationService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasReplication.IsRlAllowed()));
+        }
+
+        if (hasBSConfig) {
+            server.AddService(new NGRpcService::TBSConfigGRpcService(ActorSystem.Get(), Counters,
+                grpcRequestProxies[0]));
         }
 
         if (ModuleFactories) {

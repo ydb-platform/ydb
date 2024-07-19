@@ -157,6 +157,7 @@ private:
     void HandleWakeup(const TActorContext& ctx) noexcept {
         auto processMemoryInfo = ProcessMemoryInfoProvider->Get();
 
+        // TODO: pass this hard limit to node whiteboard and mem observer
         ui64 hardLimitBytes = GetHardLimitBytes(processMemoryInfo);
         ui64 softLimitBytes = GetSoftLimitBytes(hardLimitBytes);
         ui64 targetUtilizationBytes = GetTargetUtilizationBytes(hardLimitBytes);

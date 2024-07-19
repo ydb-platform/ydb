@@ -181,10 +181,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Progress(TIndexBuildId id) {
 
 void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild& index, const TIndexBuildInfo::TPtr indexInfo) {
     index.SetId(ui64(indexInfo->Id));
-    std::cerr << "I WAS HERE" << std::endl;
     if (indexInfo->Issue) {
-        std::cerr << "ISSUE: " << indexInfo->Issue << std::endl;
-        std::cerr << static_cast<int>(indexInfo->State) << std::endl;
         AddIssue(index.MutableIssues(), indexInfo->Issue);
     }
 

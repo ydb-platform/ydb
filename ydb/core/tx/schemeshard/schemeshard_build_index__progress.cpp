@@ -834,9 +834,6 @@ public:
                 }
                 break;
             case  NKikimrTxDataShard::TEvBuildIndexProgressResponse::CHECKING_NOT_NULL_ERROR:
-                std::cerr << "i am here 1" << std::endl;
-                std::cerr << "i am here 1" << std::endl;
-                std::cerr << "i am here 1" << std::endl;
                 buildInfo->Issue += TStringBuilder()
                     << "One of the shards report CHECKING_NOT_NULL_ERROR at Filling stage, process has to be canceled"
                     << ", shardId: " << shardId

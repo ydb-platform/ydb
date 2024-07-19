@@ -3636,7 +3636,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 ( 1, NULL ),
                 ( 2, NULL );
             )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(!initNullValues.IsSuccess(), initNullValues.GetIssues().ToString());
+            UNIT_ASSERT_C(initNullValues.IsSuccess(), initNullValues.GetIssues().ToString());
         }
     }
 

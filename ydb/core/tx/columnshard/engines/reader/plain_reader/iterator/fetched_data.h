@@ -87,7 +87,7 @@ public:
     void AddBatch(const std::shared_ptr<NArrow::TGeneralContainer>& table) {
         AFL_VERIFY(table);
         if (UseFilter) {
-            AddBatch(table->BuildTable());
+            AddBatch(table->BuildTableVerified());
         } else {
             if (!Table) {
                 Table = table;

@@ -10,7 +10,9 @@ PROTO_NAMESPACE(yt)
 
 SRCS(
     async_barrier_ut.cpp
+    async_looper_ut.cpp
     async_rw_lock_ut.cpp
+    async_semaphore_ut.cpp
     async_stream_pipe_ut.cpp
     async_stream_ut.cpp
     async_yson_writer_ut.cpp

@@ -1352,10 +1352,10 @@ class GnuToolchain(Toolchain):
             self.setup_apple_local_sdk(target)
 
     def setup_apple_arcadia_sdk(self, target):
-        if target.is_ios:
+        if target.is_ios and not is_positive('DISABLE_YMAKE_CONF_CUSTOMIZATION'):
             self.setup_xcode_sdk(project='build/internal/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}')
             self.platform_projects.append('build/internal/platform/macos_system_stl')
-        if target.is_macos:
+        if target.is_macos and not is_positive('DISABLE_YMAKE_CONF_CUSTOMIZATION'):
             self.setup_xcode_sdk(project='build/internal/platform/macos_sdk', var='${MACOS_SDK_RESOURCE_GLOBAL}')
 
     def setup_apple_local_sdk(self, target):
@@ -1925,7 +1925,8 @@ class MSVCToolchain(MSVC, Toolchain):
         MSVC.__init__(self, tc, build)
 
         if self.tc.from_arcadia and not self.tc.ide_msvs:
-            self.platform_projects.append('build/internal/platform/msvc')
+            if not is_positive('DISABLE_YMAKE_CONF_CUSTOMIZATION'):
+                self.platform_projects.append('build/internal/platform/msvc')
             self.platform_projects.append('build/platform/wine')
 
     def print_toolchain(self):
@@ -2552,7 +2553,7 @@ class Cuda(object):
             'Y_SDK_Root': '$WINDOWS_KITS_RESOURCE_GLOBAL',
         }
 
-        if not self.build.tc.ide_msvs:
+        if not self.build.tc.ide_msvs and not is_positive('DISABLE_YMAKE_CONF_CUSTOMIZATION'):
             self.peerdirs.append('build/internal/platform/msvc')
         self.cuda_host_compiler_env.value = format_env(env)
         self.cuda_host_msvc_version.value = vc_version

@@ -39,10 +39,7 @@ struct IUnversionedRowsetWriter
      *
      * Must not be called concurrently with Write method.
      */
-    virtual std::optional<NCrypto::TMD5Hash> GetDigest() const
-    {
-        return std::nullopt;
-    }
+    virtual std::optional<NCrypto::TMD5Hash> GetDigest() const = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IUnversionedRowsetWriter)

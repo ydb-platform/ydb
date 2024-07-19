@@ -10,6 +10,8 @@
 
 #include <yt/yt/core/bus/tcp/dispatcher.h>
 
+#include <yt/yt/library/oom/oom.h>
+
 #include <yt/yt/library/tracing/jaeger/tracer.h>
 
 #include <yt/yt/library/profiling/perf/counters.h>
@@ -63,6 +65,7 @@ public:
         i64 totalMemory = GetContainerMemoryLimit();
         AdjustPageHeapLimit(totalMemory, config);
         AdjustAggressiveReleaseThreshold(totalMemory, config);
+        SetupMemoryLimitHandler(config);
     }
 
     i64 GetAggressiveReleaseThreshold()
@@ -100,6 +103,20 @@ private:
             AggressiveReleaseThreshold_ = *config->AggressiveReleaseThresholdRatio * totalMemory;
         } else {
             AggressiveReleaseThreshold_ = config->AggressiveReleaseThreshold;
+        }
+    }
+
+    void SetupMemoryLimitHandler(const TTCMallocConfigPtr& config)
+    {
+        TTCMallocLimitHandlerOptions handlerOptions {
+            .HeapDumpDirectory = config->HeapSizeLimit->DumpMemoryProfilePath,
+            .Timeout = config->HeapSizeLimit->DumpMemoryProfileTimeout,
+        };
+
+        if (config->HeapSizeLimit->DumpMemoryProfileOnViolation) {
+            EnableTCMallocLimitHandler(handlerOptions);
+        } else {
+            DisableTCMallocLimitHandler();
         }
     }
 
@@ -237,6 +254,13 @@ void ConfigureSingletons(const TSingletonsConfigPtr& config)
     NYson::SetProtobufInteropConfig(config->ProtobufInterop);
 }
 
+TTCMallocConfigPtr MergeTCMallocDynamicConfig(const TTCMallocConfigPtr& staticConfig, const TTCMallocConfigPtr& dynamicConfig)
+{
+    auto mergedConfig = CloneYsonStruct(dynamicConfig);
+    mergedConfig->HeapSizeLimit->DumpMemoryProfilePath = staticConfig->HeapSizeLimit->DumpMemoryProfilePath;
+    return mergedConfig;
+}
+
 void ReconfigureSingletons(const TSingletonsConfigPtr& config, const TSingletonsDynamicConfigPtr& dynamicConfig)
 {
     SetSpinWaitSlowPathLoggingThreshold(dynamicConfig->SpinWaitSlowPathLoggingThreshold.value_or(config->SpinWaitSlowPathLoggingThreshold));
@@ -271,7 +295,7 @@ void ReconfigureSingletons(const TSingletonsConfigPtr& config, const TSingletons
     }
 
     if (dynamicConfig->TCMalloc) {
-        ConfigureTCMalloc(dynamicConfig->TCMalloc);
+        ConfigureTCMalloc(MergeTCMallocDynamicConfig(config->TCMalloc, dynamicConfig->TCMalloc));
     } else if (config->TCMalloc) {
         ConfigureTCMalloc(config->TCMalloc);
     }

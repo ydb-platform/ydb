@@ -185,7 +185,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvAddConsumer::TPtr &ev) {
     if (ev->Get()->Record.HasOffset()) {
         readOffset = ev->Get()->Record.GetOffset();
     }
-    Send(ev->Sender, new NFq::TEvRowDispatcher::TEvAck(ev->Get()->Record.GetTransportMeta()));
+   // Send(ev->Sender, );
 
     SessionKey key{ev->Get()->Record.GetSource().GetTopicPath(), ev->Get()->Record.GetPartitionId()};
     LOG_ROW_DISPATCHER_DEBUG("Sessions count " << Sessions.size());
@@ -196,6 +196,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvAddConsumer::TPtr &ev) {
     if (sessions.empty() || readOffset) {
         LOG_ROW_DISPATCHER_DEBUG("Create new session " << readOffset);
         auto actorId = Register(NewTopicSession(
+            SelfId(),
             ev->Get()->Record.GetSource(),
             ev->Get()->Record.GetPartitionId(),
             YqSharedResources->UserSpaceYdbDriver,
@@ -209,15 +210,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvAddConsumer::TPtr &ev) {
         sessionActorId = sessions.begin()->first;
     }
 
-    //auto sessionActorId = Sessions[key];
-    auto consumer = MakeHolder<NFq::Consumer>(sessionActorId, ev->Get()->Record);
-
-    //sessions[sessionActorId].Consumers.insert(ev->Sender);
-    //auto event = std::make_unique<TEvRowDispatcher::TEvSessionAddConsumer>();
-    // event->ConsumerActorId = ev->Sender;
-    // event->Offset = readOffset;
-    // event->StartingMessageTimestampMs = ev->Get()->Record.GetStartingMessageTimestampMs(); 
-    // event->SourceParams = ev->Get()->Record.GetSource();
+    auto consumer = MakeHolder<NFq::Consumer>(ev->Sender, sessionActorId, ev->Get()->Record);
     Send(sessionActorId, new TEvRowDispatcher::TEvSessionAddConsumer(std::move(consumer)));
 }
 
@@ -230,35 +223,35 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr &/*ev*/
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvStopSession, topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
         " partitionId " << ev->Get()->Record.GetPartitionId());
-    SessionKey key{ev->Get()->Record.GetSource().GetTopicPath(), ev->Get()->Record.GetPartitionId()};
-    LOG_ROW_DISPATCHER_DEBUG("Sessions count " << Sessions.size());
-    auto& sessionsMap = Sessions[key].TopicSessions;
-    LOG_ROW_DISPATCHER_DEBUG("Sessions count by key " << Sessions.size());
-    if (sessionsMap.empty()) {
-        return;
-    }
+    // SessionKey key{ev->Get()->Record.GetSource().GetTopicPath(), ev->Get()->Record.GetPartitionId()};
+    // LOG_ROW_DISPATCHER_DEBUG("Sessions count " << Sessions.size());
+    // auto& sessionsMap = Sessions[key].TopicSessions;
+    // LOG_ROW_DISPATCHER_DEBUG("Sessions count by key " << Sessions.size());
+    // if (sessionsMap.empty()) {
+    //     return;
+    // }
 
-    for (auto& [topicSessionActorId, info]: sessionsMap) {
-        for (auto consumerActorId: info.Consumers) {
-            if (consumerActorId != ev->Sender) {
-                continue;
-            }
+    // for (auto& [topicSessionActorId, info]: sessionsMap) {
+    //     for (auto consumerActorId: info.Consumers) {
+    //         if (consumerActorId != ev->Sender) {
+    //             continue;
+    //         }
 
-            auto event = std::make_unique<TEvRowDispatcher::TEvSessionDeleteConsumer>();
-            event->ConsumerActorId = ev->Sender;
-            Send(topicSessionActorId, event.release());
+    //         // auto event = std::make_unique<TEvRowDispatcher::TEvSessionDeleteConsumer>();
+    //         // event->ReadActorId = ev->Sender;
+    //         // Send(topicSessionActorId, event.release());
 
-            info.Consumers.erase(ev->Sender);
-            if (info.Consumers.empty()) {
-                Send(topicSessionActorId, new NActors::TEvents::TEvPoisonPill());
-                sessionsMap.erase(topicSessionActorId);
-                if (sessionsMap.empty()) {
-                    Sessions.erase(key);
-                }
-            }
-            return;
-        }
-    }
+    //         info.Consumers.erase(ev->Sender);
+    //         if (info.Consumers.empty()) {
+    //             /Send(topicSessionActorId, new NActors::TEvents::TEvPoisonPill());
+    //             sessionsMap.erase(topicSessionActorId);
+    //             if (sessionsMap.empty()) {
+    //                 Sessions.erase(key);
+    //             }
+    //         }
+    //         return;
+    //     }
+    // }
 }
 
 } // namespace

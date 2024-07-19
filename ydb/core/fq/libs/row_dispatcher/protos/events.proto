@@ -32,6 +32,7 @@ message TEvAddConsumer {
 }
 
 message TEvAck {
+    TEvAddConsumer Consumer = 1;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 
@@ -47,6 +48,7 @@ message TEvNewDataArrived {
 message TEvStopSession {
     NYql.NPq.NProto.TDqPqTopicSource Source = 1;
     uint32 PartitionId = 2;
+    optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 
 message TEvMessage {
@@ -62,5 +64,6 @@ message TEvMessageBatch {
 
 message TEvSessionError {
     string Message = 1;
+    optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 

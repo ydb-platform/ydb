@@ -10,16 +10,21 @@ namespace NFq {
 struct Consumer  {
 
     Consumer(
-        NActors::TActorId consumerActorId,
+        NActors::TActorId readActorId,
+        NActors::TActorId selfId,
         NFq::NRowDispatcherProto::TEvAddConsumer& proto)
-        : ConsumerActorId(consumerActorId)
+        : ReadActorId(readActorId)
         , SourceParams(proto.GetSource())
         , PartitionId(proto.GetPartitionId())
         , Offset(proto.HasOffset() ? TMaybe<ui64>(proto.GetOffset()) : TMaybe<ui64>())
-        , StartingMessageTimestampMs(proto.GetStartingMessageTimestampMs()) {
+        , StartingMessageTimestampMs(proto.GetStartingMessageTimestampMs())
+        , Proto(proto) {
+
+        EventsQueue.Init("txId", selfId, selfId, 1);    // TODO 1
+        EventsQueue.OnNewRecipientId(readActorId);
     }
 
-    NActors::TActorId ConsumerActorId;
+    NActors::TActorId ReadActorId;
 
     NYql::NPq::NProto::TDqPqTopicSource SourceParams;
     ui64 PartitionId;
@@ -30,5 +35,7 @@ struct Consumer  {
 
     NYql::NDq::TRetryEventsQueue EventsQueue;
     TQueue<TString> Buffer;
+
+    NFq::NRowDispatcherProto::TEvAddConsumer Proto;
 };
 } // namespace NFq

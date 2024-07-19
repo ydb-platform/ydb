@@ -32,6 +32,7 @@ struct TEvRowDispatcher {
 
         EvSessionAddConsumer,
         EvSessionDeleteConsumer,
+        EvSessionConsumerDeleted,
         EvEnd,
     };
 
@@ -93,8 +94,9 @@ struct TEvRowDispatcher {
     struct TEvAck : public NActors::TEventPB<TEvAck,
         NFq::NRowDispatcherProto::TEvAck, EEv::EvAck> {
         TEvAck() = default;
-        explicit TEvAck(const NYql::NDqProto::TMessageTransportMeta& transportMeta) {
-            Record.MutableTransportMeta()->CopyFrom(transportMeta);
+        explicit TEvAck(
+            const NFq::NRowDispatcherProto::TEvAddConsumer& consumer) {
+            Record.MutableConsumer()->CopyFrom(consumer);
         }
     };
 
@@ -134,8 +136,15 @@ struct TEvRowDispatcher {
     };
 
     struct TEvSessionDeleteConsumer : public NActors::TEventLocal<TEvSessionDeleteConsumer, EEv::EvSessionDeleteConsumer> {
-        NActors::TActorId ConsumerActorId;
+        NActors::TActorId ReadActorId;
     };
+
+
+
+    struct TEvSessionConsumerDeleted : public NActors::TEventLocal<TEvSessionConsumerDeleted, EEv::EvSessionConsumerDeleted> {
+        NActors::TActorId ReadActorId;
+    };
+
 };
 
 } // namespace NFq

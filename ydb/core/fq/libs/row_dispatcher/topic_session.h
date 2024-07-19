@@ -13,6 +13,7 @@
 namespace NFq {
 
 std::unique_ptr<NActors::IActor> NewTopicSession(
+    NActors::TActorId rowDispatcherActorId,
     const NYql::NPq::NProto::TDqPqTopicSource& sourceParams,
     ui32 partitionId,
     NYdb::TDriver driver,

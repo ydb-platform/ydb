@@ -127,6 +127,7 @@ public:
     }
 
     void OnNewRecipientId(const NActors::TActorId& recipientId, bool unsubscribe = true);
+    void ChangeRecipientId(const NActors::TActorId& recipientId, bool unsubscribe = true);
     void HandleNodeConnected(ui32 nodeId);
     void HandleNodeDisconnected(ui32 nodeId);
     bool HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev);

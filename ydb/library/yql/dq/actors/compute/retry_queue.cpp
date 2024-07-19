@@ -26,6 +26,12 @@ void TRetryEventsQueue::OnNewRecipientId(const NActors::TActorId& recipientId, b
     RetryState = Nothing();
 }
 
+void TRetryEventsQueue::ChangeRecipientId(const NActors::TActorId& recipientId, bool /*unsubscribe*/) {
+    RecipientId = recipientId;
+    LocalRecipient = RecipientId.NodeId() == SelfId.NodeId();
+}
+
+
 void TRetryEventsQueue::HandleNodeDisconnected(ui32 nodeId) {
     if (nodeId == RecipientId.NodeId()) {
         Connected = false;

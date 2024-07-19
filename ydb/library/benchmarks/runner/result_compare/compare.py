@@ -254,26 +254,27 @@ code { white-space: pre; }
                         mismatches = []
                         for col in range(ncols):
                             stype = stypes[col][1]
-                            isOptional = False
+                            # isOptional = False
                             if stype[0] == b'OptionalType':
                                 stype = stype[1]
-                                isOptional = True
-                            assert stype[0] == b'DataType'
-                            isDouble = stype[1] == b'Double' or stype[1] == b'Decimal'
+                                # isOptional = True
+                            assert stype[0] in {b'DataType', b'PgType'}
+                            isDouble = stype[1] in {b'Double', b'Decimal', b'numeric'}
                             for row in range(nrows):
                                 val = valData[row][col]
                                 ref = refData[row][col]
-                                if isOptional:
-                                    if ref is None:
-                                        if val is not None:
-                                            mismatches += ['{} != NULL at {}, {}'.format(val, row, col)]
-                                        # assert val is None, '{} != NULL at {}, {}'.format(val, row, col)
-                                        continue
-                                    # assert val is not None, 'NULL != {} at {}, {}'.format(ref, row, col)
-                                    if val is None:
-                                        mismatches += ['NULL != {} at {}, {}'.format(ref, row, col)]
-                                        continue
+                                if ref is None:
+                                    if val is not None:
+                                        mismatches += ['{} != NULL at {}, {}'.format(val, row, col)]
+                                    # assert val is None, '{} != NULL at {}, {}'.format(val, row, col)
+                                    continue
+                                # assert val is not None, 'NULL != {} at {}, {}'.format(ref, row, col)
+                                if val is None:
+                                    mismatches += ['NULL != {} at {}, {}'.format(ref, row, col)]
+                                    continue
+                                if type(ref) is list:
                                     ref = ref[0]
+                                if type(val) is list:
                                     val = val[0]
                                 if isDouble:
                                     val = float(val)

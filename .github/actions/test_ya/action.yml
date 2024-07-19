@@ -343,7 +343,7 @@ runs:
         testmo_proxy_pid=$!
         
         TESTMO_TOKEN=${{ inputs.testman_token }} NODE_TLS_REJECT_UNAUTHORIZED=0 testmo automation:run:submit-thread \
-          --instance "https://$TESTMO_PROXY_ADDR" --run-id "${{ steps.th.outputs.runid }}" \
+          --instance "https://$TESTMO_PROXY_ADDR" --run-id "$TESTMO_RUN_ID" \
           --results "$TESTMO_JUNIT_REPORT_PARTS/*.xml"
         
         kill $testmo_proxy_pid

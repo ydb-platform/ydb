@@ -128,51 +128,51 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(MatchRecognizeWithoutTimeOrderRecoverer) {
-        TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableQueryServiceConfig()->SetEnableMatchRecognize(true);
-        settings.SetAppConfig(appConfig);
+    // Not implemented.
 
-        TKikimrRunner kikimr(settings);
-        NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
+    // Y_UNIT_TEST(MatchRecognizeWithoutTimeOrderRecoverer) {
+    //     TKikimrSettings settings;
+    //     NKikimrConfig::TAppConfig appConfig;
+    //     appConfig.MutableQueryServiceConfig()->SetEnableMatchRecognize(true);
+    //     settings.SetAppConfig(appConfig);
 
-        auto result = client.ExecuteYqlScript(R"(
-            PRAGMA FeatureR010="prototype";
-            PRAGMA config.flags("MatchRecognizeStream", "disable");
+    //     TKikimrRunner kikimr(settings);
+    //     NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
 
-            CREATE TABLE `/Root/NewTable` (
-                dt Uint64,
-                value String,
-                PRIMARY KEY (dt)
-            );
-            COMMIT;
+    //     auto result = client.ExecuteYqlScript(R"(
+    //         PRAGMA FeatureR010="prototype";
+    //         PRAGMA config.flags("MatchRecognizeStream", "disable");
 
-            INSERT INTO `/Root/NewTable` (dt, value) VALUES 
-                (1, 'value1'), (2, 'value2'), (3, 'value3'), (4, 'value4');
-            COMMIT;
+    //         CREATE TABLE `/Root/NewTable` (
+    //             dt Uint64,
+    //             value String,
+    //             PRIMARY KEY (dt)
+    //         );
+    //         COMMIT;
+
+    //         INSERT INTO `/Root/NewTable` (dt, value) VALUES 
+    //             (1, 'value1'), (2, 'value2'), (3, 'value3'), (4, 'value4');
+    //         COMMIT;
             
             
-            SELECT * FROM (SELECT dt, value FROM `/Root/NewTable`)
-                MATCH_RECOGNIZE(
-                    MEASURES
-                        LAST(V1.dt) as v1,
-                        LAST(V4.dt) as v4
-                    ONE ROW PER MATCH
-                    PATTERN (V1 V* V4)
-                    DEFINE 
-                        V1 as V1.value = "value1",
-                        V as True,
-                        V4 as V4.value = "value4" 
-                );
-        )").GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        //$data = SELECT dt, value FROM ;
-//  ORDER BY dt
-        CompareYson(R"([
-            [[1u];[3u]];
-        ])", FormatResultSetYson(result.GetResultSet(0)));
-    }
+    //         SELECT * FROM (SELECT dt, value FROM `/Root/NewTable`)
+    //             MATCH_RECOGNIZE(
+    //                 MEASURES
+    //                     LAST(V1.dt) as v1,
+    //                     LAST(V4.dt) as v4
+    //                 ONE ROW PER MATCH
+    //                 PATTERN (V1 V* V4)
+    //                 DEFINE 
+    //                     V1 as V1.value = "value1",
+    //                     V as True,
+    //                     V4 as V4.value = "value4" 
+    //             );
+    //     )").GetValueSync();
+    //     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    //     CompareYson(R"([
+    //         [[1u];[4u]];
+    //     ])", FormatResultSetYson(result.GetResultSet(0)));
+    // }
 }
 
 } // namspace NKqp

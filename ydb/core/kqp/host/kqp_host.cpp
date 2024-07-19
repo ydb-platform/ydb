@@ -1835,7 +1835,6 @@ private:
         auto configProvider = CreateConfigProvider(*TypesCtx, gatewaysConfig, {}, allowSettings);
         TypesCtx->AddDataSource(ConfigProviderName, configProvider);
         TypesCtx->MatchRecognize = QueryServiceConfig.GetEnableMatchRecognize();
-       // TypesCtx->MatchRecognizeStreaming = EMatchRecognizeStreamingMode::Disable;
 
         YQL_ENSURE(TypesCtx->Initialize(*ExprCtx));
 

@@ -5,11 +5,9 @@
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-
 #include <ydb/library/yql/minikql/computation/mock_spiller_factory_ut.h>
 
 #include <cstring>
-#include <random>
 #include <algorithm>
 
 namespace NKikimr {
@@ -29,12 +27,10 @@ public:
 
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx)
             : TBase(memInfo), CompCtx(compCtx)
-        {
-            CompCtx.SpillerFactory = std::make_shared<TMockSpillerFactory>();
-        }
+        {}
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            CompCtx.SpillerFactory = std::make_shared<TMockSpillerFactory>();
+
             constexpr auto size = Y_ARRAY_SIZE(g_TestYieldStreamData);
             if (Index == size) {
                 return NUdf::EFetchStatus::Finish;
@@ -66,7 +62,6 @@ public:
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        ctx.SpillerFactory = std::make_shared<TMockSpillerFactory>();
         return ctx.HolderFactory.Create<TStreamValue>(ctx);
     }
 private:

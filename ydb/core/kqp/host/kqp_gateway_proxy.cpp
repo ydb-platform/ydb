@@ -582,7 +582,7 @@ public:
                         }
 
                         if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                            *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription).GetSettings();
+                            *indexDesc->MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription);
                         }
                     }
                     FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata);

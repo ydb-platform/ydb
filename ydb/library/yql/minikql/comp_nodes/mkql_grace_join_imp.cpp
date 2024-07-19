@@ -700,7 +700,7 @@ inline bool TTable::AddKeysToHashTable(KeysHashTable& t, ui64* keys, NYql::NUdf:
     }
 
     if ( HasBitSet(keys + HashSize, 1)) // Keys with null value
-        return false;
+        return true;
 
     ui64 hash = *keys;
     ui64 slot = hash % t.NSlots;

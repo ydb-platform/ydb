@@ -1,7 +1,18 @@
 UNITTEST_FOR(ydb/core/memory_controller)
 
-TIMEOUT(600)
-SIZE(MEDIUM)
+FORK_SUBTESTS()
+
+SPLIT_FACTOR(1)
+
+IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+    TIMEOUT(3600)
+    SIZE(LARGE)
+    TAG(ya:fat)
+    REQUIREMENTS(ram:16)
+ELSE()
+    TIMEOUT(600)
+    SIZE(MEDIUM)
+ENDIF()
 
 PEERDIR(
     ydb/library/yql/sql/pg_dummy
@@ -11,11 +22,13 @@ PEERDIR(
     library/cpp/testing/unittest
 )
 
+YQL_LAST_ABI_VERSION()
+
 SRCS(
     memory_controller_ut.cpp
     memtable_collection_ut.cpp
 )
 
-YQL_LAST_ABI_VERSION()
+REQUIREMENTS(ram:32)
 
 END()

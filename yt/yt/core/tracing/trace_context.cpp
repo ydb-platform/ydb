@@ -377,6 +377,7 @@ TTraceContextPtr TTraceContext::CreateChild(
     auto guard = Guard(Lock_);
     child->ProfilingTags_ = ProfilingTags_;
     child->TargetEndpoint_ = TargetEndpoint_;
+    child->AllocationTags_ = AllocationTags_;
     return child;
 }
 

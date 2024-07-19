@@ -2113,7 +2113,7 @@ void TMemoryControllerInitializer::InitializeServices(
     auto config = appData->MemoryControllerConfig;
     auto* actor = NMemory::CreateMemoryController(TDuration::Seconds(1), ProcessMemoryInfoProvider, config, appData->Counters);
     setup->LocalServices.emplace_back(
-        TActorId(),
+        NMemory::MakeMemoryControllerId(0),
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->BatchPoolId)
     );
 }

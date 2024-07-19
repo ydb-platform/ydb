@@ -114,7 +114,7 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
 
     if (!indexName.empty()) {
         TPath index = table.Child(indexName);
-        Y_ABORT_UNLESS(index.Base()->GetChildren().size() == 1);
+        Y_ABORT_UNLESS(index.Base()->GetChildren().size() >= 1);
         for (auto& indexChildItems: index.Base()->GetChildren()) {
             const TString& implTableName = indexChildItems.first;
             Y_ABORT_UNLESS(NTableIndex::IsImplTable(implTableName), "unexpected name %s", implTableName.c_str());

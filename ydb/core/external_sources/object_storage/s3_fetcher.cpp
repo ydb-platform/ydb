@@ -10,11 +10,11 @@ public:
         TString url,
         NYql::IHTTPGateway::TPtr gateway,
         NYql::IHTTPGateway::TRetryPolicy::TPtr retryPolicy,
-        NYql::TS3Credentials credentials)
+        const NYql::TS3Credentials& credentials)
         : Url_{std::move(url)}
         , Gateway_{std::move(gateway)}
         , RetryPolicy_{std::move(retryPolicy)}
-        , Credentials_{std::move(credentials)}
+        , Credentials_(credentials)
     {}
 
     void Bootstrap() {
@@ -80,15 +80,15 @@ private:
     TString Url_;
     NYql::IHTTPGateway::TPtr Gateway_;
     NYql::IHTTPGateway::TRetryPolicy::TPtr RetryPolicy_;
-    NYql::TS3Credentials Credentials_;
+    const NYql::TS3Credentials Credentials_;
 };
 
 NActors::IActor* CreateS3FetcherActor(
     TString url,
     NYql::IHTTPGateway::TPtr gateway,
     NYql::IHTTPGateway::TRetryPolicy::TPtr retryPolicy,
-    NYql::TS3Credentials credentials) {
+    const NYql::TS3Credentials& credentials) {
 
-    return new S3Fetcher(std::move(url), std::move(gateway), std::move(retryPolicy), std::move(credentials));
+    return new S3Fetcher(std::move(url), std::move(gateway), std::move(retryPolicy), credentials);
 }
 } // namespace NKikimr::NExternalSource::NObjectStorage

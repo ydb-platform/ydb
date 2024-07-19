@@ -173,7 +173,7 @@ public:
         IHTTPGateway::TPtr gateway,
         IHTTPGateway::TRetryPolicy::TPtr retryPolicy,
         TString url,
-        TS3Credentials credentials,
+        const TS3Credentials& credentials,
         TString pattern,
         NS3Lister::ES3PatternVariant patternVariant,
         NS3Lister::ES3PatternType patternType)
@@ -189,7 +189,7 @@ public:
         , Gateway(std::move(gateway))
         , RetryPolicy(std::move(retryPolicy))
         , Url(std::move(url))
-        , Credentials(std::move(credentials))
+        , Credentials(credentials)
         , Pattern(std::move(pattern))
         , PatternVariant(patternVariant)
         , PatternType(patternType) {
@@ -638,7 +638,7 @@ NActors::IActor* CreateS3FileQueueActor(
         IHTTPGateway::TPtr gateway,
         IHTTPGateway::TRetryPolicy::TPtr retryPolicy,
         TString url,
-        TS3Credentials credentials,
+        const TS3Credentials& credentials,
         TString pattern,
         NS3Lister::ES3PatternVariant patternVariant,
         NS3Lister::ES3PatternType patternType) {

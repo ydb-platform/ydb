@@ -303,6 +303,8 @@ struct TObjectStorageExternalSource : public IExternalSource {
             }
             auto& saAuth = std::get<NAuth::TServiceAccount>(meta->Auth);
             structuredTokenBuilder.SetServiceAccountIdAuth(saAuth.ServiceAccountId, saAuth.ServiceAccountIdSignature);
+        } else {
+            structuredTokenBuilder.SetNoAuth();
         }
 
         const NYql::TS3Credentials credentials(CredentialsFactory, structuredTokenBuilder.ToJson());

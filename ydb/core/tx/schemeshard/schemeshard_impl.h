@@ -326,7 +326,7 @@ public:
     bool EnableReplaceIfExistsForExternalEntities = false;
     bool EnableTempTables = false;
     bool EnableTableDatetime64 = false;
-    bool EnableResourcePoolsOnServerLess = false;
+    bool EnableResourcePoolsOnServerless = false;
 
     TShardDeleter ShardDeleter;
 

@@ -7010,7 +7010,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableTempTables = featureFlags.GetEnableTempTables();
     EnableReplaceIfExistsForExternalEntities = featureFlags.GetEnableReplaceIfExistsForExternalEntities();
     EnableTableDatetime64 = featureFlags.GetEnableTableDatetime64();
-    EnableResourcePoolsOnServerLess = featureFlags.GetEnableResourcePoolsOnServerLess();
+    EnableResourcePoolsOnServerless = featureFlags.GetEnableResourcePoolsOnServerless();
 }
 
 void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {

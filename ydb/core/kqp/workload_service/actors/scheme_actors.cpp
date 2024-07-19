@@ -20,9 +20,9 @@ using namespace NActors;
 
 class TPoolResolverActor : public TActorBootstrapped<TPoolResolverActor> {
 public:
-    TPoolResolverActor(TEvPlaceRequestIntoPool::TPtr event, bool defaultPoolExists, bool enableOnServerLess)
+    TPoolResolverActor(TEvPlaceRequestIntoPool::TPtr event, bool defaultPoolExists, bool enableOnServerless)
         : Event(std::move(event))
-        , EnableOnServerLess(enableOnServerLess)
+        , EnableOnServerless(enableOnServerless)
     {
         if (!Event->Get()->PoolId) {
             Event->Get()->PoolId = NResourcePool::DEFAULT_POOL_ID;
@@ -37,7 +37,7 @@ public:
 
     void StartPoolFetchRequest() const {
         LOG_D("Start pool fetching");
-        Register(CreatePoolFetcherActor(SelfId(), Event->Get()->Database, Event->Get()->PoolId, Event->Get()->UserToken, EnableOnServerLess));
+        Register(CreatePoolFetcherActor(SelfId(), Event->Get()->Database, Event->Get()->PoolId, Event->Get()->UserToken, EnableOnServerless));
     }
 
     void Handle(TEvPrivate::TEvFetchPoolResponse::TPtr& ev) {
@@ -108,7 +108,7 @@ private:
 
 private:
     TEvPlaceRequestIntoPool::TPtr Event;
-    const bool EnableOnServerLess;
+    const bool EnableOnServerless;
     bool CanCreatePool = false;
     bool DefaultPoolCreated = false;
 };
@@ -116,12 +116,12 @@ private:
 
 class TPoolFetcherActor : public TSchemeActorBase<TPoolFetcherActor> {
 public:
-    TPoolFetcherActor(const NActors::TActorId& replyActorId, const TString& database, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool enableOnServerLess)
+    TPoolFetcherActor(const NActors::TActorId& replyActorId, const TString& database, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool enableOnServerless)
         : ReplyActorId(replyActorId)
         , Database(database)
         , PoolId(poolId)
         , UserToken(userToken)
-        , EnableOnServerLess(enableOnServerLess)
+        , EnableOnServerless(enableOnServerless)
     {}
 
     void DoBootstrap() {
@@ -136,8 +136,8 @@ public:
         }
 
         const auto& result = results[0];
-        if (!EnableOnServerLess && result.DomainInfo && result.DomainInfo->IsServerless()) {
-            Reply(Ydb::StatusIds::UNSUPPORTED, "Resource pools are disabled for server less domains. Please contact your system administrator to enable it");
+        if (!EnableOnServerless && result.DomainInfo && result.DomainInfo->IsServerless()) {
+            Reply(Ydb::StatusIds::UNSUPPORTED, "Resource pools are disabled for serverless domains. Please contact your system administrator to enable it");
             return;
         }
 
@@ -230,7 +230,7 @@ private:
     const TString Database;
     const TString PoolId;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    const bool EnableOnServerLess;
+    const bool EnableOnServerless;
 
     NResourcePool::TPoolSettings PoolConfig;
     NKikimrProto::TPathID PathId;
@@ -374,12 +374,12 @@ private:
 
 }  // anonymous namespace
 
-IActor* CreatePoolResolverActor(TEvPlaceRequestIntoPool::TPtr event, bool defaultPoolExists, bool enableOnServerLess) {
-    return new TPoolResolverActor(std::move(event), defaultPoolExists, enableOnServerLess);
+IActor* CreatePoolResolverActor(TEvPlaceRequestIntoPool::TPtr event, bool defaultPoolExists, bool enableOnServerless) {
+    return new TPoolResolverActor(std::move(event), defaultPoolExists, enableOnServerless);
 }
 
-IActor* CreatePoolFetcherActor(const TActorId& replyActorId, const TString& database, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool enableOnServerLess) {
-    return new TPoolFetcherActor(replyActorId, database, poolId, userToken, enableOnServerLess);
+IActor* CreatePoolFetcherActor(const TActorId& replyActorId, const TString& database, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool enableOnServerless) {
+    return new TPoolFetcherActor(replyActorId, database, poolId, userToken, enableOnServerless);
 }
 
 IActor* CreatePoolCreatorActor(const TActorId& replyActorId, const TString& database, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, TIntrusiveConstPtr<NACLib::TUserToken> userToken, NACLibProto::TDiffACL diffAcl) {

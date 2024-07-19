@@ -44,7 +44,7 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
     }
     const auto& indexSchema = ActualSchema->GetIndexInfo().ArrowSchema();
     NArrow::TSchemaSubset subset;
-    auto reorderConclusion = NArrow::TColumnOperator().Adapt(OriginalBatch, indexSchema->field_names(), &subset);
+    auto reorderConclusion = NArrow::TColumnOperator().Adapt(OriginalBatch, indexSchema, &subset);
     if (reorderConclusion.IsFail()) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unadaptable schemas")("index", indexSchema->ToString())("problem", reorderConclusion.GetErrorMessage());
         ReplyError("cannot reorder schema: " + reorderConclusion.GetErrorMessage());

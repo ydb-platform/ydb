@@ -250,7 +250,7 @@ public:
     /// Returns names of columns defined by the specific ids.
     std::vector<TString> GetColumnNames(const std::vector<ui32>& ids) const;
     std::vector<std::string> GetColumnSTLNames(const std::vector<ui32>& ids) const;
-    std::vector<ui32> GetColumnIds(const bool withSpecial = true) const;
+    const std::vector<ui32>& GetColumnIds(const bool withSpecial = true) const;
     std::vector<ui32> GetEntityIds() const;
 
     /// Returns info of columns defined by specific ids.

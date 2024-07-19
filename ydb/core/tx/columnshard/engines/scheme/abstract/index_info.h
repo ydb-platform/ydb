@@ -62,12 +62,6 @@ public:
         return std::make_shared<arrow::Schema>(std::move(fields));
     }
 
-    void AddSpecialFieldIds(std::vector<ui32>& result) const {
-        result.emplace_back((ui32)ESpecialColumn::PLAN_STEP);
-        result.emplace_back((ui32)ESpecialColumn::TX_ID);
-        result.emplace_back((ui32)ESpecialColumn::DELETE_FLAG);
-    }
-
     static void AddSpecialFields(std::vector<std::shared_ptr<arrow::Field>>& fields) {
         AddSnapshotFields(fields);
         fields.push_back(arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean()));
@@ -98,7 +92,7 @@ public:
         return result;
     }
 
-    static std::vector<ui32> AddSpecialFieldIds(const std::vector<ui32>& baseColumnIds) {
+    [[nodiscard]] static std::vector<ui32> AddSpecialFieldIds(const std::vector<ui32>& baseColumnIds) {
         std::vector<ui32> result = baseColumnIds;
         for (auto&& i : GetSystemColumnIds()) {
             result.emplace_back(i);

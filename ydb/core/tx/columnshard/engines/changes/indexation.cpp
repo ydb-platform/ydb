@@ -73,7 +73,6 @@ class TPathData {
 private:
     std::vector<TBatchInfo> Batches;
     YDB_READONLY_DEF(std::optional<TGranuleShardingInfo>, ShardingInfo);
-    std::set<std::string> MergeFieldNames;
     bool HasDeletionFlag = false;
 public:
     TPathData(const std::optional<TGranuleShardingInfo>& shardingInfo)
@@ -91,9 +90,6 @@ public:
             HasDeletionFlag = true;
         }
         AFL_VERIFY(batch);
-        for (auto&& i : batch->schema()->fields()) {
-            MergeFieldNames.emplace(i->name());
-        }
         Batches.emplace_back(batch, data.GetMeta().GetModificationType());
     }
 

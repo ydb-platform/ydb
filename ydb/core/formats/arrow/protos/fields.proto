@@ -3,12 +3,13 @@ package NKikimrArrowSchema;
 message TSchemaSubset {
 
     message TFieldsList {
-        repeated uint32 FieldsIdx = 1;
+        optional bool Exclude = 1;
+        repeated uint32 FieldsIdx = 2;
     }
 
     oneof Implementation {
         TFieldsList List = 1;
-        std::string Bits = 2;
+        string Bits = 2;
 
     }
 }

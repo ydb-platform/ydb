@@ -123,8 +123,8 @@ public:
         : WriteMeta(writeData.GetWriteMeta())
         , SchemaVersion(writeData.GetData()->GetSchemaVersion()) 
         , Size(writeData.GetSize())
-        , BlobsAction(writeData.GetBlobsAction())
-        , SchemaSubset(writeData.GetSchemaSubsetVerified()) {
+        , BlobsAction(writeData.GetBlobsAction()) {
+        AFL_VERIFY(!writeData.GetSchemaSubset());
     }
 };
 

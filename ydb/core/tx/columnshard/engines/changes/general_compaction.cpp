@@ -33,7 +33,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByFullBatches(
         std::set<ui32> columnIds;
         for (auto&& i : portions) {
             if (columnIds.size() != resultSchema->GetColumnsCount()) {
-                for (auto id : i.GetColumnIds(columnIds)) {
+                for (auto id : i.GetPortionInfo().GetColumnIds()) {
                     if (resultSchema->GetFieldIndex(id) > 0) {
                         columnIds.emplace(id);
                     }
@@ -188,8 +188,8 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
     for (auto&& i : SwitchedPortions) {
         stats->Merge(i.GetSerializationStat(*resultSchema));
         if (columnIds.size() != resultSchema->GetColumnsCount()) {
-            for (auto id : i.GetColumnIds(columnIds)) {
-                if (resultSchema->GetFieldIndex(id) > 0) {
+            for (auto id : i.GetColumnIds()) {
+                if (resultSchema->HasColumnId(id)) {
                     columnIds.emplace(id);
                 }
             }

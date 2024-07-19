@@ -1,5 +1,6 @@
 #include "process_columns.h"
 #include "common/adapter.h"
+#include "modifier/subset.h"
 
 #include <util/string/join.h>
 
@@ -28,7 +29,7 @@ std::shared_ptr<TDataContainer> ExtractColumnsValidateImpl(const std::shared_ptr
 
 template <class TDataContainer>
 TConclusion<std::shared_ptr<TDataContainer>> AdaptColumnsImpl(const std::shared_ptr<TDataContainer>& srcBatch,
-    const std::shared_ptr<arrow::Schema>& dstSchema, const TSchemaSubset* subset) {
+    const std::shared_ptr<arrow::Schema>& dstSchema, TSchemaSubset* subset) {
     AFL_VERIFY(srcBatch);
     AFL_VERIFY(dstSchema);
     std::vector<std::shared_ptr<typename NAdapter::TDataBuilderPolicy<TDataContainer>::TColumn>> columns;
@@ -62,7 +63,7 @@ TConclusion<std::shared_ptr<TDataContainer>> AdaptColumnsImpl(const std::shared_
         ++idx;
     }
     if (subset) {
-        *subset = TSchemaSubset(fieldIdx);
+        *subset = TSchemaSubset(fieldIdx, dstSchema->num_fields());
     }
     return NAdapter::TDataBuilderPolicy<TDataContainer>::Build(std::make_shared<arrow::Schema>(fields), std::move(columns), srcBatch->num_rows());
 }
@@ -124,11 +125,11 @@ std::shared_ptr<arrow::Table> TColumnOperator::Extract(const std::shared_ptr<arr
     return ExtractImpl(AbsentColumnPolicy, incoming, columnNames);
 }
 
-NKikimr::TConclusion<std::shared_ptr<arrow::RecordBatch>> TColumnOperator::Adapt(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<arrow::Schema>& dstSchema, const TSchemaSubset* subset) {
+NKikimr::TConclusion<std::shared_ptr<arrow::RecordBatch>> TColumnOperator::Adapt(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<arrow::Schema>& dstSchema, TSchemaSubset* subset) {
     return AdaptColumnsImpl(incoming, dstSchema, subset);
 }
 
-NKikimr::TConclusion<std::shared_ptr<arrow::Table>> TColumnOperator::Adapt(const std::shared_ptr<arrow::Table>& incoming, const std::shared_ptr<arrow::Schema>& dstSchema, const TSchemaSubset* subset) {
+NKikimr::TConclusion<std::shared_ptr<arrow::Table>> TColumnOperator::Adapt(const std::shared_ptr<arrow::Table>& incoming, const std::shared_ptr<arrow::Schema>& dstSchema, TSchemaSubset* subset) {
     return AdaptColumnsImpl(incoming, dstSchema, subset);
 }
 

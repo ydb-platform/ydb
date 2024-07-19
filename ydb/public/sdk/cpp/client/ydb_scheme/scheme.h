@@ -6,6 +6,8 @@ namespace Ydb {
     class VirtualTimestamp;
     namespace Scheme {
         class Entry;
+        class ModifyPermissionsRequest;
+        class Permissions;
     }
 }
 
@@ -24,6 +26,8 @@ struct TPermissions {
     {}
     TString Subject;
     TVector<TString> PermissionNames;
+
+    void SerializeTo(::Ydb::Scheme::Permissions& proto) const;
 };
 
 enum class ESchemeEntryType : i32 {
@@ -77,6 +81,9 @@ struct TSchemeEntry {
     TSchemeEntry(const ::Ydb::Scheme::Entry& proto);
 
     void Out(IOutputStream& out) const;
+
+    // Fills ModifyPermissionsRequest proto from this entry
+    void SerializeTo(::Ydb::Scheme::ModifyPermissionsRequest& request) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

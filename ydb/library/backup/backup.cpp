@@ -440,22 +440,6 @@ NScheme::TSchemeEntry DescribePath(TDriver driver, const TString& fullPath) {
     return status.GetEntry();
 }
 
-Ydb::Scheme::ModifyPermissionsRequest ProtoFromSchemeEntry(const NScheme::TSchemeEntry& entry) {
-    Ydb::Scheme::ModifyPermissionsRequest proto;
-    
-    proto.mutable_actions()->Add()->set_change_owner(entry.Owner);
-
-    for (const auto& permission : entry.Permissions) {
-        auto* grant = proto.mutable_actions()->Add()->mutable_grant();
-        grant->set_subject(permission.Subject);
-        for (const auto& name : permission.PermissionNames) {
-            *grant->mutable_permission_names()->Add() = name;
-        }
-    }
-
-    return proto;
-}
-
 TAsyncStatus CopyTableAsyncStart(TDriver driver, const TString& src, const TString& dst) {
     NTable::TTableClient client(driver);
 
@@ -509,11 +493,13 @@ void DropTable(TDriver driver, const TString& path) {
 
 void BackupPermissions(TDriver driver, const TString& dbPrefix, const TString& path, const TFsPath& folderPath) {
     auto entry = DescribePath(driver, JoinDatabasePath(dbPrefix, path));
-    auto proto = ProtoFromSchemeEntry(entry);
+    Ydb::Scheme::ModifyPermissionsRequest proto;
+    entry.SerializeTo(proto);
 
     TString permissionsStr;
     google::protobuf::TextFormat::PrintToString(proto, &permissionsStr);
     LOG_DEBUG("ModifyPermissionsRequest.proto: " << permissionsStr);
+
     TFile outFile(folderPath.Child(PERMISSIONS_FILE_NAME), CreateAlways | WrOnly);
     outFile.Write(permissionsStr.data(), permissionsStr.size());
 }

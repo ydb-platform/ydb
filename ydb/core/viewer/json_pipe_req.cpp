@@ -10,6 +10,8 @@ NTabletPipe::TClientConfig TViewerPipeClientImpl::GetPipeClientConfig() {
     return clientConfig;
 }
 
+TViewerPipeClientImpl::~TViewerPipeClientImpl() = default;
+
 TViewerPipeClientImpl::TViewerPipeClientImpl() = default;
 
 TViewerPipeClientImpl::TViewerPipeClientImpl(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)

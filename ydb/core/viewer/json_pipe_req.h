@@ -141,6 +141,8 @@ protected:
 
     NTabletPipe::TClientConfig GetPipeClientConfig();
 
+    ~TViewerPipeClientImpl();
+
     TViewerPipeClientImpl();
 
     TViewerPipeClientImpl(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev);

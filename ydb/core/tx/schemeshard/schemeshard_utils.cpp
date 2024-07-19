@@ -350,7 +350,7 @@ void SetImplTablePartitionConfig(
 }
 
 void FillIndexImplTableColumns(
-    const auto& baseTableColumns,
+    const THashMap<ui32, struct NSchemeShard::TTableInfo::TColumn>& baseTableColumns,
     const TTableColumns& implTableColumns,
     NKikimrSchemeOp::TTableDescription& implTableDesc)
 {

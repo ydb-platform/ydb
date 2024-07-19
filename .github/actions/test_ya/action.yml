@@ -397,7 +397,7 @@ runs:
       if: always() && inputs.testman_token && inputs.run_tests
       shell: bash
       run: |
-        TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{ steps.th.outputs.runid }}
+        TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{ steps.build.outputs.runid }}
     
     - name: analyze tests results
       shell: bash

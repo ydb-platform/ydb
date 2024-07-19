@@ -213,6 +213,28 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
                                      "value = 50, key = 5\n"
                                      "value = 40, key = 4\n");
         }
+    }
+
+    Y_UNIT_TEST (ScanBadParameters) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+
+        // Allow manipulating shadow data using normal schemeshard operations
+        runtime.GetAppData().AllowShadowDataInSchemeShardForTests = true;
+
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
+
+        auto snapshot = CreateVolatileSnapshot(server, {"/Root/table-1"});
 
         {
             auto ev = std::make_unique<TEvDataShard::TEvSampleKRequest>();

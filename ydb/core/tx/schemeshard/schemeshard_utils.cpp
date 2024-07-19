@@ -1,5 +1,6 @@
 #include "schemeshard_utils.h"
 
+#include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/persqueue/utils.h>
 #include <ydb/core/protos/counters_schemeshard.pb.h>
@@ -210,7 +211,7 @@ PQGroupReserve::PQGroupReserve(const ::NKikimrPQ::TPQTabletConfig& tabletConfig,
 namespace NTableIndex {
 
 TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription &tableDescr) {
-    NTableIndex::TTableColumns result;
+    TTableColumns result;
     for (auto& column: tableDescr.GetColumns()) {
         result.Columns.insert(column.GetName());
     }
@@ -221,7 +222,7 @@ TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription &tableDescr) 
 }
 
 TIndexColumns ExtractInfo(const NKikimrSchemeOp::TIndexCreationConfig &indexDesc) {
-    NTableIndex::TIndexColumns result;
+    TIndexColumns result;
     for (auto& keyName: indexDesc.GetKeyColumnNames()) {
         result.KeyColumns.push_back(keyName);
     }
@@ -232,7 +233,7 @@ TIndexColumns ExtractInfo(const NKikimrSchemeOp::TIndexCreationConfig &indexDesc
 }
 
 TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr &tableInfo) {
-    NTableIndex::TTableColumns result;
+    TTableColumns result;
     for (auto& item: tableInfo->Columns) {
         const auto& column = item.second;
         if (column.IsDropped()) {
@@ -348,13 +349,11 @@ void SetImplTablePartitionConfig(
     *tableDescription.MutablePartitionConfig() = PartitionConfigForIndexes(baseTablePartitionConfig, indexTableDesc);
 }
 
- void FillIndexImplTableColumns(
+void FillIndexImplTableColumns(
     const THashMap<ui32, struct NSchemeShard::TTableInfo::TColumn>& baseTableColumns,
-    const NTableIndex::TTableColumns& implTableColumns,
+    const TTableColumns& implTableColumns,
     NKikimrSchemeOp::TTableDescription& implTableDesc)
 {
-    //Columns and KeyColumnNames order is really important
-    //the order of implTableColumns.Keys is the right one
 
     THashMap<TString, ui32> implKeyToImplColumn;
     for (ui32 keyId = 0; keyId < implTableColumns.Keys.size(); ++keyId) {
@@ -446,7 +445,7 @@ void FillIndexImplTableColumns(
 
 NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
-    const NTableIndex::TTableColumns& implTableColumns,
+    const TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc)
 {
     NKikimrSchemeOp::TTableDescription implTableDesc;
@@ -487,11 +486,11 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
     SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
 
     {
-        auto parentIdColumn = implTableDesc.AddColumns();
-        parentIdColumn->SetName(NTableVectorKmeansTreeIndex::LevelTable_ParentIdColumn);
-        parentIdColumn->SetType("Uint32");
-        parentIdColumn->SetTypeId(NScheme::NTypeIds::Uint32);
-        parentIdColumn->SetId(0);
+        auto parentColumn = implTableDesc.AddColumns();
+        parentColumn->SetName(NTableVectorKmeansTreeIndex::LevelTable_ParentIdColumn);
+        parentColumn->SetType("Uint32");
+        parentColumn->SetTypeId(NScheme::NTypeIds::Uint32);
+        parentColumn->SetId(0);
     }
     {
         auto idColumn = implTableDesc.AddColumns();
@@ -517,7 +516,7 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-    const NTableIndex::TTableColumns& implTableColumns,
+    const TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc)
 {
     NKikimrSchemeOp::TTableDescription implTableDesc;
@@ -540,9 +539,9 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
 }
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
-    const NKikimrSchemeOp::TTableDescription &baseTableDescr,
+    const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-    const NTableIndex::TTableColumns& implTableColumns,
+    const TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc)
 {
     NKikimrSchemeOp::TTableDescription implTableDesc;

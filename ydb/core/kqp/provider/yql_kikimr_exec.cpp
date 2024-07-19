@@ -1598,6 +1598,12 @@ public:
                             } else if (type == "asyncGlobal") {
                                 add_index->mutable_global_async_index();
                             } else if (type == "globalVectorKmeansTree") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableVectorIndex()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        TStringBuilder() << "Vector index support is disabled"));
+                                    return SyncError();
+                                }
+
                                 add_index->mutable_global_vector_kmeans_tree_index();
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),

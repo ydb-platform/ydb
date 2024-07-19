@@ -188,9 +188,9 @@ double TKqpProviderContext::ComputeJoinCost(const TOptimizerStatistics& leftStat
             return rightStats.Nrows + outputRows;
             
         case EJoinAlgoType::MapJoin:
-            return leftStats.Nrows + 1.8 * rightStats.Nrows + outputRows;
+            return 1.5 * (leftStats.Nrows + 1.8 * rightStats.Nrows + outputRows);
         case EJoinAlgoType::GraceJoin:
-            return leftStats.Nrows + 2.0 * rightStats.Nrows + outputRows;
+            return 1.5 * (leftStats.Nrows + 2.0 * rightStats.Nrows + outputRows);
         default:
             Y_ENSURE(false, "Illegal join type encountered");
             return 0;

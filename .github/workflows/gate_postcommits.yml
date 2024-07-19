@@ -17,7 +17,8 @@ jobs:
           jq '[.workflow_runs[] | {name,status,id,updated_at,"waiting_seconds":(now - (.updated_at | fromdate)), html_url}]' | \
           jq '[.[] | select(.waiting_seconds > 600)] | length')
         echo "Queue size: $queue_size"
-        if (( queue_size > 0 ));then
+        # temporary solution for https://www.githubstatus.com/incidents/m70hk23gx3nx (some workflows are uncancellable stuck)
+        if (( queue_size > 10 ));then
           echo "Close gate for postcommits"
           query='.runners[] | select(.labels[].name=="ghrun") | select( any([.labels[].name][]; .=="postcommit")) | .id'
         else

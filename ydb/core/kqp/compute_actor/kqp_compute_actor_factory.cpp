@@ -63,6 +63,10 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
         return TotalQueryAllocationsSize >= ReasonableSpillingTreshold;
     }
 
+    TString MemoryConsumptionDetails() const override {
+        return ResourceManager->GetTxResourcesUsageDebugInfo(TxId);
+    }
+
     void TerminateHandler(bool success, const NYql::TIssues& issues) {
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)
             ("problem", "finish_compute_actor")
@@ -110,13 +114,24 @@ public:
         ReasonableSpillingTreshold.store(config.GetReasonableSpillingTreshold());
     }
 
-    TActorId CreateKqpComputeActor(TCreateArgs&& args) {
+    TActorStartResult CreateKqpComputeActor(TCreateArgs&& args) {
         NYql::NDq::TComputeMemoryLimits memoryLimits;
         memoryLimits.ChannelBufferSize = 0;
         memoryLimits.MkqlLightProgramMemoryLimit = MkqlLightProgramMemoryLimit.load();
         memoryLimits.MkqlHeavyProgramMemoryLimit = MkqlHeavyProgramMemoryLimit.load();
 
         auto estimation = ResourceManager_->EstimateTaskResources(*args.Task, args.NumberOfTasks);
+        NRm::TKqpResourcesRequest resourcesRequest;
+        resourcesRequest.MemoryPool = args.MemoryPool;
+        resourcesRequest.ExecutionUnits = 1;
+        resourcesRequest.Memory =  memoryLimits.MkqlLightProgramMemoryLimit;
+
+        auto rmResult = ResourceManager_->AllocateResources(
+            args.TxId, args.Task->GetId(), resourcesRequest);
+
+        if (!rmResult) {
+            return NRm::TKqpRMAllocateResult{rmResult};
+        }
 
         {
             ui32 inputChannelsCount = 0;

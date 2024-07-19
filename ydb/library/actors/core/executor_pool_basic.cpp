@@ -9,6 +9,7 @@
 #include "mailbox.h"
 #include "thread_context.h"
 #include <atomic>
+#include <memory>
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/util/datetime.h>
 
@@ -423,6 +424,19 @@ namespace NActors {
         for (i16 i = 0; i < MaxFullThreadCount; ++i) {
             Threads[i].Thread->GetCurrentStats(statsCopy[i + 1]);
         }
+    }
+
+    void TBasicExecutorPool::GetExecutorPoolState(TExecutorPoolState &poolState) const {
+        if (Harmonizer) {
+            TPoolHarmonizerStats stats = Harmonizer->GetPoolStats(PoolId);
+            poolState.UsedCpu = stats.AvgConsumedCpu;
+            poolState.PossibleMaxLimit = stats.PotentialMaxThreadCount;
+        } else {
+            poolState.PossibleMaxLimit = poolState.MaxLimit;
+        }
+        poolState.CurrentLimit = GetThreadCount();
+        poolState.MaxLimit = GetMaxThreadCount();
+        poolState.MinLimit = GetDefaultThreadCount();
     }
 
     void TBasicExecutorPool::Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) {

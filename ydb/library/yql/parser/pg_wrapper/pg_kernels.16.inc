@@ -68,6 +68,7 @@ TExecFunc arrow_pg_log_backend_memory_contexts() { return TGenericExec<TPgDirect
 TExecFunc arrow_pg_reload_conf() { return TGenericExec<TPgDirectFunc<&pg_reload_conf>, true, true, TArgs_pg_reload_conf_Policy>({}); }
 TExecFunc arrow_pg_rotate_logfile() { return TGenericExec<TPgDirectFunc<&pg_rotate_logfile>, true, true, TArgs_pg_rotate_logfile_Policy>({}); }
 TExecFunc arrow_pg_rotate_logfile_v2() { return TGenericExec<TPgDirectFunc<&pg_rotate_logfile_v2>, true, true, TArgs_pg_rotate_logfile_v2_Policy>({}); }
+TExecFunc arrow_pg_settings_get_flags() { return TGenericExec<TPgDirectFunc<&pg_settings_get_flags>, true, false, TArgs_pg_settings_get_flags_Policy>({}); }
 TExecFunc arrow_pg_terminate_backend() { return TGenericExec<TPgDirectFunc<&pg_terminate_backend>, true, true, TArgs_pg_terminate_backend_Policy>({}); }
 TExecFunc arrow_set_config_by_name() { return TGenericExec<TPgDirectFunc<&set_config_by_name>, false, false, TArgs_set_config_by_name_Policy>({}); }
 TExecFunc arrow_show_config_by_name() { return TGenericExec<TPgDirectFunc<&show_config_by_name>, true, false, TArgs_show_config_by_name_Policy>({}); }

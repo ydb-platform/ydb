@@ -3,7 +3,7 @@
  * execReplication.c
  *	  miscellaneous executor routines for logical replication
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -25,6 +25,7 @@
 #include "nodes/nodeFuncs.h"
 #include "parser/parse_relation.h"
 #include "parser/parsetree.h"
+#include "replication/logicalrelation.h"
 #include "storage/bufmgr.h"
 #include "storage/lmgr.h"
 #include "utils/builtins.h"
@@ -37,49 +38,61 @@
 #include "utils/typcache.h"
 
 
+static bool tuples_equal(TupleTableSlot *slot1, TupleTableSlot *slot2,
+						 TypeCacheEntry **eq);
+
 /*
  * Setup a ScanKey for a search in the relation 'rel' for a tuple 'key' that
  * is setup to match 'rel' (*NOT* idxrel!).
  *
- * Returns whether any column contains NULLs.
+ * Returns how many columns to use for the index scan.
  *
- * This is not generic routine, it expects the idxrel to be replication
- * identity of a rel and meet all limitations associated with that.
+ * This is not generic routine, idxrel must be PK, RI, or an index that can be
+ * used for REPLICA IDENTITY FULL table. See FindUsableIndexForReplicaIdentityFull()
+ * for details.
+ *
+ * By definition, replication identity of a rel meets all limitations associated
+ * with that. Note that any other index could also meet these limitations.
  */
-static bool
+static int
 build_replindex_scan_key(ScanKey skey, Relation rel, Relation idxrel,
 						 TupleTableSlot *searchslot)
 {
-	int			attoff;
-	bool		isnull;
+	int			index_attoff;
+	int			skey_attoff = 0;
 	Datum		indclassDatum;
 	oidvector  *opclass;
 	int2vector *indkey = &idxrel->rd_index->indkey;
-	bool		hasnulls = false;
 
-	Assert(RelationGetReplicaIndex(rel) == RelationGetRelid(idxrel) ||
-		   RelationGetPrimaryKeyIndex(rel) == RelationGetRelid(idxrel));
-
-	indclassDatum = SysCacheGetAttr(INDEXRELID, idxrel->rd_indextuple,
-									Anum_pg_index_indclass, &isnull);
-	Assert(!isnull);
+	indclassDatum = SysCacheGetAttrNotNull(INDEXRELID, idxrel->rd_indextuple,
+										   Anum_pg_index_indclass);
 	opclass = (oidvector *) DatumGetPointer(indclassDatum);
 
-	/* Build scankey for every attribute in the index. */
-	for (attoff = 0; attoff < IndexRelationGetNumberOfKeyAttributes(idxrel); attoff++)
+	/* Build scankey for every non-expression attribute in the index. */
+	for (index_attoff = 0; index_attoff < IndexRelationGetNumberOfKeyAttributes(idxrel);
+		 index_attoff++)
 	{
 		Oid			operator;
+		Oid			optype;
 		Oid			opfamily;
 		RegProcedure regop;
-		int			pkattno = attoff + 1;
-		int			mainattno = indkey->values[attoff];
-		Oid			optype = get_opclass_input_type(opclass->values[attoff]);
+		int			table_attno = indkey->values[index_attoff];
+
+		if (!AttributeNumberIsValid(table_attno))
+		{
+			/*
+			 * XXX: Currently, we don't support expressions in the scan key,
+			 * see code below.
+			 */
+			continue;
+		}
 
 		/*
 		 * Load the operator info.  We need this to get the equality operator
 		 * function for the scan key.
 		 */
-		opfamily = get_opclass_family(opclass->values[attoff]);
+		optype = get_opclass_input_type(opclass->values[index_attoff]);
+		opfamily = get_opclass_family(opclass->values[index_attoff]);
 
 		operator = get_opfamily_member(opfamily, optype,
 									   optype,
@@ -91,23 +104,25 @@ build_replindex_scan_key(ScanKey skey, Relation rel, Relation idxrel,
 		regop = get_opcode(operator);
 
 		/* Initialize the scankey. */
-		ScanKeyInit(&skey[attoff],
-					pkattno,
+		ScanKeyInit(&skey[skey_attoff],
+					index_attoff + 1,
 					BTEqualStrategyNumber,
 					regop,
-					searchslot->tts_values[mainattno - 1]);
+					searchslot->tts_values[table_attno - 1]);
 
-		skey[attoff].sk_collation = idxrel->rd_indcollation[attoff];
+		skey[skey_attoff].sk_collation = idxrel->rd_indcollation[index_attoff];
 
 		/* Check for null value. */
-		if (searchslot->tts_isnull[mainattno - 1])
-		{
-			hasnulls = true;
-			skey[attoff].sk_flags |= SK_ISNULL;
-		}
+		if (searchslot->tts_isnull[table_attno - 1])
+			skey[skey_attoff].sk_flags |= (SK_ISNULL | SK_SEARCHNULL);
+
+		skey_attoff++;
 	}
 
-	return hasnulls;
+	/* There must always be at least one attribute for the index scan. */
+	Assert(skey_attoff > 0);
+
+	return skey_attoff;
 }
 
 /*
@@ -123,33 +138,49 @@ RelationFindReplTupleByIndex(Relation rel, Oid idxoid,
 							 TupleTableSlot *outslot)
 {
 	ScanKeyData skey[INDEX_MAX_KEYS];
+	int			skey_attoff;
 	IndexScanDesc scan;
 	SnapshotData snap;
 	TransactionId xwait;
 	Relation	idxrel;
 	bool		found;
+	TypeCacheEntry **eq = NULL;
+	bool		isIdxSafeToSkipDuplicates;
 
 	/* Open the index. */
 	idxrel = index_open(idxoid, RowExclusiveLock);
 
-	/* Start an index scan. */
+	isIdxSafeToSkipDuplicates = (GetRelationIdentityOrPK(rel) == idxoid);
+
 	InitDirtySnapshot(snap);
-	scan = index_beginscan(rel, idxrel, &snap,
-						   IndexRelationGetNumberOfKeyAttributes(idxrel),
-						   0);
 
 	/* Build scan key. */
-	build_replindex_scan_key(skey, rel, idxrel, searchslot);
+	skey_attoff = build_replindex_scan_key(skey, rel, idxrel, searchslot);
+
+	/* Start an index scan. */
+	scan = index_beginscan(rel, idxrel, &snap, skey_attoff, 0);
 
 retry:
 	found = false;
 
-	index_rescan(scan, skey, IndexRelationGetNumberOfKeyAttributes(idxrel), NULL, 0);
+	index_rescan(scan, skey, skey_attoff, NULL, 0);
 
 	/* Try to find the tuple */
-	if (index_getnext_slot(scan, ForwardScanDirection, outslot))
+	while (index_getnext_slot(scan, ForwardScanDirection, outslot))
 	{
-		found = true;
+		/*
+		 * Avoid expensive equality check if the index is primary key or
+		 * replica identity index.
+		 */
+		if (!isIdxSafeToSkipDuplicates)
+		{
+			if (eq == NULL)
+				eq = palloc0(sizeof(*eq) * outslot->tts_tupleDescriptor->natts);
+
+			if (!tuples_equal(outslot, searchslot, eq))
+				continue;
+		}
+
 		ExecMaterializeSlot(outslot);
 
 		xwait = TransactionIdIsValid(snap.xmin) ?
@@ -164,6 +195,10 @@ retry:
 			XactLockTableWait(xwait, NULL, NULL, XLTW_None);
 			goto retry;
 		}
+
+		/* Found our tuple and it's not locked */
+		found = true;
+		break;
 	}
 
 	/* Found tuple, try to lock it in the lockmode. */
@@ -452,7 +487,7 @@ ExecSimpleRelationInsert(ResultRelInfo *resultRelInfo,
 		if (resultRelInfo->ri_NumIndices > 0)
 			recheckIndexes = ExecInsertIndexTuples(resultRelInfo,
 												   slot, estate, false, false,
-												   NULL, NIL);
+												   NULL, NIL, false);
 
 		/* AFTER ROW INSERT Triggers */
 		ExecARInsertTriggers(estate, resultRelInfo, slot,
@@ -493,14 +528,14 @@ ExecSimpleRelationUpdate(ResultRelInfo *resultRelInfo,
 		resultRelInfo->ri_TrigDesc->trig_update_before_row)
 	{
 		if (!ExecBRUpdateTriggers(estate, epqstate, resultRelInfo,
-								  tid, NULL, slot))
+								  tid, NULL, slot, NULL, NULL))
 			skip_tuple = true;	/* "do nothing" */
 	}
 
 	if (!skip_tuple)
 	{
 		List	   *recheckIndexes = NIL;
-		bool		update_indexes;
+		TU_UpdateIndexes update_indexes;
 
 		/* Compute stored generated columns */
 		if (rel->rd_att->constr &&
@@ -517,15 +552,17 @@ ExecSimpleRelationUpdate(ResultRelInfo *resultRelInfo,
 		simple_table_tuple_update(rel, tid, slot, estate->es_snapshot,
 								  &update_indexes);
 
-		if (resultRelInfo->ri_NumIndices > 0 && update_indexes)
+		if (resultRelInfo->ri_NumIndices > 0 && (update_indexes != TU_None))
 			recheckIndexes = ExecInsertIndexTuples(resultRelInfo,
 												   slot, estate, true, false,
-												   NULL, NIL);
+												   NULL, NIL,
+												   (update_indexes == TU_Summarizing));
 
 		/* AFTER ROW UPDATE Triggers */
 		ExecARUpdateTriggers(estate, resultRelInfo,
+							 NULL, NULL,
 							 tid, NULL, slot,
-							 recheckIndexes, NULL);
+							 recheckIndexes, NULL, false);
 
 		list_free(recheckIndexes);
 	}
@@ -553,8 +590,7 @@ ExecSimpleRelationDelete(ResultRelInfo *resultRelInfo,
 		resultRelInfo->ri_TrigDesc->trig_delete_before_row)
 	{
 		skip_tuple = !ExecBRDeleteTriggers(estate, epqstate, resultRelInfo,
-										   tid, NULL, NULL);
-
+										   tid, NULL, NULL, NULL, NULL);
 	}
 
 	if (!skip_tuple)
@@ -564,7 +600,7 @@ ExecSimpleRelationDelete(ResultRelInfo *resultRelInfo,
 
 		/* AFTER ROW DELETE Triggers */
 		ExecARDeleteTriggers(estate, resultRelInfo,
-							 tid, NULL, NULL);
+							 tid, NULL, NULL, false);
 	}
 }
 
@@ -574,7 +610,7 @@ ExecSimpleRelationDelete(ResultRelInfo *resultRelInfo,
 void
 CheckCmdReplicaIdentity(Relation rel, CmdType cmd)
 {
-	PublicationActions *pubactions;
+	PublicationDesc pubdesc;
 
 	/*
 	 * Skip checking the replica identity for partitioned tables, because the
@@ -587,24 +623,64 @@ CheckCmdReplicaIdentity(Relation rel, CmdType cmd)
 	if (cmd != CMD_UPDATE && cmd != CMD_DELETE)
 		return;
 
+	/*
+	 * It is only safe to execute UPDATE/DELETE when all columns, referenced
+	 * in the row filters from publications which the relation is in, are
+	 * valid - i.e. when all referenced columns are part of REPLICA IDENTITY
+	 * or the table does not publish UPDATEs or DELETEs.
+	 *
+	 * XXX We could optimize it by first checking whether any of the
+	 * publications have a row filter for this relation. If not and relation
+	 * has replica identity then we can avoid building the descriptor but as
+	 * this happens only one time it doesn't seem worth the additional
+	 * complexity.
+	 */
+	RelationBuildPublicationDesc(rel, &pubdesc);
+	if (cmd == CMD_UPDATE && !pubdesc.rf_valid_for_update)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+				 errmsg("cannot update table \"%s\"",
+						RelationGetRelationName(rel)),
+				 errdetail("Column used in the publication WHERE expression is not part of the replica identity.")));
+	else if (cmd == CMD_UPDATE && !pubdesc.cols_valid_for_update)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+				 errmsg("cannot update table \"%s\"",
+						RelationGetRelationName(rel)),
+				 errdetail("Column list used by the publication does not cover the replica identity.")));
+	else if (cmd == CMD_DELETE && !pubdesc.rf_valid_for_delete)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+				 errmsg("cannot delete from table \"%s\"",
+						RelationGetRelationName(rel)),
+				 errdetail("Column used in the publication WHERE expression is not part of the replica identity.")));
+	else if (cmd == CMD_DELETE && !pubdesc.cols_valid_for_delete)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+				 errmsg("cannot delete from table \"%s\"",
+						RelationGetRelationName(rel)),
+				 errdetail("Column list used by the publication does not cover the replica identity.")));
+
 	/* If relation has replica identity we are always good. */
-	if (rel->rd_rel->relreplident == REPLICA_IDENTITY_FULL ||
-		OidIsValid(RelationGetReplicaIndex(rel)))
+	if (OidIsValid(RelationGetReplicaIndex(rel)))
+		return;
+
+	/* REPLICA IDENTITY FULL is also good for UPDATE/DELETE. */
+	if (rel->rd_rel->relreplident == REPLICA_IDENTITY_FULL)
 		return;
 
 	/*
-	 * This is either UPDATE OR DELETE and there is no replica identity.
+	 * This is UPDATE/DELETE and there is no replica identity.
 	 *
 	 * Check if the table publishes UPDATES or DELETES.
 	 */
-	pubactions = GetRelationPublicationActions(rel);
-	if (cmd == CMD_UPDATE && pubactions->pubupdate)
+	if (cmd == CMD_UPDATE && pubdesc.pubactions.pubupdate)
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("cannot update table \"%s\" because it does not have a replica identity and publishes updates",
 						RelationGetRelationName(rel)),
 				 errhint("To enable updating the table, set REPLICA IDENTITY using ALTER TABLE.")));
-	else if (cmd == CMD_DELETE && pubactions->pubdelete)
+	else if (cmd == CMD_DELETE && pubdesc.pubactions.pubdelete)
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("cannot delete from table \"%s\" because it does not have a replica identity and publishes deletes",
@@ -622,22 +698,10 @@ void
 CheckSubscriptionRelkind(char relkind, const char *nspname,
 						 const char *relname)
 {
-	/*
-	 * Give a more specific error for foreign tables.
-	 */
-	if (relkind == RELKIND_FOREIGN_TABLE)
-		ereport(ERROR,
-				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-				 errmsg("cannot use relation \"%s.%s\" as logical replication target",
-						nspname, relname),
-				 errdetail("\"%s.%s\" is a foreign table.",
-						   nspname, relname)));
-
 	if (relkind != RELKIND_RELATION && relkind != RELKIND_PARTITIONED_TABLE)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("cannot use relation \"%s.%s\" as logical replication target",
 						nspname, relname),
-				 errdetail("\"%s.%s\" is not a table.",
-						   nspname, relname)));
+				 errdetail_relkind_not_supported(relkind)));
 }

@@ -359,8 +359,8 @@ private:
     void VisitUnaryCasualSubexpr(const TRule_unary_casual_subexpr& msg) {
         bool invoke = false;
         for (auto& b : msg.GetRule_unary_subexpr_suffix2().GetBlock1()) {
-            switch (b.Alt_case()) {
-            case TRule_unary_subexpr_suffix::TBlock1::kAlt2: {
+            switch (b.GetBlock1().Alt_case()) {
+            case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt2: {
                 invoke = true;
                 break;
             }
@@ -385,8 +385,8 @@ private:
     void VisitInUnaryCasualSubexpr(const TRule_in_unary_casual_subexpr& msg) {
         bool invoke = false;
         for (auto& b : msg.GetRule_unary_subexpr_suffix2().GetBlock1()) {
-            switch (b.Alt_case()) {
-            case TRule_unary_subexpr_suffix::TBlock1::kAlt2: {
+            switch (b.GetBlock1().Alt_case()) {
+            case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt2: {
                 invoke = true;
                 break;
             }

@@ -115,9 +115,14 @@ void IKikimrGateway::BuildIndexMetadata(TTableMetadataResult& loadTableMetadataR
     for (size_t i = 0; i < indexesCount; i++) {
         const auto& index = tableMetadata->Indexes[i];
         auto indexTablePath = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(tableName, index.Name);
-        NKikimr::NTableIndex::TTableColumns indexTableColumns = NKikimr::NTableIndex::CalcTableImplDescription(
-                    tableColumns,
-                    NKikimr::NTableIndex::TIndexColumns{index.KeyColumns, {}});
+
+        NKikimr::NTableIndex::TIndexColumns indexColumns{index.KeyColumns, {}};
+
+        TString error;
+        NKikimrSchemeOp::EIndexType indexType = TIndexDescription::ConvertIndexType(index.Type);
+        YQL_ENSURE(IsCompatibleIndex(indexType, tableColumns, indexColumns, error), "Index is not compatible: " << error);
+
+        NKikimr::NTableIndex::TTableColumns indexTableColumns = NKikimr::NTableIndex::CalcTableImplDescription(indexType, tableColumns, indexColumns);
 
         TKikimrTableMetadataPtr indexTableMetadata = new TKikimrTableMetadata(cluster, indexTablePath);
         indexTableMetadata->DoesExist = true;

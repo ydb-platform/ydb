@@ -134,6 +134,14 @@ struct TArgs_degrees_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
+struct TArgs_derf_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+struct TArgs_derfc_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
 struct TArgs_dexp_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
@@ -169,6 +177,10 @@ struct TArgs_dpow_Policy {
 struct TArgs_drandom_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 0> IsFixedArg = {};
+};
+struct TArgs_drandom_normal_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
 struct TArgs_dround_Policy {
     static constexpr bool VarArgs = false;
@@ -682,6 +694,10 @@ struct TArgs_pg_stat_clear_snapshot_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 0> IsFixedArg = {};
 };
+struct TArgs_pg_stat_force_next_flush_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 0> IsFixedArg = {};
+};
 struct TArgs_pg_stat_get_analyze_count_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
@@ -723,6 +739,10 @@ struct TArgs_pg_stat_get_backend_pid_Policy {
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
 struct TArgs_pg_stat_get_backend_start_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+struct TArgs_pg_stat_get_backend_subxact_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
@@ -831,6 +851,10 @@ struct TArgs_pg_stat_get_db_conflict_bufferpin_Policy {
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
 struct TArgs_pg_stat_get_db_conflict_lock_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+struct TArgs_pg_stat_get_db_conflict_logicalslot_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
@@ -954,6 +978,10 @@ struct TArgs_pg_stat_get_last_vacuum_time_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
+struct TArgs_pg_stat_get_lastscan_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
 struct TArgs_pg_stat_get_live_tuples_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
@@ -966,9 +994,17 @@ struct TArgs_pg_stat_get_numscans_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
+struct TArgs_pg_stat_get_replication_slot_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
 struct TArgs_pg_stat_get_snapshot_timestamp_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 0> IsFixedArg = {};
+};
+struct TArgs_pg_stat_get_subscription_stats_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
 struct TArgs_pg_stat_get_tuples_deleted_Policy {
     static constexpr bool VarArgs = false;
@@ -983,6 +1019,10 @@ struct TArgs_pg_stat_get_tuples_hot_updated_Policy {
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
 struct TArgs_pg_stat_get_tuples_inserted_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+struct TArgs_pg_stat_get_tuples_newpage_updated_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
@@ -1042,6 +1082,10 @@ struct TArgs_pg_stat_get_xact_tuples_inserted_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
+struct TArgs_pg_stat_get_xact_tuples_newpage_updated_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
 struct TArgs_pg_stat_get_xact_tuples_returned_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
@@ -1049,6 +1093,10 @@ struct TArgs_pg_stat_get_xact_tuples_returned_Policy {
 struct TArgs_pg_stat_get_xact_tuples_updated_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+struct TArgs_pg_stat_have_stats_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
 };
 struct TArgs_pg_stat_reset_Policy {
     static constexpr bool VarArgs = false;
@@ -1073,6 +1121,10 @@ struct TArgs_pg_stat_reset_single_table_counters_Policy {
 struct TArgs_pg_stat_reset_slru_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+struct TArgs_pg_stat_reset_subscription_stats_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
 struct TArgs_pg_statistics_obj_is_visible_Policy {
     static constexpr bool VarArgs = false;

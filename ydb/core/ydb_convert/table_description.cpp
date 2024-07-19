@@ -313,6 +313,10 @@ bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKiki
                     }
                     break;
                 }
+                case Ydb::Table::ColumnMeta::kEmptyDefault: {
+                    column->SetEmptyDefault(google::protobuf::NullValue());
+                    break;
+                }
                 default: break;
             }
         }
@@ -461,6 +465,10 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
         case NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence: {
             auto* fromSequence = newColumn->mutable_from_sequence();
             fromSequence->set_name(column.GetDefaultFromSequence());
+            break;
+        }
+        case NKikimrSchemeOp::TColumnDescription::kEmptyDefault: {
+            newColumn->set_empty_default(google::protobuf::NullValue());
             break;
         }
         default: break;
@@ -690,6 +698,10 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
                 *fromSequence = column.from_sequence().name();
                 break;
             }
+            case Ydb::Table::ColumnMeta::kEmptyDefault: {
+                cd->SetEmptyDefault(google::protobuf::NullValue());
+                break;
+            }
             default: break;
         }
     }
@@ -828,13 +840,8 @@ void FillPartitioningSettingsImpl(TYdbProto& out,
 }
 
 void FillGlobalIndexSettings(Ydb::Table::GlobalIndexSettings& settings,
-    const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TTableDescription>& indexImplTables
+    const NKikimrSchemeOp::TTableDescription& indexImplTableDescription
 ) {
-    if (indexImplTables.empty()) {
-        return;
-    }
-    const auto& indexImplTableDescription = indexImplTables.Get(0);
-
     if (indexImplTableDescription.SplitBoundarySize()) {
         NKikimrMiniKQL::TType splitKeyType;
         Ydb::Table::DescribeTableResult unused;
@@ -871,20 +878,33 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobal:
             FillGlobalIndexSettings(
                 *index->mutable_global_index()->mutable_settings(),
-                tableIndex.GetIndexImplTableDescriptions()
+                tableIndex.GetIndexImplTableDescriptions(0)
             );
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync:
             FillGlobalIndexSettings(
                 *index->mutable_global_async_index()->mutable_settings(),
-                tableIndex.GetIndexImplTableDescriptions()
+                tableIndex.GetIndexImplTableDescriptions(0)
             );
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique:
             FillGlobalIndexSettings(
                 *index->mutable_global_unique_index()->mutable_settings(),
-                tableIndex.GetIndexImplTableDescriptions()
+                tableIndex.GetIndexImplTableDescriptions(0)
             );
+            break;
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
+            FillGlobalIndexSettings(
+                *index->mutable_global_vector_kmeans_tree_index()->mutable_level_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(0)
+            );
+            FillGlobalIndexSettings(
+                *index->mutable_global_vector_kmeans_tree_index()->mutable_posting_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(1)
+            );
+
+            *index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings() = tableIndex.GetVectorIndexKmeansTreeDescription().GetSettings();
+
             break;
         default:
             break;
@@ -939,6 +959,7 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
         }
 
         // specific fields
+        std::vector<NKikimrSchemeOp::TTableDescription> indexImplTableDescriptionsVector;
         switch (index.type_case()) {
         case Ydb::Table::TableIndex::kGlobalIndex:
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobal);
@@ -952,15 +973,21 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique);
             break;
 
+        case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
+            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
+            *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
+            break;
+
         default:
             // pass through
             // TODO: maybe return BAD_REQUEST?
             break;
         }
 
-        if (!FillIndexTablePartitioning(*indexDesc->AddIndexImplTableDescriptions(), index, status, error)) {
+        if (!FillIndexTablePartitioning(indexImplTableDescriptionsVector, index, status, error)) {
             return false;
         }
+        *indexDesc->MutableIndexImplTableDescriptions() = {indexImplTableDescriptionsVector.begin(), indexImplTableDescriptionsVector.end()};
     }
 
     return true;

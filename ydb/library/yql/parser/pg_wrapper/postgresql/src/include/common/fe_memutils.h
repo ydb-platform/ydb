@@ -2,7 +2,7 @@
  *	fe_memutils.h
  *		memory management support for frontend code
  *
- *	Copyright (c) 2003-2021, PostgreSQL Global Development Group
+ *	Copyright (c) 2003-2023, PostgreSQL Global Development Group
  *
  *	src/include/common/fe_memutils.h
  */
@@ -26,8 +26,8 @@ extern char *pg_strdup(const char *in);
 extern void *pg_malloc(size_t size);
 extern void *pg_malloc0(size_t size);
 extern void *pg_malloc_extended(size_t size, int flags);
-extern void *pg_realloc(void *pointer, size_t size);
-extern void pg_free(void *pointer);
+extern void *pg_realloc(void *ptr, size_t size);
+extern void pg_free(void *ptr);
 
 /*
  * Variants with easier notation and more type safety

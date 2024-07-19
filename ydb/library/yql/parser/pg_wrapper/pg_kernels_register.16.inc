@@ -72,3 +72,4 @@ RegisterExec(4123, arrow_macaddrtomacaddr8());
 RegisterExec(4124, arrow_macaddr8tomacaddr());
 RegisterExec(4125, arrow_macaddr8_set7bit());
 RegisterExec(4543, arrow_pg_log_backend_memory_contexts());
+RegisterExec(6240, arrow_pg_settings_get_flags());

@@ -20,13 +20,12 @@ private:
 
     void ConstructResult();
 
-    std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
+    std::shared_ptr<NColumnShard::TReaderResourcesGuard> ResourcesGuard;
     const ui32 IntervalIdx;
     TAtomicCounter ReadySourcesCount = 0;
     TAtomicCounter ReadyGuards = 0;
     ui32 WaitSourcesCount = 0;
     NColumnShard::TConcreteScanCounters::TScanIntervalStateGuard IntervalStateGuard;
-    void OnInitResourcesGuard(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard);
 protected:
     virtual void DoOnAllocationSuccess(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard) override;
 
@@ -47,7 +46,7 @@ public:
         return Sources;
     }
 
-    const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& GetResourcesGuard() const {
+    const std::shared_ptr<NColumnShard::TReaderResourcesGuard>& GetResourcesGuard() const {
         return ResourcesGuard;
     }
 

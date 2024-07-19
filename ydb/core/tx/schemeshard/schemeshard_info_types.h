@@ -2366,7 +2366,12 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
         alterData->IndexKeys.assign(config.GetKeyColumnNames().begin(), config.GetKeyColumnNames().end());
         Y_ABORT_UNLESS(alterData->IndexKeys.size());
         alterData->IndexDataColumns.assign(config.GetDataColumnNames().begin(), config.GetDataColumnNames().end());
+
         alterData->State = config.HasState() ? config.GetState() : EState::EIndexStateReady;
+
+        if (config.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+            alterData->SpecializedIndexDescription = config.GetVectorIndexKmeansTreeDescription();
+        }
 
         return result;
     }
@@ -2379,6 +2384,8 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
     TVector<TString> IndexDataColumns;
 
     TTableIndexInfo::TPtr AlterData = nullptr;
+
+    std::variant<std::monostate, NKikimrSchemeOp::TVectorIndexKmeansTreeDescription> SpecializedIndexDescription;
 };
 
 struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
@@ -2923,7 +2930,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     TString ImplTablePath;
     NTableIndex::TTableColumns ImplTableColumns;
-    NKikimrSchemeOp::TTableDescription ImplTableDescription;
+    TVector<NKikimrSchemeOp::TTableDescription> ImplTableDescriptions;
 
     EState State = EState::Invalid;
     TString Issue;
@@ -3063,6 +3070,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         indexInfo->IndexName = row.template GetValue<Schema::IndexBuild::IndexName>();
         indexInfo->IndexType = row.template GetValue<Schema::IndexBuild::IndexType>();
+
+        // TODO load indexInfo->ImplTableDescriptions
 
         indexInfo->State = TIndexBuildInfo::EState(
             row.template GetValue<Schema::IndexBuild::State>());

@@ -3,7 +3,7 @@
  * float.c
  *	  Functions for the built-in floating-point types.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -21,6 +21,7 @@
 
 #include "catalog/pg_type.h"
 #include "common/int.h"
+#include "common/pg_prng.h"
 #include "common/shortest_dec.h"
 #include "libpq/pqformat.h"
 #include "miscadmin.h"
@@ -65,7 +66,7 @@ __thread float8		degree_c_one = 1.0;
 
 /* State for drandom() and setseed() */
 static __thread bool drandom_seed_set = false;
-static __thread unsigned short drandom_seed[3] = {0, 0, 0};
+static __thread pg_prng_state drandom_seed;
 
 /* Local function prototypes */
 static double sind_q1(double x);
@@ -162,16 +163,34 @@ Datum
 float4in(PG_FUNCTION_ARGS)
 {
 	char	   *num = PG_GETARG_CSTRING(0);
-	char	   *orig_num;
+
+	PG_RETURN_FLOAT4(float4in_internal(num, NULL, "real", num,
+									   fcinfo->context));
+}
+
+/*
+ * float4in_internal - guts of float4in()
+ *
+ * This is exposed for use by functions that want a reasonably
+ * platform-independent way of inputting floats. The behavior is
+ * essentially like strtof + ereturn on error.
+ *
+ * Uses the same API as float8in_internal below, so most of its
+ * comments also apply here, except regarding use in geometric types.
+ */
+float4
+float4in_internal(char *num, char **endptr_p,
+				  const char *type_name, const char *orig_string,
+				  struct Node *escontext)
+{
 	float		val;
 	char	   *endptr;
 
 	/*
 	 * endptr points to the first character _after_ the sequence we recognized
-	 * as a valid floating point number. orig_num points to the original input
-	 * string.
+	 * as a valid floating point number. orig_string points to the original
+	 * input string.
 	 */
-	orig_num = num;
 
 	/* skip leading whitespace */
 	while (*num != '\0' && isspace((unsigned char) *num))
@@ -182,10 +201,10 @@ float4in(PG_FUNCTION_ARGS)
 	 * strtod() on different platforms.
 	 */
 	if (*num == '\0')
-		ereport(ERROR,
+		ereturn(escontext, 0,
 				(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
 				 errmsg("invalid input syntax for type %s: \"%s\"",
-						"real", orig_num)));
+						type_name, orig_string)));
 
 	errno = 0;
 	val = strtof(num, &endptr);
@@ -248,42 +267,47 @@ float4in(PG_FUNCTION_ARGS)
 			 * precision).  We'd prefer not to throw error for that, so try to
 			 * detect whether it's a "real" out-of-range condition by checking
 			 * to see if the result is zero or huge.
-			 *
-			 * Use isinf() rather than HUGE_VALF on VS2013 because it
-			 * generates a spurious overflow warning for -HUGE_VALF.  Also use
-			 * isinf() if HUGE_VALF is missing.
 			 */
 			if (val == 0.0 ||
-#if !defined(HUGE_VALF) || (defined(_MSC_VER) && (_MSC_VER < 1900))
+#if !defined(HUGE_VALF)
 				isinf(val)
 #else
 				(val >= HUGE_VALF || val <= -HUGE_VALF)
 #endif
 				)
-				ereport(ERROR,
+			{
+				/* see comments in float8in_internal for rationale */
+				char	   *errnumber = pstrdup(num);
+
+				errnumber[endptr - num] = '\0';
+
+				ereturn(escontext, 0,
 						(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
 						 errmsg("\"%s\" is out of range for type real",
-								orig_num)));
+								errnumber)));
+			}
 		}
 		else
-			ereport(ERROR,
+			ereturn(escontext, 0,
 					(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
 					 errmsg("invalid input syntax for type %s: \"%s\"",
-							"real", orig_num)));
+							type_name, orig_string)));
 	}
 
 	/* skip trailing whitespace */
 	while (*endptr != '\0' && isspace((unsigned char) *endptr))
 		endptr++;
 
-	/* if there is any junk left at the end of the string, bail out */
-	if (*endptr != '\0')
-		ereport(ERROR,
+	/* report stopping point if wanted, else complain if not end of string */
+	if (endptr_p)
+		*endptr_p = endptr;
+	else if (*endptr != '\0')
+		ereturn(escontext, 0,
 				(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
 				 errmsg("invalid input syntax for type %s: \"%s\"",
-						"real", orig_num)));
+						type_name, orig_string)));
 
-	PG_RETURN_FLOAT4(val);
+	return val;
 }
 
 /*
@@ -340,51 +364,39 @@ float8in(PG_FUNCTION_ARGS)
 {
 	char	   *num = PG_GETARG_CSTRING(0);
 
-	PG_RETURN_FLOAT8(float8in_internal(num, NULL, "double precision", num));
+	PG_RETURN_FLOAT8(float8in_internal(num, NULL, "double precision", num,
+									   fcinfo->context));
 }
 
-/* Convenience macro: set *have_error flag (if provided) or throw error */
-#define RETURN_ERROR(throw_error, have_error) \
-do { \
-	if (have_error) { \
-		*have_error = true; \
-		return 0.0; \
-	} else { \
-		throw_error; \
-	} \
-} while (0)
-
 /*
- * float8in_internal_opt_error - guts of float8in()
+ * float8in_internal - guts of float8in()
  *
  * This is exposed for use by functions that want a reasonably
  * platform-independent way of inputting doubles.  The behavior is
- * essentially like strtod + ereport on error, but note the following
+ * essentially like strtod + ereturn on error, but note the following
  * differences:
  * 1. Both leading and trailing whitespace are skipped.
- * 2. If endptr_p is NULL, we throw error if there's trailing junk.
+ * 2. If endptr_p is NULL, we report error if there's trailing junk.
  * Otherwise, it's up to the caller to complain about trailing junk.
  * 3. In event of a syntax error, the report mentions the given type_name
  * and prints orig_string as the input; this is meant to support use of
  * this function with types such as "box" and "point", where what we are
  * parsing here is just a substring of orig_string.
  *
+ * If escontext points to an ErrorSaveContext node, that is filled instead
+ * of throwing an error; the caller must check SOFT_ERROR_OCCURRED()
+ * to detect errors.
+ *
  * "num" could validly be declared "const char *", but that results in an
  * unreasonable amount of extra casting both here and in callers, so we don't.
- *
- * When "*have_error" flag is provided, it's set instead of throwing an
- * error.  This is helpful when caller need to handle errors by itself.
  */
-double
-float8in_internal_opt_error(char *num, char **endptr_p,
-							const char *type_name, const char *orig_string,
-							bool *have_error)
+float8
+float8in_internal(char *num, char **endptr_p,
+				  const char *type_name, const char *orig_string,
+				  struct Node *escontext)
 {
 	double		val;
 	char	   *endptr;
-
-	if (have_error)
-		*have_error = false;
 
 	/* skip leading whitespace */
 	while (*num != '\0' && isspace((unsigned char) *num))
@@ -395,11 +407,10 @@ float8in_internal_opt_error(char *num, char **endptr_p,
 	 * strtod() on different platforms.
 	 */
 	if (*num == '\0')
-		RETURN_ERROR(ereport(ERROR,
-							 (errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-							  errmsg("invalid input syntax for type %s: \"%s\"",
-									 type_name, orig_string))),
-					 have_error);
+		ereturn(escontext, 0,
+				(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
+				 errmsg("invalid input syntax for type %s: \"%s\"",
+						type_name, orig_string)));
 
 	errno = 0;
 	val = strtod(num, &endptr);
@@ -472,20 +483,17 @@ float8in_internal_opt_error(char *num, char **endptr_p,
 				char	   *errnumber = pstrdup(num);
 
 				errnumber[endptr - num] = '\0';
-				RETURN_ERROR(ereport(ERROR,
-									 (errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
-									  errmsg("\"%s\" is out of range for type double precision",
-											 errnumber))),
-							 have_error);
+				ereturn(escontext, 0,
+						(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+						 errmsg("\"%s\" is out of range for type double precision",
+								errnumber)));
 			}
 		}
 		else
-			RETURN_ERROR(ereport(ERROR,
-								 (errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-								  errmsg("invalid input syntax for type "
-										 "%s: \"%s\"",
-										 type_name, orig_string))),
-						 have_error);
+			ereturn(escontext, 0,
+					(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
+					 errmsg("invalid input syntax for type %s: \"%s\"",
+							type_name, orig_string)));
 	}
 
 	/* skip trailing whitespace */
@@ -496,25 +504,12 @@ float8in_internal_opt_error(char *num, char **endptr_p,
 	if (endptr_p)
 		*endptr_p = endptr;
 	else if (*endptr != '\0')
-		RETURN_ERROR(ereport(ERROR,
-							 (errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-							  errmsg("invalid input syntax for type "
-									 "%s: \"%s\"",
-									 type_name, orig_string))),
-					 have_error);
+		ereturn(escontext, 0,
+				(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
+				 errmsg("invalid input syntax for type %s: \"%s\"",
+						type_name, orig_string)));
 
 	return val;
-}
-
-/*
- * Interface to float8in_internal_opt_error() without "have_error" argument.
- */
-double
-float8in_internal(char *num, char **endptr_p,
-				  const char *type_name, const char *orig_string)
-{
-	return float8in_internal_opt_error(num, endptr_p, type_name,
-									   orig_string, NULL);
 }
 
 
@@ -596,7 +591,7 @@ float4abs(PG_FUNCTION_ARGS)
 {
 	float4		arg1 = PG_GETARG_FLOAT4(0);
 
-	PG_RETURN_FLOAT4((float4) fabs(arg1));
+	PG_RETURN_FLOAT4(fabsf(arg1));
 }
 
 /*
@@ -2746,14 +2741,59 @@ datanh(PG_FUNCTION_ARGS)
 }
 
 
+/* ========== ERROR FUNCTIONS ========== */
+
+
 /*
- *		drandom		- returns a random number
+ *		derf			- returns the error function: erf(arg1)
  */
 Datum
-drandom(PG_FUNCTION_ARGS)
+derf(PG_FUNCTION_ARGS)
 {
+	float8		arg1 = PG_GETARG_FLOAT8(0);
 	float8		result;
 
+	/*
+	 * For erf, we don't need an errno check because it never overflows.
+	 */
+	result = erf(arg1);
+
+	if (unlikely(isinf(result)))
+		float_overflow_error();
+
+	PG_RETURN_FLOAT8(result);
+}
+
+/*
+ *		derfc			- returns the complementary error function: 1 - erf(arg1)
+ */
+Datum
+derfc(PG_FUNCTION_ARGS)
+{
+	float8		arg1 = PG_GETARG_FLOAT8(0);
+	float8		result;
+
+	/*
+	 * For erfc, we don't need an errno check because it never overflows.
+	 */
+	result = erfc(arg1);
+
+	if (unlikely(isinf(result)))
+		float_overflow_error();
+
+	PG_RETURN_FLOAT8(result);
+}
+
+
+/* ========== RANDOM FUNCTIONS ========== */
+
+
+/*
+ * initialize_drandom_seed - initialize drandom_seed if not yet done
+ */
+static void
+initialize_drandom_seed(void)
+{
 	/* Initialize random seed, if not done yet in this process */
 	if (unlikely(!drandom_seed_set))
 	{
@@ -2762,26 +2802,56 @@ drandom(PG_FUNCTION_ARGS)
 		 * Should that fail for some reason, we fall back on a lower-quality
 		 * seed based on current time and PID.
 		 */
-		if (!pg_strong_random(drandom_seed, sizeof(drandom_seed)))
+		if (unlikely(!pg_prng_strong_seed(&drandom_seed)))
 		{
 			TimestampTz now = GetCurrentTimestamp();
 			uint64		iseed;
 
 			/* Mix the PID with the most predictable bits of the timestamp */
 			iseed = (uint64) now ^ ((uint64) MyProcPid << 32);
-			drandom_seed[0] = (unsigned short) iseed;
-			drandom_seed[1] = (unsigned short) (iseed >> 16);
-			drandom_seed[2] = (unsigned short) (iseed >> 32);
+			pg_prng_seed(&drandom_seed, iseed);
 		}
 		drandom_seed_set = true;
 	}
+}
 
-	/* pg_erand48 produces desired result range [0.0 - 1.0) */
-	result = pg_erand48(drandom_seed);
+/*
+ *		drandom		- returns a random number
+ */
+Datum
+drandom(PG_FUNCTION_ARGS)
+{
+	float8		result;
+
+	initialize_drandom_seed();
+
+	/* pg_prng_double produces desired result range [0.0 - 1.0) */
+	result = pg_prng_double(&drandom_seed);
 
 	PG_RETURN_FLOAT8(result);
 }
 
+/*
+ *		drandom_normal	- returns a random number from a normal distribution
+ */
+Datum
+drandom_normal(PG_FUNCTION_ARGS)
+{
+	float8		mean = PG_GETARG_FLOAT8(0);
+	float8		stddev = PG_GETARG_FLOAT8(1);
+	float8		result,
+				z;
+
+	initialize_drandom_seed();
+
+	/* Get random value from standard normal(mean = 0.0, stddev = 1.0) */
+	z = pg_prng_double_normal(&drandom_seed);
+	/* Transform the normal standard variable (z) */
+	/* using the target normal distribution parameters */
+	result = (stddev * z) + mean;
+
+	PG_RETURN_FLOAT8(result);
+}
 
 /*
  *		setseed		- set seed for the random number generator
@@ -2790,7 +2860,6 @@ Datum
 setseed(PG_FUNCTION_ARGS)
 {
 	float8		seed = PG_GETARG_FLOAT8(0);
-	uint64		iseed;
 
 	if (seed < -1 || seed > 1 || isnan(seed))
 		ereport(ERROR,
@@ -2798,11 +2867,7 @@ setseed(PG_FUNCTION_ARGS)
 				 errmsg("setseed parameter %g is out of allowed range [-1,1]",
 						seed)));
 
-	/* Use sign bit + 47 fractional bits to fill drandom_seed[] */
-	iseed = (int64) (seed * (float8) UINT64CONST(0x7FFFFFFFFFFF));
-	drandom_seed[0] = (unsigned short) iseed;
-	drandom_seed[1] = (unsigned short) (iseed >> 16);
-	drandom_seed[2] = (unsigned short) (iseed >> 32);
+	pg_prng_fseed(&drandom_seed, seed);
 	drandom_seed_set = true;
 
 	PG_RETURN_VOID();
@@ -4024,7 +4089,7 @@ width_bucket_float8(PG_FUNCTION_ARGS)
 	int32		count = PG_GETARG_INT32(3);
 	int32		result;
 
-	if (count <= 0.0)
+	if (count <= 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_ARGUMENT_FOR_WIDTH_BUCKET_FUNCTION),
 				 errmsg("count must be greater than zero")));
@@ -4052,7 +4117,31 @@ width_bucket_float8(PG_FUNCTION_ARGS)
 						 errmsg("integer out of range")));
 		}
 		else
-			result = ((float8) count * (operand - bound1) / (bound2 - bound1)) + 1;
+		{
+			if (!isinf(bound2 - bound1))
+			{
+				/* The quotient is surely in [0,1], so this can't overflow */
+				result = count * ((operand - bound1) / (bound2 - bound1));
+			}
+			else
+			{
+				/*
+				 * We get here if bound2 - bound1 overflows DBL_MAX.  Since
+				 * both bounds are finite, their difference can't exceed twice
+				 * DBL_MAX; so we can perform the computation without overflow
+				 * by dividing all the inputs by 2.  That should be exact too,
+				 * except in the case where a very small operand underflows to
+				 * zero, which would have negligible impact on the result
+				 * given such large bounds.
+				 */
+				result = count * ((operand / 2 - bound1 / 2) / (bound2 / 2 - bound1 / 2));
+			}
+			/* The quotient could round to 1.0, which would be a lie */
+			if (result >= count)
+				result = count - 1;
+			/* Having done that, we can add 1 without fear of overflow */
+			result++;
+		}
 	}
 	else if (bound1 > bound2)
 	{
@@ -4066,7 +4155,15 @@ width_bucket_float8(PG_FUNCTION_ARGS)
 						 errmsg("integer out of range")));
 		}
 		else
-			result = ((float8) count * (bound1 - operand) / (bound1 - bound2)) + 1;
+		{
+			if (!isinf(bound1 - bound2))
+				result = count * ((bound1 - operand) / (bound1 - bound2));
+			else
+				result = count * ((bound1 / 2 - operand / 2) / (bound1 / 2 - bound2 / 2));
+			if (result >= count)
+				result = count - 1;
+			result++;
+		}
 	}
 	else
 	{

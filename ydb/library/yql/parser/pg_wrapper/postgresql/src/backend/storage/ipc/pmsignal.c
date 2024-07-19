@@ -4,7 +4,7 @@
  *	  routines for signaling between the postmaster and its child processes
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -98,7 +98,7 @@ static __thread bool *PMChildInUse;		/* true if i'th flag slot is assigned */
 __thread volatile sig_atomic_t postmaster_possibly_dead = false;
 
 static void
-postmaster_death_handler(int signo)
+postmaster_death_handler(SIGNAL_ARGS)
 {
 	postmaster_possibly_dead = true;
 }

@@ -3,7 +3,6 @@
 #include "schemeshard_utils.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
@@ -324,9 +323,9 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
         bool isAlterColumn = (source && colName2Id.contains(colName));
         if (isAlterColumn) {
-            if (keys.contains(colName2Id.at(colName))) {
+            if (keys.contains(colName2Id.at(colName)) && columnFamily) {
                 errStr = TStringBuilder()
-                    << "Cannot alter key column ' " << colName << "' with id " << colName2Id.at(colName);
+                    << "Cannot set family for key column ' " << colName << "' with id " << colName2Id.at(colName);
                 return nullptr;
             }
 
@@ -338,20 +337,27 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             bool isDropNotNull = col.HasNotNull(); // if has, then always false
             bool isSetNotNull = col.HasIsCheckingNotNullInProgress();
 
-            if (!isSetNotNull && !isDropNotNull && !columnFamily && !col.HasDefaultFromSequence()) {
+            if (!isSetNotNull && !isDropNotNull && !columnFamily && !col.HasDefaultFromSequence() && !col.HasEmptyDefault()) {
                 errStr = Sprintf("Nothing to alter for column '%s'", colName.data());
                 return nullptr;
             }
 
-            if (col.HasDefaultFromSequence()) {
-                if (!localSequences.contains(col.GetDefaultFromSequence())) {
-                    errStr = Sprintf("Column '%s' cannot use an unknown sequence '%s'", colName.c_str(), col.GetDefaultFromSequence().c_str());
-                    return nullptr;
-                }
-            } else {
-                if (col.DefaultValue_case() != NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET) {
-                    errStr = Sprintf("Cannot set default from literal for column '%s'", colName.c_str());
-                    return nullptr;
+            if (col.DefaultValue_case() != NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET) {
+                switch (col.GetDefaultValueCase()) {
+                    case NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence: {
+                        if (!localSequences.contains(col.GetDefaultFromSequence())) {
+                            errStr = Sprintf("Column '%s' cannot use an unknown sequence '%s'", colName.c_str(), col.GetDefaultFromSequence().c_str());
+                            return nullptr;
+                        }
+                        break;
+                    }
+                    case NKikimrSchemeOp::TColumnDescription::kEmptyDefault: {
+                        break;
+                    }
+                    default: {
+                        errStr = Sprintf("Cannot set default from literal for column '%s'", colName.c_str());
+                        return nullptr;
+                    }
                 }
             }
 
@@ -385,13 +391,18 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             if (columnFamily) {
                 column.Family = columnFamily->GetId();
             }
-
-            if (col.HasDefaultFromSequence()) {
-                column.DefaultKind = ETableColumnDefaultKind::FromSequence;
-                column.DefaultValue = col.GetDefaultFromSequence();
-            } else if (col.HasDefaultFromLiteral()) {
-                column.DefaultKind = ETableColumnDefaultKind::FromLiteral;
-                column.DefaultValue = col.GetDefaultFromLiteral().SerializeAsString();
+            switch (col.GetDefaultValueCase()) {
+                case NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence: {
+                    column.DefaultKind = ETableColumnDefaultKind::FromSequence;
+                    column.DefaultValue = col.GetDefaultFromSequence();
+                    break;
+                }
+                case NKikimrSchemeOp::TColumnDescription::kEmptyDefault: {
+                    column.DefaultKind = ETableColumnDefaultKind::None;
+                    column.DefaultValue = "";
+                    break;
+                }
+                default: break;
             }
         } else {
             if (colName2Id.contains(colName)) {
@@ -520,6 +531,13 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     }
 
     if (op.HasTTLSettings()) {
+        for (const auto& indexDescription : op.GetTableIndexes()) {
+            if (indexDescription.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+                errStr = "Table with vector indexes doesn't support TTL";
+                return nullptr;                
+            }
+        }
+
         const auto& ttl = op.GetTTLSettings();
 
         if (!ValidateTtlSettings(ttl, source ? source->Columns : THashMap<ui32, TColumn>(), alterData->Columns, colName2Id, subDomain, errStr)) {
@@ -2085,7 +2103,9 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
         *index.AddDataColumnNames() = x;
     }
 
-    *index.AddIndexImplTableDescriptions() = ImplTableDescription;
+    for (const auto& implTableDescription : ImplTableDescriptions) {
+        *index.AddIndexImplTableDescriptions() = implTableDescription;
+    }
 }
 
 void TIndexBuildInfo::TColumnBuildInfo::SerializeToProto(NKikimrIndexBuilder::TColumnBuildSetting* setting) const {

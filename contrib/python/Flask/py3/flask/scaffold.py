@@ -10,7 +10,7 @@ from functools import update_wrapper
 from json import JSONDecoder
 from json import JSONEncoder
 
-from jinja2 import ChoiceLoader, FileSystemLoader, ResourceLoader, PackageLoader
+from jinja2 import ChoiceLoader, FileSystemLoader, ResourceLoader
 from werkzeug.exceptions import default_exceptions
 from werkzeug.exceptions import HTTPException
 
@@ -359,7 +359,6 @@ class Scaffold:
         if self.template_folder is not None:
             return ChoiceLoader([
                 FileSystemLoader(os.path.join(self.root_path, self.template_folder)),
-                PackageLoader(self.import_name, self.template_folder),
                 ResourceLoader(os.path.join(self._builtin_resource_prefix, self.template_folder), self.module_loader),
             ])
         else:

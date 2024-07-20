@@ -355,6 +355,7 @@ namespace NActors {
             return TypeName<TEv>() + " { " + TBase::Record.ShortDebugString() + " }";
         }
     };
+    
 
     template <typename TEv, typename TRecord, ui32 TEventType>
     class TEventPreSerializedPB: public TEventPB<TEv, TRecord, TEventType> {

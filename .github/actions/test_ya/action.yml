@@ -232,7 +232,7 @@ runs:
 
         YA_MAKE_OUTPUT="$PUBLIC_DIR/ya_make_output.log"
         YA_MAKE_OUTPUT_URL="$PUBLIC_DIR_URL/ya_make_output.log"
-        echo "10 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
+        echo "20 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
         echo "YA_MAKE_OUTPUT_URL=$YA_MAKE_OUTPUT_URL" >> $GITHUB_ENV 
 
         BUILD_FAILED=0
@@ -252,7 +252,8 @@ runs:
             echo "runid=${TESTMO_RUN_ID}" >> $GITHUB_OUTPUT
             TESTMO_HISTORY_URL="${TESTMO_URL}/automation/runs/view/${TESTMO_RUN_ID}"
 
-            # Print test history link
+            # Replace test history link
+            cat $SUMMARY_LINKS | grep -v "[Test history]" > $SUMMARY_LINKS
             echo "10 [Test history](${TESTMO_HISTORY_URL})" >> $SUMMARY_LINKS
           fi
 

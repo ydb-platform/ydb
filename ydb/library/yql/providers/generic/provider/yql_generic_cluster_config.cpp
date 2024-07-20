@@ -107,14 +107,12 @@ namespace NYql {
                            NYql::TGenericClusterConfig& clusterConfig) {
         auto it = properties.find("database_name");
         if (it == properties.cend()) {
-            // TODO: make this property required during https://st.yandex-team.ru/YQ-2494
-            // ythrow yexception() <<  "missing 'DATABASE_NAME' value";
+            ythrow yexception() <<  "missing 'DATABASE_NAME' value";
             return;
         }
 
         if (!it->second) {
-            // TODO: make this property required during https://st.yandex-team.ru/YQ-2494
-            // ythrow yexception() << "invalid 'DATABASE_NAME' value: '" << it->second << "'";
+            ythrow yexception() << "invalid 'DATABASE_NAME' value: '" << it->second << "'";
             return;
         }
 
@@ -125,14 +123,12 @@ namespace NYql {
                      NYql::TGenericClusterConfig& clusterConfig) {
         auto it = properties.find("schema");
         if (it == properties.cend()) {
-            // TODO: make this property required during https://st.yandex-team.ru/YQ-2494
-            // ythrow yexception() <<  "missing 'SCHEMA' value";
+            // SCHEMA is optional field
             return;
         }
 
         if (!it->second) {
-            // TODO: make this property required during https://st.yandex-team.ru/YQ-2494
-            // ythrow yexception() << "invalid 'SCHEMA' value: '" << it->second << "'";
+            // SCHEMA is optional field
             return;
         }
 
@@ -333,9 +329,12 @@ namespace NYql {
     }
 
     static const TSet<NConnector::NApi::EDataSourceKind> managedDatabaseKinds{
-        NConnector::NApi::EDataSourceKind::POSTGRESQL,
         NConnector::NApi::EDataSourceKind::CLICKHOUSE,
-        NConnector::NApi::EDataSourceKind::YDB};
+        NConnector::NApi::EDataSourceKind::GREENPLUM,
+        NConnector::NApi::EDataSourceKind::MYSQL,
+        NConnector::NApi::EDataSourceKind::POSTGRESQL,
+        NConnector::NApi::EDataSourceKind::YDB,
+    };
 
     void ValidateGenericClusterConfig(
         const NYql::TGenericClusterConfig& clusterConfig,

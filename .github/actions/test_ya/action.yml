@@ -243,7 +243,7 @@ runs:
 
         RETRY_COUNT=${{ inputs.run_tests_retry_count }}
 
-        for RETRY in {1..$RETRY_COUNT}
+        for RETRY in $(seq 1 $RETRY_COUNT)
         do
           if [ ${{ inputs.testman_token }} ]; then
             # inititalize testmo session

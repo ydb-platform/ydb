@@ -73,7 +73,7 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
                 ++fetchedChunks;
             } else {
                 defaultBlocks.emplace(c->GetAddress(),
-                    TPortionInfo::TAssembleBlobInfo(c->GetMeta().GetNumRows(), Schema->GetDefaultValueVerified(c->GetColumnId())));
+                    TPortionInfo::TAssembleBlobInfo(c->GetMeta().GetNumRows(), Schema->GetExternalDefaultValueVerified(c->GetColumnId())));
                 ++nullChunks;
             }
             itFinished = !itFilter.Next(c->GetMeta().GetNumRows());

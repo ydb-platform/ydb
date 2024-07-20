@@ -66,8 +66,8 @@ public:
         return !it->second.NotNull;
     }
 
-    std::shared_ptr<arrow::Scalar> GetColumnDefaultValueVerified(const std::string& colName) const;
-    std::shared_ptr<arrow::Scalar> GetColumnDefaultValueVerified(const ui32 colId) const;
+    std::shared_ptr<arrow::Scalar> GetColumnExternalDefaultValueVerified(const std::string& colName) const;
+    std::shared_ptr<arrow::Scalar> GetColumnExternalDefaultValueVerified(const ui32 colId) const;
 
     bool GetExternalGuaranteeExclusivePK() const {
         return ExternalGuaranteeExclusivePK;

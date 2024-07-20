@@ -227,7 +227,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
                 }
                 auto f = resultSchema->GetFieldByColumnIdVerified(columnId);
                 chunks.emplace_back(std::make_shared<NChunks::TDefaultChunkPreparation>(columnId, p.GetPortionInfo().GetRecordsCount(),
-                    resultField, resultSchema->GetDefaultValueVerified(columnId),
+                    resultField, resultSchema->GetExternalDefaultValueVerified(columnId),
                     resultSchema->GetColumnSaver(columnId)));
                 records = { nullptr };
             }

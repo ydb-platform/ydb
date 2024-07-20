@@ -47,7 +47,7 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
             }
         } else if (restoreColumnIds.contains(columnId)) {
             result->AddField(resultField,
-                    NArrow::TThreadSimpleArraysCache::Get(resultField->type(), GetDefaultValueVerified(columnId), batch->num_rows()))
+                    NArrow::TThreadSimpleArraysCache::Get(resultField->type(), GetExternalDefaultValueVerified(columnId), batch->num_rows()))
                 .Validate();
         }
     }
@@ -117,7 +117,7 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
                     if (batch->GetColumnByName(f->name())) {
                         continue;
                     }
-                    if (!GetIndexInfo().GetColumnDefaultValueVerified(f->name())) {
+                    if (!GetIndexInfo().GetColumnExternalDefaultValueVerified(f->name())) {
                         return TConclusionStatus::Fail("empty field for non-default column: '" + f->name() + "'");
                     }
                 }
@@ -182,7 +182,7 @@ std::vector<std::shared_ptr<arrow::Field>> ISnapshotSchema::GetAbsentFields(cons
 TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::BuildDefaultBatch(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ui32 rowsCount) const {
     std::vector<std::shared_ptr<arrow::Array>> columns;
     for (auto&& i : fields) {
-        auto defaultValue = GetDefaultValueVerified(i->name());
+        auto defaultValue = GetExternalDefaultValueVerified(i->name());
         if (!defaultValue && !GetIndexInfo().IsNullableVerified(i->name())) {
             return TConclusionStatus::Fail("not nullable field with no default: " + i->name());
         }
@@ -191,32 +191,12 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::BuildDefaultBa
     return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), rowsCount, columns);
 }
 
-std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetDefaultValueVerified(const std::string& columnName) const {
-    return GetIndexInfo().GetColumnDefaultValueVerified(columnName);
+std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetExternalDefaultValueVerified(const std::string& columnName) const {
+    return GetIndexInfo().GetColumnExternalDefaultValueVerified(columnName);
 }
 
-std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetDefaultValueVerified(const ui32 columnId) const {
-    return GetIndexInfo().GetColumnDefaultValueVerified(columnId);
-}
-
-TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::AddDefault(const std::shared_ptr<arrow::RecordBatch>& batch, const bool force) const {
-    auto result = batch;
-    for (auto&& i : GetIndexInfo().ArrowSchema()->fields()) {
-        if (batch->schema()->GetFieldIndex(i->name()) != -1) {
-            continue;
-        }
-        auto defaultValue = GetDefaultValueVerified(i->name());
-        if (!defaultValue && !GetIndexInfo().IsNullableVerified(i->name())) {
-            if (!force) {
-                return TConclusionStatus::Fail("not nullable field withno default: " + i->name());
-            } else {
-                defaultValue = NArrow::DefaultScalar(i->type());
-            }
-        }
-        std::shared_ptr<arrow::Array> column = NArrow::TThreadSimpleArraysCache::Get(i->type(), defaultValue, batch->num_rows());
-        result = NArrow::TStatusValidator::GetValid(result->AddColumn(result->num_columns(), i->name(), column));
-    }
-    return result;
+std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetExternalDefaultValueVerified(const ui32 columnId) const {
+    return GetIndexInfo().GetColumnExternalDefaultValueVerified(columnId);
 }
 
 bool ISnapshotSchema::IsSpecialColumnId(const ui32 columnId) const {
@@ -226,6 +206,9 @@ bool ISnapshotSchema::IsSpecialColumnId(const ui32 columnId) const {
 std::set<ui32> ISnapshotSchema::GetColumnsWithDifferentDefaults(
     const THashMap<ui64, ISnapshotSchema::TPtr>& schemas, const ISnapshotSchema::TPtr& targetSchema) {
     std::set<ui32> result;
+    if (schemas.size() <= 1) {
+        return {};
+    }
     std::map<ui32, std::shared_ptr<arrow::Scalar>> defaults;
     for (auto& [_, blobSchema] : schemas) {
         for (auto&& columnId : blobSchema->GetIndexInfo().GetColumnIds(true)) {
@@ -242,7 +225,7 @@ std::set<ui32> ISnapshotSchema::GetColumnsWithDifferentDefaults(
             auto it = defaults.find(columnId);
             if (it == defaults.end()) {
                 defaults.emplace(columnId, def);
-            } else if (NArrow::ScalarCompare(def, it->second) != 0) {
+            } else if (NArrow::ScalarCompareNullable(def, it->second) != 0) {
                 result.emplace(columnId);
             }
         }

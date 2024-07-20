@@ -377,21 +377,16 @@ std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> TIndexInfo::Get
     return CompactionPlannerConstructor;
 }
 
-std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnDefaultValueVerified(const std::string& colName) const {
+std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueVerified(const std::string& colName) const {
     const ui32 columnId = GetColumnIdVerified(colName);
-    return GetColumnDefaultValueVerified(columnId);
+    return GetColumnExternalDefaultValueVerified(columnId);
 }
 
-std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnDefaultValueVerified(const ui32 columnId) const {
+std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueVerified(const ui32 columnId) const {
     if (IIndexInfo::IsSpecialColumn(columnId)) {
         return IIndexInfo::DefaultColumnValue(columnId);
     }
-    auto& features = GetColumnFeaturesVerified(columnId);
-    if (features.GetDefaultValue().IsEmpty() && !IsNullableVerified(columnId)) {
-        return NArrow::DefaultScalar(GetColumnFieldVerified(columnId)->type());
-    } else {
-        return features.GetDefaultValue().GetValue();
-    }
+    return GetColumnFeaturesVerified(columnId).GetDefaultValue().GetValue();
 }
 
 NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData,

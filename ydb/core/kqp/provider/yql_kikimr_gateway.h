@@ -793,6 +793,10 @@ struct TDropReplicationSettings {
     bool Cascade = false;
 };
 
+struct TAnalyzeSettings {
+    TString Table;
+};
+
 struct TKikimrListPathItem {
     TKikimrListPathItem(TString name, bool isDirectory) {
         Name = name;
@@ -1018,6 +1022,8 @@ public:
     virtual NThreading::TFuture<TGenericResult> AlterExternalTable(const TString& cluster, const TAlterExternalTableSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> DropExternalTable(const TString& cluster, const TDropExternalTableSettings& settings, bool missingOk) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> Analyze(const TString& cluster, const TAnalyzeSettings& settings) = 0;
 
     virtual TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() = 0;
 

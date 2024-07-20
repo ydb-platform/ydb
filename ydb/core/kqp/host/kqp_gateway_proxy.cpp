@@ -2044,6 +2044,35 @@ public:
         }
     }
 
+    TFuture<TGenericResult> Analyze(const TString& cluster, const NYql::TAnalyzeSettings& settings) override {
+        // CHECK_PREPARED_DDL(Analyze);
+
+        // auto analyzePromise = NewPromise<TGenericResult>();
+
+        // NKikimrSchemeOp::TModifyScheme schemeTx;
+        // schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
+        // schemeTx.SetWorkingDir(pathPair.first);
+
+        // auto* drop = schemeTx.MutableDrop();
+        // drop->SetName(pathPair.second);
+
+        // if (IsPrepare()) {
+        //     auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+        //     auto& phyTx = *phyQuery.AddTransactions();
+        //     phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
+        //     phyTx.MutableSchemeOperation()->MutableDropTable()->Swap(&schemeTx);
+            
+        //     TGenericResult result;
+        //     result.SetSuccess();
+        //     analyzePromise.SetValue(result);
+        // } else {
+            return Gateway->Analyze(cluster, settings);
+        // }
+
+        // return analyzePromise.GetFuture();
+    }
+
     TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() override {
         return Gateway->GetCollectedSchemeData();
     }

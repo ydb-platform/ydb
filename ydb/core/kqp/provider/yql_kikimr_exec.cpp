@@ -280,6 +280,12 @@ namespace {
         };
     }
 
+    TAnalyzeSettings ParseAnalyzeSettings(const TKiAnalyze& analyze) {
+        return TAnalyzeSettings{
+            .Table = TString(analyze.Table())
+        };
+    }
+
     TAlterColumnTableSettings ParseAlterColumnTableSettings(TKiAlterTable alter) {
         return TAlterColumnTableSettings{
             .Table = TString(alter.Table())
@@ -2279,6 +2285,21 @@ public:
                                     TStringBuilder() << "Unknown PgDrop operation: " << type));
                 return SyncError();
             }
+        }
+
+        if (auto maybeAnalyze = TMaybeNode<TKiAnalyze>(input)) {
+            auto cluster = TString(maybeAnalyze.Cast().DataSink().Cluster());
+
+            TAnalyzeSettings analyzeSettings = ParseAnalyzeSettings(maybeAnalyze.Cast());
+
+            auto future = Gateway->Analyze(cluster, analyzeSettings);
+            
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing ANALYZE");
         }
 
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()

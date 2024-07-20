@@ -1386,6 +1386,14 @@ public:
         }
     }
 
+    TFuture<TGenericResult> Analyze(const TString& cluster, const NYql::TAnalyzeSettings& settings) override {
+        try {
+            YQL_ENSURE(false, "gateway doesn't implement analyze");
+        } catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
     template <class TSettings>
     class IObjectModifier {
     public:

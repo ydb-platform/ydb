@@ -179,12 +179,27 @@ std::vector<std::shared_ptr<arrow::Field>> ISnapshotSchema::GetAbsentFields(cons
     return result;
 }
 
-TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::BuildDefaultBatch(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ui32 rowsCount) const {
-    std::vector<std::shared_ptr<arrow::Array>> columns;
+TConclusionStatus ISnapshotSchema::CheckColumnsDefault(const std::vector<std::shared_ptr<arrow::Field>>& fields) const {
     for (auto&& i : fields) {
         auto defaultValue = GetExternalDefaultValueVerified(i->name());
         if (!defaultValue && !GetIndexInfo().IsNullableVerified(i->name())) {
             return TConclusionStatus::Fail("not nullable field with no default: " + i->name());
+        }
+    }
+    return TConclusionStatus::Success();
+}
+
+TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::BuildDefaultBatch(
+    const std::vector<std::shared_ptr<arrow::Field>>& fields, const ui32 rowsCount, const bool force) const {
+    std::vector<std::shared_ptr<arrow::Array>> columns;
+    for (auto&& i : fields) {
+        auto defaultValue = GetExternalDefaultValueVerified(i->name());
+        if (!defaultValue && !GetIndexInfo().IsNullableVerified(i->name())) {
+            if (force) {
+                defaultValue = NArrow::DefaultScalar(i->type());
+            } else {
+                return TConclusionStatus::Fail("not nullable field with no default: " + i->name());
+            }
         }
         columns.emplace_back(NArrow::TThreadSimpleArraysCache::Get(i->type(), defaultValue, rowsCount));
     }

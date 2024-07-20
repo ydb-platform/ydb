@@ -41,7 +41,9 @@ public:
     std::shared_ptr<arrow::Scalar> GetExternalDefaultValueVerified(const std::string& columnName) const;
     std::shared_ptr<arrow::Scalar> GetExternalDefaultValueVerified(const ui32 columnId) const;
 
-    TConclusion<std::shared_ptr<arrow::RecordBatch>> BuildDefaultBatch(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ui32 rowsCount) const;
+    TConclusion<std::shared_ptr<arrow::RecordBatch>> BuildDefaultBatch(
+        const std::vector<std::shared_ptr<arrow::Field>>& fields, const ui32 rowsCount, const bool force) const;
+    TConclusionStatus CheckColumnsDefault(const std::vector<std::shared_ptr<arrow::Field>>& fields) const;
 
     std::vector<std::string> GetPKColumnNames() const;
 

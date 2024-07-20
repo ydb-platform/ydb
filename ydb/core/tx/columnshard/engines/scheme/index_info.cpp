@@ -383,6 +383,9 @@ std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnDefaultValueVerified(const s
 }
 
 std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnDefaultValueVerified(const ui32 columnId) const {
+    if (IIndexInfo::IsSpecialColumn(columnId)) {
+        return IIndexInfo::DefaultColumnValue(columnId);
+    }
     auto& features = GetColumnFeaturesVerified(columnId);
     if (features.GetDefaultValue().IsEmpty() && !IsNullableVerified(columnId)) {
         return NArrow::DefaultScalar(GetColumnFieldVerified(columnId)->type());

@@ -148,6 +148,10 @@ public:
             || fieldId == (ui32)ESpecialColumn::DELETE_FLAG;
     }
 
+    static bool IsNullableVerified(const ui32 fieldId) {
+        return false;
+    }
+
     static ui32 GetSpecialColumnByteWidth(const ui32 field) {
         Y_ABORT_UNLESS(IsSpecialColumn(field));
         return 8;

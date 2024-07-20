@@ -812,6 +812,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
                 UNIT_ASSERT_EQUAL(childIds[1], 2);
             }
         }
+
         UNIT_ASSERT(firstPartitionFound);
 
         TString secondPartitionTo = "";

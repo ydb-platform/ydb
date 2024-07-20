@@ -223,4 +223,34 @@ bool ISnapshotSchema::IsSpecialColumnId(const ui32 columnId) const {
     return GetIndexInfo().IsSpecialColumn(columnId);
 }
 
+std::set<ui32> ISnapshotSchema::GetColumnsWithDifferentDefaults(
+    const THashMap<ui64, ISnapshotSchema::TPtr>& schemas, const ISnapshotSchema::TPtr& targetSchema) {
+    std::set<ui32> result;
+    std::map<ui32, std::shared_ptr<arrow::Scalar>> defaults;
+    for (auto& [_, blobSchema] : schemas) {
+        for (auto&& columnId : blobSchema->GetIndexInfo().GetColumnIds(true)) {
+            if (result.contains(columnId)) {
+                continue;
+            }
+            if (targetSchema && !targetSchema->HasColumnId(columnId)) {
+                continue;
+            }
+            auto def = blobSchema->GetIndexInfo().GetColumnDefaultValueVerified(columnId);
+            if (!blobSchema->GetIndexInfo().IsNullableVerified(columnId) && !def) {
+                continue;
+            }
+            auto it = defaults.find(columnId);
+            if (it == defaults.end()) {
+                defaults.emplace(columnId, def);
+            } else if (NArrow::ScalarCompare(def, it->second) != 0) {
+                result.emplace(columnId);
+            }
+        }
+        if (targetSchema && result.size() == targetSchema->GetIndexInfo().GetColumnIds(true).size()) {
+            break;
+        }
+    }
+    return result;
+}
+
 }

@@ -185,17 +185,27 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
 
     std::shared_ptr<TSerializationStats> stats = std::make_shared<TSerializationStats>();
     std::set<ui32> columnIds;
-    for (auto&& i : SwitchedPortions) {
-        stats->Merge(i.GetSerializationStat(*resultSchema));
-        if (columnIds.size() != resultSchema->GetColumnsCount()) {
-            for (auto id : i.GetColumnIds()) {
-                if (resultSchema->HasColumnId(id)) {
-                    columnIds.emplace(id);
+    {
+        {
+            THashMap<ui64, ISnapshotSchema::TPtr> schemas;
+            for (auto& portion : SwitchedPortions) {
+                auto dataSchema = portion.GetSchema(context.SchemaVersions);
+                schemas.emplace(dataSchema->GetVersion(), dataSchema);
+            }
+            columnIds = ISnapshotSchema::GetColumnsWithDifferentDefaults(schemas, resultSchema);
+        }
+        for (auto&& i : SwitchedPortions) {
+            stats->Merge(i.GetSerializationStat(*resultSchema));
+            if (columnIds.size() != resultSchema->GetColumnsCount()) {
+                for (auto id : i.GetColumnIds()) {
+                    if (resultSchema->HasColumnId(id)) {
+                        columnIds.emplace(id);
+                    }
                 }
             }
         }
+        AFL_VERIFY(columnIds.size() <= resultSchema->GetColumnsCount());
     }
-    AFL_VERIFY(columnIds.size() <= resultSchema->GetColumnsCount());
 
     std::vector<std::map<ui32, std::vector<TColumnPortionResult>>> chunkGroups;
     chunkGroups.resize(batchResults.size());

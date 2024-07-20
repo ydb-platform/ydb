@@ -162,6 +162,17 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
 
     TPathesData pathBatches;
     std::set<ui32> usageColumnIds;
+    {
+        THashMap<ui64, ISnapshotSchema::TPtr> schemas;
+        for (auto& inserted : DataToIndex) {
+            if (schemas.contains(inserted.GetSchemaVersion())) {
+                continue;
+            }
+            schemas.emplace(inserted.GetSchemaVersion(), context.SchemaVersions.GetSchemaVerified(inserted.GetSchemaVersion()));
+        }
+        usageColumnIds = ISnapshotSchema::GetColumnsWithDifferentDefaults(schemas, resultSchema);
+    }
+
     for (auto& inserted : DataToIndex) {
         auto blobSchema = context.SchemaVersions.GetSchemaVerified(inserted.GetSchemaVersion());
         std::vector<ui32> filteredIds = inserted.GetMeta().GetSchemaSubset().Apply(blobSchema->GetIndexInfo().GetColumnIds(true));

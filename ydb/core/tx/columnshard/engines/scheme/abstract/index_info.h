@@ -62,12 +62,6 @@ public:
         return std::make_shared<arrow::Schema>(std::move(fields));
     }
 
-    void AddSpecialFieldIds(std::vector<ui32>& result) const {
-        result.emplace_back((ui32)ESpecialColumn::PLAN_STEP);
-        result.emplace_back((ui32)ESpecialColumn::TX_ID);
-        result.emplace_back((ui32)ESpecialColumn::DELETE_FLAG);
-    }
-
     static void AddSpecialFields(std::vector<std::shared_ptr<arrow::Field>>& fields) {
         AddSnapshotFields(fields);
         fields.push_back(arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean()));
@@ -98,6 +92,13 @@ public:
         return result;
     }
 
+    [[nodiscard]] static std::vector<ui32> AddSpecialFieldIds(const std::vector<ui32>& baseColumnIds) {
+        std::vector<ui32> result = baseColumnIds;
+        for (auto&& i : GetSystemColumnIds()) {
+            result.emplace_back(i);
+        }
+        return result;
+    }
 
     std::optional<ui32> GetColumnIdOptional(const std::string& name) const;
     TString GetColumnName(ui32 id, bool required) const;
@@ -145,6 +146,10 @@ public:
         return fieldId == (ui32)ESpecialColumn::PLAN_STEP
             || fieldId == (ui32)ESpecialColumn::TX_ID
             || fieldId == (ui32)ESpecialColumn::DELETE_FLAG;
+    }
+
+    static bool IsNullableVerified(const ui32 fieldId) {
+        return false;
     }
 
     static ui32 GetSpecialColumnByteWidth(const ui32 field) {

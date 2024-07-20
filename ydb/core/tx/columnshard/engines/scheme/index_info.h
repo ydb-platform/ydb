@@ -54,19 +54,20 @@ public:
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> GetCompactionPlannerConstructor() const;
 
     bool IsNullableVerified(const std::string& fName) const {
-        auto it = Columns.find(GetColumnIdVerified(fName));
-        AFL_VERIFY(it != Columns.end());
-        return !it->second.NotNull;
+        return IsNullableVerified(GetColumnIdVerified(fName));
     }
 
     bool IsNullableVerified(const ui32 colId) const {
         auto it = Columns.find(colId);
-        AFL_VERIFY(it != Columns.end());
+        if (it == Columns.end()) {
+            AFL_VERIFY(IIndexInfo::IsSpecialColumn(colId));
+            return IIndexInfo::IsNullableVerified(colId);
+        }
         return !it->second.NotNull;
     }
 
-    std::shared_ptr<arrow::Scalar> GetColumnDefaultValueVerified(const std::string& colName) const;
-    std::shared_ptr<arrow::Scalar> GetColumnDefaultValueVerified(const ui32 colId) const;
+    std::shared_ptr<arrow::Scalar> GetColumnExternalDefaultValueVerified(const std::string& colName) const;
+    std::shared_ptr<arrow::Scalar> GetColumnExternalDefaultValueVerified(const ui32 colId) const;
 
     bool GetExternalGuaranteeExclusivePK() const {
         return ExternalGuaranteeExclusivePK;
@@ -250,14 +251,8 @@ public:
     /// Returns names of columns defined by the specific ids.
     std::vector<TString> GetColumnNames(const std::vector<ui32>& ids) const;
     std::vector<std::string> GetColumnSTLNames(const std::vector<ui32>& ids) const;
-    std::vector<ui32> GetColumnIds(const bool withSpecial = true) const;
-    std::vector<ui32> GetEntityIds() const {
-        auto result = GetColumnIds();
-        for (auto&& i : Indexes) {
-            result.emplace_back(i.first);
-        }
-        return result;
-    }
+    const std::vector<ui32>& GetColumnIds(const bool withSpecial = true) const;
+    std::vector<ui32> GetEntityIds() const;
 
     /// Returns info of columns defined by specific ids.
     std::vector<TNameTypeInfo> GetColumns(const std::vector<ui32>& ids) const;
@@ -320,6 +315,8 @@ public:
 private:
     ui64 Version = 0;
     TString Name;
+    std::vector<ui32> SchemaColumnIds;
+    std::vector<ui32> SchemaColumnIdsWithSpecials;
     std::shared_ptr<arrow::Schema> Schema;
     std::shared_ptr<arrow::Schema> SchemaWithSpecials;
     std::shared_ptr<arrow::Schema> PrimaryKey;
@@ -328,7 +325,7 @@ private:
     NArrow::NSerialization::TSerializerContainer DefaultSerializer = NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
 };
 
-std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, const bool withSpecials = false);
+std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids);
 
 /// Extracts columns with the specific ids from the schema.
 std::vector<TNameTypeInfo> GetColumns(const NTable::TScheme::TTableSchema& tableSchema, const std::vector<ui32>& ids);

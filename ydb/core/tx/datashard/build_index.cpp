@@ -21,6 +21,12 @@
 
 namespace NKikimr::NDataShard {
 
+#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
+#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
+#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
+#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
+
 using TColumnsTypes = THashMap<TString, NScheme::TTypeInfo>;
 using TTypes = TVector<std::pair<TString, Ydb::Type>>;
 using TRows = TVector<std::pair<TSerializedCellVec, TString>>;
@@ -274,10 +280,7 @@ protected:
 
     template <typename TAddRow>
     EScan FeedImpl(TArrayRef<const TCell> key, const TRow& row, TAddRow&& addRow) noexcept {
-        auto ctx = TActivationContext::AsActorContext().MakeFor(SelfId());
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Feed key " << DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry)
-                                << " " << Debug());
+        LOG_T("Feed key " << DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry) << " " << Debug());
 
         addRow();
 
@@ -305,10 +308,8 @@ public:
 
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept override {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
-        auto ctx = TActivationContext::AsActorContext().MakeFor(SelfId());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Prepared " << Debug());
+        LOG_D("Prepare " << Debug());
 
         Driver = driver;
 
@@ -316,9 +317,7 @@ public:
     }
 
     EScan Seek(TLead& lead, ui64 seq) noexcept override {
-        auto ctx = TActivationContext::AsActorContext().MakeFor(SelfId());
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Seek no " << seq << " " << Debug());
+        LOG_T("Seek no " << seq << " " << Debug());
         if (seq) {
             if (!WriteBuf.IsEmpty()) {
                 return EScan::Sleep;
@@ -340,14 +339,14 @@ public:
 
         auto scanRange = Intersect(KeyTypes, RequestedRange.ToTableRange(), TableRange.ToTableRange());
 
-        if (bool(scanRange.From)) {
+        if (scanRange.From) {
             auto seek = scanRange.InclusiveFrom ? NTable::ESeek::Lower : NTable::ESeek::Upper;
             lead.To(ScanTags, scanRange.From, seek);
         } else {
             lead.To(ScanTags, {}, NTable::ESeek::Lower);
         }
 
-        if (bool(scanRange.To)) {
+        if (scanRange.To) {
             lead.Until(scanRange.To, scanRange.InclusiveTo);
         }
 
@@ -373,8 +372,7 @@ public:
             progress->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::ABORTED);
             UploadStatus.Issues.AddIssue(NYql::TIssue("Aborted by scan host env"));
 
-            LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                       Debug());
+            LOG_W(Debug());
         } else if (!UploadStatus.IsSuccess()) {
             progress->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::BUILD_ERROR);
         } else {
@@ -385,8 +383,7 @@ public:
 
         ctx.Send(ProgressActorId, progress.Release());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Finish " << Debug());
+        LOG_D("Finish " << Debug());
 
         Driver = nullptr;
         PassAway();
@@ -403,24 +400,19 @@ public:
     }
 
     TString Debug() const {
-        TStringBuilder result;
-        result << "TBuildIndexScan: "
-               << ", datashard: " << DataShardId
-               << ", requested range: " << DebugPrintRange(KeyTypes, RequestedRange.ToTableRange(), *AppData()->TypeRegistry)
-               << ", last acked point: " << DebugPrintPoint(KeyTypes, LastUploadedKey.GetCells(), *AppData()->TypeRegistry)
-               << Stats.ToString()
-               << UploadStatus.ToString();
-        return result;
+        return TStringBuilder() << "TBuildIndexScan: "
+                                << "datashard: " << DataShardId
+                                << ", requested range: " << DebugPrintRange(KeyTypes, RequestedRange.ToTableRange(), *AppData()->TypeRegistry)
+                                << ", last acked point: " << DebugPrintPoint(KeyTypes, LastUploadedKey.GetCells(), *AppData()->TypeRegistry)
+                                << Stats.ToString()
+                                << UploadStatus.ToString();
     }
 
     EScan PageFault() noexcept override {
-        auto ctx = TActivationContext::AsActorContext().MakeFor(SelfId());
-
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Page fault"
-                        << " ReadBuf empty: " << ReadBuf.IsEmpty()
-                        << " WriteBuf empty: " << WriteBuf.IsEmpty()
-                        << " " << Debug());
+        LOG_T("Page fault"
+              << " ReadBuf empty: " << ReadBuf.IsEmpty()
+              << " WriteBuf empty: " << WriteBuf.IsEmpty()
+              << " " << Debug());
 
         if (ReadBuf.IsEmpty()) {
             return EScan::Feed;
@@ -440,15 +432,12 @@ private:
             HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                LOG_ERROR(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                          "TBuildIndexScan: StateWork unexpected event type: %" PRIx32 " event: %s",
-                          ev->GetTypeRewrite(), ev->ToString().data());
+                LOG_E("TBuildIndexScan: StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
         }
     }
 
     void HandleWakeup(const NActors::TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Retry upload " << Debug());
+        LOG_D("Retry upload " << Debug());
 
         if (!WriteBuf.IsEmpty()) {
             RetryUpload();
@@ -456,11 +445,10 @@ private:
     }
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx) {
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Handle TEvUploadRowsResponse"
-                        << " " << Debug()
-                        << " Uploader: " << Uploader.ToString()
-                        << " ev->Sender: " << ev->Sender.ToString());
+        LOG_T("Handle TEvUploadRowsResponse "
+              << Debug()
+              << " Uploader: " << Uploader.ToString()
+              << " ev->Sender: " << ev->Sender.ToString());
 
         if (Uploader) {
             Y_VERIFY_S(Uploader == ev->Sender,
@@ -506,15 +494,13 @@ private:
         }
 
         if (RetryCount < Limits.MaxUploadRowsRetryCount && UploadStatus.IsRetriable()) {
-            LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
-                         "Got retriable error, " << Debug());
+            LOG_N("Got retriable error, " << Debug());
 
             ctx.Schedule(Limits.GetTimeoutBackouff(RetryCount), new TEvents::TEvWakeup());
             return;
         }
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
-                     "Got error, abort scan, " << Debug());
+        LOG_N("Got error, abort scan, " << Debug());
 
         Driver->Touch(EScan::Final);
     }
@@ -530,10 +516,7 @@ private:
             RetryCount = 0;
         }
 
-        auto ctx = TActivationContext::AsActorContext().MakeFor(SelfId());
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Upload, last key " << DebugPrintPoint(KeyTypes, WriteBuf.GetLastKey().GetCells(), *AppData()->TypeRegistry)
-                                        << " " << Debug());
+        LOG_D("Upload, last key " << DebugPrintPoint(KeyTypes, WriteBuf.GetLastKey().GetCells(), *AppData()->TypeRegistry) << " " << Debug());
 
         auto actor = NTxProxy::CreateUploadRowsInternal(
             SelfId(), TargetTable,
@@ -542,7 +525,7 @@ private:
             UploadMode,
             true /*writeToPrivateTable*/);
 
-        Uploader = ctx.Register(actor);
+        Uploader = TActivationContext::AsActorContext().MakeFor(SelfId()).Register(actor);
     }
 };
 

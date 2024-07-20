@@ -19,9 +19,13 @@
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
 
+#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
+#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
+
 namespace NKikimr::NDataShard {
 
-class TSampleKScan: public TActor<TSampleKScan>, public NTable::IScan {
+class TSampleKScan final: public TActor<TSampleKScan>, public NTable::IScan {
 protected:
     const TAutoPtr<TEvDataShard::TEvSampleKResponse> Response;
     const TActorId ResponseActorId;
@@ -35,17 +39,17 @@ protected:
 
     IDriver* Driver = nullptr;
 
-    struct Probability {
-        ui64 p = 0;
-        ui64 i = 0;
+    struct TProbability {
+        ui64 P = 0;
+        ui64 I = 0;
 
-        bool operator==(const Probability&) const noexcept = default;
-        auto operator<=>(const Probability&) const noexcept = default;
+        bool operator==(const TProbability&) const noexcept = default;
+        auto operator<=>(const TProbability&) const noexcept = default;
     };
 
     TReallyFastRng32 Rng;
     ui64 MaxProbability = 0;
-    std::vector<Probability> MaxRows;
+    std::vector<TProbability> MaxRows;
     std::vector<TString> DataRows;
 
 public:
@@ -72,39 +76,32 @@ public:
     {
     }
 
-    ~TSampleKScan() override = default;
+    ~TSampleKScan() final = default;
 
-    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept override {
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept final {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
-        auto ctx = TActivationContext::AsActorContext().MakeFor(SelfId());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Prepared " << Debug());
+        LOG_D("Prepare " << Debug());
 
         Driver = driver;
 
         return {EScan::Feed, {}};
     }
 
-    EScan Seek(TLead& lead, ui64 seq) noexcept override {
-        auto ctx = TActivationContext::AsActorContext().MakeFor(SelfId());
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Seek no " << seq << " " << Debug());
-        if (seq) {
-            SendResponse();
-            return EScan::Final;
-        }
+    EScan Seek(TLead& lead, ui64 seq) noexcept final {
+        Y_ABORT_UNLESS(seq == 0);
+        LOG_T("Seek " << Debug());
 
         auto scanRange = Intersect(KeyTypes, RequestedRange.ToTableRange(), TableRange.ToTableRange());
 
-        if (bool(scanRange.From)) {
+        if (scanRange.From) {
             auto seek = scanRange.InclusiveFrom ? NTable::ESeek::Lower : NTable::ESeek::Upper;
             lead.To(ScanTags, scanRange.From, seek);
         } else {
             lead.To(ScanTags, {}, NTable::ESeek::Lower);
         }
 
-        if (bool(scanRange.To)) {
+        if (scanRange.To) {
             lead.Until(scanRange.To, scanRange.InclusiveTo);
         }
 
@@ -112,10 +109,7 @@ public:
     }
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final {
-        auto ctx = TActivationContext::AsActorContext().MakeFor(SelfId());
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Feed key " << DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry)
-                                << " " << Debug());
+        LOG_T("Feed key " << DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry) << " " << Debug());
 
         const auto probability = Rng.GenRand64();
         if (DataRows.size() < K) {
@@ -123,72 +117,72 @@ public:
             DataRows.emplace_back(TSerializedCellVec::Serialize(*row));
             if (DataRows.size() == K) {
                 std::make_heap(MaxRows.begin(), MaxRows.end());
-                MaxProbability = MaxRows.front().p;
+                MaxProbability = MaxRows.front().P;
             }
         } else if (probability < MaxProbability) {
-            SetRow(row, probability);
+            ReplaceRow(row, probability);
         }
 
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
-        auto ctx = TActivationContext::AsActorContext().MakeFor(SelfId());
-        if (abort != EAbort::None) {
-            Response->Record.SetStatus(NKikimrTxDataShard::TEvSampleKResponse::ABORTED);
-
-            LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                       Debug());
-            ctx.Send(ResponseActorId, Response.Release());
+    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final {
+        Y_ABORT_UNLESS(Response);
+        if (abort == EAbort::None) {
+            FillResponse();
         } else {
-            SendResponse();
+            Response->Record.SetStatus(NKikimrTxDataShard::TEvSampleKResponse::ABORTED);
         }
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Finish " << Debug());
+        LOG_D("Finish " << Debug());
+        TActivationContext::AsActorContext().MakeFor(SelfId()).Send(ResponseActorId, Response.Release());
         Driver = nullptr;
         PassAway();
         return nullptr;
     }
 
-    void Describe(IOutputStream& out) const noexcept override {
+    void Describe(IOutputStream& out) const noexcept final {
         out << Debug();
     }
 
+    EScan Exhausted() noexcept final {
+        return EScan::Final;
+    }
+
     TString Debug() const {
-        return {}; // TODO(mbkkt)
+        if (!Response) {
+            return "empty TBuildIndexScan";
+        }
+        auto& rec = Response->Record;
+        return TStringBuilder() << "TBuildIndexScan:"
+                                << "id: " << rec.GetId()
+                                << ", shard: " << rec.GetTabletId()
+                                << ", generation: " << rec.GetRequestSeqNoGeneration()
+                                << ", round: " << rec.GetRequestSeqNoRound();
     }
 
 private:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             default:
-                LOG_ERROR(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                          "TSampleKScan: StateWork unexpected event type: %" PRIx32 " event: %s",
-                          ev->GetTypeRewrite(), ev->ToString().data());
+                LOG_E("TSampleKScan: StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
         }
     }
 
-    void SetRow(const TRow& row, ui64 p) {
+    void ReplaceRow(const TRow& row, ui64 p) {
         std::pop_heap(MaxRows.begin(), MaxRows.end());
-        DataRows[MaxRows.back().i] = TSerializedCellVec::Serialize(*row);
-        MaxRows.back().p = p;
+        DataRows[MaxRows.back().I] = TSerializedCellVec::Serialize(*row);
+        MaxRows.back().P = p;
         std::push_heap(MaxRows.begin(), MaxRows.end());
-        MaxProbability = MaxRows.front().p;
+        MaxProbability = MaxRows.front().P;
     }
 
-    void SendResponse() {
-        if (!Response) {
-            return;
-        }
-        auto ctx = TActivationContext::AsActorContext().MakeFor(SelfId());
+    void FillResponse() {
         std::sort(MaxRows.begin(), MaxRows.end());
         for (auto& [p, i] : MaxRows) {
             Response->Record.AddProbabilities(p);
             Response->Record.AddRows(std::move(DataRows[i]));
         }
         Response->Record.SetStatus(NKikimrTxDataShard::TEvSampleKResponse::DONE);
-        // TODO(mbkkt) some retry? how?
-        ctx.Send(ResponseActorId, Response.Release());
     }
 };
 

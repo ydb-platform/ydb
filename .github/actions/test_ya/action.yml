@@ -185,7 +185,7 @@ runs:
         TESTMO_ARCH="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
         TESTMO_PR_NUMBER=${{ github.event.number }}
         
-        # install test mo
+        # install testmo
         npm install -g @testmo/testmo-cli
 
         case "$BUILD_PRESET" in

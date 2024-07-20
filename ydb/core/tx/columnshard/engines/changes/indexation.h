@@ -10,7 +10,6 @@ namespace NKikimr::NOlap {
 class TInsertColumnEngineChanges: public TChangesWithAppend {
 private:
     using TBase = TChangesWithAppend;
-    void AddSpecials(NArrow::TGeneralContainer& batch, const TIndexInfo& indexInfo, const TInsertedData& inserted) const;
     std::vector<NOlap::TInsertedData> DataToIndex;
 protected:
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;

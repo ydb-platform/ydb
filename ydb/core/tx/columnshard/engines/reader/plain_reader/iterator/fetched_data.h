@@ -25,7 +25,7 @@ public:
 
     }
 
-    void SyncTableColumns(const std::vector<std::shared_ptr<arrow::Field>>& fields);
+    void SyncTableColumns(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ISnapshotSchema& schema);
 
     std::shared_ptr<NArrow::TColumnFilter> GetAppliedFilter() const {
         return UseFilter ? Filter : nullptr;

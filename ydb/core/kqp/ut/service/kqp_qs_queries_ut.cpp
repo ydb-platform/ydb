@@ -3047,6 +3047,13 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             }
 
             {
+                auto it = client.ExecuteQuery(R"(
+                UPSERT INTO `/Root/DataShard` (Col3) VALUES ('null');
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT(!it.IsSuccess());
+            }
+
+            {
                 auto it = client.StreamExecuteQuery(R"(
                 SELECT * FROM `/Root/DataShard` ORDER BY Col1;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();

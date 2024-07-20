@@ -41,12 +41,14 @@ TConclusionStatus TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*t
                 NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
                 return TConclusionStatus::Success();
             } else {
-                auto conclusion = ActualSchema->BuildDefaultBatch(ActualSchema->GetIndexInfo().ArrowSchema()->fields(), 1);
+                auto insertionConclusion = ActualSchema->CheckColumnsDefault(defaultFields);
+                auto conclusion = ActualSchema->BuildDefaultBatch(ActualSchema->GetIndexInfo().ArrowSchema()->fields(), 1, true);
                 AFL_VERIFY(!conclusion.IsFail())("error", conclusion.GetErrorMessage());
                 auto batchDefault = conclusion.DetachResult();
                 NArrow::NMerger::TSortableBatchPosition pos(
                     batchDefault, 0, batchDefault->schema()->field_names(), batchDefault->schema()->field_names(), false);
-                merger = std::make_shared<TUpdateMerger>(batch, ActualSchema, pos);
+                merger = std::make_shared<TUpdateMerger>(
+                    batch, ActualSchema, insertionConclusion.IsSuccess() ? "" : insertionConclusion.GetErrorMessage(), pos);
                 break;
             }
         }
@@ -55,7 +57,7 @@ TConclusionStatus TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*t
             break;
         }
         case NEvWrite::EModificationType::Update: {
-            merger = std::make_shared<TUpdateMerger>(batch, ActualSchema);
+            merger = std::make_shared<TUpdateMerger>(batch, ActualSchema, "");
             break;
         }
         case NEvWrite::EModificationType::Replace:

@@ -55,7 +55,7 @@ TString CollectTokens(const TRule_select_stmt& selectStatement) {
 
 NSQLTranslation::TTranslationSettings CreateViewTranslationSettings(const NSQLTranslation::TTranslationSettings& base) {
     NSQLTranslation::TTranslationSettings settings;
-    
+
     settings.ClusterMapping = base.ClusterMapping;
     settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
 
@@ -2407,15 +2407,15 @@ static bool StoreTopicSettingsEntry(
             }
             settings.MinPartitions.Set(valueExprNode);
         }
-    } else if (to_lower(id.Name) == "partition_count_limit") {
+    } else if (to_lower(id.Name) == "partition_count_limit" || to_lower(id.Name) == "max_active_partitions") {
         if (reset) {
-            settings.PartitionsLimit.Reset();
+            settings.MaxPartitions.Reset();
         } else {
             if (!valueExprNode->IsIntegerLiteral()) {
                 ctx.Error() << to_upper(id.Name) << " value should be an integer";
                 return false;
             }
-            settings.PartitionsLimit.Set(valueExprNode);
+            settings.MaxPartitions.Set(valueExprNode);
         }
     } else if (to_lower(id.Name) == "retention_period") {
         if (reset) {
@@ -2476,6 +2476,46 @@ static bool StoreTopicSettingsEntry(
                 return false;
             }
             settings.SupportedCodecs.Set(valueExprNode);
+        }
+    } else if (to_lower(id.Name) == "auto_partitioning_stabilization_window") {
+        if (reset) {
+            settings.AutoPartitioningStabilizationWindow.Reset();
+        } else {
+            if (valueExprNode->GetOpName() != "Interval") {
+                ctx.Error() << "Literal of Interval type is expected for retention";
+                return false;
+            }
+            settings.AutoPartitioningStabilizationWindow.Set(valueExprNode);
+        }
+    } else if (to_lower(id.Name) == "auto_partitioning_up_utilization_percent") {
+        if (reset) {
+            settings.AutoPartitioningUpUtilizationPercent.Reset();
+        } else {
+            if (!valueExprNode->IsIntegerLiteral()) {
+                ctx.Error() << to_upper(id.Name) << " value should be an integer";
+                return false;
+            }
+            settings.AutoPartitioningUpUtilizationPercent.Set(valueExprNode);
+        }
+    } else if (to_lower(id.Name) == "auto_partitioning_down_utilization_percent") {
+        if (reset) {
+            settings.AutoPartitioningDownUtilizationPercent.Reset();
+        } else {
+            if (!valueExprNode->IsIntegerLiteral()) {
+                ctx.Error() << to_upper(id.Name) << " value should be an integer";
+                return false;
+            }
+            settings.AutoPartitioningDownUtilizationPercent.Set(valueExprNode);
+        }
+    } else if (to_lower(id.Name) == "auto_partitioning_strategy") {
+        if (reset) {
+            settings.AutoPartitioningStrategy.Reset();
+        } else {
+            if (!valueExprNode->IsLiteral() || valueExprNode->GetLiteralType() != "String") {
+                ctx.Error() << to_upper(id.Name) << " value should be string";
+                return false;
+            }
+            settings.AutoPartitioningStrategy.Set(valueExprNode);
         }
     } else {
         ctx.Error() << "unknown topic setting: " << id.Name;
@@ -4428,7 +4468,7 @@ TNodePtr TSqlTranslation::ForStatement(const TRule_for_stmt& stmt) {
     if (isParallel) {
         --Ctx.ParallelModeCount;
     }
-    
+
     PopNamedNode(itemArgName);
     if (!bodyNode) {
         return{};
@@ -4729,7 +4769,7 @@ public:
     void AddColumn(const NSQLv1Generated::TRule_an_id & rule, TTranslation& ctx) {
         ColumnNames.push_back(NSQLTranslationV1::Id(rule, ctx));
     }
-    
+
     bool DoInit(TContext& ctx, ISource* source) override {
         Node = Y();
         if (Star) {

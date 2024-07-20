@@ -154,13 +154,15 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const TTableColumns& implTableColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    std::string_view suffix = {});
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const TTableColumns& implTableColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc);    
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    std::string_view suffix = {});
 
 TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr& tableInfo);
 TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription& tableDesc);

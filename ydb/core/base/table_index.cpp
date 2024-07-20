@@ -41,9 +41,6 @@ TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType type, const T
             result.Keys.push_back(ik);
             result.Columns.emplace(ik);
         }
-    } else {
-        result.Keys.push_back(NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn);
-        result.Columns.insert(NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn);
     }
 
     for (const auto& tk : table.Keys) {

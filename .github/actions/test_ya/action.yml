@@ -253,7 +253,8 @@ runs:
             TESTMO_HISTORY_URL="${TESTMO_URL}/automation/runs/view/${TESTMO_RUN_ID}"
 
             # Replace test history link
-            cat $SUMMARY_LINKS | (grep -v "Test history"  || true) > $SUMMARY_LINKS
+            cat $SUMMARY_LINKS | (grep -v "Test history"  || true) > $TMP_DIR/tmp_summary
+            mv $TMP_DIR/tmp_summary $SUMMARY_LINKS
             echo "10 [Test history](${TESTMO_HISTORY_URL})" >> $SUMMARY_LINKS
           fi
 

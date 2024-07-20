@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/base/table_vector_index.h>
 
 #include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
@@ -21,7 +20,6 @@ struct TIndexColumns {
 };
 
 inline constexpr const char* ImplTable = "indexImplTable";
-inline constexpr std::string_view ImplTables[] = {ImplTable, NTableVectorKmeansTreeIndex::LevelTable, NTableVectorKmeansTreeIndex::PostingTable};
 
 bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType type, const TTableColumns& table, const TIndexColumns& index, TString& explain);
 TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType type, const TTableColumns& table, const TIndexColumns& index);

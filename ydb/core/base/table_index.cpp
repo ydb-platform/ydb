@@ -24,9 +24,11 @@ const TString* IsContains(const TVector<TString>& names, const THashSet<TString>
     return nullptr;
 }
 
-bool Contains(const TVector<TString>& names, std::string_view str) {
-    return std::find(names.begin(), names.end(), str) != names.end();
+bool Contains(const auto& names, std::string_view str) {
+    return std::find(std::begin(names), std::end(names), str) != std::end(names);
 }
+
+constexpr std::string_view ImplTables[] = {ImplTable, NTableVectorKmeansTreeIndex::LevelTable, NTableVectorKmeansTreeIndex::PostingTable};
 
 }
 
@@ -102,8 +104,13 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
     const bool isSecondaryIndex = indexType != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
 
     if (isSecondaryIndex) {
-        if (index.KeyColumns == table.Keys) {
-            explain = "table and index keys are the same";
+        if (index.KeyColumns.size() < 1) {
+            explain = "should be at least single index key column";
+            return false;
+        }
+        if (index.KeyColumns.size() <= table.Keys.size() &&
+            std::equal(index.KeyColumns.begin(), index.KeyColumns.end(), table.Keys.begin())) {
+            explain = "index keys are prefix of table keys";
             return false;
         }
     } else {
@@ -112,7 +119,12 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
             return false;
         }
 
+        if (Contains(table.Keys, NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn)) {
+            explain = TStringBuilder() << "table key column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn;
+            return false;
+        }
         if (Contains(index.KeyColumns, NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn)) {
+            // This isn't really needed, but it will be really strange to have column with such name but different meaning
             explain = TStringBuilder() << "index key column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn;
             return false;
         }
@@ -135,7 +147,7 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
 }
 
 bool IsImplTable(std::string_view tableName) {
-    return std::find(std::begin(ImplTables), std::end(ImplTables), tableName) != std::end(ImplTables);
+    return Contains(ImplTables, tableName);
 }
 
 }

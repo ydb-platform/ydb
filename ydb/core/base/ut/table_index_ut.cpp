@@ -1,4 +1,5 @@
 #include "table_index.h"
+#include "table_vector_index.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -40,13 +41,6 @@ Y_UNIT_TEST_SUITE (TableIndex) {
             UNIT_ASSERT(IsCompatibleIndex(type, Table3, {{"DATA"}, {}}, explain));
             UNIT_ASSERT(explain.empty());
         }
-
-        // will be fixed:
-        UNIT_ASSERT(IsCompatibleIndex(type, Table, {{}, {}}, explain));
-        UNIT_ASSERT(explain.empty());
-
-        UNIT_ASSERT(IsCompatibleIndex(type, Table, {{"PK2"}, {}}, explain));
-        UNIT_ASSERT(explain.empty());
     }
 
     Y_UNIT_TEST (NotCompatibleSecondaryIndex) {
@@ -73,6 +67,12 @@ Y_UNIT_TEST_SUITE (TableIndex) {
 
         UNIT_ASSERT(!IsCompatibleIndex(type, Table, {{"DATA1"}, {"DATA3", "DATA3"}}, explain));
         UNIT_ASSERT(!explain.empty());
+
+        UNIT_ASSERT(!IsCompatibleIndex(type, Table, {{}, {}}, explain));
+        UNIT_ASSERT(!explain.empty());
+
+        UNIT_ASSERT(!IsCompatibleIndex(type, Table, {{"PK2"}, {}}, explain));
+        UNIT_ASSERT(!explain.empty());
     }
 
     Y_UNIT_TEST (CompatibleVectorIndex) {
@@ -90,14 +90,6 @@ Y_UNIT_TEST_SUITE (TableIndex) {
 
         UNIT_ASSERT(IsCompatibleIndex(type, Table, {{"DATA1"}, {"DATA1"}}, explain));
         UNIT_ASSERT(explain.empty());
-
-        // will be fixed:
-        {
-            const TTableColumns Table3{{"PK", "DATA", NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn}, {NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn}};
-
-            UNIT_ASSERT(IsCompatibleIndex(type, Table3, {{"DATA"}, {}}, explain));
-            UNIT_ASSERT(explain.empty());
-        }
     }
 
     Y_UNIT_TEST (NotCompatibleVectorIndex) {
@@ -129,6 +121,12 @@ Y_UNIT_TEST_SUITE (TableIndex) {
             UNIT_ASSERT(!explain.empty());
 
             UNIT_ASSERT(!IsCompatibleIndex(type, Table2, {{"DATA"}, {NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn}}, explain));
+            UNIT_ASSERT(!explain.empty());
+        }
+        {
+            const TTableColumns Table3{{"PK", "DATA", NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn}, {NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn}};
+
+            UNIT_ASSERT(!IsCompatibleIndex(type, Table3, {{"DATA"}, {}}, explain));
             UNIT_ASSERT(!explain.empty());
         }
     }

@@ -107,7 +107,7 @@ namespace NYql {
                            NYql::TGenericClusterConfig& clusterConfig) {
         auto it = properties.find("database_name");
         if (it == properties.cend()) {
-            ythrow yexception() <<  "missing 'DATABASE_NAME' value";
+            ythrow yexception() << "missing 'DATABASE_NAME' value";
             return;
         }
 

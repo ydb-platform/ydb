@@ -241,7 +241,7 @@ runs:
 
         BUILD_FAILED=0
 
-        RETRY_COUNT=${{ run_tests_retry_count }}
+        RETRY_COUNT=${{ inputs.run_tests_retry_count }}
 
         for RETRY in {1..$RETRY_COUNT}
         do

@@ -378,6 +378,7 @@ namespace NYql {
 
         void FillTablePath(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig,
                            const TString& tablePath) {
+            /*
             // for backward compability full path can be used (cluster_name.`db_name.table`)
             // TODO: simplify during https://st.yandex-team.ru/YQ-2494
             const auto dataSourceKind = clusterConfig.GetKind();
@@ -410,6 +411,9 @@ namespace NYql {
 
             request.mutable_data_source_instance()->set_database(TString(dbNameTarget));
             request.set_table(TString(tableName));
+            */
+            request.mutable_data_source_instance()->set_database(clusterConfig.GetDatabaseName());
+            request.set_table(tablePath);
         }
 
     private:

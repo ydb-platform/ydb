@@ -120,6 +120,7 @@ void IKikimrGateway::BuildIndexMetadata(TTableMetadataResult& loadTableMetadataR
 
         TString error;
         auto indexType = TIndexDescription::ConvertIndexType(index.Type);
+        YQL_ENSURE(indexType != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
         YQL_ENSURE(IsCompatibleIndex(indexType, tableColumns, indexColumns, error), "Index is not compatible: " << error);
 
         auto indexTableColumns = NKikimr::NTableIndex::CalcTableImplDescription(indexType, tableColumns, indexColumns);

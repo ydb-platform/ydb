@@ -52,6 +52,10 @@ inputs:
     type: boolean
     default: true
     description: "run tests"
+  run_tests_retry_count:
+    type: int
+    default: 3
+    description: "how many times to retry failed tests"
 outputs:
   success:
     value: ${{ steps.build.outputs.status }}
@@ -237,7 +241,9 @@ runs:
 
         BUILD_FAILED=0
 
-        for RETRY in {1..3}
+        RETRY_COUNT=${{ run_tests_retry_count }}
+
+        for RETRY in {1..$RETRY_COUNT}
         do
           if [ ${{ inputs.testman_token }} ]; then
             # inititalize testmo session

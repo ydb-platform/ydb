@@ -659,6 +659,7 @@ private:
                 inCallInfo->flinfo = &this->InFuncInfo_;
                 inCallInfo->nargs = 3;
                 inCallInfo->fncollation = DEFAULT_COLLATION_OID;
+                inCallInfo->context = (Node*)NKikimr::NMiniKQL::TlsAllocState->CurrentContext;
                 inCallInfo->isnull = false;
                 inCallInfo->args[0] = { (Datum)this->AggDesc_.InitValue.c_str(), false };
                 inCallInfo->args[1] = { ObjectIdGetDatum(this->TypeIOParam_), false };

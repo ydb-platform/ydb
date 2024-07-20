@@ -130,6 +130,9 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         }
         result.push_back(createImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexLevelTableDesc)));
         result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc)));
+        // TODO Maybe better to use partition from main table
+        result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc, "0tmp")));
+        result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc, "1tmp")));
     } else {
         NKikimrSchemeOp::TTableDescription indexTableDesc;
         // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS
@@ -137,6 +140,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             indexTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
         }
         auto implTableDesc = CalcImplTableDesc(tableInfo, implTableColumns, indexTableDesc);
+        // TODO if keep erase markers also speedup compaction or something else we can enable it for other impl tables too
         implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
         result.push_back(createImplTable(std::move(implTableDesc)));
     }

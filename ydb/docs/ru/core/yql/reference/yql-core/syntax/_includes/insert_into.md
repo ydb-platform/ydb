@@ -6,13 +6,7 @@
 
 {% include [OLAP_not_allow_text](../../../../_includes/not_allow_for_olap_text.md) %}
 
-{% cut "Способы загрузки данных в колоночные таблицы" %}
-* [YDB CLI](../../../../reference/ydb-cli/export-import/import-file.md)
-* [Пакетная вставка данных](../../../../recipes/ydb-sdk/bulk-upsert.md)
-* [FluentBit](../../../../integrations/fluent-bit.md)
-* [Yandex Data Transfer](https://yandex.cloud/ru/services/data-transfer)
-
-{% endcut %}
+{% include [OLAP_not_allow_text](../../../../_includes/ways_add_data_to_olap.md) %}
 
 {% endnote %}
 

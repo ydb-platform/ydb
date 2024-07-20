@@ -218,7 +218,7 @@ std::set<ui32> ISnapshotSchema::GetColumnsWithDifferentDefaults(
             if (targetSchema && !targetSchema->HasColumnId(columnId)) {
                 continue;
             }
-            auto def = blobSchema->GetIndexInfo().GetColumnDefaultValueVerified(columnId);
+            auto def = blobSchema->GetIndexInfo().GetColumnExternalDefaultValueVerified(columnId);
             if (!blobSchema->GetIndexInfo().IsNullableVerified(columnId) && !def) {
                 continue;
             }

@@ -66,7 +66,6 @@ struct TTransaction {
     explicit TTransaction(TSimpleSharedPtr<TEvPQ::TEvProposePartitionConfig> proposeConfig)
         : ProposeConfig(proposeConfig)
     {
-
         Y_ABORT_UNLESS(ProposeConfig);
     }
 

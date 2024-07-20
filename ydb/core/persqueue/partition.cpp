@@ -82,7 +82,7 @@ TString TPartition::LogPrefix() const {
     } else {
         state = "Unknown";
     }
-    return TStringBuilder() << "[Partition:" << Partition << ", State:" << state << "] ";
+    return TStringBuilder() << "[PQ: " << TabletID << ", Partition:" << Partition << ", State:" << state << "] ";
 }
 
 bool TPartition::IsActive() const {
@@ -927,6 +927,10 @@ void TPartition::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
 
 void TPartition::Handle(TEvPQ::TEvProposePartitionConfig::TPtr& ev, const TActorContext& ctx)
 {
+    PQ_LOG_D("Handle TEvPQ::TEvProposePartitionConfig" <<
+             " Step " << ev->Get()->Step <<
+             ", TxId " << ev->Get()->TxId);
+
     PushBackDistrTx(ev->Release());
 
     ProcessTxsAndUserActs(ctx);
@@ -939,6 +943,10 @@ void TPartition::HandleOnInit(TEvPQ::TEvTxCalcPredicate::TPtr& ev, const TActorC
 
 void TPartition::HandleOnInit(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext&)
 {
+    PQ_LOG_D("HandleOnInit TEvPQ::TEvTxCommit" <<
+             " Step " << ev->Get()->Step <<
+             ", TxId " << ev->Get()->TxId);
+
     PendingEvents.emplace_back(ev->ReleaseBase().Release());
 }
 
@@ -949,6 +957,10 @@ void TPartition::HandleOnInit(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContex
 
 void TPartition::HandleOnInit(TEvPQ::TEvProposePartitionConfig::TPtr& ev, const TActorContext&)
 {
+    PQ_LOG_D("HandleOnInit TEvPQ::TEvProposePartitionConfig" <<
+             " Step " << ev->Get()->Step <<
+             ", TxId " << ev->Get()->TxId);
+
     PendingEvents.emplace_back(ev->ReleaseBase().Release());
 }
 
@@ -961,8 +973,15 @@ void TPartition::Handle(TEvPQ::TEvTxCalcPredicate::TPtr& ev, const TActorContext
 
 void TPartition::Handle(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext& ctx)
 {
+    PQ_LOG_D("Handle TEvPQ::TEvTxCommit" <<
+             " Step " << ev->Get()->Step <<
+             ", TxId " << ev->Get()->TxId);
+
     if (PlanStep.Defined() && TxId.Defined()) {
         if (GetStepAndTxId(*ev->Get()) < GetStepAndTxId(*PlanStep, *TxId)) {
+            PQ_LOG_D("Send TEvTxCommitDone" <<
+                     " Step " << ev->Get()->Step <<
+                     ", TxId " << ev->Get()->TxId);
             ctx.Send(Tablet, MakeCommitDone(ev->Get()->Step, ev->Get()->TxId).Release());
             return;
         }
@@ -970,11 +989,20 @@ void TPartition::Handle(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext& ctx)
 
     auto txIter = TransactionsInflight.begin();
     if (ChangeConfig) {
-        Y_ABORT_UNLESS(TransactionsInflight.size() == 1);
+        Y_ABORT_UNLESS(TransactionsInflight.size() == 1,
+                       "PQ: %" PRIu64 ", Partition: %" PRIu32 ", Step: %" PRIu64 ", TxId: %" PRIu64,
+                       TabletID, Partition.OriginalPartitionId,
+                       ev->Get()->Step, ev->Get()->TxId);
     } else {
-        Y_ABORT_UNLESS(!TransactionsInflight.empty());
+        Y_ABORT_UNLESS(!TransactionsInflight.empty(),
+                       "PQ: %" PRIu64 ", Partition: %" PRIu32 ", Step: %" PRIu64 ", TxId: %" PRIu64,
+                       TabletID, Partition.OriginalPartitionId,
+                       ev->Get()->Step, ev->Get()->TxId);
         txIter = TransactionsInflight.find(ev->Get()->TxId);
-        Y_ABORT_UNLESS(!txIter.IsEnd());
+        Y_ABORT_UNLESS(!txIter.IsEnd(),
+                       "PQ: %" PRIu64 ", Partition: %" PRIu32 ", Step: %" PRIu64 ", TxId: %" PRIu64,
+                       TabletID, Partition.OriginalPartitionId,
+                       ev->Get()->Step, ev->Get()->TxId);
     }
     Y_ABORT_UNLESS(txIter->second->State == ECommitState::Pending);
 
@@ -987,18 +1015,29 @@ void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx
     auto* event = ev->Get();
     if (PlanStep.Defined() && TxId.Defined()) {
         if (GetStepAndTxId(*event) < GetStepAndTxId(*PlanStep, *TxId)) {
+            PQ_LOG_D("Rollback for" <<
+                     " Step " << ev->Get()->Step <<
+                     ", TxId " << ev->Get()->TxId);
             return;
         }
     }
 
     auto txIter = TransactionsInflight.begin();
     if (ChangeConfig) {
-        Y_ABORT_UNLESS(TransactionsInflight.size() == 1);
+        Y_ABORT_UNLESS(TransactionsInflight.size() == 1,
+                       "PQ: %" PRIu64 ", Partition: %" PRIu32,
+                       TabletID, Partition.OriginalPartitionId);
     } else {
+        Y_ABORT_UNLESS(!TransactionsInflight.empty(),
+                       "PQ: %" PRIu64 ", Partition: %" PRIu32,
+                       TabletID, Partition.OriginalPartitionId);
         txIter = TransactionsInflight.find(ev->Get()->TxId);
-        Y_ABORT_UNLESS(!txIter.IsEnd());
+        Y_ABORT_UNLESS(!txIter.IsEnd(),
+                       "PQ: %" PRIu64 ", Partition: %" PRIu32,
+                       TabletID, Partition.OriginalPartitionId);
     }
     Y_ABORT_UNLESS(txIter->second->State == ECommitState::Pending);
+
     txIter->second->State = ECommitState::Aborted;
     ProcessTxsAndUserActs(ctx);
 }
@@ -1123,19 +1162,20 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorConte
 void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, bool isPredicate) {
 
     if (isPredicate) {
-        auto insRes = TransactionsInflight.insert(std::make_pair(tx->Tx->TxId, tx));
-        Y_ABORT_UNLESS(insRes.second);
-        Send(Tablet, MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(tx->Tx->Step,
-                                                                tx->Tx->TxId,
-                                                                Partition,
-                                                                *tx->Predicate).Release());
-    } else {
-        auto insRes = TransactionsInflight.insert(std::make_pair(tx->ProposeConfig->TxId, tx));
+        auto insRes = TransactionsInflight.emplace(tx->Tx->TxId, tx);
         Y_ABORT_UNLESS(insRes.second);
         Send(Tablet,
-                MakeHolder<TEvPQ::TEvProposePartitionConfigResult>(tx->ProposeConfig->Step,
-                                                                    tx->ProposeConfig->TxId,
-                                                                    Partition).Release());
+             MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(tx->Tx->Step,
+                                                         tx->Tx->TxId,
+                                                         Partition,
+                                                         *tx->Predicate).Release());
+    } else {
+        auto insRes = TransactionsInflight.emplace(tx->ProposeConfig->TxId, tx);
+        Y_ABORT_UNLESS(insRes.second);
+        Send(Tablet,
+             MakeHolder<TEvPQ::TEvProposePartitionConfigResult>(tx->ProposeConfig->Step,
+                                                                tx->ProposeConfig->TxId,
+                                                                Partition).Release());
     }
 }
 
@@ -3332,20 +3372,25 @@ void TPartition::ScheduleNegativeReplies()
 {
     auto processQueue = [&](std::deque<TUserActionAndTransactionEvent>& queue) {
         for (auto& event : queue) {
-            if (auto* setInfo = std::get_if<0>(&event.Event)) {
-                ScheduleNegativeReply(*setInfo->Get());
-            } else if (auto* tx = std::get_if<1>(&event.Event)) {
-                if (tx->Get()->ProposeTransaction) {
-                    ScheduleNegativeReply(*tx->Get()->ProposeTransaction);
-                } else {
-                    ScheduleNegativeReply(*tx->Get());
+            std::visit(TOverloaded{
+                [this](TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& v) {
+                    ScheduleNegativeReply(*v);
+                },
+                [this](TSimpleSharedPtr<TTransaction>& v) {
+                    if (v->ProposeTransaction) {
+                        ScheduleNegativeReply(*v->ProposeTransaction);
+                    } else {
+                        ScheduleNegativeReply(*v);
+                    }
+                },
+                [this](TMessage& v) {
+                    ScheduleNegativeReply(v);
                 }
-            } else {
-                ScheduleNegativeReply(*(std::get_if<2>(&event.Event)));
-            }
+            }, event.Event);
         }
         queue.clear();
     };
+
     processQueue(UserActionAndTransactionEvents);
     processQueue(UserActionAndTxPendingCommit);
 }

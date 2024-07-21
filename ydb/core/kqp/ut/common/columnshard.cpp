@@ -132,7 +132,7 @@ namespace NKqp {
 
     void TTestHelper::WaitTabletDeletionInHive(ui64 tabletId, TDuration duration) {
         auto deadline = TInstant::Now() + duration;
-        while (GetKikimr().GetTestClient().TabletExistsInHive(&GetRuntime(), tabletId) && deadline >= TInstant::Now()) {
+        while (GetKikimr().GetTestClient().TabletExistsInHive(&GetRuntime(), tabletId) && TInstant::Now() <= deadline) {
             Cerr << "WaitTabletDeletionInHive: wait until " << tabletId << " is deleted" << Endl;
             Sleep(TDuration::Seconds(1));
         }

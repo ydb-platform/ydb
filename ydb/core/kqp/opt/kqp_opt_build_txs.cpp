@@ -36,6 +36,13 @@ EChannelMode GetChannelMode(NKikimrConfig::TTableServiceConfig_EBlockChannelsMod
     }
 }
 
+TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildWideBlockChannelsTransformer(
+        TTypeAnnotationContext& typesCtx,
+        NKikimrConfig::TTableServiceConfig_EBlockChannelsMode blockChannelsMode) {
+    const EChannelMode mode = GetChannelMode(blockChannelsMode);
+    return NDq::CreateDqBuildWideBlockChannelsTransformer(typesCtx, mode);
+}
+
 TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildPhyStagesTransformer(
         bool allowDependantConsumers,
         TTypeAnnotationContext& typesCtx,
@@ -571,6 +578,8 @@ public:
             .Add(*TypeAnnTransformer, "TypeAnnotation")
             .AddPostTypeAnnotation(/* forSubgraph */ true)
             .Add(CreateKqpBuildPhyStagesTransformer(enableSpillingGenericQuery, typesCtx, config->BlockChannelsMode), "BuildPhysicalStages")
+            // TODO(ilezhankin): "BuildWideBlockChannels" transformer is required only for BLOCK_CHANNELS_FORCE mode.
+            .Add(CreateKqpBuildWideBlockChannelsTransformer(typesCtx, config->BlockChannelsMode), "BuildWideBlockChannels")
             .Add(*BuildTxTransformer, "BuildPhysicalTx")
             .Add(CreateKqpTxPeepholeTransformer(
                 TypeAnnTransformer.Get(), typesCtx, config,

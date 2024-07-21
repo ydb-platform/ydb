@@ -1015,7 +1015,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
             TIndexDescription::TSpecializedIndexDescription specializedIndexDescription;
             if (indexType == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                NKikimrSchemeOp::TVectorIndexKmeansTreeDescription vectorIndexDescription;
+                NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexDescription;
                 *vectorIndexDescription.MutableSettings() = SerializeVectorIndexSettingsToProto(index.IndexSettings());
                 specializedIndexDescription = vectorIndexDescription;
             }

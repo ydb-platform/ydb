@@ -84,7 +84,7 @@ struct TIndexDescription {
     const ui64 LocalPathId;
     const ui64 PathOwnerId;
 
-    using TSpecializedIndexDescription = std::variant<std::monostate, NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>;
+    using TSpecializedIndexDescription = std::variant<std::monostate, NKikimrKqp::TVectorIndexKmeansTreeDescription>;
     TSpecializedIndexDescription SpecializedIndexDescription;
 
     TIndexDescription(const TString& name, const TVector<TString>& keyColumns, const TVector<TString>& dataColumns,
@@ -112,7 +112,9 @@ struct TIndexDescription {
         , PathOwnerId(index.HasPathOwnerId() ? index.GetPathOwnerId() : 0ul)
     {
         if (Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-            SpecializedIndexDescription = index.GetVectorIndexKmeansTreeDescription();
+            NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexDescription;
+            *vectorIndexDescription.MutableSettings() = index.GetVectorIndexKmeansTreeDescription().GetSettings();
+            SpecializedIndexDescription = vectorIndexDescription;
         }
     }
 
@@ -176,7 +178,7 @@ struct TIndexDescription {
         }
 
         if (Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-            *message->MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
+            *message->MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
         }
 
     }

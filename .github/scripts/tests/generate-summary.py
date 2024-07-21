@@ -286,7 +286,9 @@ def gen_summary(public_dir, public_dir_url, paths):
 
         if not summary_line.tests:
             continue
-
+        
+        if os.path.isabs(html_fn):
+            html_fn = os.path.relpath(html_fn, public_dir)
         report_url = f"{public_dir_url}/{html_fn}"
 
         render_testlist_html(summary_line.tests, os.path.join(public_dir, html_fn))

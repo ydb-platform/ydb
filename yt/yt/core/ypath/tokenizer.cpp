@@ -274,7 +274,7 @@ TTokenizer::TCheckpoint::~TCheckpoint()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool HasPrefix(const TYPath& fullPath, const TYPath& prefixPath)
+bool HasPrefix(TYPathBuf fullPath, TYPathBuf prefixPath)
 {
     TTokenizer fullTokenizer(fullPath);
     TTokenizer prefixTokenizer(prefixPath);

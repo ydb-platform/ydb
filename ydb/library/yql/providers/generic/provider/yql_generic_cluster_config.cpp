@@ -107,12 +107,12 @@ namespace NYql {
                            NYql::TGenericClusterConfig& clusterConfig) {
         auto it = properties.find("database_name");
         if (it == properties.cend()) {
-            ythrow yexception() << "missing 'DATABASE_NAME' value";
+            // DATABASE_NAME is a mandatory field for the most of databases, 
+            // however, managed YDB does not require it, so we have to accept empty values here.
             return;
         }
 
         if (!it->second) {
-            ythrow yexception() << "invalid 'DATABASE_NAME' value: '" << it->second << "'";
             return;
         }
 
@@ -336,6 +336,15 @@ namespace NYql {
         NConnector::NApi::EDataSourceKind::YDB,
     };
 
+    static const TSet<NConnector::NApi::EDataSourceKind> traditionalRelationalDatabaseKinds{
+        NConnector::NApi::EDataSourceKind::CLICKHOUSE,
+        NConnector::NApi::EDataSourceKind::GREENPLUM,
+        NConnector::NApi::EDataSourceKind::MS_SQL_SERVER,
+        NConnector::NApi::EDataSourceKind::MYSQL,
+        NConnector::NApi::EDataSourceKind::ORACLE,
+        NConnector::NApi::EDataSourceKind::POSTGRESQL,
+    };
+
     void ValidateGenericClusterConfig(
         const NYql::TGenericClusterConfig& clusterConfig,
         const TString& context) {
@@ -418,6 +427,17 @@ namespace NYql {
                     clusterConfig,
                     context,
                     "For Oracle databases you must set service, but you have not set it");
+            }
+        }
+
+        // All the databases with exception to managed YDB: 
+        // * DATABASE_NAME is mandatory field
+        if (traditionalRelationalDatabaseKinds.contains(clusterConfig.GetKind())) {
+            if (!clusterConfig.GetDatabaseName()) {
+                return ValidationError(
+                    clusterConfig,
+                    context,
+                    "You must provide database name explicitly");
             }
         }
 

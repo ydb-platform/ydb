@@ -52,6 +52,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<NDq::EHashJoinMode, false> HashJoinMode;
     NCommon::TConfSetting<TString, false> OverrideStatistics;
     NCommon::TConfSetting<ui64, false> EnableSpillingNodes;
+    NCommon::TConfSetting<TString, false> OverridePlanner;
 
     /* Disable optimizer rules */
     NCommon::TConfSetting<bool, false> OptDisableTopSort;

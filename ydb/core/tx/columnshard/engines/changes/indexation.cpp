@@ -204,7 +204,9 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
         for (auto&& i : itGranule->second) {
             AFL_VERIFY(points.emplace(i, false).second);
         }
-        auto localAppended = NCompaction::TMerger(context, SaverContext, std::move(batches), std::move(filters)).Execute(stats, points, filteredSnapshot, pathId, shardingVersion);
+        NCompaction::TMerger merger(context, SaverContext, std::move(batches), std::move(filters));
+        merger.SetOptimizationWritingPackMode(true);
+        auto localAppended = merger.Execute(stats, points, filteredSnapshot, pathId, shardingVersion);
         for (auto&& i : localAppended) {
             AppendedPortions.emplace_back(std::move(i));
         }

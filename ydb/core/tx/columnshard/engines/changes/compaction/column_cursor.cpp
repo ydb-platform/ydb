@@ -6,7 +6,11 @@ namespace NKikimr::NOlap::NCompaction {
 bool TPortionColumnCursor::Fetch(TMergedColumn& column) {
     Y_ABORT_UNLESS(RecordIndexStart);
 //    NActors::TLogContextGuard lg(NActors::TLogContextBuilder::Build()("portion_id", PortionId));
-    CurrentChunk = BlobChunks->GetChunk(CurrentChunk, *RecordIndexStart);
+    if (CurrentChunk && CurrentChunk->GetStartPosition() <= *RecordIndexStart && *RecordIndexStart < CurrentChunk->GetFinishPosition()) {
+        
+    } else {
+        CurrentChunk = BlobChunks->GetChunk(CurrentChunk, *RecordIndexStart);
+    }
 
     ui32 currentStart = *RecordIndexStart;
     while (RecordIndexFinish >= CurrentChunk->GetFinishPosition()) {

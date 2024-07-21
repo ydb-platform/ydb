@@ -10,6 +10,7 @@
 namespace NKikimr::NOlap::NCompaction {
 class TMerger {
 private:
+    YDB_ACCESSOR(bool, OptimizationWritingPackMode, false);
     std::vector<std::shared_ptr<NArrow::TGeneralContainer>> Batches;
     std::vector<std::shared_ptr<NArrow::TColumnFilter>> Filters;
     const TConstructionContext& Context;

@@ -95,6 +95,9 @@ protected:
             ui32 startIndex = 0;
             ui64 idx = 0;
             if (chunkCurrent) {
+                if (position < chunkCurrent->GetFinishPosition()) {
+                    return *chunkCurrent;
+                }
                 AFL_VERIFY(chunkCurrent->GetChunkIndex() < accessor.GetChunksCount());
                 startIndex = chunkCurrent->GetChunkIndex();
                 idx = chunkCurrent->GetStartPosition();

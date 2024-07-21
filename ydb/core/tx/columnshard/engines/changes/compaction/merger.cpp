@@ -8,6 +8,7 @@
 #include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/formats/arrow/simple_builder/array.h>
 #include <ydb/core/formats/arrow/simple_builder/filler.h>
+#include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 
 namespace NKikimr::NOlap::NCompaction {
@@ -77,8 +78,20 @@ std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> TMerger::Execute(c
         for (auto&& batchResult : batchResults) {
             const ui32 portionRecordsCountLimit =
                 batchResult->num_rows() / (batchResult->num_rows() / NSplitter::TSplitSettings().GetExpectedRecordsCountOnPage() + 1) + 1;
+
+            NArrow::NSerialization::TSerializerContainer externalSaver;
+            if (OptimizationWritingPackMode) {
+                if (batchResult->num_rows() < 100) {
+                    externalSaver = NArrow::NSerialization::TSerializerContainer(
+                        std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::UNCOMPRESSED));
+                } else {
+                    externalSaver = NArrow::NSerialization::TSerializerContainer(
+                        std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::LZ4_FRAME));
+                }
+            }
+
             NCompaction::TColumnMergeContext context(columnId, resultFiltered, portionRecordsCountLimit,
-                NSplitter::TSplitSettings().GetExpectedUnpackColumnChunkRawSize(), columnInfo);
+                NSplitter::TSplitSettings().GetExpectedUnpackColumnChunkRawSize(), columnInfo, externalSaver);
             NCompaction::TMergedColumn mColumn(context);
 
             auto columnPortionIdx = batchResult->GetColumnByName(portionIdFieldName);

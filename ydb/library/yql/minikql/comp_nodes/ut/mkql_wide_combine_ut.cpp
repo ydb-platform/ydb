@@ -119,6 +119,13 @@ TRuntimeNode Combine(TProgramBuilder& pb, TRuntimeNode stream, std::function<TRu
         pb.CombineCore(stream, keyExtractor, init, update, finishLambda, 64ul << 20);
 }
 
+template<bool SPILLING>
+TRuntimeNode WideLastCombiner(TProgramBuilder& pb, TRuntimeNode flow, const TProgramBuilder::TWideLambda& extractor, const TProgramBuilder::TBinaryWideLambda& init, const TProgramBuilder::TTernaryWideLambda& update, const TProgramBuilder::TBinaryWideLambda& finish) {
+    return SPILLING ?
+        pb.WideLastCombinerWithSpilling(flow, extractor, init, update, finish):
+        pb.WideLastCombiner(flow, extractor, init, update, finish);
+}
+
 } // unnamed
 
 #if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 18u
@@ -1042,12 +1049,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
 
         const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
 
-        auto wideLastCombinerCollable = &TProgramBuilder::WideLastCombiner;
-        if (SPILLING) {
-            wideLastCombinerCollable = &TProgramBuilder::WideLastCombinerWithSpilling;
-        }
-
-        const auto pgmReturn = pb.Collect(pb.NarrowMap((pb.*wideLastCombinerCollable)(pb.ExpandMap(pb.ToFlow(list),
+        const auto pgmReturn = pb.Collect(pb.NarrowMap(WideLastCombiner<SPILLING>(pb, pb.ExpandMap(pb.ToFlow(list),
             [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
             [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
             [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) -> TRuntimeNode::TList {
@@ -1138,11 +1140,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
 
         const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
 
-        auto wideLastCombinerCollable = &TProgramBuilder::WideLastCombiner;
-        if (SPILLING) {
-            wideLastCombinerCollable = &TProgramBuilder::WideLastCombinerWithSpilling;
-        }
-        const auto pgmReturn = pb.Collect(pb.NarrowMap((pb.*wideLastCombinerCollable)(pb.ExpandMap(pb.ToFlow(list),
+        const auto pgmReturn = pb.Collect(pb.NarrowMap(WideLastCombiner<SPILLING>(pb, pb.ExpandMap(pb.ToFlow(list),
             [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
             [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
             [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) -> TRuntimeNode::TList {
@@ -1232,11 +1230,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
 
         const auto landmine = pb.NewDataLiteral<NUdf::EDataSlot::String>("ACHTUNG MINEN!");
 
-        auto wideLastCombinerCollable = &TProgramBuilder::WideLastCombiner;
-        if (SPILLING) {
-            wideLastCombinerCollable = &TProgramBuilder::WideLastCombinerWithSpilling;
-        }
-        const auto pgmReturn = pb.Collect(pb.NarrowMap((pb.*wideLastCombinerCollable)(pb.ExpandMap(pb.ToFlow(list),
+        const auto pgmReturn = pb.Collect(pb.NarrowMap(WideLastCombiner<SPILLING>(pb, pb.ExpandMap(pb.ToFlow(list),
             [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Unwrap(pb.Nth(item, 1U), landmine, __FILE__, __LINE__, 0), pb.Nth(item, 2U)}; }),
             [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
             [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) -> TRuntimeNode::TList {
@@ -1321,11 +1315,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
 
         const auto landmine = pb.NewDataLiteral<NUdf::EDataSlot::String>("ACHTUNG MINEN!");
 
-        auto wideLastCombinerCollable = &TProgramBuilder::WideLastCombiner;
-        if (SPILLING) {
-            wideLastCombinerCollable = &TProgramBuilder::WideLastCombinerWithSpilling;
-        }
-        const auto pgmReturn = pb.Collect(pb.NarrowMap((pb.*wideLastCombinerCollable)(pb.ExpandMap(pb.ToFlow(list),
+        const auto pgmReturn = pb.Collect(pb.NarrowMap(WideLastCombiner<SPILLING>(pb, pb.ExpandMap(pb.ToFlow(list),
             [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
             [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
             [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList {
@@ -1376,11 +1366,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
 
         const auto list = pb.NewList(tupleType, {data, data, data, data});
 
-        auto wideLastCombinerCollable = &TProgramBuilder::WideLastCombiner;
-        if (SPILLING) {
-            wideLastCombinerCollable = &TProgramBuilder::WideLastCombinerWithSpilling;
-        }
-        const auto pgmReturn = pb.Collect(pb.NarrowMap((pb.*wideLastCombinerCollable)(pb.ExpandMap(pb.ToFlow(list),
+        const auto pgmReturn = pb.Collect(pb.NarrowMap(WideLastCombiner<SPILLING>(pb, pb.ExpandMap(pb.ToFlow(list),
             [](TRuntimeNode) -> TRuntimeNode::TList { return {}; }),
             [](TRuntimeNode::TList items) { return items; },
             [](TRuntimeNode::TList, TRuntimeNode::TList items) { return items; },

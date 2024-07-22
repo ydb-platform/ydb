@@ -47,7 +47,7 @@ this.retryCtx = SessionRetryContext.create(tableClient).build();
 
 {% include [create_table.md](../_includes/steps/02_create_table.md) %}
 
-Для создания таблиц используется метод `Session.createTable()`:
+Для создания строковых таблиц используется метод `Session.createTable()`:
 
 ```java
 private void createTables() {
@@ -88,7 +88,7 @@ private void createTables() {
 }
 ```
 
-С помощью метода `Session.describeTable()` можно вывести информацию о структуре таблицы и убедиться, что она успешно создалась:
+С помощью метода `Session.describeTable()` можно вывести информацию о структуре строковой таблицы и убедиться, что она успешно создалась:
 
 ```java
 private void describeTables() {

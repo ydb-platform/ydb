@@ -15,7 +15,5 @@ SELECT
     CAST(release_date AS Date) AS release_date
 
 FROM series;
-
-COMMIT;
 ```
 

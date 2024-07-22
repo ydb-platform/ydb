@@ -23,7 +23,7 @@
 
 {% include [steps/02_create_table.md](steps/02_create_table.md) %}
 
-Для создания таблиц используется метод `CreateTable`:
+Для создания строковых таблиц используется метод `CreateTable`:
 
 ```c++
 //! Creates sample tables with CrateTable API.
@@ -40,7 +40,46 @@
     }));
 ```
 
-С помощью метода `DescribeTable` можно вывести информацию о структуре таблицы и убедиться, что она успешно создалась:
+Метод `CreateTable` не поддерживает создание колоночных таблиц. Их можно создать с помощью метода `ExecuteDataQuery`, который выполняет произвольные YQL-запросы:
+```c++
+static TStatus CreateColumnTable(TSession session, const TString& path,
+    TMaybe<TResultSet>& resultSet)
+{
+    auto query = Sprintf(R"(
+            CREATE TABLE series (
+            series_id Uint64 NOT NULL,
+            title Utf8,
+            series_info Utf8,
+            release_date Uint64,
+            PRIMARY KEY (series_id)
+            )
+            WITH (
+            STORE = COLUMN);
+        )", path.c_str());
+
+    auto txControl =
+        // Begin new transaction with SerializableRW mode
+        TTxControl::BeginTx(TTxSettings::SerializableRW())
+        // Commit transaction at the end of the query
+        .CommitTx();
+
+    // Executes data query with specified transaction control settings.
+    auto result = session.ExecuteDataQuery(query, txControl).GetValueSync();
+
+    if (result.IsSuccess()) {
+        // Index of result set corresponds to its order in YQL query
+        resultSet = result.GetResultSet(0);
+    }
+
+    return result;
+}    
+```
+
+Подробное использование метода `ExecuteDataQuery` описано в разделе [Запись данных](#write-queries).
+
+### Получение структуры таблиц (DescribeTable) {#get-tables-structure}
+
+С помощью метода `DescribeTable` можно вывести информацию о структуре таблицы и убедиться, что она была успешно создана:
 
 ```c++
     TMaybe<TTableDescription> desc;

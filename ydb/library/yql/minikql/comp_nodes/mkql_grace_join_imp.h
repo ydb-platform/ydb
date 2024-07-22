@@ -262,10 +262,6 @@ class TTable {
 
 public:
 
-    // Adds new tuple to the table.  intColumns, stringColumns - data of columns, 
-    // stringsSizes - sizes of strings columns.  Indexes of null-value columns
-    // in the form of bit array should be first values of intColumns.
-    void AddTuple(ui64* intColumns, char** stringColumns, ui32* stringsSizes, NYql::NUdf::TUnboxedValue * iColumns = nullptr);
 
     // Resets iterators. In case of join results table it also resets iterators for joined tables
     void ResetIterator();
@@ -335,6 +331,12 @@ public:
             ui64 numberOfDataIntColumns = 0, ui64 numberOfDataStringColumns = 0,
             ui64 numberOfKeyIColumns = 0, ui64 numberOfDataIColumns = 0, 
             ui64 nullsBitmapSize = 1, TColTypeInterface * colInterfaces = nullptr, bool isAny = false);
+
+    enum class EAddTupleResult { Added, Unmatched, AnyMatch };
+    // Adds new tuple to the table.  intColumns, stringColumns - data of columns,
+    // stringsSizes - sizes of strings columns.  Indexes of null-value columns
+    // in the form of bit array should be first values of intColumns.
+    EAddTupleResult AddTuple(ui64* intColumns, char** stringColumns, ui32* stringsSizes, NYql::NUdf::TUnboxedValue * iColumns = nullptr, const TTable &other = {});
     
     ~TTable();
 

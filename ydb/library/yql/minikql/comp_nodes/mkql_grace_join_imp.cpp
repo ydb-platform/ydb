@@ -13,7 +13,10 @@ namespace NMiniKQL {
 namespace GraceJoin {
 
 
-void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * stringsSizes, NYql::NUdf::TUnboxedValue * iColumns ) {
+TTable::EAddTupleResult TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * stringsSizes, NYql::NUdf::TUnboxedValue * iColumns, const TTable &other) {
+
+    if ((intColumns[0] & 1))
+        return EAddTupleResult::Unmatched;
 
     TotalPacked++;
 
@@ -99,7 +102,7 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
         if ( !AddKeysToHashTable(kh, keyIntVals.begin() + offset, iColumns) ) {
             keyIntVals.resize(offset);
             ++AnyFiltered_;
-            return;
+            return EAddTupleResult::AnyMatch;
         }
     }
 
@@ -147,6 +150,7 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
 
     TableBucketsStats[bucket].KeyIntValsTotalSize += keyIntVals.size() - offset;
     TableBucketsStats[bucket].StringValuesTotalSize += stringVals.size() - initialStringsSize;
+    return EAddTupleResult::Added;
 }
 
 void TTable::ResetIterator() {

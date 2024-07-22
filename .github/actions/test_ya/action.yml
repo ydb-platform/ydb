@@ -52,9 +52,9 @@ inputs:
     type: boolean
     default: true
     description: "run tests"
-  run_tests_retry_count:
-    type: int
-    default: 3
+  test_retry_count:
+    type: string
+    default: ""
     description: "how many times to retry failed tests"
 outputs:
   success:
@@ -114,6 +114,8 @@ runs:
           --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
           -DUSE_EAT_MY_DATA
         )
+
+        TEST_RETRY_COUNT=${{ inputs.test_retry_count }}
         
         case "$BUILD_PRESET" in
           debug)
@@ -136,25 +138,39 @@ runs:
               --build "release" --sanitize="address"
               -DDEBUGINFO_LINES_ONLY
             )
+            if [ $TEST_RETRY_COUNT -z ]; then
+              $TEST_RETRY_COUNT=1
+            fi
             ;;
           release-tsan)
             params+=(
               --build "release" --sanitize="thread"
               -DDEBUGINFO_LINES_ONLY
             )
+            if [ $TEST_RETRY_COUNT -z ]; then
+              $TEST_RETRY_COUNT=1
+            fi
             ;;
           release-msan)
             params+=(
               --build "release" --sanitize="memory"
               -DDEBUGINFO_LINES_ONLY
             )
+            if [ $TEST_RETRY_COUNT -z ]; then
+              $TEST_RETRY_COUNT=1
+            fi
             ;;
           *)
             echo "Invalid preset: $BUILD_PRESET"
             exit 1
             ;;
         esac
-        
+
+        if [ $TEST_RETRY_COUNT -z ]; then
+          # default is 3 for ordinary build and 1 for sanitizer builds
+          $TEST_RETRY_COUNT=3
+        fi
+    
         if [ ! -z "${{ inputs.additional_ya_make_args }}" ]; then
           params+=(${{ inputs.additional_ya_make_args }})
         fi
@@ -241,9 +257,7 @@ runs:
 
         BUILD_FAILED=0
 
-        RETRY_COUNT=${{ inputs.run_tests_retry_count }}
-
-        for RETRY in $(seq 1 $RETRY_COUNT)
+        for RETRY in $(seq 1 $TEST_RETRY_COUNT)
         do
           if [ ${{ inputs.testman_token }} ]; then
             # inititalize testmo session

@@ -259,6 +259,18 @@ runs:
 
         for RETRY in $(seq 1 $TEST_RETRY_COUNT)
         do
+          if [ $RETRY = $TEST_RETRY_COUNT ]; then
+            IS_LAST_RETRY=1
+          else
+            IS_LAST_RETRY=0
+          fi
+
+          if [ $RETRY = 1 ]; then
+            IS_FIRST_RETRY=1
+          else
+            IS_FIRST_RETRY=0
+          fi
+
           if [ ${{ inputs.testman_token }} ]; then
             # inititalize testmo session
             TESTMO_RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID_$RETRY"
@@ -280,7 +292,7 @@ runs:
 
           CURRENT_MESSAGE="**{platform_name}-${BUILD_PRESET}** is running..." 
           RERUN_FAILED_TESTS=""
-          if [ $RETRY = 1 ]; then
+          if [ $IS_FIRST_RETRY = 1 ]; then
             CURRENT_MESSAGE="Check $CURRENT_MESSAGE"
           else
             CURRENT_MESSAGE="Failed tests rerun (try $RETRY) $CURRENT_MESSAGE"
@@ -331,6 +343,7 @@ runs:
               --public_dir_url "$PUBLIC_DIR_URL" \
               --build_preset "$BUILD_PRESET" \
               --status_report_file statusrep.txt \
+              --is_last_retry $IS_LAST_RETRY \
               "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_JUNIT_XML_PATH"
           fi
 

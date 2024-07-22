@@ -92,8 +92,7 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         for (auto& indexChildItems : index.Base()->GetChildren()) {
             const auto& indexImplTableName = indexChildItems.first;
             const auto partId = NextPartId(nextId, result);
-            // all impl tables that ends with "tmp" should be used only for index creation and dropped when index build is finished
-            if (indexImplTableName.EndsWith("tmp")) {
+            if (NTableIndex::IsTmpImplTable(indexImplTableName)) {
                 result.push_back(DropIndexImplTable(context, index, nextId, partId, indexImplTableName, indexChildItems.second));
             } else {
                 result.push_back(FinalizeIndexImplTable(context, index, partId, indexImplTableName, indexChildItems.second));

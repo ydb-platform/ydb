@@ -24,5 +24,6 @@ inline constexpr const char* ImplTable = "indexImplTable";
 bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType type, const TTableColumns& table, const TIndexColumns& index, TString& explain);
 TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType type, const TTableColumns& table, const TIndexColumns& index);
 bool IsImplTable(std::string_view tableName);
+bool IsTmpImplTable(std::string_view tableName);
 
 }

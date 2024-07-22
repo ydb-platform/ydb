@@ -79,38 +79,18 @@ runs:
         # The whole dir will be uploaded to s3 with public (=wild internet) ACL
         export PUBLIC_DIR=$TMP_DIR/results
         echo "PUBLIC_DIR=$PUBLIC_DIR" >> $GITHUB_ENV
+        export PUBLIC_DIR_URL=$S3_URL_PREFIX
+        echo "PUBLIC_DIR_URL=$PUBLIC_DIR_URL" >> $GITHUB_ENV
         mkdir -p $PUBLIC_DIR
 
         export YA_MAKE_OUT_DIR=$TMP_DIR/out
         echo "YA_MAKE_OUT_DIR=$YA_MAKE_OUT_DIR" >> $GITHUB_ENV
         mkdir -p $YA_MAKE_OUT_DIR
 
-        export ARTIFACTS_DIR=$PUBLIC_DIR/artifacts
-        echo "ARTIFACTS_DIR=$ARTIFACTS_DIR" >> $GITHUB_ENV
-        echo "ARTIFACTS_DIR_URL=$S3_URL_PREFIX/artifacts" >> $GITHUB_ENV
-        mkdir -p $ARTIFACTS_DIR
-
-        export TEST_ARTIFACTS_DIR=$PUBLIC_DIR/test_artifacts
-        echo "TEST_ARTIFACTS_DIR=$TEST_ARTIFACTS_DIR" >> $GITHUB_ENV
-        echo "TEST_ARTIFACTS_DIR_URL=$S3_URL_PREFIX/test_artifacts" >> $GITHUB_ENV
-        mkdir -p $TEST_ARTIFACTS_DIR
-
-
         echo "JUNIT_REPORT_XML=$PUBLIC_DIR/junit.xml" >> $GITHUB_ENV
         echo "TESTMO_URL=${{ inputs.testman_url }}" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
-        
-        echo "YA_TEST_LOG=$PUBLIC_DIR/ya_log.log" >> $GITHUB_ENV
-        echo "YA_TEST_LOG_URL=$S3_URL_PREFIX/ya_log.log" >> $GITHUB_ENV
-
-
-        echo YA_MAKE_OUTPUT="$PUBLIC_DIR/ya_make_output.log" >>  $GITHUB_ENV
-        export YA_MAKE_OUTPUT_URL="$S3_URL_PREFIX/ya_make_output.log"
-        echo "YA_MAKE_OUTPUT_URL=$YA_MAKE_OUTPUT_URL" >> $GITHUB_ENV
-
-        # install test mo
-        npm install -g @testmo/testmo-cli
     
 
     - name: Upload tests result to testmo
@@ -126,6 +106,9 @@ runs:
         BRANCH_TAG="$GITHUB_REF_NAME"
         ARCH="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
         
+        # install test mo
+        npm install -g @testmo/testmo-cli
+
         case "$BUILD_PRESET" in
           relwithdebinfo)
             TESTMO_SOURCE="ya-${ARCH}"
@@ -165,7 +148,7 @@ runs:
             EXTRA_TAG=""
             ;;
         esac
-
+        echo "TESTMO_RUN_NAME=$TESTMO_RUN_NAME" >> $GITHUB_ENV 
         testmo automation:resources:add-link --name build --url "$RUN_URL" --resources testmo.json
         testmo automation:resources:add-field --name git-sha --type string --value "${GITHUB_SHA:0:7}" --resources testmo.json
         RUN_ID=$(
@@ -174,7 +157,8 @@ runs:
           --tags "$BRANCH_TAG" --tags "$EXTRA_TAG"
         )
         echo "runid=${RUN_ID}" >> $GITHUB_OUTPUT
-        echo "TEST_HISTORY_URL=${TESTMO_URL}/automation/runs/view/${RUN_ID}" >> $GITHUB_ENV
+        TEST_HISTORY_URL="${TESTMO_URL}/automation/runs/view/${RUN_ID}"
+        echo "TEST_HISTORY_URL=$TEST_HISTORY_URL" >> $GITHUB_ENV
 
         # Print test history link
         echo "10 [Test history](${TEST_HISTORY_URL})" >> $SUMMARY_LINKS
@@ -262,19 +246,22 @@ runs:
 
         echo "::debug::get version"
         ./ya --version
-        
+
+        YA_MAKE_OUTPUT="$PUBLIC_DIR/ya_make_output.log"
+        YA_MAKE_OUTPUT_URL="$PUBLIC_DIR_URL/ya_make_output.log"
+        echo "10 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
+        echo "YA_MAKE_OUTPUT_URL=$YA_MAKE_OUTPUT_URL" >> $GITHUB_ENV 
+
         echo "Build+Tests **{platform_name}-${BUILD_PRESET}** is running..." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
         set +ex
         (./ya make ${{ inputs.build_target }} "${params[@]}" \
-          --stat --log-file "$YA_TEST_LOG" -DCONSISTENT_DEBUG \
+          --stat --log-file "$PUBLIC_DIR/ya_log.log" -DCONSISTENT_DEBUG \
           --no-dir-outputs --test-failure-code 0 --build-all \
           --cache-size 2TB --force-build-depends --evlog-file "$PUBLIC_DIR/ya_evlog.jsonl" \
           --junit "$JUNIT_REPORT_XML" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& tee $YA_MAKE_OUTPUT
         set -e
         RC=`cat exit_code`
 
-        echo "10 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
-        echo "20 [Ya logs]($YA_TEST_LOG_URL)" >> $SUMMARY_LINKS
 
         if [ $RC -ne 0 ]; then
           echo "ya make returned $RC, build failed"
@@ -315,13 +302,12 @@ runs:
         # postprocess junit report
         .github/scripts/tests/transform-ya-junit.py -i \
           -m .github/config/muted_ya.txt \
-          --ya-out "$YA_MAKE_OUT_DIR" \
-          --log-url-prefix "$ARTIFACTS_DIR_URL/logs/" \
-          --log-out-dir "$ARTIFACTS_DIR/logs/" \
-          --test-stuff-out "$TEST_ARTIFACTS_DIR/" \
-          --test-stuff-prefix "$TEST_ARTIFACTS_DIR_URL/" \
+          --ya_out "$YA_MAKE_OUT_DIR" \
+          --public_dir "$PUBLIC_DIR" \
+          --public_dir_url "$PUBLIC_DIR_URL" \
+          --log_out_dir "artifacts/logs/" \
+          --test_stuff_out "test_artifacts/" \
           "$JUNIT_REPORT_XML"
-  
     
     - name: Test history upload results to YDB
       if: inputs.run_tests
@@ -342,8 +328,9 @@ runs:
         echo "JOB_NAME=${JOB_NAME}"
         echo "JOB_ID=${JOB_ID}"
         echo "GITHUB_REF_NAME=${GITHUB_REF_NAME}"
-        
-        result=`.github/scripts/upload_tests_results.py --test-results-file ${JUNIT_REPORT_XML} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull ${PR_NUMBER} --job-name ${JOB_NAME} --job-id ${JOB_ID} --branch ${GITHUB_REF_NAME}`
+
+        run_name="${TESTMO_RUN_NAME// /"_"}"
+        result=`.github/scripts/upload_tests_results.py --test-results-file ${JUNIT_REPORT_XML} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull $run_name --job-name ${JOB_NAME} --job-id ${JOB_ID} --branch ${GITHUB_REF_NAME}`
 
     - name: Unit test history upload results
       if: inputs.testman_token && inputs.run_tests
@@ -403,15 +390,12 @@ runs:
           exit 0
         fi
 
-        mkdir $ARTIFACTS_DIR/summary/
-
         .github/scripts/tests/generate-summary.py \
-          --summary-out-path $ARTIFACTS_DIR/summary/ \
-          --summary-url-prefix $ARTIFACTS_DIR_URL/summary/ \
-          --test-history-url "$TEST_HISTORY_URL" \
-          --test-log-url="$YA_TEST_LOG_URL" \
-          --build-preset "$BUILD_PRESET" \
-          --status-report-file statusrep.txt \
+          --summary_links "$SUMMARY_LINKS" \
+          --public_dir "$PUBLIC_DIR" \
+          --public_dir_url "$PUBLIC_DIR_URL" \
+          --build_preset "$BUILD_PRESET" \
+          --status_report_file statusrep.txt \
           "Tests" ya-test.html "$JUNIT_REPORT_XML"
 
         teststatus=$(cat statusrep.txt)
@@ -441,7 +425,7 @@ runs:
         set -x
         echo "::group::s3-sync"
         .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/"
-        echo "00 [Workflow run results](${S3_URL_PREFIX}/index.html)" >> $SUMMARY_LINKS
+        echo "00 [Workflow artifacts](${S3_URL_PREFIX}/index.html)" >> $SUMMARY_LINKS
         s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"     
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
         echo "::endgroup::"

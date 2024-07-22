@@ -266,7 +266,6 @@ class KikimrConfigGenerator(object):
 
         if disable_iterator_reads:
             self.yaml_config["table_service_config"]["enable_kqp_scan_query_source_read"] = False
-            self.yaml_config["table_service_config"]["enable_kqp_data_query_source_read"] = False
 
         if disable_iterator_lookups:
             self.yaml_config["table_service_config"]["enable_kqp_scan_query_stream_lookup"] = False

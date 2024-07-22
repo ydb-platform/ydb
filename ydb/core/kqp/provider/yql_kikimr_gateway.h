@@ -64,7 +64,7 @@ struct TIndexDescription {
         GlobalSync = 0,
         GlobalAsync = 1,
         GlobalSyncUnique = 2,
-        GlobalSyncVectorKMeansTree = 3
+        GlobalSyncVectorKMeansTree = 3,
     };
 
     // Index states here must be in sync with NKikimrSchemeOp::EIndexState protobuf

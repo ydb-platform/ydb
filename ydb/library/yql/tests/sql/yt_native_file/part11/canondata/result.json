@@ -1810,9 +1810,9 @@
     ],
     "test.test[pg-select_common_type_unionall--Debug]": [
         {
-            "checksum": "2c375b992f5c040197e02d26ccd11b79",
+            "checksum": "17bff30ff796f8489122ccfbc5304b95",
             "size": 9270,
-            "uri": "https://{canondata_backend}/1777230/3357002b611e7f8663adc13ea32a922e1953fa56/resource.tar.gz#test.test_pg-select_common_type_unionall--Debug_/opt.yql"
+            "uri": "https://{canondata_backend}/1817427/d985c28930b4dca23a560c12b64159306cff752e/resource.tar.gz#test.test_pg-select_common_type_unionall--Debug_/opt.yql"
         }
     ],
     "test.test[pg-select_common_type_unionall--Plan]": [
@@ -2188,9 +2188,9 @@
     ],
     "test.test[pg_catalog-user-default.txt-Debug]": [
         {
-            "checksum": "a3ac463405bd37eba6e90620a124fe96",
-            "size": 673,
-            "uri": "https://{canondata_backend}/1031349/e0d85027c4e39b38b460c0dbc0618a662f8a1dc3/resource.tar.gz#test.test_pg_catalog-user-default.txt-Debug_/opt.yql"
+            "checksum": "f3befc2c7ccd151ec1627935713e944f",
+            "size": 768,
+            "uri": "https://{canondata_backend}/1899731/8e3863ca69967a81b91196b65004961a7c52e2a5/resource.tar.gz#test.test_pg_catalog-user-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg_catalog-user-default.txt-Plan]": [
@@ -2202,9 +2202,9 @@
     ],
     "test.test[pg_catalog-user-default.txt-Results]": [
         {
-            "checksum": "231a565780cbd001099daeb95dc7ed4e",
-            "size": 4182,
-            "uri": "https://{canondata_backend}/1900335/b19e3a88f54bb49e1964c45fd96be88e34fd38d0/resource.tar.gz#test.test_pg_catalog-user-default.txt-Results_/results.txt"
+            "checksum": "fdb8e5ac8f1bed8efea16c30e07a0286",
+            "size": 4872,
+            "uri": "https://{canondata_backend}/1899731/8e3863ca69967a81b91196b65004961a7c52e2a5/resource.tar.gz#test.test_pg_catalog-user-default.txt-Results_/results.txt"
         }
     ],
     "test.test[produce-process_with_lambda-default.txt-Debug]": [

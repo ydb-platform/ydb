@@ -73,7 +73,7 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
                 ++fetchedChunks;
             } else {
                 defaultBlocks.emplace(c->GetAddress(),
-                    TPortionInfo::TAssembleBlobInfo(c->GetMeta().GetNumRows(), Schema->GetDefaultValueVerified(c->GetColumnId())));
+                    TPortionInfo::TAssembleBlobInfo(c->GetMeta().GetNumRows(), Schema->GetExternalDefaultValueVerified(c->GetColumnId())));
                 ++nullChunks;
             }
             itFinished = !itFilter.Next(c->GetMeta().GetNumRows());
@@ -240,13 +240,14 @@ void TCommittedDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>&
         AFL_VERIFY(GetStageData().GetBlobs().size() == 1);
         auto bData = MutableStageData().ExtractBlob(GetStageData().GetBlobs().begin()->first);
         auto schema = GetContext()->GetReadMetadata()->GetBlobSchema(CommittedBlob.GetSchemaVersion());
-        auto batch = NArrow::DeserializeBatch(bData, schema);
-        AFL_VERIFY(batch)("schema", schema->ToString());
-        batch = GetContext()->GetReadMetadata()->GetIndexInfo().AddSnapshotColumns(batch, CommittedBlob.GetSnapshot());
-        batch = GetContext()->GetReadMetadata()->GetIndexInfo().AddDeleteFlagsColumn(batch, CommittedBlob.GetIsDelete());
+        auto rBatch = NArrow::DeserializeBatch(bData, std::make_shared<arrow::Schema>(CommittedBlob.GetSchemaSubset().Apply(schema->fields())));
+        AFL_VERIFY(rBatch)("schema", schema->ToString());
+        auto batch = std::make_shared<NArrow::TGeneralContainer>(rBatch);
+        GetContext()->GetReadMetadata()->GetIndexInfo().AddSnapshotColumns(*batch, CommittedBlob.GetSnapshot());
+        GetContext()->GetReadMetadata()->GetIndexInfo().AddDeleteFlagsColumn(*batch, CommittedBlob.GetIsDelete());
         MutableStageData().AddBatch(batch);
     }
-    MutableStageData().SyncTableColumns(columns->GetSchema()->fields());
+    MutableStageData().SyncTableColumns(columns->GetSchema()->fields(), *GetContext()->GetReadMetadata()->GetResultSchema());
 }
 
 }   // namespace NKikimr::NOlap::NReader::NPlain

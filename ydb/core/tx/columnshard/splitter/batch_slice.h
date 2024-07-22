@@ -65,13 +65,13 @@ protected:
     std::shared_ptr<NColumnShard::TSplitterCounters> Counters;
     TGeneralSerializedSlice() = default;
 
-    const TSplittedEntity& GetEntityDataVerified(const ui32& entityId) const {
+    const TSplittedEntity& GetEntityDataVerified(const ui32 entityId) const {
         for (auto&& i : Data) {
             if (i.GetEntityId() == entityId) {
                 return i;
             }
         }
-        Y_ABORT_UNLESS(false);
+        AFL_VERIFY(false)("id", entityId);
         return Data.front();
     }
     bool GroupBlobsImpl(const NSplitter::TGroupFeatures& features, std::vector<TSplittedBlob>& blobs);

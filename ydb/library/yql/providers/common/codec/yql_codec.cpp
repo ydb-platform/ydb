@@ -1281,7 +1281,7 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type, ui64 nativeYtTypeFlags,
         }
         auto itemType = static_cast<TOptionalType*>(type)->GetItemType();
         if (isTableFormat && (nativeYtTypeFlags & ENativeTypeCompatFlags::NTCF_COMPLEX)) {
-            if (itemType->GetKind() == TType::EKind::Optional) {
+            if (itemType->GetKind() == TType::EKind::Optional || itemType->GetKind() == TType::EKind::Pg) {
                 CHECK_EXPECTED(cmd, BeginListSymbol);
                 cmd = buf.Read();
                 auto value = ReadYsonValue(itemType, nativeYtTypeFlags, holderFactory, cmd, buf, isTableFormat);
@@ -2412,11 +2412,11 @@ void WriteYsonValueInTableFormat(TOutputBuf& buf, TType* type, ui64 nativeYtType
         auto itemType = static_cast<TOptionalType*>(type)->GetItemType();
         if (nativeYtTypeFlags & ENativeTypeCompatFlags::NTCF_COMPLEX) {
             if (value) {
-                if (itemType->GetKind() == TType::EKind::Optional) {
+                if (itemType->GetKind() == TType::EKind::Optional || itemType->GetKind() == TType::EKind::Pg) {
                     buf.Write(BeginListSymbol);
                 }
                 WriteYsonValueInTableFormat(buf, itemType, nativeYtTypeFlags, value.GetOptionalValue(), false);
-                if (itemType->GetKind() == TType::EKind::Optional) {
+                if (itemType->GetKind() == TType::EKind::Optional || itemType->GetKind() == TType::EKind::Pg) {
                     buf.Write(ListItemSeparatorSymbol);
                     buf.Write(EndListSymbol);
                 }
@@ -2497,7 +2497,7 @@ void WriteYsonValueInTableFormat(TOutputBuf& buf, TType* type, ui64 nativeYtType
 
     case TType::EKind::Pg: {
         auto pgType = static_cast<TPgType*>(type);
-        WriteYsonValueInTableFormatPg(buf, pgType, value);
+        WriteYsonValueInTableFormatPg(buf, pgType, value, topLevel);
         break;
     }
 

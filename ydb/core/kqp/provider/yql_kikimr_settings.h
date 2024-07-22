@@ -51,6 +51,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> EnableLlvm;
     NCommon::TConfSetting<NDq::EHashJoinMode, false> HashJoinMode;
     NCommon::TConfSetting<TString, false> OverrideStatistics;
+    NCommon::TConfSetting<ui64, false> EnableSpillingNodes;
 
     /* Disable optimizer rules */
     NCommon::TConfSetting<bool, false> OptDisableTopSort;
@@ -82,6 +83,7 @@ struct TKikimrSettings {
     bool HasOptEnableOlapPushdown() const;
     bool HasOptEnableOlapProvideComputeSharding() const;
     bool HasOptUseFinalizeByKey() const;
+    ui64 GetEnabledSpillingNodes() const;
 
     EOptionalFlag GetOptPredicateExtract() const;
     EOptionalFlag GetUseLlvm() const;
@@ -143,7 +145,6 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     NKikimrConfig::TFeatureFlags FeatureFlags;
 
     bool EnableKqpScanQuerySourceRead = false;
-    bool EnableKqpDataQuerySourceRead = false;
     bool EnableKqpScanQueryStreamLookup = false;
     bool EnableKqpDataQueryStreamLookup = false;
     bool EnableKqpScanQueryStreamIdxLookupJoin = false;

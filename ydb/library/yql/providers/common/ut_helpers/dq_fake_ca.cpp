@@ -55,7 +55,7 @@ void TFakeActor::InitAsyncInput(IDqComputeActorAsyncInput* dqAsyncInput, IActor*
     DqAsyncInputAsActor = dqAsyncInputAsActor;
 }
 
-void TFakeActor::Terminate() {
+void TFakeActor::Terminate(std::shared_ptr<std::atomic<bool>> done) {
     if (DqAsyncInputActorId) {
         DqAsyncInput->PassAway();
 
@@ -71,6 +71,7 @@ void TFakeActor::Terminate() {
         DqAsyncOutput = nullptr;
         DqAsyncOutputAsActor = nullptr;
     }
+    done->store(true);
 }
 
 TFakeActor::TAsyncOutputCallbacks& TFakeActor::GetAsyncOutputCallbacks() {
@@ -101,9 +102,14 @@ TFakeCASetup::TFakeCASetup()
 }
 
 TFakeCASetup::~TFakeCASetup() {
-    Execute([](TFakeActor& actor) {
-        actor.Terminate();
+    auto shouldStop = std::make_shared<std::atomic<bool>>(); 
+    Execute([shouldStop](TFakeActor& actor) {
+        actor.Terminate(shouldStop);
     });
+
+    while (!*shouldStop) {
+        Sleep(TDuration::MilliSeconds(200));
+    }
 }
 
 void TFakeCASetup::AsyncOutputWrite(const TWriteValueProducer valueProducer, TMaybe<NDqProto::TCheckpoint> checkpoint, bool finish) {

@@ -32,9 +32,9 @@ message TLoadControlConfig {
 message TWorkloadManagerConfig {
     message TResourcePool {
         string Name = 1;
-        int64 ConcurrentQueryLimit = 2;
-        int64 QueueSize = 3;
-        int64 DatabaseLoadCpuThreshold = 4;
+        int32 ConcurrentQueryLimit = 2;
+        int32 QueueSize = 3;
+        double DatabaseLoadCpuThreshold = 4;
     }
 
     bool Enable = 1;

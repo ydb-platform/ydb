@@ -271,7 +271,12 @@ public:
 
     void Handle(const TEvYdbCompute::TEvCreateResourcePoolResponse::TPtr& ev) {
         const auto& status = ev.Get()->Get()->Status;
-        if (!status.IsSuccess() && status.GetStatus() != NYdb::EStatus::ALREADY_EXISTS) {
+        if (IsPathExistsIssue(status)) {
+            if (AlterResourcePool(ev.Get()->Cookie)) {
+                return;
+            }
+        }
+        if (!status.IsSuccess()) {
             LOG_E("Create resource pool response (error): " << ProcessedResourcePools << " of " << WorkloadManagerConfig.ResourcePoolSize() << ", issues = " << status.GetIssues().ToOneLineString());
             Issues.AddIssues(status.GetIssues());
             ProcessCreateResourcePool();
@@ -612,14 +617,15 @@ private:
 
     void CreateResourcePools() {
         using namespace fmt::literals;
-        for (const auto& resourcePool: WorkloadManagerConfig.GetResourcePool()) {
+        for (size_t i = 0; i < WorkloadManagerConfig.ResourcePoolSize(); i++) {
+            const auto& resourcePool = WorkloadManagerConfig.GetResourcePool(i);
             Client
                 ->RetryOperation([resourcePool](NYdb::NTable::TSession session) {    
                     return session.ExecuteSchemeQuery(fmt::format(R"(
                         CREATE RESOURCE POOL `{resource_pool_name}` WITH (
-                            CONCURRENT_QUERY_LIMIT={concurrent_query_limit},
-                            QUEUE_SIZE={queue_size},
-                            DATABASE_LOAD_CPU_THRESHOLD={database_load_cpu_threshold}
+                            CONCURRENT_QUERY_LIMIT="{concurrent_query_limit}",
+                            QUEUE_SIZE="{queue_size}",
+                            DATABASE_LOAD_CPU_THRESHOLD="{database_load_cpu_threshold}"
                         );
                     )",
                     "resource_pool_name"_a = resourcePool.GetName(),
@@ -627,14 +633,46 @@ private:
                     "queue_size"_a = resourcePool.GetQueueSize(),
                     "database_load_cpu_threshold"_a = resourcePool.GetDatabaseLoadCpuThreshold()));
                 })
-                .Subscribe([actorSystem = TActivationContext::ActorSystem(), self = SelfId()](const NYdb::TAsyncStatus& future) {
-                    actorSystem->Send(self, new TEvYdbCompute::TEvCreateResourcePoolResponse(ExtractStatus(future)));;
+                .Subscribe([actorSystem = TActivationContext::ActorSystem(), self = SelfId(), i](const NYdb::TAsyncStatus& future) {
+                    actorSystem->Send(self, new TEvYdbCompute::TEvCreateResourcePoolResponse(ExtractStatus(future)), 0, i);
                 });
         }
 
         if (WorkloadManagerConfig.GetResourcePool().empty()) {
             SendFinalModifyDatabase();
         }
+    }
+
+    static bool IsPathExistsIssue(const NYdb::TStatus& status) {
+        return status.GetIssues().ToOneLineString().Contains("error: path exist");
+    }
+
+    bool AlterResourcePool(size_t index) {
+        using namespace fmt::literals;
+        if (index >= WorkloadManagerConfig.ResourcePoolSize()) {
+            LOG_E("Alter resource pool has been failed. Invalid index: " << index << " of " << WorkloadManagerConfig.ResourcePoolSize());
+            Issues.AddIssue(TStringBuilder{} << "Alter resource pool has been failed. Invalid index: " << index << " of " << WorkloadManagerConfig.ResourcePoolSize());
+            return false;
+        }
+        const auto& resourcePool = WorkloadManagerConfig.GetResourcePool(index);
+        Client
+            ->RetryOperation([resourcePool](NYdb::NTable::TSession session) {    
+                return session.ExecuteSchemeQuery(fmt::format(R"(
+                    ALTER RESOURCE POOL `{resource_pool_name}` SET (
+                        CONCURRENT_QUERY_LIMIT="{concurrent_query_limit}",
+                        QUEUE_SIZE="{queue_size}",
+                        DATABASE_LOAD_CPU_THRESHOLD="{database_load_cpu_threshold}"
+                    );
+                )",
+                "resource_pool_name"_a = resourcePool.GetName(),
+                "concurrent_query_limit"_a = resourcePool.GetConcurrentQueryLimit(),
+                "queue_size"_a = resourcePool.GetQueueSize(),
+                "database_load_cpu_threshold"_a = resourcePool.GetDatabaseLoadCpuThreshold()));
+            })
+            .Subscribe([actorSystem = TActivationContext::ActorSystem(), self = SelfId(), index](const NYdb::TAsyncStatus& future) {
+                actorSystem->Send(self, new TEvYdbCompute::TEvCreateResourcePoolResponse(ExtractStatus(future)), 0, index);
+            });
+        return true;
     }
 
     template<typename T>

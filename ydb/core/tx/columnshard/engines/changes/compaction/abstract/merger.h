@@ -8,7 +8,7 @@ private:
     bool Started = false;
 
     virtual std::vector<TColumnPortionResult> DoExecute(
-        const NCompaction::TColumnMergeContext& context, const std::shared_ptr<arrow::RecordBatch>& remap) = 0;
+        const NCompaction::TColumnMergeContext& context, const arrow::UInt16Array& pIdxArray, const arrow::UInt32Array& pRecordIdxArray) = 0;
     virtual void DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input) = 0;
 
 public:
@@ -29,7 +29,19 @@ public:
 
     std::vector<TColumnPortionResult> Execute(
         const NCompaction::TColumnMergeContext& context, const std::shared_ptr<arrow::RecordBatch>& remap) {
-        return DoExecute(context, remap);
+
+        auto columnPortionIdx = remap->GetColumnByName(IColumnMerger::PortionIdFieldName);
+        auto columnPortionRecordIdx = remap->GetColumnByName(IColumnMerger::PortionRecordIndexFieldName);
+        Y_ABORT_UNLESS(columnPortionIdx && columnPortionRecordIdx);
+        Y_ABORT_UNLESS(columnPortionIdx->type_id() == arrow::UInt16Type::type_id);
+        Y_ABORT_UNLESS(columnPortionRecordIdx->type_id() == arrow::UInt32Type::type_id);
+        const arrow::UInt16Array& pIdxArray = static_cast<const arrow::UInt16Array&>(*columnPortionIdx);
+        const arrow::UInt32Array& pRecordIdxArray = static_cast<const arrow::UInt32Array&>(*columnPortionRecordIdx);
+
+        AFL_VERIFY(remap->num_rows() == pIdxArray.length());
+        AFL_VERIFY(remap->num_rows() == pRecordIdxArray.length());
+
+        return DoExecute(context, pIdxArray, pRecordIdxArray);
     }
 };
 

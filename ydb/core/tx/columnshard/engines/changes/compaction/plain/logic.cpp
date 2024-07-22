@@ -9,18 +9,9 @@ void TPlainMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::
 }
 
 std::vector<NKikimr::NOlap::NCompaction::TColumnPortionResult> TPlainMerger::DoExecute(
-    const NCompaction::TColumnMergeContext& context, const std::shared_ptr<arrow::RecordBatch>& remap) {
+    const NCompaction::TColumnMergeContext& context, const arrow::UInt16Array& pIdxArray, const arrow::UInt32Array& pRecordIdxArray) {
     NCompaction::TMergedColumn mColumn(context);
 
-    auto columnPortionIdx = remap->GetColumnByName(IColumnMerger::PortionIdFieldName);
-    auto columnPortionRecordIdx = remap->GetColumnByName(IColumnMerger::PortionRecordIndexFieldName);
-    Y_ABORT_UNLESS(columnPortionIdx && columnPortionRecordIdx);
-    Y_ABORT_UNLESS(columnPortionIdx->type_id() == arrow::UInt16Type::type_id);
-    Y_ABORT_UNLESS(columnPortionRecordIdx->type_id() == arrow::UInt32Type::type_id);
-    const arrow::UInt16Array& pIdxArray = static_cast<const arrow::UInt16Array&>(*columnPortionIdx);
-    const arrow::UInt32Array& pRecordIdxArray = static_cast<const arrow::UInt32Array&>(*columnPortionRecordIdx);
-
-    AFL_VERIFY(remap->num_rows() == pIdxArray.length());
     std::optional<ui16> predPortionIdx;
     for (ui32 idx = 0; idx < pIdxArray.length(); ++idx) {
         const ui16 portionIdx = pIdxArray.Value(idx);
@@ -35,7 +26,7 @@ std::vector<NKikimr::NOlap::NCompaction::TColumnPortionResult> TPlainMerger::DoE
         }
         predPortionIdx = portionIdx;
     }
-    AFL_VERIFY(remap->num_rows() == mColumn.GetRecordsCount());
+    AFL_VERIFY(pIdxArray.length() == mColumn.GetRecordsCount());
     return mColumn.BuildResult();
 }
 

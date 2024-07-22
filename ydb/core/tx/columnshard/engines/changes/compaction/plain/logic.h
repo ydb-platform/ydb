@@ -10,8 +10,8 @@ private:
     std::vector<NCompaction::TPortionColumnCursor> Cursors;
     virtual void DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input) override;
 
-    virtual std::vector<TColumnPortionResult> DoExecute(
-        const NCompaction::TColumnMergeContext& context, const std::shared_ptr<arrow::RecordBatch>& remap) override;
+    virtual std::vector<TColumnPortionResult> DoExecute(const NCompaction::TColumnMergeContext& context, const arrow::UInt16Array& pIdxArray,
+        const arrow::UInt32Array& pRecordIdxArray) override;
 
 public:
 };

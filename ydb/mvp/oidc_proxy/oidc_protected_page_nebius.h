@@ -141,7 +141,9 @@ private:
 
     void RequestAuthorizationCode(const NActors::TActorContext& ctx) {
         LOG_DEBUG_S(ctx, EService::MVP, "Request authorization code");
-        NHttp::THttpOutgoingResponsePtr httpResponse = GetHttpOutgoingResponsePtr(TStringBuf(), Request, Settings, IsAjaxRequest);
+        NHttp::THeadersBuilder responseHeaders;
+        responseHeaders.Set("Set-Cookie", TStringBuilder() << CreateNameSessionCookie(Settings.ClientId) << "=; Max-Age=0");
+        NHttp::THttpOutgoingResponsePtr httpResponse = GetHttpOutgoingResponsePtr(TStringBuf(), Request, Settings, responseHeaders, IsAjaxRequest);
         ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
         Die(ctx);
     }

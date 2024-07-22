@@ -37,7 +37,7 @@ bool TryAppendAuthEndpointFromDetailsYandexProfile(const TRedirectUrlParameters&
 >>>>>>> 8e0d57db1b (rewrite GetTableClient)
 =======
     NMVP::EAccessServiceType AccessServiceType;
-    TStringBuf AuthEndpoint;
+    TStringBuf AuthUrlPath;
 };
 
 bool TryAppendAuthEndpointFromDetailsYandexProfile(const TRedirectUrlParameters& parameters, TStringBuilder& locationHeaderValue) {
@@ -139,10 +139,14 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(TStringBuf eventDetai
                                                     .Host = request->Host,
                                                     .AccessServiceType = settings.AccessServiceType,
 <<<<<<< HEAD
+<<<<<<< HEAD
                                                     .AuthUrlPath = settings.AuthUrlPath});
 =======
                                                     .AuthEndpoint = settings.AuthEndpoint});
 >>>>>>> b14ae95980 (renamed EAuth profile to EAccessServiceTypeEAccessServiceType)
+=======
+                                                    .AuthUrlPath = settings.AuthUrlPath});
+>>>>>>> 0aa912e2da (renamed path url)
     const size_t cookieMaxAgeSec = 420;
     TStringBuilder setCookieBuilder;
     setCookieBuilder << CreateNameYdbOidcCookie(settings.ClientSecret, state) << "=" << GenerateCookie(state, GetRequestedUrl(request, isAjaxRequest), settings.ClientSecret, isAjaxRequest)
@@ -189,6 +193,6 @@ const TString& GetAuthCallbackUrl() {
 TString CreateSecureCookie(const TString& key, const TString& value) {
     TStringBuilder cookieBuilder;
     cookieBuilder << CreateNameSessionCookie(key) << "=" << Base64Encode(value)
-            << "; Path=/; Secure; HttpOnly; SameSite=Lax";
+            << "; Path=/; Secure; HttpOnly; SameSite=None; Partitioned";
     return cookieBuilder;
 }

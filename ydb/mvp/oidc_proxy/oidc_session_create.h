@@ -38,15 +38,13 @@ protected:
     bool IsAjaxRequest = false;
     NHttp::THeadersBuilder ResponseHeaders;
 
-    virtual void RemoveAppliedCookie(const TString& cookieName) = 0;
-
     bool IsStateValid(const TString& state, const NHttp::TCookies& cookies, const NActors::TActorContext& ctx) {
         const TString cookieName {CreateNameYdbOidcCookie(Settings.ClientSecret, state)};
         if (!cookies.Has(cookieName)) {
             LOG_DEBUG_S(ctx, EService::MVP, "Check state: Cannot find cookie " << cookieName);
             return false;
         }
-        RemoveAppliedCookie(cookieName);
+        ResponseHeaders.Set("Set-Cookie", TStringBuilder() << cookieName << "=; Path=" << GetAuthCallbackUrl() << "; Max-Age=0");
         TString cookieStruct = Base64Decode(cookies.Get(cookieName));
         TString stateStruct;
         TString expectedDigest;

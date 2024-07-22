@@ -36,11 +36,17 @@ struct TOpenIdConnectSettings {
     NMVP::EAuthProfile AuthProfile = NMVP::EAuthProfile::YandexV2;
 =======
     NMVP::EAccessServiceType AccessServiceType = NMVP::EAccessServiceType::YandexV2;
+<<<<<<< HEAD
 >>>>>>> b14ae95980 (renamed EAuth profile to EAccessServiceTypeEAccessServiceType)
     TString AuthEndpoint = DEFAULT_AUTH_ENDPOINT;
     TString TokenEndpoint = DEFAULT_TOKEN_ENDPOINT;
     TString ExchangeEndpoint = DEFAULT_EXCHANGE_ENDPOINT;
 >>>>>>> 8e0d57db1b (rewrite GetTableClient)
+=======
+    TString AuthUrlPath = DEFAULT_AUTH_URL_PATH;
+    TString TokenUrlPath = DEFAULT_TOKEN_URL_PATH;
+    TString ExchangeUrlPath = DEFAULT_EXCHANGE_URL_PATH;
+>>>>>>> 0aa912e2da (renamed path url)
 
     TString GetAuthorizationString() const {
         return "Basic " + Base64Encode(ClientId + ":" + ClientSecret);

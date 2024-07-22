@@ -274,7 +274,8 @@ runs:
           fi
           echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
-          CURRENT_PUBLIC_DIR=$PUBLIC_DIR/try_$RETRY
+          CURRENT_PUBLIC_DIR_RELATIVE=try_$RETRY
+          CURRENT_PUBLIC_DIR=$PUBLIC_DIR/$CURRENT_PUBLIC_DIR_RELATIVE
           mkdir $CURRENT_PUBLIC_DIR
 
           CURRENT_JUNIT_XML_PATH=$CURRENT_PUBLIC_DIR/junit.xml
@@ -298,13 +299,14 @@ runs:
           gzip -c $CURRENT_JUNIT_XML_PATH > $CURRENT_PUBLIC_DIR/orig_junit.xml.gz
 
           # postprocess junit report
+          # TODO relative log out and test stuff
           .github/scripts/tests/transform-ya-junit.py -i \
             -m .github/config/muted_ya.txt \
             --ya_out "$YA_MAKE_OUT_DIR" \
             --public_dir "$PUBLIC_DIR" \
             --public_dir_url "$PUBLIC_DIR_URL" \
-            --log_out_dir "$CURRENT_PUBLIC_DIR/artifacts/logs/" \
-            --test_stuff_out "$CURRENT_PUBLIC_DIR/test_artifacts/" \
+            --log_out_dir "$CURRENT_PUBLIC_DIR_RELATIVE/artifacts/logs/" \
+            --test_stuff_out "$CURRENT_PUBLIC_DIR_RELATIVE/test_artifacts/" \
             "$CURRENT_JUNIT_XML_PATH"
           cp $CURRENT_JUNIT_XML_PATH $JUNIT_REPORT_XML
 

@@ -170,10 +170,10 @@ private:
             consumersConsumption += consumers.back().Consumption;
         }
 
-        // allocatedMemory = externalConsumption + consumersConsumption
-        ui64 externalConsumption = SafeDiff(processMemoryInfo.AllocatedMemory, consumersConsumption);
-        // targetConsumersConsumption + externalConsumption = targetUtilizationBytes
-        ui64 targetConsumersConsumption = SafeDiff(targetUtilizationBytes, externalConsumption);
+        // allocatedMemory = otherConsumption + consumersConsumption
+        ui64 otherConsumption = SafeDiff(processMemoryInfo.AllocatedMemory, consumersConsumption);
+        // targetConsumersConsumption + otherConsumption = targetUtilizationBytes
+        ui64 targetConsumersConsumption = SafeDiff(targetUtilizationBytes, otherConsumption);
 
         // want to find maximum possible coefficient in range [0..1] so that
         // Sum(
@@ -194,7 +194,7 @@ private:
         LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Periodic memory stats:"
             << " AnonRss: " << processMemoryInfo.AnonRss << " CGroupLimit: " << processMemoryInfo.CGroupLimit << " AllocatedMemory: " << processMemoryInfo.AllocatedMemory
             << " HardLimitBytes: " << hardLimitBytes << " SoftLimitBytes: " << softLimitBytes << " TargetUtilizationBytes: " << targetUtilizationBytes
-            << " ConsumersConsumption: " << consumersConsumption << " ExternalConsumption: " << externalConsumption 
+            << " ConsumersConsumption: " << consumersConsumption << " OtherConsumption: " << otherConsumption 
             << " TargetConsumersConsumption: " << targetConsumersConsumption << " ResultingConsumersConsumption: " << resultingConsumersConsumption
             << " Coefficient: " << coefficient);
         Counters->GetCounter("Stats/AnonRss")->Set(processMemoryInfo.AnonRss.value_or(0));
@@ -205,7 +205,7 @@ private:
         Counters->GetCounter("Stats/SoftLimitBytes")->Set(softLimitBytes);
         Counters->GetCounter("Stats/TargetUtilizationBytes")->Set(targetUtilizationBytes);
         Counters->GetCounter("Stats/ConsumersConsumption")->Set(consumersConsumption);
-        Counters->GetCounter("Stats/ExternalConsumption")->Set(externalConsumption);
+        Counters->GetCounter("Stats/OtherConsumption")->Set(otherConsumption);
         Counters->GetCounter("Stats/TargetConsumersConsumption")->Set(targetConsumersConsumption);
         Counters->GetCounter("Stats/ResultingConsumersConsumption")->Set(resultingConsumersConsumption);
         Counters->GetCounter("Stats/Coefficient")->Set(coefficient * 1e9);
@@ -213,8 +213,8 @@ private:
         ui64 consumersLimitBytes = 0;
         for (const auto& consumer : consumers) {
             ui64 limitBytes = consumer.GetLimit(coefficient);
-            if (resultingConsumersConsumption + externalConsumption > softLimitBytes && consumer.Config.CanZeroLimit) {
-                limitBytes = SafeDiff(limitBytes, resultingConsumersConsumption + externalConsumption - softLimitBytes);
+            if (resultingConsumersConsumption + otherConsumption > softLimitBytes && consumer.Config.CanZeroLimit) {
+                limitBytes = SafeDiff(limitBytes, resultingConsumersConsumption + otherConsumption - softLimitBytes);
             }
             consumersLimitBytes += limitBytes;
 

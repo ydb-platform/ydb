@@ -1,34 +1,25 @@
 #include "merger.h"
 
-#include "column_cursor.h"
-#include "column_portion_chunk.h"
-#include "merge_context.h"
-#include "merged_column.h"
+#include "abstract/merger.h"
+#include "plain/logic.h"
 
 #include <ydb/core/formats/arrow/reader/merger.h>
+#include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/formats/arrow/simple_builder/array.h>
 #include <ydb/core/formats/arrow/simple_builder/filler.h>
-#include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 
 namespace NKikimr::NOlap::NCompaction {
 
 std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared_ptr<TSerializationStats>& stats,
-    const NArrow::NMerger::TIntervalPositions& checkPoints, const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered,
-    const ui64 pathId, const std::optional<ui64> shardingActualVersion) {
+    const NArrow::NMerger::TIntervalPositions& checkPoints, const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered, const ui64 pathId,
+    const std::optional<ui64> shardingActualVersion) {
     AFL_VERIFY(Batches.size() == Filters.size());
-    static const TString portionIdFieldName = "$$__portion_id";
-    static const TString portionRecordIndexFieldName = "$$__portion_record_idx";
-    static const std::shared_ptr<arrow::Field> portionIdField =
-        std::make_shared<arrow::Field>(portionIdFieldName, std::make_shared<arrow::UInt16Type>());
-    static const std::shared_ptr<arrow::Field> portionRecordIndexField =
-        std::make_shared<arrow::Field>(portionRecordIndexFieldName, std::make_shared<arrow::UInt32Type>());
-
     std::vector<std::shared_ptr<arrow::RecordBatch>> batchResults;
     {
         arrow::FieldVector indexFields;
-        indexFields.emplace_back(portionIdField);
-        indexFields.emplace_back(portionRecordIndexField);
+        indexFields.emplace_back(IColumnMerger::PortionIdField);
+        indexFields.emplace_back(IColumnMerger::PortionRecordIndexField);
         IIndexInfo::AddSpecialFields(indexFields);
         auto dataSchema = std::make_shared<arrow::Schema>(indexFields);
         NArrow::NMerger::TMergePartialStream mergeStream(
@@ -39,14 +30,14 @@ std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> TMerger::Execute(c
             {
                 NArrow::NConstruction::IArrayBuilder::TPtr column =
                     std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntConstFiller<arrow::UInt16Type>>>(
-                        portionIdFieldName, idx);
-                batch->AddField(portionIdField, column->BuildArray(batch->num_rows())).Validate();
+                        IColumnMerger::PortionIdFieldName, idx);
+                batch->AddField(IColumnMerger::PortionIdField, column->BuildArray(batch->num_rows())).Validate();
             }
             {
                 NArrow::NConstruction::IArrayBuilder::TPtr column =
                     std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::UInt32Type>>>(
-                        portionRecordIndexFieldName);
-                batch->AddField(portionRecordIndexField, column->BuildArray(batch->num_rows())).Validate();
+                        IColumnMerger::PortionRecordIndexFieldName);
+                batch->AddField(IColumnMerger::PortionRecordIndexField, column->BuildArray(batch->num_rows())).Validate();
             }
             mergeStream.AddSource(batch, Filters[idx]);
             ++idx;
@@ -54,25 +45,25 @@ std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> TMerger::Execute(c
         batchResults = mergeStream.DrainAllParts(checkPoints, indexFields);
     }
 
-    std::vector<std::map<ui32, std::vector<NCompaction::TColumnPortionResult>>> chunkGroups;
+    std::vector<std::map<ui32, std::vector<TColumnPortionResult>>> chunkGroups;
     chunkGroups.resize(batchResults.size());
     for (auto&& columnId : resultFiltered->GetColumnIds()) {
         NActors::TLogContextGuard logGuard(
             NActors::TLogContextBuilder::Build()("field_name", resultFiltered->GetIndexInfo().GetColumnName(columnId)));
         auto columnInfo = stats->GetColumnInfo(columnId);
         auto resultField = resultFiltered->GetIndexInfo().GetColumnFieldVerified(columnId);
+        std::shared_ptr<IColumnMerger> merger = std::make_shared<TPlainMerger>();
+        //        resultFiltered->BuildColumnMergerVerified(columnId);
 
-        std::vector<NCompaction::TPortionColumnCursor> cursors;
         {
-            ui32 idx = 0;
+            std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> parts;
             for (auto&& p : Batches) {
-                cursors.emplace_back(NCompaction::TPortionColumnCursor(p->GetColumnVerified(resultFiltered->GetFieldIndex(columnId)), idx));
-                ++idx;
+                parts.emplace_back(p->GetColumnVerified(resultFiltered->GetFieldIndex(columnId)));
             }
+
+            merger->Start(parts);
         }
 
-        ui32 batchesRecordsCount = 0;
-        ui32 columnRecordsCount = 0;
         std::map<std::string, std::vector<NCompaction::TColumnPortionResult>> columnChunks;
         ui32 batchIdx = 0;
         for (auto&& batchResult : batchResults) {
@@ -92,42 +83,10 @@ std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> TMerger::Execute(c
 
             NCompaction::TColumnMergeContext context(columnId, resultFiltered, portionRecordsCountLimit,
                 NSplitter::TSplitSettings().GetExpectedUnpackColumnChunkRawSize(), columnInfo, externalSaver);
-            NCompaction::TMergedColumn mColumn(context);
 
-            auto columnPortionIdx = batchResult->GetColumnByName(portionIdFieldName);
-            auto columnPortionRecordIdx = batchResult->GetColumnByName(portionRecordIndexFieldName);
-            auto columnSnapshotPlanStepIdx = batchResult->GetColumnByName(TIndexInfo::SPEC_COL_PLAN_STEP);
-            auto columnSnapshotTxIdx = batchResult->GetColumnByName(TIndexInfo::SPEC_COL_TX_ID);
-            Y_ABORT_UNLESS(columnPortionIdx && columnPortionRecordIdx && columnSnapshotPlanStepIdx && columnSnapshotTxIdx);
-            Y_ABORT_UNLESS(columnPortionIdx->type_id() == arrow::UInt16Type::type_id);
-            Y_ABORT_UNLESS(columnPortionRecordIdx->type_id() == arrow::UInt32Type::type_id);
-            Y_ABORT_UNLESS(columnSnapshotPlanStepIdx->type_id() == arrow::UInt64Type::type_id);
-            Y_ABORT_UNLESS(columnSnapshotTxIdx->type_id() == arrow::UInt64Type::type_id);
-            const arrow::UInt16Array& pIdxArray = static_cast<const arrow::UInt16Array&>(*columnPortionIdx);
-            const arrow::UInt32Array& pRecordIdxArray = static_cast<const arrow::UInt32Array&>(*columnPortionRecordIdx);
-
-            AFL_VERIFY(batchResult->num_rows() == pIdxArray.length());
-            std::optional<ui16> predPortionIdx;
-            for (ui32 idx = 0; idx < pIdxArray.length(); ++idx) {
-                const ui16 portionIdx = pIdxArray.Value(idx);
-                const ui32 portionRecordIdx = pRecordIdxArray.Value(idx);
-                auto& cursor = cursors[portionIdx];
-                cursor.Next(portionRecordIdx, mColumn);
-                if (predPortionIdx && portionIdx != *predPortionIdx) {
-                    cursors[*predPortionIdx].Fetch(mColumn);
-                }
-                if (idx + 1 == pIdxArray.length()) {
-                    cursor.Fetch(mColumn);
-                }
-                predPortionIdx = portionIdx;
-            }
-            chunkGroups[batchIdx][columnId] = mColumn.BuildResult();
-            batchesRecordsCount += batchResult->num_rows();
-            columnRecordsCount += mColumn.GetRecordsCount();
-            AFL_VERIFY(batchResult->num_rows() == mColumn.GetRecordsCount());
+            chunkGroups[batchIdx][columnId] = merger->Execute(context, batchResult);
             ++batchIdx;
         }
-        AFL_VERIFY(columnRecordsCount == batchesRecordsCount)("mCount", columnRecordsCount)("bCount", batchesRecordsCount);
     }
     ui32 batchIdx = 0;
 
@@ -149,6 +108,12 @@ std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> TMerger::Execute(c
             AFL_VERIFY(i.second.size() == columnChunks.begin()->second.size())("first", columnChunks.begin()->second.size())(
                                               "current", i.second.size())("first_name", columnChunks.begin()->first)("current_name", i.first);
         }
+        auto columnSnapshotPlanStepIdx = batchResult->GetColumnByName(TIndexInfo::SPEC_COL_PLAN_STEP);
+        auto columnSnapshotTxIdx = batchResult->GetColumnByName(TIndexInfo::SPEC_COL_TX_ID);
+        Y_ABORT_UNLESS(columnSnapshotPlanStepIdx);
+        Y_ABORT_UNLESS(columnSnapshotTxIdx);
+        Y_ABORT_UNLESS(columnSnapshotPlanStepIdx->type_id() == arrow::UInt64Type::type_id);
+        Y_ABORT_UNLESS(columnSnapshotTxIdx->type_id() == arrow::UInt64Type::type_id);
 
         std::vector<TGeneralSerializedSlice> batchSlices;
         std::shared_ptr<TDefaultSchemaDetails> schemaDetails(new TDefaultSchemaDetails(resultFiltered, stats));
@@ -191,4 +156,4 @@ std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> TMerger::Execute(c
     return result;
 }
 
-}
+}   // namespace NKikimr::NOlap::NCompaction

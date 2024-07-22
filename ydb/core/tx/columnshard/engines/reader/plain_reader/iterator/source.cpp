@@ -187,32 +187,8 @@ void TPortionDataSource::DoApplyIndex(const NIndexes::TIndexCheckerContainer& in
 
 void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) {
     auto blobSchema = GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*Portion);
-    if (SequentialEntityIds.empty()) {
-        MutableStageData().AddBatch(Portion->PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs()).AssembleTable());
-    } else {
-        {
-            auto inMemColumns = columns->GetColumnIds();
-            for (auto&& i : SequentialEntityIds) {
-                inMemColumns.erase(i);
-            }
-            if (inMemColumns.size()) {
-                auto filteredSchema = std::make_shared<TFilteredSnapshotSchema>(columns->GetFilteredSchemaPtrVerified(), inMemColumns);
-                MutableStageData().AddBatch(Portion->PrepareForAssemble(*blobSchema, *filteredSchema, MutableStageData().MutableBlobs()).AssembleTable());
-            }
-        }
-        {
-            std::set<ui32> scanColumns;
-            for (auto&& i : columns->GetColumnIds()) {
-                if (SequentialEntityIds.contains(i)) {
-                    scanColumns.emplace(i);
-                }
-            }
-            if (scanColumns.size()) {
-                auto filteredSchema = std::make_shared<TFilteredSnapshotSchema>(columns->GetFilteredSchemaPtrVerified(), scanColumns);
-                MutableStageData().AddBatch(Portion->PrepareForAssemble(*blobSchema, *filteredSchema, MutableStageData().MutableBlobs()).AssembleForSeqAccess());
-            }
-        }
-    }
+    MutableStageData().AddBatch(Portion->PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs())
+                                    .AssembleToGeneralContainer(SequentialEntityIds));
 }
 
 bool TCommittedDataSource::DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& /*columns*/) {

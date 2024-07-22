@@ -775,20 +775,11 @@ private:
             }
             if (isYield) return EFetchResult::Yield;
 
-            if (!*HaveMoreRightRows && !*PartialJoinCompleted && LeftPacker->TuplesBatchPacked >= LeftPacker->BatchSize ) {
-                *PartialJoinCompleted = true;
-                JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
-                JoinedTablePtr->ResetIterator();
-            }
 
-            if (!*HaveMoreLeftRows && !*PartialJoinCompleted && RightPacker->TuplesBatchPacked >= RightPacker->BatchSize ) {
-                *PartialJoinCompleted = true;
-                JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
-                JoinedTablePtr->ResetIterator();
+            if (!*PartialJoinCompleted && (
+                (!*HaveMoreRightRows && (!*HaveMoreLeftRows || LeftPacker->TuplesBatchPacked >= LeftPacker->BatchSize )) ||
+                (!*HaveMoreLeftRows && RightPacker->TuplesBatchPacked >= RightPacker->BatchSize))) {
 
-            }
-
-            if (!*HaveMoreRightRows && !*HaveMoreLeftRows && !*PartialJoinCompleted) {
                 *PartialJoinCompleted = true;
                 LeftPacker->StartTime = std::chrono::system_clock::now();
                 RightPacker->StartTime = std::chrono::system_clock::now();

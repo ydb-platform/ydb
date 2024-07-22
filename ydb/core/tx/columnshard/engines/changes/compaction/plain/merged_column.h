@@ -1,6 +1,7 @@
 #pragma once
 #include "column_portion_chunk.h"
-#include "merge_context.h"
+
+#include <ydb/core/tx/columnshard/engines/changes/compaction/common/context.h>
 #include <ydb/core/tx/columnshard/engines/portions/column_record.h>
 
 namespace NKikimr::NOlap::NCompaction {
@@ -25,4 +26,4 @@ public:
     std::vector<TColumnPortionResult> BuildResult();
 };
 
-}
+}   // namespace NKikimr::NOlap::NCompaction

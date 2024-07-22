@@ -1,4 +1,4 @@
-#include "merge_context.h"
+#include "context.h"
 
 namespace NKikimr::NOlap::NCompaction {
 

@@ -109,7 +109,7 @@ protected:
                 }
                 idx = nextIdx;
             }
-        } else if (position < chunkCurrent->GetStartPosition()) {
+        } else {
             AFL_VERIFY(chunkCurrent->GetChunkIndex() > 0);
             ui64 idx = chunkCurrent->GetStartPosition();
             for (i32 i = chunkCurrent->GetChunkIndex() - 1; i >= 0; --i) {

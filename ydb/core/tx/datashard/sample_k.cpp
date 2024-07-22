@@ -20,7 +20,6 @@
 #include <util/string/builder.h>
 
 #define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 
 namespace NKikimr::NDataShard {
@@ -81,7 +80,7 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept final {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
 
-        LOG_D("Prepare " << Debug());
+        LOG_T("Prepare " << Debug());
 
         Driver = driver;
 
@@ -133,7 +132,7 @@ public:
         } else {
             Response->Record.SetStatus(NKikimrTxDataShard::TEvSampleKResponse::ABORTED);
         }
-        LOG_D("Finish " << Debug());
+        LOG_T("Finish " << Debug());
         TActivationContext::AsActorContext().MakeFor(SelfId()).Send(ResponseActorId, Response.Release());
         Driver = nullptr;
         PassAway();
@@ -150,10 +149,10 @@ public:
 
     TString Debug() const {
         if (!Response) {
-            return "empty TBuildIndexScan";
+            return "empty TSampleKScan";
         }
         auto& rec = Response->Record;
-        return TStringBuilder() << "TBuildIndexScan:"
+        return TStringBuilder() << "TSampleKScan:"
                                 << "id: " << rec.GetId()
                                 << ", shard: " << rec.GetTabletId()
                                 << ", generation: " << rec.GetRequestSeqNoGeneration()

@@ -13,21 +13,21 @@ namespace {
     private:
         ui32 InputsNumber_;
         bool UseSystemColumns_;
-        TString TablePrefix_;
         TString CallableName_;
+        TString TablePrefix_;
         bool Complete_ = false;
 
     public:
         explicit TTableReadsReplacer(
             ui32 inputsNumber,
             bool useSystemColumns,
-            TString tablePrefix,
-            TString inputNodeName
+            TString inputNodeName,
+            TString tablePrefix
         )
             : InputsNumber_(inputsNumber)
             , UseSystemColumns_(useSystemColumns)
-            , TablePrefix_(std::move(tablePrefix))
             , CallableName_(std::move(inputNodeName))
+            , TablePrefix_(std::move(tablePrefix))
         {
         }
 
@@ -228,8 +228,8 @@ namespace {
 TAutoPtr<IGraphTransformer> NYql::NPureCalc::MakeTableReadsReplacer(
     ui32 inputsNumber,
     bool useSystemColumns,
-    TString tablePrefix,
-    TString callableName
+    TString callableName,
+    TString tablePrefix
 ) {
-    return new TTableReadsReplacer(inputsNumber, useSystemColumns, std::move(tablePrefix), std::move(callableName));
+    return new TTableReadsReplacer(inputsNumber, useSystemColumns, std::move(callableName), std::move(tablePrefix));
 }

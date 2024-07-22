@@ -15,14 +15,14 @@ namespace NYql::NPureCalc {
      *
      * @param inputStructs types of each input.
      * @param useSystemColumns whether to allow special system columns in input structs.
-     * @param tablePrefix required prefix for all table names (e.g. `Input`).
      * @param callableName name of the special callable used to get input data (e.g. `Self`).
+     * @param tablePrefix required prefix for all table names (e.g. `Input`).
      * @param return a graph transformer for replacing table reads.
      */
     TAutoPtr<IGraphTransformer> MakeTableReadsReplacer(
         ui32 inputsNumber,
         bool useSystemColumns,
-        TString tablePrefix = TString{PurecalcInputTablePrefix},
-        TString callableName = TString{PurecalcInputCallableName}
+        TString callableName = TString{PurecalcInputCallableName},
+        TString tablePrefix = TString{PurecalcInputTablePrefix}
     );
 }

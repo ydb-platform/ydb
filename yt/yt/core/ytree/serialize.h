@@ -268,6 +268,14 @@ void Deserialize(TStrongTypedef<T, TTag>& value, INodePtr node);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class T, class... TExtraArgs>
+concept CYsonSerializable = requires (const T& value, NYson::IYsonConsumer* consumer, TExtraArgs&&... args)
+{
+    { Serialize(value, consumer, std::forward<TExtraArgs>(args)...) } -> std::same_as<void>;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NYTree
 
 #define SERIALIZE_INL_H_

@@ -53,12 +53,15 @@ TEST_W(TScheduledExecutorTest, Simple)
         callback,
         interval);
 
+    // If execution of the next three lines (which would also include 2
+    // invocations of callback inside delayed executor) take more than
+    // 400ms (integral lag of 100ms) then a 3rd execution would occur.
     executor->Start();
     TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(300));
     WaitFor(executor->Stop())
         .ThrowOnError();
     EXPECT_LE(1, count.load());
-    EXPECT_GE(2, count.load());
+    EXPECT_GE(3, count.load());
 }
 
 TEST_W(TScheduledExecutorTest, SimpleScheduleOutOfBand)

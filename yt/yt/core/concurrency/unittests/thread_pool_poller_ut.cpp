@@ -43,11 +43,6 @@ public:
         return LoggingTag_;
     }
 
-    EPollablePriority GetPriority() const override
-    {
-        return EPollablePriority::Normal;
-    }
-
     void OnEvent(EPollControl control) override
     {
         // NB: Retry is the only event we trigger in this unittest via |IPoller::Retry|.

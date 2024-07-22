@@ -39,7 +39,7 @@ IF (OS_ANDROID)
 ELSEIF (OS_LINUX)
     LDFLAGS(
         -fuse-ld=lld
-        --ld-path=${LLD_ROOT_RESOURCE_GLOBAL}/ld.lld
+        --ld-path=${LLD_ROOT_RESOURCE_GLOBAL}/bin/ld.lld
 
         # dynlinker on auld ubuntu versions can not handle .rodata stored in standalone segment [citation needed]
         -Wl,--no-rosegment
@@ -49,21 +49,21 @@ ELSEIF (OS_LINUX)
 ELSEIF (OS_DARWIN OR OS_IOS)
     IF (MAPSMOBI_BUILD_TARGET AND XCODE)
         LDFLAGS(
-            -fuse-ld=${LLD_ROOT_RESOURCE_GLOBAL}/ld64.lld
+            -fuse-ld=${LLD_ROOT_RESOURCE_GLOBAL}/bin/ld64.lld
         )
     ELSEIF (XCODE)
         LDFLAGS(-DYA_XCODE)
     ELSE()
         LDFLAGS(
             -fuse-ld=lld
-            --ld-path=${LLD_ROOT_RESOURCE_GLOBAL}/ld64.lld
+            --ld-path=${LLD_ROOT_RESOURCE_GLOBAL}/bin/ld64.lld
             # FIXME: Remove fake linker version flag when clang 16 version arrives
             -mlinker-version=705
         )
     ENDIF()
 ELSEIF (OS_EMSCRIPTEN)
     LDFLAGS(
-        -fuse-ld=${LLD_ROOT_RESOURCE_GLOBAL}/wasm-ld
+        -fuse-ld=${LLD_ROOT_RESOURCE_GLOBAL}/bin/wasm-ld
         # FIXME: Linker does not capture "ld-path" and therefore it can not find "wasm-ld"
     )
 ENDIF()

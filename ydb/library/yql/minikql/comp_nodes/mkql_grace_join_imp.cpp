@@ -98,6 +98,7 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
     if (IsAny_) {
         if ( !AddKeysToHashTable(kh, keyIntVals.begin() + offset, iColumns) ) {
             keyIntVals.resize(offset);
+            ++AnyFiltered_;
             return;
         }
     }
@@ -394,6 +395,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
             nSlots = (3 * tuplesNum2 + 1) | 1;
             joinSlots.resize(nSlots*slotSize, 0);
             initHashTable = true;
+            ++InitHashTableCount_;
         }
 
         auto firstSlot = [begin = joinSlots.begin(), slotSize, nSlots](auto hash) {
@@ -423,9 +425,12 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
 
                 auto slotIt = firstSlot(hash);
 
+                ++HashLookups_;
                 for (; *slotIt != 0; slotIt = nextSlot(slotIt))
                 {
+                    ++HashO1Iterations_;
                 }
+                ++HashSlotIterations_;
 
                 if (keysValSize <= slotSize - 1)
                 {
@@ -439,8 +444,10 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
                 }
                 slotIt[slotSize - 1] = tuple2Idx;
             }
+            if (swapTables) JoinTable1Total_ += tuplesNum2; else JoinTable2Total_ += tuplesNum2;
         }
 
+        if (swapTables) JoinTable2Total_ += tuplesNum1; else JoinTable1Total_ += tuplesNum1;
 
         ui32 tuple1Idx = 0;
         auto it1 = bucket1->KeyIntVals.begin();
@@ -465,14 +472,17 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
                 continue;
             }
 
+            ++HashLookups_;
             auto slotIt = firstSlot(hash);
             for (; *slotIt != 0; slotIt = nextSlot(slotIt) )
             {
+                ++HashO1Iterations_;
                 if (*slotIt != hash)
                     continue;
 
                 auto tuple2Idx = slotIt[slotSize - 1];
 
+                ++HashSlotIterations_;
                 if (table1HasKeyIColumns || !(keysValSize - nullsSize1 <= slotSize - 1 - nullsSize2)) {
                     // 2nd condition cannot be true unless HasKeyStringColumns or HasKeyIColumns, hence size at the end of header is present
 
@@ -571,6 +581,21 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
             }
 
         }
+        YQL_LOG(TRACE)
+            << (const void *)this << '#'
+            << bucket
+            << " Table1 " << JoinTable1->TableBucketsStats[bucket].TuplesNum
+            << " Table2 " << JoinTable2->TableBucketsStats[bucket].TuplesNum
+            << " LeftTableBatch " << LeftTableBatch_
+            << " leftMatchedIds " << leftMatchedIds.size()
+            << " RightTableBatch " << RightTableBatch_
+            << " rightMatchedIds " << rightMatchedIds.size()
+            << " rightIds " << rightIds.size()
+            << " joinIds " << joinIds.size()
+            << " joinKind " << (int)JoinKind
+            << " swapTables " << swapTables
+            << " initHashTable " << initHashTable
+            ;
     }
 
     HasMoreLeftTuples_ = hasMoreLeftTuples;
@@ -1291,6 +1316,13 @@ TTable::TTable( ui64 numberOfKeyIntColumns, ui64 numberOfKeyStringColumns,
 }
 
 TTable::~TTable() {
+    YQL_LOG_IF(DEBUG, InitHashTableCount_)
+        << (const void *)this << '#' << "InitHashTableCount " << InitHashTableCount_
+        << " HashLookups " << HashLookups_ << " HashChainTraversal " << HashO1Iterations_/(double)HashLookups_ << " HashSlotOperations " << HashSlotIterations_/(double)HashLookups_
+        << " Table1 " << JoinTable1Total_ << " Table2 " << JoinTable2Total_ << " TuplesFound " << TuplesFound_
+        ;
+    YQL_LOG_IF(DEBUG, JoinTable1 && JoinTable1->AnyFiltered_) << (const void *)this << '#' << "L AnyFiltered " <<  JoinTable1->AnyFiltered_;
+    YQL_LOG_IF(DEBUG, JoinTable2 && JoinTable2->AnyFiltered_) << (const void *)this << '#' << "R AnyFiltered " <<  JoinTable2->AnyFiltered_;
 };
 
 TTableBucketSpiller::TTableBucketSpiller(ISpiller::TPtr spiller, size_t sizeLimit)

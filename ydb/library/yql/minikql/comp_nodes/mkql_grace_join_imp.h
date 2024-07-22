@@ -338,6 +338,15 @@ public:
     
     ~TTable();
 
+    ui64 InitHashTableCount_ = 0;
+
+    ui64 HashLookups_ = 0; // hash lookups
+    ui64 HashO1Iterations_ = 0; // hash chain
+    ui64 HashSlotIterations_ = 0; // O(SlotSize) operations
+
+    ui64 JoinTable1Total_ = 0;
+    ui64 JoinTable2Total_ = 0;
+    ui64 AnyFiltered_ = 0;
 };
 
 

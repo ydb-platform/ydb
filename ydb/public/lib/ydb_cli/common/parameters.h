@@ -55,6 +55,7 @@ protected:
     size_t BatchLimit;
     TDuration BatchMaxDelay;
     THolder<NScripting::TExplainYqlResult> ValidateResult;
+    bool ReadParametersFromStdin = false;
 };
 
 }

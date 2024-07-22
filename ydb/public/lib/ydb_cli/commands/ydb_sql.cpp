@@ -104,8 +104,19 @@ void TCommandSql::Parse(TConfig& config) {
         throw TMisuseException() << "Statistics collection mode option \"--stats\" has no effect in explain mode"
             "Relevant for execution mode only.";
     }
+    if (ReadParametersFromStdin && QueryFile == "-") {
+        throw TMisuseException() << "Both path to script file and param file are \"-\". Can't read both values from stdin";
+    }
     if (QueryFile) {
-        Query = ReadFromFile(QueryFile, "query");
+        if (QueryFile == "-") {
+            if (IsStdinInteractive()) {
+                throw TMisuseException() << "Path to script file is \"-\", meaning that script text should be read "
+                    "from stdin. This is only available in non-interactive mode";
+            }
+            Query = Cin.ReadAll();
+        } else {
+            Query = ReadFromFile(QueryFile, "query");
+        }
     }
 }
 
@@ -136,7 +147,9 @@ int TCommandSql::RunCommand(TConfig& config) {
     } else {
         throw TMisuseException() << "Unknow syntax option \"" << Syntax << "\"";
     }
-    if (!Parameters.empty() || !IsStdinInteractive()) {
+    if (!Parameters.empty() || ReadParametersFromStdin) {
+        ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
+            ExplainQuery(config, Query, NScripting::ExplainYqlRequestMode::Validate));
         // Execute query with parameters
         THolder<TParamsBuilder> paramBuilder;
         while (!IsInterrupted() && GetNextParams(paramBuilder)) {
@@ -150,7 +163,10 @@ int TCommandSql::RunCommand(TConfig& config) {
 
             auto result = asyncResult.GetValueSync();
             ThrowOnError(result);
-            return PrintResponse(result);
+            int printResult = PrintResponse(result);
+            if (printResult != EXIT_SUCCESS) {
+                return printResult;
+            }
         }
     } else {
         // Execute query without parameters

@@ -83,6 +83,10 @@ void TCommandYql::Parse(TConfig& config) {
         throw TMisuseException() << "FlameGraph path can not be empty.";
     }
     ParseParameters(config);
+    // For backward compatibility
+    if (!IsStdinInteractive()) {
+        ReadParametersFromStdin = true;
+    }
 }
 
 int TCommandYql::Run(TConfig& config) {
@@ -104,7 +108,7 @@ int TCommandYql::RunCommand(TConfig& config, const TString& script) {
 
     SetInterruptHandlers();
 
-    if (!Parameters.empty() || !IsStdinInteractive()) {
+    if (!Parameters.empty() || ReadParametersFromStdin) {
         ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
             ExplainQuery(config, Script, NScripting::ExplainYqlRequestMode::Validate));
         THolder<TParamsBuilder> paramBuilder;

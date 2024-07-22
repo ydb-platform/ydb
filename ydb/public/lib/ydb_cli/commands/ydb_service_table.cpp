@@ -414,6 +414,10 @@ void TCommandExecuteQuery::Parse(TConfig& config) {
     CheckQueryOptions();
     CheckQueryFile();
     ParseParameters(config);
+    // For backward compatibility
+    if (!IsStdinInteractive()) {
+        ReadParametersFromStdin = true;
+    }
 }
 
 int TCommandExecuteQuery::Run(TConfig& config) {
@@ -456,7 +460,7 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
     NTable::TTableClient client(CreateDriver(config));
     NTable::TAsyncDataQueryResult asyncResult;
 
-    if (!Parameters.empty() || !IsStdinInteractive()) {
+    if (!Parameters.empty() || ReadParametersFromStdin) {
         ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
             ExplainQuery(config, Query, NScripting::ExplainYqlRequestMode::Validate));
         THolder<TParamsBuilder> paramBuilder;
@@ -685,7 +689,7 @@ int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
 
     TAsyncPartIterator<TClient> asyncResult;
     SetInterruptHandlers();
-    if (!Parameters.empty() || !IsStdinInteractive()) {
+    if (!Parameters.empty() || ReadParametersFromStdin) {
         ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
             ExplainQuery(config, Query, NScripting::ExplainYqlRequestMode::Validate));
         THolder<TParamsBuilder> paramBuilder;

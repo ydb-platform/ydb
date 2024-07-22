@@ -33,6 +33,21 @@ TDriver TYdbCommand::CreateDriver(const TConfig& config, THolder<TLogBackend>&& 
     return TDriver(driverConfig);
 }
 
+NScripting::TExplainYqlResult TYdbCommand::ExplainQuery(TClientCommand::TConfig& config, const TString& queryText,
+        NScripting::ExplainYqlRequestMode mode) {
+    NScripting::TScriptingClient client(CreateDriver(config));
+
+    NScripting::TExplainYqlRequestSettings explainSettings;
+    explainSettings.Mode(mode);
+
+    auto result = client.ExplainYqlScript(
+        queryText,
+        explainSettings
+    ).GetValueSync();
+    ThrowOnError(result);
+    return result;
+}
+
 TYdbSimpleCommand::TYdbSimpleCommand(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)
     :TYdbCommand(name, aliases, description)
 {}
@@ -56,21 +71,6 @@ void TYdbOperationCommand::Config(TConfig& config) {
     opts.AddLongOption("timeout", "Operation timeout. Operation should be executed on server within this timeout. "
             "There could also be a delay up to 200ms to receive timeout error from server.")
         .RequiredArgument("ms").StoreResult(&OperationTimeout);
-}
-
-NScripting::TExplainYqlResult TYdbOperationCommand::ExplainQuery(TClientCommand::TConfig& config, const TString& queryText,
-        NScripting::ExplainYqlRequestMode mode) {
-    NScripting::TScriptingClient client(CreateDriver(config));
-
-    NScripting::TExplainYqlRequestSettings explainSettings;
-    explainSettings.Mode(mode);
-
-    auto result = client.ExplainYqlScript(
-        queryText,
-        explainSettings
-    ).GetValueSync();
-    ThrowOnError(result);
-    return result;
 }
 
 }

@@ -69,6 +69,17 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
     }
 
     for (auto& file : ParameterFiles) {
+        if (file == "-") {
+            if (ReadParametersFromStdin) {
+                throw TMisuseException() << "Param file \"-\" provided several times";
+            }
+            if (IsStdinInteractive()) {
+                throw TMisuseException() << "Path to param file is \"-\", meaning that parameter value[s] should be read "
+                    "from stdin. This is only available in non-interactive mode";
+            }
+            ReadParametersFromStdin = true;
+            continue;
+        }
         TString data;
         data = ReadFromFile(file, "param-file");
         std::map<TString, TString> params;
@@ -88,7 +99,7 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
     if (StdinParameters.empty() && StdinFormat == EOutputFormat::Raw) {
         throw TMisuseException() << "For \"raw\" format \"--stdin-par\" option should be used.";
     }
-    if (!StdinParameters.empty() && IsStdinInteractive()) {
+    if (!StdinParameters.empty() && !ReadParametersFromStdin) {
         throw TMisuseException() << "\"--stdin-par\" option is allowed only with non-interactive stdin.";
     }
     if (BatchMode == EBatchMode::Full || BatchMode == EBatchMode::Adaptive) {
@@ -252,7 +263,7 @@ bool TCommandWithParameters::GetNextParams(THolder<TParamsBuilder>& paramBuilder
     if (IsFirstEncounter) {
         IsFirstEncounter = false;
         ParamTypes = ValidateResult->GetParameterTypes();
-        if (IsStdinInteractive()) {
+        if (!ReadParametersFromStdin) {
             AddParams(*paramBuilder);
             return true;
         }
@@ -278,7 +289,7 @@ bool TCommandWithParameters::GetNextParams(THolder<TParamsBuilder>& paramBuilder
             Input = MakeHolder<TSimpleParamStream>();
         }
     }
-    if (IsStdinInteractive()) {
+    if (!ReadParametersFromStdin) {
         return false;
     }
 

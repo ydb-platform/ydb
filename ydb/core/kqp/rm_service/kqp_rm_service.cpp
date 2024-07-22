@@ -264,6 +264,10 @@ public:
         // all other requests are not guaranteed to be satisfied.
         // In the nearest future we need to implement several layers of memory requests.
         bool isFirstAllocationRequest = (resources.ExecutionUnits > 0 && resources.MemoryPool == EKqpMemoryPool::DataQuery);
+        if (resources.ExecutionUnits > 0) {
+            Counters->RmOnStartAllocs->Inc();
+        }
+
         if (isFirstAllocationRequest) {
             auto& txBucket = TxBucket(txId);
             with_lock(txBucket.Lock) {
@@ -370,6 +374,12 @@ public:
 
         auto& txBucket = TxBucket(txId);
 
+        if (resources.ReleaseAllResources) {
+            Counters->RmOnCompleteFree->Inc();
+        } else {
+            Counters->RmExtraMemFree->Inc();
+        }
+
         {
             TMaybe<TGuard<TMutex>> guard;
             guard.ConstructInPlace(txBucket.Lock);
@@ -435,9 +445,11 @@ public:
             Y_DEBUG_ABORT_UNLESS(Counters->RmMemory->Val() >= 0);
         } // with_lock (txBucket.Lock)
 
-        with_lock (Lock) {
-            ScanQueryMemoryResource.Release(releaseScanQueryMemory);
-        } // with_lock (Lock)
+        if (releaseScanQueryMemory > 0) {
+            with_lock (Lock) {
+                ScanQueryMemoryResource.Release(releaseScanQueryMemory);
+            } // with_lock (Lock)
+        }
 
         LOG_AS_D("TxId: " << txId << ", taskId: " << taskId << ". Released resources, "
             << "ScanQueryMemory: " << releaseScanQueryMemory << ", "

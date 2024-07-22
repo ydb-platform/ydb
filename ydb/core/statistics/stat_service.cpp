@@ -591,6 +591,10 @@ private:
     void Handle(TEvStatistics::TEvAggregateKeepAliveAck::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         const auto round = record.GetRound();
+
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "Received TEvAggregateKeepAliveAck: node: " << ev->Recipient.NodeId() << ", sender: " << ev->Sender.NodeId() <<  ", round: " << round);
+
         if (IsNotCurrentRound(round)) {
             LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
                 "Skip TEvAggregateKeepAliveAck");
@@ -602,6 +606,9 @@ private:
 
     void Handle(TEvPrivate::TEvKeepAliveAckTimeout::TPtr& ev) {
         const auto round = ev->Get()->Round;
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "Received TEvKeepAliveAckTimeout: node: " << ev->Recipient.NodeId() <<  ", round: " << round);
+
         if (IsNotCurrentRound(round)) {
             LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
                 "Skip TEvKeepAliveAckTimeout");
@@ -630,6 +637,9 @@ private:
 
     void Handle(TEvPrivate::TEvDispatchKeepAlive::TPtr& ev) {
         const auto round = ev->Get()->Round;
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "Received TEvDispatchKeepAlive: node: " << ev->Recipient.NodeId() <<  ", round: " << round);
+
         if (IsNotCurrentRound(round)) {
             LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
                 "Skip TEvDispatchKeepAlive");
@@ -644,6 +654,8 @@ private:
 
     void Handle(TEvPrivate::TEvKeepAliveTimeout::TPtr& ev) {
         const auto round = ev->Get()->Round;
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "Received TEvKeepAliveTimeout: node: " << ev->Recipient.NodeId() <<  ", round: " << round);
 
         if (IsNotCurrentRound(round)) {
             LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
@@ -682,6 +694,9 @@ private:
     void Handle(TEvStatistics::TEvAggregateKeepAlive::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         const auto round = record.GetRound();
+
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "Received TEvAggregateKeepAlive: node: " << ev->Recipient.NodeId() << ", sender: " << ev->Sender.NodeId() <<  ", round: " << round);
 
         if (IsNotCurrentRound(round)) {
             LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,

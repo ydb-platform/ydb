@@ -385,6 +385,59 @@ Y_UNIT_TEST_SUITE(StatisticsService) {
             }
         }
     }
+
+    Y_UNIT_TEST(ShouldBePings) {
+        size_t nodeCount = 2;
+        auto runtime = TTestActorRuntime(nodeCount, 1, false);
+        auto indexToNodeIdMap = InitializeRuntime(runtime, nodeCount,
+            GetDefaultSettings()
+                .SetAggregateKeepAlivePeriod(TDuration::MilliSeconds(100))
+                .SetAggregateKeepAliveTimeout(TDuration::Seconds(3))
+                .SetAggregateKeepAliveAckTimeout(TDuration::Seconds(3)));
+        auto nodeIdToIndexMap = ReverseMap(indexToNodeIdMap);
+        std::vector<TAggregateStatisticsRequest::TTablets> nodesTablets = {{.NodeId = indexToNodeIdMap[0], .Ids{1}},
+            {.NodeId = indexToNodeIdMap[1], .Ids{2}}};
+
+        std::unordered_map<ui32, int> ping;
+        std::unordered_map<ui32, int> pong;
+        std::vector<TTestActorRuntimeBase::TEventObserverHolder> observers;
+        observers.emplace_back(runtime.AddObserver<TEvStatistics::TEvAggregateKeepAlive>([&](TEvStatistics::TEvAggregateKeepAlive::TPtr& ev) {
+            ++ping[ev->Sender.NodeId()];
+        }));
+        observers.emplace_back(runtime.AddObserver<TEvStatistics::TEvAggregateKeepAliveAck>([&](TEvStatistics::TEvAggregateKeepAliveAck::TPtr& ev) {
+            ++pong[ev->Sender.NodeId()];
+        }));
+
+        auto sender = runtime.AllocateEdgeActor();
+        runtime.Send(NStat::MakeStatServiceID(indexToNodeIdMap[0]), sender, CreateStatisticsRequest(TAggregateStatisticsRequest{
+            .Round = 1,
+            .PathId{3, 3},
+            .Nodes{ nodesTablets },
+            .ColumnTags{1, 2}
+        }).release());
+
+        runtime.DispatchEvents(TDispatchOptions{
+            .CustomFinalCondition = [&]() {
+                    return ping[sender.NodeId()] >= 10 && ping[nodeIdToIndexMap[0]] >= 10
+                        && pong[nodeIdToIndexMap[0]] >= 10 && pong[nodeIdToIndexMap[1]] >= 10;
+            }
+        });
+
+        for (const auto& node : nodesTablets) {
+            for (auto tabletId : node.Ids) {
+                auto actorId = NStat::MakeStatServiceID(node.NodeId);
+                runtime.Send(new IEventHandle(actorId, actorId, 
+                    CreateStatisticsResponse(TStatisticsResponse{
+                        .TabletId = tabletId,
+                        .Status = NKikimrStat::TEvStatisticsResponse::SUCCESS
+                    }).release(), 0, 1), nodeIdToIndexMap[node.NodeId], true);
+            }
+        }
+
+        auto res = runtime.GrabEdgeEvent<TEvStatistics::TEvAggregateStatisticsResponse>(sender);
+        const auto& record = res->Get()->Record;
+        UNIT_ASSERT(record.GetFailedTablets().empty());
+    }
 }
 
 } // NSysView

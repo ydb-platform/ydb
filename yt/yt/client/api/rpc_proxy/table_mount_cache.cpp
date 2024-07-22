@@ -80,9 +80,8 @@ private:
                     FromProto(tabletInfo.Get(), protoTabletInfo);
                     tabletInfo->TableId = tableId;
                     tabletInfo->UpdateTime = Now();
-                    tabletInfo->Owners.push_back(MakeWeak(tableInfo));
 
-                    tabletInfo = TabletInfoCache_.Insert(std::move(tabletInfo));
+                    TabletInfoOwnerCache_.Insert(tabletInfo->TabletId, MakeWeak(tableInfo));
                     tableInfo->Tablets.push_back(tabletInfo);
                     if (tabletInfo->State == ETabletState::Mounted) {
                         tableInfo->MountedTablets.push_back(tabletInfo);

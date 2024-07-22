@@ -123,6 +123,36 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
         TSampleQueries::TSelect42::CheckResult(hangingRequest.GetResult());
     }
 
+    Y_UNIT_TEST(TestZeroQueueSizeManyQueries) {
+        const i32 inFlight = 10;
+        auto ydb = TYdbSetupSettings()
+            .ConcurrentQueryLimit(inFlight)
+            .QueueSize(0)
+            .QueryCancelAfter(FUTURE_WAIT_TIMEOUT * inFlight)
+            .Create();
+
+        auto settings = TQueryRunnerSettings().HangUpDuringExecution(true);
+
+        std::vector<TQueryRunnerResultAsync> asyncResults;
+        for (size_t i = 0; i < inFlight; ++i) {
+            asyncResults.emplace_back(ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, settings));
+        }
+
+        for (const auto& asyncResult : asyncResults) {
+            ydb->WaitQueryExecution(asyncResult);
+        }
+
+        TSampleQueries::CheckOverloaded(
+            ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().ExecutionExpected(false)),
+            ydb->GetSettings().PoolId_
+        );
+
+        for (const auto& asyncResult : asyncResults) {
+            ydb->ContinueQueryExecution(asyncResult);
+            TSampleQueries::TSelect42::CheckResult(asyncResult.GetResult());
+        }
+    }
+
     Y_UNIT_TEST(TestQueryCancelAfterUnlimitedPool) {
         auto ydb = TYdbSetupSettings()
             .QueryCancelAfter(TDuration::Seconds(10))

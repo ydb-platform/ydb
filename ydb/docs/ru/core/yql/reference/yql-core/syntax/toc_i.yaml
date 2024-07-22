@@ -20,7 +20,7 @@ items:
 - { name: COMMIT,                       href: commit.md                                                   }
 - { name: DECLARE,                      href: declare.md }
 - { name: DELETE,                       href: delete.md,                     when: feature_map_tables }
-- { name: DISCARD,                      href: discard.md }
+- { name: DISCARD,                      href: discard.md,                    when: backend_name != "YDB" }
 - { name: DROP GROUP,                   href: drop-group.md,                 when: feature_user_and_group }
 - { name: DROP EXTERNAL DATA SOURCE,    href: drop-external-data-source.md,  when: feature_federated_queries}
 - { name: DROP EXTERNAL TABLE,          href: drop-external-table.md,        when: feature_federated_queries}

@@ -78,6 +78,7 @@ struct TConfig
     TString Prefix;
     TString ApiVersion;
     TString LogLevel;
+    TString LogPath;
 
     // Compression for data that is sent to YT cluster.
     EEncoding ContentEncoding;

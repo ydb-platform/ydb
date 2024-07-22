@@ -14,8 +14,9 @@ namespace NViewer {
 using namespace NActors;
 using NSchemeShard::TEvSchemeShard;
 
-class TJsonACL : public TViewerPipeClient<TJsonACL> {
-    using TBase = TViewerPipeClient<TJsonACL>;
+class TJsonACL : public TViewerPipeClient {
+    using TThis = TJsonACL;
+    using TBase = TViewerPipeClient;
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
     TAutoPtr<TEvTxProxySchemeCache::TEvNavigateKeySetResult> CacheResult;
@@ -24,16 +25,12 @@ class TJsonACL : public TViewerPipeClient<TJsonACL> {
     ui32 Timeout = 0;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TJsonACL(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
         : Viewer(viewer)
         , Event(ev)
     {}
 
-    void Bootstrap() {
+    void Bootstrap() override {
         const auto& params(Event->Get()->Request.GetParams());
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         TString database;
@@ -158,7 +155,7 @@ public:
         PassAway();
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         if (CacheResult == nullptr) {
             return ReplyAndPassAway(Viewer->GetHTTPINTERNALERROR(Event->Get(), "text/plain", "no SchemeCache response"));
         }

@@ -14,19 +14,13 @@ void TReadPortionInfoWithBlobs::RestoreChunk(const std::shared_ptr<IPortionDataC
 }
 
 std::shared_ptr<NArrow::TGeneralContainer> TReadPortionInfoWithBlobs::RestoreBatch(
-    const ISnapshotSchema::TPtr& data, const ISnapshotSchema& result, const std::set<std::string>& columnNames) const {
-    Y_ABORT_UNLESS(data);
+    const ISnapshotSchema& data, const ISnapshotSchema& resultSchema, const std::set<ui32>& seqColumns) const {
     THashMap<TChunkAddress, TString> blobs;
     for (auto&& i : PortionInfo.Records) {
         blobs[i.GetAddress()] = GetBlobByAddressVerified(i.ColumnId, i.Chunk);
         Y_ABORT_UNLESS(blobs[i.GetAddress()].size() == i.BlobRange.Size);
     }
-    if (columnNames.empty()) {
-        return PortionInfo.PrepareForAssemble(*data, result, blobs).AssembleToGeneralContainer();
-    } else {
-        auto filteredSchema = std::make_shared<TFilteredSnapshotSchema>(data, columnNames);
-        return PortionInfo.PrepareForAssemble(*data, *filteredSchema, blobs).AssembleToGeneralContainer();
-    }
+    return PortionInfo.PrepareForAssemble(data, resultSchema, blobs).AssembleToGeneralContainer(seqColumns);
 }
 
 NKikimr::NOlap::TReadPortionInfoWithBlobs TReadPortionInfoWithBlobs::RestorePortion(const TPortionInfo& portion, NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) {
@@ -70,20 +64,15 @@ bool TReadPortionInfoWithBlobs::ExtractColumnChunks(const ui32 entityId, std::ve
     if (records.empty()) {
         return false;
     }
-    std::map<TChunkAddress, std::shared_ptr<IPortionDataChunk>> chunksMap;
+    std::vector<std::shared_ptr<IPortionDataChunk>> chunksLocal;
     for (auto it = Chunks.begin(); it != Chunks.end();) {
         if (it->first.GetEntityId() == entityId) {
-            chunksMap.emplace(it->first, std::move(it->second));
+            AFL_VERIFY(chunksLocal.empty() || chunksLocal.back()->GetChunkAddressVerified() < it->second->GetChunkAddressVerified());
+            chunksLocal.emplace_back(std::move(it->second));
             it = Chunks.erase(it);
         } else {
             ++it;
         }
-    }
-    std::vector<std::shared_ptr<IPortionDataChunk>> chunksLocal;
-    for (auto&& i : chunksMap) {
-        Y_ABORT_UNLESS(i.first.GetColumnId() == entityId);
-        Y_ABORT_UNLESS(i.first.GetChunk() == chunksLocal.size());
-        chunksLocal.emplace_back(i.second);
     }
     std::swap(chunksLocal, chunks);
     return true;

@@ -43,6 +43,7 @@ SRCS(
     json_nodelist.h
     json_nodes.h
     json_pdiskinfo.h
+    json_pipe_req.cpp
     json_query.h
     json_query_old.h
     json_render.h
@@ -70,6 +71,7 @@ SRCS(
     scheme_directory.h
     storage_groups.cpp
     query_autocomplete_helper.h
+    viewer_capabilities.cpp
     viewer_request.cpp
     viewer_request.h
     viewer.cpp

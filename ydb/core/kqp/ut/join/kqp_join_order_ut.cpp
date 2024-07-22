@@ -48,6 +48,8 @@ static void CreateSampleTable(TSession session) {
 
     UNIT_ASSERT(session.ExecuteSchemeQuery(GetStatic("schema/tpcc.sql")).GetValueSync().IsSuccess());
 
+    UNIT_ASSERT(session.ExecuteSchemeQuery(GetStatic("schema/lookupbug.sql")).GetValueSync().IsSuccess());
+
 }
 
 static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false, TString stats = ""){
@@ -148,7 +150,8 @@ void ExplainJoinOrderTestDataQuery(const TString& queryPath, bool useStreamLooku
 
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-        Cout << result.GetPlan();
+        Cout << result.GetPlan() << Endl;
+        Cout << CanonizeJoinOrder(result.GetPlan()) << Endl;
     }
 }
 
@@ -329,6 +332,12 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         JoinOrderTestWithOverridenStats(
             "queries/tpcc.sql", "stats/tpcc.json", "join_order/tpcc.json", false);
     }
+
+    Y_UNIT_TEST(LookupBug) {
+        JoinOrderTestWithOverridenStats(
+            "queries/lookupbug.sql", "stats/lookupbug.json", "join_order/lookupbug.json", false);
+    }
+
 
 }
 }

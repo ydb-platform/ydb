@@ -9,6 +9,7 @@
   - android/native_window.h
   - android/native_window_jni.h
   - android/ndk-version.h
+  - android/set_abort_message.h
   - cpu-features.h: contrib/libs/android_cpufeatures/cpu-features.h
   - jni.h
   - EGL/egl.h

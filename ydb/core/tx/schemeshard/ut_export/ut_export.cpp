@@ -227,6 +227,15 @@ namespace {
         fieldChecker(fieldGetter(proto));
     }
 
+    void CheckPermissions(const TString& permissions, auto&& fieldChecker) {
+        Ydb::Scheme::ModifyPermissionsRequest proto;
+        UNIT_ASSERT_C(
+            google::protobuf::TextFormat::ParseFromString(permissions, &proto),
+            permissions
+        );
+        fieldChecker(proto);
+    }
+
 } // anonymous
 
 Y_UNIT_TEST_SUITE(TExportToS3Tests) {
@@ -247,6 +256,8 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
             auto it = s3Mock.GetData().find(canonPath + "/metadata.json");
             UNIT_ASSERT(it != s3Mock.GetData().end());
             it = s3Mock.GetData().find(canonPath + "/scheme.pb");
+            UNIT_ASSERT(it != s3Mock.GetData().end());
+            it = s3Mock.GetData().find(canonPath + "/permissions.pb");
             UNIT_ASSERT(it != s3Mock.GetData().end());
         }
     }
@@ -2002,5 +2013,56 @@ partitioning_settings {
         const auto& entry = desc.GetResponse().GetEntry();
         UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_PREPARING);
         UNIT_ASSERT_VALUES_EQUAL(entry.GetUserSID(), userSID);
+    }
+
+    Y_UNIT_TEST(TablePermissions) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        NACLib::TDiffACL diffACL;
+        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user@builtin", NACLib::InheritNone);
+        TestModifyACL(runtime, ++txId, "/MyRoot", "Table", diffACL.SerializeAsString(), "user@builtin");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        auto* permissions = s3Mock.GetData().FindPtr("/permissions.pb");
+        UNIT_ASSERT(permissions);
+        CheckPermissions(*permissions, CreateProtoComparator(R"(
+            actions {
+                change_owner: "user@builtin"
+            }
+            actions {
+                grant {
+                    subject: "user@builtin"
+                    permission_names: "ydb.generic.use"
+                }
+            }
+        )"));
     }
 }

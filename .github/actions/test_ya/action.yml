@@ -168,7 +168,7 @@ runs:
 
         if [ $TEST_RETRY_COUNT -z ]; then
           # default is 3 for ordinary build and 1 for sanitizer builds
-          $TEST_RETRY_COUNT=3
+          TEST_RETRY_COUNT=3
         fi
     
         if [ ! -z "${{ inputs.additional_ya_make_args }}" ]; then

@@ -191,7 +191,7 @@ class TestSummary:
             if need_first_column:
                 row.append(line.title)
             row.extend([
-                render_pm(line.test_count + (" (only retried tests)" if self.is_retry else ""), f"{report_url}", 0),
+                render_pm(f"{line.test_count}" + (" (only retried tests)" if self.is_retry else ""), f"{report_url}", 0),
                 render_pm(line.passed, f"{report_url}#PASS", 0),
                 render_pm(line.errors, f"{report_url}#ERROR", 0),
                 render_pm(line.failed, f"{report_url}#FAIL", 0),

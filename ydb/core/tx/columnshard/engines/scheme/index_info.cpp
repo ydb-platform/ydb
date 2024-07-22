@@ -157,10 +157,11 @@ void TIndexInfo::SetAllKeys(const std::shared_ptr<IStoragesManager>& operators) 
     /// * apply REPLACE by MergeSort
     /// * apply PK predicate before REPLACE
     {
+        AFL_VERIFY(PKColumnIds.empty());
         const auto& primaryKeyNames = NamesOnly(GetPrimaryKeyColumns());
-        auto columnIds = GetColumnIds(primaryKeyNames);
-        AFL_VERIFY(columnIds.size());
-        PrimaryKey = MakeArrowSchema(Columns, columnIds);
+        PKColumnIds = GetColumnIds(primaryKeyNames);
+        AFL_VERIFY(PKColumnIds.size());
+        PrimaryKey = MakeArrowSchema(Columns, PKColumnIds);
     }
 
     for (const auto& [colId, column] : Columns) {

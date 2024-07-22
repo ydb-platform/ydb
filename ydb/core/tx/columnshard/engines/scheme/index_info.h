@@ -252,6 +252,10 @@ public:
     std::vector<TString> GetColumnNames(const std::vector<ui32>& ids) const;
     std::vector<std::string> GetColumnSTLNames(const std::vector<ui32>& ids) const;
     const std::vector<ui32>& GetColumnIds(const bool withSpecial = true) const;
+    const std::vector<ui32>& GetPKColumnIds() const {
+        AFL_VERIFY(PKColumnIds.size());
+        return PKColumnIds;
+    }
     std::vector<ui32> GetEntityIds() const;
 
     /// Returns info of columns defined by specific ids.
@@ -317,6 +321,7 @@ private:
     TString Name;
     std::vector<ui32> SchemaColumnIds;
     std::vector<ui32> SchemaColumnIdsWithSpecials;
+    std::vector<ui32> PKColumnIds;
     std::shared_ptr<arrow::Schema> Schema;
     std::shared_ptr<arrow::Schema> SchemaWithSpecials;
     std::shared_ptr<arrow::Schema> PrimaryKey;

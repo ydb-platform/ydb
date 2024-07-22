@@ -91,13 +91,16 @@ protected:
 
     template <class TChunkAccessor>
     TCurrentChunkAddress SelectChunk(const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position, const TChunkAccessor& accessor) const {
-        if (!chunkCurrent || position >= chunkCurrent->GetStartPosition() + chunkCurrent->GetLength()) {
+        if (!chunkCurrent || position >= chunkCurrent->GetStartPosition()) {
             ui32 startIndex = 0;
             ui64 idx = 0;
             if (chunkCurrent) {
-                AFL_VERIFY(chunkCurrent->GetChunkIndex() + 1 < accessor.GetChunksCount());
-                startIndex = chunkCurrent->GetChunkIndex() + 1;
-                idx = chunkCurrent->GetStartPosition() + chunkCurrent->GetLength();
+                if (position < chunkCurrent->GetFinishPosition()) {
+                    return *chunkCurrent;
+                }
+                AFL_VERIFY(chunkCurrent->GetChunkIndex() < accessor.GetChunksCount());
+                startIndex = chunkCurrent->GetChunkIndex();
+                idx = chunkCurrent->GetStartPosition();
             }
             for (ui32 i = startIndex; i < accessor.GetChunksCount(); ++i) {
                 const ui64 nextIdx = idx + accessor.GetChunkLength(i);

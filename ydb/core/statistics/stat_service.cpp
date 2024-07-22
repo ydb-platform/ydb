@@ -820,6 +820,9 @@ private:
 
     void SendRequestToNode(TAggregationStatistics::TNode& node, const NKikimrStat::TEvAggregateStatistics& record) {
         if (node.Tablets.empty()) {
+            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                "TEvAggregateStatistics node EMPTY");
+
             node.Status = TAggregationStatistics::TNode::EStatus::Processed;
             ++AggregationStatistics.PprocessedNodes;
             return;
@@ -852,6 +855,8 @@ private:
 
         // sending the request to the first node of the range
         const auto nodeId = node.Tablets[0].NodeId;
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                "TEvAggregateStatistics SEND TO NODE: " << nodeId);
         node.Actor = MakeStatServiceID(nodeId);
         node.Status = TAggregationStatistics::TNode::EStatus::Processing;
 
@@ -896,12 +901,14 @@ private:
         // forming the right and left child nodes
         size_t k = 0;
         for (const auto& node : nodes) {
-            ++k;
-
             if (node.GetNodeId() == currentNodeId) {
+                LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                    "TEvAggregateStatistics send to local tablets");
                 AggregationStatistics.LocalTablets.Ids.reserve(node.GetTabletIds().size());
 
                 for (const auto& tabletId : node.GetTabletIds()) {
+                    LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                        "TEvAggregateStatistics send to local tablets: " << tabletId);
                     AggregationStatistics.LocalTablets.Ids.push_back(tabletId);
                 }
                 continue;
@@ -909,12 +916,19 @@ private:
 
             TAggregationStatistics::TTablets nodeTablets;
             nodeTablets.NodeId = node.GetNodeId();
+            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                "TEvAggregateStatistics add node: " << nodeTablets.NodeId);
+
             nodeTablets.Ids.reserve(node.GetTabletIds().size());
             for (const auto& tabletId : node.GetTabletIds()) {
+                LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                    "TEvAggregateStatistics add tablet: " << tabletId);
+
                 nodeTablets.Ids.push_back(tabletId);
             }
 
             AggregationStatistics.Nodes[k % Settings.FanOutFactor].Tablets.push_back(std::move(nodeTablets));
+            ++k;
         }
 
         for (auto& node : AggregationStatistics.Nodes) {

@@ -590,6 +590,7 @@ public:
     ,   SelfJoinSameKeys_(isSelfJoin && (leftKeyColumns == rightKeyColumns))
     ,   IsSpillingAllowed(isSpillingAllowed)
     {
+        YQL_LOG(DEBUG) << (const void *)&*JoinedTablePtr << "# AnyJoinSettings=" << (int)anyJoinSettings << " JoinKind=" << (int)joinKind;
         if (JoinKind == EJoinKind::Full || JoinKind == EJoinKind::Exclusion || IsSelfJoin_) {
             LeftPacker->BatchSize = std::numeric_limits<ui64>::max();
             RightPacker->BatchSize = std::numeric_limits<ui64>::max();
@@ -768,7 +769,7 @@ private:
                 const auto limit = TlsAllocState->GetLimit();
 
                 YQL_LOG(INFO) << "yellow zone reached " << (used*100/limit) << "%=" << used << "/" << limit;
-                YQL_LOG(INFO) << "switching Memory mode to Spilling";
+                YQL_LOG(INFO) << (const void *)&*JoinedTablePtr << "# switching Memory mode to Spilling";
 
                 SwitchMode(EOperatingMode::Spilling, ctx);
                 return EFetchResult::Yield;
@@ -780,6 +781,11 @@ private:
                 (!*HaveMoreRightRows && (!*HaveMoreLeftRows || LeftPacker->TuplesBatchPacked >= LeftPacker->BatchSize )) ||
                 (!*HaveMoreLeftRows && RightPacker->TuplesBatchPacked >= RightPacker->BatchSize))) {
 
+                YQL_LOG(TRACE)
+                    << (const void *)&*JoinedTablePtr << '#'
+                    << " HaveLeft " << *HaveMoreLeftRows << " LeftPacked " << LeftPacker->TuplesBatchPacked << " LeftBatch " << LeftPacker->BatchSize
+                    << " HaveRight " << *HaveMoreRightRows << " RightPacked " << RightPacker->TuplesBatchPacked << " RightBatch " << RightPacker->BatchSize
+                    ;
                 *PartialJoinCompleted = true;
                 LeftPacker->StartTime = std::chrono::system_clock::now();
                 RightPacker->StartTime = std::chrono::system_clock::now();
@@ -850,7 +856,7 @@ void DoCalculateWithSpilling(TComputationContext& ctx) {
         }
         if (!IsReadyForSpilledDataProcessing()) return;
 
-        YQL_LOG(INFO) << "switching to ProcessSpilled";
+        YQL_LOG(INFO) << (const void *)&*JoinedTablePtr << "# switching to ProcessSpilled";
         SwitchMode(EOperatingMode::ProcessSpilled, ctx);
         return;
     }

@@ -52,9 +52,9 @@ inputs:
     type: boolean
     default: true
     description: "run tests"
-  run_tests_retry_count:
-    type: int
-    default: 3
+  test_retry_count:
+    type: string
+    default: ""
     description: "how many times to retry failed tests"
 outputs:
   success:
@@ -114,6 +114,8 @@ runs:
           --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
           -DUSE_EAT_MY_DATA
         )
+
+        TEST_RETRY_COUNT=${{ inputs.test_retry_count }}
         
         case "$BUILD_PRESET" in
           debug)
@@ -136,25 +138,39 @@ runs:
               --build "release" --sanitize="address"
               -DDEBUGINFO_LINES_ONLY
             )
+            if [ $TEST_RETRY_COUNT -z ]; then
+              $TEST_RETRY_COUNT=1
+            fi
             ;;
           release-tsan)
             params+=(
               --build "release" --sanitize="thread"
               -DDEBUGINFO_LINES_ONLY
             )
+            if [ $TEST_RETRY_COUNT -z ]; then
+              $TEST_RETRY_COUNT=1
+            fi
             ;;
           release-msan)
             params+=(
               --build "release" --sanitize="memory"
               -DDEBUGINFO_LINES_ONLY
             )
+            if [ $TEST_RETRY_COUNT -z ]; then
+              $TEST_RETRY_COUNT=1
+            fi
             ;;
           *)
             echo "Invalid preset: $BUILD_PRESET"
             exit 1
             ;;
         esac
-        
+
+        if [ $TEST_RETRY_COUNT -z ]; then
+          # default is 3 for ordinary build and 1 for sanitizer builds
+          $TEST_RETRY_COUNT=3
+        fi
+    
         if [ ! -z "${{ inputs.additional_ya_make_args }}" ]; then
           params+=(${{ inputs.additional_ya_make_args }})
         fi
@@ -241,9 +257,7 @@ runs:
 
         BUILD_FAILED=0
 
-        RETRY_COUNT=${{ inputs.run_tests_retry_count }}
-
-        for RETRY in $(seq 1 $RETRY_COUNT)
+        for RETRY in $(seq 1 $TEST_RETRY_COUNT)
         do
           if [ ${{ inputs.testman_token }} ]; then
             # inititalize testmo session
@@ -274,7 +288,8 @@ runs:
           fi
           echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
-          CURRENT_PUBLIC_DIR=$PUBLIC_DIR/try_$RETRY
+          CURRENT_PUBLIC_DIR_RELATIVE=try_$RETRY
+          CURRENT_PUBLIC_DIR=$PUBLIC_DIR/$CURRENT_PUBLIC_DIR_RELATIVE
           mkdir $CURRENT_PUBLIC_DIR
 
           CURRENT_JUNIT_XML_PATH=$CURRENT_PUBLIC_DIR/junit.xml
@@ -298,13 +313,14 @@ runs:
           gzip -c $CURRENT_JUNIT_XML_PATH > $CURRENT_PUBLIC_DIR/orig_junit.xml.gz
 
           # postprocess junit report
+          # TODO relative log out and test stuff
           .github/scripts/tests/transform-ya-junit.py -i \
             -m .github/config/muted_ya.txt \
             --ya_out "$YA_MAKE_OUT_DIR" \
             --public_dir "$PUBLIC_DIR" \
             --public_dir_url "$PUBLIC_DIR_URL" \
-            --log_out_dir "$CURRENT_PUBLIC_DIR/artifacts/logs/" \
-            --test_stuff_out "$CURRENT_PUBLIC_DIR/test_artifacts/" \
+            --log_out_dir "$CURRENT_PUBLIC_DIR_RELATIVE/artifacts/logs/" \
+            --test_stuff_out "$CURRENT_PUBLIC_DIR_RELATIVE/test_artifacts/" \
             "$CURRENT_JUNIT_XML_PATH"
           cp $CURRENT_JUNIT_XML_PATH $JUNIT_REPORT_XML
 
@@ -420,24 +436,24 @@ runs:
         fi
     - name: analyze tests results
       shell: bash
-      if: inputs.run_tests
       env:
         GITHUB_TOKEN: ${{ github.token }}
       run: |
         set -x
-        # TODO
-        teststatus=$(cat statusrep.txt)
-        if [[ $teststatus == "success" ]];then
-          testmessage="The check has been completed successfully"
-        else
-          testmessage="The check has been failed"
-        fi
-        curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
-            -d '{"state":"'$teststatus'","description":"'"$testmessage"'","context":"test_${{inputs.build_preset}}"}'
-        
-        if [[ $teststatus != "success" ]];then
-          echo "status=failed" >> $GITHUB_OUTPUT
+        if [ true = ${{ inputs.run_tests }} ]; then
+          teststatus=$(cat statusrep.txt)
+          if [[ $teststatus == "success" ]];then
+            testmessage="The check has been completed successfully"
+          else
+            testmessage="The check has been failed"
+          fi
+          curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+              https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+              -d '{"state":"'$teststatus'","description":"'"$testmessage"'","context":"test_${{inputs.build_preset}}"}'
+          
+          if [[ $teststatus != "success" ]];then
+            echo "status=failed" >> $GITHUB_OUTPUT
+          fi
         fi
     
     - name: check test results

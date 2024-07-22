@@ -739,7 +739,7 @@ std::tuple<bool, T, TString> TSqlTranslation::GetIndexSettingValue(const TRule_i
     T value;
     // id_or_type
     if (node.HasAlt_index_setting_value1()) {
-        const TString stringValue = IdEx(node.GetAlt_index_setting_value1().GetRule_id_or_type1(), *this).Name;
+        const TString stringValue = to_lower(IdEx(node.GetAlt_index_setting_value1().GetRule_id_or_type1(), *this).Name);
         if (!TryFromString<T>(stringValue, value)) {
             return {false, value, stringValue};
         }
@@ -747,7 +747,7 @@ std::tuple<bool, T, TString> TSqlTranslation::GetIndexSettingValue(const TRule_i
     }
     // STRING_VALUE
     else if (node.HasAlt_index_setting_value2()) {
-        const TString stringValue = Token(node.GetAlt_index_setting_value2().GetToken1());
+        const TString stringValue = to_lower(Token(node.GetAlt_index_setting_value2().GetToken1()));
         const auto unescaped = StringContent(Ctx, Ctx.Pos(), stringValue);
         if (!unescaped) {
             return {false, value, stringValue};

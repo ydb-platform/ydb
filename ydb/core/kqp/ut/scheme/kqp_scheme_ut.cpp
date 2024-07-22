@@ -2760,6 +2760,32 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     } 
 
+
+    Y_UNIT_TEST(CreateTableWithVectorIndexCaseIncentive) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            TString create_index_query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Embedding String,
+                    PRIMARY KEY (Key),
+                    INDEX vector_idx 
+                        GLOBAL USING vector_KMEANS_tree 
+                        ON (Embedding)
+                        WITH (similarity=COSINE, VECTOR_TYPE=float, vector_DIMENSION=1024)
+                );
+            )";
+            auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }    
+    }
+
     Y_UNIT_TEST(CreateTableWithVectorIndexNoFeatureFlag) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

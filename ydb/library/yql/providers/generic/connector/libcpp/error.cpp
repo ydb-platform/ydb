@@ -37,7 +37,11 @@ namespace NYql::NConnector {
                 return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_UNSUPPORTED;
             case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_NOT_FOUND:
                 return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_BAD_REQUEST;
+            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SCHEME_ERROR:
+                return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_BAD_REQUEST;
             default:
+                // FIXME: remove me after debug
+                Cout << "CRAB: " << ::Ydb::StatusIds::StatusCode_Name(error.status()) << Endl;
                 ythrow yexception() << "Unexpected YDB status code: " << ::Ydb::StatusIds::StatusCode_Name(error.status());
         }
     }

@@ -200,13 +200,9 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
 
         auto itGranule = PathToGranule.find(pathId);
         AFL_VERIFY(itGranule != PathToGranule.end());
-        std::map<NArrow::NMerger::TSortableBatchPosition, bool> points;
-        for (auto&& i : itGranule->second) {
-            AFL_VERIFY(points.emplace(i, false).second);
-        }
         NCompaction::TMerger merger(context, SaverContext, std::move(batches), std::move(filters));
         merger.SetOptimizationWritingPackMode(true);
-        auto localAppended = merger.Execute(stats, points, filteredSnapshot, pathId, shardingVersion);
+        auto localAppended = merger.Execute(stats, itGranule->second, filteredSnapshot, pathId, shardingVersion);
         for (auto&& i : localAppended) {
             AppendedPortions.emplace_back(std::move(i));
         }

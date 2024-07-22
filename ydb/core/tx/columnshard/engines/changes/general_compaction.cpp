@@ -212,8 +212,8 @@ NColumnShard::ECumulativeCounters TGeneralCompactColumnEngineChanges::GetCounter
 }
 
 void TGeneralCompactColumnEngineChanges::AddCheckPoint(
-    const NArrow::NMerger::TSortableBatchPosition& position, const bool include, const bool validationDuplications) {
-    AFL_VERIFY(CheckPoints.emplace(position, include).second || !validationDuplications);
+    const NArrow::NMerger::TSortableBatchPosition& position, const bool include) {
+    CheckPoints.AddPosition(position, include);
 }
 
 std::shared_ptr<TGeneralCompactColumnEngineChanges::IMemoryPredictor> TGeneralCompactColumnEngineChanges::BuildMemoryPredictor() {

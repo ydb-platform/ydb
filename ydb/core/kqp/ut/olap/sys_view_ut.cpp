@@ -243,7 +243,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             ui64 bytes2;
             helper.GetVolumes(rawBytes2, bytes2, false, {"new_column_ui64"});
             AFL_VERIFY(rawBytes2 == 6500023)("real", rawBytes2);
-            AFL_VERIFY(bytes2 == 45360)("b", bytes2);
+            AFL_VERIFY(bytes2 == 38880)("b", bytes2);
         }
     }
 

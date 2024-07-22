@@ -14,7 +14,7 @@
 namespace NKikimr::NOlap::NCompaction {
 
 std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared_ptr<TSerializationStats>& stats,
-    const std::map<NArrow::NMerger::TSortableBatchPosition, bool>& checkPoints, const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered,
+    const NArrow::NMerger::TIntervalPositions& checkPoints, const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered,
     const ui64 pathId, const std::optional<ui64> shardingActualVersion) {
     AFL_VERIFY(Batches.size() == Filters.size());
     static const TString portionIdFieldName = "$$__portion_id";

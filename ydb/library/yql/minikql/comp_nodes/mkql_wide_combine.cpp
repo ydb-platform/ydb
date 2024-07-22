@@ -521,7 +521,6 @@ private:
 
         if (finishedCount != SpilledBuckets.size()) return true;
 
-        YQL_LOG(INFO) << "switching to ProcessSpilled";
         SwitchMode(EOperatingMode::ProcessSpilled);
 
         return ProcessSpilledDataAndWait();
@@ -551,17 +550,26 @@ private:
 
     bool CheckMemoryAndSwitchToSpilling() {
         if (AllowSpilling && Ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
-            const auto used = TlsAllocState->GetUsed();
-            const auto limit = TlsAllocState->GetLimit();
-
-            YQL_LOG(INFO) << "yellow zone reached " << (used*100/limit) << "%=" << used << "/" << limit;
-            YQL_LOG(INFO) << "switching Memory mode to Spilling";
+            LogMemoryUsage();
 
             SwitchMode(EOperatingMode::Spilling);
             return true;
         }
 
         return false;
+    }
+
+    void LogMemoryUsage() const {
+        const auto used = TlsAllocState->GetUsed();
+        const auto limit = TlsAllocState->GetLimit();
+        TStringBuilder logmsg;
+        logmsg << "Memory usage: ";
+        if (limit) {
+            logmsg << (used*100/limit) << "%=";
+        }
+        logmsg << (used/1_MB) << "MB/" << (limit/1_MB) << "MB";
+
+        YQL_LOG(INFO) << logmsg;
     }
 
     void SpillMoreStateFromBucket(TSpilledBucket& bucket) {
@@ -688,10 +696,12 @@ private:
     void SwitchMode(EOperatingMode mode) {
         switch(mode) {
             case EOperatingMode::InMemory: {
+                YQL_LOG(INFO) << "switching Memory mode to InMemory";
                 MKQL_ENSURE(false, "Internal logic error");
                 break;
             }
             case EOperatingMode::Spilling: {
+                YQL_LOG(INFO) << "switching Memory mode to Spilling";
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
                 SpilledBuckets.resize(SpilledBucketCount);
                 auto spiller = Ctx.SpillerFactory->CreateSpiller();
@@ -707,6 +717,7 @@ private:
                 break;
             }
             case EOperatingMode::ProcessSpilled: {
+                YQL_LOG(INFO) << "switching Memory mode to ProcessSpilled";
                 MKQL_ENSURE(EOperatingMode::Spilling == Mode, "Internal logic error");
                 MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");
                 BufferForKeyAndState.resize(0);
@@ -722,9 +733,7 @@ private:
     }
 
     bool IsSwitchToSpillingModeCondition() const {
-        return false;
-        // TODO: YQL-18033
-        // return !HasMemoryForProcessing();
+        return !HasMemoryForProcessing();
     }
 
 public:
@@ -1250,7 +1259,6 @@ public:
         , AllowSpilling(allowSpilling)
     {}
 
-    // MARK: DoCAlculate
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         if (!state.HasValue()) {
             MakeState(ctx, state);

@@ -445,6 +445,27 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SqlColumn"]);
     }
 
+    Y_UNIT_TEST(DisabledJoinCartesianProduct) {
+        NYql::TAstParseResult res = SqlToYql("pragma DisableAnsiImplicitCrossJoin; use plato; select * from A,B,C");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:67: Error: Cartesian product of tables is disabled. Please use explicit CROSS JOIN or enable it via PRAGMA AnsiImplicitCrossJoin\n");
+    }
+
+    Y_UNIT_TEST(JoinCartesianProduct) {
+        NYql::TAstParseResult res = SqlToYql("pragma AnsiImplicitCrossJoin; use plato; select * from A,B,C");
+        UNIT_ASSERT(res.Root);
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "EquiJoin") {
+                auto pos = line.find("Cross");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, pos);
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Cross", pos + 1));
+            }
+        };
+        TWordCountHive elementStat = {{TString("EquiJoin"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["EquiJoin"]);
+    }
+
     Y_UNIT_TEST(JoinWithoutConcreteColumns) {
         NYql::TAstParseResult res = SqlToYql(
             " use plato;"
@@ -539,6 +560,12 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input AS a CROSS JOIN /*+ merge() */ plato.Input AS b;");
         UNIT_ASSERT(res.Root);
         UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:32: Warning: Non-default join strategy will not be used for CROSS JOIN, code: 4534\n");
+    }
+
+    Y_UNIT_TEST(WarnCartesianProductStrategyHint) {
+        NYql::TAstParseResult res = SqlToYql("pragma AnsiImplicitCrossJoin; use plato; SELECT * FROM A, /*+ merge() */ B;");
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:74: Warning: Non-default join strategy will not be used for CROSS JOIN, code: 4534\n");
     }
 
     Y_UNIT_TEST(WarnUnknownJoinStrategyHint) {
@@ -3924,6 +3951,16 @@ select FormatType($f());
         res = SqlToYql("use plato; select * from Input1 cross join any Input2");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:44: Error: ANY should not be used with Cross JOIN\n");
+    }
+
+    Y_UNIT_TEST(AnyWithCartesianProduct) {
+        NYql::TAstParseResult res = SqlToYql("pragma AnsiImplicitCrossJoin; use plato; select * from any Input1, Input2");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:56: Error: ANY should not be used with Cross JOIN\n");
+
+        res = SqlToYql("pragma AnsiImplicitCrossJoin; use plato; select * from Input1, any Input2");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:64: Error: ANY should not be used with Cross JOIN\n");
     }
 
     Y_UNIT_TEST(ErrorPlainEndAsInlineActionTerminator) {

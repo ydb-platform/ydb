@@ -17,9 +17,10 @@ namespace NViewer {
 using namespace NActors;
 using NSchemeShard::TEvSchemeShard;
 
-class TJsonHotkeys : public TViewerPipeClient<TJsonHotkeys> {
+class TJsonHotkeys : public TViewerPipeClient {
     static const bool WithRetry = false;
-    using TBase = TViewerPipeClient<TJsonHotkeys>;
+    using TThis = TJsonHotkeys;
+    using TBase = TViewerPipeClient;
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
     TAutoPtr<TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
@@ -37,10 +38,6 @@ class TJsonHotkeys : public TViewerPipeClient<TJsonHotkeys> {
     TMultiSet<std::pair<ui64, TVector<TString>>, KeysComparator> Keys;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TJsonHotkeys(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
         : Viewer(viewer)
         , Event(ev)
@@ -53,7 +50,7 @@ public:
         record->MutableOptions()->SetReturnPartitionStats(true);
     }
 
-    void Bootstrap() {
+    void Bootstrap() override {
         const auto& params(Event->Get()->Request.GetParams());
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         Limit = FromStringWithDefault<ui32>(params.Get("limit"), 10);
@@ -141,7 +138,7 @@ public:
         return root;
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         if (DescribeResult != nullptr) {
             switch (DescribeResult->GetRecord().GetStatus()) {
             case NKikimrScheme::StatusAccessDenied:

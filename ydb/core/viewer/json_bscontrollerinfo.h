@@ -13,8 +13,9 @@ namespace NViewer {
 
 using namespace NActors;
 
-class TJsonBSControllerInfo : public TViewerPipeClient<TJsonBSControllerInfo> {
-    using TBase = TViewerPipeClient<TJsonBSControllerInfo>;
+class TJsonBSControllerInfo : public TViewerPipeClient {
+    using TThis = TJsonBSControllerInfo;
+    using TBase = TViewerPipeClient;
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
     TAutoPtr<TEvBlobStorage::TEvResponseControllerInfo> ControllerInfo;
@@ -22,22 +23,19 @@ class TJsonBSControllerInfo : public TViewerPipeClient<TJsonBSControllerInfo> {
     ui32 Timeout = 0;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TJsonBSControllerInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
         : Viewer(viewer)
         , Event(ev)
     {}
 
-    void Bootstrap(const TActorContext& ctx) {
+    void Bootstrap() override {
         const auto& params(Event->Get()->Request.GetParams());
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         InitConfig(params);
         RequestBSControllerInfo();
+        const auto ctx = TActivationContext::ActorContextFor(SelfId());
         Become(&TThis::StateRequestedInfo, ctx, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
 
@@ -54,7 +52,7 @@ public:
         RequestDone();
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         TStringStream json;
         if (ControllerInfo != nullptr) {
             TProtoToJson::ProtoToJson(json, ControllerInfo->Record);

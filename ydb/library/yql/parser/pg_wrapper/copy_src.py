@@ -49,9 +49,20 @@ def is_inside_source_dirs(filename):
             return True
     return False
 
+no_copy_sources = [
+    "postgresql/src/include/port/win32/sys/un.h",
+    "postgresql/src/include/port/win32/netinet/tcp.h",
+    "postgresql/src/include/port/win32/sys/resource.h",
+    "postgresql/src/include/port/win32/sys/select.h",
+    "postgresql/src/include/port/win32/dlfcn.h",
+]
+
 def need_copy(filename):
     if not is_inside_source_dirs(filename):
         return False
+    for prefix in no_copy_sources:
+        if filename.startswith(prefix):
+            return False
     return True
 
 exclude_from_source_list = set([
@@ -60,6 +71,8 @@ exclude_from_source_list = set([
     "postgresql/src/port/pg_crc32c_sse42_choose.c",
     "postgresql/src/backend/port/posix_sema.c",
     "postgresql/src/backend/port/sysv_shmem.c",
+    "postgresql/src/port/strlcat.c",
+    "postgresql/src/port/strlcpy.c",
 ])
 
 def fix_line(line, all_lines, pos):

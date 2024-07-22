@@ -139,7 +139,7 @@ runs:
               -DDEBUGINFO_LINES_ONLY
             )
             if [ $TEST_RETRY_COUNT -z ]; then
-              $TEST_RETRY_COUNT=1
+              TEST_RETRY_COUNT=1
             fi
             ;;
           release-tsan)
@@ -148,7 +148,7 @@ runs:
               -DDEBUGINFO_LINES_ONLY
             )
             if [ $TEST_RETRY_COUNT -z ]; then
-              $TEST_RETRY_COUNT=1
+              TEST_RETRY_COUNT=1
             fi
             ;;
           release-msan)
@@ -157,7 +157,7 @@ runs:
               -DDEBUGINFO_LINES_ONLY
             )
             if [ $TEST_RETRY_COUNT -z ]; then
-              $TEST_RETRY_COUNT=1
+              TEST_RETRY_COUNT=1
             fi
             ;;
           *)

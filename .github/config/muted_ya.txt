@@ -20,7 +20,6 @@ ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpOlap.OlapRead_GenericQuerys
 ydb/core/kqp/ut/scheme KqpOlap.OlapRead_StreamGenericQuery
 ydb/core/kqp/ut/scheme KqpOlap.OlapRead_UsesGenericQueryOnJoinWithDataShardTable
-ydb/core/kqp/ut/scheme KqpOlapScheme.DropTable
 ydb/core/kqp/ut/scheme KqpScheme.AlterAsyncReplication
 ydb/core/kqp/ut/scheme KqpScheme.QueryWithAlter
 ydb/core/kqp/ut/scheme [14/50]*

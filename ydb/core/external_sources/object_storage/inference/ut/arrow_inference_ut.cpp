@@ -45,7 +45,7 @@ public:
             BaseUrl,
             Gateway,
             NYql::IHTTPGateway::TRetryPolicy::GetNoRetryPolicy(),
-            NYql::TS3Credentials::TAuthInfo{}), 1);
+            NYql::TS3Credentials{}), 1);
     }
 
     NActors::TActorId RegisterInferencinator(TStringBuf formatStr) {

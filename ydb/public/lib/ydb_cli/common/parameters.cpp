@@ -137,62 +137,73 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
 }
 
 void TCommandWithParameters::AddParametersOption(TClientCommand::TConfig& config, const TString& clarification) {
-    TStringStream descr;
+    TStringStream paramDescr;
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-    descr << "Query parameter[s].";
+    paramDescr << "Query parameter[s].";
     if (clarification) {
-        descr << ' ' << clarification;
+        paramDescr << ' ' << clarification;
     }
-    descr << Endl << "Several parameter options can be specified." << Endl
+    paramDescr << Endl << "Several parameter options can be specified." << Endl
         << "To change parameter input format use --param-format option." << Endl
         << "Escaping depends on operating system.";
-    config.Opts->AddLongOption('p', "param", descr.Str())
+    if (config.HelpCommandVerbosiltyLevel <= 1) {
+        paramDescr << "Use -hh option to see usage examples and all other options to work with parameters." << Endl;
+    }
+    config.Opts->AddLongOption('p', "param", paramDescr.Str())
         .RequiredArgument("$name=value").AppendTo(&ParameterOptions);
-    config.Opts->AddLongOption("param-file", "File name with parameter names and values.\n"
-        "This option may be specified several times.\n"
-        "To change parameter input format use --param-format option.")
+
+    TStringStream paramFileDescr;
+    paramFileDescr << "File name with parameter names and values." << Endl
+        << "This option may be specified several times." << Endl
+        << "To change parameter input format use --param-format option.";
+    if (config.HelpCommandVerbosiltyLevel <= 1) {
+        paramFileDescr << "Use -hh option to see all other options to work with parameters." << Endl;
+    }
+    config.Opts->AddLongOption("param-file", paramFileDescr.Str())
         .RequiredArgument("PATH").AppendTo(&ParameterFiles);
 
-    AddOptionExamples(
-        "param",
-        TExampleSetBuilder()
-            .Title("Examples (with default json-unicode format)")
-            .BeginExample()
-                .Title("One parameter of type Uint64")
-                .Text(TStringBuilder() << "What cli expects:     " << colors.BoldColor() << "$id=3" << colors.OldColor() << Endl
-                    << "How to pass in linux: " << colors.BoldColor() << "--param '$id=3'" << colors.OldColor())
-            .EndExample()
-            .BeginExample()
-                .Title("Two parameters of types Uint64 and Utf8")
-                .Text(TStringBuilder() << "What cli expects:     " << colors.BoldColor() << "$key=1 $value=\"One\"" << colors.OldColor() << Endl
-                    << "How to pass in linux: " << colors.BoldColor() << "--param '$key=3' --param '$value=\"One\"'" << colors.OldColor())
-            .EndExample()
-            .BeginExample()
-                .Title("More complex parameter of type List<Struct<key:Uint64, value:Utf8>>")
-                .Text(TStringBuilder() << "What cli expects:     " << colors.BoldColor() << "$values=[{\"key\":1,\"value\":\"one\"},{\"key\":2,\"value\":\"two\"}]" << colors.OldColor() << Endl
-                    << "How to pass in linux: " << colors.BoldColor() << "--param '$values=[{\"key\":1,\"value\":\"one\"},{\"key\":2,\"value\":\"two\"}]'" << colors.OldColor())
-            .EndExample()
-        .Build()
-    );
+    if (config.HelpCommandVerbosiltyLevel > 1) {
+        AddOptionExamples(
+            "param",
+            TExampleSetBuilder()
+                .Title("Examples (with default json-unicode format)")
+                .BeginExample()
+                    .Title("One parameter of type Uint64")
+                    .Text(TStringBuilder() << "What cli expects:     " << colors.BoldColor() << "$id=3" << colors.OldColor() << Endl
+                        << "How to pass in linux: " << colors.BoldColor() << "--param '$id=3'" << colors.OldColor())
+                .EndExample()
+                .BeginExample()
+                    .Title("Two parameters of types Uint64 and Utf8")
+                    .Text(TStringBuilder() << "What cli expects:     " << colors.BoldColor() << "$key=1 $value=\"One\"" << colors.OldColor() << Endl
+                        << "How to pass in linux: " << colors.BoldColor() << "--param '$key=3' --param '$value=\"One\"'" << colors.OldColor())
+                .EndExample()
+                .BeginExample()
+                    .Title("More complex parameter of type List<Struct<key:Uint64, value:Utf8>>")
+                    .Text(TStringBuilder() << "What cli expects:     " << colors.BoldColor() << "$values=[{\"key\":1,\"value\":\"one\"},{\"key\":2,\"value\":\"two\"}]" << colors.OldColor() << Endl
+                        << "How to pass in linux: " << colors.BoldColor() << "--param '$values=[{\"key\":1,\"value\":\"one\"},{\"key\":2,\"value\":\"two\"}]'" << colors.OldColor())
+                .EndExample()
+            .Build()
+        );
+    }
 }
 
 void TCommandWithParameters::AddParametersStdinOption(TClientCommand::TConfig& config, const TString& requestString) {
-    config.Opts->AddLongOption("param-columns", "String with column names that replaces header when passing "
-        "parameters in CSV/TSV format. It is assumed that there is no header in the file")
+    auto& paramColumns = config.Opts->AddLongOption("param-columns", "String with column names that replaces header "
+        "when passing parameters in CSV/TSV format. It is assumed that there is no header in the file")
         .RequiredArgument("STR").StoreResult(&Columns);
     config.Opts->AddLongOption("columns", "For backward compatibility")
         .RequiredArgument("STR").StoreResult(&Columns).Hidden();
     config.Opts->MutuallyExclusive("param-columns", "columns");
 
-    config.Opts->AddLongOption("param-skip-rows", "Number of header rows to skip when passing parameters in "
-        "CSV/TSV format (not including the row of column names, if any).")
+    auto& paramSkipRows = config.Opts->AddLongOption("param-skip-rows", "Number of header rows to skip when passing "
+        "parameters in CSV/TSV format (not including the row of column names, if any).")
         .RequiredArgument("NUM").StoreResult(&SkipRows).DefaultValue(0);
     config.Opts->AddLongOption("skip-rows", "For backward compatibility")
         .RequiredArgument("NUM").StoreResult(&DeprecatedSkipRows).DefaultValue(0).Hidden();
     config.Opts->MutuallyExclusive("param-skip-rows", "skip-rows");
 
-    config.Opts->AddLongOption("param-name-stdin", "Name of a parameter whose value is provided on stdin, without a "
-        "$ sign. This name is required when you use the raw format in --stdin-format.\n"
+    auto& paramNameStdin = config.Opts->AddLongOption("param-name-stdin", "Name of a parameter whose value is provided"
+        " on stdin, without a $ sign. This name is required when you use the raw format in --stdin-param-format.\n"
         "When used with JSON formats, stdin is interpreted not as a JSON document but as a JSON value passed to "
         "the parameter with the specified name.")
         .RequiredArgument("STRING").AppendTo(&StdinParameters);
@@ -205,7 +216,7 @@ void TCommandWithParameters::AddParametersStdinOption(TClientCommand::TConfig& c
     descr << "Batching mode for stdin parameters processing. Available options:\n  "
         << colors.BoldColor() << "iterative" << colors.OldColor()
         << "\n    Executes " << requestString << " for each parameter set (exactly one execution "
-        "when no framing is specified in \"stdin-format\")\n  "
+        "when no framing is specified in \"stdin-param-format\")\n  "
         << colors.BoldColor() << "full" << colors.OldColor()
         << "\n    Executes " << requestString << " once, with all parameter sets wrapped in json list, when EOF is reached on stdin\n  "
         << colors.BoldColor() << "adaptive" << colors.OldColor()
@@ -214,24 +225,33 @@ void TCommandWithParameters::AddParametersStdinOption(TClientCommand::TConfig& c
         "\"--param-name-stdin\" option for \"adaptive\" batch mode."
         "\nDefault: " << colors.CyanColor() << "\"iterative\"" << colors.OldColor() << ".";
 
-    config.Opts->AddLongOption("param-batch", descr.Str()).RequiredArgument("STRING")
+    auto& paramBatch = config.Opts->AddLongOption("param-batch", descr.Str()).RequiredArgument("STRING")
         .StoreResult(&BatchMode);
     config.Opts->AddLongOption("batch", "For backward compatibility").RequiredArgument("STRING")
         .StoreResult(&BatchMode).Hidden();
     config.Opts->MutuallyExclusive("param-batch", "batch");
 
-    config.Opts->AddLongOption("param-batch-limit", "Maximum size of list for adaptive parameter batching mode")
+    auto& paramBatchLimit = config.Opts->AddLongOption("param-batch-limit",
+        "Maximum size of list for adaptive parameter batching mode")
         .RequiredArgument("INT").StoreResult(&BatchLimit).DefaultValue(DEFAULT_BATCH_LIMIT);
     config.Opts->AddLongOption("batch-limit", "For backward compatibility")
             .RequiredArgument("INT").StoreResult(&DeprecatedBatchLimit).DefaultValue(DEFAULT_BATCH_LIMIT).Hidden();
     config.Opts->MutuallyExclusive("param-batch-limit", "batch-limit");
 
-    config.Opts->AddLongOption("param-batch-max-delay", "Maximum delay to process first item in the list for "
-        "adaptive parameter batching mode")
+    auto& paramBatchMaxDelay = config.Opts->AddLongOption("param-batch-max-delay",
+        "Maximum delay to process first item in the list for adaptive parameter batching mode")
         .RequiredArgument("VAL").StoreResult(&BatchMaxDelay).DefaultValue(DEFAULT_BATCH_MAX_DELAY);
     config.Opts->AddLongOption("batch-max-delay", "For backward compatibility")
             .RequiredArgument("VAL").StoreResult(&DeprecatedBatchMaxDelay).DefaultValue(DEFAULT_BATCH_MAX_DELAY).Hidden();
     config.Opts->MutuallyExclusive("param-batch-max-delay", "batch-max-delay");
+    if (config.HelpCommandVerbosiltyLevel <= 1) {
+        paramColumns.Hidden();
+        paramSkipRows.Hidden();
+        paramNameStdin.Hidden();
+        paramBatch.Hidden();
+        paramBatchLimit.Hidden();
+        paramBatchMaxDelay.Hidden();
+    }
 }
 
 void TCommandWithParameters::AddParams(TParamsBuilder& paramBuilder) {

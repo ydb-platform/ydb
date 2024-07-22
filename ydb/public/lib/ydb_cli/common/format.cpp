@@ -132,8 +132,11 @@ void TCommandWithFormat::AddParamFormats(TClientCommand::TConfig& config, const 
             << "\n    " << findResult->second;
     }
     description << "\nDefault: " << colors.CyanColor() << "\"" << defaultFormat << "\"" << colors.OldColor() << ".";
-    config.Opts->AddLongOption("param-format", description.Str())
+    auto& paramFormatOption = config.Opts->AddLongOption("param-format", description.Str())
         .RequiredArgument("STRING").StoreResult(&ParamFormat);
+    if (config.HelpCommandVerbosiltyLevel <= 1) {
+        paramFormatOption.Hidden();
+    }
     config.Opts->AddLongOption("input-format", "For backward compatibility")
         .RequiredArgument("STRING").StoreResult(&LegacyInputFormat).Hidden();
     config.Opts->MutuallyExclusive("param-format", "input-format");
@@ -141,7 +144,7 @@ void TCommandWithFormat::AddParamFormats(TClientCommand::TConfig& config, const 
 }
 
 void TCommandWithFormat::AddStdinFormats(TClientCommand::TConfig &config, const TVector<EOutputFormat>& allowedStdinFormats,
-                                         const TVector<EOutputFormat>& allowedFramingFormats, const TString& optionName) {
+                                         const TVector<EOutputFormat>& allowedFramingFormats) {
     TStringStream description;
     description << "Stdin parameters format and framing. Specify this option twice to select both.\n"
                 << "1. Parameters format. Format of parameters expected on the stdin. Available options: ";
@@ -163,10 +166,17 @@ void TCommandWithFormat::AddStdinFormats(TClientCommand::TConfig &config, const 
                     << "\n    " << findResult->second;
     }
     description << "\nDefault: " << colors.CyanColor() << "\"no-framing\"" << colors.OldColor() << ".";
-    config.Opts->AddLongOption(optionName, description.Str())
+    auto& stdinParamFormat = config.Opts->AddLongOption("stdin-param-format", description.Str())
             .RequiredArgument("STRING").AppendTo(&StdinFormats);
+    config.Opts->AddLongOption("stdin-format", "For backward compatibility").RequiredArgument("STRING")
+        .AppendTo(&StdinFormats).Hidden();
+    config.Opts->MutuallyExclusive("stdin-param-format", "stdin-format");
+    if (config.HelpCommandVerbosiltyLevel <= 1) {
+        stdinParamFormat.Hidden();
+    }
     AllowedStdinFormats = allowedStdinFormats;
     AllowedFramingFormats = allowedFramingFormats;
+    
 }
 
 void TCommandWithFormat::AddFormats(TClientCommand::TConfig& config, 

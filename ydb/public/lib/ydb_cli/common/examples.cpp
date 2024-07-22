@@ -80,7 +80,7 @@ namespace {
 }
 
 void TCommandWithExamples::CheckExamples(const TClientCommand::TConfig& config) {
-    if (!IsOptionCalled(config)) {
+    if (!IsOptionCalled(config) && config.HelpCommandVerbosiltyLevel <= 1) {
         return;
     }
 

@@ -60,8 +60,6 @@ void TCommandSql::Config(TConfig& config) {
 
     AddParametersOption(config);
 
-    AddExamplesOption(config);
-
     AddParamFormats(config, {
         EOutputFormat::JsonUnicode,
         EOutputFormat::JsonBase64
@@ -76,10 +74,11 @@ void TCommandSql::Config(TConfig& config) {
     }, {
         EOutputFormat::NoFraming,
         EOutputFormat::NewlineDelimited
-    },
-    "stdin-param-format");
+    });
 
     AddParametersStdinOption(config, "script");
+
+    CheckExamples(config);
 
     config.SetFreeArgsNum(0);
 }

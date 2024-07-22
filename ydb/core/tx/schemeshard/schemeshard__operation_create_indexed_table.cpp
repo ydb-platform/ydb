@@ -238,14 +238,14 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), scheme));
         }
 
-        auto createIndexImplTable = [&] (const NKikimrSchemeOp::TTableDescription&& implTableDesc) {
+        auto createIndexImplTable = [&] (NKikimrSchemeOp::TTableDescription&& implTableDesc) {
             auto scheme = TransactionTemplate(
                 tx.GetWorkingDir() + "/" + baseTableDescription.GetName() + "/" + indexDescription.GetName(),
                 NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
             scheme.SetFailOnExist(tx.GetFailOnExist());
             scheme.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
 
-            *scheme.MutableCreateTable() = implTableDesc;
+            *scheme.MutableCreateTable() = std::move(implTableDesc);
 
             return CreateNewTable(NextPartId(nextId, result), scheme);    
         };

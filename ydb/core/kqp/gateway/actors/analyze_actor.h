@@ -36,11 +36,21 @@ public:
             HFunc(NStat::TEvStatistics::TEvScanTableResponse, Handle);
             IgnoreFunc(NStat::TEvStatistics::TEvScanTableAccepted);
             default:
-                LOG_CRIT_S(
-                    TlsActivationContext->AsActorContext(), 
-                    NKikimrServices::STATISTICS,
-                    "NKikimr::NKqp::TAnalyzeActor: unexpected event# " << ev->GetTypeRewrite()
+                ALOG_CRIT(
+                    NKikimrServices::KQP_GATEWAY, 
+                    "TAnalyzeActor, unexpected event, request type: " << ev->GetTypeRewrite();
                 );
+                    
+                Promise_.SetValue(
+                    NYql::NCommon::ResultFromError<NYql::IKikimrGateway::TGenericResult>(
+                        YqlIssue(
+                            {}, NYql::TIssuesIds::UNEXPECTED, 
+                            TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite()
+                        )
+                    )
+                );
+
+                this->PassAway();
         }
     }
 
@@ -116,7 +126,7 @@ private:
             navigateDomainKey(domainInfo->ResourcesDomainKey);
         }
     }
-    // 72075186224037897 72075186224037897
+
     void SendStatisticsAggregatorAnalyze(ui64 statisticsAggregatorId) {
         auto scanTable = std::make_unique<NStat::TEvStatistics::TEvScanTable>();
         auto& record = scanTable->Record;

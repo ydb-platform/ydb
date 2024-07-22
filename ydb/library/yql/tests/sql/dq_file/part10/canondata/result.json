@@ -2295,6 +2295,11 @@
         }
     ],
     "test.test[pg-values-default.txt-Results]": [],
+    "test.test[pg_duplicated-ambigous_order_by_with_duplicates--Results]": [
+        {
+            "uri": "file://test.test_pg_duplicated-ambigous_order_by_with_duplicates--Results_/extracted"
+        }
+    ],
     "test.test[produce-process_multi_in_trivial_lambda--Analyze]": [
         {
             "checksum": "3dbb5da9da6aa6644bd298b1538eb071",

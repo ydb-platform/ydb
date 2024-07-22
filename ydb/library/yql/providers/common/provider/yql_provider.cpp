@@ -1645,30 +1645,30 @@ bool RenamePgSelectColumns(
     if (auto targetColumnsOption = GetSetItemOption(node, "target_columns")) {
         auto targetColumns = GetSetItemOptionValue(TExprBase(targetColumnsOption));
         for (const auto& child : targetColumns->ChildrenList()) {
-            insertColumnOrder.emplace_back(child->Content());
+            insertColumnOrder.AddColumn(TString(child->Content()));
         }
     } else {
         YQL_ENSURE(tableColumnOrder);
         insertColumnOrder = *tableColumnOrder;
     }
     YQL_ENSURE(selectorColumnOrder);
-    if (selectorColumnOrder->size() > insertColumnOrder.size()) {
+    if (selectorColumnOrder->Size() > insertColumnOrder.Size()) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << Sprintf(
             "%s have %zu columns, INSERT INTO expects: %zu",
             optionName.Data(),
-            selectorColumnOrder->size(),
-            insertColumnOrder.size()
+            selectorColumnOrder->Size(),
+            insertColumnOrder.Size()
         )));
         return false;
     }
 
-    if (selectorColumnOrder == insertColumnOrder) {
+    if (*selectorColumnOrder == insertColumnOrder) {
         output = node.Ptr();
         return true;
     }
 
     TVector<const TItemExprType*> rowTypeItems;
-    rowTypeItems.reserve(selectorColumnOrder->size());
+    rowTypeItems.reserve(selectorColumnOrder->Size());
     const TTypeAnnotationNode* inputType;
     switch (node.Ref().GetTypeAnn()->GetKind()) {
         case ETypeAnnotationKind::List:
@@ -1685,13 +1685,13 @@ bool RenamePgSelectColumns(
         .Done();
     auto structBuilder = Build<TCoAsStruct>(ctx, node.Pos());
 
-    for (size_t i = 0; i < selectorColumnOrder->size(); i++) {
+    for (size_t i = 0; i < selectorColumnOrder->Size(); i++) {
         const auto& columnName = selectorColumnOrder->at(i);
         structBuilder.Add<TCoNameValueTuple>()
-            .Name().Build(insertColumnOrder.at(i))
+            .Name().Build(insertColumnOrder.at(i).PhysicalName)
             .Value<TCoMember>()
                 .Struct(rowArg)
-                .Name().Build(columnName)
+                .Name().Build(columnName.PhysicalName)
             .Build()
         .Build();
     }

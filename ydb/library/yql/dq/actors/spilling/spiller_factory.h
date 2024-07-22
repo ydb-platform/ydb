@@ -11,10 +11,11 @@ using namespace NActors;
 class TDqSpillerFactory : public NKikimr::NMiniKQL::ISpillerFactory
 {
 public:
-    TDqSpillerFactory(TTxId txId, TActorSystem* actorSystem, std::function<void()> wakeUpCallback) 
+    TDqSpillerFactory(TTxId txId, TActorSystem* actorSystem, std::function<void()> wakeUpCallback, std::function<void(const TString&)> errorCallback) 
         : ActorSystem_(actorSystem),
         TxId_(txId),
-        WakeUpCallback_(wakeUpCallback)
+        WakeUpCallback_(wakeUpCallback),
+        ErrorCallback_(errorCallback),
     {
     }
 
@@ -26,6 +27,7 @@ private:
     TActorSystem* ActorSystem_;
     TTxId TxId_;
     std::function<void()> WakeUpCallback_;
+    std::function<void(const TString&)> ErrorCallback_;
 };
 
 } // namespace NYql::NDq

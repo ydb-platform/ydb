@@ -66,6 +66,7 @@ public:
                 hFunc(TEvSinkDataRequest, OnSinkDataRequest);
                 hFunc(TEvLoadTaskRunnerFromState, OnLoadTaskRunnerFromState);
                 hFunc(TEvStatistics, OnStatisticsRequest);
+                hFunc(TEvError, OnError);
                 default: {
                     Y_DEBUG_ABORT_UNLESS(false, "%s: unexpected message type 0x%08" PRIx32, __func__, ev->GetTypeRewrite());
                 }
@@ -86,6 +87,10 @@ public:
     }
 
 private:
+    void OnError(TEvError::TPtr& ev) {
+        throw yexception() << ev->ToString();
+    }
+
     void OnStatisticsRequest(TEvStatistics::TPtr& ev) {
 
         THashMap<ui32, const IDqAsyncOutputBuffer*> sinks;
@@ -441,7 +446,10 @@ private:
 
         if (settings.GetEnableSpilling()) {
             auto wakeUpCallback = ev->Get()->ExecCtx->GetWakeupCallback();
-            TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(TxId, NActors::TActivationContext::ActorSystem(), wakeUpCallback));
+            const auto errorCallback = [this](const TString& error) {
+                Send(SelfId(), new TEvError(error));
+            };
+            TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(TxId, NActors::TActivationContext::ActorSystem(), wakeUpCallback, errorCallback));
         }
 
         auto event = MakeHolder<TEvTaskRunnerCreateFinished>(

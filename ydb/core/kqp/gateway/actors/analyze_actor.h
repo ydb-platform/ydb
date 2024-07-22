@@ -29,7 +29,6 @@ public:
         Become(&TAnalyzeActor::StateWork);
     }
 
-    // TODO if enablecolumnstatistics = false it will deadlock
     STFUNC(StateWork) {
         switch(ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);

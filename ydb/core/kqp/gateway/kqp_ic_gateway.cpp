@@ -1,5 +1,6 @@
 #include "kqp_gateway.h"
 #include "actors/kqp_ic_gateway_actors.h"
+#include "actors/analyze_actor.h"
 #include "actors/scheme.h"
 #include "kqp_metadata_loader.h"
 #include "local_rpc/helper.h"
@@ -1388,7 +1389,11 @@ public:
 
     TFuture<TGenericResult> Analyze(const TString& cluster, const NYql::TAnalyzeSettings& settings) override {
         try {
-            YQL_ENSURE(false, "gateway doesn't implement analyze");
+            auto analyzePromise = NewPromise<TGenericResult>();
+            IActor* requestHandler = new TAnalyzeActor(settings.TablePath, analyzePromise);
+            RegisterActor(requestHandler);
+            
+            return analyzePromise.GetFuture();
         } catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));
         }

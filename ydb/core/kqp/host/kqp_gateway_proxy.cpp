@@ -2045,32 +2045,29 @@ public:
     }
 
     TFuture<TGenericResult> Analyze(const TString& cluster, const NYql::TAnalyzeSettings& settings) override {
-        // CHECK_PREPARED_DDL(Analyze);
+        CHECK_PREPARED_DDL(Analyze);
 
-        // auto analyzePromise = NewPromise<TGenericResult>();
+        try {
+            NKqpProto::TKqpAnalyzeOperation analyzeTx;
+            analyzeTx.SetTablePath(settings.TablePath);
 
-        // NKikimrSchemeOp::TModifyScheme schemeTx;
-        // schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
-        // schemeTx.SetWorkingDir(pathPair.first);
+            if (IsPrepare()) {
+                auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                auto& phyTx = *phyQuery.AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
 
-        // auto* drop = schemeTx.MutableDrop();
-        // drop->SetName(pathPair.second);
-
-        // if (IsPrepare()) {
-        //     auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
-        //     auto& phyTx = *phyQuery.AddTransactions();
-        //     phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
-
-        //     phyTx.MutableSchemeOperation()->MutableDropTable()->Swap(&schemeTx);
-            
-        //     TGenericResult result;
-        //     result.SetSuccess();
-        //     analyzePromise.SetValue(result);
-        // } else {
-            return Gateway->Analyze(cluster, settings);
-        // }
-
-        // return analyzePromise.GetFuture();
+                phyTx.MutableSchemeOperation()->MutableAnalyze()->Swap(&analyzeTx);
+                
+                TGenericResult result;
+                result.SetSuccess();
+                return MakeFuture(result);
+            } else {
+                return Gateway->Analyze(cluster, settings);
+            }
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
     }
 
     TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() override {

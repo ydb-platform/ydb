@@ -282,7 +282,7 @@ namespace {
 
     TAnalyzeSettings ParseAnalyzeSettings(const TKiAnalyze& analyze) {
         return TAnalyzeSettings{
-            .Table = TString(analyze.Table())
+            .TablePath = TString(analyze.Table())
         };
     }
 

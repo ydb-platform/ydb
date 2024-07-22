@@ -91,6 +91,8 @@ runs:
         echo "TESTMO_URL=${{ inputs.testman_url }}" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
+
+        python3 -m pip install ydb ydb[yc] codeowners
     
 
     - name: set environment variables required by some tests
@@ -346,7 +348,10 @@ runs:
               --is_last_retry $IS_LAST_RETRY \
               "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_JUNIT_XML_PATH"
           fi
-
+            
+          # upload tests results to YDB
+          ydb_upload_run_name="${TESTMO_RUN_NAME// /"_"}"
+          result=`.github/scripts/upload_tests_results.py --test-results-file ${JUNIT_REPORT_XML} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull $ydb_upload_run_name --job-name "${{ github.workflow }}" --job-id "${{ github.run_id }}" --branch ${GITHUB_REF_NAME}`
 
           if [ ${{ inputs.testman_token }} ]; then
             # finish testme session
@@ -416,29 +421,6 @@ runs:
           echo "Build successful." | .github/scripts/tests/comment-pr.py --ok
         fi
     
-    - name: Test history upload results to YDB
-      if: inputs.run_tests
-      continue-on-error: true
-      shell: bash
-      env:
-        PR_NUMBER: ${{ github.event.number }}
-        JOB_NAME: ${{ github.workflow }}
-        JOB_ID: ${{github.run_id }}
-      run: |
-        set -x
-        python3 -m pip install ydb ydb[yc] codeowners
-
-        #Variables
-        echo "JUNIT_REPORT_XML=${JUNIT_REPORT_XML}"
-        echo "BUILD_PRESET=${BUILD_PRESET}"
-        echo "PR_NUMBER=${PR_NUMBER}"
-        echo "JOB_NAME=${JOB_NAME}"
-        echo "JOB_ID=${JOB_ID}"
-        echo "GITHUB_REF_NAME=${GITHUB_REF_NAME}"
-
-        run_name="${TESTMO_RUN_NAME// /"_"}"
-        result=`.github/scripts/upload_tests_results.py --test-results-file ${JUNIT_REPORT_XML} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull $run_name --job-name ${JOB_NAME} --job-id ${JOB_ID} --branch ${GITHUB_REF_NAME}`
-
 
     - name: Clean up unfinished testmo sessions
       if: always()

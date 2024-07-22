@@ -13,8 +13,6 @@ private:
     std::shared_ptr<NArrow::NAccessor::IChunkedArray> BlobChunks;
     std::optional<ui32> RecordIndexStart;
     YDB_READONLY(ui32, RecordIndexFinish, 0);
-    const ui64 PortionId;
-
 public:
     ~TPortionColumnCursor() {
         AFL_VERIFY(!RecordIndexStart)("start", RecordIndexStart)("finish", RecordIndexFinish);
@@ -24,10 +22,8 @@ public:
 
     bool Fetch(TMergedColumn& column);
 
-    TPortionColumnCursor(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& columnChunks, const ui64 portionId)
-        : BlobChunks(columnChunks)
-        , PortionId(portionId) {
-        Y_UNUSED(PortionId);
+    TPortionColumnCursor(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& columnChunks)
+        : BlobChunks(columnChunks) {
     }
 };
 

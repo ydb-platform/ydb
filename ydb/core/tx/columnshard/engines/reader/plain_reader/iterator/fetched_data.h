@@ -80,10 +80,6 @@ public:
         }
     }
 
-    void AddBatch(const std::shared_ptr<arrow::RecordBatch>& batch) {
-        return AddBatch(arrow::Table::Make(batch->schema(), batch->columns(), batch->num_rows()));
-    }
-
     void AddBatch(const std::shared_ptr<NArrow::TGeneralContainer>& table) {
         AFL_VERIFY(table);
         if (UseFilter) {

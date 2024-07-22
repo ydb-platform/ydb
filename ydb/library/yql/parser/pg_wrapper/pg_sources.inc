@@ -712,6 +712,7 @@ SRCS(
     postgresql/src/backend/utils/misc/guc-file.c
     postgresql/src/backend/utils/misc/guc_funcs.c
     postgresql/src/backend/utils/misc/guc_tables.c
+    postgresql/src/backend/utils/misc/help_config.c
     postgresql/src/backend/utils/misc/pg_config.c
     postgresql/src/backend/utils/misc/pg_controldata.c
     postgresql/src/backend/utils/misc/pg_rusage.c
@@ -799,6 +800,8 @@ SRCS(
     postgresql/src/port/quotes.c
     postgresql/src/port/snprintf.c
     postgresql/src/port/strerror.c
+    postgresql/src/port/strlcat.c
+    postgresql/src/port/strlcpy.c
     postgresql/src/port/tar.c
     postgresql/src/port/thread.c
     postgresql/src/timezone/localtime.c

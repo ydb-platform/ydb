@@ -143,9 +143,10 @@ class TestSummaryLine:
 
 
 class TestSummary:
-    def __init__(self):
+    def __init__(self, is_retry: bool):
         self.lines: List[TestSummaryLine] = []
         self.is_failed = False
+        self.is_retry = is_retry
 
     def add_line(self, line: TestSummaryLine):
         self.is_failed |= line.is_failed
@@ -158,7 +159,7 @@ class TestSummary:
     def render_line(self, items):
         return f"| {' | '.join(items)} |"
 
-    def render(self, add_footnote=False):
+    def render(self, add_footnote=False, is_retry=False):
         github_srv = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
         repo = os.environ.get("GITHUB_REPOSITORY", "ydb-platform/ydb")
 
@@ -190,7 +191,7 @@ class TestSummary:
             if need_first_column:
                 row.append(line.title)
             row.extend([
-                render_pm(line.test_count, f"{report_url}", 0),
+                render_pm(line.test_count + (" (only retried tests)" if self.is_retry else ""), f"{report_url}", 0),
                 render_pm(line.passed, f"{report_url}#PASS", 0),
                 render_pm(line.errors, f"{report_url}#ERROR", 0),
                 render_pm(line.failed, f"{report_url}#FAIL", 0),
@@ -273,8 +274,8 @@ def write_summary(summary: TestSummary):
         fp.close()
 
 
-def gen_summary(public_dir, public_dir_url, paths):
-    summary = TestSummary()
+def gen_summary(public_dir, public_dir_url, paths, is_retry: bool):
+    summary = TestSummary(is_retry=is_retry)
 
     for title, html_fn, path in paths:
         summary_line = TestSummaryLine(title)
@@ -347,6 +348,7 @@ def main():
     parser.add_argument("--summary_links", required=True)
     parser.add_argument('--build_preset', default="default-linux-x86-64-relwithdebinfo", required=False)
     parser.add_argument('--status_report_file', required=False)
+    parser.add_argument('--is_retry', required=True, type=int)
     parser.add_argument('--is_last_retry', required=True, type=int)
     parser.add_argument("args", nargs="+", metavar="TITLE html_out path")
     args = parser.parse_args()
@@ -358,7 +360,7 @@ def main():
     paths = iter(args.args)
     title_path = list(zip(paths, paths, paths))
 
-    summary = gen_summary(args.public_dir, args.public_dir_url, title_path)
+    summary = gen_summary(args.public_dir, args.public_dir_url, title_path, is_retry=bool(args.is_retry))
     write_summary(summary)
 
     if summary.is_empty | summary.is_failed:

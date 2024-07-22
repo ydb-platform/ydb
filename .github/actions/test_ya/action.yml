@@ -267,10 +267,10 @@ runs:
             IS_LAST_RETRY=0
           fi
 
-          if [ $RETRY = 1 ]; then
-            IS_FIRST_RETRY=1
+          if [ $RETRY != 1 ]; then
+            IS_RETRY=1
           else
-            IS_FIRST_RETRY=0
+            IS_RETRY=0
           fi
 
           if [ ${{ inputs.testman_token }} ]; then
@@ -293,9 +293,9 @@ runs:
           fi
 
           CURRENT_MESSAGE="**{platform_name}-${BUILD_PRESET}** is running..." 
-          RERUN_FAILED_TESTS=""
-          if [ $IS_FIRST_RETRY = 1 ]; then
+          if [ $IS_RETRY = 0 ]; then
             CURRENT_MESSAGE="Check $CURRENT_MESSAGE"
+            RERUN_FAILED_TESTS=""
           else
             CURRENT_MESSAGE="Failed tests rerun (try $RETRY) $CURRENT_MESSAGE"
             RERUN_FAILED_OPT="-X"
@@ -344,6 +344,7 @@ runs:
               --public_dir_url "$PUBLIC_DIR_URL" \
               --build_preset "$BUILD_PRESET" \
               --status_report_file statusrep.txt \
+              --is_retry $IS_RETRY \
               --is_last_retry $IS_LAST_RETRY \
               "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_JUNIT_XML_PATH"
           fi

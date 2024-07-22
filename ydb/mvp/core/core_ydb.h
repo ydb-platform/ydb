@@ -15,6 +15,7 @@
 #include <library/cpp/json/json_value.h>
 #include <util/generic/strbuf.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
+#include "auth_profile.h"
 #include "grpc_log.h"
 #include "mvp_tokens.h"
 
@@ -156,6 +157,8 @@ struct TYdbLocation {
     static TString UserToken;
     static TString CaCertificate;
     static TString SslCertificate;
+    NMVP::EAuthProfile AuthProfile = NMVP::EAuthProfile::YandexV2;
+    TString ServiceTokenName;
     TString ServerlessDocumentProxyEndpoint;
     TString ServerlessYdbProxyEndpoint;
 
@@ -305,6 +308,10 @@ struct TYdbLocation {
 
     std::unique_ptr<NYdb::NDataStreams::V1::TDataStreamsClient> GetDataStreamsClientPtr(TStringBuf endpoint, TStringBuf scheme, const NYdb::TCommonClientSettings& settings = NYdb::TCommonClientSettings()) const;
 
+<<<<<<< HEAD
+=======
+    NYdb::NTable::TTableClient GetTableClient(const TRequest& request, const TYdbLocation& location) const;
+>>>>>>> 8e0d57db1b (rewrite GetTableClient)
     NYdb::NTable::TTableClient GetTableClient(const NYdb::NTable::TClientSettings& clientSettings = {}) const;
 
     NYdb::NScripting::TScriptingClient GetScriptingClient(const TRequest& request) const;

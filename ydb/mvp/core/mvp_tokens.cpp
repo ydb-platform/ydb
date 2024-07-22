@@ -246,8 +246,13 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
     std::set<std::string> audience;
     audience.insert(jwtInfo->audience());
 
+<<<<<<< HEAD
     switch (TokenConfigs.AccessServiceType) {
         case NMvp::yandex_v2: {
+=======
+    switch (AuthProfile) {
+        case NMVP::EAuthProfile::YandexV2: {
+>>>>>>> 8e0d57db1b (rewrite GetTableClient)
             auto algorithm = jwt::algorithm::ps256(jwtInfo->publickey(), jwtInfo->privatekey());
             auto encodedToken = jwt::create()
                     .set_key_id(keyId)
@@ -265,7 +270,11 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
 
             break;
         }
+<<<<<<< HEAD
         case NMvp::nebius_v1: {
+=======
+        case NMVP::EAuthProfile::NebiusV1: {
+>>>>>>> 8e0d57db1b (rewrite GetTableClient)
             auto algorithm = jwt::algorithm::rs256(jwtInfo->publickey(), jwtInfo->privatekey());
             auto encodedToken = jwt::create()
                     .set_key_id(keyId)

@@ -104,6 +104,39 @@ std::unique_ptr<NYdb::NTopic::TTopicClient> TYdbLocation::GetTopicClientPtr(TStr
     return std::make_unique<NYdb::NTopic::TTopicClient>(GetDriver(endpoint, scheme), settings);
 }
 
+<<<<<<< HEAD
+=======
+NYdb::NTable::TTableClient TYdbLocation::GetTableClient(const TRequest& request, const TYdbLocation& location) const {
+    auto defaultClientSettings = NYdb::NTable::TClientSettings().Database(location.RootDomain);
+    NYdb::NTable::TClientSettings clientSettings(defaultClientSettings);
+
+    TString authToken;
+    switch (location.AuthProfile) {
+    case NMVP::EAuthProfile::YandexV2:
+        authToken = request.GetAuthToken();
+        break;
+    case NMVP::EAuthProfile::NebiusV1:
+        NMVP::TMvpTokenator* tokenator = MVPAppData()->Tokenator;
+        if (tokenator && !location.ServiceTokenName.empty()) {
+            authToken = tokenator->GetToken(location.ServiceTokenName);
+        }
+        break;
+    }
+    if (authToken) {
+        clientSettings.AuthToken(authToken);
+    }
+    TString database = request.Parameters["database"];
+    if (database) {
+        if (!database.StartsWith('/')) {
+            database.insert(database.begin(), '/');
+        }
+        database.insert(0, RootDomain);
+        clientSettings.Database(database);
+    }
+    return GetTableClient(clientSettings);
+}
+
+>>>>>>> 8e0d57db1b (rewrite GetTableClient)
 NYdb::NTable::TTableClient TYdbLocation::GetTableClient(const NYdb::NTable::TClientSettings& clientSettings) const {
     return NYdb::NTable::TTableClient(GetDriver(), clientSettings);
 }

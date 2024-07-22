@@ -45,7 +45,11 @@ public:
         NActors::TActorId actorId = ctx.SelfID;
 
         {
+<<<<<<< HEAD
             Location.GetTableClient(TMVP::GetMetaDatabaseClientSettings(Request, Location))
+=======
+            Location.GetTableClient(Request, Location)
+>>>>>>> 8e0d57db1b (rewrite GetTableClient)
                 .CreateSession().Subscribe([actorId, actorSystem](const NYdb::NTable::TAsyncCreateSessionResult& result) {
                 NYdb::NTable::TAsyncCreateSessionResult res(result);
                 actorSystem->Send(actorId, new TEvPrivate::TEvCreateSessionResult(res.ExtractValue()));

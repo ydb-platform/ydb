@@ -68,7 +68,6 @@ void MarkIdAsSeen(const TString& id) {
 }
 
 bool GetCacheOwnership(const TString& id, NMeta::TGetCacheOwnershipCallback cb) {
-    Cerr << "iiii GetCacheOwnership" << Endl;
     MetaLocation.GetTableClient(NYdb::NTable::TClientSettings().Database(MetaLocation.RootDomain).AuthToken(MVPAppData()->Tokenator->GetToken("meta-token")))
                 .CreateSession().Subscribe([id, cb = move(cb)](const NYdb::NTable::TAsyncCreateSessionResult& result) {
                     auto resultCopy = result;
@@ -165,13 +164,14 @@ void TMVP::InitMeta() {
     MetaLocation.Endpoints.emplace_back("api", MetaApiEndpoint);
     MetaLocation.Endpoints.emplace_back("cluster-api", MetaApiEndpoint);
     MetaLocation.RootDomain = MetaDatabase;
+    MetaLocation.ServiceTokenName = MetaDatabaseTokenName;
+    MetaLocation.AuthProfile = AuthProfile;
 
     LocalEndpoint = TStringBuilder() << "http://" << FQDNHostName() << ":" << HttpPort;
 
     TActorId httpIncomingProxyId = ActorSystem.Register(NHttp::CreateIncomingHttpCache(HttpProxyId, GetIncomingMetaCachePolicy));
 
     if (MetaCache) {
-        Cerr << "iiiiiii MetaCache" << Endl;
         httpIncomingProxyId = ActorSystem.Register(NMeta::CreateHttpMetaCache(httpIncomingProxyId, GetIncomingMetaCachePolicy, GetCacheOwnership));
     }
 

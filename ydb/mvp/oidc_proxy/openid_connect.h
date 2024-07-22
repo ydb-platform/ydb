@@ -26,10 +26,17 @@ struct TOpenIdConnectSettings {
     TString ClientSecret;
     std::vector<TString> AllowedProxyHosts;
 
+<<<<<<< HEAD
     NMvp::EAccessServiceType AccessServiceType = NMvp::yandex_v2;
     TString AuthUrlPath = DEFAULT_AUTH_URL_PATH;
     TString TokenUrlPath = DEFAULT_TOKEN_URL_PATH;
     TString ExchangeUrlPath = DEFAULT_EXCHANGE_URL_PATH;
+=======
+    NMVP::EAuthProfile AuthProfile = NMVP::EAuthProfile::YandexV2;
+    TString AuthEndpoint = DEFAULT_AUTH_ENDPOINT;
+    TString TokenEndpoint = DEFAULT_TOKEN_ENDPOINT;
+    TString ExchangeEndpoint = DEFAULT_EXCHANGE_ENDPOINT;
+>>>>>>> 8e0d57db1b (rewrite GetTableClient)
 
     TString GetAuthorizationString() const {
         return "Basic " + Base64Encode(ClientId + ":" + ClientSecret);

@@ -55,12 +55,15 @@ public:
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx) {
-        Cerr << "iiiiii Bootstrap " << Endl;
         NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
         NActors::TActorId actorId = ctx.SelfID;
 
         {
+<<<<<<< HEAD
             Location.GetTableClient(TMVP::GetMetaDatabaseClientSettings(Request, Location)).CreateSession().Subscribe([actorId, actorSystem](const NYdb::NTable::TAsyncCreateSessionResult& result) {
+=======
+            Location.GetTableClient(Request, Location).CreateSession().Subscribe([actorId, actorSystem](const NYdb::NTable::TAsyncCreateSessionResult& result) {
+>>>>>>> 8e0d57db1b (rewrite GetTableClient)
                 NYdb::NTable::TAsyncCreateSessionResult res(result);
                 actorSystem->Send(actorId, new TEvPrivate::TEvCreateSessionResult(res.ExtractValue()));
             });
@@ -70,7 +73,6 @@ public:
     }
 
     void Handle(TEvPrivate::TEvCreateSessionResult::TPtr event, const NActors::TActorContext& ctx) {
-        Cerr << "iiiiii TEvCreateSessionResult " << Endl;
         const NYdb::NTable::TCreateSessionResult& result(event->Get()->Result);
         if (result.IsSuccess()) {
             Session = result.GetSession();
@@ -101,7 +103,6 @@ public:
     }
 
     void SendDatabaseRequest(const NActors::TActorContext& ctx) {
-        Cerr << "iiiiii SendDatabaseRequest" << Endl;
         NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
         NActors::TActorId actorId = ctx.SelfID;
         yandex::cloud::priv::ydb::v1::ListAllDatabasesRequest cpRequest;
@@ -118,12 +119,10 @@ public:
         NYdbGrpc::TCallMeta meta;
         Request.ForwardHeaders(meta);
         NMVP::TMvpTokenator* tokenator = MVPAppData()->Tokenator;
-        Cerr << "iiiiii MvpTokenName " << Endl;
         if (tokenator && MvpTokenName) {
             TString token = tokenator->GetToken(MvpTokenName);
             if (token) {
-                Cerr << "iiiiii token " << token << Endl;
-                Request.SetHeader(meta, "Authorization", token);
+                Request.SetHeader(meta, "authorization", token);
             }
         }
         meta.Timeout = GetClientTimeout();
@@ -132,7 +131,6 @@ public:
     }
 
     void Handle(TEvPrivate::TEvDataQueryResult::TPtr event, const NActors::TActorContext& ctx) {
-        Cerr << "iiiiii TEvDataQueryResult " << Endl;
         NYdb::NTable::TDataQueryResult& result(event->Get()->Result);
         NHttp::THttpOutgoingResponsePtr response;
         if (result.IsSuccess()) {
@@ -192,7 +190,6 @@ public:
     }
 
     void Handle(TEvPrivate::TEvListAllDatabaseResponse::TPtr event, const NActors::TActorContext& ctx) {
-        Cerr << "iiiiii TEvListAllDatabaseResponse " << Endl;
         Databases = std::move(event->Get()->Databases);
         if (--Requests == 0) {
             ReplyAndDie(ctx);
@@ -200,7 +197,6 @@ public:
     }
 
     void Handle(TEvPrivate::TEvErrorResponse::TPtr event, const NActors::TActorContext& ctx) {
-        Cerr << "iiiiii TEvErrorResponse " << Endl;
         if (event->Get()->Status.StartsWith("4") || DatabaseRequestDeadline <= ctx.Now()) {
             NHttp::THttpOutgoingResponsePtr response = CreateErrorResponse(Request.Request, event->Get());
             ctx.Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
@@ -212,7 +208,6 @@ public:
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
-        Cerr << "iiiiii TEvHttpIncomingResponse " << Endl;
         TStringBuf status = event->Get()->Response->Status;
         if (event->Get()->Error.empty() && status == "200") {
             NJson::ReadJsonTree(event->Get()->Response->Body, &JsonReaderConfig, &TenantInfo);
@@ -223,13 +218,11 @@ public:
     }
 
     void HandleTimeout(const NActors::TActorContext& ctx) {
-        Cerr << "iiiiii HandleTimeout " << Endl;
         ctx.Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request.Request->CreateResponseGatewayTimeout()));
         Die(ctx);
     }
 
     void ReplyAndDie(const NActors::TActorContext& ctx) {
-        Cerr << "iiiiii ReplyAndDie " << Endl;
         NProtobufJson::TProto2JsonConfig proto2JsonConfig = NProtobufJson::TProto2JsonConfig()
                 .SetMapAsObject(true)
                 .SetEnumMode(NProtobufJson::TProto2JsonConfig::EnumValueMode::EnumName);

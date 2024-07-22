@@ -26,7 +26,6 @@ protected:
     NSignals::TSignalHandler<SIGINT, &TMVP::OnTerminate> SignalSIGINT;
     NSignals::TSignalHandler<SIGTERM, &TMVP::OnTerminate> SignalSIGTERM;
     NSignals::TSignalIgnore<SIGPIPE> SignalSIGPIPE;
-    static EAuthProfile AuthProfile;
 
 public:
     ui16 HttpPort = {};
@@ -38,7 +37,12 @@ public:
     TString MetaApiEndpoint;
     TString MetaDatabase;
     bool MetaCache = false;
+<<<<<<< HEAD
     static TString MetaDatabaseTokenName;
+=======
+    TString MetaDatabaseTokenName;
+    EAuthProfile AuthProfile = EAuthProfile::YandexV2;
+>>>>>>> 8e0d57db1b (rewrite GetTableClient)
 
     TMVP(int argc, char** argv);
     int Init();

@@ -62,11 +62,19 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OpenIdConnectRequestWithIamTokenYandex) {
+<<<<<<< HEAD
         OpenIdConnectRequestWithIamTokenTest(NMvp::yandex_v2);
     }
 
     Y_UNIT_TEST(OpenIdConnectRequestWithIamTokenNebius) {
         OpenIdConnectRequestWithIamTokenTest(NMvp::nebius_v1);
+=======
+        OpenIdConnectRequestWithIamTokenTest(NMVP::EAuthProfile::YandexV2);
+    }
+
+    Y_UNIT_TEST(OpenIdConnectRequestWithIamTokenNebius) {
+        OpenIdConnectRequestWithIamTokenTest(NMVP::EAuthProfile::NebiusV1);
+>>>>>>> 8e0d57db1b (rewrite GetTableClient)
     }
 
     void OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMvp::EAccessServiceType profile) {
@@ -115,11 +123,19 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OpenIdConnectNonAuthorizeRequestWithOptionMethodYandex) {
+<<<<<<< HEAD
         OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMvp::yandex_v2);
     }
 
     Y_UNIT_TEST(OpenIdConnectNonAuthorizeRequestWithOptionMethodNebius) {
         OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMvp::nebius_v1);
+=======
+        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile::YandexV2);
+    }
+
+    Y_UNIT_TEST(OpenIdConnectNonAuthorizeRequestWithOptionMethodNebius) {
+        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile::NebiusV1);
+>>>>>>> 8e0d57db1b (rewrite GetTableClient)
     }
 
     void OpenIdConnectSessionServiceCheckValidCookieTest(NMvp::EAccessServiceType profile) {
@@ -166,11 +182,19 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OpenIdConnectSessionServiceCheckValidCookieYandex) {
+<<<<<<< HEAD
         OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMvp::yandex_v2);
     }
 
     Y_UNIT_TEST(OpenIdConnectSessionServiceCheckValidCookieNebius) {
         OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMvp::nebius_v1);
+=======
+        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile::YandexV2);
+    }
+
+    Y_UNIT_TEST(OpenIdConnectSessionServiceCheckValidCookieNebius) {
+        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile::NebiusV1);
+>>>>>>> 8e0d57db1b (rewrite GetTableClient)
     }
 
     Y_UNIT_TEST(OpenIdConnectProxyOnHttpsHost) {
@@ -184,7 +208,11 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
             .AllowedProxyHosts = {allowedProxyHost},
+<<<<<<< HEAD
             .AccessServiceType = NMvp::yandex_v2
+=======
+            .AuthProfile = NMVP::EAuthProfile::YandexV2
+>>>>>>> 8e0d57db1b (rewrite GetTableClient)
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
@@ -247,7 +275,11 @@ Y_UNIT_TEST_SUITE(Mvp) {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
             .AuthorizationServerAddress = "https://auth.test.net",
             .AllowedProxyHosts = {allowedProxyHost},
+<<<<<<< HEAD
             .AccessServiceType = NMvp::nebius_v1
+=======
+            .AuthProfile = NMVP::EAuthProfile::NebiusV1
+>>>>>>> 8e0d57db1b (rewrite GetTableClient)
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();

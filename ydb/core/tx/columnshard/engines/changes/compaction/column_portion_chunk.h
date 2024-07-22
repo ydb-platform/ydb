@@ -44,6 +44,7 @@ class TColumnPortion: public TColumnPortionResult {
 private:
     using TBase = TColumnPortionResult;
     std::unique_ptr<arrow::ArrayBuilder> Builder;
+    std::shared_ptr<arrow::DataType> Type;
     const TColumnMergeContext& Context;
     YDB_READONLY(ui64, CurrentChunkRawSize, 0);
     double PredictedPackedBytes = 0;
@@ -55,6 +56,7 @@ public:
         , ColumnInfo(Context.GetIndexInfo().GetColumnFeaturesVerified(context.GetColumnId()))
     {
         Builder = Context.MakeBuilder();
+        Type = Builder->type();
     }
 
     bool IsFullPortion() const {

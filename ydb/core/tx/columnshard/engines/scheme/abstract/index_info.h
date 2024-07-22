@@ -100,6 +100,14 @@ public:
         return result;
     }
 
+    [[nodiscard]] static std::vector<ui32> AddSnapshotFieldIds(const std::vector<ui32>& baseColumnIds) {
+        std::vector<ui32> result = baseColumnIds;
+        for (auto&& i : GetSnapshotColumnIds()) {
+            result.emplace_back(i);
+        }
+        return result;
+    }
+
     std::optional<ui32> GetColumnIdOptional(const std::string& name) const;
     TString GetColumnName(ui32 id, bool required) const;
     static std::shared_ptr<arrow::Field> GetColumnFieldOptional(const ui32 columnId);

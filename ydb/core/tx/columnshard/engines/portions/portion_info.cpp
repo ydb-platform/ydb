@@ -710,7 +710,11 @@ std::shared_ptr<TDeserializeChunkedArray> TPortionInfo::TPreparedColumn::Assembl
     ui64 recordsCount = 0;
     for (auto& blob : Blobs) {
         chunks.push_back(blob.BuildDeserializeChunk(Loader));
-        recordsCount += blob.GetExpectedRowsCountVerified();
+        if (!!blob.GetData()) {
+            recordsCount += blob.GetExpectedRowsCountVerified();
+        } else {
+            recordsCount += blob.GetDefaultRowsCount();
+        }
     }
 
     return std::make_shared<TDeserializeChunkedArray>(recordsCount, Loader, std::move(chunks));
@@ -773,11 +777,16 @@ std::shared_ptr<NArrow::TGeneralContainer> TPortionInfo::TPreparedBatchData::Ass
     return std::make_shared<NArrow::TGeneralContainer>(fields, std::move(columns));
 }
 
-std::shared_ptr<NArrow::TGeneralContainer> TPortionInfo::TPreparedBatchData::AssembleToGeneralContainer() const {
+std::shared_ptr<NArrow::TGeneralContainer> TPortionInfo::TPreparedBatchData::AssembleToGeneralContainer(
+    const std::set<ui32>& sequentialColumnIds) const {
     std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> columns;
     std::vector<std::shared_ptr<arrow::Field>> fields;
     for (auto&& i : Columns) {
-        columns.emplace_back(i.AssembleAccessor());
+        if (sequentialColumnIds.contains(i.GetColumnId())) {
+            columns.emplace_back(i.AssembleForSeqAccess());
+        } else {
+            columns.emplace_back(i.AssembleAccessor());
+        }
         fields.emplace_back(i.GetField());
     }
 

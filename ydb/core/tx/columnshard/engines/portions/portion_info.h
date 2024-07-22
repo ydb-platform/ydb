@@ -752,7 +752,7 @@ public:
         }
 
         std::shared_ptr<arrow::RecordBatch> Assemble(const TAssembleOptions& options = {}) const;
-        std::shared_ptr<NArrow::TGeneralContainer> AssembleToGeneralContainer() const;
+        std::shared_ptr<NArrow::TGeneralContainer> AssembleToGeneralContainer(const std::set<ui32>& sequentialColumnIds) const;
         std::shared_ptr<arrow::Table> AssembleTable(const TAssembleOptions& options = {}) const;
         std::shared_ptr<NArrow::TGeneralContainer> AssembleForSeqAccess() const;
     };

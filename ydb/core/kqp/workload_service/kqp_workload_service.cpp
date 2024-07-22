@@ -58,6 +58,7 @@ public:
         CpuQuotaManager = std::make_unique<TCpuQuotaManagerState>(ActorContext(), Counters->GetSubgroup("subcomponent", "CpuQuotaManager"));
 
         EnabledResourcePools = AppData()->FeatureFlags.GetEnableResourcePools();
+        EnabledResourcePoolsOnServerless = AppData()->FeatureFlags.GetEnableResourcePoolsOnServerless();
         if (EnabledResourcePools) {
             InitializeWorkloadService();
         }
@@ -84,6 +85,7 @@ public:
         const auto& event = ev->Get()->Record;
 
         EnabledResourcePools = event.GetConfig().GetFeatureFlags().GetEnableResourcePools();
+        EnabledResourcePoolsOnServerless = event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsOnServerless();
         if (EnabledResourcePools) {
             LOG_I("Resource pools was enanbled");
             InitializeWorkloadService();
@@ -135,7 +137,7 @@ public:
 
         LOG_D("Recieved new request from " << workerActorId << ", Database: " << ev->Get()->Database << ", PoolId: " << ev->Get()->PoolId << ", SessionId: " << ev->Get()->SessionId);
         bool hasDefaultPool = DatabasesWithDefaultPool.contains(CanonizePath(ev->Get()->Database));
-        Register(CreatePoolResolverActor(std::move(ev), hasDefaultPool));
+        Register(CreatePoolResolverActor(std::move(ev), hasDefaultPool, EnabledResourcePoolsOnServerless));
     }
 
     void Handle(TEvCleanupRequest::TPtr& ev) {
@@ -520,6 +522,7 @@ private:
     NMonitoring::TDynamicCounterPtr Counters;
 
     bool EnabledResourcePools = false;
+    bool EnabledResourcePoolsOnServerless = false;
     bool ServiceInitialized = false;
     bool IdleChecksStarted = false;
     ETablesCreationStatus TablesCreationStatus = ETablesCreationStatus::Cleanup;

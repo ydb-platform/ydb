@@ -107,7 +107,7 @@ namespace NYql {
                            NYql::TGenericClusterConfig& clusterConfig) {
         auto it = properties.find("database_name");
         if (it == properties.cend()) {
-            // DATABASE_NAME is a mandatory field for the most of databases, 
+            // DATABASE_NAME is a mandatory field for the most of databases,
             // however, managed YDB does not require it, so we have to accept empty values here.
             return;
         }
@@ -430,7 +430,7 @@ namespace NYql {
             }
         }
 
-        // All the databases with exception to managed YDB: 
+        // All the databases with exception to managed YDB:
         // * DATABASE_NAME is mandatory field
         if (traditionalRelationalDatabaseKinds.contains(clusterConfig.GetKind())) {
             if (!clusterConfig.GetDatabaseName()) {

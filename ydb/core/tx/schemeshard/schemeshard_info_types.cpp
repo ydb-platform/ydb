@@ -356,10 +356,10 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             const TTableInfo::TColumn& sourceColumn = source->Columns[colId];
 
             if (col.HasDefaultFromSequence()) {
-                if (sourceColumn.PType.GetTypeId() != NScheme::NTypeIds::Int64 
+                if (sourceColumn.PType.GetTypeId() != NScheme::NTypeIds::Int64
                         && NPg::PgTypeIdFromTypeDesc(sourceColumn.PType.GetTypeDesc()) != INT8OID) {
-                    TString sequenceType = sourceColumn.PType.GetTypeId() == NScheme::NTypeIds::Pg 
-                        ? NPg::PgTypeNameFromTypeDesc(NPg::TypeDescFromPgTypeId(INT8OID)) 
+                    TString sequenceType = sourceColumn.PType.GetTypeId() == NScheme::NTypeIds::Pg
+                        ? NPg::PgTypeNameFromTypeDesc(NPg::TypeDescFromPgTypeId(INT8OID))
                         : NScheme::TypeName(NScheme::NTypeIds::Int64);
                     errStr = Sprintf(
                         "Sequence value type '%s' must be equal to the column type '%s'", sequenceType.c_str(),
@@ -411,7 +411,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                             return nullptr;
                         default:
                             break;
-                    }                    
+                    }
                 }
             } else {
                 auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
@@ -1614,8 +1614,9 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
     Stats.PartitionStats.swap(newPartitionStats);
     Stats.Aggregated = newAggregatedStats;
     Partitions.swap(newPartitioning);
-    PreSerializedPathDescription.clear();
-    PreSerializedPathDescriptionWithoutRangeKey.clear();
+    PreserializedTablePartitions.clear();
+    PreserializedTablePartitionsNoKeys.clear();
+    PreserializedTableSplitBoundaries.clear();
 
     CondEraseSchedule.clear();
     InFlightCondErase.clear();

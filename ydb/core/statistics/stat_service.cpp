@@ -469,6 +469,8 @@ private:
         const auto tabletId = localTablets.Ids[localTablets.NextTablet];
         ++localTablets.NextTablet;
         ++localTablets.InFlight;
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "SendRequestToNextTablet NodeId: " << SelfId().NodeId() << ", tabletId: " << tabletId);
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvGetTabletNode(tabletId), 0, AggregationStatistics.Round);
     }
 
@@ -570,7 +572,7 @@ private:
 
     void Handle(TEvStatistics::TEvStatisticsResponse::TPtr& ev) {
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Received TEvStatisticsResponse TabletId: " << ev->Get()->Record.GetShardTabletId());
+            "Received TEvStatisticsResponse NodeId: " << ev->Recipient.NodeId() << ", TabletId: " << ev->Get()->Record.GetShardTabletId());
 
         const auto round = ev->Cookie;
         const auto& record = ev->Get()->Record;
@@ -942,6 +944,8 @@ private:
         const auto count = std::min(Settings.MaxInFlightTabletRequests,
                                     localTablets.Ids.size());
         for (size_t i = 0; i < count; ++i) {
+            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                    "TEvAggregateStatistics SendRequestToNextTablet NodeId: " << SelfId().NodeId());
             SendRequestToNextTablet();
         }
     }

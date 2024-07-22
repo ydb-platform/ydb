@@ -78,8 +78,12 @@ namespace {
             auto actualType = MakeActualType(input);
             switch (actualType->GetKind()) {
                 case ETypeAnnotationKind::Stream:
+                    Y_ENSURE(ProcessorMode_ != EProcessorMode::PullList,
+                             "processor mode mismatches the actual container type");
                     return actualType->Cast<TStreamExprType>()->GetItemType();
                 case ETypeAnnotationKind::List:
+                    Y_ENSURE(ProcessorMode_ == EProcessorMode::PullList,
+                             "processor mode mismatches the actual container type");
                     return actualType->Cast<TListExprType>()->GetItemType();
                 default:
                     Y_ABORT("unexpected return type");

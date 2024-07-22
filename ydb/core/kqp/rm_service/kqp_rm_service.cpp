@@ -395,6 +395,7 @@ public:
                 return;
             }
 
+            guard.Clear();
             auto& task = taskIt->second;
             if (resources.ReleaseAllResources && task.ExecutionUnits) {
                 FreeExecutionUnits(task.ExecutionUnits);
@@ -410,10 +411,7 @@ public:
             }
 
             task.ScanQueryMemory -= releaseScanQueryMemory;
-            tx.TxScanQueryMemory -= releaseScanQueryMemory;
-
             task.ExternalDataQueryMemory -= releaseExternalDataQueryMemory;
-            tx.TxExternalDataQueryMemory -= releaseExternalDataQueryMemory;
 
             if (task.ScanQueryMemory == 0) {
                 if (task.ResourceBrokerTaskId) {
@@ -429,6 +427,9 @@ public:
                 Y_DEBUG_ABORT_UNLESS(reduced);
             }
 
+            guard.ConstructInPlace(txBucket.Lock);
+            tx.TxScanQueryMemory -= releaseScanQueryMemory;
+            tx.TxExternalDataQueryMemory -= releaseExternalDataQueryMemory;
             if (resources.ExecutionUnits) {
                 ui64 remainsTasks = tx.Tasks.size() - 1;
                 if (remainsTasks == 0) {
@@ -437,6 +438,8 @@ public:
                     tx.Tasks.erase(taskIt);
                 }
             }
+
+            guard.Clear();
 
             i64 prev = ExternalDataQueryMemory.fetch_sub(releaseExternalDataQueryMemory);
             Counters->RmExternalMemory->Sub(releaseExternalDataQueryMemory);

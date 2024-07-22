@@ -99,6 +99,7 @@ struct TConsumerState {
 
 struct TConsumerCounters {
     TCounterPtr Consumption;
+    TCounterPtr Reservation;
     TCounterPtr LimitBytes;
     TCounterPtr LimitMinBytes;
     TCounterPtr LimitMaxBytes;
@@ -222,6 +223,7 @@ private:
                 << " MinBytes: " << consumer.MinBytes << " MaxBytes: " << consumer.MaxBytes);
             auto& counters = GetConsumerCounters(consumer.Kind);
             counters.Consumption->Set(consumer.Consumption);
+            counters.Reservation->Set(SafeDiff(limitBytes, consumer.Consumption));
             counters.LimitBytes->Set(limitBytes);
             counters.LimitMinBytes->Set(consumer.MinBytes);
             counters.LimitMaxBytes->Set(consumer.MaxBytes);
@@ -315,6 +317,7 @@ private:
 
         return ConsumerCounters.emplace(consumer, TConsumerCounters{
             Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/Consumption"),
+            Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/Reservation"),
             Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/LimitBytes"),
             Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/LimitMinBytes"),
             Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/LimitMaxBytes"),

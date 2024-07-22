@@ -14,7 +14,7 @@ namespace {
 }
 
 void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
-    switch (InputFormat) {
+    switch (ParamFormat) {
         case EOutputFormat::Default:
         case EOutputFormat::JsonUnicode:
             InputEncoding = EBinaryStringEncoding::Unicode;
@@ -23,7 +23,7 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
             InputEncoding = EBinaryStringEncoding::Base64;
             break;
         default:
-            throw TMisuseException() << "Unknown input format: " << InputFormat;
+            throw TMisuseException() << "Unknown param format: " << ParamFormat;
     }
 
     switch (StdinFormat) {
@@ -132,13 +132,14 @@ void TCommandWithParameters::AddParametersOption(TClientCommand::TConfig& config
     if (clarification) {
         descr << ' ' << clarification;
     }
-    descr << Endl << "Several parameter options can be specified. " << Endl
-        << "To change input format use --input-format option." << Endl
+    descr << Endl << "Several parameter options can be specified." << Endl
+        << "To change parameter input format use --param-format option." << Endl
         << "Escaping depends on operating system.";
     config.Opts->AddLongOption('p', "param", descr.Str())
         .RequiredArgument("$name=value").AppendTo(&ParameterOptions);
-    config.Opts->AddLongOption("param-file", "File name with parameter names and values "
-        "in json format. You may specify this option repeatedly.")
+    config.Opts->AddLongOption("param-file", "File name with parameter names and values.\n"
+        "This option may be specified several times.\n"
+        "To change parameter input format use --param-format option.")
         .RequiredArgument("PATH").AppendTo(&ParameterFiles);
 
     AddOptionExamples(
@@ -223,7 +224,7 @@ void TCommandWithParameters::AddParametersStdinOption(TClientCommand::TConfig& c
 }
 
 void TCommandWithParameters::AddParams(TParamsBuilder& paramBuilder) {
-     switch (InputFormat) {
+     switch (ParamFormat) {
         case EOutputFormat::Default:
         case EOutputFormat::JsonUnicode:
         case EOutputFormat::JsonBase64: {
@@ -242,7 +243,7 @@ void TCommandWithParameters::AddParams(TParamsBuilder& paramBuilder) {
             break;
         }
         default:
-            Y_ABORT_UNLESS(false, "Unexpected input format");
+            Y_ABORT_UNLESS(false, "Unexpected param format");
     }
 }
 

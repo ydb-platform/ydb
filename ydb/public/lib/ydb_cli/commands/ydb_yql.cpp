@@ -45,7 +45,7 @@ void TCommandYql::Config(TConfig& config) {
 
     AddParametersOption(config);
 
-    AddInputFormats(config, {
+    AddParamFormats(config, {
         EOutputFormat::JsonUnicode,
         EOutputFormat::JsonBase64
     });

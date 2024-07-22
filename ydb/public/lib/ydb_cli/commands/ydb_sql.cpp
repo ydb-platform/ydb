@@ -62,12 +62,10 @@ void TCommandSql::Config(TConfig& config) {
 
     AddExamplesOption(config);
 
-    AddInputFormats(config, {
+    AddParamFormats(config, {
         EOutputFormat::JsonUnicode,
         EOutputFormat::JsonBase64
-    },
-    EOutputFormat::JsonUnicode,
-    "param-format");
+    });
 
     AddStdinFormats(config, {
         EOutputFormat::JsonUnicode,
@@ -138,16 +136,35 @@ int TCommandSql::RunCommand(TConfig& config) {
     } else {
         throw TMisuseException() << "Unknow syntax option \"" << Syntax << "\"";
     }
-    // Execute query without parameters
-    auto asyncResult = client.StreamExecuteQuery(
-        Query,
-        NQuery::TTxControl::NoTx(),
-        settings
-    );
+    if (!Parameters.empty() || !IsStdinInteractive()) {
+        // Execute query with parameters
+        THolder<TParamsBuilder> paramBuilder;
+        while (!IsInterrupted() && GetNextParams(paramBuilder)) {
+            auto asyncResult = client.StreamExecuteQuery(
+                    Query,
+                    // TODO: NoTx by default
+                    NQuery::TTxControl::BeginTx().CommitTx(),
+                    paramBuilder->Build(),
+                    settings
+                );
 
-    auto result = asyncResult.GetValueSync();
-    ThrowOnError(result);
-    return PrintResponse(result);
+            auto result = asyncResult.GetValueSync();
+            ThrowOnError(result);
+            return PrintResponse(result);
+        }
+    } else {
+        // Execute query without parameters
+        auto asyncResult = client.StreamExecuteQuery(
+            Query,
+            NQuery::TTxControl::NoTx(),
+            settings
+        );
+
+        auto result = asyncResult.GetValueSync();
+        ThrowOnError(result);
+        return PrintResponse(result);
+    }
+    return EXIT_SUCCESS;
 }
 
 int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {

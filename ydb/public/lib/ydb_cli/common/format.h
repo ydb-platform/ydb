@@ -30,8 +30,10 @@ class TCommandWithFormat {
 protected:
     void AddInputFormats(TClientCommand::TConfig& config, 
                          const TVector<EOutputFormat>& allowedFormats,
-                         EOutputFormat defaultFormat = EOutputFormat::JsonUnicode,
-                         const TString& optionName = "input-format");
+                         EOutputFormat defaultFormat = EOutputFormat::JsonUnicode);
+    void AddParamFormats(TClientCommand::TConfig& config, 
+                         const TVector<EOutputFormat>& allowedFormats,
+                         EOutputFormat defaultFormat = EOutputFormat::JsonUnicode);
     void AddStdinFormats(TClientCommand::TConfig& config, const TVector<EOutputFormat>& allowedStdinFormats, 
                          const TVector<EOutputFormat>& allowedFramingFormats, const TString& optionName = "stdin-format");
     void AddFormats(TClientCommand::TConfig& config, 
@@ -48,6 +50,8 @@ protected:
 protected:
     EOutputFormat OutputFormat = EOutputFormat::Default;
     EOutputFormat InputFormat = EOutputFormat::Default;
+    EOutputFormat ParamFormat = EOutputFormat::Default;
+    EOutputFormat LegacyInputFormat = EOutputFormat::Default;
     EOutputFormat FramingFormat = EOutputFormat::Default;
     EOutputFormat StdinFormat = EOutputFormat::Default;
     TVector<EOutputFormat> StdinFormats;

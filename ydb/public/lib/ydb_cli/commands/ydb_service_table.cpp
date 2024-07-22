@@ -378,7 +378,7 @@ void TCommandExecuteQuery::Config(TConfig& config) {
 
     AddParametersOption(config, "(for data & scan queries)");
 
-    AddInputFormats(config, {
+    AddParamFormats(config, {
         EOutputFormat::JsonUnicode,
         EOutputFormat::JsonBase64
     });

@@ -382,6 +382,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr RmOnCompleteFree;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmInternalError;
     NMonitoring::THistogramPtr RmSnapshotLatency;
+    NMonitoring::THistogramPtr RmFreeResourcesLatency;
     NMonitoring::THistogramPtr NodeServiceStartEventDelivery;
     NMonitoring::THistogramPtr NodeServiceProcessTime;
     NMonitoring::THistogramPtr NodeServiceProcessCancelTime;

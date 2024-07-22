@@ -783,6 +783,8 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     RmInternalError = KqpGroup->GetCounter("RM/InternalError", true);
     RmSnapshotLatency = KqpGroup->GetHistogram(
         "RM/SnapshotLatency", NMonitoring::ExponentialHistogram(20, 2, 1));
+    RmFreeResourcesLatency = KqpGroup->GetHistogram(
+        "RM/FreeResourcesLatency", NMonitoring::ExponentialHistogram(20, 2, 1));
 
     NodeServiceStartEventDelivery = KqpGroup->GetHistogram(
         "NodeService/StartEventDeliveryUs", NMonitoring::ExponentialHistogram(20, 2, 1));

@@ -360,6 +360,8 @@ public:
     }
 
     void FreeResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) override {
+        auto startedTimestamp = TlsActivationContext->Monotonic();
+        
         ui64 releaseScanQueryMemory = 0;
         ui64 releaseExternalDataQueryMemory = 0;
 
@@ -377,12 +379,14 @@ public:
 
             auto txIt = txBucket.Txs.find(txId);
             if (txIt == txBucket.Txs.end()) {
+                Counters->RmFreeResourcesLatency->Collect((TlsActivationContext->Monotonic() - startedTimestamp).MilliSeconds());
                 return;
             }
 
             auto& tx = txIt->second;
             auto taskIt = tx.Tasks.find(taskId);
             if (taskIt == tx.Tasks.end()) {
+                Counters->RmFreeResourcesLatency->Collect((TlsActivationContext->Monotonic() - startedTimestamp).MilliSeconds());
                 return;
             }
 
@@ -448,6 +452,8 @@ public:
             << "ExecutionUnits " << resources.ExecutionUnits << ".");
 
         FireResourcesPublishing();
+
+        Counters->RmFreeResourcesLatency->Collect((TlsActivationContext->Monotonic() - startedTimestamp).MilliSeconds());
     }
 
     void NotifyExternalResourcesAllocated(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) override {

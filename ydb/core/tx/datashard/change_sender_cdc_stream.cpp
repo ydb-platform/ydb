@@ -574,7 +574,6 @@ class TCdcChangeSenderMain
         }
 
         TSet<TPQPartitionInfo, TPQPartitionInfo::TLess> partitions(schema);
-        THashSet<ui64> shards;
 
         for (const auto& partition : pqDesc.GetPartitions()) {
             const auto partitionId = partition.GetPartitionId();
@@ -587,7 +586,6 @@ class TCdcChangeSenderMain
             Y_ABORT_UNLESS(!keyRange.ToBound || keyRange.ToBound->GetCells().size() == schema.size());
 
             partitions.insert({partitionId, shardId, std::move(keyRange)});
-            shards.insert(shardId);
         }
 
         // used to validate

@@ -10,23 +10,20 @@ namespace NViewer {
 
 using namespace NActors;
 
-class TViewerCapabilities : public TViewerPipeClient<TViewerCapabilities> {
+class TViewerCapabilities : public TViewerPipeClient {
 public:
-    using TBase = TViewerPipeClient<TViewerCapabilities>;
-
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
+    using TThis = TViewerCapabilities;
+    using TBase = TViewerPipeClient;
 
     TViewerCapabilities(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : TBase(viewer, ev)
     {}
 
-    void Bootstrap() {
+    void Bootstrap() override {
         ReplyAndPassAway();
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         NJson::TJsonValue json;
         json["Capabilities"] = Viewer->GetCapabilities();
         TBase::ReplyAndPassAway(GetHTTPOKJSON(NJson::WriteJson(json, false)));

@@ -24,11 +24,18 @@ using namespace NKikimr;
 using namespace NSchemeCache;
 using NNodeWhiteboard::TNodeId;
 
-class TViewerPipeClientImpl {
-    struct TDerivedActor;
+class TViewerPipeClient: public TActorBootstrapped<TViewerPipeClient> {
+    using TBase = TActorBootstrapped<TViewerPipeClient>;
+
+public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::VIEWER_HANDLER;
+    }
+
+    virtual void Bootstrap() = 0;
+    virtual void ReplyAndPassAway() = 0;
 
 protected:
-    TDerivedActor* Derived = nullptr;
     bool Followers = true;
     bool Metrics = true;
     bool WithRetry = true;
@@ -51,7 +58,7 @@ protected:
 
     std::deque<TDelayedRequest> DelayedRequests;
 
-    template<typename T>
+    template <typename T>
     struct TRequestResponse {
         std::variant<std::monostate, std::unique_ptr<T>, TString> Response;
         NWilson::TSpan Span;
@@ -59,12 +66,13 @@ protected:
         TRequestResponse() = default;
         TRequestResponse(NWilson::TSpan&& span)
             : Span(std::move(span))
-        {}
+        {
+        }
 
         TRequestResponse(const TRequestResponse&) = delete;
         TRequestResponse(TRequestResponse&&) = default;
-        TRequestResponse& operator =(const TRequestResponse&) = delete;
-        TRequestResponse& operator =(TRequestResponse&&) = default;
+        TRequestResponse& operator=(const TRequestResponse&) = delete;
+        TRequestResponse& operator=(TRequestResponse&&) = default;
 
         void Set(std::unique_ptr<T>&& response) {
             if (!IsDone()) {
@@ -121,19 +129,19 @@ protected:
             return *Get();
         }
 
-        T* operator ->() {
+        T* operator->() {
             return Get();
         }
 
-        const T* operator ->() const {
+        const T* operator->() const {
             return Get();
         }
 
-        T& operator *() {
+        T& operator*() {
             return GetRef();
         }
 
-        const T& operator *() const {
+        const T& operator*() const {
             return GetRef();
         }
 
@@ -144,11 +152,11 @@ protected:
 
     NTabletPipe::TClientConfig GetPipeClientConfig();
 
-    ~TViewerPipeClientImpl();
+    ~TViewerPipeClient();
 
-    TViewerPipeClientImpl(IActor* derived);
+    TViewerPipeClient();
 
-    TViewerPipeClientImpl(IActor* derived, IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev);
+    TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev);
 
     TActorId ConnectTabletPipe(NNodeWhiteboard::TTabletId tabletId);
 
@@ -158,14 +166,14 @@ protected:
 
     void SendRequestToPipe(TActorId pipe, IEventBase* ev, ui64 cookie = 0, NWilson::TTraceId traceId = {});
 
-    template<typename TResponse>
+    template <typename TResponse>
     TRequestResponse<TResponse> MakeRequest(TActorId recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) {
         TRequestResponse<TResponse> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, TypeName(*ev)));
         SendRequest(recipient, ev, flags, cookie, response.Span.GetTraceId());
         return response;
     }
 
-    template<typename TResponse>
+    template <typename TResponse>
     TRequestResponse<TResponse> MakeRequestToPipe(TActorId pipe, IEventBase* ev, ui64 cookie = 0) {
         TRequestResponse<TResponse> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, TypeName(*ev)));
         SendRequestToPipe(pipe, ev, cookie, response.Span.GetTraceId());
@@ -269,46 +277,12 @@ protected:
     TString GetHTTPINTERNALERROR(TString contentType = {}, TString response = {});
 
     TString MakeForward(const std::vector<ui32>& nodes);
-};
 
-template <typename TDerived>
-class TViewerPipeClient : public TActorBootstrapped<TDerived>, protected TViewerPipeClientImpl {
-protected:
-    using TBase = TActorBootstrapped<TDerived>;
-    using TImpl = TViewerPipeClientImpl;
+    void RequestDone(ui32 requests = 1);
 
-    TViewerPipeClient()
-        : TImpl(this)
-    {
-    }
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev);
 
-    TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : TImpl(this, viewer, ev)
-    {
-    }
-
-    void RequestDone(ui32 requests = 1) {
-        Requests -= requests;
-        if (!DelayedRequests.empty()) {
-            SendDelayedRequests();
-        }
-        if (Requests == 0) {
-            // TODO maybe make ReplyAndPassAway virtual?
-            static_cast<TDerived*>(this)->ReplyAndPassAway();
-        }
-    }
-
-    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
-        if (ev->Get()->Status != NKikimrProto::OK) {
-            ui32 requests = FailPipeConnect(ev->Get()->TabletId);
-            RequestDone(requests);
-        }
-    }
-
-    void PassAway() override {
-        ClosePipes();
-        TBase::PassAway();
-    }
+    void PassAway() override;
 };
 
 }

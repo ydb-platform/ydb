@@ -207,7 +207,6 @@ void TCommandWithFormat::AddMessagingFormats(TClientCommand::TConfig& config, co
 }
 
 void TCommandWithFormat::ParseFormats() {
-    Cerr << "TCommandWithFormat::ParseFormats" << Endl;
     if ((InputFormat != EOutputFormat::Default)
             && std::find(AllowedInputFormats.begin(), AllowedInputFormats.end(), InputFormat) == AllowedInputFormats.end()) {
         throw TMisuseException() << "Input format " << InputFormat << " is not available for this command";
@@ -257,8 +256,6 @@ void TCommandWithFormat::ParseFormats() {
             && std::find(AllowedInputFormats.begin(), AllowedInputFormats.end(), ParamFormat) == AllowedInputFormats.end()) {
         throw TMisuseException() << "Param format " << ParamFormat << " is not available for this command";
     }
-    Cerr << "ParamFormat: " << ParamFormat << Endl
-        << "LegacyInputFormat: " << LegacyInputFormat << Endl;
 }
 
 void TCommandWithFormat::ParseMessagingFormats() {

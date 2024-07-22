@@ -1151,6 +1151,8 @@ void TSharedCacheInitializer::InitializeServices(
     }
 
     if (cfg.HasMemoryLimit() && cfg.GetMemoryLimit() != 0) {
+        // config limit is optional
+        // if preserved apply both memory controller limit and config limit
         config->LimitBytes = cfg.GetMemoryLimit();
     } else {
         config->LimitBytes = {};

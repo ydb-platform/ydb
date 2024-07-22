@@ -206,7 +206,7 @@ private:
         Counters->GetCounter("Stats/ExternalConsumption")->Set(externalConsumption);
         Counters->GetCounter("Stats/TargetConsumersConsumption")->Set(targetConsumersConsumption);
         Counters->GetCounter("Stats/ResultingConsumersConsumption")->Set(resultingConsumersConsumption);
-        Counters->GetCounter("Stats/Coefficient")->Set(coefficient);
+        Counters->Get("Stats/Coefficient")->Set(coefficient);
 
         ui64 consumersLimitBytes = 0;
         for (const auto& consumer : consumers) {

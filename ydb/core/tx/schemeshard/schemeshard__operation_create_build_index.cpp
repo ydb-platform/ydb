@@ -114,10 +114,10 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     }
 
     auto createImplTable = [&](NKikimrSchemeOp::TTableDescription&& implTableDesc) {
+        implTableDesc.MutablePartitionConfig()->SetShadowData(true);
+
         auto outTx = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable);
         *outTx.MutableCreateTable() = std::move(implTableDesc);
-
-        implTableDesc.MutablePartitionConfig()->SetShadowData(true);
 
         return CreateInitializeBuildIndexImplTable(NextPartId(opId, result), outTx);
     };

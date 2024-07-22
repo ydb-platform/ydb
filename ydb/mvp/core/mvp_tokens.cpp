@@ -247,7 +247,7 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
     audience.insert(jwtInfo->audience());
 
     switch (AuthProfile) {
-        case NMVP::EAuthProfile::Yandex: {
+        case NMVP::EAuthProfile::YandexV2: {
             auto algorithm = jwt::algorithm::ps256(jwtInfo->publickey(), jwtInfo->privatekey());
             auto encodedToken = jwt::create()
                     .set_key_id(keyId)
@@ -265,7 +265,7 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
 
             break;
         }
-        case NMVP::EAuthProfile::Nebius: {
+        case NMVP::EAuthProfile::NebiusV1: {
             auto algorithm = jwt::algorithm::rs256(jwtInfo->publickey(), jwtInfo->privatekey());
             auto encodedToken = jwt::create()
                     .set_key_id(keyId)

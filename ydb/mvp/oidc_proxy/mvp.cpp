@@ -1,4 +1,5 @@
 #include <util/datetime/base.h>
+#include <util/generic/algorithm.h>
 #include <util/generic/yexception.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/stream/file.h>
@@ -288,8 +289,8 @@ void TMVP::TryGetGenericOptionsFromConfig(
         }
     }
 
-    if (generic["auth_profile"]) {
-        auto name = generic["auth_profile"].as<std::string>("yandex");
+    if (generic["access_service_type"]) {
+        auto name = to_lower(ToString(generic["access_service_type"].as<std::string>("yandex_v2")));
         auto it = AuthProfileByName.find(name);
         if (it != AuthProfileByName.end()) {
             OpenIdConnectSettings.AuthProfile = it->second;

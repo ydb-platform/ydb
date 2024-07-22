@@ -14,10 +14,10 @@ void TSessionCreateHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::
     NHttp::THttpIncomingRequestPtr request = event->Get()->Request;
     if (request->Method == "GET") {
         switch (Settings.AuthProfile) {
-            case NMVP::EAuthProfile::Yandex:
+            case NMVP::EAuthProfile::YandexV2:
                 ctx.Register(new THandlerSessionCreateYandex(event->Sender, request, HttpProxyId, Settings));
                 return;
-            case NMVP::EAuthProfile::Nebius:
+            case NMVP::EAuthProfile::NebiusV1:
                 ctx.Register(new THandlerSessionCreateNebius(event->Sender, request, HttpProxyId, Settings));
                 return;
         }

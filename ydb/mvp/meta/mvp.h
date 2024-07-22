@@ -26,7 +26,6 @@ protected:
     NSignals::TSignalHandler<SIGINT, &TMVP::OnTerminate> SignalSIGINT;
     NSignals::TSignalHandler<SIGTERM, &TMVP::OnTerminate> SignalSIGTERM;
     NSignals::TSignalIgnore<SIGPIPE> SignalSIGPIPE;
-    static EAuthProfile AuthProfile;
 
 public:
     ui16 HttpPort = {};
@@ -38,6 +37,8 @@ public:
     TString MetaApiEndpoint;
     TString MetaDatabase;
     bool MetaCache = false;
+    TString MetaDatabaseTokenName;
+    EAuthProfile AuthProfile = EAuthProfile::YandexV2;
 
     TMVP(int argc, char** argv);
     int Init();

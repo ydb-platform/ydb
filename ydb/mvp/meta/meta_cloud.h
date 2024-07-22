@@ -51,7 +51,7 @@ public:
         NActors::TActorId actorId = ctx.SelfID;
 
         {
-            Location.GetTableClient(Request, NYdb::NTable::TClientSettings().Database(Location.RootDomain))
+            Location.GetTableClient(Request, Location)
                 .CreateSession().Subscribe([actorId, actorSystem](const NYdb::NTable::TAsyncCreateSessionResult& result) {
                 NYdb::NTable::TAsyncCreateSessionResult res(result);
                 actorSystem->Send(actorId, new TEvPrivate::TEvCreateSessionResult(res.ExtractValue()));
@@ -122,7 +122,7 @@ public:
                     if (tokenator) {
                         token = tokenator->GetToken(token);
                         if (token) {
-                            Request.SetHeader(meta, "Authorization", token);
+                            Request.SetHeader(meta, "authorization", token);
                         }
                     }
                     meta.Timeout = GetClientTimeout();

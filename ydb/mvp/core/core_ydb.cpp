@@ -109,28 +109,22 @@ std::unique_ptr<NYdb::NTopic::TTopicClient> TYdbLocation::GetTopicClientPtr(TStr
     return std::make_unique<NYdb::NTopic::TTopicClient>(GetDriver(endpoint, scheme), settings);
 }
 
-NYdb::NTable::TTableClient TYdbLocation::GetTableClient(const TRequest& request,
-                                                        const NYdb::NTable::TClientSettings& defaultClientSettings,
-                                                        const TString& tokenName) const {
-    Cerr << "iiiiii GetTableClient" << Endl;
+NYdb::NTable::TTableClient TYdbLocation::GetTableClient(const TRequest& request, const TYdbLocation& location) const {
+    auto defaultClientSettings = NYdb::NTable::TClientSettings().Database(location.RootDomain);
     NYdb::NTable::TClientSettings clientSettings(defaultClientSettings);
 
     TString authToken;
-    // switch (authProfile) {
-    //     case NMVP::EAuthProfile::Yandex: {
-    //         authToken = request.GetAuthToken();
-    //         Cerr << "iiiiii authToken" << authToken << Endl;
-    //         break;
-    //     }
-    //    case NMVP::EAuthProfile::Nebius: {
-    Cerr << "iiiiii tokenName" << tokenName << Endl;
-    NMVP::TMvpTokenator* tokenator = MVPAppData()->Tokenator;
-    if (tokenator && !tokenName.empty()) {
-        TString authToken = tokenator->GetToken(tokenName);
+    switch (location.AuthProfile) {
+    case NMVP::EAuthProfile::YandexV2:
+        authToken = request.GetAuthToken();
+        break;
+    case NMVP::EAuthProfile::NebiusV1:
+        NMVP::TMvpTokenator* tokenator = MVPAppData()->Tokenator;
+        if (tokenator && !location.ServiceTokenName.empty()) {
+            authToken = tokenator->GetToken(location.ServiceTokenName);
+        }
+        break;
     }
-    //         break;
-    //     }
-    // }
     if (authToken) {
         clientSettings.AuthToken(authToken);
     }

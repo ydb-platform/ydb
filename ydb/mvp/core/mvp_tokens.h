@@ -14,25 +14,15 @@
 #include <ydb/public/api/client/nc_private/iam/token_service.grpc.pb.h>
 #include <ydb/public/api/client/nc_private/iam/token_exchange_service.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_auth.pb.h>
+#include "auth_profile.h"
 #include "grpc_log.h"
 
 namespace NMVP {
-
-enum EAuthProfile {
-    Yandex = 1,
-    Nebius = 2
-};
-
-const THashMap<TString, EAuthProfile> AuthProfileByName = {
-    { "yandex", EAuthProfile::Yandex },
-    { "nebius", EAuthProfile::Nebius }
-};
-
 class TMvpTokenator : public NActors::TActorBootstrapped<TMvpTokenator> {
 public:
     using TBase = NActors::TActorBootstrapped<TMvpTokenator>;
 
-    static TMvpTokenator* CreateTokenator(const NMvp::TTokensConfig& tokensConfig, const NActors::TActorId& httpProxy, const NMVP::EAuthProfile authProfile = NMVP::EAuthProfile::Yandex);
+    static TMvpTokenator* CreateTokenator(const NMvp::TTokensConfig& tokensConfig, const NActors::TActorId& httpProxy, const NMVP::EAuthProfile authProfile = NMVP::EAuthProfile::YandexV2);
     TString GetToken(const TString& name);
 
 protected:

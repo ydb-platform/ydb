@@ -15,7 +15,7 @@ namespace NViewer {
 
 using namespace NActors;
 
-class TPDiskInfo : public TViewerPipeClient<TPDiskInfo> {
+class TPDiskInfo : public TViewerPipeClient {
     enum EEv {
         EvRetryNodeRequest = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvEnd
@@ -30,7 +30,7 @@ class TPDiskInfo : public TViewerPipeClient<TPDiskInfo> {
 
 protected:
     using TThis = TPDiskInfo;
-    using TBase = TViewerPipeClient<TThis>;
+    using TBase = TViewerPipeClient;
     ui32 Timeout = 0;
     ui32 ActualRetries = 0;
     ui32 Retries = 0;
@@ -45,15 +45,11 @@ protected:
     ui32 PDiskId = 0;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TPDiskInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : TBase(viewer, ev)
     {}
 
-    void Bootstrap() {
+    void Bootstrap() override {
         const auto& params(Event->Get()->Request.GetParams());
         NodeId = FromStringWithDefault<ui32>(params.Get("node_id"), 0);
         PDiskId = FromStringWithDefault<ui32>(params.Get("pdisk_id"), Max<ui32>());
@@ -178,7 +174,7 @@ public:
         TBase::PassAway();
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         NKikimrViewer::TPDiskInfo proto;
         bool hasPDisk = false;
         bool hasVDisk = false;

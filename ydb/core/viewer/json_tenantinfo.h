@@ -24,8 +24,9 @@ namespace NViewer {
 
 using namespace NActors;
 
-class TJsonTenantInfo : public TViewerPipeClient<TJsonTenantInfo> {
-    using TBase = TViewerPipeClient<TJsonTenantInfo>;
+class TJsonTenantInfo : public TViewerPipeClient {
+    using TThis = TJsonTenantInfo;
+    using TBase = TViewerPipeClient;
     IViewer* Viewer;
     THashMap<TString, NKikimrViewer::TTenant> TenantByPath;
     THashMap<TPathId, NKikimrViewer::TTenant> TenantBySubDomainKey;
@@ -65,10 +66,6 @@ class TJsonTenantInfo : public TViewerPipeClient<TJsonTenantInfo> {
     };
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TJsonTenantInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : Viewer(viewer)
         , Event(ev)
@@ -99,7 +96,7 @@ public:
         return !IsFilterByOwner() || users.count(User) != 0;
     }
 
-    void Bootstrap() {
+    void Bootstrap() override {
         BLOG_TRACE("Bootstrap()");
         const auto& params(Event->Get()->Request.GetParams());
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
@@ -538,7 +535,7 @@ public:
         return NKikimrViewer::TStorageUsage::None;
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         BLOG_TRACE("ReplyAndPassAway() started");
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         auto *domain = domains->GetDomain();

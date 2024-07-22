@@ -21,10 +21,10 @@ using namespace NActors;
 using namespace NNodeWhiteboard;
 
 template<typename TRequestEventType, typename TResponseEventType>
-class TJsonWhiteboardRequest : public TWhiteboardRequest<TJsonWhiteboardRequest<TRequestEventType, TResponseEventType>, TRequestEventType, TResponseEventType> {
+class TJsonWhiteboardRequest : public TWhiteboardRequest<TRequestEventType, TResponseEventType> {
 protected:
     using TThis = TJsonWhiteboardRequest<TRequestEventType, TResponseEventType>;
-    using TBase = TWhiteboardRequest<TThis, TRequestEventType, TResponseEventType>;
+    using TBase = TWhiteboardRequest<TRequestEventType, TResponseEventType>;
     using TResponseType = typename TResponseEventType::ProtoRecordType;
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
@@ -85,7 +85,7 @@ public:
         TProtoToJson::ProtoToJson(json, response, JsonSettings);
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         try {
             TStringStream json;
             if (!TBase::RequestSettings.MergeFields.empty()) {

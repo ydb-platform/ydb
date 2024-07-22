@@ -131,9 +131,9 @@ constexpr ui8 operator +(EGroupFields e) {
 
 using TFieldsType = std::bitset<+EGroupFields::COUNT>;
 
-class TStorageGroups : public TViewerPipeClient<TStorageGroups> {
+class TStorageGroups : public TViewerPipeClient {
 public:
-    using TBase = TViewerPipeClient<TStorageGroups>;
+    using TBase = TViewerPipeClient;
     using TThis = TStorageGroups;
 
     // Common
@@ -621,11 +621,7 @@ public:
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
-    virtual void Bootstrap() {
+    void Bootstrap() override {
         Direct |= TBase::Event->Get()->Request.GetUri().StartsWith("/node/"); // we're already forwarding
         Direct |= (Database == AppData()->TenantName) || Database.empty(); // we're already on the right node or don't use database filter
 
@@ -1610,7 +1606,7 @@ public:
         }
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         ApplyEverything();
         NKikimrViewer::TStorageGroupsInfo json;
         json.SetVersion(1);

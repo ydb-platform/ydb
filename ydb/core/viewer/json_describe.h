@@ -17,8 +17,9 @@ using namespace NActors;
 using NSchemeShard::TEvSchemeShard;
 using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
-class TJsonDescribe : public TViewerPipeClient<TJsonDescribe> {
-    using TBase = TViewerPipeClient<TJsonDescribe>;
+class TJsonDescribe : public TViewerPipeClient {
+    using TThis = TJsonDescribe;
+    using TBase = TViewerPipeClient;
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
     TAutoPtr<TEvSchemeShard::TEvDescribeSchemeResult> SchemeShardResult;
@@ -30,10 +31,6 @@ class TJsonDescribe : public TViewerPipeClient<TJsonDescribe> {
     int Requests = 0;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TJsonDescribe(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
         : Viewer(viewer)
         , Event(ev)
@@ -58,7 +55,7 @@ public:
         record->MutableOptions()->SetReturnPartitioningInfo(FromStringWithDefault<bool>(params.Get("partitioning_info"), true));
     }
 
-    void Bootstrap() {
+    void Bootstrap() override {
         const auto& params(Event->Get()->Request.GetParams());
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
@@ -229,7 +226,7 @@ public:
         return result;
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         TStringStream json;
         if (SchemeShardResult != nullptr && SchemeShardResult->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
             DescribeResult = GetSchemeShardDescribeSchemeInfo();

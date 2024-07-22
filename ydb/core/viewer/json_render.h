@@ -15,9 +15,9 @@ namespace NViewer {
 using namespace NActors;
 using namespace NMonitoring;
 
-class TJsonRender : public TViewerPipeClient<TJsonRender> {
+class TJsonRender : public TViewerPipeClient {
     using TThis = TJsonRender;
-    using TBase = TViewerPipeClient<TJsonRender>;
+    using TBase = TViewerPipeClient;
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
     TEvViewer::TEvViewerRequest::TPtr ViewerRequest;
@@ -31,10 +31,6 @@ class TJsonRender : public TViewerPipeClient<TJsonRender> {
     bool Direct = false;
     bool MadeProxyRequest = false;
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TJsonRender(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
         : Viewer(viewer)
         , Event(ev)
@@ -58,7 +54,7 @@ public:
         Timeout = ViewerRequest->Get()->Record.GetTimeout();
     }
 
-    void Bootstrap() {
+    void Bootstrap() override {
         auto postData = Event
             ? Event->Get()->Request.GetPostContent()
             : ViewerRequest->Get()->Record.GetRenderRequest().GetContent();
@@ -280,6 +276,9 @@ public:
     void ReplyAndPassAway(TString data) {
         Send(Event->Sender, new NMon::TEvHttpInfoRes(std::move(data), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
+    }
+
+    void ReplyAndPassAway() override {
     }
 };
 

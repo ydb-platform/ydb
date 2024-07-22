@@ -82,6 +82,7 @@ namespace NKqp {
         void BulkUpsert(const TColumnTable& table, std::shared_ptr<arrow::RecordBatch> batch, const Ydb::StatusIds_StatusCode& opStatus = Ydb::StatusIds::SUCCESS);
         void ReadData(const TString& query, const TString& expected, const NYdb::EStatus opStatus = NYdb::EStatus::SUCCESS);
         void RebootTablets(const TString& tableName);
+        void WaitTabletDeletionInHive(ui64 tabletId, TDuration duration);
     };
 
 }

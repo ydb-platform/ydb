@@ -7010,6 +7010,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         }
         testHelper.DropTable("/Root/ColumnTableTest");
         for (auto tablet: tabletIds) {
+            testHelper.WaitTabletDeletionInHive(tablet, TDuration::Seconds(5));
             UNIT_ASSERT_C(!testHelper.GetKikimr().GetTestClient().TabletExistsInHive(&testHelper.GetRuntime(), tablet), ToString(tablet) + " is alive");
         }
     }

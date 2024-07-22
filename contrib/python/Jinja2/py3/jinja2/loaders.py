@@ -296,7 +296,13 @@ class PackageLoader(BaseLoader):
 
         # Make sure the package exists. This also makes namespace
         # packages work, otherwise get_loader returns None.
-        package = import_module(package_name)
+        try:
+            package = import_module(package_name)
+        except ModuleNotFoundError:
+            if skip_unknown_package:
+                self._template_root = None
+                return
+            raise
         spec = importlib.util.find_spec(package_name)
         assert spec is not None, "An import spec was not found for the package."
         loader = spec.loader
@@ -330,7 +336,7 @@ class PackageLoader(BaseLoader):
                     template_root = root
                     break
 
-        if template_root is None and not skip_unknown_package:
+        if template_root is None:
             raise ValueError(
                 f"The {package_name!r} package was not installed in a"
                 " way that PackageLoader understands."

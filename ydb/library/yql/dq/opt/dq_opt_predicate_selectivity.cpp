@@ -350,7 +350,7 @@ double NYql::NDq::ComputePredicateSelectivity(const TExprBase& input, const std:
 
     if (!resSelectivity.has_value()) {
         auto dumped = input.Raw()->Dump();
-        YQL_CLOG(WARN, CoreDq) << "ComputePredicateSelectivity NOT FOUND : " << dumped;
+        YQL_CLOG(TRACE, CoreDq) << "ComputePredicateSelectivity NOT FOUND : " << dumped;
         return 1.0;
     }
 

@@ -158,7 +158,7 @@ class TestSummary:
     def render_line(self, items):
         return f"| {' | '.join(items)} |"
 
-    def render(self, add_footnote=False, use_spoiler=False):
+    def render(self, add_footnote=False):
         github_srv = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
         repo = os.environ.get("GITHUB_REPOSITORY", "ydb-platform/ydb")
 
@@ -176,10 +176,6 @@ class TestSummary:
             columns.insert(0, "")
 
         result = []
-
-        if use_spoiler:
-            result.append("<details>")
-            result.append("")
 
         result.append(self.render_line(columns))
 
@@ -206,12 +202,6 @@ class TestSummary:
         if add_footnote:
             result.append("")
             result.append(f"[^1]: All mute rules are defined [here]({footnote_url}).")
-            
-        result.append("")
-
-        if use_spoiler:
-            result.append("")
-            result.append("</details>")
         
         return result
 
@@ -314,8 +304,17 @@ def get_comment_text(pr: PullRequest, summary: TestSummary, summary_links: str, 
         ]
     elif summary.is_failed:
         result = f"Some tests failed, follow the links below."
+        if not is_last_retry:
+            result += " Going to retry failed tests..."
     else:
         result = f"Tests successful."
+
+    body = []
+
+    if not is_last_retry:
+        body.append("")
+        body.append("<details>")
+        body.append("")
 
     body = [
         result
@@ -331,7 +330,12 @@ def get_comment_text(pr: PullRequest, summary: TestSummary, summary_links: str, 
         body.append("")
         body.append(" | ".join(links))
     
-    body.extend(summary.render(use_spoiler=not is_last_retry))
+    body.extend(summary.render())
+
+    if not is_last_retry:
+        body.append("")
+        body.append("</details>")
+        body.append("")
 
     return body
 

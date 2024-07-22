@@ -542,7 +542,7 @@ public:
                         State_->Gateway,
                         State_->GatewayRetryPolicy,
                         connect.Url,
-                        GetAuthInfo(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster)),
+                        TS3Credentials(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster)),
                         pathPattern,
                         pathPatternVariant,
                         NS3Lister::ES3PatternType::Wildcard

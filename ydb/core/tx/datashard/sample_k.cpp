@@ -163,7 +163,7 @@ private:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             default:
-                LOG_E("TSampleKScan: StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
+                LOG_E("TSampleKScan: StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString() << " " << Debug());
         }
     }
 

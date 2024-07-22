@@ -285,6 +285,19 @@ public:
                 }
                 return false;
             }
+        } else {
+            if (Storage && With == EWith::SpaceProblems) {
+                return false;
+            }
+            if (UptimeSeconds > 0) {
+                return false;
+            }
+            if (ProblemNodesOnly) {
+                return false;
+            }
+            if (Filter) {
+                return false;
+            }
         }
 
         return true;

@@ -142,7 +142,10 @@ struct TEvRowDispatcher {
 
 
     struct TEvSessionConsumerDeleted : public NActors::TEventLocal<TEvSessionConsumerDeleted, EEv::EvSessionConsumerDeleted> {
-        NActors::TActorId ReadActorId;
+        TEvSessionConsumerDeleted(THolder<NFq::Consumer>&& consumer) 
+        : Consumer(std::move(consumer)) // TODO 
+        {}
+        THolder<NFq::Consumer> Consumer;
     };
 
 };

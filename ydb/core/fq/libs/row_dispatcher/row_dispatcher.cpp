@@ -80,6 +80,9 @@ public:
     void Handle(NFq::TEvRowDispatcher::TEvAddConsumer::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr &ev);
+    void Handle(NFq::TEvRowDispatcher::TEvSessionConsumerDeleted::TPtr &ev);
+
+    
 
     STRICT_STFUNC(
         StateFunc, {
@@ -94,6 +97,7 @@ public:
 
         hFunc(NFq::TEvRowDispatcher::TEvAddConsumer, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStopSession, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvSessionConsumerDeleted, Handle);
     })
 
 private:
@@ -220,6 +224,20 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr &/*ev*/
 }
 
 
+void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionConsumerDeleted::TPtr &ev) {
+    LOG_ROW_DISPATCHER_DEBUG("TEvSessionConsumerDeleted");
+    const auto& consumer = ev->Get()->Consumer;
+    SessionKey key{consumer->SourceParams.GetTopicPath(), consumer->PartitionId};
+    auto sessionInfo = Sessions[key];
+    sessionInfo.TopicSessions.erase(consumer->ReadActorId);
+
+    if (sessionInfo.TopicSessions.empty()) {
+        LOG_ROW_DISPATCHER_DEBUG("Delete session info");
+        Sessions.erase(key);
+    }
+}
+
+
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvStopSession, topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
         " partitionId " << ev->Get()->Record.GetPartitionId());
@@ -252,6 +270,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev) {
     //         return;
     //     }
     // }
+    LOG_ROW_DISPATCHER_DEBUG("TEvStopSession end ");
 }
 
 } // namespace

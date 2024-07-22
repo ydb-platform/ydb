@@ -192,7 +192,7 @@ TTopicSession::TTopicSession(
     , Driver(driver)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , BufferSize(16_MB)
-    , LogPrefix("TopicSession: ")
+    , LogPrefix("TopicSession: " << SelfId())
    // , StartingMessageTimestamp(TInstant::MilliSeconds(TInstant::Now().MilliSeconds())) // this field is serialized as milliseconds, so drop microseconds part to be consistent with storage
     , Parser(NewJsonParser(GetVector(sourceParams.GetColumns()), [&](const NYql::NUdf::TUnboxedValue* json){
             DataParsed(json);
@@ -210,12 +210,12 @@ TTopicSession::TTopicSession(
 
 void TTopicSession::Bootstrap() {
     Become(&TTopicSession::StateFunc);
-    LOG_ROW_DISPATCHER_DEBUG("id " << SelfId());
+    LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << SourceParams.GetTopicPath() << ", PartitionId " << PartitionId);
 }
 
 void TTopicSession::PassAway() {
     LOG_ROW_DISPATCHER_DEBUG("PassAway");
-    NActors::TActorBootstrapped<TTopicSession>::PassAway();
+    //NActors::TActorBootstrapped<TTopicSession>::PassAway();
 }
 
 void TTopicSession::SubscribeOnNextEvent() {
@@ -540,23 +540,33 @@ void TTopicSession::Handle(TEvRowDispatcher::TEvSessionAddConsumer::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvSessionAddConsumer");
     //THolder<NFq::Consumer>& consumer = ev->Get()->Consumer;
 
-    auto& consumer = Consumers[ev->Get()->Consumer->ReadActorId]; // TODO : mv to try
-    consumer.Consumer = std::move(ev->Get()->Consumer);
+    auto it = Consumers.find(ev->Get()->Consumer->ReadActorId);// TODO : mv to try
+    if (it != Consumers.end()) {
+        LOG_ROW_DISPATCHER_DEBUG("Wrong consumer"); // TODO
+        return;
+    }
 
-    consumer.Consumer->EventsQueue.Send(new NFq::TEvRowDispatcher::TEvAck(consumer.Consumer->Proto));
+    auto& consumerInfo = Consumers[ev->Get()->Consumer->ReadActorId];
+    consumerInfo.Consumer = std::move(ev->Get()->Consumer);
+    consumerInfo.Consumer->EventsQueue.Send(new NFq::TEvRowDispatcher::TEvAck(consumerInfo.Consumer->Proto));
 
     TString predicate;
     try {
-        predicate = FormatWhere(consumer.Consumer->SourceParams.GetPredicate());
+        predicate = FormatWhere(consumerInfo.Consumer->SourceParams.GetPredicate());
         LOG_ROW_DISPATCHER_DEBUG("predicate " << predicate);
 
-        consumer.Filter = NewJsonFilter(
-            GetVector(consumer.Consumer->SourceParams.GetColumns()),
-            GetVector(consumer.Consumer->SourceParams.GetColumnTypes()),
+        consumerInfo.Filter = NewJsonFilter(
+            GetVector(consumerInfo.Consumer->SourceParams.GetColumns()),
+            GetVector(consumerInfo.Consumer->SourceParams.GetColumnTypes()),
             predicate,
-            [&, actorId = consumer.Consumer->ReadActorId](const TString& json){
-                auto& consumer = Consumers[actorId];
-                consumer.Consumer->Buffer.push(json);
+            [&, actorId = consumerInfo.Consumer->ReadActorId](const TString& json){
+                auto it = Consumers.find(actorId);
+                if (it == Consumers.end()) {
+                    LOG_ROW_DISPATCHER_DEBUG("Wrong consumer"); // TODO
+                    return;
+                }
+                auto& consumerInfo = it->second;
+                consumerInfo.Consumer->Buffer.push(json);
                 LOG_ROW_DISPATCHER_DEBUG("JsonFilter data: " << json);
                 SendData();
             });
@@ -592,12 +602,19 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev) {
         LOG_ROW_DISPATCHER_DEBUG("Wrong consumer"); // TODO
         return;
     }
+
+    // auto event = std::make_unique<TEvRowDispatcher::TEvSessionConsumerDeleted>();
+    // event->ReadActorId = ev->Sender;
+    Send(RowDispatcherActorId, new TEvRowDispatcher::TEvSessionConsumerDeleted(std::move(it->second.Consumer)));
     Consumers.erase(it);
-    
+
     if (Consumers.empty()) {
-        Send(RowDispatcherActorId, ev->Get());
+        //Send(RowDispatcherActorId, ev->Get());
+        LOG_ROW_DISPATCHER_DEBUG("No consumer, delete this session");
         TActorBootstrapped<TTopicSession>::PassAway();
     }
+    // Send(SelfId(), new NActors::TEvents::TEvPoisonPill());
+    // LOG_ROW_DISPATCHER_DEBUG("TEvStopSession end ");
 }
 
 

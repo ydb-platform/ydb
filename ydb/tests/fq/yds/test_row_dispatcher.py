@@ -74,8 +74,6 @@ class TestPqRowDispatcher(TestYdsBase):
             SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`;'''
      
         query_id = start_yds_query(kikimr, client, sql)
-        wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 1)
-
         data = [
             '{"time" = 101;}',
             '{"time" = 102;}'

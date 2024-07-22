@@ -363,33 +363,34 @@ void FillIndexImplTableColumns(
         implKeyToImplColumn[implTableColumns.Keys[keyId]] = keyId;
     }
 
-    for (ui32 i = Max<ui32>() / 2; auto& iter: baseTableColumns) {
-        NKikimrSchemeOp::TColumnDescription* item = nullptr;
-        if constexpr (std::is_same_v<const std::pair<const ui32, NSchemeShard::TTableInfo::TColumn>&, decltype(iter)>) {
-            const auto& column = iter.second;
-            if (!column.IsDropped() && implTableColumns.Columns.contains(column.Name)) {
-                item = implTableDesc.AddColumns();
-                item->SetName(column.Name);
-                item->SetType(NScheme::TypeName(column.PType, column.PTypeMod));
-                item->SetNotNull(column.NotNull);
+    for (ui32 i = Max<ui32>() / 2; auto& columnIt: baseTableColumns) {
+        NKikimrSchemeOp::TColumnDescription* column = nullptr;
+        using TColumn = std::decay_t<decltype(columnIt)>;
+        if constexpr (std::is_same_v<TColumn, std::pair<const ui32, NSchemeShard::TTableInfo::TColumn>>) {
+            const auto& columnInfo = columnIt.second;
+            if (!columnInfo.IsDropped() && implTableColumns.Columns.contains(columnInfo.Name)) {
+                column = implTableDesc.AddColumns();
+                column->SetName(columnInfo.Name);
+                column->SetType(NScheme::TypeName(columnInfo.PType, columnInfo.PTypeMod));
+                column->SetNotNull(columnInfo.NotNull);
             }
-        } else if constexpr (std::is_same_v<const NKikimrSchemeOp::TColumnDescription&, decltype(iter)>) {
-            if (implTableColumns.Columns.contains(iter.GetName())) {
-                item = implTableDesc.AddColumns();
-                *item = iter;
-                item->ClearFamily();
-                item->ClearFamilyName();
-                item->ClearDefaultValue();
+        } else if constexpr (std::is_same_v<TColumn, NKikimrSchemeOp::TColumnDescription>) {
+            if (implTableColumns.Columns.contains(columnIt.GetName())) {
+                column = implTableDesc.AddColumns();
+                *column = columnIt;
+                column->ClearFamily();
+                column->ClearFamilyName();
+                column->ClearDefaultValue();
             }
         } else {
-            static_assert(dependent_false<decltype(iter)>::value);
+            static_assert(dependent_false<TColumn>::value);
         }
-        if (item) {
+        if (column) {
             ui32 order = i++;
-            if (const auto* id = implKeyToImplColumn.FindPtr(item->GetName())) {
+            if (const auto* id = implKeyToImplColumn.FindPtr(column->GetName())) {
                 order = *id;
             }
-            item->SetId(order);
+            column->SetId(order);
         }
     }
 

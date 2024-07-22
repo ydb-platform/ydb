@@ -795,7 +795,7 @@ namespace NYql {
                 return AllVirtualColumns_;
             }
 
-            static constexpr bool ProvidesBlocks = false;
+            virtual bool ProvidesBlocks() const { return false; }
         };
 
         /**
@@ -840,7 +840,7 @@ namespace NYql {
                 OutputColumnsFilter_ = outputColumnsFilter;
             }
 
-            static constexpr bool AcceptsBlocks = false;
+            virtual bool AcceptsBlocks() const { return false; }
         };
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////

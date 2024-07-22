@@ -356,6 +356,8 @@ void FillIndexImplTableColumns(
     const TTableColumns& implTableColumns,
     NKikimrSchemeOp::TTableDescription& implTableDesc)
 {
+    // The function that calls this may have already added some columns
+    // and we want to add new columns after those that have already been added
     const auto was = implTableDesc.ColumnsSize();
 
     THashMap<TString, ui32> implKeyToImplColumn;
@@ -363,6 +365,9 @@ void FillIndexImplTableColumns(
         implKeyToImplColumn[implTableColumns.Keys[keyId]] = keyId;
     }
 
+    // We want data columns order in index table same as in indexed table,
+    // so we use counter to keep this order in the std::sort
+    // Counter starts with Max/2 to avoid intersection with key columns counter
     for (ui32 i = Max<ui32>() / 2; auto& columnIt: baseTableColumns) {
         NKikimrSchemeOp::TColumnDescription* column = nullptr;
         using TColumn = std::decay_t<decltype(columnIt)>;

@@ -316,9 +316,7 @@ def get_comment_text(pr: PullRequest, summary: TestSummary, summary_links: str, 
         body.append("<details>")
         body.append("")
 
-    body = [
-        result
-    ]
+    body.append(result)
 
     with open(summary_links) as f:
         links = f.readlines()

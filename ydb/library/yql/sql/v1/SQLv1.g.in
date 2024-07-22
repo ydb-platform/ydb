@@ -718,9 +718,10 @@ table_constraint:
 ;
 
 table_index: INDEX an_id table_index_type
-    with_index_settings?
     ON LPAREN an_id_schema (COMMA an_id_schema)* RPAREN
-    (COVER LPAREN an_id_schema (COMMA an_id_schema)* RPAREN)?;
+    (COVER LPAREN an_id_schema (COMMA an_id_schema)* RPAREN)?
+    with_index_settings?
+;
 
 table_index_type: (global_index | local_index) (USING index_subtype)?;
 

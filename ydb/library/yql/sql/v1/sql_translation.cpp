@@ -683,12 +683,12 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
     }
 
     // WITH
-    if (node.HasBlock4()) {
+    if (node.HasBlock10()) {
         //const auto& with = node.GetBlock4();
         auto& index = indexes.back();
         if (index.Type == TIndexDescription::EType::GlobalVectorKmeansTree) {
             index.IndexSettings = TVectorIndexSettings();
-            if (!CreateIndexSettings(node.GetBlock4().GetRule_with_index_settings1(), index.Type, index.IndexSettings)) {
+            if (!CreateIndexSettings(node.GetBlock10().GetRule_with_index_settings1(), index.Type, index.IndexSettings)) {
                 return false;
             }
             const auto &vectorSettings = std::get<TVectorIndexSettings>(index.IndexSettings);
@@ -702,13 +702,13 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
         }
     }
 
-    indexes.back().IndexColumns.emplace_back(IdEx(node.GetRule_an_id_schema7(), *this));
-    for (const auto& block : node.GetBlock8()) {
+    indexes.back().IndexColumns.emplace_back(IdEx(node.GetRule_an_id_schema6(), *this));
+    for (const auto& block : node.GetBlock7()) {
         indexes.back().IndexColumns.emplace_back(IdEx(block.GetRule_an_id_schema2(), *this));
     }
 
-    if (node.HasBlock10()) {
-        const auto& block = node.GetBlock10();
+    if (node.HasBlock9()) {
+        const auto& block = node.GetBlock9();
         indexes.back().DataColumns.emplace_back(IdEx(block.GetRule_an_id_schema3(), *this));
         for (const auto& inner : block.GetBlock4()) {
             indexes.back().DataColumns.emplace_back(IdEx(inner.GetRule_an_id_schema2(), *this));

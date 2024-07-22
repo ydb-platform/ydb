@@ -12,7 +12,8 @@ To work with data stored in external DBMSs, it is sufficient to create an [exter
 
 You can learn about the internals of the federated query processing system in the [architecture](./architecture.md) section. Detailed information on working with various data sources is provided in the corresponding sections:
 - [ClickHouse](clickhouse.md)
-- [PostgreSQL](postgresql.md)
-- [{{ ydb-short-name }}](ydb.md)
-- [S3](s3/external_table.md)
 - [Greenplum](greenplum.md)
+- [MySQL](mysql.md)
+- [PostgreSQL](postgresql.md)
+- [S3](s3/external_table.md)
+- [{{ ydb-short-name }}](ydb.md)

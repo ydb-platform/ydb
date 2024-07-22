@@ -1088,7 +1088,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
         NUdf::TUnboxedValue item;
         while (!expected.empty()) {
             UNIT_ASSERT(iterator.Next(item));
-            TString actual = item.AsStringRef().Data();
+            const auto actual = TString(item.AsStringRef());
 
             auto it = expected.find(actual);
             UNIT_ASSERT(it != expected.end());
@@ -1178,7 +1178,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
         NUdf::TUnboxedValue item;
         while (!expected.empty()) {
             UNIT_ASSERT(iterator.Next(item));
-            TString actual = item.AsStringRef().Data();
+            const auto actual = TString(item.AsStringRef());
 
             auto it = expected.find(actual);
             UNIT_ASSERT(it != expected.end());
@@ -1266,7 +1266,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
         NUdf::TUnboxedValue item;
         while (!expected.empty()) {
             UNIT_ASSERT(iterator.Next(item));
-            TString actual = item.AsStringRef().Data();
+            const auto actual = TString(item.AsStringRef());
 
             auto it = expected.find(actual);
             UNIT_ASSERT(it != expected.end());
@@ -1343,7 +1343,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
         NUdf::TUnboxedValue item;
         while (!expected.empty()) {
             UNIT_ASSERT(iterator.Next(item));
-            TString actual = item.AsStringRef().Data();
+            const auto actual = TString(item.AsStringRef());
 
             auto it = expected.find(actual);
             UNIT_ASSERT(it != expected.end());

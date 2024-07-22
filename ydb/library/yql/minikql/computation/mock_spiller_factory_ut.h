@@ -11,7 +11,7 @@ class TMockSpillerFactory : public ISpillerFactory
 {
 public:
     ISpiller::TPtr CreateSpiller() override {
-        return std::make_shared<TMockSpiller>();
+        return CreateMockSpiller();
     }
 };
 

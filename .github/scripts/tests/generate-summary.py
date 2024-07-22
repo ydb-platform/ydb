@@ -311,12 +311,12 @@ def get_comment_text(pr: PullRequest, summary: TestSummary, summary_links: str, 
 
     body = []
 
+    body.append(result)
+
     if not is_last_retry:
         body.append("")
         body.append("<details>")
         body.append("")
-
-    body.append(result)
 
     with open(summary_links) as f:
         links = f.readlines()

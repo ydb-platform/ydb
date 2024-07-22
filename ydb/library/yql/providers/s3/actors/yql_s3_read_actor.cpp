@@ -944,7 +944,7 @@ public:
         DeferredDecompressedDataParts.push(std::move(ev->Release()));
     }
 
-    void Handle(TEvS3Provider::TEvDecompressDataFinish::TPtr& ev) {
+    void Handle(TEvS3Provider::TEvDecompressDataFinish::TPtr&) {
         DecompressedInputFinished = true;
     }
 

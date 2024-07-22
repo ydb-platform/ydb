@@ -99,4 +99,6 @@ NYql::TIssues GroupIssues(const NYql::TIssues& issues, const TString& message);
 
 void ParsePoolSettings(const NKikimrSchemeOp::TResourcePoolDescription& description, NResourcePool::TPoolSettings& poolConfig);
 
+ui64 SaturationSub(ui64 x, ui64 y);
+
 }  // NKikimr::NKqp::NWorkload

@@ -991,20 +991,15 @@ void TPartitionActor::InitLockPartition(const TActorContext& ctx) {
 
 
 void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
-    if (ReadingFinishedSent) {
+    if (WaitDataInfly.size() > 1) { //already got 2 requests inflight
         return;
     }
-
-    if (WaitDataInfly.size() > 1) //already got 2 requests inflight
-        return;
-    Y_ABORT_UNLESS(InitDone);
-
-    Y_ABORT_UNLESS(PipeClient);
-
     if (!WaitForData) {
         return;
     }
 
+    Y_ABORT_UNLESS(InitDone);
+    Y_ABORT_UNLESS(PipeClient);
     Y_ABORT_UNLESS(ReadOffset >= EndOffset);
 
     TAutoPtr<TEvPersQueue::TEvHasDataInfo> event(new TEvPersQueue::TEvHasDataInfo());
@@ -1020,7 +1015,6 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     NTabletPipe::SendData(ctx, PipeClient, event.Release());
 
     ctx.Schedule(PREWAIT_DATA, new TEvents::TEvWakeup());
-
     ctx.Schedule(WAIT_DATA, new TEvPQProxy::TEvDeadlineExceeded(WaitDataCookie));
 
     WaitDataInfly.insert(WaitDataCookie);
@@ -1219,13 +1213,8 @@ void TPartitionActor::HandlePoison(TEvents::TEvPoisonPill::TPtr&, const TActorCo
 }
 
 void TPartitionActor::Handle(TEvPQProxy::TEvDeadlineExceeded::TPtr& ev, const TActorContext& ctx) {
-
     WaitDataInfly.erase(ev->Get()->Cookie);
-    if (ReadOffset >= EndOffset && WaitDataInfly.size() <= 1 && PipeClient) {
-        Y_ABORT_UNLESS(WaitForData);
-        WaitDataInPartition(ctx);
-    }
-
+    HandleWakeup(ctx);
 }
 
 void TPartitionActor::HandleWakeup(const TActorContext& ctx) {

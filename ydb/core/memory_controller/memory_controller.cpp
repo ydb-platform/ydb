@@ -199,6 +199,7 @@ private:
         Counters->GetCounter("Stats/AnonRss")->Set(processMemoryInfo.AnonRss.value_or(0));
         Counters->GetCounter("Stats/CGroupLimit")->Set(processMemoryInfo.CGroupLimit.value_or(0));
         Counters->GetCounter("Stats/AllocatedMemory")->Set(processMemoryInfo.AllocatedMemory);
+        // TODO: add allocator caches metric
         Counters->GetCounter("Stats/HardLimitBytes")->Set(hardLimitBytes);
         Counters->GetCounter("Stats/SoftLimitBytes")->Set(softLimitBytes);
         Counters->GetCounter("Stats/TargetUtilizationBytes")->Set(targetUtilizationBytes);

@@ -355,6 +355,15 @@ public:
         return {};
     }
 
+    NJson::TJsonValue GetCapabilities() override {
+        std::lock_guard guard(JsonHandlersMutex);
+        NJson::TJsonValue capabilities(NJson::JSON_MAP);
+        for (const auto& [name, version] : JsonHandlers.Capabilities) {
+            capabilities[name] = version;
+        }
+        return capabilities;
+    }
+
     void RegisterVirtualHandler(
             NKikimrViewer::EObjectType parentObjectType,
             TVirtualHandlerType handler) override {
@@ -385,6 +394,7 @@ public:
 
 private:
     TJsonHandlers JsonHandlers;
+    std::mutex JsonHandlersMutex;
     std::unordered_map<TString, TString> Redirect307;
     const TKikimrRunConfig KikimrRunConfig;
     std::unordered_multimap<NKikimrViewer::EObjectType, TVirtualHandler> VirtualHandlersByParentType;

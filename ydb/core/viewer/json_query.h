@@ -24,9 +24,9 @@ using namespace NMonitoring;
 using ::google::protobuf::FieldDescriptor;
 using namespace NNodeWhiteboard;
 
-class TJsonQuery : public TViewerPipeClient<TJsonQuery> {
+class TJsonQuery : public TViewerPipeClient {
     using TThis = TJsonQuery;
-    using TBase = TViewerPipeClient<TJsonQuery>;
+    using TBase = TViewerPipeClient;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
     TVector<Ydb::ResultSet> ResultSets;
@@ -52,10 +52,6 @@ class TJsonQuery : public TViewerPipeClient<TJsonQuery> {
     TString SessionId;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     ESchemaType StringToSchemaType(const TString& schemaStr) {
         if (schemaStr == "classic") {
             return ESchemaType::Classic;
@@ -112,7 +108,7 @@ public:
     {
     }
 
-    void Bootstrap() {
+    void Bootstrap() override {
         const auto& params(Event->Get()->Request.GetParams());
         InitConfig(params);
         ParseCgiParameters(params);
@@ -155,6 +151,9 @@ public:
         }
         TBase::PassAway();
         BLOG_TRACE("PassAway()");
+    }
+
+    void ReplyAndPassAway() override {
     }
 
     STATEFN(StateWork) {

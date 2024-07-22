@@ -175,9 +175,9 @@ class TestSummary:
         if need_first_column:
             columns.insert(0, "")
 
-        result = [
-            self.render_line(columns),
-        ]
+        result = []
+
+        result.append(self.render_line(columns))
 
         if need_first_column:
             result.append(self.render_line([':---'] + ['---:'] * (len(columns) - 1)))
@@ -202,8 +202,7 @@ class TestSummary:
         if add_footnote:
             result.append("")
             result.append(f"[^1]: All mute rules are defined [here]({footnote_url}).")
-            
-        result.append("")
+        
         return result
 
 
@@ -298,19 +297,26 @@ def gen_summary(public_dir, public_dir_url, paths):
     return summary
 
 
-def get_comment_text(pr: PullRequest, summary: TestSummary, summary_links: str):
+def get_comment_text(pr: PullRequest, summary: TestSummary, summary_links: str, is_last_retry: bool):
     if summary.is_empty:
         return [
             f"Test run completed, no test results found for commit {pr.head.sha}. "
         ]
     elif summary.is_failed:
         result = f"Some tests failed, follow the links below."
+        if not is_last_retry:
+            result += " Going to retry failed tests..."
     else:
         result = f"Tests successful."
 
-    body = [
-        result
-    ]
+    body = []
+
+    body.append(result)
+
+    if not is_last_retry:
+        body.append("")
+        body.append("<details>")
+        body.append("")
 
     with open(summary_links) as f:
         links = f.readlines()
@@ -321,8 +327,15 @@ def get_comment_text(pr: PullRequest, summary: TestSummary, summary_links: str):
     if links:
         body.append("")
         body.append(" | ".join(links))
-
+    
     body.extend(summary.render())
+
+    if not is_last_retry:
+        body.append("")
+        body.append("</details>")
+        body.append("")
+    else:
+        body.append("")
 
     return body
 
@@ -334,6 +347,7 @@ def main():
     parser.add_argument("--summary_links", required=True)
     parser.add_argument('--build_preset', default="default-linux-x86-64-relwithdebinfo", required=False)
     parser.add_argument('--status_report_file', required=False)
+    parser.add_argument('--is_last_retry', required=True, type=int)
     parser.add_argument("args", nargs="+", metavar="TITLE html_out path")
     args = parser.parse_args()
 
@@ -362,7 +376,7 @@ def main():
             event = json.load(fp)
 
         pr = gh.create_from_raw_data(PullRequest, event["pull_request"])
-        text = get_comment_text(pr, summary, args.summary_links)
+        text = get_comment_text(pr, summary, args.summary_links, is_last_retry=bool(args.is_last_retry))
 
         update_pr_comment_text(pr, args.build_preset, run_number, color, text='\n'.join(text), rewrite=False)
 

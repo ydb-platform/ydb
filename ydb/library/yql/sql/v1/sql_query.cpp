@@ -1560,10 +1560,21 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
         }
         break;
     }
+    case TRule_alter_table_action::kAltAlterTableAction17: {
+        // ALTER COLUMN id DROP NOT NULL
+        const auto& alterRule = node.GetAlt_alter_table_action17().GetRule_alter_table_alter_column_drop_not_null1();
 
-    case TRule_alter_table_action::ALT_NOT_SET:
+        if (!AlterTableAlterColumnDropNotNull(alterRule, params)) {
+            return false;
+        }
+
+        break;
+    }
+
+    case TRule_alter_table_action::ALT_NOT_SET: {
         AltNotImplemented("alter_table_action", node);
         return false;
+    }
     }
     return true;
 }
@@ -1651,7 +1662,7 @@ bool TSqlQuery::AlterTableAlterColumn(const TRule_alter_table_alter_column& node
     TVector<TIdentifier> families;
     const auto& familyRelation = node.GetRule_family_relation5();
     families.push_back(IdEx(familyRelation.GetRule_an_id2(), *this));
-    params.AlterColumns.emplace_back(pos, name, nullptr, false, families, false, nullptr);
+    params.AlterColumns.emplace_back(pos, name, nullptr, false, families, false, nullptr, TColumnSchema::ETypeOfChange::SetFamily);
     return true;
 }
 
@@ -1820,6 +1831,13 @@ bool TSqlQuery::AlterTableAlterIndex(const TRule_alter_table_alter_index& node, 
         return false;
     }
 
+    return true;
+}
+
+bool TSqlQuery::AlterTableAlterColumnDropNotNull(const TRule_alter_table_alter_column_drop_not_null& node, TAlterTableParameters& params) {
+    TString name = Id(node.GetRule_an_id3(), *this);
+    const TPosition pos(Context().Pos());
+    params.AlterColumns.emplace_back(pos, name, nullptr, false, TVector<TIdentifier>(), false, nullptr, TColumnSchema::ETypeOfChange::DropNotNullConstraint);
     return true;
 }
 

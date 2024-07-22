@@ -343,7 +343,7 @@ TFuture<TSharedRefArray> ExecuteVerb(
     }
 
     NRpc::NProto::TRequestHeader requestHeader;
-    YT_VERIFY(ParseRequestHeader(requestMessage, &requestHeader));
+    YT_VERIFY(TryParseRequestHeader(requestMessage, &requestHeader));
     SetRequestTargetYPath(&requestHeader, suffixPath);
 
     auto updatedRequestMessage = SetRequestHeader(requestMessage, requestHeader);
@@ -385,7 +385,7 @@ void ExecuteVerb(
 
     auto requestMessage = context->GetRequestMessage();
     auto requestHeader = std::make_unique<NRpc::NProto::TRequestHeader>();
-    YT_VERIFY(ParseRequestHeader(requestMessage, requestHeader.get()));
+    YT_VERIFY(TryParseRequestHeader(requestMessage, requestHeader.get()));
     SetRequestTargetYPath(requestHeader.get(), suffixPath);
     context->SetRequestHeader(std::move(requestHeader));
 

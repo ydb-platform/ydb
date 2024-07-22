@@ -56,6 +56,13 @@ public:
     {
         return reference;
     }
+
+    TErrorOr<TSharedRef> TryTrack(
+        TSharedRef reference,
+        bool /*keepExistingTracking*/) override
+    {
+        return reference;
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -189,7 +196,7 @@ i64 TMemoryUsageTrackerGuard::GetSize() const
 
 void TMemoryUsageTrackerGuard::SetSize(i64 size)
 {
-    auto ignoredError = SetSizeGeneric(size, [&] (i64 delta) {
+    auto ignoredError = SetSizeImpl(size, [&] (i64 delta) {
         Tracker_->Acquire(delta);
         return TError{};
     });
@@ -199,12 +206,12 @@ void TMemoryUsageTrackerGuard::SetSize(i64 size)
 
 TError TMemoryUsageTrackerGuard::TrySetSize(i64 size)
 {
-    return SetSizeGeneric(size, [&] (i64 delta) {
+    return SetSizeImpl(size, [&] (i64 delta) {
         return Tracker_->TryAcquire(delta);
     });
 }
 
-TError TMemoryUsageTrackerGuard::SetSizeGeneric(i64 size, auto acquirer)
+TError TMemoryUsageTrackerGuard::SetSizeImpl(i64 size, auto acquirer)
 {
     if (!Tracker_) {
         return {};
@@ -353,6 +360,17 @@ void TMemoryTrackedBlob::Clear()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+TErrorOr<TSharedRef> TryTrackMemory(
+    const IMemoryUsageTrackerPtr& tracker,
+    TSharedRef reference,
+    bool keepExistingTracking)
+{
+    if (!tracker || !reference) {
+        return reference;
+    }
+    return tracker->TryTrack(reference, keepExistingTracking);
+}
 
 TSharedRef TrackMemory(
     const IMemoryUsageTrackerPtr& tracker,

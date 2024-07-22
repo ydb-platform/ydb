@@ -14,7 +14,7 @@ namespace NViewer {
 
 using namespace NActors;
 
-class TJsonVDiskEvict : public TViewerPipeClient<TJsonVDiskEvict> {
+class TJsonVDiskEvict : public TViewerPipeClient {
     enum EEv {
         EvRetryNodeRequest = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvEnd
@@ -29,7 +29,7 @@ class TJsonVDiskEvict : public TViewerPipeClient<TJsonVDiskEvict> {
 
 protected:
     using TThis = TJsonVDiskEvict;
-    using TBase = TViewerPipeClient<TThis>;
+    using TBase = TViewerPipeClient;
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
     ui32 Timeout = 0;
@@ -47,10 +47,6 @@ protected:
     bool Force = false;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TJsonVDiskEvict(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : Viewer(viewer)
         , Event(ev)
@@ -66,7 +62,7 @@ public:
         return true;
     }
 
-    void Bootstrap() {
+    void Bootstrap() override {
         const auto& params(Event->Get()->Request.GetParams());
         TString vdisk_id = params.Get("vdisk_id");
         if (vdisk_id) {
@@ -165,7 +161,7 @@ public:
         TBase::PassAway();
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         NJson::TJsonValue json;
         if (Response != nullptr) {
             if (Response->Record.GetResponse().GetSuccess()) {

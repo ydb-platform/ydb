@@ -16,6 +16,7 @@ PEERDIR(
     yt/yt/core
     yt/yt/core/service_discovery/yp
     yt/yt/library/monitoring
+    yt/yt/library/oom
     yt/yt/library/profiling/solomon
     yt/yt/library/profiling/tcmalloc
     yt/yt/library/profiling/perf

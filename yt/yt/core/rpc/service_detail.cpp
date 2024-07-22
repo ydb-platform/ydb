@@ -32,17 +32,6 @@
 
 #include <library/cpp/yt/misc/tls.h>
 
-namespace NYT
-{
-    static TError operator<<(TError error, const std::optional<TError>& maybeError)
-    {
-        if (maybeError) {
-            return error << *maybeError;
-        }
-        return error;
-    }
-}
-
 namespace NYT::NRpc {
 
 using namespace NBus;
@@ -60,7 +49,7 @@ using NYT::ToProto;
 static const auto InfiniteRequestThrottlerConfig = New<TThroughputThrottlerConfig>();
 static const auto DefaultLoggingSuppressionFailedRequestThrottlerConfig = TThroughputThrottlerConfig::Create(1'000);
 
-constexpr TDuration ServiceLivenessCheckPeriod = TDuration::MilliSeconds(100);
+constexpr auto ServiceLivenessCheckPeriod = TDuration::MilliSeconds(100);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -273,9 +262,22 @@ auto TServiceBase::TMethodDescriptor::SetHandleMethodError(bool value) const -> 
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TServiceBase::TErrorCodeCounter::TErrorCodeCounter(NProfiling::TProfiler profiler)
+    : Profiler_(std::move(profiler))
+{ }
+
+void TServiceBase::TErrorCodeCounter::Increment(TErrorCode code)
+{
+    CodeToCounter_.FindOrInsert(code, [&] {
+        return Profiler_.WithTag("code", ToString(code)).Counter("/code_count");
+    }).first->Increment();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TServiceBase::TMethodPerformanceCounters::TMethodPerformanceCounters(
     const NProfiling::TProfiler& profiler,
-    const THistogramConfigPtr& histogramConfig)
+    const TTimeHistogramConfigPtr& timeHistogramConfig)
     : RequestCounter(profiler.Counter("/request_count"))
     , CanceledRequestCounter(profiler.Counter("/canceled_request_count"))
     , FailedRequestCounter(profiler.Counter("/failed_request_count"))
@@ -285,16 +287,16 @@ TServiceBase::TMethodPerformanceCounters::TMethodPerformanceCounters(
     , RequestMessageAttachmentSizeCounter(profiler.Counter("/request_message_attachment_bytes"))
     , ResponseMessageBodySizeCounter(profiler.Counter("/response_message_body_bytes"))
     , ResponseMessageAttachmentSizeCounter(profiler.Counter("/response_message_attachment_bytes"))
-    , ErrorCodes(profiler)
+    , ErrorCodeCounter(profiler)
 {
-    if (histogramConfig && histogramConfig->CustomBounds) {
-        const auto &customBounds = *histogramConfig->CustomBounds;
+    if (timeHistogramConfig && timeHistogramConfig->CustomBounds) {
+        const auto& customBounds = *timeHistogramConfig->CustomBounds;
         ExecutionTimeCounter = profiler.TimeHistogram("/request_time_histogram/execution", customBounds);
         RemoteWaitTimeCounter = profiler.TimeHistogram("/request_time_histogram/remote_wait", customBounds);
         LocalWaitTimeCounter = profiler.TimeHistogram("/request_time_histogram/local_wait", customBounds);
         TotalTimeCounter = profiler.TimeHistogram("/request_time_histogram/total", customBounds);
-    } else if (histogramConfig && histogramConfig->ExponentialBounds) {
-        const auto &exponentialBounds = *histogramConfig->ExponentialBounds;
+    } else if (timeHistogramConfig && timeHistogramConfig->ExponentialBounds) {
+        const auto& exponentialBounds = *timeHistogramConfig->ExponentialBounds;
         ExecutionTimeCounter = profiler.TimeHistogram("/request_time_histogram/execution", exponentialBounds->Min, exponentialBounds->Max);
         RemoteWaitTimeCounter = profiler.TimeHistogram("/request_time_histogram/remote_wait", exponentialBounds->Min, exponentialBounds->Max);
         LocalWaitTimeCounter = profiler.TimeHistogram("/request_time_histogram/local_wait", exponentialBounds->Min, exponentialBounds->Max);
@@ -1019,8 +1021,8 @@ private:
         MethodPerformanceCounters_->ExecutionTimeCounter.Record(*ExecutionTime_);
         MethodPerformanceCounters_->TotalTimeCounter.Record(*TotalTime_);
         if (!Error_.IsOK()) {
-            if (Service_->EnableErrorCodeCounting.load()) {
-                MethodPerformanceCounters_->ErrorCodes.RegisterCode(Error_.GetNonTrivialCode());
+            if (Service_->EnableErrorCodeCounter_.load()) {
+                MethodPerformanceCounters_->ErrorCodeCounter.Increment(Error_.GetNonTrivialCode());
             } else {
                 MethodPerformanceCounters_->FailedRequestCounter.Increment();
             }
@@ -1513,9 +1515,11 @@ void TRequestQueue::RunRequest(TServiceBase::TServiceContextPtr context)
     options.SetHeavy(RuntimeInfo_->Heavy.load(std::memory_order::relaxed));
 
     if (options.Heavy) {
-        BIND(RuntimeInfo_->Descriptor.HeavyHandler)
+        BIND([this, this_ = MakeStrong(this), context, options] {
+            return RuntimeInfo_->Descriptor.HeavyHandler.Run(context, options);
+        })
             .AsyncVia(TDispatcher::Get()->GetHeavyInvoker())
-            .Run(context, options)
+            .Run()
             .Subscribe(BIND(&TServiceBase::TServiceContext::CheckAndRun, std::move(context)));
     } else {
         context->Run(RuntimeInfo_->Descriptor.LiteHandler);
@@ -1715,7 +1719,7 @@ void TServiceBase::HandleRequest(
     message = TrackMemory(MemoryUsageTracker_, std::move(message));
     if (MemoryUsageTracker_ && MemoryUsageTracker_->IsExceeded()) {
         return replyError(TError(
-            NRpc::EErrorCode::MemoryOverflow,
+            NRpc::EErrorCode::MemoryPressure,
             "Request is dropped due to high memory pressure"));
     }
 
@@ -2338,11 +2342,7 @@ TServiceBase::TMethodPerformanceCountersPtr TServiceBase::CreateMethodPerformanc
     if (runtimeInfo->Descriptor.RequestQueueProvider) {
         profiler = profiler.WithTag("queue", requestQueue->GetName());
     }
-    const auto config = [&]{
-        const auto guard = Guard(HistogramConfigLock_);
-        return HistogramTimerProfiling;
-    }();
-    return New<TMethodPerformanceCounters>(profiler, config);
+    return New<TMethodPerformanceCounters>(profiler, TimeHistogramConfig_.Acquire());
 }
 
 TServiceBase::TMethodPerformanceCounters* TServiceBase::GetMethodPerformanceCounters(
@@ -2575,15 +2575,14 @@ void TServiceBase::DoConfigureHistogramTimer(
     const TServiceCommonConfigPtr& configDefaults,
     const TServiceConfigPtr& config)
 {
-    THistogramConfigPtr finalConfig;
-    if (config->HistogramTimerProfiling) {
-        finalConfig = config->HistogramTimerProfiling;
-    } else if (configDefaults->HistogramTimerProfiling) {
-        finalConfig = configDefaults->HistogramTimerProfiling;
+    TTimeHistogramConfigPtr newTimeHistogramConfig;
+    if (config->TimeHistogram) {
+        newTimeHistogramConfig = config->TimeHistogram;
+    } else if (configDefaults->TimeHistogram) {
+        newTimeHistogramConfig = configDefaults->TimeHistogram;
     }
-    if (finalConfig) {
-        auto guard = Guard(HistogramConfigLock_);
-        HistogramTimerProfiling = finalConfig;
+    if (newTimeHistogramConfig) {
+        TimeHistogramConfig_.Store(std::move(newTimeHistogramConfig));
     }
 }
 
@@ -2598,7 +2597,6 @@ void TServiceBase::DoConfigure(
         // Validate configuration.
         for (const auto& [methodName, _] : config->Methods) {
             auto* method = FindMethodInfo(methodName);
-
             if (!method) {
                 // TODO(don-dron): Split service configs by realmid.
                 YT_LOG_WARNING(
@@ -2612,7 +2610,7 @@ void TServiceBase::DoConfigure(
         EnablePerUserProfiling_.store(config->EnablePerUserProfiling.value_or(configDefaults->EnablePerUserProfiling));
         AuthenticationQueueSizeLimit_.store(config->AuthenticationQueueSizeLimit.value_or(DefaultAuthenticationQueueSizeLimit));
         PendingPayloadsTimeout_.store(config->PendingPayloadsTimeout.value_or(DefaultPendingPayloadsTimeout));
-        EnableErrorCodeCounting.store(config->EnableErrorCodeCounting.value_or(configDefaults->EnableErrorCodeCounting));
+        EnableErrorCodeCounter_.store(config->EnableErrorCodeCounter.value_or(configDefaults->EnableErrorCodeCounter));
 
         DoConfigureHistogramTimer(configDefaults, config);
 

@@ -206,6 +206,8 @@ public:
     virtual void AddRunningQuery(const TString& queryId, const TActorId& actorId) = 0;
     virtual void EndRunningQuery(const TString& queryId, const TActorId& actorId) = 0;
     virtual TActorId FindRunningQuery(const TString& queryId) = 0;
+
+    virtual NJson::TJsonValue GetCapabilities() = 0;
 };
 
 void SetupPQVirtualHandlers(IViewer* viewer);

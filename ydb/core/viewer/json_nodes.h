@@ -20,9 +20,9 @@ using namespace NActors;
 using namespace NNodeWhiteboard;
 using ::google::protobuf::FieldDescriptor;
 
-class TJsonNodes : public TViewerPipeClient<TJsonNodes> {
+class TJsonNodes : public TViewerPipeClient {
     using TThis = TJsonNodes;
-    using TBase = TViewerPipeClient<TJsonNodes>;
+    using TBase = TViewerPipeClient;
     using TNodeId = ui32;
     using TPDiskId = std::pair<TNodeId, ui32>;
     IViewer* Viewer;
@@ -96,10 +96,6 @@ class TJsonNodes : public TViewerPipeClient<TJsonNodes> {
     std::optional<ui64> MaximumDisksPerNode;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TString GetLogPrefix() {
         static TString prefix = "json/nodes ";
         return prefix;
@@ -178,7 +174,7 @@ public:
         }
     }
 
-    void Bootstrap() {
+    void Bootstrap() override {
         BLOG_TRACE("Bootstrap()");
         if (Type != EType::Any) {
             TIntrusivePtr<TDynamicNameserviceConfig> dynamicNameserviceConfig = AppData()->DynamicNameserviceConfig;
@@ -283,6 +279,19 @@ public:
                 if (std::to_string(nodeId).contains(Filter)) {
                     return true;
                 }
+                return false;
+            }
+        } else {
+            if (Storage && With == EWith::SpaceProblems) {
+                return false;
+            }
+            if (UptimeSeconds > 0) {
+                return false;
+            }
+            if (ProblemNodesOnly) {
+                return false;
+            }
+            if (Filter) {
                 return false;
             }
         }
@@ -710,7 +719,7 @@ public:
         return missing;
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         NKikimrViewer::TNodesInfo result;
 
         if (Storage && BaseConfig) {

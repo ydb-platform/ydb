@@ -221,7 +221,7 @@ message TTableServiceConfig {
     reserved 25; // optional bool EnableKqpPatternCacheCompute = 25 [default = false];
 
     optional bool EnableKqpScanQuerySourceRead = 26 [default = false];
-    optional bool EnableKqpDataQuerySourceRead = 27 [default = true];
+    reserved 27; // EnableKqpDataQuerySourceRead
     optional uint64 SessionIdleDurationSeconds = 28 [default = 600];
     optional TAggregationConfig AggregationConfig = 29;
     optional bool EnableKqpScanQueryStreamLookup = 30 [default = true];
@@ -298,6 +298,6 @@ message TTableServiceConfig {
     optional uint32 DefaultCostBasedOptimizationLevel = 64 [default = 3];
 
     optional bool EnableConstantFolding = 65 [ default = true ];
-    
+
     optional bool EnableImplicitQueryParameterTypes = 66 [ default = true ];
 };

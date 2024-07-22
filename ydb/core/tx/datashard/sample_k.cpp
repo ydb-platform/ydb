@@ -53,7 +53,7 @@ protected:
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::BUILD_INDEX_SCAN_ACTOR; // TODO(mbkkt) Should be different activity type?
+        return NKikimrServices::TActivity::SAMPLE_K_SCAN_ACTOR;
     }
 
     TSampleKScan(TAutoPtr<TEvDataShard::TEvSampleKResponse>&& response,

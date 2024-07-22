@@ -11,7 +11,7 @@ using namespace NYql::NPureCalc;
 namespace {
     class TTableReadsReplacer: public TSyncTransformerBase {
     private:
-        ui32 InputsNumber_;
+        const TVector<const TStructExprType*>& InputStructs_;
         bool UseSystemColumns_;
         TString CallableName_;
         TString TablePrefix_;
@@ -19,12 +19,12 @@ namespace {
 
     public:
         explicit TTableReadsReplacer(
-            ui32 inputsNumber,
+            const TVector<const TStructExprType*>& inputStructs,
             bool useSystemColumns,
             TString inputNodeName,
             TString tablePrefix
         )
-            : InputsNumber_(inputsNumber)
+            : InputStructs_(inputStructs)
             , UseSystemColumns_(useSystemColumns)
             , CallableName_(std::move(inputNodeName))
             , TablePrefix_(std::move(tablePrefix))
@@ -163,7 +163,7 @@ namespace {
                 return MakeIntrusive<TIssue>(ctx.GetPosition(node->Pos()), TStringBuilder() << "At function: " << node->Content());
             });
 
-            if (!InputsNumber_) {
+            if (InputStructs_.empty()) {
                 ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "No inputs provided by input spec"));
                 return nullptr;
             }
@@ -174,10 +174,10 @@ namespace {
 
             auto builder = ctx.Builder(replacePos);
 
-            if (InputsNumber_ > 1) {
+            if (InputStructs_.size() > 1) {
                 auto listBuilder = builder.List();
 
-                for (ui32 i = 0; i < InputsNumber_; ++i) {
+                for (ui32 i = 0; i < InputStructs_.size(); ++i) {
                     listBuilder.Callable(i, CallableName_).Atom(0, ToString(i)).Seal();
                 }
 
@@ -226,10 +226,10 @@ namespace {
 }
 
 TAutoPtr<IGraphTransformer> NYql::NPureCalc::MakeTableReadsReplacer(
-    ui32 inputsNumber,
+    const TVector<const TStructExprType*>& inputStructs,
     bool useSystemColumns,
     TString callableName,
     TString tablePrefix
 ) {
-    return new TTableReadsReplacer(inputsNumber, useSystemColumns, std::move(callableName), std::move(tablePrefix));
+    return new TTableReadsReplacer(inputStructs, useSystemColumns, std::move(callableName), std::move(tablePrefix));
 }

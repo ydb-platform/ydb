@@ -20,7 +20,7 @@ namespace NYql::NPureCalc {
      * @param return a graph transformer for replacing table reads.
      */
     TAutoPtr<IGraphTransformer> MakeTableReadsReplacer(
-        ui32 inputsNumber,
+        const TVector<const TStructExprType*>& inputStructs,
         bool useSystemColumns,
         TString callableName = TString{PurecalcInputCallableName},
         TString tablePrefix = TString{PurecalcInputTablePrefix}

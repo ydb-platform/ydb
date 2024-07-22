@@ -246,7 +246,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
 
     TTransformationPipeline pipeline(typeContext);
 
-    pipeline.Add(MakeTableReadsReplacer(InputTypes_.size(), UseSystemColumns_),
+    pipeline.Add(MakeTableReadsReplacer(InputTypes_, UseSystemColumns_),
                  "ReplaceTableReads", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
                  "Replace reads from tables");
     pipeline.AddServiceTransformers();

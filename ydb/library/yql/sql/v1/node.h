@@ -1184,7 +1184,7 @@ namespace NSQLTranslationV1 {
             GlobalSync,
             GlobalAsync,
             GlobalSyncUnique,
-            GlobalVectorKmeansTree
+            GlobalVectorKmeansTree,
         };
 
         TIndexDescription(const TIdentifier& name, EType type = EType::GlobalSync)

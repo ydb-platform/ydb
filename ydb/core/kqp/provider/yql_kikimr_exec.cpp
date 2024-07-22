@@ -1644,41 +1644,11 @@ public:
                             for (const auto& vectorSetting : indexSettings.Cast<TCoNameValueTupleList>()) {
                                 YQL_ENSURE(vectorSetting.Value().Maybe<TCoAtom>());
                                 if (vectorSetting.Name().Value() == "distance") {
-                                    auto parseEnum = [] (const TString distance) {
-                                        if (distance == "cosine")
-                                            return Ydb::Table::VectorIndexSettings_Distance_DISTANCE_COSINE;
-                                        else if (distance == "manhattan")
-                                            return Ydb::Table::VectorIndexSettings_Distance_DISTANCE_MANHATTAN;
-                                        else if (distance == "euclidean")
-                                            return Ydb::Table::VectorIndexSettings_Distance_DISTANCE_EUCLIDEAN;
-                                        else
-                                            YQL_ENSURE(false, "Wrong distance: " << distance);
-                                    };
-                                    protoVectorSettings.set_distance(parseEnum(vectorSetting.Value().Cast<TCoAtom>().StringValue()));
+                                    protoVectorSettings.set_distance(VectorIndexSettingsParseDistance(vectorSetting.Value().Cast<TCoAtom>().StringValue()));
                                 } else if (vectorSetting.Name().Value() == "similarity") {
-                                    auto parseEnum = [] (const TString similarity) {
-                                        if (similarity == "cosine")
-                                            return Ydb::Table::VectorIndexSettings_Similarity_SIMILARITY_COSINE;
-                                        else if (similarity == "inner_product")
-                                            return Ydb::Table::VectorIndexSettings_Similarity_SIMILARITY_INNER_PRODUCT;
-                                        else
-                                            YQL_ENSURE(false, "Wrong similarity: " << similarity);
-                                    };
-                                    protoVectorSettings.set_similarity(parseEnum(vectorSetting.Value().Cast<TCoAtom>().StringValue()));
+                                    protoVectorSettings.set_similarity(VectorIndexSettingsParseSimilarity(vectorSetting.Value().Cast<TCoAtom>().StringValue()));
                                 } else if (vectorSetting.Name().Value() == "vector_type") {
-                                    auto parseEnum = [] (const TString vectorType) {
-                                        if (vectorType == "float")
-                                            return Ydb::Table::VectorIndexSettings_VectorType_VECTOR_TYPE_FLOAT;
-                                        else if (vectorType == "uint8")
-                                            return Ydb::Table::VectorIndexSettings_VectorType_VECTOR_TYPE_UINT8;
-                                        else if (vectorType == "int8")
-                                            return Ydb::Table::VectorIndexSettings_VectorType_VECTOR_TYPE_INT8;
-                                        else if (vectorType == "bit")
-                                            return Ydb::Table::VectorIndexSettings_VectorType_VECTOR_TYPE_BIT;
-                                        else
-                                            YQL_ENSURE(false, "Wrong vector_type: " << vectorType);
-                                    };
-                                    protoVectorSettings.set_vector_type(parseEnum(vectorSetting.Value().Cast<TCoAtom>().StringValue()));
+                                    protoVectorSettings.set_vector_type(VectorIndexSettingsParseVectorType(vectorSetting.Value().Cast<TCoAtom>().StringValue()));
                                 } else if (vectorSetting.Name().Value() == "vector_dimension") {
                                     auto parseInt = [] (const TString vectorDimensionStr) {
                                         ui32 vectorDimension;

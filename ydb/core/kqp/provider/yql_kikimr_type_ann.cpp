@@ -817,39 +817,6 @@ private:
     }
 
 Ydb::Table::VectorIndexSettings SerializeVectorIndexSettingsToProto(const TCoNameValueTupleList& indexSettings) {
-    auto parseDistance = [] (std::string_view distance) -> auto {
-        if (distance == "cosine")
-            return Ydb::Table::VectorIndexSettings::DISTANCE_COSINE;
-        else if (distance == "manhattan")
-            return Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN;
-        else if (distance == "euclidean")
-            return Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN;
-        else 
-            YQL_ENSURE(false, "Wrong index setting distance: " << distance);
-    };
-
-    auto parseSimilarity = [] (std::string_view similarity) -> auto {
-        if (similarity == "cosine")
-            return Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE;
-        else if (similarity == "inner_product")
-            return Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT;
-        else
-            YQL_ENSURE(false, "Wrong index setting similarity: " << similarity);
-    };
-
-    auto parseVectorType = [] (std::string_view vectorType) -> auto {
-        if (vectorType == "float")
-            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
-        else if (vectorType == "uint8")
-            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
-        else if (vectorType == "int8")
-            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8;
-        else if (vectorType == "bit")
-            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT;
-        else
-            YQL_ENSURE(false, "Wrong index setting vector_type: " << vectorType);
-    };
-    
     Ydb::Table::VectorIndexSettings proto;
 
     for (const auto& indexSetting : indexSettings) {
@@ -857,11 +824,11 @@ Ydb::Table::VectorIndexSettings SerializeVectorIndexSettingsToProto(const TCoNam
         const auto& value = indexSetting.Value().Cast<TCoAtom>().StringValue();
 
         if (name == "distance")
-            proto.set_distance(parseDistance(value));
+            proto.set_distance(VectorIndexSettingsParseDistance(value));
         else if (name =="similarity")
-            proto.set_similarity(parseSimilarity(value));
+            proto.set_similarity(VectorIndexSettingsParseSimilarity(value));
         else if (name =="vector_type")
-            proto.set_vector_type(parseVectorType(value));
+            proto.set_vector_type(VectorIndexSettingsParseVectorType(value));
         else if (name =="vector_dimension")
             proto.set_vector_dimension(FromString<ui32>(value));
         else

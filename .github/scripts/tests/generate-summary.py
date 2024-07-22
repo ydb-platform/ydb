@@ -334,6 +334,8 @@ def get_comment_text(pr: PullRequest, summary: TestSummary, summary_links: str, 
         body.append("")
         body.append("</details>")
         body.append("")
+    else:
+        body.append("")
 
     return body
 

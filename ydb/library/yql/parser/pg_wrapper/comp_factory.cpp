@@ -4948,7 +4948,10 @@ void* PgInitializeMainContext() {
 }
 
 void PgDestroyMainContext(void* ctx) {
-    delete (TMainContext*)ctx;
+    auto typedCtx = (TMainContext*)ctx;
+    MemoryContextDeleteChildren((MemoryContext)&typedCtx->Data);
+    MemoryContextDeleteChildren((MemoryContext)&typedCtx->ErrorData);
+    delete typedCtx;
 }
 
 void PgAcquireThreadContext(void* ctx) {

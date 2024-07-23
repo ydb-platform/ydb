@@ -256,3 +256,5 @@ federated_query_config:
       uri: ""
   pinger:
     ping_period: "30s"
+column_shard_config:
+  disabled_on_scheme_shard: false

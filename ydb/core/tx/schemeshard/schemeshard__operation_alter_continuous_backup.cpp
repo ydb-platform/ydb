@@ -45,6 +45,12 @@ void DoCreateIncrBackupTable(const TOperationId& opId, const TPath& dst, NKikimr
     desc.CopyFrom(tableDesc);
     desc.SetName(dst.LeafName());
 
+    auto& attrsDesc = *outTx.MutableAlterUserAttributes();
+    attrsDesc.SetPathName(dst.LeafName());
+    auto& attr = *attrsDesc.AddUserAttributes();
+    attr.SetKey(TString(ATTR_INCREMENTAL_BACKUP));
+    attr.SetValue("{}");
+
     auto& replicationConfig = *desc.MutableReplicationConfig();
     replicationConfig.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
     replicationConfig.SetConsistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK);

@@ -23,7 +23,6 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils
 
     ydb/core/tx/schemeshard/ut_helpers
-    ydb/library/dbgtrace
 )
 
 YQL_LAST_ABI_VERSION()

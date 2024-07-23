@@ -22,7 +22,6 @@
 
 #include "make_config.h"
 #include "pqtablet_mock.h"
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -527,7 +526,6 @@ void TPQTabletFixture::WaitDropTabletReply(const TDropTabletReplyMatcher& matche
 template <class T>
 void TPQTabletFixture::WaitForEvent(size_t count)
 {
-    DBGTRACE("TPQTabletFixture::WaitForEvent");
     bool found = false;
     size_t received = 0;
 
@@ -536,7 +534,6 @@ void TPQTabletFixture::WaitForEvent(size_t count)
         if (auto* msg = event->CastAsLocal<T>()) {
             ++received;
             found = (received >= count);
-            DBGTRACE_LOG("received=" << received << " (" << count << "), found=" << found);
         }
 
         return prev ? prev(event) : TTestActorRuntimeBase::EEventAction::PROCESS;
@@ -1436,7 +1433,6 @@ Y_UNIT_TEST_F(Config_TEvTxCommit_After_Restart, TPQTabletFixture)
 
 Y_UNIT_TEST_F(One_Tablet_For_All_Partitions, TPQTabletFixture)
 {
-    DBGTRACE("Gizmo");
     const ui64 txId = 67890;
 
     PQTabletPrepare({.partitions=1}, {}, *Ctx);
@@ -1528,8 +1524,6 @@ Y_UNIT_TEST_F(One_New_Partition_In_Another_Tablet, TPQTabletFixture)
 NKikimrPQ::TPQTabletConfig MakeWideConfig(ui64 childTabletId, size_t childrenCount,
                                           ui64 parentTabletId)
 {
-    DBGTRACE("MakeWideConfig");
-    DBGTRACE_LOG("childTabletId=" << childTabletId << ", parentTabletId=" << parentTabletId << ", childrenCount=" << childrenCount);
     NKikimrPQ::TPQTabletConfig config;
 
     config.SetVersion(2);
@@ -1570,16 +1564,14 @@ NKikimrPQ::TPQTabletConfig MakeWideConfig(ui64 childTabletId, size_t childrenCou
     config.MutablePartitionConfig()->SetLifetimeSeconds(TDuration::Hours(24).Seconds());
     config.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(10 << 20);
 
-    DBGTRACE_LOG("config=" << config.ShortDebugString());
 
     Migrate(config);
 
     return config;
 }
 
-Y_UNIT_TEST_F(All_New_Partitions_In_Another_Tablet,, TPQTabletFixture)
+Y_UNIT_TEST_F(All_New_Partitions_In_Another_Tablet, TPQTabletFixture)
 {
-    DBGTRACE("Foo");
     const ui64 txId = 67890;
     const ui64 mockTabletId = 22222;
     const size_t partitionCount = 100;
@@ -1603,16 +1595,12 @@ Y_UNIT_TEST_F(All_New_Partitions_In_Another_Tablet,, TPQTabletFixture)
 
     // the transaction is now in the WAIT_RS state on disk and in memory
 
-    DBGTRACE_LOG("restarting");
     PQTabletRestart(*Ctx);
-    DBGTRACE_LOG("restarted");
 
     tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
 
-    DBGTRACE_LOG("wait for TEvProposeTransactionResult");
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
-    DBGTRACE_LOG("received TEvProposeTransactionResult");
 
     tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
     WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=mockTabletId, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});

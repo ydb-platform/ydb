@@ -1,4 +1,4 @@
-#include "change_sender_chooser.h"
+#include "change_sender_partitioner.h"
 
 namespace NKikimr::NChangeExchange {
 

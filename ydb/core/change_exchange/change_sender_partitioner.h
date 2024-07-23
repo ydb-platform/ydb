@@ -9,9 +9,9 @@
 namespace NKikimr::NChangeExchange {
 
 template<typename TChangeRecord>
-class IChangeSenderChooser {
+class IChangeSenderPartitioner {
 public:
-    virtual ~IChangeSenderChooser() = default;
+    virtual ~IChangeSenderPartitioner() = default;
 
     virtual ui64 ResolvePartitionId(const typename TChangeRecord::TPtr& record) const = 0;
 };
@@ -20,9 +20,9 @@ public:
 ui64 ResolveSchemaBoundaryPartitionId(NKikimr::TKeyDesc* keyDesc, TConstArrayRef<TCell> key);
 
 template<typename TChangeRecord>
-class SchemaBoundaryChooser final : public IChangeSenderChooser<TChangeRecord> {
+class SchemaBoundaryPartitioner final : public IChangeSenderPartitioner<TChangeRecord> {
 public:
-    SchemaBoundaryChooser(NKikimr::TKeyDesc* keyDesc)
+    SchemaBoundaryPartitioner(NKikimr::TKeyDesc* keyDesc)
         : KeyDesc(keyDesc) {
     }
 
@@ -36,8 +36,8 @@ private:
 
 
 template<typename TChangeRecord>
-IChangeSenderChooser<TChangeRecord>* CreateSchemaBoundaryChooser(NKikimr::TKeyDesc* keyDesc) {
-    return new SchemaBoundaryChooser<TChangeRecord>(keyDesc);
+IChangeSenderPartitioner<TChangeRecord>* CreateSchemaBoundaryPartitioner(NKikimr::TKeyDesc* keyDesc) {
+    return new SchemaBoundaryPartitioner<TChangeRecord>(keyDesc);
 }
 
 

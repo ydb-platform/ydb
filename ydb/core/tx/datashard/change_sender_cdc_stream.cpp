@@ -293,9 +293,9 @@ private:
 
 }; // TCdcChangeSenderPartition
 
-class TMd5Chooser final : public NChangeExchange::IChangeSenderChooser<TChangeRecord> {
+class TMd5Partitioner final : public NChangeExchange::IChangeSenderPartitioner<TChangeRecord> {
 public:
-    TMd5Chooser(size_t partitionCount)
+    TMd5Partitioner(size_t partitionCount)
         : PartitionCount(partitionCount) {
     }
 
@@ -309,9 +309,9 @@ private:
     size_t PartitionCount;
 };
 
-class TBoundaryChooser final : public NChangeExchange::IChangeSenderChooser<TChangeRecord> {
+class TBoundaryPartitioner final : public NChangeExchange::IChangeSenderPartitioner<TChangeRecord> {
 public:
-    TBoundaryChooser(const NKikimrSchemeOp::TPersQueueGroupDescription& config) {
+    TBoundaryPartitioner(const NKikimrSchemeOp::TPersQueueGroupDescription& config) {
         Chooser = NPQ::CreatePartitionChooser(config);
     }
 
@@ -661,11 +661,11 @@ class TCdcChangeSenderMain
         KeyDesc->Partitioning = std::make_shared<TVector<NKikimr::TKeyDesc::TPartitionInfo>>(std::move(partitioning));
 
         if (::NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED != pqConfig.GetPartitionStrategy().GetPartitionStrategyType()) {
-            SetChooser(new TBoundaryChooser(pqDesc));
+            SetPartitioner(new TBoundaryPartitioner(pqDesc));
         } else if (NKikimrSchemeOp::ECdcStreamFormatProto == Stream.Format) {
-            SetChooser(NChangeExchange::CreateSchemaBoundaryChooser<TChangeRecord>(KeyDesc.Get()));
+            SetPartitioner(NChangeExchange::CreateSchemaBoundaryPartitioner<TChangeRecord>(KeyDesc.Get()));
         } else {
-            SetChooser(new TMd5Chooser(KeyDesc->GetPartitions().size()));
+            SetPartitioner(new TMd5Partitioner(KeyDesc->GetPartitions().size()));
         }
 
         CreateSenders(MakePartitionIds(*KeyDesc->Partitioning), versionChanged);

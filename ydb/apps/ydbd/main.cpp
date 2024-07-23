@@ -9,6 +9,10 @@
 
 
 int main(int argc, char **argv) {
+    volatile int a = 0;
+    volatile int b = 0;
+    volatile int c = a/b;
+    (void)c;
     SetupTerminateHandler();
 
     auto factories = std::make_shared<NKikimr::TModuleFactories>();

@@ -92,8 +92,9 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         for (auto& indexChildItems : index.Base()->GetChildren()) {
             const auto& indexImplTableName = indexChildItems.first;
             const auto partId = NextPartId(nextId, result);
-            // TODO(mbkkt) We should remove tmp tables, but it doesn't work for some reason
-            {
+            if (NTableIndex::IsTmpImplTable(indexImplTableName)) {
+                result.push_back(DropIndexImplTable(context, index, nextId, partId, indexImplTableName, indexChildItems.second));
+            } else {
                 result.push_back(FinalizeIndexImplTable(context, index, partId, indexImplTableName, indexChildItems.second));
             }
         }
@@ -132,7 +133,7 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
         TPath index = table.Child(indexName);
         auto tableIndexDropping = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex);
         auto operation = tableIndexDropping.MutableDrop();
-        operation->SetName(ToString(index.Base()->Name));
+        operation->SetName(index.Base()->Name);
 
         result.push_back(CreateDropTableIndex(NextPartId(nextId, result), tableIndexDropping));
     }

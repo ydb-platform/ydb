@@ -137,7 +137,6 @@ struct TTxState {
         item(TxCreateResourcePool, 91) \
         item(TxDropResourcePool, 92) \
         item(TxAlterResourcePool, 93) \
-        item(TxRestoreIncrementalBackup, 94) \
 
     // TX_STATE_TYPE_ENUM
 
@@ -401,7 +400,6 @@ struct TTxState {
         case TxMergeTablePartition:
         case TxBackup:
         case TxRestore:
-        case TxRestoreIncrementalBackup:
         case TxAlterBlockStoreVolume:
         case TxAssignBlockStoreVolume:
         case TxAlterFileStore:
@@ -507,7 +505,6 @@ struct TTxState {
         case TxMergeTablePartition:
         case TxBackup:
         case TxRestore:
-        case TxRestoreIncrementalBackup:
         case TxAlterBlockStoreVolume:
         case TxAssignBlockStoreVolume:
         case TxAlterFileStore:
@@ -613,7 +610,6 @@ struct TTxState {
         case TxModifyACL:
         case TxBackup:
         case TxRestore:
-        case TxRestoreIncrementalBackup:
         case TxAlterBlockStoreVolume:
         case TxAssignBlockStoreVolume:
         case TxAlterFileStore:

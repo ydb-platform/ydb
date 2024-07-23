@@ -1582,7 +1582,6 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxBackup:
         return TPathElement::EPathState::EPathStateBackup;
     case TTxState::TxRestore:
-    case TTxState::TxRestoreIncrementalBackup:
         return TPathElement::EPathState::EPathStateRestore;
     case TTxState::TxUpgradeSubDomain:
         return TPathElement::EPathState::EPathStateUpgrade;

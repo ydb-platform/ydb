@@ -370,8 +370,8 @@ private:
     void ClosePipeClient() {
         if (SchemePipeActorId) {
             ClosedSchemePipeActors.insert(SchemePipeActorId);
-            SchemePipeActorId = {};
             NTabletPipe::CloseClient(SelfId(), SchemePipeActorId);
+            SchemePipeActorId = {};
         }
     }
 

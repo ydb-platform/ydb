@@ -2022,11 +2022,11 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         ui32 source2_id = 0;
         ui32 join_id = 0;
         ui32 limit_id = 0;
+        auto queryClient = kikimr->GetQueryClient();
 
         {
             // default planner values
 
-            auto queryClient = kikimr->GetQueryClient();
             const TString sql = fmt::format(R"(
                     SELECT SUM(t1.bar + t2.bar) as sum FROM `{table1}` as t1 JOIN /*+grace()*/ `{table2}`as t2 ON t1.foo = t2.foo
                 )",
@@ -2057,7 +2057,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         {
             // scale down
 
-            auto queryClient = kikimr->GetQueryClient();
             const TString sql = fmt::format(R"(
                     pragma ydb.OverridePlanner = @@ [
                         {{ "tx": 0, "stage": {source1_id}, "tasks": 1 }},
@@ -2094,7 +2093,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         {
             // scale up
 
-            auto queryClient = kikimr->GetQueryClient();
             const TString sql = fmt::format(R"(
                     pragma ydb.OverridePlanner = @@ [
                         {{ "tx": 0, "stage": {source1_id}, "tasks": 10 }},

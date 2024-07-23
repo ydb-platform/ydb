@@ -105,7 +105,7 @@ class TestRetry(TestYdsBase):
         )
         assert retry_count >= 1, "Incorrect RetryCount"
 
-    @pytest.mark.parametrize("kikimr", [Param(retry_limit=3, task_lease_ttl=1, ping_period=0.5)], indirect=["kikimr"])
+    @pytest.mark.parametrize("kikimr", [Param(retry_limit=2, retry_period=600, task_lease_ttl=1, ping_period=0.5)], indirect=["kikimr"])
     def test_high_rate(self, kikimr):
         topic_name = "high_rate"
         connection = "high_rate"

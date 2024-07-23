@@ -1048,6 +1048,7 @@ message TBuildIndexOutcome {
     message TCancel {
         // Path id of the index whose creation was cancelled
         optional NKikimrProto.TPathID IndexPathId = 1;
+        optional bool CancelByCheckingNotNull = 4;
     }
 
     message TApply {

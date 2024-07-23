@@ -140,6 +140,7 @@ public:
                                << ", stepId: " << step);
 
         TTxState* txState = context.SS->FindTx(OperationId);
+
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxFinalizeBuildIndex);
 
         NIceDb::TNiceDb db(context.GetDB());
@@ -157,12 +158,7 @@ public:
         const TTableInfo::TPtr tableInfo = context.SS->Tables.at(txState->TargetPathId);
         tableInfo->AlterVersion += 1;
 
-        for(auto& [cId, cInfo]: tableInfo->Columns) {
-            // std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
-            // std::cerr << "tableInfo" << std::endl;
-            // std::cerr << "cinfo.Name = " << cInfo.Name << std::endl;
-            // std::cerr << "cinfo.IsCheckingNotNullInProgress = " << cInfo.IsCheckingNotNullInProgress << std::endl;
-            // std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+        for (auto& [cId, cInfo]: tableInfo->Columns) {
             if (cInfo.IsDropped() || !cInfo.IsBuildInProgress && !cInfo.IsCheckingNotNullInProgress) {
                 continue;
             }
@@ -174,9 +170,11 @@ public:
                                     << " terminating build column process at column "
                                     << cInfo.Name);
 
-               cInfo.IsBuildInProgress = false;
+                cInfo.IsBuildInProgress = false;
+                context.SS->PersistTableFinishColumnBuilding(db, txState->TargetPathId, tableInfo, cId);
             } else { // if (cInfo.IsCheckingNotNullInProgress)
-                bool isError = false;
+                const auto& outcome = txState->BuildIndexOutcome;
+                bool isError = (outcome && outcome->HasCancel() && outcome->GetCancel().HasCancelByCheckingNotNull() && outcome->GetCancel().GetCancelByCheckingNotNull());
                 LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         DebugHint() << " HandleReply ProgressState"
                                     << " at tablet: " << ssId
@@ -185,13 +183,9 @@ public:
                                     << (isError ? "null value was found" : "null values were not found"));
 
                 cInfo.IsCheckingNotNullInProgress = false;
-
-                if (!isError) {
-                    cInfo.NotNull = true;
-                }
+                cInfo.NotNull = !isError;
+                context.SS->PersistTableFinishCheckingNotNull(db, txState->TargetPathId, tableInfo, cId);
             }
-
-            context.SS->PersistTableFinishColumnBuilding(db, txState->TargetPathId, tableInfo, cId);
         }
 
         context.SS->PersistTableAlterVersion(db, txState->TargetPathId, tableInfo);

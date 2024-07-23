@@ -2614,7 +2614,15 @@ void TSchemeShard::PersistTableFinishColumnBuilding(NIceDb::TNiceDb& db, const T
     if (pathId.OwnerId == TabletID()) {
         db.Table<Schema::Columns>().Key(pathId.LocalPathId, colId).Update(
             NIceDb::TUpdate<Schema::Columns::IsBuildInProgress>(cinfo.IsBuildInProgress));
+    } else {
+        db.Table<Schema::MigratedColumns>().Key(pathId.OwnerId, pathId.LocalPathId, colId).Update(
+            NIceDb::TUpdate<Schema::MigratedColumns::IsBuildInProgress>(cinfo.IsBuildInProgress));
+    }
+}
 
+void TSchemeShard::PersistTableFinishCheckingNotNull(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo, ui64 colId) {
+    const auto& cinfo = tableInfo->Columns.at(colId);
+    if (pathId.OwnerId == TabletID()) {
         db.Table<Schema::Columns>().Key(pathId.LocalPathId, colId).Update(
             NIceDb::TUpdate<Schema::Columns::IsCheckingNotNullInProgress>(cinfo.IsCheckingNotNullInProgress));
 
@@ -2622,15 +2630,13 @@ void TSchemeShard::PersistTableFinishColumnBuilding(NIceDb::TNiceDb& db, const T
             NIceDb::TUpdate<Schema::Columns::NotNull>(cinfo.NotNull));
     } else {
         db.Table<Schema::MigratedColumns>().Key(pathId.OwnerId, pathId.LocalPathId, colId).Update(
-            NIceDb::TUpdate<Schema::MigratedColumns::IsBuildInProgress>(cinfo.IsBuildInProgress));
-
-        db.Table<Schema::MigratedColumns>().Key(pathId.OwnerId, pathId.LocalPathId, colId).Update(
             NIceDb::TUpdate<Schema::MigratedColumns::IsCheckingNotNullInProgress>(cinfo.IsCheckingNotNullInProgress));
 
         db.Table<Schema::MigratedColumns>().Key(pathId.OwnerId, pathId.LocalPathId, colId).Update(
             NIceDb::TUpdate<Schema::MigratedColumns::NotNull>(cinfo.NotNull));
     }
 }
+
 
 void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo) {
     TString partitionConfig;

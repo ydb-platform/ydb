@@ -99,11 +99,14 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
             PathIdFromPathId(index.Base()->PathId, op->MutableOutcome()->MutableCancel()->MutableIndexPathId());
         }
 
+        if (!tx.HasInitiateCheckingNotNull()) {
+            op->MutableOutcome()->MutableCancel()->SetCancelByCheckingNotNull(true);
+        }
+
         result.push_back(CreateFinalizeBuildIndexMainTable(NextPartId(nextId, result), finalize));
     }
 
-    if (!indexName.empty())
-    {
+    if (!indexName.empty()) {
         TPath index = table.Child(indexName);
         auto tableIndexDropping = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex);
         auto operation = tableIndexDropping.MutableDrop();

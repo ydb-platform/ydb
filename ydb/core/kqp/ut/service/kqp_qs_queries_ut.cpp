@@ -3913,7 +3913,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_C(initValues.IsSuccess(), initValues.GetIssues().ToString());
         }
 
-        std::cerr << "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" << std::endl;
         {
             auto setNotNull = client.ExecuteQuery(R"sql(
                 ALTER TABLE `/Root/test/alterNotNull`
@@ -3921,7 +3920,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
         }
-        std::cerr << "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" << std::endl;
 
         {
             auto initNullValues = client.ExecuteQuery(R"sql(

@@ -2,10 +2,10 @@
 
 namespace NKikimr::NChangeExchange {
 
-ui64 ResolveSchemaBoundaryPartitionId(NKikimr::TKeyDesc* keyDesc, TConstArrayRef<TCell> key) {
-        const auto& partitions = keyDesc->GetPartitions();
+ui64 ResolveSchemaBoundaryPartitionId(const NKikimr::TKeyDesc& keyDesc, TConstArrayRef<TCell> key) {
+        const auto& partitions = keyDesc.GetPartitions();
         Y_ABORT_UNLESS(partitions);
-        const auto& schema = keyDesc->KeyColumnTypes;
+        const auto& schema = keyDesc.KeyColumnTypes;
 
         const auto range = TTableRange(key);
         Y_ABORT_UNLESS(range.Point);

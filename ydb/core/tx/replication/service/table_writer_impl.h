@@ -382,7 +382,7 @@ class TLocalTableWriter
             TVector<TKeyDesc::TColumnOp>()
         );
 
-        TBaseSender::SetPartitioner(NChangeExchange::CreateSchemaBoundaryPartitioner<TChangeRecord>(KeyDesc.Get()));
+        TBaseSender::SetPartitioner(NChangeExchange::CreateSchemaBoundaryPartitioner<TChangeRecord>(*KeyDesc.Get()));
 
         ResolveKeys();
     }

@@ -17,12 +17,12 @@ public:
 };
 
 
-ui64 ResolveSchemaBoundaryPartitionId(NKikimr::TKeyDesc* keyDesc, TConstArrayRef<TCell> key);
+ui64 ResolveSchemaBoundaryPartitionId(const NKikimr::TKeyDesc& keyDesc, TConstArrayRef<TCell> key);
 
 template<typename TChangeRecord>
 class SchemaBoundaryPartitioner final : public IChangeSenderPartitioner<TChangeRecord> {
 public:
-    SchemaBoundaryPartitioner(NKikimr::TKeyDesc* keyDesc)
+    SchemaBoundaryPartitioner(const NKikimr::TKeyDesc& keyDesc)
         : KeyDesc(keyDesc) {
     }
 
@@ -31,12 +31,12 @@ public:
     }
 
 private:
-    NKikimr::TKeyDesc* KeyDesc;
+    const NKikimr::TKeyDesc& KeyDesc;
 };
 
 
 template<typename TChangeRecord>
-IChangeSenderPartitioner<TChangeRecord>* CreateSchemaBoundaryPartitioner(NKikimr::TKeyDesc* keyDesc) {
+IChangeSenderPartitioner<TChangeRecord>* CreateSchemaBoundaryPartitioner(const NKikimr::TKeyDesc& keyDesc) {
     return new SchemaBoundaryPartitioner<TChangeRecord>(keyDesc);
 }
 

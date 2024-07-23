@@ -640,7 +640,7 @@ class TAsyncIndexChangeSenderMain
             TVector<TKeyDesc::TColumnOp>()
         );
 
-        SetPartitioner(NChangeExchange::CreateSchemaBoundaryPartitioner<TChangeRecord>(KeyDesc.Get()));
+        SetPartitioner(NChangeExchange::CreateSchemaBoundaryPartitioner<TChangeRecord>(*KeyDesc.Get()));
 
         ResolveKeys();
     }

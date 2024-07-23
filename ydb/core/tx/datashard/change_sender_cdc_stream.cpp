@@ -663,7 +663,7 @@ class TCdcChangeSenderMain
         if (::NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED != pqConfig.GetPartitionStrategy().GetPartitionStrategyType()) {
             SetPartitioner(new TBoundaryPartitioner(pqDesc));
         } else if (NKikimrSchemeOp::ECdcStreamFormatProto == Stream.Format) {
-            SetPartitioner(NChangeExchange::CreateSchemaBoundaryPartitioner<TChangeRecord>(KeyDesc.Get()));
+            SetPartitioner(NChangeExchange::CreateSchemaBoundaryPartitioner<TChangeRecord>(*KeyDesc.Get()));
         } else {
             SetPartitioner(new TMd5Partitioner(KeyDesc->GetPartitions().size()));
         }

@@ -101,6 +101,9 @@
  * Macro to use in place of 'inline' in function declaration/definition to force
  * it to be inlined.
  */
+
+// sample change
+
 #if !defined(Y_FORCE_INLINE)
     #if defined(CLANG_COVERAGE)
         #/* excessive __always_inline__ might significantly slow down compilation of an instrumented unit */

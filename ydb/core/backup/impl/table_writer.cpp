@@ -50,33 +50,6 @@ public:
         return Serialize(record);
     }
 
-    ui64 ResolvePartitionId(NChangeExchange::IChangeSenderResolver* const resolver) const override {
-        const auto& partitions = resolver->GetPartitions();
-        Y_ABORT_UNLESS(partitions);
-        const auto& schema = resolver->GetSchema();
-        const auto streamFormat = resolver->GetStreamFormat();
-        Y_ABORT_UNLESS(streamFormat == NKikimrSchemeOp::ECdcStreamFormatProto);
-
-        const auto range = TTableRange(GetKey());
-        Y_ABORT_UNLESS(range.Point);
-
-        const auto it = LowerBound(
-            partitions.cbegin(), partitions.cend(), true,
-            [&](const auto& partition, bool) {
-                const int compares = CompareBorders<true, false>(
-                    partition.Range->EndKeyPrefix.GetCells(), range.From,
-                    partition.Range->IsInclusive || partition.Range->IsPoint,
-                    range.InclusiveFrom || range.Point, schema
-                );
-
-                return (compares < 0);
-            }
-        );
-
-        Y_ABORT_UNLESS(it != partitions.end());
-        return it->ShardId;
-    }
-
     TConstArrayRef<TCell> GetKey() const {
         Y_ABORT_UNLESS(ProtoBody.HasCdcDataChange());
         Y_ABORT_UNLESS(ProtoBody.GetCdcDataChange().HasKey());

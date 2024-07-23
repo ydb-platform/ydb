@@ -3940,7 +3940,7 @@ void TPersQueue::SendEvTxCommitToPartitions(const TActorContext& ctx,
 
         auto p = Partitions.find(TPartitionId(partitionId));
         Y_ABORT_UNLESS(p != Partitions.end(),
-                       "Unknown partition. Tablet %" PRIu64 ", Partition %" PRIu32 ", TxId %" PRIu64,
+                       "Tablet %" PRIu64 ", Partition %" PRIu32 ", TxId %" PRIu64,
                        TabletID(), partitionId, tx.TxId);
 
         ctx.Send(p->second.Actor, event.release());

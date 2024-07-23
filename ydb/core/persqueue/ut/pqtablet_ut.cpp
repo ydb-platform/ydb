@@ -1539,7 +1539,7 @@ NKikimrPQ::TPQTabletConfig MakeWideConfig(ui64 childTabletId, size_t childrenCou
         p->SetTabletId(childTabletId);
         p->AddParentPartitionIds(childrenCount);
     }
-    
+
     {
         auto* p = config.AddAllPartitions();
         p->SetPartitionId(childrenCount);

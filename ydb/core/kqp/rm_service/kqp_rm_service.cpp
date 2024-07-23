@@ -361,7 +361,7 @@ public:
 
     void FreeResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) override {
         auto startedTimestamp = TlsActivationContext->Monotonic();
-        
+
         ui64 releaseScanQueryMemory = 0;
         ui64 releaseExternalDataQueryMemory = 0;
 
@@ -547,13 +547,10 @@ public:
     }
 
     void FireResourcesPublishing() {
-        with_lock (Lock) {
-            if (PublishScheduledAt) {
-                return;
-            }
+        bool prev = PublishScheduled.test_and_set();
+        if (!prev) {
+            ActorSystem->Send(SelfId, new TEvPrivate::TEvSchedulePublishResources);
         }
-
-        ActorSystem->Send(SelfId, new TEvPrivate::TEvSchedulePublishResources);
     }
 
     void UpdatePatternCache(ui64 maxSizeBytes, ui64 maxCompiledSizeBytes, ui64 patternAccessTimesBeforeTryToCompile) {
@@ -588,9 +585,7 @@ public:
     std::array<TTxStatesBucket, BucketsCount> Buckets;
     std::atomic<ui64> LastResourceBrokerTaskId = 0;
 
-    // schedule info (guarded by Lock)
-    std::optional<TInstant> PublishScheduledAt;
-
+    std::atomic_flag PublishScheduled;
     // pattern cache for different actors
     std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> PatternCache;
 
@@ -719,9 +714,7 @@ private:
     }
 
     void HandleWork(TEvPrivate::TEvPublishResources::TPtr&) {
-        with_lock (ResourceManager->Lock) {
-            ResourceManager->PublishScheduledAt.reset();
-        }
+        PublishResourcesScheduledAt.reset();
 
         PublishResourceUsage("batching");
     }
@@ -918,13 +911,8 @@ private:
                     str << "Last publish time: " << *WbState.LastPublishTime << Endl;
                 }
 
-                std::optional<TInstant> publishScheduledAt;
-                with_lock (ResourceManager->Lock) {
-                    publishScheduledAt = ResourceManager->PublishScheduledAt;
-                }
-
-                if (publishScheduledAt) {
-                    str << "Next publish time: " << *publishScheduledAt << Endl;
+                if (PublishResourcesScheduledAt) {
+                    str << "Next publish time: " << *PublishResourcesScheduledAt << Endl;
                 }
 
                 str << Endl << "Transactions:" << Endl;
@@ -1007,29 +995,27 @@ private:
 
     void PublishResourceUsage(TStringBuf reason) {
         TDuration publishInterval;
-        std::optional<TInstant> publishScheduledAt;
 
         with_lock (ResourceManager->Lock) {
             publishInterval = TDuration::Seconds(ResourceManager->Config.GetPublishStatisticsIntervalSec());
-            publishScheduledAt = ResourceManager->PublishScheduledAt;
         }
 
-        if (publishScheduledAt) {
+        if (PublishResourcesScheduledAt) {
             return;
         }
 
         auto now = ResourceManager->ActorSystem->Timestamp();
         if (publishInterval && WbState.LastPublishTime && now - *WbState.LastPublishTime < publishInterval) {
-            publishScheduledAt = *WbState.LastPublishTime + publishInterval;
+            PublishResourcesScheduledAt = *WbState.LastPublishTime + publishInterval;
 
-            with_lock (ResourceManager->Lock) {
-                ResourceManager->PublishScheduledAt = publishScheduledAt;
-            }
-
-            Schedule(*publishScheduledAt - now, new TEvPrivate::TEvPublishResources);
-            LOG_D("Schedule publish at " << *publishScheduledAt << ", after " << (*publishScheduledAt - now));
+            Schedule(*PublishResourcesScheduledAt - now, new TEvPrivate::TEvPublishResources);
+            LOG_D("Schedule publish at " << *PublishResourcesScheduledAt << ", after " << (*PublishResourcesScheduledAt - now));
             return;
         }
+
+        // starting resources publishing.
+        // saying resource manager that we are ready for the next publishing.
+        ResourceManager->PublishScheduled.clear();
 
         NKikimrKqp::TKqpNodeResources payload;
         payload.SetNodeId(SelfId().NodeId());
@@ -1112,6 +1098,7 @@ private:
 
     std::shared_ptr<TKqpResourceManager> ResourceManager;
 
+    std::optional<TInstant> PublishResourcesScheduledAt;
     bool PublishResourcesByExchanger;
     std::optional<TString> SelfDataCenterId;
 };

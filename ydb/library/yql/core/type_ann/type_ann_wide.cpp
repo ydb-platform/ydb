@@ -418,6 +418,145 @@ IGraphTransformer::TStatus WideCombinerWrapper(const TExprNode::TPtr& input, TEx
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus WideCombinerWithSpillingWrapper(const TExprNode::TPtr& input, TExprNode::TPtr&, TContext& ctx) {
+    if (!EnsureArgsCount(*input, 7U, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!EnsureWideFlowType(input->Head(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    const auto multiType = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
+
+    if (!EnsureAtom(*input->Child(1U), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (const auto& limit = input->Child(1U)->Content(); !limit.empty()) {
+        i64 memLimit = 0LL;
+        if (!TryFromString(limit, memLimit)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1U)->Pos()), TStringBuilder() <<
+                "Bad memLimit value: " << limit));
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+
+    auto& keyExtractor = input->ChildRef(2U);
+    auto& initHandler = input->ChildRef(3U);
+    auto& updateHandler = input->ChildRef(4U);
+    auto& finishHandler = input->ChildRef(5U);
+    auto& loadHandler = input->ChildRef(6U);
+
+    if (const auto status = ConvertToLambda(keyExtractor, ctx.Expr, multiType->GetSize()); status.Level != IGraphTransformer::TStatus::Ok) {
+        return status;
+    }
+
+    if (!UpdateLambdaAllArgumentsTypes(keyExtractor, multiType->GetItems(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!keyExtractor->GetTypeAnn()) {
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    TTypeAnnotationNode::TListType keyTypes;
+    keyTypes.reserve(keyExtractor->ChildrenSize() - 1U);
+    for (ui32 i = 1U; i < keyExtractor->ChildrenSize(); ++i) {
+        const auto child = keyExtractor->Child(i);
+        keyTypes.emplace_back(child->GetTypeAnn());
+        if (!EnsureHashableKey(child->Pos(), keyTypes.back(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        if (!EnsureEquatableKey(child->Pos(), keyTypes.back(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+
+    auto argTypes = multiType->GetItems();
+    argTypes.insert(argTypes.cbegin(), keyTypes.cbegin(), keyTypes.cend());
+
+    if (const auto status = ConvertToLambda(initHandler, ctx.Expr, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
+        return status;
+    }
+
+    if (!UpdateLambdaAllArgumentsTypes(initHandler, argTypes, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!initHandler->GetTypeAnn()) {
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    TTypeAnnotationNode::TListType stateTypes;
+    stateTypes.reserve(initHandler->ChildrenSize() - 1U);
+    for (ui32 i = 1U; i < initHandler->ChildrenSize(); ++i) {
+        const auto child = initHandler->Child(i);
+        stateTypes.emplace_back(child->GetTypeAnn());
+        if (!EnsureComputableType(child->Pos(), *stateTypes.back(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+
+    argTypes.insert(argTypes.cend(), stateTypes.cbegin(), stateTypes.cend());
+
+    if (const auto status = ConvertToLambda(updateHandler, ctx.Expr, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
+        return status;
+    }
+
+    if (!UpdateLambdaAllArgumentsTypes(updateHandler, argTypes, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!updateHandler->GetTypeAnn()) {
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    for (auto i = updateHandler->ChildrenSize() - 1U; i;) {
+        const auto child = updateHandler->Child(i);
+        if (!IsSameAnnotation(*stateTypes[--i], *child->GetTypeAnn())) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "State type changed in update from "
+                << *stateTypes[i] << " on " << *child->GetTypeAnn()));
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+
+    argTypes.erase(argTypes.cbegin() + keyTypes.size(), argTypes.cbegin() + keyTypes.size() + multiType->GetSize());
+
+    if (const auto status = ConvertToLambda(finishHandler, ctx.Expr, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
+        return status;
+    }
+
+    if (!UpdateLambdaAllArgumentsTypes(finishHandler, argTypes, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!finishHandler->GetTypeAnn()) {
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    auto retType = GetWideLambdaOutputType(*finishHandler, ctx.Expr);
+
+    argTypes.clear();
+    auto &retWideItems = retType->GetItems();
+    argTypes.insert(argTypes.begin(), retWideItems.begin(), retWideItems.end());
+
+    if (const auto status = ConvertToLambda(loadHandler, ctx.Expr, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
+        return status;
+    }
+
+    if (!UpdateLambdaAllArgumentsTypes(loadHandler, argTypes, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!loadHandler->GetTypeAnn()) {
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(retType));
+    return IGraphTransformer::TStatus::Ok;
+}
+
 IGraphTransformer::TStatus WideChopperWrapper(const TExprNode::TPtr& input, TExprNode::TPtr&, TContext& ctx) {
     if (!EnsureArgsCount(*input, 4U, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;

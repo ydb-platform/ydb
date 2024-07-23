@@ -137,7 +137,10 @@ protected:
                 bool syncActor = Config->ComputeActorType.Get() != "async";
                 return NHopping::RewriteAsHoppingWindow(node, ctx, input.Cast(), analyticsHopping, lateArrivalDelay, defaultWatermarksMode, syncActor);
             } else {
-                return DqRewriteAggregate(node, ctx, TypesCtx, true, Config->UseAggPhases.Get().GetOrElse(false), Config->UseFinalizeByKey.Get().GetOrElse(false));
+                NDq::TSpillingSettings spillingSettings(Config->GetEnabledSpillingNodes());
+                return DqRewriteAggregate(node, ctx, TypesCtx, true,
+                    Config->UseAggPhases.Get().GetOrElse(false), Config->UseFinalizeByKey.Get().GetOrElse(false),
+                    spillingSettings.IsAggregationSpillingEnabled());
             }
         }
         return node;
@@ -183,7 +186,7 @@ protected:
             return node;
         }
 
-        TDqLookupSourceWrap lookupSourceWrap =  right.Maybe<TDqSourceWrap>() 
+        TDqLookupSourceWrap lookupSourceWrap =  right.Maybe<TDqSourceWrap>()
             ? LookupSourceFromSource(right.Cast<TDqSourceWrap>(), ctx)
             : LookupSourceFromRead(right.Cast<TDqReadWrap>(), ctx)
         ;

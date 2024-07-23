@@ -101,7 +101,7 @@ protected:
     TMaybeNode<TExprBase> RewriteAggregate(TExprBase node, TExprContext& ctx) {
         TMaybeNode<TExprBase> output;
         auto aggregate = node.Cast<TCoAggregateBase>();
-        auto hopSetting = GetSetting(aggregate.Settings().Ref(), "hopping");        
+        auto hopSetting = GetSetting(aggregate.Settings().Ref(), "hopping");
         if (hopSetting) {
             auto input = aggregate.Input().Maybe<TDqConnection>();
             if (!input) {
@@ -116,7 +116,9 @@ protected:
                 true,               // defaultWatermarksMode
                 true);              // syncActor
         } else {
-            output = DqRewriteAggregate(node, ctx, TypesCtx, false, KqpCtx.Config->HasOptEnableOlapPushdown() || KqpCtx.Config->HasOptUseFinalizeByKey(), KqpCtx.Config->HasOptUseFinalizeByKey());
+            output = DqRewriteAggregate(node, ctx, TypesCtx, false,
+                KqpCtx.Config->HasOptEnableOlapPushdown() || KqpCtx.Config->HasOptUseFinalizeByKey(),
+                KqpCtx.Config->HasOptUseFinalizeByKey(), false /* allowSpilling */);
         }
         if (output) {
             DumpAppliedRule("RewriteAggregate", node.Ptr(), output.Cast().Ptr(), ctx);

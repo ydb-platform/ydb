@@ -9,7 +9,7 @@ namespace NYql {
 class TAggregateExpander {
 public:
     TAggregateExpander(bool usePartitionsByKeys, const bool useFinalizeByKeys, const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx,
-        bool forceCompact = false, bool compactForDistinct = false, bool usePhases = false)
+        bool forceCompact = false, bool compactForDistinct = false, bool usePhases = false, bool allowSpilling = false)
         : Node(node)
         , Ctx(ctx)
         , TypesCtx(typesCtx)
@@ -18,6 +18,7 @@ public:
         , ForceCompact(forceCompact)
         , CompactForDistinct(compactForDistinct)
         , UsePhases(usePhases)
+        , AllowSpilling(allowSpilling)
         , AggregatedColumns(nullptr)
         , VoidNode(ctx.NewCallable(node->Pos(), "Void", {}))
         , HaveDistinct(false)
@@ -98,6 +99,7 @@ private:
     bool ForceCompact;
     bool CompactForDistinct;
     bool UsePhases;
+    bool AllowSpilling;
     TStringBuf Suffix;
 
     TSessionWindowParams SessionWindowParams;

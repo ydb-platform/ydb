@@ -89,6 +89,33 @@ enum class EHashJoinMode {
     GraceAndSelf /* "graceandself" */,
 };
 
+enum class EEnabledSpillingNodes : ui64 {
+    GraceJoin   = 1ULL      /* "GraceJoin" */,
+    Aggregation = 2ULL      /* "Aggregation" */,
+    All         = ~0ULL     /* "All" */,
+};
+
+class TSpillingSettings {
+public:
+    TSpillingSettings() = default;
+    explicit TSpillingSettings(ui64 mask) : Mask(mask) {};
+
+    operator bool() const {
+        return Mask;
+    }
+
+    bool IsGraceJoinSpillingEnabled() const {
+        return Mask & ui64(EEnabledSpillingNodes::GraceJoin);
+    }
+
+    bool IsAggregationSpillingEnabled() const {
+        return Mask & ui64(EEnabledSpillingNodes::Aggregation);
+    }
+
+private:
+    const ui64 Mask = 0;
+};
+
 } // namespace NYql::NDq
 
 IOutputStream& operator<<(IOutputStream& stream, const NYql::NDq::TTxId& txId);

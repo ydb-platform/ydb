@@ -416,6 +416,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        appConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
 
         Tests::TServerSettings serverSettings(msgbPort);
         serverSettings.Port = msgbPort;

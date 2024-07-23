@@ -252,7 +252,9 @@ public:
     TTableCreatedGuard BuildNew(const TPathId& id, TColumnTableInfo::TPtr object);
     TTableExtractedGuard TakeVerified(const TPathId& id);
     TTableExtractedGuard TakeAlterVerified(const TPathId& id);
-
+    bool empty() const {
+        return Tables.empty();
+    }
     bool contains(const TPathId& id) const {
         return Tables.contains(id);
     }

@@ -61,7 +61,7 @@ message Database {
   string document_api_endpoint = 22;
 
   string kinesis_api_endpoint = 23;
-  
+
   string kafka_api_endpoint = 26;
 
   // configured monitoring config for the database.

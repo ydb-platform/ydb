@@ -215,6 +215,10 @@ bool TPathElement::IsExternalDataSource() const {
     return PathType == EPathType::EPathTypeExternalDataSource;
 }
 
+bool TPathElement::IsIncrementalBackupTable() const {
+    return true;
+}
+
 bool TPathElement::IsView() const {
     return PathType == EPathType::EPathTypeView;
 }

@@ -27,7 +27,7 @@ public:
     }
 
     ui64 ResolvePartitionId(const typename TChangeRecord::TPtr& record) const override {
-        return ResolveSchemaBoundaryPartitionId(KeyDesc, record.GetKey());
+        return ResolveSchemaBoundaryPartitionId(KeyDesc, record->GetKey());
     }
 
 private:
@@ -36,7 +36,9 @@ private:
 
 
 template<typename TChangeRecord>
-IChangeSenderChooser<TChangeRecord>* CreateSchemaBoundaryChooser(NKikimr::TKeyDesc* keyDesc);
+IChangeSenderChooser<TChangeRecord>* CreateSchemaBoundaryChooser(NKikimr::TKeyDesc* keyDesc) {
+    return new SchemaBoundaryChooser<TChangeRecord>(keyDesc);
+}
 
 
 } // NKikimr::NChangeExchange

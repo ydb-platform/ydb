@@ -251,6 +251,27 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         ExplainJoinOrderTestDataQuery("queries/tpcds61.sql", StreamLookupJoin);       
     }
 
+void ExecuteJoinOrderTestDataQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin) {
+    auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath));
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    CreateSampleTable(session);
+
+    /* join with parameters */
+    {
+        const TString query = GetStatic(queryPath);
+        
+        auto result = session.ExecuteDataQuery(query,TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+    }
+}
+
+    Y_UNIT_TEST_TWIN(TPCDS87, StreamLookupJoin) {
+        ExecuteJoinOrderTestDataQueryWithStats("queries/tpcds87.sql", "stats/tpcds1000s.json", StreamLookupJoin); 
+    }
+
     Y_UNIT_TEST_TWIN(TPCDS88, StreamLookupJoin) {
         ExplainJoinOrderTestDataQuery("queries/tpcds88.sql", StreamLookupJoin); 
     }
@@ -314,13 +335,11 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
-    /*
     Y_UNIT_TEST_TWIN(OverrideStatsTPCDS64, StreamLookupJoin) {
         JoinOrderTestWithOverridenStats(
             "queries/tpcds64.sql", "stats/tpcds1000s.json", "join_order/tpcds64_1000s.json", StreamLookupJoin
         );
     }
-    */
    
     Y_UNIT_TEST_TWIN(OverrideStatsTPCDS78, StreamLookupJoin) {
         JoinOrderTestWithOverridenStats(

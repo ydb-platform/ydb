@@ -1181,8 +1181,6 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         Y_ABORT("TODO: implement");
     case TTxState::ETxType::TxDropContinuousBackup:
         Y_ABORT("TODO: implement");
-    case TTxState::ETxType::TxRestoreIncrementalBackup:
-        Y_ABORT("TODO: implement");
 
     // ResourcePool
     case TTxState::ETxType::TxCreateResourcePool:

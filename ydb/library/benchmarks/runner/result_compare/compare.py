@@ -29,10 +29,14 @@ def fmtchange(cur, ref, plus='bad', minus='good', threshold=10):
     cls = ''
     if change > threshold:
         cls = ' class="{}"'.format(plus)
+        if change > threshold*100:
+            return '{}<span{}>&gt;&gt;&gt;&gt;</span>'.format(ret, cls)
     elif change < -threshold:
         cls = ' class="{}"'.format(minus)
+        if change <= -99:
+            return '{}<span{}>&lt;&lt;&lt;&lt;</span>'.format(ret, cls)
 
-    return ret + '<code{}> {:+3}%</code>'.format(cls, change)
+    return '{}<code{}> {:+3}%</code>'.format(ret, cls, change)
 
 
 def main():

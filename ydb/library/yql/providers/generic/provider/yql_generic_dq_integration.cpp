@@ -117,7 +117,6 @@ namespace NYql {
 
                     // prepare select
                     Generic::TSource source;
-                    source.set_table(table);
                     auto select = source.mutable_select();
                     select->mutable_from()->set_table(table);
                     select->mutable_data_source_instance()->CopyFrom(tableMeta.value()->DataSourceInstance);

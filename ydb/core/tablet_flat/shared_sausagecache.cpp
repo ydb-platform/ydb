@@ -1129,6 +1129,7 @@ public:
             hFunc(TKikimrEvents::TEvWakeup, Wakeup);
             cFunc(TEvents::TSystem::PoisonPill, TakePoison);
 
+            hFunc(NMemory::TEvConsumerRegistered, Handle);
             hFunc(NMemory::TEvConsumerLimit, Handle);
         }
     }

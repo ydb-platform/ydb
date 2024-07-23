@@ -4,6 +4,7 @@
 #include "schemeshard_path_element.h"
 #include "schemeshard_utils.h"
 
+#include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/ydb_convert/table_description.h>
@@ -113,10 +114,10 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     }
 
     auto createImplTable = [&](NKikimrSchemeOp::TTableDescription&& implTableDesc) {
-        auto outTx = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable);
-        *outTx.MutableCreateTable() = implTableDesc;
-
         implTableDesc.MutablePartitionConfig()->SetShadowData(true);
+
+        auto outTx = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable);
+        *outTx.MutableCreateTable() = std::move(implTableDesc);
 
         return CreateInitializeBuildIndexImplTable(NextPartId(opId, result), outTx);
     };
@@ -130,6 +131,10 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         }
         result.push_back(createImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexLevelTableDesc)));
         result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc)));
+        // TODO Maybe better to use partition from main table
+        // This tables are temporary and handled differently in apply_build_index
+        result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc, NTableVectorKmeansTreeIndex::TmpPostingTableSuffix0)));
+        result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc, NTableVectorKmeansTreeIndex::TmpPostingTableSuffix1)));
     } else {
         NKikimrSchemeOp::TTableDescription indexTableDesc;
         // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS
@@ -137,6 +142,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             indexTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
         }
         auto implTableDesc = CalcImplTableDesc(tableInfo, implTableColumns, indexTableDesc);
+        // TODO if keep erase markers also speedup compaction or something else we can enable it for other impl tables too
         implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
         result.push_back(createImplTable(std::move(implTableDesc)));
     }

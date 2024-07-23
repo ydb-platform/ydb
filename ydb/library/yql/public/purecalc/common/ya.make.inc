@@ -20,6 +20,7 @@ SRCS(
     transformations/output_columns_filter.cpp
     transformations/replace_table_reads.cpp
     transformations/type_annotation.cpp
+    transformations/utils.cpp
     type_from_schema.cpp
     worker.cpp
     worker_factory.cpp

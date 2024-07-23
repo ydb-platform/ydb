@@ -640,6 +640,8 @@ class TAsyncIndexChangeSenderMain
             TVector<TKeyDesc::TColumnOp>()
         );
 
+        SetChooser(NChangeExchange::CreateSchemaBoundaryChooser<TChangeRecord>(KeyDesc.Get()));
+
         ResolveKeys();
     }
 

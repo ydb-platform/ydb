@@ -293,6 +293,37 @@ private:
 
 }; // TCdcChangeSenderPartition
 
+class TMd5Chooser final : public NChangeExchange::IChangeSenderChooser<TChangeRecord> {
+public:
+    TMd5Chooser(size_t partitionCount)
+        : PartitionCount(partitionCount) {
+    }
+
+    ui64 ResolvePartitionId(const typename TChangeRecord::TPtr& record) const override {
+        using namespace NKikimr::NDataStreams::V1;
+        const auto hashKey = HexBytesToDecimal(record->GetPartitionKey() /* MD5 */);
+        return ShardFromDecimal(hashKey, PartitionCount);
+    }
+
+private:
+    size_t PartitionCount;
+};
+
+class TBoundaryChooser final : public NChangeExchange::IChangeSenderChooser<TChangeRecord> {
+public:
+    TBoundaryChooser(const NKikimrSchemeOp::TPersQueueGroupDescription& config) {
+        Chooser = NPQ::CreatePartitionChooser(config);
+    }
+
+    ui64 ResolvePartitionId(const typename TChangeRecord::TPtr& record) const override {
+        auto* p = Chooser->GetPartition(record->GetPartitionKey());
+        return p->TabletId;
+    }
+
+private:
+    std::shared_ptr<NPQ::IPartitionChooser> Chooser;
+};
+
 class TCdcChangeSenderMain
     : public TActorBootstrapped<TCdcChangeSenderMain>
     , public NChangeExchange::TBaseChangeSender<TChangeRecord>
@@ -628,6 +659,14 @@ class TCdcChangeSenderMain
 
         KeyDesc = NKikimr::TKeyDesc::CreateMiniKeyDesc(schema);
         KeyDesc->Partitioning = std::make_shared<TVector<NKikimr::TKeyDesc::TPartitionInfo>>(std::move(partitioning));
+
+        if (::NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED != pqConfig.GetPartitionStrategy().GetPartitionStrategyType()) {
+            SetChooser(new TBoundaryChooser(pqDesc));
+        } else if (NKikimrSchemeOp::ECdcStreamFormatProto == Stream.Format) {
+            SetChooser(NChangeExchange::CreateSchemaBoundaryChooser<TChangeRecord>(KeyDesc.Get()));
+        } else {
+            SetChooser(new TMd5Chooser(KeyDesc->GetPartitions().size()));
+        }
 
         CreateSenders(MakePartitionIds(*KeyDesc->Partitioning), versionChanged);
         Become(&TThis::StateMain);

@@ -382,6 +382,8 @@ class TLocalTableWriter
             TVector<TKeyDesc::TColumnOp>()
         );
 
+        TBaseSender::SetChooser(NChangeExchange::CreateSchemaBoundaryChooser<TChangeRecord>(KeyDesc.Get()));
+
         ResolveKeys();
     }
 

@@ -928,11 +928,9 @@ void TPersQueue::MoveTopTxToCalculating(TDistributedTransaction& tx,
                              tx.TopicConverter,
                              ctx);
         DBGTRACE_LOG("InitCompleted=" << InitCompleted);
-        if (InitCompleted) {
-            CreateNewPartitions(tx.TabletConfig,
-                                tx.TopicConverter,
-                                ctx);
-        }
+        CreateNewPartitions(tx.TabletConfig,
+                            tx.TopicConverter,
+                            ctx);
         SendEvProposePartitionConfig(ctx, tx);
         break;
     }
@@ -945,24 +943,6 @@ void TPersQueue::MoveTopTxToCalculating(TDistributedTransaction& tx,
                  ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
     PQ_LOG_D("TxId " << tx.TxId <<
              ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
-}
-
-void TPersQueue::UpdateTopTxState(const TActorContext& ctx)
-{
-    Y_ABORT_UNLESS(!InitCompleted);
-
-    if (TxQueue.empty()) {
-        return;
-    }
-
-    Y_ABORT_UNLESS(Txs.contains(TxQueue.front().second));
-    auto& tx = Txs.at(TxQueue.front().second);
-
-    if (tx.State <= NKikimrPQ::TTransaction::PLANNED) {
-        return;
-    }
-
-    MoveTopTxToCalculating(tx, ctx);
 }
 
 void TPersQueue::AddSupportivePartition(const TPartitionId& partitionId)
@@ -1103,8 +1083,6 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
                                 false,
                                 ctx);
     }
-
-    UpdateTopTxState(ctx);
 
     ConfigInited = true;
 
@@ -4179,8 +4157,6 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
             switch (tx.Kind) {
             case NKikimrPQ::TTransaction::KIND_DATA:
             case NKikimrPQ::TTransaction::KIND_CONFIG:
-                WriteTx(tx, NKikimrPQ::TTransaction::WAIT_RS);
-
                 tx.State = NKikimrPQ::TTransaction::CALCULATED;
                 DBGTRACE_LOG("TxId " << tx.TxId <<
                              ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
@@ -4192,14 +4168,14 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
             case NKikimrPQ::TTransaction::KIND_UNKNOWN:
                 Y_ABORT_UNLESS(false);
             }
+        } else {
+            break;
         }
 
-        break;
+        [[fallthrough]];
 
     case NKikimrPQ::TTransaction::CALCULATED:
-        Y_ABORT_UNLESS(tx.WriteInProgress);
-
-        tx.WriteInProgress = false;
+        Y_ABORT_UNLESS(!tx.WriteInProgress);
 
         tx.State = NKikimrPQ::TTransaction::WAIT_RS;
         DBGTRACE_LOG("TxId " << tx.TxId <<

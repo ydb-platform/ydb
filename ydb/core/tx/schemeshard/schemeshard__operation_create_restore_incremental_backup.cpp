@@ -25,7 +25,6 @@ void DoCreateLock(const TOperationId opId, const TPath& workingDirPath, const TP
     outTx.SetInternal(true);
     auto cfg = outTx.MutableLockConfig();
     cfg->SetName(tablePath.LeafName());
-    cfg->SetAllowIndexImplLock(allowIndexImplLock);
 
     result.push_back(CreateLock(NextPartId(opId, result), outTx));
 }
@@ -176,7 +175,14 @@ TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, c
 
     DoCreateAlterTable(opId, dstTablePath, result);
 
-    NCdc::DoCreateStream(createCdcStreamOp, opId, workingDirPath, srcTablePath, acceptExisted, true, {}, result);
+    NCdc::DoCreateStream(
+        result,
+        createCdcStreamOp,
+        opId,
+        workingDirPath,
+        srcTablePath,
+        acceptExisted,
+        true);
     DoCreatePqPart(
         opId,
         streamPath,

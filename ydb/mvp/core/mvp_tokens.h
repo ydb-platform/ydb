@@ -14,7 +14,7 @@
 #include <ydb/public/api/client/nc_private/iam/token_service.grpc.pb.h>
 #include <ydb/public/api/client/nc_private/iam/token_exchange_service.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_auth.pb.h>
-#include "auth_profile.h"
+#include "access_service_type.h"
 #include "grpc_log.h"
 
 namespace NMVP {
@@ -22,7 +22,7 @@ class TMvpTokenator : public NActors::TActorBootstrapped<TMvpTokenator> {
 public:
     using TBase = NActors::TActorBootstrapped<TMvpTokenator>;
 
-    static TMvpTokenator* CreateTokenator(const NMvp::TTokensConfig& tokensConfig, const NActors::TActorId& httpProxy, const NMVP::EAuthProfile authProfile = NMVP::EAuthProfile::YandexV2);
+    static TMvpTokenator* CreateTokenator(const NMvp::TTokensConfig& tokensConfig, const NActors::TActorId& httpProxy, const NMVP::EAccessServiceType accessServiceType = NMVP::EAccessServiceType::YandexV2);
     TString GetToken(const TString& name);
 
 protected:
@@ -71,7 +71,7 @@ protected:
         using TEvUpdateStaticCredentialsToken = TEvUpdateToken<EvUpdateStaticCredentialsToken, Ydb::Auth::LoginResponse>;
     };
 
-    TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TActorId& httpProxy, const EAuthProfile authProfile);
+    TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TActorId& httpProxy, const EAccessServiceType accessServiceType);
     void Bootstrap();
     void HandlePeriodic();
     void Handle(TEvPrivate::TEvRefreshToken::TPtr event);
@@ -128,7 +128,7 @@ protected:
     TTokenConfigs TokenConfigs;
     TSpinLock TokensLock;
     NActors::TActorId HttpProxy;
-    const NMVP::EAuthProfile AuthProfile;
+    const NMVP::EAccessServiceType AccessServiceType;
     THashMap<NHttp::THttpRequest*, TString> HttpRequestNames;
 
     template <typename TGRpcService>

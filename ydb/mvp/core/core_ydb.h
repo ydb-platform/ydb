@@ -15,7 +15,7 @@
 #include <library/cpp/json/json_value.h>
 #include <util/generic/strbuf.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
-#include "auth_profile.h"
+#include "access_service_type.h"
 #include "grpc_log.h"
 #include "mvp_tokens.h"
 
@@ -157,7 +157,7 @@ struct TYdbLocation {
     static TString UserToken;
     static TString CaCertificate;
     static TString SslCertificate;
-    NMVP::EAuthProfile AuthProfile = NMVP::EAuthProfile::YandexV2;
+    NMVP::EAccessServiceType AccessServiceType = NMVP::EAccessServiceType::YandexV2;
     TString ServiceTokenName;
     TString ServerlessDocumentProxyEndpoint;
     TString ServerlessYdbProxyEndpoint;

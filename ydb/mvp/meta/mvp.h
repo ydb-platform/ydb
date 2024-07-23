@@ -38,7 +38,7 @@ public:
     TString MetaDatabase;
     bool MetaCache = false;
     TString MetaDatabaseTokenName;
-    EAuthProfile AuthProfile = EAuthProfile::YandexV2;
+    EAccessServiceType AccessServiceType = EAccessServiceType::YandexV2;
 
     TMVP(int argc, char** argv);
     int Init();

@@ -111,7 +111,10 @@ TWorkerGraph::TWorkerGraph(
 
     // Compile computation pattern
 
-    auto selfCallableName = Env_.InternName(PurecalcInputCallableName);
+    const THashSet<NKikimr::NMiniKQL::TInternName> selfCallableNames = {
+        Env_.InternName(PurecalcInputCallableName),
+        Env_.InternName(PurecalcBlockInputCallableName)
+    };
 
     NKikimr::NMiniKQL::TExploringNodeVisitor explorer;
     explorer.Walk(rootNode.GetNode(), Env_);
@@ -123,7 +126,7 @@ TWorkerGraph::TWorkerGraph(
     auto nodeFactory = [&](
         NKikimr::NMiniKQL::TCallable& callable, const NKikimr::NMiniKQL::TComputationNodeFactoryContext& ctx
         ) -> NKikimr::NMiniKQL::IComputationNode* {
-        if (callable.GetType()->GetNameStr() == selfCallableName) {
+        if (selfCallableNames.contains(callable.GetType()->GetNameStr())) {
             YQL_ENSURE(callable.GetInputsCount() == 1, "Self takes exactly 1 argument");
             const auto inputIndex = AS_VALUE(NKikimr::NMiniKQL::TDataLiteral, callable.GetInput(0))->AsValue().Get<ui32>();
             YQL_ENSURE(inputIndex < inputsCount, "Self index is out of range");

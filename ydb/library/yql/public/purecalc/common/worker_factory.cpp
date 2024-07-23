@@ -97,7 +97,8 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
         SerializedProgram_ = TString{options.Query};
     } else {
         ExprRoot_ = Compile(options.Query, options.TranslationMode_,
-            options.ModuleResolver, options.SyntaxVersion_, options.Modules, options.OutputSpec, processorMode);
+            options.ModuleResolver, options.SyntaxVersion_, options.Modules,
+            options.InputSpec, options.OutputSpec, processorMode);
 
         // Deduce output type if it wasn't provided by output spec
 
@@ -117,6 +118,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     IModuleResolver::TPtr moduleResolver,
     ui16 syntaxVersion,
     const THashMap<TString, TString>& modules,
+    const TInputSpecBase& inputSpec,
     const TOutputSpecBase& outputSpec,
     EProcessorMode processorMode
 ) {
@@ -244,21 +246,27 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         return IGraphTransformer::TStatus::Ok;
     });
 
+    const TString& selfName = TString(inputSpec.ProvidesBlocks()
+                            ? PurecalcBlockInputCallableName
+                            : PurecalcInputCallableName);
+
     TTransformationPipeline pipeline(typeContext);
 
-    pipeline.Add(MakeTableReadsReplacer(InputTypes_, UseSystemColumns_),
+    pipeline.Add(MakeTableReadsReplacer(InputTypes_, UseSystemColumns_, processorMode, selfName),
                  "ReplaceTableReads", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
                  "Replace reads from tables");
     pipeline.AddServiceTransformers();
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FuncRegistry_, calcTransformer.Get());
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotationTransformer(MakeTypeAnnotationTransformer(typeContext, InputTypes_, processorMode));
+    pipeline.AddTypeAnnotationTransformer(MakeTypeAnnotationTransformer(typeContext, InputTypes_, processorMode, selfName));
     pipeline.AddPostTypeAnnotation();
     pipeline.Add(CreateFunctorTransformer(
         [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             return OptimizeExpr(input, output, [](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
-                if (node->IsCallable("Unordered") && node->Child(0)->IsCallable(PurecalcInputCallableName)) {
+                if (node->IsCallable("Unordered") && node->Child(0)->IsCallable({
+                    PurecalcInputCallableName, PurecalcBlockInputCallableName
+                })) {
                     return node->ChildPtr(0);
                 }
                 return node;

@@ -104,6 +104,25 @@ namespace {
             YQL_ENSURE(inputIndex < InputStructs_.size());
 
             auto itemType = InputStructs_[inputIndex];
+
+            // XXX: Tweak the input expression type, if the spec supports blocks:
+            // 1. Add "_yql_block_length" attribute for internal usage.
+            // 2. Add block container to wrap the actual item type.
+            if (input->IsCallable(PurecalcBlockInputCallableName)) {
+                const auto inputItems = itemType->GetItems();
+                TVector<const TItemExprType*> members;
+                for (const auto& item : inputItems) {
+                    if (item->GetName() == "_yql_block_length") {
+                        const auto scalarItemType = ctx.MakeType<TScalarExprType>(item->GetItemType());
+                        members.push_back(ctx.MakeType<TItemExprType>(item->GetName(), scalarItemType));
+                    } else {
+                        const auto blockItemType = ctx.MakeType<TBlockExprType>(item->GetItemType());
+                        members.push_back(ctx.MakeType<TItemExprType>(item->GetName(), blockItemType));
+                    }
+                }
+                itemType = ctx.MakeType<TStructExprType>(members);
+            }
+
             TColumnOrder columnOrder;
             for (const auto& i : itemType->GetItems()) {
                 columnOrder.AddColumn(TString(i->GetName()));

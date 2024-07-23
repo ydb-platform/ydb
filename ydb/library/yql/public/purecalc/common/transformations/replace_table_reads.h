@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/public/purecalc/common/names.h>
+#include <ydb/library/yql/public/purecalc/common/processor_mode.h>
 
 #include <ydb/library/yql/core/yql_graph_transformer.h>
 
@@ -22,6 +23,7 @@ namespace NYql::NPureCalc {
     TAutoPtr<IGraphTransformer> MakeTableReadsReplacer(
         const TVector<const TStructExprType*>& inputStructs,
         bool useSystemColumns,
+        EProcessorMode processorMode,
         TString callableName = TString{PurecalcInputCallableName},
         TString tablePrefix = TString{PurecalcInputTablePrefix}
     );

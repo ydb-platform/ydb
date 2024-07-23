@@ -125,6 +125,7 @@ namespace NYql {
                 IModuleResolver::TPtr moduleResolver,
                 ui16 syntaxVersion,
                 const THashMap<TString, TString>& modules,
+                const TInputSpecBase& inputSpec,
                 const TOutputSpecBase& outputSpec,
                 EProcessorMode processorMode);
         };

@@ -12,5 +12,7 @@ namespace NYql::NPureCalc {
     extern const TStringBuf PurecalcInputCallableName;
     extern const TStringBuf PurecalcInputTablePrefix;
 
+    extern const TStringBuf PurecalcBlockInputCallableName;
+
     extern const TStringBuf PurecalcUdfModulePrefix;
 }

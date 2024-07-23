@@ -1,6 +1,7 @@
 #include "replace_table_reads.h"
 
 #include <ydb/library/yql/public/purecalc/common/names.h>
+#include <ydb/library/yql/public/purecalc/common/transformations/utils.h>
 
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
@@ -13,6 +14,7 @@ namespace {
     private:
         const TVector<const TStructExprType*>& InputStructs_;
         bool UseSystemColumns_;
+        EProcessorMode ProcessorMode_;
         TString CallableName_;
         TString TablePrefix_;
         bool Complete_ = false;
@@ -21,11 +23,13 @@ namespace {
         explicit TTableReadsReplacer(
             const TVector<const TStructExprType*>& inputStructs,
             bool useSystemColumns,
+            EProcessorMode processorMode,
             TString inputNodeName,
             TString tablePrefix
         )
             : InputStructs_(inputStructs)
             , UseSystemColumns_(useSystemColumns)
+            , ProcessorMode_(processorMode)
             , CallableName_(std::move(inputNodeName))
             , TablePrefix_(std::move(tablePrefix))
         {
@@ -135,6 +139,30 @@ namespace {
                 .Seal()
                 .Build();
 
+            if (inputNode->IsCallable(PurecalcBlockInputCallableName)) {
+                const auto inputStruct = InputStructs_[inputIndex]->Cast<TStructExprType>();
+                const auto blocksLambda = NodeFromBlocks(replacePos, inputStruct, ctx);
+                if (ProcessorMode_ == EProcessorMode::PullList) {
+                    inputNode = ctx.Builder(replacePos)
+                        .Callable("LMap")
+                            .Add(0, inputNode)
+                            .Lambda(1)
+                                .Param("stream")
+                                .Apply(blocksLambda)
+                                    .With(0, "stream")
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                        .Build();
+                } else {
+                    inputNode = ctx.Builder(replacePos)
+                        .Apply(blocksLambda)
+                            .With(0, inputNode)
+                        .Seal()
+                        .Build();
+                }
+            }
+
             if (UseSystemColumns_) {
                 auto mapLambda = ctx.Builder(replacePos)
                     .Lambda()
@@ -228,8 +256,9 @@ namespace {
 TAutoPtr<IGraphTransformer> NYql::NPureCalc::MakeTableReadsReplacer(
     const TVector<const TStructExprType*>& inputStructs,
     bool useSystemColumns,
+    EProcessorMode processorMode,
     TString callableName,
     TString tablePrefix
 ) {
-    return new TTableReadsReplacer(inputStructs, useSystemColumns, std::move(callableName), std::move(tablePrefix));
+    return new TTableReadsReplacer(inputStructs, useSystemColumns, processorMode, std::move(callableName), std::move(tablePrefix));
 }

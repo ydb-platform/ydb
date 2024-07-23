@@ -1,47 +1,11 @@
 #pragma once
 
-#include "replication.h"
-
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 
-#include <ydb/library/yverify_stream/yverify_stream.h>
-
 #include <util/generic/algorithm.h>
-#include <util/generic/maybe.h>
 #include <util/generic/size_literals.h>
 
 namespace NKikimr::NReplication::NController {
-
-inline TMaybe<TReplication::ETargetKind> TryTargetKindFromEntryType(NYdb::NScheme::ESchemeEntryType type) {
-    switch (type) {
-    case NYdb::NScheme::ESchemeEntryType::Table:
-        return TReplication::ETargetKind::Table;
-    case NYdb::NScheme::ESchemeEntryType::Unknown:
-    case NYdb::NScheme::ESchemeEntryType::Directory:
-    case NYdb::NScheme::ESchemeEntryType::PqGroup:
-    case NYdb::NScheme::ESchemeEntryType::SubDomain:
-    case NYdb::NScheme::ESchemeEntryType::RtmrVolume:
-    case NYdb::NScheme::ESchemeEntryType::BlockStoreVolume:
-    case NYdb::NScheme::ESchemeEntryType::CoordinationNode:
-    case NYdb::NScheme::ESchemeEntryType::Sequence:
-    case NYdb::NScheme::ESchemeEntryType::Replication:
-    case NYdb::NScheme::ESchemeEntryType::ColumnTable:
-    case NYdb::NScheme::ESchemeEntryType::ColumnStore:
-    case NYdb::NScheme::ESchemeEntryType::Topic:
-    case NYdb::NScheme::ESchemeEntryType::ExternalTable:
-    case NYdb::NScheme::ESchemeEntryType::ExternalDataSource:
-    case NYdb::NScheme::ESchemeEntryType::View:
-    case NYdb::NScheme::ESchemeEntryType::ResourcePool:
-        return Nothing();
-    }
-}
-
-inline TReplication::ETargetKind TargetKindFromEntryType(NYdb::NScheme::ESchemeEntryType type) {
-    auto res = TryTargetKindFromEntryType(type);
-    Y_VERIFY_S(res, "Unexpected entry type: " << static_cast<i32>(type));
-    return *res;
-}
 
 inline TString& TruncatedIssue(TString& issue) {
     static constexpr ui32 sizeLimit = 2_KB;

@@ -3994,7 +3994,9 @@ void TPersQueue::SendEvTxCommitToPartitions(const TActorContext& ctx,
         auto event = std::make_unique<TEvPQ::TEvTxCommit>(tx.Step, tx.TxId);
 
         auto p = Partitions.find(TPartitionId(partitionId));
-        Y_ABORT_UNLESS(p != Partitions.end(), "unknown partition %" PRIu32, partitionId);
+        Y_ABORT_UNLESS(p != Partitions.end(),
+                       "Unknown partition. Tablet %" PRIu64 ", Partition %" PRIu32 ", TxId %" PRIu64,
+                       TabletID(), partitionId, tx.TxId);
 
         DBGTRACE_LOG("send TEvTxCommit to partition " << partitionId);
         ctx.Send(p->second.Actor, event.release());

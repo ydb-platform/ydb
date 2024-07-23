@@ -2,6 +2,7 @@
 
 #include <ydb/library/actors/testlib/test_runtime.h>
 
+#include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/stat_service.h>
@@ -50,6 +51,42 @@ void CreateUniformTable(TTestEnv& env, const TString& databaseName, const TStrin
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
+void CreateColumnStoreTable(TTestEnv& env, const TString& databaseName, const TString& tableName) {
+    TTableClient client(env.GetDriver());
+    auto session = client.CreateSession().GetValueSync().GetSession();
+
+    auto fullTableName = Sprintf("Root/%s/%s", databaseName.c_str(), tableName.c_str());
+    auto result = session.ExecuteSchemeQuery(Sprintf(R"(
+        CREATE TABLE `%s` (
+            Key Uint64 NOT NULL,
+            Value Uint64,
+            PRIMARY KEY (Key)
+        )
+        PARTITION BY HASH(Key)
+        WITH (
+            STORE = COLUMN,
+            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+        );
+    )", fullTableName.c_str())).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    NYdb::TValueBuilder rows;
+    rows.BeginList();
+    for (size_t i = 0; i < 100; ++i) {
+        auto key = TValueBuilder().Uint64(i).Build();
+        auto value = TValueBuilder().OptionalUint64(i).Build();
+        rows.AddListItem();
+        rows.BeginStruct();
+        rows.AddMember("Key", key);
+        rows.AddMember("Value", value);
+        rows.EndStruct();
+    }
+    rows.EndList();
+
+    result = client.BulkUpsert(fullTableName, rows.Build()).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
 void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableName) {
     TTableClient client(env.GetDriver());
     auto session = client.CreateSession().GetValueSync().GetSession();
@@ -60,7 +97,7 @@ void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableN
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-void ValidateCountMin(TTestActorRuntime& runtime, TPathId pathId) {
+std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, TPathId pathId) {
     auto statServiceId = NStat::MakeStatServiceID(runtime.GetNodeId(1));
 
     NStat::TRequest req;
@@ -84,9 +121,15 @@ void ValidateCountMin(TTestActorRuntime& runtime, TPathId pathId) {
     UNIT_ASSERT(rsp.Success);
     UNIT_ASSERT(stat.CountMin);
 
+    return stat.CountMin;
+}
+
+void ValidateCountMin(TTestActorRuntime& runtime, TPathId pathId) {
+    auto countMin = ExtractCountMin(runtime, pathId);
+
     for (ui32 i = 0; i < 4; ++i) {
         ui64 value = 4000000000000000000ull * (i + 1);
-        auto probe = stat.CountMin->Probe((const char *)&value, sizeof(ui64));
+        auto probe = countMin->Probe((const char *)&value, sizeof(ui64));
         UNIT_ASSERT_VALUES_EQUAL(probe, 1);
     }
 }
@@ -132,6 +175,8 @@ Y_UNIT_TEST_SUITE(StatisticsAggregator) {
 
         ui64 tabletId = 0;
         auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &tabletId);
+
+        runtime.SimulateSleep(TDuration::Seconds(30));
 
         auto ev = std::make_unique<TEvStatistics::TEvScanTable>();
         auto& record = ev->Record;
@@ -298,6 +343,30 @@ Y_UNIT_TEST_SUITE(StatisticsAggregator) {
         ValidateCountMinAbsense(runtime, pathId);
     }
 
+    Y_UNIT_TEST(ScanOneColumnTable) {
+        TTestEnv env(1, 1);
+        auto init = [&] () {
+            CreateDatabase(env, "Database");
+            CreateColumnStoreTable(env, "Database", "Table");
+        };
+        std::thread initThread(init);
+
+        auto& runtime = *env.GetServer().GetRuntime();
+        runtime.SimulateSleep(TDuration::Seconds(30));
+        initThread.join();
+
+        ui64 tabletId = 0;
+        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &tabletId);
+        Y_UNUSED(pathId);
+
+        runtime.SimulateSleep(TDuration::Seconds(30));
+
+        auto countMin = ExtractCountMin(runtime, pathId);
+
+        ui32 value = 1;
+        auto probe = countMin->Probe((const char *)&value, sizeof(value));
+        UNIT_ASSERT_VALUES_EQUAL(probe, 10);
+    }
 }
 
 } // NStat

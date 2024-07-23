@@ -7370,6 +7370,7 @@ void TSchemeShard::SendBaseStatsToSA() {
         entryPathId->SetLocalId(pathId.LocalPathId);
         entry->SetRowCount(aggregated.RowCount);
         entry->SetBytesSize(aggregated.DataSize);
+        entry->SetIsColumnTable(false);
         ++count;
     }
     auto columnTablesPathIds = ColumnTables.GetAllPathIds();
@@ -7382,6 +7383,7 @@ void TSchemeShard::SendBaseStatsToSA() {
         entryPathId->SetLocalId(pathId.LocalPathId);
         entry->SetRowCount(aggregated.RowCount);
         entry->SetBytesSize(aggregated.DataSize);
+        entry->SetIsColumnTable(true);
         ++count;
     }
 

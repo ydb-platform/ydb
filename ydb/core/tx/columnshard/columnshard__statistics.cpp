@@ -12,6 +12,18 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
 
     record.SetStatus(NKikimrStat::TEvStatisticsResponse::SUCCESS);
 
+    std::unique_ptr<TCountMinSketch> sketch(TCountMinSketch::Create());
+    ui32 value = 1;
+    sketch->Count((const char*)&value, sizeof(value));
+    TString strSketch(sketch->AsStringBuf());
+
+    auto* column = record.AddColumns();
+    column->SetTag(1);
+
+    auto* statistic = column->AddStatistics();
+    statistic->SetType(NStat::COUNT_MIN_SKETCH);
+    statistic->SetData(strSketch);
+
     Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
 

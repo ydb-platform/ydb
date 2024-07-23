@@ -93,14 +93,15 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
             ParameterSources[name] = "param file " + file;
         }
     }
-    if (StdinFormat != EOutputFormat::Csv && StdinFormat != EOutputFormat::Tsv && (!Columns.Empty() || config.ParseResult->Has("skip-rows"))) {
-        throw TMisuseException() << "Options \"--columns\" and  \"--skip-rows\" requires \"csv\" or \"tsv\" formats";
+    if (StdinFormat != EOutputFormat::Csv && StdinFormat != EOutputFormat::Tsv && (!Columns.Empty() || config.ParseResult->Has("param-skip-rows")
+            || config.ParseResult->Has("skip-rows"))) {
+        throw TMisuseException() << "Options \"--param-columns\" and  \"--param-skip-rows\" requires \"csv\" or \"tsv\" formats";
     }
     if (StdinParameters.empty() && StdinFormat == EOutputFormat::Raw) {
-        throw TMisuseException() << "For \"raw\" format \"--stdin-par\" option should be used.";
+        throw TMisuseException() << "For \"raw\" format \"--param-name-stdin\" option should be used.";
     }
     if (!StdinParameters.empty() && !ReadParametersFromStdin) {
-        throw TMisuseException() << "\"--stdin-par\" option is allowed only with non-interactive stdin.";
+        throw TMisuseException() << "\"--param-name-stdin\" option is allowed only with non-interactive stdin.";
     }
     if (BatchMode == EBatchMode::Full || BatchMode == EBatchMode::Adaptive) {
         if (StdinParameters.size() > 1) {
@@ -115,15 +116,17 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
 
     for (auto it = StdinParameters.begin(); it != StdinParameters.end(); ++it) {
         if (std::find(StdinParameters.begin(), it, *it) != it) {
-            throw TMisuseException() << "Parameter $" << *it << " value found in more than one source: \'--stdin-par\' option.";
+            throw TMisuseException() << "Parameter $" << *it << " value found in more than one \'--param-name-stdin\' option.";
         }
         if (Parameters.find("$" + *it) != Parameters.end()) {
-            throw TMisuseException() << "Parameter $" << *it << " value found in more than one source: \'--stdin-par\' option, "
+            throw TMisuseException() << "Parameter $" << *it << " value found in more than one source: \'--param-name-stdin\' option, "
                 << ParameterSources["$" + *it] << ".";
         }
     }
-    if (BatchMode != EBatchMode::Adaptive && (config.ParseResult->Has("batch-limit") || config.ParseResult->Has("batch-max-delay"))) {
-        throw TMisuseException() << "Options \"--batch-limit\" and \"--batch-max-delay\" are allowed only in \"adaptive\" batch mode.";
+    if (BatchMode != EBatchMode::Adaptive && (config.ParseResult->Has("param-batch-limit")
+            || config.ParseResult->Has("param-batch-max-delay") || config.ParseResult->Has("batch-limit")
+            || config.ParseResult->Has("batch-max-delay"))) {
+        throw TMisuseException() << "Options \"--param-batch-limit\" and \"--param-batch-max-delay\" are allowed only in \"adaptive\" batch mode.";
     }
     if (DeprecatedSkipRows != 0) {
         SkipRows = DeprecatedSkipRows;
@@ -144,21 +147,25 @@ void TCommandWithParameters::AddParametersOption(TClientCommand::TConfig& config
         paramDescr << ' ' << clarification;
     }
     paramDescr << Endl << "Several parameter options can be specified." << Endl
-        << "To change parameter input format use --param-format option." << Endl
+        << "To change input parameter format use --param-format option." << Endl
         << "Escaping depends on operating system.";
     if (config.HelpCommandVerbosiltyLevel <= 1) {
-        paramDescr << "Use -hh option to see usage examples and all other options to work with parameters." << Endl;
+        paramDescr << Endl << "Use -hh option to see usage examples and all other options to work with parameters.";
     }
+    paramDescr << Endl << "More information and examples in the documentation:" << Endl
+        << "https://ydb.tech/docs/en/reference/ydb-cli/parameterized-queries-cli";
     config.Opts->AddLongOption('p', "param", paramDescr.Str())
         .RequiredArgument("$name=value").AppendTo(&ParameterOptions);
 
     TStringStream paramFileDescr;
-    paramFileDescr << "File name with parameter names and values." << Endl
+    paramFileDescr << "Path to a file with parameter name[s] and value[s]." << Endl
         << "This option may be specified several times." << Endl
-        << "To change parameter input format use --param-format option.";
+        << "To change input parameter format use --param-format option.";
     if (config.HelpCommandVerbosiltyLevel <= 1) {
-        paramFileDescr << "Use -hh option to see all other options to work with parameters." << Endl;
+        paramFileDescr << Endl << "Use -hh option to see all other options to work with parameters.";
     }
+    paramFileDescr << Endl << "More information and examples in the documentation:" << Endl
+        << "https://ydb.tech/docs/en/reference/ydb-cli/parameterized-queries-cli";
     config.Opts->AddLongOption("param-file", paramFileDescr.Str())
         .RequiredArgument("PATH").AppendTo(&ParameterFiles);
 
@@ -189,7 +196,7 @@ void TCommandWithParameters::AddParametersOption(TClientCommand::TConfig& config
 
 void TCommandWithParameters::AddParametersStdinOption(TClientCommand::TConfig& config, const TString& requestString) {
     auto& paramColumns = config.Opts->AddLongOption("param-columns", "String with column names that replaces header "
-        "when passing parameters in CSV/TSV format. It is assumed that there is no header in the file")
+        "when passing parameters in CSV/TSV format. It is assumed that there is no header in the parameters file")
         .RequiredArgument("STR").StoreResult(&Columns);
     config.Opts->AddLongOption("columns", "For backward compatibility")
         .RequiredArgument("STR").StoreResult(&Columns).Hidden();
@@ -220,8 +227,8 @@ void TCommandWithParameters::AddParametersStdinOption(TClientCommand::TConfig& c
         << colors.BoldColor() << "full" << colors.OldColor()
         << "\n    Executes " << requestString << " once, with all parameter sets wrapped in json list, when EOF is reached on stdin\n  "
         << colors.BoldColor() << "adaptive" << colors.OldColor()
-        << "\n    Executes " << requestString << " with a json list of parameter sets every time when its number reaches batch-limit, "
-        "or the waiting time reaches batch-max-delay. An stdin parameter name must be specified via "
+        << "\n    Executes " << requestString << " with a json list of parameter sets every time when its number reaches param-batch-limit, "
+        "or the waiting time reaches param-batch-max-delay. An stdin parameter name must be specified via "
         "\"--param-name-stdin\" option for \"adaptive\" batch mode."
         "\nDefault: " << colors.CyanColor() << "\"iterative\"" << colors.OldColor() << ".";
 

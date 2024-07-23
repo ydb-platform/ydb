@@ -56,6 +56,12 @@ concept TProtobufEventWithTransportMeta = TProtobufEvent<T> && THasTransportMeta
 
 class TRetryEventsQueue {
 public:
+    struct ICallbacks {
+        virtual void SessionClosed(ui64 eventQueueId) = 0;       // Need to create new session.
+        virtual ~ICallbacks() = default;
+    };
+
+public:
     class IRetryableEvent : public TSimpleRefCount<IRetryableEvent> {
     public:
         using TPtr = TIntrusivePtr<IRetryableEvent>;
@@ -63,6 +69,11 @@ public:
         virtual THolder<NActors::IEventHandle> Clone(ui64 confirmedSeqNo) const = 0;
         virtual ui64 GetSeqNo() const = 0;
     };
+
+    TRetryEventsQueue(ICallbacks* cbs = nullptr)
+        : Cbs(cbs) {
+            Cbs->SessionClosed(0);
+        }
 
     void Init(const TTxId& txId, const NActors::TActorId& senderId, const NActors::TActorId& selfId, ui64 eventQueueId = 0);
 
@@ -202,6 +213,7 @@ private:
     bool RetryScheduled = false;
     TMaybe<TRetryState> RetryState;
     TTxId TxId;
+    ICallbacks* const Cbs;
 };
 
 } // namespace NYql::NDq

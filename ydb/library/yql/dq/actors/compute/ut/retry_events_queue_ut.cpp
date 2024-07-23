@@ -1,43 +1,92 @@
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/yql/dq/actors/compute/retry_queue.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/core/testlib/basics/appdata.h>
 
-
-//using namespace NYql;
 using namespace NActors;
-//using namespace NProto;
-//using namespace NDqs;
 
 namespace {
 
-
-class ClientActor : public TActorBootstrapped<ClientActor> {
+class ClientActor : public TActorBootstrapped<ClientActor>, public NYql::NDq::TRetryEventsQueue::ICallbacks {
 public:
-    void Bootstrap() {}
+    ClientActor(NActors::TActorId serverActorId)
+     : EventsQueue(this)
+     , ServerActorId(serverActorId) {}
+
+    void Bootstrap() {
+        std::cerr << "Bootstrap" << std::endl;
+        Become(&ClientActor::StateFunc);
+    }
+
+
+  void Handle(const NYql::NDq::TEvDqCompute::TEvRun::TPtr& ev) {
+        std::cerr << "TEvRun" << std::endl;
+        Send(ev->Sender,new NYql::NDq::TEvDqCompute::TEvRun());
+
+        Init();
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(NYql::NDq::TEvDqCompute::TEvRun, Handle);
+    )
+
+    void Init() {
+        EventsQueue.Init("TxId", SelfId(), SelfId(), 777);
+        EventsQueue.OnNewRecipientId(ServerActorId);
+        EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvRun());
+    }
+
+    virtual void SessionClosed(ui64 ) {}
+
+    NYql::NDq::TRetryEventsQueue EventsQueue;
+    NActors::TActorId ServerActorId;
+};
+
+class ServerActor : public TActorBootstrapped<ServerActor>, public NYql::NDq::TRetryEventsQueue::ICallbacks {
+public:
+    ServerActor()
+     : EventsQueue(this) {}
+
+    void Bootstrap() {
+        Become(&ServerActor::StateFunc);
+    }
+
+    void Handle(const NYql::NDq::TEvDqCompute::TEvRun::TPtr&) {
+        std::cerr << "TEvRun" << std::endl;
+    }
+
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(NYql::NDq::TEvDqCompute::TEvRun, Handle);
+    )
+
+
+    virtual void SessionClosed(ui64 ) {}
 
     NYql::NDq::TRetryEventsQueue EventsQueue;
 };
 
-class ServerActor : public TActorBootstrapped<ServerActor> {
-public:
-    void Bootstrap() {}
-
-    NYql::NDq::TRetryEventsQueue EventsQueue;
-};
-
-struct TFixture: public NUnitTest::TBaseFixture
+struct TRuntime: public NActors::TTestActorRuntime
 {
+    
 public:
 
-    void SetUp(NUnitTest::TTestContext& /* context */) override {
-        const ui32 nodesNumber = 2;
-        ActorSystem.Reset(new NActors::TTestActorRuntimeBase(nodesNumber, true));
+    TRuntime() 
+    : NActors::TTestActorRuntime(2){
+       // const ui32 nodesNumber = 1;
+        //ActorSystem.Reset(new NActors::TTestActorRuntimeBase(nodesNumber));
 
-        ClientActorId = ActorSystem->Register(new ClientActor());
-        ServerActorId = ActorSystem->Register(new ServerActor());
+        Initialize(MakeEgg());
 
-        ActorSystem->Initialize();
+        Server = new ServerActor();
+        ServerActorId = Register(Server, 1);
+        
+        Client = new ClientActor(ServerActorId);
+        ClientActorId = Register(Client, 0);
+        //Start();
 
         // for (ui32 i = 1; i < nodesNumber; i++) {
         //     ActorRuntime_->GetLogSettings(i)->Append(
@@ -53,7 +102,7 @@ public:
         // NActors::TDispatchOptions options;
         // options.FinalEvents.emplace_back(NActors::TEvents::TSystem::Bootstrap, nodesNumber);
         // ActorRuntime_->DispatchEvents(options);
-        ActorSystem->DispatchEvents({}, TDuration::Zero());
+        DispatchEvents({}, TDuration::Zero());
 
         // auto statusEv = MakeHolder<TEvClusterStatus>();
         // const auto statusSender = ActorRuntime_->AllocateEdgeActor();
@@ -61,14 +110,35 @@ public:
         // auto resp = ActorRuntime_->GrabEdgeEvent<TEvClusterStatusResponse>(statusSender);
 
     }
-    THolder<NActors::TTestActorRuntimeBase> ActorSystem;
+
+    TTestActorRuntime::TEgg MakeEgg()
+    {
+        return { new NKikimr::TAppData(0, 0, 0, 0, { }, nullptr, nullptr, nullptr, nullptr), nullptr, nullptr, {} };
+    }
+
+
+    // void TearDown(NUnitTest::TTestContext&) override {
+    //   //  Reset();
+    // }
+
+   // THolder<NActors::TTestActorRuntimeBase> ActorSystem;
+    ClientActor* Client;
+    ServerActor* Server;
+
     NActors::TActorId ClientActorId;
     NActors::TActorId ServerActorId;
+ //   NKikimr::TActorSystemStub ActorSystemStub;
 };
 
 Y_UNIT_TEST_SUITE(TRetryEventsQueueTest) {
-    Y_UNIT_TEST_F(Empty, TFixture) { 
+    Y_UNIT_TEST(Empty) { 
+        // Client->Init(ServerActorId);
+        TRuntime runtime;
+        const auto edge = runtime.AllocateEdgeActor(0);
 
+        runtime.Send(new IEventHandle(runtime.ClientActorId, edge, new NYql::NDq::TEvDqCompute::TEvRun()), 0, true);
+        runtime.GrabEdgeEvent<NYql::NDq::TEvDqCompute::TEvRun>(edge);
+        
     }
 }
 

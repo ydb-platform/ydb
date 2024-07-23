@@ -16,6 +16,7 @@ PEERDIR(
     ydb/library/yql/public/udf/service/stub
     ydb/library/yql/sql/pg_dummy
     ydb/library/yql/minikql/comp_nodes/no_llvm
+    ydb/core/testlib/actors
 )
 
 YQL_LAST_ABI_VERSION()

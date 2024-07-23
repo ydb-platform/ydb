@@ -49,6 +49,7 @@ jobs:
         build_target: ${{ inputs.build_target || 'ydb/apps/ydbd'}}
         increment: false
         run_tests: false
+        test_retry_count: 1
         put_build_results_to_cache: false
         additional_ya_make_args: "-DDUMP_LINKER_MAP -DCOMPILER_TIME_TRACE --add-result .json"
         secs: ${{ format('{{"TESTMO_TOKEN2":"{0}","AWS_KEY_ID":"{1}","AWS_KEY_VALUE":"{2}","REMOTE_CACHE_USERNAME":"{3}","REMOTE_CACHE_PASSWORD":"{4}"}}',

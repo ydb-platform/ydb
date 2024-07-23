@@ -219,7 +219,6 @@ class TDataShard::TTxCdcStreamScanProgress
             auto it = table->Columns.find(tag);
             Y_ABORT_UNLESS(it != table->Columns.end());
             if (it->second.Name == "__incrBackupImpl_deleted") {
-                // FIXME assert
                 if (const auto& cell = cells.at(pos); !cell.IsNull() && cell.AsValue<bool>()) {
                     return std::nullopt;
                 }

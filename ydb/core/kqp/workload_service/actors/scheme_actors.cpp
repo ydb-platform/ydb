@@ -118,7 +118,7 @@ private:
 
 class TPoolFetcherActor : public TSchemeActorBase<TPoolFetcherActor> {
 public:
-    TPoolFetcherActor(const NActors::TActorId& replyActorId, const TString& database, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool enableOnServerless)
+    TPoolFetcherActor(const TActorId& replyActorId, const TString& database, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool enableOnServerless)
         : ReplyActorId(replyActorId)
         , Database(database)
         , PoolId(poolId)
@@ -294,19 +294,16 @@ public:
             return;
         }
 
-        PipeClientClosedByUs = true;
-        SchemePipeActorId = {};
-        NTabletPipe::CloseClient(SelfId(), SchemePipeActorId);
-
+        ClosePipeClient();
         ScheduleRetry(TStringBuilder() << "Tablet to pipe not connected: " << NKikimrProto::EReplyStatus_Name(ev->Get()->Status));
     }
 
-    void HandleClientDestroyed() {
-        SchemePipeActorId = {};
-        if (!PipeClientClosedByUs) {
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
+        const TActorId clientId = ev->Get()->ClientId;
+        if (!ClosedSchemePipeActors.contains(clientId)) {
+            ClosePipeClient();
             ScheduleRetry("Tablet to pipe destroyed");
         }
-        PipeClientClosedByUs = false;
     }
 
     void HandleNotifyTxCompletionResult() {
@@ -317,7 +314,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle)
             hFunc(TEvTabletPipe::TEvClientConnected, Handle)
-            sFunc(TEvTabletPipe::TEvClientDestroyed, HandleClientDestroyed)
+            hFunc(TEvTabletPipe::TEvClientDestroyed, Handle)
             sFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, HandleNotifyTxCompletionResult)
             IgnoreFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered)
 
@@ -358,11 +355,10 @@ private:
     void SubscribeOnTransactionOrRetry(NTxProxy::TResultStatus::EStatus status, const NKikimrTxUserProxy::TEvProposeTransactionStatus& response) {
         const ui64 txId = status == NTxProxy::TResultStatus::ExecInProgress ? response.GetTxId() : response.GetPathCreateTxId();
         if (txId == 0) {
-            ScheduleRetry(response, "Unable to subscribe to concurrent transaction");
+            ScheduleRetry(response, "Unable to subscribe to concurrent transaction", true);
             return;
         }
 
-        PipeClientClosedByUs = false;
         SchemePipeActorId = Register(NTabletPipe::CreateClient(SelfId(), response.GetSchemeShardTabletId()));
 
         auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
@@ -371,11 +367,16 @@ private:
         LOG_D("Subscribe on create pool tx: " << txId);
     }
 
-    void ScheduleRetry(const NKikimrTxUserProxy::TEvProposeTransactionStatus& response, const TString& message, bool longDelay = false) {
-        if (SchemePipeActorId){
-            PipeClientClosedByUs = true;
+    void ClosePipeClient() {
+        if (SchemePipeActorId) {
+            ClosedSchemePipeActors.insert(SchemePipeActorId);
+            SchemePipeActorId = {};
             NTabletPipe::CloseClient(SelfId(), SchemePipeActorId);
         }
+    }
+
+    void ScheduleRetry(const NKikimrTxUserProxy::TEvProposeTransactionStatus& response, const TString& message, bool longDelay = false) {
+        ClosePipeClient();
 
         auto ssStatus = static_cast<NKikimrScheme::EStatus>(response.GetSchemeShardStatus());
         if (!TBase::ScheduleRetry(ExtractIssues(response, TStringBuilder() << message << ", status: " << ssStatus), longDelay)) {
@@ -384,11 +385,7 @@ private:
     }
 
     void ScheduleRetry(const TString& message, bool longDelay = false) {
-        if (SchemePipeActorId){
-            PipeClientClosedByUs = true;
-            NTabletPipe::CloseClient(SelfId(), SchemePipeActorId);
-        }
-
+        ClosePipeClient();
         if (!TBase::ScheduleRetry(message, longDelay)) {
             Reply(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "Retry limit exceeded on error: " << message);
         }
@@ -423,9 +420,7 @@ private:
             LOG_W("Failed to create pool, " << status << ", issues: " << issues.ToOneLineString());
         }
 
-        if (SchemePipeActorId) {
-            NTabletPipe::CloseClient(SelfId(), SchemePipeActorId);
-        }
+        ClosePipeClient();
 
         Issues.AddIssues(std::move(issues));
         Send(ReplyActorId, new TEvPrivate::TEvCreatePoolResponse(status, std::move(Issues)));
@@ -446,8 +441,8 @@ private:
     const NACLibProto::TDiffACL DiffAcl;
     NResourcePool::TPoolSettings PoolConfig;
 
-    NActors::TActorId SchemePipeActorId;
-    bool PipeClientClosedByUs = false;
+    std::unordered_set<TActorId> ClosedSchemePipeActors;
+    TActorId SchemePipeActorId;
 };
 
 }  // anonymous namespace

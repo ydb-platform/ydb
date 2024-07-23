@@ -26,6 +26,7 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/string/escape.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 #define PQ_LOG_ERROR_AND_DIE(expr) \
     PQ_LOG_ERROR(expr); \
@@ -894,6 +895,8 @@ void TPersQueue::CreateOriginalPartition(const NKikimrPQ::TPQTabletConfig& confi
                                          bool newPartition,
                                          const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::CreateOriginalPartition");
+    DBGTRACE_LOG("partitionId=" << partitionId);
     TActorId actorId = ctx.Register(CreatePartitionActor(partitionId,
                                                          topicConverter,
                                                          config,
@@ -910,6 +913,7 @@ void TPersQueue::CreateOriginalPartition(const NKikimrPQ::TPQTabletConfig& confi
 void TPersQueue::MoveTopTxToCalculating(TDistributedTransaction& tx,
                                         const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::MoveTopTxToCalculating");
     std::tie(ExecStep, ExecTxId) = TxQueue.front();
     PQ_LOG_D("New ExecStep " << ExecStep << ", ExecTxId " << ExecTxId);
 
@@ -923,6 +927,7 @@ void TPersQueue::MoveTopTxToCalculating(TDistributedTransaction& tx,
                              converterFactory,
                              tx.TopicConverter,
                              ctx);
+        DBGTRACE_LOG("InitCompleted=" << InitCompleted);
         if (InitCompleted) {
             CreateNewPartitions(tx.TabletConfig,
                                 tx.TopicConverter,
@@ -936,6 +941,8 @@ void TPersQueue::MoveTopTxToCalculating(TDistributedTransaction& tx,
     }
 
     tx.State = NKikimrPQ::TTransaction::CALCULATING;
+    DBGTRACE_LOG("TxId " << tx.TxId <<
+                 ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
     PQ_LOG_D("TxId " << tx.TxId <<
              ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
 }
@@ -1427,6 +1434,7 @@ bool TPersQueue::AllOriginalPartitionsInited() const
 
 void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::Handle(TEvPQ::TEvInitComplete)");
     const auto& partitionId = ev->Get()->Partition;
     auto& partition = GetPartitionInfo(partitionId);
     Y_ABORT_UNLESS(!partition.InitDone);
@@ -3184,6 +3192,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, co
 
 void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction)");
     PQ_LOG_D("Handle TEvPersQueue::TEvProposeTransaction " << ev->Get()->Record.ShortDebugString());
 
     NKikimrPQ::TEvProposeTransaction& event = ev->Get()->Record;
@@ -3337,6 +3346,7 @@ void TPersQueue::HandleConfigTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransa
 
 void TPersQueue::Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::Handle(TEvTxProcessing::TEvPlanStep)");
     PQ_LOG_D("Handle TEvTxProcessing::TEvPlanStep " << ev->Get()->Record.ShortDebugString());
 
     EvPlanStepQueue.emplace_back(ev->Sender, ev->Release().Release());
@@ -3346,6 +3356,8 @@ void TPersQueue::Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorCont
 
 void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::Handle(TEvTxProcessing::TEvReadSet)");
+    DBGTRACE_LOG("TxId " << ev->Get()->Record.GetTxId());
     PQ_LOG_D("Handle TEvTxProcessing::TEvReadSet " << ev->Get()->Record.ShortDebugString());
 
     NKikimrTx::TEvReadSet& event = ev->Get()->Record;
@@ -3356,9 +3368,19 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
         ack = std::make_unique<TEvTxProcessing::TEvReadSetAck>(*ev->Get(), TabletID());
     }
 
+    {
+        DBGTRACE_LOG("producer=" << event.GetTabletProducer());
+        auto tx = GetTransaction(ctx, event.GetTxId());
+        DBGTRACE_LOG("tx.PredicatesReceived.size=" << tx->PredicatesReceived.size());
+        for (auto& [k, v] : tx->PredicatesReceived) {
+            DBGTRACE_LOG("k=" << k);
+        }
+    }
+
     if (auto tx = GetTransaction(ctx, event.GetTxId()); tx && tx->PredicatesReceived.contains(event.GetTabletProducer())) {
         tx->OnReadSet(event, ev->Sender, std::move(ack));
 
+        DBGTRACE_LOG("tx.State=" << NKikimrPQ::TTransaction_EState_Name(tx->State));
         if (tx->State == NKikimrPQ::TTransaction::WAIT_RS) {
             CheckTxState(ctx, *tx);
 
@@ -3375,6 +3397,7 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
 
 void TPersQueue::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::Handle(TEvTxProcessing::TEvReadSetAck)");
     PQ_LOG_D("Handle TEvTxProcessing::TEvReadSetAck " << ev->Get()->Record.ShortDebugString());
 
     NKikimrTx::TEvReadSetAck& event = ev->Get()->Record;
@@ -3422,6 +3445,11 @@ void TPersQueue::Handle(TEvPQ::TEvTxCalcPredicateResult::TPtr& ev, const TActorC
 void TPersQueue::Handle(TEvPQ::TEvProposePartitionConfigResult::TPtr& ev, const TActorContext& ctx)
 {
     const TEvPQ::TEvProposePartitionConfigResult& event = *ev->Get();
+
+    DBGTRACE("TPersQueue::Handle(TEvPQ::TEvProposePartitionConfigResult)");
+    DBGTRACE_LOG("Step " << event.Step <<
+                 ", TxId " << event.TxId <<
+                 ", Partition " << event.Partition);
 
     PQ_LOG_D("Handle TEvPQ::TEvProposePartitionConfigResult" <<
              " Step " << event.Step <<
@@ -3604,6 +3632,8 @@ void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx)
 
         const NKikimrPQ::TEvProposeTransaction& event = front->Record;
         TDistributedTransaction& tx = Txs[event.GetTxId()];
+        DBGTRACE_LOG("maybe insert tx " << event.GetTxId() <<
+                     " (" << NKikimrPQ::TTransaction_EState_Name(tx.State) << ")");
 
         switch (tx.State) {
         case NKikimrPQ::TTransaction::UNKNOWN:
@@ -3840,6 +3870,7 @@ void TPersQueue::SchedulePlanStepAccepted(const TActorId& actorId,
 void TPersQueue::SendEvReadSetToReceivers(const TActorContext& ctx,
                                           TDistributedTransaction& tx)
 {
+    DBGTRACE("TPersQueue::SendEvReadSetToReceivers");
     NKikimrTx::TReadSetData data;
     data.SetDecision(tx.SelfDecision);
 
@@ -3856,6 +3887,7 @@ void TPersQueue::SendEvReadSetToReceivers(const TActorContext& ctx,
                                                                        TabletID(),
                                                                        body,
                                                                        0);
+            DBGTRACE_LOG("send TEvReadSet to tablet " << receiverId);
             PQ_LOG_D("Send TEvReadSet to tablet " << receiverId);
             SendToPipe(receiverId, tx, std::move(event), ctx);
         }
@@ -3955,14 +3987,16 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
 void TPersQueue::SendEvTxCommitToPartitions(const TActorContext& ctx,
                                             TDistributedTransaction& tx)
 {
+    DBGTRACE("TPersQueue::SendEvTxCommitToPartitions");
     PQ_LOG_T("Commit tx " << tx.TxId);
 
     for (ui32 partitionId : tx.Partitions) {
         auto event = std::make_unique<TEvPQ::TEvTxCommit>(tx.Step, tx.TxId);
 
         auto p = Partitions.find(TPartitionId(partitionId));
-        Y_ABORT_UNLESS(p != Partitions.end());
+        Y_ABORT_UNLESS(p != Partitions.end(), "unknown partition %" PRIu32, partitionId);
 
+        DBGTRACE_LOG("send TEvTxCommit to partition " << partitionId);
         ctx.Send(p->second.Actor, event.release());
     }
 
@@ -4056,6 +4090,9 @@ TDistributedTransaction* TPersQueue::GetTransaction(const TActorContext& ctx,
 void TPersQueue::CheckTxState(const TActorContext& ctx,
                               TDistributedTransaction& tx)
 {
+    DBGTRACE("TPersQueue::CheckTxState");
+    DBGTRACE_LOG("TxId " << tx.TxId <<
+                 ", State " << NKikimrPQ::TTransaction_EState_Name(tx.State));
     PQ_LOG_D("TxId " << tx.TxId <<
              ", State " << NKikimrPQ::TTransaction_EState_Name(tx.State));
 
@@ -4067,6 +4104,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         ScheduleProposeTransactionResult(tx);
 
         tx.State = NKikimrPQ::TTransaction::PREPARING;
+        DBGTRACE_LOG("TxId " << tx.TxId <<
+                     ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
         PQ_LOG_D("TxId " << tx.TxId <<
                  ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
 
@@ -4082,6 +4121,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         //
 
         tx.State = NKikimrPQ::TTransaction::PREPARED;
+        DBGTRACE_LOG("TxId " << tx.TxId <<
+                     ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
         PQ_LOG_D("TxId " << tx.TxId <<
                  ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
 
@@ -4093,6 +4134,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         WriteTx(tx, NKikimrPQ::TTransaction::PLANNED);
 
         tx.State = NKikimrPQ::TTransaction::PLANNING;
+        DBGTRACE_LOG("TxId " << tx.TxId <<
+                     ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
         PQ_LOG_D("TxId " << tx.TxId <<
                  ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
 
@@ -4108,6 +4151,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         //
 
         tx.State = NKikimrPQ::TTransaction::PLANNED;
+        DBGTRACE_LOG("TxId " << tx.TxId <<
+                     ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
         PQ_LOG_D("TxId " << tx.TxId <<
                  ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
 
@@ -4135,6 +4180,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
                 WriteTx(tx, NKikimrPQ::TTransaction::WAIT_RS);
 
                 tx.State = NKikimrPQ::TTransaction::CALCULATED;
+                DBGTRACE_LOG("TxId " << tx.TxId <<
+                             ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
                 PQ_LOG_D("TxId " << tx.TxId <<
                          ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
 
@@ -4153,6 +4200,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         tx.WriteInProgress = false;
 
         tx.State = NKikimrPQ::TTransaction::WAIT_RS;
+        DBGTRACE_LOG("TxId " << tx.TxId <<
+                     ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
         PQ_LOG_D("TxId " << tx.TxId <<
                  ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
 
@@ -4169,6 +4218,7 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
         SendEvReadSetToReceivers(ctx, tx);
 
+        DBGTRACE_LOG("HaveParticipantsDecision " << tx.HaveParticipantsDecision());
         PQ_LOG_D("HaveParticipantsDecision " << tx.HaveParticipantsDecision());
 
         if (tx.HaveParticipantsDecision()) {
@@ -4179,6 +4229,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
             }
 
             tx.State = NKikimrPQ::TTransaction::EXECUTING;
+            DBGTRACE_LOG("TxId " << tx.TxId <<
+                         ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
             PQ_LOG_D("TxId " << tx.TxId <<
                      ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
         } else {
@@ -4212,6 +4264,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
             }
 
             tx.State = NKikimrPQ::TTransaction::EXECUTED;
+            DBGTRACE_LOG("TxId " << tx.TxId <<
+                         ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
             PQ_LOG_D("TxId " << tx.TxId <<
                      ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
         } else {
@@ -4240,6 +4294,7 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
             TryStartTransaction(ctx);
         }
         Txs.erase(tx.TxId);
+        DBGTRACE_LOG("detete tx " << tx.TxId);
         // If this was the last transaction, then you need to send responses to messages about changes
         // in the status of the PQ tablet (if they came)
         TryReturnTabletStateAll(ctx);
@@ -4261,6 +4316,8 @@ void TPersQueue::DeleteTx(TDistributedTransaction& tx)
     DeleteTxs.insert(tx.TxId);
 
     tx.State = NKikimrPQ::TTransaction::DELETING;
+    DBGTRACE_LOG("TxId " << tx.TxId <<
+                 ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
     PQ_LOG_D("TxId " << tx.TxId <<
              ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
 
@@ -4407,12 +4464,14 @@ void TPersQueue::CreateNewPartitions(NKikimrPQ::TPQTabletConfig& config,
                                      NPersQueue::TTopicConverterPtr topicConverter,
                                      const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::CreateNewPartitions");
     EnsurePartitionsAreNotDeleted(config);
 
     Y_ABORT_UNLESS(ConfigInited && AllOriginalPartitionsInited());
 
     for (const auto& partition : config.GetPartitions()) {
         const TPartitionId partitionId(partition.GetPartitionId());
+        DBGTRACE_LOG("partitionId=" << partitionId);
         if (Partitions.contains(partitionId)) {
             continue;
         }
@@ -4424,6 +4483,7 @@ void TPersQueue::CreateNewPartitions(NKikimrPQ::TPQTabletConfig& config,
                                 true,
                                 ctx);
     }
+    DBGTRACE_LOG("Partitions.size=" << Partitions.size());
 }
 
 void TPersQueue::EnsurePartitionsAreNotDeleted(const NKikimrPQ::TPQTabletConfig& config) const
@@ -4455,6 +4515,8 @@ void TPersQueue::InitTransactions(const NKikimrClient::TKeyValueResponse::TReadR
         PQ_LOG_D("Load tx " << tx.ShortDebugString());
 
         Txs.emplace(tx.GetTxId(), tx);
+        DBGTRACE_LOG("insert tx " << tx.GetTxId() <<
+                     " (" << NKikimrPQ::TTransaction_EState_Name(tx.GetState()) << ")");
 
         if (tx.HasStep()) {
             if (std::make_pair(tx.GetStep(), tx.GetTxId()) >= std::make_pair(ExecStep, ExecTxId)) {

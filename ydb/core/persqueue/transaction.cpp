@@ -1,6 +1,7 @@
 #include "transaction.h"
 #include "utils.h"
 #include "partition_log.h"
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -20,6 +21,7 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
 
     for (auto& p : tx.GetPredicatesReceived()) {
         PredicatesReceived[p.GetTabletId()] = p;
+        DBGTRACE_LOG("maybe insert PredicatesReceived " << p.GetTabletId());
 
         if (p.HasPredicate()) {
             SetDecision(ParticipantsDecision,
@@ -141,6 +143,7 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TDataTransac
     for (ui64 tabletId : txBody.GetSendingShards()) {
         if (tabletId != extractTabletId) {
             PredicatesReceived[tabletId].SetTabletId(tabletId);
+            DBGTRACE_LOG("maybe insert PredicatesReceived " << tabletId);
         }
     }
 
@@ -165,6 +168,7 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TConfigTrans
     Kind = NKikimrPQ::TTransaction::KIND_CONFIG;
 
     TabletConfig = txBody.GetTabletConfig();
+    DBGTRACE_LOG("TabletConfig=" << TabletConfig.ShortDebugString());
     BootstrapConfig = txBody.GetBootstrapConfig();
 
     Migrate(TabletConfig);
@@ -182,6 +186,7 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TConfigTrans
             for (const auto* r : node->Parents) {
                 if (extractTabletId != r->TabletId) {
                     PredicatesReceived[r->TabletId].SetTabletId(r->TabletId);
+                    DBGTRACE_LOG("maybe insert PredicatesReceived " << r->TabletId);
                 }
             }
         }
@@ -246,6 +251,7 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
         ReadSetAcks[sender] = std::move(ack);
 
         auto& p = PredicatesReceived[event.GetTabletProducer()];
+        DBGTRACE_LOG("maybe insert PredicatesReceived " << event.GetTabletProducer());
         if (!p.HasPredicate()) {
             p.SetPredicate(data.GetDecision() == NKikimrTx::TReadSetData::DECISION_COMMIT);
             ++ReadSetCount;

@@ -22,6 +22,7 @@
 
 #include "make_config.h"
 #include "pqtablet_mock.h"
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -206,9 +207,9 @@ protected:
     void StartPQWriteTxsObserver();
     void WaitForPQWriteTxs();
 
-    template <class T> void WaitForEvent();
-    void WaitForCalcPredicateResult();
-    void WaitForProposePartitionConfigResult();
+    template <class T> void WaitForEvent(size_t count);
+    void WaitForCalcPredicateResult(size_t count = 1);
+    void WaitForProposePartitionConfigResult(size_t count = 1);
 
     void TestWaitingForTEvReadSet(size_t senders, size_t receivers);
 
@@ -524,14 +525,18 @@ void TPQTabletFixture::WaitDropTabletReply(const TDropTabletReplyMatcher& matche
 }
 
 template <class T>
-void TPQTabletFixture::WaitForEvent()
+void TPQTabletFixture::WaitForEvent(size_t count)
 {
+    DBGTRACE("TPQTabletFixture::WaitForEvent");
     bool found = false;
+    size_t received = 0;
 
     TTestActorRuntimeBase::TEventObserver prev;
-    auto observer = [&found, &prev](TAutoPtr<IEventHandle>& event) {
+    auto observer = [&found, &prev, &received, count](TAutoPtr<IEventHandle>& event) {
         if (auto* msg = event->CastAsLocal<T>()) {
-            found = true;
+            ++received;
+            found = (received >= count);
+            DBGTRACE_LOG("received=" << received << " (" << count << "), found=" << found);
         }
 
         return prev ? prev(event) : TTestActorRuntimeBase::EEventAction::PROCESS;
@@ -549,14 +554,14 @@ void TPQTabletFixture::WaitForEvent()
     Ctx->Runtime->SetObserverFunc(prev);
 }
 
-void TPQTabletFixture::WaitForCalcPredicateResult()
+void TPQTabletFixture::WaitForCalcPredicateResult(size_t count)
 {
-    WaitForEvent<TEvPQ::TEvTxCalcPredicateResult>();
+    WaitForEvent<TEvPQ::TEvTxCalcPredicateResult>(count);
 }
 
-void TPQTabletFixture::WaitForProposePartitionConfigResult()
+void TPQTabletFixture::WaitForProposePartitionConfigResult(size_t count)
 {
-    WaitForEvent<TEvPQ::TEvProposePartitionConfigResult>();
+    WaitForEvent<TEvPQ::TEvProposePartitionConfigResult>(count);
 }
 
 std::unique_ptr<TEvPersQueue::TEvRequest> TPQTabletFixture::MakeGetOwnershipRequest(const TGetOwnershipRequestParams& params,
@@ -1424,6 +1429,190 @@ Y_UNIT_TEST_F(Config_TEvTxCommit_After_Restart, TPQTabletFixture)
 
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
+    WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=mockTabletId, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
+}
+
+Y_UNIT_TEST_F(One_Tablet_For_All_Partitions, TPQTabletFixture)
+{
+    DBGTRACE("Gizmo");
+    const ui64 txId = 67890;
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    auto tabletConfig = NHelpers::MakeConfig({.Version=2,
+                                             .Consumers={
+                                             {.Consumer="client-1", .Generation=0},
+                                             {.Consumer="client-3", .Generation=7}
+                                             },
+                                             .Partitions={
+                                             {.Id=0},
+                                             {.Id=1},
+                                             {.Id=2}
+                                             },
+                                             .AllPartitions={
+                                             {.Id=0, .TabletId=Ctx->TabletId, .Children={1, 2},  .Parents={}},
+                                             {.Id=1, .TabletId=Ctx->TabletId, .Children={}, .Parents={0}},
+                                             {.Id=2, .TabletId=Ctx->TabletId, .Children={}, .Parents={0}}
+                                             }});
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Configs=NHelpers::TConfigParams{
+                                  .Tablet=tabletConfig,
+                                  .Bootstrap=NHelpers::MakeBootstrapConfig(),
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitForProposePartitionConfigResult();
+
+    // the transaction is now in the WAIT_RS state on disk and in memory
+
+    PQTabletRestart(*Ctx);
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+}
+
+Y_UNIT_TEST_F(One_New_Partition_In_Another_Tablet, TPQTabletFixture)
+{
+    const ui64 txId = 67890;
+    const ui64 mockTabletId = 22222;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    auto tabletConfig = NHelpers::MakeConfig({.Version=2,
+                                             .Consumers={
+                                             {.Consumer="client-1", .Generation=0},
+                                             {.Consumer="client-3", .Generation=7}
+                                             },
+                                             .Partitions={
+                                             {.Id=0},
+                                             {.Id=1},
+                                             },
+                                             .AllPartitions={
+                                             {.Id=0, .TabletId=Ctx->TabletId, .Children={1, 2}, .Parents={}},
+                                             {.Id=1, .TabletId=Ctx->TabletId, .Children={}, .Parents={0}},
+                                             {.Id=2, .TabletId=mockTabletId,  .Children={}, .Parents={0}}
+                                             }});
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Configs=NHelpers::TConfigParams{
+                                  .Tablet=tabletConfig,
+                                  .Bootstrap=NHelpers::MakeBootstrapConfig(),
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitForProposePartitionConfigResult();
+
+    // the transaction is now in the WAIT_RS state on disk and in memory
+
+    PQTabletRestart(*Ctx);
+
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
+    WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=mockTabletId, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
+}
+
+NKikimrPQ::TPQTabletConfig MakeWideConfig(ui64 childTabletId, size_t childrenCount,
+                                          ui64 parentTabletId)
+{
+    DBGTRACE("MakeWideConfig");
+    DBGTRACE_LOG("childTabletId=" << childTabletId << ", parentTabletId=" << parentTabletId << ", childrenCount=" << childrenCount);
+    NKikimrPQ::TPQTabletConfig config;
+
+    config.SetVersion(2);
+
+    config.AddReadRules("client-1");
+    config.AddReadRuleGenerations(0);
+    config.AddReadRules("client-3");
+    config.AddReadRuleGenerations(7);
+
+    for (size_t i = 0; i < childrenCount; ++i) {
+        auto* p = config.AddAllPartitions();
+        p->SetPartitionId(i);
+        p->SetTabletId(childTabletId);
+        p->AddParentPartitionIds(childrenCount);
+    }
+    
+    {
+        auto* p = config.AddAllPartitions();
+        p->SetPartitionId(childrenCount);
+        p->SetTabletId(parentTabletId);
+        for (size_t i = 0; i < childrenCount; ++i) {
+            p->AddChildPartitionIds(i);
+        }
+    }
+
+    for (size_t i = 0; i < childrenCount; ++i) {
+        auto* p = config.AddPartitions();
+        p->SetPartitionId(i);
+    }
+
+    config.SetTopicName("rt3.dc1--account--topic");
+    config.SetTopicPath("/Root/PQ/rt3.dc1--account--topic");
+    config.SetFederationAccount("account");
+    config.SetLocalDC(true);
+    config.SetYdbDatabasePath("");
+
+    config.SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
+    config.MutablePartitionConfig()->SetLifetimeSeconds(TDuration::Hours(24).Seconds());
+    config.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(10 << 20);
+
+    DBGTRACE_LOG("config=" << config.ShortDebugString());
+
+    Migrate(config);
+
+    return config;
+}
+
+Y_UNIT_TEST_F(All_New_Partitions_In_Another_Tablet,, TPQTabletFixture)
+{
+    DBGTRACE("Foo");
+    const ui64 txId = 67890;
+    const ui64 mockTabletId = 22222;
+    const size_t partitionCount = 100;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=partitionCount}, {}, *Ctx);
+
+    auto tabletConfig = MakeWideConfig(Ctx->TabletId, partitionCount, mockTabletId);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Configs=NHelpers::TConfigParams{
+                                  .Tablet=tabletConfig,
+                                  .Bootstrap=NHelpers::MakeBootstrapConfig(),
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitForProposePartitionConfigResult(partitionCount);
+
+    // the transaction is now in the WAIT_RS state on disk and in memory
+
+    DBGTRACE_LOG("restarting");
+    PQTabletRestart(*Ctx);
+    DBGTRACE_LOG("restarted");
+
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    DBGTRACE_LOG("wait for TEvProposeTransactionResult");
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+    DBGTRACE_LOG("received TEvProposeTransactionResult");
 
     tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
     WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=mockTabletId, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});

@@ -321,6 +321,7 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
         switch (scope.scope_case()) {
         case Ydb::Maintenance::ActionScope::kNodeId:
         case Ydb::Maintenance::ActionScope::kHost:
+        case Ydb::Maintenance::ActionScope::kPdiskId:
             return true;
         default:
             Reply(Ydb::StatusIds::BAD_REQUEST, "Unknown scope");
@@ -378,17 +379,24 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
     }
 
     static void ConvertAction(const Ydb::Maintenance::LockAction& action, NKikimrCms::TAction& cmsAction) {
-        cmsAction.SetType(NKikimrCms::TAction::SHUTDOWN_HOST);
         cmsAction.SetDuration(TimeUtil::DurationToMicroseconds(action.duration()));
 
         const auto& scope = action.scope();
         switch (scope.scope_case()) {
         case Ydb::Maintenance::ActionScope::kNodeId:
+            cmsAction.SetType(NKikimrCms::TAction::SHUTDOWN_HOST);
             cmsAction.SetHost(ToString(scope.node_id()));
             break;
         case Ydb::Maintenance::ActionScope::kHost:
+            cmsAction.SetType(NKikimrCms::TAction::SHUTDOWN_HOST);
             cmsAction.SetHost(scope.host());
             break;
+        case Ydb::Maintenance::ActionScope::kPdiskId: {
+            cmsAction.SetType(NKikimrCms::TAction::DECOMISSION_DISK);
+            auto& pdiskId = scope.pdisk_id();
+            *cmsAction.add_devices() = Sprintf("pdisk-%" PRIu32 "-%" PRIu32, pdiskId.nodeid(), pdiskId.pdiskid());
+            break;
+        }
         default:
             Y_ABORT("unreachable");
         }

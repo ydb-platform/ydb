@@ -24,6 +24,7 @@ SRCS(
     cms_ut_common.cpp
     cms_ut_common.h
     downtime_ut.cpp
+    maintenance_api_cms_ut.cpp
     ut_helpers.cpp
 )
 

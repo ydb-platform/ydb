@@ -539,6 +539,8 @@ bool TCms::CheckAction(const TAction &action, const TActionOptions &opts, TError
             return CheckActionShutdownHost(action, opts, error, ctx);
         case TAction::REPLACE_DEVICES:
             return CheckActionReplaceDevices(action, opts.PermissionDuration, error);
+        case TAction::DECOMISSION_DISK:
+            return CheckActionDecomissionDisk(action, opts.PermissionDuration, error);
         case TAction::START_SERVICES:
         case TAction::STOP_SERVICES:
         case TAction::ADD_HOST:
@@ -924,6 +926,47 @@ bool TCms::CheckActionReplaceDevices(const TAction &action,
             const auto &vdisk = ClusterInfo->VDisk(device);
             if (TryToLockVDisk(opts, vdisk, duration, error))
                 ClusterInfo->AddVDiskTempLock(vdisk.VDiskId, action);
+            else {
+                res = false;
+                break;
+            }
+        } else {
+            error.Code = TStatus::NO_SUCH_DEVICE;
+            error.Reason = Sprintf("Unknown device %s (use cluster state command"
+                                   " to get list of known devices)", device.data());
+            res = false;
+        }
+    }
+    ClusterInfo->RollbackLocks(point);
+
+    if (res)
+        error.Deadline = TActivationContext::Now() + opts.PermissionDuration;
+
+    return res;
+}
+
+bool TCms::CheckActionDecomissionDisk(const TAction &action,
+                                      const TActionOptions &opts,
+                                      TErrorInfo &error) const
+{
+    auto point = ClusterInfo->PushRollbackPoint();
+    bool res = true;
+    TDuration duration = TDuration::MicroSeconds(action.GetDuration());
+    duration += opts.PermissionDuration;
+
+    for (const auto &device : action.GetDevices()) {
+        if (ClusterInfo->HasPDisk(device)) {
+            const auto &pdisk = ClusterInfo->PDisk(device);
+            if (TryToLockPDisk(action, opts, pdisk, error))
+                ClusterInfo->AddPDiskTempLock(pdisk.PDiskId, action);
+            else {
+                res = false;
+                break;
+            }
+        } else if (ClusterInfo->HasPDisk(action.GetHost(), device)) {
+            const auto &pdisk = ClusterInfo->PDisk(action.GetHost(), device);
+            if (TryToLockPDisk(action, opts, pdisk, error))
+                ClusterInfo->AddPDiskTempLock(pdisk.PDiskId, action);
             else {
                 res = false;
                 break;
@@ -2065,6 +2108,25 @@ bool TCms::CheckNotificationReplaceDevices(const TAction &action, TInstant time,
     return true;
 }
 
+bool TCms::CheckNotificationDecomissionDisk(const TAction &action, TInstant time,
+                                           TErrorInfo &error, const TActorContext &ctx) const
+{
+    for (const auto &device : action.GetDevices()) {
+        if (!ClusterInfo->HasPDisk(device)
+                && !ClusterInfo->HasPDisk(action.GetHost(), device)) {
+            error.Code = TStatus::NO_SUCH_DEVICE;
+            error.Reason = Sprintf("Unknown device %s (use cluster state command"
+                                   " to get list of known devices)", device.data());
+            return false;
+        }
+    }
+
+    if (!CheckNotificationDeadline(action, time, error, ctx))
+        return false;
+
+    return true;
+}
+
 bool TCms::IsValidNotificationAction(const TAction &action, TInstant time,
                                      TErrorInfo &error, const TActorContext &ctx) const
 {
@@ -2079,6 +2141,8 @@ bool TCms::IsValidNotificationAction(const TAction &action, TInstant time,
             return CheckNotificationShutdownHost(action, time, error, ctx);
         case TAction::REPLACE_DEVICES:
             return CheckNotificationReplaceDevices(action, time, error, ctx);
+        case TAction::DECOMISSION_DISK:
+            return CheckNotificationDecomissionDisk(action, time, error, ctx);
         case TAction::START_SERVICES:
         case TAction::STOP_SERVICES:
         case TAction::ADD_HOST:

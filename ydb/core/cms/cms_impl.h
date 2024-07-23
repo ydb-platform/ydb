@@ -322,6 +322,9 @@ private:
     bool CheckActionReplaceDevices(const NKikimrCms::TAction &action,
         const TActionOptions &options,
         TErrorInfo &error) const;
+    bool CheckActionDecomissionDisk(const NKikimrCms::TAction &action,
+        const TActionOptions &options,
+        TErrorInfo &error) const;
     bool CheckSysTabletsNode(const TActionOptions &opts,
         const TNodeInfo &node,
         TErrorInfo &error) const;
@@ -367,6 +370,8 @@ private:
     bool CheckNotificationShutdownHost(const NKikimrCms::TAction &action, TInstant time,
         TErrorInfo &error, const TActorContext &ctx) const;
     bool CheckNotificationReplaceDevices(const NKikimrCms::TAction &action, TInstant time,
+        TErrorInfo &error, const TActorContext &ctx) const;
+    bool CheckNotificationDecomissionDisk(const NKikimrCms::TAction &action, TInstant time,
         TErrorInfo &error, const TActorContext &ctx) const;
     bool IsValidNotificationAction(const NKikimrCms::TAction &action, TInstant time,
         TErrorInfo &error, const TActorContext &ctx) const;

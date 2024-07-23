@@ -2559,14 +2559,12 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
             if (entry.RequestType == TNavigate::TEntry::ERequestType::ByPath) {
                 auto pathExtractor = [this](TNavigate::TEntry& entry) {
+                    NSysView::ISystemViewResolver::TSystemViewPath sysViewPath;
                     if (AppData()->FeatureFlags.GetEnableSystemViews()
-                        && (entry.Operation == TNavigate::OpPath || entry.Operation == TNavigate::OpTable))
+                        && SystemViewResolver->IsSystemViewPath(entry.Path, sysViewPath))
                     {
-                        NSysView::ISystemViewResolver::TSystemViewPath sysViewPath;
-                        if (SystemViewResolver->IsSystemViewPath(entry.Path, sysViewPath)) {
-                            entry.TableId.SysViewInfo = sysViewPath.ViewName;
-                            return CanonizePath(sysViewPath.Parent);
-                        }
+                        entry.TableId.SysViewInfo = sysViewPath.ViewName;
+                        return CanonizePath(sysViewPath.Parent);
                     }
 
                     TString path = CanonizePath(entry.Path);

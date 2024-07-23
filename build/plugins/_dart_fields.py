@@ -219,15 +219,6 @@ def extract_java_system_properties(unit, args):
     return props, None
 
 
-def _create_erm_json(unit):
-    from lib.nots.erm_json_lite import ErmJsonLite
-
-    erm_packages_path = unit.get("ERM_PACKAGES_PATH")
-    path = unit.resolve(unit.resolve_arc_path(erm_packages_path))
-
-    return ErmJsonLite.load(path)
-
-
 def _resolve_module_files(unit, mod_dir, file_paths):
     mod_dir_with_sep_len = len(mod_dir) + 1
     resolved_files = []
@@ -239,26 +230,6 @@ def _resolve_module_files(unit, mod_dir, file_paths):
         resolved_files.append(resolved)
 
     return resolved_files
-
-
-def _create_pm(unit):
-    from lib.nots.package_manager import manager
-
-    sources_path = unit.path()
-    module_path = unit.get("MODDIR")
-    if unit.get("TS_TEST_FOR"):
-        sources_path = unit.get("TS_TEST_FOR_DIR")
-        module_path = unit.get("TS_TEST_FOR_PATH")
-
-    return manager(
-        sources_path=unit.resolve(sources_path),
-        build_root="$B",
-        build_path=unit.path().replace("$S", "$B", 1),
-        contribs_path=unit.get("NPM_CONTRIBS_PATH"),
-        nodejs_bin_path=None,
-        script_path=None,
-        module_path=module_path,
-    )
 
 
 def _resolve_config_path(unit, test_runner, rel_to):
@@ -402,7 +373,7 @@ class CustomDependencies:
 
     @classmethod
     def value5(cls, unit, flat_args, spec_args):
-        deps = _create_pm(unit).get_peers_from_package_json()
+        deps = flat_args[0]
         recipes_lines = format_recipes(unit.get("TEST_RECIPES_VALUE")).strip().splitlines()
         if recipes_lines:
             deps = deps or []
@@ -1014,6 +985,12 @@ class TestFiles:
         test_files = [_common.resolve_common_const(f) for f in typecheck_files]
         return {cls.KEY: serialize_list(test_files)}
 
+    @classmethod
+    def value8(cls, unit, flat_args, spec_args):
+        test_files = get_values_list(unit, "_TS_LINT_SRCS_VALUE")
+        test_files = _resolve_module_files(unit, unit.get("MODDIR"), test_files)
+        return {cls.KEY: serialize_list(test_files)}
+
 
 class TestEnv:
     KEY = 'TEST-ENV'
@@ -1147,7 +1124,7 @@ class TsResources:
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        erm_json = _create_erm_json(unit)
+        erm_json = spec_args['erm_json']
         ret = {}
         for tool in erm_json.list_npm_packages():
             tool_resource_label = cls.KEY.format(tool.upper())

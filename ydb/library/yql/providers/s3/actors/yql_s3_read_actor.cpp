@@ -937,10 +937,13 @@ public:
     }
 
     void Handle(TEvS3Provider::TEvDecompressDataResult::TPtr& ev) {
+        CpuTime += ev->Get()->CpuTime;
         DeferredDecompressedDataParts.push(std::move(ev->Release()));
+        
     }
 
-    void Handle(TEvS3Provider::TEvDecompressDataFinish::TPtr&) {
+    void Handle(TEvS3Provider::TEvDecompressDataFinish::TPtr& ev) {
+        CpuTime += ev->Get()->CpuTime;
         DecompressedInputFinished = true;
     }
 

@@ -166,7 +166,7 @@ def main():
             outj.flush()
             if args.perf:
                 exitcode, rusage, elapsed, iostat = run(
-                    ['{}/ya'.format(args.arc_path), 'tool', 'perf', 'record', '-F250', '-g', '--call-graph', 'dwarf', '--'] +
+                    ['{}/ya'.format(args.arc_path), 'tool', 'perf', 'record', '-F250', '-g', '--call-graph', 'dwarf', '-o', '{}/perf.data'.format(outdir), '--'] +
                     argv + [
                         '--result-file', '/dev/null',
                         '--bindings-file', bindings,
@@ -179,10 +179,10 @@ def main():
                     name + '-stderr-perf.txt',
                     timeout=args.timeout)
                 os.system('''
-                {0}/ya tool perf script --header |
+                {0}/ya tool perf script -i {2}/perf.data --header |
                 {0}/contrib/tools/flame-graph/stackcollapse-perf.pl |
-                {0}/contrib/tools/flame-graph/flamegraph.pl > {1}
-                '''.format(args.arc_path, name + '.svg'))
+                {0}/contrib/tools/flame-graph/flamegraph.pl > {1}.svg
+                '''.format(args.arc_path, name, outdir))
 
 
 if __name__ == "__main__":

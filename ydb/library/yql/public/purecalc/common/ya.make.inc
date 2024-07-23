@@ -19,6 +19,7 @@ SRCS(
     transformations/extract_used_columns.cpp
     transformations/output_columns_filter.cpp
     transformations/replace_table_reads.cpp
+    transformations/root_to_blocks.cpp
     transformations/type_annotation.cpp
     transformations/utils.cpp
     type_from_schema.cpp

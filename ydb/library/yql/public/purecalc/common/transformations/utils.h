@@ -18,5 +18,20 @@ namespace NYql {
             const TStructExprType* structType,
             TExprContext& ctx
         );
+
+        /**
+         * A transformer which wraps the given root node with the pipeline
+         * converting the output type to the block one.
+         *
+         * @param pos the position of the given node to be rewritten.
+         * @param structType the item type of the container provided by the node.
+         * @param ctx the context to make ExprNode rewrites.
+         * @return the resulting ExprNode.
+         */
+        TExprNode::TPtr NodeToBlocks(
+            const TPositionHandle& pos,
+            const TStructExprType* structType,
+            TExprContext& ctx
+        );
     }
 }

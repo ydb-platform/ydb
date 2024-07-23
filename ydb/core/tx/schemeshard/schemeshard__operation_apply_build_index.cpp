@@ -92,9 +92,11 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         for (auto& indexChildItems : index.Base()->GetChildren()) {
             const auto& indexImplTableName = indexChildItems.first;
             const auto partId = NextPartId(nextId, result);
-            if (NTableIndex::IsTmpImplTable(indexImplTableName)) {
-                result.push_back(DropIndexImplTable(context, index, nextId, partId, indexImplTableName, indexChildItems.second));
-            } else {
+            // TODO(mbkkt) it doesn't work for some reason
+            // if (NTableIndex::IsTmpImplTable(indexImplTableName)) {
+            //     result.push_back(DropIndexImplTable(context, index, nextId, partId, indexImplTableName, indexChildItems.second));
+            // } else 
+            {
                 result.push_back(FinalizeIndexImplTable(context, index, partId, indexImplTableName, indexChildItems.second));
             }
         }

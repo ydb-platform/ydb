@@ -1849,7 +1849,7 @@ public:
     {
         TString id = src->GetId();
         Os << "<tr>";
-
+        Os << "<td>";
         try {
             Os << src->GetStartTime().ToStringUpToSeconds();
         } catch (...) {

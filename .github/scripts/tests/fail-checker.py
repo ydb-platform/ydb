@@ -39,7 +39,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-o",
-        "--output_file",
+        "--output_path",
         metavar="OUTPUT",
         help=(
             "Output file with count of failed tests"
@@ -47,7 +47,7 @@ def main():
     )
     parser.add_argument("path", nargs="+", help="jsuite xml reports directories")
     args = parser.parse_args()
-    check_for_fail(args.path, args.output_file)
+    check_for_fail(args.path, args.output_path)
 
 
 if __name__ == "__main__":

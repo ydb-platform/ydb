@@ -12,10 +12,15 @@ Released on June 24, 2024. To update to version **2.10.0**, select the [Download
 * Added replication description support in the `ydb scheme describe` and `ydb scheme ls` commands.
 * Added big datetime types support: `Date32`, `Datetime64`, `Timestamp64`, `Interval64`.
 * `ydb workload` commands rework:
+   * Added the `--clear` option to the `init` subcommand, allowing tables from previous runs to be removed before workload initialization.
+   * Added the `ydb workload * import` command to prepopulate tables with initial content before executing benchmarks.
+
+**Minor backward incompatible changes:**
+
+* `ydb workload` commands rework:
    * The `--path` option was moved to a specific workload level. For example: `ydb workload tpch --path some/tables/path init ...`.
    * The `--store=s3` option was changed to `--store=external-s3` in the `init` subcommand.
-   * Added the `--clear` option to the `init` subcommand, allowing tables from previous runs to be removed before workload initialization.
-   * Added the `ydb workload * import` command to prepopulate tables with initial content before executing benchmarks. 
+
 
 **Bug fixes:**
 

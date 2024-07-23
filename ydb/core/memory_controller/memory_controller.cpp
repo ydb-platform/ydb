@@ -240,6 +240,8 @@ private:
     void Handle(TEvConsumerRegister::TPtr &ev, const TActorContext& ctx) {
         const auto *msg = ev->Get();
         auto consumer = Consumers.emplace(msg->Kind, MakeIntrusive<TMemoryConsumer>(msg->Kind, ev->Sender));
+        auto config = GetConsumerConfig(msg->Kind);
+        ConsumersConfigLimit += msg->ConfigLimit.value_or(0) * 100 / Max<ui64>(1, config.MaxPercent.value_or(100));
         Y_ABORT_UNLESS(consumer.second, "Consumer kinds should be unique");
         LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Consumer " << msg->Kind << " " << ev->Sender << " registered");
         Send(ev->Sender, new TEvConsumerRegistered(consumer.first->second));
@@ -414,7 +416,8 @@ private:
             return info.CGroupLimit.value();
         }
         // TODO: get total RAM
-        return Config.GetHardLimitBytes();
+        return Max(ConsumersConfigLimit, // temporary hack for old cluster configs
+            Config.GetHardLimitBytes());
     }
 
     ui64 GetSoftLimitBytes(ui64 hardLimitBytes) const {
@@ -444,6 +447,7 @@ private:
 private:
     const TDuration Interval;
     TMap<EMemoryConsumerKind, TIntrusivePtr<TMemoryConsumer>> Consumers;
+    ui64 ConsumersConfigLimit = 0;
     std::shared_ptr<TMemTableMemoryConsumersCollection> MemTables;
     const TIntrusiveConstPtr<IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
     NKikimrConfig::TMemoryControllerConfig Config;

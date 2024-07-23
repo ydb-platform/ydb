@@ -326,7 +326,6 @@ namespace NYql {
         NConnector::NApi::EDataSourceKind::GREENPLUM,
         NConnector::NApi::EDataSourceKind::MS_SQL_SERVER,
         NConnector::NApi::EDataSourceKind::MYSQL,
-        NConnector::NApi::EDataSourceKind::ORACLE,
         NConnector::NApi::EDataSourceKind::POSTGRESQL,
     };
 
@@ -401,17 +400,6 @@ namespace NYql {
                     clusterConfig,
                     context,
                     "For YDB clusters you must set either database name or database id, but you have set none of them");
-            }
-        }
-
-        // Oracle:
-        // * always set service_name for oracle;
-        if (clusterConfig.GetKind() == NConnector::NApi::ORACLE) {
-            if (!clusterConfig.GetDataSourceOptions().contains("service_name")) {
-                return ValidationError(
-                    clusterConfig,
-                    context,
-                    "For Oracle databases you must set service, but you have not set it");
             }
         }
 

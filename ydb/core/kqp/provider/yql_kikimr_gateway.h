@@ -1048,8 +1048,6 @@ public:
     using TCreateDirFunc = std::function<void(const TString&, const TString&, NThreading::TPromise<TGenericResult>)>;
 
     static NThreading::TFuture<TGenericResult> CreatePath(const TString& path, TCreateDirFunc createDir);
-
-    static void BuildIndexMetadata(TTableMetadataResult& loadTableMetadataResult);
 };
 
 EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus);

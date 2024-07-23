@@ -32,6 +32,7 @@ inline TMaybe<TReplication::ETargetKind> TryTargetKindFromEntryType(NYdb::NSchem
     case NYdb::NScheme::ESchemeEntryType::ExternalTable:
     case NYdb::NScheme::ESchemeEntryType::ExternalDataSource:
     case NYdb::NScheme::ESchemeEntryType::View:
+    case NYdb::NScheme::ESchemeEntryType::ResourcePool:
         return Nothing();
     }
 }

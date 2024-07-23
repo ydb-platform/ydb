@@ -4041,7 +4041,9 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
     switch (tx.State) {
     case NKikimrPQ::TTransaction::UNKNOWN:
-        Y_ABORT_UNLESS(tx.TxId != Max<ui64>());
+        Y_ABORT_UNLESS(tx.TxId != Max<ui64>(),
+                       "PQ %" PRIu64 ", TxId %" PRIu64,
+                       TabletID(), tx.TxId);
 
         WriteTx(tx, NKikimrPQ::TTransaction::PREPARED);
         ScheduleProposeTransactionResult(tx);
@@ -4053,7 +4055,9 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         break;
 
     case NKikimrPQ::TTransaction::PREPARING:
-        Y_ABORT_UNLESS(tx.WriteInProgress);
+        Y_ABORT_UNLESS(tx.WriteInProgress,
+                       "PQ %" PRIu64 ", TxId %" PRIu64,
+                       TabletID(), tx.TxId);
 
         tx.WriteInProgress = false;
 
@@ -4068,7 +4072,9 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         break;
 
     case NKikimrPQ::TTransaction::PREPARED:
-        Y_ABORT_UNLESS(tx.Step != Max<ui64>());
+        Y_ABORT_UNLESS(tx.Step != Max<ui64>(),
+                       "PQ %" PRIu64 ", TxId %" PRIu64,
+                       TabletID(), tx.TxId);
 
         WriteTx(tx, NKikimrPQ::TTransaction::PLANNED);
 
@@ -4079,7 +4085,9 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         break;
 
     case NKikimrPQ::TTransaction::PLANNING:
-        Y_ABORT_UNLESS(tx.WriteInProgress);
+        Y_ABORT_UNLESS(tx.WriteInProgress,
+                       "PQ %" PRIu64 ", TxId %" PRIu64,
+                       TabletID(), tx.TxId);
 
         tx.WriteInProgress = false;
 
@@ -4103,7 +4111,10 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         break;
 
     case NKikimrPQ::TTransaction::CALCULATING:
-        Y_ABORT_UNLESS(tx.PartitionRepliesCount <= tx.PartitionRepliesExpected);
+        Y_ABORT_UNLESS(tx.PartitionRepliesCount <= tx.PartitionRepliesExpected,
+                       "PQ %" PRIu64 ", TxId %" PRIu64 ", PartitionRepliesCount %" PRISZT ", PartitionRepliesExpected %" PRISZT,
+                       TabletID(), tx.TxId,
+                       tx.PartitionRepliesCount, tx.PartitionRepliesExpected);
 
         PQ_LOG_D("Received " << tx.PartitionRepliesCount <<
                  ", Expected " << tx.PartitionRepliesExpected);
@@ -4128,7 +4139,9 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         [[fallthrough]];
 
     case NKikimrPQ::TTransaction::CALCULATED:
-        Y_ABORT_UNLESS(!tx.WriteInProgress);
+        Y_ABORT_UNLESS(!tx.WriteInProgress,
+                       "PQ %" PRIu64 ", TxId %" PRIu64,
+                       TabletID(), tx.TxId);
 
         tx.State = NKikimrPQ::TTransaction::WAIT_RS;
         PQ_LOG_D("TxId " << tx.TxId <<
@@ -4142,7 +4155,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         // from TEvProposeTransaction
         //
         Y_ABORT_UNLESS(tx.ReadSetAcks.size() <= tx.PredicatesReceived.size(),
-                       "tx.ReadSetAcks.size=%" PRISZT ", tx.PredicatesReceived.size=%" PRISZT,
+                       "PQ %" PRIu64 ", TxId %" PRIu64 ", ReadSetAcks.size %" PRISZT ", PredicatesReceived.size %" PRISZT,
+                       TabletID(), tx.TxId,
                        tx.ReadSetAcks.size(), tx.PredicatesReceived.size());
 
         SendEvReadSetToReceivers(ctx, tx);
@@ -4166,14 +4180,21 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         [[fallthrough]];
 
     case NKikimrPQ::TTransaction::EXECUTING:
-        Y_ABORT_UNLESS(tx.PartitionRepliesCount <= tx.PartitionRepliesExpected);
+        Y_ABORT_UNLESS(tx.PartitionRepliesCount <= tx.PartitionRepliesExpected,
+                       "PQ %" PRIu64 ", TxId %" PRIu64 ", PartitionRepliesCount %" PRISZT ", PartitionRepliesExpected %" PRISZT,
+                       TabletID(), tx.TxId,
+                       tx.PartitionRepliesCount, tx.PartitionRepliesExpected);
 
         PQ_LOG_D("Received " << tx.PartitionRepliesCount <<
                  ", Expected " << tx.PartitionRepliesExpected);
 
         if (tx.PartitionRepliesCount == tx.PartitionRepliesExpected) {
-            Y_ABORT_UNLESS(!TxQueue.empty());
-            Y_ABORT_UNLESS(TxQueue.front().second == tx.TxId);
+            Y_ABORT_UNLESS(!TxQueue.empty(),
+                           "PQ %" PRIu64 ", TxId %" PRIu64,
+                           TabletID(), tx.TxId);
+            Y_ABORT_UNLESS(TxQueue.front().second == tx.TxId,
+                           "PQ %" PRIu64 ", TxId %" PRIu64,
+                           TabletID(), tx.TxId);
 
             SendEvProposeTransactionResult(ctx, tx);
 

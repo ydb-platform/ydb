@@ -38,7 +38,7 @@ def main():
     print('<table border="1">')
     data = []
     filelists = [sorted(map(str, Path(dirname).glob('**/summary.tsv'))) for dirname in rdirs]
-    print('<tr><th>' + ''.join('<th colspan="{}">'.format(4*len(filelist)) + html.escape(dirname) for dirname, filelist in zip(rdirs, filelists)))
+    print('<tr><th>' + ''.join('<th colspan="{}">'.format(4*len(filelist)) + html.escape(dirname) for dirname, filelist in zip(rdirs, filelists) if len(filelist)))
     print('<tr><th>')
     for dirname, filelist in zip(rdirs, filelists):
         for name in filelist:

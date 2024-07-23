@@ -42,7 +42,9 @@ class TReplication::TImpl: public TLagProvider {
     ITarget* CreateTarget(TReplication* self, ui64 id, ETargetKind kind, Args&&... args) const {
         switch (kind) {
         case ETargetKind::Table:
-            return new TTableTarget(self, id, std::forward<Args>(args)...);
+            return new TTargetTable(self, id, std::forward<Args>(args)...);
+        case ETargetKind::IndexTable:
+            return new TTargetIndexTable(self, id, std::forward<Args>(args)...);
         }
     }
 

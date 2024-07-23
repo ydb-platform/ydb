@@ -402,9 +402,11 @@ Y_UNIT_TEST_SUITE(StatisticsService) {
         std::unordered_map<ui32, int> pong;
         std::vector<TTestActorRuntimeBase::TEventObserverHolder> observers;
         observers.emplace_back(runtime.AddObserver<TEvStatistics::TEvAggregateKeepAlive>([&](TEvStatistics::TEvAggregateKeepAlive::TPtr& ev) {
+            Cerr << "Observer TEvAggregateKeepAlive: NodeId" << ev->Sender.NodeId() << Endl;
             ++ping[ev->Sender.NodeId()];
         }));
         observers.emplace_back(runtime.AddObserver<TEvStatistics::TEvAggregateKeepAliveAck>([&](TEvStatistics::TEvAggregateKeepAliveAck::TPtr& ev) {
+            Cerr << "Observer TEvAggregateKeepAliveAck: NodeId" << ev->Sender.NodeId() << Endl;
             ++pong[ev->Sender.NodeId()];
         }));
 
@@ -418,8 +420,8 @@ Y_UNIT_TEST_SUITE(StatisticsService) {
 
         runtime.DispatchEvents(TDispatchOptions{
             .CustomFinalCondition = [&]() {
-                    return ping[sender.NodeId()] >= 10 && ping[nodeIdToIndexMap[0]] >= 10
-                        && pong[nodeIdToIndexMap[0]] >= 10 && pong[nodeIdToIndexMap[1]] >= 10;
+                    return ping[sender.NodeId()] >= 10 && ping[indexToNodeIdMap[0]] >= 10
+                        && pong[indexToNodeIdMap[0]] >= 10 && pong[indexToNodeIdMap[1]] >= 10;
             }
         });
 

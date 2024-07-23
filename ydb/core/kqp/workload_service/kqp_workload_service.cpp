@@ -491,6 +491,10 @@ private:
             token->AddGroupSID(allAuthenticatedUsersSID);
         }
 
+        if (userToken && !userToken->GetSerializedToken().empty()) {
+            token->SaveSerializationInfo();
+        }
+
         return token;
     }
 

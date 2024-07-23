@@ -25,6 +25,7 @@ namespace NKikimr::NKqp::NWorkload {
 #define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << stream)
 
 
+
 template <typename TDerived>
 class TSchemeActorBase : public NActors::TActorBootstrapped<TDerived> {
     using TRetryPolicy = IRetryPolicy<bool>;
@@ -62,19 +63,23 @@ protected:
     virtual TString LogPrefix() const = 0;
 
 protected:
-    bool ScheduleRetry(const TString& message, bool longDelay = false) {
+    bool ScheduleRetry(NYql::TIssues issues, bool longDelay = false) {
         if (!RetryState) {
             RetryState = CreateRetryState();
         }
 
         if (const auto delay = RetryState->GetNextRetryDelay(longDelay)) {
-            Issues.AddIssue(message);
+            Issues.AddIssues(issues);
             this->Schedule(*delay, new TEvents::TEvWakeup());
-            LOG_W("Scheduled retry for error: " << message);
+            LOG_W("Scheduled retry for error: " << issues.ToOneLineString());
             return true;
         }
 
         return false;
+    }
+
+    bool ScheduleRetry(const TString& message, bool longDelay = false) {
+        return ScheduleRetry({NYql::TIssue(message)}, longDelay);
     }
 
 private:

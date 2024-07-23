@@ -32,8 +32,8 @@ public:
     size_t GetByteSize() const;
 
 private:
-    constexpr static int HashTableExpansionParameter = 2;
-    constexpr static int ValueLog = 48;
+    static constexpr int HashTableExpansionParameter = 2;
+    static constexpr int ValueLog = 48;
 
     std::vector<std::atomic<TEntry>> HashTable_;
 

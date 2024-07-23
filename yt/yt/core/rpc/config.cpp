@@ -10,16 +10,20 @@ using namespace NConcurrency;
 
 void THistogramExponentialBounds::Register(TRegistrar registrar)
 {
-    registrar.Parameter("min", &TThis::Min).Default(TDuration::Zero());
-    registrar.Parameter("max", &TThis::Max).Default(TDuration::Seconds(2));
+    registrar.Parameter("min", &TThis::Min)
+        .Default(TDuration::Zero());
+    registrar.Parameter("max", &TThis::Max)
+        .Default(TDuration::Seconds(2));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void THistogramConfig::Register(TRegistrar registrar)
+void TTimeHistogramConfig::Register(TRegistrar registrar)
 {
-    registrar.Parameter("exponential_bounds", &TThis::ExponentialBounds).Optional();
-    registrar.Parameter("custom_bounds", &TThis::CustomBounds).Optional();
+    registrar.Parameter("exponential_bounds", &TThis::ExponentialBounds)
+        .Optional();
+    registrar.Parameter("custom_bounds", &TThis::CustomBounds)
+        .Optional();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -28,9 +32,11 @@ void TServiceCommonConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("enable_per_user_profiling", &TThis::EnablePerUserProfiling)
         .Default(false);
-    registrar.Parameter("histogram_timer_profiling", &TThis::HistogramTimerProfiling)
+    registrar.Parameter("timing_histogram", &TThis::TimeHistogram)
+        .Alias("histogram_timer_profiling")
         .Default();
-    registrar.Parameter("code_counting", &TThis::EnableErrorCodeCounting)
+    registrar.Parameter("enable_error_code_counter", &TThis::EnableErrorCodeCounter)
+        .Alias("code_counting")
         .Default(false);
     registrar.Parameter("tracing_mode", &TThis::TracingMode)
         .Default(ERequestTracingMode::Enable);
@@ -42,10 +48,12 @@ void TServiceCommonDynamicConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("enable_per_user_profiling", &TThis::EnablePerUserProfiling)
         .Default();
-    registrar.Parameter("histogram_timer_profiling", &TThis::HistogramTimerProfiling)
+    registrar.Parameter("time_histogram", &TThis::TimeHistogram)
+        .Alias("histogram_timer_profiling")
         .Default();
-    registrar.Parameter("code_counting", &TThis::EnableErrorCodeCounting)
-        .Default();
+    registrar.Parameter("enable_error_code_counter", &TThis::EnableErrorCodeCounter)
+        .Alias("code_counting")
+        .Default(false);
     registrar.Parameter("tracing_mode", &TThis::TracingMode)
         .Default();
 }
@@ -72,9 +80,10 @@ void TServiceConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("enable_per_user_profiling", &TThis::EnablePerUserProfiling)
         .Optional();
-    registrar.Parameter("code_counting", &TThis::EnableErrorCodeCounting)
+    registrar.Parameter("enable_error_code_counter", &TThis::EnableErrorCodeCounter)
+        .Alias("code_counting")
         .Optional();
-    registrar.Parameter("histogram_timer_profiling", &TThis::HistogramTimerProfiling)
+    registrar.Parameter("histogram_timer_profiling", &TThis::TimeHistogram)
         .Default();
     registrar.Parameter("tracing_mode", &TThis::TracingMode)
         .Optional();

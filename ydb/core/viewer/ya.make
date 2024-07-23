@@ -43,6 +43,7 @@ SRCS(
     json_nodelist.h
     json_nodes.h
     json_pdiskinfo.h
+    json_pipe_req.cpp
     json_query.h
     json_query_old.h
     json_render.h

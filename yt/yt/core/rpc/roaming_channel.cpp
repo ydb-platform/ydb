@@ -183,6 +183,11 @@ public:
         return 0;
     }
 
+    IMemoryUsageTrackerPtr GetChannelMemoryTracker() override
+    {
+        return GetNullMemoryUsageTracker();
+    }
+
 private:
     const IRoamingChannelProviderPtr Provider_;
 };

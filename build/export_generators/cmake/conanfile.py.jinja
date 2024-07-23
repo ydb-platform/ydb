@@ -1,0 +1,71 @@
+from conan import ConanFile
+
+{%- if use_conan2 %}
+
+from conan.tools.files import copy
+from conan.tools.cmake import CMakeToolchain, CMakeDeps, cmake_layout
+
+{%- endif %}
+
+
+class App(ConanFile):
+
+    settings = "os", "compiler", "build_type", "arch"
+
+    options = {
+{%- for conan_option in conan.options -%}
+{%-     set option_and_value = rsplit(conan_option, "=", 2) %}"{{ option_and_value[0] }}": "{{ option_and_value[1] }}"
+{%-     if not loop.last -%}, {% endif -%}
+{%- endfor -%}
+}
+
+    requires =
+{%- for conan_require in conan.requires %} "{{ conan_require }}"
+{%-     if not loop.last -%},{%- endif -%}
+{%- endfor %}
+
+    tool_requires =
+{%- for conan_tool_require in conan.tool_requires %} "{{ conan_tool_require }}"
+{%-     if not loop.last -%},{%- endif -%}
+{%- endfor %}
+
+{%- if use_conan2 %}
+
+    def generate(self):
+        CMakeDeps(self).generate()
+        CMakeToolchain(self).generate()
+{%-     for conan_generator in conan.generators %}
+            {{ conan_generator }}(self).generate()
+{%-     endfor %}
+
+        for dep in self.dependencies.values():
+            if dep.cpp_info.bindirs:
+{%-         for conan_import in conan.imports -%}
+{%-             set search_and_dstdir = rsplit(conan_import|trim, "->", 2) -%}
+{%-             set search = search_and_dstdir[0]|trim -%}
+{%-             set dstdir = search_and_dstdir[1]|trim -%}
+{%-             set srcdir_and_mask = rsplit(search, ",", 2) -%}
+{%-             set srcdir = srcdir_and_mask[0]|trim -%}
+{%-             set mask = srcdir_and_mask[1]|trim %}
+                copy(self, pattern="{{ mask }}", src=dep.cpp_info.bindirs[0], dst=self.build_folder + "../../../../{{ dstdir }}")
+{%-         endfor %}
+
+    def layout(self):
+        cmake_layout(self)
+
+{%- else -%}
+
+    generators = "cmake_find_package", "cmake_paths"
+
+    def imports(self):
+{%-     for conan_import in conan.imports -%}
+{%-         set search_and_dstdir = rsplit(conan_import|trim, "->", 2) -%}
+{%-         set search = search_and_dstdir[0]|trim -%}
+{%-         set dstdir = search_and_dstdir[1]|trim -%}
+{%-         set srcdir_and_mask = rsplit(search, ",", 2) -%}
+{%-         set srcdir = srcdir_and_mask[0]|trim -%}
+{%-         set mask = srcdir_and_mask[1]|trim %}
+        self.copy(pattern="{{ mask }}", src="{{ srcdir }}", dst="{{ dstdir }}")
+{%-     endfor %}
+
+{%- endif %}

@@ -137,7 +137,7 @@ DEFINE_ENUM(EFormulaTokenType,
 );
 
 static int Precedence(EFormulaTokenType type) {
-    constexpr static int precedence[] =
+    static constexpr int precedence[] =
     {
         FOR_EACH_TOKEN(EXTRACT_PRECEDENCE)
     };

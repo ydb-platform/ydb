@@ -23,8 +23,9 @@ namespace NViewer {
 
 using namespace NActors;
 
-class TJsonCompute : public TViewerPipeClient<TJsonCompute> {
-    using TBase = TViewerPipeClient<TJsonCompute>;
+class TJsonCompute : public TViewerPipeClient {
+    using TThis = TJsonCompute;
+    using TBase = TViewerPipeClient;
     IViewer* Viewer;
     THashMap<TString, NKikimrViewer::TTenant> TenantByPath;
     THashMap<TPathId, NKikimrViewer::TTenant> TenantBySubDomainKey;
@@ -80,10 +81,6 @@ class TJsonCompute : public TViewerPipeClient<TJsonCompute> {
     bool IsNodesListSorted = false;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TJsonCompute(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : Viewer(viewer)
         , Event(ev)
@@ -109,7 +106,7 @@ public:
         return false;
     }
 
-    void Bootstrap(const TActorContext& ) {
+    void Bootstrap() override {
         const auto& params(Event->Get()->Request.GetParams());
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
@@ -555,7 +552,7 @@ public:
         }
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         NKikimrWhiteboard::TEvTabletStateResponse tabletInfo;
         MergeWhiteboardResponses(tabletInfo, NodeTabletInfo);
         for (const auto& info : tabletInfo.GetTabletStateInfo()) {

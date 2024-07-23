@@ -1,12 +1,7 @@
 #include "indexation.h"
-#include <ydb/core/tx/columnshard/blob_cache.h>
-#include <ydb/core/protos/counters_columnshard.pb.h>
+
+#include "compaction/merger.h"
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
-#include <ydb/core/formats/arrow/serializer/native.h>
-#include <ydb/core/formats/arrow/reader/position.h>
-#include <ydb/core/formats/arrow/reader/merger.h>
-#include <ydb/core/formats/arrow/reader/result_builder.h>
 
 namespace NKikimr::NOlap {
 
@@ -81,6 +76,14 @@ public:
     
     }
 
+    std::vector<std::shared_ptr<NArrow::TGeneralContainer>> GetGeneralContainers() const {
+        std::vector<std::shared_ptr<NArrow::TGeneralContainer>> result;
+        for (auto&& i : Batches) {
+            result.emplace_back(i.GetBatch());
+        }
+        return result;
+    }
+
     bool HasDeletion() {
         return HasDeletionFlag;
     }
@@ -99,26 +102,6 @@ public:
         } else if (ShardingInfo && info->GetSnapshotVersion() < ShardingInfo->GetSnapshotVersion()) {
             ShardingInfo = info;
         }
-    }
-
-    std::shared_ptr<arrow::RecordBatch> Merge(
-        const std::shared_ptr<arrow::Schema>& sortSchema, const std::shared_ptr<arrow::Schema>& dataSchema) const {
-        NArrow::NMerger::TMergePartialStream stream(sortSchema, dataSchema, false, IIndexInfo::GetSnapshotColumnNames());
-        THashMap<std::string, ui64> fieldSizes;
-        ui64 rowsCount = 0;
-        for (auto&& batch : Batches) {
-            auto& forMerge = batch.GetBatch();
-            stream.AddSource(forMerge, nullptr);
-            for (ui32 cIdx = 0; cIdx < (ui32)forMerge->GetColumnsCount(); ++cIdx) {
-                fieldSizes[forMerge->GetSchema()->GetFieldVerified(cIdx)->name()] += forMerge->GetColumnVerified(cIdx)->GetRawSize().value_or(0);
-            }
-            rowsCount += forMerge->num_rows();
-        }
-
-        NArrow::NMerger::TRecordBatchBuilder builder(dataSchema->fields(), rowsCount, fieldSizes);
-        stream.SetPossibleSameVersion(true);
-        stream.DrainAll(builder);
-        return builder.Finalize();
     }
 };
 
@@ -204,37 +187,24 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
     }
 
     Y_ABORT_UNLESS(Blobs.IsEmpty());
-    const std::vector<std::string> comparableColumns = resultSchema->GetIndexInfo().GetReplaceKey()->field_names();
-    auto filteredSchema = resultSchema->GetIndexInfo().GetColumnsSchema(usageColumnIds);
+    auto filteredSnapshot = std::make_shared<TFilteredSnapshotSchema>(resultSchema, usageColumnIds);
+    auto stats = std::make_shared<TSerializationStats>();
+    std::vector<std::shared_ptr<NArrow::TColumnFilter>> filters;
     for (auto& [pathId, pathInfo] : pathBatches.GetData()) {
-        auto shardingFilter = context.SchemaVersions.GetShardingInfoActual(pathId);
-        auto mergedBatch = pathInfo.Merge(resultSchema->GetIndexInfo().GetReplaceKey(), filteredSchema);
-        Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(mergedBatch, resultSchema->GetIndexInfo().GetReplaceKey()));
+        std::optional<ui64> shardingVersion;
+        if (pathInfo.GetShardingInfo()) {
+            shardingVersion = pathInfo.GetShardingInfo()->GetSnapshotVersion();
+        }
+        auto batches = pathInfo.GetGeneralContainers();
+        filters.resize(batches.size());
 
         auto itGranule = PathToGranule.find(pathId);
         AFL_VERIFY(itGranule != PathToGranule.end());
-        std::vector<std::shared_ptr<arrow::RecordBatch>> result =
-            NArrow::NMerger::TRWSortableBatchPosition::SplitByBordersInSequentialContainer(mergedBatch, comparableColumns, itGranule->second);
-        for (auto&& b : result) {
-            if (!b) {
-                continue;
-            }
-            std::optional<NArrow::NSerialization::TSerializerContainer> externalSaver;
-            if (b->num_rows() < 100) {
-                externalSaver = NArrow::NSerialization::TSerializerContainer(
-                    std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::UNCOMPRESSED));
-            } else {
-                externalSaver = NArrow::NSerialization::TSerializerContainer(
-                    std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::LZ4_FRAME));
-            }
-            auto portions = MakeAppendedPortions(b, pathId, maxSnapshot, nullptr, context, externalSaver);
-            Y_ABORT_UNLESS(portions.size());
-            for (auto& portion : portions) {
-                if (pathInfo.GetShardingInfo()) {
-                    portion.GetPortionConstructor().SetShardingVersion(pathInfo.GetShardingInfo()->GetSnapshotVersion());
-                }
-                AppendedPortions.emplace_back(TWritePortionInfoWithBlobsResult(std::move(portion)));
-            }
+        NCompaction::TMerger merger(context, SaverContext, std::move(batches), std::move(filters));
+        merger.SetOptimizationWritingPackMode(true);
+        auto localAppended = merger.Execute(stats, itGranule->second, filteredSnapshot, pathId, shardingVersion);
+        for (auto&& i : localAppended) {
+            AppendedPortions.emplace_back(std::move(i));
         }
     }
 

@@ -121,6 +121,11 @@ public:
         YT_UNIMPLEMENTED();
     }
 
+    IMemoryUsageTrackerPtr GetChannelMemoryTracker() override
+    {
+        return GetNullMemoryUsageTracker();
+    }
+
 private:
     IClientPtr Client_;
     std::optional<TDuration> ClientTimeout_;

@@ -129,6 +129,11 @@ public:
         return 0;
     }
 
+    IMemoryUsageTrackerPtr GetChannelMemoryTracker() override
+    {
+        return GetNullMemoryUsageTracker();
+    }
+
     DEFINE_SIGNAL_OVERRIDE(void(const TError&), Terminated);
 private:
     TString Address_;

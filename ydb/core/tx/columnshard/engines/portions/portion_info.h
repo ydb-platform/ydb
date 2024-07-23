@@ -751,9 +751,7 @@ public:
             , RowsCount(rowsCount) {
         }
 
-        std::shared_ptr<arrow::RecordBatch> Assemble(const TAssembleOptions& options = {}) const;
-        std::shared_ptr<NArrow::TGeneralContainer> AssembleToGeneralContainer() const;
-        std::shared_ptr<arrow::Table> AssembleTable(const TAssembleOptions& options = {}) const;
+        std::shared_ptr<NArrow::TGeneralContainer> AssembleToGeneralContainer(const std::set<ui32>& sequentialColumnIds) const;
         std::shared_ptr<NArrow::TGeneralContainer> AssembleForSeqAccess() const;
     };
 
@@ -803,13 +801,6 @@ public:
 
     TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TString>& blobsData) const;
     TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData) const;
-
-    std::shared_ptr<arrow::RecordBatch> AssembleInBatch(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
-        THashMap<TChunkAddress, TString>& data) const {
-        auto batch = PrepareForAssemble(dataSchema, resultSchema, data).Assemble();
-        Y_ABORT_UNLESS(batch->Validate().ok());
-        return batch;
-    }
 
     friend IOutputStream& operator << (IOutputStream& out, const TPortionInfo& info) {
         out << info.DebugString();

@@ -396,6 +396,7 @@ runs:
           if [ $FAILED_TESTS_COUNT -gt 500 ]; then 
             TOO_MANY_FAILED="Too many tests failed, NOT going to retry"
             echo $TOO_MANY_FAILED | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --fail
+            break
           fi
 
           if [ $TESTS_RESULT = 0 ]; then

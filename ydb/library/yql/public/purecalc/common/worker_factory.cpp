@@ -11,6 +11,7 @@
 #include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec.h>
 #include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
+#include <ydb/library/yql/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
@@ -136,6 +137,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         CreateDeterministicTimeProvider(*DeterministicTimeProviderSeed_) :
         CreateDefaultTimeProvider();
     typeContext->UdfResolver = NCommon::CreateSimpleUdfResolver(FuncRegistry_.Get());
+    typeContext->ArrowResolver = MakeSimpleArrowResolver(*FuncRegistry_.Get());
     typeContext->UserDataStorage = MakeIntrusive<TUserDataStorage>(nullptr, UserData_, nullptr, nullptr);
     typeContext->Modules = moduleResolver;
     typeContext->BlockEngineMode = BlockEngineMode_;

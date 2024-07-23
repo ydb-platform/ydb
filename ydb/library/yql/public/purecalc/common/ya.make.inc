@@ -44,6 +44,7 @@ PEERDIR(
     ydb/library/yql/providers/common/provider
     ydb/library/yql/providers/common/schema/expr
     ydb/library/yql/providers/common/udf_resolve
+    ydb/library/yql/providers/common/arrow_resolve
 )
 
 YQL_LAST_ABI_VERSION()

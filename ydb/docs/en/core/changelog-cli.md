@@ -15,7 +15,7 @@ Released on June 24, 2024. To update to version **2.10.0**, select the [Download
    * Added the `--clear` option to the `init` subcommand, allowing tables from previous runs to be removed before workload initialization.
    * Added the `ydb workload * import` command to prepopulate tables with initial content before executing benchmarks.
 
-**Minor backward incompatible changes:**
+**Backward incompatible changes:**
 
 * `ydb workload` commands rework:
    * The `--path` option was moved to a specific workload level. For example: `ydb workload tpch --path some/tables/path init ...`.

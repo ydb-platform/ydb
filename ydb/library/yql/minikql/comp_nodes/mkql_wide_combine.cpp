@@ -244,13 +244,6 @@ public:
     }
 
     ~TState() {
-    //Workaround for YQL-16663, consider to rework this class in a safe manner
-        while (auto row = Extract()) {
-            for (size_t i = 0; i != RowSize(); ++i) {
-                row[i].UnRef();
-            }
-        }
-
         ExtractIt.reset();
         Storage.clear();
         States.Clear();

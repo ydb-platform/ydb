@@ -306,8 +306,8 @@ public:
         }
     }
 
-    void HandleNotifyTxCompletionResult() {
-        ScheduleRetry("Transaction completed, doublechecking");
+    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
+        ScheduleRetry(TStringBuilder() << "Transaction " << ev->Get()->Record.GetTxId() << " completed, doublechecking");
     }
 
     STFUNC(StateFunc) {
@@ -315,7 +315,7 @@ public:
             hFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle)
             hFunc(TEvTabletPipe::TEvClientConnected, Handle)
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle)
-            sFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, HandleNotifyTxCompletionResult)
+            hFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle)
             IgnoreFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered)
 
             default:

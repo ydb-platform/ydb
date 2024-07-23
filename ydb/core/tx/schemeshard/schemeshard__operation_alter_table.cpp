@@ -731,7 +731,7 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
     // Admins can alter indexImplTable unconditionally.
     // Regular users can only alter allowed fields.
     if (!IsSuperUser(context.UserToken.Get())
-        && (!CheckAllowedFields(alter, {"Name", "PartitionConfig"})
+        && (!CheckAllowedFields(alter, {"Name", "PathId", "PartitionConfig", "ReplicationConfig"})
             || (alter.HasPartitionConfig()
                 && !CheckAllowedFields(alter.GetPartitionConfig(), {"PartitioningPolicy"})
             )
@@ -744,6 +744,7 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
 
     {
         auto tableIndexAltering = TransactionTemplate(parent.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
+        tableIndexAltering.SetInternal(tx.GetInternal());
         auto alterIndex = tableIndexAltering.MutableAlterTableIndex();
         alterIndex->SetName(parent.LeafName());
         alterIndex->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);

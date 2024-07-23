@@ -6,6 +6,7 @@ GRPC()
 
 SRCS(
     ydb_federation_discovery_v1.proto
+    ydb_bsconfig_v1.proto
     ydb_auth_v1.proto
     ydb_cms_v1.proto
     ydb_coordination_v1.proto

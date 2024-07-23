@@ -13,6 +13,7 @@
 #include <ydb/core/protos/blobstorage_base3.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/tablet.pb.h>
+#include <ydb/public/api/protos/ydb_bsconfig.pb.h>
 
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/protobuf/json/util.h>
@@ -1428,6 +1429,14 @@ namespace NKikimr::NYaml {
         }
 
         return result;
+    }
+
+    Ydb::BSConfig::DefineRequest BuildDefineDistributedStorageCommand(const TString& data) {
+        auto yamlNode = YAML::Load(data);
+        NJson::TJsonValue defineJson = Yaml2Json(yamlNode, true);
+        Ydb::BSConfig::DefineRequest defineRequest;
+        NProtobufJson::MergeJson2Proto(defineJson, defineRequest, GetJsonToProtoConfig());
+        return defineRequest;
     }
 
     void Parse(const NJson::TJsonValue& json, NProtobufJson::TJson2ProtoConfig convertConfig, NKikimrConfig::TAppConfig& config, bool transform, bool relaxed) {

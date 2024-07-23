@@ -1,0 +1,89 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.BSConfig;
+
+option java_package = "com.yandex.ydb.bsconfig.proto";
+option java_outer_classname = "BSConfigProtos";
+option java_multiple_files = true;
+
+import "ydb/public/api/protos/ydb_operation.proto";
+
+//
+// BSConfig API.
+//
+
+// Enum defining PDisk underlying drive type (rotational or solid state)
+enum PDiskType {
+    // rotational drives (HDD)
+    ROT = 0;
+    // solid state drives (SSD)
+    SSD = 1;
+    // PCIe-connected solid state drives (NVMe SSD)
+    NVME = 2;
+    // used if device type is unknown or if group consists of different PDisk device types
+    UNKNOWN_TYPE = 3;
+}
+
+message DriveInfo {
+    message Drive {
+        // path to the device on the host node
+        string path = 1;
+        // drive type (rotational or solid state)
+        PDiskType type = 2;
+    }
+    message Host {
+        // fully qualified domain name of the host
+        string fqdn = 1;
+        // interconnect port to use
+        int32 port = 2;
+    }
+    oneof host_id {
+        Host host = 1;
+        // may be set instead of Fqdn/IcPort to specify explicit NodeId
+        uint32 node_id = 2;
+    }
+    repeated Drive drive = 3;
+}
+
+message DefineRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    repeated DriveInfo drive_info = 2;
+}
+
+message DefineResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DefineResult {
+}
+
+message FetchRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message FetchResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message FetchResult {
+    repeated DriveInfo drive_info = 1;
+}
+
+message EvictRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    uint32 group_id = 2;
+    uint32 group_generation = 3;
+    uint32 fail_realm_idx = 4;
+    uint32 fail_domain_idx = 5;
+    uint32 vdisk_idx = 6;
+    // when set, donor mode is not used even if it is enabled through BSC
+    bool supress_donor_mode = 7;
+}
+
+message EvictResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message EvictResult {
+}

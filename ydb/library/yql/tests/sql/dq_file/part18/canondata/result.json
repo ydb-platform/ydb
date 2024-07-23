@@ -1849,9 +1849,9 @@
     ],
     "test.test[optimizers-sort_constraint_in_left--Debug]": [
         {
-            "checksum": "b1709776e175b9e244b7f9552358e74a",
-            "size": 4067,
-            "uri": "https://{canondata_backend}/1777230/00c02c2221ad7773f9cfecb5ec1bd067dbaacbc5/resource.tar.gz#test.test_optimizers-sort_constraint_in_left--Debug_/opt.yql_patched"
+            "checksum": "ddafcba99ec8f9ffc2ca1656003dacd5",
+            "size": 4102,
+            "uri": "https://{canondata_backend}/1916746/2673649875bad3e7ba633862e83892bc57334832/resource.tar.gz#test.test_optimizers-sort_constraint_in_left--Debug_/opt.yql_patched"
         }
     ],
     "test.test[optimizers-sort_constraint_in_left--Plan]": [

@@ -686,10 +686,6 @@ class TCdcChangeSenderMain
         return KeyDesc && KeyDesc->Partitioning;
     }
 
-    const TVector<NKikimr::TKeyDesc::TPartitionInfo>& GetPartitions() const override { return KeyDesc->GetPartitions(); }
-    const TVector<NScheme::TTypeInfo>& GetSchema() const override { return KeyDesc->KeyColumnTypes; }
-    NKikimrSchemeOp::ECdcStreamFormat GetStreamFormat() const override { return Stream.Format; }
-
     IActor* CreateSender(ui64 partitionId) const override {
         Y_ABORT_UNLESS(PartitionToShard.contains(partitionId));
         const auto shardId = PartitionToShard.at(partitionId);

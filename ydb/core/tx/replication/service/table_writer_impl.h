@@ -443,10 +443,6 @@ class TLocalTableWriter
             BuilderContext);
     }
 
-    const TVector<TKeyDesc::TPartitionInfo>& GetPartitions() const override { return KeyDesc->GetPartitions(); }
-    const TVector<NScheme::TTypeInfo>& GetSchema() const override { return KeyDesc->KeyColumnTypes; }
-    NKikimrSchemeOp::ECdcStreamFormat GetStreamFormat() const override { return TChangeRecord::StreamType; }
-
     void Handle(TEvWorker::TEvData::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 

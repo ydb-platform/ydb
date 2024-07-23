@@ -103,7 +103,7 @@ protected:
     TMaybeNode<TExprBase> RewriteAggregate(TExprBase node, TExprContext& ctx) {
         TMaybeNode<TExprBase> output;
         auto aggregate = node.Cast<TCoAggregateBase>();
-        auto hopSetting = GetSetting(aggregate.Settings().Ref(), "hopping");        
+        auto hopSetting = GetSetting(aggregate.Settings().Ref(), "hopping");
         if (hopSetting) {
             auto input = aggregate.Input().Maybe<TDqConnection>();
             if (!input) {

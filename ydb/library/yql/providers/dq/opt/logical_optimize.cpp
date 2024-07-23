@@ -252,7 +252,7 @@ protected:
             return node;
         }
 
-        TDqLookupSourceWrap lookupSourceWrap =  right.Maybe<TDqSourceWrap>() 
+        TDqLookupSourceWrap lookupSourceWrap =  right.Maybe<TDqSourceWrap>()
             ? LookupSourceFromSource(right.Cast<TDqSourceWrap>(), ctx)
             : LookupSourceFromRead(right.Cast<TDqReadWrap>(), ctx)
         ;

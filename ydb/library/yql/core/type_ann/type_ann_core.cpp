@@ -1232,7 +1232,7 @@ namespace NTypeAnnImpl {
 
         YQL_ENSURE(IsSameAnnotation(*memberType, *resultType) ||
                    IsSameAnnotation(*ctx.Expr.MakeType<TOptionalExprType>(memberType), *resultType));
-        
+
         output = ctx.Expr.Builder(input->Pos())
             .Callable("IfStrict")
                 .Callable(0, "Exists")
@@ -2749,8 +2749,8 @@ namespace NTypeAnnImpl {
                 if (!(*dataTypeOne == *dataTypeTwo)) {
                     ctx.Expr.AddError(TIssue(
                         ctx.Expr.GetPosition(input->Pos()),
-                        TStringBuilder() << "Cannot calculate with different decimals: " 
-                            << static_cast<const TTypeAnnotationNode&>(*dataType[0]) << " != " 
+                        TStringBuilder() << "Cannot calculate with different decimals: "
+                            << static_cast<const TTypeAnnotationNode&>(*dataType[0]) << " != "
                             << static_cast<const TTypeAnnotationNode&>(*dataType[1])
                     ));
 
@@ -6193,18 +6193,18 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         };
 
         auto mergeMembers = [&ctx, &buildJustMember, &input, &left, &right, &mergeLambda](const TStringBuf& name, bool hasLeft, bool hasRight) -> TExprNode::TPtr {
-            auto leftMaybe = hasLeft ? 
+            auto leftMaybe = hasLeft ?
                 buildJustMember(left, name) :
                 ctx.Expr.NewCallable(input->Pos(), "Nothing", {
                     ExpandType(input->Pos(), *ctx.Expr.MakeType<TOptionalExprType>(right->GetTypeAnn()->Cast<TStructExprType>()->FindItemType(name)), ctx.Expr)
                 });
-            
-            auto rightMaybe = hasRight ? 
+
+            auto rightMaybe = hasRight ?
                 buildJustMember(right, name) :
                 ctx.Expr.NewCallable(input->Pos(), "Nothing", {
                     ExpandType(input->Pos(), *ctx.Expr.MakeType<TOptionalExprType>(left->GetTypeAnn()->Cast<TStructExprType>()->FindItemType(name)), ctx.Expr)
                 });
-            
+
             return ctx.Expr.Builder(input->Pos())
                 .List()
                     .Atom(0, name)
@@ -6492,7 +6492,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                             .With(1, result)
                         .Seal()
                     .Build();
-                }                        
+                }
             }
         } else if (collection->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
             for (size_t idx = 0; idx < collection->GetTypeAnn()->Cast<TTupleExprType>()->GetSize(); idx++) {
@@ -6523,7 +6523,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (result) { 
+        if (result) {
             output = result;
         } else {
             output = ctx.Expr.Builder(input->Pos()).Callable("Null").Seal().Build();
@@ -12306,6 +12306,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["GraceJoinCore"] = &GraceJoinCoreWrapper;
         Functions["GraceSelfJoinCore"] = &GraceSelfJoinCoreWrapper;
         Functions["CombineCore"] = &CombineCoreWrapper;
+        Functions["CombineCoreWithSpilling"] = &CombineCoreWithSpillingWrapper;
         Functions["GroupingCore"] = &GroupingCoreWrapper;
         Functions["HoppingTraits"] = &HoppingTraitsWrapper;
         Functions["HoppingCore"] = &HoppingCoreWrapper;
@@ -12328,7 +12329,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["CallableResultType"] = &TypeArgWrapper<ETypeArgument::CallableResult>;
         Functions["CallableArgumentType"] = &TypeArgWrapper<ETypeArgument::CallableArgument>;
         Functions["CombineByKey"] = &CombineByKeyWrapper;
+        Functions["CombineByKeyWithSpilling"] = &CombineByKeyWrapper;
         Functions["FinalizeByKey"] = &CombineByKeyWrapper;
+        Functions["FinalizeByKeyWithSpilling"] = &CombineByKeyWrapper;
         Functions["NewMTRand"] = &NewMTRandWrapper;
         Functions["NextMTRand"] = &NextMTRandWrapper;
         Functions["FormatType"] = &FormatTypeWrapper;
@@ -12557,6 +12560,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["WideSkipWhileInclusive"] = &WideWhileWrapper;
         Functions["WideCondense1"] = &WideCondense1Wrapper;
         Functions["WideCombiner"] = &WideCombinerWrapper;
+        Functions["WideCombinerWithSpilling"] = &WideCombinerWithSpillingWrapper;
         Functions["WideChopper"] = &WideChopperWrapper;
         Functions["WideChain1Map"] = &WideChain1MapWrapper;
         Functions["WideTop"] = &WideTopWrapper;

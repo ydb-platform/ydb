@@ -18,6 +18,7 @@ public:
         , ForceCompact(forceCompact)
         , CompactForDistinct(compactForDistinct)
         , UsePhases(usePhases)
+        , AllowSpilling(allowSpilling)
         , AggregatedColumns(nullptr)
         , VoidNode(ctx.NewCallable(node->Pos(), "Void", {}))
         , HaveDistinct(false)
@@ -99,6 +100,7 @@ private:
     bool ForceCompact;
     bool CompactForDistinct;
     bool UsePhases;
+    bool AllowSpilling;
     TStringBuf Suffix;
 
     TSessionWindowParams SessionWindowParams;

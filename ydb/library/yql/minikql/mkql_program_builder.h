@@ -410,8 +410,9 @@ public:
 
     TRuntimeNode WideCombiner(TRuntimeNode flow, i64 memLimit, const TWideLambda& keyExtractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish);
     TRuntimeNode WideLastCombinerCommon(const TStringBuf& funcName, TRuntimeNode flow, const TWideLambda& keyExtractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish);
+    TRuntimeNode WideLastCombinerCommonWithSpilling(const TStringBuf& funcName, TRuntimeNode flow, const TWideLambda& keyExtractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish, const TWideLambda& load);
     TRuntimeNode WideLastCombiner(TRuntimeNode flow, const TWideLambda& keyExtractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish);
-    TRuntimeNode WideLastCombinerWithSpilling(TRuntimeNode flow, const TWideLambda& keyExtractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish);
+    TRuntimeNode WideLastCombinerWithSpilling(TRuntimeNode flow, const TWideLambda& keyExtractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish, const TWideLambda& load);
     TRuntimeNode WideCondense1(TRuntimeNode stream, const TWideLambda& init, const TWideSwitchLambda& switcher, const TBinaryWideLambda& handler, bool useCtx = false);
 
     TRuntimeNode WideTop(TRuntimeNode flow, TRuntimeNode count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys);
@@ -470,6 +471,13 @@ public:
         const TBinaryLambda& init,
         const TTernaryLambda& update,
         const TBinaryLambda& finish,
+        ui64 memLimit);
+    TRuntimeNode CombineCoreWithSpilling(TRuntimeNode stream,
+        const TUnaryLambda& keyExtractor,
+        const TBinaryLambda& init,
+        const TTernaryLambda& update,
+        const TBinaryLambda& finish,
+        const TUnaryLambda& load,
         ui64 memLimit);
     TRuntimeNode GroupingCore(TRuntimeNode stream,
         const TBinaryLambda& groupSwitch,

@@ -1432,10 +1432,10 @@ namespace {
     }
 
     IGraphTransformer::TStatus ListTopSortWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 2, 3, ctx.Expr)) { 
+        if (!EnsureMinMaxArgsCount(*input, 2, 3, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
-        
+
         TStringBuf newName = input->Content();
         newName.Skip(4);
         bool desc = false;
@@ -1457,7 +1457,7 @@ namespace {
                 .Seal()
             .Build();
         }
-        
+
         return OptListWrapperImpl<4U, 4U>(ctx.Expr.Builder(input->Pos())
             .Callable(newName)
                 .Add(0, input->ChildPtr(0))
@@ -4166,7 +4166,17 @@ namespace {
 
     IGraphTransformer::TStatus CombineByKeyWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
-        if (!EnsureArgsCount(*input, 6, ctx.Expr)) {
+        ui32 expectedArgsCount = 6;
+        bool isWithSpilling = false;
+        if (input->Content().find("WithSpilling") != std::string::npos) {
+            expectedArgsCount = 7;
+            isWithSpilling = true;
+        }
+        bool isFinalize = false;
+        if (input->Content().find("FinalizeByKey") != std::string::npos) {
+            isFinalize = true;
+        }
+        if (!EnsureArgsCount(*input, expectedArgsCount, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -4181,6 +4191,9 @@ namespace {
         status = status.Combine(ConvertToLambda(input->ChildRef(3), ctx.Expr, 2));
         status = status.Combine(ConvertToLambda(input->ChildRef(4), ctx.Expr, 3));
         status = status.Combine(ConvertToLambda(input->ChildRef(5), ctx.Expr, 2));
+        if (isWithSpilling) {
+            status = status.Combine(ConvertToLambda(input->ChildRef(6), ctx.Expr, isFinalize ? 2 : 1));
+        }
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -4261,10 +4274,31 @@ namespace {
         }
 
         const TTypeAnnotationNode* retItemType = nullptr;
-        if (input->Content() == "FinalizeByKey") {
+        if (isFinalize) {
             retItemType = lambdaFinishHandler->GetTypeAnn();
         } else {
             if (!EnsureNewSeqType<true, true>(*lambdaFinishHandler, ctx.Expr, &retItemType)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        if (isWithSpilling) {
+            auto& lambdaSerDeHandler = input->ChildRef(6);
+            if (isFinalize) {
+                if (!UpdateLambdaAllArgumentsTypes(lambdaSerDeHandler, {lambdaKeySelector->GetTypeAnn(), stateType}, ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            } else {
+                if (!UpdateLambdaAllArgumentsTypes(lambdaSerDeHandler, {retItemType}, ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+
+            if (!lambdaSerDeHandler->GetTypeAnn()) {
+                return IGraphTransformer::TStatus::Repeat;
+            }
+
+            if (!EnsureComputableType(lambdaSerDeHandler->Pos(), *lambdaSerDeHandler->GetTypeAnn(), ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
         }
@@ -6503,7 +6537,7 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        const TTypeAnnotationNode* outputType = ctx.Expr.MakeType<TDataExprType>(input->IsCallable("PercentRank") ? 
+        const TTypeAnnotationNode* outputType = ctx.Expr.MakeType<TDataExprType>(input->IsCallable("PercentRank") ?
             EDataSlot::Double : EDataSlot::Uint64);
         if (!isAnsi && keyType->GetKind() == ETypeAnnotationKind::Optional) {
             outputType = ctx.Expr.MakeType<TOptionalExprType>(outputType);
@@ -7001,6 +7035,121 @@ namespace {
             retItemType = finishType->Cast<TOptionalExprType>()->GetItemType();
         } else {
             retItemType = finishType->Cast<TStreamExprType>()->GetItemType();
+        }
+
+        input->SetTypeAnn(MakeSequenceType(input->Head().GetTypeAnn()->GetKind(), *retItemType, ctx.Expr));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus CombineCoreWithSpillingWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureMinMaxArgsCount(*input, 6U, 7U, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const TTypeAnnotationNode* itemType = nullptr;
+        if (!EnsureNewSeqType<false, false>(input->Head(), ctx.Expr, &itemType)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (TCoCombineCoreWithSpilling::idx_MemLimit < input->ChildrenSize()) {
+            if (!EnsureAtom(*input->Child(TCoCombineCoreWithSpilling::idx_MemLimit), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            ui64 memLimit = 0ULL;
+            if (!TryFromString(input->Child(TCoCombineCoreWithSpilling::idx_MemLimit)->Content(), memLimit)) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(TCoCombineCoreWithSpilling::idx_MemLimit)->Pos()), TStringBuilder() <<
+                    "Bad memLimit value: " << input->Child(TCoCombineCoreWithSpilling::idx_MemLimit)->Content()));
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        TExprNode::TPtr& keyExtractor = input->ChildRef(TCoCombineCoreWithSpilling::idx_KeyExtractor);
+        TExprNode::TPtr& initHandler = input->ChildRef(TCoCombineCoreWithSpilling::idx_InitHandler);
+        TExprNode::TPtr& updateHandler = input->ChildRef(TCoCombineCoreWithSpilling::idx_UpdateHandler);
+        TExprNode::TPtr& finishHandler = input->ChildRef(TCoCombineCoreWithSpilling::idx_FinishHandler);
+        TExprNode::TPtr& loadHandler = input->ChildRef(TCoCombineCoreWithSpilling::idx_LoadHandler);
+
+        auto status = ConvertToLambda(keyExtractor, ctx.Expr, 1);
+        status = status.Combine(ConvertToLambda(initHandler, ctx.Expr, 2));
+        status = status.Combine(ConvertToLambda(updateHandler, ctx.Expr, 3));
+        status = status.Combine(ConvertToLambda(finishHandler, ctx.Expr, 2));
+        status = status.Combine(ConvertToLambda(loadHandler, ctx.Expr, 1));
+        if (status.Level != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        // keyExtractor
+        if (!UpdateLambdaAllArgumentsTypes(keyExtractor, {itemType}, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        if (!keyExtractor->GetTypeAnn()) {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+        auto keyType = keyExtractor->GetTypeAnn();
+        if (!EnsureHashableKey(keyExtractor->Pos(), keyType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        if (!EnsureEquatableKey(keyExtractor->Pos(), keyType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        // initHandler
+        if (!UpdateLambdaAllArgumentsTypes(initHandler, {keyType, itemType}, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        if (!initHandler->GetTypeAnn()) {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+        auto stateType = initHandler->GetTypeAnn();
+        if (!EnsureComputableType(initHandler->Pos(), *stateType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        // updateHandler
+        if (!UpdateLambdaAllArgumentsTypes(updateHandler, {keyType, itemType, stateType}, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        if (!updateHandler->GetTypeAnn()) {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+        if (!IsSameAnnotation(*updateHandler->GetTypeAnn(), *stateType)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(updateHandler->Pos()), "Mismatch of update lambda return type and state type"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        // finishHandler
+        if (!UpdateLambdaAllArgumentsTypes(finishHandler, {keyType, stateType}, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        if (!finishHandler->GetTypeAnn()) {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+        auto finishType = finishHandler->GetTypeAnn();
+        if (!EnsureSeqOrOptionalType(finishHandler->Pos(), *finishType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto retKind = finishType->GetKind();
+        const TTypeAnnotationNode* retItemType = nullptr;
+        if (retKind == ETypeAnnotationKind::List) {
+            retItemType = finishType->Cast<TListExprType>()->GetItemType();
+        } else if (retKind == ETypeAnnotationKind::Optional) {
+            retItemType = finishType->Cast<TOptionalExprType>()->GetItemType();
+        } else {
+            retItemType = finishType->Cast<TStreamExprType>()->GetItemType();
+        }
+
+        // loadHandler
+        if (!UpdateLambdaAllArgumentsTypes(loadHandler, {retItemType}, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        if (!loadHandler->GetTypeAnn()) {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+        if (!EnsureComputableType(loadHandler->Pos(), *loadHandler->GetTypeAnn(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
         }
 
         input->SetTypeAnn(MakeSequenceType(input->Head().GetTypeAnn()->GetKind(), *retItemType, ctx.Expr));

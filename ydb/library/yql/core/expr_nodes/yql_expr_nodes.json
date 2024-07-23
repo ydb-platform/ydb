@@ -439,6 +439,19 @@
             ]
         },
         {
+            "Name": "TCoCombineByKeyWithSpilling",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "CombineByKeyWithSpilling"},
+            "Children": [
+                {"Index": 1, "Name": "PreMapLambda",        "Type": "TCoLambda"},
+                {"Index": 2, "Name": "KeySelectorLambda",   "Type": "TCoLambda"},
+                {"Index": 3, "Name": "InitHandlerLambda",   "Type": "TCoLambda"},
+                {"Index": 4, "Name": "UpdateHandlerLambda", "Type": "TCoLambda"},
+                {"Index": 5, "Name": "FinishHandlerLambda", "Type": "TCoLambda"},
+                {"Index": 6, "Name": "LoadHandlerLambda",   "Type": "TCoLambda"}
+            ]
+        },
+        {
             "Name": "TCoFinalizeByKey",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "FinalizeByKey"},
@@ -448,6 +461,19 @@
                 {"Index": 3, "Name": "InitHandlerLambda",   "Type": "TCoLambda"},
                 {"Index": 4, "Name": "UpdateHandlerLambda", "Type": "TCoLambda"},
                 {"Index": 5, "Name": "FinishHandlerLambda", "Type": "TCoLambda"}
+            ]
+        },
+        {
+            "Name": "TCoFinalizeByKeyWithSpilling",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "FinalizeByKey"},
+            "Children": [
+                {"Index": 1, "Name": "PreMapLambda",        "Type": "TCoLambda"},
+                {"Index": 2, "Name": "KeySelectorLambda",   "Type": "TCoLambda"},
+                {"Index": 3, "Name": "InitHandlerLambda",   "Type": "TCoLambda"},
+                {"Index": 4, "Name": "UpdateHandlerLambda", "Type": "TCoLambda"},
+                {"Index": 5, "Name": "FinishHandlerLambda", "Type": "TCoLambda"},
+                {"Index": 6, "Name": "SaveHandlerLambda", "Type": "TCoLambda"}
             ]
         },
         {
@@ -1625,7 +1651,7 @@
                 {"Index": 5, "Name": "LeftRenames", "Type": "TCoAtomList"},
                 {"Index": 6, "Name": "RightRenames", "Type": "TCoAtomList"},
                 {"Index": 7, "Name": "LeftKeysColumnNames", "Type": "TCoAtomList"},
-                {"Index": 8, "Name": "RightKeysColumnNames", "Type": "TCoAtomList"},  
+                {"Index": 8, "Name": "RightKeysColumnNames", "Type": "TCoAtomList"},
                 {"Index": 9, "Name": "Flags", "Type": "TCoAtomList"}
             ]
         },
@@ -1641,7 +1667,7 @@
                 {"Index": 4, "Name": "LeftRenames", "Type": "TCoAtomList"},
                 {"Index": 5, "Name": "RightRenames", "Type": "TCoAtomList"},
                 {"Index": 6, "Name": "LeftKeysColumnNames", "Type": "TCoAtomList"},
-                {"Index": 7, "Name": "RightKeysColumnNames", "Type": "TCoAtomList"}, 
+                {"Index": 7, "Name": "RightKeysColumnNames", "Type": "TCoAtomList"},
                 {"Index": 8, "Name": "Flags", "Type": "TCoAtomList"}
             ]
         },
@@ -1978,6 +2004,19 @@
             ]
         },
         {
+            "Name": "TCoCombineCoreWithSpilling",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "CombineCoreWithSpilling"},
+            "Children": [
+                {"Index": 1, "Name": "KeyExtractor",  "Type": "TCoLambda"},
+                {"Index": 2, "Name": "InitHandler",   "Type": "TCoLambda"},
+                {"Index": 3, "Name": "UpdateHandler", "Type": "TCoLambda"},
+                {"Index": 4, "Name": "FinishHandler", "Type": "TCoLambda"},
+                {"Index": 5, "Name": "LoadHandler",   "Type": "TCoLambda"},
+                {"Index": 6, "Name": "MemLimit",      "Type": "TCoAtom", "Optional": true}
+            ]
+        },
+        {
             "Name": "TCoWideCombiner",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "WideCombiner"},
@@ -1987,6 +2026,19 @@
                 {"Index": 3, "Name": "InitHandler",   "Type": "TCoLambda"},
                 {"Index": 4, "Name": "UpdateHandler", "Type": "TCoLambda"},
                 {"Index": 5, "Name": "FinishHandler", "Type": "TCoLambda"}
+            ]
+        },
+        {
+            "Name": "TCoWideCombinerWithSpilling",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "WideCombinerWithSpilling"},
+            "Children": [
+                {"Index": 1, "Name": "MemLimit",      "Type": "TCoAtom"},
+                {"Index": 2, "Name": "KeyExtractor",  "Type": "TCoLambda"},
+                {"Index": 3, "Name": "InitHandler",   "Type": "TCoLambda"},
+                {"Index": 4, "Name": "UpdateHandler", "Type": "TCoLambda"},
+                {"Index": 5, "Name": "FinishHandler", "Type": "TCoLambda"},
+                {"Index": 6, "Name": "LoadHandler",   "Type": "TCoLambda"}
             ]
         },
         {

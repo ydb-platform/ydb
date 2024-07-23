@@ -605,7 +605,7 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
         TVector<TExprNode::TPtr> roots;
         for (ui32 i = 1; i < argsCount + 1; ++i) {
             auto root = trait->Child(2)->ChildPtr(i);
-            allTypes.push_back(root->GetTypeAnn());            
+            allTypes.push_back(root->GetTypeAnn());
 
             auto status = RemapExpr(root, root, remaps, Ctx, TOptimizeExprSettings(&TypesCtx));
 
@@ -944,16 +944,187 @@ TExprNode::TPtr TAggregateExpander::GeneratePartialAggregateForNonDistinct(const
         .Seal()
         .Build();
 
-    return Ctx.Builder(Node->Pos())
-        .Callable("CombineByKey")
-            .Add(0, AggList)
-            .Add(1, PreMap)
-            .Add(2, keyExtractor)
-            .Add(3, std::move(combineInit))
-            .Add(4, std::move(combineUpdate))
-            .Add(5, std::move(combineSave))
+    ui32 index = 0U;
+    auto combineLoad = Ctx.Builder(Node->Pos())
+        .Lambda()
+            .Param("item")
+            .Callable("AsStruct")
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    for (ui32 i = 0; i < KeyColumns->ChildrenSize(); ++i) {
+                        parent
+                            .List(index++)
+                                .Add(0, KeyColumns->ChildPtr(i))
+                                .Callable(1, "Member")
+                                    .Arg(0, "item")
+                                    .Add(1, KeyColumns->ChildPtr(i))
+                                .Seal()
+                            .Seal();
+                    }
+                    if (SessionWindowParams.Update) {
+                        parent
+                            .List(index++)
+                                .Atom(0, SessionStartMemberName)
+                                .Callable(1, "Member")
+                                    .Arg(0, "item")
+                                    .Atom(1, SessionStartMemberName)
+                                .Seal()
+                            .Seal();
+                    }
+                    return parent;
+                })
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    for (ui32 i = 0; i < columnNames.size(); ++i) {
+                        auto child = AggregatedColumns->Child(i);
+                        auto trait = Traits[i];
+                        if (!EffectiveCompact) {
+                            auto loadLambda = trait->Child(4);
+                            auto extractorLambda = GetFinalAggStateExtractor(i);
+
+                            if (!DistinctFields.empty() || Suffix == "MergeManyFinalize") {
+                                parent.List(index++)
+                                    .Add(0, columnNames[i])
+                                    .Callable(1, "Map")
+                                        .Apply(0, *extractorLambda)
+                                            .With(0, "item")
+                                        .Seal()
+                                        .Add(1, loadLambda)
+                                    .Seal()
+                                .Seal();
+                            } else {
+                                parent.List(index++)
+                                    .Add(0, columnNames[i])
+                                    .Apply(1, *loadLambda)
+                                        .With(0)
+                                            .Apply(*extractorLambda)
+                                                .With(0, "item")
+                                            .Seal()
+                                        .Done()
+                                    .Seal();
+                            }
+                        } else {
+                            auto initLambda = trait->Child(1);
+                            auto distinctField = (child->ChildrenSize() == 3) ? child->Child(2) : nullptr;
+                            auto initApply = [&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                parent.Apply(1, *initLambda)
+                                    .With(0)
+                                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                            if (distinctField) {
+                                                parent
+                                                    .Callable("Member")
+                                                        .Arg(0, "item")
+                                                        .Add(1, distinctField)
+                                                    .Seal();
+                                            } else {
+                                                parent
+                                                    .Callable("CastStruct")
+                                                        .Arg(0, "item")
+                                                        .Add(1, ExpandType(Node->Pos(), *initLambda->Head().Head().GetTypeAnn(), Ctx))
+                                                    .Seal();
+                                            }
+
+                                            return parent;
+                                        })
+                                    .Done()
+                                    .Do([&](TExprNodeReplaceBuilder& parent) -> TExprNodeReplaceBuilder& {
+                                        if (initLambda->Head().ChildrenSize() == 2) {
+                                            parent.With(1)
+                                                .Callable("Uint32")
+                                                    .Atom(0, ToString(i), TNodeFlags::Default)
+                                                    .Seal()
+                                                .Done();
+                                        }
+
+                                        return parent;
+                                    })
+                                .Seal();
+
+                                return parent;
+                            };
+
+                            if (distinctField) {
+                                const bool isFirst = *Distinct2Columns[distinctField->Content()].begin() == i;
+                                if (isFirst) {
+                                    parent.List(index++)
+                                        .Add(0, columnNames[i])
+                                        .List(1)
+                                            .Callable(0, "NamedApply")
+                                                .Add(0, UdfSetCreate[distinctField->Content()])
+                                                .List(1)
+                                                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                                        if (!DistinctFieldNeedsPickle[distinctField->Content()]) {
+                                                            parent.Callable(0, "Member")
+                                                                .Arg(0, "item")
+                                                                .Add(1, distinctField)
+                                                            .Seal();
+                                                        } else {
+                                                            parent.Callable(0, "StablePickle")
+                                                                .Callable(0, "Member")
+                                                                .Arg(0, "item")
+                                                                .Add(1, distinctField)
+                                                                .Seal()
+                                                                .Seal();
+                                                        }
+
+                                                        return parent;
+                                                    })
+                                                    .Callable(1, "Uint32")
+                                                        .Atom(0, "0", TNodeFlags::Default)
+                                                    .Seal()
+                                                .Seal()
+                                                .Callable(2, "AsStruct").Seal()
+                                                .Callable(3, "DependsOn")
+                                                    .Callable(0, "String")
+                                                        .Add(0, distinctField)
+                                                    .Seal()
+                                                .Seal()
+                                            .Seal()
+                                            .Do(initApply)
+                                        .Seal()
+                                        .Seal();
+                                } else {
+                                    parent.List(index++)
+                                        .Add(0, columnNames[i])
+                                        .Do(initApply)
+                                        .Seal();
+                                }
+                            } else {
+                                parent.List(index++)
+                                    .Add(0, columnNames[i])
+                                    .Do(initApply)
+                                .Seal();
+                            }
+                        }
+                    }
+                    return parent;
+                })
+            .Seal()
         .Seal()
         .Build();
+
+    if (AllowSpilling) {
+        return Ctx.Builder(Node->Pos())
+            .Callable("CombineByKeyWithSpilling")
+                .Add(0, AggList)
+                .Add(1, PreMap)
+                .Add(2, keyExtractor)
+                .Add(3, std::move(combineInit))
+                .Add(4, std::move(combineUpdate))
+                .Add(5, std::move(combineSave))
+                .Add(6, combineLoad)
+            .Seal()
+            .Build();
+    } else {
+        return Ctx.Builder(Node->Pos())
+            .Callable("CombineByKey")
+                .Add(0, AggList)
+                .Add(1, PreMap)
+                .Add(2, keyExtractor)
+                .Add(3, std::move(combineInit))
+                .Add(4, std::move(combineUpdate))
+                .Add(5, std::move(combineSave))
+            .Seal()
+            .Build();
+    }
 }
 
 void TAggregateExpander::GenerateInitForDistinct(TExprNodeBuilder& parent, ui32& ndx, const TIdxSet& indicies, const TExprNode::TPtr& distinctField) {

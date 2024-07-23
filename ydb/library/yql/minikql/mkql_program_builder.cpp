@@ -4824,12 +4824,74 @@ TRuntimeNode TProgramBuilder::WideLastCombiner(TRuntimeNode flow, const TWideLam
     return WideLastCombinerCommon(__func__, flow, extractor, init, update, finish);
 }
 
-TRuntimeNode TProgramBuilder::WideLastCombinerWithSpilling(TRuntimeNode flow, const TWideLambda& extractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish) {
-    if constexpr (RuntimeVersion < 49U) {
+TRuntimeNode TProgramBuilder::WideLastCombinerCommonWithSpilling(const TStringBuf& funcName, TRuntimeNode flow, const TWideLambda& extractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish, const TWideLambda& load) {
+    const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
+
+    TRuntimeNode::TList itemArgs;
+    itemArgs.reserve(wideComponents.size());
+
+    auto i = 0U;
+    std::generate_n(std::back_inserter(itemArgs), wideComponents.size(), [&](){ return Arg(wideComponents[i++]); });
+
+    const auto keys = extractor(itemArgs);
+
+    TRuntimeNode::TList keyArgs;
+    keyArgs.reserve(keys.size());
+    std::transform(keys.cbegin(), keys.cend(), std::back_inserter(keyArgs), [&](TRuntimeNode key){ return Arg(key.GetStaticType()); }  );
+
+    const auto first = init(keyArgs, itemArgs);
+
+    TRuntimeNode::TList stateArgs;
+    stateArgs.reserve(first.size());
+    std::transform(first.cbegin(), first.cend(), std::back_inserter(stateArgs), [&](TRuntimeNode state){ return Arg(state.GetStaticType()); }  );
+
+    const auto next = update(keyArgs, itemArgs, stateArgs);
+    MKQL_ENSURE(next.size() == first.size(), "Mismatch init and update state size.");
+
+    TRuntimeNode::TList finishKeyArgs;
+    finishKeyArgs.reserve(keys.size());
+    std::transform(keys.cbegin(), keys.cend(), std::back_inserter(finishKeyArgs), [&](TRuntimeNode key){ return Arg(key.GetStaticType()); }  );
+
+    TRuntimeNode::TList finishStateArgs;
+    finishStateArgs.reserve(next.size());
+    std::transform(next.cbegin(), next.cend(), std::back_inserter(finishStateArgs), [&](TRuntimeNode state){ return Arg(state.GetStaticType()); }  );
+
+    const auto output = finish(finishKeyArgs, finishStateArgs);
+
+    std::vector<TType*> tupleItems;
+    tupleItems.reserve(output.size());
+    std::transform(output.cbegin(), output.cend(), std::back_inserter(tupleItems), std::bind(&TRuntimeNode::GetStaticType, std::placeholders::_1));
+
+    TRuntimeNode::TList loadStateArgs;
+    loadStateArgs.reserve(tupleItems.size());
+    std::transform(tupleItems.cbegin(), tupleItems.cend(), std::back_inserter(loadStateArgs), [&](TType* t){ return Arg(t); }  );
+
+    const auto loadOutput = load(loadStateArgs);
+
+    TCallableBuilder callableBuilder(Env, funcName, NewFlowType(NewMultiType(tupleItems)));
+    callableBuilder.Add(flow);
+    callableBuilder.Add(NewDataLiteral(ui32(keyArgs.size())));
+    callableBuilder.Add(NewDataLiteral(ui32(stateArgs.size())));
+    std::for_each(itemArgs.cbegin(), itemArgs.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
+    std::for_each(keys.cbegin(), keys.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
+    std::for_each(keyArgs.cbegin(), keyArgs.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
+    std::for_each(first.cbegin(), first.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
+    std::for_each(stateArgs.cbegin(), stateArgs.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
+    std::for_each(next.cbegin(), next.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
+    std::for_each(finishKeyArgs.cbegin(), finishKeyArgs.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
+    std::for_each(finishStateArgs.cbegin(), finishStateArgs.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
+    std::for_each(output.cbegin(), output.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
+    std::for_each(loadStateArgs.cbegin(), loadStateArgs.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
+    std::for_each(loadOutput.cbegin(), loadOutput.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::WideLastCombinerWithSpilling(TRuntimeNode flow, const TWideLambda& extractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish, const TWideLambda& load) {
+    if constexpr (RuntimeVersion < 51U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
 
-    return WideLastCombinerCommon(__func__, flow, extractor, init, update, finish);
+    return WideLastCombinerCommonWithSpilling(__func__, flow, extractor, init, update, finish, load);
 }
 
 TRuntimeNode TProgramBuilder::WideCondense1(TRuntimeNode flow, const TWideLambda& init, const TWideSwitchLambda& switcher, const TBinaryWideLambda& update, bool useCtx) {
@@ -4926,6 +4988,66 @@ TRuntimeNode TProgramBuilder::CombineCore(TRuntimeNode stream,
     callableBuilder.Add(stateArg);
     callableBuilder.Add(stateUpdate);
     callableBuilder.Add(finishItem);
+    callableBuilder.Add(NewDataLiteral(memLimit));
+
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::CombineCoreWithSpilling(TRuntimeNode stream,
+    const TUnaryLambda& keyExtractor,
+    const TBinaryLambda& init,
+    const TTernaryLambda& update,
+    const TBinaryLambda& finish,
+    const TUnaryLambda& load,
+    ui64 memLimit)
+{
+    if constexpr (RuntimeVersion < 51U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    const bool isStream = stream.GetStaticType()->IsStream();
+    const auto itemType = isStream ? AS_TYPE(TStreamType, stream)->GetItemType() : AS_TYPE(TFlowType, stream)->GetItemType();
+
+    const auto itemArg = Arg(itemType);
+
+    const auto key = keyExtractor(itemArg);
+    const auto keyType = key.GetStaticType();
+
+    const auto keyArg = Arg(keyType);
+
+    const auto stateInit = init(keyArg, itemArg);
+    const auto stateType = stateInit.GetStaticType();
+
+    const auto stateArg = Arg(stateType);
+
+    const auto stateUpdate = update(keyArg, itemArg, stateArg);
+    const auto finishItem = finish(keyArg, stateArg);
+
+    const auto finishType = finishItem.GetStaticType();
+    MKQL_ENSURE(finishType->IsList() || finishType->IsStream() || finishType->IsOptional(), "Expected list, stream or optional");
+
+    const auto stateLoad = load(stateArg);
+
+    TType* retItemType = nullptr;
+    if (finishType->IsOptional()) {
+        retItemType = AS_TYPE(TOptionalType, finishType)->GetItemType();
+    } else if (finishType->IsList()) {
+        retItemType = AS_TYPE(TListType, finishType)->GetItemType();
+    } else if (finishType->IsStream()) {
+        retItemType = AS_TYPE(TStreamType, finishType)->GetItemType();
+    }
+
+    const auto resultStreamType = isStream ? NewStreamType(retItemType) : NewFlowType(retItemType);
+    TCallableBuilder callableBuilder(Env, __func__, resultStreamType);
+    callableBuilder.Add(stream);
+    callableBuilder.Add(itemArg);
+    callableBuilder.Add(key);
+    callableBuilder.Add(keyArg);
+    callableBuilder.Add(stateInit);
+    callableBuilder.Add(stateArg);
+    callableBuilder.Add(stateUpdate);
+    callableBuilder.Add(finishItem);
+    callableBuilder.Add(stateLoad);
     callableBuilder.Add(NewDataLiteral(memLimit));
 
     return TRuntimeNode(callableBuilder.Build(), false);

@@ -352,10 +352,7 @@ TCompatibilityPair CheckDecimalTypeCompatibility(
     }
 }
 
-// Returns pair:
-//   1. Inner element that is neither optional nor tagged.
-//   2. How many times this element is wrapped into Optional type.
-static std::pair<TComplexTypeFieldDescriptor, int> UnwrapOptionalAndTagged(const TComplexTypeFieldDescriptor& descriptor)
+std::pair<TComplexTypeFieldDescriptor, int> UnwrapOptionalAndTagged(const TComplexTypeFieldDescriptor& descriptor)
 {
     int nesting = 0;
     auto current = descriptor;

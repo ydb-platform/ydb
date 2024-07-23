@@ -301,7 +301,7 @@ public:
             }
         } catch (...) {
             ythrow yexception()
-                << CurrentExceptionMessage()
+                << EncodeHtmlPcdata(CurrentExceptionMessage())
                 << " while parsing track log query: "
                 << Text;
         }
@@ -1853,7 +1853,7 @@ public:
         try {
             Os << src->GetStartTime().ToStringUpToSeconds();
         } catch (...) {
-            Os << "error: " << CurrentExceptionMessage();
+            Os << "error: " << EncodeHtmlPcdata(CurrentExceptionMessage());
         }
         Os << "</td>"
            << "<td><div class=\"dropdown\">"
@@ -3821,17 +3821,17 @@ public:
             }
         } catch (TPageGenBase& gen) {
             out.Clear();
-            out << gen.what();
+            out << EncodeHtmlPcdata(gen.what());
         } catch (...) {
             out.Clear();
             if (request.GetParams().Get("error") == "text") {
                 // Text error reply is helpful for ajax requests
                 out << NMonitoring::HTTPOKTEXT;
-                out << CurrentExceptionMessage();
+                out << EncodeHtmlPcdata(CurrentExceptionMessage());
             } else {
                 WWW_HTML(out) {
                     out << "<h2>Error</h2><pre>"
-                        << CurrentExceptionMessage()
+                        << EncodeHtmlPcdata(CurrentExceptionMessage())
                         << Endl;
                 }
             }

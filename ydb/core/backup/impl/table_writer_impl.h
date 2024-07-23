@@ -158,7 +158,7 @@ private:
 
             break;
         }
-        case NKikimrChangeExchange::TDataChange::kReset:
+        case NKikimrChangeExchange::TDataChange::kReset: [[fallthrough]];
         default:
             Y_FAIL_S("Unexpected row operation: " << static_cast<int>(ProtoBody.GetCdcDataChange().GetRowOperationCase()));
         }
@@ -180,11 +180,10 @@ private:
             upsert.SetData(ProtoBody.GetCdcDataChange().GetUpsert().GetData());
             break;
         }
-        case NKikimrChangeExchange::TDataChange::kErase: {
+        case NKikimrChangeExchange::TDataChange::kErase:
             record.MutableErase();
             break;
-        }
-        case NKikimrChangeExchange::TDataChange::kReset:
+        case NKikimrChangeExchange::TDataChange::kReset: [[fallthrough]];
         default:
             Y_FAIL_S("Unexpected row operation: " << static_cast<int>(ProtoBody.GetCdcDataChange().GetRowOperationCase()));
         }

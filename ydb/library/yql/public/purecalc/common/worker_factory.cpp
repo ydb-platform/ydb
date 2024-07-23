@@ -27,6 +27,7 @@
 #include <ydb/library/yql/public/purecalc/common/transformations/extract_used_columns.h>
 #include <ydb/library/yql/public/purecalc/common/transformations/output_columns_filter.h>
 #include <ydb/library/yql/public/purecalc/common/transformations/replace_table_reads.h>
+#include <ydb/library/yql/public/purecalc/common/transformations/root_to_blocks.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <util/stream/trace.h>
 
@@ -105,6 +106,20 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
 
         if (!OutputType_) {
             OutputType_ = GetSequenceItemType(ExprRoot_->Pos(), ExprRoot_->GetTypeAnn(), true, ExprContext_);
+            // XXX: Tweak the obtained expression type, is the spec supports blocks:
+            // 1. Remove "_yql_block_length" attribute, since it's for internal usage.
+            // 2. Strip block container from the type to store its internal type.
+            if (options.OutputSpec.AcceptsBlocks()) {
+                Y_ENSURE(OutputType_->GetKind() == ETypeAnnotationKind::Struct);
+                const auto originalMembers = OutputType_->Cast<TStructExprType>()->GetItems();
+                TVector<const TItemExprType*> newMembers;
+                for (auto originalItem : originalMembers) {
+                    bool isScalarUnused;
+                    const auto blockItemType = GetBlockItemType(*originalItem->GetItemType(), isScalarUnused);
+                    newMembers.push_back(ExprContext_.MakeType<TItemExprType>(originalItem->GetName(), blockItemType));
+                }
+                OutputType_ = ExprContext_.MakeType<TStructExprType>(newMembers);
+            }
         }
         if (!OutputType_) {
             ythrow TCompileError("", ExprContext_.IssueManager.GetIssues().ToString()) << "cannot deduce output schema";
@@ -289,7 +304,10 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     pipeline.Add(MakeOutputColumnsFilter(outputSpec.GetOutputColumnsFilter()),
                  "Filter", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
                  "Filter output columns");
-    pipeline.Add(MakeOutputAligner(OutputType_, processorMode),
+    pipeline.Add(MakeRootToBlocks(outputSpec.AcceptsBlocks(), processorMode),
+                 "RootToBlocks", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
+                 "Rewrite the root if the output spec accepts blocks");
+    pipeline.Add(MakeOutputAligner(OutputType_, outputSpec.AcceptsBlocks(), processorMode),
                  "Convert", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
                  "Align return type of the program to output schema");
     pipeline.AddCommonOptimization();

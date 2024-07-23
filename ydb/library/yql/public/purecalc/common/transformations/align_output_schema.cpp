@@ -11,11 +11,17 @@ namespace {
     class TOutputAligner : public TSyncTransformerBase {
     private:
         const TTypeAnnotationNode* OutputStruct_;
+        bool AcceptsBlocks_;
         EProcessorMode ProcessorMode_;
 
     public:
-        explicit TOutputAligner(const TTypeAnnotationNode* outputStruct, EProcessorMode processorMode)
+        explicit TOutputAligner(
+            const TTypeAnnotationNode* outputStruct,
+            bool acceptsBlocks,
+            EProcessorMode processorMode
+        )
             : OutputStruct_(outputStruct)
+            , AcceptsBlocks_(acceptsBlocks)
             , ProcessorMode_(processorMode)
         {
         }
@@ -28,6 +34,26 @@ namespace {
             const auto* expectedItemType = MakeExpectedItemType();
             const auto* actualType = MakeActualType(input);
             const auto* actualItemType = MakeActualItemType(input);
+
+            // XXX: Tweak the obtained expression type, is the spec supports blocks:
+            // 1. Remove "_yql_block_length" attribute, since it's for internal usage.
+            // 2. Strip block container from the type to store its internal type.
+            if (AcceptsBlocks_) {
+                Y_ENSURE(actualItemType->GetKind() == ETypeAnnotationKind::Struct);
+                const auto originalMembers = actualItemType->Cast<TStructExprType>()->GetItems();
+                TVector<const TItemExprType*> newMembers;
+                for (auto originalItem : originalMembers) {
+                    bool isScalarUnused;
+                    const auto blockItemType = GetBlockItemType(*originalItem->GetItemType(), isScalarUnused);
+                    newMembers.push_back(ctx.MakeType<TItemExprType>(originalItem->GetName(), blockItemType));
+                }
+                actualItemType = ctx.MakeType<TStructExprType>(newMembers);
+                if (ProcessorMode_ == EProcessorMode::PullList) {
+                    actualType = ctx.MakeType<TListExprType>(actualItemType);
+                } else {
+                    actualType = ctx.MakeType<TStreamExprType>(actualItemType);
+                }
+            }
 
             if (!ValidateOutputType(actualItemType, expectedItemType, ctx)) {
                 return TStatus::Error;
@@ -92,6 +118,10 @@ namespace {
     };
 }
 
-TAutoPtr<IGraphTransformer> NYql::NPureCalc::MakeOutputAligner(const TTypeAnnotationNode* outputStruct, EProcessorMode processorMode) {
-    return new TOutputAligner(outputStruct, processorMode);
+TAutoPtr<IGraphTransformer> NYql::NPureCalc::MakeOutputAligner(
+    const TTypeAnnotationNode* outputStruct,
+    bool acceptsBlocks,
+    EProcessorMode processorMode
+) {
+    return new TOutputAligner(outputStruct, acceptsBlocks, processorMode);
 }

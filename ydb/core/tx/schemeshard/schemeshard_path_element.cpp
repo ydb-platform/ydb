@@ -216,7 +216,11 @@ bool TPathElement::IsExternalDataSource() const {
 }
 
 bool TPathElement::IsIncrementalBackupTable() const {
-    return UserAttrs->Attrs.contains(ATTR_INCREMENTAL_BACKUP) && UserAttrs->Attrs.at(TString(ATTR_INCREMENTAL_BACKUP)) != "null";
+    auto it = UserAttrs->Attrs.find(ATTR_INCREMENTAL_BACKUP);
+    if (it == UserAttrs->Attrs.end()) {
+        return false;
+    }
+    return TString(it->second) != "null";
 }
 
 bool TPathElement::IsView() const {

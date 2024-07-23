@@ -1001,8 +1001,6 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateBackup(NextPartId(), txState);
     case TTxState::ETxType::TxRestore:
         return CreateRestore(NextPartId(), txState);
-    case TTxState::ETxType::TxRestoreIncrementalBackup:
-        Y_ABORT("TODO: implement");
     case TTxState::ETxType::TxDropTable:
         return CreateDropTable(NextPartId(), txState);
     case TTxState::ETxType::TxCreateTableIndex:
@@ -1176,12 +1174,14 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxAlterView:
         Y_ABORT("TODO: implement");
     // Continuous Backup
-    // Now these functions won't be called because we presist only cdc function internally
+    // Now these txs won't be called because we presist only cdc txs internally
     case TTxState::ETxType::TxCreateContinuousBackup:
         Y_ABORT("TODO: implement");
     case TTxState::ETxType::TxAlterContinuousBackup:
         Y_ABORT("TODO: implement");
     case TTxState::ETxType::TxDropContinuousBackup:
+        Y_ABORT("TODO: implement");
+    case TTxState::ETxType::TxRestoreIncrementalBackup:
         Y_ABORT("TODO: implement");
 
     // ResourcePool

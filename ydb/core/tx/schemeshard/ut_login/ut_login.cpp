@@ -1,5 +1,6 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/library/login/login.h>
+#include <ydb/core/protos/auth.pb.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -7,8 +8,10 @@ using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
     Y_UNIT_TEST(BasicLogin) {
+        // AppData()->AuthConfig.SetUseInternalLoginMethod(true);
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().AuthConfig.SetUseInternalLoginMethod(false);
         ui64 txId = 100;
         TActorId sender = runtime.AllocateEdgeActor();
         std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> transaction(CreateAlterLoginCreateUser(++txId, "user1", "password1"));

@@ -34,6 +34,7 @@ struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
     THashMap<TString, TString> Sequences;
     THashMap<TString, Ydb::TypedValue> DefaultFromLiteral;
     bool IsBuildInProgress = false;
+    bool IsCheckingNotNullInProgress = false;
 
     TTableConstInfo() {}
     TTableConstInfo(const TString& path) : Path(path) {}
@@ -54,6 +55,7 @@ struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
         }
         column.NotNull = phyColumn.GetNotNull();
         column.IsBuildInProgress = phyColumn.GetIsBuildInProgress();
+        column.IsCheckingNotNullInProgress = phyColumn.GetIsCheckingNotNullInProgress();
 
         Columns.emplace(phyColumn.GetId().GetName(), std::move(column));
         if (!phyColumn.GetDefaultFromSequence().empty()) {

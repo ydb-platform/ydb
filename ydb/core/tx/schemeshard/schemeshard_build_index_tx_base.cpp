@@ -289,7 +289,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
     }
 
     if (info->IsCheckingNotNull()) {
-        for(const auto& column : info->CheckNotNullColumns) {
+        for(const auto& column : info->CheckingNotNullColumns) {
             auto* columnProto = settings.mutable_column_check_not_null()->add_column();
             columnProto->SetColumnName(column.ColumnName);
         }

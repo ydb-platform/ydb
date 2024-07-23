@@ -1467,6 +1467,7 @@ void TTableInfo::FinishAlter() {
             oldCol->Family = cinfo.Family;
             oldCol->DefaultKind = cinfo.DefaultKind;
             oldCol->DefaultValue = cinfo.DefaultValue;
+            oldCol->IsCheckingNotNullInProgress = cinfo.IsCheckingNotNullInProgress;
 
             if (!cinfo.IsCheckingNotNullInProgress) {
                 oldCol->NotNull = cinfo.NotNull;
@@ -2167,7 +2168,7 @@ void TIndexBuildInfo::TColumnCheckingInfo::SerializeToProto(NKikimrIndexBuilder:
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TCheckingNotNullSettings* result) const {
     Y_ABORT_UNLESS(IsCheckingNotNull());
     result->SetTable(TPath::Init(TablePathId, ss).PathString());
-    for (const auto& column : CheckNotNullColumns) {
+    for (const auto& column : CheckingNotNullColumns) {
         column.SerializeToProto(result->add_column());
     }
 }

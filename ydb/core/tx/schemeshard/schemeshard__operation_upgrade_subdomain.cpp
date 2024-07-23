@@ -231,6 +231,7 @@ public:
             colDescr->SetFamily(column.Family);
             colDescr->SetNotNull(column.NotNull);
             colDescr->SetIsBuildInProgress(column.IsBuildInProgress);
+            colDescr->SetIsCheckingNotNullInProgress(column.IsCheckingNotNullInProgress);
             if (column.DefaultKind != ETableColumnDefaultKind::None) {
                 colDescr->SetDefaultKind(ui32(column.DefaultKind));
                 colDescr->SetDefaultValue(column.DefaultValue);

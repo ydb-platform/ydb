@@ -158,20 +158,39 @@ public:
         tableInfo->AlterVersion += 1;
 
         for(auto& [cId, cInfo]: tableInfo->Columns) {
-            if (cInfo.IsDropped())
+            // std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+            // std::cerr << "tableInfo" << std::endl;
+            // std::cerr << "cinfo.Name = " << cInfo.Name << std::endl;
+            // std::cerr << "cinfo.IsCheckingNotNullInProgress = " << cInfo.IsCheckingNotNullInProgress << std::endl;
+            // std::cerr << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+            if (cInfo.IsDropped() || !cInfo.IsBuildInProgress && !cInfo.IsCheckingNotNullInProgress) {
                 continue;
+            }
 
-            if (!cInfo.IsBuildInProgress || !cInfo.IsCheckingNotNullInProgress)
-                continue;
+            if (cInfo.IsBuildInProgress) {
+                LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        DebugHint() << " HandleReply ProgressState"
+                                    << " at tablet: " << ssId
+                                    << " terminating build column process at column "
+                                    << cInfo.Name);
 
-            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       DebugHint() << " HandleReply ProgressState"
-                                   << " at tablet: " << ssId
-                                   << " terminating build column process at column "
-                                   << cInfo.Name);
+               cInfo.IsBuildInProgress = false;
+            } else { // if (cInfo.IsCheckingNotNullInProgress)
+                bool isError = false;
+                LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        DebugHint() << " HandleReply ProgressState"
+                                    << " at tablet: " << ssId
+                                    << " terminating checking not null process at column "
+                                    << cInfo.Name
+                                    << (isError ? "null value was found" : "null values were not found"));
 
-            cInfo.IsBuildInProgress = false;
-            cInfo.IsCheckingNotNullInProgress = false;
+                cInfo.IsCheckingNotNullInProgress = false;
+
+                if (!isError) {
+                    cInfo.NotNull = true;
+                }
+            }
+
             context.SS->PersistTableFinishColumnBuilding(db, txState->TargetPathId, tableInfo, cId);
         }
 

@@ -125,7 +125,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
         modifyScheme.SetWorkingDir(TPath::Init(buildInfo->TablePathId, ss).Parent().PathString());
         modifyScheme.MutableAlterTable()->SetName(TPath::Init(buildInfo->TablePathId, ss).LeafName());
 
-        for (auto& colInfo : buildInfo->CheckNotNullColumns) {
+        for (auto& colInfo : buildInfo->CheckingNotNullColumns) {
             auto col = modifyScheme.MutableAlterTable()->AddColumns();
             col->SetName(colInfo.ColumnName);
             col->SetIsCheckingNotNullInProgress(true);

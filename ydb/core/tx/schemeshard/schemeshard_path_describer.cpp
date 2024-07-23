@@ -1218,6 +1218,7 @@ void TSchemeShard::DescribeTable(
         }
 
         colDescr->SetIsBuildInProgress(cinfo.IsBuildInProgress);
+        colDescr->SetIsCheckingNotNullInProgress(cinfo.IsCheckingNotNullInProgress);
 
         switch (cinfo.DefaultKind) {
             case ETableColumnDefaultKind::None:

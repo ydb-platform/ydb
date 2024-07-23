@@ -2617,12 +2617,18 @@ void TSchemeShard::PersistTableFinishColumnBuilding(NIceDb::TNiceDb& db, const T
 
         db.Table<Schema::Columns>().Key(pathId.LocalPathId, colId).Update(
             NIceDb::TUpdate<Schema::Columns::IsCheckingNotNullInProgress>(cinfo.IsCheckingNotNullInProgress));
+
+        db.Table<Schema::Columns>().Key(pathId.LocalPathId, colId).Update(
+            NIceDb::TUpdate<Schema::Columns::NotNull>(cinfo.NotNull));
     } else {
         db.Table<Schema::MigratedColumns>().Key(pathId.OwnerId, pathId.LocalPathId, colId).Update(
             NIceDb::TUpdate<Schema::MigratedColumns::IsBuildInProgress>(cinfo.IsBuildInProgress));
 
         db.Table<Schema::MigratedColumns>().Key(pathId.OwnerId, pathId.LocalPathId, colId).Update(
             NIceDb::TUpdate<Schema::MigratedColumns::IsCheckingNotNullInProgress>(cinfo.IsCheckingNotNullInProgress));
+
+        db.Table<Schema::MigratedColumns>().Key(pathId.OwnerId, pathId.LocalPathId, colId).Update(
+            NIceDb::TUpdate<Schema::MigratedColumns::NotNull>(cinfo.NotNull));
     }
 }
 

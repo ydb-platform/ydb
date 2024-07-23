@@ -428,7 +428,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     bool IsTemporary = false;
     TActorId OwnerActorId;
 
-    TAlterTableInfo::TPtr AlterData;
+    TAlterDataPtr AlterData;
 
     NKikimrSchemeOp::TTableDescription TableDescription;
 
@@ -2929,7 +2929,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     TVector<TString> DataColumns;
 
     TVector<TColumnBuildInfo> BuildColumns;
-    TVector<TColumnCheckingInfo> CheckNotNullColumns;
+    TVector<TColumnCheckingInfo> CheckingNotNullColumns;
 
     TString ImplTablePath;
     NTableIndex::TTableColumns ImplTableColumns;

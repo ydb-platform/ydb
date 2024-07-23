@@ -24,6 +24,7 @@ struct TRedirectUrlParameters {
     TStringBuf State;
     TStringBuf Scheme;
     TStringBuf Host;
+<<<<<<< HEAD
     NMvp::EAccessServiceType AccessServiceType;
     TStringBuf AuthUrlPath;
 };
@@ -34,6 +35,14 @@ bool TryAppendAuthEndpointFromDetailsYandexProfile(const TRedirectUrlParameters&
 =======
     if (parameters.AuthProfile != NMVP::EAuthProfile::YandexV2) {
 >>>>>>> 8e0d57db1b (rewrite GetTableClient)
+=======
+    NMVP::EAccessServiceType AccessServiceType;
+    TStringBuf AuthEndpoint;
+};
+
+bool TryAppendAuthEndpointFromDetailsYandexProfile(const TRedirectUrlParameters& parameters, TStringBuilder& locationHeaderValue) {
+    if (parameters.AccessServiceType != NMVP::EAccessServiceType::YandexV2) {
+>>>>>>> b14ae95980 (renamed EAuth profile to EAccessServiceTypeEAccessServiceType)
         return false;
     }
     const auto& eventDetails = parameters.SessionServerCheckDetails;
@@ -129,7 +138,11 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(TStringBuf eventDetai
                                                     .Scheme = (request->Endpoint->Secure ? "https://" : "http://"),
                                                     .Host = request->Host,
                                                     .AccessServiceType = settings.AccessServiceType,
+<<<<<<< HEAD
                                                     .AuthUrlPath = settings.AuthUrlPath});
+=======
+                                                    .AuthEndpoint = settings.AuthEndpoint});
+>>>>>>> b14ae95980 (renamed EAuth profile to EAccessServiceTypeEAccessServiceType)
     const size_t cookieMaxAgeSec = 420;
     TStringBuilder setCookieBuilder;
     setCookieBuilder << CreateNameYdbOidcCookie(settings.ClientSecret, state) << "=" << GenerateCookie(state, GetRequestedUrl(request, isAjaxRequest), settings.ClientSecret, isAjaxRequest)

@@ -63,7 +63,7 @@ int TMVP::Init() {
     ActorSystem.Register(NActors::CreateProcStatCollector(TDuration::Seconds(5), AppData.MetricRegistry = std::make_shared<NMonitoring::TMetricRegistry>()));
 
     HttpProxyId = ActorSystem.Register(NHttp::CreateHttpProxy(AppData.MetricRegistry));
-    ActorSystem.Register(AppData.Tokenator = TMvpTokenator::CreateTokenator(TokensConfig, HttpProxyId, AuthProfile));
+    ActorSystem.Register(AppData.Tokenator = TMvpTokenator::CreateTokenator(TokensConfig, HttpProxyId, AccessServiceType));
 
     if (Http) {
         auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(HttpPort, TStringBuilder() << FQDNHostName() << ':' << HttpPort);
@@ -230,9 +230,9 @@ void TMVP::TryGetGenericOptionsFromConfig(
 
     if (generic["access_service_type"]) {
         auto name = to_lower(ToString(generic["access_service_type"].as<std::string>("yandex_v2")));
-        auto it = AuthProfileByName.find(name);
-        if (it != AuthProfileByName.end()) {
-            AuthProfile = it->second;
+        auto it = AccessServiceTypeByName.find(name);
+        if (it != AccessServiceTypeByName.end()) {
+            AccessServiceType = it->second;
         } else {
             ythrow yexception() << "Unknown auth profile: " << name;
         }

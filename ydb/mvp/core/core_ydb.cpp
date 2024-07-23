@@ -111,11 +111,11 @@ NYdb::NTable::TTableClient TYdbLocation::GetTableClient(const TRequest& request,
     NYdb::NTable::TClientSettings clientSettings(defaultClientSettings);
 
     TString authToken;
-    switch (location.AuthProfile) {
-    case NMVP::EAuthProfile::YandexV2:
+    switch (location.AccessServiceType) {
+    case NMVP::EAccessServiceType::YandexV2:
         authToken = request.GetAuthToken();
         break;
-    case NMVP::EAuthProfile::NebiusV1:
+    case NMVP::EAccessServiceType::NebiusV1:
         NMVP::TMvpTokenator* tokenator = MVPAppData()->Tokenator;
         if (tokenator && !location.ServiceTokenName.empty()) {
             authToken = tokenator->GetToken(location.ServiceTokenName);

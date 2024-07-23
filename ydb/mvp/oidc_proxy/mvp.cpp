@@ -75,7 +75,11 @@ int TMVP::Init() {
     ActorSystem.Register(NActors::CreateProcStatCollector(TDuration::Seconds(5), AppData.MetricRegistry = std::make_shared<NMonitoring::TMetricRegistry>()));
 
     BaseHttpProxyId = ActorSystem.Register(NHttp::CreateHttpProxy(AppData.MetricRegistry));
+<<<<<<< HEAD
     ActorSystem.Register(AppData.Tokenator = TMvpTokenator::CreateTokenator(TokensConfig, BaseHttpProxyId));
+=======
+    ActorSystem.Register(AppData.Tokenator = TMvpTokenator::CreateTokenator(TokensConfig, BaseHttpProxyId, OpenIdConnectSettings.AccessServiceType));
+>>>>>>> b14ae95980 (renamed EAuth profile to EAccessServiceTypeEAccessServiceType)
 
     HttpProxyId = ActorSystem.Register(NHttp::CreateHttpCache(BaseHttpProxyId, GetCachePolicy));
 
@@ -287,9 +291,18 @@ void TMVP::TryGetGenericOptionsFromConfig(
     }
 
     if (generic["access_service_type"]) {
+<<<<<<< HEAD
         auto accessServiceTypeStr = TString(generic["access_service_type"].as<std::string>(""));
         if (!NMvp::EAccessServiceType_Parse(to_lower(accessServiceTypeStr), &OpenIdConnectSettings.AccessServiceType)) {
             ythrow yexception() << "Unknown access_service_type value: " << accessServiceTypeStr;
+=======
+        auto name = to_lower(ToString(generic["access_service_type"].as<std::string>("yandex_v2")));
+        auto it = AccessServiceTypeByName.find(name);
+        if (it != AccessServiceTypeByName.end()) {
+            OpenIdConnectSettings.AccessServiceType = it->second;
+        } else {
+            ythrow yexception() << "Unknown auth profile: " << name;
+>>>>>>> b14ae95980 (renamed EAuth profile to EAccessServiceTypeEAccessServiceType)
         }
     }
 }

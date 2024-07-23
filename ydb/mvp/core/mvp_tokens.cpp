@@ -8,8 +8,13 @@
 
 namespace NMVP {
 
+<<<<<<< HEAD
 TMvpTokenator* TMvpTokenator::CreateTokenator(const NMvp::TTokensConfig& tokensConfig,  const NActors::TActorId& httpProxy) {
     return new TMvpTokenator(tokensConfig, httpProxy);
+=======
+TMvpTokenator* TMvpTokenator::CreateTokenator(const NMvp::TTokensConfig& tokensConfig,  const NActors::TActorId& httpProxy, const NMVP::EAccessServiceType accessServiceType) {
+    return new TMvpTokenator(tokensConfig, httpProxy, accessServiceType);
+>>>>>>> b14ae95980 (renamed EAuth profile to EAccessServiceTypeEAccessServiceType)
 }
 
 TString TMvpTokenator::GetToken(const TString& name) {
@@ -24,8 +29,14 @@ TString TMvpTokenator::GetToken(const TString& name) {
     return token;
 }
 
+<<<<<<< HEAD
 TMvpTokenator::TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TActorId& httpProxy)
     : HttpProxy(httpProxy)
+=======
+TMvpTokenator::TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TActorId& httpProxy, const NMVP::EAccessServiceType accessServiceType)
+    : HttpProxy(httpProxy)
+    , AccessServiceType(accessServiceType)
+>>>>>>> b14ae95980 (renamed EAuth profile to EAccessServiceTypeEAccessServiceType)
 {
     if (tokensConfig.HasStaffApiUserTokenInfo()) {
         UpdateStaffApiUserToken(&tokensConfig.staffapiusertokeninfo());
@@ -247,12 +258,17 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
     audience.insert(jwtInfo->audience());
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     switch (TokenConfigs.AccessServiceType) {
         case NMvp::yandex_v2: {
 =======
     switch (AuthProfile) {
         case NMVP::EAuthProfile::YandexV2: {
 >>>>>>> 8e0d57db1b (rewrite GetTableClient)
+=======
+    switch (AccessServiceType) {
+        case NMVP::EAccessServiceType::YandexV2: {
+>>>>>>> b14ae95980 (renamed EAuth profile to EAccessServiceTypeEAccessServiceType)
             auto algorithm = jwt::algorithm::ps256(jwtInfo->publickey(), jwtInfo->privatekey());
             auto encodedToken = jwt::create()
                     .set_key_id(keyId)
@@ -271,10 +287,14 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
             break;
         }
 <<<<<<< HEAD
+<<<<<<< HEAD
         case NMvp::nebius_v1: {
 =======
         case NMVP::EAuthProfile::NebiusV1: {
 >>>>>>> 8e0d57db1b (rewrite GetTableClient)
+=======
+        case NMVP::EAccessServiceType::NebiusV1: {
+>>>>>>> b14ae95980 (renamed EAuth profile to EAccessServiceTypeEAccessServiceType)
             auto algorithm = jwt::algorithm::rs256(jwtInfo->publickey(), jwtInfo->privatekey());
             auto encodedToken = jwt::create()
                     .set_key_id(keyId)

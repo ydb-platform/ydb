@@ -41,8 +41,12 @@ public:
     static TString MetaDatabaseTokenName;
 =======
     TString MetaDatabaseTokenName;
+<<<<<<< HEAD
     EAuthProfile AuthProfile = EAuthProfile::YandexV2;
 >>>>>>> 8e0d57db1b (rewrite GetTableClient)
+=======
+    EAccessServiceType AccessServiceType = EAccessServiceType::YandexV2;
+>>>>>>> b14ae95980 (renamed EAuth profile to EAccessServiceTypeEAccessServiceType)
 
     TMVP(int argc, char** argv);
     int Init();

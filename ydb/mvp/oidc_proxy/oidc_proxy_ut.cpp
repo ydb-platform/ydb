@@ -23,7 +23,11 @@ void EatWholeString(TIntrusivePtr<HttpType>& request, const TString& data) {
 }
 
 Y_UNIT_TEST_SUITE(Mvp) {
+<<<<<<< HEAD
     void OpenIdConnectRequestWithIamTokenTest(NMvp::EAccessServiceType profile) {
+=======
+    void OpenIdConnectRequestWithIamTokenTest(NMVP::EAccessServiceType profile) {
+>>>>>>> b14ae95980 (renamed EAuth profile to EAccessServiceTypeEAccessServiceType)
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -63,6 +67,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
     Y_UNIT_TEST(OpenIdConnectRequestWithIamTokenYandex) {
 <<<<<<< HEAD
+<<<<<<< HEAD
         OpenIdConnectRequestWithIamTokenTest(NMvp::yandex_v2);
     }
 
@@ -78,6 +83,16 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     void OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMvp::EAccessServiceType profile) {
+=======
+        OpenIdConnectRequestWithIamTokenTest(NMVP::EAccessServiceType::YandexV2);
+    }
+
+    Y_UNIT_TEST(OpenIdConnectRequestWithIamTokenNebius) {
+        OpenIdConnectRequestWithIamTokenTest(NMVP::EAccessServiceType::NebiusV1);
+    }
+
+    void OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAccessServiceType profile) {
+>>>>>>> b14ae95980 (renamed EAuth profile to EAccessServiceTypeEAccessServiceType)
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -124,6 +139,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
     Y_UNIT_TEST(OpenIdConnectNonAuthorizeRequestWithOptionMethodYandex) {
 <<<<<<< HEAD
+<<<<<<< HEAD
         OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMvp::yandex_v2);
     }
 
@@ -139,6 +155,16 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     void OpenIdConnectSessionServiceCheckValidCookieTest(NMvp::EAccessServiceType profile) {
+=======
+        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAccessServiceType::YandexV2);
+    }
+
+    Y_UNIT_TEST(OpenIdConnectNonAuthorizeRequestWithOptionMethodNebius) {
+        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAccessServiceType::NebiusV1);
+    }
+
+    void OpenIdConnectSessionServiceCheckValidCookieTest(NMVP::EAccessServiceType profile) {
+>>>>>>> b14ae95980 (renamed EAuth profile to EAccessServiceTypeEAccessServiceType)
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -183,6 +209,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
     Y_UNIT_TEST(OpenIdConnectSessionServiceCheckValidCookieYandex) {
 <<<<<<< HEAD
+<<<<<<< HEAD
         OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMvp::yandex_v2);
     }
 
@@ -195,6 +222,13 @@ Y_UNIT_TEST_SUITE(Mvp) {
     Y_UNIT_TEST(OpenIdConnectSessionServiceCheckValidCookieNebius) {
         OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAuthProfile::NebiusV1);
 >>>>>>> 8e0d57db1b (rewrite GetTableClient)
+=======
+        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAccessServiceType::YandexV2);
+    }
+
+    Y_UNIT_TEST(OpenIdConnectSessionServiceCheckValidCookieNebius) {
+        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAccessServiceType::NebiusV1);
+>>>>>>> b14ae95980 (renamed EAuth profile to EAccessServiceTypeEAccessServiceType)
     }
 
     Y_UNIT_TEST(OpenIdConnectProxyOnHttpsHost) {
@@ -209,10 +243,14 @@ Y_UNIT_TEST_SUITE(Mvp) {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
             .AllowedProxyHosts = {allowedProxyHost},
 <<<<<<< HEAD
+<<<<<<< HEAD
             .AccessServiceType = NMvp::yandex_v2
 =======
             .AuthProfile = NMVP::EAuthProfile::YandexV2
 >>>>>>> 8e0d57db1b (rewrite GetTableClient)
+=======
+            .AccessServiceType = NMVP::EAccessServiceType::YandexV2
+>>>>>>> b14ae95980 (renamed EAuth profile to EAccessServiceTypeEAccessServiceType)
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
@@ -276,10 +314,14 @@ Y_UNIT_TEST_SUITE(Mvp) {
             .AuthorizationServerAddress = "https://auth.test.net",
             .AllowedProxyHosts = {allowedProxyHost},
 <<<<<<< HEAD
+<<<<<<< HEAD
             .AccessServiceType = NMvp::nebius_v1
 =======
             .AuthProfile = NMVP::EAuthProfile::NebiusV1
 >>>>>>> 8e0d57db1b (rewrite GetTableClient)
+=======
+            .AccessServiceType = NMVP::EAccessServiceType::NebiusV1
+>>>>>>> b14ae95980 (renamed EAuth profile to EAccessServiceTypeEAccessServiceType)
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();

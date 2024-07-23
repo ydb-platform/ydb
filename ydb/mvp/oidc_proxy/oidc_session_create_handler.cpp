@@ -14,6 +14,7 @@ void TSessionCreateHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::
     NHttp::THttpIncomingRequestPtr request = event->Get()->Request;
     if (request->Method == "GET") {
 <<<<<<< HEAD
+<<<<<<< HEAD
         switch (Settings.AccessServiceType) {
             case NMvp::yandex_v2:
                 ctx.Register(new THandlerSessionCreateYandex(event->Sender, request, HttpProxyId, Settings));
@@ -26,6 +27,13 @@ void TSessionCreateHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::
                 return;
             case NMVP::EAuthProfile::NebiusV1:
 >>>>>>> 8e0d57db1b (rewrite GetTableClient)
+=======
+        switch (Settings.AccessServiceType) {
+            case NMVP::EAccessServiceType::YandexV2:
+                ctx.Register(new THandlerSessionCreateYandex(event->Sender, request, HttpProxyId, Settings));
+                return;
+            case NMVP::EAccessServiceType::NebiusV1:
+>>>>>>> b14ae95980 (renamed EAuth profile to EAccessServiceTypeEAccessServiceType)
                 ctx.Register(new THandlerSessionCreateNebius(event->Sender, request, HttpProxyId, Settings));
                 return;
         }

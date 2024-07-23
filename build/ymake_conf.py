@@ -41,7 +41,7 @@ class WindowsVersion(object):
 ANDROID_API_DEFAULT = 21
 
 # This is default Linux SDK unless `-DOS_SDK` is specified in cmdline
-LINUX_SDK_DEFAULT = "ubuntu-14"
+LINUX_SDK_DEFAULT = "ubuntu-16"
 
 MACOS_VERSION_MIN = "11.0"
 MACOS_VERSION_MIN_AS_INT = "110000"

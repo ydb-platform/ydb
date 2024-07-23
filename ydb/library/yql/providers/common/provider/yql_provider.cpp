@@ -269,6 +269,8 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
                 YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>());
                 auto index = Build<TCoIndex>(ctx, node.Pos());
                 bool inferName = false;
+                TCoNameValueTupleList tableSettings = Build<TCoNameValueTupleList>(ctx, node.Pos()).Done();
+                TCoNameValueTupleList indexSettings = Build<TCoNameValueTupleList>(ctx, node.Pos()).Done();
                 TMaybe<TCoAtomList> columnList;
                 for (const auto& item : tuple.Value().Cast<TCoNameValueTupleList>()) {
                     const auto& indexItemName = item.Name().Value();
@@ -287,11 +289,17 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
                     } else if (indexItemName == "dataColumns") {
                         index.DataColumns(item.Value().Cast<TCoAtomList>());
                     } else if (indexItemName == "tableSettings") {
-                        index.TableSettings(item.Value().Cast<TCoNameValueTupleList>());
+                        tableSettings = item.Value().Cast<TCoNameValueTupleList>();
+                    } else if (indexItemName == "indexSettings") {
+                        indexSettings = item.Value().Cast<TCoNameValueTupleList>();
                     } else {
                         YQL_ENSURE(false, "unknown index item");
                     }
                 }
+
+                index.TableSettings(tableSettings);
+                index.IndexSettings(indexSettings);
+
                 if (inferName) {
                     YQL_ENSURE(columnList);
                     index.Name(InferIndexName(*columnList, ctx));

@@ -1152,11 +1152,39 @@ namespace NSQLTranslationV1 {
         TNodePtr Compression;
     };
 
+    struct TVectorIndexSettings {
+        enum class EDistance {
+              Cosine        /* "cosine" */
+            , Manhattan     /* "manhattan" */
+            , Euclidean     /* "euclidean" */
+        };
+
+        enum class ESimilarity {
+              Cosine        /* "cosine" */
+            , InnerProduct  /* "inner_product" */
+        };
+
+        enum class EVectorType {
+              Float         /* "float" */
+            , Uint8         /* "uint8" */
+            , Int8          /* "int8" */
+            , Bit           /* "bit" */
+        };
+
+        using TMetric = std::variant<std::monostate, EDistance, ESimilarity>;
+        TMetric Metric;
+        std::optional<EVectorType> VectorType;
+        std::optional<ui32> VectorDimension;
+
+        bool Validate(TContext& ctx) const;
+    };
+
     struct TIndexDescription {
         enum class EType {
             GlobalSync,
             GlobalAsync,
             GlobalSyncUnique,
+            GlobalVectorKmeansTree,
         };
 
         TIndexDescription(const TIdentifier& name, EType type = EType::GlobalSync)
@@ -1169,6 +1197,9 @@ namespace NSQLTranslationV1 {
         TVector<TIdentifier> IndexColumns;
         TVector<TIdentifier> DataColumns;
         TTableSettings TableSettings;
+
+        using TIndexSettings = std::variant<std::monostate, TVectorIndexSettings>;
+        TIndexSettings IndexSettings;
     };
 
     struct TChangefeedSettings {

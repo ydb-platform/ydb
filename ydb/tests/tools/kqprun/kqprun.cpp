@@ -51,7 +51,7 @@ struct TExecutionOptions {
         }
 
         for (size_t i = 0; i < ExecutionCases.size(); ++i) {
-            if (i < ScriptQueryActions.size() && ScriptQueryActions[i] != NKikimrKqp::EQueryAction::QUERY_ACTION_EXECUTE) {
+            if (GetScriptQueryAction(i) != NKikimrKqp::EQueryAction::QUERY_ACTION_EXECUTE) {
                 continue;
             }
             if (ExecutionCases[i] != EExecutionCase::AsyncQuery) {
@@ -63,6 +63,10 @@ struct TExecutionOptions {
 
     EExecutionCase GetExecutionCase(size_t index) const {
         return GetValue(index, ExecutionCases, EExecutionCase::GenericScript);
+    }
+
+    NKikimrKqp::EQueryAction GetScriptQueryAction(size_t index) const {
+        return GetValue(index, ScriptQueryActions, NKikimrKqp::EQueryAction::QUERY_ACTION_EXECUTE);
     }
 
     NKqpRun::TRequestOptions GetSchemeQueryOptions() const {
@@ -79,7 +83,7 @@ struct TExecutionOptions {
         Y_ABORT_UNLESS(index < ScriptQueries.size());
         return {
             .Query = ScriptQueries[index],
-            .Action = GetValue(index, ScriptQueryActions, NKikimrKqp::EQueryAction::QUERY_ACTION_EXECUTE),
+            .Action = GetScriptQueryAction(index),
             .TraceId = TStringBuilder() << GetValue(index, TraceIds, DefaultTraceId) << "-" << startTime.ToString(),
             .PoolId = GetValue(index, PoolIds, TString()),
             .UserSID = GetValue(index, UserSIDs, TString(BUILTIN_ACL_ROOT))

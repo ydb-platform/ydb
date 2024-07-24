@@ -158,8 +158,18 @@ private:
     void HandleWakeup(const TActorContext& ctx) noexcept {
         auto processMemoryInfo = ProcessMemoryInfoProvider->Get();
 
-        // TODO: pass this hard limit to node whiteboard and mem observer
-        ui64 hardLimitBytes = GetHardLimitBytes(processMemoryInfo);
+        std::optional<ui64> hardLimitBytes_ = TryGetHardLimitBytes(processMemoryInfo);
+        if (!hardLimitBytes_.has_value()) {
+            // Note: can't use default Config.GetHardLimitBytes because some clusters without CGroupLimit
+            // may have specified SharedPageCacheConfig.LimitBytes and it shouldn't be lowered by memory controller for now
+            LOG_WARN_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "HardLimitBytes isn't available");
+            ctx.Schedule(Interval, new TEvents::TEvWakeup());
+            return;
+        }
+        ui64 hardLimitBytes = hardLimitBytes_.value();
+        
+        // TODO: pass hard limit to node whiteboard and mem observer
+
         ui64 softLimitBytes = GetSoftLimitBytes(hardLimitBytes);
         ui64 targetUtilizationBytes = GetTargetUtilizationBytes(hardLimitBytes);
 
@@ -240,8 +250,6 @@ private:
     void Handle(TEvConsumerRegister::TPtr &ev, const TActorContext& ctx) {
         const auto *msg = ev->Get();
         auto consumer = Consumers.emplace(msg->Kind, MakeIntrusive<TMemoryConsumer>(msg->Kind, ev->Sender));
-        auto config = GetConsumerConfig(msg->Kind);
-        ConsumersConfigLimit += msg->ConfigLimit.value_or(0) * 100 / Max<ui64>(1, config.MaxPercent.value_or(100));
         Y_ABORT_UNLESS(consumer.second, "Consumer kinds should be unique");
         LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Consumer " << msg->Kind << " " << ev->Sender << " registered");
         Send(ev->Sender, new TEvConsumerRegistered(consumer.first->second));
@@ -408,7 +416,7 @@ private:
         return result;
     }
 
-    ui64 GetHardLimitBytes(const TProcessMemoryInfo& info) const {
+    std::optional<ui64> TryGetHardLimitBytes(const TProcessMemoryInfo& info) const {
         if (Config.HasHardLimitBytes()) {
             return Config.GetHardLimitBytes();
         }
@@ -416,8 +424,7 @@ private:
             return info.CGroupLimit.value();
         }
         // TODO: get total RAM
-        return Max(ConsumersConfigLimit, // temporary hack for old cluster configs
-            Config.GetHardLimitBytes());
+        return {};
     }
 
     ui64 GetSoftLimitBytes(ui64 hardLimitBytes) const {
@@ -447,7 +454,6 @@ private:
 private:
     const TDuration Interval;
     TMap<EMemoryConsumerKind, TIntrusivePtr<TMemoryConsumer>> Consumers;
-    ui64 ConsumersConfigLimit = 0;
     std::shared_ptr<TMemTableMemoryConsumersCollection> MemTables;
     const TIntrusiveConstPtr<IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
     NKikimrConfig::TMemoryControllerConfig Config;

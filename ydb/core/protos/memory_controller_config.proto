@@ -15,8 +15,8 @@ message TMemoryControllerConfig {
     optional float SharedCacheMaxPercent = 102 [default = 50];
     optional uint64 SharedCacheMaxBytes = 103;
 
-    optional float MemTableMinPercent = 104 [default = 1];
-    optional uint64 MemTableMinBytes = 105;
-    optional float MemTableMaxPercent = 106 [default = 3];
-    optional uint64 MemTableMaxBytes = 107;
+    optional float MemTableMinPercent = 110 [default = 1];
+    optional uint64 MemTableMinBytes = 111;
+    optional float MemTableMaxPercent = 112 [default = 3];
+    optional uint64 MemTableMaxBytes = 113;
 }

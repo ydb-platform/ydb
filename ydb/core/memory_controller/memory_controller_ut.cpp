@@ -168,15 +168,16 @@ Y_UNIT_TEST(SharedCache_NoConfigLimit) {
     server->PrintCounters();
     UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ConfigLimitBytes->Val(), 0_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->MemLimitBytes->Val(), 0); // not applied yet
-    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ActiveLimitBytes->Val(), 10_MB); // reasonable default
+    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ActiveLimitBytes->Val(), 512_MB); // reasonable default
 
     runtime.SimulateSleep(TDuration::Seconds(2));
+    server->PrintCounters();
     UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ConfigLimitBytes->Val(), 0_MB);
     UNIT_ASSERT_DOUBLES_EQUAL(server->SharedPageCacheCounters->MemLimitBytes->Val(), static_cast<i64>(94_MB), static_cast<i64>(1_MB));
     UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ActiveLimitBytes->Val(), server->SharedPageCacheCounters->MemLimitBytes->Val());
 }
 
-Y_UNIT_TEST(SharedCache_NoHardLimit_BigConfigLimit) {
+Y_UNIT_TEST(SharedCache_NoHardLimit) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -189,20 +190,21 @@ Y_UNIT_TEST(SharedCache_NoHardLimit_BigConfigLimit) {
 
     server->PrintCounters();
     UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ConfigLimitBytes->Val(), 1000_MB);
-    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->MemLimitBytes->Val(), 0); // not applied yet
+    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->MemLimitBytes->Val(), 0);
     UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ActiveLimitBytes->Val(), 1000_MB);
 
     runtime.SimulateSleep(TDuration::Seconds(2));
+    server->PrintCounters();
     UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ConfigLimitBytes->Val(), 1000_MB);
-    UNIT_ASSERT_DOUBLES_EQUAL(server->SharedPageCacheCounters->MemLimitBytes->Val(), static_cast<i64>(943_MB), static_cast<i64>(1_MB));
-    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ActiveLimitBytes->Val(), server->SharedPageCacheCounters->MemLimitBytes->Val());
+    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->MemLimitBytes->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ActiveLimitBytes->Val(), 1000_MB);
 
-    server->ProcessMemoryInfo->AllocatedMemory = 300_MB;
+    server->ProcessMemoryInfo->AllocatedMemory = 900_MB;
     runtime.SimulateSleep(TDuration::Seconds(2));
     server->PrintCounters();
     UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ConfigLimitBytes->Val(), 1000_MB);
-    UNIT_ASSERT_DOUBLES_EQUAL(server->SharedPageCacheCounters->MemLimitBytes->Val(), static_cast<i64>(662_MB), static_cast<i64>(1_MB));
-    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ActiveLimitBytes->Val(), server->SharedPageCacheCounters->MemLimitBytes->Val());
+    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->MemLimitBytes->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ActiveLimitBytes->Val(), 1000_MB);
 }
 
 Y_UNIT_TEST(SharedCache_NoHardLimit_NoConfigLimit) {
@@ -218,20 +220,21 @@ Y_UNIT_TEST(SharedCache_NoHardLimit_NoConfigLimit) {
 
     server->PrintCounters();
     UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ConfigLimitBytes->Val(), 0_MB);
-    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->MemLimitBytes->Val(), 0); // not applied yet
-    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ActiveLimitBytes->Val(), 10_MB); // reasonable default
+    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->MemLimitBytes->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ActiveLimitBytes->Val(), 512_MB); // reasonable default
 
-    runtime.SimulateSleep(TDuration::Seconds(2));
-    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ConfigLimitBytes->Val(), 0_MB);
-    UNIT_ASSERT_DOUBLES_EQUAL(server->SharedPageCacheCounters->MemLimitBytes->Val(), static_cast<i64>(241_MB), static_cast<i64>(1_MB));
-    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ActiveLimitBytes->Val(), server->SharedPageCacheCounters->MemLimitBytes->Val());
-
-    server->ProcessMemoryInfo->AllocatedMemory = 100_MB;
     runtime.SimulateSleep(TDuration::Seconds(2));
     server->PrintCounters();
     UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ConfigLimitBytes->Val(), 0_MB);
-    UNIT_ASSERT_DOUBLES_EQUAL(server->SharedPageCacheCounters->MemLimitBytes->Val(), static_cast<i64>(147_MB), static_cast<i64>(1_MB));
-    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ActiveLimitBytes->Val(), server->SharedPageCacheCounters->MemLimitBytes->Val());
+    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->MemLimitBytes->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ActiveLimitBytes->Val(), 512_MB);
+
+    server->ProcessMemoryInfo->AllocatedMemory = 900_MB;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    server->PrintCounters();
+    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ConfigLimitBytes->Val(), 0_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->MemLimitBytes->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ActiveLimitBytes->Val(), 512_MB);
 }
 
 Y_UNIT_TEST(MemTable) {

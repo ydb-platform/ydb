@@ -1106,12 +1106,10 @@ public:
     }
 
     void Bootstrap() {
-        MemLimitBytes = Config->LimitBytes.value_or(10_MB); // soon will be updated by MemoryController
+        MemLimitBytes = Config->LimitBytes.value_or(512_MB); // soon will be updated by MemoryController
         ActualizeCacheSizeLimit();
         
-        auto consumerRegister = MakeHolder<NMemory::TEvConsumerRegister>(NMemory::EMemoryConsumerKind::SharedCache);
-        consumerRegister->ConfigLimit = Config->LimitBytes;
-        Send(NMemory::MakeMemoryControllerId(), consumerRegister.Release());
+        Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::SharedCache));
 
         Become(&TThis::StateFunc);
     }

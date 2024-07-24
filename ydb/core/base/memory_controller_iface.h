@@ -31,7 +31,6 @@ static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_MEMORY), "expected EvEnd <
 
 struct TEvConsumerRegister : public TEventLocal<TEvConsumerRegister, EvConsumerRegister> {
     const EMemoryConsumerKind Kind;
-    std::optional<ui64> ConfigLimit;
 
     TEvConsumerRegister(EMemoryConsumerKind kind)
         : Kind(kind)

@@ -311,8 +311,13 @@ message TOffloadConfig {
         optional NKikimrProto.TPathID DstPathId = 2;
     }
 
+    message TIncrementalRestore {
+        optional NKikimrProto.TPathID DstPathId = 1;
+    }
+
     oneof Strategy {
         TIncrementalBackup IncrementalBackup = 1;
+        TIncrementalRestore IncrementalRestore = 2;
     }
 }
 

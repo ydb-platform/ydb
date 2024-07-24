@@ -53,32 +53,13 @@ def kikimr(request):
 
 
 class TestRetry(TestYdsBase):
-    @pytest.mark.parametrize("kikimr", [Param(retry_limit=0, retry_period=1000)], indirect=["kikimr"])
-    def test_fail_first(self, kikimr):
-        topic_name = "fail_first"
-        connection = "fail_first"
-        self.init_topics(topic_name)
-        sql = R'''SELECT * FROM {connection}.`{input_topic}`;'''.format(
-            input_topic=self.input_topic, connection=connection
-        )
-        client = FederatedQueryClient("my_folder", streaming_over_kikimr=kikimr)
-        client.create_yds_connection(connection, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
-        query_id = client.create_query("a", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        kikimr.compute_plane.stop()
-        kikimr.compute_plane.start()
-        client.wait_query_status(query_id, fq.QueryMeta.ABORTED_BY_SYSTEM)
-        retry_count = kikimr.compute_plane.get_sensors(1, "yq").find_sensor(
-            {"query_id": query_id, "sensor": "RetryCount"}
-        )
-        assert retry_count == 0, "Incorrect RetryCount"
-
+    # TODO: fix this place. We need to speed up the drain and use retry_limit=3, retry_period=20
     @pytest.mark.parametrize(
-        "kikimr", [Param(retry_limit=1, retry_period=2, task_lease_ttl=1, ping_period=0.5)], indirect=["kikimr"]
+        "kikimr", [Param(retry_limit=2, retry_period=600, task_lease_ttl=1, ping_period=0.5)], indirect=["kikimr"]
     )
-    def test_low_rate(self, kikimr):
-        topic_name = "low_rate"
-        connection = "low_rate"
+    def test_high_rate(self, kikimr):
+        topic_name = "high_rate"
+        connection = "high_rate"
         self.init_topics(topic_name)
         sql = R'''SELECT * FROM {connection}.`{input_topic}`;'''.format(
             input_topic=self.input_topic, connection=connection
@@ -87,20 +68,15 @@ class TestRetry(TestYdsBase):
         client.create_yds_connection(connection, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
         query_id = client.create_query("a", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        deadline = time.time() + 2 * 2
-        for _ in range(5):
-            delta = deadline - time.time()
-            if delta > 0:
-                time.sleep(delta)
-            deadline = time.time() + 2 * 2
+        for _ in range(10):
+            deadline = time.time() + 1
             kikimr.compute_plane.stop()
             kikimr.compute_plane.start()
             kikimr.compute_plane.wait_bootstrap()
-            # client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-            time.sleep(4)
-        client.abort_query(query_id)
-        client.wait_query_status(query_id, fq.QueryMeta.ABORTED_BY_USER)
-        retry_count = kikimr.compute_plane.get_sensors(1, "yq").find_sensor(
-            {"query_id": query_id, "sensor": "RetryCount"}
-        )
-        assert retry_count >= 1, "Incorrect RetryCount"
+            if client.describe_query(query_id).result.query.meta.status == fq.QueryMeta.ABORTED_BY_SYSTEM:
+                break
+            delta = deadline - time.time()
+            if delta > 0:
+                time.sleep(delta)
+        else:
+            assert False, "Query was NOT aborted"

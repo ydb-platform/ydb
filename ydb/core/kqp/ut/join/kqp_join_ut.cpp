@@ -874,10 +874,11 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         }
         {
             auto result = db.ExecuteQuery(R"(
-                SELECT ta.a, tb.bval, tc.cval FROM ta INNER JOIN tb ON ta.b = tb.b LEFT JOIN tc ON ta.c = tc.cval;
+                SELECT ta.a, tb.bval, tc.cval FROM ta INNER JOIN tb ON ta.b = tb.b LEFT JOIN tc ON ta.c = tc.cval
+                ORDER BY ta.a, tb.bval, tc.cval;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            CompareYson(R"([[[1];[1001];[2001]];[[3];[1003];[2003]];[[2];[1002];[2002]]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[[1];[1001];[2001]];[[2];[1002];[2002]];[[3];[1003];[2003]]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 

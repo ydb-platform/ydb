@@ -37,7 +37,7 @@ jobs:
             for (let pair of mapping) {
               if (description.includes(pair[0]))
               {
-                # add label
+                // add label
                 try {
                   const result = await github.rest.issues.addLabels({
                     owner,
@@ -52,7 +52,7 @@ jobs:
               }
               else
               {
-                # remove label
+                // remove label
                 try {
                   const result = await github.rest.issues.deleteLabels({
                     owner,

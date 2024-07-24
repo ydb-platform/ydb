@@ -230,7 +230,7 @@ message TTableServiceConfig {
     reserved 33; // optional bool EnableKqpDataQueryStreamPointLookup = 33 [default = false];
     optional bool EnablePublishKqpProxyByRM = 34 [default = true];
     optional bool EnableKqpScanQueryStreamIdxLookupJoin = 35 [default = false];
-    optional bool EnableKqpDataQueryStreamIdxLookupJoin = 49 [default = false];
+    optional bool EnableKqpDataQueryStreamIdxLookupJoin = 49 [default = true];
     reserved 36; //optional bool EnablePredicateExtractForScanQueries = 36 [default = true];
     reserved 37; //optional bool EnablePredicateExtractForDataQueries = 37 [default = true];
     reserved 38; // optional bool EnableKqpImmediateEffects = 38 [default = true];

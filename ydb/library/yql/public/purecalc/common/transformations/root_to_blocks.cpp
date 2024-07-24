@@ -46,26 +46,8 @@ public:
         Y_ENSURE(returnItemType->GetKind() == ETypeAnnotationKind::Struct);
         const TStructExprType* structType = returnItemType->Cast<TStructExprType>();
         const auto blocksLambda = NodeToBlocks(input->Pos(), structType, ctx);
-
-        if (ProcessorMode_ == EProcessorMode::PullList) {
-            output = ctx.Builder(input->Pos())
-                .Callable("LMap")
-                    .Add(0, input)
-                    .Lambda(1)
-                        .Param("stream")
-                        .Apply(blocksLambda)
-                            .With(0, "stream")
-                        .Seal()
-                    .Seal()
-                .Seal()
-                .Build();
-        } else {
-            output = ctx.Builder(input->Pos())
-                .Apply(blocksLambda)
-                    .With(0, input)
-                .Seal()
-                .Build();
-        }
+        bool wrapLMap = ProcessorMode_ == EProcessorMode::PullList;
+        output = ApplyToIterable(input->Pos(), input, blocksLambda, wrapLMap, ctx);
 
         Wrapped_ = true;
 

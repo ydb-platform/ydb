@@ -1,6 +1,7 @@
 #include "utils.h"
 
 #include <ydb/library/yql/public/purecalc/common/names.h>
+#include <ydb/library/yql/core/yql_expr_type_annotation.h>
 
 using namespace NYql;
 using namespace NYql::NPureCalc;
@@ -117,4 +118,62 @@ TExprNode::TPtr NYql::NPureCalc::NodeToBlocks(
             .Seal()
         .Seal()
         .Build();
+}
+
+TExprNode::TPtr NYql::NPureCalc::ApplyToIterable(
+    const TPositionHandle& pos,
+    const TExprNode::TPtr iterable,
+    const TExprNode::TPtr lambda,
+    bool wrapLMap,
+    TExprContext& ctx
+) {
+    if (wrapLMap) {
+        return ctx.Builder(pos)
+            .Callable("LMap")
+                .Add(0, iterable)
+                .Lambda(1)
+                    .Param("stream")
+                    .Apply(lambda)
+                        .With(0, "stream")
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+    } else {
+        return ctx.Builder(pos)
+            .Apply(lambda)
+                .With(0, iterable)
+            .Seal()
+            .Build();
+    }
+}
+
+const TStructExprType* NYql::NPureCalc::WrapBlockStruct(
+    const TStructExprType* structType,
+    TExprContext& ctx
+) {
+    TVector<const TItemExprType*> members;
+    for (const auto& item : structType->GetItems()) {
+        const auto blockItemType = ctx.MakeType<TBlockExprType>(item->GetItemType());
+        members.push_back(ctx.MakeType<TItemExprType>(item->GetName(), blockItemType));
+    }
+    const auto scalarItemType = ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64));
+    members.push_back(ctx.MakeType<TItemExprType>(PurecalcBlockColumnLength, scalarItemType));
+    return ctx.MakeType<TStructExprType>(members);
+}
+
+const TStructExprType* NYql::NPureCalc::UnwrapBlockStruct(
+    const TStructExprType* structType,
+    TExprContext& ctx
+) {
+    TVector<const TItemExprType*> members;
+    for (const auto& item : structType->GetItems()) {
+        if (item->GetName() == PurecalcBlockColumnLength) {
+            continue;
+        }
+        bool isScalarUnused;
+        const auto blockItemType = GetBlockItemType(*item->GetItemType(), isScalarUnused);
+        members.push_back(ctx.MakeType<TItemExprType>(item->GetName(), blockItemType));
+    }
+    return ctx.MakeType<TStructExprType>(members);
 }

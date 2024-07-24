@@ -142,25 +142,8 @@ namespace {
             if (inputNode->IsCallable(PurecalcBlockInputCallableName)) {
                 const auto inputStruct = InputStructs_[inputIndex]->Cast<TStructExprType>();
                 const auto blocksLambda = NodeFromBlocks(replacePos, inputStruct, ctx);
-                if (ProcessorMode_ == EProcessorMode::PullList) {
-                    inputNode = ctx.Builder(replacePos)
-                        .Callable("LMap")
-                            .Add(0, inputNode)
-                            .Lambda(1)
-                                .Param("stream")
-                                .Apply(blocksLambda)
-                                    .With(0, "stream")
-                                .Seal()
-                            .Seal()
-                        .Seal()
-                        .Build();
-                } else {
-                    inputNode = ctx.Builder(replacePos)
-                        .Apply(blocksLambda)
-                            .With(0, inputNode)
-                        .Seal()
-                        .Build();
-                }
+                bool wrapLMap = ProcessorMode_ == EProcessorMode::PullList;
+                inputNode = ApplyToIterable(replacePos, inputNode, blocksLambda, wrapLMap, ctx);
             }
 
             if (UseSystemColumns_) {

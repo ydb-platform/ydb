@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/public/purecalc/common/names.h>
 #include <ydb/library/yql/public/purecalc/common/type_from_schema.h>
+#include <ydb/library/yql/public/purecalc/common/transformations/utils.h>
 
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 
@@ -41,17 +42,7 @@ namespace {
             // 2. Strip block container from the type to store its internal type.
             if (AcceptsBlocks_) {
                 Y_ENSURE(actualItemType->GetKind() == ETypeAnnotationKind::Struct);
-                const auto originalMembers = actualItemType->Cast<TStructExprType>()->GetItems();
-                TVector<const TItemExprType*> newMembers;
-                for (auto originalItem : originalMembers) {
-                    if (originalItem->GetName() == PurecalcBlockColumnLength) {
-                        continue;
-                    }
-                    bool isScalarUnused;
-                    const auto blockItemType = GetBlockItemType(*originalItem->GetItemType(), isScalarUnused);
-                    newMembers.push_back(ctx.MakeType<TItemExprType>(originalItem->GetName(), blockItemType));
-                }
-                actualItemType = ctx.MakeType<TStructExprType>(newMembers);
+                actualItemType = UnwrapBlockStruct(actualItemType->Cast<TStructExprType>(), ctx);
                 if (ProcessorMode_ == EProcessorMode::PullList) {
                     actualType = ctx.MakeType<TListExprType>(actualItemType);
                 } else {

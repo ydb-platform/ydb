@@ -3,6 +3,7 @@
 #include <ydb/library/yql/public/purecalc/common/interface.h>
 #include <ydb/library/yql/public/purecalc/common/inspect_input.h>
 #include <ydb/library/yql/public/purecalc/common/names.h>
+#include <ydb/library/yql/public/purecalc/common/transformations/utils.h>
 
 #include <ydb/library/yql/core/type_ann/type_ann_core.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
@@ -112,15 +113,7 @@ namespace {
             // 1. Add "_yql_block_length" attribute for internal usage.
             // 2. Add block container to wrap the actual item type.
             if (input->IsCallable(PurecalcBlockInputCallableName)) {
-                const auto inputItems = itemType->GetItems();
-                TVector<const TItemExprType*> members;
-                for (const auto& item : inputItems) {
-                    const auto blockItemType = ctx.MakeType<TBlockExprType>(item->GetItemType());
-                    members.push_back(ctx.MakeType<TItemExprType>(item->GetName(), blockItemType));
-                }
-                const auto scalarItemType = ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64));
-                members.push_back(ctx.MakeType<TItemExprType>(PurecalcBlockColumnLength, scalarItemType));
-                itemType = ctx.MakeType<TStructExprType>(members);
+                itemType = WrapBlockStruct(itemType, ctx);
             }
 
             RawInputTypes_[inputIndex] = itemType;

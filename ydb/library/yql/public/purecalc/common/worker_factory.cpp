@@ -28,6 +28,7 @@
 #include <ydb/library/yql/public/purecalc/common/transformations/output_columns_filter.h>
 #include <ydb/library/yql/public/purecalc/common/transformations/replace_table_reads.h>
 #include <ydb/library/yql/public/purecalc/common/transformations/root_to_blocks.h>
+#include <ydb/library/yql/public/purecalc/common/transformations/utils.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <util/stream/trace.h>
 
@@ -116,17 +117,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
             // 2. Strip block container from the type to store its internal type.
             if (options.OutputSpec.AcceptsBlocks()) {
                 Y_ENSURE(OutputType_->GetKind() == ETypeAnnotationKind::Struct);
-                const auto originalMembers = OutputType_->Cast<TStructExprType>()->GetItems();
-                TVector<const TItemExprType*> newMembers;
-                for (auto originalItem : originalMembers) {
-                    if (originalItem->GetName() == PurecalcBlockColumnLength) {
-                        continue;
-                    }
-                    bool isScalarUnused;
-                    const auto blockItemType = GetBlockItemType(*originalItem->GetItemType(), isScalarUnused);
-                    newMembers.push_back(ExprContext_.MakeType<TItemExprType>(originalItem->GetName(), blockItemType));
-                }
-                OutputType_ = ExprContext_.MakeType<TStructExprType>(newMembers);
+                OutputType_ = UnwrapBlockStruct(OutputType_->Cast<TStructExprType>(), ExprContext_);
             }
         }
         if (!OutputType_) {

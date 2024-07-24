@@ -122,14 +122,7 @@
  * prevent it from being inlined.
  */
 #if !defined(Y_NO_INLINE)
-    #if defined(_MSC_VER)
-        #define Y_NO_INLINE __declspec(noinline)
-    #elif defined(__GNUC__) || defined(__INTEL_COMPILER)
-        #/* Clang also defines __GNUC__ (as 4) */
-        #define Y_NO_INLINE __attribute__((__noinline__))
-    #else
-        #define Y_NO_INLINE
-    #endif
+    #define Y_NO_INLINE
 #endif
 
 //to cheat compiler about strict aliasing or similar problems

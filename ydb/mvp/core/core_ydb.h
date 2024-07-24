@@ -144,6 +144,10 @@ struct TYdbUnitResources {
 extern TMap<std::pair<TStringBuf, TStringBuf>, TYdbUnitResources> DefaultUnitResources;
 
 struct TYdbLocation {
+    enum EAuthTokenSource {
+        Client,
+        Service
+    };
     TString Name;
     TString Environment;
     TVector<std::pair<TString, TString>> Endpoints;
@@ -157,8 +161,8 @@ struct TYdbLocation {
     static TString UserToken;
     static TString CaCertificate;
     static TString SslCertificate;
-    NMVP::EAccessServiceType AccessServiceType = NMVP::EAccessServiceType::YandexV2;
-    TString ServiceTokenName;
+    EAuthSource MetaDatabaseTokenSource = EAuthTokenSource::Client;
+    TString MetaDatabaseTokenName;
     TString ServerlessDocumentProxyEndpoint;
     TString ServerlessYdbProxyEndpoint;
 

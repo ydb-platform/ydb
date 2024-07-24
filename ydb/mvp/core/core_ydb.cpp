@@ -118,14 +118,14 @@ NYdb::NTable::TTableClient TYdbLocation::GetTableClient(const TRequest& request,
     NYdb::NTable::TClientSettings clientSettings(defaultClientSettings);
 
     TString authToken;
-    switch (location.AccessServiceType) {
-    case NMVP::EAccessServiceType::YandexV2:
+    switch (location.MetaDatabaseTokenSource) {
+    case TYdbLocation::EAuthTokenSource::Client:
         authToken = request.GetAuthToken();
         break;
-    case NMVP::EAccessServiceType::NebiusV1:
+    case TYdbLocation::EAuthTokenSource::Service:
         NMVP::TMvpTokenator* tokenator = MVPAppData()->Tokenator;
-        if (tokenator && !location.ServiceTokenName.empty()) {
-            authToken = tokenator->GetToken(location.ServiceTokenName);
+        if (tokenator && !location.MetaDatabaseTokenName.empty()) {
+            authToken = tokenator->GetToken(location.MetaDatabaseTokenName);
         }
         break;
     }

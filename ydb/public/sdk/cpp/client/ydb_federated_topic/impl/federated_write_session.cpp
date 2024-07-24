@@ -134,11 +134,9 @@ std::shared_ptr<NTopic::IWriteSession> TFederatedWriteSessionImpl::OpenSubsessio
                         return;
                     }
 
-                    TDeferredWrite deferred;
                     Y_ABORT_UNLESS(self->PendingToken.Empty());
                     self->PendingToken = std::move(ev.ContinuationToken);
-                    self->PrepareDeferredWriteImpl(deferred);
-                    deferred.DoWrite();
+                    self->MaybeWriteImpl();
                 }
             }
         })
@@ -387,8 +385,6 @@ void TFederatedWriteSessionImpl::WriteEncoded(NTopic::TContinuationToken&& token
 }
 
 void TFederatedWriteSessionImpl::WriteInternal(NTopic::TContinuationToken&&, TWrappedWriteMessage&& wrapped) {
-    TDeferredWrite deferred(Subsession);
-
     with_lock(Lock) {
         ClientHasToken = false;
         if (!wrapped.Message.CreateTimestamp_.Defined()) {
@@ -396,15 +392,13 @@ void TFederatedWriteSessionImpl::WriteInternal(NTopic::TContinuationToken&&, TWr
         }
         BufferFreeSpace -= wrapped.Message.Data.size();
         OriginalMessagesToPassDown.emplace_back(std::move(wrapped));
-        PrepareDeferredWriteImpl(deferred);
+        MaybeWriteImpl();
     }
-
-    deferred.DoWrite();
 
     IssueTokenIfAllowed();
 }
 
-bool TFederatedWriteSessionImpl::PrepareDeferredWriteImpl(TDeferredWrite& deferred) {
+bool TFederatedWriteSessionImpl::MaybeWriteImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
     if (PendingToken.Empty()) {
         return false;
@@ -414,9 +408,7 @@ bool TFederatedWriteSessionImpl::PrepareDeferredWriteImpl(TDeferredWrite& deferr
     }
     OriginalMessagesToGetAck.push_back(std::move(OriginalMessagesToPassDown.front()));
     OriginalMessagesToPassDown.pop_front();
-    deferred.Writer = Subsession;
-    deferred.Token.ConstructInPlace(std::move(*PendingToken));
-    deferred.Message.ConstructInPlace(std::move(OriginalMessagesToGetAck.back().Message));
+    Subsession->Write(std::move(*PendingToken), std::move(OriginalMessagesToGetAck.back().Message));
     PendingToken.Clear();
     return true;
 }

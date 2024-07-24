@@ -63,25 +63,6 @@ private:
         }
     };
 
-    struct TDeferredWrite {
-        TDeferredWrite() {}
-        explicit TDeferredWrite(std::shared_ptr<NTopic::IWriteSession> writer)
-            : Writer(std::move(writer)) {
-        }
-
-        void DoWrite() {
-            if (Token.Empty() && Message.Empty()) {
-                return;
-            }
-            Y_ABORT_UNLESS(Token.Defined() && Message.Defined());
-            return Writer->Write(std::move(*Token), std::move(*Message));
-        }
-
-        std::shared_ptr<NTopic::IWriteSession> Writer;
-        TMaybe<NTopic::TContinuationToken> Token;
-        TMaybe<NTopic::TWriteMessage> Message;
-    };
-
 private:
     void Start();
 
@@ -92,7 +73,7 @@ private:
     void ScheduleFederationStateUpdateImpl(TDuration delay);
 
     void WriteInternal(NTopic::TContinuationToken&&, TWrappedWriteMessage&& message);
-    bool PrepareDeferredWriteImpl(TDeferredWrite& deferred);
+    bool MaybeWriteImpl();
 
     void CloseImpl(EStatus statusCode, NYql::TIssues&& issues);
     void CloseImpl(NTopic::TSessionClosedEvent const& ev);

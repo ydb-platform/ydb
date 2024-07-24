@@ -9,16 +9,14 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.84.0)
+VERSION(1.85.0)
 
-ORIGINAL_SOURCE(https://github.com/boostorg/intrusive/archive/boost-1.84.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/boostorg/intrusive/archive/boost-1.85.0.tar.gz)
 
 PEERDIR(
     contrib/restricted/boost/assert
     contrib/restricted/boost/config
-    contrib/restricted/boost/container_hash
     contrib/restricted/boost/move
-    contrib/restricted/boost/static_assert
 )
 
 ADDINCL(

@@ -292,6 +292,7 @@ void TMVP::TryGetGenericOptionsFromConfig(
 
     if (generic["access_service_type"]) {
 <<<<<<< HEAD
+<<<<<<< HEAD
         auto accessServiceTypeStr = TString(generic["access_service_type"].as<std::string>(""));
         if (!NMvp::EAccessServiceType_Parse(to_lower(accessServiceTypeStr), &OpenIdConnectSettings.AccessServiceType)) {
             ythrow yexception() << "Unknown access_service_type value: " << accessServiceTypeStr;
@@ -304,6 +305,9 @@ void TMVP::TryGetGenericOptionsFromConfig(
             ythrow yexception() << "Unknown auth profile: " << name;
 >>>>>>> b14ae95980 (renamed EAuth profile to EAccessServiceTypeEAccessServiceType)
         }
+=======
+        OpenIdConnectSettings.AccessServiceType = GetAccessServiceTypeFromString(generic["access_service_type"].as<std::string>(""));
+>>>>>>> 8359e2fa0d (added GetAccessServiceTypeFromString method)
     }
 }
 

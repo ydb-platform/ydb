@@ -580,6 +580,10 @@ public:
                         for (const auto& col : index.DataColumns) {
                             indexDesc->AddDataColumnNames(col);
                         }
+
+                        if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                            *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription).GetSettings();
+                        }
                     }
                     FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata);
                     if (sequences.size() > 0 && !sessionCtx->Config().EnableSequences) {

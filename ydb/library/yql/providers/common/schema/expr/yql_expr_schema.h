@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
+#include <ydb/library/yql/core/yql_type_annotation.h>
 
 #include <library/cpp/yson/consumer.h>
 #include <library/cpp/yson/node/node.h>
@@ -27,19 +28,19 @@ void WriteTypeToYson(NYson::TYsonConsumerBase& writer, const TTypeAnnotationNode
 
 // saves in columns order
 void SaveStructTypeToYson(NYson::TYsonConsumerBase& writer, const TStructExprType* type,
-    const TMaybe<TVector<TString>>& columns = {}, const TStructMemberMapper& mapper = {}, bool extendedForm = false);
+    const TMaybe<TColumnOrder>& columns = {}, const TStructMemberMapper& mapper = {}, bool extendedForm = false);
 
 NYT::TNode TypeToYsonNode(const TTypeAnnotationNode* type, bool extendedForm = false);
 TString WriteTypeToYson(const TTypeAnnotationNode* type, NYT::NYson::EYsonFormat format = NYT::NYson::EYsonFormat::Binary,
     bool extendedForm = false);
 
 const TTypeAnnotationNode* ParseTypeFromYson(const TStringBuf yson, TExprContext& ctx, const TPosition& pos = TPosition());
-const TTypeAnnotationNode* ParseOrderAwareTypeFromYson(const TStringBuf yson, TVector<TString>& topLevelColumns, TExprContext& ctx, const TPosition& pos = TPosition());
+const TTypeAnnotationNode* ParseOrderAwareTypeFromYson(const TStringBuf yson, TColumnOrder& topLevelColumns, TExprContext& ctx, const TPosition& pos = TPosition());
 const TTypeAnnotationNode* ParseTypeFromYson(const NYT::TNode& node, TExprContext& ctx, const TPosition& pos = TPosition());
-const TTypeAnnotationNode* ParseOrderAwareTypeFromYson(const NYT::TNode& node, TVector<TString>& topLevelColumns, TExprContext& ctx, const TPosition& pos = TPosition());
+const TTypeAnnotationNode* ParseOrderAwareTypeFromYson(const NYT::TNode& node, TColumnOrder& topLevelColumns, TExprContext& ctx, const TPosition& pos = TPosition());
 
 void WriteResOrPullType(NYson::TYsonConsumerBase& writer, const TTypeAnnotationNode* type,
-    const TVector<TString>& columns);
+    const TColumnOrder& columns);
 
 } // namespace NCommon
 } // namespace NYql

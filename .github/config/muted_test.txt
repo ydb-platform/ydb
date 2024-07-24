@@ -1,8 +1,0 @@
-ydb-core-blobstorage-pdisk-ut/TSectorMap::*
-ydb-core-blobstorage-ut_blobstorage/SpaceCheckForDiskReassign::*
-ydb-services-ydb-sdk_sessions_pool_ut/YdbSdkSessionsPool::StressTestSync10
-ydb-tests-functional-kqp-kqp_query_session/KqpQuerySession::NoLocalAttach
-ydb-core-blobstorage-ut_blobstorage/VDiskAssimilation::Test
-ydb-library-yql-sql-pg-ut/PgSqlParsingAutoparam::AutoParamValues_DifferentTypes
-ydb-core-blobstorage-ut_blobstorage/[6/10]*
-ydb/core/blobstorage/ut_blobstorage/Defragmentation::DoesItWork

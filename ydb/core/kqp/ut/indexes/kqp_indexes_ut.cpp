@@ -90,7 +90,8 @@ void CreateTableWithIndexWithState(
             state,
             0,
             0,
-            0
+            0,
+            {}
         )
     );
     metadata->KeyColumnNames.push_back("key");

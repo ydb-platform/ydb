@@ -2773,14 +2773,14 @@ private:
         TString type;
         NYT::TNode rowSpec;
         if (execCtx->Options_.FillSettings().Format == IDataProvider::EResultFormat::Skiff) {
-            auto ytType =  ParseYTType(pull.Input().Ref(), ctx, execCtx, columns);
+            auto ytType = ParseYTType(pull.Input().Ref(), ctx, execCtx, TColumnOrder(columns));
 
             type = ytType.first;
             rowSpec = ytType.second;
         } else if (NCommon::HasResOrPullOption(pull.Ref(), "type")) {
             TStringStream typeYson;
             ::NYson::TYsonWriter typeWriter(&typeYson);
-            NCommon::WriteResOrPullType(typeWriter, pull.Input().Ref().GetTypeAnn(), columns);
+            NCommon::WriteResOrPullType(typeWriter, pull.Input().Ref().GetTypeAnn(), TColumnOrder(columns));
             type = typeYson.Str();
         }
 
@@ -3025,7 +3025,7 @@ private:
         } else if (NCommon::HasResOrPullOption(result.Ref(), "type")) {
             TStringStream typeYson;
             ::NYson::TYsonWriter typeWriter(&typeYson);
-            NCommon::WriteResOrPullType(typeWriter, result.Input().Ref().GetTypeAnn(), columns);
+            NCommon::WriteResOrPullType(typeWriter, result.Input().Ref().GetTypeAnn(), TColumnOrder(columns));
             type = typeYson.Str();
         }
 

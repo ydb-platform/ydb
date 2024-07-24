@@ -718,17 +718,26 @@ table_constraint:
 ;
 
 table_index: INDEX an_id table_index_type
-    (WITH LPAREN an_id EQUALS an_id (COMMA an_id EQUALS an_id)* COMMA? RPAREN)?
     ON LPAREN an_id_schema (COMMA an_id_schema)* RPAREN
-    (COVER LPAREN an_id_schema (COMMA an_id_schema)* RPAREN)?;
-
-table_index_type:
-      global_index
-    | local_index
+    (COVER LPAREN an_id_schema (COMMA an_id_schema)* RPAREN)?
+    with_index_settings?
 ;
+
+table_index_type: (global_index | local_index) (USING index_subtype)?;
 
 global_index: GLOBAL UNIQUE? (SYNC | ASYNC)?;
 local_index: LOCAL;
+
+index_subtype: an_id;
+
+with_index_settings: WITH LPAREN index_setting_entry (COMMA index_setting_entry)* COMMA? RPAREN; 
+index_setting_entry: an_id EQUALS index_setting_value;
+index_setting_value:
+      id_or_type
+    | STRING_VALUE      
+    | integer
+    | bool_value
+;
 
 changefeed: CHANGEFEED an_id WITH LPAREN changefeed_settings RPAREN;
 changefeed_settings: changefeed_settings_entry (COMMA changefeed_settings_entry)*;

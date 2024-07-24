@@ -6871,7 +6871,7 @@ void CheckExpectedTypeAndColumnOrder(const TExprNode& node, TExprContext& ctx, T
             auto status = typesCtx.SetColumnOrder(node, oldColumnOrder, ctx);
             YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
         } else {
-            YQL_ENSURE(newColumnOrder == oldColumnOrder,
+            YQL_ENSURE(newColumnOrder && *newColumnOrder == oldColumnOrder,
                 "Rewrite error, column order should be: "
                 << FormatColumnOrder(oldColumnOrder) << ", but it is: "
                 << FormatColumnOrder(newColumnOrder) << " for node "

@@ -339,7 +339,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Write(TExprBase node, T
         || (maybeReadSettings && NYql::HasAnySetting(maybeReadSettings.Ref(),
             EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Sample))
         || (nextDescription.RowSpec->GetColumnOrder().Defined() && AnyOf(inputPaths, [colOrder = *nextDescription.RowSpec->GetColumnOrder()] (const TYtPathInfo::TPtr& path) {
-            return path->Table->RowSpec->GetColumnOrder().Defined() && path->Table->RowSpec->GetColumnOrder() != colOrder;
+            return path->Table->RowSpec->GetColumnOrder().Defined() && *path->Table->RowSpec->GetColumnOrder() != colOrder;
         }))
     );
 

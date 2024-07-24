@@ -106,7 +106,7 @@ namespace {
             auto itemType = InputStructs_[inputIndex];
             TColumnOrder columnOrder;
             for (const auto& i : itemType->GetItems()) {
-                columnOrder.push_back(TString(i->GetName()));
+                columnOrder.AddColumn(TString(i->GetName()));
             }
 
             if (ProcessorMode_ != EProcessorMode::PullList) {

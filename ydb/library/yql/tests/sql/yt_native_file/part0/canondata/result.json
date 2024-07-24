@@ -2500,6 +2500,41 @@
             "uri": "https://{canondata_backend}/1775059/ac786a412ea7eeb03c2f46ced1b142e23374a289/resource.tar.gz#test.test_pg_catalog-pg_stat_gssapi-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[pg_duplicated-ambigous_order_by_item_expression_from_projection--Debug]": [],
+    "test.test[pg_duplicated-ambigous_order_by_item_expression_from_projection--Plan]": [],
+    "test.test[pg_duplicated-ambigous_order_by_item_expression_from_projection--Results]": [
+        {
+            "uri": "file://test.test_pg_duplicated-ambigous_order_by_item_expression_from_projection--Results_/extracted"
+        }
+    ],
+    "test.test[pg_duplicated-ambigous_ref--Debug]": [],
+    "test.test[pg_duplicated-ambigous_ref--Plan]": [],
+    "test.test[pg_duplicated-ambigous_ref--Results]": [
+        {
+            "uri": "file://test.test_pg_duplicated-ambigous_ref--Results_/extracted"
+        }
+    ],
+    "test.test[pg_duplicated-star_proj-default.txt-Debug]": [
+        {
+            "checksum": "0ed373b95736151db65d3409402caebf",
+            "size": 361,
+            "uri": "https://{canondata_backend}/1937367/b7c9cac76abde5c75b5f08ee8ddb15ad82a12daf/resource.tar.gz#test.test_pg_duplicated-star_proj-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[pg_duplicated-star_proj-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1937367/b7c9cac76abde5c75b5f08ee8ddb15ad82a12daf/resource.tar.gz#test.test_pg_duplicated-star_proj-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg_duplicated-star_proj-default.txt-Results]": [
+        {
+            "checksum": "88bba99371d4b24ba5085349b29e0446",
+            "size": 1052,
+            "uri": "https://{canondata_backend}/1937367/b7c9cac76abde5c75b5f08ee8ddb15ad82a12daf/resource.tar.gz#test.test_pg_duplicated-star_proj-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[produce-discard_process_with_lambda-default.txt-Debug]": [
         {
             "checksum": "5dcd06dd5bb38090ce57d59084981cca",

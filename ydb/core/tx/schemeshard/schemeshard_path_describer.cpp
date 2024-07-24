@@ -1288,8 +1288,12 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
 
     auto indexPath = *PathsById.FindPtr(pathId);
     Y_ABORT_UNLESS(indexPath);
-    const ui8 expectedIndexImplTableCount = indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree ? 2 : 1;
-    Y_ABORT_UNLESS(indexPath->GetChildren().size() == expectedIndexImplTableCount);
+    if (indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+        // For vector index we have 4 impl tables on build stage and 2 impl tables when it's ready
+        Y_ABORT_UNLESS(indexPath->GetChildren().size() == 4 || indexPath->GetChildren().size() == 2);
+    } else {
+        Y_ABORT_UNLESS(indexPath->GetChildren().size() == 1);
+    }
 
     ui64 dataSize = 0;
     for (const auto& indexImplTablePathId : indexPath->GetChildren()) {

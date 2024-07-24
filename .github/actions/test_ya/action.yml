@@ -316,7 +316,7 @@ runs:
           RC=`cat exit_code`
 
           # convert to chromium trace
-          ya analyze-make timeline --evlog $CURRENT_PUBLIC_DIR/ya_evlog.jsonl
+          ./ya analyze-make timeline --evlog $CURRENT_PUBLIC_DIR/ya_evlog.jsonl
 
           if [ $RC -ne 0 ]; then
             echo "ya make returned $RC, build failed"

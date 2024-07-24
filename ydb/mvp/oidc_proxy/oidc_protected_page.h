@@ -68,7 +68,7 @@ public:
         }
     }
 
-    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
+    void HandleProxy(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
         NHttp::THttpOutgoingResponsePtr httpResponse;
         if (event->Get()->Response != nullptr) {
             NHttp::THttpIncomingResponsePtr response = event->Get()->Response;

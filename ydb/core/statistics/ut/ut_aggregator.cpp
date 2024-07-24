@@ -51,7 +51,9 @@ void CreateUniformTable(TTestEnv& env, const TString& databaseName, const TStrin
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-void CreateColumnStoreTable(TTestEnv& env, const TString& databaseName, const TString& tableName) {
+void CreateColumnStoreTable(TTestEnv& env, const TString& databaseName, const TString& tableName,
+    int shardCount)
+{
     TTableClient client(env.GetDriver());
     auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -65,9 +67,9 @@ void CreateColumnStoreTable(TTestEnv& env, const TString& databaseName, const TS
         PARTITION BY HASH(Key)
         WITH (
             STORE = COLUMN,
-            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = %d
         );
-    )", fullTableName.c_str())).GetValueSync();
+    )", fullTableName.c_str(), shardCount)).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
     NYdb::TValueBuilder rows;
@@ -347,7 +349,7 @@ Y_UNIT_TEST_SUITE(StatisticsAggregator) {
         TTestEnv env(1, 1);
         auto init = [&] () {
             CreateDatabase(env, "Database");
-            CreateColumnStoreTable(env, "Database", "Table");
+            CreateColumnStoreTable(env, "Database", "Table", 10);
         };
         std::thread initThread(init);
 

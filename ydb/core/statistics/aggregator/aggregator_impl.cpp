@@ -403,6 +403,8 @@ void TStatisticsAggregator::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
     if (IsColumnTable) {
         if (tabletId == HiveId) {
             Schedule(HiveRetryInterval, new TEvPrivate::TEvRequestDistribution);
+        } else {
+            SA_LOG_CRIT("[" << TabletID() << "] TEvDeliveryProblem with unexpected tablet " << tabletId);
         }
     } else {
         if (ShardRanges.empty()) {

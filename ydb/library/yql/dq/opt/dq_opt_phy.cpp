@@ -2692,7 +2692,7 @@ TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationCon
         return node;
     }
 
-    if (useHashJoin) {
+    if (useHashJoin && hashJoin == EHashJoinMode::GraceAndSelf) {
         return DqBuildHashJoin(join, hashJoin, ctx, optCtx);
     }
 

@@ -125,9 +125,9 @@ private:
 
 }; // TSessionInfo
 
-struct TCredentialsKey: std::tuple<TString, TString, TString> {
-    explicit TCredentialsKey(const TString& endpoint, const TString& database, const TString& user)
-        : std::tuple<TString, TString, TString>(endpoint, database, user)
+struct TCredentialsKey: std::tuple<TString, TString, bool, TString> {
+    explicit TCredentialsKey(const TString& endpoint, const TString& database, bool ssl, const TString& user)
+        : std::tuple<TString, TString, bool, TString>(endpoint, database, ssl, user)
     {
     }
 
@@ -139,12 +139,20 @@ struct TCredentialsKey: std::tuple<TString, TString, TString> {
         return std::get<1>(*this);
     }
 
+    bool EnableSsl() const {
+        return std::get<2>(*this);
+    }
+
     static TCredentialsKey FromParams(const NKikimrReplication::TConnectionParams& params) {
+        const auto& endpoint = params.GetEndpoint();
+        const auto& database = params.GetDatabase();
+        const bool ssl = params.GetEnableSsl();
+
         switch (params.GetCredentialsCase()) {
         case NKikimrReplication::TConnectionParams::kStaticCredentials:
-            return TCredentialsKey(params.GetEndpoint(), params.GetDatabase(), params.GetStaticCredentials().GetUser());
+            return TCredentialsKey(endpoint, database, ssl, params.GetStaticCredentials().GetUser());
         case NKikimrReplication::TConnectionParams::kOAuthToken:
-            return TCredentialsKey(params.GetEndpoint(), params.GetDatabase(), params.GetOAuthToken().GetToken() /* TODO */);
+            return TCredentialsKey(endpoint, database, ssl, params.GetOAuthToken().GetToken());
         default:
             Y_ABORT("Unexpected credentials");
         }
@@ -155,7 +163,7 @@ struct TCredentialsKey: std::tuple<TString, TString, TString> {
 } // NKikimr::NReplication::NService
 
 template <>
-struct THash<NKikimr::NReplication::NService::TCredentialsKey> : THash<std::tuple<TString, TString, TString>> {};
+struct THash<NKikimr::NReplication::NService::TCredentialsKey> : THash<std::tuple<TString, TString, bool, TString>> {};
 
 namespace NKikimr::NReplication {
 
@@ -213,7 +221,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     const TActorId& GetOrCreateYdbProxy(TCredentialsKey&& key, Args&&... args) {
         auto it = YdbProxies.find(key);
         if (it == YdbProxies.end()) {
-            auto ydbProxy = Register(CreateYdbProxy(key.Endpoint(), key.Database(), std::forward<Args>(args)...));
+            auto ydbProxy = Register(CreateYdbProxy(key.Endpoint(), key.Database(), key.EnableSsl(), std::forward<Args>(args)...));
             auto res = YdbProxies.emplace(std::move(key), std::move(ydbProxy));
             Y_ABORT_UNLESS(res.second);
             it = res.first;

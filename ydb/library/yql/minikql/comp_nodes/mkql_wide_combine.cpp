@@ -1247,7 +1247,6 @@ public:
         , AllowSpilling(allowSpilling)
     {}
 
-    // MARK: DoCalculate
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         if (!state.HasValue()) {
             MakeState(ctx, state);

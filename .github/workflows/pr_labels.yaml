@@ -34,17 +34,35 @@ jobs:
             ];
             if (!description) return;
             for (let pair of mapping) {
-              if (!description.includes(pair[0])) continue;
-              try {
-                 const result = await github.rest.issues.addLabels({
-                  owner,
-                  repo,
-                  issue_number: prNumber,
-                  labels: [pair[1]]
-                });
-                console.log('Added label', pair[1]);
-              } catch(e) {
-                console.log(e);
+              if (description.includes(pair[0]))
+              {
+                # add label
+                try {
+                  const result = await github.rest.issues.addLabels({
+                    owner,
+                    repo,
+                    issue_number: prNumber,
+                    labels: [pair[1]]
+                  });
+                  console.log('Added label', pair[1]);
+                } catch(e) {
+                  console.log(e);
+                }
+              }
+              else
+              {
+                # remove label
+                try {
+                  const result = await github.rest.issues.deleteLabels({
+                    owner,
+                    repo,
+                    issue_number: prNumber,
+                    labels: [pair[1]]
+                  });
+                  console.log('Added label', pair[1]);
+                } catch(e) {
+                  console.log(e);
+                }
               }
               return;
             }

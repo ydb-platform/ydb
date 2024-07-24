@@ -166,10 +166,10 @@ void TMVP::InitMeta() {
     MetaLocation.RootDomain = MetaDatabase;
     MetaLocation.MetaDatabaseTokenName = MetaDatabaseTokenName;
     switch (AccessServiceType) {
-        case AccessServiceType::YandexV2:
+        case NMVP::EAccessServiceType::YandexV2:
             MetaLocation.MetaDatabaseTokenSource = TYdbLocation::EAuthTokenSource::Client;
             break;
-        case AccessServiceType::NebiusV1:
+        case NMVP::EAccessServiceType::NebiusV1:
             MetaLocation.MetaDatabaseTokenSource = TYdbLocation::EAuthTokenSource::Service;
             break;
     }

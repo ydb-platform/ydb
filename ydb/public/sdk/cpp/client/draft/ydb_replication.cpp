@@ -19,6 +19,7 @@ namespace NReplication {
 TConnectionParams::TConnectionParams(const Ydb::Replication::ConnectionParams& params) {
     DiscoveryEndpoint(params.endpoint());
     Database(params.database());
+    SslCredentials(params.enable_ssl());
 
     switch (params.credentials_case()) {
     case Ydb::Replication::ConnectionParams::kStaticCredentials:
@@ -45,6 +46,10 @@ const TString& TConnectionParams::GetDiscoveryEndpoint() const {
 
 const TString& TConnectionParams::GetDatabase() const {
     return *Database_;
+}
+
+bool TConnectionParams::GetEnableSsl() const {
+    return SslCredentials_->IsEnabled;
 }
 
 TConnectionParams::ECredentials TConnectionParams::GetCredentials() const {

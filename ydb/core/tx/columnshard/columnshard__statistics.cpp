@@ -22,7 +22,7 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
 
     auto* statistic = column->AddStatistics();
     statistic->SetType(NStat::COUNT_MIN_SKETCH);
-    statistic->SetData(strSketch);
+    statistic->SetData(std::move(strSketch));
 
     Send(ev->Sender, response.release(), 0, ev->Cookie);
 }

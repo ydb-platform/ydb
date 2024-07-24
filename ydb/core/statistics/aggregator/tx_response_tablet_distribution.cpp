@@ -8,9 +8,13 @@ namespace NKikimr::NStat {
 struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
     NKikimrHive::TEvResponseTabletDistribution Record;
 
-    bool SendAggregate = false;
-    bool ScheduleResolve = false;
-    bool ScheduleReqDistribution = false;
+    enum class EAction : ui8 {
+        None,
+        SendAggregate,
+        ScheduleResolve,
+        ScheduleReqDistribution,
+    };
+    EAction Action = EAction::None;
 
     std::unique_ptr<TEvStatistics::TEvAggregateStatistics> Request;
 
@@ -36,7 +40,7 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
             if (inNode.GetNodeId() == 0) {
                 // these tablets are probably in Hive boot queue
                 if (Self->HiveRequestRound < Self->MaxHiveRequestRoundCount) {
-                    ScheduleReqDistribution = true;
+                    Action = EAction::ScheduleReqDistribution;
                     return true;
                 }
                 continue;
@@ -53,7 +57,7 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
 
         if (!Self->TabletsForReqDistribution.empty() && Self->ResolveRound < Self->MaxResolveRoundCount) {
             // these tablets do not exist in Hive anymore
-            ScheduleResolve = true;
+            Action = EAction::ScheduleResolve;
             return true;
         }
 
@@ -66,7 +70,7 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
         ++Self->GlobalTraversalRound;
         Self->PersistGlobalTraversalRound(db);
         outRecord.SetRound(Self->GlobalTraversalRound);
-        SendAggregate = true;
+        Action = EAction::SendAggregate;
 
         return true;
     }
@@ -74,17 +78,22 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
     void Complete(const TActorContext& ctx) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxResponseTabletDistribution::Complete");
 
-        if (ScheduleResolve) {
+        switch (Action) {
+        case EAction::ScheduleResolve:
             ctx.Schedule(ResolveRetryInterval, new TEvPrivate::TEvResolve());
-        }
+            break;
 
-        if (ScheduleReqDistribution) {
+        case EAction::ScheduleReqDistribution:
             ctx.Schedule(HiveRetryInterval, new TEvPrivate::TEvRequestDistribution());
-        }
+            break;
 
-        if (SendAggregate) {
+        case EAction::SendAggregate:
             ctx.Send(MakeStatServiceID(Self->SelfId().NodeId()), Request.release());
             ctx.Schedule(KeepAliveTimeout, new TEvPrivate::TEvAckTimeout(++Self->KeepAliveSeqNo));
+            break;
+
+        default:
+            break;
         }
     }
 };

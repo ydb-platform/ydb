@@ -7,8 +7,12 @@ namespace NKikimr::NStat {
 struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
     NKikimrStat::TEvAggregateStatisticsResponse Record;
 
-    bool SendReqDistribution = false;
-    bool SendAggregate = false;
+    enum class EAction : ui8 {
+        None,
+        SendReqDistribution,
+        SendAggregate,
+    };
+    EAction Action = EAction::None;
 
     std::unique_ptr<TEvStatistics::TEvAggregateStatistics> Request;
 
@@ -30,17 +34,18 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
             auto tag = column.GetTag();
             for (auto& statistic : column.GetStatistics()) {
                 if (statistic.GetType() == NKikimr::NStat::COUNT_MIN_SKETCH) {
-                    if (Self->ColumnNames.find(tag) == Self->ColumnNames.end()) {
+                    if (!Self->ColumnNames.contains(tag)) {
                         continue;
                     }
-                    if (Self->CountMinSketches.find(tag) == Self->CountMinSketches.end()) {
-                        Self->CountMinSketches[tag].reset(TCountMinSketch::Create());
+
+                    auto [currentIt, emplaced] = Self->CountMinSketches.try_emplace(tag);
+                    if (emplaced) {
+                        currentIt->second.reset(TCountMinSketch::Create());
                     }
 
                     auto* data = statistic.GetData().Data();
                     auto* sketch = reinterpret_cast<const TCountMinSketch*>(data);
-                    auto& current = Self->CountMinSketches[tag];
-                    *current += *sketch;
+                    *(currentIt->second) += *sketch;
                 }
             }
         }
@@ -52,7 +57,7 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
             return true;
         }
 
-        std::unordered_map<ui32, std::unordered_set<ui64>> nonLocalTablets;
+        std::unordered_map<ui32, std::vector<ui64>> nonLocalTablets;
 
         Self->TabletsForReqDistribution.clear();
         for (auto& tablet : Record.GetFailedTablets()) {
@@ -60,20 +65,23 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
             switch (error) {
             case NKikimrStat::TEvAggregateStatisticsResponse::UnavailableNode:
                 Self->TabletsForReqDistribution.insert(tablet.GetTabletId());
-                SendReqDistribution = true;
+                Action = EAction::SendReqDistribution;
                 break;
+
             case NKikimrStat::TEvAggregateStatisticsResponse::NonLocalTablet:
                 auto nodeId = tablet.GetNodeId();
                 if (nodeId == 0) {
                     // we cannot reach this tablet
                     Self->TabletsForReqDistribution.insert(tablet.GetTabletId());
-                    SendReqDistribution = true;
-                } else {
-                    nonLocalTablets[nodeId].insert(tablet.GetTabletId());
+                    Action = EAction::SendReqDistribution;
+
+                } else if (Action != EAction::SendReqDistribution) {
+                    nonLocalTablets[nodeId].push_back(tablet.GetTabletId());
                 }
             }
         }
-        if (SendReqDistribution) {
+
+        if (Action == EAction::SendReqDistribution) {
             return true;
         }
 
@@ -93,7 +101,7 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
         ++Self->GlobalTraversalRound;
         Self->PersistGlobalTraversalRound(db);
         outRecord.SetRound(Self->GlobalTraversalRound);
-        SendAggregate = true;
+        Action = EAction::SendAggregate;
 
         return true;
     }
@@ -101,14 +109,18 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
     void Complete(const TActorContext& ctx) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxAggregateStatisticsResponse::Complete");
 
-        if (SendReqDistribution) {
+        switch (Action) {
+        case EAction::SendReqDistribution:
             ctx.Send(Self->SelfId(), new TEvPrivate::TEvRequestDistribution);
-            return;
-        }
+            break;
 
-        if (SendAggregate) {
+        case EAction::SendAggregate:
             ctx.Send(MakeStatServiceID(Self->SelfId().NodeId()), Request.release());
             ctx.Schedule(KeepAliveTimeout, new TEvPrivate::TEvAckTimeout(++Self->KeepAliveSeqNo));
+            break;
+
+        default:
+            break;
         }
     }
 };

@@ -72,6 +72,7 @@ public:
         NHttp::THttpOutgoingResponsePtr httpResponse;
         if (event->Get()->Response != nullptr) {
             NHttp::THttpIncomingResponsePtr response = event->Get()->Response;
+            LOG_DEBUG_S(ctx, EService::MVP, "Incoming response for protected resource: " << response->Status);
             if (response->Status == "400" && RequestedPageScheme.empty()) {
                 NHttp::THttpOutgoingRequestPtr request = response->GetRequest();
                 if (!request->Secure) {

@@ -598,6 +598,7 @@ Y_UNIT_TEST_SUITE(TestStateFunc) {
     };
 
     Y_UNIT_TEST(StateFuncWithExceptions) {
+        UNIT_ASSERT_VALUES_EQUAL(42, 420);
         TTestActorRuntimeBase runtime;
         runtime.Initialize();
         auto sender = runtime.AllocateEdgeActor();

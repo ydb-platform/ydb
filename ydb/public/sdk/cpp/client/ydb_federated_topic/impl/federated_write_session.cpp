@@ -29,12 +29,14 @@ TFederatedWriteSessionImpl::TFederatedWriteSessionImpl(
     std::shared_ptr<TGRpcConnectionsImpl> connections,
     const TFederatedTopicClientSettings& clientSettings,
     std::shared_ptr<TFederatedDbObserver> observer,
-    std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> codecs
+    std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> codecs,
+    NTopic::IExecutor::TPtr subsessionHandlersExecutor
 )
     : Settings(settings)
     , Connections(std::move(connections))
     , SubclientSettings(FromFederated(clientSettings))
     , ProvidedCodecs(std::move(codecs))
+    , SubsessionHandlersExecutor(subsessionHandlersExecutor)
     , Observer(std::move(observer))
     , AsyncInit(Observer->WaitForFirstState())
     , FederationState(nullptr)
@@ -124,15 +126,15 @@ std::shared_ptr<NTopic::IWriteSession> TFederatedWriteSessionImpl::OpenSubsessio
     auto subclient = make_shared<NTopic::TTopicClient::TImpl>(Connections, clientSettings);
 
     auto handlers = NTopic::TWriteSessionSettings::TEventHandlers()
-        .HandlersExecutor(NTopic::CreateThreadPoolExecutor(1))
+        .HandlersExecutor(SubsessionHandlersExecutor)
         .ReadyToAcceptHandler([selfCtx = SelfContext, generation = SubsessionGeneration](NTopic::TWriteSessionEvent::TReadyToAcceptEvent& ev) {
             if (auto self = selfCtx->LockShared()) {
                 with_lock(self->Lock) {
-                    TDeferredWrite deferred;
                     if (generation != self->SubsessionGeneration) {
                         return;
                     }
 
+                    TDeferredWrite deferred;
                     Y_ABORT_UNLESS(self->PendingToken.Empty());
                     self->PendingToken = std::move(ev.ContinuationToken);
                     self->PrepareDeferredWriteImpl(deferred);

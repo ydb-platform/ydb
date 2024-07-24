@@ -35,7 +35,8 @@ TFederatedTopicClient::TImpl::CreateWriteSession(const TFederatedWriteSessionSet
             splitSettings.EventHandlers_.HandlersExecutor(ClientSettings.DefaultHandlersExecutor_);
         }
     }
-    auto session = std::make_shared<TFederatedWriteSession>(splitSettings, Connections, ClientSettings, GetObserver(), ProvidedCodecs);
+    auto session = std::make_shared<TFederatedWriteSession>(
+        splitSettings, Connections, ClientSettings, GetObserver(), ProvidedCodecs, GetSubsessionHandlersExecutor());
     session->Start();
     return std::move(session);
 }
@@ -47,6 +48,21 @@ void TFederatedTopicClient::TImpl::InitObserver() {
             Observer->Start();
         }
     }
+}
+
+auto TFederatedTopicClient::TImpl::GetSubsessionHandlersExecutor() -> NTopic::IExecutor::TPtr {
+    auto driverStatePtr = Connections->GetDriverState(
+        ClientSettings.Database_,
+        ClientSettings.DiscoveryEndpoint_,
+        ClientSettings.DiscoveryMode_,
+        ClientSettings.SslCredentials_,
+        ClientSettings.CredentialsProviderFactory_
+    );
+    auto& executorPtr = SubsessionHandlersExecutors[driverStatePtr];
+    if (!executorPtr) {
+        executorPtr = NTopic::CreateThreadPoolExecutor(1);
+    }
+    return executorPtr;
 }
 
 }

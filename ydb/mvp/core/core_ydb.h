@@ -161,7 +161,7 @@ struct TYdbLocation {
     static TString UserToken;
     static TString CaCertificate;
     static TString SslCertificate;
-    EAuthSource MetaDatabaseTokenSource = EAuthTokenSource::Client;
+    EAuthTokenSource MetaDatabaseTokenSource = EAuthTokenSource::Client;
     TString MetaDatabaseTokenName;
     TString ServerlessDocumentProxyEndpoint;
     TString ServerlessYdbProxyEndpoint;

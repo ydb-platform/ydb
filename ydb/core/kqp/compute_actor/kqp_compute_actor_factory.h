@@ -107,6 +107,7 @@ public:
         const NActors::TActorId& ExecuterId;
         const ui64 TxId;
         NYql::NDqProto::TDqTask* Task;
+        TIntrusivePtr<NRm::TTxState> TxInfo;
         const NYql::NDq::TComputeRuntimeSettings& RuntimeSettings;
         NWilson::TTraceId TraceId;
         TIntrusivePtr<NActors::TProtoArenaHolder> Arena;

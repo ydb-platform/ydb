@@ -35,19 +35,16 @@ jobs:
             ];
             // remove all labels owned by current script 
             for (let pair of mapping) {
-              if (description.includes(pair[0]))
-              {
-                try {
-                  const result = await github.rest.issues.removeLabel({
-                    owner,
-                    repo,
-                    issue_number: prNumber,
-                    name: pair[1]
-                  });
-                  console.log('Removed label', pair[1]);
-                } catch(e) {
-                  console.log(e);
-                }
+              try {
+                const result = await github.rest.issues.removeLabel({
+                  owner,
+                  repo,
+                  issue_number: prNumber,
+                  name: pair[1]
+                });
+                console.log('Removed label', pair[1]);
+              } catch(e) {
+                console.log(e);
               }
             }
             // add first encountered label

@@ -68,6 +68,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
 
         InputTypes_.push_back(structType);
         OriginalInputTypes_.push_back(originalStructType);
+        RawInputTypes_.push_back(originalStructType);
 
         auto& columnsSet = AllColumns_.emplace_back();
         for (const auto* structItem : structType->GetItems()) {
@@ -93,6 +94,8 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
         OutputType_ = nullptr;
     }
 
+    RawOutputType_ = OutputType_;
+
     // Translate
 
     if (options.TranslationMode_ == ETranslationMode::Mkql) {
@@ -102,10 +105,12 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
             options.ModuleResolver, options.SyntaxVersion_, options.Modules,
             options.InputSpec, options.OutputSpec, processorMode);
 
+        RawOutputType_ = GetSequenceItemType(ExprRoot_->Pos(), ExprRoot_->GetTypeAnn(), true, ExprContext_);
+
         // Deduce output type if it wasn't provided by output spec
 
         if (!OutputType_) {
-            OutputType_ = GetSequenceItemType(ExprRoot_->Pos(), ExprRoot_->GetTypeAnn(), true, ExprContext_);
+            OutputType_ = RawOutputType_;
             // XXX: Tweak the obtained expression type, is the spec supports blocks:
             // 1. Remove "_yql_block_length" attribute, since it's for internal usage.
             // 2. Strip block container from the type to store its internal type.
@@ -114,6 +119,9 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
                 const auto originalMembers = OutputType_->Cast<TStructExprType>()->GetItems();
                 TVector<const TItemExprType*> newMembers;
                 for (auto originalItem : originalMembers) {
+                    if (originalItem->GetName() == "_yql_block_length") {
+                        continue;
+                    }
                     bool isScalarUnused;
                     const auto blockItemType = GetBlockItemType(*originalItem->GetItemType(), isScalarUnused);
                     newMembers.push_back(ExprContext_.MakeType<TItemExprType>(originalItem->GetName(), blockItemType));
@@ -245,6 +253,8 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
             UserData_,
             {},
             {},
+            {},
+            valueNode->GetTypeAnn(),
             valueNode->GetTypeAnn(),
             LLVMSettings_,
             CountersProvider_,
@@ -276,7 +286,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FuncRegistry_, calcTransformer.Get());
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotationTransformer(MakeTypeAnnotationTransformer(typeContext, InputTypes_, processorMode, selfName));
+    pipeline.AddTypeAnnotationTransformer(MakeTypeAnnotationTransformer(typeContext, InputTypes_, RawInputTypes_, processorMode, selfName));
     pipeline.AddPostTypeAnnotation();
     pipeline.Add(CreateFunctorTransformer(
         [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
@@ -492,7 +502,9 @@ void TWorkerFactory<TBase>::ReturnWorker(IWorker* worker) {
             UserData_,                                                                  \
             InputTypes_,                                                                \
             OriginalInputTypes_,                                                        \
+            RawInputTypes_,                                                             \
             OutputType_,                                                                \
+            RawOutputType_,                                                             \
             LLVMSettings_,                                                              \
             CountersProvider_,                                                          \
             NativeYtTypeFlags_,                                                         \

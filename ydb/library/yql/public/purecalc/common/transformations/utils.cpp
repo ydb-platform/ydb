@@ -9,10 +9,7 @@ TExprNode::TPtr NYql::NPureCalc::NodeFromBlocks(
     TExprContext& ctx
 ) {
     const auto items = structType->GetItems();
-    Y_ENSURE(items.size() > 1);
-    const auto blockLengthValue = structType->FindItem("_yql_block_length");
-    Y_ENSURE(blockLengthValue);
-    const ui32 blockLengthIndex = *blockLengthValue;
+    Y_ENSURE(items.size() > 0);
     return ctx.Builder(pos)
         .Lambda()
             .Param("stream")
@@ -27,18 +24,15 @@ TExprNode::TPtr NYql::NPureCalc::NodeFromBlocks(
                                 .Param("item")
                                 .Do([&](TExprNodeBuilder& lambda) -> TExprNodeBuilder& {
                                     ui32 i = 0;
-                                    for (ui32 j = 0; j < items.size(); j++) {
-                                        if (j == blockLengthIndex) {
-                                            continue;
-                                        }
+                                    for (const auto& item : items) {
                                         lambda.Callable(i++, "Member")
                                             .Arg(0, "item")
-                                            .Atom(1, items[j]->GetName())
+                                            .Atom(1, item->GetName())
                                         .Seal();
                                     }
                                     lambda.Callable(i, "Member")
                                         .Arg(0, "item")
-                                        .Atom(1, items[blockLengthIndex]->GetName())
+                                        .Atom(1, "_yql_block_length")
                                     .Seal();
                                     return lambda;
                                 })
@@ -46,16 +40,13 @@ TExprNode::TPtr NYql::NPureCalc::NodeFromBlocks(
                         .Seal()
                     .Seal()
                     .Lambda(1)
-                        .Params("fields", items.size() - 1)
+                        .Params("fields", items.size())
                         .Callable("AsStruct")
                             .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                                     ui32 i = 0;
-                                    for (ui32 j = 0; j < items.size(); j++) {
-                                        if (j == blockLengthIndex) {
-                                            continue;
-                                        }
+                                    for (const auto& item : items) {
                                         parent.List(i)
-                                            .Atom(0, items[j]->GetName())
+                                            .Atom(0, item->GetName())
                                             .Arg(1, "fields", i++)
                                         .Seal();
                                     }

@@ -82,7 +82,7 @@ public:
                                  ? worker->MakeInputSchema(index)
                                  : inputSchema;
 
-        const auto* type = worker->GetInputType(index, true);
+        const auto* type = worker->GetRawInputType(index);
 
         Y_ENSURE(type->IsStruct());
         Y_ENSURE(schema.ChildAsString(0) == "StructType");
@@ -143,7 +143,7 @@ public:
                                  ? worker->MakeOutputSchema()
                                  : outputSchema;
 
-        const auto* type = worker->GetOutputType();
+        const auto* type = worker->GetRawOutputType();
 
         Y_ENSURE(type->IsStruct());
         Y_ENSURE(schema.ChildAsString(0) == "StructType");

@@ -43,6 +43,9 @@ namespace {
                 const auto originalMembers = actualItemType->Cast<TStructExprType>()->GetItems();
                 TVector<const TItemExprType*> newMembers;
                 for (auto originalItem : originalMembers) {
+                    if (originalItem->GetName() == "_yql_block_length") {
+                        continue;
+                    }
                     bool isScalarUnused;
                     const auto blockItemType = GetBlockItemType(*originalItem->GetItemType(), isScalarUnused);
                     newMembers.push_back(ctx.MakeType<TItemExprType>(originalItem->GetName(), blockItemType));

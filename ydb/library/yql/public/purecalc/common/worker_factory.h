@@ -88,7 +88,9 @@ namespace NYql {
             TString SerializedProgram_;
             TVector<const TStructExprType*> InputTypes_;
             TVector<const TStructExprType*> OriginalInputTypes_;
+            TVector<const TStructExprType*> RawInputTypes_;
             const TTypeAnnotationNode* OutputType_;
+            const TTypeAnnotationNode* RawOutputType_;
             TVector<THashSet<TString>> AllColumns_;
             TVector<THashSet<TString>> UsedColumns_;
             TString LLVMSettings_;

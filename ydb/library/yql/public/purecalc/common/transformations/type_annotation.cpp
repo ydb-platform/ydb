@@ -70,6 +70,7 @@ namespace {
     private:
         TTypeAnnotationContextPtr TypeAnnotationContext_;
         const TVector<const TStructExprType*>& InputStructs_;
+        TVector<const TStructExprType*>& RawInputTypes_;
         EProcessorMode ProcessorMode_;
         TString InputNodeName_;
 
@@ -77,12 +78,14 @@ namespace {
         TTypeAnnotator(
             TTypeAnnotationContextPtr typeAnnotationContext,
             const TVector<const TStructExprType*>& inputStructs,
+            TVector<const TStructExprType*>& rawInputTypes,
             EProcessorMode processorMode,
             TString nodeName
         )
             : TTypeAnnotatorBase(typeAnnotationContext)
             , TypeAnnotationContext_(typeAnnotationContext)
             , InputStructs_(inputStructs)
+            , RawInputTypes_(rawInputTypes)
             , ProcessorMode_(processorMode)
             , InputNodeName_(std::move(nodeName))
         {
@@ -112,16 +115,15 @@ namespace {
                 const auto inputItems = itemType->GetItems();
                 TVector<const TItemExprType*> members;
                 for (const auto& item : inputItems) {
-                    if (item->GetName() == "_yql_block_length") {
-                        const auto scalarItemType = ctx.MakeType<TScalarExprType>(item->GetItemType());
-                        members.push_back(ctx.MakeType<TItemExprType>(item->GetName(), scalarItemType));
-                    } else {
-                        const auto blockItemType = ctx.MakeType<TBlockExprType>(item->GetItemType());
-                        members.push_back(ctx.MakeType<TItemExprType>(item->GetName(), blockItemType));
-                    }
+                    const auto blockItemType = ctx.MakeType<TBlockExprType>(item->GetItemType());
+                    members.push_back(ctx.MakeType<TItemExprType>(item->GetName(), blockItemType));
                 }
+                const auto scalarItemType = ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64));
+                members.push_back(ctx.MakeType<TItemExprType>("_yql_block_length", scalarItemType));
                 itemType = ctx.MakeType<TStructExprType>(members);
             }
+
+            RawInputTypes_[inputIndex] = itemType;
 
             TColumnOrder columnOrder;
             for (const auto& i : itemType->GetItems()) {
@@ -248,8 +250,9 @@ namespace {
 TAutoPtr<IGraphTransformer> NYql::NPureCalc::MakeTypeAnnotationTransformer(
     TTypeAnnotationContextPtr typeAnnotationContext,
     const TVector<const TStructExprType*>& inputStructs,
+    TVector<const TStructExprType*>& rawInputTypes,
     EProcessorMode processorMode,
     const TString& nodeName
 ) {
-    return new TTypeAnnotator(typeAnnotationContext, inputStructs, processorMode, nodeName);
+    return new TTypeAnnotator(typeAnnotationContext, inputStructs, rawInputTypes, processorMode, nodeName);
 }

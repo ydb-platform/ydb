@@ -107,6 +107,9 @@ void TAsyncLooper::StartLoop(bool cleanStart, const TGuard& guard)
         // We got canceled -- this is normal.
         throw;
     } catch (const std::exception& ex) {
+        if (TError(ex).GetCode() == NYT::EErrorCode::Canceled) {
+            throw;
+        }
         YT_LOG_FATAL(ex, "Unexpected error encountered during the async step");
     } catch (...) {
         YT_LOG_FATAL("Unexpected error encountered during the async step");
@@ -219,6 +222,9 @@ void TAsyncLooper::DoStep(bool cleanStart, bool wasRestarted)
         // We got canceled -- this is normal.
         throw;
     } catch (const std::exception& ex) {
+        if (TError(ex).GetCode() == NYT::EErrorCode::Canceled) {
+            throw;
+        }
         YT_LOG_FATAL(ex, "Unexpected error encountered during the sync step");
     } catch (...) {
         YT_LOG_FATAL("Unexpected error encountered during the sync step");

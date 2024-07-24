@@ -1372,7 +1372,7 @@ Y_UNIT_TEST_F(Read_TEvTxCommit_After_Restart, TPQTabletFixture)
 
     WaitForCalcPredicateResult();
 
-    // the transaction is now in the WAIT_RS state on disk and in memory
+    // the transaction is now in the WAIT_RS state in memory and PLANNED state in disk
 
     PQTabletRestart(*Ctx);
 
@@ -1418,7 +1418,7 @@ Y_UNIT_TEST_F(Config_TEvTxCommit_After_Restart, TPQTabletFixture)
 
     WaitForProposePartitionConfigResult();
 
-    // the transaction is now in the WAIT_RS state on disk and in memory
+    // the transaction is now in the WAIT_RS state in memory and PLANNED state in disk
 
     PQTabletRestart(*Ctx);
 
@@ -1463,9 +1463,9 @@ Y_UNIT_TEST_F(One_Tablet_For_All_Partitions, TPQTabletFixture)
 
     SendPlanStep({.Step=100, .TxIds={txId}});
 
-    WaitForProposePartitionConfigResult();
+    WaitForProposePartitionConfigResult(2);
 
-    // the transaction is now in the WAIT_RS state on disk and in memory
+    // the transaction is now in the WAIT_RS state in memory and PLANNED state in disk
 
     PQTabletRestart(*Ctx);
 
@@ -1506,9 +1506,9 @@ Y_UNIT_TEST_F(One_New_Partition_In_Another_Tablet, TPQTabletFixture)
 
     SendPlanStep({.Step=100, .TxIds={txId}});
 
-    WaitForProposePartitionConfigResult();
+    WaitForProposePartitionConfigResult(2);
 
-    // the transaction is now in the WAIT_RS state on disk and in memory
+    // the transaction is now in the WAIT_RS state in memory and PLANNED state in disk
 
     PQTabletRestart(*Ctx);
 
@@ -1521,65 +1521,28 @@ Y_UNIT_TEST_F(One_New_Partition_In_Another_Tablet, TPQTabletFixture)
     WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=mockTabletId, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
 }
 
-NKikimrPQ::TPQTabletConfig MakeWideConfig(ui64 childTabletId, size_t childrenCount,
-                                          ui64 parentTabletId)
-{
-    NKikimrPQ::TPQTabletConfig config;
-
-    config.SetVersion(2);
-
-    config.AddReadRules("client-1");
-    config.AddReadRuleGenerations(0);
-    config.AddReadRules("client-3");
-    config.AddReadRuleGenerations(7);
-
-    for (size_t i = 0; i < childrenCount; ++i) {
-        auto* p = config.AddAllPartitions();
-        p->SetPartitionId(i);
-        p->SetTabletId(childTabletId);
-        p->AddParentPartitionIds(childrenCount);
-    }
-
-    {
-        auto* p = config.AddAllPartitions();
-        p->SetPartitionId(childrenCount);
-        p->SetTabletId(parentTabletId);
-        for (size_t i = 0; i < childrenCount; ++i) {
-            p->AddChildPartitionIds(i);
-        }
-    }
-
-    for (size_t i = 0; i < childrenCount; ++i) {
-        auto* p = config.AddPartitions();
-        p->SetPartitionId(i);
-    }
-
-    config.SetTopicName("rt3.dc1--account--topic");
-    config.SetTopicPath("/Root/PQ/rt3.dc1--account--topic");
-    config.SetFederationAccount("account");
-    config.SetLocalDC(true);
-    config.SetYdbDatabasePath("");
-
-    config.SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
-    config.MutablePartitionConfig()->SetLifetimeSeconds(TDuration::Hours(24).Seconds());
-    config.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(10 << 20);
-
-
-    Migrate(config);
-
-    return config;
-}
-
 Y_UNIT_TEST_F(All_New_Partitions_In_Another_Tablet, TPQTabletFixture)
 {
     const ui64 txId = 67890;
     const ui64 mockTabletId = 22222;
-    const size_t partitionCount = 100;
 
     NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
-    PQTabletPrepare({.partitions=partitionCount}, {}, *Ctx);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
 
-    auto tabletConfig = MakeWideConfig(Ctx->TabletId, partitionCount, mockTabletId);
+    auto tabletConfig = NHelpers::MakeConfig({.Version=2,
+                                             .Consumers={
+                                             {.Consumer="client-1", .Generation=0},
+                                             {.Consumer="client-3", .Generation=7}
+                                             },
+                                             .Partitions={
+                                             {.Id=0},
+                                             {.Id=1},
+                                             },
+                                             .AllPartitions={
+                                             {.Id=0, .TabletId=Ctx->TabletId, .Children={}, .Parents={2}},
+                                             {.Id=1, .TabletId=Ctx->TabletId, .Children={}, .Parents={2}},
+                                             {.Id=2, .TabletId=mockTabletId,  .Children={0, 1}, .Parents={}}
+                                             }});
 
     SendProposeTransactionRequest({.TxId=txId,
                                   .Configs=NHelpers::TConfigParams{
@@ -1591,9 +1554,9 @@ Y_UNIT_TEST_F(All_New_Partitions_In_Another_Tablet, TPQTabletFixture)
 
     SendPlanStep({.Step=100, .TxIds={txId}});
 
-    WaitForProposePartitionConfigResult(partitionCount);
+    WaitForProposePartitionConfigResult(2);
 
-    // the transaction is now in the WAIT_RS state on disk and in memory
+    // the transaction is now in the WAIT_RS state in memory and PLANNED state in disk
 
     PQTabletRestart(*Ctx);
 

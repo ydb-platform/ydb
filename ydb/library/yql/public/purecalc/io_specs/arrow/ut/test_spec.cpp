@@ -51,21 +51,49 @@ public:
 using ExecBatchStreamImpl = TVectorStream<arrow::compute::ExecBatch>;
 using ExecBatchConsumerImpl = TVectorConsumer<arrow::compute::ExecBatch>;
 
+template <typename TBuilder>
+arrow::Datum MakeArrayDatumFromVector(
+    const TVector<typename TBuilder::value_type>& data,
+    const TVector<bool>& valid
+) {
+    TBuilder builder;
+    ARROW_OK(builder.Reserve(data.size()));
+    ARROW_OK(builder.AppendValues(data, valid));
+    return arrow::Datum(ARROW_RESULT(builder.Finish()));
+}
+
+template <typename TValue>
+TVector<TValue> MakeVectorFromArrayDatum(
+    const arrow::Datum& datum,
+    const int64_t dsize
+) {
+    Y_ENSURE(datum.is_array(), "ExecBatch layout doesn't respect the schema");
+
+    const auto& array = *datum.array();
+    Y_ENSURE(array.length == dsize,
+        "Array Datum size differs from the given ExecBatch size");
+    Y_ENSURE(array.GetNullCount() == 0,
+        "Null values conversion is not supported");
+    Y_ENSURE(array.buffers.size() == 2,
+        "Array Datum layout doesn't respect the schema");
+
+    const TValue* adata1 = array.GetValuesSafe<TValue>(1);
+    return TVector<TValue>(adata1, adata1 + dsize);
+}
 
 arrow::compute::ExecBatch MakeBatch(ui64 bsize, i64 value) {
-    TVector<uint64_t> data(bsize);
+    TVector<uint64_t> data1(bsize);
+    TVector<int64_t> data2(bsize);
     TVector<bool> valid(bsize);
-    std::iota(data.begin(), data.end(), 1);
+    std::iota(data1.begin(), data1.end(), 1);
+    std::fill(data2.begin(), data2.end(), value);
     std::fill(valid.begin(), valid.end(), true);
 
-    arrow::UInt64Builder builder;
-    ARROW_OK(builder.Reserve(bsize));
-    ARROW_OK(builder.AppendValues(data, valid));
+    TVector<arrow::Datum> batchArgs = {
+        MakeArrayDatumFromVector<arrow::UInt64Builder>(data1, valid),
+        MakeArrayDatumFromVector<arrow::Int64Builder>(data2, valid)
+    };
 
-    arrow::Datum array(ARROW_RESULT(builder.Finish()));
-    arrow::Datum scalar(std::make_shared<arrow::Int64Scalar>(value));
-
-    TVector<arrow::Datum> batchArgs = {array, scalar};
     return arrow::compute::ExecBatch(std::move(batchArgs), bsize);
 }
 
@@ -74,41 +102,11 @@ TVector<std::tuple<ui64, i64>> CanonBatches(const TVector<arrow::compute::ExecBa
     for (const auto& batch : batches) {
         const auto bsize = batch.length;
 
-        Y_ENSURE(batch.num_values() == 2,
-            "ExecBatch layout doesn't respect the schema");
-        arrow::Datum first = batch.values[0];
-        arrow::Datum second = batch.values[1];
-
-
-        Y_ENSURE(first.is_array(),
-            "ExecBatch layout doesn't respect the schema");
-
-        const auto& array = *first.array();
-        Y_ENSURE(array.length == bsize,
-            "Array Datum size differs from the given ExecBatch size");
-        Y_ENSURE(array.GetNullCount() == 0,
-            "Null values conversion is not supported");
-        Y_ENSURE(array.buffers.size() == 2,
-            "Array Datum layout doesn't respect the schema");
-
-        const ui64* adata = array.GetValuesSafe<ui64>(1);
-        TVector<ui64> avec(adata, adata + bsize);
-
-
-        Y_ENSURE(second.is_scalar(),
-            "ExecBatch layout doesn't respect the schema");
-
-        const auto& scalar = second.scalar();
-        Y_ENSURE(scalar->is_valid,
-            "Null values conversion is not supported");
-
-        const auto& sdata = arrow::internal::checked_cast<const arrow::Int64Scalar&>(*scalar);
-        TVector<i64> svec(bsize);
-        std::fill(svec.begin(), svec.end(), sdata.value);
-
+        const auto& avec1 = MakeVectorFromArrayDatum<ui64>(batch.values[0], bsize);
+        const auto& avec2 = MakeVectorFromArrayDatum<i64>(batch.values[1], bsize);
 
         for (auto i = 0; i < bsize; i++) {
-            result.push_back(std::make_tuple(avec[i], svec[i]));
+            result.push_back(std::make_tuple(avec1[i], avec2[i]));
         }
     }
     std::sort(result.begin(), result.end());

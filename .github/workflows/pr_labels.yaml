@@ -54,16 +54,15 @@ jobs:
               {
                 // remove label
                 try {
-                  const result = await github.rest.issues.deleteLabels({
+                  const result = await github.rest.issues.removeLabel({
                     owner,
                     repo,
                     issue_number: prNumber,
-                    labels: [pair[1]]
+                    name: pair[1]
                   });
-                  console.log('Added label', pair[1]);
+                  console.log('Removed label', pair[1]);
                 } catch(e) {
                   console.log(e);
                 }
               }
-              return;
             }

@@ -14,6 +14,8 @@
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/system/rwlock.h>
 #include <util/system/hp_timer.h>
+#include <chrono>
+#include <thread>
 
 using namespace NActors;
 using namespace NActors::NTests;
@@ -598,6 +600,8 @@ Y_UNIT_TEST_SUITE(TestStateFunc) {
     };
 
     Y_UNIT_TEST(StateFuncWithExceptions) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000*30));
+        UNIT_ASSERT_VALUES_EQUAL(42, 420);
         TTestActorRuntimeBase runtime;
         runtime.Initialize();
         auto sender = runtime.AllocateEdgeActor();

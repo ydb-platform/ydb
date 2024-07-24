@@ -99,9 +99,9 @@ void InitLdapSettingsWithEmptyBindPassword(NKikimrProto::TLdapAuthentication* ld
 
 class TLoginClientConnection {
 public:
-    TLoginClientConnection(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, TTempFileHandle&)> initLdapSettings, bool isBuiltinLoginDisabled = true)
+    TLoginClientConnection(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, TTempFileHandle&)> initLdapSettings, bool isBuiltinAuthMechanismDisabled = true)
         : CaCertificateFile()
-        , Server(InitAuthSettings(std::move(initLdapSettings), isBuiltinLoginDisabled))
+        , Server(InitAuthSettings(std::move(initLdapSettings), isBuiltinAuthMechanismDisabled))
         , Connection(GetDriverConfig(Server.GetPort()))
         , Client(Connection)
     {}
@@ -119,7 +119,7 @@ public:
     }
 
 private:
-    NKikimrConfig::TAppConfig InitAuthSettings(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, TTempFileHandle&)>&& initLdapSettings, bool isBuiltinLoginDisabled = true) {
+    NKikimrConfig::TAppConfig InitAuthSettings(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, TTempFileHandle&)>&& initLdapSettings, bool isBuiltinAuthMechanismDisabled = true) {
         TPortManager tp;
         LdapPort = tp.GetPort(389);
 
@@ -128,7 +128,7 @@ private:
 
         authConfig->SetUseBlackBox(false);
         authConfig->SetUseLoginProvider(true);
-        authConfig->SetUseInternalLoginMethod(isBuiltinLoginDisabled);
+        authConfig->SetEnableBuiltinAuthMechanism(isBuiltinAuthMechanismDisabled);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
 
@@ -393,7 +393,7 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         loginConnection.Stop();
     }
 
-    Y_UNIT_TEST(UnavailableLoginOverBuiltinMechanism) {
+    Y_UNIT_TEST(DisableBuiltinAuthMechanism) {
         TString login = "builtinUser";
         TString password = "builtinUserPassword";
 
@@ -402,7 +402,7 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         auto factory = CreateLoginCredentialsProviderFactory({.User = login, .Password = password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
         TStringBuilder expectedErrorMessage;
-        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Builtin user registry has been disabled in the cluster settings");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Builtin authentication mechanism has been disabled in the cluster settings");
 
         loginConnection.Stop();
     }

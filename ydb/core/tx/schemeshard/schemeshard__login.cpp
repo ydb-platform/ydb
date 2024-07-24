@@ -69,7 +69,7 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
 
         THolder<TEvSchemeShard::TEvLoginResult> result = MakeHolder<TEvSchemeShard::TEvLoginResult>();
         const auto& loginRequest = GetLoginRequest();
-        if (loginRequest.ExternalAuth || AppData(ctx)->AuthConfig.GetUseInternalLoginMethod()) {
+        if (loginRequest.ExternalAuth || AppData(ctx)->AuthConfig.GetEnableBuiltinAuthMechanism()) {
             NLogin::TLoginProvider::TLoginUserResponse LoginResponse = Self->LoginProvider.LoginUser(loginRequest);
             if (LoginResponse.Error) {
                 result->Record.SetError(LoginResponse.Error);
@@ -78,7 +78,7 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
                 result->Record.SetToken(LoginResponse.Token);
             }
         } else {
-            result->Record.SetError("Builtin user registry has been disabled in the cluster settings");
+            result->Record.SetError("Builtin authentication mechanism has been disabled in the cluster settings");
         }
 
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

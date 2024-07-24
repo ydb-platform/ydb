@@ -380,7 +380,7 @@ def main():
             event = json.load(fp)
 
         pr = gh.create_from_raw_data(PullRequest, event["pull_request"])
-        text = get_comment_text(pr, summary, args.summary_links, is_last_retry=bool(args.is_last_retry))
+        color, text = get_comment_text(pr, summary, args.summary_links, is_last_retry=bool(args.is_last_retry))
 
         update_pr_comment_text(pr, args.build_preset, run_number, color, text='\n'.join(text), rewrite=False)
 

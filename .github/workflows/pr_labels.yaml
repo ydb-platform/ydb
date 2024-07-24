@@ -3,7 +3,6 @@ on:
   pull_request_target:
     branches:
       - 'main'
-      - 'dev-labels'
     types:
       - 'opened'
       - 'edited'

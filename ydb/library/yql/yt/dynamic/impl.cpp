@@ -37,7 +37,6 @@ TBridgeYqlPlugin* BridgeCreateYqlPlugin(const TBridgeYqlPluginOptions* bridgeOpt
         .YTTokenPath = TString(bridgeOptions->YTTokenPath),
         .LogBackend = std::move(*reinterpret_cast<THolder<TLogBackend>*>(bridgeOptions->LogBackend)),
     };
-
     auto nativePlugin = CreateYqlPlugin(std::move(options));
     return nativePlugin.release();
 }

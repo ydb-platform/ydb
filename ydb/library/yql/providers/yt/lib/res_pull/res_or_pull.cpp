@@ -118,7 +118,7 @@ TSkiffExecuteResOrPull::TSkiffExecuteResOrPull(TMaybe<ui64> rowLimit, TMaybe<ui6
 
     SkiffWriter.SetSpecs(Specs);
 
-    AlphabeticPermutation = NCommon::CreateAlphabeticPositions(Specs.Outputs[0].RowType, columns);
+    AlphabeticPermutation = CreateAlphabeticPositions(Specs.Outputs[0].RowType, columns);
 }
 
 TString TSkiffExecuteResOrPull::Finish() {
@@ -245,6 +245,42 @@ bool TSkiffExecuteResOrPull::WriteNext(TMkqlIOCache& specsCache, const NUdf::TUn
 
 void TSkiffExecuteResOrPull::SetListResult() {
     IsList = true;
+}
+
+TMaybe<TVector<ui32>> TSkiffExecuteResOrPull::CreateAlphabeticPositions(NKikimr::NMiniKQL::TType* inputType, const TVector<TString>& columns)
+{
+    if (inputType->GetKind() != TType::EKind::Struct) {
+        return Nothing();
+    }
+    auto inputStruct = AS_TYPE(TStructType, inputType);
+
+    YQL_ENSURE(columns.empty() || columns.size() == inputStruct->GetMembersCount());
+
+    if (columns.empty()) {
+        TVector<ui32> positions(inputStruct->GetMembersCount());
+        for (size_t index = 0; index < positions.size(); ++index) {
+            positions[index] = index;
+        }
+        return positions;
+    }
+
+    TMap<TStringBuf, ui32> orders;
+    for (size_t index = 0; index < columns.size(); ++index) {
+        orders.emplace(columns[index], -1);
+    }
+    {
+        ui32 index = 0;
+        for (auto& [column, order] : orders) {
+            order = index++;
+        }
+    }
+
+    TVector<ui32> positions(columns.size());
+    for (size_t index = 0; index < columns.size(); ++index) {
+        positions[orders[columns[index]]] = index;
+    }
+
+    return positions;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -3084,9 +3084,10 @@ private:
                     writer.OnKeyedItem("SkiffType");
                     writer.OnRaw(skiffType, ::NYson::EYsonType::Node);
 
+
                     writer.OnKeyedItem("Columns");
                     writer.OnBeginList();
-                    for (auto& column : columns) {
+                    for (auto& column: columns) {
                         writer.OnListItem();
                         writer.OnStringScalar(column);
                     }

@@ -312,41 +312,6 @@ TMaybe<TVector<ui32>> CreateStructPositions(TType* inputType, const TVector<TStr
     return structPositions;
 }
 
-TMaybe<TVector<ui32>> CreateAlphabeticPositions(TType* inputType, const TVector<TString>& columns) {
-    if (inputType->GetKind() != TType::EKind::Struct) {
-        return Nothing();
-    }
-    auto inputStruct = AS_TYPE(TStructType, inputType);
-
-    YQL_ENSURE(columns.empty() || columns.size() == inputStruct->GetMembersCount());
-
-    if (columns.empty()) {
-        TVector<ui32> positions(inputStruct->GetMembersCount());
-        for (size_t index = 0; index < positions.size(); ++index) {
-            positions[index] = index;
-        }
-        return positions;
-    }
-
-    TMap<TStringBuf, ui32> orders;
-    for (size_t index = 0; index < columns.size(); ++index) {
-        orders.emplace(columns[index], -1);
-    }
-    {
-        ui32 index = 0;
-        for (auto& [column, order] : orders) {
-            order = index++;
-        }
-    }
-
-    TVector<ui32> positions(columns.size());
-    for (size_t index = 0; index < columns.size(); ++index) {
-        positions[orders[columns[index]]] = index;
-    }
-
-    return positions;
-}
-
 namespace {
 NYT::TNode DataValueToNode(const NKikimr::NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TType* type) {
     YQL_ENSURE(type->GetKind() == TType::EKind::Data);

@@ -1167,6 +1167,8 @@ You can read messages without a [commit](#no-commit) as well. In this case, all 
 
 Information about which messages have already been processed can be [saved on the client side](#client-commit) by sending the starting consumer offset to the server when creating a new connection. This does not change the consumer offset on the server.
 
+Data from topics can be read in the context of [transactions](#read-tx). In this case, the reading offset will only advance when the transaction is committed. On reconnect, all uncommitted messages will be read again.
+
 {% list tabs %}
 
 - C++
@@ -1571,6 +1573,60 @@ Reading progress is usually saved on a server for each Consumer. However, such p
 ### Reading in a transaction {#read-tx}
 
 {% list tabs %}
+
+- C++
+
+  Before reading messages, the client code must pass a transaction object reference to the reading session settings.
+
+  ```cpp
+      ReadSession->WaitEvent().Wait(TDuration::Seconds(1));
+
+      auto tableSettings = NYdb::NTable::TTxSettings::SerializableRW();
+      auto transactionResult = TableSession->BeginTransaction(tableSettings).GetValueSync();
+      auto Transaction = transactionResult.GetTransaction();
+
+      NYdb::NTopic::TReadSessionGetEventSettings topicSettings;
+      topicSettings.Block(false);
+      topicSettings.Tx(Transaction);
+
+      auto events = ReadSession->GetEvents(topicSettings);
+
+      for (auto& event : events) {
+          // process the event and write results to a table
+      }
+
+      NYdb::NTable::TCommitTxSettings commitSettings;
+      auto commitResult = Transaction.Commit(commitSettings).GetValueSync();
+  ```
+
+{% note warning %}
+
+  When processing `events`, you do not need to confirm processing for `TDataReceivedEvent` events explicitly.
+
+{% endnote %}
+
+  Confirmation of the `TStopPartitionSessionEvent` event processing must be done after calling `Commit`.
+
+  ```cpp
+      std::optional<TStopPartitionSessionEvent> stopPartitionSession;
+
+      auto events = ReadSession->GetEvents(topicSettings);
+
+      for (auto& event : events) {
+          if (auto* e = std::get_if<TStopPartitionSessionEvent>(&event) {
+              stopPartitionSessionEvent = std::move(*e);
+          } else {
+             // process the event and write results to a table
+          }
+      }
+
+      NYdb::NTable::TCommitTxSettings commitSettings;
+      auto commitResult = Transaction.Commit(commitSettings).GetValueSync();
+
+      if (stopPartitionSessionEvent) {
+          stopPartitionSessionEvent->Commit();
+      }
+  ```
 
 - Java (sync)
 

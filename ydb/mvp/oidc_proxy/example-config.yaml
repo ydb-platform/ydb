@@ -20,10 +20,14 @@ oidc:
   session_service_token_name: "ss-token"
   authorization_server_address: "https://auth-preprod.cloud.yandex.ru"
 <<<<<<< HEAD
+<<<<<<< HEAD
   access_service_type: "yandex_v2"
 =======
   access_service_type: "yandex"
 >>>>>>> b14ae95980 (renamed EAuth profile to EAccessServiceTypeEAccessServiceType)
+=======
+  access_service_type: "yandex_v2"
+>>>>>>> db295bcc6b (fixed examples)
   allowed_proxy_hosts:
     - "*.yandex.net"
     - "*.yandex-team.ru"

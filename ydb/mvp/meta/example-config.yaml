@@ -16,4 +16,8 @@ generic:
 meta:
   meta_api_endpoint: grpc://lb.ydb-ui.ydb.nemax.nebiuscloud.net:2135
   meta_database: /nemax_global/ydb-ui
+<<<<<<< HEAD
   meta_database_token_name: "meta-token"
+=======
+  access_service_type: "yandex_v2"
+>>>>>>> db295bcc6b (fixed examples)

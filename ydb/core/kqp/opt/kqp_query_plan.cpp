@@ -592,9 +592,7 @@ private:
                 }
 
                 if (auto literal = key.Maybe<TCoUuid>()) {
-                    TStringStream out;
-                    NUuid::UuidBytesToString(literal.Cast().Literal().Value().Data(), out);
-                    return out.Str();
+                    return NUuid::UuidBytesToString(literal.Cast().Literal().StringValue());
                 }
 
                 if (auto literal = key.Maybe<TCoDataCtor>()) {

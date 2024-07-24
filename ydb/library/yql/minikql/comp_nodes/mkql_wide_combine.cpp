@@ -370,7 +370,9 @@ public:
     enum class EUpdateResult: i8 {
         Yield = -1,
         ExtractRawData,
-        None
+        ReadInput,
+        Extract,
+        Finish
     };
     TSpillingSupportState(
         TMemoryUsageInfo* memInfo,
@@ -407,16 +409,17 @@ public:
     }
 
     EUpdateResult Update() {
+        if (IsEverythingExtracted) return EUpdateResult::Finish;
+
         switch (GetMode()) {
             case EOperatingMode::InMemory: {
                 if (CheckMemoryAndSwitchToSpilling()) {
                     return Update();
                 }
-                return EUpdateResult::None;
+                if (InputStatus == EFetchResult::Finish) return EUpdateResult::Extract;
+
+                return EUpdateResult::ReadInput;
             }
-                
-            case EOperatingMode::ProcessSpilled:
-                return ProcessSpilledDataAndWait();
             case EOperatingMode::Spilling: {
                 UpdateSpillingBuckets();
 
@@ -434,8 +437,10 @@ public:
 
                 // Prepare buffer for reading new key
                 BufferForKeyAndState.resize(KeyWidth);
-                return EUpdateResult::None;
+                return EUpdateResult::ReadInput;
             }
+            case EOperatingMode::ProcessSpilled:
+                return ProcessSpilledData();
         }
     }
 
@@ -480,14 +485,20 @@ public:
     }
 
     NUdf::TUnboxedValuePod* Extract() {
-        if (GetMode() == EOperatingMode::InMemory) return static_cast<NUdf::TUnboxedValue*>(InMemoryProcessingState.Extract());
+        NUdf::TUnboxedValue* value = nullptr;
+        if (GetMode() == EOperatingMode::InMemory) {
+            value = static_cast<NUdf::TUnboxedValue*>(InMemoryProcessingState.Extract());
+            if (!value) IsEverythingExtracted = true;
+            return value;
+        }
 
         MKQL_ENSURE(SpilledBuckets.front().BucketState == TSpilledBucket::EBucketState::InMemory, "Internal logic error");
         MKQL_ENSURE(SpilledBuckets.size() > 0, "Internal logic error");
 
-        auto value = static_cast<NUdf::TUnboxedValue*>(SpilledBuckets.front().InMemoryProcessingState->Extract());
+        value = static_cast<NUdf::TUnboxedValue*>(SpilledBuckets.front().InMemoryProcessingState->Extract());
         if (!value) {
             SpilledBuckets.pop_front();
+            if (SpilledBuckets.empty()) IsEverythingExtracted = true;
         }
 
         return value;
@@ -521,7 +532,7 @@ private:
 
         SwitchMode(EOperatingMode::ProcessSpilled);
 
-        return ProcessSpilledDataAndWait();
+        return ProcessSpilledData();
     }
 
     void SplitStateIntoBuckets() {
@@ -626,9 +637,7 @@ private:
         return false;
     }
 
-    EUpdateResult ProcessSpilledDataAndWait() {
-        if (SpilledBuckets.empty()) return EUpdateResult::None;
-
+    EUpdateResult ProcessSpilledData() {
         if (AsyncReadOperation) {
             if (!AsyncReadOperation->HasValue()) return EUpdateResult::Yield;
             if (RecoverState) {
@@ -640,7 +649,7 @@ private:
         }
 
         auto& bucket = SpilledBuckets.front();
-        if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory) return EUpdateResult::None;
+        if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory) return EUpdateResult::Extract;
 
         //recover spilled state
         while(!bucket.SpilledState->Empty()) {
@@ -678,7 +687,7 @@ private:
             return EUpdateResult::ExtractRawData;
         }
         bucket.BucketState = TSpilledBucket::EBucketState::InMemory;
-        return EUpdateResult::None;
+        return EUpdateResult::Extract;
     }
 
     EOperatingMode GetMode() const {
@@ -735,6 +744,8 @@ public:
 
 private:
     ui64 NextBucketToSpill = 0;
+
+    bool IsEverythingExtracted = false;
 
     TState InMemoryProcessingState;
     const TMultiType* const UsedInputItemType;
@@ -1257,52 +1268,48 @@ public:
 
             while (true) {
                 switch(ptr->Update()) {
+                    case TSpillingSupportState::EUpdateResult::ReadInput: {
+                        for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i)
+                            fields[i] = Nodes.GetUsedInputItemNodePtrOrNull(ctx, i);
+                        switch (ptr->InputStatus = Flow->FetchValues(ctx, fields)) {
+                            case EFetchResult::One:
+                                break;
+                            case EFetchResult::Finish:
+                                continue;
+                            case EFetchResult::Yield:
+                                return EFetchResult::Yield;
+                        }
+                        break;
+                    }
                     case TSpillingSupportState::EUpdateResult::Yield:
                         return EFetchResult::Yield;
                     case TSpillingSupportState::EUpdateResult::ExtractRawData:
                         Nodes.ExtractValues(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Throat), fields);
                         break;
-                    case TSpillingSupportState::EUpdateResult::None:
+                    case TSpillingSupportState::EUpdateResult::Extract:
+                        if (const auto values = static_cast<NUdf::TUnboxedValue*>(ptr->Extract())) {
+                            Nodes.FinishItem(ctx, values, output);
+                            return EFetchResult::One;
+                        }
+                        continue;
+                    case TSpillingSupportState::EUpdateResult::Finish:
+                        return EFetchResult::Finish;
+                }
+
+                Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
+
+                switch(ptr->TasteIt()) {
+                    case TSpillingSupportState::ETasteResult::Init:
+                        Nodes.ProcessItem(ctx, nullptr, static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
+                        break;
+                    case TSpillingSupportState::ETasteResult::Update:
+                        Nodes.ProcessItem(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
+                        break;
+                    case TSpillingSupportState::ETasteResult::ConsumeRawData:
+                        Nodes.ExtractValues(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
                         break;
                 }
-                if (ptr->InputStatus != EFetchResult::Finish) {
-                    for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i)
-                        fields[i] = Nodes.GetUsedInputItemNodePtrOrNull(ctx, i);
-                    switch (ptr->InputStatus = Flow->FetchValues(ctx, fields)) {
-                        case EFetchResult::One:
-                            break;
-                        case EFetchResult::Finish:
-                            continue;
-                        case EFetchResult::Yield:
-                            return EFetchResult::Yield;
-                    }
-                }
 
-                if (ptr->IsProcessingRequired()) {
-                    Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
-
-                    switch(ptr->TasteIt()) {
-                        case TSpillingSupportState::ETasteResult::Init:
-                            Nodes.ProcessItem(ctx, nullptr, static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
-                            break;
-                        case TSpillingSupportState::ETasteResult::Update:
-                            Nodes.ProcessItem(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
-                            break;
-                        case TSpillingSupportState::ETasteResult::ConsumeRawData:
-                            Nodes.ExtractValues(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
-                            break;
-                    }
-                    continue;
-                }
-
-                if (const auto values = static_cast<NUdf::TUnboxedValue*>(ptr->Extract())) {
-                    Nodes.FinishItem(ctx, values, output);
-                    return EFetchResult::One;
-                }
-
-                if (!ptr->HasAnyData()) {
-                    return EFetchResult::Finish;
-                }
             }
         }
         Y_UNREACHABLE();
@@ -1368,7 +1375,7 @@ public:
             updateWay->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::EUpdateResult::Yield)), over);
             // TODO add exctraction code and jmp there
             updateWay->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::EUpdateResult::ExtractRawData)), test);
-            updateWay->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::EUpdateResult::None)), test);
+            updateWay->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::EUpdateResult::Extract)), test);
 
             block = test;
 

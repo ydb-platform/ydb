@@ -5,13 +5,14 @@ import operator
 import os
 import re
 import shlex
-import six
 import sys
 from functools import reduce
 
+import six
+import ymake
+
 import _common
 import lib.test_const as consts
-import ymake
 
 
 CANON_RESULT_FILE_NAME = 'result.json'
@@ -574,6 +575,10 @@ class NodejsRootVarName:
 class NodeModulesBundleFilename:
     KEY = 'NODE-MODULES-BUNDLE-FILENAME'
 
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        return {cls.KEY: spec_args.get('nm_bundle')}
+
 
 class PythonPaths:
     KEY = 'PYTHON-PATHS'
@@ -853,6 +858,22 @@ class TsConfigPath:
     KEY = 'TS_CONFIG_PATH'
 
 
+class TsStylelintConfig:
+    KEY = 'TS_STYLELINT_CONFIG'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        test_config = unit.get('_TS_STYLELINT_CONFIG')
+        abs_test_config = unit.resolve(unit.resolve_arc_path(test_config))
+        if not abs_test_config:
+            ymake.report_configure_error(
+                f"Config for stylelint not found: {test_config}.\n"
+                "Set the correct value in `TS_STYLELINT(<config_filename>)` macro in the `ya.make` file."
+            )
+
+        return {cls.KEY: test_config}
+
+
 class TsTestDataDirs:
     KEY = 'TS-TEST-DATA-DIRS'
 
@@ -989,6 +1010,13 @@ class TestFiles:
     def value8(cls, unit, flat_args, spec_args):
         test_files = get_values_list(unit, "_TS_LINT_SRCS_VALUE")
         test_files = _resolve_module_files(unit, unit.get("MODDIR"), test_files)
+        return {cls.KEY: serialize_list(test_files)}
+
+    @classmethod
+    def stylesheets(cls, unit, flat_args, spec_args):
+        test_files = get_values_list(unit, "_TS_STYLELINT_FILES")
+        test_files = _resolve_module_files(unit, unit.get("MODDIR"), test_files)
+
         return {cls.KEY: serialize_list(test_files)}
 
 

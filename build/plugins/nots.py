@@ -1,11 +1,18 @@
 import os
-from enum import StrEnum, auto
+import typing
+from enum import auto, StrEnum
+
+import ymake
 
 import _dart_fields as df
-import ymake
 import ytest
+from _common import (
+    rootrel_arc_src,
+    sort_uniq,
+    strip_roots,
+    to_yesno,
+)
 from _dart_fields import create_dart_record
-from _common import rootrel_arc_src, to_yesno, strip_roots, sort_uniq
 
 
 # 1 is 60 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
@@ -20,6 +27,7 @@ class TsTestType(StrEnum):
     PLAYWRIGHT = auto()
     ESLINT = auto()
     TSC_TYPECHECK = auto()
+    TS_STYLELINT = auto()
 
 
 TS_TEST_FIELDS_BASE = (
@@ -80,6 +88,11 @@ TS_TEST_SPECIFIC_FIELDS = {
         df.TestCwd.value3,
         df.Tag.value2,
         df.Requirements.value4,
+    ),
+    TsTestType.TS_STYLELINT: (
+        df.TsStylelintConfig.value,
+        df.TestFiles.stylesheets,
+        df.NodeModulesBundleFilename.value,
     ),
 }
 
@@ -174,7 +187,7 @@ def _create_erm_json(unit):
     return ErmJsonLite.load(path)
 
 
-def _get_pm_type(unit) -> str:
+def _get_pm_type(unit) -> typing.Literal["pnpm", "npm"]:
     resolved = unit.get("PM_TYPE")
     if not resolved:
         raise Exception("PM_TYPE is not set yet. Macro _SET_PACKAGE_MANAGER() should be called before.")
@@ -193,6 +206,7 @@ def _create_pm(unit):
     sources_path = _get_source_path(unit)
     module_path = unit.get("TS_TEST_FOR_PATH") if unit.get("TS_TEST_FOR") else unit.get("MODDIR")
 
+    # noinspection PyPep8Naming
     PackageManager = get_package_manager_type(_get_pm_type(unit))
 
     return PackageManager(
@@ -359,11 +373,14 @@ def on_ts_configure(unit):
 
         _filter_inputs_by_rules_from_tsconfig(unit, tsconfig)
 
-    _setup_eslint(unit)
-    _setup_tsc_typecheck(unit)
-
+    # Code navigation
     if unit.get("TS_YNDEXING") == "yes":
         unit.on_do_ts_yndexing()
+
+    # Style tests
+    _setup_eslint(unit)
+    _setup_tsc_typecheck(unit)
+    _setup_stylelint(unit)
 
 
 @_with_report_configure_error
@@ -475,6 +492,7 @@ def _setup_eslint(unit):
     unit.set(["TEST_RECIPES_VALUE", user_recipes])
 
 
+@_with_report_configure_error
 def _setup_tsc_typecheck(unit):
     if not _is_tests_enabled(unit):
         return
@@ -534,6 +552,51 @@ def _setup_tsc_typecheck(unit):
     if data:
         unit.set_property(["DART_DATA", data])
     unit.set(["TEST_RECIPES_VALUE", user_recipes])
+
+
+@_with_report_configure_error
+def _setup_stylelint(unit):
+    if not _is_tests_enabled(unit):
+        return
+
+    if unit.get("_TS_STYLELINT_VALUE") == "no":
+        return
+
+    test_files = df.TestFiles.stylesheets(unit, (), {})[df.TestFiles.KEY]
+    if not test_files:
+        return
+
+    from lib.nots.package_manager import constants
+
+    recipes_value = unit.get("TEST_RECIPES_VALUE")
+    unit.on_setup_install_node_modules_recipe()
+    unit.on_setup_extract_output_tars_recipe([unit.get("MODDIR")])
+
+    test_type = TsTestType.TS_STYLELINT
+
+    peers = _create_pm(unit).get_peers_from_package_json()
+
+    deps = df.CustomDependencies.value5(unit, (peers,), {})[df.CustomDependencies.KEY].split()
+    if deps:
+        joined_deps = "\n".join(deps)
+        logger.info(f"{test_type} deps: \n{joined_deps}")
+        unit.ondepends(deps)
+
+    flat_args = (test_type,)
+    spec_args = dict(nm_bundle=constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME)
+
+    dart_record = create_dart_record(
+        TS_TEST_FIELDS_BASE + TS_TEST_SPECIFIC_FIELDS[test_type], unit, flat_args, spec_args
+    )
+
+    extra_deps = df.CustomDependencies.value3(unit, (), {})[df.CustomDependencies.KEY].split()
+    dart_record[df.CustomDependencies.KEY] = " ".join(sort_uniq(deps + extra_deps))
+
+    data = ytest.dump_test(unit, dart_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
+
+    unit.set(["TEST_RECIPES_VALUE", recipes_value])
 
 
 def _resolve_module_files(unit, mod_dir, file_paths):

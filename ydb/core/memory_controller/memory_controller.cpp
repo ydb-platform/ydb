@@ -93,6 +93,7 @@ struct TConsumerState {
     }
 
     ui64 GetLimit(double coefficient) const {
+        Y_DEBUG_ABORT_UNLESS(MinBytes <= MaxBytes);
         return static_cast<ui64>(MinBytes + coefficient * (MaxBytes - MinBytes));
     }
 };
@@ -429,26 +430,26 @@ private:
 
     ui64 GetSoftLimitBytes(ui64 hardLimitBytes) const {
         if (Config.HasSoftLimitPercent() && Config.HasSoftLimitBytes()) {
-            return Min(GetPercent(hardLimitBytes, Config.GetSoftLimitPercent()), Config.GetSoftLimitBytes());
+            return Min(GetPercent(Config.GetSoftLimitPercent(), hardLimitBytes), Config.GetSoftLimitBytes());
         }
         if (Config.HasSoftLimitBytes()) {
             return Config.GetSoftLimitBytes();
         }
-        return GetPercent(hardLimitBytes, Config.GetSoftLimitPercent());
+        return GetPercent(Config.GetSoftLimitPercent(), hardLimitBytes);
     }
 
     ui64 GetTargetUtilizationBytes(ui64 hardLimitBytes) const {
         if (Config.HasTargetUtilizationPercent() && Config.HasTargetUtilizationBytes()) {
-            return Min(GetPercent(hardLimitBytes, Config.GetTargetUtilizationPercent()), Config.GetTargetUtilizationBytes());
+            return Min(GetPercent(Config.GetTargetUtilizationPercent(), hardLimitBytes), Config.GetTargetUtilizationBytes());
         }
         if (Config.HasTargetUtilizationBytes()) {
             return Config.GetTargetUtilizationBytes();
         }
-        return GetPercent(hardLimitBytes, Config.GetTargetUtilizationPercent());
+        return GetPercent(Config.GetTargetUtilizationPercent(), hardLimitBytes);
     }
 
     ui64 GetPercent(float percent, ui64 value) const {
-        return static_cast<ui64>(static_cast<double>(value) * percent / 100);
+        return static_cast<ui64>(static_cast<double>(value) * (percent / 100.0));
     }
 
 private:

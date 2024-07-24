@@ -13,10 +13,12 @@ PEERDIR(
     ydb/library/yql/dq/actors
     ydb/library/actors/wilson
     ydb/library/actors/testlib
-    ydb/library/yql/public/udf/service/stub
+    #ydb/library/yql/public/udf/service/stub
     ydb/library/yql/sql/pg_dummy
-    ydb/library/yql/minikql/comp_nodes/no_llvm
+    #ydb/library/yql/minikql/comp_nodes/no_llvm
+    ydb/library/yql/minikql/comp_nodes/llvm14
     ydb/core/testlib/actors
+    ydb/core/testlib/basics
 )
 
 YQL_LAST_ABI_VERSION()

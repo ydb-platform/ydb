@@ -5,6 +5,8 @@
 namespace NYql::NDq {
 
 void TRetryEventsQueue::Init(const TTxId& txId, const NActors::TActorId& senderId, const NActors::TActorId& selfId, ui64 eventQueueId) {
+    
+    std::cerr << "Init()" << std::endl;
     TxId = txId;
     SenderId = senderId;
     SelfId = selfId;
@@ -50,6 +52,7 @@ void TRetryEventsQueue::HandleNodeConnected(ui32 nodeId) {
                 SendRetryable(ev);
             }
         }
+        SchedulePing();
     }
 }
 
@@ -64,14 +67,36 @@ bool TRetryEventsQueue::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr
 }
 
 void TRetryEventsQueue::Retry() {
+
+    std::cerr << "TRetryEventsQueue::TEvRetry" << std::endl;
+    
     RetryScheduled = false;
     if (!Connected) {
+    //    std::cerr << "!Connected" << std::endl;
         Connect();
     }
 }
 
+void TRetryEventsQueue::Ping() {
+
+    std::cerr << "TRetryEventsQueue::Ping" << std::endl;
+
+    if (!Connected) {
+        PingScheduled = false;
+        std::cerr << "TRetryEventsQueue::Ping not connected" << std::endl;
+        return;
+    }
+
+    auto ev = MakeHolder<NActors::TEvents::TEvPing>();
+    NActors::TActivationContext::Send(new NActors::IEventHandle(RecipientId, SenderId, ev.Release()));
+
+    SchedulePing();
+}
+
 void TRetryEventsQueue::Connect() {
     auto connectEvent = MakeHolder<NActors::TEvInterconnect::TEvConnectNode>();
+   auto proxy = NActors::TActivationContext::InterconnectProxy(RecipientId.NodeId());
+    std::cerr << "proxy " << proxy.ToString() << std::endl;
     NActors::TActivationContext::Send(
         new NActors::IEventHandle(NActors::TActivationContext::InterconnectProxy(RecipientId.NodeId()), SenderId, connectEvent.Release(), 0, 0));
 }
@@ -108,9 +133,20 @@ void TRetryEventsQueue::ScheduleRetry() {
         if (!RetryState) {
             RetryState.ConstructInPlace();
         }
+        std::cerr << "ScheduleRetry" << std::endl;
         auto ev = MakeHolder<TEvRetryQueuePrivate::TEvRetry>(EventQueueId);
         NActors::TActivationContext::Schedule(RetryState->GetNextDelay(), new NActors::IEventHandle(SelfId, SelfId, ev.Release()));
     }
+}
+
+void TRetryEventsQueue::SchedulePing() {
+    if (PingScheduled) {
+        return;
+    }
+    PingScheduled = true;
+    std::cerr << "SchedulePing" << std::endl;
+    auto ev = MakeHolder<TEvRetryQueuePrivate::TEvPing>(EventQueueId);
+    NActors::TActivationContext::Schedule(TDuration::Seconds(2), new NActors::IEventHandle(SelfId, SelfId, ev.Release()));
 }
 
 TDuration TRetryEventsQueue::TRetryState::GetNextDelay() {

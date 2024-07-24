@@ -16,9 +16,8 @@ struct TEvRetryQueuePrivate {
     // Event ids.
     enum EEv : ui32 {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-
         EvRetry = EvBegin,
-
+        EvPing,
         EvEnd
     };
 
@@ -29,9 +28,14 @@ struct TEvRetryQueuePrivate {
     struct TEvRetry : NActors::TEventLocal<TEvRetry, EvRetry> {
         explicit TEvRetry(ui64 eventQueueId)
             : EventQueueId(eventQueueId)
-        {
-        }
+        { }
+        const ui64 EventQueueId;
+    };
 
+    struct TEvPing : NActors::TEventLocal<TEvPing, EvPing> {
+        explicit TEvPing(ui64 eventQueueId)
+            : EventQueueId(eventQueueId)
+        { }
         const ui64 EventQueueId;
     };
 
@@ -72,7 +76,7 @@ public:
 
     TRetryEventsQueue(ICallbacks* cbs = nullptr)
         : Cbs(cbs) {
-            Cbs->SessionClosed(0);
+           // Cbs->SessionClosed(0);
         }
 
     void Init(const TTxId& txId, const NActors::TActorId& senderId, const NActors::TActorId& selfId, ui64 eventQueueId = 0);
@@ -85,9 +89,12 @@ public:
     template <TProtobufEventWithTransportMeta T>
     void Send(THolder<T> ev, ui64 cookie = 0) {
         if (LocalRecipient) {
+            std::cerr << "LocalRecipient" << std::endl;
             NActors::TActivationContext::Send(new NActors::IEventHandle(RecipientId, SenderId, ev.Release(), cookie));
             return;
         }
+
+        std::cerr << "no LocalRecipient" << std::endl;
 
         IRetryableEvent::TPtr retryableEvent = Store(RecipientId, SenderId, std::move(ev), cookie);
         if (Connected) {
@@ -143,6 +150,7 @@ public:
     void HandleNodeDisconnected(ui32 nodeId);
     bool HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev);
     void Retry();
+    void Ping();
     void Unsubscribe();
 
 private:
@@ -156,6 +164,7 @@ private:
     void RemoveConfirmedEvents(ui64 confirmedSeqNo);
     void SendRetryable(const IRetryableEvent::TPtr& ev);
     void ScheduleRetry();
+    void SchedulePing();
     void Connect();
 
 private:
@@ -211,9 +220,10 @@ private:
     std::set<ui64> ReceivedEventsSeqNos;
     bool Connected = false;
     bool RetryScheduled = false;
+    bool PingScheduled = false;
     TMaybe<TRetryState> RetryState;
     TTxId TxId;
-    ICallbacks* const Cbs;
+    [[maybe_unused]] ICallbacks* const Cbs;
 };
 
 } // namespace NYql::NDq

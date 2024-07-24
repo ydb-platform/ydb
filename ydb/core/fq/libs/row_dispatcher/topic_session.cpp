@@ -106,7 +106,7 @@ private:
     TMap<NActors::TActorId, ConsumersInfo> Consumers;
     std::unique_ptr<TJsonParser> Parser;
 
-    ui64 CurrentOffset = 0;
+    //ui64 CurrentOffset = 0;
 
 
 public:
@@ -126,7 +126,7 @@ public:
     NYdb::NTopic::IReadSession& GetReadSession();
     void SubscribeOnNextEvent();
     void ParseData();
-    void DataParsed(const NYql::NUdf::TUnboxedValue* json);
+    void DataParsed(ui64 offset, TList<TString>&& value);
     void SendData();
     void CloseSession();
 
@@ -152,6 +152,9 @@ public:
     void Handle(NActors::TEvents::TEvUndelivered::TPtr &ev);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&);
     void Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev);
+    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvPing::TPtr&);
+
+    void Handle(NActors::TEvents::TEvPing::TPtr &ev);
 
     static constexpr char ActorName[] = "YQ_ROW_DISPATCHER_SESSION";
 
@@ -168,6 +171,8 @@ private:
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
         cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
         hFunc(NFq::TEvRowDispatcher::TEvStopSession, Handle);
+        hFunc(NActors::TEvents::TEvPing, Handle);
+        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvPing, Handle);
     )
 
 };
@@ -192,10 +197,10 @@ TTopicSession::TTopicSession(
     , Driver(driver)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , BufferSize(16_MB)
-    , LogPrefix("TopicSession: " << SelfId())
+    , LogPrefix("TopicSession: " + SelfId().ToString())
    // , StartingMessageTimestamp(TInstant::MilliSeconds(TInstant::Now().MilliSeconds())) // this field is serialized as milliseconds, so drop microseconds part to be consistent with storage
-    , Parser(NewJsonParser(GetVector(sourceParams.GetColumns()), [&](const NYql::NUdf::TUnboxedValue* json){
-            DataParsed(json);
+    , Parser(NewJsonParser("", GetVector(sourceParams.GetColumns()), [&](ui64 offset, TList<TString>&& value){
+            DataParsed(offset, std::move(value));
         }))
 {
    // Alloc.DisableStrictAllocationCheck();
@@ -473,9 +478,9 @@ void TTopicSession::ParseData() {
     }
     auto& readyBatch = ReadyBuffer.front();
     for (const auto& [offset, value] : readyBatch.Data) {
-        CurrentOffset = offset;
+        //CurrentOffset = offset;
         try {
-            Parser->Push(value);
+            Parser->Push(offset, value);
         } catch (...) {
             auto message = CurrentExceptionMessage();
             LOG_ROW_DISPATCHER_DEBUG("Parsing error: " << message);
@@ -485,12 +490,16 @@ void TTopicSession::ParseData() {
 }
 
 
-void TTopicSession::DataParsed(const NYql::NUdf::TUnboxedValue* json) {
-    LOG_ROW_DISPATCHER_DEBUG("DataParsed");
+void TTopicSession::DataParsed(ui64 offset, TList<TString>&& value) {
+    LOG_ROW_DISPATCHER_DEBUG("DataParsed, offset " << offset);
     
-    for (auto& [actorId, info] : Consumers) {
-        info.Filter->Push(json);
+    for (auto v: value) {
+        LOG_ROW_DISPATCHER_DEBUG("v " << v);
     }
+
+    // for (auto& [actorId, info] : Consumers) {
+    //     info.Filter->Push(json);
+    // }
 }
 
 void TTopicSession::SendData() {
@@ -501,7 +510,7 @@ void TTopicSession::SendData() {
             const TString json = info.Consumer->Buffer.front();
             NFq::NRowDispatcherProto::TEvMessage message;
             message.SetJson(json);
-            message.SetOffset(CurrentOffset);
+            //message.SetOffset(CurrentOffset);
             
             auto event = std::make_unique<TEvRowDispatcher::TEvMessageBatch>();
             event->Record.SetPartitionId(PartitionId);    
@@ -617,6 +626,14 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev) {
     // LOG_ROW_DISPATCHER_DEBUG("TEvStopSession end ");
 }
 
+void TTopicSession::Handle(NActors::TEvents::TEvPing::TPtr &/*ev*/) {
+    LOG_ROW_DISPATCHER_DEBUG("TEvPing");
+}
+
+void TTopicSession::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvPing::TPtr& /*ev*/) {
+    LOG_ROW_DISPATCHER_DEBUG("TEvRetryQueuePrivate::TEvPing");
+    // TODO
+}
 
 } // namespace
 

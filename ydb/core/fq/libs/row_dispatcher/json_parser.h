@@ -1,16 +1,22 @@
-
 #pragma once
+
+#include <functional>
+
+#include <util/generic/string.h>
 
 namespace NFq {
 
 class TJsonParser {
 public:
-    using TCallback = std::function<void(const NYql::NUdf::TUnboxedValue*)>;
+    using TCallback = std::function<void(ui64, TList<TString>&&)>;
     
 public:
-    TJsonParser(const TVector<TString>& columns, TCallback callback);
+    TJsonParser(
+        const TString& udfDir,
+        const TVector<TString>& columns,
+        TCallback callback);
     ~TJsonParser();
-    void Push(const TString& value);
+    void Push(ui64 offset, const TString& value);
 
 private:
     class TImpl;
@@ -18,6 +24,7 @@ private:
 };
 
 std::unique_ptr<TJsonParser> NewJsonParser(
+    const TString& udfDir,
     const TVector<TString>& columns,
     TJsonParser::TCallback callback);
 

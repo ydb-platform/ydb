@@ -19,27 +19,34 @@
 namespace NFq {
 
 
-
-
 using TCallback = TJsonParser::TCallback;
+using TInputConsumerArg = std::pair<ui64, TString>;
 
-static void AddField(NYT::TNode& node, const TString& field) {
+static void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldType) {
     node.Add(
         NYT::TNode::CreateList()
-            .Add(field)
-            .Add(NYT::TNode::CreateList().Add("DataType").Add("String"))
+            .Add(fieldName)
+            .Add(NYT::TNode::CreateList().Add("DataType").Add(fieldType))
     );
 }
 
-static NYT::TNode MakeSchema(const TVector<TString>& columns) {
+static NYT::TNode MakeInputSchema() {
     auto structMembers = NYT::TNode::CreateList();
+    AddField(structMembers, "offset", "Uint64");
+    AddField(structMembers, "data", "String");
+    return NYT::TNode::CreateList().Add("StructType").Add(std::move(structMembers));
+}
+
+static NYT::TNode MakeOutputSchema(const TVector<TString>& columns) {
+    auto structMembers = NYT::TNode::CreateList();
+    AddField(structMembers, "offset", "Uint64");
     for (const auto& col : columns) {
-        AddField(structMembers, col);
+        AddField(structMembers, col, "String");
     }
     return NYT::TNode::CreateList().Add("StructType").Add(std::move(structMembers));
 }
 
-class TParserInputConsumer : public NYql::NPureCalc::IConsumer<TString> {
+class TParserInputConsumer : public NYql::NPureCalc::IConsumer<TInputConsumerArg> {
 public:
     explicit TParserInputConsumer(NYql::NPureCalc::TWorkerHolder<NYql::NPureCalc::IPushStreamWorker> worker)
         : Worker(std::move(worker)) {
@@ -51,8 +58,12 @@ public:
         }
     }
 
-    void OnObject(TString value) override {
-        LOG_ROW_DISPATCHER_DEBUG("TParserInputConsumer::OnObject: " << value);
+    void OnObject(std::pair<ui64, TString> value) override {
+        NMiniKQL::TThrowingBindTerminator bind;
+        LOG_ROW_DISPATCHER_DEBUG("TParserInputConsumer::OnObject: " << value.first);
+        LOG_ROW_DISPATCHER_DEBUG("TParserInputConsumer::OnObject: " << value.second);
+
+        std::cerr << "json " << value.second << std::endl;
 
         with_lock (Worker->GetScopedAlloc()) {
             auto& holderFactory = Worker->GetGraph().GetHolderFactory();
@@ -60,23 +71,25 @@ public:
 
             NYql::NUdf::TUnboxedValue result = Cache.NewArray(
                 holderFactory,
-                static_cast<ui32>(1),
+                static_cast<ui32>(2),
                 items);
     
-            NYql::NUdf::TStringValue str(value.Size());
-            std::memcpy(str.Data(), value.Data(), value.Size());
-            items[0] = NYql::NUdf::TUnboxedValuePod(std::move(str));
+            items[0] = NYql::NUdf::TUnboxedValuePod(value.first);
+            NYql::NUdf::TStringValue str(value.second.Size());
+            std::memcpy(str.Data(), value.second.Data(), value.second.Size());
+            items[1] = NYql::NUdf::TUnboxedValuePod(std::move(str));
             LOG_ROW_DISPATCHER_DEBUG("Push ");
             try {
                 Worker->Push(std::move(result));
             } catch (...) {
-                
+                std::cerr << "catch " << std::endl;
             }
             LOG_ROW_DISPATCHER_DEBUG("Push end");
         }
     }
 
     void OnFinish() override {
+        std::cerr << "OnFinish " << std::endl;
         NKikimr::NMiniKQL::TBindTerminator bind(Worker->GetGraph().GetTerminator());
         with_lock(Worker->GetScopedAlloc()) {
             Worker->OnFinish();
@@ -93,7 +106,7 @@ private:
 class TParserInputSpec : public NYql::NPureCalc::TInputSpecBase {
 public:
     TParserInputSpec() {
-        Schemas = {MakeSchema({"data"})};
+        Schemas = {MakeInputSchema()};
     }
 
     const TVector<NYT::TNode>& GetSchemas() const override {
@@ -116,10 +129,27 @@ public:
         // for (const auto& field : parsedRecord->AsMap()) {
         //     result += field.second.AsString();
         // }
-        Callback(value);
+
+
+        TList<TString> result;
+        
+        ui64 offset = value->GetElement(0).Get<ui64>();
+        
+
+        for (size_t i = 1; i != value->GetListLength(); ++i) {
+            const auto& cell = value->GetElement(i);
+
+            NYql::NUdf::TStringRef strRef(cell.AsStringRef());
+            result.emplace_back(strRef.Data(), strRef.Size());
+        }
+        
+        Callback(offset, std::move(result));
     }
 
     void OnFinish() override {
+        std::cerr << "TParserOutputConsumer::OnFinish " << std::endl;
+
+
         Y_UNREACHABLE();
     }
 private:
@@ -190,6 +220,8 @@ public:
     }
 
     void OnFinish() override {
+        std::cerr << "TParserPushRelayImpl::OnFinish " << std::endl;
+
         auto unguard = Unguard(Worker->GetScopedAlloc());
         Underlying->OnFinish();
     }
@@ -207,7 +239,7 @@ struct NYql::NPureCalc::TInputSpecTraits<NFq::TParserInputSpec> {
     static constexpr bool IsPartial = false;
     static constexpr bool SupportPushStreamMode = true;
 
-    using TConsumerType = THolder<NYql::NPureCalc::IConsumer<TString>>;
+    using TConsumerType = THolder<NYql::NPureCalc::IConsumer<NFq::TInputConsumerArg>>;
 
     static TConsumerType MakeConsumer(
         const NFq::TParserInputSpec& spec,
@@ -235,16 +267,22 @@ namespace NFq {
 
 class TJsonParser::TImpl {
 public:
-    TImpl(const TVector<TString>& columns,
+    TImpl(
+        const TString& udfDir,
+        const TVector<TString>& columns,
         TCallback callback)
         : LogPrefix("JsonParser: ") {
-        auto factory = NYql::NPureCalc::MakeProgramFactory(NYql::NPureCalc::TProgramFactoryOptions());
+        auto options = NYql::NPureCalc::TProgramFactoryOptions();
+        if (!udfDir.empty()) {
+            options.SetUDFsDir(udfDir);
+        }
+        auto factory = NYql::NPureCalc::MakeProgramFactory(options);
 
         try {
             LOG_ROW_DISPATCHER_DEBUG("Creating program...");
             Program = factory->MakePushStreamProgram(
                 TParserInputSpec(),
-                TParserOutputSpec(MakeSchema(columns)),
+                TParserOutputSpec(MakeOutputSchema(columns)),
                 GenerateSql(columns),
                 NYql::NPureCalc::ETranslationMode::SQL
             );
@@ -258,10 +296,10 @@ public:
         }
     }
 
-    void Push(const TString& value) {
+    void Push( ui64 offset, const TString& value) {
         try {
             LOG_ROW_DISPATCHER_DEBUG("Push " << value);
-            InputConsumer->OnObject(value);
+            InputConsumer->OnObject(std::make_pair(offset, value));
         } catch (const yexception& ex) {
                 LOG_ROW_DISPATCHER_DEBUG("Push error");
         }
@@ -270,40 +308,43 @@ public:
 private:
     TString GenerateSql(const TVector<TString>& columns) {
         TStringStream str;
-        str << R"($json = SELECT CAST(data AS Json) as `Json` FROM Input;)"; 
-        str << "\nSELECT ";
+        str << R"($json = SELECT CAST(data AS Json) as `Json`, offset FROM Input;)"; 
+        str << "\nSELECT offset, ";
         for (auto it = columns.begin(); it != columns.end(); ++it) {
             str << R"(CAST(Unwrap(JSON_VALUE(`Json`, "$.)" << *it << "\")) as String) as "
                 << *it << ((it != columns.end() - 1) ? "," : "");
         }
         str << " FROM $json;";
+        std::cerr << "GenerateSql" << str.Str() << std::endl;
         LOG_ROW_DISPATCHER_DEBUG("GenerateSql " << str.Str());
         return str.Str();
     }
 
 private:
     THolder<NYql::NPureCalc::TPushStreamProgram<TParserInputSpec, TParserOutputSpec>> Program;
-    THolder<NYql::NPureCalc::IConsumer<TString>> InputConsumer;
+    THolder<NYql::NPureCalc::IConsumer<TInputConsumerArg>> InputConsumer;
     const TString LogPrefix;
 };
 
 TJsonParser::TJsonParser(
+    const TString& udfDir,
     const TVector<TString>& columns,
     TCallback callback)
-    : Impl(std::make_unique<TJsonParser::TImpl>(columns, callback)) { 
+    : Impl(std::make_unique<TJsonParser::TImpl>(udfDir, columns, callback)) { 
 }
 
 TJsonParser::~TJsonParser() {
 }
     
-void TJsonParser::Push(const TString& value) {
-     Impl->Push(value);
+void TJsonParser::Push(ui64 offset, const TString& value) {
+     Impl->Push(offset, value);
 }
 
 std::unique_ptr<TJsonParser> NewJsonParser(
+    const TString& udfDir,
     const TVector<TString>& columns,
     TCallback callback) {
-    return std::unique_ptr<TJsonParser>(new TJsonParser(columns, callback));
+    return std::unique_ptr<TJsonParser>(new TJsonParser(udfDir, columns, callback));
 }
 
 } // namespace NFq

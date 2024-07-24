@@ -82,6 +82,8 @@ public:
     void Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvSessionConsumerDeleted::TPtr &ev);
 
+    void Handle(NActors::TEvents::TEvPing::TPtr &ev);
+
     
 
     STRICT_STFUNC(
@@ -98,6 +100,8 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvAddConsumer, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStopSession, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvSessionConsumerDeleted, Handle);
+
+        hFunc(NActors::TEvents::TEvPing, Handle);
     })
 
 private:
@@ -223,7 +227,6 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr &/*ev*/
 
 }
 
-
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionConsumerDeleted::TPtr &ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvSessionConsumerDeleted");
     const auto& consumer = ev->Get()->Consumer;
@@ -231,12 +234,19 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionConsumerDeleted::TP
     auto sessionInfo = Sessions[key];
     sessionInfo.TopicSessions.erase(consumer->ReadActorId);
 
+    LOG_ROW_DISPATCHER_DEBUG("TEvSessionConsumerDeleted TopicSessions size " << sessionInfo.TopicSessions.size());
+
     if (sessionInfo.TopicSessions.empty()) {
         LOG_ROW_DISPATCHER_DEBUG("Delete session info");
         Sessions.erase(key);
     }
+
+    LOG_ROW_DISPATCHER_DEBUG("TEvSessionConsumerDeleted Sessions size " << Sessions.size());
 }
 
+void TRowDispatcher::Handle(NActors::TEvents::TEvPing::TPtr &/*ev*/) {
+    LOG_ROW_DISPATCHER_DEBUG("TEvPing");
+}
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvStopSession, topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<

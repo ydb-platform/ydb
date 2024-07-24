@@ -3,8 +3,12 @@
 #include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/yql/dq/actors/compute/retry_queue.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+//#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/library/actors/interconnect/interconnect_impl.h>
+#include <chrono>
+#include <thread>
+
 
 using namespace NActors;
 
@@ -19,24 +23,33 @@ public:
     void Bootstrap() {
         std::cerr << "Bootstrap" << std::endl;
         Become(&ClientActor::StateFunc);
+        Init();
+        std::cerr << "Bootstrap end" << std::endl;
     }
 
 
-  void Handle(const NYql::NDq::TEvDqCompute::TEvRun::TPtr& ev) {
-        std::cerr << "TEvRun" << std::endl;
-        Send(ev->Sender,new NYql::NDq::TEvDqCompute::TEvRun());
+    // void Handle(const NYql::NDq::TEvDqCompute::TEvRun::TPtr& ev) {
+    //     std::cerr << "TEvRun" << std::endl;
+    //     Send(ev->Sender,new NYql::NDq::TEvDqCompute::TEvRun());
 
-        Init();
+        
+    // }
+
+    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ) {
+        std::cerr << "TEvRetry" << std::endl;
+        EventsQueue.Retry();
     }
 
     STRICT_STFUNC(StateFunc,
-        hFunc(NYql::NDq::TEvDqCompute::TEvRun, Handle);
+       // hFunc(NYql::NDq::TEvDqCompute::TEvRun, Handle);
+        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
+        
     )
 
     void Init() {
         EventsQueue.Init("TxId", SelfId(), SelfId(), 777);
         EventsQueue.OnNewRecipientId(ServerActorId);
-        EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvRun());
+       // EventsQueue.Send(new NYql::NDq::TEvRetryQueuePrivate::TEvRetry(1));
     }
 
     virtual void SessionClosed(ui64 ) {}
@@ -45,29 +58,29 @@ public:
     NActors::TActorId ServerActorId;
 };
 
-class ServerActor : public TActorBootstrapped<ServerActor>, public NYql::NDq::TRetryEventsQueue::ICallbacks {
-public:
-    ServerActor()
-     : EventsQueue(this) {}
+// class ServerActor : public TActorBootstrapped<ServerActor>, public NYql::NDq::TRetryEventsQueue::ICallbacks {
+// public:
+//     ServerActor()
+//      : EventsQueue(this) {}
 
-    void Bootstrap() {
-        Become(&ServerActor::StateFunc);
-    }
+//     void Bootstrap() {
+//         Become(&ServerActor::StateFunc);
+//     }
 
-    void Handle(const NYql::NDq::TEvDqCompute::TEvRun::TPtr&) {
-        std::cerr << "TEvRun" << std::endl;
-    }
-
-
-    STRICT_STFUNC(StateFunc,
-        hFunc(NYql::NDq::TEvDqCompute::TEvRun, Handle);
-    )
+//     void Handle(const NYql::NDq::TEvDqCompute::TEvRun::TPtr&) {
+//         std::cerr << "TEvRun" << std::endl;
+//     }
 
 
-    virtual void SessionClosed(ui64 ) {}
+//     STRICT_STFUNC(StateFunc,
+//         hFunc(NYql::NDq::TEvDqCompute::TEvRun, Handle);
+//     )
 
-    NYql::NDq::TRetryEventsQueue EventsQueue;
-};
+
+//     virtual void SessionClosed(ui64 ) {}
+
+//     NYql::NDq::TRetryEventsQueue EventsQueue;
+// };
 
 struct TRuntime: public NActors::TTestActorRuntime
 {
@@ -75,17 +88,24 @@ struct TRuntime: public NActors::TTestActorRuntime
 public:
 
     TRuntime() 
-    : NActors::TTestActorRuntime(2){
+    : NActors::TTestActorRuntime(1, true){
        // const ui32 nodesNumber = 1;
         //ActorSystem.Reset(new NActors::TTestActorRuntimeBase(nodesNumber));
 
-        Initialize(MakeEgg());
+        //Initialize(MakeEgg());
 
-        Server = new ServerActor();
-        ServerActorId = Register(Server, 1);
+        Initialize(NKikimr::TAppPrepare().Unwrap());
+
+        ServerActorId = AllocateEdgeActor(0);
+
+        // Server = new ServerActor();
+        // ServerActorId = Register(Server);
         
         Client = new ClientActor(ServerActorId);
         ClientActorId = Register(Client, 0);
+
+      //  EnableScheduleForActor(ServerActorId, true);
+        EnableScheduleForActor(ClientActorId, true);
         //Start();
 
         // for (ui32 i = 1; i < nodesNumber; i++) {
@@ -99,10 +119,16 @@ public:
         //     Y_ABORT_IF(err);
         // }
 
-        // NActors::TDispatchOptions options;
-        // options.FinalEvents.emplace_back(NActors::TEvents::TSystem::Bootstrap, nodesNumber);
-        // ActorRuntime_->DispatchEvents(options);
-        DispatchEvents({}, TDuration::Zero());
+
+        std::cerr << " wait Bootstrap " << std::endl;
+
+         NActors::TDispatchOptions options;
+         options.FinalEvents.emplace_back(NActors::TEvents::TSystem::Bootstrap, 1);
+         DispatchEvents(options);
+
+         std::cerr << "Bootstrap success" << std::endl;
+
+       // DispatchEvents({}, TDuration::Zero());
 
         // auto statusEv = MakeHolder<TEvClusterStatus>();
         // const auto statusSender = ActorRuntime_->AllocateEdgeActor();
@@ -123,22 +149,42 @@ public:
 
    // THolder<NActors::TTestActorRuntimeBase> ActorSystem;
     ClientActor* Client;
-    ServerActor* Server;
+   // ServerActor* Server;
 
     NActors::TActorId ClientActorId;
     NActors::TActorId ServerActorId;
  //   NKikimr::TActorSystemStub ActorSystemStub;
 };
 
+
 Y_UNIT_TEST_SUITE(TRetryEventsQueueTest) {
     Y_UNIT_TEST(Empty) { 
         // Client->Init(ServerActorId);
         TRuntime runtime;
-        const auto edge = runtime.AllocateEdgeActor(0);
 
-        runtime.Send(new IEventHandle(runtime.ClientActorId, edge, new NYql::NDq::TEvDqCompute::TEvRun()), 0, true);
-        runtime.GrabEdgeEvent<NYql::NDq::TEvDqCompute::TEvRun>(edge);
-        
+        //runtime.Send(new IEventHandle(runtime.ClientActorId, runtime.ServerActorId, new NYql::NDq::TEvDqCompute::TEvRun()), 0, true);
+        // runtime.GrabEdgeEvent<NYql::NDq::TEvDqCompute::TEvRun>(runtime.ServerActorId);
+        //  runtime.DispatchEvents({}, TDuration::Seconds(5));
+
+
+        // TAutoPtr<IEventHandle> handle;
+        // runtime.GrabEdgeEvent<NYql::NDq::TEvRetryQueuePrivate::TEvRetry>(handle);
+
+
+        // TAutoPtr<IEventHandle> handle;
+        // runtime.GrabEdgeEvent<NActors::TEvInterconnect::TEvConnectNode>(handle);
+
+        //  const TActorId proxy = runtime.GetInterconnectProxy(0, 1);
+        //  std::cerr << "proxy2 " << proxy.ToString() << std::endl;
+
+     //   runtime.Send(proxy, TActorId(), new NActors::TEvInterconnect::TEvConnectNode(), 0, true);
+
+        //Wait for event TEvInterconnect::EvNodeDisconnected
+        // TDispatchOptions options;
+        // options.FinalEvents.emplace_back(NActors::TEvInterconnect::EvConnectNode);
+        // runtime.DispatchEvents(options);
+
+        //std::this_thread::sleep_for(std::chrono::milliseconds(20000));
     }
 }
 

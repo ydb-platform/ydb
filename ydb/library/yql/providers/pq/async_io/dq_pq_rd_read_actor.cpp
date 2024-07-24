@@ -169,6 +169,8 @@ public:
     void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev);
     void Handle(NActors::TEvents::TEvUndelivered::TPtr &ev);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&);
+    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvPing::TPtr&);
+    
 
     STRICT_STFUNC(
         StateFunc, {
@@ -181,6 +183,7 @@ public:
         hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
+        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvPing, Handle);
 
         // hFunc(NActors::TEvents::TEvWakeup, Handle)
     })
@@ -490,6 +493,14 @@ void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::T
     sessionIt->second.EventsQueue.Retry();
 }
 
+void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvPing::TPtr& ev) {
+    SRC_LOG_D("TEvPing");
+    ui64 partitionId = ev->Get()->EventQueueId;
+
+    auto sessionIt = Sessions.find(partitionId);
+    YQL_ENSURE(sessionIt != Sessions.end(), "Unknown partition id");
+    sessionIt->second.EventsQueue.Ping();
+}
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr &ev) {
     SRC_LOG_D("TEvCoordinatorChanged = " << ev->Get()->CoordinatorActorId);

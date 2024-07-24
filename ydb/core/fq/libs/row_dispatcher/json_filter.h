@@ -3,6 +3,9 @@
 
 namespace NFq {
 
+#include <ydb/library/yql/public/udf/udf_data_type.h>
+#include <ydb/library/yql/public/udf/udf_value.h>
+
 class TJsonFilter {
 public:
     using TCallback = std::function<void(const TString&)>;

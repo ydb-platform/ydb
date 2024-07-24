@@ -44,7 +44,7 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
+            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, HandleProxy);
             HFunc(TEvPrivate::TEvCheckSessionResponse, Handle);
             HFunc(TEvPrivate::TEvErrorResponse, Handle);
         }

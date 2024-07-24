@@ -475,8 +475,6 @@ public:
         BufferForUsedInputItemsBucketId = bucketId;
 
         Throat = BufferForUsedInputItems.data();
-        Tongue = nullptr;
-
     
         return ETasteResult::ConsumeRawData;
     }
@@ -1360,13 +1358,18 @@ public:
 
             block = more;
 
-            const auto waitMoreFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::UpdateAndWait));
-            const auto waitMoreFuncPtr = CastInst::Create(Instruction::IntToPtr, waitMoreFunc, PointerType::getUnqual(boolFuncType), "wait_more_func", block);
-            const auto waitMore = CallInst::Create(boolFuncType, waitMoreFuncPtr, { stateArg }, "wait_more", block);
+            const auto updateFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::Update));
+            const auto updateType = FunctionType::get(wayType, {stateArg->getType()}, false);
+            const auto updateFuncPtr = CastInst::Create(Instruction::IntToPtr, updateFunc, PointerType::getUnqual(updateType), "update_func", block);
+            const auto update = CallInst::Create(updateType, updateFuncPtr, { stateArg }, "update", block);
 
             result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
 
-            BranchInst::Create(over, test, waitMore, block);
+            const auto updateWay = SwitchInst::Create(update, test, 3U, block);
+            updateWay->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::EUpdateResult::Yield)), over);
+            // TODO add exctraction code and jmp there
+            updateWay->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::EUpdateResult::ExtractRawData)), test);
+            updateWay->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::EUpdateResult::None)), test);
 
             block = test;
 

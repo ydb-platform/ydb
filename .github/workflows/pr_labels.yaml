@@ -35,7 +35,7 @@ jobs:
             ];
             // remove all labels owned by current script 
             for (let pair of mapping) {
-              if (!description.includes(pair[0]))
+              if (description.includes(pair[0]))
               {
                 try {
                   const result = await github.rest.issues.removeLabel({

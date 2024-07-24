@@ -6,6 +6,7 @@
 #include <queue>
 #include "ldap_auth_provider.h"
 #include "ldap_utils.h"
+#include "ldap_auth_provider_log.h"
 
 // This temporary solution
 // These lines should be declared outside ldap_compat.h
@@ -118,6 +119,7 @@ private:
     }
 
     void Handle(TEvLdapAuthProvider::TEvEnrichGroupsRequest::TPtr& ev) {
+        // LDAP_LOG_D("+++ TEvLdapAuthProvider::TEvEnrichGroupsRequest");
         TEvLdapAuthProvider::TEvEnrichGroupsRequest* request = ev->Get();
         LDAP* ld = nullptr;
         auto initAndBindResult = InitAndBind(&ld, [&request](const TEvLdapAuthProvider::EStatus& status, const TEvLdapAuthProvider::TError& error) {
@@ -174,6 +176,7 @@ private:
         if (Settings.GetScheme() != NKikimrLdap::LDAPS_SCHEME && Settings.GetUseTls().GetEnable()) {
             result = NKikimrLdap::StartTLS(*ld);
             if (!NKikimrLdap::IsSuccess(result)) {
+                LDAP_LOG_D("Could not start TLS. " + NKikimrLdap::ErrorToString(result));
                 TEvLdapAuthProvider::TError error {
                     .Message = "Could not start TLS\n" + NKikimrLdap::ErrorToString(result),
                     .Retryable = NKikimrLdap::IsRetryableError(result)
@@ -187,6 +190,8 @@ private:
 
         result = NKikimrLdap::Bind(*ld, Settings.GetBindDn(), Settings.GetBindPassword());
         if (!NKikimrLdap::IsSuccess(result)) {
+            LDAP_LOG_D("Could not perform initial LDAP bind for dn " + Settings.GetBindDn() + " on server " + UrisCreator.GetUris() + ". "
+                            + NKikimrLdap::ErrorToString(result));
             TEvLdapAuthProvider::TError error {
                 .Message = "Could not perform initial LDAP bind for dn " + Settings.GetBindDn() + " on server " + UrisCreator.GetUris() + "\n"
                             + NKikimrLdap::ErrorToString(result),
@@ -249,6 +254,8 @@ private:
     TAuthenticateUserResponse AuthenticateUser(const TAuthenticateUserRequest& request) {
         char* dn = NKikimrLdap::GetDn(*request.Ld, request.Entry);
         if (dn == nullptr) {
+            LDAP_LOG_D("Could not get dn for the first entry matching " + FilterCreator.GetFilter(request.Login) + " on server " + UrisCreator.GetUris() + ". "
+                            + NKikimrLdap::LdapError(*request.Ld));
             return {{TEvLdapAuthProvider::EStatus::UNAUTHORIZED,
                     {.Message = "Could not get dn for the first entry matching " + FilterCreator.GetFilter(request.Login) + " on server " + UrisCreator.GetUris() + "\n"
                             + NKikimrLdap::LdapError(*request.Ld),
@@ -257,6 +264,8 @@ private:
         TEvLdapAuthProvider::TError error;
         int result = NKikimrLdap::Bind(*request.Ld, dn, request.Password);
         if (!NKikimrLdap::IsSuccess(result)) {
+            LDAP_LOG_D("LDAP login failed for user " + TString(dn) + " on server " + UrisCreator.GetUris() + ". "
+                            + NKikimrLdap::ErrorToString((result)));
             error.Message = "LDAP login failed for user " + TString(dn) + " on server " + UrisCreator.GetUris() + "\n"
                             + NKikimrLdap::ErrorToString((result));
             error.Retryable = NKikimrLdap::IsRetryableError(result);
@@ -278,6 +287,8 @@ private:
                                         &searchMessage);
         TSearchUserResponse response;
         if (!NKikimrLdap::IsSuccess(result)) {
+            LDAP_LOG_D("Could not search for filter " + searchFilter + " on server " + UrisCreator.GetUris() + ". "
+                                         + NKikimrLdap::ErrorToString(result));
             response.Status = NKikimrLdap::ErrorToStatus(result);
             response.Error = {.Message = "Could not search for filter " + searchFilter + " on server " + UrisCreator.GetUris() + "\n"
                                          + NKikimrLdap::ErrorToString(result),
@@ -287,10 +298,14 @@ private:
         const int countEntries = NKikimrLdap::CountEntries(request.Ld, searchMessage);
         if (countEntries != 1) {
             if (countEntries == 0) {
+                LDAP_LOG_D("LDAP user " + request.User + " does not exist. "
+                           "LDAP search for filter " + searchFilter + " on server " + UrisCreator.GetUris() + " return no entries");
                 response.Error  = {.Message = "LDAP user " + request.User + " does not exist. "
                                               "LDAP search for filter " + searchFilter + " on server " + UrisCreator.GetUris() + " return no entries",
                                    .Retryable = false};
             } else {
+                LDAP_LOG_D("LDAP user " + request.User + " is not unique. "
+                           "LDAP search for filter " + searchFilter + " on server " + UrisCreator.GetUris() + " return " + countEntries + " entries");
                 response.Error = {.Message = "LDAP user " + request.User + " is not unique. "
                                              "LDAP search for filter " + searchFilter + " on server " + UrisCreator.GetUris() + " return " + countEntries + " entries",
                                   .Retryable = false};

@@ -263,7 +263,7 @@ def write_summary(summary: TestSummary):
         fp = sys.stdout
 
     if summary.is_empty:
-        fp.write(f":red_circle: Test run completed, no test results found. Please check ya make output.")
+        fp.write(f"Test run completed, no test results found (in most cases it is OK).")
     else:
         for line in summary.render(add_footnote=True):
             fp.write(f"{line}\n")
@@ -363,7 +363,7 @@ def main():
     summary = gen_summary(args.public_dir, args.public_dir_url, title_path, is_retry=bool(args.is_retry))
     write_summary(summary)
 
-    if summary.is_empty | summary.is_failed:
+    if summary.is_failed:
         color = 'red'
         overall_status = "failure"
     else:

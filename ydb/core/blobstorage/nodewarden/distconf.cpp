@@ -34,9 +34,7 @@ namespace NKikimr::NStorage {
                 DrivesToRead.push_back(drive.GetPath());
             });
             std::sort(DrivesToRead.begin(), DrivesToRead.end());
-
-            auto query = std::bind(&TThis::ReadConfig, TActivationContext::ActorSystem(), SelfId(), DrivesToRead, Cfg, 0);
-            Send(MakeIoDispatcherActorId(), new TEvInvokeQuery(std::move(query)));
+            ReadConfig();
         } else {
             StorageConfigLoaded = true;
         }
@@ -181,6 +179,10 @@ namespace NKikimr::NStorage {
 #endif
 
     STFUNC(TDistributedConfigKeeper::StateWaitForInit) {
+        STLOG(PRI_DEBUG, BS_NODE, NWDC53, "StateWaitForInit event", (Type, ev->GetTypeRewrite()),
+            (StorageConfigLoaded, StorageConfigLoaded), (NodeListObtained, NodeListObtained),
+            (PendingEvents.size, PendingEvents.size()));
+
         auto processPendingEvents = [&] {
             if (PendingEvents.empty()) {
                 Become(&TThis::StateFunc);
@@ -195,7 +197,9 @@ namespace NKikimr::NStorage {
         switch (ev->GetTypeRewrite()) {
             case TEvInterconnect::TEvNodesInfo::EventType:
                 Handle(reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr&>(ev));
-                change = !std::exchange(NodeListObtained, true);
+                if (!NodeIds.empty()) {
+                    change = !std::exchange(NodeListObtained, true);
+                }
                 break;
 
             case TEvPrivate::EvStorageConfigLoaded:
@@ -216,10 +220,6 @@ namespace NKikimr::NStorage {
         }
 
         if (change && NodeListObtained && StorageConfigLoaded) {
-            if (IsSelfStatic) {
-                UpdateBound(SelfNode.NodeId(), SelfNode, *StorageConfig, nullptr);
-                IssueNextBindRequest();
-            }
             processPendingEvents();
         }
     }

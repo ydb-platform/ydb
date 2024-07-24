@@ -1525,8 +1525,9 @@ struct TEvReadMetadataResult : TEventLocal<TEvReadMetadataResult, TEvBlobStorage
     TRcBuf Metadata;
     std::optional<ui64> PDiskGuid;
 
-    TEvReadMetadataResult(EPDiskMetadataOutcome outcome)
+    TEvReadMetadataResult(EPDiskMetadataOutcome outcome, std::optional<ui64> pdiskGuid)
         : Outcome(outcome)
+        , PDiskGuid(pdiskGuid)
     {}
 
     TEvReadMetadataResult(TRcBuf&& metadata, std::optional<ui64> pdiskGuid)

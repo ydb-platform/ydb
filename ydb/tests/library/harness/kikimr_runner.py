@@ -80,7 +80,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         else:
             self.__log_file = None
 
-        daemon.Daemon.__init__(self, self.command, cwd=self.cwd, timeout=180, stderr_on_error_lines=240)
+        daemon.Daemon.__init__(self, self.command, cwd=self.cwd, timeout=180, stderr_on_error_lines=240, stdin_file=yatest_common.work_path('dev/stdin'), stdout_file=yatest_common.work_path('dev/stdout'), stderr_file=yatest_common.work_path('dev/stderr'))
         self.__binary_path = None
 
     @property

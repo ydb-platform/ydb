@@ -1686,17 +1686,18 @@ public:
                             const auto indexIter = std::find_if(table.Metadata->Indexes.begin(), table.Metadata->Indexes.end(), [&indexName] (const auto& index) {
                                 return index.Name == indexName;
                             });
-                            if (!indexIter) {
+                            if (indexIter == table.Metadata->Indexes.end()) {
                                 ctx.AddError(
-                                    TIssue(ctx.GetPosition(indexSetting.Name().Pos()),
-                                            TStringBuilder() << "Unknown index name: " << indexName));
+                                    YqlIssue(ctx.GetPosition(indexSetting.Name().Pos()),
+                                        TIssuesIds::KIKIMR_SCHEME_ERROR,
+                                        TStringBuilder() << "Unknown index name: " << indexName));                                
                                 return SyncError();
-                            }
+                            }                            
                             auto indexTablePaths = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(table.Metadata->Name, indexIter->Type, indexName);
                             if (indexTablePaths.size() != 1) {
                                 ctx.AddError(
                                     TIssue(ctx.GetPosition(indexSetting.Name().Pos()),
-                                            TStringBuilder() << "Only index with one impl table is supported"));
+                                        TStringBuilder() << "Only index with one impl table is supported"));
                                 return SyncError();
                             }
                             alterTableRequest.set_path(std::move(indexTablePaths[0]));

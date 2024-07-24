@@ -130,12 +130,15 @@ struct TKiExploreTxResults {
         auto view = key.GetView();
         if (view && view->Name) {
             const auto& indexName = view->Name;
-            const auto indexTablePath = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(tableMeta->Name, indexName);
 
             auto indexIt = std::find_if(tableMeta->Indexes.begin(), tableMeta->Indexes.end(), [&indexName](const auto& index){
                 return index.Name == indexName;
             });
             YQL_ENSURE(indexIt != tableMeta->Indexes.end(), "Index not found");
+
+            const auto indexTablePaths = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(tableMeta->Name, indexIt->Type, indexName);
+            YQL_ENSURE(indexTablePaths.size() == 1, "Only index with one impl table is supported");
+            const auto indexTablePath = indexTablePaths[0];
 
             THashSet<TString> indexColumns;
             indexColumns.reserve(indexIt->KeyColumns.size() + indexIt->DataColumns.size());
@@ -180,7 +183,9 @@ struct TKiExploreTxResults {
                 continue;
             }
 
-            const auto indexTable = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(tableMeta->Name, index.Name);
+            const auto indexTables = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(tableMeta->Name, index.Type, index.Name);
+            YQL_ENSURE(indexTables.size() == 1, "Only index with one impl table is supported");
+            const auto indexTable = indexTables[0];
 
             ops[tableMeta->Name] |= TPrimitiveYdbOperation::Read;
             ops[indexTable] = TPrimitiveYdbOperation::Write;
@@ -202,7 +207,10 @@ struct TKiExploreTxResults {
                 continue;
             }
 
-            const auto indexTable = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(tableMeta->Name, index.Name);
+            const auto indexTables = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(tableMeta->Name, index.Type, index.Name);
+            YQL_ENSURE(indexTables.size() == 1, "Only index with one impl table is supported");
+            const auto indexTable = indexTables[0];
+
             for (const auto& column : index.KeyColumns) {
                 if (updateColumns.contains(column)) {
                     // delete old index values and upsert rows into index table

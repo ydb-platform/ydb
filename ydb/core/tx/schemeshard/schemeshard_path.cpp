@@ -1636,7 +1636,7 @@ bool TPath::IsAsyncReplicaTable() const {
     TPathElement::TPtr path = SS->PathsById.at(Base()->PathId);
     TTableInfo::TCPtr tableInfo = SS->Tables.at(Base()->PathId);
 
-    return tableInfo->IsAsyncReplica() && !path->IsIncrementalBackupTable();
+    return tableInfo->IsAsyncReplica();
 }
 
 bool TPath::IsCdcStream() const {

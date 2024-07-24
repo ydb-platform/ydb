@@ -331,15 +331,13 @@ public:
                 case NKikimrSchemeOp::ECdcStreamModeUpdate:
                     Serialize(body, ERowOp::Upsert, key, keyTags, MakeUpdates(v.GetCells(), valueTags, table));
                     break;
-                case NKikimrSchemeOp::ECdcStreamModeRestoreIncrBackup: {
-                    auto updates = MakeRestoreUpdates(v.GetCells(), valueTags, table);
-                    if (updates) {
+                case NKikimrSchemeOp::ECdcStreamModeRestoreIncrBackup:
+                    if (auto updates = MakeRestoreUpdates(v.GetCells(), valueTags, table); updates) {
                         Serialize(body, ERowOp::Upsert, key, keyTags, *updates);
                     } else {
                         Serialize(body, ERowOp::Erase, key, keyTags, {});
                     }
                     break;
-                }
                 case NKikimrSchemeOp::ECdcStreamModeNewImage:
                 case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages: {
                     const auto newImage = MakeRow(v.GetCells());

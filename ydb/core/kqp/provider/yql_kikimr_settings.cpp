@@ -67,6 +67,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptEnableOlapPushdown);
     REGISTER_SETTING(*this, OptEnableOlapProvideComputeSharding);
     REGISTER_SETTING(*this, OverrideStatistics);
+    REGISTER_SETTING(*this, OverridePlanner);
 
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);

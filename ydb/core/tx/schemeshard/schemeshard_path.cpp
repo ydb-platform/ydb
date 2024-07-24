@@ -1633,6 +1633,7 @@ bool TPath::IsAsyncReplicaTable() const {
         return false;
     }
 
+    TPathElement::TPtr path = SS->PathsById.at(Base()->PathId);
     TTableInfo::TCPtr tableInfo = SS->Tables.at(Base()->PathId);
 
     return tableInfo->IsAsyncReplica();

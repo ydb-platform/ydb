@@ -346,11 +346,16 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
     auto& task = TasksGraph.GetTask(taskId);
     NYql::NDqProto::TDqTask* taskDesc = ArenaSerializeTaskToProto(TasksGraph, task, true);
     NYql::NDq::TComputeRuntimeSettings settings;
+    if (!TxInfo) {
+        TxInfo = MakeIntrusive<NRm::TTxState>(
+            TxId, TInstant::Now(), ResourceManager_->GetCounters());
+    }
 
     auto startResult = CaFactory_->CreateKqpComputeActor({
         .ExecuterId = ExecuterId,
         .TxId = TxId,
         .Task = taskDesc,
+        .TxInfo = TxInfo,
         .RuntimeSettings = settings,
         .TraceId = NWilson::TTraceId(ExecuterSpan.GetTraceId()),
         .Arena = TasksGraph.GetMeta().GetArenaIntrusivePtr(),

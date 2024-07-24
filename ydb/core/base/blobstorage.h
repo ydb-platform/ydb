@@ -732,6 +732,7 @@ struct TEvBlobStorage {
         EvMinHugeBlobSizeUpdate,
         EvHugePreCompact,
         EvHugePreCompactResult,
+        EvPDiskMetadataLoaded,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -868,6 +869,10 @@ struct TEvBlobStorage {
         EvNodeWardenBaseConfig,
         EvNodeWardenDynamicConfigSubscribe,
         EvNodeWardenDynamicConfigPush,
+        EvNodeWardenReadMetadata,
+        EvNodeWardenReadMetadataResult,
+        EvNodeWardenWriteMetadata,
+        EvNodeWardenWriteMetadataResult,
 
         // Other
         EvRunActor = EvPut + 15 * 512,

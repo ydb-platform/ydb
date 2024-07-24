@@ -1762,13 +1762,30 @@ ui64 AsyncCreateContinuousBackup(
 ui64 AsyncAlterTakeIncrementalBackup(
         Tests::TServer::TPtr server,
         const TString& workingDir,
-        const TString& tableName)
+        const TString& srcTableName,
+        const TString& dstTableName)
 {
     auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpAlterContinuousBackup, workingDir);
 
     auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableAlterContinuousBackup();
-    desc.SetTableName(tableName);
-    desc.MutableTakeIncrementalBackup();
+    desc.SetTableName(srcTableName);
+    auto& incBackup = *desc.MutableTakeIncrementalBackup();
+    incBackup.SetDstPath(dstTableName);
+
+    return RunSchemeTx(*server->GetRuntime(), std::move(request));
+}
+
+ui64 AsyncAlterRestoreIncrementalBackup(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& srcTableName,
+        const TString& dstTableName)
+{
+    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackup, workingDir);
+
+    auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableRestoreIncrementalBackup();
+    desc.SetSrcTableName(srcTableName);
+    desc.SetDstTableName(dstTableName);
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request));
 }

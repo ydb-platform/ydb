@@ -1174,7 +1174,7 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxAlterView:
         Y_ABORT("TODO: implement");
     // Continuous Backup
-    // Now these functions won't be called because we presist only cdc function internally
+    // Now these txs won't be called because we presist only cdc txs internally
     case TTxState::ETxType::TxCreateContinuousBackup:
         Y_ABORT("TODO: implement");
     case TTxState::ETxType::TxAlterContinuousBackup:
@@ -1438,6 +1438,9 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
         return {CreateAlterResourcePool(NextPartId(), tx)};
 
+    // IncrementalBackup
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup:
+        return CreateRestoreIncrementalBackup(NextPartId(), tx, context);
     }
 
     Y_UNREACHABLE();

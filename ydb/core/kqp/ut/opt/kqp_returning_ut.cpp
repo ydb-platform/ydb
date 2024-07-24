@@ -96,10 +96,25 @@ Y_UNIT_TEST(ReturningTwice) {
             .AddParam("$limit").Int32(1).Build()
             .Build();
 
-        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).GetValueSync();
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params, execSettings).GetValueSync();
         UNIT_ASSERT(result.IsSuccess());
 
-        //CompareYson(R"([[1]])", FormatResultSetYson(result.GetResultSet(0)));
+        size_t eta_table_access = 0;
+        auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+        for (auto phase : stats.query_phases()) {
+            for (auto table : phase.table_access()) {
+                if (table.name() == "/Root/tasks_eta_002") {
+                    eta_table_access++;
+                }
+            }
+        }
+        Cerr << "access count " << eta_table_access << Endl;
+        UNIT_ASSERT_EQUAL(eta_table_access, 1);
+        //Cerr << stats.Utf8DebugString() << Endl;
     }
 }
 

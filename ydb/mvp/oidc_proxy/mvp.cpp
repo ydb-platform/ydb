@@ -290,15 +290,8 @@ void TMVP::TryGetGenericOptionsFromConfig(
     }
 
     if (generic["access_service_type"]) {
-        auto name = to_lower(ToString(generic["access_service_type"].as<std::string>("yandex_v2")));
-        auto it = AccessServiceTypeByName.find(name);
-        if (it != AccessServiceTypeByName.end()) {
-            OpenIdConnectSettings.AccessServiceType = it->second;
-        } else {
-            ythrow yexception() << "Unknown auth profile: " << name;
-        }
+        OpenIdConnectSettings.AccessServiceType = GetAccessServiceTypeFromString(generic["access_service_type"].as<std::string>(""));
     }
-
 }
 
 THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char** argv) {

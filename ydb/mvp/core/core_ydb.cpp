@@ -57,12 +57,10 @@ NYdb::NScheme::TSchemeClient TYdbLocation::GetSchemeClient(const TRequest& reque
     if (authToken) {
         clientSettings.AuthToken(authToken);
     }
-    TString database = request.Parameters["database"];
+    TYdbLocation::GetDatabaseName(request);
+
+    TString database = TYdbLocation::GetDatabaseName(request);
     if (database) {
-        if (!database.StartsWith('/')) {
-            database.insert(database.begin(), '/');
-        }
-        database.insert(0, RootDomain);
         clientSettings.Database(database);
     }
     return NYdb::NScheme::TSchemeClient(GetDriver(), clientSettings);
@@ -128,12 +126,8 @@ NYdb::NTable::TTableClient TYdbLocation::GetTableClient(const TRequest& request,
     if (authToken) {
         clientSettings.AuthToken(authToken);
     }
-    TString database = request.Parameters["database"];
+    TString database = TYdbLocation::GetDatabaseName(request);
     if (database) {
-        if (!database.StartsWith('/')) {
-            database.insert(database.begin(), '/');
-        }
-        database.insert(0, RootDomain);
         clientSettings.Database(database);
     }
     return GetTableClient(clientSettings);

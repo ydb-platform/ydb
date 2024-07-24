@@ -119,7 +119,7 @@ namespace {
                     members.push_back(ctx.MakeType<TItemExprType>(item->GetName(), blockItemType));
                 }
                 const auto scalarItemType = ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64));
-                members.push_back(ctx.MakeType<TItemExprType>("_yql_block_length", scalarItemType));
+                members.push_back(ctx.MakeType<TItemExprType>(PurecalcBlockColumnLength, scalarItemType));
                 itemType = ctx.MakeType<TStructExprType>(members);
             }
 

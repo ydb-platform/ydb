@@ -5,6 +5,7 @@
 namespace NYql::NPureCalc {
     const TStringBuf PurecalcSysColumnsPrefix = "_yql_sys_";
     const TStringBuf PurecalcSysColumnTablePath = "_yql_sys_tablepath";
+    const TStringBuf PurecalcBlockColumnLength = "_yql_block_length";
 
     const TStringBuf PurecalcDefaultCluster = "view";
     const TStringBuf PurecalcDefaultService = "data";

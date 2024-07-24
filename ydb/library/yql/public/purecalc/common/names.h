@@ -5,6 +5,7 @@
 namespace NYql::NPureCalc {
     extern const TStringBuf PurecalcSysColumnsPrefix;
     extern const TStringBuf PurecalcSysColumnTablePath;
+    extern const TStringBuf PurecalcBlockColumnLength;
 
     extern const TStringBuf PurecalcDefaultCluster;
     extern const TStringBuf PurecalcDefaultService;

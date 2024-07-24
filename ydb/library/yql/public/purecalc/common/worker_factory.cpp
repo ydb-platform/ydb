@@ -119,7 +119,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
                 const auto originalMembers = OutputType_->Cast<TStructExprType>()->GetItems();
                 TVector<const TItemExprType*> newMembers;
                 for (auto originalItem : originalMembers) {
-                    if (originalItem->GetName() == "_yql_block_length") {
+                    if (originalItem->GetName() == PurecalcBlockColumnLength) {
                         continue;
                     }
                     bool isScalarUnused;

@@ -1,5 +1,6 @@
 #include "align_output_schema.h"
 
+#include <ydb/library/yql/public/purecalc/common/names.h>
 #include <ydb/library/yql/public/purecalc/common/type_from_schema.h>
 
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
@@ -43,7 +44,7 @@ namespace {
                 const auto originalMembers = actualItemType->Cast<TStructExprType>()->GetItems();
                 TVector<const TItemExprType*> newMembers;
                 for (auto originalItem : originalMembers) {
-                    if (originalItem->GetName() == "_yql_block_length") {
+                    if (originalItem->GetName() == PurecalcBlockColumnLength) {
                         continue;
                     }
                     bool isScalarUnused;

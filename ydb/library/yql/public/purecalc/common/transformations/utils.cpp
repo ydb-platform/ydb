@@ -1,5 +1,7 @@
 #include "utils.h"
 
+#include <ydb/library/yql/public/purecalc/common/names.h>
+
 using namespace NYql;
 using namespace NYql::NPureCalc;
 
@@ -32,7 +34,7 @@ TExprNode::TPtr NYql::NPureCalc::NodeFromBlocks(
                                     }
                                     lambda.Callable(i, "Member")
                                         .Arg(0, "item")
-                                        .Atom(1, "_yql_block_length")
+                                        .Atom(1, PurecalcBlockColumnLength)
                                     .Seal();
                                     return lambda;
                                 })
@@ -104,7 +106,7 @@ TExprNode::TPtr NYql::NPureCalc::NodeToBlocks(
                                     .Seal();
                                 }
                                 parent.List(i)
-                                    .Atom(0, "_yql_block_length")
+                                    .Atom(0, PurecalcBlockColumnLength)
                                     .Arg(1, "fields", i)
                                 .Seal();
                                 return parent;

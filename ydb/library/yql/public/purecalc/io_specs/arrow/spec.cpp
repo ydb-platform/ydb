@@ -1,5 +1,7 @@
 #include "spec.h"
 
+#include <ydb/library/yql/public/purecalc/common/names.h>
+
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
@@ -96,7 +98,7 @@ public:
             Y_ENSURE(memberIndex);
             DatumToMemberIDMap_[i] = *memberIndex;
         }
-        const auto& batchLengthID = type->FindMemberIndex("_yql_block_length");
+        const auto& batchLengthID = type->FindMemberIndex(PurecalcBlockColumnLength);
         Y_ENSURE(batchLengthID);
         BatchLengthID_ = *batchLengthID;
     }
@@ -159,7 +161,7 @@ public:
             Y_ENSURE(memberIndex);
             DatumToMemberIDMap_[i] = *memberIndex;
         }
-        const auto& batchLengthID = stype->FindMemberIndex("_yql_block_length");
+        const auto& batchLengthID = stype->FindMemberIndex(PurecalcBlockColumnLength);
         Y_ENSURE(batchLengthID);
         BatchLengthID_ = *batchLengthID;
     }

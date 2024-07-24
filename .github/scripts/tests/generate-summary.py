@@ -263,7 +263,7 @@ def write_summary(summary: TestSummary):
         fp = sys.stdout
 
     if summary.is_empty:
-        fp.write(f"Test run completed, no test results found (in most cases it is OK).")
+        fp.write(f"Test run completed, no test results found")
     else:
         for line in summary.render(add_footnote=True):
             fp.write(f"{line}\n")

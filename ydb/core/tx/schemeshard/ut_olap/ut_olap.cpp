@@ -736,6 +736,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
             UNIT_ASSERT_GT(tabletStats.GetRowCount(), 0);
             UNIT_ASSERT_GT(tabletStats.GetDataSize(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetImmediateTxCompleted(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetPlannedTxCompleted(), 0);
         }
 
         {
@@ -745,6 +747,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
             UNIT_ASSERT_GT(tabletStats.GetRowCount(), 0);
             UNIT_ASSERT_GT(tabletStats.GetDataSize(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetImmediateTxCompleted(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetPlannedTxCompleted(), 0);
         }
 
 #if 0

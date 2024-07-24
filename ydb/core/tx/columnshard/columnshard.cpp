@@ -168,6 +168,7 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
         IncCounter(COUNTER_SCAN_LATENCY, duration);
         ScanTxInFlight.erase(txId);
         SetCounter(COUNTER_SCAN_IN_FLY, ScanTxInFlight.size());
+        IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
     }
 }
 
@@ -336,8 +337,11 @@ void TColumnShard::ConfigureStats(const NOlap::TColumnEngineStats& indexStats,
 }
 
 void TColumnShard::FillTxTableStats(::NKikimrTableStats::TTableStats* tableStats) const {
+    tableStats->SetImmediateTxCompleted(TabletCounters->Cumulative()[COUNTER_IMMEDIATE_TX_COMPLETED].Get());
     tableStats->SetTxRejectedByOverload(TabletCounters->Cumulative()[COUNTER_WRITE_OVERLOAD].Get());
     tableStats->SetTxRejectedBySpace(TabletCounters->Cumulative()[COUNTER_OUT_OF_SPACE].Get());
+    tableStats->SetPlannedTxCompleted(TabletCounters->Cumulative()[COUNTER_PLANNED_TX_COMPLETED].Get());
+    tableStats->SetTxCompleteLagMsec(GetTxCompleteLag().MilliSeconds());
     tableStats->SetInFlightTxCount(Executor()->GetStats().TxInFly);
 }
 

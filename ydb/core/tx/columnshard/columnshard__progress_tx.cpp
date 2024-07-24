@@ -43,6 +43,7 @@ public:
             TxOperator = Self->ProgressTxController->GetVerifiedTxOperator(txId);
             AFL_VERIFY(TxOperator->ProgressOnExecute(*Self, NOlap::TSnapshot(step, txId), txc));
             Self->ProgressTxController->FinishPlannedTx(txId, txc);
+            Self->IncCounter(COUNTER_PLANNED_TX_COMPLETED);
         }
         return true;
     }

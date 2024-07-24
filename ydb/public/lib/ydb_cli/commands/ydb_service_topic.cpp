@@ -42,12 +42,14 @@ namespace NYdb::NConsoleClient {
             std::pair<TString, NTopic::EAutoPartitioningStrategy>("disabled", NTopic::EAutoPartitioningStrategy::Disabled),
             std::pair<TString, NTopic::EAutoPartitioningStrategy>("up", NTopic::EAutoPartitioningStrategy::ScaleUp),
             std::pair<TString, NTopic::EAutoPartitioningStrategy>("up-and-down", NTopic::EAutoPartitioningStrategy::ScaleUpAndDown),
+            std::pair<TString, NTopic::EAutoPartitioningStrategy>("puased", NTopic::EAutoPartitioningStrategy::Paused),
         };
 
         THashMap<NTopic::EAutoPartitioningStrategy, TString> AutoscaleStrategiesDescriptions = {
             std::pair<NTopic::EAutoPartitioningStrategy, TString>(NTopic::EAutoPartitioningStrategy::Disabled, "Automatic scaling of the number of partitions is disabled"),
             std::pair<NTopic::EAutoPartitioningStrategy, TString>(NTopic::EAutoPartitioningStrategy::ScaleUp, "The number of partitions can increase under high load, but cannot decrease"),
             std::pair<NTopic::EAutoPartitioningStrategy, TString>(NTopic::EAutoPartitioningStrategy::ScaleUpAndDown, "The number of partitions can increase under high load and decrease under low load"),
+            std::pair<NTopic::EAutoPartitioningStrategy, TString>(NTopic::EAutoPartitioningStrategy::Paused, "Automatic scaling of the number of partitions is paused"),
         };
 
         THashMap<ETopicMetadataField, TString> TopicMetadataFieldsDescriptions = {

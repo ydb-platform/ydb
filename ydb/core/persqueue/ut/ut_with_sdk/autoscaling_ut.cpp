@@ -741,6 +741,57 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             auto v = f.GetValueSync();
             UNIT_ASSERT_C(v.IsSuccess(),  "Error: " << v);
         }
+
+        {
+            auto describeAfterAlter = client.DescribeTopic(topicName).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy(), EAutoPartitioningStrategy::Disabled);
+        }
+    }
+
+    Y_UNIT_TEST(ControlPlane_PauseAutoPartitioning) {
+        auto topicName = "autoscalit-topic";
+
+        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicClient client = setup.MakeClient();
+
+        {
+            TCreateTopicSettings createSettings;
+            createSettings
+                .BeginConfigurePartitioningSettings()
+                    .MinActivePartitions(1)
+                    .MaxActivePartitions(100)
+                    .BeginConfigureAutoPartitioningSettings()
+                        .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                    .EndConfigureAutoPartitioningSettings()
+                .EndConfigurePartitioningSettings();
+            client.CreateTopic(topicName, createSettings).Wait();
+        }
+
+        {
+            TAlterTopicSettings alterSettings;
+            alterSettings
+                .BeginAlterPartitioningSettings()
+                    .MinActivePartitions(3)
+                    .MaxActivePartitions(107)
+                    .BeginAlterAutoPartitioningSettings()
+                        .Strategy(EAutoPartitioningStrategy::Paused)
+                    .EndAlterAutoPartitioningSettings()
+                .EndAlterTopicPartitioningSettings();
+            auto f = client.AlterTopic(topicName, alterSettings);
+            f.Wait();
+
+            auto v = f.GetValueSync();
+            UNIT_ASSERT_C(v.IsSuccess(),  "Error: " << v);
+        }
+
+        {
+            auto describeAfterAlter = client.DescribeTopic(topicName).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetMaxActivePartitions(), 107);
+            UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy(), EAutoPartitioningStrategy::Paused);
+        }
     }
 
     Y_UNIT_TEST(ControlPlane_AutoscalingWithStorageSizeRetention) {

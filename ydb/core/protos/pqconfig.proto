@@ -404,6 +404,7 @@ message TPQTabletConfig {
         CAN_SPLIT = 1;
         // The autoscaling algorithm will both increase and decrease partitions count depending on the load characteristics.
         CAN_SPLIT_AND_MERGE = 2;
+        PAUSED = 3;
     }
 
     // Strategy for automatically changing the number of topic partitions depending on the load

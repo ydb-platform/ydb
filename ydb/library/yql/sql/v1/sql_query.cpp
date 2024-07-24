@@ -1773,7 +1773,7 @@ bool TSqlQuery::AlterTableResetTableSetting(
 }
 
 bool TSqlQuery::AlterTableAddIndex(const TRule_alter_table_add_index& node, TAlterTableParameters& params) {
-    if (!CreateTableIndex(node.GetRule_table_index2(), *this, params.AddIndexes)) {
+    if (!CreateTableIndex(node.GetRule_table_index2(), params.AddIndexes)) {
         return false;
     }
     return true;
@@ -2611,6 +2611,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disablevalidateunusedexprs") {
             Ctx.ValidateUnusedExprs = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableValidateUnusedExprs");
+        } else if (normalizedPragma == "ansiimplicitcrossjoin") {
+            Ctx.AnsiImplicitCrossJoin = true;
+            Ctx.IncrementMonCounter("sql_pragma", "AnsiImplicitCrossJoin");
+        } else if (normalizedPragma == "disableansiimplicitcrossjoin") {
+            Ctx.AnsiImplicitCrossJoin = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableAnsiImplicitCrossJoin");
         } else {
             Error() << "Unknown pragma: " << pragma;
             Ctx.IncrementMonCounter("sql_errors", "UnknownPragma");

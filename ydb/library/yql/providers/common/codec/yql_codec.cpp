@@ -290,6 +290,7 @@ TMaybe<TVector<ui32>> CreateStructPositions(TType* inputType, const TVector<TStr
     if (inputType->GetKind() != TType::EKind::Struct) {
         return Nothing();
     }
+    
     auto inputStruct = AS_TYPE(TStructType, inputType);
     TMap<TStringBuf, ui32> members;
     TVector<ui32> structPositions(inputStruct->GetMembersCount(), Max<ui32>());
@@ -301,10 +302,11 @@ TMaybe<TVector<ui32>> CreateStructPositions(TType* inputType, const TVector<TStr
         }
     }
     if (columns) {
+        TColumnOrder order(*columns);
         ui32 pos = 0;
-        for (auto& column: *columns) {
-            const ui32* idx = members.FindPtr(column);
-            YQL_ENSURE(idx, "Unknown member: " << column);
+        for (auto& [column, gen_column]: order) {
+            const ui32* idx = members.FindPtr(gen_column);
+            YQL_ENSURE(idx, "Unknown member: " << gen_column);
             structPositions[pos] = *idx;
             ++pos;
         }

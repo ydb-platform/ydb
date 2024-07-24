@@ -269,13 +269,6 @@ namespace NYql {
                 const auto& clusterConfig = State_->Configuration->ClusterNamesToClusterConfigs[clusterName];
                 const auto& endpoint = clusterConfig.endpoint();
 
-                // for backward compability full path can be used (cluster_name.`db_name.table`)
-                // TODO: simplify during https://st.yandex-team.ru/YQ-2494
-                TStringBuf db, dbTable;
-                if (!TStringBuf(table).TrySplit('.', db, dbTable)) {
-                    dbTable = table;
-                }
-
                 YQL_CLOG(INFO, ProviderGeneric)
                     << "Filling lookup source settings"
                     << ": cluster: " << clusterName
@@ -288,7 +281,7 @@ namespace NYql {
                 }
 
                 Generic::TLookupSource source;
-                source.set_table(TString(dbTable));
+                source.set_table(table);
                 *source.mutable_data_source_instance() = tableMeta.value()->DataSourceInstance;
 
                 // Managed YDB supports access via IAM token.

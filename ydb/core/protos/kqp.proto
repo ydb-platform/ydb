@@ -130,6 +130,10 @@ message TKqpPathIdProto {
     optional uint32 TableId = 2;
 }
 
+message TVectorIndexKmeansTreeDescription {
+    optional Ydb.Table.VectorIndexSettings Settings = 1;
+}
+
 message TIndexDescriptionProto {
     optional string Name = 1;
     optional uint32 Type = 2;
@@ -139,6 +143,9 @@ message TIndexDescriptionProto {
     optional uint32 PathOwnerId = 6;
     repeated string KeyColumns = 7;
     repeated string DataColumns = 8;
+    oneof SpecializedIndexDescription {
+        TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 9;
+    }
 };
 
 message TKqpColumnMetadataProto {

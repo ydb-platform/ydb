@@ -515,6 +515,33 @@ public:
             CompileTransaction(tx, *queryProto.AddTransactions(), ctx);
         }
 
+        auto overridePlanner = Config->OverridePlanner.Get();
+        if (overridePlanner) {
+            NJson::TJsonReaderConfig jsonConfig;
+            NJson::TJsonValue jsonNode;
+            if (NJson::ReadJsonTree(*overridePlanner, &jsonConfig, &jsonNode)) {
+                for (auto& stageOverride : jsonNode.GetArray()) {
+                    ui32 txId = 0;
+                    if (auto* txNode = stageOverride.GetValueByPath("tx")) {
+                        txId = txNode->GetIntegerSafe();
+                    }
+                    if (txId < static_cast<ui32>(queryProto.GetTransactions().size())) {
+                        auto& tx = *queryProto.MutableTransactions(txId);
+                        ui32 stageId = 0;
+                        if (auto* stageNode = stageOverride.GetValueByPath("stage")) {
+                            stageId = stageNode->GetIntegerSafe();
+                        }
+                        if (stageId < static_cast<ui32>(tx.GetStages().size())) {
+                            auto& stage = *tx.MutableStages(stageId);
+                            if (auto* tasksNode = stageOverride.GetValueByPath("tasks")) {
+                                stage.SetTaskCount(tasksNode->GetIntegerSafe());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         for (ui32 i = 0; i < query.Results().Size(); ++i) {
             const auto& result = query.Results().Item(i);
 

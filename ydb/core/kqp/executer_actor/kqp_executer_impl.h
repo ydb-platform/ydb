@@ -923,7 +923,12 @@ protected:
 
         ui32 taskCount = externalSource.GetPartitionedTaskParams().size();
 
-        if (!resourceSnapshot.empty()) {
+        auto taskCountHint = stage.GetTaskCount();
+        if (taskCountHint) {
+            if (taskCount > taskCountHint) {
+                taskCount = taskCountHint;
+            }
+        } else if (!resourceSnapshot.empty()) {
             ui32 maxTaskcount = resourceSnapshot.size() * 2;
             if (taskCount > maxTaskcount) {
                 taskCount = maxTaskcount;
@@ -1302,7 +1307,11 @@ protected:
         }
 
         if (isShuffle) {
-            partitionsCount = std::max(partitionsCount, GetMaxTasksAggregation(stageInfo, inputTasks, nodesCount));
+            if (stage.GetTaskCount()) {
+                partitionsCount = stage.GetTaskCount();
+            } else {
+                partitionsCount = std::max(partitionsCount, GetMaxTasksAggregation(stageInfo, inputTasks, nodesCount));
+            }
         }
 
         for (ui32 i = 0; i < partitionsCount; ++i) {

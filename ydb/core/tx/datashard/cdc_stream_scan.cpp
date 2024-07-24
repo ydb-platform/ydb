@@ -212,7 +212,7 @@ class TDataShard::TTxCdcStreamScanProgress
         Y_ABORT_UNLESS(cells.size() >= 1);
         TVector<TUpdateOp> updates(::Reserve(cells.size() - 1));
 
-        bool skipped = false;
+        bool foundSpecialColumn = false;
         Y_ABORT_UNLESS(cells.size() == tags.size());
         for (TPos pos = 0; pos < cells.size(); ++pos) {
             const auto tag = tags.at(pos);
@@ -222,12 +222,12 @@ class TDataShard::TTxCdcStreamScanProgress
                 if (const auto& cell = cells.at(pos); !cell.IsNull() && cell.AsValue<bool>()) {
                     return std::nullopt;
                 }
-                skipped = true;
+                foundSpecialColumn = true;
                 continue;
             }
             updates.emplace_back(tag, ECellOp::Set, TRawTypeValue(cells.at(pos).AsRef(), it->second.Type));
         }
-        Y_ABORT_UNLESS(skipped);
+        Y_ABORT_UNLESS(foundSpecialColumn);
 
         return updates;
     }

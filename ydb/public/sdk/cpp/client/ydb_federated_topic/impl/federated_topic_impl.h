@@ -77,7 +77,6 @@ public:
 private:
 
     // Use single-threaded executor to prevent deadlocks inside subsession event handlers.
-    // Returns a separate executor for different TDbDriverState pointers.
     NTopic::IExecutor::TPtr GetSubsessionHandlersExecutor();
 
 private:
@@ -87,7 +86,7 @@ private:
     std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> ProvidedCodecs =
         std::make_shared<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>>();
 
-    std::map<TDbDriverStatePtr, NTopic::IExecutor::TPtr> SubsessionHandlersExecutors;
+    NTopic::IExecutor::TPtr SubsessionHandlersExecutor;
 
     TAdaptiveLock Lock;
 };

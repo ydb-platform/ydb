@@ -51,18 +51,12 @@ void TFederatedTopicClient::TImpl::InitObserver() {
 }
 
 auto TFederatedTopicClient::TImpl::GetSubsessionHandlersExecutor() -> NTopic::IExecutor::TPtr {
-    auto driverStatePtr = Connections->GetDriverState(
-        ClientSettings.Database_,
-        ClientSettings.DiscoveryEndpoint_,
-        ClientSettings.DiscoveryMode_,
-        ClientSettings.SslCredentials_,
-        ClientSettings.CredentialsProviderFactory_
-    );
-    auto& executorPtr = SubsessionHandlersExecutors[driverStatePtr];
-    if (!executorPtr) {
-        executorPtr = NTopic::CreateThreadPoolExecutor(1);
+    with_lock (Lock) {
+        if (!SubsessionHandlersExecutor) {
+            SubsessionHandlersExecutor = NTopic::CreateThreadPoolExecutor(1);
+        }
+        return SubsessionHandlersExecutor;
     }
-    return executorPtr;
 }
 
 }

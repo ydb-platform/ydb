@@ -58,13 +58,13 @@ namespace NKikimr::NStorage {
         // issue updates
         NodeIds = std::move(nodeIds);
         BindQueue.Update(NodeIds);
-        if (NodeListObtained && StorageConfigLoaded && !std::exchange(SelfBound, true)) {
-            UpdateBound(SelfNode.NodeId(), SelfNode, *StorageConfig, nullptr);
+        if (NodeListObtained && StorageConfigLoaded) {
             IssueNextBindRequest();
         }
     }
 
     void TDistributedConfigKeeper::IssueNextBindRequest() {
+        Y_DEBUG_ABORT_UNLESS(IsSelfStatic);
         CheckRootNodeStatus();
         if (RootState == ERootState::INITIAL && !Binding && AllBoundNodes.size() < NodeIds.size()) {
             const TMonotonic now = TActivationContext::Monotonic();

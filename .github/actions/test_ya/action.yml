@@ -317,7 +317,8 @@ runs:
 
           # convert to chromium trace
           # seems analyze-make don't have simple "output" parameter, so change cwd
-          (cd $CURRENT_PUBLIC_DIR && ./ya analyze-make timeline --evlog ya_evlog.jsonl)
+          ya_dir=$(pwd)
+          (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl)
 
           if [ $RC -ne 0 ]; then
             echo "ya make returned $RC, build failed"

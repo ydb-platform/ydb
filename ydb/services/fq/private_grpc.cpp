@@ -4,6 +4,7 @@
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/service_fq_internal.h>
 #include <ydb/library/protobuf_printer/security_printer.h>
+#include <ydb/library/grpc/server/dbg_printer.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -68,3 +69,20 @@ MakeIntrusive<TGRpcRequest<Fq::Private::NAME##Request, Fq::Private::NAME##Respon
 
 } // namespace NGRpcService
 } // namespace NKikimr
+
+namespace NYdbGrpc {
+
+template TString MakeDbgMessageString<NKikimr::TSecurityTextFormatPrinter<Fq::Private::PingTaskRequest>>(const NProtoBuf::Message& message, bool ok);
+template TString MakeDbgMessageString<NKikimr::TSecurityTextFormatPrinter<Fq::Private::PingTaskResponse>>(const NProtoBuf::Message& message, bool ok);
+template TString MakeDbgMessageString<NKikimr::TSecurityTextFormatPrinter<Fq::Private::GetTaskRequest>>(const NProtoBuf::Message& message, bool ok);
+template TString MakeDbgMessageString<NKikimr::TSecurityTextFormatPrinter<Fq::Private::GetTaskResponse>>(const NProtoBuf::Message& message, bool ok);
+template TString MakeDbgMessageString<NKikimr::TSecurityTextFormatPrinter<Fq::Private::WriteTaskResultRequest>>(const NProtoBuf::Message& message, bool ok);
+template TString MakeDbgMessageString<NKikimr::TSecurityTextFormatPrinter<Fq::Private::WriteTaskResultResponse>>(const NProtoBuf::Message& message, bool ok);
+template TString MakeDbgMessageString<NKikimr::TSecurityTextFormatPrinter<Fq::Private::NodesHealthCheckRequest>>(const NProtoBuf::Message& message, bool ok);
+template TString MakeDbgMessageString<NKikimr::TSecurityTextFormatPrinter<Fq::Private::NodesHealthCheckResponse>>(const NProtoBuf::Message& message, bool ok);
+template TString MakeDbgMessageString<NKikimr::TSecurityTextFormatPrinter<Fq::Private::CreateRateLimiterResourceRequest>>(const NProtoBuf::Message& message, bool ok);
+template TString MakeDbgMessageString<NKikimr::TSecurityTextFormatPrinter<Fq::Private::CreateRateLimiterResourceResponse>>(const NProtoBuf::Message& message, bool ok);
+template TString MakeDbgMessageString<NKikimr::TSecurityTextFormatPrinter<Fq::Private::DeleteRateLimiterResourceRequest>>(const NProtoBuf::Message& message, bool ok);
+template TString MakeDbgMessageString<NKikimr::TSecurityTextFormatPrinter<Fq::Private::DeleteRateLimiterResourceResponse>>(const NProtoBuf::Message& message, bool ok);
+
+}

@@ -5,6 +5,7 @@
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/grpc_services/ydb_over_fq/service.h>
 #include <ydb/library/protobuf_printer/security_printer.h>
+#include <ydb/library/grpc/server/dbg_printer.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -86,3 +87,21 @@ MakeIntrusive<TGRpcRequest<Ydb::Scheme::NAME##Request, Ydb::Scheme::NAME##Respon
 }
 
 } // namespace NKikimr::NGRpcService
+
+namespace NYdbGrpc {
+
+template TString MakeDbgMessageString<NKikimr::TSecurityTextFormatPrinter<Ydb::Table::ExecuteDataQueryRequest>>(const NProtoBuf::Message& message, bool ok);
+template TString MakeDbgMessageString<NKikimr::TSecurityTextFormatPrinter<Ydb::Table::ExecuteDataQueryResponse>>(const NProtoBuf::Message& message, bool ok);
+template TString MakeDbgMessageString<NKikimr::TSecurityTextFormatPrinter<Ydb::Table::CreateSessionRequest>>(const NProtoBuf::Message& message, bool ok);
+template TString MakeDbgMessageString<NKikimr::TSecurityTextFormatPrinter<Ydb::Table::CreateSessionResponse>>(const NProtoBuf::Message& message, bool ok);
+template TString MakeDbgMessageString<NKikimr::TSecurityTextFormatPrinter<Ydb::Table::DeleteSessionRequest>>(const NProtoBuf::Message& message, bool ok);
+template TString MakeDbgMessageString<NKikimr::TSecurityTextFormatPrinter<Ydb::Table::DeleteSessionResponse>>(const NProtoBuf::Message& message, bool ok);
+template TString MakeDbgMessageString<NKikimr::TSecurityTextFormatPrinter<Ydb::Table::KeepAliveRequest>>(const NProtoBuf::Message& message, bool ok);
+template TString MakeDbgMessageString<NKikimr::TSecurityTextFormatPrinter<Ydb::Table::KeepAliveResponse>>(const NProtoBuf::Message& message, bool ok);
+template TString MakeDbgMessageString<NKikimr::TSecurityTextFormatPrinter<Ydb::Table::DescribeTableRequest>>(const NProtoBuf::Message& message, bool ok);
+template TString MakeDbgMessageString<NKikimr::TSecurityTextFormatPrinter<Ydb::Table::DescribeTableResponse>>(const NProtoBuf::Message& message, bool ok);
+
+template TString MakeDbgMessageString<NKikimr::TSecurityTextFormatPrinter<Ydb::Scheme::ListDirectoryRequest>>(const NProtoBuf::Message& message, bool ok);
+template TString MakeDbgMessageString<NKikimr::TSecurityTextFormatPrinter<Ydb::Scheme::ListDirectoryResponse>>(const NProtoBuf::Message& message, bool ok);
+
+}

@@ -1,6 +1,6 @@
 # ALTER ASYNC REPLICATION
 
-Вызов `ALTER ASYNC REPLICATION` изменяет параметры и состояние [асинхронной репликации](../../../concepts/async-replication.md).
+Вызов `ALTER ASYNC REPLICATION` изменяет параметры и состояние экземпляра [асинхронной репликации](../../../concepts/async-replication.md).
 
 ## Синтаксис {#syntax}
 
@@ -9,7 +9,7 @@ ALTER ASYNC REPLICATION <name> SET (option = value [, ...])
 ```
 
 где:
-* `name` — имя объекта асинхронной репликации.
+* `name` — имя экземпляра асинхронной репликации.
 * `SET (option = value [, ...])` — [параметры](#params) асинхронной репликации.
 
 ### Параметры {#params}

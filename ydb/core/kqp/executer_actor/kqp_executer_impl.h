@@ -983,6 +983,8 @@ protected:
         TVector<ui64> tasksIds;
 
         // generate all tasks
+
+        ui32 firstNodeIndex = resourceSnapshot.size() ? TInstant::Now().MicroSeconds() % resourceSnapshot.size() : 0;
         for (ui32 i = 0; i < taskCount; i++) {
             auto& task = TasksGraph.AddTask(stageInfo);
 
@@ -999,7 +1001,7 @@ protected:
             if (resourceSnapshot.empty()) {
                 task.Meta.Type = TTaskMeta::TTaskType::Compute;
             } else {
-                task.Meta.NodeId = resourceSnapshot[i % resourceSnapshot.size()].GetNodeId();
+                task.Meta.NodeId = resourceSnapshot[(firstNodeIndex + i) % resourceSnapshot.size()].GetNodeId();
                 task.Meta.Type = TTaskMeta::TTaskType::Scan;
             }
 

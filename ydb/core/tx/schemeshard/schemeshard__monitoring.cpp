@@ -717,7 +717,7 @@ private:
 
                     << "Shards.size:                  " << info.Shards.size() << Endl
                     << "ToUploadShards.size:          " << info.ToUploadShards.size() << Endl
-                    << "DoneShards.size:              " << info.DoneShards.size() << Endl
+                    << "DoneShards.size:              " << info.DoneShardsSize << Endl
                     << "InProgressShards.size:        " << info.InProgressShards.size() << Endl
 
                     << "DomainPathId:                  " << LinkToPathInfo(info.DomainPathId) << Endl

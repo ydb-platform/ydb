@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     pinger.cpp
+    plan2svg.cpp
     run_actor_params.cpp
     utils.cpp
 )

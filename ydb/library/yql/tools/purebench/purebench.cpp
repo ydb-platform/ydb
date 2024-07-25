@@ -3,6 +3,8 @@
 
 #include <ydb/library/yql/public/purecalc/purecalc.h>
 #include <ydb/library/yql/public/purecalc/io_specs/mkql/spec.h>
+#include <ydb/library/yql/public/purecalc/io_specs/arrow/spec.h>
+#include <ydb/library/yql/public/purecalc/helpers/stream/stream_from_vector.h>
 
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
@@ -175,35 +177,75 @@ int Main(int argc, const char *argv[])
     ETranslationMode isPgGen = res.Has("pg") ? ETranslationMode::PG : ETranslationMode::SQL;
     ETranslationMode isPgTest = res.Has("pt") ? ETranslationMode::PG : ETranslationMode::SQL;
 
-    TStringStream outputGenStream;
-    auto outputGenSchema = RunGenSql<TSkiffOutputSpec>(
-        factory, inputGenSchema, genSql, isPgGen,
-        [&](const auto& program) {
-            auto handle = program->Apply(&inputGenStream);
-            handle->Run(&outputGenStream);
-            Cerr << "Generated data size: " << outputGenStream.Size() << "\n";
-        });
+    if (blockEngineSettings == "disable") {
+        TStringStream outputGenStream;
+        auto outputGenSchema = RunGenSql<TSkiffOutputSpec>(
+            factory, inputGenSchema, genSql, isPgGen,
+            [&](const auto& program) {
+                auto handle = program->Apply(&inputGenStream);
+                handle->Run(&outputGenStream);
+                Cerr << "Generated data size: " << outputGenStream.Size() << "\n";
+            });
 
-    if (showResults) {
-        auto inputResStream = TStringStream(outputGenStream);
-        ShowResults<TSkiffInputSpec>(
-            factory, {outputGenSchema}, testSql, isPgTest, &inputResStream);
+        if (showResults) {
+            auto inputResStream = TStringStream(outputGenStream);
+            ShowResults<TSkiffInputSpec>(
+                factory, {outputGenSchema}, testSql, isPgTest, &inputResStream);
+        }
+
+        auto inputBenchSize = outputGenStream.Size();
+        double time = RunBenchmarks<TSkiffInputSpec, TSkiffOutputSpec>(
+            factory, {outputGenSchema}, testSql, isPgTest, repeats,
+            [&](const auto& program) {
+                auto inputBorrowed = TStringStream(outputGenStream);
+                auto handle = program->Apply(&inputBorrowed);
+                TNullOutput output;
+                handle->Run(&output);
+            });
+
+        Cout << "Bench score: " << Prec(inputBenchSize / time, 4) << "\n";
+    } else {
+        auto inputGenSpec = TSkiffInputSpec(inputGenSchema);
+        auto outputGenSpec = TArrowOutputSpec({NYT::TNode::CreateEntity()});
+        // XXX: <RunGenSql> cannot be used for this case, since all buffers
+        // from the Datums in the obtained batches are owned by the worker's
+        // allocator. Hence, the program (i.e. worker) object should be created
+        // at the very beginning of the block, or at least prior to all the
+        // temporary batch storages (mind outputGenStream below).
+        auto program = factory->MakePullListProgram(
+            inputGenSpec, outputGenSpec, genSql, isPgGen);
+
+        auto handle = program->Apply(&inputGenStream);
+        auto outputGenSchema = program->MakeOutputSchema();
+
+        TVector<arrow::compute::ExecBatch> outputGenStream;
+        while (arrow::compute::ExecBatch* batch = handle->Fetch()) {
+            outputGenStream.push_back(*batch);
+        }
+
+        ui64 outputGenSize = std::transform_reduce(
+            outputGenStream.cbegin(), outputGenStream.cend(),
+            0l, std::plus{}, [](auto t) { return t.length; });
+
+        Cerr << "Generated data size: " << outputGenSize << "\n";
+
+        if (showResults) {
+            auto inputResStreamHolder = StreamFromVector(outputGenStream);
+            auto inputResStream = inputResStreamHolder.Get();
+            ShowResults<TArrowInputSpec>(
+                factory, {outputGenSchema}, testSql, isPgTest, inputResStream);
+        }
+
+        auto inputBenchSize = outputGenSize;
+        double time = RunBenchmarks<TArrowInputSpec, TArrowOutputSpec>(
+            factory, {outputGenSchema}, testSql, isPgTest, repeats,
+            [&](const auto& program) {
+                auto handle = program->Apply(StreamFromVector(outputGenStream));
+                while (arrow::compute::ExecBatch* batch = handle->Fetch()) {}
+            });
+
+        Cout << "Bench score: " << Prec(inputBenchSize / time, 4) << "\n";
     }
-
-    auto inputBenchSize = outputGenStream.Size();
-    double time = RunBenchmarks<TSkiffInputSpec, TSkiffOutputSpec>(
-        factory, {outputGenSchema}, testSql, isPgTest, repeats,
-        [&](const auto& program) {
-            auto inputBorrowed = TStringStream(outputGenStream);
-            auto handle = program->Apply(&inputBorrowed);
-            TNullOutput output;
-            handle->Run(&output);
-        });
-
-    Cout << "Bench score: " << Prec(inputBenchSize / time, 4) << "\n";
-
-
-
 
     NLog::CleanupLogger();
     return 0;

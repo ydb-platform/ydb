@@ -377,6 +377,8 @@ public:
     void HandleNextWriteMetadata();
     void ProcessWriteMetadataResult(TWriteMetadataResult& request);
 
+    void DropAllMetadataRequests();
+
     TRcBuf CreateMetadataPayload(TRcBuf& metadata, size_t offset, size_t payloadSize, ui32 sectorSize, bool encryption,
         const TKey& key, ui64 sequenceNumber, ui32 recordIndex, ui32 totalRecords);
     bool WriteMetadataSync(TRcBuf&& metadata);

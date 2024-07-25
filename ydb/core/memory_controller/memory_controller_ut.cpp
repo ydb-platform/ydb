@@ -26,7 +26,7 @@ class TWithMemoryControllerServer : public TServer {
             return ProcessMemoryInfo;
         }
 
-        TProcessMemoryInfo ProcessMemoryInfo{0_MB, {}, {}};
+        TProcessMemoryInfo ProcessMemoryInfo{0_MB, 0_MB, {}, {}};
     };
 
 public:

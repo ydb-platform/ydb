@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     void WithIndex(const TString& replicatedPath, NKikimrSchemeOp::EIndexType indexType) {
-        TEnv env;
+        TEnv env(TFeatureFlags().SetEnableChangefeedsOnIndexTables(true));
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
         const auto tableDesc = TTestTableDescription{

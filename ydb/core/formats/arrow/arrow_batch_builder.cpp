@@ -170,21 +170,7 @@ NKikimr::NArrow::TRecordBatchReader TRecordBatchConstructor::Finish() {
 
 void TRecordBatchReader::SerializeToStrings(TString& schema, TString& data) const {
     Y_ABORT_UNLESS(!!Batch);
-    auto batchSchema = *Batch->schema();
-    schema = NArrow::SerializeSchema(batchSchema);
-
-    if (batchSchema.num_fields() == 2) {
-        // In case of simple timeseries table like
-        // | TimeColumn | ValueColumn |
-        // we apply Gorilla compression.
-        const auto& firstField = batchSchema.field(0);
-        const auto firstFieldType = firstField->type();
-        if (firstFieldType->Equals(arrow::TimestampType(arrow::TimeUnit::MICRO))) {
-            data = NArrow::SerializeBatchGorillaCompression(Batch);
-            return;
-        }
-    }
-
+    schema = NArrow::SerializeSchema(*Batch->schema());
     data = NArrow::SerializeBatchNoCompression(Batch);
 }
 
@@ -193,19 +179,6 @@ bool TRecordBatchReader::DeserializeFromStrings(const TString& schemaString, con
     if (!schema) {
         return false;
     }
-
-    if (schema->num_fields() == 2) {
-        // In case of simple timeseries table like
-        // | TimeColumn | ValueColumn |
-        // we apply Gorilla compression.
-        const auto& firstField = schema->field(0);
-        const auto firstFieldType = firstField->type();
-        if (firstFieldType->Equals(arrow::TimestampType(arrow::TimeUnit::MICRO))) {
-            Batch = NArrow::DeserializeBatchGorilla(dataString, schema);
-            return true;
-        }
-    }
-
     Batch = NArrow::DeserializeBatch(dataString, schema);
     return true;
 }

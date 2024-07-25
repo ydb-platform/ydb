@@ -14,7 +14,7 @@
 // ---------- COMPRESSION ------------------
 class BitWriter {
 public:
-    explicit BitWriter(std::ostream& os) : out(&os), buffer(0), count(8) {}
+    explicit BitWriter(std::ostream &os) : out(&os), buffer(0), count(8) {}
 
     // Write a single bit at the available right-most position of the `buffer`.
     void writeBit(bool bit) {
@@ -31,7 +31,7 @@ public:
 
         // If `buffer` is filled, write it out and reinitialize.
         if (count == 0) {
-            write_buf();
+            writeBuf();
             buffer = 0;
             count = 8;
         }
@@ -79,7 +79,7 @@ public:
         // 4. Write the remaining (right-remaining) part of the `byte` to the `buffer`
         //    (00000100 in this example)
         buffer |= (byte >> (8 - count));
-        write_buf();
+        writeBuf();
         buffer = byte << count;
     }
 
@@ -93,19 +93,20 @@ public:
     }
 
 private:
-    void write_buf() {
-        out->write(reinterpret_cast<const char*>(&buffer), sizeof(buffer));
+    void writeBuf() {
+        out->write(reinterpret_cast<const char *>(&buffer), sizeof(buffer));
     }
 
-    std::ostream* out;
+    std::ostream *out;
     uint8_t buffer;
     // How many right-most bits are available for writing in the current byte (the last byte of the buffer).
     uint8_t count;
 };
 
-constexpr int32_t FIRST_DELTA_BITS = 14;
+constexpr int32_t
+FIRST_DELTA_BITS = 14;
 
-uint8_t leading_zeros(uint64_t v) {
+uint8_t leadingZeros(uint64_t v) {
     uint64_t mask = 0x8000000000000000;
     uint8_t ret = 0;
     while (ret < 64 && (v & mask) == 0) {
@@ -115,7 +116,7 @@ uint8_t leading_zeros(uint64_t v) {
     return ret;
 }
 
-uint8_t trailing_zeros(uint64_t v) {
+uint8_t trailingZeros(uint64_t v) {
     uint64_t mask = 0x0000000000000001;
     uint8_t ret = 0;
     while (ret < 64 && (v & mask) == 0) {
@@ -125,14 +126,22 @@ uint8_t trailing_zeros(uint64_t v) {
     return ret;
 }
 
+// Diff from initial article implementation:
+// 1.) Leading zeroes are encoded and decoded as 6 bits and not as 5 (as it's done in the article).
+// 2.) Max DOD encoded as 64 bits and not as 32.
 class Compressor {
 public:
-    Compressor(std::ostream& os, uint64_t header) : bw(os), header_(header), leading_zeros_(UINT8_MAX) {
+    Compressor(std::ostream &os, uint64_t header) : bw(os), header_(header), leading_zeros_(INT8_MAX) {
         bw.writeBits(header_, 64);
     }
 
     void compress(uint64_t t, uint64_t v) {
         if (t_ == 0) {
+            if (t - header_ < 0) {
+                std::cerr << "First time passed for compression is less than header." << std::endl;
+                std::cerr << "Header: " << header_ << ". Time: " << t << "." << std::endl;
+                exit(0);
+            }
             int64_t delta = static_cast<int64_t>(t) - static_cast<int64_t>(header_);
             t_ = t;
             t_delta_ = delta;
@@ -148,7 +157,7 @@ public:
 
     void finish() {
         if (t_ == 0) {
-            bw.writeBits(1<< (FIRST_DELTA_BITS - 1), FIRST_DELTA_BITS);
+            bw.writeBits((1 << FIRST_DELTA_BITS) - 1, FIRST_DELTA_BITS);
             bw.writeBits(0, 64);
             bw.flush(false);
             return;
@@ -157,7 +166,7 @@ public:
         // 0x0F           = 00001111 -> 1111 (cutted).
         bw.writeBits(0x0F, 4);
         // 0xFFFFFFFF     = 11111111 11111111 11111111 11111111
-        bw.writeBits(0xFFFFFFFF, 32);
+        bw.writeBits(0xFFFFFFFFFFFFFFFF, 64);
         bw.writeBit(false);
         bw.flush(false);
     }
@@ -165,7 +174,7 @@ public:
 private:
     void compressTimestamp(uint64_t t) {
         auto delta = static_cast<int64_t>(t) - static_cast<int64_t>(t_);
-        int64_t dod = static_cast<int64_t>(delta) - static_cast<int64_t>(t_delta_);
+        int64_t dod = delta - t_delta_;
 
         t_ = t;
         t_delta_ = delta;
@@ -188,11 +197,11 @@ private:
     }
 
     void writeInt64Bits(int64_t i, int nbits) {
-        uint64_t u;
+        uint64_t u = 0;
         if (i >= 0 || nbits >= 64) {
             u = static_cast<uint64_t>(i);
         } else {
-            u = static_cast<uint64_t>(1 << (nbits + i));
+            u = static_cast<uint64_t>((1 << nbits) + i);
         }
         bw.writeBits(u, int(nbits));
     }
@@ -206,12 +215,12 @@ private:
             return;
         }
 
-        uint8_t leading_zeros_val = leading_zeros(xor_val);
-        uint8_t trailing_zeros_val = trailing_zeros(xor_val);
+        uint8_t leading_zeros_val = leadingZeros(xor_val);
+        uint8_t trailing_zeros_val = trailingZeros(xor_val);
 
         bw.writeBit(true);
 
-        if (leading_zeros_val <= leading_zeros_ && trailing_zeros_val <= trailing_zeros_) {
+        if (leading_zeros_ <= leading_zeros_val && trailing_zeros_ <= trailing_zeros_val) {
             bw.writeBit(false);
             int significant_bits = 64 - leading_zeros_ - trailing_zeros_;
             bw.writeBits(xor_val >> trailing_zeros_, significant_bits);
@@ -222,7 +231,7 @@ private:
         trailing_zeros_ = trailing_zeros_val;
 
         bw.writeBit(true);
-        bw.writeBits(leading_zeros_val, 5);
+        bw.writeBits(leading_zeros_, 6);
         int significant_bits = 64 - leading_zeros_ - trailing_zeros_;
         bw.writeBits(static_cast<uint64_t>(significant_bits), 6);
         bw.writeBits(xor_val >> trailing_zeros_val, significant_bits);
@@ -249,12 +258,12 @@ private:
 // ---------- DECOMPRESSION ----------------
 class BitReader {
 public:
-    explicit BitReader(std::istream& is) : in(is), buffer_(0), count_(0) {}
+    explicit BitReader(std::istream &is) : in(is), buffer_(0), count_(0) {}
 
     // Read single bit from the stream.
     bool readBit() {
         if (count_ == 0) {
-            refresh_buffer();
+            refreshBuffer();
             count_ = 8;
         }
         count_--;
@@ -271,11 +280,11 @@ public:
     // Read single byte from the stream.
     uint8_t readByte() {
         if (count_ == 0) {
-            refresh_buffer();
+            refreshBuffer();
             return buffer_;
         }
         uint8_t byte = buffer_;
-        refresh_buffer();
+        refreshBuffer();
         byte |= (buffer_ >> count_);
         buffer_ <<= (8 - count_);
         return byte;
@@ -305,13 +314,13 @@ public:
 
 private:
     // Read a new byte from the stream.
-    void refresh_buffer() {
+    void refreshBuffer() {
         char read_byte;
         in.read(&read_byte, 1);
         buffer_ = read_byte;
     }
 
-    std::istream& in;
+    std::istream &in;
     uint8_t buffer_;
     // How many right-most bits are available for reading in the current byte.
     // Note: reading is applied from left to right.
@@ -320,28 +329,28 @@ private:
 
 class Decompressor {
 public:
-    explicit Decompressor(std::istream& is) : br(is) {
+    explicit Decompressor(std::istream &is) : br(is) {
         header_ = br.readBits(64);
     }
 
-    [[nodiscard]] uint64_t get_header() const {
+    [[nodiscard]] uint64_t getHeader() const {
         return header_;
     }
 
-    std::pair<uint64_t, uint64_t> next() {
+    std::optional<std::pair<uint64_t, uint64_t>> next() {
         if (t_ == 0) {
-            return decompress_first();
+            return {decompressFirst()};
         } else {
             return decompress();
         }
     }
 
 private:
-    [[nodiscard]] std::pair<uint64_t, uint64_t> decompress_first() {
+    [[nodiscard]] std::pair<uint64_t, uint64_t> decompressFirst() {
         uint64_t delta_u64 = br.readBits(FIRST_DELTA_BITS);
-        int64_t delta = *reinterpret_cast<int64_t*>(&delta_u64);
+        int64_t delta = *reinterpret_cast<int64_t *>(&delta_u64);
 
-        if (delta == (1 << (FIRST_DELTA_BITS - 1))) {
+        if (delta == ((1 << FIRST_DELTA_BITS) - 1)) {
             return std::make_pair(0, 0);
         }
 
@@ -353,15 +362,18 @@ private:
         return std::make_pair(t_, value_);
     }
 
-    std::pair<uint64_t, uint64_t> decompress() {
-        uint64_t t = decompress_timestamp();
-        uint64_t v = decompress_value();
+    std::optional<std::pair<uint64_t, uint64_t>> decompress() {
+        std::optional<uint64_t> t = decompressTimestamp();
+        if (t) {
+            uint64_t v = decompressValue();
 
-        return std::make_pair(t, v);
+            return {std::make_pair(*t, v)};
+        }
+        return std::nullopt;
     }
 
-    uint64_t decompress_timestamp() {
-        uint8_t n = dod_timestamp_bits();
+    std::optional<uint64_t> decompressTimestamp() {
+        uint8_t n = dodTimestampBits();
 
         if (n == 0) {
             t_ += t_delta_;
@@ -370,13 +382,13 @@ private:
 
         uint64_t bits = br.readBits(n);
 
-        if (n == 32 && bits == 0xFFFFFFFF) {
-            return 0;
+        if (n == 64 && bits == 0xFFFFFFFFFFFFFFFF) {
+            return std::nullopt;
         }
 
-        int64_t bits_int64 = *reinterpret_cast<int64_t*>(bits);
+        int64_t bits_int64 = *reinterpret_cast<int64_t *>(&bits);
         int64_t dod = bits_int64;
-        if (n != 32 && (1 << (n - 1)) < bits_int64) {
+        if (n != 64 && (1 << (n - 1)) < bits_int64) {
             dod = bits_int64 - (1 << n);
         }
 
@@ -385,7 +397,7 @@ private:
         return t_;
     }
 
-    uint8_t dod_timestamp_bits() {
+    uint8_t dodTimestampBits() {
         uint8_t dod = 0;
         for (int i = 0; i < 4; i++) {
             dod <<= 1;
@@ -408,14 +420,14 @@ private:
         } else if (dod == 0x0E) {
             return 12;
         } else if (dod == 0x0F) {
-            return 32;
+            return 64;
         } else {
             std::cerr << "invalid bit header for bit length to read" << std::endl;
             exit(1);
         }
     }
 
-    uint64_t decompress_value() {
+    uint64_t decompressValue() {
         uint8_t read = 0;
         for (int i = 0; i < 2; i++) {
             bool bit = br.readBit();
@@ -429,13 +441,13 @@ private:
 
         if (read == 0x1 || read == 0x3) {
             if (read == 0x3) {
-                uint8_t leading_zeroes = br.readBits(5);
+                uint8_t leading_zeroes = br.readBits(6);
                 uint8_t significant_bits = br.readBits(6);
                 if (significant_bits == 0) {
                     significant_bits = 64;
                 }
                 leading_zeros_ = leading_zeroes;
-                trailing_zeros_ = 64 - significant_bits - leading_zeroes;
+                trailing_zeros_ = 64 - significant_bits - leading_zeros_;
             }
 
             uint64_t value_bits = br.readBits(64 - leading_zeros_ - trailing_zeros_);

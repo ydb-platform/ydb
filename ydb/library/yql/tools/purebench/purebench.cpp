@@ -33,6 +33,26 @@ TStringStream MakeGenInput(ui64 count) {
     return stream;
 }
 
+template <typename TInputSpec, typename TOutputSpec>
+using TRunCallable = std::function<void (const THolder<TPullListProgram<TInputSpec, TOutputSpec>>&)>;
+
+template <typename TOutputSpec>
+NYT::TNode RunGenSql(
+    const IProgramFactoryPtr factory,
+    const TVector<NYT::TNode>& inputSchema,
+    const TString& sql,
+    ETranslationMode isPg,
+    TRunCallable<TSkiffInputSpec, TOutputSpec> runCallable
+) {
+    auto inputSpec = TSkiffInputSpec(inputSchema);
+    auto outputSpec = TOutputSpec({NYT::TNode::CreateEntity()});
+    auto program = factory->MakePullListProgram(inputSpec, outputSpec, sql, isPg);
+
+    runCallable(program);
+
+    return program->MakeOutputSchema();
+}
+
 int Main(int argc, const char *argv[])
 {
     Y_UNUSED(NUdf::GetStaticSymbols());
@@ -92,20 +112,19 @@ int Main(int argc, const char *argv[])
                             .Add("StructType")
                             .Add(members);
 
-    auto inputSpec1 = TSkiffInputSpec(TVector<NYT::TNode>{schema});
-    auto outputSpec1 = TSkiffOutputSpec({NYT::TNode::CreateEntity()});
-    auto genProgram = factory->MakePullListProgram(
-        inputSpec1,
-        outputSpec1,
-        genSql,
-        res.Has("pg") ? ETranslationMode::PG : ETranslationMode::SQL);
+    auto inputGenSchema = TVector<NYT::TNode>{schema};
+    auto inputGenStream = MakeGenInput(count);
+    Cerr << "Input data size: " << inputGenStream.Size() << "\n";
+    ETranslationMode isPgGen = res.Has("pg") ? ETranslationMode::PG : ETranslationMode::SQL;
 
-    auto input1 = MakeGenInput(count);
-    Cerr << "Input data size: " << input1.Size() << "\n";
-    auto handle1 = genProgram->Apply(&input1);
-    TStringStream output1;
-    handle1->Run(&output1);
-    Cerr << "Generated data size: " << output1.Size() << "\n";
+    TStringStream outputGenStream;
+    auto outputGenSchema = RunGenSql<TSkiffOutputSpec>(
+        factory, inputGenSchema, genSql, isPgGen,
+        [&](const auto& program) {
+            auto handle = program->Apply(&inputGenStream);
+            handle->Run(&outputGenStream);
+            Cerr << "Generated data size: " << outputGenStream.Size() << "\n";
+        });
 
     Cerr << "Dry run of test sql...\n";
     auto inputSpec2 = TSkiffInputSpec(genProgram->MakeOutputSchema());

@@ -10,27 +10,10 @@
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/core/process_stats.h>
 #include <ydb/library/services/services.pb.h>
 
 namespace NKikimr::NMemory {
-
-TProcessMemoryInfo TProcessMemoryInfoProvider::Get() const {
-    std::optional<TMemoryUsage> memoryUsage = TAllocState::TryGetMemoryUsage();
-
-    TProcessMemoryInfo result{
-        TAllocState::GetAllocatedMemoryEstimate(),
-        {}, {}
-    };
-
-    if (memoryUsage) {
-        result.AnonRss.emplace(memoryUsage->AnonRss);
-    }
-    if (memoryUsage && memoryUsage->CGroupLimit) {
-        result.CGroupLimit.emplace(memoryUsage->CGroupLimit);
-    }
-
-    return result;
-}
 
 namespace {
 

@@ -58,10 +58,13 @@ NYdb::NScheme::TSchemeClient TYdbLocation::GetSchemeClient(const TRequest& reque
         clientSettings.AuthToken(authToken);
     }
 <<<<<<< HEAD
+<<<<<<< HEAD
     if (TString database = TYdbLocation::GetDatabaseName(request)) {
 =======
     TYdbLocation::GetDatabaseName(request);
 
+=======
+>>>>>>> 3e569226dc (remove uneessasary line)
     TString database = TYdbLocation::GetDatabaseName(request);
     if (database) {
 >>>>>>> 8359e2fa0d (added GetAccessServiceTypeFromString method)

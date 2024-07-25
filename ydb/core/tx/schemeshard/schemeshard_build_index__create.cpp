@@ -140,7 +140,7 @@ public:
             }
 
             TString explain;
-            if (!Prepare(buildInfo, settings, explain)) {
+            if (!Prepare(*buildInfo, settings, explain)) {
                 return Reply(Ydb::StatusIds::BAD_REQUEST,
                              TStringBuilder()
                                  << "Failed item check: " << explain);
@@ -179,7 +179,7 @@ public:
         buildInfo->CreateSender = Request->Sender;
         buildInfo->SenderCookie = Request->Cookie;
 
-        Self->PersistCreateBuildIndex(db, buildInfo);
+        Self->PersistCreateBuildIndex(db, *buildInfo);
 
         if (buildInfo->IsBuildIndex()) {
             buildInfo->State = TIndexBuildInfo::EState::Locking;
@@ -187,11 +187,13 @@ public:
             buildInfo->State = TIndexBuildInfo::EState::AlterMainTable;
         }
 
-        Self->PersistBuildIndexState(db, buildInfo);
+        Self->PersistBuildIndexState(db, *buildInfo);
 
-        Self->IndexBuilds[id] = buildInfo;
+        auto [it, emplaced] = Self->IndexBuilds.emplace(id, buildInfo);
+        Y_ASSERT(emplaced);
         if (uid) {
-            Self->IndexBuildsByUid[uid] = buildInfo;
+            std::tie(std::ignore, emplaced) = Self->IndexBuildsByUid.emplace(uid, buildInfo);
+            Y_ASSERT(emplaced);
         }
 
         Progress(id);
@@ -202,7 +204,7 @@ public:
     void DoComplete(const TActorContext&) override {}
 
 private:
-    bool Prepare(TIndexBuildInfo::TPtr buildInfo, const NKikimrIndexBuilder::TIndexBuildSettings& settings, TString& explain) {
+    bool Prepare(TIndexBuildInfo& buildInfo, const NKikimrIndexBuilder::TIndexBuildSettings& settings, TString& explain) {
         if (!settings.has_index() && !settings.has_column_build_operation()) {
             explain = "missing index or column to build";
             return false;
@@ -218,19 +220,19 @@ private:
 
             switch (index.type_case()) {
             case Ydb::Table::TableIndex::TypeCase::kGlobalIndex:
-                buildInfo->IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobal;
+                buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobal;
                 break;
             case Ydb::Table::TableIndex::TypeCase::kGlobalAsyncIndex:
-                buildInfo->IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync;
+                buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync;
                 break;
             case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
                 explain = "unsupported index type to build";
                 return false;
             case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex: {
-                buildInfo->IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
+                buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
                 NKikimrSchemeOp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
                 *vectorIndexKmeansTreeDescription.MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
-                buildInfo->SpecializedIndexDescription = vectorIndexKmeansTreeDescription;
+                buildInfo.SpecializedIndexDescription = vectorIndexKmeansTreeDescription;
                 break;
             }
             case Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET:
@@ -238,12 +240,12 @@ private:
                 return false;
             };
 
-            buildInfo->IndexName = index.name();
-            buildInfo->IndexColumns.assign(index.index_columns().begin(), index.index_columns().end());
-            buildInfo->DataColumns.assign(index.data_columns().begin(), index.data_columns().end());
+            buildInfo.IndexName = index.name();
+            buildInfo.IndexColumns.assign(index.index_columns().begin(), index.index_columns().end());
+            buildInfo.DataColumns.assign(index.data_columns().begin(), index.data_columns().end());
 
             Ydb::StatusIds::StatusCode status;
-            if (!FillIndexTablePartitioning(buildInfo->ImplTableDescriptions, index, status, explain)) {
+            if (!FillIndexTablePartitioning(buildInfo.ImplTableDescriptions, index, status, explain)) {
                 return false;
             } 
         }

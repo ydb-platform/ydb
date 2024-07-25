@@ -17,6 +17,7 @@
 #include <util/stream/format.h>
 #include <util/stream/null.h>
 
+#include <algorithm>
 #include <cmath>
 
 using namespace NYql;
@@ -69,6 +70,44 @@ void ShowResults(
     handle->Run(&output);
     TStringInput in(output.Str());
     NYson::ReformatYsonStream(&in, &Cerr, NYson::EYsonFormat::Pretty, NYson::EYsonType::ListFragment);
+}
+
+template <typename TInputSpec, typename TOutputSpec>
+double RunBenchmarks(
+    const IProgramFactoryPtr factory,
+    const TVector<NYT::TNode>& inputSchema,
+    const TString& sql,
+    ETranslationMode isPg,
+    ui32 repeats,
+    TRunCallable<TInputSpec, TOutputSpec> runCallable
+) {
+    auto inputSpec = TInputSpec(inputSchema);
+    auto outputSpec = TOutputSpec({NYT::TNode::CreateEntity()});
+    auto program = factory->MakePullListProgram(inputSpec, outputSpec, sql, isPg);
+
+    Cerr << "Dry run of test sql...\n";
+
+    runCallable(program);
+
+    Cerr << "Run benchmark...\n";
+
+    TVector<TDuration> times;
+    TSimpleTimer allTimer;
+    for (ui32 i = 0; i < repeats; ++i) {
+        TSimpleTimer timer;
+        runCallable(program);
+        times.push_back(timer.Get());
+    }
+
+    Cout << "Elapsed: " << allTimer.Get() << "\n";
+
+    Sort(times);
+    times.erase(times.end() - times.size() / 3, times.end());
+
+    double sum = std::transform_reduce(times.cbegin(), times.cend(),
+        .0, std::plus{}, [](auto t) { return std::log(t.MicroSeconds()); });
+
+    return std::exp(sum / times.size());
 }
 
 int Main(int argc, const char *argv[])
@@ -151,29 +190,20 @@ int Main(int argc, const char *argv[])
             factory, {outputGenSchema}, testSql, isPgTest, &inputResStream);
     }
 
-    Cerr << "Dry run of test sql...\n";
-    Cerr << "Run benchmark...\n";
-    TVector<TDuration> times;
-    TSimpleTimer allTimer;
-    for (ui32 i = 0; i < repeats; ++i) {
-        TSimpleTimer timer;
-        auto input2 = TStringStream(output1);
-        auto handle2 = testProgram->Apply(&input2);
-        TNullOutput output2;
-        handle2->Run(&output2);
-        times.push_back(timer.Get());
-    }
+    auto inputBenchSize = outputGenStream.Size();
+    double time = RunBenchmarks<TSkiffInputSpec, TSkiffOutputSpec>(
+        factory, {outputGenSchema}, testSql, isPgTest, repeats,
+        [&](const auto& program) {
+            auto inputBorrowed = TStringStream(outputGenStream);
+            auto handle = program->Apply(&inputBorrowed);
+            TNullOutput output;
+            handle->Run(&output);
+        });
 
-    Cout << "Elapsed: " << allTimer.Get() << "\n";
-    Sort(times);
-    times.erase(times.end() - times.size() / 3, times.end());
-    double s = 0;
-    for (auto t : times) {
-        s += std::log(t.MicroSeconds());
-    }
+    Cout << "Bench score: " << Prec(inputBenchSize / time, 4) << "\n";
 
-    double score = output1.Size() / std::exp(s / times.size());
-    Cout << "Bench score: " << Prec(score, 4) << "\n";
+
+
 
     NLog::CleanupLogger();
     return 0;

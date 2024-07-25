@@ -371,6 +371,9 @@ void TPDisk::Stop() {
     while (InputQueue.GetWaitingSize() > 0) {
         TRequestBase::AbortDelete(InputQueue.Pop(), ActorSystem);
     }
+
+    DropAllMetadataRequests();
+
     if (InitialTailBuffer) {
         InitialTailBuffer->Exec(ActorSystem);
         InitialTailBuffer = nullptr;

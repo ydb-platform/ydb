@@ -137,7 +137,7 @@ std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> TMerger::Execute(c
             TGeneralSerializedSlice slice(dataWithSecondary.GetExternalData(), schemaDetails, Context.Counters.SplitterCounters);
 
             auto b = batchResult->Slice(recordIdx, slice.GetRecordsCount());
-            const ui32 deletionsCount = IIndexInfo::CalcDeletions(b, true);
+            const ui32 deletionsCount = IIndexInfo::CalcDeletions(b, false);
             auto constructor = TWritePortionInfoWithBlobsConstructor::BuildByBlobs(slice.GroupChunksByBlobs(groups),
                 dataWithSecondary.GetSecondaryInplaceData(), pathId, resultFiltered->GetVersion(), resultFiltered->GetSnapshot(),
                 SaverContext.GetStoragesManager());

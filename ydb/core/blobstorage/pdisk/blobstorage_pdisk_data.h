@@ -564,8 +564,6 @@ struct TDiskFormat {
     ui64 TimestampUs;
     ui64 FormatFlags;     // Flags default to 0
 
-    TMetadataFormatSector MetadataFormat;
-
     THash Hash;
 
     TString FormatFlagsToString(ui64 flags) const {

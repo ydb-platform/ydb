@@ -269,6 +269,7 @@ namespace NActors {
                     
                     Ctx.AddElapsedCycles(activityType, hpnow - hpprev);
                     NHPTimer::STime elapsed = Ctx.AddEventProcessingStats(eventStart, hpnow, activityType, CurrentActorScheduledEventsCounter);
+                    mailbox->AddElapsedCycles(elapsed);
                     if (elapsed > 1000000) {
                         LwTraceSlowEvent(ev.Get(), evTypeForTracing, actorType, Ctx.PoolId, CurrentRecipient, NHPTimer::GetSeconds(elapsed) * 1000.0);
                     }
@@ -372,7 +373,7 @@ namespace NActors {
                 break; // empty queue, leave
             }
         }
-        TlsThreadContext->ActivationStartTS.store(GetCycleCountFast(), std::memory_order_release);
+        TlsThreadContext->ActivationStartTS.store(hpnow, std::memory_order_release);
         TlsThreadContext->ElapsingActorActivity.store(ActorSystemIndex, std::memory_order_release);
 
         NProfiling::TMemoryTagScope::Reset(0);

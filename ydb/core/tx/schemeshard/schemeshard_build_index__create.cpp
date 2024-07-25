@@ -179,7 +179,7 @@ public:
         buildInfo->CreateSender = Request->Sender;
         buildInfo->SenderCookie = Request->Cookie;
 
-        Self->PersistCreateBuildIndex(db, buildInfo);
+        Self->PersistCreateBuildIndex(db, *buildInfo);
 
         if (buildInfo->IsBuildIndex()) {
             buildInfo->State = TIndexBuildInfo::EState::Locking;
@@ -187,11 +187,13 @@ public:
             buildInfo->State = TIndexBuildInfo::EState::AlterMainTable;
         }
 
-        Self->PersistBuildIndexState(db, buildInfo);
+        Self->PersistBuildIndexState(db, *buildInfo);
 
-        Self->IndexBuilds[id] = buildInfo;
+        auto [it, emplaced] = Self->IndexBuilds.emplace(id, buildInfo);
+        Y_ASSERT(emplaced);
         if (uid) {
-            Self->IndexBuildsByUid[uid] = buildInfo;
+            std::tie(std::ignore, emplaced) = Self->IndexBuildsByUid.emplace(uid, buildInfo);
+            Y_ASSERT(emplaced);
         }
 
         Progress(id);

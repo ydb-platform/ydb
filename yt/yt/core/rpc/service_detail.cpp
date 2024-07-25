@@ -745,7 +745,7 @@ private:
         auto userAgent = RequestHeader_->has_user_agent()
             ? TStringBuf(RequestHeader_->user_agent())
             : UnknownUserAgent;
-        PerformanceCounters_->IncrementRequestsPerUserAgent(userAgent);
+        PerformanceCounters_->IncrementRequestsPerUserAgent(userAgent.SubString(0, 200));
 
         MethodPerformanceCounters_->RequestCounter.Increment();
         MethodPerformanceCounters_->RequestMessageBodySizeCounter.Increment(

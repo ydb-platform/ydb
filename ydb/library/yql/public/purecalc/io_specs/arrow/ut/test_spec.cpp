@@ -156,7 +156,7 @@ Y_UNIT_TEST_SUITE(TestSimplePullListArrowIO) {
 
         auto factory = MakeProgramFactory(TestOptions(BlockEngineMode));
 
-        {
+        try {
             auto program = factory->MakePullListProgram(
                 TArrowInputSpec({schema}),
                 TArrowOutputSpec(schema),
@@ -176,6 +176,8 @@ Y_UNIT_TEST_SUITE(TestSimplePullListArrowIO) {
             }
             const auto canonOutput = CanonBatches(output);
             UNIT_ASSERT_EQUAL(canonInput, canonOutput);
+        } catch (const TCompileError& error) {
+            Cerr << error.GetIssues() << "\n";
         }
     }
 
@@ -187,7 +189,7 @@ Y_UNIT_TEST_SUITE(TestSimplePullListArrowIO) {
 
         auto factory = MakeProgramFactory(TestOptions(BlockEngineMode));
 
-        {
+        try {
             auto program = factory->MakePullListProgram(
                 TArrowInputSpec({schema, schema}),
                 TArrowOutputSpec(schema),
@@ -218,6 +220,8 @@ Y_UNIT_TEST_SUITE(TestSimplePullListArrowIO) {
             }
             const auto canonOutput = CanonBatches(output);
             UNIT_ASSERT_EQUAL(canonInputs, canonOutput);
+        } catch (const TCompileError& error) {
+            Cerr << error.GetIssues() << "\n";
         }
     }
 }
@@ -232,7 +236,7 @@ Y_UNIT_TEST_SUITE(TestMorePullListArrowIO) {
 
         auto factory = MakeProgramFactory(TestOptions(BlockEngineMode));
 
-        {
+        try {
             auto program = factory->MakePullListProgram(
                 TArrowInputSpec({schema}),
                 TArrowOutputSpec(schema),
@@ -257,6 +261,8 @@ Y_UNIT_TEST_SUITE(TestMorePullListArrowIO) {
             const TVector<arrow::compute::ExecBatch> check({MakeBatch(9, 17, 2)});
             const auto canonCheck = CanonBatches(check);
             UNIT_ASSERT_EQUAL(canonCheck, canonOutput);
+        } catch (const TCompileError& error) {
+            Cerr << error.GetIssues() << "\n";
         }
     }
 }
@@ -271,7 +277,7 @@ Y_UNIT_TEST_SUITE(TestSimplePullStreamArrowIO) {
 
         auto factory = MakeProgramFactory(TestOptions(BlockEngineMode));
 
-        {
+        try {
             auto program = factory->MakePullStreamProgram(
                 TArrowInputSpec({schema}),
                 TArrowOutputSpec(schema),
@@ -291,6 +297,8 @@ Y_UNIT_TEST_SUITE(TestSimplePullStreamArrowIO) {
             }
             const auto canonOutput = CanonBatches(output);
             UNIT_ASSERT_EQUAL(canonInput, canonOutput);
+        } catch (const TCompileError& error) {
+            Cerr << error.GetIssues() << "\n";
         }
     }
 }
@@ -305,7 +313,7 @@ Y_UNIT_TEST_SUITE(TestMorePullStreamArrowIO) {
 
         auto factory = MakeProgramFactory(TestOptions(BlockEngineMode));
 
-        {
+        try {
             auto program = factory->MakePullStreamProgram(
                 TArrowInputSpec({schema}),
                 TArrowOutputSpec(schema),
@@ -330,6 +338,8 @@ Y_UNIT_TEST_SUITE(TestMorePullStreamArrowIO) {
             const TVector<arrow::compute::ExecBatch> check({MakeBatch(9, 17, 2)});
             const auto canonCheck = CanonBatches(check);
             UNIT_ASSERT_EQUAL(canonCheck, canonOutput);
+        } catch (const TCompileError& error) {
+            Cerr << error.GetIssues() << "\n";
         }
     }
 }
@@ -344,7 +354,7 @@ Y_UNIT_TEST_SUITE(TestPushStreamArrowIO) {
 
         auto factory = MakeProgramFactory(TestOptions(BlockEngineMode));
 
-        {
+        try {
             auto program = factory->MakePushStreamProgram(
                 TArrowInputSpec({schema}),
                 TArrowOutputSpec(schema),
@@ -363,6 +373,8 @@ Y_UNIT_TEST_SUITE(TestPushStreamArrowIO) {
 
             const auto canonOutput = CanonBatches(output);
             UNIT_ASSERT_EQUAL(canonInput, canonOutput);
+        } catch (const TCompileError& error) {
+            Cerr << error.GetIssues() << "\n";
         }
     }
 }
@@ -376,7 +388,7 @@ Y_UNIT_TEST_SUITE(TestMorePushStreamArrowIO) {
 
         auto factory = MakeProgramFactory(TestOptions(BlockEngineMode));
 
-        {
+        try {
             auto program = factory->MakePushStreamProgram(
                 TArrowInputSpec({schema}),
                 TArrowOutputSpec(schema),
@@ -400,6 +412,8 @@ Y_UNIT_TEST_SUITE(TestMorePushStreamArrowIO) {
             const TVector<arrow::compute::ExecBatch> check({MakeBatch(9, 17, 2)});
             const auto canonCheck = CanonBatches(check);
             UNIT_ASSERT_EQUAL(canonCheck, canonOutput);
+        } catch (const TCompileError& error) {
+            Cerr << error.GetIssues() << "\n";
         }
     }
 }

@@ -1,10 +1,10 @@
 items:
-- { name: Обзор,                                  href: index.md }
 - { name: Глоссарий,                  href: glossary.md }
 - { name: Соединение с БД,       href: connect.md }
 - name: Аутентификация
   href: auth.md
 - name: Модель данных и схема
+  href: datamodel/index.md
   include: { path: datamodel/toc_p.yaml, mode: link }
 - { name: Транзакции,                             href: transactions.md }
 - { name: Вторичные индексы,                      href: secondary_indexes.md }
@@ -16,9 +16,8 @@ items:
 - name: Федеративные запросы
   include: { path: federated_query/toc_p.yaml, mode: link }
 - name: Кластер YDB
+  href: cluster/index.md
   items:
-  - name: Обзор
-    href: cluster/index.md
   - name: Топология
     href: topology.md
   - name: Общая схема YDB

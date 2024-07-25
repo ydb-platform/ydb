@@ -2,7 +2,8 @@ UNITTEST_FOR(ydb/core/fq/libs/row_dispatcher)
 
 SRCS(
     leader_detector_ut.cpp
-    json_parser_filter_ut.cpp
+    json_parser_ut.cpp
+    json_filter_ut.cpp
 )
 
 PEERDIR(
@@ -11,6 +12,7 @@ PEERDIR(
     #ydb/core/testlib/actors
     ydb/core/testlib
     ydb/library/yql/udfs/common/json2
+    ydb/library/yql/udfs/common/yson2
 )
 
 SIZE(MEDIUM)

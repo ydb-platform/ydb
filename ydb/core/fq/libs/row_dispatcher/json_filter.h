@@ -8,7 +8,7 @@ namespace NFq {
 
 class TJsonFilter {
 public:
-    using TCallback = std::function<void(const TString&)>;
+    using TCallback = std::function<void(ui64, const TString&)>;
     
 public:
     TJsonFilter(
@@ -17,7 +17,7 @@ public:
         const TString& whereFilter,
         TCallback callback);
     ~TJsonFilter();
-    void Push(const NYql::NUdf::TUnboxedValue* value);
+    void Push(ui64 offset, const TList<TString>& value);
 
 private:
     class TImpl;

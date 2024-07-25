@@ -568,7 +568,7 @@ void TTopicSession::Handle(TEvRowDispatcher::TEvSessionAddConsumer::TPtr& ev) {
             GetVector(consumerInfo.Consumer->SourceParams.GetColumns()),
             GetVector(consumerInfo.Consumer->SourceParams.GetColumnTypes()),
             predicate,
-            [&, actorId = consumerInfo.Consumer->ReadActorId](const TString& json){
+            [&, actorId = consumerInfo.Consumer->ReadActorId](ui64 /*offset*/, const TString& json){
                 auto it = Consumers.find(actorId);
                 if (it == Consumers.end()) {
                     LOG_ROW_DISPATCHER_DEBUG("Wrong consumer"); // TODO

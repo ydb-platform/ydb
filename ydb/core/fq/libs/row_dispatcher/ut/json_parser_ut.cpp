@@ -45,7 +45,7 @@ public:
     std::unique_ptr<NFq::TJsonParser> Parser;
 };
 
-Y_UNIT_TEST_SUITE(TRetryEventsQueueTest) {
+Y_UNIT_TEST_SUITE(TJsonParserTests) {
     Y_UNIT_TEST_F(Simple1, TFixture) { 
         TList<TString> result;
         ui64 resultOffset;
@@ -107,8 +107,6 @@ Y_UNIT_TEST_SUITE(TRetryEventsQueueTest) {
         MakeParser({"a2", "a1"}, [&](ui64, TList<TString>&&){ });
         UNIT_ASSERT_EXCEPTION_CONTAINS(Parser->Push(5, R"(ydb)"), yexception, " Failed to unwrap empty optional");
     }
-
-
 }
 
 }

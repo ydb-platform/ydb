@@ -21,7 +21,7 @@ namespace NFq {
 
 using TCallback = TJsonParser::TCallback;
 using TInputConsumerArg = std::pair<ui64, TString>;
-const char* OffsetFieldName = "_offset"; 
+static const char* OffsetFieldName = "_offset"; 
 
 static void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldType) {
     node.Add(
@@ -174,7 +174,7 @@ public:
     TParserPushRelayImpl(const TParserOutputSpec& outputSpec, NYql::NPureCalc::IPushStreamWorker* worker, THolder<NYql::NPureCalc::IConsumer<std::pair<ui64, TList<TString>>>> underlying)
         : Underlying(std::move(underlying))
         , Worker(worker)
-        , FieldsMapping(outputSpec.GetSchema(), worker->GetOutputType())
+        , FieldsMapping(outputSpec.GetSchema(), Worker->GetOutputType())
     { }
 
 public:

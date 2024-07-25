@@ -261,12 +261,6 @@ runs:
 
         for RETRY in $(seq 1 $TEST_RETRY_COUNT)
         do
-          if [ $RETRY = $TEST_RETRY_COUNT ]; then
-            IS_LAST_RETRY=1
-          else
-            IS_LAST_RETRY=0
-          fi
-
           if [ $RETRY != 1 ]; then
             IS_RETRY=1
           else
@@ -344,6 +338,22 @@ runs:
             "$CURRENT_JUNIT_XML_PATH"
           cp $CURRENT_JUNIT_XML_PATH $LAST_JUNIT_REPORT_XML
 
+          TESTS_RESULT=0
+          .github/scripts/tests/fail-checker.py "$CURRENT_JUNIT_XML_PATH" --output_path $CURRENT_PUBLIC_DIR/failed_count.txt || TESTS_RESULT=$?
+          FAILED_TESTS_COUNT=$(cat $CURRENT_PUBLIC_DIR/failed_count.txt)
+
+          IS_LAST_RETRY=0
+
+          if [ $TESTS_RESULT = 0 ] || [ $RETRY = $TEST_RETRY_COUNT ]; then
+            IS_LAST_RETRY=1
+          fi
+
+          if [ $FAILED_TESTS_COUNT -gt 500 ]; then 
+            IS_LAST_RETRY=1
+            TOO_MANY_FAILED="Too many tests failed, NOT going to retry"
+            echo $TOO_MANY_FAILED | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --fail
+          fi
+
           if [ "${{ inputs.run_tests }}" = "true" ]; then
             GITHUB_TOKEN=${{ github.token }} .github/scripts/tests/generate-summary.py \
               --summary_links "$SUMMARY_LINKS" \
@@ -395,18 +405,7 @@ runs:
             echo "runid=" >> $GITHUB_OUTPUT
           fi
 
-          TESTS_RESULT=0
-          .github/scripts/tests/fail-checker.py "$CURRENT_JUNIT_XML_PATH" --output_path $CURRENT_PUBLIC_DIR/failed_count.txt || TESTS_RESULT=$?
-
-          FAILED_TESTS_COUNT=$(cat $CURRENT_PUBLIC_DIR/failed_count.txt)
-
-          if [ $FAILED_TESTS_COUNT -gt 500 ]; then 
-            TOO_MANY_FAILED="Too many tests failed, NOT going to retry"
-            echo $TOO_MANY_FAILED | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --fail
-            break
-          fi
-
-          if [ $TESTS_RESULT = 0 ]; then
+          if [ $IS_LAST_RETRY = 1 ]; then
             break
           fi
         done;

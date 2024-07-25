@@ -267,7 +267,7 @@ public:
             break;
         case TIndexBuildInfo::EState::Filling:
             if (buildInfo.IsCancellationRequested()) {
-                buildInfo.DoneShards.clear();
+                buildInfo.DoneShardsSize = 0;
                 buildInfo.InProgressShards.clear();
 
                 Self->IndexBuildPipes.CloseAll(BuildId, ctx);
@@ -287,7 +287,7 @@ public:
             }
 
             if (buildInfo.ToUploadShards.empty()
-                && buildInfo.DoneShards.empty()
+                && buildInfo.DoneShardsSize == 0
                 && buildInfo.InProgressShards.empty())
             {
                 for (const auto& item: buildInfo.Shards) {
@@ -300,7 +300,7 @@ public:
                         buildInfo.ToUploadShards.push_back(item.first);
                         break;
                     case NKikimrTxDataShard::TEvBuildIndexProgressResponse::DONE:
-                        buildInfo.DoneShards.insert(item.first);
+                        ++buildInfo.DoneShardsSize;
                         break;
                     case NKikimrTxDataShard::TEvBuildIndexProgressResponse::BUILD_ERROR:
                     case NKikimrTxDataShard::TEvBuildIndexProgressResponse::BAD_REQUEST:
@@ -387,7 +387,7 @@ public:
             }
 
             if (buildInfo.InProgressShards.empty() && buildInfo.ToUploadShards.empty()
-                && buildInfo.DoneShards.size() == buildInfo.Shards.size()) {
+                && buildInfo.DoneShardsSize == buildInfo.Shards.size()) {
                 // all done
                 Y_ABORT_UNLESS(0 == Self->IndexBuildPipes.CloseAll(BuildId, ctx));
 
@@ -642,7 +642,6 @@ public:
             // reschedule shard
             if (buildInfo.InProgressShards.erase(shardIdx)) {
                 buildInfo.ToUploadShards.push_front(shardIdx);
-                buildInfo.InProgressShards.erase(shardIdx);
 
                 Self->IndexBuildPipes.Close(buildId, tabletId, ctx);
 
@@ -776,7 +775,7 @@ public:
 
             case  NKikimrTxDataShard::TEvBuildIndexProgressResponse::DONE:
                 if (buildInfo.InProgressShards.erase(shardIdx)) {
-                    buildInfo.DoneShards.emplace(shardIdx);
+                    ++buildInfo.DoneShardsSize;
 
                     Self->IndexBuildPipes.Close(buildId, shardId, ctx);
 

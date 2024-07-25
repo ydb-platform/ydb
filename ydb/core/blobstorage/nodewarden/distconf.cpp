@@ -197,7 +197,7 @@ namespace NKikimr::NStorage {
         switch (ev->GetTypeRewrite()) {
             case TEvInterconnect::TEvNodesInfo::EventType:
                 Handle(reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr&>(ev));
-                if (!NodeIds.empty()) {
+                if (!NodeIds.empty() || !IsSelfStatic) {
                     change = !std::exchange(NodeListObtained, true);
                 }
                 break;
@@ -220,6 +220,10 @@ namespace NKikimr::NStorage {
         }
 
         if (change && NodeListObtained && StorageConfigLoaded) {
+            if (IsSelfStatic) {
+                UpdateBound(SelfNode.NodeId(), SelfNode, *StorageConfig, nullptr);
+                IssueNextBindRequest();
+            }
             processPendingEvents();
         }
     }

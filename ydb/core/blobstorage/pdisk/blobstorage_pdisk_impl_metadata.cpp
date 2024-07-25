@@ -77,11 +77,13 @@ namespace NKikimr::NPDisk {
 
         class TCompletionWriteMetadata : public TCompletionAction {
             TPDisk* const PDisk;
+            const TActorId Sender;
             std::deque<std::tuple<NMeta::TSlotKey, TRcBuf>> WriteQueue;
 
         public:
-            TCompletionWriteMetadata(TPDisk *pdisk)
+            TCompletionWriteMetadata(TPDisk *pdisk, TActorId sender)
                 : PDisk(pdisk)
+                , Sender(sender)
             {}
 
             bool CanHandleResult() const override { return true; }
@@ -90,11 +92,11 @@ namespace NKikimr::NPDisk {
                 WriteQueue.emplace_back(key, std::move(buffer));
             }
 
-            void IssueQuery() {
+            void IssueQuery(TActorSystem *actorSystem) {
                 Y_ABORT_UNLESS(!WriteQueue.empty());
                 auto& [key, buffer] = WriteQueue.front();
                 const ui64 writeOffset = PDisk->Format.Offset(key.ChunkIdx, key.OffsetInSectors);
-                LOG_DEBUG_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId
+                LOG_DEBUG_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId
                     << " TCompletionWriteMetadata::IssueQuery"
                     << " Buffer.size# " << buffer.size()
                     << " WriteOffset# " << writeOffset
@@ -105,20 +107,21 @@ namespace NKikimr::NPDisk {
             }
 
             void Exec(TActorSystem *actorSystem) override {
-                LOG_DEBUG_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId
+                LOG_DEBUG_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId
                     << " TCompletionWriteMetadata::Exec"
                     << " Result# " << Result);
                 if (Result != EIoResult::Ok) {
-                    PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TWriteMetadataResult>(false));
+                    PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TWriteMetadataResult>(false, Sender));
                 } else if (WriteQueue.empty()) {
-                    PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TWriteMetadataResult>(true));
+                    PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TWriteMetadataResult>(true, Sender));
                 } else {
-                    return IssueQuery();
+                    return IssueQuery(actorSystem);
                 }
-                Release(actorSystem);
+                delete this;
             }
 
-            void Release(TActorSystem* /*actorSystem*/) override {
+            void Release(TActorSystem *actorSystem) override {
+                actorSystem->Send(Sender, new TEvWriteMetadataResult(EPDiskMetadataOutcome::ERROR, std::nullopt));
                 delete this;
             }
         };
@@ -188,6 +191,7 @@ namespace NKikimr::NPDisk {
 
         class TCompletionWriteUnformattedMetadata : public TCompletionAction {
             TPDisk* const PDisk;
+            const TActorId Sender;
             const TMetadataFormatSector Format;
             TRcBuf Payload;
             const TMainKey MainKey;
@@ -195,9 +199,10 @@ namespace NKikimr::NPDisk {
             ui32 BadSectors = 0;
 
         public:
-            TCompletionWriteUnformattedMetadata(TPDisk *pdisk, const TMetadataFormatSector& format, TRcBuf&& payload,
-                    const TMainKey& mainKey)
+            TCompletionWriteUnformattedMetadata(TPDisk *pdisk, TActorId sender, const TMetadataFormatSector& format,
+                    TRcBuf&& payload, const TMainKey& mainKey)
                 : PDisk(pdisk)
+                , Sender(sender)
                 , Format(format)
                 , Payload(std::move(payload))
                 , MainKey(mainKey)
@@ -246,12 +251,13 @@ namespace NKikimr::NPDisk {
                 }
             }
 
-            void Release(TActorSystem* /*actorSystem*/) override {
+            void Release(TActorSystem *actorSystem) override {
+                actorSystem->Send(Sender, new TEvWriteMetadataResult(EPDiskMetadataOutcome::ERROR, std::nullopt));
                 delete this;
             }
 
             void Finish(bool success) {
-                PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TWriteMetadataResult>(success));
+                PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TWriteMetadataResult>(success, Sender));
                 delete this;
             }
         };
@@ -585,7 +591,7 @@ namespace NKikimr::NPDisk {
                 }
 
                 // generate write queue
-                auto completion = std::make_unique<TCompletionWriteMetadata>(this);
+                auto completion = std::make_unique<TCompletionWriteMetadata>(this, write.Sender);
                 size_t offset = 0;
                 for (ui32 i = 0; i < numSlotsRequired; ++i, offset += slotSize) {
                     const NMeta::TSlotKey key = freeSlotKeys[i];
@@ -603,7 +609,7 @@ namespace NKikimr::NPDisk {
                     it->second = NMeta::ESlotState::BEING_WRITTEN;
                 }
 
-                completion.release()->IssueQuery();
+                completion.release()->IssueQuery(ActorSystem);
             },
             [&](NMeta::TUnformatted& unformatted) {
                 TMetadataFormatSector& fmt = unformatted.FormatInFlight;
@@ -641,7 +647,8 @@ namespace NKikimr::NPDisk {
                 fmt.Length = bytesToWrite;
                 fmt.SequenceNumber = Meta.NextSequenceNumber;
 
-                auto *completion = new TCompletionWriteUnformattedMetadata(this, fmt, std::move(payload), write.MainKey);
+                auto *completion = new TCompletionWriteUnformattedMetadata(this, write.Sender, fmt, std::move(payload),
+                    write.MainKey);
                 completion->IssueQuery();
             },
         }, Meta.State);
@@ -696,6 +703,12 @@ namespace NKikimr::NPDisk {
         Meta.Requests.pop_front();
 
         ProcessMetadataRequestQueue();
+    }
+
+    void TPDisk::DropAllMetadataRequests() {
+        for (auto& item : std::exchange(Meta.Requests, {})) {
+            TRequestBase::AbortDelete(item.release(), ActorSystem);
+        }
     }
 
     TRcBuf TPDisk::CreateMetadataPayload(TRcBuf& metadata, size_t offset, size_t payloadSize, ui32 sectorSize,

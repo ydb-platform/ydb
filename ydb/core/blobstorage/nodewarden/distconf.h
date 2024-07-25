@@ -220,7 +220,6 @@ namespace NKikimr::NStorage {
         std::deque<TAutoPtr<IEventHandle>> PendingEvents;
         std::vector<ui32> NodeIds;
         TNodeIdentifier SelfNode;
-        bool SelfBound = false;
 
         // scatter tasks
         ui64 NextScatterCookie = RandomNumber<ui64>();

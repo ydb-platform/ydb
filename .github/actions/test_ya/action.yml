@@ -261,12 +261,6 @@ runs:
 
         for RETRY in $(seq 1 $TEST_RETRY_COUNT)
         do
-          if [ $RETRY = $TEST_RETRY_COUNT ]; then
-            IS_LAST_RETRY=1
-          else
-            IS_LAST_RETRY=0
-          fi
-
           if [ $RETRY != 1 ]; then
             IS_RETRY=1
           else
@@ -300,6 +294,8 @@ runs:
             CURRENT_MESSAGE="Failed tests rerun (try $RETRY) $CURRENT_MESSAGE"
             RERUN_FAILED_OPT="-X"
           fi
+
+          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
           echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
           CURRENT_PUBLIC_DIR_RELATIVE=try_$RETRY
@@ -310,10 +306,15 @@ runs:
           set +ex
           (./ya make ${{ inputs.build_target }} "${params[@]}" \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.log"  \
-            --evlog-file "$PUBLIC_DIR/ya_evlog.jsonl" \
-            --junit "$CURRENT_JUNIT_XML_PATH" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& tee -a $YA_MAKE_OUTPUT
+            --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
+            --junit "$CURRENT_JUNIT_XML_PATH" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
           set -ex
           RC=`cat exit_code`
+
+          # convert to chromium trace
+          # seems analyze-make don't have simple "output" parameter, so change cwd
+          ya_dir=$(pwd)
+          (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl)
 
           if [ $RC -ne 0 ]; then
             echo "ya make returned $RC, build failed"
@@ -336,6 +337,22 @@ runs:
             --test_stuff_out "$CURRENT_PUBLIC_DIR_RELATIVE/test_artifacts/" \
             "$CURRENT_JUNIT_XML_PATH"
           cp $CURRENT_JUNIT_XML_PATH $LAST_JUNIT_REPORT_XML
+
+          TESTS_RESULT=0
+          .github/scripts/tests/fail-checker.py "$CURRENT_JUNIT_XML_PATH" --output_path $CURRENT_PUBLIC_DIR/failed_count.txt || TESTS_RESULT=$?
+          FAILED_TESTS_COUNT=$(cat $CURRENT_PUBLIC_DIR/failed_count.txt)
+
+          IS_LAST_RETRY=0
+
+          if [ $TESTS_RESULT = 0 ] || [ $RETRY = $TEST_RETRY_COUNT ]; then
+            IS_LAST_RETRY=1
+          fi
+
+          if [ $FAILED_TESTS_COUNT -gt 500 ]; then 
+            IS_LAST_RETRY=1
+            TOO_MANY_FAILED="Too many tests failed, NOT going to retry"
+            echo $TOO_MANY_FAILED | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --fail
+          fi
 
           if [ "${{ inputs.run_tests }}" = "true" ]; then
             GITHUB_TOKEN=${{ github.token }} .github/scripts/tests/generate-summary.py \
@@ -388,18 +405,7 @@ runs:
             echo "runid=" >> $GITHUB_OUTPUT
           fi
 
-          TESTS_RESULT=0
-          .github/scripts/tests/fail-checker.py "$CURRENT_JUNIT_XML_PATH" --output_path $CURRENT_PUBLIC_DIR/failed_count.txt || TESTS_RESULT=$?
-
-          FAILED_TESTS_COUNT=$(cat $CURRENT_PUBLIC_DIR/failed_count.txt)
-
-          if [ $FAILED_TESTS_COUNT -gt 500 ]; then 
-            TOO_MANY_FAILED="Too many tests failed, NOT going to retry"
-            echo $TOO_MANY_FAILED | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --fail
-            break
-          fi
-
-          if [ $TESTS_RESULT = 0 ]; then
+          if [ $IS_LAST_RETRY = 1 ]; then
             break
           fi
         done;
@@ -473,7 +479,7 @@ runs:
         echo "::group::s3-sync"
         .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/"
         echo "00 [Workflow artifacts](${S3_URL_PREFIX}/index.html)" >> $SUMMARY_LINKS
-        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"     
+        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
         echo "::endgroup::"
 

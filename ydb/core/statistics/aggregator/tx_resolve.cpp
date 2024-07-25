@@ -1,5 +1,6 @@
 #include "aggregator_impl.h"
 
+#include <ydb/core/base/hive.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
 namespace NKikimr::NStat {
@@ -34,29 +35,43 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
             return true;
         }
 
-        Self->ShardRanges.clear();
+        auto& partitioning = entry.KeyDescription->GetPartitions();
 
-        auto& partitioning = entry.KeyDescription->Partitioning;
-        for (auto& part : *partitioning) {
+        if (Self->IsColumnTable) {
+            Self->TabletsForReqDistribution.clear();
+        } else {
+            Self->ShardRanges.clear();
+        }
+
+        for (auto& part : partitioning) {
             if (!part.Range) {
                 continue;
             }
-            TRange range;
-            range.EndKey = part.Range->EndKeyPrefix;
-            range.DataShardId = part.ShardId;
-            Self->ShardRanges.push_back(range);
+            if (Self->IsColumnTable) {
+                Self->TabletsForReqDistribution.insert(part.ShardId);
+            } else {
+                TRange range;
+                range.EndKey = part.Range->EndKeyPrefix;
+                range.DataShardId = part.ShardId;
+                Self->ShardRanges.push_back(range);
+            }
         }
+
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext& ctx) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxResolve::Complete");
 
         if (Cancelled) {
             return;
         }
 
-        Self->NextRange();
+        if (Self->IsColumnTable) {
+            ctx.Send(Self->SelfId(), new TEvPrivate::TEvRequestDistribution);
+        } else {
+            Self->NextRange();
+        }
     }
 };
 

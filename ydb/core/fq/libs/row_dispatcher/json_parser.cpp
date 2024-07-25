@@ -21,6 +21,7 @@ namespace NFq {
 
 using TCallback = TJsonParser::TCallback;
 using TInputConsumerArg = std::pair<ui64, TString>;
+const char* OffsetFieldName = "_offset"; 
 
 static void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldType) {
     node.Add(
@@ -32,14 +33,14 @@ static void AddField(NYT::TNode& node, const TString& fieldName, const TString& 
 
 static NYT::TNode MakeInputSchema() {
     auto structMembers = NYT::TNode::CreateList();
-    AddField(structMembers, "offset", "Uint64");
+    AddField(structMembers, OffsetFieldName, "Uint64");
     AddField(structMembers, "data", "String");
     return NYT::TNode::CreateList().Add("StructType").Add(std::move(structMembers));
 }
 
 static NYT::TNode MakeOutputSchema(const TVector<TString>& columns) {
     auto structMembers = NYT::TNode::CreateList();
-    AddField(structMembers, "offset", "Uint64");
+    AddField(structMembers, OffsetFieldName, "Uint64");
     for (const auto& col : columns) {
         AddField(structMembers, col, "String");
     }
@@ -59,11 +60,7 @@ public:
     }
 
     void OnObject(std::pair<ui64, TString> value) override {
-        NMiniKQL::TThrowingBindTerminator bind;
-        LOG_ROW_DISPATCHER_DEBUG("TParserInputConsumer::OnObject: " << value.first);
-        LOG_ROW_DISPATCHER_DEBUG("TParserInputConsumer::OnObject: " << value.second);
-
-        std::cerr << "json " << value.second << std::endl;
+        NKikimr::NMiniKQL::TThrowingBindTerminator bind;
 
         with_lock (Worker->GetScopedAlloc()) {
             auto& holderFactory = Worker->GetGraph().GetHolderFactory();
@@ -78,18 +75,11 @@ public:
             NYql::NUdf::TStringValue str(value.second.Size());
             std::memcpy(str.Data(), value.second.Data(), value.second.Size());
             items[1] = NYql::NUdf::TUnboxedValuePod(std::move(str));
-            LOG_ROW_DISPATCHER_DEBUG("Push ");
-            try {
-                Worker->Push(std::move(result));
-            } catch (...) {
-                std::cerr << "catch " << std::endl;
-            }
-            LOG_ROW_DISPATCHER_DEBUG("Push end");
+            Worker->Push(std::move(result));
         }
     }
 
     void OnFinish() override {
-        std::cerr << "OnFinish " << std::endl;
         NKikimr::NMiniKQL::TBindTerminator bind(Worker->GetGraph().GetTerminator());
         with_lock(Worker->GetScopedAlloc()) {
             Worker->OnFinish();
@@ -118,38 +108,17 @@ private:
 };
 
 
-class TParserOutputConsumer: public NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*> {
+class TParserOutputConsumer: public NYql::NPureCalc::IConsumer<std::pair<ui64, TList<TString>>> {
 public:
     TParserOutputConsumer(TCallback callback)
         : Callback(callback) {
     }
 
-    void OnObject(const NYql::NUdf::TUnboxedValue* value) override {
-        // TString result;
-        // for (const auto& field : parsedRecord->AsMap()) {
-        //     result += field.second.AsString();
-        // }
-
-
-        TList<TString> result;
-        
-        ui64 offset = value->GetElement(0).Get<ui64>();
-        
-
-        for (size_t i = 1; i != value->GetListLength(); ++i) {
-            const auto& cell = value->GetElement(i);
-
-            NYql::NUdf::TStringRef strRef(cell.AsStringRef());
-            result.emplace_back(strRef.Data(), strRef.Size());
-        }
-        
-        Callback(offset, std::move(result));
+    void OnObject(std::pair<ui64, TList<TString>> value) override {
+        Callback(value.first, std::move(value.second));
     }
 
     void OnFinish() override {
-        std::cerr << "TParserOutputConsumer::OnFinish " << std::endl;
-
-
         Y_UNREACHABLE();
     }
 private:
@@ -171,65 +140,70 @@ private:
     NYT::TNode Schema;
 };
 
-// struct TFieldsMapping{
-//     THashMap<TString, size_t> FieldsPositions;
+struct TFieldsMapping{
+    TVector<size_t> FieldsPositions;
+    size_t OffsetPosition;
 
-//     TFieldsMapping(const NYT::TNode& schema) {
-//         const auto& fields = schema[1];
-//         assert(fields.IsList());
+    TFieldsMapping(const NYT::TNode& schema, const NKikimr::NMiniKQL::TType* outputType) {
+        THashMap<TString, size_t> outputPositions;
+        Y_ENSURE(outputType->IsStruct());
+        const auto structType = static_cast<const NKikimr::NMiniKQL::TStructType*>(outputType);
+        const auto nMembers = structType->GetMembersCount();
 
-//         for (size_t i = 0; i < fields.Size(); ++i) {
-//             auto name = fields[i][0].AsString();
-//             FieldsPositions[std::move(name)] = i;
-//         }
-//     }
+        for (ui32 i = 1; i < nMembers; ++i) {  // 0 index - OffsetFieldName
+            const auto name = structType->GetMemberName(i);
+            outputPositions[name] = i;
+        }
 
-//     size_t GetPosition(const TString& fieldName) const {
-//         return FieldsPositions.at(fieldName);
-//     }
-
-//     bool Has(const TString& fieldName) const {
-//         return FieldsPositions.contains(fieldName);
-//     }
-// };
+        const auto& fields = schema[1];
+        Y_ENSURE(fields.IsList());
+        Y_ENSURE(nMembers == fields.Size());
+        for (size_t i = 0; i < fields.Size(); ++i) {
+            auto name = fields[i][0].AsString();
+            if (name == OffsetFieldName) {
+                OffsetPosition = i;
+                continue;
+            }
+            FieldsPositions.push_back(outputPositions[name]);
+        }
+    }
+};
 
 class TParserPushRelayImpl: public NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*> {
 public:
-    TParserPushRelayImpl(const TParserOutputSpec& /*outputSpec*/, NYql::NPureCalc::IPushStreamWorker* worker, THolder<NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*>> underlying)
+    TParserPushRelayImpl(const TParserOutputSpec& outputSpec, NYql::NPureCalc::IPushStreamWorker* worker, THolder<NYql::NPureCalc::IConsumer<std::pair<ui64, TList<TString>>>> underlying)
         : Underlying(std::move(underlying))
         , Worker(worker)
-       // , FieldsMapping(outputSpec.GetSchema())
-    {}
-
-// void FillOutputNode(const NYql::NUdf::TUnboxedValue* source, NYT::TNode& destination, const TFieldsMapping& fieldsMapping) {
-//     for (const auto& field : fieldsMapping.FieldsPositions) {
-//         const auto& cell = source->GetElement(field.second);
-//         if (!cell) {
-//             continue;
-//         }
-//         destination[field.first] = TString(cell.AsStringRef());
-//     }
-// }
+        , FieldsMapping(outputSpec.GetSchema(), worker->GetOutputType())
+    { }
 
 public:
     void OnObject(const NYql::NUdf::TUnboxedValue* value) override {
-        NYT::TNode result = NYT::TNode::CreateMap();
-        //FillOutputNode(value, result, FieldsMapping);
         auto unguard = Unguard(Worker->GetScopedAlloc());
-        Underlying->OnObject(value);
+        TList<TString> result;
+        
+        Y_ENSURE(value->GetListLength() == FieldsMapping.FieldsPositions.size() + 1);
+        ui64 offset = value->GetElement(FieldsMapping.OffsetPosition).Get<ui64>();
+
+        for (auto pos : FieldsMapping.FieldsPositions) {
+            const auto& cell = value->GetElement(pos);
+
+            NYql::NUdf::TStringRef strRef(cell.AsStringRef());
+            result.emplace_back(strRef.Data(), strRef.Size());
+        }
+        
+        Underlying->OnObject(std::make_pair(offset, std::move(result)));
     }
 
     void OnFinish() override {
-        std::cerr << "TParserPushRelayImpl::OnFinish " << std::endl;
-
         auto unguard = Unguard(Worker->GetScopedAlloc());
         Underlying->OnFinish();
     }
 
 private:
-    THolder<NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*>> Underlying;
-    [[maybe_unused]]    NYql::NPureCalc::IWorker* Worker;
-  //  TFieldsMapping FieldsMapping;
+    THolder<NYql::NPureCalc::IConsumer<std::pair<ui64, TList<TString>>>> Underlying;
+    [[maybe_unused]] NYql::NPureCalc::IWorker* Worker;
+    TFieldsMapping FieldsMapping;
 };
 
 } // namespace NFq
@@ -258,7 +232,7 @@ struct NYql::NPureCalc::TOutputSpecTraits<NFq::TParserOutputSpec> {
     static const constexpr bool SupportPullListMode = false;
     static const constexpr bool SupportPushStreamMode = true;
 
-    static void SetConsumerToWorker(const NFq::TParserOutputSpec& outputSpec, NYql::NPureCalc::IPushStreamWorker* worker, THolder<NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*>> consumer) {
+    static void SetConsumerToWorker(const NFq::TParserOutputSpec& outputSpec, NYql::NPureCalc::IPushStreamWorker* worker, THolder<NYql::NPureCalc::IConsumer<std::pair<ui64, TList<TString>>>> consumer) {
         worker->SetConsumer(MakeHolder<NFq::TParserPushRelayImpl>(outputSpec, worker, std::move(consumer)));
     }
 };
@@ -297,25 +271,20 @@ public:
     }
 
     void Push( ui64 offset, const TString& value) {
-        try {
-            LOG_ROW_DISPATCHER_DEBUG("Push " << value);
-            InputConsumer->OnObject(std::make_pair(offset, value));
-        } catch (const yexception& ex) {
-                LOG_ROW_DISPATCHER_DEBUG("Push error");
-        }
+        LOG_ROW_DISPATCHER_DEBUG("Push " << value);
+        InputConsumer->OnObject(std::make_pair(offset, value));
     }
 
 private:
     TString GenerateSql(const TVector<TString>& columns) {
         TStringStream str;
-        str << R"($json = SELECT CAST(data AS Json) as `Json`, offset FROM Input;)"; 
-        str << "\nSELECT offset, ";
+        str << R"($json = SELECT CAST(data AS Json) as `Json`, )" << OffsetFieldName << " FROM Input;"; 
+        str << "\nSELECT " << OffsetFieldName << ", ";
         for (auto it = columns.begin(); it != columns.end(); ++it) {
             str << R"(CAST(Unwrap(JSON_VALUE(`Json`, "$.)" << *it << "\")) as String) as "
                 << *it << ((it != columns.end() - 1) ? "," : "");
         }
         str << " FROM $json;";
-        std::cerr << "GenerateSql" << str.Str() << std::endl;
         LOG_ROW_DISPATCHER_DEBUG("GenerateSql " << str.Str());
         return str.Str();
     }

@@ -15,39 +15,107 @@ namespace {
 using namespace NKikimr;
 using namespace NFq;
 
-struct TTestBootstrap : public NActors::TTestActorRuntime {
-    explicit TTestBootstrap()
-        : TTestActorRuntime(true)
-    {
+class TFixture : public NUnitTest::TBaseFixture {
+
+public:
+    TFixture()
+    : Runtime(true) {}
+
+    void SetUp(NUnitTest::TTestContext&) override {
+        std::cerr << "SetUp" << std::endl;
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
-        Initialize(app->Unwrap());
-        SetLogPriority(NKikimrServices::YQ_ROW_DISPATCHER, NLog::PRI_DEBUG);
+        Runtime.Initialize(app->Unwrap());
+        Runtime.SetLogPriority(NKikimrServices::YQ_ROW_DISPATCHER, NLog::PRI_DEBUG);
     }
+
+    void TearDown(NUnitTest::TTestContext& /* context */) override {
+        if (Parser) {
+            Parser.reset();
+        }
+        std::cerr << "TearDown" << std::endl;
+    }
+
+    void MakeParser(TVector<TString> columns, NFq::TJsonParser::TCallback callback) {
+        Parser = NFq::NewJsonParser(
+            "/home/kardymon-d/arcadia2/contrib/ydb/library/yql/udfs/",
+            columns,
+            callback);
+    }
+
     TActorSystemStub actorSystemStub;
+    NActors::TTestActorRuntime Runtime;
+    std::unique_ptr<NFq::TJsonParser> Parser;
 };
 
 Y_UNIT_TEST_SUITE(TRetryEventsQueueTest) {
-    Y_UNIT_TEST(Empty) { 
-
-        TTestBootstrap bootstrap; 
-        TVector<TString> columns{"time", "data"};
-
-        auto Parser = NFq::NewJsonParser(
-            "/home/kardymon-d/arcadia2/contrib/ydb/library/yql/udfs/",
-            columns,
-            [&](ui64 offset, TList<TString>&& value){
-                std::cerr << "offset " << offset << std::endl;
-                for (auto v: value) {
-                    std::cerr << "v " << v << std::endl;
-                }
-
+    Y_UNIT_TEST_F(Simple1, TFixture) { 
+        TList<TString> result;
+        ui64 resultOffset;
+        MakeParser({"a1", "a2"}, [&](ui64 offset, TList<TString>&& value){
+                resultOffset = offset;
+                result = std::move(value);
             });
-        std::cerr << "push " << std::endl;
-
-        Parser->Push(5, R"({"time": 101, "data": "hello1", "event": "event1"})");
-        std::cerr << "push end" << std::endl;
-
+        Parser->Push(5, R"({"a1": "hello1", "a2": "101",  "event": "event1"})");
+        UNIT_ASSERT_VALUES_EQUAL(5, resultOffset);
+        UNIT_ASSERT_VALUES_EQUAL(2, result.size());
+        UNIT_ASSERT_VALUES_EQUAL("hello1", result.front());
+        UNIT_ASSERT_VALUES_EQUAL("101", result.back());
     }
+
+    Y_UNIT_TEST_F(Simple2, TFixture) { 
+        TList<TString> result;
+        ui64 resultOffset;
+        MakeParser({"a2", "a1"}, [&](ui64 offset, TList<TString>&& value){
+                resultOffset = offset;
+                result = std::move(value);
+            });
+        Parser->Push(5, R"({"a1": "hello1", "a2": "101",  "event": "event1"})");
+        UNIT_ASSERT_VALUES_EQUAL(5, resultOffset);
+        UNIT_ASSERT_VALUES_EQUAL(2, result.size());
+        UNIT_ASSERT_VALUES_EQUAL("101", result.front());
+        UNIT_ASSERT_VALUES_EQUAL("hello1", result.back());
+    }
+
+    Y_UNIT_TEST_F(Simple3, TFixture) { 
+        TList<TString> result;
+        ui64 resultOffset;
+        MakeParser({"a1", "a2"}, [&](ui64 offset, TList<TString>&& value){
+                resultOffset = offset;
+                result = std::move(value);
+            });
+        Parser->Push(5, R"({"a2": "hello1", "a1": "101",  "event": "event1"})");
+        UNIT_ASSERT_VALUES_EQUAL(5, resultOffset);
+        UNIT_ASSERT_VALUES_EQUAL(2, result.size());
+        UNIT_ASSERT_VALUES_EQUAL("101", result.front());
+        UNIT_ASSERT_VALUES_EQUAL("hello1", result.back());
+    }
+
+    Y_UNIT_TEST_F(Simple4, TFixture) { 
+        TList<TString> result;
+        ui64 resultOffset;
+        MakeParser({"a2", "a1"}, [&](ui64 offset, TList<TString>&& value){
+                resultOffset = offset;
+                result = std::move(value);
+            });
+        Parser->Push(5, R"({"a2": "hello1", "a1": "101",  "event": "event1"})");
+        UNIT_ASSERT_VALUES_EQUAL(5, resultOffset);
+        UNIT_ASSERT_VALUES_EQUAL(2, result.size());
+        UNIT_ASSERT_VALUES_EQUAL("hello1", result.front());
+        UNIT_ASSERT_VALUES_EQUAL("101", result.back());
+    }
+
+    Y_UNIT_TEST_F(ThrowExceptionByError, TFixture) { 
+
+     
+        // try {
+        //     Parser->Push(5, R"({"a1": "hello1", "a2": "101",  "event": "event1"})");
+        // } catch (const yexception& ex) {
+        //     UNIT_ASSERT_C(false, ex.what());
+        // }
+    
+    }
+
+
 }
 
 }

@@ -331,6 +331,10 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
         return MaxMemorySize;
     };
 
+    TString MemoryConsumptionDetails() const override {
+        return TString();
+    }
+
     virtual bool AllocateExtraQuota(ui64) {
         return false;
     }

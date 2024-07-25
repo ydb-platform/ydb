@@ -11,6 +11,8 @@
 #include <util/datetime/base.h>
 #include <util/string/builder.h>
 
+#include "kqp_resource_estimation.h"
+
 #include <array>
 #include <bitset>
 #include <functional>
@@ -40,9 +42,130 @@ struct TKqpResourcesRequest {
     ui64 ExternalMemory = 0;
     bool ReleaseAllResources = false;
 
+    void MoveToFreeTier() {
+        ExternalMemory += Memory;
+        Memory = 0;
+    }
+
     TString ToString() const {
         return TStringBuilder() << "TKqpResourcesRequest{ MemoryPool: " << (ui32) MemoryPool << ", Memory: " << Memory
             << "ExternalMemory: " << ExternalMemory << " }";
+    }
+};
+
+class TTxState;
+
+class TTaskState : public TAtomicRefCount<TTaskState> {
+    friend TTxState;
+
+public:
+    const ui64 TaskId = 0;
+    const TInstant CreatedAt;
+    ui64 ScanQueryMemory = 0;
+    ui64 ExternalDataQueryMemory = 0;
+    ui64 ResourceBrokerTaskId = 0;
+    ui32 ExecutionUnits = 0;
+
+public:
+
+    // compute actor wants to release some memory.
+    // we distribute that memory across granted resources
+    TKqpResourcesRequest FitRequest(TKqpResourcesRequest& resources) {
+        ui64 releaseScanQueryMemory = std::min(ScanQueryMemory, resources.Memory);
+        ui64 leftToRelease = resources.Memory - releaseScanQueryMemory;
+        ui64 releaseExternalDataQueryMemory = std::min(ExternalDataQueryMemory, resources.ExternalMemory + leftToRelease);
+
+        resources.Memory = releaseScanQueryMemory;
+        resources.ExternalMemory = releaseExternalDataQueryMemory;
+        return resources;
+    }
+
+    TKqpResourcesRequest FreeResourcesRequest() const {
+        return TKqpResourcesRequest{
+            .ExecutionUnits=ExecutionUnits,
+            .MemoryPool=EKqpMemoryPool::Unspecified,
+            .Memory=ScanQueryMemory,
+            .ExternalMemory=ExternalDataQueryMemory};
+    }
+
+    explicit TTaskState(ui64 taskId, TInstant createdAt)
+        : TaskId(taskId)
+        , CreatedAt(createdAt)
+    {
+    }
+};
+
+class TTxState : public TAtomicRefCount<TTxState> {
+
+public:
+    const ui64 TxId;
+    const TInstant CreatedAt;
+    TIntrusivePtr<TKqpCounters> Counters;
+private:
+    std::atomic<ui64> TxScanQueryMemory = 0;
+    std::atomic<ui64> TxExternalDataQueryMemory = 0;
+    std::atomic<ui32> TxExecutionUnits = 0;
+
+public:
+    explicit TTxState(ui64 txId, TInstant now, TIntrusivePtr<TKqpCounters> counters)
+        : TxId(txId)
+        , CreatedAt(now)
+        , Counters(std::move(counters))
+    {}
+
+    TString ToString() const {
+        return TStringBuilder() << "TxResourcesInfo{ "
+            << "TxId: " << TxId
+            << ", memory initially granted resources: " << TxExternalDataQueryMemory.load()
+            << ", extra allocations " << TxScanQueryMemory.load()
+            << ", execution units: " << TxExecutionUnits.load()
+            << ", started at: " << CreatedAt
+            << " }";
+    }
+
+    ui64 GetExtraMemoryAllocatedSize() {
+        return TxScanQueryMemory.load();
+    }
+
+    void Released(TIntrusivePtr<TTaskState>& taskState, const TKqpResourcesRequest& resources) {
+        if (resources.ExecutionUnits) {
+            Counters->RmOnCompleteFree->Inc();
+        } else {
+            Counters->RmExtraMemFree->Inc();
+        }
+
+        Counters->RmExternalMemory->Sub(resources.ExternalMemory);
+        TxExternalDataQueryMemory.fetch_sub(resources.ExternalMemory);
+        taskState->ExternalDataQueryMemory -= resources.ExternalMemory;
+
+        TxScanQueryMemory.fetch_sub(resources.Memory);
+        taskState->ScanQueryMemory -= resources.Memory;
+        Counters->RmMemory->Sub(resources.Memory);
+
+        TxExecutionUnits.fetch_sub(resources.ExecutionUnits);
+        taskState->ExecutionUnits -= resources.ExecutionUnits;
+        Counters->RmComputeActors->Sub(resources.ExecutionUnits);
+    }
+
+    void Allocated(TIntrusivePtr<TTaskState>& taskState, const TKqpResourcesRequest& resources) {
+        if (resources.ExecutionUnits > 0) {
+            Counters->RmOnStartAllocs->Inc();
+        }
+
+        Counters->RmExternalMemory->Add(resources.ExternalMemory);
+        TxExternalDataQueryMemory.fetch_add(resources.ExternalMemory);
+        taskState->ExternalDataQueryMemory += resources.ExternalMemory;
+
+        TxScanQueryMemory.fetch_add(resources.Memory);
+        taskState->ScanQueryMemory += resources.Memory;
+        Counters->RmMemory->Add(resources.Memory);
+        if (resources.Memory) {
+            Counters->RmExtraMemAllocs->Inc();
+        }
+
+        TxExecutionUnits.fetch_add(resources.ExecutionUnits);
+        taskState->ExecutionUnits += resources.ExecutionUnits;
+        Counters->RmComputeActors->Add(resources.ExecutionUnits);
     }
 };
 
@@ -51,7 +174,8 @@ struct TKqpRMAllocateResult {
     bool Success = true;
     NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason Status = NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR;
     TString FailReason;
-    ui64 TotalAllocatedQueryMemory = 0;
+    TIntrusivePtr<TTaskState> TaskInfo;
+    TIntrusivePtr<TTxState> TxInfo;
 
     NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason GetStatus() const {
         return Status;
@@ -83,20 +207,19 @@ class IKqpResourceManager : private TNonCopyable {
 public:
     virtual ~IKqpResourceManager() = default;
 
-    virtual TKqpRMAllocateResult AllocateResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
+    virtual const TIntrusivePtr<TKqpCounters>& GetCounters() const = 0;
 
-    using TResourcesAllocatedCallback = std::function<void(NActors::TActorSystem* as)>;
+    virtual TKqpRMAllocateResult AllocateResources(TIntrusivePtr<TTxState>& tx, TIntrusivePtr<TTaskState>& task, const TKqpResourcesRequest& resources) = 0;
 
-    virtual void FreeResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
-    virtual void FreeResources(ui64 txId, ui64 taskId) = 0;
+    virtual TTaskResourceEstimation EstimateTaskResources(const NYql::NDqProto::TDqTask& task, const ui32 tasksCount) = 0;
+    virtual void EstimateTaskResources(TTaskResourceEstimation& result, const ui32 tasksCount) = 0;
 
-    virtual void NotifyExternalResourcesAllocated(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
-
+    virtual void FreeResources(TIntrusivePtr<TTxState>& tx, TIntrusivePtr<TTaskState>& task, const TKqpResourcesRequest& resources) = 0;
+    virtual void FreeResources(TIntrusivePtr<TTxState>& tx, TIntrusivePtr<TTaskState>& task) = 0;
     virtual void RequestClusterResourcesInfo(TOnResourcesSnapshotCallback&& callback) = 0;
 
     virtual TVector<NKikimrKqp::TKqpNodeResources> GetClusterResources() const = 0;
     virtual TKqpLocalNodeResources GetLocalResources() const = 0;
-    virtual NKikimrConfig::TTableServiceConfig::TResourceManager GetConfig() = 0;
 
     virtual std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetPatternCache() = 0;
 
@@ -142,7 +265,8 @@ struct TKqpProxySharedResources {
 
 NActors::IActor* CreateKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
     TIntrusivePtr<TKqpCounters> counters, NActors::TActorId resourceBroker = {},
-    std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources = nullptr);
+    std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources = nullptr,
+    ui32 nodeId = 0);
 
 std::shared_ptr<NRm::IKqpResourceManager> GetKqpResourceManager(TMaybe<ui32> nodeId = Nothing());
 std::shared_ptr<NRm::IKqpResourceManager> TryGetKqpResourceManager(TMaybe<ui32> nodeId = Nothing());

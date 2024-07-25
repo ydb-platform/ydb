@@ -64,6 +64,8 @@ public:
         const ui64 OutputChunkMaxSize = 0;
         const TGUCSettings::TPtr GUCSettings;
         const bool MayRunTasksLocally = false;
+        const std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager>& ResourceManager_;
+        const std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory>& CaFactory_;
     };
 
     TKqpPlanner(TKqpPlanner::TArgs&& args);
@@ -83,7 +85,7 @@ public:
 private:
 
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const;
-    void ExecuteDataComputeTask(ui64 taskId, bool shareMailbox, bool optimizeProtoForLocalExecution);
+    TString ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize);
     void PrepareToProcess();
     TString GetEstimationsInfo() const;
 
@@ -128,6 +130,10 @@ private:
     const ui64 OutputChunkMaxSize;
     const TGUCSettings::TPtr GUCSettings;
     const bool MayRunTasksLocally;
+    TString SerializedGUCSettings;
+    std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
+    std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
+    TIntrusivePtr<NRm::TTxState> TxInfo;
 
 public:
     static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error

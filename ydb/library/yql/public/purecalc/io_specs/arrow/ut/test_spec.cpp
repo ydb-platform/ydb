@@ -177,7 +177,7 @@ Y_UNIT_TEST_SUITE(TestSimplePullListArrowIO) {
             const auto canonOutput = CanonBatches(output);
             UNIT_ASSERT_EQUAL(canonInput, canonOutput);
         } catch (const TCompileError& error) {
-            Cerr << error.GetIssues() << "\n";
+            UNIT_FAIL(error.GetIssues());
         }
     }
 
@@ -221,7 +221,7 @@ Y_UNIT_TEST_SUITE(TestSimplePullListArrowIO) {
             const auto canonOutput = CanonBatches(output);
             UNIT_ASSERT_EQUAL(canonInputs, canonOutput);
         } catch (const TCompileError& error) {
-            Cerr << error.GetIssues() << "\n";
+            UNIT_FAIL(error.GetIssues());
         }
     }
 }
@@ -262,7 +262,7 @@ Y_UNIT_TEST_SUITE(TestMorePullListArrowIO) {
             const auto canonCheck = CanonBatches(check);
             UNIT_ASSERT_EQUAL(canonCheck, canonOutput);
         } catch (const TCompileError& error) {
-            Cerr << error.GetIssues() << "\n";
+            UNIT_FAIL(error.GetIssues());
         }
     }
 }
@@ -298,7 +298,7 @@ Y_UNIT_TEST_SUITE(TestSimplePullStreamArrowIO) {
             const auto canonOutput = CanonBatches(output);
             UNIT_ASSERT_EQUAL(canonInput, canonOutput);
         } catch (const TCompileError& error) {
-            Cerr << error.GetIssues() << "\n";
+            UNIT_FAIL(error.GetIssues());
         }
     }
 }
@@ -339,7 +339,7 @@ Y_UNIT_TEST_SUITE(TestMorePullStreamArrowIO) {
             const auto canonCheck = CanonBatches(check);
             UNIT_ASSERT_EQUAL(canonCheck, canonOutput);
         } catch (const TCompileError& error) {
-            Cerr << error.GetIssues() << "\n";
+            UNIT_FAIL(error.GetIssues());
         }
     }
 }
@@ -374,7 +374,7 @@ Y_UNIT_TEST_SUITE(TestPushStreamArrowIO) {
             const auto canonOutput = CanonBatches(output);
             UNIT_ASSERT_EQUAL(canonInput, canonOutput);
         } catch (const TCompileError& error) {
-            Cerr << error.GetIssues() << "\n";
+            UNIT_FAIL(error.GetIssues());
         }
     }
 }
@@ -413,7 +413,7 @@ Y_UNIT_TEST_SUITE(TestMorePushStreamArrowIO) {
             const auto canonCheck = CanonBatches(check);
             UNIT_ASSERT_EQUAL(canonCheck, canonOutput);
         } catch (const TCompileError& error) {
-            Cerr << error.GetIssues() << "\n";
+            UNIT_FAIL(error.GetIssues());
         }
     }
 }

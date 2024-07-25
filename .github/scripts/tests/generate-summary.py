@@ -152,10 +152,6 @@ class TestSummary:
         self.is_failed |= line.is_failed
         self.lines.append(line)
 
-    @property
-    def is_empty(self):
-        return len(self.lines) == 0
-
     def render_line(self, items):
         return f"| {' | '.join(items)} |"
 
@@ -262,11 +258,8 @@ def write_summary(summary: TestSummary):
     else:
         fp = sys.stdout
 
-    if summary.is_empty:
-        fp.write(f"Test run completed, no test results found")
-    else:
-        for line in summary.render(add_footnote=True):
-            fp.write(f"{line}\n")
+    for line in summary.render(add_footnote=True):
+        fp.write(f"{line}\n")
 
     fp.write("\n")
 
@@ -300,12 +293,7 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool):
 
 def get_comment_text(pr: PullRequest, summary: TestSummary, summary_links: str, is_last_retry: bool)->tuple[str, list[str]]:
     color = "red"
-    if summary.is_empty:
-        color = "green"
-        return color, [
-            f"Test run completed, no test results found for commit {pr.head.sha}. "
-        ]
-    elif summary.is_failed:
+    if summary.is_failed:
         color = "red" if is_last_retry else "yellow"
         result = f"Some tests failed, follow the links below."
         if not is_last_retry:

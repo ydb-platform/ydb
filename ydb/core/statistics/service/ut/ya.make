@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/statistics)
+UNITTEST_FOR(ydb/core/statistics/service)
 
 FORK_SUBTESTS()
 
@@ -17,15 +17,13 @@ PEERDIR(
     library/cpp/testing/unittest
     ydb/core/protos
     ydb/core/testlib/default
+    ydb/core/statistics/ut_common
 )
 
 SRCS(
-    ut_common.h
-    ut_common.cpp
-    ut_aggregator.cpp
-    ut_statistics.cpp
-    ut_database.cpp
-    #ut_service.cpp
+    ut_basic_statistics.cpp
+    ut_service.cpp
 )
 
 END()
+

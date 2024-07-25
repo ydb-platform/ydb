@@ -276,9 +276,6 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool):
         for fn, suite, case in iter_xml_files(path):
             test_result = TestResult.from_junit(case)
             summary_line.add(test_result)
-
-        if not summary_line.tests:
-            continue
         
         if os.path.isabs(html_fn):
             html_fn = os.path.relpath(html_fn, public_dir)

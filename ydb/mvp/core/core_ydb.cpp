@@ -57,8 +57,6 @@ NYdb::NScheme::TSchemeClient TYdbLocation::GetSchemeClient(const TRequest& reque
     if (authToken) {
         clientSettings.AuthToken(authToken);
     }
-    TYdbLocation::GetDatabaseName(request);
-
     TString database = TYdbLocation::GetDatabaseName(request);
     if (database) {
         clientSettings.Database(database);

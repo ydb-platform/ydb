@@ -3017,7 +3017,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     {}
 
     template<class TRow>
-    void AddBuildColumnInfo(const TRow& row){
+    void AddBuildColumnInfo(const TRow& row) {
         TString columnName = row.template GetValue<Schema::BuildColumnOperationSettings::ColumnName>();
         TString defaultFromLiteral = row.template GetValue<Schema::BuildColumnOperationSettings::DefaultFromLiteral>();
         bool notNull = row.template GetValue<Schema::BuildColumnOperationSettings::NotNull>();

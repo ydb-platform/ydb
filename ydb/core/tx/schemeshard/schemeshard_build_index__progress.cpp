@@ -138,7 +138,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> ApplyPropose(
         indexBuild.SetIndexName(buildInfo->IndexName);
     }
 
-    indexBuild.SetSnaphotTxId(ui64(buildInfo->InitiateTxId));
+    indexBuild.SetSnapshotTxId(ui64(buildInfo->InitiateTxId));
     indexBuild.SetBuildIndexId(ui64(buildInfo->Id));
 
     return propose;
@@ -182,7 +182,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CancelPropose(
     auto& indexBuild = *modifyScheme.MutableCancelIndexBuild();
     indexBuild.SetTablePath(TPath::Init(buildInfo->TablePathId, ss).PathString());
     indexBuild.SetIndexName(buildInfo->IndexName);
-    indexBuild.SetSnaphotTxId(ui64(buildInfo->InitiateTxId));
+    indexBuild.SetSnapshotTxId(ui64(buildInfo->InitiateTxId));
     indexBuild.SetBuildIndexId(ui64(buildInfo->Id));
 
     return propose;
@@ -256,11 +256,10 @@ public:
                 // TODO add vector index filling
                 if (buildInfo->IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
                     ChangeState(BuildId, TIndexBuildInfo::EState::Applying);
-                    Progress(BuildId);
-                    break;
+                } else {
+                    ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
                 }
 
-                ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
                 Progress(BuildId);
             }
 

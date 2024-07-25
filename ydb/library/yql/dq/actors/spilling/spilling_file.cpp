@@ -13,6 +13,9 @@
 #include <util/folder/path.h>
 #include <util/stream/file.h>
 #include <util/thread/pool.h>
+#include <util/generic/guid.h>
+#include <util/folder/iterator.h>
+#include <util/generic/vector.h>
 
 namespace NYql::NDq {
 
@@ -206,9 +209,39 @@ public:
 
     void Bootstrap() {
         Root_ = Config_.Root;
-        Root_ /= (TStringBuilder() << "node_" << SelfId().NodeId());
+        const auto root = Root_;
+        
+        const auto nodeIdString = ToString(SelfId().NodeId());
+        const auto guidString = TGUID::Create().AsGuidString();
+
+        Root_ /= (TStringBuilder() << "node_" << nodeIdString << "_" << guidString);
+        Cerr << "Root from config: " << Config_.Root << ", Root_: " << Root_ << "\n";
 
         LOG_I("Init DQ local file spilling service at " << Root_ << ", actor: " << SelfId());
+
+        {
+            Cerr << "Traverse:\n";
+            TDirIterator iter(root, TDirIterator::TOptions().SetMaxLevel(1));
+            TVector<TString> old_tmps;
+            for (const auto &dir_entry : iter) {
+                if (dir_entry.fts_info == FTS_DP) {
+                    // skip postorder visit
+                    continue;
+                }
+                TString dir_name = dir_entry.fts_name;
+                TVector<TString> parts;
+                StringSplitter(dir_name).Split('_').Collect(&parts);
+                
+                if (parts.size() == 3 && parts[0] == "node" && parts[1] == nodeIdString && parts[2] != guidString) {
+                    Cerr << "Found old temporary at '" << (root / dir_name) << "'\n";
+                    old_tmps.emplace_back(std::move(dir_name));
+                }
+            }
+
+            ForEach(old_tmps.begin(), old_tmps.end(), [&root](const auto& dir_name) {
+                (root / dir_name).ForceDelete();
+            });
+        }
 
         try {
             if (Root_.IsSymlink()) {

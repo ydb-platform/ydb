@@ -80,11 +80,11 @@ public:
             TActorSetupCmd(resman, TMailboxType::Simple, 0));
 
         if (withSpilling) {
-            char tempDir[MAX_PATH];
-            if (MakeTempDir(tempDir, nullptr) != 0)
-                ythrow yexception() << "LocalServiceHolder: Can't create temporary directory " << tempDir;
+            const char * tempDir = "/tmp/spilling-service-tmp";
 
-            auto spillingActor = NDq::CreateDqLocalFileSpillingService(NDq::TFileSpillingServiceConfig{.Root = tempDir, .CleanupOnShutdown = true}, MakeIntrusive<NDq::TSpillingCounters>(lwmGroup));
+            MakeDirIfNotExist(tempDir);
+
+            auto spillingActor = NDq::CreateDqLocalFileSpillingService(NDq::TFileSpillingServiceConfig{.Root = tempDir, .CleanupOnShutdown = false}, MakeIntrusive<NDq::TSpillingCounters>(lwmGroup));
 
             ServiceNode->AddLocalService(
                 NDq::MakeDqLocalFileSpillingServiceID(nodeId),

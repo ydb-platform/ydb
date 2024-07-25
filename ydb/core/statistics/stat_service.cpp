@@ -1421,22 +1421,24 @@ private:
 
         } else if (method == HTTP_METHOD_GET) {
             auto& params = request.GetParams();
-            auto itAction = params.find("action");
-            if (itAction == params.end()) {
-                Send(ev->Sender, new NMon::TEvHttpInfoRes("'action' parameter is required"));
+            if (!params.empty()) {
+                auto itAction = params.find("action");
+                if (itAction == params.end()) {
+                    Send(ev->Sender, new NMon::TEvHttpInfoRes("'action' parameter is required"));
+                    return;
+                }
+                if (itAction->second != "status") {
+                    Send(ev->Sender, new NMon::TEvHttpInfoRes("Unknown 'action' parameter"));
+                    return;
+                }
+                auto itPath = params.find("path");
+                if (itPath == params.end()) {
+                    Send(ev->Sender, new NMon::TEvHttpInfoRes("'path' parameter is required"));
+                    return;
+                }
+                Register(new THttpRequest(THttpRequest::EType::STATUS, itPath->second, ev->Sender));
                 return;
             }
-            if (itAction->second != "status") {
-                Send(ev->Sender, new NMon::TEvHttpInfoRes("Unknown 'action' parameter"));
-                return;
-            }
-            auto itPath = params.find("path");
-            if (itPath == params.end()) {
-                Send(ev->Sender, new NMon::TEvHttpInfoRes("'path' parameter is required"));
-                return;
-            }
-            Register(new THttpRequest(THttpRequest::EType::STATUS, itPath->second, ev->Sender));
-            return;
         }
 
         TStringStream str;

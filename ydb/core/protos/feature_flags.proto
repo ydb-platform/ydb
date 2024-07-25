@@ -144,4 +144,5 @@ message TFeatureFlags {
     optional bool EnableResourcePools  = 129 [default = false];
     optional bool EnableColumnStatistics = 130 [default = false];
     optional bool EnableSingleCompositeActionGroup = 131 [default = false];
+    optional bool EnableChangefeedsOnIndexTables = 134 [default = false];
 }

@@ -18,4 +18,7 @@ enum ETxTypes {
     TXTYPE_SAVE_QUERY_RESPONSE = 8 [(TxTypeOpts) = {Name: "TxSaveQueryResponse"}];
     TXTYPE_SCHEDULE_SCAN = 9       [(TxTypeOpts) = {Name: "TxScheduleScan"}];
     TXTYPE_DELETE_QUERY_RESPONSE = 10 [(TxTypeOpts) = {Name: "TxDeleteQueryResponse"}];
+    TXTYPE_AGGR_STAT_RESPONSE = 11 [(TxTypeOpts) = {Name: "TxAggregateStatisticsResponse"}];
+    TXTYPE_RESPONSE_TABLET_DISTRIBUTION = 12 [(TxTypeOpts) = {Name: "TxResponseTabletDistribution"}];
+    TXTYPE_ACK_TIMEOUT = 13        [(TxTypeOpts) = {Name: "TxAckTimeout"}];
 }

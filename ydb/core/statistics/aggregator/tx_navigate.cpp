@@ -58,6 +58,15 @@ struct TStatisticsAggregator::TTxNavigate : public TTxBase {
             Self->PersistStartKey(db);
         }
 
+        if (Self->IsColumnTable) {
+            // TODO: serverless case
+            if (entry.DomainInfo->Params.HasHive()) {
+                Self->HiveId = entry.DomainInfo->Params.GetHive();
+            } else {
+                Self->HiveId = AppData()->DomainsInfo->GetHive();
+            }
+        }
+
         return true;
     }
 

@@ -1,6 +1,6 @@
 # CREATE ASYNC REPLICATION
 
-Вызов `CREATE ASYNC REPLICATION` создает объект [асинхронной репликации](../../../concepts/async-replication.md).
+Вызов `CREATE ASYNC REPLICATION` создает экземпляр [асинхронной репликации](../../../concepts/async-replication.md).
 
 ## Синтаксис {#syntax}
 
@@ -11,7 +11,7 @@ WITH (option = value [, ...])
 ```
 
 где:
-* `name` — имя объекта асинхронной репликации.
+* `name` — имя экземпляра асинхронной репликации.
 * `remote_path` — относительный или абсолютный путь до исходной таблицы или директории в базе-источнике.
 * `local_path` — относительный или абсолютный путь до целевой таблицы или директории в текущей базе.
 * `WITH (option = value [, ...])` — [параметры](#params) асинхронной репликации.
@@ -28,13 +28,13 @@ WITH (option = value [, ...])
 
 ## Примеры {#examples}
 
-{% note info %}
+{% note tip %}
 
-Перед созданием объекта асинхронной репликации [создайте](create-object-type-secret.md) или убедитесь в существовании секрета с аутентификационными данными для подключения.
+Перед созданием экземпляра асинхронной репликации [создайте](create-object-type-secret.md) секрет с аутентификационными данными для подключения или убедитесь в его существовании и наличии доступа к нему.
 
 {% endnote %}
 
-Создание асинхронной репликации для таблицы `table` из базы `/Root/another_database` в текущую базу в таблицу `replica_table`:
+Создание экземпляра асинхронной репликации для таблицы `table` из базы `/Root/another_database` в текущую базу в таблицу `replica_table`:
 
 ```sql
 CREATE ASYNC REPLICATION `my_replication_for_single_table`
@@ -47,7 +47,7 @@ WITH (
 
 Для подключения к базе `/Root/another_database` используется [эндпоинт](../../../concepts/connect.md#endpoint) `grpcs://example.com:2135`, а для аутентификации — токен из секрета `my_secret`.
 
-Создание асинхронной репликации для таблиц `table1` и `table2`:
+Создание экземпляра асинхронной репликации для таблиц `table1` и `table2`:
 
 ```sql
 CREATE ASYNC REPLICATION `my_replication_for_multiple_tables`
@@ -58,7 +58,7 @@ WITH (
 );
 ```
 
-Создание асинхронной репликации для содержимого директории `dir`:
+Создание экземпляра асинхронной репликации для содержимого директории `dir`:
 
 ```sql
 CREATE ASYNC REPLICATION `my_replication_for_dir`
@@ -69,7 +69,7 @@ WITH (
 );
 ```
 
-Создание асинхронной репликации для содержимого базы `/Root/another_database`:
+Создание экземпляра асинхронной репликации для содержимого базы `/Root/another_database`:
 
 ```sql
 CREATE ASYNC REPLICATION `my_replication_for_database`

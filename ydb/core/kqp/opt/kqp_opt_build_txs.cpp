@@ -830,6 +830,10 @@ private:
                     auto input = stage.Inputs().Item(i);
                     if (auto maybeConn = input.Maybe<TDqConnection>()) {
                         auto conn = maybeConn.Cast();
+                        if (!conn.Maybe<TDqCnValue>() && !conn.Maybe<TDqCnUnionAll>()) {
+                            continue;
+                        }
+
                         if (phaseStagesMap.contains(conn.Output().Stage().Raw())) {
                             auto oldArg = stage.Program().Args().Arg(i);
                             auto newArg = Build<TCoArgument>(ctx, stage.Program().Args().Arg(i).Pos())

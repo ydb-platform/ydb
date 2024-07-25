@@ -4,6 +4,7 @@
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
 
 #include "yql_s3_settings.h"
 

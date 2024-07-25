@@ -8,6 +8,7 @@
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
 
 namespace NKikimr::NKqp {
 
@@ -18,6 +19,7 @@ namespace NKikimr::NKqp {
         NYql::IDatabaseAsyncResolver::TPtr DatabaseAsyncResolver;
         NYql::TS3GatewayConfig S3GatewayConfig;
         NYql::TGenericGatewayConfig GenericGatewayConfig;
+        NYql::NDq::TS3ReadActorFactoryConfig S3ReadActorFactoryConfig;
     };
 
     struct IKqpFederatedQuerySetupFactory {
@@ -51,6 +53,7 @@ namespace NKikimr::NKqp {
         NYql::NConnector::IClient::TPtr ConnectorClient;
         std::optional<NActors::TActorId> DatabaseResolverActorId;
         NYql::IMdbEndpointGenerator::TPtr MdbEndpointGenerator;
+        NYql::NDq::TS3ReadActorFactoryConfig S3ReadActorFactoryConfig;
     };
 
     struct TKqpFederatedQuerySetupFactoryMock: public IKqpFederatedQuerySetupFactory {
@@ -74,7 +77,7 @@ namespace NKikimr::NKqp {
 
         std::optional<TKqpFederatedQuerySetup> Make(NActors::TActorSystem*) override {
             return TKqpFederatedQuerySetup{
-                HttpGateway, ConnectorClient, CredentialsFactory, DatabaseAsyncResolver, S3GatewayConfig, GenericGatewayConfig};
+                HttpGateway, ConnectorClient, CredentialsFactory, DatabaseAsyncResolver, S3GatewayConfig, GenericGatewayConfig, S3ReadActorFactoryConfig};
         }
 
     private:
@@ -84,6 +87,7 @@ namespace NKikimr::NKqp {
         NYql::IDatabaseAsyncResolver::TPtr DatabaseAsyncResolver;
         NYql::TS3GatewayConfig S3GatewayConfig;
         NYql::TGenericGatewayConfig GenericGatewayConfig;
+        NYql::NDq::TS3ReadActorFactoryConfig S3ReadActorFactoryConfig;
     };
 
     IKqpFederatedQuerySetupFactory::TPtr MakeKqpFederatedQuerySetupFactory(

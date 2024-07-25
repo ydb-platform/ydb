@@ -310,10 +310,15 @@ runs:
           set +ex
           (./ya make ${{ inputs.build_target }} "${params[@]}" \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.log"  \
-            --evlog-file "$PUBLIC_DIR/ya_evlog.jsonl" \
+            --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
             --junit "$CURRENT_JUNIT_XML_PATH" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& tee -a $YA_MAKE_OUTPUT
           set -ex
           RC=`cat exit_code`
+
+          # convert to chromium trace
+          # seems analyze-make don't have simple "output" parameter, so change cwd
+          ya_dir=$(pwd)
+          (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl)
 
           if [ $RC -ne 0 ]; then
             echo "ya make returned $RC, build failed"

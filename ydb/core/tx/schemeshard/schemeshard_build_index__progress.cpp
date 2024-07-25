@@ -52,9 +52,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> InitiatePropose(
     if (buildInfo.IsBuildIndex()) {
         modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexBuild);
         modifyScheme.SetInternal(true);
-
         modifyScheme.SetWorkingDir(TPath::Init(buildInfo.DomainPathId, ss).PathString());
-
         modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
 
         buildInfo.SerializeToProto(ss, modifyScheme.MutableInitiateIndexBuild());
@@ -286,29 +284,6 @@ public:
                 InitiateShards(db, buildInfo);
             }
 
-            if (buildInfo.ToUploadShards.empty()
-                && buildInfo.DoneShardsSize == 0
-                && buildInfo.InProgressShards.empty())
-            {
-                for (const auto& item: buildInfo.Shards) {
-                    const TIndexBuildInfo::TShardStatus& shardStatus = item.second;
-                    switch (shardStatus.Status) {
-                    case NKikimrTxDataShard::TEvBuildIndexProgressResponse::INVALID:
-                    case NKikimrTxDataShard::TEvBuildIndexProgressResponse::ACCEPTED:
-                    case NKikimrTxDataShard::TEvBuildIndexProgressResponse::INPROGRESS:
-                    case NKikimrTxDataShard::TEvBuildIndexProgressResponse::ABORTED:
-                        buildInfo.ToUploadShards.push_back(item.first);
-                        break;
-                    case NKikimrTxDataShard::TEvBuildIndexProgressResponse::DONE:
-                        ++buildInfo.DoneShardsSize;
-                        break;
-                    case NKikimrTxDataShard::TEvBuildIndexProgressResponse::BUILD_ERROR:
-                    case NKikimrTxDataShard::TEvBuildIndexProgressResponse::BAD_REQUEST:
-                        Y_ABORT("Unreachable");
-                    }
-                }
-            }
-
             if (!buildInfo.SnapshotTxId || !buildInfo.SnapshotStep) {
                 Y_ABORT_UNLESS(Self->TablesWithSnapshots.contains(buildInfo.TablePathId));
                 Y_ABORT_UNLESS(Self->TablesWithSnapshots.at(buildInfo.TablePathId) == buildInfo.InitiateTxId);
@@ -317,14 +292,6 @@ public:
                 Y_ABORT_UNLESS(buildInfo.SnapshotTxId);
                 buildInfo.SnapshotStep = Self->SnapshotsStepIds.at(buildInfo.SnapshotTxId);
                 Y_ABORT_UNLESS(buildInfo.SnapshotStep);
-            }
-
-            if (buildInfo.ImplTablePath.Empty() && buildInfo.IsBuildIndex()) {
-                TPath implTable = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName).Dive(NTableIndex::ImplTable);
-                buildInfo.ImplTablePath = implTable.PathString();
-
-                TTableInfo::TPtr implTableInfo = Self->Tables.at(implTable.Base()->PathId);
-                buildInfo.ImplTableColumns = NTableIndex::ExtractInfo(implTableInfo);
             }
 
             while (!buildInfo.ToUploadShards.empty()
@@ -343,24 +310,24 @@ public:
                 ev->Record.SetOwnerId(buildInfo.TablePathId.OwnerId);
                 ev->Record.SetPathId(buildInfo.TablePathId.LocalPathId);
 
-                if (buildInfo.IsBuildColumn()) {
-                    ev->Record.SetTargetName(TPath::Init(buildInfo.TablePathId, Self).PathString());
-                } else if (buildInfo.IsBuildIndex()) {
-                    ev->Record.SetTargetName(buildInfo.ImplTablePath);
-                }
-
                 if (buildInfo.IsBuildIndex()) {
-                    THashSet<TString> columns = buildInfo.ImplTableColumns.Columns;
-                    for (const auto& x: buildInfo.ImplTableColumns.Keys) {
-                        *ev->Record.AddIndexColumns() = x;
-                        columns.erase(x);
-                    }
-                    for (const auto& x: columns) {
-                        *ev->Record.AddDataColumns() = x;
+                    *ev->Record.MutableIndexColumns() = {
+                        buildInfo.IndexColumns.begin(),
+                        buildInfo.IndexColumns.end()
+                    };
+                    *ev->Record.MutableDataColumns() = {
+                        buildInfo.DataColumns.begin(),
+                        buildInfo.DataColumns.end()
+                    };
+                    if (buildInfo.TargetName.empty()) {
+                        TPath implTable = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName).Dive(NTableIndex::ImplTable);
+                        buildInfo.TargetName = implTable.PathString();
                     }
                 } else if (buildInfo.IsBuildColumn()) {
                     buildInfo.SerializeToProto(Self, ev->Record.MutableColumnBuildSettings());
                 }
+
+                ev->Record.SetTargetName(buildInfo.TargetName);
 
                 TIndexBuildInfo::TShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
                 if (shardStatus.LastKeyAck) {
@@ -491,6 +458,10 @@ public:
     }
 
     void InitiateShards(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) {
+        Y_ASSERT(buildInfo.Shards.empty());
+        Y_ASSERT(buildInfo.ToUploadShards.empty());
+        Y_ASSERT(buildInfo.InProgressShards.empty());
+        Y_ASSERT(buildInfo.DoneShardsSize == 0);
         TTableInfo::TPtr table = Self->Tables.at(buildInfo.TablePathId);
 
         auto tableColumns = NTableIndex::ExtractInfo(table); // skip dropped columns
@@ -501,6 +472,23 @@ public:
 
             buildInfo.Shards.emplace(x.ShardIdx, TIndexBuildInfo::TShardStatus(infiniteRange, ""));
             Self->PersistBuildIndexUploadInitiate(db, buildInfo, x.ShardIdx);
+        }
+        for (const auto& item: buildInfo.Shards) {
+            const TIndexBuildInfo::TShardStatus& shardStatus = item.second;
+            switch (shardStatus.Status) {
+            case NKikimrTxDataShard::TEvBuildIndexProgressResponse::INVALID:
+            case NKikimrTxDataShard::TEvBuildIndexProgressResponse::ACCEPTED:
+            case NKikimrTxDataShard::TEvBuildIndexProgressResponse::INPROGRESS:
+            case NKikimrTxDataShard::TEvBuildIndexProgressResponse::ABORTED:
+                buildInfo.ToUploadShards.push_back(item.first);
+                break;
+            case NKikimrTxDataShard::TEvBuildIndexProgressResponse::DONE:
+                ++buildInfo.DoneShardsSize;
+                break;
+            case NKikimrTxDataShard::TEvBuildIndexProgressResponse::BUILD_ERROR:
+            case NKikimrTxDataShard::TEvBuildIndexProgressResponse::BAD_REQUEST:
+                Y_ABORT("Unreachable");
+            }
         }
     }
 

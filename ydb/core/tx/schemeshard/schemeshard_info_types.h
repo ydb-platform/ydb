@@ -2927,8 +2927,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     TVector<TColumnBuildInfo> BuildColumns;
 
-    TString ImplTablePath;
-    NTableIndex::TTableColumns ImplTableColumns;
+    mutable TString TargetName;
     TVector<NKikimrSchemeOp::TTableDescription> ImplTableDescriptions;
 
     std::variant<std::monostate, NKikimrSchemeOp::TVectorIndexKmeansTreeDescription> SpecializedIndexDescription;

@@ -2122,17 +2122,20 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
     index.SetName(IndexName);
     index.SetType(IndexType);
 
-    for (const auto& x : IndexColumns) {
-        *index.AddKeyColumnNames() = x;
-    }
+    *index.MutableKeyColumnNames() = {
+        IndexColumns.begin(),
+        IndexColumns.end()
+    };
 
-    for (const auto& x : DataColumns) {
-        *index.AddDataColumnNames() = x;
-    }
+    *index.MutableDataColumnNames() = {
+        DataColumns.begin(),
+        DataColumns.end()
+    };
 
-    for (const auto& implTableDescription : ImplTableDescriptions) {
-        *index.AddIndexImplTableDescriptions() = implTableDescription;
-    }
+    *index.MutableIndexImplTableDescriptions() = {
+        ImplTableDescriptions.begin(),
+        ImplTableDescriptions.end()
+    };
 
     if (IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
         *index.MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
@@ -2141,7 +2144,10 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
 
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {
     Y_ABORT_UNLESS(IsBuildColumn());
-    result->SetTable(TPath::Init(TablePathId, ss).PathString());
+    if (TargetName.empty()) {
+        TargetName = TPath::Init(TablePathId, ss).PathString();
+    }
+    result->SetTable(TargetName);
     for(const auto& column : BuildColumns) {
         column.SerializeToProto(result->add_column());
     }

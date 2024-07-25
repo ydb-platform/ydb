@@ -10,6 +10,7 @@ PEERDIR(
     library/cpp/testing/unittest
     #ydb/core/testlib/actors
     ydb/core/testlib
+    ydb/library/yql/udfs/common/json2
 )
 
 SIZE(MEDIUM)

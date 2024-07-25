@@ -22,7 +22,6 @@ public:
     : Runtime(true) {}
 
     void SetUp(NUnitTest::TTestContext&) override {
-        std::cerr << "SetUp" << std::endl;
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Runtime.Initialize(app->Unwrap());
         Runtime.SetLogPriority(NKikimrServices::YQ_ROW_DISPATCHER, NLog::PRI_DEBUG);
@@ -32,12 +31,11 @@ public:
         if (Parser) {
             Parser.reset();
         }
-        std::cerr << "TearDown" << std::endl;
     }
 
     void MakeParser(TVector<TString> columns, NFq::TJsonParser::TCallback callback) {
         Parser = NFq::NewJsonParser(
-            "/home/kardymon-d/arcadia2/contrib/ydb/library/yql/udfs/",
+            "",
             columns,
             callback);
     }
@@ -106,13 +104,8 @@ Y_UNIT_TEST_SUITE(TRetryEventsQueueTest) {
 
     Y_UNIT_TEST_F(ThrowExceptionByError, TFixture) { 
 
-     
-        // try {
-        //     Parser->Push(5, R"({"a1": "hello1", "a2": "101",  "event": "event1"})");
-        // } catch (const yexception& ex) {
-        //     UNIT_ASSERT_C(false, ex.what());
-        // }
-    
+        MakeParser({"a2", "a1"}, [&](ui64, TList<TString>&&){ });
+        UNIT_ASSERT_EXCEPTION_CONTAINS(Parser->Push(5, R"(ydb)"), yexception, " Failed to unwrap empty optional");
     }
 
 

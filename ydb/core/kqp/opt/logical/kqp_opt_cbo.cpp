@@ -176,13 +176,13 @@ double TKqpProviderContext::ComputeJoinCost(const TOptimizerStatistics& leftStat
     
     switch(joinAlgo) {
         case EJoinAlgoType::LookupJoin:
-            if (OptLevel==1) {
+            if (OptLevel == 2) {
                 return -1;
             }
             return leftStats.Nrows + outputRows;
 
         case EJoinAlgoType::LookupJoinReverse:
-            if (OptLevel==1) {
+            if (OptLevel == 2) {
                 return -1;
             }
             return rightStats.Nrows + outputRows;

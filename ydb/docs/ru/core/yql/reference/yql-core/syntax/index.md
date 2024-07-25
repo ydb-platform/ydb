@@ -61,3 +61,8 @@
 * [ALTER TOPIC](alter-topic.md)
 * [DROP TOPIC](drop-topic.md)
 {% endif %}
+{% if feature_async_replication %}
+* [CREATE ASYNC REPLICATION](create-async-replication.md)
+* [ALTER ASYNC REPLICATION](alter-async-replication.md)
+* [DROP ASYNC REPLICATION](drop-async-replication.md)
+{% endif %}

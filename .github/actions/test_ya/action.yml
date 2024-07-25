@@ -342,14 +342,14 @@ runs:
           .github/scripts/tests/fail-checker.py "$CURRENT_JUNIT_XML_PATH" --output_path $CURRENT_PUBLIC_DIR/failed_count.txt || TESTS_RESULT=$?
           FAILED_TESTS_COUNT=$(cat $CURRENT_PUBLIC_DIR/failed_count.txt)
 
-          LAST_RETRY=0
+          IS_LAST_RETRY=0
 
           if [ $TESTS_RESULT = 0 ] || [ $RETRY = $TEST_RETRY_COUNT ]; then
-            LAST_RETRY=1
+            IS_LAST_RETRY=1
           fi
 
           if [ $FAILED_TESTS_COUNT -gt 500 ]; then 
-            LAST_RETRY=1
+            IS_LAST_RETRY=1
             TOO_MANY_FAILED="Too many tests failed, NOT going to retry"
             echo $TOO_MANY_FAILED | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --fail
           fi
@@ -405,7 +405,7 @@ runs:
             echo "runid=" >> $GITHUB_OUTPUT
           fi
 
-          if [ $LAST_RETRY = 1 ]; then
+          if [ $IS_LAST_RETRY = 1 ]; then
             break
           fi
         done;

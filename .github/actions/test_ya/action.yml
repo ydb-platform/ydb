@@ -179,8 +179,8 @@ runs:
 
         if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
           true
-          # params+=(--bazel-remote-store)
-          # params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
+          params+=(--bazel-remote-store)
+          params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
         fi
 
         if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then

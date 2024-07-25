@@ -640,7 +640,7 @@ public:
         case TIndexBuildInfo::EState::Filling:
         {
             // reschedule shard
-            if (buildInfo.InProgressShards.contains(shardIdx)) {
+            if (buildInfo.InProgressShards.erase(shardIdx)) {
                 buildInfo.ToUploadShards.push_front(shardIdx);
                 buildInfo.InProgressShards.erase(shardIdx);
 
@@ -775,8 +775,7 @@ public:
                 break;
 
             case  NKikimrTxDataShard::TEvBuildIndexProgressResponse::DONE:
-                if (buildInfo.InProgressShards.contains(shardIdx)) {
-                    buildInfo.InProgressShards.erase(shardIdx);
+                if (buildInfo.InProgressShards.erase(shardIdx)) {
                     buildInfo.DoneShards.emplace(shardIdx);
 
                     Self->IndexBuildPipes.Close(buildId, shardId, ctx);
@@ -787,9 +786,8 @@ public:
 
             case  NKikimrTxDataShard::TEvBuildIndexProgressResponse::ABORTED:
                 // datashard gracefully rebooted, reschedule shard
-                if (buildInfo.InProgressShards.contains(shardIdx)) {
+                if (buildInfo.InProgressShards.erase(shardIdx)) {
                     buildInfo.ToUploadShards.push_front(shardIdx);
-                    buildInfo.InProgressShards.erase(shardIdx);
 
                     Self->IndexBuildPipes.Close(buildId, shardId, ctx);
 

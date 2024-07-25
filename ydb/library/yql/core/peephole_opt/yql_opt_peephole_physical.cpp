@@ -5078,6 +5078,23 @@ TExprNode::TPtr DropUnusedArgs(const TExprNode& lambda, const std::vector<ui32>&
     return ctx.ChangeChild(*copy, 0U, ctx.NewArguments(copy->Head().Pos(), DropUnused(copy->Head().ChildrenList(), unused, skip)));
 }
 
+void DropUnusedRenames(TExprNode::TPtr& renames, const std::vector<ui32>& unused, TExprContext& ctx) {
+    TExprNode::TListType children;
+    children.reserve(renames->ChildrenSize());
+    for (auto i = 0U; i < renames->ChildrenSize() >> 1U; ++i) {
+        const auto idx = i << 1U;
+        const auto outIndex = renames->Child(1U + idx);
+        const auto oldOutPos = FromString<ui32>(outIndex->Content());
+        if (const auto iter = std::lower_bound(unused.cbegin(), unused.cend(), oldOutPos); unused.cend() == iter || *iter != oldOutPos) {
+            children.emplace_back(renames->ChildPtr(idx));
+            const auto newOutPos = oldOutPos - ui32(std::distance(unused.cbegin(), iter));
+            children.emplace_back(ctx.NewAtom(outIndex->Pos(), newOutPos));
+        }
+    }
+
+    renames = ctx.ChangeChildren(*renames, std::move(children));
+}
+
 TExprNode::TPtr DropUnusedStateFromUpdate(const TExprNode& lambda, const std::vector<ui32>& unused, TExprContext& ctx) {
     const auto& copy = ctx.DeepCopyLambda(lambda, DropUnused(GetLambdaBody(lambda), unused));
     return ctx.ChangeChild(*copy, 0U, ctx.NewArguments(copy->Head().Pos(), DropUnused(copy->Head().ChildrenList(), unused, lambda.Head().ChildrenSize() - lambda.ChildrenSize() + 1U)));
@@ -6472,6 +6489,17 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
                         .Add(1, DropUnusedArgs(node->Tail(), unusedState, ctx))
                     .Seal().Build();
             }
+        } else if (input.IsCallable({"GraceJoinCore", "GraceSelfJoinCore", "MapJoinCore"})) {
+            YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content() << " with " << unused.size() << " unused fields.";
+            auto children = input.ChildrenList();
+            const bool self = input.IsCallable("GraceSelfJoinCore");
+            DropUnusedRenames(children[5U], unused, ctx);
+            DropUnusedRenames(children[self ? 4U : 6U], unused, ctx);
+            return ctx.Builder(node->Pos())
+                .Callable(node->Content())
+                    .Add(0, ctx.ChangeChildren(input, std::move(children)))
+                    .Add(1, DropUnusedArgs(node->Tail(), unused, ctx))
+                .Seal().Build();
         } else if (node->IsCallable("WideMap") && input.IsCallable("ReplicateScalars")) {
             YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content();
             return SwapReplicateScalarsWithWideMap(node, ctx);

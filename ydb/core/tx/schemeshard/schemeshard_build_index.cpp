@@ -229,41 +229,25 @@ void TSchemeShard::Resume(const TDeque<TIndexBuildId>& indexIds, const TActorCon
 
 void TSchemeShard::SetupRouting(const TDeque<TIndexBuildId>& indexIds, const TActorContext &) {
     for (const auto& id : indexIds) {
-        if (!IndexBuilds.contains(id)) {
+        auto* buildInfoPtr = IndexBuilds.FindPtr(id);
+        if (!buildInfoPtr) {
             continue;
         }
+        Y_ASSERT(*buildInfoPtr);
+        auto& buildInfo = **buildInfoPtr;
 
-        auto buildInfo = IndexBuilds.at(id);
+        auto handle = [&] (auto txId) {
+            if (txId) {
+                auto [it, emplaced] = TxIdToIndexBuilds.try_emplace(txId, buildInfo.Id);
+                Y_ABORT_UNLESS(it->second == buildInfo.Id);
+            }
+        };
 
-        if (buildInfo->LockTxId) {
-            Y_ABORT_UNLESS(!TxIdToIndexBuilds.contains(buildInfo->LockTxId)
-                     || TxIdToIndexBuilds.at(buildInfo->LockTxId) == buildInfo->Id);
-            TxIdToIndexBuilds[buildInfo->LockTxId] = buildInfo->Id;
-        }
-
-        if (buildInfo->AlterMainTableTxId) {
-            Y_ABORT_UNLESS(!TxIdToIndexBuilds.contains(buildInfo->AlterMainTableTxId)
-                     || TxIdToIndexBuilds.at(buildInfo->AlterMainTableTxId) == buildInfo->Id);
-            TxIdToIndexBuilds[buildInfo->AlterMainTableTxId] = buildInfo->Id;
-        }
-
-        if (buildInfo->InitiateTxId) {
-            Y_ABORT_UNLESS(!TxIdToIndexBuilds.contains(buildInfo->InitiateTxId)
-                     || TxIdToIndexBuilds.at(buildInfo->InitiateTxId) == buildInfo->Id);
-            TxIdToIndexBuilds[buildInfo->InitiateTxId] = buildInfo->Id;
-        }
-
-        if (buildInfo->ApplyTxId) {
-            Y_ABORT_UNLESS(!TxIdToIndexBuilds.contains(buildInfo->ApplyTxId)
-                     || TxIdToIndexBuilds.at(buildInfo->ApplyTxId) == buildInfo->Id);
-            TxIdToIndexBuilds[buildInfo->ApplyTxId] = buildInfo->Id;
-        }
-
-        if (buildInfo->UnlockTxId) {
-            Y_ABORT_UNLESS(!TxIdToIndexBuilds.contains(buildInfo->UnlockTxId)
-                     || TxIdToIndexBuilds.at(buildInfo->UnlockTxId) == buildInfo->Id);
-            TxIdToIndexBuilds[buildInfo->UnlockTxId] = buildInfo->Id;
-        }
+        handle(buildInfo.AlterMainTableTxId);
+        handle(buildInfo.LockTxId);
+        handle(buildInfo.InitiateTxId);
+        handle(buildInfo.ApplyTxId);
+        handle(buildInfo.UnlockTxId);
     }
 }
 

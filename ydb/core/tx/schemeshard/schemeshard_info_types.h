@@ -3235,6 +3235,41 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
 };
 
+constexpr const char* Name(TIndexBuildInfo::EState state) noexcept {
+    switch (state) {
+    case TIndexBuildInfo::EState::Invalid:
+        return "Invalid";
+    case TIndexBuildInfo::EState::AlterMainTable:
+        return "AlterMainTable";
+    case TIndexBuildInfo::EState::Locking:
+        return "Locking";
+    case TIndexBuildInfo::EState::GatheringStatistics:
+        return "GatheringStatistics";
+    case TIndexBuildInfo::EState::Initiating:
+        return "Initiating";
+    case TIndexBuildInfo::EState::Filling:
+        return "Filling";
+    case TIndexBuildInfo::EState::Applying:
+        return "Applying";
+    case TIndexBuildInfo::EState::Unlocking:
+        return "Unlocking";
+    case TIndexBuildInfo::EState::Done:
+        return "Done";
+    case TIndexBuildInfo::EState::Cancellation_Applying:
+        return "Cancellation_Applying";
+    case TIndexBuildInfo::EState::Cancellation_Unlocking:
+        return "Cancellation_Unlocking";
+    case TIndexBuildInfo::EState::Cancelled:
+        return "Cancelled";
+    case TIndexBuildInfo::EState::Rejection_Applying:
+        return "Rejection_Applying";
+    case TIndexBuildInfo::EState::Rejection_Unlocking:
+        return "Rejection_Unlocking";
+    case TIndexBuildInfo::EState::Rejected:
+        return "Rejected";
+    }
+}
+
 struct TExternalTableInfo: TSimpleRefCount<TExternalTableInfo> {
     using TPtr = TIntrusivePtr<TExternalTableInfo>;
 

@@ -29,6 +29,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat
+    ydb/core/statistics/database
     ydb/library/minsketch
 )
 

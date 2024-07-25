@@ -4487,17 +4487,17 @@ void TPersQueue::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const T
 {
     auto& record = ev->Get()->Record;
     auto it = Partitions.find(TPartitionId(TPartitionId(record.GetPartition())));
-    if (it == Partitions.end()) {
+    if (InitCompleted && it == Partitions.end()) {
         LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Unknown partition " << record.GetPartition());
 
-        auto response = THolder<TEvPQ::TEvCheckPartitionStatusResponse>();
+        auto response = MakeHolder<TEvPQ::TEvCheckPartitionStatusResponse>();
         response->Record.SetStatus(NKikimrPQ::ETopicPartitionStatus::Deleted);
         Send(ev->Sender, response.Release());
 
         return;
     }
 
-    if (it->second.InitDone) {
+    if (it != Partitions.end() && it->second.InitDone) {
         Forward(ev, it->second.Actor);
     } else {
         CheckPartitionStatusRequests[record.GetPartition()].push_back(ev);

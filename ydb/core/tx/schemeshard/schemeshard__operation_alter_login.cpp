@@ -16,8 +16,8 @@ public:
         NIceDb::TNiceDb db(context.GetTxc().DB); // do not track is there are direct writes happen
         TTabletId ssId = context.SS->SelfTabletId();
         auto result = MakeHolder<TProposeResponse>(OperationId.GetTxId(), ssId);
-        if (!AppData()->AuthConfig.GetEnableBuiltinAuthMechanism()) {
-            result->SetStatus(NKikimrScheme::StatusPreconditionFailed, "Builtin authentication mechanism has been disabled in the cluster settings");
+        if (!AppData()->AuthConfig.GetEnableLoginAuthentication()) {
+            result->SetStatus(NKikimrScheme::StatusPreconditionFailed, "Login authentication is disabled");
         } else if (Transaction.GetWorkingDir() != context.SS->LoginProvider.Audience) {
             result->SetStatus(NKikimrScheme::StatusPreconditionFailed, "Wrong working dir");
         } else {

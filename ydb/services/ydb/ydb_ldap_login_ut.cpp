@@ -99,9 +99,9 @@ void InitLdapSettingsWithEmptyBindPassword(NKikimrProto::TLdapAuthentication* ld
 
 class TLoginClientConnection {
 public:
-    TLoginClientConnection(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, TTempFileHandle&)> initLdapSettings, bool isBuiltinAuthMechanismDisabled = true)
+    TLoginClientConnection(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, TTempFileHandle&)> initLdapSettings, bool isLoginAuthenticationEnabled = true)
         : CaCertificateFile()
-        , Server(InitAuthSettings(std::move(initLdapSettings), isBuiltinAuthMechanismDisabled))
+        , Server(InitAuthSettings(std::move(initLdapSettings), isLoginAuthenticationEnabled))
         , Connection(GetDriverConfig(Server.GetPort()))
         , Client(Connection)
     {}
@@ -119,7 +119,7 @@ public:
     }
 
 private:
-    NKikimrConfig::TAppConfig InitAuthSettings(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, TTempFileHandle&)>&& initLdapSettings, bool isBuiltinAuthMechanismDisabled = true) {
+    NKikimrConfig::TAppConfig InitAuthSettings(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, TTempFileHandle&)>&& initLdapSettings, bool isLoginAuthenticationEnabled = true) {
         TPortManager tp;
         LdapPort = tp.GetPort(389);
 
@@ -128,7 +128,7 @@ private:
 
         authConfig->SetUseBlackBox(false);
         authConfig->SetUseLoginProvider(true);
-        authConfig->SetEnableBuiltinAuthMechanism(isBuiltinAuthMechanismDisabled);
+        authConfig->SetEnableLoginAuthentication(isLoginAuthenticationEnabled);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
 
@@ -402,7 +402,7 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         auto factory = CreateLoginCredentialsProviderFactory({.User = login, .Password = password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
         TStringBuilder expectedErrorMessage;
-        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Builtin authentication mechanism has been disabled in the cluster settings");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Login authentication is disabled");
 
         loginConnection.Stop();
     }

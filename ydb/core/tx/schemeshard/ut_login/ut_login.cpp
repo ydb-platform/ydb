@@ -33,14 +33,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
     Y_UNIT_TEST(DisableBuiltinAuthMechanism) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        runtime.GetAppData().AuthConfig.SetEnableBuiltinAuthMechanism(false);
+        runtime.GetAppData().AuthConfig.SetEnableLoginAuthentication(false);
         ui64 txId = 100;
         TActorId sender = runtime.AllocateEdgeActor();
         std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> transaction(CreateAlterLoginCreateUser(++txId, "user1", "password1"));
         transaction->Record.MutableTransaction(0)->SetWorkingDir("/MyRoot");
         ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, transaction.release());
         auto resultLogin = Login(runtime, "user1", "password1");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Builtin authentication mechanism has been disabled in the cluster settings");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Login authentication is disabled");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");
         auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
         UNIT_ASSERT(describe.HasPathDescription());

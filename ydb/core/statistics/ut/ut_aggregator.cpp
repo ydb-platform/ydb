@@ -5,7 +5,7 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/statistics/events.h>
-#include <ydb/core/statistics/stat_service.h>
+#include <ydb/core/statistics/service/service.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>

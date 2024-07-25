@@ -3,8 +3,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
 
-namespace NKikimr {
-namespace NStat {
+namespace NKikimr::NStat {
 
 struct TStatServiceSettings {
     TDuration AggregateKeepAlivePeriod;
@@ -41,12 +40,8 @@ struct TStatServiceSettings {
     }
 };
 
-inline NActors::TActorId MakeStatServiceID(ui32 node) {
-    const char x[12] = "StatService";
-    return NActors::TActorId(node, TStringBuf(x, 12));
-}
+NActors::TActorId MakeStatServiceID(ui32 node);
 
 THolder<NActors::IActor> CreateStatService(const TStatServiceSettings& settings = TStatServiceSettings());
 
-} // NStat
-} // NKikimr
+} // NKikimr::NStat

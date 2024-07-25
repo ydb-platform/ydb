@@ -6,7 +6,7 @@
 #include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/statistics/events.h>
-#include <ydb/core/statistics/stat_service.h>
+#include <ydb/core/statistics/service/service.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>

@@ -1,8 +1,9 @@
 #include "aggregator_impl.h"
 
+#include <ydb/core/statistics/database/database.h>
+#include <ydb/core/statistics/service/service.h>
+
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
-#include <ydb/core/statistics/save_load_stats.h>
-#include <ydb/core/statistics/stat_service.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>

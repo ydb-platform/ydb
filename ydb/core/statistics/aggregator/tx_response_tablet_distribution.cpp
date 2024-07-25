@@ -1,7 +1,7 @@
 #include "aggregator_impl.h"
 
 #include <ydb/core/protos/hive.pb.h>
-#include <ydb/core/statistics/stat_service.h>
+#include <ydb/core/statistics/service/service.h>
 
 namespace NKikimr::NStat {
 

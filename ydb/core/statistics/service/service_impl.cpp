@@ -1,6 +1,8 @@
-#include "stat_service.h"
-#include "events.h"
-#include "save_load_stats.h"
+#include "service.h"
+#include "http_request.h"
+
+#include <ydb/core/statistics/events.h>
+#include <ydb/core/statistics/database/database.h>
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/base/feature_flags.h>
@@ -23,205 +25,6 @@
 namespace NKikimr {
 namespace NStat {
 
-static constexpr TDuration DefaultAggregateKeepAlivePeriod = TDuration::MilliSeconds(500);
-static constexpr TDuration DefaultAggregateKeepAliveTimeout = TDuration::Seconds(3);
-static constexpr TDuration DefaultAggregateKeepAliveAckTimeout = TDuration::Seconds(3);
-static constexpr size_t DefaultMaxInFlightTabletRequests = 5;
-static constexpr size_t DefaultFanOutFactor = 5;
-
-class THttpRequest : public TActorBootstrapped<THttpRequest> {
-public:
-    using TBase = TActorBootstrapped<THttpRequest>;
-
-    static constexpr auto ActorActivityType() {
-        return NKikimrServices::TActivity::STAT_SERVICE_HTTP_REQUEST;
-    }
-
-    void Bootstrap() {
-        using TNavigate = NSchemeCache::TSchemeCacheNavigate;
-        auto navigate = std::make_unique<TNavigate>();
-        auto& entry = navigate->ResultSet.emplace_back();
-        entry.Path = SplitPath(Path);
-        entry.Operation = TNavigate::EOp::OpTable;
-        entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
-        navigate->Cookie = FirstRoundCookie;
-
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
-
-        Become(&THttpRequest::StateWork);
-    }
-
-    STFUNC(StateWork) {
-        switch(ev->GetTypeRewrite()) {
-            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            hFunc(TEvStatistics::TEvScanTableAccepted, Handle);
-            hFunc(TEvStatistics::TEvGetScanStatusResponse, Handle);
-            hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-            IgnoreFunc(TEvStatistics::TEvScanTableResponse);
-            default:
-                LOG_CRIT_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                    "NStat::THttpRequest: unexpected event# " << ev->GetTypeRewrite());
-        }
-    }
-
-    enum EType {
-        ANALYZE,
-        STATUS
-    };
-
-    THttpRequest(EType type, const TString& path, TActorId replyToActorId)
-        : Type(type)
-        , Path(path)
-        , ReplyToActorId(replyToActorId)
-    {}
-
-private:
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        using TNavigate = NSchemeCache::TSchemeCacheNavigate;
-        std::unique_ptr<TNavigate> navigate(ev->Get()->Request.Release());
-        Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
-        auto& entry = navigate->ResultSet.front();
-
-        if (navigate->Cookie == SecondRoundCookie) {
-            if (entry.Status != TNavigate::EStatus::Ok) {
-                HttpReply("Internal error");
-                return;
-            }
-            if (entry.DomainInfo->Params.HasStatisticsAggregator()) {
-                StatisticsAggregatorId = entry.DomainInfo->Params.GetStatisticsAggregator();
-            }
-            ResolveSuccess();
-            return;
-        }
-
-        if (entry.Status != TNavigate::EStatus::Ok) {
-            switch (entry.Status) {
-            case TNavigate::EStatus::PathErrorUnknown:
-                HttpReply("Path does not exist");
-                return;
-            case TNavigate::EStatus::PathNotPath:
-                HttpReply("Invalid path");
-                return;
-            case TNavigate::EStatus::PathNotTable:
-                HttpReply("Path is not a table");
-                return;
-            default:
-                HttpReply("Internal error");
-                return;
-            }
-        }
-
-        PathId = entry.TableId.PathId;
-
-        auto& domainInfo = entry.DomainInfo;
-        ui64 aggregatorId = 0;
-        if (domainInfo->Params.HasStatisticsAggregator()) {
-            aggregatorId = domainInfo->Params.GetStatisticsAggregator();
-        }
-        bool isServerless = domainInfo->IsServerless();
-        TPathId domainKey = domainInfo->DomainKey;
-        TPathId resourcesDomainKey = domainInfo->ResourcesDomainKey;
-
-        auto navigateDomainKey = [this] (TPathId domainKey) {
-            using TNavigate = NSchemeCache::TSchemeCacheNavigate;
-            auto navigate = std::make_unique<TNavigate>();
-            auto& entry = navigate->ResultSet.emplace_back();
-            entry.TableId = TTableId(domainKey.OwnerId, domainKey.LocalPathId);
-            entry.Operation = TNavigate::EOp::OpPath;
-            entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
-            entry.RedirectRequired = false;
-            navigate->Cookie = SecondRoundCookie;
-
-            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
-        };
-
-        if (!isServerless) {
-            if (aggregatorId) {
-                StatisticsAggregatorId = aggregatorId;
-                ResolveSuccess();
-            } else {
-                navigateDomainKey(domainKey);
-            }
-        } else {
-            navigateDomainKey(resourcesDomainKey);
-        }
-    }
-
-    void Handle(TEvStatistics::TEvScanTableAccepted::TPtr&) {
-        HttpReply("Scan accepted");
-    }
-
-    void Handle(TEvStatistics::TEvGetScanStatusResponse::TPtr& ev) {
-        auto& record = ev->Get()->Record;
-        switch (record.GetStatus()) {
-        case NKikimrStat::TEvGetScanStatusResponse::NO_OPERATION:
-            HttpReply("No scan operation");
-            break;
-        case NKikimrStat::TEvGetScanStatusResponse::ENQUEUED:
-            HttpReply("Scan is enqueued");
-            break;
-        case NKikimrStat::TEvGetScanStatusResponse::IN_PROGRESS:
-            HttpReply("Scan is in progress");
-            break;
-        }
-    }
-
-    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
-        HttpReply("Delivery problem");
-    }
-
-    void ResolveSuccess() {
-        if (StatisticsAggregatorId == 0) {
-            HttpReply("No statistics aggregator");
-            return;
-        }
-
-        if (Type == ANALYZE) {
-            auto scanTable = std::make_unique<TEvStatistics::TEvScanTable>();
-            auto& record = scanTable->Record;
-            PathIdFromPathId(PathId, record.MutablePathId());
-
-            Send(MakePipePerNodeCacheID(false),
-                new TEvPipeCache::TEvForward(scanTable.release(), StatisticsAggregatorId, true));
-        } else {
-            auto getStatus = std::make_unique<TEvStatistics::TEvGetScanStatus>();
-            auto& record = getStatus->Record;
-            PathIdFromPathId(PathId, record.MutablePathId());
-
-            Send(MakePipePerNodeCacheID(false),
-                new TEvPipeCache::TEvForward(getStatus.release(), StatisticsAggregatorId, true));
-        }
-    }
-
-    void HttpReply(const TString& msg) {
-        Send(ReplyToActorId, new NMon::TEvHttpInfoRes(msg));
-        PassAway();
-    }
-
-    void PassAway() {
-        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
-        TBase::PassAway();
-    }
-
-private:
-    const EType Type;
-    const TString Path;
-    const TActorId ReplyToActorId;
-
-    TPathId PathId;
-    ui64 StatisticsAggregatorId = 0;
-
-    static const ui64 FirstRoundCookie = 1;
-    static const ui64 SecondRoundCookie = 2;
-};
-
-TStatServiceSettings::TStatServiceSettings()
-    : AggregateKeepAlivePeriod(DefaultAggregateKeepAlivePeriod)
-    , AggregateKeepAliveTimeout(DefaultAggregateKeepAliveTimeout)
-    , AggregateKeepAliveAckTimeout(DefaultAggregateKeepAliveAckTimeout)
-    , MaxInFlightTabletRequests(DefaultMaxInFlightTabletRequests)
-    , FanOutFactor(DefaultFanOutFactor)
-{}
 
 struct TAggregationStatistics {
     using TColumnsStatistics = ::google::protobuf::RepeatedPtrField<::NKikimrStat::TColumn>;
@@ -1518,6 +1321,7 @@ private:
 THolder<IActor> CreateStatService(const TStatServiceSettings& settings) {
     return MakeHolder<TStatService>(settings);
 }
+
 
 } // NStat
 } // NKikimr

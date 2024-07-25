@@ -4,7 +4,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 
 #include <ydb/core/statistics/events.h>
-#include <ydb/core/statistics/stat_service.h>
+#include <ydb/core/statistics/service/service.h>
 #include <ydb/core/protos/statistics.pb.h>
 
 #include <type_traits>

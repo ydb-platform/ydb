@@ -200,6 +200,9 @@ bool IsErasureChunkType(NObjectClient::EObjectType type);
 bool IsErasureChunkId(TChunkId id);
 
 //! Returns |true| iff this is an erasure chunk part.
+bool IsErasureChunkPartType(NObjectClient::EObjectType type);
+
+//! Returns |true| iff this is an erasure chunk part.
 bool IsErasureChunkPartId(TChunkId id);
 
 //! Returns |true| iff this is a regular (not erasure) chunk.

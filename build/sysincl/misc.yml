@@ -519,6 +519,11 @@
     - "]b4_location_include["
     - "position.hh"
 
+- source_filter: "^contrib/libs/libheif"
+  includes:
+    - error.h:  contrib/libs/libheif/libheif/error.h
+    - file.h:   contrib/libs/libheif/libheif/file.h
+
 - source_filter: "^vendor/github.com/NVIDIA"
   includes:
     - nvml.h:

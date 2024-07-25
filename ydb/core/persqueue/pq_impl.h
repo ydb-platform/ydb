@@ -504,7 +504,6 @@ private:
                                const TWriteId& writeId) const;
     bool CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBody) const;
 
-    void UpdateTopTxState(const TActorContext& ctx);
     void MoveTopTxToCalculating(TDistributedTransaction& tx, const TActorContext& ctx);
 };
 

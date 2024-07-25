@@ -2520,8 +2520,51 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(AlterTableAddIndexWithIsNotSupported) {
-        ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx LOCAL WITH (a=b, c=d, e=f) ON (col)",
-            "<main>:1:40: Error: local: alternative is not implemented yet: 727:7: local_index\n");
+        ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx GLOBAL ON (col) WITH (a=b)",
+            "<main>:1:40: Error: with: alternative is not implemented yet: 726:20: global_index\n");
+    }
+
+    Y_UNIT_TEST(AlterTableAddIndexLocalIsNotSupported) {
+        ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx LOCAL ON (col)",
+            "<main>:1:40: Error: local: alternative is not implemented yet: 726:35: local_index\n");
+    }
+
+    Y_UNIT_TEST(CreateTableAddIndexVector) {
+        const auto result = SqlToYql(R"(USE plato;
+            CREATE TABLE table (
+                pk INT32 NOT NULL,
+                col String, 
+                INDEX idx GLOBAL USING vector_kmeans_tree 
+                    ON (col) COVER (col)
+                    WITH (distance=cosine, vector_type=float, vector_dimension=1024,),
+                PRIMARY KEY (pk))
+                )");
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableAddIndexVector) {
+        const auto result = SqlToYql(R"(USE plato; 
+            ALTER TABLE table ADD INDEX idx 
+                GLOBAL USING vector_kmeans_tree 
+                ON (col) COVER (col)
+                WITH (distance=cosine, vector_type="float", vector_dimension=1024) 
+                )");
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableAddIndexUnknownSubtype) {
+        ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx GLOBAL USING unknown ON (col)",
+            "<main>:1:57: Error: UNKNOWN index subtype is not supported\n");
+    }
+
+    Y_UNIT_TEST(AlterTableAddIndexMissedParameter) {
+        ExpectFailWithError(R"(USE plato; 
+            ALTER TABLE table ADD INDEX idx 
+                GLOBAL USING vector_kmeans_tree 
+                ON (col)
+                WITH (distance=cosine, vector_type=float) 
+                )",
+            "<main>:5:52: Error: vector_dimension should be set\n");
     }
 
     Y_UNIT_TEST(AlterTableAlterIndexSetPartitioningIsCorrect) {

@@ -71,4 +71,45 @@ namespace NKikimr::NStorage {
         : TEventPB<TEvNodeWardenDynamicConfigPush, NKikimrBlobStorage::TEvNodeWardenDynamicConfigPush, TEvBlobStorage::EvNodeWardenDynamicConfigPush>
     {};
 
+    struct TEvNodeWardenReadMetadata : TEventLocal<TEvNodeWardenReadMetadata, TEvBlobStorage::EvNodeWardenReadMetadata> {
+        TString Path;
+
+        TEvNodeWardenReadMetadata(TString path)
+            : Path(std::move(path))
+        {}
+    };
+
+    struct TEvNodeWardenReadMetadataResult : TEventLocal<TEvNodeWardenReadMetadataResult, TEvBlobStorage::EvNodeWardenReadMetadataResult> {
+        std::optional<ui64> Guid;
+        NPDisk::EPDiskMetadataOutcome Outcome;
+        NKikimrBlobStorage::TPDiskMetadataRecord Record;
+
+        TEvNodeWardenReadMetadataResult(std::optional<ui64> guid, NPDisk::EPDiskMetadataOutcome outcome,
+                NKikimrBlobStorage::TPDiskMetadataRecord record)
+            : Guid(guid)
+            , Outcome(outcome)
+            , Record(std::move(record))
+        {}
+    };
+
+    struct TEvNodeWardenWriteMetadata : TEventLocal<TEvNodeWardenWriteMetadata, TEvBlobStorage::EvNodeWardenWriteMetadata> {
+        TString Path;
+        NKikimrBlobStorage::TPDiskMetadataRecord Record;
+
+        TEvNodeWardenWriteMetadata(TString path, NKikimrBlobStorage::TPDiskMetadataRecord record)
+            : Path(std::move(path))
+            , Record(std::move(record))
+        {}
+    };
+
+    struct TEvNodeWardenWriteMetadataResult : TEventLocal<TEvNodeWardenWriteMetadataResult, TEvBlobStorage::EvNodeWardenWriteMetadataResult> {
+        std::optional<ui64> Guid;
+        NPDisk::EPDiskMetadataOutcome Outcome;
+
+        TEvNodeWardenWriteMetadataResult(std::optional<ui64> guid, NPDisk::EPDiskMetadataOutcome outcome)
+            : Guid(guid)
+            , Outcome(outcome)
+        {}
+    };
+
 } // NKikimr::NStorage

@@ -133,7 +133,7 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
         TPath index = table.Child(indexName);
         auto tableIndexDropping = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex);
         auto operation = tableIndexDropping.MutableDrop();
-        operation->SetName(ToString(index.Base()->Name));
+        operation->SetName(index.Base()->Name);
 
         result.push_back(CreateDropTableIndex(NextPartId(nextId, result), tableIndexDropping));
     }

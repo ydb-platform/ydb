@@ -580,6 +580,10 @@ public:
                         for (const auto& col : index.DataColumns) {
                             indexDesc->AddDataColumnNames(col);
                         }
+
+                        if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                            *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription).GetSettings();
+                        }
                     }
                     FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata);
                     if (sequences.size() > 0 && !sessionCtx->Config().EnableSequences) {
@@ -1908,6 +1912,7 @@ public:
                 const auto parseResult = NYdb::ParseConnectionString(*connectionString);
                 params.SetEndpoint(parseResult.Endpoint);
                 params.SetDatabase(parseResult.Database);
+                params.SetEnableSsl(parseResult.EnableSsl);
             }
             if (const auto& endpoint = settings.Settings.Endpoint) {
                 params.SetEndpoint(*endpoint);

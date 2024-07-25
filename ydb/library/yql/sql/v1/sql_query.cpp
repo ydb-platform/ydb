@@ -1773,7 +1773,7 @@ bool TSqlQuery::AlterTableResetTableSetting(
 }
 
 bool TSqlQuery::AlterTableAddIndex(const TRule_alter_table_add_index& node, TAlterTableParameters& params) {
-    if (!CreateTableIndex(node.GetRule_table_index2(), *this, params.AddIndexes)) {
+    if (!CreateTableIndex(node.GetRule_table_index2(), params.AddIndexes)) {
         return false;
     }
     return true;

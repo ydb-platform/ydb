@@ -220,6 +220,7 @@ namespace NKikimr::NStorage {
         std::deque<TAutoPtr<IEventHandle>> PendingEvents;
         std::vector<ui32> NodeIds;
         TNodeIdentifier SelfNode;
+        bool SelfBound = false;
 
         // scatter tasks
         ui64 NextScatterCookie = RandomNumber<ui64>();
@@ -265,15 +266,10 @@ namespace NKikimr::NStorage {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // PDisk configuration retrieval and storing
 
-        static void ReadConfig(TActorSystem *actorSystem, TActorId selfId, const std::vector<TString>& drives,
-            const TIntrusivePtr<TNodeWardenConfig>& cfg, ui64 cookie);
-
-        static void WriteConfig(TActorSystem *actorSystem, TActorId selfId, const std::vector<TString>& drives,
-            const TIntrusivePtr<TNodeWardenConfig>& cfg, const NKikimrBlobStorage::TPDiskMetadataRecord& record);
-
+        void ReadConfig(ui64 cookie = 0);
+        void WriteConfig(std::vector<TString> drives, NKikimrBlobStorage::TPDiskMetadataRecord record);
         void PersistConfig(TPersistCallback callback);
         void Handle(TEvPrivate::TEvStorageConfigStored::TPtr ev);
-
         void Handle(TEvPrivate::TEvStorageConfigLoaded::TPtr ev);
 
         static TString CalculateFingerprint(const NKikimrBlobStorage::TStorageConfig& config);

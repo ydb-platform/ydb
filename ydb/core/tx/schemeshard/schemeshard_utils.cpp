@@ -439,6 +439,10 @@ auto CalcImplTableDescImpl(
     implTableDesc.SetName(NTableIndex::ImplTable);
     SetImplTablePartitionConfig(GetPartitionConfig(baseTable), indexTableDesc, implTableDesc);
     FillIndexImplTableColumns(GetColumns(baseTable), implTableColumns, implTableDesc);
+    if (indexTableDesc.HasReplicationConfig()) {
+        implTableDesc.MutableReplicationConfig()->CopyFrom(indexTableDesc.GetReplicationConfig());
+    }
+
     return implTableDesc;
 }
 

@@ -450,6 +450,8 @@ void TPDisk::OutputHtmlChunkLockUnlockInfo(TStringStream &str) {
                                             str << ",";
                                         } else if (chunk.OwnerId == OwnerLocked) {
                                             str << "X";
+                                        } else if (chunk.OwnerId == OwnerMetadata) {
+                                            str << 'M';
                                         } else {
                                             str << (ui32)chunk.OwnerId;
                                             if (chunk.CommitState != TChunkState::DATA_COMMITTED && chunk.CommitState != TChunkState::LOCKED) {

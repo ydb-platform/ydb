@@ -81,11 +81,11 @@ TVector<TValue> MakeVectorFromArrayDatum(
     return TVector<TValue>(adata1, adata1 + dsize);
 }
 
-arrow::compute::ExecBatch MakeBatch(ui64 bsize, i64 value) {
+arrow::compute::ExecBatch MakeBatch(ui64 bsize, i64 value, ui64 init = 1) {
     TVector<uint64_t> data1(bsize);
     TVector<int64_t> data2(bsize);
     TVector<bool> valid(bsize);
-    std::iota(data1.begin(), data1.end(), 1);
+    std::iota(data1.begin(), data1.end(), init);
     std::fill(data2.begin(), data2.end(), value);
     std::fill(valid.begin(), valid.end(), true);
 
@@ -192,6 +192,45 @@ Y_UNIT_TEST_SUITE(TestSimplePullListArrowIO) {
 }
 
 
+Y_UNIT_TEST_SUITE(TestMorePullListArrowIO) {
+    Y_UNIT_TEST(TestInc) {
+        using namespace NYql::NPureCalc;
+
+        TVector<TString> fields = {"uint64", "int64"};
+        auto schema = NYql::NPureCalc::NPrivate::GetSchema(fields);
+
+        auto factory = MakeProgramFactory();
+
+        {
+            auto program = factory->MakePullListProgram(
+                TArrowInputSpec({schema}),
+                TArrowOutputSpec(schema),
+                R"(SELECT
+                    `uint64` + 1 as `uint64`,
+                    `int64`  - 2  as `int64`,
+                FROM Input)",
+                ETranslationMode::SQL
+            );
+
+            const TVector<arrow::compute::ExecBatch> input({MakeBatch(9, 19)});
+            const auto canonInput = CanonBatches(input);
+            ExecBatchStreamImpl items(input);
+
+            auto stream = program->Apply(&items);
+
+            TVector<arrow::compute::ExecBatch> output;
+            while (arrow::compute::ExecBatch* batch = stream->Fetch()) {
+                output.push_back(*batch);
+            }
+            const auto canonOutput = CanonBatches(output);
+            const TVector<arrow::compute::ExecBatch> check({MakeBatch(9, 17, 2)});
+            const auto canonCheck = CanonBatches(check);
+            UNIT_ASSERT_EQUAL(canonCheck, canonOutput);
+        }
+    }
+}
+
+
 Y_UNIT_TEST_SUITE(TestSimplePullStreamArrowIO) {
     Y_UNIT_TEST(TestSingleInput) {
         using namespace NYql::NPureCalc;
@@ -226,6 +265,45 @@ Y_UNIT_TEST_SUITE(TestSimplePullStreamArrowIO) {
 }
 
 
+Y_UNIT_TEST_SUITE(TestMorePullStreamArrowIO) {
+    Y_UNIT_TEST(TestInc) {
+        using namespace NYql::NPureCalc;
+
+        TVector<TString> fields = {"uint64", "int64"};
+        auto schema = NYql::NPureCalc::NPrivate::GetSchema(fields);
+
+        auto factory = MakeProgramFactory();
+
+        {
+            auto program = factory->MakePullStreamProgram(
+                TArrowInputSpec({schema}),
+                TArrowOutputSpec(schema),
+                R"(SELECT
+                    `uint64` + 1 as `uint64`,
+                    `int64`  - 2  as `int64`,
+                FROM Input)",
+                ETranslationMode::SQL
+            );
+
+            const TVector<arrow::compute::ExecBatch> input({MakeBatch(9, 19)});
+            const auto canonInput = CanonBatches(input);
+            ExecBatchStreamImpl items(input);
+
+            auto stream = program->Apply(&items);
+
+            TVector<arrow::compute::ExecBatch> output;
+            while (arrow::compute::ExecBatch* batch = stream->Fetch()) {
+                output.push_back(*batch);
+            }
+            const auto canonOutput = CanonBatches(output);
+            const TVector<arrow::compute::ExecBatch> check({MakeBatch(9, 17, 2)});
+            const auto canonCheck = CanonBatches(check);
+            UNIT_ASSERT_EQUAL(canonCheck, canonOutput);
+        }
+    }
+}
+
+
 Y_UNIT_TEST_SUITE(TestPushStreamArrowIO) {
     Y_UNIT_TEST(TestAllColumns) {
         using namespace NYql::NPureCalc;
@@ -254,6 +332,43 @@ Y_UNIT_TEST_SUITE(TestPushStreamArrowIO) {
 
             const auto canonOutput = CanonBatches(output);
             UNIT_ASSERT_EQUAL(canonInput, canonOutput);
+        }
+    }
+}
+
+Y_UNIT_TEST_SUITE(TestMorePushStreamArrowIO) {
+    Y_UNIT_TEST(TestInc) {
+        using namespace NYql::NPureCalc;
+
+        TVector<TString> fields = {"uint64", "int64"};
+        auto schema = NYql::NPureCalc::NPrivate::GetSchema(fields);
+
+        auto factory = MakeProgramFactory();
+
+        {
+            auto program = factory->MakePushStreamProgram(
+                TArrowInputSpec({schema}),
+                TArrowOutputSpec(schema),
+                R"(SELECT
+                    `uint64` + 1 as `uint64`,
+                    `int64`  - 2  as `int64`,
+                FROM Input)",
+                ETranslationMode::SQL
+            );
+
+            arrow::compute::ExecBatch input = MakeBatch(9, 19);
+            const auto canonInput = CanonBatches({input});
+            TVector<arrow::compute::ExecBatch> output;
+
+            auto consumer = program->Apply(MakeHolder<ExecBatchConsumerImpl>(output));
+
+            UNIT_ASSERT_NO_EXCEPTION([&](){ consumer->OnObject(&input); }());
+            UNIT_ASSERT_NO_EXCEPTION([&](){ consumer->OnFinish(); }());
+
+            const auto canonOutput = CanonBatches(output);
+            const TVector<arrow::compute::ExecBatch> check({MakeBatch(9, 17, 2)});
+            const auto canonCheck = CanonBatches(check);
+            UNIT_ASSERT_EQUAL(canonCheck, canonOutput);
         }
     }
 }

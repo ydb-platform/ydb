@@ -2061,8 +2061,9 @@ void TPersQueueDirectReadCacheInitializer::InitializeServices(NActors::TActorSys
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
 }
 
-TMemProfMonitorInitializer::TMemProfMonitorInitializer(const TKikimrRunConfig& runConfig)
+TMemProfMonitorInitializer::TMemProfMonitorInitializer(const TKikimrRunConfig& runConfig, TIntrusiveConstPtr<NMemory::IProcessMemoryInfoProvider> processMemoryInfoProvider)
     : IKikimrServicesInitializer(runConfig)
+    , ProcessMemoryInfoProvider(std::move(processMemoryInfoProvider))
 {}
 
 void TMemProfMonitorInitializer::InitializeServices(
@@ -2077,6 +2078,7 @@ void TMemProfMonitorInitializer::InitializeServices(
 
     IActor* monitorActor = CreateMemProfMonitor(
         TDuration::Seconds(1),
+        ProcessMemoryInfoProvider,
         appData->Counters,
         filePathPrefix);
 

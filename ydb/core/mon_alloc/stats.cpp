@@ -189,14 +189,4 @@ namespace NKikimr {
         return AllocState->GetAllocatedMemoryEstimate();
     }
 
-    std::optional<TMemoryUsage> TAllocState::TryGetMemoryUsage() {
-        NActors::TProcStat procStat;
-        if (!procStat.Fill(getpid())) {
-            return { };
-        }
-        return TMemoryUsage {
-            .AnonRss = procStat.AnonRss,
-            .CGroupLimit = procStat.CGroupMemLim
-        };
-    }
 }

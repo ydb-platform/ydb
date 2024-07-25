@@ -142,18 +142,8 @@ private:
     void HandleWakeup(const TActorContext& ctx) noexcept {
         auto processMemoryInfo = ProcessMemoryInfoProvider->Get();
 
-        std::optional<ui64> hardLimitBytes_ = TryGetHardLimitBytes(processMemoryInfo);
-        if (!hardLimitBytes_.has_value()) {
-            // Note: can't use default Config.GetHardLimitBytes because some clusters without CGroupLimit
-            // may have specified SharedPageCacheConfig.LimitBytes and it shouldn't be lowered by memory controller for now
-            LOG_WARN_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "HardLimitBytes isn't available");
-            ctx.Schedule(Interval, new TEvents::TEvWakeup());
-            return;
-        }
-        ui64 hardLimitBytes = hardLimitBytes_.value();
-        
+        ui64 hardLimitBytes = GetHardLimitBytes(processMemoryInfo);
         // TODO: pass hard limit to node whiteboard and mem observer
-
         ui64 softLimitBytes = GetSoftLimitBytes(hardLimitBytes);
         ui64 targetUtilizationBytes = GetTargetUtilizationBytes(hardLimitBytes);
 
@@ -186,13 +176,17 @@ private:
         }
 
         LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Periodic memory stats:"
-            << " AnonRss: " << processMemoryInfo.AnonRss << " CGroupLimit: " << processMemoryInfo.CGroupLimit << " AllocatedMemory: " << processMemoryInfo.AllocatedMemory
+            << " AnonRss: " << processMemoryInfo.AnonRss << " CGroupLimit: " << processMemoryInfo.CGroupLimit 
+            << " MemTotal: " << processMemoryInfo.MemTotal << " MemAvailable: " << processMemoryInfo.MemAvailable
+            << " AllocatedMemory: " << processMemoryInfo.AllocatedMemory << " AllocatorCachesMemory: " << processMemoryInfo.AllocatorCachesMemory
             << " HardLimitBytes: " << hardLimitBytes << " SoftLimitBytes: " << softLimitBytes << " TargetUtilizationBytes: " << targetUtilizationBytes
             << " ConsumersConsumption: " << consumersConsumption << " OtherConsumption: " << otherConsumption 
             << " TargetConsumersConsumption: " << targetConsumersConsumption << " ResultingConsumersConsumption: " << resultingConsumersConsumption
             << " Coefficient: " << coefficient);
         Counters->GetCounter("Stats/AnonRss")->Set(processMemoryInfo.AnonRss.value_or(0));
         Counters->GetCounter("Stats/CGroupLimit")->Set(processMemoryInfo.CGroupLimit.value_or(0));
+        Counters->GetCounter("Stats/MemTotal")->Set(processMemoryInfo.MemTotal.value_or(0));
+        Counters->GetCounter("Stats/MemAvailable")->Set(processMemoryInfo.MemAvailable.value_or(0));
         Counters->GetCounter("Stats/AllocatedMemory")->Set(processMemoryInfo.AllocatedMemory);
         Counters->GetCounter("Stats/AllocatorCachesMemory")->Set(processMemoryInfo.AllocatorCachesMemory);
         Counters->GetCounter("Stats/HardLimitBytes")->Set(hardLimitBytes);
@@ -400,7 +394,7 @@ private:
         return result;
     }
 
-    std::optional<ui64> TryGetHardLimitBytes(const TProcessMemoryInfo& info) const {
+    ui64 GetHardLimitBytes(const TProcessMemoryInfo& info) const {
         if (Config.HasHardLimitBytes()) {
             ui64 hardLimitBytes = Config.GetHardLimitBytes();
             if (info.CGroupLimit.has_value()) {
@@ -411,8 +405,10 @@ private:
         if (info.CGroupLimit.has_value()) {
             return info.CGroupLimit.value();
         }
-        // TODO: get total RAM
-        return {};
+        if (info.MemTotal) {
+            return info.MemTotal.value();
+        }
+        return Config.GetHardLimitBytes();
     }
 
     ui64 GetSoftLimitBytes(ui64 hardLimitBytes) const {

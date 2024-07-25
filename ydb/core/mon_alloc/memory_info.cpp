@@ -10,14 +10,20 @@ TProcessMemoryInfo TProcessMemoryInfoProvider::Get() const {
     TProcessMemoryInfo result{
         allocState.AllocatedMemory,
         allocState.AllocatorCachesMemory,
-        {}, {}
+        {}, {}, {}, {}
     };
 
     NActors::TProcStat procStat;
     if (procStat.Fill(getpid())) {
-        result.AnonRss.emplace(procStat.AnonRss);
+        if (procStat.AnonRss) {
+            result.AnonRss.emplace(procStat.AnonRss);
+        }
         if (procStat.CGroupMemLim) {
             result.CGroupLimit.emplace(procStat.CGroupMemLim);
+        }
+        if (procStat.MemTotal) {
+            result.MemTotal.emplace(procStat.MemTotal);
+            result.MemAvailable.emplace(procStat.MemAvailable);
         }
     }
 

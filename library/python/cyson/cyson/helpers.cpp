@@ -161,7 +161,11 @@ namespace NCYson {
         }
 
         TPyObjectPtr::~TPyObjectPtr() {
-#if PY_MAJOR_VERSION >= 3 && PY_MINOR_VERSION >= 7
+#if PY_MAJOR_VERSION >= 3 && PY_MINOR_VERSION >= 13
+            if (Py_IsFinalizing()) {
+                return;
+            }
+#elif PY_MAJOR_VERSION >= 3 && PY_MINOR_VERSION >= 7
             if (_Py_IsFinalizing()) {
                 return;
             }

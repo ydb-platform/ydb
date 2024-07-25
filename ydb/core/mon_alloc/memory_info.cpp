@@ -5,8 +5,11 @@
 namespace NKikimr::NMemory {
 
 TProcessMemoryInfo TProcessMemoryInfoProvider::Get() const {
+    auto allocState = NKikimr::TAllocState::Get();
+    
     TProcessMemoryInfo result{
-        NKikimr::TAllocState::GetAllocatedMemoryEstimate(),
+        allocState.AllocatedMemory,
+        allocState.AllocatorCachesMemory,
         {}, {}
     };
 

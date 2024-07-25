@@ -950,7 +950,7 @@ protected:
         if (ProcessStats.CGroupMemLim != 0) {
             systemStatsUpdate->Record.SetMemoryLimit(ProcessStats.CGroupMemLim);
         }
-        systemStatsUpdate->Record.SetMemoryUsedInAlloc(TAllocState::GetAllocatedMemoryEstimate());
+        systemStatsUpdate->Record.SetMemoryUsedInAlloc(TAllocState::Get().AllocatedMemory);
         if (CheckedMerge(SystemStateInfo, systemStatsUpdate->Record)) {
             SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
         }

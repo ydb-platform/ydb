@@ -6,6 +6,7 @@ namespace NKikimr::NMemory {
 
 struct TProcessMemoryInfo {
     ui64 AllocatedMemory;
+    ui64 AllocatorCachesMemory;
     std::optional<ui64> AnonRss;
     std::optional<ui64> CGroupLimit;
 };

@@ -20,7 +20,7 @@ std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> TMerger::Execute(c
         arrow::FieldVector indexFields;
         indexFields.emplace_back(IColumnMerger::PortionIdField);
         indexFields.emplace_back(IColumnMerger::PortionRecordIndexField);
-        IIndexInfo::AddSpecialFields(indexFields);
+        IIndexInfo::AddSnapshotFields(indexFields);
         auto dataSchema = std::make_shared<arrow::Schema>(indexFields);
         NArrow::NMerger::TMergePartialStream mergeStream(
             resultFiltered->GetIndexInfo().GetReplaceKey(), dataSchema, false, IIndexInfo::GetSnapshotColumnNames());

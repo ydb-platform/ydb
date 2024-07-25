@@ -10,7 +10,6 @@ TEST_SRCS(
 
 IF (SANITIZER_TYPE == "thread")
     REQUIREMENTS(
-        cpu:4
         ram:16
     )
     TIMEOUT(1800)
@@ -18,7 +17,6 @@ IF (SANITIZER_TYPE == "thread")
     TAG(ya:fat)
 ELSE()
     REQUIREMENTS(
-        cpu:4
         ram:32
     )
     TIMEOUT(600)

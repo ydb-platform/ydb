@@ -9,7 +9,6 @@ IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
     REQUIREMENTS(
-        cpu:4
         ram:32
     )
 ELSE()

@@ -1,7 +1,10 @@
 #include "spec.h"
 
+#include <ydb/library/yql/public/purecalc/common/names.h>
+
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/public/udf/arrow/udf_arrow_helpers.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
@@ -62,9 +65,9 @@ public:
  */
 class TArrowInputConverter {
 protected:
-    IWorker* Worker_;
     const THolderFactory& Factory_;
-    const NYT::TNode& Schema_;
+    TVector<ui32> DatumToMemberIDMap_;
+    size_t BatchLengthID_;
 
 public:
     explicit TArrowInputConverter(
@@ -72,21 +75,46 @@ public:
         ui32 index,
         IWorker* worker
     )
-        : Worker_(worker)
-        , Factory_(Worker_->GetGraph().GetHolderFactory())
-        , Schema_(inputSpec.GetSchema(index))
+        : Factory_(worker->GetGraph().GetHolderFactory())
     {
+        const NYT::TNode& inputSchema = inputSpec.GetSchema(index);
+        // Deduce the schema from the input MKQL type, if no is
+        // provided by <inputSpec>.
+        const NYT::TNode& schema = inputSchema.IsEntity()
+                                 ? worker->MakeInputSchema(index)
+                                 : inputSchema;
+
+        const auto* type = worker->GetRawInputType(index);
+
+        Y_ENSURE(type->IsStruct());
+        Y_ENSURE(schema.ChildAsString(0) == "StructType");
+
+        const auto& members = schema.ChildAsList(1);
+        DatumToMemberIDMap_.resize(members.size());
+
+        for (size_t i = 0; i < DatumToMemberIDMap_.size(); i++) {
+            const auto& name = members[i].ChildAsString(0);
+            const auto& memberIndex = type->FindMemberIndex(name);
+            Y_ENSURE(memberIndex);
+            DatumToMemberIDMap_[i] = *memberIndex;
+        }
+        const auto& batchLengthID = type->FindMemberIndex(PurecalcBlockColumnLength);
+        Y_ENSURE(batchLengthID);
+        BatchLengthID_ = *batchLengthID;
     }
 
     void DoConvert(arrow::compute::ExecBatch* batch, TUnboxedValue& result) {
-        ui64 nvalues = Schema_.Size();
+        size_t nvalues = DatumToMemberIDMap_.size();
         Y_ENSURE(nvalues == static_cast<size_t>(batch->num_values()));
 
         TUnboxedValue* datums = nullptr;
-        result = Factory_.CreateDirectArrayHolder(nvalues, datums);
-        for (ui64 i = 0; i < nvalues; i++) {
-            datums[i] = Factory_.CreateArrowBlock(std::move(batch->values[i]));
+        result = Factory_.CreateDirectArrayHolder(nvalues + 1, datums);
+        for (size_t i = 0; i < nvalues; i++) {
+            const ui32 id = DatumToMemberIDMap_[i];
+            datums[id] = Factory_.CreateArrowBlock(std::move(batch->values[i]));
         }
+        arrow::Datum length(std::make_shared<arrow::UInt64Scalar>(batch->length));
+        datums[BatchLengthID_] = Factory_.CreateArrowBlock(std::move(length));
     }
 };
 
@@ -96,31 +124,70 @@ public:
  */
 class TArrowOutputConverter {
 protected:
-    IWorker* Worker_;
     const THolderFactory& Factory_;
-    const NYT::TNode& Schema_;
+    TVector<ui32> DatumToMemberIDMap_;
     THolder<arrow::compute::ExecBatch> Batch_;
+    size_t BatchLengthID_;
 
 public:
     explicit TArrowOutputConverter(
         const TArrowOutputSpec& outputSpec,
         IWorker* worker
     )
-        : Worker_(worker)
-        , Factory_(worker->GetGraph().GetHolderFactory())
-        , Schema_(outputSpec.GetSchema())
+        : Factory_(worker->GetGraph().GetHolderFactory())
     {
         Batch_.Reset(new arrow::compute::ExecBatch);
+
+        const NYT::TNode& outputSchema = outputSpec.GetSchema();
+        // Deduce the schema from the output MKQL type, if no is
+        // provided by <outputSpec>.
+        const NYT::TNode& schema = outputSchema.IsEntity()
+                                 ? worker->MakeOutputSchema()
+                                 : outputSchema;
+
+        const auto* type = worker->GetRawOutputType();
+
+        Y_ENSURE(type->IsStruct());
+        Y_ENSURE(schema.ChildAsString(0) == "StructType");
+
+        const auto* stype = AS_TYPE(NKikimr::NMiniKQL::TStructType, type);
+
+        const auto& members = schema.ChildAsList(1);
+        DatumToMemberIDMap_.resize(members.size());
+
+        for (size_t i = 0; i < DatumToMemberIDMap_.size(); i++) {
+            const auto& name = members[i].ChildAsString(0);
+            const auto& memberIndex = stype->FindMemberIndex(name);
+            Y_ENSURE(memberIndex);
+            DatumToMemberIDMap_[i] = *memberIndex;
+        }
+        const auto& batchLengthID = stype->FindMemberIndex(PurecalcBlockColumnLength);
+        Y_ENSURE(batchLengthID);
+        BatchLengthID_ = *batchLengthID;
     }
 
     OutputItemType DoConvert(TUnboxedValue value) {
         OutputItemType batch = Batch_.Get();
-        ui64 nvalues = Schema_.Size();
+        size_t nvalues = DatumToMemberIDMap_.size();
+
+        const auto& sizeDatum = TArrowBlock::From(value.GetElement(BatchLengthID_)).GetDatum();
+        Y_ENSURE(sizeDatum.is_scalar());
+        const auto& sizeScalar = sizeDatum.scalar();
+        const auto& sizeData = arrow::internal::checked_cast<const arrow::UInt64Scalar&>(*sizeScalar);
+        const int64_t length = sizeData.value;
+
         TVector<arrow::Datum> datums(nvalues);
-        for (ui32 i = 0; i < nvalues; i++) {
-            datums[i] = TArrowBlock::From(value.GetElement(i)).GetDatum();
+        for (size_t i = 0; i < nvalues; i++) {
+            const ui32 id = DatumToMemberIDMap_[i];
+            const auto& datum = TArrowBlock::From(value.GetElement(id)).GetDatum();
+            datums[i] = datum;
+            if (datum.is_scalar()) {
+                continue;
+            }
+            Y_ENSURE(datum.length() == length);
         }
-        *batch = ARROW_RESULT(arrow::compute::ExecBatch::Make(datums));
+
+        *batch = arrow::compute::ExecBatch(std::move(datums), length);
         return batch;
     }
 };

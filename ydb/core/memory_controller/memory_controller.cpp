@@ -402,6 +402,10 @@ private:
 
     std::optional<ui64> TryGetHardLimitBytes(const TProcessMemoryInfo& info) const {
         if (Config.HasHardLimitBytes()) {
+            ui64 hardLimitBytes = Config.GetHardLimitBytes();
+            if (info.CGroupLimit.has_value()) {
+                hardLimitBytes = Min(hardLimitBytes, info.CGroupLimit.value());
+            }
             return Config.GetHardLimitBytes();
         }
         if (info.CGroupLimit.has_value()) {

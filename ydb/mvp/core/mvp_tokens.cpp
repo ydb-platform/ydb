@@ -24,7 +24,7 @@ TString TMvpTokenator::GetToken(const TString& name) {
     return token;
 }
 
-TMvpTokenator::TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TActorId& httpProxy, const NMVP::EAccessServiceType accessServiceType)
+TMvpTokenator::TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TActorId& httpProxy, NMVP::EAccessServiceType accessServiceType)
     : HttpProxy(httpProxy)
     , AccessServiceType(accessServiceType)
 {

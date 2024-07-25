@@ -57,8 +57,7 @@ NYdb::NScheme::TSchemeClient TYdbLocation::GetSchemeClient(const TRequest& reque
     if (authToken) {
         clientSettings.AuthToken(authToken);
     }
-    TString database = TYdbLocation::GetDatabaseName(request);
-    if (database) {
+    if (TString database = TYdbLocation::GetDatabaseName(request)) {
         clientSettings.Database(database);
     }
     return NYdb::NScheme::TSchemeClient(GetDriver(), clientSettings);
@@ -124,10 +123,8 @@ NYdb::NTable::TTableClient TYdbLocation::GetTableClient(const TRequest& request,
     if (authToken) {
         clientSettings.AuthToken(authToken);
     }
-    TString database = TYdbLocation::GetDatabaseName(request);
-    if (database) {
+    if (TString database = TYdbLocation::GetDatabaseName(request))
         clientSettings.Database(database);
-    }
     return GetTableClient(clientSettings);
 }
 
@@ -197,6 +194,24 @@ TString TYdbLocation::GetServerlessProxyUrl(const TString& database) const {
         return ServerlessDocumentProxyEndpoint + database;
     } else {
         return {};
+    }
+}
+
+TYdbLocation::EAuthTokenSource TYdbLocation::GetTokenSourceFromString(const TString& name) {
+    static const THashMap<TString, EAuthTokenSource> TokenSourceTypeByName = {
+        { "client", EAuthTokenSource::Client },
+        { "service", EAuthTokenSource::Service }
+    };
+    if (name.empty()) {
+        return EAuthTokenSource::Client;
+    }
+
+    auto lower = to_lower(name);
+    auto it = TokenSourceTypeByName.find(lower);
+    if (it != TokenSourceTypeByName.end()) {
+        return it->second;
+    } else {
+        ythrow yexception() << "Unknown token source: " << name;
     }
 }
 

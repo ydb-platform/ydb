@@ -71,7 +71,7 @@ protected:
         using TEvUpdateStaticCredentialsToken = TEvUpdateToken<EvUpdateStaticCredentialsToken, Ydb::Auth::LoginResponse>;
     };
 
-    TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TActorId& httpProxy, const EAccessServiceType accessServiceType);
+    TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TActorId& httpProxy, EAccessServiceType accessServiceType);
     void Bootstrap();
     void HandlePeriodic();
     void Handle(TEvPrivate::TEvRefreshToken::TPtr event);

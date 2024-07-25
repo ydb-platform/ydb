@@ -352,6 +352,7 @@ struct TYdbLocation {
 
     TString GetDatabaseName(const TRequest& request) const;
     TString GetServerlessProxyUrl(const TString& database) const;
+    static TYdbLocation::EAuthTokenSource GetTokenSourceFromString(const TString& name);
 
 private:
     NYdbGrpc::TGRpcClientLow& GetGRpcClientLow() const {

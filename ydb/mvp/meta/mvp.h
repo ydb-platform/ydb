@@ -39,6 +39,7 @@ public:
     bool MetaCache = false;
     TString MetaDatabaseTokenName;
     EAccessServiceType AccessServiceType = EAccessServiceType::YandexV2;
+    TYdbLocation::EAuthTokenSource MetaDatabaseTokenSource = TYdbLocation::EAuthTokenSource::Client;
 
     TMVP(int argc, char** argv);
     int Init();

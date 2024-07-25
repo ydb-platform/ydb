@@ -269,7 +269,7 @@ runs:
 
           if [ ${{ inputs.testman_token }} ]; then
             # inititalize testmo session
-            TESTMO_RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID_$RETRY"
+            TESTMO_RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-link --name build --url "$TESTMO_RUN_URL" --resources testmo.json
             TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-field --name git-sha --type string --value "${GITHUB_SHA:0:7}" --resources testmo.json
             TESTMO_RUN_ID=$(

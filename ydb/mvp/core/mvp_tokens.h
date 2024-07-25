@@ -87,10 +87,14 @@ protected:
     };
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TActorId& httpProxy);
 =======
     TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TActorId& httpProxy, const EAccessServiceType accessServiceType);
 >>>>>>> b14ae95980 (renamed EAuth profile to EAccessServiceTypeEAccessServiceType)
+=======
+    TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TActorId& httpProxy, EAccessServiceType accessServiceType);
+>>>>>>> 998106b446 (added config token_source parameter)
     void Bootstrap();
     void HandlePeriodic();
     void Handle(TEvPrivate::TEvRefreshToken::TPtr event);

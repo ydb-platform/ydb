@@ -46,7 +46,11 @@ public:
 >>>>>>> 8e0d57db1b (rewrite GetTableClient)
 =======
     EAccessServiceType AccessServiceType = EAccessServiceType::YandexV2;
+<<<<<<< HEAD
 >>>>>>> b14ae95980 (renamed EAuth profile to EAccessServiceTypeEAccessServiceType)
+=======
+    TYdbLocation::EAuthTokenSource MetaDatabaseTokenSource = TYdbLocation::EAuthTokenSource::Client;
+>>>>>>> 998106b446 (added config token_source parameter)
 
     TMVP(int argc, char** argv);
     int Init();

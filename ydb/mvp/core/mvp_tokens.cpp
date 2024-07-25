@@ -30,10 +30,14 @@ TString TMvpTokenator::GetToken(const TString& name) {
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 TMvpTokenator::TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TActorId& httpProxy)
     : HttpProxy(httpProxy)
 =======
 TMvpTokenator::TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TActorId& httpProxy, const NMVP::EAccessServiceType accessServiceType)
+=======
+TMvpTokenator::TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TActorId& httpProxy, NMVP::EAccessServiceType accessServiceType)
+>>>>>>> 998106b446 (added config token_source parameter)
     : HttpProxy(httpProxy)
     , AccessServiceType(accessServiceType)
 >>>>>>> b14ae95980 (renamed EAuth profile to EAccessServiceTypeEAccessServiceType)

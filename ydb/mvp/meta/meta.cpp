@@ -165,14 +165,7 @@ void TMVP::InitMeta() {
     MetaLocation.Endpoints.emplace_back("cluster-api", MetaApiEndpoint);
     MetaLocation.RootDomain = MetaDatabase;
     MetaLocation.MetaDatabaseTokenName = MetaDatabaseTokenName;
-    switch (AccessServiceType) {
-        case NMVP::EAccessServiceType::YandexV2:
-            MetaLocation.MetaDatabaseTokenSource = TYdbLocation::EAuthTokenSource::Client;
-            break;
-        case NMVP::EAccessServiceType::NebiusV1:
-            MetaLocation.MetaDatabaseTokenSource = TYdbLocation::EAuthTokenSource::Service;
-            break;
-    }
+    MetaLocation.MetaDatabaseTokenSource = MetaDatabaseTokenSource;
 
     LocalEndpoint = TStringBuilder() << "http://" << FQDNHostName() << ":" << HttpPort;
 

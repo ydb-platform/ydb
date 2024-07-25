@@ -668,10 +668,6 @@ std::optional<TDriveData> GetDriveData(const TString &path, TStringStream *outDe
     try {
         TFile f(path, OpenExisting | RdOnly);
         TDriveData data;
-        long size = 0;
-        if (ioctl(f.GetHandle(), BLKGETSIZE, &size) == 0) {
-            data.Size = size << 9;
-        }
         EWriteCacheResult res = GetWriteCache(f.GetHandle(), path, &data, outDetails);
         if (res == EWriteCacheResult::WriteCacheResultOk) {
             data.Path = path;
@@ -680,13 +676,11 @@ std::optional<TDriveData> GetDriveData(const TString &path, TStringStream *outDe
         *outDetails << "; ";
         if (std::optional<TDriveData> nvmeData = GetSysfsDriveData(path, outDetails)) {
             nvmeData->Path = path;
-            nvmeData->Size = nvmeData->Size ? nvmeData->Size : data.Size;
             return nvmeData;
         }
         *outDetails << "; ";
         if (std::optional<TDriveData> nvmeData = GetNvmeDriveData(f.GetHandle(), outDetails)) {
             nvmeData->Path = path;
-            nvmeData->Size = nvmeData->Size ? nvmeData->Size : data.Size;
             return nvmeData;
         }
         return std::nullopt;

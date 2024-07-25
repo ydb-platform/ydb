@@ -64,9 +64,6 @@ namespace NKikimr::NStorage {
         TReplQuoter::TPtr ReplPDiskReadQuoter;
         TReplQuoter::TPtr ReplPDiskWriteQuoter;
 
-        ui32 RefCount = 0;
-        bool Temporary = false;
-
         TPDiskRecord(NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk record)
             : Record(std::move(record))
         {}
@@ -103,12 +100,6 @@ namespace NKikimr::NStorage {
         TIntrusiveList<TPDiskRecord, TUnreportedMetricTag> PDisksWithUnreportedMetrics;
         std::map<ui64, ui32> PDiskRestartRequests;
 
-        struct TPDiskByPathInfo {
-            TPDiskKey RunningPDiskId; // currently running PDiskId
-            std::optional<NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk> Pending; // pending
-        };
-        THashMap<TString, TPDiskByPathInfo> PDiskByPath;
-
         ui64 LastScrubCookie = RandomNumber<ui64>();
 
         ui32 AvailDomainId;
@@ -134,16 +125,10 @@ namespace NKikimr::NStorage {
                 EvReadCache,
                 EvGetGroup,
                 EvGroupPendingQueueTick,
-                EvDereferencePDisk,
             };
 
             struct TEvSendDiskMetrics : TEventLocal<TEvSendDiskMetrics, EvSendDiskMetrics> {};
             struct TEvUpdateNodeDrives : TEventLocal<TEvUpdateNodeDrives, EvUpdateNodeDrives> {};
-
-            struct TEvDereferencePDisk : TEventLocal<TEvDereferencePDisk, EvDereferencePDisk> {
-                TPDiskKey PDiskKey;
-                TEvDereferencePDisk(TPDiskKey pdiskKey) : PDiskKey(pdiskKey) {}
-            };
         };
 
         TControlWrapper EnablePutBatching;
@@ -159,8 +144,6 @@ namespace NKikimr::NStorage {
         TReplQuoter::TPtr ReplNodeResponseQuoter;
 
         TCostMetricsParametersByMedia CostMetricsParametersByMedia;
-
-        class TPDiskMetadataInteractionActor;
 
     public:
         struct TGroupRecord;
@@ -204,7 +187,7 @@ namespace NKikimr::NStorage {
         }
 
         TIntrusivePtr<TPDiskConfig> CreatePDiskConfig(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk);
-        void StartLocalPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk, bool temporary);
+        void StartLocalPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk);
         void AskBSCToRestartPDisk(ui32 pdiskId, ui64 requestCookie);
         void OnPDiskRestartFinished(ui32 pdiskId, NKikimrProto::EReplyStatus status);
         void DestroyLocalPDisk(ui32 pdiskId);
@@ -577,11 +560,6 @@ namespace NKikimr::NStorage {
 
         void Handle(TEvNodeWardenQueryBaseConfig::TPtr ev);
 
-        void Handle(TEvNodeWardenReadMetadata::TPtr ev);
-        void Handle(TEvNodeWardenWriteMetadata::TPtr ev);
-        TPDiskKey GetPDiskForMetadata(const TString& path);
-        void Handle(TEvPrivate::TEvDereferencePDisk::TPtr ev);
-
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         ui64 NextInvokeCookie = 1;
@@ -682,10 +660,6 @@ namespace NKikimr::NStorage {
                 hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
 
                 fFunc(TEvents::TSystem::Gone, HandleGone);
-
-                hFunc(TEvNodeWardenReadMetadata, Handle);
-                hFunc(TEvNodeWardenWriteMetadata, Handle);
-                hFunc(TEvPrivate::TEvDereferencePDisk, Handle);
 
                 default:
                     EnqueuePendingMessage(ev);

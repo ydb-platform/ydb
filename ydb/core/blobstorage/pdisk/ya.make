@@ -29,7 +29,6 @@ PEERDIR(
 )
 
 GENERATE_ENUM_SERIALIZATION(blobstorage_pdisk_state.h)
-GENERATE_ENUM_SERIALIZATION(blobstorage_pdisk_defs.h)
 
 SRCS(
     blobstorage_pdisk.cpp
@@ -42,7 +41,6 @@ SRCS(
     blobstorage_pdisk_impl.cpp
     blobstorage_pdisk_impl_http.cpp
     blobstorage_pdisk_impl_log.cpp
-    blobstorage_pdisk_impl_metadata.cpp
     blobstorage_pdisk_internal_interface.cpp
     blobstorage_pdisk_log_cache.cpp
     blobstorage_pdisk_logreader.cpp

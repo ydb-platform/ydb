@@ -328,7 +328,8 @@ namespace NKikimr::NStorage {
                 }
                 std::sort(drives.begin(), drives.end());
                 drives.erase(std::unique(drives.begin(), drives.end()), drives.end());
-                ReadConfig(cookie);
+                auto query = std::bind(&TThis::ReadConfig, TActivationContext::ActorSystem(), SelfId(), drives, Cfg, cookie);
+                Send(MakeIoDispatcherActorId(), new TEvInvokeQuery(std::move(query)));
                 ++task.AsyncOperationsPending;
                 break;
             }

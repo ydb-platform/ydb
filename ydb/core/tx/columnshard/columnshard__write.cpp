@@ -153,7 +153,6 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteDraft::TPtr& ev, const TActorConte
 
 void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx) {
     CSCounters.OnStartWriteRequest();
-    LastAccessTime = TAppData::TimeProvider->Now();
 
     const auto& record = Proto(ev->Get());
     const ui64 tableId = record.GetTableId();
@@ -161,6 +160,9 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     const ui64 cookie = ev->Cookie;
     const TString dedupId = record.GetDedupId();
     const auto source = ev->Sender;
+
+    TablesManager.RegisterAccess(tableId);
+    TablesManager.RegisterUpdate(tableId);
 
     std::optional<ui32> granuleShardingVersion;
     if (record.HasGranuleShardingVersion()) {

@@ -163,12 +163,18 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
     InFlightReadsTracker.RemoveInFlightRequest(ev->Get()->RequestCookie, index);
 
     ui64 txId = ev->Get()->TxId;
+    bool success = ev->Get()->Success;
     if (ScanTxInFlight.contains(txId)) {
         TDuration duration = TAppData::TimeProvider->Now() - ScanTxInFlight[txId];
         IncCounter(COUNTER_SCAN_LATENCY, duration);
         ScanTxInFlight.erase(txId);
         SetCounter(COUNTER_SCAN_IN_FLY, ScanTxInFlight.size());
         IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
+        if (success) {
+            IncCounter(COUNTER_READ_SUCCESS);
+        } else {
+            IncCounter(COUNTER_READ_FAIL);
+        }
     }
 }
 
@@ -313,30 +319,108 @@ void TColumnShard::UpdateResourceMetrics(const TActorContext& ctx, const TUsage&
     metrics->TryUpdate(ctx);
 }
 
-void TColumnShard::ConfigureStats(const NOlap::TColumnEngineStats& indexStats,
-                                  ::NKikimrTableStats::TTableStats* tabletStats) {
-    NOlap::TSnapshot lastIndexUpdate = TablesManager.GetPrimaryIndexSafe().LastUpdate();
-    auto activeIndexStats = indexStats.Active();   // data stats excluding inactive and evicted
-
-    if (activeIndexStats.Rows < 0 || activeIndexStats.Bytes < 0) {
-        LOG_S_WARN("Negative stats counter. Rows: " << activeIndexStats.Rows << " Bytes: " << activeIndexStats.Bytes
-                                                    << TabletID());
-
-        activeIndexStats.Rows = (activeIndexStats.Rows < 0) ? 0 : activeIndexStats.Rows;
-        activeIndexStats.Bytes = (activeIndexStats.Bytes < 0) ? 0 : activeIndexStats.Bytes;
+std::optional<TColumnShard::TAggregatedTableStats> TColumnShard::CollectTableStats() const {
+    if (!TablesManager.HasPrimaryIndex()) {
+        return std::nullopt;
     }
 
-    tabletStats->SetRowCount(activeIndexStats.Rows);
-    tabletStats->SetDataSize(activeIndexStats.Bytes + TabletCounters->Simple()[COUNTER_COMMITTED_BYTES].Get());
+    const TMap<ui64, std::shared_ptr<NOlap::TColumnEngineStats>>& columnEngineStats =
+        TablesManager.GetPrimaryIndexSafe().GetStats();
+    TAggregatedTableStats resultStats;
+
+    // TODO: Pull dataStats collected via BuildStats. They are shared between all patIds.
+
+    for (const auto& [pathId, tableInfo] : TablesManager.GetTables()) {
+        TColumnTableStats& tableStats = resultStats.StatsByPathId[pathId];
+        tableStats.AccessTime = tableInfo.GetLastAccessTime();
+        tableStats.UpdateTime = tableInfo.GetLastUpdateTime();
+        tableStats.LastFullCompaction = BackgroundController.GetLastCompactionFinishInstant(pathId);
+
+        auto findEngineStats = columnEngineStats.FindPtr(pathId);
+        if (findEngineStats && *findEngineStats) {
+            NOlap::TColumnEngineStats::TPortionsStats portionsStats =
+                (*findEngineStats)->Active(); // data stats excluding inactive and evicted
+
+            if (portionsStats.Rows < 0 || portionsStats.Bytes < 0) {
+                LOG_S_WARN(
+                    "Negative stats counter. Rows: " << portionsStats.Rows << " Bytes: " << portionsStats.Bytes
+                                                        << TabletID()
+                );
+
+                portionsStats.Rows = (portionsStats.Rows < 0) ? 0 : portionsStats.Rows;
+                portionsStats.Bytes = (portionsStats.Bytes < 0) ? 0 : portionsStats.Bytes;
+            }
+
+            // Count rows and bytes from portions only, ignoring data stored in InsertTable
+            tableStats.RowCount = portionsStats.Rows;
+            tableStats.DataSize = portionsStats.Bytes;
+        } else {
+            LOG_S_ERROR("CollectTableStats: missing column engine stats for pathId " << pathId);
+        }
+
+        if (resultStats.TotalStats.AccessTime < tableStats.AccessTime) {
+            resultStats.TotalStats.AccessTime = tableStats.AccessTime;
+        }
+        if (resultStats.TotalStats.UpdateTime < tableStats.UpdateTime) {
+            resultStats.TotalStats.UpdateTime = tableStats.UpdateTime;
+        }
+        if (resultStats.TotalStats.LastFullCompaction < tableStats.LastFullCompaction) {
+            resultStats.TotalStats.LastFullCompaction = tableStats.LastFullCompaction;
+        }
+        // TODO: When dataStats are included, don't aggregate rowCount and dataSize from individual pathIds.
+        resultStats.TotalStats.RowCount += tableStats.RowCount;
+        resultStats.TotalStats.DataSize += tableStats.DataSize;
+    }
+
+    return resultStats;
+}
+
+void TColumnShard::ConfigureStats(const TColumnTableStats& inputStats, ::NKikimrTableStats::TTableStats* outputStats) {
+    Y_ABORT_UNLESS(outputStats);
+
+    outputStats->SetRowCount(inputStats.RowCount);
+    outputStats->SetDataSize(inputStats.DataSize);
 
     // TODO: we need row/dataSize counters for evicted data (managed by tablet but stored outside)
-    // tabletStats->SetIndexSize(); // TODO: calc size of internal tables
+    // tabletStats->SetIndexSize(ti.Stats.IndexSize); // TODO: calc size of internal tables
+    // tabletStats->SetInMemSize(ti.Stats.MemDataSize);
 
-    tabletStats->SetLastAccessTime(LastAccessTime.MilliSeconds());
-    tabletStats->SetLastUpdateTime(lastIndexUpdate.GetPlanStep());
+    // TMap<ui8, std::tuple<ui64, ui64>> channels; // Channel -> (DataSize, IndexSize)
+    // for (size_t channel = 0; channel < ti.Stats.DataStats.DataSize.ByChannel.size(); channel++) {
+    //     if (ti.Stats.DataStats.DataSize.ByChannel[channel]) {
+    //         std::get<0>(channels[channel]) = ti.Stats.DataStats.DataSize.ByChannel[channel];
+    //     }
+    // }
+    // for (size_t channel = 0; channel < ti.Stats.DataStats.IndexSize.ByChannel.size(); channel++) {
+    //     if (ti.Stats.DataStats.IndexSize.ByChannel[channel]) {
+    //         std::get<1>(channels[channel]) = ti.Stats.DataStats.IndexSize.ByChannel[channel];
+    //     }
+    // }
+    // for (auto p : channels) {
+    //     auto item = ev->Record.MutableTableStats()->AddChannels();
+    //     item->SetChannel(p.first);
+    //     item->SetDataSize(std::get<0>(p.second));
+    //     item->SetIndexSize(std::get<1>(p.second));
+    // }
+
+    outputStats->SetLastAccessTime(inputStats.AccessTime.MilliSeconds());
+    outputStats->SetLastUpdateTime(inputStats.UpdateTime.MilliSeconds());
+
+    outputStats->SetRowUpdates(TabletCounters->Cumulative()[COUNTER_WRITE_SUCCESS].Get());
+    outputStats->SetRowDeletes(0);
+    outputStats->SetRowReads(0); // all reads are range reads
+    outputStats->SetRangeReads(TabletCounters->Cumulative()[COUNTER_READ_SUCCESS].Get());
+    outputStats->SetRangeReadRows(TabletCounters->Cumulative()[COUNTER_READ_INDEX_ROWS].Get());
+
+    // ev->Record.MutableTableStats()->SetPartCount(ti.Stats.PartCount);
+    // ev->Record.MutableTableStats()->SetSearchHeight(ti.Stats.SearchHeight);
+
+    outputStats->SetLastFullCompactionTs(inputStats.LastFullCompaction.Seconds());
+    outputStats->SetHasLoanedParts(Executor()->HasLoanedParts());
 }
 
 void TColumnShard::FillTxTableStats(::NKikimrTableStats::TTableStats* tableStats) const {
+    Y_ABORT_UNLESS(tableStats);
     tableStats->SetImmediateTxCompleted(TabletCounters->Cumulative()[COUNTER_IMMEDIATE_TX_COMPLETED].Get());
     tableStats->SetTxRejectedByOverload(TabletCounters->Cumulative()[COUNTER_WRITE_OVERLOAD].Get());
     tableStats->SetTxRejectedBySpace(TabletCounters->Cumulative()[COUNTER_OUT_OF_SPACE].Get());
@@ -345,7 +429,11 @@ void TColumnShard::FillTxTableStats(::NKikimrTableStats::TTableStats* tableStats
     tableStats->SetInFlightTxCount(Executor()->GetStats().TxInFly);
 }
 
-void TColumnShard::FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev) {
+void TColumnShard::FillOlapStats(
+    const TActorContext& ctx,
+    const std::optional<TAggregatedTableStats>& tableStats,
+    std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev
+) {
     ev->Record.SetShardState(2);   // NKikimrTxDataShard.EDatashardState.Ready
     ev->Record.SetGeneration(Executor()->Generation());
     ev->Record.SetRound(StatsReportRound++);
@@ -354,30 +442,27 @@ void TColumnShard::FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDa
     if (auto* resourceMetrics = Executor()->GetResourceMetrics()) {
         resourceMetrics->Fill(*ev->Record.MutableTabletMetrics());
     }
-    auto* tabletStats = ev->Record.MutableTableStats();
-    FillTxTableStats(tabletStats);
-    if (TablesManager.HasPrimaryIndex()) {
-        const auto& indexStats = TablesManager.MutablePrimaryIndex().GetTotalStats();
-        ConfigureStats(indexStats, tabletStats);
+    auto* outputTableStats = ev->Record.MutableTableStats();
+    FillTxTableStats(outputTableStats);
+    if (tableStats) {
+        ConfigureStats(tableStats->TotalStats, outputTableStats);
     }
 }
 
-void TColumnShard::FillColumnTableStats(const TActorContext& ctx,
-                                        std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev) {
-    if (!TablesManager.HasPrimaryIndex()) {
+void TColumnShard::FillColumnTableStats(
+    const TActorContext& ctx,
+    const std::optional<TAggregatedTableStats>& tableStats,
+    std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev
+) {
+    if (!tableStats) {
         return;
     }
-    const auto& tablesIndexStats = TablesManager.MutablePrimaryIndex().GetStats();
-    LOG_S_DEBUG("There are stats for " << tablesIndexStats.size() << " tables");
-    for (const auto& [tableLocalID, columnStats] : tablesIndexStats) {
-        if (!columnStats) {
-            LOG_S_ERROR("SendPeriodicStats: empty stats");
-            continue;
-        }
 
+    LOG_S_DEBUG("There are stats for " << tableStats->StatsByPathId.size() << " tables");
+    for (const auto& [pathId, columnStats] : tableStats->StatsByPathId) {
         auto* periodicTableStats = ev->Record.AddTables();
         periodicTableStats->SetDatashardId(TabletID());
-        periodicTableStats->SetTableLocalId(tableLocalID);
+        periodicTableStats->SetTableLocalId(pathId);
 
         periodicTableStats->SetShardState(2);   // NKikimrTxDataShard.EDatashardState.Ready
         periodicTableStats->SetGeneration(Executor()->Generation());
@@ -389,11 +474,11 @@ void TColumnShard::FillColumnTableStats(const TActorContext& ctx,
             resourceMetrics->Fill(*periodicTableStats->MutableTabletMetrics());
         }
 
-        auto* tableStats = periodicTableStats->MutableTableStats();
-        FillTxTableStats(tableStats);
-        ConfigureStats(*columnStats, tableStats);
+        auto* outputTableStats = periodicTableStats->MutableTableStats();
+        FillTxTableStats(outputTableStats);
+        ConfigureStats(columnStats, outputTableStats);
 
-        LOG_S_TRACE("Add stats for table, tableLocalID=" << tableLocalID);
+        LOG_S_TRACE("Add stats for table, tableLocalID=" << pathId);
     }
 }
 
@@ -420,10 +505,11 @@ void TColumnShard::SendPeriodicStats() {
         StatsReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
     }
 
+    std::optional<TAggregatedTableStats> aggregatedStats = CollectTableStats();
     auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletID(), OwnerPathId);
 
-    FillOlapStats(ctx, ev);
-    FillColumnTableStats(ctx, ev);
+    FillOlapStats(ctx, aggregatedStats, ev);
+    FillColumnTableStats(ctx, aggregatedStats, ev);
 
     NTabletPipe::SendData(ctx, StatsReportPipe, ev.release());
 }

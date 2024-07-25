@@ -14,6 +14,7 @@ private:
 
     using TCurrentCompaction = THashMap<ui64, NOlap::TPlanCompactionInfo>;
     TCurrentCompaction ActiveCompactionInfo;
+    THashMap<ui64, TInstant> LastCompactionFinishInstants; // pathId to finish time
 
     bool ActiveCleanupPortions = false;
     bool ActiveCleanupTables = false;
@@ -29,6 +30,8 @@ public:
     bool StartCompaction(const NOlap::TPlanCompactionInfo& info);
     void FinishCompaction(const NOlap::TPlanCompactionInfo& info) {
         Y_ABORT_UNLESS(ActiveCompactionInfo.erase(info.GetPathId()));
+        TInstant& lastFinishInstant = LastCompactionFinishInstants[info.GetPathId()];
+        lastFinishInstant = std::max(lastFinishInstant, TInstant::Now());
     }
     const TCurrentCompaction& GetActiveCompaction() const {
         return ActiveCompactionInfo;
@@ -36,6 +39,8 @@ public:
     ui32 GetCompactionsCount() const {
         return ActiveCompactionInfo.size();
     }
+    TInstant GetLastCompactionFinishInstant(ui64 pathId) const;
+    TInstant GetLastCompactionFinishInstant() const;
 
     void StartIndexing(const NOlap::TColumnEngineChanges& changes);
     void FinishIndexing(const NOlap::TColumnEngineChanges& changes);

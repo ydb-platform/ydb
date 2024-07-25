@@ -143,7 +143,7 @@ void TTxWrite::Complete(const TActorContext& ctx) {
         Self->CSCounters.OnWriteTxComplete(now - writeMeta.GetWriteStartInstant());
         Self->CSCounters.OnSuccessWriteResponse();
     }
-
+    Self->IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
 }
 
 }

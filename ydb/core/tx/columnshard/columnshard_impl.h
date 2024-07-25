@@ -431,6 +431,19 @@ private:
         std::optional<ui32> GranuleShardingVersionId;
     };
 
+    struct TColumnTableStats {
+        ui64 RowCount = 0;
+        ui64 DataSize = 0;
+        TInstant AccessTime;
+        TInstant UpdateTime;
+        TInstant LastFullCompaction;
+    };
+
+    struct TAggregatedTableStats {
+        TColumnTableStats TotalStats;
+        THashMap<ui64, TColumnTableStats> StatsByPathId;
+    };
+
     class TWritesMonitor {
     private:
         TColumnShard& Owner;
@@ -591,10 +604,11 @@ private:
     void UpdateResourceMetrics(const TActorContext& ctx, const TUsage& usage);
     ui64 MemoryUsage() const;
 
+    std::optional<TAggregatedTableStats> CollectTableStats() const;
     void SendPeriodicStats();
-    void FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
-    void FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
-    void ConfigureStats(const NOlap::TColumnEngineStats& indexStats, ::NKikimrTableStats::TTableStats* tabletStats);
+    void FillOlapStats(const TActorContext& ctx, const std::optional<TAggregatedTableStats>& tableStats, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
+    void FillColumnTableStats(const TActorContext& ctx, const std::optional<TAggregatedTableStats>& tableStats, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
+    void ConfigureStats(const TColumnTableStats& inputStats, ::NKikimrTableStats::TTableStats* outputStats);
     void FillTxTableStats(::NKikimrTableStats::TTableStats* tableStats) const;
 
 public:

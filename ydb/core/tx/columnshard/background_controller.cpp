@@ -26,6 +26,24 @@ void TBackgroundController::CheckDeadlinesIndexation() {
     }
 }
 
+TInstant TBackgroundController::GetLastCompactionFinishInstant(ui64 pathId) const {
+    auto findInstant = LastCompactionFinishInstants.find(pathId);
+    if (findInstant.IsEnd()) {
+        return TInstant::Zero();
+    }
+    return findInstant->second;
+}
+
+TInstant TBackgroundController::GetLastCompactionFinishInstant() const {
+    TInstant maxInstant = TInstant::Zero();
+    for (const auto& [pathId, instant] : LastCompactionFinishInstants) {
+        if (maxInstant < instant) {
+            maxInstant = instant;
+        }
+    }
+    return maxInstant;
+}
+
 void TBackgroundController::StartIndexing(const NOlap::TColumnEngineChanges& changes) {
     LastIndexationInstant = TMonotonic::Now();
     Y_ABORT_UNLESS(ActiveIndexationTasks.emplace(changes.GetTaskIdentifier(), TMonotonic::Now()).second);

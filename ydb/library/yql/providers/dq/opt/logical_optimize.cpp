@@ -225,7 +225,7 @@ protected:
                 rels.push_back(rel);
             };
 
-            return DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, 1, *opt, providerCollect);
+            return DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, 2, *opt, providerCollect);
         } else {
             return node;
         }

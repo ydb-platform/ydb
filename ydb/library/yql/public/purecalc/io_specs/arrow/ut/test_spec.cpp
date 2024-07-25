@@ -3,11 +3,42 @@
 #include <ydb/library/yql/public/purecalc/common/interface.h>
 #include <ydb/library/yql/public/purecalc/io_specs/arrow/spec.h>
 #include <ydb/library/yql/public/purecalc/ut/lib/helpers.h>
+#include <ydb/library/yql/core/yql_type_annotation.h>
 
 #include <ydb/library/yql/public/udf/arrow/udf_arrow_helpers.h>
 #include <arrow/array/builder_primitive.h>
 
 namespace {
+
+#define Y_UNIT_TEST_ADD_BLOCK_TEST(N, MODE)             \
+    TCurrentTest::AddTest(#N ":BlockEngineMode=" #MODE, \
+        static_cast<void (*)(NUnitTest::TTestContext&)>(&N<NYql::EBlockEngineMode::MODE>), false);
+
+#define Y_UNIT_TEST_BLOCKS(N)                                                \
+    template<NYql::EBlockEngineMode BlockEngineMode>                         \
+    void N(NUnitTest::TTestContext&);                                        \
+    struct TTestRegistration##N {                                            \
+        TTestRegistration##N() {                                             \
+            Y_UNIT_TEST_ADD_BLOCK_TEST(N, Disable)                           \
+            Y_UNIT_TEST_ADD_BLOCK_TEST(N, Auto)                              \
+            Y_UNIT_TEST_ADD_BLOCK_TEST(N, Force)                             \
+        }                                                                    \
+    };                                                                       \
+    static TTestRegistration##N testRegistration##N;                         \
+    template<NYql::EBlockEngineMode BlockEngineMode>                         \
+    void N(NUnitTest::TTestContext&)
+
+NYql::NPureCalc::TProgramFactoryOptions TestOptions(NYql::EBlockEngineMode mode) {
+    static const TMap<NYql::EBlockEngineMode, const TString> mode2settings = {
+        {NYql::EBlockEngineMode::Disable, "disable"},
+        {NYql::EBlockEngineMode::Auto, "auto"},
+        {NYql::EBlockEngineMode::Force, "force"},
+    };
+    auto options = NYql::NPureCalc::TProgramFactoryOptions();
+    options.SetBlockEngineSettings(mode2settings.at(mode));
+    return options;
+}
+
 
 template <typename T>
 struct TVectorStream: public NYql::NPureCalc::IStream<T*> {
@@ -117,13 +148,13 @@ TVector<std::tuple<ui64, i64>> CanonBatches(const TVector<arrow::compute::ExecBa
 
 
 Y_UNIT_TEST_SUITE(TestSimplePullListArrowIO) {
-    Y_UNIT_TEST(TestSingleInput) {
+    Y_UNIT_TEST_BLOCKS(TestSingleInput) {
         using namespace NYql::NPureCalc;
 
         TVector<TString> fields = {"uint64", "int64"};
         auto schema = NYql::NPureCalc::NPrivate::GetSchema(fields);
 
-        auto factory = MakeProgramFactory();
+        auto factory = MakeProgramFactory(TestOptions(BlockEngineMode));
 
         {
             auto program = factory->MakePullListProgram(
@@ -148,13 +179,13 @@ Y_UNIT_TEST_SUITE(TestSimplePullListArrowIO) {
         }
     }
 
-    Y_UNIT_TEST(TestMultiInput) {
+    Y_UNIT_TEST_BLOCKS(TestMultiInput) {
         using namespace NYql::NPureCalc;
 
         TVector<TString> fields = {"uint64", "int64"};
         auto schema = NYql::NPureCalc::NPrivate::GetSchema(fields);
 
-        auto factory = MakeProgramFactory();
+        auto factory = MakeProgramFactory(TestOptions(BlockEngineMode));
 
         {
             auto program = factory->MakePullListProgram(
@@ -193,13 +224,13 @@ Y_UNIT_TEST_SUITE(TestSimplePullListArrowIO) {
 
 
 Y_UNIT_TEST_SUITE(TestMorePullListArrowIO) {
-    Y_UNIT_TEST(TestInc) {
+    Y_UNIT_TEST_BLOCKS(TestInc) {
         using namespace NYql::NPureCalc;
 
         TVector<TString> fields = {"uint64", "int64"};
         auto schema = NYql::NPureCalc::NPrivate::GetSchema(fields);
 
-        auto factory = MakeProgramFactory();
+        auto factory = MakeProgramFactory(TestOptions(BlockEngineMode));
 
         {
             auto program = factory->MakePullListProgram(
@@ -232,13 +263,13 @@ Y_UNIT_TEST_SUITE(TestMorePullListArrowIO) {
 
 
 Y_UNIT_TEST_SUITE(TestSimplePullStreamArrowIO) {
-    Y_UNIT_TEST(TestSingleInput) {
+    Y_UNIT_TEST_BLOCKS(TestSingleInput) {
         using namespace NYql::NPureCalc;
 
         TVector<TString> fields = {"uint64", "int64"};
         auto schema = NYql::NPureCalc::NPrivate::GetSchema(fields);
 
-        auto factory = MakeProgramFactory();
+        auto factory = MakeProgramFactory(TestOptions(BlockEngineMode));
 
         {
             auto program = factory->MakePullStreamProgram(
@@ -266,13 +297,13 @@ Y_UNIT_TEST_SUITE(TestSimplePullStreamArrowIO) {
 
 
 Y_UNIT_TEST_SUITE(TestMorePullStreamArrowIO) {
-    Y_UNIT_TEST(TestInc) {
+    Y_UNIT_TEST_BLOCKS(TestInc) {
         using namespace NYql::NPureCalc;
 
         TVector<TString> fields = {"uint64", "int64"};
         auto schema = NYql::NPureCalc::NPrivate::GetSchema(fields);
 
-        auto factory = MakeProgramFactory();
+        auto factory = MakeProgramFactory(TestOptions(BlockEngineMode));
 
         {
             auto program = factory->MakePullStreamProgram(
@@ -305,13 +336,13 @@ Y_UNIT_TEST_SUITE(TestMorePullStreamArrowIO) {
 
 
 Y_UNIT_TEST_SUITE(TestPushStreamArrowIO) {
-    Y_UNIT_TEST(TestAllColumns) {
+    Y_UNIT_TEST_BLOCKS(TestAllColumns) {
         using namespace NYql::NPureCalc;
 
         TVector<TString> fields = {"uint64", "int64"};
         auto schema = NYql::NPureCalc::NPrivate::GetSchema(fields);
 
-        auto factory = MakeProgramFactory();
+        auto factory = MakeProgramFactory(TestOptions(BlockEngineMode));
 
         {
             auto program = factory->MakePushStreamProgram(
@@ -337,13 +368,13 @@ Y_UNIT_TEST_SUITE(TestPushStreamArrowIO) {
 }
 
 Y_UNIT_TEST_SUITE(TestMorePushStreamArrowIO) {
-    Y_UNIT_TEST(TestInc) {
+    Y_UNIT_TEST_BLOCKS(TestInc) {
         using namespace NYql::NPureCalc;
 
         TVector<TString> fields = {"uint64", "int64"};
         auto schema = NYql::NPureCalc::NPrivate::GetSchema(fields);
 
-        auto factory = MakeProgramFactory();
+        auto factory = MakeProgramFactory(TestOptions(BlockEngineMode));
 
         {
             auto program = factory->MakePushStreamProgram(

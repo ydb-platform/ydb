@@ -616,38 +616,39 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadIndexMeta
 
     for (size_t i = 0; i < indexesCount; i++) {
         const auto& index = tableMetadata->Indexes[i];
-        auto indexTablePath = NSchemeHelpers::CreateIndexTablePath(tableName, index.Name);
+        const auto indexTablePaths = NSchemeHelpers::CreateIndexTablePath(tableName, index.Type, index.Name);
+        for (const auto& indexTablePath : indexTablePaths) {
+            if (!index.SchemaVersion) {
+                LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_GATEWAY, "Load index metadata without schema version check index: " << index.Name);
+                children.push_back(
+                    LoadTableMetadata(cluster, indexTablePath,
+                        TLoadTableMetadataSettings().WithPrivateTables(true), database, userToken)
+                        .Apply([i, tableMetadata](const TFuture<TTableMetadataResult>& result) {
+                            auto value = result.GetValue();
+                            UpdateMetadataIfSuccess(tableMetadata, i, value);
+                            return static_cast<TGenericResult>(value);
+                        })
+                );
 
-        if (!index.SchemaVersion) {
-            LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_GATEWAY, "Load index metadata without schema version check index: " << index.Name);
-            children.push_back(
-                LoadTableMetadata(cluster, indexTablePath,
-                    TLoadTableMetadataSettings().WithPrivateTables(true), database, userToken)
-                    .Apply([i, tableMetadata](const TFuture<TTableMetadataResult>& result) {
-                        auto value = result.GetValue();
-                        UpdateMetadataIfSuccess(tableMetadata, i, value);
-                        return static_cast<TGenericResult>(value);
-                    })
-            );
+            } else {
+                LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_GATEWAY, "Load index metadata with schema version check"
+                    << "index: " << index.Name
+                    << "pathId: " << index.LocalPathId
+                    << "ownerId: " << index.PathOwnerId
+                    << "schemaVersion: " << index.SchemaVersion
+                    << "tableOwnerId: " << tableOwnerId);
+                auto ownerId = index.PathOwnerId ? index.PathOwnerId : tableOwnerId; //for compat with 20-2
+                children.push_back(
+                    LoadIndexMetadataByPathId(cluster,
+                        NKikimr::TIndexId(ownerId, index.LocalPathId, index.SchemaVersion), indexTablePath, database, userToken)
+                        .Apply([i, tableMetadata](const TFuture<TTableMetadataResult>& result) {
+                            auto value = result.GetValue();
+                            UpdateMetadataIfSuccess(tableMetadata, i, value);
+                            return static_cast<TGenericResult>(value);
+                        })
+                );
 
-        } else {
-            LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_GATEWAY, "Load index metadata with schema version check"
-                << "index: " << index.Name
-                << "pathId: " << index.LocalPathId
-                << "ownerId: " << index.PathOwnerId
-                << "schemaVersion: " << index.SchemaVersion
-                << "tableOwnerId: " << tableOwnerId);
-             auto ownerId = index.PathOwnerId ? index.PathOwnerId : tableOwnerId; //for compat with 20-2
-             children.push_back(
-                 LoadIndexMetadataByPathId(cluster,
-                     NKikimr::TIndexId(ownerId, index.LocalPathId, index.SchemaVersion), indexTablePath, database, userToken)
-                     .Apply([i, tableMetadata](const TFuture<TTableMetadataResult>& result) {
-                         auto value = result.GetValue();
-                         UpdateMetadataIfSuccess(tableMetadata, i, value);
-                         return static_cast<TGenericResult>(value);
-                     })
-             );
-
+            }
         }
     }
 

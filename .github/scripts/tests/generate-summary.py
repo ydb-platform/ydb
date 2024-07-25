@@ -298,16 +298,20 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool):
     return summary
 
 
-def get_comment_text(pr: PullRequest, summary: TestSummary, summary_links: str, is_last_retry: bool):
+def get_comment_text(pr: PullRequest, summary: TestSummary, summary_links: str, is_last_retry: bool)->tuple[str, list[str]]:
+    color = "red"
     if summary.is_empty:
-        return [
+        color = "green"
+        return color, [
             f"Test run completed, no test results found for commit {pr.head.sha}. "
         ]
     elif summary.is_failed:
+        color = "red" if is_last_retry else "yellow"
         result = f"Some tests failed, follow the links below."
         if not is_last_retry:
             result += " Going to retry failed tests..."
     else:
+        color = "green"
         result = f"Tests successful."
 
     body = []
@@ -338,7 +342,7 @@ def get_comment_text(pr: PullRequest, summary: TestSummary, summary_links: str, 
     else:
         body.append("")
 
-    return body
+    return color, body
 
 
 def main():
@@ -364,10 +368,8 @@ def main():
     write_summary(summary)
 
     if summary.is_failed:
-        color = 'red'
         overall_status = "failure"
     else:
-        color = 'green'
         overall_status = "success"
 
     if os.environ.get("GITHUB_EVENT_NAME") in ("pull_request", "pull_request_target"):
@@ -378,7 +380,7 @@ def main():
             event = json.load(fp)
 
         pr = gh.create_from_raw_data(PullRequest, event["pull_request"])
-        text = get_comment_text(pr, summary, args.summary_links, is_last_retry=bool(args.is_last_retry))
+        color, text = get_comment_text(pr, summary, args.summary_links, is_last_retry=bool(args.is_last_retry))
 
         update_pr_comment_text(pr, args.build_preset, run_number, color, text='\n'.join(text), rewrite=False)
 

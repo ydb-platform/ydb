@@ -62,10 +62,10 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
                 << "--param '$input=1'";
         }
         if (Parameters.find(paramName) != Parameters.end()) {
-            throw TMisuseException() << "Parameter $" << paramName << " value found in more than one source: \'--param\' option.";
+            throw TMisuseException() << "Parameter $" << paramName << " value found in more than one source: --param option.";
         }
         Parameters[paramName] = parameterOption.substr(equalPos + 1);
-        ParameterSources[paramName] = "\'--param\' option";
+        ParameterSources[paramName] = "--param option";
     }
 
     for (auto& file : ParameterFiles) {
@@ -95,13 +95,13 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
     }
     if (StdinFormat != EOutputFormat::Csv && StdinFormat != EOutputFormat::Tsv && (!Columns.Empty() || config.ParseResult->Has("param-skip-rows")
             || config.ParseResult->Has("skip-rows"))) {
-        throw TMisuseException() << "Options \"--param-columns\" and  \"--param-skip-rows\" requires \"csv\" or \"tsv\" formats";
+        throw TMisuseException() << "Options --param-columns and  --param-skip-rows requires \"csv\" or \"tsv\" formats";
     }
     if (StdinParameters.empty() && StdinFormat == EOutputFormat::Raw) {
-        throw TMisuseException() << "For \"raw\" format \"--param-name-stdin\" option should be used.";
+        throw TMisuseException() << "For \"raw\" format --param-name-stdin option should be used.";
     }
     if (!StdinParameters.empty() && !ReadParametersFromStdin) {
-        throw TMisuseException() << "\"--param-name-stdin\" option is allowed only with non-interactive stdin.";
+        throw TMisuseException() << "--param-name-stdin option is allowed only with non-interactive stdin.";
     }
     if (BatchMode == EBatchMode::Full || BatchMode == EBatchMode::Adaptive) {
         if (StdinParameters.size() > 1) {
@@ -116,17 +116,17 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
 
     for (auto it = StdinParameters.begin(); it != StdinParameters.end(); ++it) {
         if (std::find(StdinParameters.begin(), it, *it) != it) {
-            throw TMisuseException() << "Parameter $" << *it << " value found in more than one \'--param-name-stdin\' option.";
+            throw TMisuseException() << "Parameter $" << *it << " value found in more than one --param-name-stdin option.";
         }
         if (Parameters.find("$" + *it) != Parameters.end()) {
-            throw TMisuseException() << "Parameter $" << *it << " value found in more than one source: \'--param-name-stdin\' option, "
+            throw TMisuseException() << "Parameter $" << *it << " value found in more than one source: --param-name-stdin option, "
                 << ParameterSources["$" + *it] << ".";
         }
     }
     if (BatchMode != EBatchMode::Adaptive && (config.ParseResult->Has("param-batch-limit")
             || config.ParseResult->Has("param-batch-max-delay") || config.ParseResult->Has("batch-limit")
             || config.ParseResult->Has("batch-max-delay"))) {
-        throw TMisuseException() << "Options \"--param-batch-limit\" and \"--param-batch-max-delay\" are allowed only in \"adaptive\" batch mode.";
+        throw TMisuseException() << "Options --param-batch-limit and --param-batch-max-delay are allowed only in \"adaptive\" batch mode.";
     }
     if (DeprecatedSkipRows != 0) {
         SkipRows = DeprecatedSkipRows;
@@ -223,13 +223,13 @@ void TCommandWithParameters::AddParametersStdinOption(TClientCommand::TConfig& c
     descr << "Batching mode for stdin parameters processing. Available options:\n  "
         << colors.BoldColor() << "iterative" << colors.OldColor()
         << "\n    Executes " << requestString << " for each parameter set (exactly one execution "
-        "when no framing is specified in \"stdin-param-format\")\n  "
+        "when no framing is specified in --stdin-param-format option)\n  "
         << colors.BoldColor() << "full" << colors.OldColor()
         << "\n    Executes " << requestString << " once, with all parameter sets wrapped in json list, when EOF is reached on stdin\n  "
         << colors.BoldColor() << "adaptive" << colors.OldColor()
         << "\n    Executes " << requestString << " with a json list of parameter sets every time when its number reaches param-batch-limit, "
         "or the waiting time reaches param-batch-max-delay. An stdin parameter name must be specified via "
-        "\"--param-name-stdin\" option for \"adaptive\" batch mode."
+        "--param-name-stdin option for \"adaptive\" batch mode."
         "\nDefault: " << colors.CyanColor() << "\"iterative\"" << colors.OldColor() << ".";
 
     auto& paramBatch = config.Opts->AddLongOption("param-batch", descr.Str()).RequiredArgument("STRING")
@@ -269,7 +269,7 @@ void TCommandWithParameters::AddParams(TParamsBuilder& paramBuilder) {
             for (const auto&[name, value] : Parameters) {
                 auto paramIt = ParamTypes.find(name);
                 if (paramIt == ParamTypes.end()) {
-                    if (ParameterSources[name] == "\'--param\' option") {
+                    if (ParameterSources[name] == "--param option") {
                         throw TMisuseException() << "Query does not contain parameter \"" << name << "\".";
                     } else {
                         continue;

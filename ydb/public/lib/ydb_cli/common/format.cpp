@@ -26,8 +26,8 @@ namespace {
         { EOutputFormat::Csv, "Parameter names and values in csv format" },
         { EOutputFormat::Tsv, "Parameter names and values in tsv format" },
         { EOutputFormat::NewlineDelimited, "Newline character delimits parameter sets on stdin and triggers "
-                                            "processing in accordance to \"batch\" option" },
-        { EOutputFormat::Raw, "Binary value with no transformations or parsing, parameter name is set by an \"stdin-par\" option" },
+                                            "processing in accordance to --param-batch option" },
+        { EOutputFormat::Raw, "Binary value with no transformations or parsing, parameter name is set by an --param-name-stdin option" },
         { EOutputFormat::NoFraming, "Data from stdin is taken as a single set of parameters" },
     };
 

@@ -53,6 +53,24 @@ NYT::TNode RunGenSql(
     return program->MakeOutputSchema();
 }
 
+template <typename TInputSpec, typename TStream>
+void ShowResults(
+    const IProgramFactoryPtr factory,
+    const TVector<NYT::TNode>& inputSchema,
+    const TString& sql,
+    ETranslationMode isPg,
+    TStream* input
+) {
+    auto inputSpec = TInputSpec(inputSchema);
+    auto outputSpec = TYsonOutputSpec({NYT::TNode::CreateEntity()});
+    auto program = factory->MakePullListProgram(inputSpec, outputSpec, sql, isPg);
+    auto handle = program->Apply(input);
+    TStringStream output;
+    handle->Run(&output);
+    TStringInput in(output.Str());
+    NYson::ReformatYsonStream(&in, &Cerr, NYson::EYsonFormat::Pretty, NYson::EYsonType::ListFragment);
+}
+
 int Main(int argc, const char *argv[])
 {
     Y_UNUSED(NUdf::GetStaticSymbols());
@@ -116,6 +134,7 @@ int Main(int argc, const char *argv[])
     auto inputGenStream = MakeGenInput(count);
     Cerr << "Input data size: " << inputGenStream.Size() << "\n";
     ETranslationMode isPgGen = res.Has("pg") ? ETranslationMode::PG : ETranslationMode::SQL;
+    ETranslationMode isPgTest = res.Has("pt") ? ETranslationMode::PG : ETranslationMode::SQL;
 
     TStringStream outputGenStream;
     auto outputGenSchema = RunGenSql<TSkiffOutputSpec>(
@@ -126,23 +145,13 @@ int Main(int argc, const char *argv[])
             Cerr << "Generated data size: " << outputGenStream.Size() << "\n";
         });
 
-    Cerr << "Dry run of test sql...\n";
-    auto inputSpec2 = TSkiffInputSpec(genProgram->MakeOutputSchema());
-    auto outputSpec2 = TYsonOutputSpec({NYT::TNode::CreateEntity()});
-    auto testProgram = factory->MakePullListProgram(
-        inputSpec2,
-        outputSpec2,
-        testSql,
-        res.Has("pt") ? ETranslationMode::PG : ETranslationMode::SQL);
-    auto input2 = TStringStream(output1);
-    auto handle2 = testProgram->Apply(&input2);
-    TStringStream output2;
-    handle2->Run(&output2);
     if (showResults) {
-        TStringInput in(output2.Str());
-        NYson::ReformatYsonStream(&in, &Cerr, NYson::EYsonFormat::Pretty, NYson::EYsonType::ListFragment);
+        auto inputResStream = TStringStream(outputGenStream);
+        ShowResults<TSkiffInputSpec>(
+            factory, {outputGenSchema}, testSql, isPgTest, &inputResStream);
     }
 
+    Cerr << "Dry run of test sql...\n";
     Cerr << "Run benchmark...\n";
     TVector<TDuration> times;
     TSimpleTimer allTimer;

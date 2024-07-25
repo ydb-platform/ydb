@@ -160,6 +160,9 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
         auto blobSchema = context.SchemaVersions.GetSchemaVerified(inserted.GetSchemaVersion());
         std::vector<ui32> filteredIds = inserted.GetMeta().GetSchemaSubset().Apply(blobSchema->GetIndexInfo().GetColumnIds(true));
         usageColumnIds.insert(filteredIds.begin(), filteredIds.end());
+        if (inserted.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete) {
+            usageColumnIds.emplace((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG);
+        }
         if (usageColumnIds.size() == resultSchema->GetIndexInfo().GetColumnIds(true).size()) {
             break;
         }
@@ -179,8 +182,10 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
         }
 
         IIndexInfo::AddSnapshotColumns(*batch, inserted.GetSnapshot());
-        IIndexInfo::AddDeleteFlagsColumn(*batch, inserted.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete);
-        usageColumnIds.insert(IIndexInfo::GetSystemColumnIds().begin(), IIndexInfo::GetSystemColumnIds().end());
+        if (usageColumnIds.contains((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG)) {
+            IIndexInfo::AddDeleteFlagsColumn(*batch, inserted.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete);
+        }
+        usageColumnIds.insert(IIndexInfo::GetSnapshotColumnIds().begin(), IIndexInfo::GetSnapshotColumnIds().end());
 
         batch = resultSchema->NormalizeBatch(*blobSchema, batch, usageColumnIds).DetachResult();
         pathBatches.Add(inserted, shardingFilterCommit, batch);

@@ -9,6 +9,8 @@ struct TProcessMemoryInfo {
     ui64 AllocatorCachesMemory;
     std::optional<ui64> AnonRss;
     std::optional<ui64> CGroupLimit;
+    std::optional<ui64> MemTotal;
+    std::optional<ui64> MemAvailable;
 };
 
 struct IProcessMemoryInfoProvider : public TThrRefBase {

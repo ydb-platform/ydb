@@ -176,6 +176,8 @@ int Main(int argc, const char *argv[])
     Cerr << "Input data size: " << inputGenStream.Size() << "\n";
     ETranslationMode isPgGen = res.Has("pg") ? ETranslationMode::PG : ETranslationMode::SQL;
     ETranslationMode isPgTest = res.Has("pt") ? ETranslationMode::PG : ETranslationMode::SQL;
+    double normalizedTime;
+    size_t inputBenchSize;
 
     if (blockEngineSettings == "disable") {
         TStringStream outputGenStream;
@@ -193,8 +195,8 @@ int Main(int argc, const char *argv[])
                 factory, {outputGenSchema}, testSql, isPgTest, &inputResStream);
         }
 
-        auto inputBenchSize = outputGenStream.Size();
-        double time = RunBenchmarks<TSkiffInputSpec, TSkiffOutputSpec>(
+        inputBenchSize = outputGenStream.Size();
+        normalizedTime = RunBenchmarks<TSkiffInputSpec, TSkiffOutputSpec>(
             factory, {outputGenSchema}, testSql, isPgTest, repeats,
             [&](const auto& program) {
                 auto inputBorrowed = TStringStream(outputGenStream);
@@ -202,8 +204,6 @@ int Main(int argc, const char *argv[])
                 TNullOutput output;
                 handle->Run(&output);
             });
-
-        Cout << "Bench score: " << Prec(inputBenchSize / time, 4) << "\n";
     } else {
         auto inputGenSpec = TSkiffInputSpec(inputGenSchema);
         auto outputGenSpec = TArrowOutputSpec({NYT::TNode::CreateEntity()});
@@ -236,16 +236,16 @@ int Main(int argc, const char *argv[])
                 factory, {outputGenSchema}, testSql, isPgTest, inputResStream);
         }
 
-        auto inputBenchSize = outputGenSize;
-        double time = RunBenchmarks<TArrowInputSpec, TArrowOutputSpec>(
+        inputBenchSize = outputGenSize;
+        normalizedTime = RunBenchmarks<TArrowInputSpec, TArrowOutputSpec>(
             factory, {outputGenSchema}, testSql, isPgTest, repeats,
             [&](const auto& program) {
                 auto handle = program->Apply(StreamFromVector(outputGenStream));
                 while (arrow::compute::ExecBatch* batch = handle->Fetch()) {}
             });
-
-        Cout << "Bench score: " << Prec(inputBenchSize / time, 4) << "\n";
     }
+
+    Cout << "Bench score: " << Prec(inputBenchSize / normalizedTime, 4) << "\n";
 
     NLog::CleanupLogger();
     return 0;

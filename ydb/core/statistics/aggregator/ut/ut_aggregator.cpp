@@ -31,8 +31,8 @@ Y_UNIT_TEST_SUITE(StatisticsAggregator) {
         runtime.SimulateSleep(TDuration::Seconds(5));
         initThread.join();
 
-        ui64 tabletId;
-        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &tabletId);
+        ui64 saTabletId;
+        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
 
         runtime.SimulateSleep(TDuration::Seconds(30));
 
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(StatisticsAggregator) {
         PathIdFromPathId(pathId, record.AddTables()->MutablePathId());
 
         auto sender = runtime.AllocateEdgeActor();
-        runtime.SendToPipe(tabletId, sender, ev.release());
+        runtime.SendToPipe(saTabletId, sender, ev.release());
         runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
 
         ValidateCountMin(runtime, pathId);
@@ -64,8 +64,8 @@ Y_UNIT_TEST_SUITE(StatisticsAggregator) {
         // TODO remove sleep
         runtime.SimulateSleep(TDuration::Seconds(30));
 
-        ui64 tabletId1;
-        auto pathId1 = ResolvePathId(runtime, "/Root/Database/Table1", nullptr, &tabletId1);
+        ui64 saTabletId1;
+        auto pathId1 = ResolvePathId(runtime, "/Root/Database/Table1", nullptr, &saTabletId1);
         auto pathId2 = ResolvePathId(runtime, "/Root/Database/Table2");
 
         auto ev = std::make_unique<TEvStatistics::TEvAnalyze>();
@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(StatisticsAggregator) {
         PathIdFromPathId(pathId2, record.AddTables()->MutablePathId());
 
         auto sender = runtime.AllocateEdgeActor();
-        runtime.SendToPipe(tabletId1, sender, ev.release());
+        runtime.SendToPipe(saTabletId1, sender, ev.release());
         runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
         runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
 
@@ -191,8 +191,8 @@ Y_UNIT_TEST_SUITE(StatisticsAggregator) {
         runtime.SimulateSleep(TDuration::Seconds(5));
         initThread.join();
 
-        ui64 tabletId = 0;
-        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &tabletId);
+        ui64 saTabletId = 0;
+        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
 
         auto init2 = [&] () {
             DropTable(env, "Database", "Table");
@@ -207,7 +207,7 @@ Y_UNIT_TEST_SUITE(StatisticsAggregator) {
         PathIdFromPathId(pathId, record.AddTables()->MutablePathId());
 
         auto sender = runtime.AllocateEdgeActor();
-        runtime.SendToPipe(tabletId, sender, ev.release());
+        runtime.SendToPipe(saTabletId, sender, ev.release());
 
         runtime.SimulateSleep(TDuration::Seconds(60));
 
@@ -226,9 +226,7 @@ Y_UNIT_TEST_SUITE(StatisticsAggregator) {
         runtime.SimulateSleep(TDuration::Seconds(30));
         initThread.join();
 
-        ui64 tabletId = 0;
-        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &tabletId);
-        Y_UNUSED(pathId);
+        auto pathId = ResolvePathId(runtime, "/Root/Database/Table");
 
         runtime.SimulateSleep(TDuration::Seconds(30));
 

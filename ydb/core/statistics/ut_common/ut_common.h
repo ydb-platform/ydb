@@ -60,7 +60,7 @@ void CreateDatabase(TTestEnv& env, const TString& databaseName, size_t nodeCount
 
 void CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, TPathId resourcesDomainKey);
 
-TPathId ResolvePathId(TTestActorRuntime& runtime, const TString& path, TPathId* domainKey = nullptr, ui64* tabletId = nullptr);
+TPathId ResolvePathId(TTestActorRuntime& runtime, const TString& path, TPathId* domainKey = nullptr, ui64* saTabletId = nullptr);
 
 
 TVector<ui64> GetTableShards(TTestActorRuntime& runtime, TActorId sender, const TString &path);

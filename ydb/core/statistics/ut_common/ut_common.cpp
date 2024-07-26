@@ -119,8 +119,7 @@ void CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, TPathI
         env.GetClient().AlterExtSubdomain("/Root", subdomainSettings));
 }
 
-TPathId ResolvePathId(TTestActorRuntime& runtime, const TString& path,
-    TPathId* domainKey, ui64* tabletId)
+TPathId ResolvePathId(TTestActorRuntime& runtime, const TString& path, TPathId* domainKey, ui64* saTabletId)
 {
     auto sender = runtime.AllocateEdgeActor();
 
@@ -147,8 +146,8 @@ TPathId ResolvePathId(TTestActorRuntime& runtime, const TString& path,
         *domainKey = resultEntry.DomainInfo->DomainKey;
     }
 
-    if (tabletId && resultEntry.DomainInfo->Params.HasStatisticsAggregator()) {
-        *tabletId = resultEntry.DomainInfo->Params.GetStatisticsAggregator();
+    if (saTabletId && resultEntry.DomainInfo->Params.HasStatisticsAggregator()) {
+        *saTabletId = resultEntry.DomainInfo->Params.GetStatisticsAggregator();
     }
 
     return resultEntry.TableId.PathId;

@@ -631,7 +631,7 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
 
     for (auto& flag : flags) {
         if (flag->IsAtom("LeftAny") || flag->IsAtom("RightAny")) {
-            ctx.AddError(TIssue(ctx.GetPosition(join.Ptr()->Pos()), "ANY join kind is not currently supported in YDB"));
+            ctx.AddError(TIssue(ctx.GetPosition(join.Ptr()->Pos()), "ANY join kind is not currently supported"));
             return join;
         }
     }

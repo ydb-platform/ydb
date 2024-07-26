@@ -458,7 +458,7 @@ void TChunkWriterOptions::Register(TRegistrar registrar)
     registrar.Parameter("enable_row_count_in_columnar_statistics", &TThis::EnableRowCountInColumnarStatistics)
         .Default(true);
     registrar.Parameter("enable_segment_meta_in_blocks", &TThis::EnableSegmentMetaInBlocks)
-        .Default(true);
+        .Default(false);
     registrar.Parameter("enable_column_meta_in_chunk_meta", &TThis::EnableColumnMetaInChunkMeta)
         .Default(true);
 

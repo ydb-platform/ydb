@@ -594,7 +594,7 @@ public:
         // ScheduleWakeUp(StartTime, MovedPatchTag);
         Become(&TBlobStorageGroupPatchRequest::MovedPatchState);
         IsMovedPatch = true;
-        ui32 subgroupIdx = 0;
+        std::optional<ui32> subgroupIdx = 0;
 
         if (OkVDisksWithParts) {
             ui32 okVDiskIdx = RandomNumber<ui32>(OkVDisksWithParts.size());
@@ -615,13 +615,16 @@ public:
                         goodDisks.push_back(idx);
                     }
                 }
-                ui32 okVDiskIdx = RandomNumber<ui32>(goodDisks.size());
-                subgroupIdx = goodDisks[okVDiskIdx];
-            } else {
-                subgroupIdx = RandomNumber<ui32>(Info->Type.TotalPartCount());
+                if (goodDisks.size()) {
+                    ui32 okVDiskIdx = RandomNumber<ui32>(goodDisks.size());
+                    subgroupIdx = goodDisks[okVDiskIdx];
+                }
             }
         }
-        TVDiskID vDisk = Info->GetVDiskInSubgroup(subgroupIdx, OriginalId.Hash());
+        if (!subgroupIdx) {
+            subgroupIdx = RandomNumber<ui32>(Info->Type.TotalPartCount());
+        }
+        TVDiskID vDisk = Info->GetVDiskInSubgroup(*subgroupIdx, OriginalId.Hash());
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVMovedPatch>> events;
 
         ui64 cookie = ((ui64)OriginalId.Hash() << 32) | PatchedId.Hash();

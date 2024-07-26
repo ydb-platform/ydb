@@ -620,7 +620,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
             }
 
         }
-        YQL_LOG(TRACE)
+        YQL_LOG(GRACEJOIN_TRACE)
             << (const void *)this << '#'
             << bucket
             << " Table1 " << JoinTable1->TableBucketsStats[bucket].TuplesNum
@@ -1355,16 +1355,16 @@ TTable::TTable( ui64 numberOfKeyIntColumns, ui64 numberOfKeyStringColumns,
 }
 
 TTable::~TTable() {
-    YQL_LOG_IF(DEBUG, InitHashTableCount_)
+    YQL_LOG_IF(GRACEJOIN_DEBUG, InitHashTableCount_)
         << (const void *)this << '#' << "InitHashTableCount " << InitHashTableCount_
         << " BloomLookups " << BloomLookups_ << " BloomHits " << BloomHits_ << " BloomFalsePositives " << BloomFalsePositives_
         << " HashLookups " << HashLookups_ << " HashChainTraversal " << HashO1Iterations_/(double)HashLookups_ << " HashSlotOperations " << HashSlotIterations_/(double)HashLookups_
         << " Table1 " << JoinTable1Total_ << " Table2 " << JoinTable2Total_ << " TuplesFound " << TuplesFound_
         ;
-    YQL_LOG_IF(DEBUG, JoinTable1 && JoinTable1->AnyFiltered_) << (const void *)this << '#' << "L AnyFiltered " <<  JoinTable1->AnyFiltered_;
-    YQL_LOG_IF(DEBUG, JoinTable1 && JoinTable1->BloomLookups_) << (const void *)this << '#' << "L BloomLookups " <<  JoinTable1->BloomLookups_ << " BloomHits " <<  JoinTable1->BloomHits_;
-    YQL_LOG_IF(DEBUG, JoinTable2 && JoinTable2->AnyFiltered_) << (const void *)this << '#' << "R AnyFiltered " <<  JoinTable2->AnyFiltered_;
-    YQL_LOG_IF(DEBUG, JoinTable2 && JoinTable2->BloomLookups_) << (const void *)this << '#' << "R BloomLookups " <<  JoinTable2->BloomLookups_ << " BloomHits " <<  JoinTable2->BloomHits_;
+    YQL_LOG_IF(GRACEJOIN_DEBUG, JoinTable1 && JoinTable1->AnyFiltered_) << (const void *)this << '#' << "L AnyFiltered " <<  JoinTable1->AnyFiltered_;
+    YQL_LOG_IF(GRACEJOIN_DEBUG, JoinTable1 && JoinTable1->BloomLookups_) << (const void *)this << '#' << "L BloomLookups " <<  JoinTable1->BloomLookups_ << " BloomHits " <<  JoinTable1->BloomHits_;
+    YQL_LOG_IF(GRACEJOIN_DEBUG, JoinTable2 && JoinTable2->AnyFiltered_) << (const void *)this << '#' << "R AnyFiltered " <<  JoinTable2->AnyFiltered_;
+    YQL_LOG_IF(GRACEJOIN_DEBUG, JoinTable2 && JoinTable2->BloomLookups_) << (const void *)this << '#' << "R BloomLookups " <<  JoinTable2->BloomLookups_ << " BloomHits " <<  JoinTable2->BloomHits_;
 };
 
 TTableBucketSpiller::TTableBucketSpiller(ISpiller::TPtr spiller, size_t sizeLimit)

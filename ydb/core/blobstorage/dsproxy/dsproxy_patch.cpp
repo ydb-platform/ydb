@@ -27,20 +27,32 @@ class TBlobStorageGroupPatchRequest : public TBlobStorageGroupRequestActor {
         }
     };
 
-    enum EWakeUpTag : ui64{
+    enum EWakeUpTag : ui64 {
         VPatchStartTag,
         VPatchDiffTag,
         MovedPatchTag,
         NeverTag,
     };
 
+    static TString ToString(ui64 wakeUp) {
+        switch (wakeUp) {
+            case VPatchStartTag: return "VPatchStartTag";
+            case VPatchDiffTag: return "VPatchDiffTag";
+            case MovedPatchTag: return "MovedPatchTag";
+            case NeverTag: return "NeverTag";
+            default: return "unknown@" + ToString(wakeUp);
+        }
+    }
+
     static constexpr ui32 TypicalHandoffCount = 2;
     static constexpr ui32 TypicalPartPlacementCount = 1 + TypicalHandoffCount;
     static constexpr ui32 TypicalMaxPartsCount = TypicalPartPlacementCount * TypicalPartsInBlob;
 
-    static constexpr ui32 VPatchStartWaitingMultiplier = 1;
-    static constexpr ui32 VPatchDiffWaitingMultiplier = 2;
+    static constexpr ui32 VPatchStartWaitingMultiplier = 2;
+    static constexpr ui32 VPatchDiffWaitingMultiplier = 6;
     static constexpr ui32 MovedPatchWaitingMultiplier = 4;
+
+    static constexpr ui32 DefaultNsForChangeStrategy = 30'000'000; // 30 ms
 
     TString Buffer;
 
@@ -56,6 +68,7 @@ class TBlobStorageGroupPatchRequest : public TBlobStorageGroupRequestActor {
     float ApproximateFreeSpaceShare = 0;
 
     TInstant StartTime;
+    TInstant StageStart;
     TInstant Deadline;
 
     NLWTrace::TOrbit Orbit;
@@ -66,6 +79,7 @@ class TBlobStorageGroupPatchRequest : public TBlobStorageGroupRequestActor {
     ui32 SentStarts = 0;
     ui32 ReceivedFoundParts = 0;
     ui32 ErrorResponses = 0;
+    ui32 SentVPatchDiff = 0;
     ui32 ReceivedResults = 0;
 
     TStackVec<TPartPlacement, TypicalMaxPartsCount> FoundParts;
@@ -76,13 +90,10 @@ class TBlobStorageGroupPatchRequest : public TBlobStorageGroupRequestActor {
     TStackVec<bool, TypicalDisksInSubring> SlowFlags;
     TBlobStorageGroupInfo::TVDiskIds VDisks;
 
-    TInstant VPatchDiffDeadline;
-
     bool UseVPatch = false;
     bool IsGoodPatchedBlobId = false;
     bool IsAllowedErasure = false;
     bool IsSecured = false;
-    bool IsAccelerated = false;
     bool HasSlowVDisk = false;
     bool IsContinuedVPatch = false;
     bool IsMovedPatch = false;
@@ -102,6 +113,19 @@ class TBlobStorageGroupPatchRequest : public TBlobStorageGroupRequestActor {
 public:
     ::NMonitoring::TDynamicCounters::TCounterPtr& GetActiveCounter() const override {
         return Mon->ActivePatch;
+    }
+
+    void ScheduleWakeUp(TInstant startTime, EWakeUpTag tag) {
+        TDuration duration = TActivationContext::Now() - startTime;
+        Schedule(duration, new TEvents::TEvWakeup(tag));
+    }
+
+    void ScheduleWakeUp(EWakeUpTag tag) {
+        ScheduleWakeUp(StageStart, tag);
+    }
+
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::BS_PROXY_PATCH_ACTOR;
     }
 
     ERequestType GetRequestType() const override {
@@ -287,6 +311,12 @@ public:
     void Handle(TEvBlobStorage::TEvVPatchFoundParts::TPtr &ev) {
         ReceivedFoundParts++;
 
+        if (Info->Type.ErasureFamily() != TErasureType::ErasureMirror) {
+            if (ReceivedFoundParts == SentStarts / 2 + SentStarts % 2) {
+                ScheduleWakeUp(VPatchStartTag);
+            }
+        }
+
         NKikimrBlobStorage::TEvVPatchFoundParts &record = ev->Get()->Record;
 
         Y_ABORT_UNLESS(record.HasCookie());
@@ -320,6 +350,7 @@ public:
         PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA26, "Received VPatchFoundParts",
                 (Status, status),
                 (SubgroupIdx, (ui32)subgroupIdx),
+                (VDiskId, VDisks[subgroupIdx]),
                 (ReceivedResults, static_cast<TString>(TStringBuilder() << ReceivedFoundParts << '/' << SentStarts)),
                 (ErrorReason, errorReason));
 
@@ -349,6 +380,13 @@ public:
         }
         ReceivedResults++;
 
+
+        if (Info->Type.ErasureFamily() != TErasureType::ErasureMirror) {
+            if (ReceivedResults == SentVPatchDiff / 2 + SentVPatchDiff % 2) {
+                ScheduleWakeUp(VPatchDiffTag);
+            }
+        }
+
         PullOutStatusFlagsAndFressSpace(record);
         Y_ABORT_UNLESS(record.HasStatus());
         NKikimrProto::EReplyStatus status = record.GetStatus();
@@ -360,6 +398,7 @@ public:
         PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA23, "Received VPatchResult",
                 (Status, status),
                 (SubgroupIdx, (ui32)subgroupIdx),
+                (VDiskID, VDisks[subgroupIdx]),
                 (ReceivedResults, static_cast<TString>(TStringBuilder() << ReceivedResults << '/' << Info->Type.TotalPartCount())),
                 (ErrorReason, errorReason));
 
@@ -490,7 +529,7 @@ public:
 
             ui32 waitedXorDiffs = (partPlacement.PartId > dataParts)  ? dataPartCount : 0;
             auto ev = std::make_unique<TEvBlobStorage::TEvVPatchDiff>(originalPartBlobId, partchedPartBlobId,
-                VDisks[idxInSubgroup], waitedXorDiffs, VPatchDiffDeadline, idxInSubgroup);
+                VDisks[idxInSubgroup], waitedXorDiffs, Deadline, idxInSubgroup);
 
             ui32 diffForPartIdx = 0;
             if (Info->Type.ErasureFamily() != TErasureType::ErasureMirror) {
@@ -510,6 +549,7 @@ public:
             }
             PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA20, "Send TEvVPatchDiff",
                     (VDiskIdxInSubgroup, idxInSubgroup),
+                    (VDiskId, VDisks[idxInSubgroup]),
                     (PatchedVDiskIdxInSubgroup, patchedIdxInSubgroup),
                     (PartId, (ui64)partPlacement.PartId),
                     (DiffsForPart, diffsForPart.size()),
@@ -543,6 +583,7 @@ public:
             ui32 vdiskIdx = vdiskIdxForParts[partIdx];
             Y_VERIFY_S(vdiskIdx == partIdx || vdiskIdx >= dataParts, "vdiskIdx# " << vdiskIdx << " partIdx# " << partIdx);
             placements.push_back(TPartPlacement{static_cast<ui8>(vdiskIdx), static_cast<ui8>(partIdx + 1)});
+            SentVPatchDiff++;
         }
         SendDiffs(placements);
     }
@@ -550,10 +591,11 @@ public:
     void StartMovedPatch() {
         PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA09, "Start Moved strategy",
                 (SentStarts, SentStarts));
-        Become(&TThis::MovedPatchState);
-        TInstant movedPatchDeadline = Deadline;
+        // ScheduleWakeUp(StartTime, MovedPatchTag);
+        Become(&TBlobStorageGroupPatchRequest::MovedPatchState);
         IsMovedPatch = true;
         ui32 subgroupIdx = 0;
+
         if (OkVDisksWithParts) {
             ui32 okVDiskIdx = RandomNumber<ui32>(OkVDisksWithParts.size());
             subgroupIdx = OkVDisksWithParts[okVDiskIdx];
@@ -562,12 +604,10 @@ public:
             ui64 nextToWorstNs = 0;
             i32 worstSubGroubIdx = -1;
             GetWorstPredictedDelaysNs(NKikimrBlobStorage::EVDiskQueueId::PutAsyncBlob, &worstNs, &nextToWorstNs, &worstSubGroubIdx);
-            if (worstNs * 2 > nextToWorstNs) {
+            if (worstNs > nextToWorstNs * 2) {
                 SlowFlags[worstSubGroubIdx] = true;
+                HasSlowVDisk = true;
             }
-            Schedule(TDuration::MicroSeconds(nextToWorstNs * MovedPatchWaitingMultiplier / 1000), new TEvents::TEvWakeup(MovedPatchTag));
-            movedPatchDeadline = TActivationContext::Now() + TDuration::MicroSeconds(nextToWorstNs * MovedPatchWaitingMultiplier * 0.9 / 1000);
-
             if (HasSlowVDisk) {
                 TStackVec<ui32, TypicalDisksInSubring> goodDisks;
                 for (ui32 idx = 0; idx < VDisks.size(); ++idx) {
@@ -586,7 +626,7 @@ public:
 
         ui64 cookie = ((ui64)OriginalId.Hash() << 32) | PatchedId.Hash();
         events.emplace_back(new TEvBlobStorage::TEvVMovedPatch(OriginalGroupId.GetRawId(), Info->GroupID.GetRawId(),
-                OriginalId, PatchedId, vDisk, false, cookie, movedPatchDeadline));
+                OriginalId, PatchedId, vDisk, false, cookie, Deadline));
         events.back()->Orbit = std::move(Orbit);
         for (ui64 diffIdx = 0; diffIdx < DiffCount; ++diffIdx) {
             auto &diff = Diffs[diffIdx];
@@ -613,7 +653,7 @@ public:
 
     void StartFallback() {
         Mon->PatchesWithFallback->Inc();
-        if (WithMovingPatchRequestToStaticNode && UseVPatch && !IsSecured) {
+        if (WithMovingPatchRequestToStaticNode && UseVPatch && !IsSecured && !IsMovedPatch) {
             PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA05, "Start Moved strategy from fallback");
             StartMovedPatch();
         } else {
@@ -625,32 +665,28 @@ public:
     }
 
     void StartVPatch() {
+        StageStart = TActivationContext::Now();
         Become(&TBlobStorageGroupPatchRequest::VPatchState);
-
-        Info->PickSubgroup(OriginalId.Hash(), &VDisks, nullptr);
         ReceivedResponseFlags.assign(VDisks.size(), false);
         ErrorResponseFlags.assign(VDisks.size(), false);
         EmptyResponseFlags.assign(VDisks.size(), false);
         ForceStopFlags.assign(VDisks.size(), false);
         SlowFlags.assign(VDisks.size(), false);
 
-        TDeque<std::unique_ptr<TEvBlobStorage::TEvVPatchStart>> events;
-
-        TInstant vpatchStartDeadline = Deadline;
         ui64 worstNs = 0;
         ui64 nextToWorstNs = 0;
         i32 worstSubGroubIdx = -1;
         GetWorstPredictedDelaysNs(NKikimrBlobStorage::EVDiskQueueId::GetFastRead, &worstNs, &nextToWorstNs, &worstSubGroubIdx);
-        if (worstNs * 2 > nextToWorstNs) {
+        if (worstNs > nextToWorstNs * 2) {
             SlowFlags[worstSubGroubIdx] = true;
+            HasSlowVDisk = true;
         }
-        Schedule(TDuration::MicroSeconds(nextToWorstNs * VPatchStartWaitingMultiplier / 1000), new TEvents::TEvWakeup(VPatchStartTag));
-        vpatchStartDeadline = TActivationContext::Now() + TDuration::MicroSeconds(nextToWorstNs * (VPatchStartWaitingMultiplier + VPatchDiffWaitingMultiplier) * 0.9 / 1000);
 
+        TDeque<std::unique_ptr<TEvBlobStorage::TEvVPatchStart>> events;
         for (ui32 idx = 0; idx < VDisks.size(); ++idx) {
             if (!SlowFlags[idx]) {
                 std::unique_ptr<TEvBlobStorage::TEvVPatchStart> ev = std::make_unique<TEvBlobStorage::TEvVPatchStart>(
-                        OriginalId, PatchedId, VDisks[idx], vpatchStartDeadline, idx, true);
+                        OriginalId, PatchedId, VDisks[idx], Deadline, idx, true);
                 events.emplace_back(std::move(ev));
                 SentStarts++;
             }
@@ -757,18 +793,17 @@ public:
     bool ContinueVPatch() {
         PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA15, "Continue VPatch strategy",
                 (FoundParts, ConvertFoundPartsToString()));
+        StageStart = TActivationContext::Now();
         IsContinuedVPatch = true;
 
-        VPatchDiffDeadline = Deadline;
         ui64 worstNs = 0;
         ui64 nextToWorstNs = 0;
         i32 worstSubGroubIdx = -1;
         GetWorstPredictedDelaysNs(NKikimrBlobStorage::EVDiskQueueId::GetFastRead, &worstNs, &nextToWorstNs, &worstSubGroubIdx);
-        if (worstNs * 2 > nextToWorstNs) {
+        if (worstNs > nextToWorstNs * 2) {
             SlowFlags[worstSubGroubIdx] = true;
+            HasSlowVDisk = true;
         }
-        Schedule(TDuration::MicroSeconds(nextToWorstNs * VPatchDiffWaitingMultiplier / 1000), new TEvents::TEvWakeup(VPatchDiffTag));
-        VPatchDiffDeadline = Min(Deadline, TActivationContext::Now() + TDuration::MicroSeconds(nextToWorstNs * VPatchDiffWaitingMultiplier * 0.9 / 1000));
 
         if (Info->Type.GetErasure() == TErasureType::ErasureMirror3dc) {
             return ContinueVPatchForMirror3dc();
@@ -852,25 +887,9 @@ public:
         return true;
     }
 
-    void GetWorstPredictedDelaysNs(NKikimrBlobStorage::EVDiskQueueId queueId,
-            ui64 *outWorstNs, ui64 *outNextToWorstNs, i32 *outWorstSubgroupIdx) const {
-        *outWorstSubgroupIdx = -1;
-        *outWorstNs = 0;
-        *outNextToWorstNs = 0;
-        for (ui32 diskIdx = 0; diskIdx < VDisks.size(); ++diskIdx) {
-            ui64 predictedNs = GroupQueues->GetPredictedDelayNsByOrderNumber(diskIdx, queueId);;
-            if (predictedNs > *outWorstNs) {
-                *outNextToWorstNs = *outWorstNs;
-                *outWorstNs = predictedNs;
-                *outWorstSubgroupIdx = diskIdx;
-            } else if (predictedNs > *outNextToWorstNs) {
-                *outNextToWorstNs = predictedNs;
-            }
-        }
-    }
-
     void Bootstrap() override {
         PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA01, "Actor bootstrapped");
+        Schedule(TDuration::MicroSeconds(60'000'000), new TEvents::TEvWakeup(NeverTag));
 
         TLogoBlobID truePatchedBlobId = PatchedId;
         bool result = true;
@@ -900,7 +919,7 @@ public:
         IsAllowedErasure = Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock
                 || Info->Type.GetErasure() == TErasureType::ErasureNone
                 || Info->Type.GetErasure() == TErasureType::ErasureMirror3dc;
-        if (IsGoodPatchedBlobId && IsAllowedErasure && UseVPatch && OriginalGroupId == Info->GroupID && !IsSecured) {
+        if (false && IsGoodPatchedBlobId && IsAllowedErasure && UseVPatch && OriginalGroupId == Info->GroupID && !IsSecured) {
             PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA03, "Start VPatch strategy from bootstrap");
             StartVPatch();
         } else {
@@ -914,16 +933,72 @@ public:
         }
     }
 
+    void GetWorstPredictedDelaysNs(NKikimrBlobStorage::EVDiskQueueId queueId,
+            ui64 *outWorstNs, ui64 *outNextToWorstNs, i32 *outWorstSubgroupIdx) const
+    {
+        *outWorstSubgroupIdx = -1;
+        *outWorstNs = 0;
+        *outNextToWorstNs = 0;
+        for (ui32 diskIdx = 0; diskIdx < VDisks.size(); ++diskIdx) {
+            ui64 predictedNs = GroupQueues->GetPredictedDelayNsByOrderNumber(diskIdx, queueId);;
+            if (predictedNs > *outWorstNs) {
+                *outNextToWorstNs = *outWorstNs;
+                *outWorstNs = predictedNs;
+                *outWorstSubgroupIdx = diskIdx;
+            } else if (predictedNs > *outNextToWorstNs) {
+                *outNextToWorstNs = predictedNs;
+            }
+        }
+    }
+
+    void SetSlowDisks() {
+        for (ui32 idx = 0; idx < SlowFlags.size(); ++idx) {
+            SlowFlags[idx] = !ReceivedResponseFlags[idx] && !EmptyResponseFlags[idx] && !ErrorResponseFlags[idx];
+            if (SlowFlags[idx]) {
+                HasSlowVDisk = true;
+            }
+        }
+    }
+
     template <ui64 ExpectedTag>
     void HandleWakeUp(TEvents::TEvWakeup::TPtr &ev) {
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA36, "HandleWakeUp",
+                (ExpectedTag, ToString(ExpectedTag)),
+                (ReceivedTag, ToString(ev->Get()->Tag)));
         if (ev->Get()->Tag == ExpectedTag) {
+            SetSlowDisks();
             StartFallback();
+        }
+        if (ev->Get()->Tag == NeverTag) {
+            SetSlowDisks();
+            StartFallback();
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA40, "Found NeverTag wake up", (ExpectedTag, ToString(ExpectedTag)));
         }
     }
 
     void HandleVPatchWakeUp(TEvents::TEvWakeup::TPtr &ev) {
-        if (ev->Get()->Tag == (IsContinuedVPatch ? VPatchDiffTag : VPatchStartTag)) {
+        ui64 expectedTag = (IsContinuedVPatch ? VPatchDiffTag : VPatchStartTag);
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA37, "HandleWakeUp",
+                (ExpectedTag, ToString(expectedTag)),
+                (ReceivedTag, ToString(ev->Get()->Tag)));
+        if (ev->Get()->Tag == expectedTag) {
+            SetSlowDisks();
             StartFallback();
+        }
+        if (ev->Get()->Tag == NeverTag) {
+            SetSlowDisks();
+            StartFallback();
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA41, "Found NeverTag wake up", (ExpectedTag, ToString(expectedTag)));
+        }
+    }
+
+    void HandleNeverTagWakeUp(TEvents::TEvWakeup::TPtr &ev) {
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA42, "HandleWakeUp",
+                (ExpectedTag, ToString(NeverTag)),
+                (ReceivedTag, ToString(ev->Get()->Tag)));
+        if (ev->Get()->Tag == NeverTag) {
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA43, "Found NeverTag wake up in naive state");
+            ReplyAndDie(NKikimrProto::DEADLINE);
         }
     }
 
@@ -935,10 +1010,13 @@ public:
             hFunc(TEvBlobStorage::TEvGetResult, Handle);
             hFunc(TEvBlobStorage::TEvPutResult, Handle);
 
-            hFunc(TEvents::TEvWakeup, HandleWakeUp<NeverTag>);
+            IgnoreFunc(TEvents::TEvWakeup);
+            //hFunc(TEvents::TEvWakeup, HandleWakeUp<NeverTag>);
             IgnoreFunc(TEvBlobStorage::TEvVPatchResult);
+            IgnoreFunc(TEvBlobStorage::TEvVPatchFoundParts);
+            IgnoreFunc(TEvBlobStorage::TEvVMovedPatchResult);
         default:
-            Y_ABORT("Received unknown event");
+            Y_FAIL_S("Received unknown event " << TypeName(*ev->GetBase()));
         };
     }
 
@@ -950,8 +1028,9 @@ public:
             hFunc(TEvBlobStorage::TEvVMovedPatchResult, Handle);
             hFunc(TEvents::TEvWakeup, HandleWakeUp<MovedPatchTag>);
             IgnoreFunc(TEvBlobStorage::TEvVPatchResult);
+            IgnoreFunc(TEvBlobStorage::TEvVPatchFoundParts);
         default:
-            Y_ABORT("Received unknown event");
+            Y_FAIL_S("Received unknown event " << TypeName(*ev->GetBase()));
         };
     }
 
@@ -964,7 +1043,7 @@ public:
             hFunc(TEvBlobStorage::TEvVPatchResult, Handle);
             hFunc(TEvents::TEvWakeup, HandleVPatchWakeUp);
         default:
-            Y_ABORT("Received unknown event");
+            Y_FAIL_S("Received unknown event " << TypeName(*ev->GetBase()));
         };
     }
 };

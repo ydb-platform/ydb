@@ -1299,18 +1299,20 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
     const auto* indexPathPtr = PathsById.FindPtr(pathId);
     Y_ABORT_UNLESS(indexPathPtr);
     const auto& indexPath = **indexPathPtr;
-    if (indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+    if (const auto size = indexPath.GetChildren().size(); indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
         // For vector index we have 2 impl tables and 2 tmp impl tables
-        Y_ABORT_UNLESS(indexPath.GetChildren().size() >= 2);
+        Y_VERIFY_S(2 <= size && size <= 4, size);
     } else {
-        Y_ABORT_UNLESS(indexPath.GetChildren().size() == 1);
+        Y_VERIFY_S(size == 1, size);
     }
 
     ui64 dataSize = 0;
     for (const auto& indexImplTablePathId : indexPath.GetChildren()) {
         const auto* tableInfoPtr = Tables.FindPtr(indexImplTablePathId.second);
-        if (!tableInfoPtr) {
-            continue;  // it's possible because of dropping tmp index impl tables
+        if (indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree && !tableInfoPtr) {
+            continue; // it's possible because of dropping tmp index impl tables
+        } else {
+            Y_ABORT_UNLESS(tableInfoPtr);
         }
         const auto& tableInfo = **tableInfoPtr;
 

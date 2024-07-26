@@ -156,8 +156,17 @@ private:
 
         // allocatedMemory = otherConsumption + consumersConsumption
         ui64 otherConsumption = SafeDiff(processMemoryInfo.AllocatedMemory, consumersConsumption);
+
+        ui64 externalConsumption = 0;
+        if (!processMemoryInfo.CGroupLimit.has_value() && processMemoryInfo.AnonRss.has_value() 
+                && processMemoryInfo.MemTotal.has_value() && processMemoryInfo.MemAvailable.has_value()) {
+            // externalConsumption + AnonRss + MemAvailable = MemTotal
+            externalConsumption = SafeDiff(processMemoryInfo.MemTotal.value(),
+                processMemoryInfo.AnonRss.value() + processMemoryInfo.MemAvailable.value());
+        }
+
         // targetConsumersConsumption + otherConsumption = targetUtilizationBytes
-        ui64 targetConsumersConsumption = SafeDiff(targetUtilizationBytes, otherConsumption);
+        ui64 targetConsumersConsumption = SafeDiff(targetUtilizationBytes, otherConsumption + externalConsumption);
 
         // want to find maximum possible coefficient in range [0..1] so that
         // Sum(
@@ -166,7 +175,6 @@ private:
         //         consumers[i].MinBytes + coefficient * (consumers[i].MaxBytes - consumers[i].MinBytes
         //        )
         //    ) <= targetConsumersConsumption
-
         auto coefficient = BinarySearchCoefficient(consumers, targetConsumersConsumption);
 
         ui64 resultingConsumersConsumption = 0;
@@ -180,7 +188,7 @@ private:
             << " MemTotal: " << processMemoryInfo.MemTotal << " MemAvailable: " << processMemoryInfo.MemAvailable
             << " AllocatedMemory: " << processMemoryInfo.AllocatedMemory << " AllocatorCachesMemory: " << processMemoryInfo.AllocatorCachesMemory
             << " HardLimitBytes: " << hardLimitBytes << " SoftLimitBytes: " << softLimitBytes << " TargetUtilizationBytes: " << targetUtilizationBytes
-            << " ConsumersConsumption: " << consumersConsumption << " OtherConsumption: " << otherConsumption 
+            << " ConsumersConsumption: " << consumersConsumption << " OtherConsumption: " << otherConsumption<< " ExternalConsumption: " << externalConsumption
             << " TargetConsumersConsumption: " << targetConsumersConsumption << " ResultingConsumersConsumption: " << resultingConsumersConsumption
             << " Coefficient: " << coefficient);
         Counters->GetCounter("Stats/AnonRss")->Set(processMemoryInfo.AnonRss.value_or(0));
@@ -193,6 +201,7 @@ private:
         Counters->GetCounter("Stats/SoftLimitBytes")->Set(softLimitBytes);
         Counters->GetCounter("Stats/TargetUtilizationBytes")->Set(targetUtilizationBytes);
         Counters->GetCounter("Stats/ConsumersConsumption")->Set(consumersConsumption);
+        Counters->GetCounter("Stats/ExternalConsumption")->Set(externalConsumption);
         Counters->GetCounter("Stats/OtherConsumption")->Set(otherConsumption);
         Counters->GetCounter("Stats/TargetConsumersConsumption")->Set(targetConsumersConsumption);
         Counters->GetCounter("Stats/ResultingConsumersConsumption")->Set(resultingConsumersConsumption);
@@ -201,8 +210,8 @@ private:
         ui64 consumersLimitBytes = 0;
         for (const auto& consumer : consumers) {
             ui64 limitBytes = consumer.GetLimit(coefficient);
-            if (resultingConsumersConsumption + otherConsumption > softLimitBytes && consumer.Config.CanZeroLimit) {
-                limitBytes = SafeDiff(limitBytes, resultingConsumersConsumption + otherConsumption - softLimitBytes);
+            if (resultingConsumersConsumption + otherConsumption + externalConsumption > softLimitBytes && consumer.Config.CanZeroLimit) {
+                limitBytes = SafeDiff(limitBytes, resultingConsumersConsumption + otherConsumption + externalConsumption - softLimitBytes);
             }
             consumersLimitBytes += limitBytes;
 
@@ -408,7 +417,7 @@ private:
         if (info.MemTotal) {
             return info.MemTotal.value();
         }
-        return Config.GetHardLimitBytes();
+        return 512_MB;
     }
 
     ui64 GetSoftLimitBytes(ui64 hardLimitBytes) const {

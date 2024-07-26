@@ -110,7 +110,10 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
             return nullptr;
         }
 
-        if ((col.GetIsCheckingNotNullInProgress() || col.GetNotNull()) && !hasDefault) {
+        // auto id = col.GetId();
+        // bool hasDefaultBefore = col.HasDefaultFromSequence();
+        if (col.GetNotNull() && !hasDefault) {
+        // if (col.GetNotNull() && !hasDefault || col.GetIsCheckingNotNullInProgress() && !hasDefaultBefore) {
             errStr = Sprintf("Not null columns without defaults are not supported.");
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;

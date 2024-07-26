@@ -447,8 +447,8 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     const NKikimrSchemeOp::TPartitionConfig& PartitionConfig() const { return TableDescription.GetPartitionConfig(); }
     NKikimrSchemeOp::TPartitionConfig& MutablePartitionConfig() { return *TableDescription.MutablePartitionConfig(); }
 
-    bool HasReplicationConfig() { return TableDescription.HasReplicationConfig(); }
-    const NKikimrSchemeOp::TTableReplicationConfig& ReplicationConfig() { return TableDescription.GetReplicationConfig(); }
+    bool HasReplicationConfig() const { return TableDescription.HasReplicationConfig(); }
+    const NKikimrSchemeOp::TTableReplicationConfig& ReplicationConfig() const { return TableDescription.GetReplicationConfig(); }
     NKikimrSchemeOp::TTableReplicationConfig& MutableReplicationConfig() { return *TableDescription.MutableReplicationConfig(); }
 
     bool IsAsyncReplica() const {

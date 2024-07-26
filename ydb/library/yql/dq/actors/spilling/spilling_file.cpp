@@ -162,6 +162,7 @@ private:
             EvCloseFileResponse = TEvDqSpillingLocalFile::EEv::LastEvent + 1,
             EvWriteFileResponse,
             EvReadFileResponse,
+            EvRemoveOldTmp,
 
             LastEvent
         };
@@ -192,6 +193,15 @@ private:
             bool Removed = false;
             TMaybe<TString> Error;
         };
+
+        struct TEvRemoveOldTmp : public TEventLocal<TEvRemoveOldTmp, EvRemoveOldTmp> {
+            TFsPath TmpRoot;
+            ui32 NodeId;
+            TString GuidString;
+
+            TEvRemoveOldTmp(TFsPath tmpRoot, ui32 nodeId, TString guidString) 
+                : TmpRoot(std::move(tmpRoot)), NodeId(nodeId), GuidString(std::move(guidString)) {}
+        };
     };
 
     struct TFileDesc;
@@ -209,39 +219,15 @@ public:
 
     void Bootstrap() {
         Root_ = Config_.Root;
-        const auto root = Root_;
-        
-        const auto nodeIdString = ToString(SelfId().NodeId());
+        const auto nodeId = SelfId().NodeId();
         const auto guidString = TGUID::Create().AsGuidString();
 
-        Root_ /= (TStringBuilder() << "node_" << nodeIdString << "_" << guidString);
+        Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(Root_, nodeId, guidString));
+
+        Root_ /= (TStringBuilder() << "node_" << nodeId << "_" << guidString);
         Cerr << "Root from config: " << Config_.Root << ", Root_: " << Root_ << "\n";
 
         LOG_I("Init DQ local file spilling service at " << Root_ << ", actor: " << SelfId());
-
-        {
-            Cerr << "Traverse:\n";
-            TDirIterator iter(root, TDirIterator::TOptions().SetMaxLevel(1));
-            TVector<TString> old_tmps;
-            for (const auto &dir_entry : iter) {
-                if (dir_entry.fts_info == FTS_DP) {
-                    // skip postorder visit
-                    continue;
-                }
-                TString dir_name = dir_entry.fts_name;
-                TVector<TString> parts;
-                StringSplitter(dir_name).Split('_').Collect(&parts);
-                
-                if (parts.size() == 3 && parts[0] == "node" && parts[1] == nodeIdString && parts[2] != guidString) {
-                    Cerr << "Found old temporary at '" << (root / dir_name) << "'\n";
-                    old_tmps.emplace_back(std::move(dir_name));
-                }
-            }
-
-            ForEach(old_tmps.begin(), old_tmps.end(), [&root](const auto& dir_name) {
-                (root / dir_name).ForceDelete();
-            });
-        }
 
         try {
             if (Root_.IsSymlink()) {
@@ -304,6 +290,7 @@ private:
         hFunc(TEvPrivate::TEvWriteFileResponse, HandleWork)
         hFunc(TEvDqSpilling::TEvRead, HandleWork)
         hFunc(TEvPrivate::TEvReadFileResponse, HandleWork)
+        hFunc(TEvPrivate::TEvRemoveOldTmp, HandleWork)
         hFunc(NMon::TEvHttpInfo, HandleWork)
         cFunc(TEvents::TEvPoison::EventType, PassAway)
     );
@@ -743,6 +730,37 @@ private:
         }
 
         Send(ev->Sender, new NMon::TEvHttpInfoRes(s.Str()));
+    }
+
+    void HandleWork(TEvPrivate::TEvRemoveOldTmp::TPtr& ev) {
+        auto& msg = *ev->Get();
+        auto& root = msg.TmpRoot;
+        auto nodeIdString = ToString(msg.NodeId);
+        auto& guidString = msg.GuidString;
+
+        LOG_I("[RemoveOldTmp] removing at root: " << root);
+
+        TDirIterator iter(root, TDirIterator::TOptions().SetMaxLevel(1));
+        
+        TVector<TString> oldTmps;
+        for (const auto &dirEntry : iter) {
+            if (dirEntry.fts_info == FTS_DP) {
+                // skip postorder visit
+                continue;
+            }
+            TString dirName = dirEntry.fts_name;
+            TVector<TString> parts;
+            StringSplitter(dirName).Split('_').Collect(&parts);
+            
+            if (parts.size() == 3 && parts[0] == "node" && parts[1] == nodeIdString && parts[2] != guidString) {
+                LOG_D("[RemoveOldTmp] found old temporary at " << (root / dirName));
+                oldTmps.emplace_back(std::move(dirName));
+            }
+        }
+
+        ForEach(oldTmps.begin(), oldTmps.end(), [&root](const auto& dirName) {
+            (root / dirName).ForceDelete();
+        });
     }
 
 private:

@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/base/events.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 
@@ -6,7 +7,7 @@ namespace NFq {
 
 struct TEventIds {
     enum EEventSpaceYqlProxy {
-        ES_YQL_ANALYTICS_PROXY = 4205 //TKikimrEvents::ES_YQL_ANALYTICS_PROXY
+        ES_YQL_ANALYTICS_PROXY = NKikimr::TKikimrEvents::ES_YQL_ANALYTICS_PROXY
     };
 
     static constexpr ui32 EventSpace = ES_YQL_ANALYTICS_PROXY;

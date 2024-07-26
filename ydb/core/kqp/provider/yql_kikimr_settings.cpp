@@ -34,8 +34,7 @@ ui64 ParseEnableSpillingNodes(const TString &v) {
         if (s.empty()) {
             throw yexception() << "Empty value item";
         }
-        auto value = FromStringWithDefault<NYql::TDqSettings::EEnabledSpillingNodes>(
-            s, NYql::TDqSettings::EEnabledSpillingNodes::None);
+        auto value = FromString<NYql::TDqSettings::EEnabledSpillingNodes>(s);
         res |= ui64(value);
     }
     return res;

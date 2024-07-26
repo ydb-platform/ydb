@@ -997,6 +997,10 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
         return;
     }
 
+    if (ReadingFinishedSent) {
+        return;
+    }
+
     Y_ABORT_UNLESS(InitDone);
     Y_ABORT_UNLESS(PipeClient);
     Y_ABORT_UNLESS(ReadOffset >= EndOffset);
@@ -1069,7 +1073,6 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
             childPartitionIds.reserve(record.GetChildPartitionIds().size());
             childPartitionIds.insert(childPartitionIds.end(), record.GetChildPartitionIds().begin(), record.GetChildPartitionIds().end());
 
-            // TODO Tx
             ctx.Send(ParentId, new TEvPQProxy::TEvReadingFinished(Topic->GetInternalName(), Partition.Partition, FirstRead,
                      std::move(adjacentPartitionIds), std::move(childPartitionIds)));
         } else if (FirstRead) {
@@ -1218,7 +1221,9 @@ void TPartitionActor::Handle(TEvPQProxy::TEvDeadlineExceeded::TPtr& ev, const TA
 
 void TPartitionActor::HandleWakeup(const TActorContext& ctx) {
     DoWakeup(ctx);
-    ctx.Schedule(PREWAIT_DATA, new TEvents::TEvWakeup());
+    if (!ReadingFinishedSent) {
+        ctx.Schedule(PREWAIT_DATA, new TEvents::TEvWakeup());
+    }
 }
 
 void TPartitionActor::DoWakeup(const TActorContext& ctx) {

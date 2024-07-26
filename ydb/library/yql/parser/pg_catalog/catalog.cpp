@@ -1940,7 +1940,6 @@ struct TCatalog : public IExtensionDDLBuilder {
     }
 
     void CreateProc(const TProcDesc& desc) final {
-        Cerr << "CreateProc: " << desc.Name << "\n";
         TProcDesc newDesc = desc;
         newDesc.ProcId = 16000 + Procs.size();
         Procs[newDesc.ProcId] = newDesc;
@@ -1948,7 +1947,6 @@ struct TCatalog : public IExtensionDDLBuilder {
     }
 
     void PrepareType(ui32 extensionIndex, const TString& name) final {
-        Cerr << "PrepareType: " << name << "\n";
         Y_ENSURE(extensionIndex);
         Y_ENSURE(!TypeByName.contains(name));
         TTypeDesc newDesc;

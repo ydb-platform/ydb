@@ -1309,11 +1309,10 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
     ui64 dataSize = 0;
     for (const auto& indexImplTablePathId : indexPath.GetChildren()) {
         const auto* tableInfoPtr = Tables.FindPtr(indexImplTablePathId.second);
-        if (indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree && !tableInfoPtr) {
-            continue; // it's possible because of dropping tmp index impl tables
-        } else {
-            Y_ABORT_UNLESS(tableInfoPtr);
+        if (!tableInfoPtr && NTableIndex::IsTmpImplTable(indexImplTablePathId.first)) {
+            continue; // it's possible because of dropping tmp index impl tables without dropping index
         }
+        Y_ABORT_UNLESS(tableInfoPtr);
         const auto& tableInfo = **tableInfoPtr;
 
         const auto& tableStats = tableInfo.GetStats().Aggregated;

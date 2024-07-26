@@ -264,7 +264,7 @@ tasks.named<Test>("test") {
 {% if runs -%}
 {%     for run in runs -%}
 
-val runJav = task<JavaExec>("runJavaProgram") {
+val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
         group = "build"
         description = "Code generation by run java program"
 
@@ -320,7 +320,7 @@ val runJav = task<JavaExec>("runJavaProgram") {
     }
 tasks {
     build {
-        dependsOn(runJav)
+        dependsOn(runJav{{ loop.index }})
     }
 }
 {%     endfor -%}

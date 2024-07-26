@@ -204,6 +204,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     request.SetStartAllOrFail(true);
     if (UseDataQueryPool) {
         request.MutableRuntimeSettings()->SetExecType(NYql::NDqProto::TComputeRuntimeSettings::DATA);
+        request.MutableRuntimeSettings()->SetUseSpilling(WithSpilling);
     } else {
         request.MutableRuntimeSettings()->SetExecType(NYql::NDqProto::TComputeRuntimeSettings::SCAN);
         request.MutableRuntimeSettings()->SetUseSpilling(WithSpilling);

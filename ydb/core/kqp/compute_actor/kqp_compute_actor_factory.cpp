@@ -172,6 +172,10 @@ public:
         runtimeSettings.UseSpilling = args.WithSpilling;
         runtimeSettings.StatsMode = args.StatsMode;
 
+        if (runtimeSettings.UseSpilling) {
+            args.Task->SetEnableSpilling(runtimeSettings.UseSpilling);
+        }
+
         if (args.Deadline) {
             runtimeSettings.Timeout = args.Deadline - TAppData::TimeProvider->Now();
         }

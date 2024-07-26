@@ -80,7 +80,8 @@ public:
             TActorSetupCmd(resman, TMailboxType::Simple, 0));
 
         if (withSpilling) {
-            const char * tempDir = "/tmp/spilling-service-tmp";
+            auto tempDir = TFsPath{GetSystemTempDir()};
+            tempDir /= "spilling-service-tmp";
 
             MakeDirIfNotExist(tempDir);
 

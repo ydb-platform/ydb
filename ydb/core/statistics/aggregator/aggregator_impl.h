@@ -120,7 +120,7 @@ private:
     size_t PropagatePart(const std::vector<TNodeId>& nodeIds, const std::vector<TSSId>& ssIds,
         size_t lastSSIndex, bool useSizeLimit);
 
-    void Handle(TEvStatistics::TEvScanTable::TPtr& ev);
+    void Handle(TEvStatistics::TEvAnalyze::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev);
     void Handle(NStat::TEvStatistics::TEvStatisticsResponse::TPtr& ev);
@@ -129,7 +129,7 @@ private:
     void Handle(TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr& ev);
     void Handle(TEvStatistics::TEvDeleteStatisticsQueryResponse::TPtr& ev);
     void Handle(TEvPrivate::TEvScheduleScan::TPtr& ev);
-    void Handle(TEvStatistics::TEvGetScanStatus::TPtr& ev);
+    void Handle(TEvStatistics::TEvAnalyzeStatus::TPtr& ev);
     void Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev);
     void Handle(TEvStatistics::TEvAggregateStatisticsResponse::TPtr& ev);
     void Handle(TEvPrivate::TEvResolve::TPtr& ev);
@@ -176,7 +176,7 @@ private:
             hFunc(TEvPrivate::TEvProcessUrgent, Handle);
             hFunc(TEvPrivate::TEvPropagateTimeout, Handle);
 
-            hFunc(TEvStatistics::TEvScanTable, Handle);
+            hFunc(TEvStatistics::TEvAnalyze, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
             hFunc(NStat::TEvStatistics::TEvStatisticsResponse, Handle);
@@ -185,7 +185,7 @@ private:
             hFunc(TEvStatistics::TEvSaveStatisticsQueryResponse, Handle);
             hFunc(TEvStatistics::TEvDeleteStatisticsQueryResponse, Handle);
             hFunc(TEvPrivate::TEvScheduleScan, Handle);
-            hFunc(TEvStatistics::TEvGetScanStatus, Handle);
+            hFunc(TEvStatistics::TEvAnalyzeStatus, Handle);
             hFunc(TEvHive::TEvResponseTabletDistribution, Handle);
             hFunc(TEvStatistics::TEvAggregateStatisticsResponse, Handle);
             hFunc(TEvPrivate::TEvResolve, Handle);

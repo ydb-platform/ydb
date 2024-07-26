@@ -431,21 +431,21 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvStatTableCreationResponse::
     }
 }
 
-void TStatisticsAggregator::Handle(TEvStatistics::TEvGetScanStatus::TPtr& ev) {
+void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeStatus::TPtr& ev) {
     auto& inRecord = ev->Get()->Record;
     auto pathId = PathIdFromPathId(inRecord.GetPathId());
 
-    auto response = std::make_unique<TEvStatistics::TEvGetScanStatusResponse>();
+    auto response = std::make_unique<TEvStatistics::TEvAnalyzeStatusResponse>();
     auto& outRecord = response->Record;
 
     if (ScanTableId.PathId == pathId) {
-        outRecord.SetStatus(NKikimrStat::TEvGetScanStatusResponse::IN_PROGRESS);
+        outRecord.SetStatus(NKikimrStat::TEvAnalyzeStatusResponse::STATUS_IN_PROGRESS);
     } else {
         auto it = ScanOperationsByPathId.find(pathId);
         if (it != ScanOperationsByPathId.end()) {
-            outRecord.SetStatus(NKikimrStat::TEvGetScanStatusResponse::ENQUEUED);
+            outRecord.SetStatus(NKikimrStat::TEvAnalyzeStatusResponse::STATUS_ENQUEUED);
         } else {
-            outRecord.SetStatus(NKikimrStat::TEvGetScanStatusResponse::NO_OPERATION);
+            outRecord.SetStatus(NKikimrStat::TEvAnalyzeStatusResponse::STATUS_NO_OPERATION);
         }
     }
     Send(ev->Sender, response.release(), 0, ev->Cookie);
@@ -518,8 +518,9 @@ void TStatisticsAggregator::NextRange() {
     auto& range = ShardRanges.front();
     auto request = std::make_unique<NStat::TEvStatistics::TEvStatisticsRequest>();
     auto& record = request->Record;
-    record.MutableTableId()->SetOwnerId(ScanTableId.PathId.OwnerId);
-    record.MutableTableId()->SetTableId(ScanTableId.PathId.LocalPathId);
+    auto* path = record.MutableTable()->MutablePathId();
+    path->SetOwnerId(ScanTableId.PathId.OwnerId);
+    path->SetLocalId(ScanTableId.PathId.LocalPathId);
     record.SetStartKey(StartKey.GetBuffer());
 
     Send(MakePipePerNodeCacheID(false),

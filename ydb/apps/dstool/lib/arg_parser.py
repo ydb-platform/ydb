@@ -6,9 +6,15 @@ import textwrap
 import itertools
 
 
+
+
 def halt(*args):
     print(*args, file=sys.stderr)
     sys.exit(1)
+
+
+
+
 
 
 def internal_error(*args):

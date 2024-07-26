@@ -142,7 +142,8 @@ private:
     void HandleWakeup(const TActorContext& ctx) noexcept {
         auto processMemoryInfo = ProcessMemoryInfoProvider->Get();
 
-        ui64 hardLimitBytes = GetHardLimitBytes(processMemoryInfo);
+        bool memTotalHardLimit = false;
+        ui64 hardLimitBytes = GetHardLimitBytes(processMemoryInfo, memTotalHardLimit);
         // TODO: pass hard limit to node whiteboard and mem observer
         ui64 softLimitBytes = GetSoftLimitBytes(hardLimitBytes);
         ui64 targetUtilizationBytes = GetTargetUtilizationBytes(hardLimitBytes);
@@ -158,14 +159,14 @@ private:
         ui64 otherConsumption = SafeDiff(processMemoryInfo.AllocatedMemory, consumersConsumption);
 
         ui64 externalConsumption = 0;
-        if (!processMemoryInfo.CGroupLimit.has_value() && processMemoryInfo.AnonRss.has_value() 
+        if (memTotalHardLimit && processMemoryInfo.AnonRss.has_value() 
                 && processMemoryInfo.MemTotal.has_value() && processMemoryInfo.MemAvailable.has_value()) {
             // externalConsumption + AnonRss + MemAvailable = MemTotal
             externalConsumption = SafeDiff(processMemoryInfo.MemTotal.value(),
                 processMemoryInfo.AnonRss.value() + processMemoryInfo.MemAvailable.value());
         }
 
-        // targetConsumersConsumption + otherConsumption = targetUtilizationBytes
+        // targetConsumersConsumption + otherConsumption + externalConsumption = targetUtilizationBytes
         ui64 targetConsumersConsumption = SafeDiff(targetUtilizationBytes, otherConsumption + externalConsumption);
 
         // want to find maximum possible coefficient in range [0..1] so that
@@ -403,7 +404,7 @@ private:
         return result;
     }
 
-    ui64 GetHardLimitBytes(const TProcessMemoryInfo& info) const {
+    ui64 GetHardLimitBytes(const TProcessMemoryInfo& info, bool& memTotalHardLimit) const {
         if (Config.HasHardLimitBytes()) {
             ui64 hardLimitBytes = Config.GetHardLimitBytes();
             if (info.CGroupLimit.has_value()) {
@@ -415,6 +416,7 @@ private:
             return info.CGroupLimit.value();
         }
         if (info.MemTotal) {
+            memTotalHardLimit = true;
             return info.MemTotal.value();
         }
         return 512_MB;

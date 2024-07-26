@@ -169,9 +169,9 @@ namespace NActors {
         template<typename T>
         void ForEach(T&& callback) noexcept {
             if (ActorPack != TMailboxActorPack::Complex) {
-                ForEach(static_cast<TMailboxActorPack::EType>(ActorPack), ActorsInfo, std::forward(callback));
+                ForEach(static_cast<TMailboxActorPack::EType>(ActorPack), ActorsInfo, std::move(callback));
             } else {
-                ForEach(ActorsInfo.Complex->ActorPack, ActorsInfo.Complex->ActorsInfo, std::forward(callback));
+                ForEach(ActorsInfo.Complex->ActorPack, ActorsInfo.Complex->ActorsInfo, std::move(callback));
             }
         }
 

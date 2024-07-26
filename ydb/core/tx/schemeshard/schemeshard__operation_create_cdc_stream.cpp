@@ -528,7 +528,7 @@ public:
                 .IsLikeDirectory()
                 .NotUnderDeleting();
 
-            if (checks && !workingDir.IsTableIndex()) {
+            if (checks && !workingDirPath.IsTableIndex()) {
                 checks.IsCommonSensePath();
             }
 
@@ -691,12 +691,12 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
                 checks.IsCommonSensePath();
             } else {
                 if (!tablePath.Parent().IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobal)) {
-                    return CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
-                        "Cannot add changefeed to index table");
+                    return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
+                        "Cannot add changefeed to index table")};
                 }
                 if (!AppData()->FeatureFlags.GetEnableChangefeedsOnIndexTables()) {
-                    return CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
-                        "Changefeed on index table is not supported yet");
+                    return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
+                        "Changefeed on index table is not supported yet")};
                 }
             }
         }

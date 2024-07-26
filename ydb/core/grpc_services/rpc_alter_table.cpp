@@ -228,7 +228,7 @@ private:
         Send(schemeCache, ev);
     }
 
-    void Navigate(const TTableId& pathId, const TActorContext& ctx) {
+    void Navigate(const TTableId& pathId) {
         DatabaseName = Request_->GetDatabaseName()
             .GetOrElse(DatabaseFromDomain(AppData()));
 
@@ -315,7 +315,7 @@ private:
                 const auto& child = list->Children.at(0);
                 AlterTable(ctx, CanonizePath(ChildPath(NKikimr::SplitPath(GetProtoRequest()->path()), child.Name)));
             } else {
-                Navigate(entry.TableId, ctx);
+                Navigate(entry.TableId);
             }
             break;
         default:

@@ -319,14 +319,14 @@ void TColumnShard::UpdateResourceMetrics(const TActorContext& ctx, const TUsage&
     metrics->TryUpdate(ctx);
 }
 
-std::optional<TColumnShard::TAggregatedTableStats> TColumnShard::CollectTableStats() const {
+std::optional<TColumnShard::TTableStatsCollection> TColumnShard::CollectTableStats() const {
     if (!TablesManager.HasPrimaryIndex()) {
         return std::nullopt;
     }
 
     const TMap<ui64, std::shared_ptr<NOlap::TColumnEngineStats>>& columnEngineStats =
         TablesManager.GetPrimaryIndexSafe().GetStats();
-    TAggregatedTableStats resultStats;
+    TTableStatsCollection resultStats;
 
     for (const auto& [pathId, tableInfo] : TablesManager.GetTables()) {
         TColumnTableStats& tableStats = resultStats.StatsByPathId[pathId];
@@ -413,7 +413,7 @@ void TColumnShard::FillTxTableStats(::NKikimrTableStats::TTableStats* tableStats
 
 void TColumnShard::FillOlapStats(
     const TActorContext& ctx,
-    const std::optional<TAggregatedTableStats>& tableStats,
+    const std::optional<TTableStatsCollection>& tableStats,
     std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev
 ) {
     ev->Record.SetShardState(2);   // NKikimrTxDataShard.EDatashardState.Ready
@@ -433,7 +433,7 @@ void TColumnShard::FillOlapStats(
 
 void TColumnShard::FillColumnTableStats(
     const TActorContext& ctx,
-    const std::optional<TAggregatedTableStats>& tableStats,
+    const std::optional<TTableStatsCollection>& tableStats,
     std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev
 ) {
     if (!tableStats) {
@@ -487,7 +487,7 @@ void TColumnShard::SendPeriodicStats() {
         StatsReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
     }
 
-    std::optional<TAggregatedTableStats> aggregatedStats = CollectTableStats();
+    std::optional<TTableStatsCollection> aggregatedStats = CollectTableStats();
     auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletID(), OwnerPathId);
 
     FillOlapStats(ctx, aggregatedStats, ev);

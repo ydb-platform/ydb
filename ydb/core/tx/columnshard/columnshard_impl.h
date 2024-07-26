@@ -440,7 +440,7 @@ private:
         TInstant LastFullCompaction;
     };
 
-    struct TAggregatedTableStats {
+    struct TTableStatsCollection {
         TColumnTableStats TotalStats;
         THashMap<ui64, TColumnTableStats> StatsByPathId;
     };
@@ -605,10 +605,10 @@ private:
     void UpdateResourceMetrics(const TActorContext& ctx, const TUsage& usage);
     ui64 MemoryUsage() const;
 
-    std::optional<TAggregatedTableStats> CollectTableStats() const;
+    std::optional<TTableStatsCollection> CollectTableStats() const;
     void SendPeriodicStats();
-    void FillOlapStats(const TActorContext& ctx, const std::optional<TAggregatedTableStats>& tableStats, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
-    void FillColumnTableStats(const TActorContext& ctx, const std::optional<TAggregatedTableStats>& tableStats, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
+    void FillOlapStats(const TActorContext& ctx, const std::optional<TTableStatsCollection>& tableStats, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
+    void FillColumnTableStats(const TActorContext& ctx, const std::optional<TTableStatsCollection>& tableStats, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
     void ConfigureStats(const TColumnTableStats& inputStats, ::NKikimrTableStats::TTableStats* outputStats);
     void FillTxTableStats(::NKikimrTableStats::TTableStats* tableStats) const;
 

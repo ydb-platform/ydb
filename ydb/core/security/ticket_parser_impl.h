@@ -1452,7 +1452,6 @@ private:
             html << "<table class='table simple-table1 table-hover table-condensed'>";
             html << "<thead><tr>";
             html << "<th>Ticket</th>";
-            html << "<th>UID</th>";
             html << "<th>Database</th>";
             html << "<th>Subject</th>";
             html << "<th>Error</th>";

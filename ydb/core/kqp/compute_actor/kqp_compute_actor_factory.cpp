@@ -166,6 +166,7 @@ public:
         runtimeSettings.UseSpilling = args.WithSpilling;
         runtimeSettings.StatsMode = args.StatsMode;
 
+        std::cerr << "MISHA use spilling compute actor factory?: " << runtimeSettings.UseSpilling << std::endl;
         if (runtimeSettings.UseSpilling) {
             args.Task->SetEnableSpilling(runtimeSettings.UseSpilling);
         }

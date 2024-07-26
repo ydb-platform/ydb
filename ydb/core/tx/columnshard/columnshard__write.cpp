@@ -5,6 +5,7 @@
 #include "operations/batch_builder/builder.h"
 #include "operations/write_data.h"
 
+#include <ydb/core/tx/columnshard/counters/common/durations.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/data_events/events.h>
 
@@ -152,6 +153,8 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteDraft::TPtr& ev, const TActorConte
 }
 
 void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx) {
+    static auto dCounter = TDurationController::CreateController("cs::ev_write");
+    TDurationController::TGuard dGuard(dCounter);
     CSCounters.OnStartWriteRequest();
     LastAccessTime = TAppData::TimeProvider->Now();
 
@@ -296,6 +299,8 @@ void TProposeWriteTransaction::Complete(const TActorContext& ctx) {
 }
 
 void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx) {
+    static auto dCounter = TDurationController::CreateController("data_events::ev_write");
+    TDurationController::TGuard dGuard(dCounter);
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("event", "TEvWrite");
 
     const auto& record = ev->Get()->Record;

@@ -115,6 +115,8 @@ static bool FillPredicatesFromRange(TReadDescription& read, const ::NKikimrTx::T
 }
 
 bool TTxScan::Execute(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) {
+    static auto dCounter = NColumnShard::TDurationController::CreateController("tx_scan::execute");
+    NColumnShard::TDurationController::TGuard dGuard(dCounter);
     TMemoryProfileGuard mpg("TTxScan::Execute");
     auto& record = Ev->Get()->Record;
     TSnapshot snapshot(record.GetSnapshot().GetStep(), record.GetSnapshot().GetTxId());
@@ -181,6 +183,8 @@ bool TTxScan::Execute(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/
 
 void TTxScan::Complete(const TActorContext& ctx) {
     TMemoryProfileGuard mpg("TTxScan::Complete");
+    static auto dCounter = NColumnShard::TDurationController::CreateController("tx_scan::complete");
+    NColumnShard::TDurationController::TGuard dGuard(dCounter);
     auto& request = Ev->Get()->Record;
     auto scanComputeActor = Ev->Sender;
     const auto& snapshot = request.GetSnapshot();

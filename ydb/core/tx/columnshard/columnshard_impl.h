@@ -13,6 +13,7 @@
 #include "transactions/tx_controller.h"
 #include "inflight_request_tracker.h"
 #include "counters/columnshard.h"
+#include "counters/common/durations.h"
 #include "resource_subscriber/counters.h"
 #include "resource_subscriber/task.h"
 #include "normalizer/abstract/abstract.h"
@@ -217,7 +218,7 @@ class TColumnShard
     void Handle(TEvPrivate::TEvReadFinished::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx);
-    void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev);
+    void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev, const TActorContext& ctx);
     void Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvWriteDraft::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, const TActorContext& ctx);
@@ -350,63 +351,77 @@ protected:
         }
     }
 
+#define HFuncWithTime(TEvType, HandleFunc)                                                  \
+    case TEvType::EventType: {                                                      \
+        static auto dCounter = TDurationController::CreateController("event_processing::" + ev->GetTypeName());\
+        TDurationController::TGuard dGuard(dCounter);\
+        typename TEvType::TPtr* x = reinterpret_cast<typename TEvType::TPtr*>(&ev); \
+        HandleFunc(*x, this->ActorContext()); \
+        break;                                                                      \
+    }
+
     STFUNC(StateWork) {
+//        static auto dCounter = TDurationController::CreateController("event_processing");
+//        TDurationController::TGuard dGuard(dCounter);
         const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId());
         TRACE_EVENT(NKikimrServices::TX_COLUMNSHARD);
         switch (ev->GetTypeRewrite()) {
-            hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
+            HFuncWithTime(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
 
-            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            HFunc(TEvTabletPipe::TEvServerConnected, Handle);
-            HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
-            HFunc(TEvColumnShard::TEvProposeTransaction, Handle);
-            HFunc(TEvColumnShard::TEvCheckPlannedTransaction, Handle);
-            HFunc(TEvColumnShard::TEvCancelTransactionProposal, Handle);
-            HFunc(TEvColumnShard::TEvNotifyTxCompletion, Handle);
-            HFunc(TEvColumnShard::TEvScan, Handle);
-            HFunc(TEvColumnShard::TEvInternalScan, Handle);
-            HFunc(TEvTxProcessing::TEvPlanStep, Handle);
-            HFunc(TEvColumnShard::TEvWrite, Handle);
-            HFunc(TEvPrivate::TEvWriteBlobsResult, Handle);
-            HFunc(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
-            HFunc(TEvMediatorTimecast::TEvNotifyPlanStep, Handle);
-            HFunc(TEvPrivate::TEvWriteIndex, Handle);
-            HFunc(TEvPrivate::TEvScanStats, Handle);
-            HFunc(TEvPrivate::TEvReadFinished, Handle);
-            HFunc(TEvPrivate::TEvPeriodicWakeup, Handle);
-            HFunc(NEvents::TDataEvents::TEvWrite, Handle);
-            HFunc(TEvPrivate::TEvWriteDraft, Handle);
-            HFunc(TEvPrivate::TEvGarbageCollectionFinished, Handle);
-            HFunc(TEvPrivate::TEvTieringModified, Handle);
+            HFuncWithTime(TEvTabletPipe::TEvClientConnected, Handle);
+            HFuncWithTime(TEvTabletPipe::TEvClientDestroyed, Handle);
+            HFuncWithTime(TEvTabletPipe::TEvServerConnected, Handle);
+            HFuncWithTime(TEvTabletPipe::TEvServerDisconnected, Handle);
+            HFuncWithTime(TEvColumnShard::TEvProposeTransaction, Handle);
+            HFuncWithTime(TEvColumnShard::TEvCheckPlannedTransaction, Handle);
+            HFuncWithTime(TEvColumnShard::TEvCancelTransactionProposal, Handle);
+            HFuncWithTime(TEvColumnShard::TEvNotifyTxCompletion, Handle);
+            HFuncWithTime(TEvColumnShard::TEvScan, Handle);
+            HFuncWithTime(TEvColumnShard::TEvInternalScan, Handle);
+            HFuncWithTime(TEvTxProcessing::TEvPlanStep, Handle);
+            HFuncWithTime(TEvColumnShard::TEvWrite, Handle);
+            HFuncWithTime(TEvPrivate::TEvWriteBlobsResult, Handle);
+            HFuncWithTime(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
+            HFuncWithTime(TEvMediatorTimecast::TEvNotifyPlanStep, Handle);
+            HFuncWithTime(TEvPrivate::TEvWriteIndex, Handle);
+            HFuncWithTime(TEvPrivate::TEvScanStats, Handle);
+            HFuncWithTime(TEvPrivate::TEvReadFinished, Handle);
+            HFuncWithTime(TEvPrivate::TEvPeriodicWakeup, Handle);
+            HFuncWithTime(NEvents::TDataEvents::TEvWrite, Handle);
+            HFuncWithTime(TEvPrivate::TEvWriteDraft, Handle);
+            HFuncWithTime(TEvPrivate::TEvGarbageCollectionFinished, Handle);
+            HFuncWithTime(TEvPrivate::TEvTieringModified, Handle);
 
-            HFunc(NStat::TEvStatistics::TEvStatisticsRequest, Handle);
+            HFuncWithTime(NStat::TEvStatistics::TEvStatisticsRequest, Handle);
 
-            HFunc(NActors::TEvents::TEvUndelivered, Handle);
+            HFuncWithTime(NActors::TEvents::TEvUndelivered, Handle);
 
-            HFunc(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs, Handle);
-            HFunc(NOlap::NBackground::TEvExecuteGeneralLocalTransaction, Handle);
-            HFunc(NOlap::NDataSharing::NEvents::TEvApplyLinksModification, Handle);
-            HFunc(NOlap::NDataSharing::NEvents::TEvApplyLinksModificationFinished, Handle);
+            HFuncWithTime(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs, Handle);
+            HFuncWithTime(NOlap::NBackground::TEvExecuteGeneralLocalTransaction, Handle);
+            HFuncWithTime(NOlap::NDataSharing::NEvents::TEvApplyLinksModification, Handle);
+            HFuncWithTime(NOlap::NDataSharing::NEvents::TEvApplyLinksModificationFinished, Handle);
 
-            HFunc(NOlap::NDataSharing::NEvents::TEvProposeFromInitiator, Handle);
-            HFunc(NOlap::NDataSharing::NEvents::TEvConfirmFromInitiator, Handle);
-            HFunc(NOlap::NDataSharing::NEvents::TEvStartToSource, Handle);
-            HFunc(NOlap::NDataSharing::NEvents::TEvSendDataFromSource, Handle);
-            HFunc(NOlap::NDataSharing::NEvents::TEvAckDataToSource, Handle);
-            HFunc(NOlap::NDataSharing::NEvents::TEvFinishedFromSource, Handle);
-            HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishToSource, Handle);
-            HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator, Handle);
-        default:
-            if (!HandleDefaultEvents(ev, SelfId())) {
-                LOG_S_WARN("TColumnShard.StateWork at " << TabletID()
-                           << " unhandled event type: "<< ev->GetTypeRewrite()
-                           << " event: " << ev->ToString());
+            HFuncWithTime(NOlap::NDataSharing::NEvents::TEvProposeFromInitiator, Handle);
+            HFuncWithTime(NOlap::NDataSharing::NEvents::TEvConfirmFromInitiator, Handle);
+            HFuncWithTime(NOlap::NDataSharing::NEvents::TEvStartToSource, Handle);
+            HFuncWithTime(NOlap::NDataSharing::NEvents::TEvSendDataFromSource, Handle);
+            HFuncWithTime(NOlap::NDataSharing::NEvents::TEvAckDataToSource, Handle);
+            HFuncWithTime(NOlap::NDataSharing::NEvents::TEvFinishedFromSource, Handle);
+            HFuncWithTime(NOlap::NDataSharing::NEvents::TEvAckFinishToSource, Handle);
+            HFuncWithTime(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator, Handle);
+            default: {
+                static auto dCounter = TDurationController::CreateController("event_processing::DEFAULT");
+                TDurationController::TGuard dGuard(dCounter);
+                if (!HandleDefaultEvents(ev, SelfId())) {
+                    LOG_S_WARN("TColumnShard.StateWork at " << TabletID()
+                        << " unhandled event type: " << ev->GetTypeRewrite()
+                        << " event: " << ev->ToString());
+                }
+                break;
             }
-            break;
         }
     }
-
+#undef HFuncWithTime
 private:
     std::unique_ptr<TTxController> ProgressTxController;
     std::unique_ptr<TOperationsManager> OperationsManager;

@@ -766,6 +766,7 @@ private:
         TVector<TExprBase> fakeReads;
         auto paramsType = NDq::CollectParameters(programLambda, ctx);
         NDq::TSpillingSettings spillingSettings{SessionCtx->Config().GetEnabledSpillingNodes()};
+        std::cerr << "MISHA spilling settings: " << (bool) spillingSettings << std::endl;
         lambda = NDq::BuildProgram(
             programLambda, *paramsType, compiler, SessionCtx->Query().QueryData->GetAllocState()->TypeEnv,
                 *SessionCtx->Query().QueryData->GetAllocState()->HolderFactory.GetFunctionRegistry(),

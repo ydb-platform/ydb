@@ -1,5 +1,6 @@
 #include "dq_task_program.h"
 
+#include <format>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 #include <ydb/library/yql/minikql/mkql_runtime_version.h>
@@ -17,6 +18,7 @@ public:
     TSpillingTransformProvider(const TSpillingSettings& spillingSettings): SpillingSettings(spillingSettings){};
 
     TCallableVisitFunc operator()(TInternName name) {
+        std::cerr << std::format("MISHA runtime: RuntimeVersion: {}, Enabled?: {}, name:", RuntimeVersion, SpillingSettings.IsGraceJoinSpillingEnabled()) << name << std::endl;
         if (RuntimeVersion >= 50U && SpillingSettings.IsGraceJoinSpillingEnabled() && (name == "GraceJoin" || name == "GraceSelfJoin")) {
             return [name](NKikimr::NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
                 TCallableBuilder callableBuilder(env,

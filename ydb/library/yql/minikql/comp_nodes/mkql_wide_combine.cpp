@@ -730,10 +730,12 @@ private:
     }
 
     bool HasMemoryForProcessing() const {
+        return false;
         return !TlsAllocState->IsMemoryYellowZoneEnabled();
     }
 
     bool IsSwitchToSpillingModeCondition() const {
+        return true;
         return !HasMemoryForProcessing();
     }
 

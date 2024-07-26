@@ -1,6 +1,7 @@
 #include "mkql_grace_join.h"
 #include "mkql_grace_join_imp.h"
 
+#include <format>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/yql/public/decimal/yql_decimal_serialize.h>
@@ -628,10 +629,12 @@ private:
     }
 
     bool HasMemoryForProcessing() const {
+        return false;
         return !TlsAllocState->IsMemoryYellowZoneEnabled();
     }
 
     bool IsSwitchToSpillingModeCondition() const {
+        return true;
         return !HasMemoryForProcessing();
     }
 
@@ -728,6 +731,7 @@ private:
     }
 
     EFetchResult DoCalculateInMemory(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
+        
         // Collecting data for join and perform join (batch or full)
         while (!*JoinCompleted ) {
 
@@ -763,12 +767,15 @@ private:
             }
 
             bool isYield = FetchAndPackData(ctx);
+            std::cerr << std::format("MISHA GJ SPILLING: {}, {}, {}\n", IsSpillingAllowed, (bool)ctx.SpillerFactory, IsSwitchToSpillingModeCondition());
             if (IsSpillingAllowed && ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
                 const auto used = TlsAllocState->GetUsed();
                 const auto limit = TlsAllocState->GetLimit();
 
                 YQL_LOG(INFO) << "yellow zone reached " << (used*100/limit) << "%=" << used << "/" << limit;
                 YQL_LOG(INFO) << "switching Memory mode to Spilling";
+
+                std::cerr << "MISHA JOIN SWITCH\n";
 
                 SwitchMode(EOperatingMode::Spilling, ctx);
                 return EFetchResult::Yield;
@@ -1174,13 +1181,11 @@ IComputationNode* WrapGraceJoinCommon(TCallable& callable, const TComputationNod
 
 IComputationNode* WrapGraceJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 8, "Expected 8 args");
-
     return WrapGraceJoinCommon(callable, ctx, false, HasSpillingFlag(callable));
 }
 
 IComputationNode* WrapGraceSelfJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 7, "Expected 7 args");
-    
     return WrapGraceJoinCommon(callable, ctx, true, HasSpillingFlag(callable));
 }
 

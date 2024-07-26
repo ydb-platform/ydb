@@ -806,7 +806,8 @@ private:
         stageProto.SetIsEffectsStage(hasEffects || hasTxTableSink);
 
         auto paramsType = CollectParameters(stage, ctx);
-        NDq::TSpillingSettings spillingSettings{Config->GetEnabledSpillingNodes()};
+        NDq::TSpillingSettings spillingSettings{~0ULL};
+        std::cerr << "MISHA spilling settings: " << (bool) spillingSettings << std::endl;
         auto programBytecode = NDq::BuildProgram(stage.Program(), *paramsType, *KqlCompiler, TypeEnv, FuncRegistry,
             ctx, {}, spillingSettings);
 

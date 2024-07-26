@@ -159,6 +159,7 @@ EOptionalFlag TKikimrSettings::GetUseLlvm() const {
 }
 
 NDq::EHashJoinMode TKikimrSettings::GetHashJoinMode() const {
+    return NDq::EHashJoinMode::Grace;
     auto maybeHashJoinMode = HashJoinMode.Get();
     return maybeHashJoinMode ? *maybeHashJoinMode : NDq::EHashJoinMode::Off;
 }

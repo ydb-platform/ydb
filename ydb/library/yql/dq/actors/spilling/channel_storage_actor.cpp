@@ -20,22 +20,22 @@ using namespace NActors;
 namespace {
 
 #define LOG_D(s) \
-    LOG_DEBUG_S(*ActorSystem_, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ", channelId: " << ChannelId_ << ". " << s);
+    LOG_INFO_S(*ActorSystem_, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ", channelId: " << ChannelId_ << ". " << s);
 
 #define LOG_I(s) \
     LOG_INFO_S(*ActorSystem_,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", channelId: " << ChannelId << ". " << s);
 
 #define LOG_E(s) \
-    LOG_ERROR_S(*ActorSystem_, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ", channelId: " << ChannelId_ << ". " << s);
+    LOG_INFO_S(*ActorSystem_, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ", channelId: " << ChannelId_ << ". " << s);
 
 #define LOG_C(s) \
-    LOG_CRIT_S(*ActorSystem_,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", channelId: " << ChannelId << ". " << s);
+    LOG_INFO_S(*ActorSystem_,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", channelId: " << ChannelId << ". " << s);
 
 #define LOG_W(s) \
-    LOG_WARN_S(*ActorSystem_,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", channelId: " << ChannelId << ". " << s);
+    LOG_INFO_S(*ActorSystem_,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", channelId: " << ChannelId << ". " << s);
 
 #define LOG_T(s) \
-    LOG_TRACE_S(*ActorSystem_,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ", channelId: " << ChannelId_ << ". " << s); 
+    LOG_INFO_S(*ActorSystem_,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ", channelId: " << ChannelId_ << ". " << s); 
 
 class TDqChannelStorageActor : public IDqChannelStorageActor,
                                public NActors::TActorBootstrapped<TDqChannelStorageActor>

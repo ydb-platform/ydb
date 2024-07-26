@@ -278,6 +278,7 @@ public:
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& lookup, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+        // Y_ABORT("MISHA MAP JOIN 281");
         auto** fields = ctx.WideFields.data() + this->WideFieldsIndex;
 
         const auto dict = this->Dict->GetValue(ctx);
@@ -453,6 +454,7 @@ public:
     }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& iter, NUdf::TUnboxedValue& item, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+        // Y_ABORT("MISHA MAP JOIN 457");
         auto** fields = ctx.WideFields.data() + this->WideFieldsIndex;
 
         for (auto iterator = std::move(iter);;) {
@@ -948,6 +950,7 @@ public:
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        // Y_ABORT("MISHA MAP JOIN 954");
         for (const auto dict = this->Dict->GetValue(ctx);;) {
             auto item = this->Stream->GetValue(ctx);
             if (item.IsSpecial()) {
@@ -997,6 +1000,7 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& curr, NUdf::TUnboxedValue& iter, TComputationContext& ctx) const {
+        // Y_ABORT("MISHA MAP JOIN 1004");
         for (auto iterator = std::move(iter);;) {
             if (iterator.HasValue() && curr.HasValue()) {
                 if (NUdf::TUnboxedValue item; iterator.Next(item)) {
@@ -1506,6 +1510,7 @@ public:
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        // Y_ABORT("MISHA MAP JOIN 1513");
 #ifndef MKQL_DISABLE_CODEGEN
         if (ctx.ExecuteLLVM && MapJoin)
             return ctx.HolderFactory.Create<TMyCodegenValue>(MapJoin, &ctx, this->Stream->GetValue(ctx), this->Dict->GetValue(ctx));

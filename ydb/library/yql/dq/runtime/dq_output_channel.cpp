@@ -47,6 +47,7 @@ public:
         , ChunkSizeLimit(settings.ChunkSizeLimit)
         , LogFunc(logFunc)
     {
+        std::cerr << "MISHA CHAN\n";
         PopStats.Level = settings.Level;
         PushStats.Level = settings.Level;
         PopStats.ChannelId = channelId;

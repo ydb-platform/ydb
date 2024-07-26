@@ -54,7 +54,6 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(!Scepter);
         RootState = ERootState::INITIAL;
         ErrorReason = {};
-        IssueNextBindRequest();
     }
 
     void TDistributedConfigKeeper::ProcessGather(TEvGather *res) {

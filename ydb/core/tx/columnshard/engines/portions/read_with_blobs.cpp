@@ -104,8 +104,6 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
         std::vector<std::shared_ptr<IPortionDataChunk>> newChunks;
         if (it != columnChunks.end()) {
             newChunks = to->GetIndexInfo().ActualizeColumnData(it->second, from->GetIndexInfo(), i);
-        } else {
-            newChunks = to->GetIndexInfo().MakeEmptyChunks(i, pageSizes, to->GetIndexInfo().GetColumnFeaturesVerified(i));
         }
         AFL_VERIFY(entityChunksNew.emplace(i, std::move(newChunks)).second);
     }

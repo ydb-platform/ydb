@@ -77,6 +77,10 @@ public:
         fields.push_back(arrow::field(SPEC_COL_TX_ID, arrow::uint64()));
     }
 
+    static void AddDeleteFields(std::vector<std::shared_ptr<arrow::Field>>& fields) {
+        fields.push_back(arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean()));
+    }
+
     static const std::set<ui32>& GetSnapshotColumnIdsSet() {
         static const std::set<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID };
         return result;

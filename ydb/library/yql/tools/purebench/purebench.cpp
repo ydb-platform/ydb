@@ -8,6 +8,7 @@
 
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
+#include <ydb/library/yql/public/udf/arrow/util.h>
 #include <ydb/library/yql/public/udf/udf_registrator.h>
 #include <ydb/library/yql/public/udf/udf_version.h>
 
@@ -225,7 +226,9 @@ int Main(int argc, const char *argv[])
 
         ui64 outputGenSize = std::transform_reduce(
             outputGenStream.cbegin(), outputGenStream.cend(),
-            0l, std::plus{}, [](auto t) { return t.length; });
+            0l, std::plus{}, [](const auto& b) {
+                return NYql::NUdf::GetSizeOfArrowExecBatchInBytes(b);
+            });
 
         Cerr << "Generated data size: " << outputGenSize << "\n";
 

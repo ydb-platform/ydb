@@ -2459,6 +2459,73 @@ namespace {
         TDeque<TPendingRequest> QuotaRequests;
     };
 
+    std::unique_ptr<TEvDataShard::TEvReadResult> ReadAllTable(
+        Tests::TServer::TPtr server,
+        ui64 tabletId,
+        const TTableId& tableId,
+        const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
+        ui64 readId)
+    {
+        auto request = std::make_unique<TEvDataShard::TEvRead>();
+        auto& record = request->Record;
+
+        record.SetReadId(readId);
+        record.MutableTableId()->SetOwnerId(tableId.PathId.OwnerId);
+        record.MutableTableId()->SetTableId(userTable.GetPathId());
+
+        const auto& description = userTable.GetDescription();
+        for (const auto& column: description.GetColumns()) {
+            record.AddColumns(column.GetId());
+        }
+
+        // read all
+        auto fromBuf = TSerializedCellVec::Serialize(TVector<TCell>());
+        auto toBuf = TSerializedCellVec::Serialize(TVector<TCell>());
+        request->Ranges.emplace_back(fromBuf, toBuf, true, true);
+
+        record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SendToPipe(
+            tabletId,
+            sender,
+            request.release()
+        );
+
+        TAutoPtr<IEventHandle> handle;
+        runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(handle, TDuration::Seconds(5));
+        UNIT_ASSERT(handle);
+
+        return std::unique_ptr<TEvDataShard::TEvReadResult>(handle->Release<TEvDataShard::TEvReadResult>().Release());
+    }
+
+    TString PrintTableFromResult(const TEvDataShard::TEvReadResult& event, const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable) {
+        const auto& description = userTable.GetDescription();
+
+        TStringBuilder result;
+        auto nrows = event.GetRowsCount();
+        for (size_t i = 0; i < nrows; ++i) {
+            const auto& cellArray = event.GetCells(i);
+            UNIT_ASSERT_VALUES_EQUAL(cellArray.size(), description.ColumnsSize());
+            bool first = true;
+            for (size_t j = 0; j < cellArray.size(); ++j) {
+                if (first) {
+                    first = false;
+                } else {
+                    result << ", ";
+                }
+                const auto& columnDescription = description.GetColumns(j);
+                TString cellValue;
+                DbgPrintValue(cellValue, cellArray[j], NScheme::TTypeInfo(columnDescription.GetTypeId()));
+                result << columnDescription.GetName() << " = " << cellValue;
+            }
+            result << '\n';
+        }
+        return result;
+    }
+
 } // namespace
 
 TReadShardedTableState StartReadShardedTable(
@@ -2513,6 +2580,24 @@ void SendViaPipeCache(
             options.Cookie),
         nodeIndex,
         /* viaActorSystem */ true);
+}
+
+TString ReadTable(
+    Tests::TServer::TPtr server,
+    ui64 tabletId,
+    const TString& tableName,
+    const TTableId& tableId,
+    ui64 readId)
+{
+    auto [tablesMap, ownerId] = GetTables(server, tabletId);
+    const auto& userTable = tablesMap.at(tableName);
+
+    auto event = ReadAllTable(server, tabletId, tableId, userTable, readId);
+
+    UNIT_ASSERT(event);
+    UNIT_ASSERT_VALUES_EQUAL(event->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+
+    return PrintTableFromResult(*event, userTable);
 }
 
 }

@@ -870,4 +870,11 @@ void SendViaPipeCache(
     std::unique_ptr<IEventBase> msg,
     const TSendViaPipeCacheOptions& options = {});
 
+TString ReadTable(
+    Tests::TServer::TPtr server,
+    ui64 tabletId,
+    const TString& tableName,
+    const TTableId& tableId,
+    ui64 readId);
+
 }

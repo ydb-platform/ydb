@@ -5,6 +5,7 @@
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 
 #include <util/string/cast.h>
+#include <util/folder/path.h>
 
 #ifndef MKQL_DISABLE_CODEGEN
 
@@ -2555,6 +2556,61 @@ Y_NO_INLINE Function* TCodegeneratorRootNodeBase::GenerateGetValueImpl(
     }
 
     return ctx.Func;
+}
+
+static const char *BUILD_PATH_ACNHOR_COMPUTATION = "/minikql/computation/llvm14";
+static const char *BUILD_PATH_ACNHOR_COMP_NODES = "/minikql/comp_nodes/llvm14";
+static const char *BUILD_PATH_REPLACEMENT_COMPUTATION = "/-Q/computation/";
+static const char *BUILD_PATH_REPLACEMENT_COMP_NODES = "/-Q/comp_nodes/";
+
+DIFile* MakeDIFile(const TCodegenContext& ctx, const std::source_location& location) {
+    TString pathStr = location.file_name();
+    size_t pos = pathStr.find(BUILD_PATH_ACNHOR_COMPUTATION);
+    if (pos != TString::npos) {
+        pathStr = BUILD_PATH_REPLACEMENT_COMPUTATION + pathStr.substr(pos + TString(BUILD_PATH_ACNHOR_COMPUTATION).Size());
+        const TFsPath path = pathStr;
+    }
+    pos = pathStr.find(BUILD_PATH_ACNHOR_COMP_NODES);
+    if (pos != TString::npos) {
+        pathStr = BUILD_PATH_REPLACEMENT_COMP_NODES + pathStr.substr(pos + TString(BUILD_PATH_ACNHOR_COMP_NODES).Size());
+        const TFsPath path = pathStr;
+    }
+    TFsPath path = pathStr;
+    return ctx.DebugBuilder->createFile(path.GetName().c_str(), path.Parent().GetPath().c_str());
+}
+
+DISubprogram* MakeDISubprogram(const TCodegenContext& ctx, const TString& name, const std::source_location& location) {
+    const auto file = MakeDIFile(ctx, location);
+    const auto unit = ctx.DebugBuilder->createCompileUnit(llvm::dwarf::DW_LANG_C_plus_plus, file, "MKQL", false, "", 0);
+    const auto subroutineType = ctx.DebugBuilder->createSubroutineType(ctx.DebugBuilder->getOrCreateTypeArray({}));
+    return ctx.DebugBuilder->createFunction(
+        unit,
+        name.c_str(),
+        llvm::StringRef(),
+        file, 0,
+        subroutineType, 0, llvm::DINode::FlagPrototyped, llvm::DISubprogram::SPFlagDefinition
+    );
+}
+
+DIScopeAnnotator::DIScopeAnnotator(const TCodegenContext& ctx, const std::source_location& location)
+    : Ctx(ctx)
+    , Scope(ctx.DebugBuilder->createLexicalBlock(ctx.Subprogram, MakeDIFile(ctx, location), location.line(), location.column()))
+{}
+
+Instruction* DIScopeAnnotator::operator()(Instruction *inst, const std::source_location& location) const {
+    inst->setDebugLoc(DILocation::get(Ctx.Codegen.GetContext(), location.line(), location.column(), Scope));
+    return inst;
+}
+
+void AnnotateInstruction(const TCodegenContext& ctx, Instruction* instr) {
+    std::unique_ptr<DIBuilder> dBuilder = std::make_unique<DIBuilder>(ctx.Codegen.GetModule());
+    auto *file =  dBuilder->createFile("mkql_computation_node_codegen.cpp", "ydb/library/yql/minikql/computation");
+    auto *unit = dBuilder->createCompileUnit(dwarf::DW_LANG_C99, file, "MKQL", false, "", 0);
+    auto *subroutineType = dBuilder->createSubroutineType(dBuilder->getOrCreateTypeArray({}));
+    auto *subroutine = dBuilder->createFunction(unit, "AnnotateInstruction", StringRef(), file, 2041, subroutineType, 0, DINode::FlagPrototyped, DISubprogram::SPFlagDefinition);
+    ctx.Func->setSubprogram(subroutine);
+    instr->setDebugLoc(DILocation::get(ctx.Codegen.GetContext(), 2047, 4, subroutine));
+    dBuilder->finalize();
 }
 
 }

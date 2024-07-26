@@ -288,6 +288,8 @@ public:
 
         Triple_ = llvm::Triple::normalize(triple);
         Module_->setTargetTriple(Triple_);
+        Module_->addModuleFlag(llvm::Module::Warning, "Dwarf Version", llvm::dwarf::DWARF_VERSION);
+        Module_->addModuleFlag(llvm::Module::Warning, "Debug Info Version", llvm::DEBUG_METADATA_VERSION);
 
         llvm::TargetOptions targetOptions;
         targetOptions.EnableFastISel = true;

@@ -480,6 +480,12 @@ private:
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
+        auto debugBuilderOwner = std::make_unique<DIBuilder>(module);
+        ctx.DebugBuilder = debugBuilderOwner.get();
+
+        ctx.Subprogram = MakeDISubprogram(ctx, name);
+        ctx.Func->setSubprogram(ctx.Subprogram);
+
         auto args = ctx.Func->arg_begin();
 
         ctx.Ctx = &*args;
@@ -539,6 +545,10 @@ private:
         const auto throwFuncPtr = CastInst::Create(Instruction::IntToPtr, throwFunc, PointerType::getUnqual(throwFuncType), "thrower", block);
         CallInst::Create(throwFuncType, throwFuncPtr, { width, ConstantInt::get(width->getType(), Representations.size()) }, "", block)->setTailCall();
         new UnreachableInst(context, block);
+
+        ctx.DebugBuilder->finalizeSubprogram(ctx.Subprogram);
+        ctx.Subprogram = nullptr;
+        ctx.DebugBuilder = nullptr;
 
         return ctx.Func;
     }

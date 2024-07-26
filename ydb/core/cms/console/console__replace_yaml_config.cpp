@@ -76,6 +76,8 @@ public:
                     .Cluster = Cluster,
                 });
 
+            bool hasForbiddenUnknown = false;
+
             if (UpdatedConfig != Self->YamlConfig || Self->YamlDropped) {
                 Modify = true;
 
@@ -90,19 +92,19 @@ public:
                     ythrow yexception() << "Version mismatch";
                 }
 
-                if (AllowUnknownFields) {
-                    UnknownFieldsCollector = new NYamlConfig::TBasicUnknownFieldsCollector;
-                }
+                UnknownFieldsCollector = new NYamlConfig::TBasicUnknownFieldsCollector;
 
                 for (auto& [_, config] : resolved.Configs) {
                     auto cfg = NYamlConfig::YamlToProto(
                         config.second,
-                        AllowUnknownFields,
+                        true,
                         true,
                         UnknownFieldsCollector);
                 }
 
-                if (!DryRun) {
+                hasForbiddenUnknown = !UnknownFieldsCollector->GetUnknownKeys().empty() || AllowUnknownFields;
+
+                if (!DryRun && !hasForbiddenUnknown) {
                     DoAudit(txc, ctx);
 
                     db.Table<Schema::YamlConfig>().Key(Version + 1)
@@ -118,11 +120,11 @@ public:
                 }
             }
 
-            auto fillResponse = [&](auto& ev){
+            auto fillResponse = [&](auto& ev, auto errorLevel){
                 if (UnknownFieldsCollector) {
                     for (auto& [path, info] : UnknownFieldsCollector->GetUnknownKeys()) {
                         auto *issue = ev->Record.AddIssues();
-                            issue->set_severity(NYql::TSeverityIds::S_WARNING);
+                            issue->set_severity(errorLevel);
                             issue->set_message(TStringBuilder{} << "Unknown key# " << info.first << " in proto# " << info.second << " found in path# " << path);
                     }
                 }
@@ -131,12 +133,17 @@ public:
             };
 
 
-            if (!Force) {
+            if (hasForbiddenUnknown) {
+                Error = true;
+                auto ev = MakeHolder<TEvConsole::TEvGenericError>();
+                ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+                fillResponse(ev, NYql::TSeverityIds::S_ERROR);
+            } else if (!Force) {
                 auto ev = MakeHolder<TEvConsole::TEvReplaceYamlConfigResponse>();
-                fillResponse(ev);
+                fillResponse(ev, NYql::TSeverityIds::S_WARNING);
             } else {
                 auto ev = MakeHolder<TEvConsole::TEvSetYamlConfigResponse>();
-                fillResponse(ev);
+                fillResponse(ev, NYql::TSeverityIds::S_WARNING);
             }
         } catch (const yexception& ex) {
             Error = true;

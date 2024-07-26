@@ -82,7 +82,7 @@ void TSrcIdMetaInitializer::DoPrepare(NInitializer::IInitializerInput::TPtr cont
             request.mutable_alter_partitioning_settings()->set_min_partitions_count(50);
             request.mutable_alter_partitioning_settings()->set_partitioning_by_load(::Ydb::FeatureFlag_Status::FeatureFlag_Status_ENABLED);
 
-            result.emplace_back(new NInitializer::TGenericTableModifier<NRequest::TDialogAlterTable>(request, "autopartitioning_by_load"));
+            result.emplace_back(new NInitializer::TGenericTableModifier<NRequest::TDialogAlterTable>(request, "enable_autopartitioning_by_load"));
         }
     }
     result.emplace_back(NInitializer::TACLModifierConstructor::GetReadOnlyModifier(tablePath, "acl"));

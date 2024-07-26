@@ -884,7 +884,6 @@ public:
     struct TQueryResult : public TGenericResult {
         TString SessionId;
         TVector<NKikimrMiniKQL::TResult*> Results;
-        TMaybe<NKikimrKqp::TQueryProfile> Profile; // TODO: Deprecate.
         NKqpProto::TKqpStatsQuery QueryStats;
         std::unique_ptr<NKikimrKqp::TPreparedQuery> PreparingQuery;
         std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery;

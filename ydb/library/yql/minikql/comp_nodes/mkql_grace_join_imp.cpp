@@ -567,6 +567,12 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
             joinSlots.clear();
             joinSlots.shrink_to_fit();
             nSlots = 0;
+            bloomFilter.Shrink();
+        }
+
+        if (BloomHits_ * 8 < BloomLookups_) {
+            // Bloomfilter was inefficient, drop it
+            bloomFilter.Shrink();
         }
 
         std::sort(joinResults.begin(), joinResults.end(), [](JoinTuplesIds a, JoinTuplesIds b)

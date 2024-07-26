@@ -93,6 +93,15 @@ class TBloomfilter {
     void Finalize() {
         Finalized_ = true;
     }
+
+    void Shrink() {
+        Finalized_ = false;
+        Bits_ = 1;
+        Storage_.clear();
+        Storage_.resize(1, ~ui64(0));
+        Storage_.shrink_to_fit();
+        Ptr_ = Storage_.data();
+    }
 };
 
 /*

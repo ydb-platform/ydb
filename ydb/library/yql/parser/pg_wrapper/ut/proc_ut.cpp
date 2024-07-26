@@ -17,7 +17,7 @@ namespace NYql {
 
 Y_UNIT_TEST_SUITE(TProcTests) {
     Y_UNIT_TEST(BuiltinsHasRuntimeFuncs) {
-        if (NPg::IsExportFunctionsEnabled()) {
+        if (NPg::AreAllFunctionsAllowed()) {
             return;
         }
         

@@ -129,6 +129,8 @@ struct TTypeDesc {
 
     // If TypType is 'c', typrelid is the OID of the class' entry in pg_class.
     ETypType TypType = ETypType::Base;
+
+    ui32 ExtensionIndex = 0;
 };
 
 enum class ECastMethod {
@@ -357,8 +359,7 @@ const TVector<TTableInfo>& GetStaticTables();
 const TTableInfo& LookupStaticTable(const TTableInfoKey& tableKey);
 const THashMap<TTableInfoKey, TVector<TColumnInfo>>& GetStaticColumns();
 
-void PrepareCatalog();
-bool IsExportFunctionsEnabled();
+bool AreAllFunctionsAllowed();
 
 struct TExtensionDesc {
     TString Name;           // postgis
@@ -373,12 +374,16 @@ public:
     virtual ~IExtensionDDLBuilder() = default;
 
     virtual void CreateProc(const TProcDesc& desc) = 0;
+
+    virtual void PrepareType(ui32 extensionIndex,const TString& name) = 0;
+
+    virtual void UpdateType(const TTypeDesc& desc) = 0;
 };
 
 class IExtensionDDLParser {
 public:
     virtual ~IExtensionDDLParser() = default;
-    virtual void Parse(const TString& sql, IExtensionDDLBuilder& builder) = 0;
+    virtual void Parse(ui32 extensionIndex, const TString& sql, IExtensionDDLBuilder& builder) = 0;
 };
 
 class IExtensionLoader {

@@ -56,6 +56,7 @@ PEERDIR(
     ydb/core/tx/columnshard/export
     ydb/core/tx/columnshard/resource_subscriber
     ydb/core/tx/columnshard/normalizer/granule
+    ydb/core/tx/columnshard/normalizer/special_columns
     ydb/core/tx/columnshard/normalizer/portion
     ydb/core/tx/columnshard/normalizer/tables
     ydb/core/tx/columnshard/blobs_action/storages_manager

@@ -328,8 +328,6 @@ std::optional<TColumnShard::TAggregatedTableStats> TColumnShard::CollectTableSta
         TablesManager.GetPrimaryIndexSafe().GetStats();
     TAggregatedTableStats resultStats;
 
-    // TODO: Pull dataStats collected via BuildStats. They are shared between all patIds.
-
     for (const auto& [pathId, tableInfo] : TablesManager.GetTables()) {
         TColumnTableStats& tableStats = resultStats.StatsByPathId[pathId];
         tableStats.AccessTime = tableInfo.GetLastAccessTime();
@@ -344,16 +342,20 @@ std::optional<TColumnShard::TAggregatedTableStats> TColumnShard::CollectTableSta
             if (portionsStats.Rows < 0 || portionsStats.Bytes < 0) {
                 LOG_S_WARN(
                     "Negative stats counter. Rows: " << portionsStats.Rows << " Bytes: " << portionsStats.Bytes
-                                                        << TabletID()
+                                                     << " Portions: " << portionsStats.Portions
+                                                     << " Tablet: " << TabletID()
                 );
 
                 portionsStats.Rows = (portionsStats.Rows < 0) ? 0 : portionsStats.Rows;
                 portionsStats.Bytes = (portionsStats.Bytes < 0) ? 0 : portionsStats.Bytes;
+                portionsStats.Portions = (portionsStats.Portions < 0) ? 0 : portionsStats.Portions;
             }
 
-            // Count rows and bytes from portions only, ignoring data stored in InsertTable
+            // TODO: count rows and bytes of data stored in InsertTable
+            // TODO: we need row/dataSize counters for evicted data (managed by tablet but stored outside)
             tableStats.RowCount = portionsStats.Rows;
             tableStats.DataSize = portionsStats.Bytes;
+            tableStats.Portions = portionsStats.Portions;
         } else {
             LOG_S_ERROR("CollectTableStats: missing column engine stats for pathId " << pathId);
         }
@@ -381,39 +383,20 @@ void TColumnShard::ConfigureStats(const TColumnTableStats& inputStats, ::NKikimr
     outputStats->SetRowCount(inputStats.RowCount);
     outputStats->SetDataSize(inputStats.DataSize);
 
-    // TODO: we need row/dataSize counters for evicted data (managed by tablet but stored outside)
-    // tabletStats->SetIndexSize(ti.Stats.IndexSize); // TODO: calc size of internal tables
-    // tabletStats->SetInMemSize(ti.Stats.MemDataSize);
-
-    // TMap<ui8, std::tuple<ui64, ui64>> channels; // Channel -> (DataSize, IndexSize)
-    // for (size_t channel = 0; channel < ti.Stats.DataStats.DataSize.ByChannel.size(); channel++) {
-    //     if (ti.Stats.DataStats.DataSize.ByChannel[channel]) {
-    //         std::get<0>(channels[channel]) = ti.Stats.DataStats.DataSize.ByChannel[channel];
-    //     }
-    // }
-    // for (size_t channel = 0; channel < ti.Stats.DataStats.IndexSize.ByChannel.size(); channel++) {
-    //     if (ti.Stats.DataStats.IndexSize.ByChannel[channel]) {
-    //         std::get<1>(channels[channel]) = ti.Stats.DataStats.IndexSize.ByChannel[channel];
-    //     }
-    // }
-    // for (auto p : channels) {
-    //     auto item = ev->Record.MutableTableStats()->AddChannels();
-    //     item->SetChannel(p.first);
-    //     item->SetDataSize(std::get<0>(p.second));
-    //     item->SetIndexSize(std::get<1>(p.second));
-    // }
+    // tabletStats->SetIndexSize(...); // Not implemented
+    // tabletStats->SetInMemSize(...); // Not implemented
 
     outputStats->SetLastAccessTime(inputStats.AccessTime.MilliSeconds());
     outputStats->SetLastUpdateTime(inputStats.UpdateTime.MilliSeconds());
 
     outputStats->SetRowUpdates(TabletCounters->Cumulative()[COUNTER_WRITE_SUCCESS].Get());
-    outputStats->SetRowDeletes(0);
+    outputStats->SetRowDeletes(0); // manual deletes are not supported
     outputStats->SetRowReads(0); // all reads are range reads
     outputStats->SetRangeReads(TabletCounters->Cumulative()[COUNTER_READ_SUCCESS].Get());
     outputStats->SetRangeReadRows(TabletCounters->Cumulative()[COUNTER_READ_INDEX_ROWS].Get());
 
-    // ev->Record.MutableTableStats()->SetPartCount(ti.Stats.PartCount);
-    // ev->Record.MutableTableStats()->SetSearchHeight(ti.Stats.SearchHeight);
+    outputStats->SetPartCount(inputStats.Portions);
+    // outputStats->SetSearchHeight(...); // Not implemented
 
     outputStats->SetLastFullCompactionTs(inputStats.LastFullCompaction.Seconds());
     outputStats->SetHasLoanedParts(Executor()->HasLoanedParts());

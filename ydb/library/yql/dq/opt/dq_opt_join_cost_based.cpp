@@ -277,7 +277,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     const TProviderCollectFunction& providerCollect,
     int& equiJoinCounter
 ) {
-    if (optLevel == 0) {
+    if (optLevel <= 1) {
         return node;
     }
 

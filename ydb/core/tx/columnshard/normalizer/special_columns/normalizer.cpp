@@ -54,9 +54,8 @@ std::optional<std::vector<TKeyBatch>> KeysToDelete(NTabletFlatExecutor::TTransac
             };
             currentBatch.emplace_back(std::move(key));
             if (currentBatch.size() == maxBatchSize) {
-                TKeyBatch newBatch;
-                currentBatch.swap(newBatch);
-                result.emplace_back(std::move(newBatch));
+                result.emplace_back(std::move(currentBatch));
+                currentBatch = TKeyBatch{};
             }
         }
         if (!rowset.Next()) {
@@ -66,6 +65,7 @@ std::optional<std::vector<TKeyBatch>> KeysToDelete(NTabletFlatExecutor::TTransac
     if (!currentBatch.empty()) {
         result.emplace_back(std::move(currentBatch));
     }
+    
     return result;
 }
 
@@ -87,13 +87,13 @@ public:
                 k.Portion,
                 k.Chunk
             ).Delete();
-
         }
+        ACFL_INFO("normalizer", "TDeleteUnsupportedSpecialColumnsNormalier")("message", TStringBuilder() << GetSize() << " rows deleted");
         return true;
     }
 
     ui64 GetSize() const override {
-        return 0;
+        return Keys.size();
     }
 private:
     const TKeyBatch Keys;
@@ -109,6 +109,14 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TDeleteUnsupportedSpecialColumns
     if (!keysToDelete) {
         return TConclusionStatus::Fail("Not ready");
     }
+    ACFL_INFO("normalizer", "TDeleteUnsupportedSpecialColumnsNormalier")("message", 
+        TStringBuilder() 
+            << "found " 
+            << std::accumulate(cbegin(*keysToDelete), cend(*keysToDelete), 0, [](size_t a, const TKeyBatch& b){return a + b.size();})
+            << " rows to delete grouped in "
+            << keysToDelete->size()
+            << " batches"
+    );
 
     std::vector<INormalizerTask::TPtr> result;
     for (auto&& batch: *keysToDelete) {

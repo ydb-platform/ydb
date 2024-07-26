@@ -89,6 +89,30 @@ struct TEvPrivate {
 } // namespace
 
 class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public IDqComputeActorAsyncInput {
+    struct TMetrics {
+        TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters)
+            : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
+            , Counters(counters) {
+            SubGroup = Counters->GetSubgroup("sink", "PqRead");
+            auto sink = SubGroup->GetSubgroup("tx_id", TxId);
+            auto task = sink->GetSubgroup("task_id", ToString(taskId));
+            InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
+            InFlySubscribe = task->GetCounter("InFlySubscribe");
+            AsyncInputDataRate = task->GetCounter("AsyncInputDataRate", true);
+        }
+
+        ~TMetrics() {
+            SubGroup->RemoveSubgroup("id", TxId);
+        }
+
+        TString TxId;
+        ::NMonitoring::TDynamicCounterPtr Counters;
+        ::NMonitoring::TDynamicCounterPtr SubGroup;
+        ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
+        ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
+        ::NMonitoring::TDynamicCounters::TCounterPtr AsyncInputDataRate;
+    };
+
 public:
     using TPartitionKey = std::pair<TString, ui64>; // Cluster, partition id.
 
@@ -104,10 +128,12 @@ public:
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const NActors::TActorId& computeActorId,
         i64 bufferSize,
+        const ::NMonitoring::TDynamicCounterPtr& counters,
         bool rangesMode)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
         , InputIndex(inputIndex)
         , TxId(txId)
+        , Metrics(txId, taskId, counters)
         , BufferSize(bufferSize)
         , RangesMode(rangesMode)
         , HolderFactory(holderFactory)
@@ -244,9 +270,14 @@ private:
         hFunc(TEvPrivate::TEvSourceDataReady, Handle);
     )
 
-    void Handle(TEvPrivate::TEvSourceDataReady::TPtr&) {
+    void Handle(TEvPrivate::TEvSourceDataReady::TPtr& ev) {
         SRC_LOG_T("Source data ready");
         SubscribedOnEvent = false;
+        if (ev.Get()->Cookie) {
+            Metrics.InFlySubscribe->Dec();
+        }
+        Metrics.InFlyAsyncInputData->Set(1);
+        Metrics.AsyncInputDataRate->Inc();
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
 
@@ -281,6 +312,7 @@ private:
     }
 
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override {
+        Metrics.InFlyAsyncInputData->Set(0);
         SRC_LOG_T("GetAsyncInputData freeSpace = " << freeSpace);
 
         const auto now = TInstant::Now();
@@ -384,9 +416,10 @@ private:
     void SubscribeOnNextEvent() {
         if (!SubscribedOnEvent) {
             SubscribedOnEvent = true;
+            Metrics.InFlySubscribe->Inc();
             NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
             EventFuture = GetReadSession().WaitEvent().Subscribe([actorSystem, selfId = SelfId()](const auto&){
-                actorSystem->Send(selfId, new TEvPrivate::TEvSourceDataReady());
+                actorSystem->Send(selfId, new TEvPrivate::TEvSourceDataReady(), 0, 1);
             });
         }
     }
@@ -560,6 +593,7 @@ private:
     const ui64 InputIndex;
     TDqAsyncStats IngressStats;
     const TTxId TxId;
+    TMetrics Metrics;
     const i64 BufferSize;
     const bool RangesMode;
     const THolderFactory& HolderFactory;
@@ -596,6 +630,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     const NActors::TActorId& computeActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     i64 bufferSize,
+    const ::NMonitoring::TDynamicCounterPtr& counters,
     bool rangesMode
     )
 {
@@ -621,15 +656,16 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         computeActorId,
         bufferSize,
+        counters,
         rangesMode
     );
 
     return {actor, actor};
 }
 
-void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, bool rangesMode) {
+void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const ::NMonitoring::TDynamicCounterPtr& counters, bool rangesMode) {
     factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqSource",
-        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), rangesMode](
+        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, rangesMode](
             NPq::NProto::TDqPqTopicSource&& settings,
             IDqAsyncIoFactory::TSourceArguments&& args)
     {
@@ -647,6 +683,7 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             args.ComputeActorId,
             args.HolderFactory,
             PQReadDefaultFreeSpace,
+            counters,
             rangesMode);
     });
 

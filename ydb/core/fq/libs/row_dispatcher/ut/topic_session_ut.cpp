@@ -37,6 +37,10 @@ public:
             CredentialsProviderFactory
             ).release());
         Runtime.EnableScheduleForActor(TopicSession);
+
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(NActors::TEvents::TSystem::Bootstrap, 1);
+        UNIT_ASSERT(Runtime.DispatchEvents(options));
     }
 
     void TearDown(NUnitTest::TTestContext& /* context */) override {
@@ -59,8 +63,6 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         Init(topicName);
         const std::vector<TString> data = { "1" };
         PQWrite(data, topicName);
-
-
     }
 
 }

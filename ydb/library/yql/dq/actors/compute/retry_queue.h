@@ -9,6 +9,7 @@
 
 #include <util/generic/yexception.h>
 #include <util/system/types.h>
+#include <util/datetime/base.h>
 
 namespace NYql::NDq {
 
@@ -79,7 +80,7 @@ public:
            // Cbs->SessionClosed(0);
         }
 
-    void Init(const TTxId& txId, const NActors::TActorId& senderId, const NActors::TActorId& selfId, ui64 eventQueueId = 0);
+    void Init(const TTxId& txId, const NActors::TActorId& senderId, const NActors::TActorId& selfId, ui64 eventQueueId = 0, bool keepAlive = false);
 
     template <TProtobufEventWithTransportMeta T>
     void Send(T* ev, ui64 cookie = 0) {
@@ -224,6 +225,8 @@ private:
     TMaybe<TRetryState> RetryState;
     TTxId TxId;
     [[maybe_unused]] ICallbacks* const Cbs;
+    bool KeepAlive = false;
+    TInstant LastReceivedDataTime = TInstant::Now();
 };
 
 } // namespace NYql::NDq

@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/core/fq/libs/row_dispatcher)
 
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
+
 SRCS(
     leader_detector_ut.cpp
     json_parser_ut.cpp

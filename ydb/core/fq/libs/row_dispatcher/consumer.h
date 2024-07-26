@@ -20,7 +20,7 @@ struct Consumer  {
         , StartingMessageTimestampMs(proto.GetStartingMessageTimestampMs())
         , Proto(proto) {
 
-        EventsQueue.Init("txId", selfId, selfId, 1);    // TODO 1
+        EventsQueue.Init("txId", selfId, selfId, 1, /* KeepAlive */ true);    // TODO 1
         EventsQueue.OnNewRecipientId(readActorId);
     }
 
@@ -34,7 +34,7 @@ struct Consumer  {
     ui64 StartingMessageTimestampMs;
 
     NYql::NDq::TRetryEventsQueue EventsQueue;
-    TQueue<TString> Buffer;
+    TQueue<std::pair<ui64, TString>> Buffer;
 
     NFq::NRowDispatcherProto::TEvAddConsumer Proto;
 };

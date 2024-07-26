@@ -213,6 +213,7 @@ void TTopicSession::Bootstrap() {
     Become(&TTopicSession::StateFunc);
     LogPrefix = LogPrefix + " " + SelfId().ToString() + " ";
     LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << SourceParams.GetTopicPath() << ", PartitionId " << PartitionId);
+    std::cerr << " TTopicSession::Bootstrap" << std::endl;
     InitParser();
 }
 
@@ -510,20 +511,23 @@ void TTopicSession::DataParsed(ui64 offset, TList<TString>&& value) {
 }
 
 void TTopicSession::SendData(ConsumersInfo& info) {
+    if (info.Consumer->Buffer.empty()) {
+        return;
+    }
+
+    auto event = std::make_unique<TEvRowDispatcher::TEvMessageBatch>();
+    event->Record.SetPartitionId(PartitionId);    
+    
     while (!info.Consumer->Buffer.empty()) {
-        const TString json = info.Consumer->Buffer.front();
+        const auto [offset, json] = info.Consumer->Buffer.front();
         NFq::NRowDispatcherProto::TEvMessage message;
         message.SetJson(json);
-        //message.SetOffset(CurrentOffset);
-        
-        auto event = std::make_unique<TEvRowDispatcher::TEvMessageBatch>();
-        event->Record.SetPartitionId(PartitionId);    
+        message.SetOffset(offset);
         event->Record.AddMessages()->CopyFrom(message);
-
-        LOG_ROW_DISPATCHER_DEBUG("SendData to " << info.Consumer->ReadActorId);
-        info.Consumer->EventsQueue.Send(event.release());
         info.Consumer->Buffer.pop();
     }
+    LOG_ROW_DISPATCHER_DEBUG("SendData to " << info.Consumer->ReadActorId);
+    info.Consumer->EventsQueue.Send(event.release());
 }
 
 void TTopicSession::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
@@ -570,14 +574,14 @@ void TTopicSession::Handle(TEvRowDispatcher::TEvSessionAddConsumer::TPtr& ev) {
             GetVector(consumerInfo.Consumer->SourceParams.GetColumns()),
             GetVector(consumerInfo.Consumer->SourceParams.GetColumnTypes()),
             predicate,
-            [&, actorId = consumerInfo.Consumer->ReadActorId](ui64 /*offset*/, const TString& json){
+            [&, actorId = consumerInfo.Consumer->ReadActorId](ui64 offset, const TString& json){
                 auto it = Consumers.find(actorId);
                 if (it == Consumers.end()) {
                     LOG_ROW_DISPATCHER_DEBUG("Wrong consumer"); // TODO
                     return;
                 }
                 auto& consumerInfo = it->second;
-                consumerInfo.Consumer->Buffer.push(json);
+                consumerInfo.Consumer->Buffer.push(std::make_pair(offset, json));
                 LOG_ROW_DISPATCHER_DEBUG("JsonFilter data: " << json);
                 
                 SendDataArrived();

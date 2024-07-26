@@ -129,7 +129,7 @@ private:
             TActorId rowDispatcherActorId,
             ui64 eventQueueId)
             : RowDispatcherActorId(rowDispatcherActorId) {
-            EventsQueue.Init(txId, selfId, selfId, eventQueueId);
+            EventsQueue.Init(txId, selfId, selfId, eventQueueId, /* KeepAlive */ true);
             EventsQueue.OnNewRecipientId(rowDispatcherActorId);
         }
 

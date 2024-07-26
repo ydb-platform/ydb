@@ -4,7 +4,14 @@
 
 namespace NYql::NDq {
 
-void TRetryEventsQueue::Init(const TTxId& txId, const NActors::TActorId& senderId, const NActors::TActorId& selfId, ui64 eventQueueId) {
+static const ui64 PingPeriodSeconds = 2;
+
+void TRetryEventsQueue::Init(
+    const TTxId& txId,
+    const NActors::TActorId& senderId,
+    const NActors::TActorId& selfId,
+    ui64 eventQueueId,
+    bool keepAlive) {
     
     std::cerr << "Init()" << std::endl;
     TxId = txId;
@@ -12,6 +19,7 @@ void TRetryEventsQueue::Init(const TTxId& txId, const NActors::TActorId& senderI
     SelfId = selfId;
     Y_ASSERT(SelfId.NodeId() == SenderId.NodeId());
     EventQueueId = eventQueueId;
+    KeepAlive = keepAlive;
 }
 
 void TRetryEventsQueue::OnNewRecipientId(const NActors::TActorId& recipientId, bool unsubscribe) {
@@ -52,7 +60,9 @@ void TRetryEventsQueue::HandleNodeConnected(ui32 nodeId) {
                 SendRetryable(ev);
             }
         }
-        SchedulePing();
+        if (KeepAlive) {
+            SchedulePing();
+        }
     }
 }
 
@@ -60,6 +70,12 @@ bool TRetryEventsQueue::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr
     if (ev->Sender == RecipientId && ev->Get()->Reason == NActors::TEvents::TEvUndelivered::Disconnected) {
         Connected = false;
         ScheduleRetry();
+        return true;
+    }
+
+    if (ev->Sender == RecipientId && ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
+        std::cerr << "TRetryEventsQueue::ReasonActorUnknown" << std::endl;
+
         return true;
     }
 
@@ -83,13 +99,12 @@ void TRetryEventsQueue::Ping() {
 
     if (!Connected) {
         PingScheduled = false;
-        std::cerr << "TRetryEventsQueue::Ping not connected" << std::endl;
+        std::cerr << "TRetryEventsQueue::Ping not connected" << std::endl;    
         return;
     }
 
     auto ev = MakeHolder<NActors::TEvents::TEvPing>();
     NActors::TActivationContext::Send(new NActors::IEventHandle(RecipientId, SenderId, ev.Release()));
-
     SchedulePing();
 }
 
@@ -140,13 +155,21 @@ void TRetryEventsQueue::ScheduleRetry() {
 }
 
 void TRetryEventsQueue::SchedulePing() {
+    if (!KeepAlive) {
+        return;
+    }
+
+    if (TInstant::Now() - LastReceivedDataTime < TDuration::Seconds(PingPeriodSeconds)) {
+        return;
+    }
+
     if (PingScheduled) {
         return;
     }
     PingScheduled = true;
     std::cerr << "SchedulePing" << std::endl;
     auto ev = MakeHolder<TEvRetryQueuePrivate::TEvPing>(EventQueueId);
-    NActors::TActivationContext::Schedule(TDuration::Seconds(2), new NActors::IEventHandle(SelfId, SelfId, ev.Release()));
+    NActors::TActivationContext::Schedule(TDuration::Seconds(PingPeriodSeconds), new NActors::IEventHandle(SelfId, SelfId, ev.Release()));
 }
 
 TDuration TRetryEventsQueue::TRetryState::GetNextDelay() {

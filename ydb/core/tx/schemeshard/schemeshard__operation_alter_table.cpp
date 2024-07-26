@@ -110,8 +110,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
             return nullptr;
         }
 
-        // fix it!!!
-        if (col.GetNotNull() && !hasDefault) {
+        if ((col.GetIsCheckingNotNullInProgress() || col.GetNotNull()) && !hasDefault) {
             errStr = Sprintf("Not null columns without defaults are not supported.");
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;

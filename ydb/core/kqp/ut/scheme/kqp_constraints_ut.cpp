@@ -14,6 +14,7 @@
 #include <util/generic/serialized_enum.h>
 #include <util/string/printf.h>
 
+#include <format>
 namespace NKikimr::NKqp {
 
 using namespace NYdb;
@@ -1259,5 +1260,111 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     }
 
+    Y_UNIT_TEST(SetNotNull) {
+        struct TValue {
+        private:
+            int _value = 0;
+            bool _isNull = false;
+        public:
+            TValue(int value) : _value(value) {}
+            TValue() : _isNull(true) {}
+
+            int GetValue() {
+                assert(!_isNull);
+                return _value;
+            }
+
+            bool IsNull() {
+                return _isNull;
+            }
+
+            std::string ToString() {
+                if (IsNull()) {
+                    return "NULL";
+                }
+
+                return std::to_string(GetValue());
+            }
+        };
+
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
+
+        TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false).SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
+        auto querySession = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
+
+        {
+            auto createTable = R"sql(
+                --!syntax_v1
+                CREATE TABLE `/Root/test/SetNotNull` (
+                    myKey Int32 NOT NULL,
+                    myValue Int32 DEFAULT 0,
+                    PRIMARY KEY (myKey)
+                );
+            )sql";
+
+            auto result = kikimr.RunCall([&]{ return session.ExecuteSchemeQuery(createTable).GetValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+        }
+
+        auto insertValues = [&](TValue key, TValue val) -> std::pair<EStatus, TString> {
+            auto query = TString(std::format(R"sql(
+                --!syntax_v1
+                REPLACE INTO `/Root/test/SetNotNull` (myKey, myValue)
+                VALUES
+                ( {}, {} );
+            )sql", key.ToString(), val.ToString()));
+
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            // execSettings.KeepInQueryCache(true);
+            // execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+            std::cerr << "====================================================================================" << std::endl;
+            std::cerr << query << std::endl;
+            std::cerr << "====================================================================================" << std::endl;
+
+            auto result =
+                session
+                    .ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(),
+                                      execSettings)
+                    .ExtractValueSync();
+
+            return {result.GetStatus(), result.GetIssues().ToString()};
+        };
+
+        {
+            const int countOfLines = 10;
+            for (int i = 1; i <= countOfLines; i++) {
+                auto key = TValue(i);
+                auto value = (i != countOfLines ? TValue(10 * i) : TValue());
+                auto [status, issue] = insertValues(key, value);
+                UNIT_ASSERT_VALUES_EQUAL_C(status, EStatus::SUCCESS, issue);
+            }
+        }
+
+        // auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        // auto setNotNull = R"sql(
+        //     --!syntax_v1
+        //     ALTER TABLE `/Root/test/SetNotNull` ALTER COLUMN val SET NOT NULL;
+        // )sql";
+
+        // auto setNotNullFuture = kikimr.RunInThreadPool([&] { return session.ExecuteSchemeQuery(setNotNull).GetValueSync(); });
+
+        // {
+        //     auto key = TValue(1);
+        //     auto value = TValue();
+        //     auto [status, issue] = insertValues(key, value);
+        //     UNIT_ASSERT_VALUES_EQUAL_C(status, EStatus::GENERIC_ERROR, issue);
+        //     UNIT_ASSERT_STRING_CONTAINS(issue, "Can't set optional or NULL value to not null column");
+        // }
+
+        // // here is checking not null must be got error
+        // auto result = runtime.WaitFuture(setNotNullFuture);
+    }
 }
 } // namespace NKikimr::NKqp

@@ -58,11 +58,6 @@ Ydb::TOperationId ToOperationId(const NKikimrIndexBuilder::TIndexBuild& build) {
 }
 
 void ToOperation(const NKikimrIndexBuilder::TIndexBuild& build, Ydb::Operations::Operation* operation) {
-    std::cerr << "gello!!!" << std::endl;
-    std::cerr << "issues:\n";
-    for (auto s : build.GetIssues()) {
-        std::cerr << s.Getmessage() << std::endl;
-    }
     operation->set_id(NOperationId::ProtoToString(ToOperationId(build)));
     operation->mutable_issues()->CopyFrom(build.GetIssues());
 

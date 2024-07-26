@@ -3863,6 +3863,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 ALTER COLUMN val SET NOT NULL;
             )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(setNotNull.GetIssues().ToString(), "One of the shards report CHECKING_NOT_NULL_ERROR at Filling stage, process has to be canceled");
         }
 
         {
@@ -3929,6 +3930,53 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 ( 2, NULL );
             )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(!initNullValues.IsSuccess(), initNullValues.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(AlterTable_SetNotNull_WithoutDefault) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto createTable = client.ExecuteQuery(R"sql(
+                CREATE TABLE `/Root/test/alterNotNull` (
+                    id Int32 NOT NULL,
+                    val Int32,
+                    PRIMARY KEY (id)
+                );
+            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(createTable.IsSuccess(), createTable.GetIssues().ToString());
+        }
+
+        {
+            auto initValues = client.ExecuteQuery(R"sql(
+                REPLACE INTO `/Root/test/alterNotNull` (id, val)
+                VALUES
+                ( 1, 1 ),
+                ( 2, 10 ),
+                ( 3, 100 ),
+                ( 4, 1000 ),
+                ( 5, 10000 ),
+                ( 6, 100000 ),
+                ( 7, 1000000 );
+            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(initValues.IsSuccess(), initValues.GetIssues().ToString());
+        }
+
+        {
+            auto setNotNull = client.ExecuteQuery(R"sql(
+                ALTER TABLE `/Root/test/alterNotNull`
+                ALTER COLUMN val SET NOT NULL;
+            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(setNotNull.GetIssues().ToString(), "Not null columns without defaults are not supported");
         }
     }
 }

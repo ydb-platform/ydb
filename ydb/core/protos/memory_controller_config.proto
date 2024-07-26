@@ -2,7 +2,7 @@ package NKikimrConfig;
 option java_package = "ru.yandex.kikimr.proto";
 
 message TMemoryControllerConfig {
-    optional uint64 HardLimitBytes = 1 [default = 536870912];
+    optional uint64 HardLimitBytes = 1;
 
     optional float SoftLimitPercent = 2 [default = 75];
     optional uint64 SoftLimitBytes = 3;

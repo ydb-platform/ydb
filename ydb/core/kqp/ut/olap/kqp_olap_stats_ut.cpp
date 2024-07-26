@@ -12,7 +12,7 @@ using namespace NYdb::NTable;
 Y_UNIT_TEST_SUITE(KqpOlapStats) {
     constexpr size_t inserted_rows = 1000;
     constexpr size_t tables_in_store = 1000;
-    constexpr size_t size_single_table = 13352;
+    constexpr size_t size_single_table = 13152;
 
     const TVector<TTestHelper::TColumnSchema> schema = {
         TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),

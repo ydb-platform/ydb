@@ -272,7 +272,7 @@ Y_UNIT_TEST_SUITE(StatisticsService) {
                 runtime.Send(new IEventHandle(ev->Sender, ev->Sender,
                     CreateStatisticsResponse(TStatisticsResponse{
                         .TabletId = tabletId,
-                        .Status = NKikimrStat::TEvStatisticsResponse::SUCCESS
+                        .Status = NKikimrStat::TEvStatisticsResponse::STATUS_SUCCESS
                     }).release(), 0, ev->Cookie), senderNodeIndex, true);
             }
             ev.Reset();
@@ -337,7 +337,7 @@ Y_UNIT_TEST_SUITE(StatisticsService) {
                                 TColumnItem{.Tag = 1, .Cells{"1", "2"}},
                                 TColumnItem{.Tag = 2, .Cells{"3"}}
                             },
-                            .Status = NKikimrStat::TEvStatisticsResponse::SUCCESS
+                            .Status = NKikimrStat::TEvStatisticsResponse::STATUS_SUCCESS
                         }).release(), 0, ev->Cookie), senderNodeIndex->second, true);
             } else {
                 runtime.Send(new IEventHandle(ev->Sender, ev->Sender,
@@ -346,7 +346,7 @@ Y_UNIT_TEST_SUITE(StatisticsService) {
                         .Columns{
                             TColumnItem{.Tag = 2, .Cells{"3"}}
                         },
-                        .Status = NKikimrStat::TEvStatisticsResponse::SUCCESS
+                        .Status = NKikimrStat::TEvStatisticsResponse::STATUS_SUCCESS
                     }).release(), 0, ev->Cookie), senderNodeIndex->second, true);
             }
 

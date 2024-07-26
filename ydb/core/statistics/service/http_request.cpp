@@ -100,20 +100,19 @@ void THttpRequest::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& 
     }
 }
 
-void THttpRequest::Handle(TEvStatistics::TEvScanTableAccepted::TPtr&) {
-    HttpReply("Scan accepted");
-}
-
-void THttpRequest::Handle(TEvStatistics::TEvGetScanStatusResponse::TPtr& ev) {
+void THttpRequest::Handle(TEvStatistics::TEvAnalyzeStatusResponse::TPtr& ev) {
     auto& record = ev->Get()->Record;
     switch (record.GetStatus()) {
-    case NKikimrStat::TEvGetScanStatusResponse::NO_OPERATION:
+    case NKikimrStat::TEvAnalyzeStatusResponse::STATUS_UNSPECIFIED:
+        HttpReply("Status is unspecified");
+        break;
+    case NKikimrStat::TEvAnalyzeStatusResponse::STATUS_NO_OPERATION:
         HttpReply("No scan operation");
         break;
-    case NKikimrStat::TEvGetScanStatusResponse::ENQUEUED:
+    case NKikimrStat::TEvAnalyzeStatusResponse::STATUS_ENQUEUED:
         HttpReply("Scan is enqueued");
         break;
-    case NKikimrStat::TEvGetScanStatusResponse::IN_PROGRESS:
+    case NKikimrStat::TEvAnalyzeStatusResponse::STATUS_IN_PROGRESS:
         HttpReply("Scan is in progress");
         break;
     }
@@ -130,14 +129,16 @@ void THttpRequest::ResolveSuccess() {
     }
 
     if (Type == ANALYZE) {
-        auto scanTable = std::make_unique<TEvStatistics::TEvScanTable>();
-        auto& record = scanTable->Record;
-        PathIdFromPathId(PathId, record.MutablePathId());
+        auto analyze = std::make_unique<TEvStatistics::TEvAnalyze>();
+        auto& record = analyze->Record;
+        PathIdFromPathId(PathId, record.AddTables()->MutablePathId());
 
         Send(MakePipePerNodeCacheID(false),
-            new TEvPipeCache::TEvForward(scanTable.release(), StatisticsAggregatorId, true));
+            new TEvPipeCache::TEvForward(analyze.release(), StatisticsAggregatorId, true));
+
+        HttpReply("Scan sent");
     } else {
-        auto getStatus = std::make_unique<TEvStatistics::TEvGetScanStatus>();
+        auto getStatus = std::make_unique<TEvStatistics::TEvAnalyzeStatus>();
         auto& record = getStatus->Record;
         PathIdFromPathId(PathId, record.MutablePathId());
 

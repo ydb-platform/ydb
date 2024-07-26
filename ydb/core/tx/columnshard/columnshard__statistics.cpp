@@ -10,7 +10,7 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
     auto& record = response->Record;
     record.SetShardTabletId(TabletID());
 
-    record.SetStatus(NKikimrStat::TEvStatisticsResponse::SUCCESS);
+    record.SetStatus(NKikimrStat::TEvStatisticsResponse::STATUS_SUCCESS);
 
     std::unique_ptr<TCountMinSketch> sketch(TCountMinSketch::Create());
     ui32 value = 1;

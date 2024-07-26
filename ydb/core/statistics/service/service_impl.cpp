@@ -27,7 +27,7 @@ namespace NStat {
 
 
 struct TAggregationStatistics {
-    using TColumnsStatistics = ::google::protobuf::RepeatedPtrField<::NKikimrStat::TColumn>;
+    using TColumnsStatistics = ::google::protobuf::RepeatedPtrField<::NKikimrStat::TColumnStatistics>;
 
     TAggregationStatistics(size_t nodesCount)
         : Nodes(nodesCount)
@@ -296,7 +296,7 @@ private:
             LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
                 "Tablet is not local. Table node: " << msg->NodeId << ", current node: " << ev->Recipient.NodeId());
 
-            const auto error = NKikimrStat::TEvAggregateStatisticsResponse::NonLocalTablet;
+            const auto error = NKikimrStat::TEvAggregateStatisticsResponse::TYPE_NON_LOCAL_TABLET;
             AggregationStatistics.FailedTablets.emplace_back(msg->TabletId, msg->NodeId, error);
 
             SendRequestToNextTablet();
@@ -312,11 +312,11 @@ private:
         auto& record = request->Record;
         record.MutableTypes()->Add(NKikimr::NStat::COUNT_MIN_SKETCH);
 
-        auto path = record.MutableTableId();
+        auto* path = record.MutableTable()->MutablePathId();
         path->SetOwnerId(AggregationStatistics.PathId.OwnerId);
-        path->SetTableId(AggregationStatistics.PathId.LocalPathId);
+        path->SetLocalId(AggregationStatistics.PathId.LocalPathId);
 
-        auto columnTags = record.MutableColumnTags();
+        auto* columnTags = record.MutableTable()->MutableColumnTags();
         for (const auto& tag : AggregationStatistics.ColumnTags) {
             columnTags->Add(tag);
         }
@@ -338,7 +338,7 @@ private:
         }
 
         const auto nodeId = ev->Recipient.NodeId();
-        const auto error = NKikimrStat::TEvAggregateStatisticsResponse::NonLocalTablet;
+        const auto error = NKikimrStat::TEvAggregateStatisticsResponse::TYPE_NON_LOCAL_TABLET;
         AggregationStatistics.FailedTablets.emplace_back(tabletId, nodeId, error);
 
         SendRequestToNextTablet();
@@ -560,7 +560,7 @@ private:
                 auto failedTablet = response.AddFailedTablets();
                 failedTablet->SetNodeId(range.NodeId);
                 failedTablet->SetTabletId(tabletId);
-                failedTablet->SetError(NKikimrStat::TEvAggregateStatisticsResponse::UnavailableNode);
+                failedTablet->SetError(NKikimrStat::TEvAggregateStatisticsResponse::TYPE_UNAVAILABLE_NODE);
             }
         }
     }

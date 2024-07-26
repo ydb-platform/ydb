@@ -4,6 +4,8 @@ SRCS(
     leader_detector_ut.cpp
     json_parser_ut.cpp
     json_filter_ut.cpp
+    topic_session_ut.cpp
+    row_dispatcher_ut.cpp
 )
 
 PEERDIR(
@@ -13,6 +15,7 @@ PEERDIR(
     ydb/core/testlib
     ydb/library/yql/udfs/common/json2
     ydb/library/yql/udfs/common/yson2
+    ydb/tests/fq/pq_async_io
 )
 
 SIZE(MEDIUM)

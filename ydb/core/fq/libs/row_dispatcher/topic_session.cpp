@@ -89,7 +89,7 @@ private:
     std::unique_ptr<NYdb::NTopic::TTopicClient> TopicClient;
     std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
     const i64 BufferSize;
-    const TString LogPrefix;
+    TString LogPrefix;
     NYql::NDq::TDqAsyncStats IngressStats;
     std::queue<TReadyBatch> ReadyBuffer;
     ui32 BatchCapacity;
@@ -105,9 +105,6 @@ private:
     };
     TMap<NActors::TActorId, ConsumersInfo> Consumers;
     std::unique_ptr<TJsonParser> Parser;
-
-    //ui64 CurrentOffset = 0;
-
 
 public:
     explicit TTopicSession(
@@ -127,9 +124,11 @@ public:
     void SubscribeOnNextEvent();
     void ParseData();
     void DataParsed(ui64 offset, TList<TString>&& value);
-    void SendData();
+    void SendData(ConsumersInfo& info);
     void CloseSession();
-
+    void InitParser();
+    void FatalError(const TString& message);
+    void SendDataArrived();
 
     TString GetSessionId() const;
     void HandleNewEvents();
@@ -197,11 +196,8 @@ TTopicSession::TTopicSession(
     , Driver(driver)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , BufferSize(16_MB)
-    , LogPrefix("TopicSession: " + SelfId().ToString())
+    , LogPrefix("TopicSession")
    // , StartingMessageTimestamp(TInstant::MilliSeconds(TInstant::Now().MilliSeconds())) // this field is serialized as milliseconds, so drop microseconds part to be consistent with storage
-    , Parser(NewJsonParser("", GetVector(sourceParams.GetColumns()), [&](ui64 offset, TList<TString>&& value){
-            DataParsed(offset, std::move(value));
-        }))
 {
    // Alloc.DisableStrictAllocationCheck();
     LOG_ROW_DISPATCHER_DEBUG("MetadataFieldsSize " << SourceParams.MetadataFieldsSize());
@@ -215,7 +211,9 @@ TTopicSession::TTopicSession(
 
 void TTopicSession::Bootstrap() {
     Become(&TTopicSession::StateFunc);
+    LogPrefix = LogPrefix + " " + SelfId().ToString() + " ";
     LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << SourceParams.GetTopicPath() << ", PartitionId " << PartitionId);
+    InitParser();
 }
 
 void TTopicSession::PassAway() {
@@ -280,9 +278,14 @@ void TTopicSession::Handle(TEvPrivate::TEvPqEventsReady::TPtr&) {
     ParseData();
 }
 
-void TTopicSession::Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr&) {
+void TTopicSession::Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvGetNextBatch");
- 
+    auto it = Consumers.find(ev->Sender);
+    if (it == Consumers.end()) {
+        LOG_ROW_DISPATCHER_DEBUG("Wrong consumer"); // TODO
+        return;
+    }
+    SendData(it->second);
 }
 
 void TTopicSession::HandleNewEvents() {
@@ -497,30 +500,29 @@ void TTopicSession::DataParsed(ui64 offset, TList<TString>&& value) {
         LOG_ROW_DISPATCHER_DEBUG("v " << v);
     }
 
-    // for (auto& [actorId, info] : Consumers) {
-    //     info.Filter->Push(json);
-    // }
+    try {
+        for (auto& [actorId, info] : Consumers) {
+            info.Filter->Push(offset, value);
+        }
+    } catch (const yexception& e) {
+        FatalError(e.what());
+    }
 }
 
-void TTopicSession::SendData() {
-    LOG_ROW_DISPATCHER_DEBUG("SendData");
-    
-    for (auto& [actorId, info] : Consumers) {
-        while (!info.Consumer->Buffer.empty()) {
-            const TString json = info.Consumer->Buffer.front();
-            NFq::NRowDispatcherProto::TEvMessage message;
-            message.SetJson(json);
-            //message.SetOffset(CurrentOffset);
-            
-            auto event = std::make_unique<TEvRowDispatcher::TEvMessageBatch>();
-            event->Record.SetPartitionId(PartitionId);    
-            event->Record.AddMessages()->CopyFrom(message);
+void TTopicSession::SendData(ConsumersInfo& info) {
+    while (!info.Consumer->Buffer.empty()) {
+        const TString json = info.Consumer->Buffer.front();
+        NFq::NRowDispatcherProto::TEvMessage message;
+        message.SetJson(json);
+        //message.SetOffset(CurrentOffset);
+        
+        auto event = std::make_unique<TEvRowDispatcher::TEvMessageBatch>();
+        event->Record.SetPartitionId(PartitionId);    
+        event->Record.AddMessages()->CopyFrom(message);
 
-            LOG_ROW_DISPATCHER_DEBUG("SendData to " << actorId);
-            //Send(actorId, event.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
-            info.Consumer->EventsQueue.Send(event.release());
-            info.Consumer->Buffer.pop();
-        }
+        LOG_ROW_DISPATCHER_DEBUG("SendData to " << info.Consumer->ReadActorId);
+        info.Consumer->EventsQueue.Send(event.release());
+        info.Consumer->Buffer.pop();
     }
 }
 
@@ -577,7 +579,9 @@ void TTopicSession::Handle(TEvRowDispatcher::TEvSessionAddConsumer::TPtr& ev) {
                 auto& consumerInfo = it->second;
                 consumerInfo.Consumer->Buffer.push(json);
                 LOG_ROW_DISPATCHER_DEBUG("JsonFilter data: " << json);
-                SendData();
+                
+                SendDataArrived();
+
             });
 
         LOG_ROW_DISPATCHER_DEBUG("Consumers size " << Consumers.size());
@@ -633,6 +637,36 @@ void TTopicSession::Handle(NActors::TEvents::TEvPing::TPtr &/*ev*/) {
 void TTopicSession::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvPing::TPtr& /*ev*/) {
     LOG_ROW_DISPATCHER_DEBUG("TEvRetryQueuePrivate::TEvPing");
     // TODO
+}
+
+void TTopicSession::InitParser() {
+    try {
+        Parser = NewJsonParser(
+            "",
+            GetVector(SourceParams.GetColumns()),
+            [&](ui64 offset, TList<TString>&& value){
+                DataParsed(offset, std::move(value));
+            });
+    } catch (NYql::NPureCalc::TCompileError& e) {
+        FatalError(e.GetIssues());
+    }
+}
+
+void TTopicSession::FatalError(const TString& message) {
+    LOG_ROW_DISPATCHER_DEBUG("FatalError: " << message);
+    // TODO
+}
+
+void TTopicSession::SendDataArrived() {
+    for (auto& [readActorId, info] : Consumers) {
+        if (info.Consumer->Buffer.empty()) {
+            continue;
+        }
+        LOG_ROW_DISPATCHER_DEBUG("Send TEvNewDataArrived to " << info.Consumer->ReadActorId);
+        auto event = std::make_unique<TEvRowDispatcher::TEvNewDataArrived>();
+        event->Record.SetPartitionId(PartitionId);    
+        info.Consumer->EventsQueue.Send(event.release());
+    }
 }
 
 } // namespace

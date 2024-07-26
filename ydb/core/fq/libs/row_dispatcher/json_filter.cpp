@@ -66,7 +66,6 @@ public:
         : Worker(std::move(worker)) {
         LOG_ROW_DISPATCHER_DEBUG("TFilterInputConsumer::TFilterInputConsumer()");
 
-
         const NKikimr::NMiniKQL::TStructType* structType = Worker->GetInputType();
         const auto nMembers = structType->GetMembersCount();
 
@@ -78,9 +77,7 @@ public:
                 continue;
             }
             schemaPositions[name] = i;
-            std::cerr << "name " << name << std::endl;
         }
-
 
         const NYT::TNode& schema = spec.GetSchemas()[0];
         const auto& fields = schema[1];
@@ -91,7 +88,6 @@ public:
             if (name == OffsetFieldName) {
                continue;
             }
-            std::cerr << "name_ " << name << std::endl;
             FieldsPositions.push_back(schemaPositions[name]);
         }
     }
@@ -247,22 +243,16 @@ public:
         : LogPrefix("JsonFilter: ") {
         auto factory = NYql::NPureCalc::MakeProgramFactory(NYql::NPureCalc::TProgramFactoryOptions());
 
-        try {
-            LOG_ROW_DISPATCHER_DEBUG("Creating program...");
-            Program = factory->MakePushStreamProgram(
-                TFilterInputSpec(MakeInputSchema(columns)),
-                TFilterOutputSpec(MakeOutputSchema()),
-                GenerateSql(columns, types, whereFilter),
-                NYql::NPureCalc::ETranslationMode::SQL
-            );
-            LOG_ROW_DISPATCHER_DEBUG("Program created");
-            InputConsumer = Program->Apply(MakeHolder<TFilterOutputConsumer>(callback));
-            LOG_ROW_DISPATCHER_DEBUG("InputConsumer created");
-
-        } catch (NYql::NPureCalc::TCompileError& e) {
-            Cerr << e.GetIssues() << Endl; // TODO
-            throw;
-        }
+        LOG_ROW_DISPATCHER_DEBUG("Creating program...");
+        Program = factory->MakePushStreamProgram(
+            TFilterInputSpec(MakeInputSchema(columns)),
+            TFilterOutputSpec(MakeOutputSchema()),
+            GenerateSql(columns, types, whereFilter),
+            NYql::NPureCalc::ETranslationMode::SQL
+        );
+        LOG_ROW_DISPATCHER_DEBUG("Program created");
+        InputConsumer = Program->Apply(MakeHolder<TFilterOutputConsumer>(callback));
+        LOG_ROW_DISPATCHER_DEBUG("InputConsumer created");
     }
 
     void Push(ui64 offset, const TList<TString>& value) {

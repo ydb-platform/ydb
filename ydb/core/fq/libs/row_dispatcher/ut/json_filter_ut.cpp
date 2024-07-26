@@ -1,7 +1,6 @@
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/events/events.h>
 
-#include <ydb/core/fq/libs/row_dispatcher/json_parser.h>
 #include <ydb/core/fq/libs/row_dispatcher/json_filter.h>
 
 #include <ydb/core/testlib/actors/test_runtime.h>
@@ -59,7 +58,6 @@ Y_UNIT_TEST_SUITE(TJsonFilterTests) {
             "where a2 > 100",
             [&](ui64 offset, const TString& json) {
                 result[offset] = json;
-                std::cerr << "Json " << json << std::endl;
             });
         Filter->Push(5, {"hello1", "99"});
         Filter->Push(6, {"hello2", "101"});
@@ -75,7 +73,6 @@ Y_UNIT_TEST_SUITE(TJsonFilterTests) {
             "where a2 > 100",
             [&](ui64 offset, const TString& json) {
                 result[offset] = json;
-                std::cerr << "Json " << json << std::endl;
             });
         Filter->Push(5, {"99", "hello1"});
         Filter->Push(6, {"101", "hello2"});
@@ -84,17 +81,12 @@ Y_UNIT_TEST_SUITE(TJsonFilterTests) {
     }
 
      Y_UNIT_TEST_F(ThrowExceptionByError, TFixture) { 
-
         MakeFilter(
             {"a1", "a2"},
             {"String", "UInt64"},
-            "where a2 > 100",
+            "where Unwrap(a2) = 1",
             [&](ui64, const TString&) { });
-        try {
-            Filter->Push(5, {"99", "hello1"});
-        } catch (const yexception& ex) {
-            std::cerr << ex.what() << std::endl;
-        }
+        UNIT_ASSERT_EXCEPTION_CONTAINS(Filter->Push(5, {"99", "hello1"}), yexception, "Failed to unwrap empty optional");
      }
 }
 

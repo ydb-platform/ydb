@@ -473,7 +473,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvAck::TPtr &ev) {
         SRC_LOG_D("TEvAck failed");
     }
     sessionInfo.EventsQueue.ChangeRecipientId(ev->Sender);
-    sessionInfo.EventsQueue.Send(new NFq::TEvRowDispatcher::TEvGetNextBatch());
+    //sessionInfo.EventsQueue.Send(new NFq::TEvRowDispatcher::TEvGetNextBatch());
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev) {
@@ -481,7 +481,9 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
     auto sessionIt = Sessions.find(partitionId);
     YQL_ENSURE(sessionIt != Sessions.end(), "Unknown partition id");
-    sessionIt->second.NewDataArrived = true;
+    auto& sessionInfo = sessionIt->second;
+    sessionInfo.NewDataArrived = true;
+    sessionInfo.EventsQueue.Send(new NFq::TEvRowDispatcher::TEvGetNextBatch());
 }
 
 void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {

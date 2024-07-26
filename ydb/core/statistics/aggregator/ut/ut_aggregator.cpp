@@ -1,4 +1,4 @@
-#include "ut_common.h"
+#include <ydb/core/statistics/ut_common/ut_common.h>
 
 #include <ydb/library/actors/testlib/test_runtime.h>
 

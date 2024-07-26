@@ -1,4 +1,4 @@
-#include "ut_common.h"
+#include <ydb/core/statistics/ut_common/ut_common.h>
 
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/database/database.h>

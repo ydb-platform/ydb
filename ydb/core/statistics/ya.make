@@ -20,8 +20,11 @@ RECURSE(
     aggregator
     database
     service
+    ut_common
 )
 
 RECURSE_FOR_TESTS(
-    ut
+    aggregator/ut
+    database/ut
+    service/ut
 )

@@ -82,10 +82,10 @@ public:
 
     void WaitIndexation(const TDuration d) const {
         TInstant start = TInstant::Now();
-        ui32 indexationStart = GetInsertStartedCounter().Val();
+        ui32 insertsStart = GetInsertStartedCounter().Val();
         while (Now() - start < d) {
-            if (indexationStart != GetInsertStartedCounter().Val()) {
-                indexationStart = GetInsertStartedCounter().Val();
+            if (insertsStart != GetInsertStartedCounter().Val()) {
+                insertsStart = GetInsertStartedCounter().Val();
                 start = TInstant::Now();
             }
             Cerr << "WAIT_INDEXATION: " << GetInsertStartedCounter().Val() << Endl;

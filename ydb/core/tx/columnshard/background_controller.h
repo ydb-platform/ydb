@@ -1,6 +1,7 @@
 #pragma once
 #include "engines/changes/abstract/compaction_info.h"
 #include "engines/portions/meta.h"
+#include <ydb/core/base/appdata.h>
 
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;
@@ -14,7 +15,7 @@ private:
 
     using TCurrentCompaction = THashMap<ui64, NOlap::TPlanCompactionInfo>;
     TCurrentCompaction ActiveCompactionInfo;
-    THashMap<ui64, TInstant> LastCompactionFinishInstants; // pathId to finish time
+    THashMap<ui64, TInstant> LastCompactionFinishByPathId;
 
     bool ActiveCleanupPortions = false;
     bool ActiveCleanupTables = false;
@@ -30,8 +31,8 @@ public:
     bool StartCompaction(const NOlap::TPlanCompactionInfo& info);
     void FinishCompaction(const NOlap::TPlanCompactionInfo& info) {
         Y_ABORT_UNLESS(ActiveCompactionInfo.erase(info.GetPathId()));
-        TInstant& lastFinishInstant = LastCompactionFinishInstants[info.GetPathId()];
-        lastFinishInstant = std::max(lastFinishInstant, TInstant::Now());
+        TInstant& lastFinishInstant = LastCompactionFinishByPathId[info.GetPathId()];
+        lastFinishInstant = std::max(lastFinishInstant, TAppData::TimeProvider->Now());
     }
     const TCurrentCompaction& GetActiveCompaction() const {
         return ActiveCompactionInfo;
@@ -40,7 +41,6 @@ public:
         return ActiveCompactionInfo.size();
     }
     TInstant GetLastCompactionFinishInstant(ui64 pathId) const;
-    TInstant GetLastCompactionFinishInstant() const;
 
     void StartIndexing(const NOlap::TColumnEngineChanges& changes);
     void FinishIndexing(const NOlap::TColumnEngineChanges& changes);

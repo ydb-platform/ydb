@@ -480,6 +480,8 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
         }
         if (tableInfo->GetStats().TableStats.contains(pathId)) {
             FillTableStats(*pathDescription, tableInfo->GetStats().TableStats.at(pathId));
+        } else {
+            FillTableStats(*pathDescription, TPartitionStats());
         }
     }
 }

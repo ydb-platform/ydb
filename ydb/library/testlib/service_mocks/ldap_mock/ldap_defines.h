@@ -1,6 +1,7 @@
 #pragma once
 #include <util/generic/string.h>
 #include <vector>
+#include <memory>
 #include <utility>
 
 namespace LdapMock {

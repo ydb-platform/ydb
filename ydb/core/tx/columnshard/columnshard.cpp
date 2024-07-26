@@ -369,7 +369,6 @@ std::optional<TColumnShard::TAggregatedTableStats> TColumnShard::CollectTableSta
         if (resultStats.TotalStats.LastFullCompaction < tableStats.LastFullCompaction) {
             resultStats.TotalStats.LastFullCompaction = tableStats.LastFullCompaction;
         }
-        // TODO: When dataStats are included, don't aggregate rowCount and dataSize from individual pathIds.
         resultStats.TotalStats.RowCount += tableStats.RowCount;
         resultStats.TotalStats.DataSize += tableStats.DataSize;
     }

@@ -434,6 +434,7 @@ private:
     struct TColumnTableStats {
         ui64 RowCount = 0;
         ui64 DataSize = 0;
+        ui64 Portions = 0;
         TInstant AccessTime;
         TInstant UpdateTime;
         TInstant LastFullCompaction;

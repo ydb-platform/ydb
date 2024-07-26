@@ -158,7 +158,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
 
     for (auto& inserted : DataToIndex) {
         auto blobSchema = context.SchemaVersions.GetSchemaVerified(inserted.GetSchemaVersion());
-        std::vector<ui32> filteredIds = inserted.GetMeta().GetSchemaSubset().Apply(blobSchema->GetIndexInfo().GetColumnIds(true));
+        std::vector<ui32> filteredIds = inserted.GetMeta().GetSchemaSubset().Apply(blobSchema->GetIndexInfo().GetColumnIds(false));
         usageColumnIds.insert(filteredIds.begin(), filteredIds.end());
         if (inserted.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete) {
             usageColumnIds.emplace((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG);

@@ -925,7 +925,10 @@ TExprBase KqpJoinToIndexLookup(const TExprBase& node, TExprContext& ctx, const T
 
     if (useCBO){
          auto algo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
-         if (algo != EJoinAlgoType::LookupJoin && algo != EJoinAlgoType::LookupJoinReverse) {
+         if (algo != EJoinAlgoType::LookupJoin && algo != EJoinAlgoType::LookupJoinReverse && algo != EJoinAlgoType::Undefined) {
+            return node;
+         }
+         if (algo == EJoinAlgoType::Undefined && kqpCtx.IsScanQuery() && !kqpCtx.Config->EnableKqpScanQueryStreamIdxLookupJoin) {
             return node;
          }
     }

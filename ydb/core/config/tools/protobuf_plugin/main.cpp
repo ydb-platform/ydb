@@ -1,20 +1,26 @@
 #include <map>
+#include <unordered_set>
 
-#include <util/system/compiler.h>
+#include <util/generic/deque.h>
 #include <util/generic/map.h>
-#include <util/generic/set.h>
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
+#include <util/generic/set.h>
 #include <util/generic/vector.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
 #include <util/string/subst.h>
+#include <util/string/join.h>
+#include <util/system/compiler.h>
+
+#include <library/cpp/protobuf/json/util.h>
 
 #include <google/protobuf/compiler/code_generator.h>
 #include <google/protobuf/compiler/plugin.h>
 #include <google/protobuf/io/printer.h>
 #include <google/protobuf/io/zero_copy_stream.h>
+
 #include <ydb/core/config/protos/marker.pb.h>
 
 #include <ydb/public/lib/protobuf/base_message_generator.h>
@@ -31,8 +37,107 @@ class TMessageGenerator
     : public TBaseMessageGenerator
 {
 private:
+    using TOnEntryFn = std::function<void(const Descriptor*, const TDeque<const Descriptor*>&, const TDeque<const FieldDescriptor*>&, const FieldDescriptor*, ssize_t)>;
+
+    ssize_t FindLoop(TDeque<const Descriptor*>& typePath, const Descriptor* child) {
+        for (ssize_t i = 0; i < (ssize_t)typePath.size(); ++i) {
+            if (typePath[i] == child) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    void Traverse(const Descriptor* d, TDeque<const Descriptor*>& typePath, TDeque<const FieldDescriptor*>& fieldPath, const FieldDescriptor* field, TOnEntryFn onEntry) {
+        ssize_t loop = FindLoop(typePath, d);
+
+        Y_ABORT_IF(!d && !field, "Either field or descriptor must be defined");
+
+        onEntry(d, typePath, fieldPath, field, loop);
+
+        if (!d || loop != -1) {
+            return;
+        }
+
+        typePath.push_back(d);
+
+        for (int i = 0; i < d->field_count(); ++i) {
+            const FieldDescriptor* fieldDescriptor = d->field(i);
+            fieldPath.push_back(fieldDescriptor);
+            Traverse(fieldDescriptor->message_type(), typePath, fieldPath, fieldDescriptor, onEntry);
+            fieldPath.pop_back();
+        }
+
+        typePath.pop_back();
+    }
+
+    void Traverse(TOnEntryFn onEntry) {
+        const Descriptor* descriptor = Message;
+
+        TDeque<const Descriptor*> typePath;
+        TDeque<const FieldDescriptor*> fieldPath;
+        fieldPath.push_back(nullptr);
+        Traverse(descriptor, typePath, fieldPath, nullptr, onEntry);
+        fieldPath.pop_back();
+    }
+
+    TString FieldName(const FieldDescriptor* field) const {
+        TString name = field->name();
+        NProtobufJson::ToSnakeCaseDense(&name);
+        return name;
+    }
+
+    TString ConstructFullFieldPath(const TDeque<const FieldDescriptor*>& fieldPath, const FieldDescriptor* field) const {
+
+        TVector<TString> path;
+        path.push_back("");
+        for (size_t i = 1; i < fieldPath.size(); ++i) {
+            TString fieldName = FieldName(fieldPath[i]);
+            path.push_back(fieldName);
+        }
+
+        return JoinSeq("/", path);
+    }
 
     void GenerateConfigRoot(TVars vars) {
+        std::unordered_set<TString> reservedPaths;
+        Traverse([&](const Descriptor* d, const TDeque<const Descriptor*>& typePath, const TDeque<const FieldDescriptor*>& fieldPath, const FieldDescriptor* field, ssize_t loop) {
+            Y_UNUSED(fieldPath, typePath, fieldPath, field, loop);
+            if (field && d) {
+                for (int i = 0; i < d->reserved_name_count(); ++i) {
+                    TString name = d->reserved_name(i);
+                    NProtobufJson::ToSnakeCaseDense(&name);
+                    reservedPaths.insert(ConstructFullFieldPath(fieldPath, field) + "/" + name);
+                }
+            }
+        });
+
+        for (int i = 0; i < Message->reserved_name_count(); ++i) {
+            TString name = Message->reserved_name(i);
+            NProtobufJson::ToSnakeCaseDense(&name);
+            reservedPaths.insert(TString("/") + name);
+        }
+
+        WITH_PLUGIN_MARKUP(HeaderIncludes, PLUGIN_NAME) {
+            HeaderIncludes->Print(Vars, "#include <unordered_set>\n");
+        }
+
+        WITH_PLUGIN_MARKUP(Header, PLUGIN_NAME) {
+            Header->Print(vars, "inline static const std::unordered_set<TString>& GetReservedChildrenPaths() {\n");
+            WITH_INDENT(Header) {
+                Header->Print(vars, "static const std::unordered_set<TString>& reserved = {\n");
+                WITH_INDENT(Header) {
+                    for (const auto& path : reservedPaths) {
+                        vars["reservedPath"] = path;
+                        Header->Print(vars, "\"$reservedPath$\",\n");
+                    }
+                }
+                Header->Print(vars, "};\n");
+                Header->Print(vars, "return reserved;\n");
+            }
+            Header->Print(vars, "}\n");
+        }
+
         for (auto i = 0; i < Message->field_count(); ++i) {
             const FieldDescriptor* field = Message->field(i);
             if (field->is_repeated()) {

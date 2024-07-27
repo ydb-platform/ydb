@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ydb/core/base/events.h>
 #include <ydb/library/actors/core/events.h>
 
 namespace NYql {
@@ -8,8 +7,8 @@ namespace NDq {
 
 struct TDqEvents {
     enum EEventSpaceDq {
-        ES_DQ_COMPUTE_KQP_COMPATIBLE = NKikimr::TKikimrEvents::ES_KQP,
-        ES_DQ_COMPUTE = NKikimr::TKikimrEvents::ES_DQ
+        ES_DQ_COMPUTE_KQP_COMPATIBLE = 4145, // TKikimrEvents::ES_KQP
+        ES_DQ_COMPUTE = 4212 //TKikimrEvents::ES_DQ
     };
 
     enum EDqEvents {

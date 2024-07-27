@@ -3,6 +3,9 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/event_pb.h>
+#include <ydb/library/yql/dq/actors/dq_events_ids.h>
+
+#include <ydb/core/fq/libs/events/event_ids.h>
 
 namespace NKikimr {
 
@@ -178,5 +181,9 @@ struct TKikimrEvents : TEvents {
         ES_LIMITER = 4258, 
     };
 };
+
+static_assert((int)TKikimrEvents::EEventSpaceKikimr::ES_KQP == (int)NYql::NDq::TDqEvents::ES_DQ_COMPUTE_KQP_COMPATIBLE);
+static_assert((int)TKikimrEvents::EEventSpaceKikimr::ES_DQ == (int)NYql::NDq::TDqEvents::ES_DQ_COMPUTE);
+static_assert((int)TKikimrEvents::EEventSpaceKikimr::ES_YQL_ANALYTICS_PROXY == (int)NFq::TEventIds::ES_YQL_ANALYTICS_PROXY);
 
 }

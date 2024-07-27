@@ -21,7 +21,9 @@ PEERDIR(
 )
 
 SRCS(
-    ut_aggregator.cpp
+    ut_analyze_datashard.cpp
+    ut_analyze_columnshard.cpp
+    ut_traverse_columnshard.cpp
 )
 
 END()

@@ -2459,52 +2459,27 @@ namespace {
         TDeque<TPendingRequest> QuotaRequests;
     };
 
-    std::unique_ptr<TEvDataShard::TEvReadResult> ReadAllTable(
+    void SendReadEntireTable(
         Tests::TServer::TPtr server,
         ui64 tabletId,
         const TTableId& tableId,
         const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
-        ui64 readId)
+        ui64 readId,
+        NKikimrDataEvents::EDataFormat format)
     {
-        auto request = std::make_unique<TEvDataShard::TEvRead>();
-        auto& record = request->Record;
-
-        record.SetReadId(readId);
-        record.MutableTableId()->SetOwnerId(tableId.PathId.OwnerId);
-        record.MutableTableId()->SetTableId(userTable.GetPathId());
-
-        const auto& description = userTable.GetDescription();
-        for (const auto& column: description.GetColumns()) {
-            record.AddColumns(column.GetId());
-        }
-
-        // read all
-        auto fromBuf = TSerializedCellVec::Serialize(TVector<TCell>());
-        auto toBuf = TSerializedCellVec::Serialize(TVector<TCell>());
-        request->Ranges.emplace_back(fromBuf, toBuf, true, true);
-
-        record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
-
         auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
-        runtime.SendToPipe(
-            tabletId,
-            sender,
-            request.release()
-        );
+        auto request = GetBaseReadRequest(tableId, userTable, readId, format);
 
-        TAutoPtr<IEventHandle> handle;
-        runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(handle, TDuration::Seconds(5));
-        UNIT_ASSERT(handle);
+        AddFullRangeQuery(*request);
 
-        return std::unique_ptr<TEvDataShard::TEvReadResult>(handle->Release<TEvDataShard::TEvReadResult>().Release());
+        SendReadAsync(server, tabletId, request.release(), sender);
     }
 
-    TString PrintTableFromResult(const TEvDataShard::TEvReadResult& event, const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable) {
+    void PrintTableFromResult(TStringBuilder& out, const TEvDataShard::TEvReadResult& event, const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable) {
         const auto& description = userTable.GetDescription();
 
-        TStringBuilder result;
         auto nrows = event.GetRowsCount();
         for (size_t i = 0; i < nrows; ++i) {
             const auto& cellArray = event.GetCells(i);
@@ -2514,16 +2489,15 @@ namespace {
                 if (first) {
                     first = false;
                 } else {
-                    result << ", ";
+                    out << ", ";
                 }
                 const auto& columnDescription = description.GetColumns(j);
                 TString cellValue;
                 DbgPrintValue(cellValue, cellArray[j], NScheme::TTypeInfo(columnDescription.GetTypeId()));
-                result << columnDescription.GetName() << " = " << cellValue;
+                out << columnDescription.GetName() << " = " << cellValue;
             }
-            result << '\n';
+            out << '\n';
         }
-        return result;
     }
 
 } // namespace
@@ -2582,22 +2556,123 @@ void SendViaPipeCache(
         /* viaActorSystem */ true);
 }
 
-TString ReadTable(
+void AddKeyQuery(
+    TEvDataShard::TEvRead& request,
+    const std::vector<ui32>& keys)
+{
+    // convertion is ugly, but for tests is OK
+    auto cells = ToCells(keys);
+    request.Keys.emplace_back(cells);
+}
+
+void AddFullRangeQuery(TEvDataShard::TEvRead& request) {
+    auto fromBuf = TSerializedCellVec::Serialize(TVector<TCell>());
+    auto toBuf = TSerializedCellVec::Serialize(TVector<TCell>());
+    request.Ranges.emplace_back(fromBuf, toBuf, true, true);
+}
+
+std::unique_ptr<TEvDataShard::TEvRead> GetBaseReadRequest(
+    const TTableId& tableId,
+    const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
+    ui64 readId,
+    NKikimrDataEvents::EDataFormat format,
+    const TRowVersion& readVersion)
+{
+    auto request = std::make_unique<TEvDataShard::TEvRead>();
+    auto& record = request->Record;
+
+    record.SetReadId(readId);
+    record.MutableTableId()->SetOwnerId(tableId.PathId.OwnerId);
+    record.MutableTableId()->SetTableId(userTable.GetPathId());
+
+    const auto& description = userTable.GetDescription();
+    for (const auto& column: description.GetColumns()) {
+        record.AddColumns(column.GetId());
+    }
+
+    record.MutableTableId()->SetSchemaVersion(description.GetTableSchemaVersion());
+
+    if (readVersion) {
+        record.MutableSnapshot()->SetStep(readVersion.Step);
+        record.MutableSnapshot()->SetTxId(readVersion.TxId);
+    }
+
+    record.SetResultFormat(format);
+
+    return request;
+}
+
+std::unique_ptr<TEvDataShard::TEvReadResult> WaitReadResult(Tests::TServer::TPtr server, TDuration timeout) {
+    auto& runtime = *server->GetRuntime();
+    TAutoPtr<IEventHandle> handle;
+    runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(handle, timeout);
+    if (!handle) {
+        return nullptr;
+    }
+    std::unique_ptr<TEvDataShard::TEvReadResult> event(handle->Release<TEvDataShard::TEvReadResult>().Release());
+    return event;
+}
+
+void SendReadAsync(
     Tests::TServer::TPtr server,
     ui64 tabletId,
+    TEvDataShard::TEvRead* request,
+    TActorId sender,
+    ui32 node,
+    const NTabletPipe::TClientConfig& clientConfig,
+    TActorId clientId)
+{
+    auto &runtime = *server->GetRuntime();
+    runtime.SendToPipe(
+        tabletId,
+        sender,
+        request,
+        node,
+        clientConfig,
+        clientId);
+}
+
+std::unique_ptr<TEvDataShard::TEvReadResult> SendRead(
+    Tests::TServer::TPtr server,
+    ui64 tabletId,
+    TEvDataShard::TEvRead* request,
+    TActorId sender,
+    ui32 node,
+    const NTabletPipe::TClientConfig& clientConfig,
+    TActorId clientId,
+    TDuration timeout)
+{
+    SendReadAsync(server, tabletId, request, sender, node, clientConfig, clientId);
+
+    return WaitReadResult(server, timeout);
+}
+
+TString ReadTable(
+    Tests::TServer::TPtr server,
+    std::span<const ui64> tabletIds,
     const TString& tableName,
     const TTableId& tableId,
-    ui64 readId)
+    ui64 startReadId)
 {
-    auto [tablesMap, ownerId] = GetTables(server, tabletId);
-    const auto& userTable = tablesMap.at(tableName);
+    TStringBuilder result;
 
-    auto event = ReadAllTable(server, tabletId, tableId, userTable, readId);
+    auto readId = startReadId;
+    for (const auto& tabletId : tabletIds) {
+        auto [tablesMap, ownerId] = GetTables(server, tabletId);
+        const auto& userTable = tablesMap.at(tableName);
 
-    UNIT_ASSERT(event);
-    UNIT_ASSERT_VALUES_EQUAL(event->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        SendReadEntireTable(server, tabletId, tableId, userTable, readId++, NKikimrDataEvents::FORMAT_CELLVEC);
 
-    return PrintTableFromResult(*event, userTable);
+        std::unique_ptr<TEvDataShard::TEvReadResult> readResult;
+        do {
+            readResult = WaitReadResult(server);
+            UNIT_ASSERT(readResult);
+            UNIT_ASSERT_VALUES_EQUAL(readResult->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            PrintTableFromResult(result, *readResult, userTable);
+        } while (!readResult->Record.GetFinished());
+    }
+
+    return result;
 }
 
 }

@@ -41,11 +41,11 @@ def test_version() -> None:
 
 
 def helper_table(rows: int = 3) -> PrettyTable:
-    table = PrettyTable(["Field 1", "Field 2", "Field 3"])
+    table = PrettyTable(["", "Field 1", "Field 2", "Field 3"])
     v = 1
     for row in range(rows):
         # Some have spaces, some not, to help test padding columns of different widths
-        table.add_row([f"value {v}", f"value{v+1}", f"value{v+2}"])
+        table.add_row([v, f"value {v}", f"value{v+1}", f"value{v+2}"])
         v += 3
     return table
 
@@ -998,21 +998,25 @@ class TestJSONOutput:
             == """
 [
     [
+        "",
         "Field 1",
         "Field 2",
         "Field 3"
     ],
     {
+        "": 1,
         "Field 1": "value 1",
         "Field 2": "value2",
         "Field 3": "value3"
     },
     {
+        "": 4,
         "Field 1": "value 4",
         "Field 2": "value5",
         "Field 3": "value6"
     },
     {
+        "": 7,
         "Field 1": "value 7",
         "Field 2": "value8",
         "Field 3": "value9"
@@ -1025,9 +1029,9 @@ class TestJSONOutput:
         result = t.get_json_string(header=False, indent=None, separators=(",", ":"))
         assert (
             result
-            == """[{"Field 1":"value 1","Field 2":"value2","Field 3":"value3"},"""
-            """{"Field 1":"value 4","Field 2":"value5","Field 3":"value6"},"""
-            """{"Field 1":"value 7","Field 2":"value8","Field 3":"value9"}]"""
+            == """[{"":1,"Field 1":"value 1","Field 2":"value2","Field 3":"value3"},"""
+            """{"":4,"Field 1":"value 4","Field 2":"value5","Field 3":"value6"},"""
+            """{"":7,"Field 1":"value 7","Field 2":"value8","Field 3":"value9"}]"""
         )
 
 
@@ -1041,6 +1045,7 @@ class TestHtmlOutput:
 <table>
     <thead>
         <tr>
+            <th></th>
             <th>Field 1</th>
             <th>Field 2</th>
             <th>Field 3</th>
@@ -1048,16 +1053,19 @@ class TestHtmlOutput:
     </thead>
     <tbody>
         <tr>
+            <td>1</td>
             <td>value 1</td>
             <td>value2</td>
             <td>value3</td>
         </tr>
         <tr>
+            <td>4</td>
             <td>value 4</td>
             <td>value5</td>
             <td>value6</td>
         </tr>
         <tr>
+            <td>7</td>
             <td>value 7</td>
             <td>value8</td>
             <td>value9</td>
@@ -1076,6 +1084,7 @@ class TestHtmlOutput:
 <table frame="box" rules="cols">
     <thead>
         <tr>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center"></th>
             <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 1</th>
             <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 2</th>
             <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 3</th>
@@ -1083,16 +1092,19 @@ class TestHtmlOutput:
     </thead>
     <tbody>
         <tr>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">1</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 1</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value2</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value3</td>
         </tr>
         <tr>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">4</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 4</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value5</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value6</td>
         </tr>
         <tr>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">7</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 7</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value8</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value9</td>
@@ -1113,6 +1125,7 @@ class TestHtmlOutput:
     <caption>Title &amp; Title</caption>
     <thead>
         <tr>
+            <th></th>
             <th>Field 1</th>
             <th>Field 2</th>
             <th>Field 3</th>
@@ -1120,16 +1133,19 @@ class TestHtmlOutput:
     </thead>
     <tbody>
         <tr>
+            <td>1</td>
             <td>value 1</td>
             <td>value2</td>
             <td>value3</td>
         </tr>
         <tr>
+            <td>4</td>
             <td>value 4</td>
             <td>value5</td>
             <td>value6</td>
         </tr>
         <tr>
+            <td>7</td>
             <td>value 7</td>
             <td>value8</td>
             <td>value9</td>
@@ -1152,6 +1168,7 @@ class TestHtmlOutput:
     <caption>Title &amp; Title</caption>
     <thead>
         <tr>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center"></th>
             <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 1</th>
             <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 2</th>
             <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 3</th>
@@ -1159,16 +1176,19 @@ class TestHtmlOutput:
     </thead>
     <tbody>
         <tr>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">1</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 1</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value2</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value3</td>
         </tr>
         <tr>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">4</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 4</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value5</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value6</td>
         </tr>
         <tr>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">7</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 7</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value8</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value9</td>
@@ -1337,93 +1357,95 @@ class TestStyle:
             pytest.param(
                 DEFAULT,
                 """
-+---------+---------+---------+
-| Field 1 | Field 2 | Field 3 |
-+---------+---------+---------+
-| value 1 |  value2 |  value3 |
-| value 4 |  value5 |  value6 |
-| value 7 |  value8 |  value9 |
-+---------+---------+---------+
++---+---------+---------+---------+
+|   | Field 1 | Field 2 | Field 3 |
++---+---------+---------+---------+
+| 1 | value 1 |  value2 |  value3 |
+| 4 | value 4 |  value5 |  value6 |
+| 7 | value 7 |  value8 |  value9 |
++---+---------+---------+---------+
 """,
                 id="DEFAULT",
             ),
             pytest.param(
-                MARKDOWN,
+                MARKDOWN,  # TODO fix
                 """
-| Field 1 | Field 2 | Field 3 |
-| :-----: | :-----: | :-----: |
-| value 1 |  value2 |  value3 |
-| value 4 |  value5 |  value6 |
-| value 7 |  value8 |  value9 |
+|     | Field 1 | Field 2 | Field 3 |
+| :-: | :-----: | :-----: | :-----: |
+|  1  | value 1 |  value2 |  value3 |
+|  4  | value 4 |  value5 |  value6 |
+|  7  | value 7 |  value8 |  value9 |
 """,
                 id="MARKDOWN",
             ),
             pytest.param(
                 MSWORD_FRIENDLY,
                 """
-| Field 1 | Field 2 | Field 3 |
-| value 1 |  value2 |  value3 |
-| value 4 |  value5 |  value6 |
-| value 7 |  value8 |  value9 |
+|   | Field 1 | Field 2 | Field 3 |
+| 1 | value 1 |  value2 |  value3 |
+| 4 | value 4 |  value5 |  value6 |
+| 7 | value 7 |  value8 |  value9 |
 """,
                 id="MSWORD_FRIENDLY",
             ),
             pytest.param(
                 ORGMODE,
                 """
-|---------+---------+---------|
-| Field 1 | Field 2 | Field 3 |
-|---------+---------+---------|
-| value 1 |  value2 |  value3 |
-| value 4 |  value5 |  value6 |
-| value 7 |  value8 |  value9 |
-|---------+---------+---------|
+|---+---------+---------+---------|
+|   | Field 1 | Field 2 | Field 3 |
+|---+---------+---------+---------|
+| 1 | value 1 |  value2 |  value3 |
+| 4 | value 4 |  value5 |  value6 |
+| 7 | value 7 |  value8 |  value9 |
+|---+---------+---------+---------|
 """,
                 id="ORGMODE",
             ),
             pytest.param(
                 PLAIN_COLUMNS,
-                "Field 1        Field 2        Field 3        \n"
-                "value 1         value2         value3        \n"
-                "value 4         value5         value6        \n"
-                "value 7         value8         value9",
+                """
+         Field 1        Field 2        Field 3        
+1        value 1         value2         value3        
+4        value 4         value5         value6        
+7        value 7         value8         value9
+""",  # noqa: W291
                 id="PLAIN_COLUMNS",
             ),
             pytest.param(
                 RANDOM,
                 """
-'^^^^^^^^^^^'^^^^^^^^^^'^^^^^^^^^^'
-%    value 1%    value2%    value3%
-'^^^^^^^^^^^'^^^^^^^^^^'^^^^^^^^^^'
-%    value 4%    value5%    value6%
-'^^^^^^^^^^^'^^^^^^^^^^'^^^^^^^^^^'
-%    value 7%    value8%    value9%
-'^^^^^^^^^^^'^^^^^^^^^^'^^^^^^^^^^'
+'^^^^^'^^^^^^^^^^^'^^^^^^^^^^'^^^^^^^^^^'
+%    1%    value 1%    value2%    value3%
+'^^^^^'^^^^^^^^^^^'^^^^^^^^^^'^^^^^^^^^^'
+%    4%    value 4%    value5%    value6%
+'^^^^^'^^^^^^^^^^^'^^^^^^^^^^'^^^^^^^^^^'
+%    7%    value 7%    value8%    value9%
+'^^^^^'^^^^^^^^^^^'^^^^^^^^^^'^^^^^^^^^^'
 """,
                 id="RANDOM",
             ),
             pytest.param(
                 DOUBLE_BORDER,
                 """
-╔═════════╦═════════╦═════════╗
-║ Field 1 ║ Field 2 ║ Field 3 ║
-╠═════════╬═════════╬═════════╣
-║ value 1 ║  value2 ║  value3 ║
-║ value 4 ║  value5 ║  value6 ║
-║ value 7 ║  value8 ║  value9 ║
-╚═════════╩═════════╩═════════╝
+╔═══╦═════════╦═════════╦═════════╗
+║   ║ Field 1 ║ Field 2 ║ Field 3 ║
+╠═══╬═════════╬═════════╬═════════╣
+║ 1 ║ value 1 ║  value2 ║  value3 ║
+║ 4 ║ value 4 ║  value5 ║  value6 ║
+║ 7 ║ value 7 ║  value8 ║  value9 ║
+╚═══╩═════════╩═════════╩═════════╝
 """,
             ),
             pytest.param(
                 SINGLE_BORDER,
                 """
-┌─────────┬─────────┬─────────┐
-│ Field 1 │ Field 2 │ Field 3 │
-├─────────┼─────────┼─────────┤
-│ value 1 │  value2 │  value3 │
-│ value 4 │  value5 │  value6 │
-│ value 7 │  value8 │  value9 │
-└─────────┴─────────┴─────────┘
+┌───┬─────────┬─────────┬─────────┐
+│   │ Field 1 │ Field 2 │ Field 3 │
+├───┼─────────┼─────────┼─────────┤
+│ 1 │ value 1 │  value2 │  value3 │
+│ 4 │ value 4 │  value5 │  value6 │
+│ 7 │ value 7 │  value8 │  value9 │
+└───┴─────────┴─────────┴─────────┘
 """,
             ),
         ],
@@ -1455,11 +1477,11 @@ class TestStyle:
             pytest.param(
                 MARKDOWN,
                 """
-| Align left | Align centre | Align right |
-| :----------| :----------: |-----------: |
-| value 1    |    value2    |      value3 |
-| value 4    |    value5    |      value6 |
-| value 7    |    value8    |      value9 |
+| l |  c  | r | Align left | Align centre | Align right |
+| :-| :-: |-: | :----------| :----------: |-----------: |
+| 1 |  2  | 3 | value 1    |    value2    |      value3 |
+| 4 |  5  | 6 | value 4    |    value5    |      value6 |
+| 7 |  8  | 9 | value 7    |    value8    |      value9 |
 """,
                 id="MARKDOWN",
             ),
@@ -1467,14 +1489,19 @@ class TestStyle:
     )
     def test_style_align(self, style, expected) -> None:
         # Arrange
-        t = helper_table()
-        t.field_names = ["Align left", "Align centre", "Align right"]
+        t = PrettyTable(["l", "c", "r", "Align left", "Align centre", "Align right"])
+        v = 1
+        for row in range(3):
+            # Some have spaces, some not, to help test padding columns of
+            # different widths
+            t.add_row([v, v + 1, v + 2, f"value {v}", f"value{v + 1}", f"value{v + 2}"])
+            v += 3
 
         # Act
         t.set_style(style)
-        t.align["Align left"] = "l"
-        t.align["Align centre"] = "c"
-        t.align["Align right"] = "r"
+        t.align["l"] = t.align["Align left"] = "l"
+        t.align["c"] = t.align["Align centre"] = "c"
+        t.align["r"] = t.align["Align right"] = "r"
 
         # Assert
         result = t.get_string()
@@ -1485,15 +1512,15 @@ class TestCsvOutput:
     def test_csv_output(self) -> None:
         t = helper_table()
         assert t.get_csv_string(delimiter="\t", header=False) == (
-            "value 1\tvalue2\tvalue3\r\n"
-            "value 4\tvalue5\tvalue6\r\n"
-            "value 7\tvalue8\tvalue9\r\n"
+            "1\tvalue 1\tvalue2\tvalue3\r\n"
+            "4\tvalue 4\tvalue5\tvalue6\r\n"
+            "7\tvalue 7\tvalue8\tvalue9\r\n"
         )
         assert t.get_csv_string() == (
-            "Field 1,Field 2,Field 3\r\n"
-            "value 1,value2,value3\r\n"
-            "value 4,value5,value6\r\n"
-            "value 7,value8,value9\r\n"
+            ",Field 1,Field 2,Field 3\r\n"
+            "1,value 1,value2,value3\r\n"
+            "4,value 4,value5,value6\r\n"
+            "7,value 7,value8,value9\r\n"
         )
 
 
@@ -1501,11 +1528,11 @@ class TestLatexOutput:
     def test_latex_output(self) -> None:
         t = helper_table()
         assert t.get_latex_string() == (
-            "\\begin{tabular}{ccc}\r\n"
-            "Field 1 & Field 2 & Field 3 \\\\\r\n"
-            "value 1 & value2 & value3 \\\\\r\n"
-            "value 4 & value5 & value6 \\\\\r\n"
-            "value 7 & value8 & value9 \\\\\r\n"
+            "\\begin{tabular}{cccc}\r\n"
+            " & Field 1 & Field 2 & Field 3 \\\\\r\n"
+            "1 & value 1 & value2 & value3 \\\\\r\n"
+            "4 & value 4 & value5 & value6 \\\\\r\n"
+            "7 & value 7 & value8 & value9 \\\\\r\n"
             "\\end{tabular}"
         )
         options = {"fields": ["Field 1", "Field 3"]}
@@ -1521,12 +1548,12 @@ class TestLatexOutput:
     def test_latex_output_formatted(self) -> None:
         t = helper_table()
         assert t.get_latex_string(format=True) == (
-            "\\begin{tabular}{|c|c|c|}\r\n"
+            "\\begin{tabular}{|c|c|c|c|}\r\n"
             "\\hline\r\n"
-            "Field 1 & Field 2 & Field 3 \\\\\r\n"
-            "value 1 & value2 & value3 \\\\\r\n"
-            "value 4 & value5 & value6 \\\\\r\n"
-            "value 7 & value8 & value9 \\\\\r\n"
+            " & Field 1 & Field 2 & Field 3 \\\\\r\n"
+            "1 & value 1 & value2 & value3 \\\\\r\n"
+            "4 & value 4 & value5 & value6 \\\\\r\n"
+            "7 & value 7 & value8 & value9 \\\\\r\n"
             "\\hline\r\n"
             "\\end{tabular}"
         )
@@ -1545,27 +1572,27 @@ class TestLatexOutput:
 
         options = {"vrules": FRAME}
         assert t.get_latex_string(format=True, **options) == (
-            "\\begin{tabular}{|ccc|}\r\n"
+            "\\begin{tabular}{|cccc|}\r\n"
             "\\hline\r\n"
-            "Field 1 & Field 2 & Field 3 \\\\\r\n"
-            "value 1 & value2 & value3 \\\\\r\n"
-            "value 4 & value5 & value6 \\\\\r\n"
-            "value 7 & value8 & value9 \\\\\r\n"
+            " & Field 1 & Field 2 & Field 3 \\\\\r\n"
+            "1 & value 1 & value2 & value3 \\\\\r\n"
+            "4 & value 4 & value5 & value6 \\\\\r\n"
+            "7 & value 7 & value8 & value9 \\\\\r\n"
             "\\hline\r\n"
             "\\end{tabular}"
         )
 
         options = {"hrules": ALL}
         assert t.get_latex_string(format=True, **options) == (
-            "\\begin{tabular}{|c|c|c|}\r\n"
+            "\\begin{tabular}{|c|c|c|c|}\r\n"
             "\\hline\r\n"
-            "Field 1 & Field 2 & Field 3 \\\\\r\n"
+            " & Field 1 & Field 2 & Field 3 \\\\\r\n"
             "\\hline\r\n"
-            "value 1 & value2 & value3 \\\\\r\n"
+            "1 & value 1 & value2 & value3 \\\\\r\n"
             "\\hline\r\n"
-            "value 4 & value5 & value6 \\\\\r\n"
+            "4 & value 4 & value5 & value6 \\\\\r\n"
             "\\hline\r\n"
-            "value 7 & value8 & value9 \\\\\r\n"
+            "7 & value 7 & value8 & value9 \\\\\r\n"
             "\\hline\r\n"
             "\\end{tabular}"
         )
@@ -1573,12 +1600,12 @@ class TestLatexOutput:
     def test_latex_output_header(self) -> None:
         t = helper_table()
         assert t.get_latex_string(format=True, hrules=HEADER) == (
-            "\\begin{tabular}{|c|c|c|}\r\n"
-            "Field 1 & Field 2 & Field 3 \\\\\r\n"
+            "\\begin{tabular}{|c|c|c|c|}\r\n"
+            " & Field 1 & Field 2 & Field 3 \\\\\r\n"
             "\\hline\r\n"
-            "value 1 & value2 & value3 \\\\\r\n"
-            "value 4 & value5 & value6 \\\\\r\n"
-            "value 7 & value8 & value9 \\\\\r\n"
+            "1 & value 1 & value2 & value3 \\\\\r\n"
+            "4 & value 4 & value5 & value6 \\\\\r\n"
+            "7 & value 7 & value8 & value9 \\\\\r\n"
             "\\end{tabular}"
         )
 
@@ -1716,23 +1743,23 @@ def test_paginate() -> None:
     # Arrange
     t = helper_table(rows=7)
     expected_page_1 = """
-+----------+---------+---------+
-| Field 1  | Field 2 | Field 3 |
-+----------+---------+---------+
-| value 1  |  value2 |  value3 |
-| value 4  |  value5 |  value6 |
-| value 7  |  value8 |  value9 |
-| value 10 | value11 | value12 |
-+----------+---------+---------+
++----+----------+---------+---------+
+|    | Field 1  | Field 2 | Field 3 |
++----+----------+---------+---------+
+| 1  | value 1  |  value2 |  value3 |
+| 4  | value 4  |  value5 |  value6 |
+| 7  | value 7  |  value8 |  value9 |
+| 10 | value 10 | value11 | value12 |
++----+----------+---------+---------+
     """.strip()
     expected_page_2 = """
-+----------+---------+---------+
-| Field 1  | Field 2 | Field 3 |
-+----------+---------+---------+
-| value 13 | value14 | value15 |
-| value 16 | value17 | value18 |
-| value 19 | value20 | value21 |
-+----------+---------+---------+
++----+----------+---------+---------+
+|    | Field 1  | Field 2 | Field 3 |
++----+----------+---------+---------+
+| 13 | value 13 | value14 | value15 |
+| 16 | value 16 | value17 | value18 |
+| 19 | value 19 | value20 | value21 |
++----+----------+---------+---------+
 """.strip()
 
     # Act
@@ -2008,15 +2035,139 @@ class TestMaxTableWidth:
         table.max_table_width = 5
         table.add_row([0])
 
+        # FIXME: Table is wider than table.max_table_width
         assert (
             table.get_string().strip()
             == """
-+-----+
-| Fie |
-+-----+
-|  0  |
-+-----+
++----+
+| Fi |
++----+
+| 0  |
++----+
 """.strip()
+        )
+
+    def test_max_table_width_wide(self) -> None:
+        table = PrettyTable()
+        table.max_table_width = 52
+        table.add_row(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam "
+                "nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam "
+                "erat, sed diam voluptua",
+            ]
+        )
+
+        assert (
+            table.get_string().strip()
+            == """
++---+---+---+---+---+------------------------------+
+| F | F | F | F | F |           Field 6            |
++---+---+---+---+---+------------------------------+
+| 0 | 0 | 0 | 0 | 0 | Lorem ipsum dolor sit amet,  |
+|   |   |   |   |   | consetetur sadipscing elitr, |
+|   |   |   |   |   |    sed diam nonumy eirmod    |
+|   |   |   |   |   | tempor invidunt ut labore et |
+|   |   |   |   |   | dolore magna aliquyam erat,  |
+|   |   |   |   |   |      sed diam voluptua       |
++---+---+---+---+---+------------------------------+""".strip()
+        )
+
+    def test_max_table_width_wide2(self) -> None:
+        table = PrettyTable()
+        table.max_table_width = 70
+        table.add_row(
+            [
+                "Lorem",
+                "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam ",
+                "ipsum",
+                "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam ",
+                "dolor",
+                "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam ",
+            ]
+        )
+
+        assert (
+            table.get_string().strip()
+            == """
++---+-----------------+---+-----------------+---+-----------------+
+| F |     Field 2     | F |     Field 4     | F |     Field 6     |
++---+-----------------+---+-----------------+---+-----------------+
+| L |   Lorem ipsum   | i |   Lorem ipsum   | d |   Lorem ipsum   |
+| o | dolor sit amet, | p | dolor sit amet, | o | dolor sit amet, |
+| r |    consetetur   | s |    consetetur   | l |    consetetur   |
+| e |    sadipscing   | u |    sadipscing   | o |    sadipscing   |
+| m | elitr, sed diam | m | elitr, sed diam | r | elitr, sed diam |
++---+-----------------+---+-----------------+---+-----------------+""".strip()
+        )
+
+    def test_max_table_width_wide_vrules_frame(self) -> None:
+        table = PrettyTable()
+        table.max_table_width = 52
+        table.vrules = FRAME
+        table.add_row(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam "
+                "nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam "
+                "erat, sed diam voluptua",
+            ]
+        )
+
+        assert (
+            table.get_string().strip()
+            == """
++--------------------------------------------------+
+| F   F   F   F   F             Field 6            |
++--------------------------------------------------+
+| 0   0   0   0   0   Lorem ipsum dolor sit amet,  |
+|                     consetetur sadipscing elitr, |
+|                        sed diam nonumy eirmod    |
+|                     tempor invidunt ut labore et |
+|                     dolore magna aliquyam erat,  |
+|                          sed diam voluptua       |
++--------------------------------------------------+""".strip()
+        )
+
+    def test_max_table_width_wide_vrules_none(self) -> None:
+        table = PrettyTable()
+        table.max_table_width = 52
+        table.vrules = NONE
+        table.add_row(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam "
+                "nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam "
+                "erat, sed diam voluptua",
+            ]
+        )
+
+        assert (
+            table.get_string().strip()
+            == """
+----------------------------------------------------
+  F   F   F   F   F             Field 6             
+----------------------------------------------------
+  0   0   0   0   0   Lorem ipsum dolor sit amet,   
+                      consetetur sadipscing elitr,  
+                         sed diam nonumy eirmod     
+                      tempor invidunt ut labore et  
+                      dolore magna aliquyam erat,   
+                           sed diam voluptua        
+----------------------------------------------------""".strip()  # noqa: W291
         )
 
 
@@ -2053,15 +2204,15 @@ class TestRowEndSection:
 class TestClearing:
     def test_clear_rows(self, row_prettytable: PrettyTable) -> None:
         t = helper_table()
-        t.add_row(["a", "b", "c"], divider=True)
+        t.add_row([0, "a", "b", "c"], divider=True)
         t.clear_rows()
         assert t.rows == []
         assert t.dividers == []
-        assert t.field_names == ["Field 1", "Field 2", "Field 3"]
+        assert t.field_names == ["", "Field 1", "Field 2", "Field 3"]
 
     def test_clear(self, row_prettytable: PrettyTable) -> None:
         t = helper_table()
-        t.add_row(["a", "b", "c"], divider=True)
+        t.add_row([0, "a", "b", "c"], divider=True)
         t.clear()
         assert t.rows == []
         assert t.dividers == []
@@ -2077,11 +2228,11 @@ class TestPreservingInternalBorders:
         assert (
             pt.get_string().strip()
             == """
- Field 1 | Field 2 | Field 3  
----------+---------+---------
- value 1 |  value2 |  value3  
- value 4 |  value5 |  value6  
- value 7 |  value8 |  value9 
+   | Field 1 | Field 2 | Field 3  
+---+---------+---------+---------
+ 1 | value 1 |  value2 |  value3  
+ 4 | value 4 |  value5 |  value6  
+ 7 | value 7 |  value8 |  value9  
 """.strip()  # noqa: W291
         )
 
@@ -2092,11 +2243,11 @@ class TestPreservingInternalBorders:
         pt.preserve_internal_border = True
 
         assert pt.get_latex_string().strip() == (
-            "\\begin{tabular}{c|c|c}\r\n"
-            "Field 1 & Field 2 & Field 3 \\\\\r\n"
-            "value 1 & value2 & value3 \\\\\r\n"
-            "value 4 & value5 & value6 \\\\\r\n"
-            "value 7 & value8 & value9 \\\\\r\n"
+            "\\begin{tabular}{c|c|c|c}\r\n"
+            " & Field 1 & Field 2 & Field 3 \\\\\r\n"
+            "1 & value 1 & value2 & value3 \\\\\r\n"
+            "4 & value 4 & value5 & value6 \\\\\r\n"
+            "7 & value 7 & value8 & value9 \\\\\r\n"
             "\\end{tabular}"
         )
 
@@ -2112,6 +2263,7 @@ class TestPreservingInternalBorders:
 <table rules="cols">
     <thead>
         <tr>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center"></th>
             <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 1</th>
             <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 2</th>
             <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 3</th>
@@ -2119,16 +2271,19 @@ class TestPreservingInternalBorders:
     </thead>
     <tbody>
         <tr>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">1</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 1</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value2</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value3</td>
         </tr>
         <tr>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">4</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 4</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value5</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value6</td>
         </tr>
         <tr>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">7</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 7</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value8</td>
             <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value9</td>

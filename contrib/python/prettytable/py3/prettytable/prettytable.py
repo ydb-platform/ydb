@@ -135,6 +135,7 @@ class PrettyTable:
         self.int_format = {}
         self.float_format = {}
         self.custom_format = {}
+        self._style = None
 
         if field_names:
             self.field_names = field_names
@@ -1270,6 +1271,7 @@ class PrettyTable:
     ##############################
 
     def set_style(self, style) -> None:
+        self._style = style
         if style == DEFAULT:
             self._set_default_style()
         elif style == MSWORD_FRIENDLY:
@@ -1550,21 +1552,26 @@ class PrettyTable:
 
     def _format_value(self, field, value):
         if isinstance(value, int) and field in self._int_format:
-            return ("%%%sd" % self._int_format[field]) % value
+            return (f"%{self._int_format[field]}d") % value
         elif isinstance(value, float) and field in self._float_format:
-            return ("%%%sf" % self._float_format[field]) % value
+            return (f"%{self._float_format[field]}f") % value
 
         formatter = self._custom_format.get(field, (lambda f, v: str(v)))
         return formatter(field, value)
 
     def _compute_table_width(self, options):
-        table_width = 2 if options["vrules"] in (FRAME, ALL) else 0
+        if options["vrules"] == FRAME:
+            table_width = 2
+        if options["vrules"] == ALL:
+            table_width = 1
+        else:
+            table_width = 0
         per_col_padding = sum(self._get_padding_widths(options))
         for index, fieldname in enumerate(self.field_names):
             if not options["fields"] or (
                 options["fields"] and fieldname in options["fields"]
             ):
-                table_width += self._widths[index] + per_col_padding
+                table_width += self._widths[index] + per_col_padding + 1
         return table_width
 
     def _compute_widths(self, rows, options) -> None:
@@ -1588,23 +1595,33 @@ class PrettyTable:
                     widths[index] = max(widths[index], _get_size(value)[0])
                 if fieldname in self.min_width:
                     widths[index] = max(widths[index], self.min_width[fieldname])
+
+                if self._style == MARKDOWN:
+                    # Markdown needs at least one hyphen in the divider
+                    if self._align[fieldname] in ("l", "r"):
+                        min_width = 1
+                    else:  # "c"
+                        min_width = 3
+                    widths[index] = max(min_width, widths[index])
+
         self._widths = widths
 
+        per_col_padding = sum(self._get_padding_widths(options))
         # Are we exceeding max_table_width?
         if self._max_table_width:
             table_width = self._compute_table_width(options)
             if table_width > self._max_table_width:
                 # Shrink widths in proportion
-                scale = 1.0 * self._max_table_width / table_width
-                widths = [int(w * scale) for w in widths]
-                self._widths = widths
+                markup_chars = per_col_padding * len(widths) + len(widths) - 1
+                scale = (self._max_table_width - markup_chars) / (
+                    table_width - markup_chars
+                )
+                self._widths = [max(1, int(w * scale)) for w in widths]
 
         # Are we under min_table_width or title width?
         if self._min_table_width or options["title"]:
             if options["title"]:
-                title_width = len(options["title"]) + sum(
-                    self._get_padding_widths(options)
-                )
+                title_width = len(options["title"]) + per_col_padding
                 if options["vrules"] in (FRAME, ALL):
                     title_width += 2
             else:
@@ -1619,9 +1636,7 @@ class PrettyTable:
                 borders = 0
 
             # Subtract padding for each column and borders
-            min_width -= (
-                sum([sum(self._get_padding_widths(options)) for _ in widths]) + borders
-            )
+            min_width -= sum([per_col_padding for _ in widths]) + borders
             # What is being scaled is content so we sum column widths
             content_width = sum(widths) or 1
 
@@ -1872,7 +1887,10 @@ class PrettyTable:
         )
         bits.append(endpoint)
         title = " " * lpad + title + " " * rpad
-        bits.append(self._justify(title, len(self._hrule) - 2, "c"))
+        lpad, rpad = self._get_padding_widths(options)
+        sum_widths = sum([n + lpad + rpad + 1 for n in self._widths])
+
+        bits.append(self._justify(title, sum_widths - 1, "c"))
         bits.append(endpoint)
         lines.append("".join(bits))
         return "\n".join(lines)
@@ -1884,9 +1902,11 @@ class PrettyTable:
             if options["hrules"] in (ALL, FRAME):
                 bits.append(self._stringify_hrule(options, "top_"))
                 if options["title"] and options["vrules"] in (ALL, FRAME):
+                    left_j_len = len(self.left_junction_char)
+                    right_j_len = len(self.right_junction_char)
                     bits[-1] = (
                         self.left_junction_char
-                        + bits[-1][1:-1]
+                        + bits[-1][left_j_len:-right_j_len]
                         + self.right_junction_char
                     )
                 bits.append("\n")
@@ -2178,7 +2198,9 @@ class PrettyTable:
                 if options["fields"] and field not in options["fields"]:
                     continue
                 lines.append(
-                    "            <th>%s</th>" % escape(field).replace("\n", linebreak)
+                    "            <th>{}</th>".format(
+                        escape(field).replace("\n", linebreak)
+                    )
                 )
             lines.append("        </tr>")
             lines.append("    </thead>")
@@ -2193,7 +2215,9 @@ class PrettyTable:
                 if options["fields"] and field not in options["fields"]:
                     continue
                 lines.append(
-                    "            <td>%s</td>" % escape(datum).replace("\n", linebreak)
+                    "            <td>{}</td>".format(
+                        escape(datum).replace("\n", linebreak)
+                    )
                 )
             lines.append("        </tr>")
         lines.append("    </tbody>")
@@ -2341,7 +2365,7 @@ class PrettyTable:
 
         alignments = "".join([self._align[field] for field in wanted_fields])
 
-        begin_cmd = "\\begin{tabular}{%s}" % alignments
+        begin_cmd = f"\\begin{{tabular}}{{{alignments}}}"
         lines.append(begin_cmd)
 
         # Headers
@@ -2383,7 +2407,7 @@ class PrettyTable:
         if options["border"] and options["vrules"] in [ALL, FRAME]:
             alignment_str = "|" + alignment_str + "|"
 
-        begin_cmd = "\\begin{tabular}{%s}" % alignment_str
+        begin_cmd = f"\\begin{{tabular}}{{{alignment_str}}}"
         lines.append(begin_cmd)
         if options["border"] and options["hrules"] in [ALL, FRAME]:
             lines.append("\\hline")

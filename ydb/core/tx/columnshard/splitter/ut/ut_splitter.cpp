@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
 
         NKikimr::NArrow::NAccessor::TColumnLoader GetColumnLoader(const ui32 columnId) const {
             return NKikimr::NArrow::NAccessor::TColumnLoader(nullptr, NSerialization::TSerializerContainer::GetDefaultSerializer(),
-                NKikimr::NArrow::NAccessor::TConstructorContainer::GetDefaultConstructor(), GetField(), nullptr, columnId);
+                NKikimr::NArrow::NAccessor::TConstructorContainer::GetDefaultConstructor(), GetField(columnId), nullptr, columnId);
         }
 
         virtual std::shared_ptr<arrow::Field> GetField(const ui32 columnId) const override {
@@ -146,7 +146,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
                     ui32 count = 0;
                     for (auto&& c : e.second) {
                         auto slice = arr->Slice(count + portionShift, c->GetRecordsCountVerified());
-                        auto readBatch = *Schema->GetColumnLoader(e.first).Apply(c->GetData());
+                        auto readBatch = Schema->GetColumnLoader(e.first).ApplyRawVerified(c->GetData());
                         AFL_VERIFY(slice->length() == readBatch->num_rows());
                         Y_ABORT_UNLESS(readBatch->column(0)->RangeEquals(*slice, 0, readBatch->num_rows(), 0, arrow::EqualOptions::Defaults()));
                         count += c->GetRecordsCountVerified();

@@ -125,7 +125,7 @@ namespace NCYson {
         }
 
 #if PY_MAJOR_VERSION >= 3
-        PyObject* tmp = _PyLong_Format(obj, 10);
+        PyObject* tmp = PyNumber_ToBase(obj, 10);
         if (!tmp) {
             return nullptr;
         }

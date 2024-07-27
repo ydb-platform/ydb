@@ -2,14 +2,9 @@ PY2TEST()
 
 PEERDIR(
     contrib/python/jsonschema
+    contrib/python/mock
     contrib/python/Twisted
 )
-
-IF (PYTHON2)
-    PEERDIR(
-        contrib/python/mock
-    )
-ENDIF()
 
 SRCDIR(contrib/python/jsonschema/py2/jsonschema/tests)
 

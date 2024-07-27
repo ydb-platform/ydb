@@ -341,7 +341,7 @@ EStrategyOutcome TGetImpl::RunMirror3of4Strategy(TLogContext &logCtx) {
     TStackVec<IStrategy*, 1> strategies;
     TMirror3of4GetStrategy s1;
     strategies.push_back(&s1);
-    TPut3of4Strategy s2(TEvBlobStorage::TEvPut::TacticMaxThroughput);
+    TPut3of4Strategy s2(TEvBlobStorage::TEvPut::TacticMaxThroughput, false, MaxRobustness);
     if (MustRestoreFirst) {
         strategies.push_back(&s2);
     }

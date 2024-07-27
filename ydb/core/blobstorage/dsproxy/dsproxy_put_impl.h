@@ -96,6 +96,8 @@ private:
     TBatchedVec<TBlobInfo> Blobs;
     std::unordered_map<TLogoBlobID, size_t> BlobMap;
 
+    const bool MaxRobustness;
+
     friend class TBlobStorageGroupPutRequest;
 
     friend void ::Out<TBlobInfo>(IOutputStream&, const TBlobInfo&);
@@ -113,6 +115,7 @@ public:
         , Mon(mon)
         , EnableRequestMod3x3ForMinLatecy(enableRequestMod3x3ForMinLatecy)
         , Tactic(ev->Tactic)
+        , MaxRobustness(TlsActivationContext && AppData() && AppData()->FeatureFlags.GetEnableMaxMirror3of4Robustness())
     {
         BlobMap.emplace(ev->Id, Blobs.size());
         Blobs.emplace_back(ev->Id, TRope(ev->Buffer), recipient, cookie, std::move(traceId), std::move(ev->Orbit),
@@ -136,6 +139,7 @@ public:
         , Mon(mon)
         , EnableRequestMod3x3ForMinLatecy(enableRequestMod3x3ForMinLatecy)
         , Tactic(tactic)
+        , MaxRobustness(TlsActivationContext && AppData() && AppData()->FeatureFlags.GetEnableMaxMirror3of4Robustness())
     {
         Y_ABORT_UNLESS(events.size(), "TEvPut vector is empty");
 

@@ -8,10 +8,12 @@ namespace NKikimr {
 class TPut3of4Strategy : public TMirror3of4StrategyBase {
     // TODO(alexvru): use Accelerate property somehow
     const TEvBlobStorage::TEvPut::ETactic Tactic;
+    const bool MaxRobustness;
 
 public:
-    TPut3of4Strategy(TEvBlobStorage::TEvPut::ETactic tactic, bool /*accelerate*/ = false)
+    TPut3of4Strategy(TEvBlobStorage::TEvPut::ETactic tactic, bool /*accelerate*/, bool maxRobustness)
         : Tactic(tactic)
+        , MaxRobustness(maxRobustness)
     {}
 
     EStrategyOutcome Process(TLogContext& /*logCtx*/, TBlobState& state, const TBlobStorageGroupInfo& info,
@@ -97,8 +99,8 @@ protected:
         }
 
         TGroups groups;
-        const ui32 requiredNumDataParts = minLatency ? 4 : 3;
-        const ui32 requiredNumMetadataParts = minLatency ? 4 : 2;
+        const ui32 requiredNumDataParts = MaxRobustness ? 8 : minLatency ? 4 : 3;
+        const ui32 requiredNumMetadataParts = MaxRobustness ? 0 : minLatency ? 4 : 2;
         const ui32 requiredNumParts = requiredNumDataParts + requiredNumMetadataParts;
 
         for (bool ignoreSlowDisks : {true, false}) {

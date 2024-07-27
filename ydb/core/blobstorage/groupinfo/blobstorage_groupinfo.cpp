@@ -118,15 +118,22 @@ public:
 };
 
 class TQuorumCheckerMirror3of4 : public TQuorumCheckerBase {
+    const bool MaxRobustness;
+    const ui32 AllowedFails;
+
 public:
-    using TQuorumCheckerBase::TQuorumCheckerBase;
+    TQuorumCheckerMirror3of4(const TBlobStorageGroupInfo::TTopology *top)
+        : TQuorumCheckerBase(top)
+        , MaxRobustness(TlsActivationContext && AppData() && AppData()->FeatureFlags.GetEnableMaxMirror3of4Robustness())
+        , AllowedFails(MaxRobustness ? 3 : 2)
+    {}
 
     bool CheckFailModelForSubgroup(const TBlobStorageGroupInfo::TSubgroupVDisks& failedSubgroupDisks) const override {
-        return failedSubgroupDisks.GetNumSetItems() <= 2;
+        return failedSubgroupDisks.GetNumSetItems() <= AllowedFails;
     }
 
     bool CheckFailModelForGroupDomains(const TBlobStorageGroupInfo::TGroupFailDomains& failedDomains) const override {
-        return failedDomains.GetNumSetItems() <= 2;
+        return failedDomains.GetNumSetItems() <= AllowedFails;
     }
 
     bool CheckQuorumForSubgroup(const TBlobStorageGroupInfo::TSubgroupVDisks& subgroupDisks) const override {
@@ -140,13 +147,13 @@ public:
     bool IsDegraded(const TBlobStorageGroupInfo::TGroupVDisks& failedDisks) const override {
         const auto& domains = TBlobStorageGroupInfo::TGroupFailDomains::CreateFromGroupDiskSet(failedDisks,
             TBlobStorageGroupInfo::TGroupFailDomains::EDiskCondition::ANY);
-        return domains.GetNumSetItems() == 2;
+        return domains.GetNumSetItems() == AllowedFails;
     }
 
     bool OneStepFromDegradedOrWorse(const TBlobStorageGroupInfo::TGroupVDisks& failedDisks) const override {
         const auto& domains = TBlobStorageGroupInfo::TGroupFailDomains::CreateFromGroupDiskSet(failedDisks,
             TBlobStorageGroupInfo::TGroupFailDomains::EDiskCondition::ANY);
-        return domains.GetNumSetItems() + 1 >= 2;
+        return domains.GetNumSetItems() + 1 >= AllowedFails;
     }
 
     TBlobStorageGroupInfo::EBlobState GetBlobState(const TSubgroupPartLayout& parts,
@@ -166,7 +173,7 @@ public:
         auto [data, any] = parts.GetMirror3of4State();
         if (!data) {
             return 0; // nowhere to restore from
-        } else if (data < 3) {
+        } else if (data < 3 || MaxRobustness) {
             // not enough data parts -- we must restore them first
             if ((parts.GetDisksWithPart(0) | parts.GetDisksWithPart(1)) & (1 << idxInSubgroup)) {
                 return 0; // this disk already has data part and we can't help the group

@@ -123,6 +123,12 @@ protected:
 
 public:
     TSparsedArray(const IChunkedArray& defaultArray, const std::shared_ptr<arrow::Scalar>& defaultValue);
+    TSparsedArray(const std::shared_ptr<arrow::Scalar>& defaultValue,
+        const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount)
+        : TSparsedArray({}, defaultValue, type, recordsCount)
+    {
+        
+    }
 
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const override {
         auto chunk = GetSparsedChunk(index);

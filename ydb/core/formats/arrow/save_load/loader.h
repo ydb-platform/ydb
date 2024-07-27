@@ -23,6 +23,8 @@ private:
         const std::shared_ptr<arrow::RecordBatch>& batch, const TChunkConstructionData& chunkData) const;
 
 public:
+    std::shared_ptr<IChunkedArray> BuildDefaultAccessor(const ui32 recordsCount) const;
+
     bool IsEqualTo(const TColumnLoader& item) const {
         if (!!Transformer != !!item.Transformer) {
             return false;

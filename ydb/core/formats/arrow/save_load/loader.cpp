@@ -1,4 +1,5 @@
 #include "loader.h"
+
 #include <ydb/core/formats/arrow/common/validation.h>
 
 namespace NKikimr::NArrow::NAccessor {
@@ -14,9 +15,9 @@ TString TColumnLoader::DebugString() const {
     return result;
 }
 
-TColumnLoader::TColumnLoader(NTransformation::ITransformer::TPtr transformer,
-    const NSerialization::TSerializerContainer& serializer, const TConstructorContainer& accessorConstructor,
-    const std::shared_ptr<arrow::Field>& resultField, const std::shared_ptr<arrow::Scalar>& defaultValue, const ui32 columnId)
+TColumnLoader::TColumnLoader(NTransformation::ITransformer::TPtr transformer, const NSerialization::TSerializerContainer& serializer,
+    const TConstructorContainer& accessorConstructor, const std::shared_ptr<arrow::Field>& resultField,
+    const std::shared_ptr<arrow::Scalar>& defaultValue, const ui32 columnId)
     : Serializer(serializer)
     , Transformer(transformer)
     , AccessorConstructor(accessorConstructor)
@@ -60,4 +61,8 @@ std::shared_ptr<IChunkedArray> TColumnLoader::BuildAccessor(
     return AccessorConstructor->Construct(batch, chunkData).DetachResult();
 }
 
+std::shared_ptr<NKikimr::NArrow::NAccessor::IChunkedArray> TColumnLoader::BuildDefaultAccessor(const ui32 recordsCount) const {
+    AccessorConstructor->ConstructDefault(TChunkConstructionData(recordsCount, DefaultValue, ResultField->type()));
 }
+
+}   // namespace NKikimr::NArrow::NAccessor

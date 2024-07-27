@@ -1,7 +1,10 @@
 #include "batch_slice.h"
-#include <ydb/library/accessor/validator.h>
+
+#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/splitter/simple.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
+
+#include <ydb/library/accessor/validator.h>
 
 namespace NKikimr::NOlap {
 
@@ -59,4 +62,4 @@ std::vector<TBatchSerializedSlice> TBatchSerializedSlice::BuildSimpleSlices(cons
     return slices;
 }
 
-}
+}   // namespace NKikimr::NOlap

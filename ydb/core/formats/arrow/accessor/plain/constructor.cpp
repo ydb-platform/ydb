@@ -2,15 +2,20 @@
 #include "constructor.h"
 
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/core/formats/arrow/simple_arrays_cache.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
 namespace NKikimr::NArrow::NAccessor::NPlain {
 
-NKikimr::TConclusion<std::shared_ptr<NKikimr::NArrow::NAccessor::IChunkedArray>> TConstructor::DoConstruct(
+TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
     const std::shared_ptr<arrow::RecordBatch>& originalData, const TChunkConstructionData& /*externalInfo*/) const {
     AFL_VERIFY(originalData->num_columns() == 1)("count", originalData->num_columns())("schema", originalData->schema()->ToString());
     return std::make_shared<NArrow::NAccessor::TTrivialArray>(originalData->column(0));
+}
+
+TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstructDefault(const TChunkConstructionData& externalInfo) const {
+    return NArrow::TThreadSimpleArraysCache::Get(externalInfo.GetColumnType(), externalInfo.GetDefaultValue(), externalInfo.GetRecordsCount()));
 }
 
 NKikimrArrowAccessorProto::TConstructor TConstructor::DoSerializeToProto() const {

@@ -18,6 +18,8 @@ public:
 private:
     virtual TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> DoConstruct(
         const std::shared_ptr<arrow::RecordBatch>& originalData, const TChunkConstructionData& externalInfo) const = 0;
+    virtual TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> DoConstructDefault(
+        const TChunkConstructionData& externalInfo) const = 0;
     virtual NKikimrArrowAccessorProto::TConstructor DoSerializeToProto() const = 0;
     virtual bool DoDeserializeFromProto(const NKikimrArrowAccessorProto::TConstructor& proto) = 0;
     virtual std::shared_ptr<arrow::Schema> DoGetExpectedSchema(const std::shared_ptr<arrow::Field>& resultColumn) const = 0;
@@ -35,6 +37,10 @@ public:
     TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> Construct(
         const std::shared_ptr<arrow::RecordBatch>& originalData, const TChunkConstructionData& externalInfo) const {
         return DoConstruct(originalData, externalInfo);
+    }
+
+    TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> ConstructDefault(const TChunkConstructionData& externalInfo) const {
+        return DoConstructDefault(externalInfo);
     }
 
     bool DeserializeFromProto(const NKikimrArrowAccessorProto::TConstructor& proto) {

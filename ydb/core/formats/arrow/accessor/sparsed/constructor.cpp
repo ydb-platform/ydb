@@ -1,5 +1,5 @@
-#include "constructor.h"
 #include "accessor.h"
+#include "constructor.h"
 
 namespace NKikimr::NArrow::NAccessor::NSparsed {
 
@@ -7,6 +7,10 @@ std::shared_ptr<arrow::Schema> TConstructor::DoGetExpectedSchema(const std::shar
     arrow::FieldVector fields = { std::make_shared<arrow::Field>("index", arrow::uint32()),
         std::make_shared<arrow::Field>("value", resultColumn->type()) };
     return std::make_shared<arrow::Schema>(fields);
+}
+
+TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstructDefault(const TChunkConstructionData& externalInfo) const {
+    return std::make_shared<TSparsedArray>(externalInfo.GetDefaultValue(), externalInfo.GetColumnType(), externalInfo.GetRecordsCount());
 }
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(

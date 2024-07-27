@@ -15,7 +15,8 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
 }
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstructDefault(const TChunkConstructionData& externalInfo) const {
-    return NArrow::TThreadSimpleArraysCache::Get(externalInfo.GetColumnType(), externalInfo.GetDefaultValue(), externalInfo.GetRecordsCount()));
+    return std::make_shared<NArrow::NAccessor::TTrivialArray>(
+        NArrow::TThreadSimpleArraysCache::Get(externalInfo.GetColumnType(), externalInfo.GetDefaultValue(), externalInfo.GetRecordsCount()));
 }
 
 NKikimrArrowAccessorProto::TConstructor TConstructor::DoSerializeToProto() const {

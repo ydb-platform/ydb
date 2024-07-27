@@ -193,7 +193,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
 
     Y_ABORT_UNLESS(Blobs.IsEmpty());
     auto filteredSnapshot = std::make_shared<TFilteredSnapshotSchema>(resultSchema, usageColumnIds);
-    auto stats = std::make_shared<TSerializationStats>();
+    auto stats = std::make_shared<NArrow::NSplitter::TSerializationStats>();
     std::vector<std::shared_ptr<NArrow::TColumnFilter>> filters;
     for (auto& [pathId, pathInfo] : pathBatches.GetData()) {
         std::optional<ui64> shardingVersion;

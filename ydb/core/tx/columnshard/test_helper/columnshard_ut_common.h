@@ -167,7 +167,7 @@ struct TTestSchema {
             // PK
             firstKeyItem,
             TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8) ),
-            TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8) ),
+            TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8)).SetAccessorClassName("SPARSED"),
             TTestColumn("uid", TTypeInfo(NTypeIds::Utf8) ).SetStorageId("__MEMORY"),
             TTestColumn("level", TTypeInfo(NTypeIds::Int32) ),
             TTestColumn("message", TTypeInfo(NTypeIds::Utf8) ).SetStorageId("__MEMORY"),
@@ -183,7 +183,7 @@ struct TTestSchema {
         std::vector<TTestColumn> schema = {
             // PK
             TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) ),
-            TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8) ),
+            TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8)).SetAccessorClassName("SPARSED"),
             TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8) ),
             TTestColumn("uid", TTypeInfo(NTypeIds::Utf8) ).SetStorageId("__MEMORY"),
             //
@@ -192,7 +192,7 @@ struct TTestSchema {
             TTestColumn("json_payload", TTypeInfo(NTypeIds::JsonDocument) ),
             TTestColumn("ingested_at", TTypeInfo(NTypeIds::Timestamp) ),
             TTestColumn("saved_at", TTypeInfo(NTypeIds::Timestamp) ),
-            TTestColumn("request_id", TTypeInfo(NTypeIds::Yson) )
+            TTestColumn("request_id", TTypeInfo(NTypeIds::Yson)).SetAccessorClassName("SPARSED")
         };
         return schema;
     };
@@ -201,7 +201,7 @@ struct TTestSchema {
         std::vector<TTestColumn> schema = {
             TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) ),
             TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8) ).SetStorageId("__MEMORY"),
-            TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8) ),
+            TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8)).SetAccessorClassName("SPARSED"),
             TTestColumn("uid", TTypeInfo(NTypeIds::Utf8) ).SetStorageId("__MEMORY")
         };
         return schema;

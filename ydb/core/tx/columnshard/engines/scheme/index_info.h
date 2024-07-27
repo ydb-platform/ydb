@@ -97,8 +97,6 @@ public:
         return result;
     }
 
-    std::vector<std::shared_ptr<IPortionDataChunk>> MakeEmptyChunks(const ui32 columnId, const std::vector<ui32>& pages, const TSimpleColumnInfo& columnInfo) const;
-
     const THashMap<ui32, NIndexes::TIndexMetaContainer>& GetIndexes() const {
         return Indexes;
     }

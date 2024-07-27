@@ -51,6 +51,7 @@ private:
     YDB_ACCESSOR_DEF(TString, Name);
     YDB_ACCESSOR_DEF(NScheme::TTypeInfo, Type);
     YDB_ACCESSOR_DEF(TString, StorageId);
+    YDB_ACCESSOR_DEF(TString, AccessorClassName);
 
 public:
     explicit TTestColumn(const TString& name, const NScheme::TTypeInfo& type)

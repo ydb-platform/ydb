@@ -81,7 +81,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
     auto resultSchema = context.SchemaVersions.GetLastSchema();
     auto shardingActual = context.SchemaVersions.GetShardingInfoActual(GranuleMeta->GetPathId());
 
-    std::shared_ptr<TSerializationStats> stats = std::make_shared<TSerializationStats>();
+    std::shared_ptr<NArrow::NSplitter::TSerializationStats> stats = std::make_shared<NArrow::NSplitter::TSerializationStats>();
     std::shared_ptr<TFilteredSnapshotSchema> resultFiltered;
     NCompaction::TMerger merger(context, SaverContext);
     {

@@ -40,6 +40,7 @@ CFLAGS(
 
 SRCS(
     ut_splitter.cpp
+    batch_slice.cpp
 )
 
 END()

@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/formats/arrow/common/accessor.h>
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/permutations.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/formats/arrow/switch/compare.h>

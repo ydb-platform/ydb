@@ -62,7 +62,7 @@ std::shared_ptr<IChunkedArray> TColumnLoader::BuildAccessor(
 }
 
 std::shared_ptr<NKikimr::NArrow::NAccessor::IChunkedArray> TColumnLoader::BuildDefaultAccessor(const ui32 recordsCount) const {
-    AccessorConstructor->ConstructDefault(TChunkConstructionData(recordsCount, DefaultValue, ResultField->type()));
+    return AccessorConstructor->ConstructDefault(TChunkConstructionData(recordsCount, DefaultValue, ResultField->type()));
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

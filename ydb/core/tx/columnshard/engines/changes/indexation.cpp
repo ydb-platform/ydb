@@ -189,9 +189,9 @@ public:
         auto shardingFilterCommit = context.SchemaVersions.GetShardingInfoOptional(inserted.PathId, inserted.GetSnapshot());
         auto it = Data.find(inserted.PathId);
         if (it == Data.end()) {
-            it = Data.emplace(inserted.PathId, TPathData(info, ResultSchema)).first;
+            it = Data.emplace(inserted.PathId, TPathData(shardingFilterCommit, ResultSchema)).first;
         }
-        it->second.AddShardingInfo(info);
+        it->second.AddShardingInfo(shardingFilterCommit);
     }
 
     void AddBatch(const NOlap::TInsertedData& inserted, const std::shared_ptr<NArrow::TGeneralContainer>& batch) {

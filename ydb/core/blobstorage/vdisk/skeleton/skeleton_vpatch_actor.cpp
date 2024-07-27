@@ -294,7 +294,7 @@ namespace NKikimr::NPrivate {
         void SendVPatchResult(NKikimrProto::EReplyStatus status, bool forceEnd = false)
         {
             STLOG(PRI_INFO, BS_VDISK_PATCH, BSVSP07,
-                    VDiskLogPrefix << " TEvVPatch: send patch result;",
+                    VDiskLogPrefix << " TEvVPatch: " << (forceEnd ? "received force end;" : "send patch result;"),
                     (OriginalBlobId, OriginalBlobId),
                     (PatchedBlobId, PatchedBlobId),
                     (OriginalPartId, (ui32)OriginalPartId),

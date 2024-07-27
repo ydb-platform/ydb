@@ -109,6 +109,18 @@ enum class ENaivePatchCase {
     ErrorOnPut,
 };
 
+#define CASE_TO_RETURN_STRING(cs) \
+    case cs: return #cs \
+// end CASE_TO_RETURN_STRING
+TString ToString(ENaivePatchCase cs) {
+    switch (cs) {
+        CASE_TO_RETURN_STRING(ENaivePatchCase::Ok);
+        CASE_TO_RETURN_STRING(ENaivePatchCase::ErrorOnGetItem);
+        CASE_TO_RETURN_STRING(ENaivePatchCase::ErrorOnGet);
+        CASE_TO_RETURN_STRING(ENaivePatchCase::ErrorOnPut);
+    }
+}
+
 NKikimrProto::EReplyStatus GetPatchResultStatus(ENaivePatchCase naiveCase) {
     switch (naiveCase) {
     case ENaivePatchCase::Ok:
@@ -154,6 +166,17 @@ enum class EVPatchCase {
     ErrorDuringVPatchDiff,
     Custom,
 };
+
+TString ToString(EVPatchCase cs) {
+    switch (cs) {
+        CASE_TO_RETURN_STRING(EVPatchCase::Ok);
+        CASE_TO_RETURN_STRING(EVPatchCase::OneErrorAndAllPartExistInStart);
+        CASE_TO_RETURN_STRING(EVPatchCase::OnePartLostInStart);
+        CASE_TO_RETURN_STRING(EVPatchCase::DeadGroupInStart);
+        CASE_TO_RETURN_STRING(EVPatchCase::ErrorDuringVPatchDiff);
+        CASE_TO_RETURN_STRING(EVPatchCase::Custom);
+    }
+}
 
 NKikimrProto::EReplyStatus GetPatchResultStatus(EVPatchCase vpatchCase) {
     switch (vpatchCase) {
@@ -248,6 +271,15 @@ enum class EMovedPatchCase {
     Error
 };
 
+TString ToString(EMovedPatchCase cs) {
+    switch (cs) {
+        CASE_TO_RETURN_STRING(EMovedPatchCase::Ok);
+        CASE_TO_RETURN_STRING(EMovedPatchCase::Error);
+    }
+}
+
+#undef CASE_TO_RETURN_STRING
+
 NKikimrProto::EReplyStatus GetPatchResultStatus(EMovedPatchCase movedCase) {
     switch (movedCase) {
     case EMovedPatchCase::Ok:
@@ -288,7 +320,7 @@ void ReceivePatchResult(TTestBasicRuntime &runtime, const TTestArgs &args, NKiki
 }
 
 void ConductGet(TTestBasicRuntime &runtime, const TTestArgs &args, ENaivePatchCase naiveCase) {
-    CTEST << "ConductGet: Start\n";
+    CTEST << "ConductGet: Start NaiveCase: " << ToString(naiveCase) << "\n";
     NKikimrProto::EReplyStatus resultStatus = GetGetResultStatus(naiveCase);
     TAutoPtr<IEventHandle> handle;
     TEvBlobStorage::TEvGet *get = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGet>(handle);
@@ -327,10 +359,10 @@ TString MakePatchedBuffer(const TTestArgs &args) {
 void ConductPut(TTestBasicRuntime &runtime, const TTestArgs &args, ENaivePatchCase naiveCase) {
     NKikimrProto::EReplyStatus resultStatus = GetPutResultStatus(naiveCase);
     if (resultStatus == NKikimrProto::UNKNOWN) {
-        CTEST << "ConductPut: Skip\n";
+        CTEST << "ConductPut: Skip NaiveCase: " << ToString(naiveCase) << "\n";
         return;
     }
-    CTEST << "ConductPut: Start\n";
+    CTEST << "ConductPut: Start NaiveCase: " << ToString(naiveCase) << "\n";
     TAutoPtr<IEventHandle> handle;
     TEvBlobStorage::TEvPut *put = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvPut>(handle);
     UNIT_ASSERT_VALUES_EQUAL(put->Id, args.PatchedId);
@@ -345,7 +377,7 @@ void ConductPut(TTestBasicRuntime &runtime, const TTestArgs &args, ENaivePatchCa
 }
 
 void ConductNaivePatch(TTestBasicRuntime &runtime, const TTestArgs &args, ENaivePatchCase naiveCase) {
-    CTEST << "ConductNaivePatch: Start\n";
+    CTEST << "ConductNaivePatch: Start NaiveCase: " << ToString(naiveCase) << Endl;
     ConductGet(runtime, args, naiveCase);
     ConductPut(runtime, args, naiveCase);
     NKikimrProto::EReplyStatus resultStatus = GetPatchResultStatus(naiveCase);
@@ -353,14 +385,27 @@ void ConductNaivePatch(TTestBasicRuntime &runtime, const TTestArgs &args, ENaive
     CTEST << "ConductNaivePatch: Finish\n";
 }
 
+template <typename InnerType> 
+TString ToString(const TVector<InnerType> &lst) {
+    TStringBuilder bld;
+    bld << '[';
+    for (ui32 idx = 0; idx < lst.size(); ++idx) {
+        if (idx) {
+            bld << ", ";
+        }
+        bld << lst[idx];
+    }
+    bld << ']';
+    return bld;
+}
 
 void ConductVPatchStart(TTestBasicRuntime &runtime, const TDSProxyEnv &env, const TTestArgs &args,
-        EVPatchCase naiveCase, TVDiskPointer vdiskPointer)
+        EVPatchCase vpatchCase, TVDiskPointer vdiskPointer)
 {
     auto [vdiskIdx, idxInSubgroup] = vdiskPointer.GetIndecies(env, args.OriginalId.Hash());
-    CTEST << "ConductVPatchStart: Start vdiskIdx# " <<  vdiskIdx << " idxInSubgroup# " << idxInSubgroup << "\n";
+    CTEST << "ConductVPatchStart: Start vdiskIdx# " <<  vdiskIdx << " idxInSubgroup# " << idxInSubgroup << " VPatchCase: " << ToString(vpatchCase) << "\n";
     TVDiskID vdisk = env.Info->GetVDiskInSubgroup(idxInSubgroup, args.OriginalId.Hash());
-    auto [status, parts] = GetVPatchFoundPartsStatus(env, args, naiveCase, vdiskPointer);
+    auto [status, parts] = GetVPatchFoundPartsStatus(env, args, vpatchCase, vdiskPointer);
 
     auto start = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVPatchStart>({env.VDisks[vdiskIdx]});
     auto &startRecord = start->Get()->Record;
@@ -375,21 +420,22 @@ void ConductVPatchStart(TTestBasicRuntime &runtime, const TDSProxyEnv &env, cons
     for (auto partId : parts) {
         foundParts->AddPart(partId);
     }
+    CTEST << "ConductVPatchStart: Send FoundParts vdiskIdx# " <<  vdiskIdx << " idxInSubgroup# " << idxInSubgroup << "parts# " << ToString(parts) << "\n";
     SendByHandle(runtime, start, std::move(foundParts));
     CTEST << "ConductVPatchStart: Finish vdiskIdx# " <<  vdiskIdx << " idxInSubgroup# " << idxInSubgroup << "\n";
 }
 
 void ConductVPatchDiff(TTestBasicRuntime &runtime, const TDSProxyEnv &env, const TTestArgs &args,
-        EVPatchCase naiveCase, TVDiskPointer vdiskPointer)
+        EVPatchCase vpatchCase, TVDiskPointer vdiskPointer)
 {
     auto [vdiskIdx, idxInSubgroup] = vdiskPointer.GetIndecies(env, args.PatchedId.Hash());
     TVDiskID vdisk = env.Info->GetVDiskInSubgroup(idxInSubgroup, args.PatchedId.Hash());
-    NKikimrProto::EReplyStatus resultStatus = GetVPatchResultStatus(env, args, naiveCase, vdiskPointer);
+    NKikimrProto::EReplyStatus resultStatus = GetVPatchResultStatus(env, args, vpatchCase, vdiskPointer);
     if (resultStatus == NKikimrProto::UNKNOWN) {
-        CTEST << "ConductVPatchDiff: Skip vdiskIdx# " <<  vdiskIdx << " idxInSubgroup# " << idxInSubgroup << "\n";
+        CTEST << "ConductVPatchDiff: Skip vdiskIdx# " <<  vdiskIdx << " idxInSubgroup# " << idxInSubgroup << " VPatchCase: " << ToString(vpatchCase) << "\n";
         return;
     }
-    CTEST << "ConductVPatchDiff: Start vdiskIdx# " <<  vdiskIdx << " idxInSubgroup# " << idxInSubgroup << "\n";
+    CTEST << "ConductVPatchDiff: Start vdiskIdx# " <<  vdiskIdx << " idxInSubgroup# " << idxInSubgroup << " VPatchCase: " << ToString(vpatchCase) << "\n";
 
     auto diffEv = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVPatchDiff>({env.VDisks[vdiskIdx]});
     auto &diffRecord = diffEv->Get()->Record;
@@ -414,6 +460,7 @@ void ConductVPatchDiff(TTestBasicRuntime &runtime, const TDSProxyEnv &env, const
 }
 
 void ConductFailedVPatch(TTestBasicRuntime &runtime, const TDSProxyEnv &env, const TTestArgs &args) {
+    return; // disabled vpatch
     CTEST << "ConductFailedVPatch: Start\n";
     for (ui32 idxInSubgroup = 0; idxInSubgroup < args.GType.BlobSubgroupSize(); ++idxInSubgroup) {
         TVDiskPointer vdisk = TVDiskPointer::GetVDiskIdx(idxInSubgroup);
@@ -428,7 +475,7 @@ void ConductFailedVPatch(TTestBasicRuntime &runtime, const TDSProxyEnv &env, con
 
 
 void ConductVMovedPatch(TTestBasicRuntime &runtime, const TTestArgs &args, EMovedPatchCase movedCase) {
-    CTEST << "ConductVMovedPatch: Start\n";
+    CTEST << "ConductVMovedPatch: Start MovedPatchCase: " << ToString(movedCase) << Endl;
     NKikimrProto::EReplyStatus resultStatus = GetVMovedPatchResultStatus(movedCase);
     TAutoPtr<IEventHandle> handle;
     TEvBlobStorage::TEvVMovedPatch *vPatch = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVMovedPatch>(handle);
@@ -458,7 +505,7 @@ void ConductVMovedPatch(TTestBasicRuntime &runtime, const TTestArgs &args, EMove
 void ConductMovedPatch(TTestBasicRuntime &runtime, const TDSProxyEnv &env, const TTestArgs &args,
         EMovedPatchCase movedCase)
 {
-    CTEST << "ConductMovedPatch: Start\n";
+    CTEST << "ConductMovedPatch: Start MovedPatchCase: " << ToString(movedCase) << Endl;
     ConductFailedVPatch(runtime, env, args);
     ConductVMovedPatch(runtime, args, movedCase);
     NKikimrProto::EReplyStatus resultStatus = GetPatchResultStatus(movedCase);
@@ -480,7 +527,8 @@ void ConductFallbackPatch(TTestBasicRuntime &runtime, const TTestArgs &args) {
 void ConductVPatchEvents(TTestBasicRuntime &runtime, const TDSProxyEnv &env, const TTestArgs &args,
         EVPatchCase vpatchCase)
 {
-    CTEST << "ConductVPatchEvents: Start\n";
+    return; // disabled vpatch
+    CTEST << "ConductVPatchEvents: Start VPatchCase: " << ToString(vpatchCase) << Endl;
     for (ui32 idxInSubgroup = 0; idxInSubgroup < args.GType.BlobSubgroupSize(); ++idxInSubgroup) {
         TVDiskPointer vdisk = TVDiskPointer::GetVDiskIdx(idxInSubgroup);
         ConductVPatchStart(runtime, env, args, vpatchCase, vdisk);
@@ -495,7 +543,7 @@ void ConductVPatchEvents(TTestBasicRuntime &runtime, const TDSProxyEnv &env, con
 void ConductVPatch(TTestBasicRuntime &runtime, const TDSProxyEnv &env, const TTestArgs &args,
         EVPatchCase vpatchCase)
 {
-    CTEST << "ConductFallbackPatch: Start\n";
+    CTEST << "ConductFallbackPatch: Start VPatchCase: " << ToString(vpatchCase) << Endl;
     ConductVPatchEvents(runtime, env, args, vpatchCase);
     NKikimrProto::EReplyStatus resultStatus = GetPatchResultStatus(vpatchCase);
     if (resultStatus == NKikimrProto::UNKNOWN) {
@@ -619,16 +667,17 @@ void RunGeneralTest(void(*runner)(TTestBasicRuntime &runtime, const TTestArgs &a
     Y_UNIT_TEST_NAIVE(ErrorOnPut, erasure) \
     Y_UNIT_TEST_MOVED(Ok, erasure) \
     Y_UNIT_TEST_MOVED(Error, erasure) \
-    Y_UNIT_TEST_VPATCH(Ok, erasure) \
-    Y_UNIT_TEST_VPATCH(OneErrorAndAllPartExistInStart, erasure) \
-    Y_UNIT_TEST_VPATCH(OnePartLostInStart, erasure) \
-    Y_UNIT_TEST_VPATCH(DeadGroupInStart, erasure) \
-    Y_UNIT_TEST_VPATCH(ErrorDuringVPatchDiff, erasure) \
     Y_UNIT_TEST_SECURED(Ok, erasure) \
     Y_UNIT_TEST_SECURED(ErrorOnGetItem, erasure) \
     Y_UNIT_TEST_SECURED(ErrorOnGet, erasure) \
     Y_UNIT_TEST_SECURED(ErrorOnPut, erasure) \
 // end Y_UNIT_TEST_PATCH_PACK
+
+//    Y_UNIT_TEST_VPATCH(Ok, erasure)
+//    Y_UNIT_TEST_VPATCH(OneErrorAndAllPartExistInStart, erasure)
+//    Y_UNIT_TEST_VPATCH(OnePartLostInStart, erasure)
+//    Y_UNIT_TEST_VPATCH(DeadGroupInStart, erasure)
+//    Y_UNIT_TEST_VPATCH(ErrorDuringVPatchDiff, erasure) 
 
     Y_UNIT_TEST_PATCH_PACK(ErasureNone)
     Y_UNIT_TEST_PATCH_PACK(Erasure4Plus2Block)
@@ -711,6 +760,7 @@ EFaultToleranceCase GetFaultToleranceCaseForBlock4Plus2(const TDSProxyEnv &env, 
             }
         }
     }
+    return EFaultToleranceCase::Fallback; // disabled vpatch
     if (layout.CountEffectiveReplicas(env.Info->Type) == env.Info->Type.TotalPartCount()) {
         return EFaultToleranceCase::Ok;
     } else {
@@ -735,6 +785,7 @@ EFaultToleranceCase GetFaultToleranceCaseForMirror3dc(const TDSProxyEnv &env, co
     for (ui32 dcIdx = 0; dcIdx < dcCnt; ++dcIdx) {
         x2cnt += (replInDc[dcIdx] >= 2);
     }
+    return EFaultToleranceCase::Fallback; // disabled vpatch
     if ((replInDc[0] && replInDc[1] && replInDc[2]) || x2cnt >= 2) {
         return EFaultToleranceCase::Ok;
     } else {

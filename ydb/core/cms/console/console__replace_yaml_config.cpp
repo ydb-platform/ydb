@@ -78,6 +78,9 @@ public:
 
             bool hasForbiddenUnknown = false;
 
+            TMap<TString, std::pair<TString, TString>> deprecatedFields;
+            TMap<TString, std::pair<TString, TString>> unknownFields;
+
             if (UpdatedConfig != Self->YamlConfig || Self->YamlDropped) {
                 Modify = true;
 
@@ -102,7 +105,17 @@ public:
                         UnknownFieldsCollector);
                 }
 
-                hasForbiddenUnknown = !UnknownFieldsCollector->GetUnknownKeys().empty() || AllowUnknownFields;
+                const auto& deprecatedPaths = NKikimrConfig::TAppConfig::GetReservedChildrenPaths();
+
+                for (const auto& [path, info] : UnknownFieldsCollector->GetUnknownKeys()) {
+                    if (deprecatedPaths.contains(path)) {
+                        deprecatedFields[path] = info;
+                    } else {
+                        unknownFields[path] = info;
+                    }
+                }
+
+                hasForbiddenUnknown = !unknownFields.empty() && !AllowUnknownFields;
 
                 if (!DryRun && !hasForbiddenUnknown) {
                     DoAudit(txc, ctx);
@@ -121,12 +134,16 @@ public:
             }
 
             auto fillResponse = [&](auto& ev, auto errorLevel){
-                if (UnknownFieldsCollector) {
-                    for (auto& [path, info] : UnknownFieldsCollector->GetUnknownKeys()) {
-                        auto *issue = ev->Record.AddIssues();
-                            issue->set_severity(errorLevel);
-                            issue->set_message(TStringBuilder{} << "Unknown key# " << info.first << " in proto# " << info.second << " found in path# " << path);
-                    }
+                for (auto& [path, info] : unknownFields) {
+                    auto *issue = ev->Record.AddIssues();
+                        issue->set_severity(errorLevel);
+                        issue->set_message(TStringBuilder{} << "Unknown key# " << info.first << " in proto# " << info.second << " found in path# " << path);
+                }
+
+                for (auto& [path, info] : deprecatedFields) {
+                    auto *issue = ev->Record.AddIssues();
+                        issue->set_severity(NYql::TSeverityIds::S_WARNING);
+                        issue->set_message(TStringBuilder{} << "Deprecated key# " << info.first << " in proto# " << info.second << " found in path# " << path);
                 }
 
                 Response = MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());

@@ -115,12 +115,11 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
                 pkColumnIds.emplace((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG);
             }
         }
-
         resultFiltered = std::make_shared<TFilteredSnapshotSchema>(resultSchema, dataColumnIds);
         {
             auto seqDataColumnIds = dataColumnIds;
             for (auto&& i : pkColumnIds) {
-                AFL_VERIFY(seqDataColumnIds.erase(i));
+                AFL_VERIFY(seqDataColumnIds.erase(i))("id", i);
             }
             THashSet<ui64> usedPortionIds;
             for (auto&& i : portions) {

@@ -68,8 +68,9 @@ private:
 
 public:
     TPathFieldsInfo(const ISnapshotSchema::TPtr& resultSchema)
-        : ResultSchema(resultSchema)
-        , FullColumnsCount(ResultSchema->GetIndexInfo().GetColumnIds(false).size())
+        : UsageColumnIds(IIndexInfo::GetNecessarySystemColumnIdsSet())
+        , ResultSchema(resultSchema)
+        , FullColumnsCount(ResultSchema->GetIndexInfo().GetColumnIds(true).size())
     {
         AFL_VERIFY(FullColumnsCount);
     }

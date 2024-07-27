@@ -25,7 +25,7 @@ You can click any of the methods below to go to the source code of an example in
    | Access Token | [ydb.AccessTokenCredentials( token )](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/access-token-credentials) |
    | Metadata | [ydb.iam.MetadataUrlCredentials()](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/metadata-credentials) |
    | Service Account Key | [ydb.iam.ServiceAccountCredentials.from_file(</br>key_file, iam_endpoint=None, iam_channel_credentials=None )](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/service-account-credentials) |
-   | OAuth 2.0 token exchange | [ydb.oauth2_token_exchange.Oauth2TokenExchangeCredentials()](https://github.com/ydb-platform/ydb-python-sdk/blob/main/ydb/oauth2_token_exchange/token_exchange.py) |
+   | OAuth 2.0 token exchange | [ydb.oauth2_token_exchange.Oauth2TokenExchangeCredentials()](https://github.com/ydb-platform/ydb-python-sdk/blob/main/ydb/oauth2_token_exchange/token_exchange.py),</br>[ydb.oauth2_token_exchange.Oauth2TokenExchangeCredentials.from_file( cfg_file, iam_endpoint=None )](https://github.com/ydb-platform/ydb-python-sdk/blob/main/ydb/oauth2_token_exchange/token_exchange.py) |
    | Determined by environment variables | `ydb.credentials_from_env_variables()` |
 
 - Go
@@ -37,7 +37,7 @@ You can click any of the methods below to go to the source code of an example in
    | Metadata | [ydb-go-yc](https://github.com/ydb-platform/ydb-go-yc/) | [yc.WithMetadataCredentials(ctx)](https://github.com/ydb-platform/ydb-go-examples/tree/master/auth/metadata_credentials) |
    | Service Account Key | [ydb-go-yc](https://github.com/ydb-platform/ydb-go-yc/) | [yc.WithServiceAccountKeyFileCredentials(key_file)](https://github.com/ydb-platform/ydb-go-examples/tree/master/auth/service_account_credentials) |
    | Static Credentials | [ydb-go-sdk/v3](https://github.com/ydb-platform/ydb-go-sdk/) | [ydb.WithStaticCredentials(user, password)](https://github.com/ydb-platform/ydb-go-examples/tree/master/auth/static_credentials) |
-   | OAuth 2.0 token exchange | [ydb-go-sdk/v3](https://github.com/ydb-platform/ydb-go-sdk/) | [ydb.WithOauth2TokenExchangeCredentials(options...)](https://github.com/ydb-platform/ydb-go-sdk/blob/master/options.go)
+   | OAuth 2.0 token exchange | [ydb-go-sdk/v3](https://github.com/ydb-platform/ydb-go-sdk/) | [ydb.WithOauth2TokenExchangeCredentials(options...)](https://github.com/ydb-platform/ydb-go-sdk/blob/master/options.go),</br>[ydb.WithOauth2TokenExchangeCredentialsFile(configFilePath)](https://github.com/ydb-platform/ydb-go-sdk/blob/master/options.go) |
    | Determined by environment variables | [ydb-go-sdk-auth-environ](https://github.com/ydb-platform/ydb-go-sdk-auth-environ/) | [environ.WithEnvironCredentials(ctx)](https://github.com/ydb-platform/ydb-go-examples/tree/master/auth/environ) |
 
 - Java
@@ -48,6 +48,7 @@ You can click any of the methods below to go to the source code of an example in
    | Access Token | [new tech.ydb.core.auth.TokenAuthProvider(accessToken);](https://github.com/ydb-platform/ydb-java-examples/tree/master/auth/access_token_credentials) |
    | Metadata | [tech.ydb.auth.iam.CloudAuthHelper.getMetadataAuthProvider();](https://github.com/ydb-platform/ydb-java-examples/tree/master/auth/metadata_credentials) |
    | Service Account Key | [tech.ydb.auth.iam.CloudAuthHelper.getServiceAccountFileAuthProvider(saKeyFile);](https://github.com/ydb-platform/ydb-java-examples/tree/master/auth/service_account_credentials) |
+   | OAuth 2.0 token exchange | [tech.ydb.auth.OAuth2TokenExchangeProvider.fromFile(cfgFile);](https://github.com/ydb-platform/ydb-java-sdk/blob/master/auth-providers/oauth2-provider/src/main/java/tech/ydb/auth/OAuth2TokenExchangeProvider.java) |
    | Determined by environment variables | [tech.ydb.auth.iam.CloudAuthHelper.getAuthProviderFromEnviron();](https://github.com/ydb-platform/ydb-java-examples/tree/master/auth/environ) |
 
 - Node.js
@@ -112,7 +113,7 @@ Fields not described in this table are ignored.
 | Field | Type | Description | Default value/optionality |
 |:-----:|:----:|:-----------:|:-------------------------:|
 |`grant-type`|string|Grant type|`urn:ietf:params:oauth:grant-type:token-exchange`|
-|`res`|string|Resource|optional|
+|`res`|string \| list of strings|Resource|optional|
 |`aud`|string \| list of strings|Audience option for [token exchange request](https://www.rfc-editor.org/rfc/rfc8693)|optional|
 |`scope`|string \| list of strings|Scope|optional|
 |`requested-token-type`|string|Requested token type|`urn:ietf:params:oauth:token-type:access_token`|

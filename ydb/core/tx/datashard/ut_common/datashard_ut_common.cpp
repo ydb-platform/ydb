@@ -34,6 +34,26 @@ using namespace Tests;
 const bool ENABLE_DATASHARD_LOG = true;
 const bool DUMP_RESULT = false;
 
+namespace {
+
+    TEvDataShard::TEvGetInfoResponse* GetEvGetInfo(
+        Tests::TServer::TPtr server,
+        ui64 tabletId,
+        TAutoPtr<IEventHandle>& handle)
+    {
+        auto &runtime = *server->GetRuntime();
+
+        auto sender = runtime.AllocateEdgeActor();
+        auto request = MakeHolder<TEvDataShard::TEvGetInfoRequest>();
+        runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+        TTableInfoMap result;
+
+        return runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetInfoResponse>(handle);
+    }
+
+} // namespace
+
 void TTester::Setup(TTestActorRuntime& runtime, const TOptions& opts) {
     Y_UNUSED(opts);
     if (ENABLE_DATASHARD_LOG) {
@@ -1289,18 +1309,29 @@ std::pair<TTableInfoMap, ui64> GetTables(
     Tests::TServer::TPtr server,
     ui64 tabletId)
 {
-    auto &runtime = *server->GetRuntime();
-
-    auto sender = runtime.AllocateEdgeActor();
-    auto request = MakeHolder<TEvDataShard::TEvGetInfoRequest>();
-    runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
-
     TTableInfoMap result;
 
     TAutoPtr<IEventHandle> handle;
-    auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetInfoResponse>(handle);
+    auto response = GetEvGetInfo(server, tabletId, handle);
     for (auto& table: response->Record.GetUserTables()) {
         result[table.GetName()] = table;
+    }
+
+    auto ownerId = response->Record.GetTabletInfo().GetSchemeShard();
+
+    return std::make_pair(result, ownerId);
+}
+
+std::pair<TTableInfoByPathIdMap, ui64> GetTablesByPathId(
+    Tests::TServer::TPtr server,
+    ui64 tabletId)
+{
+    TTableInfoByPathIdMap result;
+
+    TAutoPtr<IEventHandle> handle;
+    auto response = GetEvGetInfo(server, tabletId, handle);
+    for (auto& table: response->Record.GetUserTables()) {
+        result[PathIdFromPathId(table.GetDescription().GetPathId())] = table;
     }
 
     auto ownerId = response->Record.GetTabletInfo().GetSchemeShard();
@@ -2650,7 +2681,6 @@ std::unique_ptr<TEvDataShard::TEvReadResult> SendRead(
 TString ReadTable(
     Tests::TServer::TPtr server,
     std::span<const ui64> tabletIds,
-    const TString& tableName,
     const TTableId& tableId,
     ui64 startReadId)
 {
@@ -2658,8 +2688,8 @@ TString ReadTable(
 
     auto readId = startReadId;
     for (const auto& tabletId : tabletIds) {
-        auto [tablesMap, ownerId] = GetTables(server, tabletId);
-        const auto& userTable = tablesMap.at(tableName);
+        auto [tablesMap, ownerId] = GetTablesByPathId(server, tabletId);
+        const auto& userTable = tablesMap.at(tableId.PathId);
 
         SendReadEntireTable(server, tabletId, tableId, userTable, readId++, NKikimrDataEvents::FORMAT_CELLVEC);
 

@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Read table =========\n";
         {
-            auto tableState = ReadTable(server, shards, "table-1", tableId, 1000);
+            auto tableState = ReadTable(server, shards, tableId);
             UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
         }
     }
@@ -76,8 +76,8 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Read tables =========\n";
         {
-            auto tableState1 = ReadTable(server, shards1, "table-1", tableId1, 1000);
-            auto tableState2 = ReadTable(server, shards2, "table-2", tableId2, 2000);
+            auto tableState1 = ReadTable(server, shards1, tableId1, 1000);
+            auto tableState2 = ReadTable(server, shards2, tableId2, 2000);
             UNIT_ASSERT_VALUES_EQUAL(tableState1, "key = 0, value = 1\n");
             UNIT_ASSERT_VALUES_EQUAL(tableState2, "key = 2, value = 3\n");
         }
@@ -109,7 +109,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Read table =========\n";
         {
-            auto tableState = ReadTable(server, shards, "table-1", tableId, 1000);
+            auto tableState = ReadTable(server, shards, tableId);
             UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
         }
     }
@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Read table =========\n";
         {
-            auto tableState = ReadTable(server, shards, "table-1", tableId, 1000);
+            auto tableState = ReadTable(server, shards, tableId, 1000);
             UNIT_ASSERT_VALUES_EQUAL(tableState, "key64 = 0, key32 = 1, value64 = 2, value32 = 3, valueUtf8 = String_4\n"
                                                  "key64 = 5, key32 = 6, value64 = 7, value32 = 8, valueUtf8 = String_9\n"
                                                  "key64 = 10, key32 = 11, value64 = 12, value32 = 13, valueUtf8 = String_14\n");
@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Read table with 1th row deleted =========\n";
         {
-            auto tableState = ReadTable(server, shards, "table-1", tableId, 2000);
+            auto tableState = ReadTable(server, shards, tableId, 2000);
             UNIT_ASSERT_VALUES_EQUAL(tableState, "key64 = 5, key32 = 6, value64 = 7, value32 = 8, valueUtf8 = String_9\n"
                                                  "key64 = 10, key32 = 11, value64 = 12, value32 = 13, valueUtf8 = String_14\n");
         }
@@ -229,7 +229,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Read table =========\n";
         {
-            auto tableState = ReadTable(server, shards, "table-1", tableId, 1000);
+            auto tableState = ReadTable(server, shards, tableId);
             UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
         }
     }    
@@ -250,7 +250,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Read table =========\n";
         {
-            auto tableState = ReadTable(server, shards, "table-1", tableId, 1000);
+            auto tableState = ReadTable(server, shards, tableId, 1000);
             UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
         }
 
@@ -270,7 +270,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Read table with 1th row deleted =========\n";
         {
-            auto tableState = ReadTable(server, shards, "table-1", tableId, 2000);
+            auto tableState = ReadTable(server, shards, tableId, 2000);
             UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 2, value = 3\nkey = 4, value = 5\n");
         }
     }   
@@ -301,7 +301,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Read table =========\n";
         {
-            auto tableState = ReadTable(server, shards, "table-1", tableId, 1000);
+            auto tableState = ReadTable(server, shards, tableId);
             UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
         }
     }    
@@ -351,7 +351,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Read table =========\n";
         {
-            auto tableState = ReadTable(server, shards, "table-1", tableId, 1000);
+            auto tableState = ReadTable(server, shards, tableId);
             UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 0, value = NULL\n");
         }
     }
@@ -382,7 +382,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Read table =========\n";
         {
-            auto tableState = ReadTable(server, shards, "table-1", tableId, 1000);
+            auto tableState = ReadTable(server, shards, tableId, 1000);
             UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
         }
 
@@ -394,7 +394,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Read table =========\n";
         {
-            auto tableState = ReadTable(server, shards, "table-1", tableId, 2000);
+            auto tableState = ReadTable(server, shards, tableId, 2000);
             UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
         }
     }    
@@ -416,7 +416,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         
         Cout << "========= Read table =========\n";
         {
-            auto tableState = ReadTable(server, shards, "table-1", tableId, 1000);
+            auto tableState = ReadTable(server, shards, tableId, 1000);
             UNIT_ASSERT_VALUES_EQUAL(tableState, "");
         }         
 
@@ -427,7 +427,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Read table =========\n";
         {
-            auto tableState = ReadTable(server, shards, "table-1", tableId, 2000);
+            auto tableState = ReadTable(server, shards, tableId, 2000);
             UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
         }
 
@@ -438,7 +438,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Read table =========\n";
         {
-            auto tableState = ReadTable(server, shards, "table-1", tableId, 3000);
+            auto tableState = ReadTable(server, shards, tableId, 3000);
             UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 0, value = 555\nkey = 2, value = 3\nkey = 4, value = 5\n");
         }
 
@@ -458,7 +458,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Read table =========\n";
         {
-            auto tableState = ReadTable(server, shards, "table-1", tableId, 4000);
+            auto tableState = ReadTable(server, shards, tableId, 4000);
             UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
         }
     }
@@ -520,7 +520,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Read table =========\n";
         {
-            auto tableState = ReadTable(server, shards, "table-1", tableId, 1000);
+            auto tableState = ReadTable(server, shards, tableId);
             UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
         }
     }
@@ -627,9 +627,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Read from tables" << Endl;
         {
-            auto tableState = ReadTable(server, shards1, tableName1, tableId1, 1000);
+            auto tableState = ReadTable(server, shards1, tableId1, 1000);
             UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
-            tableState = ReadTable(server, shards2, tableName2, tableId2, 2000);
+            tableState = ReadTable(server, shards2, tableId2, 2000);
             UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
         }
     }
@@ -675,7 +675,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Read table =========\n";
         {
-            auto tableState = ReadTable(server, shards, "table-1", tableId, 1000);
+            auto tableState = ReadTable(server, shards, tableId);
             UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
         }
 
@@ -700,7 +700,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Read table =========\n";
         {
-            auto tableState = ReadTable(server, shards, tableName, tableId, 1000);
+            auto tableState = ReadTable(server, shards, tableId, 1000);
             UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
         }
 
@@ -747,7 +747,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Read table =========\n";
         {
-            auto tableState = ReadTable(server, shards, tableName, tableId, 2000);
+            auto tableState = ReadTable(server, shards, tableId, 2000);
             UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 2, value = 3\nkey = 4, value = 5\n");
         }
     }
@@ -977,7 +977,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cerr << "========= Checking table =========" << Endl;
         {
-            auto tableState = ReadTable(server, shards, "table", tableId, 1000);
+            auto tableState = ReadTable(server, shards, tableId);
             UNIT_ASSERT_VALUES_EQUAL(tableState,
                 "key = 1, value = 11\n"
                 "key = 11, value = 111\n"
@@ -1021,7 +1021,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cerr << "========= Checking table =========" << Endl;
         {
-            auto tableState = ReadTable(server, shards, "table", tableId, 1000);
+            auto tableState = ReadTable(server, shards, tableId);
             UNIT_ASSERT_VALUES_EQUAL(tableState, "");
         }
     }
@@ -1062,7 +1062,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cerr << "========= Checking table =========" << Endl;
         {
-            auto tableState = ReadTable(server, shards, "table", tableId, 1000);
+            auto tableState = ReadTable(server, shards, tableId);
             UNIT_ASSERT_VALUES_EQUAL(tableState, "");
         }
     }
@@ -1147,7 +1147,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cerr << "========= Checking table =========" << Endl;
         {
-            auto tableState = ReadTable(server, shards, "table", tableId, 1000);
+            auto tableState = ReadTable(server, shards, tableId);
             UNIT_ASSERT_VALUES_EQUAL(tableState,
                 "key = 1, value = 11\n"
                 "key = 11, value = 111\n"
@@ -1237,7 +1237,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cerr << "========= Checking table =========" << Endl;
         {
-            auto tableState = ReadTable(server, shards, "table", tableId, 1000);
+            auto tableState = ReadTable(server, shards, tableId);
             UNIT_ASSERT_VALUES_EQUAL(tableState, "");
         }
     }

@@ -536,9 +536,13 @@ NKikimrTxDataShard::TEvCompactBorrowedResult CompactBorrowed(
     TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId);
 
 using TTableInfoMap = THashMap<TString, NKikimrTxDataShard::TEvGetInfoResponse::TUserTable>;
+using TTableInfoByPathIdMap = THashMap<TPathId, NKikimrTxDataShard::TEvGetInfoResponse::TUserTable>;
 
 std::pair<TTableInfoMap, ui64> GetTables(Tests::TServer::TPtr server,
                                          ui64 tabletId);
+
+std::pair<TTableInfoByPathIdMap, ui64> GetTablesByPathId(Tests::TServer::TPtr server,
+                                                         ui64 tabletId);
 
 TTableId ResolveTableId(
         Tests::TServer::TPtr server,
@@ -936,8 +940,7 @@ std::unique_ptr<TEvDataShard::TEvReadResult> SendRead(
 TString ReadTable(
     Tests::TServer::TPtr server,
     std::span<const ui64> tabletIds,
-    const TString& tableName,
     const TTableId& tableId,
-    ui64 startReadId);
+    ui64 startReadId = 1000);
 
 }

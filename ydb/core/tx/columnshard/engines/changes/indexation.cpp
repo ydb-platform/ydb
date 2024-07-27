@@ -71,6 +71,7 @@ public:
         : ResultSchema(resultSchema)
         , FullColumnsCount(ResultSchema->GetIndexInfo().GetColumnIds(false).size())
     {
+        AFL_VERIFY(FullColumnsCount);
     }
 
     bool IsFinished() const {
@@ -83,6 +84,7 @@ public:
     }
 
     void Finish() {
+        AFL_VERIFY(UsageColumnIds.size());
         AFL_VERIFY(!Finished);
         Finished = true;
         if (UsageColumnIds.size() == FullColumnsCount) {
@@ -97,7 +99,7 @@ public:
         return UsageColumnIds;
     }
 
-    void AddChunkInfo(const TInsertedData& data, TConstructionContext& context) {
+    void AddChunkInfo(const TInsertedData& data, const TConstructionContext& context) {
         AFL_VERIFY(!Finished);
         if (UsageColumnIds.size() == FullColumnsCount) {
             return;
@@ -142,7 +144,7 @@ public:
         return result;
     }
 
-    void AddChunkInfo(const NOlap::TInsertedData& data, TConstructionContext& context) {
+    void AddChunkInfo(const NOlap::TInsertedData& data, const TConstructionContext& context) {
         ColumnsInfo.AddChunkInfo(data, context);
     }
 
@@ -191,6 +193,7 @@ public:
         if (it == Data.end()) {
             it = Data.emplace(inserted.PathId, TPathData(shardingFilterCommit, ResultSchema)).first;
         }
+        it->second.AddChunkInfo(inserted, context);
         it->second.AddShardingInfo(shardingFilterCommit);
     }
 

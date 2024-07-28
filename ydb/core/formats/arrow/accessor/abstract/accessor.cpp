@@ -52,7 +52,7 @@ NKikimr::NArrow::NAccessor::IChunkedArray::TFullDataAddress IChunkedArray::GetCh
         if (chunkCurrent) {
             AFL_VERIFY(chunkCurrent->GetSize() == 1)("size", chunkCurrent->GetSize());
         }
-        auto localAddress = DoGetChunk(address, position);
+        auto localAddress = DoGetLocalData(address, position);
         TAddressChain addressChain;
         addressChain.Add(localAddress.GetAddress());
         return TFullDataAddress(localAddress.GetArray(), std::move(addressChain));
@@ -62,7 +62,7 @@ NKikimr::NArrow::NAccessor::IChunkedArray::TFullDataAddress IChunkedArray::GetCh
             AFL_VERIFY(chunkCurrent->GetSize() == 1 + chunkedArrayAddress.GetAddress().GetSize())("current", chunkCurrent->GetSize())(
                                                           "chunked", chunkedArrayAddress.GetAddress().GetSize());
         }
-        auto localAddress = chunkedArrayAddress.GetArray()->DoGetChunk(address, chunkedArrayAddress.GetAddress().GetLocalIndex(position));
+        auto localAddress = chunkedArrayAddress.GetArray()->DoGetLocalData(address, chunkedArrayAddress.GetAddress().GetLocalIndex(position));
         auto fullAddress = std::move(chunkedArrayAddress.MutableAddress());
         fullAddress.Add(localAddress.GetAddress());
         return TFullDataAddress(localAddress.GetArray(), std::move(fullAddress));
@@ -89,7 +89,7 @@ IChunkedArray::TFullChunkedArrayAddress IChunkedArray::GetArray(
         if (chunkCurrent) {
             currentAddress = chunkCurrent->GetAddress(idx);
         }
-        auto nextChunkedArray = currentLevel->DoGetArray(currentAddress, currentPosition);
+        auto nextChunkedArray = currentLevel->DoGetLocalChunkedArray(currentAddress, currentPosition);
         chainForTemporarySave.emplace_back(nextChunkedArray.GetArray());
         currentLevel = chainForTemporarySave.back().get();
         addressChain.Add(nextChunkedArray.GetAddress());

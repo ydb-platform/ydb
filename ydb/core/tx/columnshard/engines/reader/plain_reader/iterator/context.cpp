@@ -104,8 +104,12 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
     TColumnsAccumulator acc;
     if (needFilterSharding && !ShardingColumns->IsEmpty()) {
         hasFilterSharding = true;
-        acc.AddFetchingStep(*result, *ShardingColumns);
-        acc.AddAssembleStep(*result, *ShardingColumns, "SPEC_SHARDING", false);
+        TColumnsSet columnsFetch = *ShardingColumns;
+        if (!exclusiveSource) {
+            columnsFetch = columnsFetch + *PKColumns + *SpecColumns;
+        }
+        acc.AddFetchingStep(*result, columnsFetch);
+        acc.AddAssembleStep(*result, columnsFetch, "SPEC_SHARDING", false);
         result->AddStep(std::make_shared<TShardingFilter>());
     }
     if (!EFColumns->GetColumnsCount() && !partialUsageByPredicate) {
@@ -126,12 +130,12 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         }
         if (columnsFetch.GetColumnsCount() || hasFilterSharding || needFilterDeletion) {
             acc.AddFetchingStep(*result, columnsFetch);
+            if (!exclusiveSource) {
+                acc.AddAssembleStep(*result, *PKColumns + *SpecColumns, "LAST_PK", false);
+            }
             if (needFilterDeletion) {
                 acc.AddAssembleStep(*result, *DeletionColumns, "SPEC_DELETION", false);
                 result->AddStep(std::make_shared<TDeletionFilter>());
-            }
-            if (!exclusiveSource) {
-                acc.AddAssembleStep(*result, *PKColumns + *SpecColumns, "LAST_PK", false);
             }
             acc.AddAssembleStep(*result, columnsFetch, "LAST", true);
         } else {
@@ -187,15 +191,15 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         AFL_VERIFY(columnsFetch.GetColumnsCount());
         acc.AddFetchingStep(*result, columnsFetch);
 
+        acc.AddAssembleStep(*result, *SpecColumns, "SPEC", false);
+        acc.AddAssembleStep(*result, *PKColumns, "PK", false);
         if (needFilterDeletion) {
             acc.AddAssembleStep(*result, *DeletionColumns, "SPEC_DELETION", false);
             result->AddStep(std::make_shared<TDeletionFilter>());
         }
-        acc.AddAssembleStep(*result, *SpecColumns, "SPEC", false);
         if (needSnapshots) {
             result->AddStep(std::make_shared<TSnapshotFilter>());
         }
-        acc.AddAssembleStep(*result, *PKColumns, "PK", false);
         if (partialUsageByPredicate) {
             result->AddStep(std::make_shared<TPredicateFilter>());
         }

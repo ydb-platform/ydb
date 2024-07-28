@@ -1,12 +1,14 @@
 #include "accessor.h"
+
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/permutations.h>
+#include <ydb/core/formats/arrow/save_load/saver.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
+#include <ydb/core/formats/arrow/splitter/simple.h>
 #include <ydb/core/formats/arrow/switch/compare.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
+
 #include <ydb/library/actors/core/log.h>
-#include <ydb/core/formats/arrow/permutations.h>
-#include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/splitter/simple.h>
-#include <ydb/core/formats/arrow/save_load/saver.h>
 
 namespace NKikimr::NArrow::NAccessor {
 
@@ -17,7 +19,7 @@ void IChunkedArray::TReader::AppendPositionTo(arrow::ArrayBuilder& builder, cons
 
 std::shared_ptr<arrow::Array> IChunkedArray::TReader::CopyRecord(const ui64 recordIndex) const {
     auto address = GetReadChunk(recordIndex);
-    return NArrow::CopyRecords(address.GetArray(), {address.GetPosition()});
+    return NArrow::CopyRecords(address.GetArray(), { address.GetPosition() });
 }
 
 std::shared_ptr<arrow::ChunkedArray> IChunkedArray::Slice(const ui32 offset, const ui32 count) const {
@@ -52,9 +54,10 @@ NKikimr::NArrow::NAccessor::IChunkedArray::TFullDataAddress IChunkedArray::GetCh
         if (chunkCurrent) {
             AFL_VERIFY(chunkCurrent->GetSize() == 1)("size", chunkCurrent->GetSize());
         }
-        auto localAddress = DoGetLocalData(address, position);
+        auto localAddress = GetLocalData(address, position);
         TAddressChain addressChain;
         addressChain.Add(localAddress.GetAddress());
+        AFL_VERIFY(addressChain.Contains(position));
         return TFullDataAddress(localAddress.GetArray(), std::move(addressChain));
     } else {
         auto chunkedArrayAddress = GetArray(chunkCurrent, position, nullptr);
@@ -62,9 +65,10 @@ NKikimr::NArrow::NAccessor::IChunkedArray::TFullDataAddress IChunkedArray::GetCh
             AFL_VERIFY(chunkCurrent->GetSize() == 1 + chunkedArrayAddress.GetAddress().GetSize())("current", chunkCurrent->GetSize())(
                                                           "chunked", chunkedArrayAddress.GetAddress().GetSize());
         }
-        auto localAddress = chunkedArrayAddress.GetArray()->DoGetLocalData(address, chunkedArrayAddress.GetAddress().GetLocalIndex(position));
+        auto localAddress = chunkedArrayAddress.GetArray()->GetLocalData(address, chunkedArrayAddress.GetAddress().GetLocalIndex(position));
         auto fullAddress = std::move(chunkedArrayAddress.MutableAddress());
         fullAddress.Add(localAddress.GetAddress());
+        AFL_VERIFY(fullAddress.Contains(position));
         return TFullDataAddress(localAddress.GetArray(), std::move(fullAddress));
     }
 }
@@ -89,7 +93,7 @@ IChunkedArray::TFullChunkedArrayAddress IChunkedArray::GetArray(
         if (chunkCurrent) {
             currentAddress = chunkCurrent->GetAddress(idx);
         }
-        auto nextChunkedArray = currentLevel->DoGetLocalChunkedArray(currentAddress, currentPosition);
+        auto nextChunkedArray = currentLevel->GetLocalChunkedArray(currentAddress, currentPosition);
         chainForTemporarySave.emplace_back(nextChunkedArray.GetArray());
         currentLevel = chainForTemporarySave.back().get();
         addressChain.Add(nextChunkedArray.GetAddress());
@@ -106,7 +110,8 @@ TString IChunkedArray::TReader::DebugString(const ui32 position) const {
     return NArrow::DebugString(address.GetArray(), address.GetPosition());
 }
 
-std::partial_ordering IChunkedArray::TReader::CompareColumns(const std::vector<TReader>& l, const ui64 lPosition, const std::vector<TReader>& r, const ui64 rPosition) {
+std::partial_ordering IChunkedArray::TReader::CompareColumns(
+    const std::vector<TReader>& l, const ui64 lPosition, const std::vector<TReader>& r, const ui64 rPosition) {
     AFL_VERIFY(l.size() == r.size());
     for (ui32 i = 0; i < l.size(); ++i) {
         const TAddress lAddress = l[i].GetReadChunk(lPosition);
@@ -132,7 +137,7 @@ const std::partial_ordering IChunkedArray::TAddress::Compare(const TAddress& ite
     return TComparator::TypedCompare<true>(*Array, Position, *item.Array, item.Position);
 }
 
- TChunkedArraySerialized::TChunkedArraySerialized(const std::shared_ptr<IChunkedArray>& array, const TString& serializedData)
+TChunkedArraySerialized::TChunkedArraySerialized(const std::shared_ptr<IChunkedArray>& array, const TString& serializedData)
     : Array(array)
     , SerializedData(serializedData) {
     AFL_VERIFY(serializedData);
@@ -144,8 +149,7 @@ std::partial_ordering IChunkedArray::TFullDataAddress::Compare(
     const ui64 position, const TFullDataAddress& item, const ui64 itemPosition) const {
     AFL_VERIFY(Address.Contains(position))("pos", position)("start", Address.DebugString());
     AFL_VERIFY(item.Address.Contains(itemPosition))("pos", itemPosition)("start", item.Address.DebugString());
-    return TComparator::TypedCompare<true>(
-        *Array, Address.GetLocalIndex(position), *item.Array, item.Address.GetLocalIndex(itemPosition));
+    return TComparator::TypedCompare<true>(*Array, Address.GetLocalIndex(position), *item.Array, item.Address.GetLocalIndex(itemPosition));
 }
 
 std::shared_ptr<arrow::Array> IChunkedArray::TFullDataAddress::CopyRecord(const ui64 recordIndex) const {
@@ -156,4 +160,4 @@ TString IChunkedArray::TFullDataAddress::DebugString(const ui64 position) const 
     return NArrow::DebugString(Array, Address.GetLocalIndex(position));
 }
 
-}
+}   // namespace NKikimr::NArrow::NAccessor

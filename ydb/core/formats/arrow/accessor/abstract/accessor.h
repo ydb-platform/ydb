@@ -207,7 +207,9 @@ public:
         }
 
         TAddress(const std::shared_ptr<arrow::Array>& arr, const ui64 position)
-            : Array(arr) {
+            : Array(arr)
+            , Position(position)
+        {
             AFL_VERIFY(!!Array);
             AFL_VERIFY(position < (ui32)Array->length());
         }

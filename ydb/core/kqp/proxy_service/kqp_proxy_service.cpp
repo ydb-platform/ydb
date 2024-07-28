@@ -44,8 +44,6 @@
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/resource/resource.h>
-#include <util/system/user.h>
-
 namespace NKikimr::NKqp {
 
 namespace {

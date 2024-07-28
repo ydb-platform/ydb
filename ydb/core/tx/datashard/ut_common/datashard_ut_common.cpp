@@ -52,6 +52,47 @@ namespace {
         return runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetInfoResponse>(handle);
     }
 
+    void SendReadTablePart(
+        Tests::TServer::TPtr server,
+        ui64 tabletId,
+        const TTableId& tableId,
+        const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
+        ui64 readId,
+        NKikimrDataEvents::EDataFormat format)
+    {
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        auto request = GetBaseReadRequest(tableId, userTable, readId, format);
+
+        AddFullRangeQuery(*request);
+
+        SendReadAsync(server, tabletId, request.release(), sender);
+    }
+
+    void PrintTableFromResult(TStringBuilder& out, const TEvDataShard::TEvReadResult& event, const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable) {
+        const auto& description = userTable.GetDescription();
+
+        auto nrows = event.GetRowsCount();
+        for (size_t i = 0; i < nrows; ++i) {
+            const auto& cellArray = event.GetCells(i);
+            UNIT_ASSERT_VALUES_EQUAL(cellArray.size(), description.ColumnsSize());
+            bool first = true;
+            for (size_t j = 0; j < cellArray.size(); ++j) {
+                if (first) {
+                    first = false;
+                } else {
+                    out << ", ";
+                }
+                const auto& columnDescription = description.GetColumns(j);
+                TString cellValue;
+                DbgPrintValue(cellValue, cellArray[j], NScheme::TTypeInfo(columnDescription.GetTypeId()));
+                out << columnDescription.GetName() << " = " << cellValue;
+            }
+            out << '\n';
+        }
+    }
+
 } // namespace
 
 void TTester::Setup(TTestActorRuntime& runtime, const TOptions& opts) {
@@ -2490,47 +2531,6 @@ namespace {
         TDeque<TPendingRequest> QuotaRequests;
     };
 
-    void SendReadEntireTable(
-        Tests::TServer::TPtr server,
-        ui64 tabletId,
-        const TTableId& tableId,
-        const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
-        ui64 readId,
-        NKikimrDataEvents::EDataFormat format)
-    {
-        auto& runtime = *server->GetRuntime();
-        auto sender = runtime.AllocateEdgeActor();
-
-        auto request = GetBaseReadRequest(tableId, userTable, readId, format);
-
-        AddFullRangeQuery(*request);
-
-        SendReadAsync(server, tabletId, request.release(), sender);
-    }
-
-    void PrintTableFromResult(TStringBuilder& out, const TEvDataShard::TEvReadResult& event, const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable) {
-        const auto& description = userTable.GetDescription();
-
-        auto nrows = event.GetRowsCount();
-        for (size_t i = 0; i < nrows; ++i) {
-            const auto& cellArray = event.GetCells(i);
-            UNIT_ASSERT_VALUES_EQUAL(cellArray.size(), description.ColumnsSize());
-            bool first = true;
-            for (size_t j = 0; j < cellArray.size(); ++j) {
-                if (first) {
-                    first = false;
-                } else {
-                    out << ", ";
-                }
-                const auto& columnDescription = description.GetColumns(j);
-                TString cellValue;
-                DbgPrintValue(cellValue, cellArray[j], NScheme::TTypeInfo(columnDescription.GetTypeId()));
-                out << columnDescription.GetName() << " = " << cellValue;
-            }
-            out << '\n';
-        }
-    }
-
 } // namespace
 
 TReadShardedTableState StartReadShardedTable(
@@ -2691,7 +2691,7 @@ TString ReadTable(
         auto [tablesMap, ownerId] = GetTablesByPathId(server, tabletId);
         const auto& userTable = tablesMap.at(tableId.PathId);
 
-        SendReadEntireTable(server, tabletId, tableId, userTable, readId++, NKikimrDataEvents::FORMAT_CELLVEC);
+        SendReadTablePart(server, tabletId, tableId, userTable, readId++, NKikimrDataEvents::FORMAT_CELLVEC);
 
         std::unique_ptr<TEvDataShard::TEvReadResult> readResult;
         do {

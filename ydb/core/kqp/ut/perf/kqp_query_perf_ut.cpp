@@ -639,7 +639,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin()) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
         } else if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
         } else {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 5);
         }

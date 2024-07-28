@@ -161,6 +161,7 @@ public:
     }
 
     static bool IsNullableVerified(const ui32 fieldId) {
+        Y_UNUSED(fieldId);
         return false;
     }
 

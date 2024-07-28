@@ -771,7 +771,7 @@ private:
 
         TNodeOnNodeOwnedMap phaseStagesMap;
         TVector<TKqlQueryResult> phaseResults;
-        TVector<TExprBase> computedInputs;
+        TVector<TDqPhyPrecompute> computedInputs;
         TNodeSet computedInputsSet;
 
         // Gather all Precompute stages, that are independent of any other stage and form phase of execution
@@ -785,94 +785,10 @@ private:
             phaseStagesMap.emplace(raw, ptr);
         }
 
-        {
-            TNodeOnNodeOwnedMap fullPhaseStagesMap;
-            for (auto& [_, stagePtr] : phaseStagesMap) {
-                VisitExpr(stagePtr,
-                    [&](const TExprNode::TPtr& node) {
-                        if (TExprBase(node).Maybe<TDqStage>()) {
-                            fullPhaseStagesMap[node.Get()] = node;
-                        }
-                        return true;
-                    });
-            }
-            phaseStagesMap.swap(fullPhaseStagesMap);
-
-            TNodeOnNodeOwnedMap fullDependantMap;
-            VisitExpr(query.Ptr(),
-                [&](const TExprNode::TPtr& node) {
-                    if (phaseStagesMap.contains(node.Get())) {
-                        return false;
-                    }
-                    if (TExprBase(node).Maybe<TDqStage>()) {
-                        fullDependantMap[node.Get()] = node;
-                    }
-                    return true;
-                });
-            dependantStagesMap.swap(fullDependantMap);
-        }
-
         if (phaseStagesMap.empty()) {
             output = query.Ptr();
             ctx.AddError(TIssue(ctx.GetPosition(query.Pos()), "Phase stages is empty"));
             return TStatus::Error;
-        }
-
-        // so that all outputs to dependent stages are precomputes
-        {
-            TSet<TExprNode*> buildingTxStages;
-
-            TNodeOnNodeOwnedMap replaces;
-
-            for (auto& [_, stagePtr] : dependantStagesMap) {
-                TDqStage stage(stagePtr);
-                for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
-                    auto input = stage.Inputs().Item(i);
-                    if (auto maybeConn = input.Maybe<TDqConnection>()) {
-                        auto conn = maybeConn.Cast();
-                        if (!conn.Maybe<TDqCnValue>() && !conn.Maybe<TDqCnUnionAll>()) {
-                            continue;
-                        }
-
-                        if (phaseStagesMap.contains(conn.Output().Stage().Raw())) {
-                            auto oldArg = stage.Program().Args().Arg(i);
-                            auto newArg = Build<TCoArgument>(ctx, stage.Program().Args().Arg(i).Pos())
-                                .Name("_replaced_arg")
-                                .Done();
-
-                            TVector<TCoArgument> newArgs;
-                            TNodeOnNodeOwnedMap programReplaces;
-                            for (size_t j = 0; j < stage.Program().Args().Size(); ++j) {
-                                auto oldArg = stage.Program().Args().Arg(j);
-                                newArgs.push_back(Build<TCoArgument>(ctx, stage.Program().Args().Arg(i).Pos())
-                                    .Name("_replaced_arg_" + ToString(j))
-                                    .Done());
-                                if (i == j) {
-                                    programReplaces[oldArg.Raw()] = Build<TCoToFlow>(ctx, oldArg.Pos()).Input(newArgs.back()).Done().Ptr();
-                                } else {
-                                    programReplaces[oldArg.Raw()] = newArgs.back().Ptr();
-                                }
-                            }
-
-                            replaces[stage.Raw()] =
-                                Build<TDqStage>(ctx, stage.Pos())
-                                    .Inputs(ctx.ReplaceNode(stage.Inputs().Ptr(), input.Ref(), Build<TDqPhyPrecompute>(ctx, input.Pos()).Connection(conn).Done().Ptr()))
-                                    .Outputs(stage.Outputs())
-                                    .Settings(stage.Settings())
-                                    .Program()
-                                        .Args(newArgs)
-                                        .Body(TExprBase(ctx.ReplaceNodes(stage.Program().Body().Ptr(), programReplaces)))
-                                        .Build()
-                                .Done().Ptr();
-                        }
-                    }
-                }
-            }
-
-            if (!replaces.empty()) {
-                output = ctx.ReplaceNodes(query.Ptr(), replaces);
-                return TStatus(TStatus::Repeat, true);
-            }
         }
 
         for (auto& [_, stagePtr] : dependantStagesMap) {

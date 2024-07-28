@@ -20,6 +20,7 @@ import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/core/protos/index_builder.proto";
 import "ydb/core/tx/columnshard/engines/scheme/defaults/protos/data.proto";
 import "ydb/core/tx/columnshard/common/protos/snapshot.proto";
+import "ydb/core/formats/arrow/protos/accessor.proto";
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
@@ -426,6 +427,7 @@ message TOlapColumnDiff {
     optional TOlapColumn.TSerializer Serializer = 5;
     optional string StorageId = 6;
     optional string DefaultValue = 7;
+    optional NKikimrArrowAccessorProto.TRequestedConstructor DataAccessorConstructor = 8;
 }
 
 message TOlapColumnDescription {
@@ -445,6 +447,7 @@ message TOlapColumnDescription {
     optional TOlapColumn.TSerializer Serializer = 10;
     optional string StorageId = 11;
     optional NKikimrColumnShardColumnDefaults.TColumnDefault DefaultValue = 12;
+    optional NKikimrArrowAccessorProto.TConstructor DataAccessorConstructor = 13;
 }
 
 message TRequestedBloomFilter {

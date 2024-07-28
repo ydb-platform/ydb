@@ -16,6 +16,8 @@
 #include <util/generic/guid.h>
 #include <util/folder/iterator.h>
 #include <util/generic/vector.h>
+#include <util/folder/dirut.h>
+#include <util/system/user.h>
 
 namespace NYql::NDq {
 
@@ -225,8 +227,7 @@ public:
         Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(Root_, nodeId, guidString));
 
         Root_ /= (TStringBuilder() << "node_" << nodeId << "_" << guidString);
-        Cerr << "Root from config: " << Config_.Root << ", Root_: " << Root_ << "\n";
-
+        Cerr << "Root from config: " << Config_.Root << ", actual root: " << Root_ << "\n";
         LOG_I("Init DQ local file spilling service at " << Root_ << ", actor: " << SelfId());
 
         try {
@@ -740,27 +741,31 @@ private:
 
         LOG_I("[RemoveOldTmp] removing at root: " << root);
 
-        TDirIterator iter(root, TDirIterator::TOptions().SetMaxLevel(1));
-        
-        TVector<TString> oldTmps;
-        for (const auto &dirEntry : iter) {
-            if (dirEntry.fts_info == FTS_DP) {
-                // skip postorder visit
-                continue;
-            }
-            TString dirName = dirEntry.fts_name;
-            TVector<TString> parts;
-            StringSplitter(dirName).Split('_').Collect(&parts);
+        try {
+            TDirIterator iter(root, TDirIterator::TOptions().SetMaxLevel(1));
             
-            if (parts.size() == 3 && parts[0] == "node" && parts[1] == nodeIdString && parts[2] != guidString) {
-                LOG_D("[RemoveOldTmp] found old temporary at " << (root / dirName));
-                oldTmps.emplace_back(std::move(dirName));
+            TVector<TString> oldTmps;
+            for (const auto &dirEntry : iter) {
+                if (dirEntry.fts_info == FTS_DP) {
+                    // skip postorder visit
+                    continue;
+                }
+                TString dirName = dirEntry.fts_name;
+                TVector<TString> parts;
+                StringSplitter(dirName).Split('_').Collect(&parts);
+                
+                if (parts.size() == 3 && parts[0] == "node" && parts[1] == nodeIdString && parts[2] != guidString) {
+                    LOG_D("[RemoveOldTmp] found old temporary at " << (root / dirName));
+                    oldTmps.emplace_back(std::move(dirName));
+                }
             }
-        }
 
-        ForEach(oldTmps.begin(), oldTmps.end(), [&root](const auto& dirName) {
-            (root / dirName).ForceDelete();
-        });
+            ForEach(oldTmps.begin(), oldTmps.end(), [&root](const auto& dirName) {
+                (root / dirName).ForceDelete();
+            });
+        } catch (const yexception& e) {
+            LOG_E("[RemoveOldTmp] removing failed due to: " << e.what());
+        }
     }
 
 private:
@@ -1002,6 +1007,13 @@ private:
 };
 
 } // anonymous namespace
+
+TFsPath GetTmpSpillingRootForCurrentUser() {
+    auto root = TFsPath{GetSystemTempDir()};
+    root /= "spilling-tmp-" + GetUsername();
+    MakeDirIfNotExist(root);
+    return root;
+}
 
 IActor* CreateDqLocalFileSpillingActor(TTxId txId, const TString& details, const TActorId& client,
     bool removeBlobsAfterRead)

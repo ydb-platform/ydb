@@ -7,6 +7,7 @@
 
 #include <util/system/types.h>
 #include <util/generic/strbuf.h>
+#include <util/folder/path.h>
 
 namespace NYql::NDq {
 
@@ -25,6 +26,8 @@ inline NActors::TActorId MakeDqLocalFileSpillingServiceID(ui32 nodeId) {
     const char name[12] = "dq_lfspill";
     return NActors::TActorId(nodeId, TStringBuf(name, 12));
 }
+
+TFsPath GetTmpSpillingRootForCurrentUser();
 
 NActors::IActor* CreateDqLocalFileSpillingActor(TTxId txId, const TString& details, const NActors::TActorId& client, bool removeBlobsAfterRead);
 

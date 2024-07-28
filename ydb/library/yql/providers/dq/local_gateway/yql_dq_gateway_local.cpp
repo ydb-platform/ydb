@@ -80,10 +80,7 @@ public:
             TActorSetupCmd(resman, TMailboxType::Simple, 0));
 
         if (withSpilling) {
-            auto tempDir = TFsPath{GetSystemTempDir()};
-            tempDir /= "spilling-service-tmp";
-
-            MakeDirIfNotExist(tempDir);
+            auto tempDir = NDq::GetTmpSpillingRootForCurrentUser();
 
             auto spillingActor = NDq::CreateDqLocalFileSpillingService(NDq::TFileSpillingServiceConfig{.Root = tempDir, .CleanupOnShutdown = false}, MakeIntrusive<NDq::TSpillingCounters>(lwmGroup));
 

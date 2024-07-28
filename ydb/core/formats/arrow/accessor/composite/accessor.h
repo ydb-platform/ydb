@@ -12,7 +12,8 @@ private:
     std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> Chunks;
 
 protected:
-    virtual TLocalChunkedArrayAddress DoGetArray(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
+    virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(
+        const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
 
     virtual std::vector<NArrow::NAccessor::TChunkedArraySerialized> DoSplitBySizes(
         const TColumnSaver& /*saver*/, const TString& /*fullSerializedData*/, const std::vector<ui64>& /*splitSizes*/) override {
@@ -31,7 +32,7 @@ protected:
         AFL_VERIFY(false);
         return nullptr;
     }
-    virtual TLocalDataAddress DoGetChunk(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
+    virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
     virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray() const override;
 
     TCompositeChunkedArray(std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>&& chunks, const ui32 recordsCount,

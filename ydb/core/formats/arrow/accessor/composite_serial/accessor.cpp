@@ -32,13 +32,13 @@ public:
 };
 }   // namespace
 
-IChunkedArray::TLocalDataAddress TDeserializeChunkedArray::DoGetChunk(
+IChunkedArray::TLocalDataAddress TDeserializeChunkedArray::DoGetLocalData(
     const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
     AFL_VERIFY(false);
     return IChunkedArray::TLocalDataAddress(nullptr, 0, 0);
 }
 
-IChunkedArray::TLocalChunkedArrayAddress TDeserializeChunkedArray::DoGetArray(
+IChunkedArray::TLocalChunkedArrayAddress TDeserializeChunkedArray::DoGetLocalChunkedArray(
     const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
     TSerializedChunkAccessor accessor(Chunks, Loader, CurrentChunkCache.get());
     SelectChunk(chunkCurrent, position, accessor);

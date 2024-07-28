@@ -27,13 +27,13 @@ public:
 };
 }   // namespace
 
-NArrow::NAccessor::IChunkedArray::TLocalDataAddress TCompositeChunkedArray::DoGetChunk(
+IChunkedArray::TLocalDataAddress TCompositeChunkedArray::DoGetLocalData(
     const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
     AFL_VERIFY(false);
     return IChunkedArray::TLocalDataAddress(nullptr, 0, 0);
 }
 
-NArrow::NAccessor::IChunkedArray::TLocalChunkedArrayAddress TCompositeChunkedArray::DoGetArray(
+IChunkedArray::TLocalChunkedArrayAddress TCompositeChunkedArray::DoGetLocalChunkedArray(
     const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
     std::optional<IChunkedArray::TLocalChunkedArrayAddress> result;
     TCompositeChunkAccessor accessor(Chunks, result);

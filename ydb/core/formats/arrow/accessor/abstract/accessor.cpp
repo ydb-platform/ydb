@@ -97,7 +97,7 @@ IChunkedArray::TFullChunkedArrayAddress IChunkedArray::GetArray(
         currentPosition -= nextChunkedArray.GetAddress().GetStartPosition();
         ++idx;
     }
-//    AFL_VERIFY(!chunkCurrent || idx + 1 == chunkCurrent->GetSize())("idx", idx)("size", chunkCurrent->GetSize());
+    AFL_VERIFY(!chunkCurrent || chunkCurrent->GetSize() - idx <= 1)("idx", idx)("size", chunkCurrent->GetSize());
     return TFullChunkedArrayAddress(chainForTemporarySave.back(), std::move(addressChain));
 }
 

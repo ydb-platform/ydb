@@ -76,7 +76,8 @@ private:
     std::vector<TSparsedArrayChunk> Records;
 
 protected:
-    virtual TLocalChunkedArrayAddress DoGetArray(const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const override {
+    virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(
+        const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const override {
         AFL_VERIFY(false);
         return TLocalChunkedArrayAddress(nullptr, 0, 0);
     }
@@ -86,7 +87,8 @@ protected:
     virtual std::vector<TChunkedArraySerialized> DoSplitBySizes(
         const TColumnSaver& saver, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) override;
 
-    virtual TLocalDataAddress DoGetChunk(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override {
+    virtual TLocalDataAddress DoGetLocalData(
+        const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override {
         ui32 currentIdx = 0;
         for (ui32 i = 0; i < Records.size(); ++i) {
             if (currentIdx <= position && position < currentIdx + Records[i].GetRecordsCount()) {

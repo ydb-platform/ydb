@@ -12,7 +12,7 @@ private:
 protected:
     virtual std::optional<ui64> DoGetRawSize() const override;
 
-    virtual TLocalDataAddress DoGetChunk(const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 position) const override {
+    virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 position) const override {
         return TLocalDataAddress(Array, 0, 0);
     }
     virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray() const override {
@@ -25,7 +25,7 @@ protected:
     virtual std::vector<TChunkedArraySerialized> DoSplitBySizes(
         const TColumnSaver& saver, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) override;
 
-    virtual TLocalChunkedArrayAddress DoGetArray(
+    virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(
         const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const override {
         AFL_VERIFY(false);
         return TLocalChunkedArrayAddress(nullptr, TCommonChunkAddress(0, GetRecordsCount(), 0));
@@ -44,7 +44,7 @@ private:
     const std::shared_ptr<arrow::ChunkedArray> Array;
 
 protected:
-    virtual TLocalDataAddress DoGetChunk(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
+    virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
     virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray() const override {
         return Array;
     }
@@ -61,7 +61,7 @@ protected:
 
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override;
 
-    virtual TLocalChunkedArrayAddress DoGetArray(
+    virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(
         const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const override {
         AFL_VERIFY(false);
         return TLocalChunkedArrayAddress(nullptr, TCommonChunkAddress(0, 0, 0));

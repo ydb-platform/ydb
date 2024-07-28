@@ -53,7 +53,7 @@ public:
 
 }   // namespace
 
-IChunkedArray::TLocalDataAddress TTrivialChunkedArray::DoGetChunk(
+IChunkedArray::TLocalDataAddress TTrivialChunkedArray::DoGetLocalData(
     const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
     std::optional<IChunkedArray::TLocalDataAddress> result;
     TChunkAccessor accessor(Array, result);

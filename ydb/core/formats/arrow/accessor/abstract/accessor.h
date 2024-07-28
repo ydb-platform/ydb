@@ -222,11 +222,17 @@ private:
     virtual std::optional<ui64> DoGetRawSize() const = 0;
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const = 0;
 
+    virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const = 0;
+    virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const = 0;
+
 protected:
     virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray() const = 0;
-    virtual TLocalChunkedArrayAddress DoGetArray(
-        const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const = 0;
-    virtual TLocalDataAddress DoGetChunk(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const = 0;
+    TLocalChunkedArrayAddress GetLocalChunkedArray(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
+        return DoGetLocalChunkedArray(chunkCurrent, position);
+    }
+    TLocalDataAddress GetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
+        return DoGetLocalData(chunkCurrent, position);
+    }
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const = 0;
     virtual std::vector<TChunkedArraySerialized> DoSplitBySizes(
         const TColumnSaver& saver, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) = 0;

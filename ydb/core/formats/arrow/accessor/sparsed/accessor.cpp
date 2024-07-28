@@ -13,7 +13,7 @@ TSparsedArray::TSparsedArray(const IChunkedArray& defaultArray, const std::share
     if (DefaultValue) {
         AFL_VERIFY(DefaultValue->type->id() == defaultArray.GetDataType()->id());
     }
-    std::optional<TCurrentChunkAddress> current;
+    std::optional<TFullDataAddress> current;
     std::shared_ptr<arrow::RecordBatch> records;
     ui32 sparsedRecordsCount = 0;
     AFL_VERIFY(SwitchType(GetDataType()->id(), [&](const auto& type) {
@@ -56,7 +56,7 @@ TSparsedArray::TSparsedArray(const IChunkedArray& defaultArray, const std::share
                     }
                 }
             }
-            pos = current->GetFinishPosition();
+            pos = current->GetAddress().GetGlobalFinishPosition();
             AFL_VERIFY(pos <= GetRecordsCount());
         }
         std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>("index", arrow::uint32()),
@@ -136,16 +136,16 @@ ui32 TSparsedArray::GetLastIndex(const std::shared_ptr<arrow::RecordBatch>& batc
     return ui32Column->Value(ui32Column->length() - 1);
 }
 
-IChunkedArray::TCurrentChunkAddress TSparsedArrayChunk::GetChunk(
-    const std::optional<IChunkedArray::TCurrentChunkAddress>& /*chunkCurrent*/, const ui64 position, const ui32 chunkIdx) const {
+IChunkedArray::TLocalDataAddress TSparsedArrayChunk::GetChunk(
+    const std::optional<IChunkedArray::TCommonChunkAddress>& /*chunkCurrent*/, const ui64 position, const ui32 chunkIdx) const {
     auto it = RemapExternalToInternal.upper_bound(position);
     AFL_VERIFY(it != RemapExternalToInternal.begin());
     --it;
     if (it->second.GetIsDefault()) {
-        return IChunkedArray::TCurrentChunkAddress(
+        return IChunkedArray::TLocalDataAddress(
             NArrow::TThreadSimpleArraysCache::Get(ColValue->type(), DefaultValue, it->second.GetSize()), StartPosition + it->first, chunkIdx);
     } else {
-        return IChunkedArray::TCurrentChunkAddress(
+        return IChunkedArray::TLocalDataAddress(
             ColValue->Slice(it->second.GetStart(), it->second.GetSize()), StartPosition + it->first, chunkIdx);
     }
 }

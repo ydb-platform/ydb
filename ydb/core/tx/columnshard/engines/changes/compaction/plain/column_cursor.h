@@ -9,7 +9,7 @@ namespace NKikimr::NOlap::NCompaction {
 
 class TPortionColumnCursor {
 private:
-    std::optional<NArrow::NAccessor::IChunkedArray::TCurrentChunkAddress> CurrentChunk;
+    std::optional<NArrow::NAccessor::IChunkedArray::TFullDataAddress> CurrentChunk;
     std::shared_ptr<NArrow::NAccessor::IChunkedArray> BlobChunks;
     std::optional<ui32> RecordIndexStart;
     YDB_READONLY(ui32, RecordIndexFinish, 0);

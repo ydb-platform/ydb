@@ -44,7 +44,7 @@ private:
     class TCursor {
     private:
         std::shared_ptr<NArrow::NAccessor::IChunkedArray> Array;
-        std::optional<NArrow::NAccessor::IChunkedArray::TCurrentArrayAddress> CurrentOwnedArray;
+        std::optional<NArrow::NAccessor::IChunkedArray::TFullChunkedArrayAddress> CurrentOwnedArray;
         std::shared_ptr<NArrow::NAccessor::TSparsedArray> CurrentSparsedArray;
         ui32 NextGlobalPosition = 0;
         ui32 NextLocalPosition = 0;

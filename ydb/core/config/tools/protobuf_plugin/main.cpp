@@ -22,6 +22,7 @@
 #include <google/protobuf/io/zero_copy_stream.h>
 
 #include <ydb/core/config/protos/marker.pb.h>
+#include <ydb/core/config/utils/config_traverse.h>
 
 #include <ydb/public/lib/protobuf/base_message_generator.h>
 #include <ydb/public/lib/protobuf/helpers.h>
@@ -37,50 +38,6 @@ class TMessageGenerator
     : public TBaseMessageGenerator
 {
 private:
-    using TOnEntryFn = std::function<void(const Descriptor*, const TDeque<const Descriptor*>&, const TDeque<const FieldDescriptor*>&, const FieldDescriptor*, ssize_t)>;
-
-    ssize_t FindLoop(TDeque<const Descriptor*>& typePath, const Descriptor* child) {
-        for (ssize_t i = 0; i < (ssize_t)typePath.size(); ++i) {
-            if (typePath[i] == child) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    void Traverse(const Descriptor* d, TDeque<const Descriptor*>& typePath, TDeque<const FieldDescriptor*>& fieldPath, const FieldDescriptor* field, TOnEntryFn onEntry) {
-        ssize_t loop = FindLoop(typePath, d);
-
-        Y_ABORT_IF(!d && !field, "Either field or descriptor must be defined");
-
-        onEntry(d, typePath, fieldPath, field, loop);
-
-        if (!d || loop != -1) {
-            return;
-        }
-
-        typePath.push_back(d);
-
-        for (int i = 0; i < d->field_count(); ++i) {
-            const FieldDescriptor* fieldDescriptor = d->field(i);
-            fieldPath.push_back(fieldDescriptor);
-            Traverse(fieldDescriptor->message_type(), typePath, fieldPath, fieldDescriptor, onEntry);
-            fieldPath.pop_back();
-        }
-
-        typePath.pop_back();
-    }
-
-    void Traverse(TOnEntryFn onEntry) {
-        const Descriptor* descriptor = Message;
-
-        TDeque<const Descriptor*> typePath;
-        TDeque<const FieldDescriptor*> fieldPath;
-        fieldPath.push_back(nullptr);
-        Traverse(descriptor, typePath, fieldPath, nullptr, onEntry);
-        fieldPath.pop_back();
-    }
-
     TString FieldName(const FieldDescriptor* field) const {
         TString name = field->name();
         NProtobufJson::ToSnakeCaseDense(&name);
@@ -101,7 +58,7 @@ private:
 
     void GenerateConfigRoot(TVars vars) {
         std::unordered_set<TString> reservedPaths;
-        Traverse([&](const Descriptor* d, const TDeque<const Descriptor*>& typePath, const TDeque<const FieldDescriptor*>& fieldPath, const FieldDescriptor* field, ssize_t loop) {
+        NKikimr::NConfig::Traverse([&](const Descriptor* d, const TDeque<const Descriptor*>& typePath, const TDeque<const FieldDescriptor*>& fieldPath, const FieldDescriptor* field, ssize_t loop) {
             Y_UNUSED(fieldPath, typePath, fieldPath, field, loop);
             if (field && d) {
                 for (int i = 0; i < d->reserved_name_count(); ++i) {
@@ -110,7 +67,7 @@ private:
                     reservedPaths.insert(ConstructFullFieldPath(fieldPath, field) + "/" + name);
                 }
             }
-        });
+        }, Message);
 
         for (int i = 0; i < Message->reserved_name_count(); ++i) {
             TString name = Message->reserved_name(i);

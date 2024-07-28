@@ -1,4 +1,5 @@
 #include <ydb/core/config/utils/config_traverse.h>
+#include <ydb/core/protos/config.pb.h>
 
 #include <library/cpp/colorizer/colors.h>
 #include <library/cpp/protobuf/json/util.h>
@@ -115,7 +116,8 @@ public:
                     << " " << (field ? FieldName(field) : RootName())
                     << " = " << (field ? field->number() : 0) << ";"
                     << (loop != -1 ? Loop() : "")  << std::endl;
-        });
+        },
+        NKikimrConfig::TAppConfig::default_instance().GetDescriptor());
     }
 
     void PrintLoops() const {
@@ -130,7 +132,8 @@ public:
                 path.push_back(DescriptorName(d));
                 std::cout << JoinSeq(" -> ", path) << std::endl;
             }
-        });
+        },
+        NKikimrConfig::TAppConfig::default_instance().GetDescriptor());
 
     }
 
@@ -141,7 +144,8 @@ public:
             if (field && field->is_required()) {
                 fields[typePath.back()->file()][typePath.back()][field].insert(ConstructFullFieldPath(fieldPath, field));
             }
-        });
+        },
+        NKikimrConfig::TAppConfig::default_instance().GetDescriptor());
         return fields;
     }
 

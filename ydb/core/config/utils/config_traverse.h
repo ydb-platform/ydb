@@ -15,6 +15,6 @@ using namespace google::protobuf;
 
 using TOnEntryFn = std::function<void(const Descriptor*, const TDeque<const Descriptor*>&, const TDeque<const FieldDescriptor*>&, const FieldDescriptor*, ssize_t)>;
 
-void Traverse(TOnEntryFn onEntry);
+void Traverse(TOnEntryFn onEntry, const Descriptor* descriptor);
 
 } // namespace NKikimr::NConfig

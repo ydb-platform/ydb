@@ -78,7 +78,7 @@ public:
 
     const std::shared_ptr<arrow::Array>& GetCurrentChunk() {
         if (!CurrentChunkArray || !CurrentChunkArray->GetAddress().Contains(CurrentRecordIndex)) {
-            CurrentChunkArray = CurrentChunk->GetChunk(CurrentChunkArray->GetAddress(), CurrentRecordIndex);
+            CurrentChunkArray = CurrentChunk->GetChunk(CurrentChunkArray, CurrentRecordIndex);
         }
         AFL_VERIFY(CurrentChunkArray);
         return CurrentChunkArray->GetArray();

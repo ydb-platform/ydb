@@ -56,23 +56,21 @@ namespace {
         Tests::TServer::TPtr server,
         ui64 tabletId,
         const TTableId& tableId,
-        const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
+        const NKikimrSchemeOp::TTableDescription& description,
         ui64 readId,
         NKikimrDataEvents::EDataFormat format)
     {
         auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
-        auto request = GetBaseReadRequest(tableId, userTable, readId, format);
+        auto request = GetBaseReadRequest(tableId, description, readId, format);
 
         AddFullRangeQuery(*request);
 
         SendReadAsync(server, tabletId, request.release(), sender);
     }
 
-    void PrintTableFromResult(TStringBuilder& out, const TEvDataShard::TEvReadResult& event, const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable) {
-        const auto& description = userTable.GetDescription();
-
+    void PrintTableFromResult(TStringBuilder& out, const TEvDataShard::TEvReadResult& event, const NKikimrSchemeOp::TTableDescription& description) {
         auto nrows = event.GetRowsCount();
         for (size_t i = 0; i < nrows; ++i) {
             const auto& cellArray = event.GetCells(i);
@@ -2604,7 +2602,7 @@ void AddFullRangeQuery(TEvDataShard::TEvRead& request) {
 
 std::unique_ptr<TEvDataShard::TEvRead> GetBaseReadRequest(
     const TTableId& tableId,
-    const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
+    const NKikimrSchemeOp::TTableDescription& description,
     ui64 readId,
     NKikimrDataEvents::EDataFormat format,
     const TRowVersion& readVersion)
@@ -2614,9 +2612,8 @@ std::unique_ptr<TEvDataShard::TEvRead> GetBaseReadRequest(
 
     record.SetReadId(readId);
     record.MutableTableId()->SetOwnerId(tableId.PathId.OwnerId);
-    record.MutableTableId()->SetTableId(userTable.GetPathId());
+    record.MutableTableId()->SetTableId(tableId.PathId.LocalPathId);
 
-    const auto& description = userTable.GetDescription();
     for (const auto& column: description.GetColumns()) {
         record.AddColumns(column.GetId());
     }
@@ -2690,15 +2687,16 @@ TString ReadTable(
     for (const auto& tabletId : tabletIds) {
         auto [tablesMap, ownerId] = GetTablesByPathId(server, tabletId);
         const auto& userTable = tablesMap.at(tableId.PathId);
+        const auto& description = userTable.GetDescription();
 
-        SendReadTablePart(server, tabletId, tableId, userTable, readId++, NKikimrDataEvents::FORMAT_CELLVEC);
+        SendReadTablePart(server, tabletId, tableId, description, readId++, NKikimrDataEvents::FORMAT_CELLVEC);
 
         std::unique_ptr<TEvDataShard::TEvReadResult> readResult;
         do {
             readResult = WaitReadResult(server);
             UNIT_ASSERT(readResult);
             UNIT_ASSERT_VALUES_EQUAL(readResult->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
-            PrintTableFromResult(result, *readResult, userTable);
+            PrintTableFromResult(result, *readResult, description);
         } while (!readResult->Record.GetFinished());
     }
 

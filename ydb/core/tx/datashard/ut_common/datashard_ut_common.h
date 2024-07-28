@@ -909,7 +909,7 @@ void AddFullRangeQuery(TEvDataShard::TEvRead& request);
 
 std::unique_ptr<TEvDataShard::TEvRead> GetBaseReadRequest(
     const TTableId& tableId,
-    const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
+    const NKikimrSchemeOp::TTableDescription& description,
     ui64 readId,
     NKikimrDataEvents::EDataFormat format = NKikimrDataEvents::FORMAT_ARROW,
     const TRowVersion& readVersion = {});

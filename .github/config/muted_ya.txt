@@ -51,8 +51,6 @@ ydb/core/viewer/ut Viewer.TabletMergingPacked
 ydb/library/actors/http/ut HttpProxy.TooLongHeader
 ydb/library/actors/http/ut sole*
 ydb/library/yql/providers/generic/connector/tests/datasource/ydb* *
-ydb/library/yql/tests/sql/yt_native_file/part12/test.py test[pg_catalog-pg_description_pg_syntax-default.txt-Results]
-ydb/library/yql/tests/sql/yt_native_file/part7/test.py test[pg_catalog-pg_proc-default.txt-Results]
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut RetryPolicy.TWriteSession_TestBrokenPolicy
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut [*/*]
 ydb/public/sdk/cpp/client/ydb_persqueue_public/ut RetryPolicy.TWriteSession_TestBrokenPolicy

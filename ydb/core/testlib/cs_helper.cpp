@@ -183,7 +183,7 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
 TString THelper::GetTestTableSchema() const {
     TStringBuilder sb;
     sb << R"(Columns{ Name: "timestamp" Type : "Timestamp" NotNull : true })";
-    sb << R"(Columns{ Name: "resource_id" Type : "Utf8" })";
+    sb << R"(Columns{ Name: "resource_id" Type : "Utf8" DataAccessorConstructor{ ClassName: "SPARSED" } })";
     sb << "Columns{ Name: \"uid\" Type : \"Utf8\" NotNull : true StorageId : \"" + OptionalStorageId + "\" }";
     sb << R"(Columns{ Name: "level" Type : "Int32" })";
     sb << "Columns{ Name: \"message\" Type : \"Utf8\" StorageId : \"" + OptionalStorageId + "\" }";

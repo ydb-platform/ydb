@@ -43,9 +43,9 @@ public:
 
     static constexpr const char * PROTO_SCHEMA = R"(
         Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
-        Columns { Name: "resource_id" Type: "Utf8" }
+        Columns { Name: "resource_id" Type: "Utf8" DataAccessorConstructor{ ClassName: "SPARSED" }}
         Columns { Name: "uid" Type: "Utf8" }
-        Columns { Name: "level" Type: "Int32" }
+        Columns { Name: "level" Type: "Int32" DataAccessorConstructor{ ClassName: "SPARSED" }}
         Columns { Name: "message" Type: "Utf8" }
         KeyColumnNames: "timestamp"
         Engine: COLUMN_ENGINE_REPLACING_TIMESERIES

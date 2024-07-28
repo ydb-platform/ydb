@@ -3,7 +3,7 @@
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
-#include <ydb/core/formats/arrow/common/accessor.h>
+#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 
 #include <ydb/library/yql/minikql/mkql_string_util.h>

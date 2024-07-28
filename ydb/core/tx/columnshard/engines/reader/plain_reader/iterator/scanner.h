@@ -2,6 +2,7 @@
 #include "source.h"
 #include "interval.h"
 #include <ydb/core/formats/arrow/reader/position.h>
+#include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
@@ -79,6 +80,7 @@ private:
     std::vector<TIntervalStat> IntervalStats;
     ui64 InFlightLimit = 1;
     ui64 MaxInFlight = 256;
+    ui64 MaxInFlightMemory = TGlobalLimits::ScanMemoryLimit;
     ui64 ZeroCount = 0;
     bool AbortFlag = false;
     void DrainSources();

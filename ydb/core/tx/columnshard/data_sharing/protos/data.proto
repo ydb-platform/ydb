@@ -14,7 +14,10 @@ message TColumnRecord {
 message TIndexChunk {
     optional uint32 IndexId = 1;
     optional uint32 ChunkIdx = 2;
-    optional NKikimrColumnShardProto.TBlobRangeLink16 BlobRange = 3;
+    oneof DataImplementation {
+        NKikimrColumnShardProto.TBlobRangeLink16 BlobRange = 3;
+        string BlobData = 5;
+    }
 
     message TMeta {
         optional uint32 RecordsCount = 1;

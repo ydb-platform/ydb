@@ -156,6 +156,8 @@ protected:
     virtual const TString& DoGetData() const override {
         return Data.GetSerializedChunk();
     }
+    virtual ui64 DoGetRawBytesImpl() const override;
+
     virtual ui32 DoGetRecordsCountImpl() const override {
         return Data.GetRecordsCount();
     }

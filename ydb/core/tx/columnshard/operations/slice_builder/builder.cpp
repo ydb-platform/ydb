@@ -29,25 +29,25 @@ std::optional<std::vector<NKikimr::NArrow::TSerializedBatch>> TBuildSlicesTask::
 
 void TBuildSlicesTask::ReplyError(const TString& message) {
     auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
-    TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(writeDataPtr) });
+    TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(*writeDataPtr) });
     auto result = NColumnShard::TEvPrivate::TEvWriteBlobsResult::Error(
         NKikimrProto::EReplyStatus::CORRUPTED, std::move(buffer), message);
     TActorContext::AsActorContext().Send(ParentActorId, result.release());
 }
 
-bool TBuildSlicesTask::DoExecute() {
+TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
     NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent_id", ParentActorId));
     if (!OriginalBatch) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "ev_write_bad_data")("write_id", WriteData.GetWriteMeta().GetWriteId())("table_id", WriteData.GetWriteMeta().GetTableId());
         ReplyError("no data in batch");
-        return true;
+        return TConclusionStatus::Fail("no data in batch");
     }
     const auto& indexSchema = ActualSchema->GetIndexInfo().ArrowSchema();
     auto reorderConclusion = NArrow::TColumnOperator().Reorder(OriginalBatch, indexSchema->field_names());
     if (reorderConclusion.IsFail()) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unadaptable schemas")("index", indexSchema->ToString())("problem", reorderConclusion.GetErrorMessage());
         ReplyError("cannot reorder schema: " + reorderConclusion.GetErrorMessage());
-        return true;
+        return TConclusionStatus::Fail("cannot reorder schema: " + reorderConclusion.GetErrorMessage());
     } else {
         OriginalBatch = reorderConclusion.DetachResult();
     }
@@ -55,7 +55,7 @@ bool TBuildSlicesTask::DoExecute() {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unequal schemas")("batch", OriginalBatch->schema()->ToString())
             ("index", indexSchema->ToString());
         ReplyError("unequal schemas");
-        return true;
+        return TConclusionStatus::Fail("unequal schemas");
     }
 
     WriteData.MutableWriteMeta().SetWriteMiddle2StartInstant(TMonotonic::Now());
@@ -67,9 +67,10 @@ bool TBuildSlicesTask::DoExecute() {
         TActorContext::AsActorContext().Send(BufferActorId, result.release());
     } else {
         ReplyError("Cannot slice input to batches");
+        return TConclusionStatus::Fail("Cannot slice input to batches");
     }
 
-    return true;
+    return TConclusionStatus::Success();
 }
 
 }

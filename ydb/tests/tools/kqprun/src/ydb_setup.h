@@ -3,7 +3,6 @@
 #include "common.h"
 #include "actors.h"
 
-#include <ydb/core/protos/kqp.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_query/query.h>
 
 
@@ -14,20 +13,18 @@ struct TSchemeMeta {
 };
 
 
-struct TExecutionMeta {
+struct TQueryMeta {
+    TString Ast;
+    TString Plan;
+    TDuration TotalDuration;
+};
+
+
+struct TExecutionMeta : public TQueryMeta {
     bool Ready = false;
     NYdb::NQuery::EExecStatus ExecutionStatus = NYdb::NQuery::EExecStatus::Unspecified;
 
     i32 ResultSetsCount = 0;
-
-    TString Ast;
-    TString Plan;
-};
-
-
-struct TQueryMeta {
-    TString Ast;
-    TString Plan;
 };
 
 
@@ -51,13 +48,13 @@ class TYdbSetup {
 public:
     explicit TYdbSetup(const TYdbSetupSettings& settings);
 
-    TRequestResult SchemeQueryRequest(const TString& query, const TString& traceId, TSchemeMeta& meta) const;
+    TRequestResult SchemeQueryRequest(const TRequestOptions& query, TSchemeMeta& meta) const;
 
-    TRequestResult ScriptRequest(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId, TString& operation) const;
+    TRequestResult ScriptRequest(const TRequestOptions& script, TString& operation) const;
 
-    TRequestResult QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets, TProgressCallback progressCallback) const;
+    TRequestResult QueryRequest(const TRequestOptions& query, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets, TProgressCallback progressCallback) const;
 
-    TRequestResult YqlScriptRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const;
+    TRequestResult YqlScriptRequest(const TRequestOptions& query, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const;
 
     TRequestResult GetScriptExecutionOperationRequest(const TString& operation, TExecutionMeta& meta) const;
 
@@ -65,7 +62,7 @@ public:
 
     TRequestResult ForgetScriptExecutionOperationRequest(const TString& operation) const;
 
-    void QueryRequestAsync(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const;
+    void QueryRequestAsync(const TRequestOptions& query) const;
 
     void WaitAsyncQueries() const;
 

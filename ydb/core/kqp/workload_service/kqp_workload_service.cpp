@@ -58,6 +58,7 @@ public:
         CpuQuotaManager = std::make_unique<TCpuQuotaManagerState>(ActorContext(), Counters->GetSubgroup("subcomponent", "CpuQuotaManager"));
 
         EnabledResourcePools = AppData()->FeatureFlags.GetEnableResourcePools();
+        EnabledResourcePoolsOnServerless = AppData()->FeatureFlags.GetEnableResourcePoolsOnServerless();
         if (EnabledResourcePools) {
             InitializeWorkloadService();
         }
@@ -84,6 +85,7 @@ public:
         const auto& event = ev->Get()->Record;
 
         EnabledResourcePools = event.GetConfig().GetFeatureFlags().GetEnableResourcePools();
+        EnabledResourcePoolsOnServerless = event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsOnServerless();
         if (EnabledResourcePools) {
             LOG_I("Resource pools was enanbled");
             InitializeWorkloadService();
@@ -130,12 +132,9 @@ public:
             return;
         }
 
-        // Add AllAuthenticatedUsers group SID into user token
-        ev->Get()->UserToken = GetUserToken(ev->Get()->UserToken);
-
         LOG_D("Recieved new request from " << workerActorId << ", Database: " << ev->Get()->Database << ", PoolId: " << ev->Get()->PoolId << ", SessionId: " << ev->Get()->SessionId);
         bool hasDefaultPool = DatabasesWithDefaultPool.contains(CanonizePath(ev->Get()->Database));
-        Register(CreatePoolResolverActor(std::move(ev), hasDefaultPool));
+        Register(CreatePoolResolverActor(std::move(ev), hasDefaultPool, EnabledResourcePoolsOnServerless));
     }
 
     void Handle(TEvCleanupRequest::TPtr& ev) {
@@ -473,25 +472,6 @@ private:
         Send(replyActorId, new TEvCleanupResponse(status, {NYql::TIssue(message)}));
     }
 
-    static TIntrusivePtr<NACLib::TUserToken> GetUserToken(TIntrusiveConstPtr<NACLib::TUserToken> userToken) {
-        auto token = MakeIntrusive<NACLib::TUserToken>(userToken ? userToken->GetUserSID() : NACLib::TSID(), TVector<NACLib::TSID>{});
-
-        bool hasAllAuthenticatedUsersSID = false;
-        const auto& allAuthenticatedUsersSID = AppData()->AllAuthenticatedUsers;
-        if (userToken) {
-            for (const auto& groupSID : userToken->GetGroupSIDs()) {
-                token->AddGroupSID(groupSID);
-                hasAllAuthenticatedUsersSID = hasAllAuthenticatedUsersSID || groupSID == allAuthenticatedUsersSID;
-            }
-        }
-
-        if (!hasAllAuthenticatedUsersSID) {
-            token->AddGroupSID(allAuthenticatedUsersSID);
-        }
-
-        return token;
-    }
-
     TPoolState* GetPoolState(const TString& database, const TString& poolId) {
         return GetPoolState(GetPoolKey(database, poolId));
     }
@@ -520,6 +500,7 @@ private:
     NMonitoring::TDynamicCounterPtr Counters;
 
     bool EnabledResourcePools = false;
+    bool EnabledResourcePoolsOnServerless = false;
     bool ServiceInitialized = false;
     bool IdleChecksStarted = false;
     ETablesCreationStatus TablesCreationStatus = ETablesCreationStatus::Cleanup;

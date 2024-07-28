@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	--!syntax_pg
+	^
+        <tmp_path>/program.sql:<main>:7:10: Error: Column reference is ambiguous: x
+        	order by x+1
+	         ^

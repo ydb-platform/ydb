@@ -316,6 +316,10 @@ void InferStatisticsForDqSourceWrap(const TExprNode::TPtr& input, TTypeAnnotatio
                         }
                     }
                     if (stats->ByteSize != 0.0) {
+                        if (stats->Ncols) {
+                            auto n = wrapBase.Cast().RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>()->GetSize();
+                            stats->ByteSize = stats->ByteSize * n / stats->Ncols;
+                        }
                         YQL_CLOG(TRACE, CoreDq) << "Infer statistics for s3 data source " << path;
                         typeCtx->SetStats(input.Get(), stats);
                         typeCtx->SetStats(s3DataSource.Raw(), stats);

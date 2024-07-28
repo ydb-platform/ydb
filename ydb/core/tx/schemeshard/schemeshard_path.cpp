@@ -391,6 +391,11 @@ const TPath::TChecker& TPath::TChecker::NotAsyncReplicaTable(EStatus status) con
         return *this;
     }
 
+    // do not treat incr backup tables as async replica
+    if (Path->IsIncrementalBackupTable()) {
+        return *this;
+    }
+
     return Fail(status, TStringBuilder() << "path is an async replica table"
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
@@ -1596,20 +1601,22 @@ bool TPath::IsInsideCdcStreamPath() const {
         return false;
     }
 
-    ++item;
-    for (; item != Elements.rend(); ++item) {
-        if (!(*item)->IsDirectory() && !(*item)->IsSubDomainRoot()) {
-            return false;
-        }
-    }
-
     return true;
 }
 
-bool TPath::IsTableIndex() const {
+bool TPath::IsTableIndex(const TMaybe<NKikimrSchemeOp::EIndexType>& type) const {
     Y_ABORT_UNLESS(IsResolved());
 
-    return Base()->IsTableIndex();
+    if (!Base()->IsTableIndex()) {
+        return false;
+    }
+
+    if (!type.Defined()) {
+        return true;
+    }
+
+    Y_ABORT_UNLESS(SS->Indexes.contains(Base()->PathId));
+    return SS->Indexes.at(Base()->PathId)->Type == *type;
 }
 
 bool TPath::IsBackupTable() const {

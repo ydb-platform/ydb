@@ -46,6 +46,8 @@ void Serialize(
             .OptionalItem("suspended", operation.Suspended)
             .OptionalItem("result", operation.Result)
             .OptionalItem("events", operation.Events)
+            .OptionalItem("scheduling_attributes_per_pool_tree", operation.SchedulingAttributesPerPoolTree)
+            // COMPAT(omgronny)
             .OptionalItem("slot_index_per_pool_tree", operation.SlotIndexPerPoolTree)
             .OptionalItem("alerts", operation.Alerts)
             .OptionalItem("alert_events", operation.AlertEvents)
@@ -121,6 +123,7 @@ void Deserialize(TOperation& operation, NYTree::IAttributeDictionaryPtr attribut
     setField(operation.Suspended, "suspended");
     setField(operation.Events, "events");
     setField(operation.Result, "result");
+    setField(operation.SchedulingAttributesPerPoolTree, "scheduling_attributes_per_pool_tree");
     setField(operation.SlotIndexPerPoolTree, "slot_index_per_pool_tree");
     setField(operation.Alerts, "alerts");
     setField(operation.AlertEvents, "alert_events");

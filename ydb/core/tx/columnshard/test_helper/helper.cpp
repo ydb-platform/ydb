@@ -1,6 +1,7 @@
 #include "helper.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/protos/accessor.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>
@@ -25,6 +26,9 @@ NKikimrSchemeOp::TOlapColumnDescription TTestColumn::CreateColumn(const ui32 id)
         col.SetStorageId(StorageId);
     }
     auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(Type, "");
+    if (AccessorClassName) {
+        col.MutableDataAccessorConstructor()->SetClassName(AccessorClassName);
+    }
     col.SetTypeId(columnType.TypeId);
     if (columnType.TypeInfo) {
         *col.MutableTypeInfo() = *columnType.TypeInfo;

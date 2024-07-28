@@ -24,8 +24,9 @@ namespace NViewer {
 
 using namespace NActors;
 
-class TJsonTenantInfo : public TViewerPipeClient<TJsonTenantInfo> {
-    using TBase = TViewerPipeClient<TJsonTenantInfo>;
+class TJsonTenantInfo : public TViewerPipeClient {
+    using TThis = TJsonTenantInfo;
+    using TBase = TViewerPipeClient;
     IViewer* Viewer;
     THashMap<TString, NKikimrViewer::TTenant> TenantByPath;
     THashMap<TPathId, NKikimrViewer::TTenant> TenantBySubDomainKey;
@@ -65,10 +66,6 @@ class TJsonTenantInfo : public TViewerPipeClient<TJsonTenantInfo> {
     };
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TJsonTenantInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : Viewer(viewer)
         , Event(ev)
@@ -99,7 +96,7 @@ public:
         return !IsFilterByOwner() || users.count(User) != 0;
     }
 
-    void Bootstrap() {
+    void Bootstrap() override {
         BLOG_TRACE("Bootstrap()");
         const auto& params(Event->Get()->Request.GetParams());
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
@@ -538,7 +535,19 @@ public:
         return NKikimrViewer::TStorageUsage::None;
     }
 
-    void ReplyAndPassAway() {
+    NKikimrViewer::TStorageUsage::EType GuessStorageType(const NKikimrSubDomains::TDomainDescription& domainDescription) {
+        NKikimrViewer::TStorageUsage::EType type = NKikimrViewer::TStorageUsage::SSD;
+        for (const auto& pool : domainDescription.GetStoragePools()) {
+            auto poolType = GetStorageType(pool.GetKind());
+            if (poolType != NKikimrViewer::TStorageUsage::None) {
+                type = poolType;
+                break;
+            }
+        }
+        return type;
+    }
+
+    void ReplyAndPassAway() override {
         BLOG_TRACE("ReplyAndPassAway() started");
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         auto *domain = domains->GetDomain();
@@ -696,18 +705,30 @@ public:
 
                     THashMap<NKikimrViewer::TStorageUsage::EType, ui64> storageUsageByType;
                     THashMap<NKikimrViewer::TStorageUsage::EType, TStorageQuota> storageQuotasByType;
-                    if (entry.DomainDescription) {
-                        for (const auto& poolUsage : entry.DomainDescription->Description.GetDiskSpaceUsage().GetStoragePoolsUsage()) {
-                            auto type = GetStorageType(poolUsage.GetPoolKind());
-                            storageUsageByType[type] += poolUsage.GetTotalSize();
-                        }
-                    }
 
                     for (const auto& quota : tenant.GetDatabaseQuotas().storage_quotas()) {
                         auto type = GetStorageType(quota.unit_kind());
                         auto& usage = storageQuotasByType[type];
                         usage.SoftQuota += quota.data_size_soft_quota();
                         usage.HardQuota += quota.data_size_hard_quota();
+                    }
+
+                    if (entry.DomainDescription) {
+                        for (const auto& poolUsage : entry.DomainDescription->Description.GetDiskSpaceUsage().GetStoragePoolsUsage()) {
+                            auto type = GetStorageType(poolUsage.GetPoolKind());
+                            storageUsageByType[type] += poolUsage.GetTotalSize();
+                        }
+
+                        if (storageUsageByType.empty() && entry.DomainDescription->Description.HasDiskSpaceUsage()) {
+                            storageUsageByType[GuessStorageType(entry.DomainDescription->Description)] =
+                                entry.DomainDescription->Description.GetDiskSpaceUsage().GetTables().GetTotalSize();
+                        }
+
+                        if (storageQuotasByType.empty()) {
+                            auto& quotas = storageQuotasByType[GuessStorageType(entry.DomainDescription->Description)];
+                            quotas.HardQuota = entry.DomainDescription->Description.GetDatabaseQuotas().data_size_hard_quota();
+                            quotas.SoftQuota = entry.DomainDescription->Description.GetDatabaseQuotas().data_size_soft_quota();
+                        }
                     }
 
                     for (const auto& [type, size] : storageUsageByType) {

@@ -16,8 +16,8 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
     {
         TChunkedColumnReader cReader = *reader.begin();
         for (reader.Start(); cReader.IsCorrect(); cReader.ReadNextChunk()) {
-            auto minMax = NArrow::FindMinMaxPosition(cReader.GetCurrentChunk());
-            auto currentScalar = NArrow::GetScalar(cReader.GetCurrentChunk(), minMax.second);
+            auto currentScalar = cReader.GetCurrentAccessor()->GetMaxScalar();
+            AFL_VERIFY(currentScalar);
             if (!result || NArrow::ScalarCompare(*result, *currentScalar) == -1) {
                 result = currentScalar;
             }

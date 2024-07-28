@@ -289,6 +289,8 @@ enum AutoPartitioningStrategy {
     AUTO_PARTITIONING_STRATEGY_SCALE_UP = 2;
     // The auto partitioning algorithm will both increase and decrease partitions count depending on the load characteristics.
     AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN = 3;
+    // The auto partitioning is paused.
+    AUTO_PARTITIONING_STRATEGY_PAUSED = 4;
 }
 
 // Partitioning settings for stream.

@@ -44,12 +44,15 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
                 scanTable.PathId = pathId;
                 scanTable.SchemeShardId = schemeShardId;
                 scanTable.LastUpdateTime = TInstant::MicroSeconds(0);
+                scanTable.IsColumnTable = entry.GetIsColumnTable();
                 auto [it, _] = Self->ScanTables.emplace(pathId, scanTable);
-                Self->ScanTablesByTime.Add(&it->second);
-
+                if (!Self->ScanTablesByTime.Has(&it->second)) {
+                    Self->ScanTablesByTime.Add(&it->second);
+                }
                 db.Table<Schema::ScanTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
                     NIceDb::TUpdate<Schema::ScanTables::SchemeShardId>(schemeShardId),
-                    NIceDb::TUpdate<Schema::ScanTables::LastUpdateTime>(0));
+                    NIceDb::TUpdate<Schema::ScanTables::LastUpdateTime>(0),
+                    NIceDb::TUpdate<Schema::ScanTables::IsColumnTable>(entry.GetIsColumnTable()));
             }
         }
 

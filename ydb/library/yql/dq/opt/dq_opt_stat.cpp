@@ -133,6 +133,37 @@ bool IsConstantExpr(const TExprNode::TPtr& input) {
     return false;
 }
 
+bool IsConstantExprWithParams(const TExprNode::TPtr& input) {
+    if (input->IsCallable("Parameter")) {
+        return true;
+    }
+
+    if (input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
+        return IsConstantExprPg(input);
+    }
+
+    if (!IsDataOrOptionalOfData(input->GetTypeAnn())) {
+        return false;
+    }
+
+    if (!NeedCalc(TExprBase(input))) {
+        return true;
+    }
+
+    else if (input->IsCallable(constantFoldingWhiteList)) {
+        for (size_t i = 0; i < input->ChildrenSize(); i++) {
+            auto callableInput = input->Child(i);
+            if (callableInput->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Type && !IsConstantExprWithParams(callableInput)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    return false;
+}
+
+
 /**
  * Compute statistics for map join
  * FIX: Currently we treat all join the same from the cost perspective, need to refine cost function

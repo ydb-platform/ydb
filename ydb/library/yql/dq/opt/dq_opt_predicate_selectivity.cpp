@@ -126,7 +126,7 @@ namespace {
 
         TString attributeName;
 
-        if (IsAttribute(right, attributeName) && IsConstantExpr(left.Ptr())) {
+        if (IsAttribute(right, attributeName) && IsConstantExprWithParams(left.Ptr())) {
             std::swap(left, right);
         }
 
@@ -139,8 +139,8 @@ namespace {
             // In case the right side is a constant that can be extracted, compute the selectivity using statistics
             // Currently, with the basic statistics we just return 1/nRows
 
-            else if (IsConstantExpr(right.Ptr())) {
-                if (stats->ColumnStatistics == nullptr) {
+            else if (IsConstantExprWithParams(right.Ptr())) {
+                if (!IsConstantExpr(right.Ptr()) || stats->ColumnStatistics == nullptr) {
                     return DefaultSelectivity(stats, attributeName);
                 }
                 
@@ -165,7 +165,7 @@ namespace {
         Y_UNUSED(stats);
 
         TString attributeName;
-        if (IsAttribute(right, attributeName) && IsConstantExpr(left.Ptr())) {
+        if (IsAttribute(right, attributeName) && IsConstantExprWithParams(left.Ptr())) {
             std::swap(left, right);
         }
 
@@ -176,7 +176,7 @@ namespace {
             }
             // In case the right side is a constant that can be extracted, compute the selectivity using statistics
             // Currently, with the basic statistics we just return 0.5
-            else if (IsConstantExpr(right.Ptr())) {
+            else if (IsConstantExprWithParams(right.Ptr())) {
                 return 0.5;
             }
         }
@@ -350,7 +350,7 @@ double NYql::NDq::ComputePredicateSelectivity(const TExprBase& input, const std:
 
     if (!resSelectivity.has_value()) {
         auto dumped = input.Raw()->Dump();
-        YQL_CLOG(WARN, CoreDq) << "ComputePredicateSelectivity NOT FOUND : " << dumped;
+        YQL_CLOG(TRACE, CoreDq) << "ComputePredicateSelectivity NOT FOUND : " << dumped;
         return 1.0;
     }
 

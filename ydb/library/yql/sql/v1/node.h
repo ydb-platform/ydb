@@ -688,6 +688,13 @@ namespace NSQLTranslationV1 {
     };
 
     struct TColumnSchema {
+        enum class ETypeOfChange {
+            Nothing,
+            DropNotNullConstraint,
+            SetNotNullConstraint, // todo flown4qqqq
+            SetFamily
+        };
+
         TPosition Pos;
         TString Name;
         TNodePtr Type;
@@ -695,9 +702,10 @@ namespace NSQLTranslationV1 {
         TVector<TIdentifier> Families;
         bool Serial;
         TNodePtr DefaultExpr;
+        const ETypeOfChange TypeOfChange;
 
         TColumnSchema(TPosition pos, const TString& name, const TNodePtr& type, bool nullable,
-            TVector<TIdentifier> families, bool serial, TNodePtr defaultExpr);
+            TVector<TIdentifier> families, bool serial, TNodePtr defaultExpr, ETypeOfChange typeOfChange = ETypeOfChange::Nothing);
     };
 
     struct TColumns: public TSimpleRefCount<TColumns> {
@@ -1144,11 +1152,39 @@ namespace NSQLTranslationV1 {
         TNodePtr Compression;
     };
 
+    struct TVectorIndexSettings {
+        enum class EDistance {
+              Cosine        /* "cosine" */
+            , Manhattan     /* "manhattan" */
+            , Euclidean     /* "euclidean" */
+        };
+
+        enum class ESimilarity {
+              Cosine        /* "cosine" */
+            , InnerProduct  /* "inner_product" */
+        };
+
+        enum class EVectorType {
+              Float         /* "float" */
+            , Uint8         /* "uint8" */
+            , Int8          /* "int8" */
+            , Bit           /* "bit" */
+        };
+
+        using TMetric = std::variant<std::monostate, EDistance, ESimilarity>;
+        TMetric Metric;
+        std::optional<EVectorType> VectorType;
+        std::optional<ui32> VectorDimension;
+
+        bool Validate(TContext& ctx) const;
+    };
+
     struct TIndexDescription {
         enum class EType {
             GlobalSync,
             GlobalAsync,
             GlobalSyncUnique,
+            GlobalVectorKmeansTree,
         };
 
         TIndexDescription(const TIdentifier& name, EType type = EType::GlobalSync)
@@ -1161,6 +1197,9 @@ namespace NSQLTranslationV1 {
         TVector<TIdentifier> IndexColumns;
         TVector<TIdentifier> DataColumns;
         TTableSettings TableSettings;
+
+        using TIndexSettings = std::variant<std::monostate, TVectorIndexSettings>;
+        TIndexSettings IndexSettings;
     };
 
     struct TChangefeedSettings {

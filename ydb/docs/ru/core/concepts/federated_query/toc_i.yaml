@@ -2,8 +2,9 @@ items:
 - { name: Обзор,                                  href: index.md }
 - { name: Архитектура,                            href: architecture.md }
 - { name: Работа с базами данных ClickHouse,      href: clickhouse.md }
+- { name: Работа с базами данных Greenplum,       href: greenplum.md }
+- { name: Работа с базами данных MySQL,           href: mysql.md }
 - { name: Работа с базами данных PostgreSQL,      href: postgresql.md }
 - { name: Работа с базами данных YDB,             href: ydb.md }
-- { name: Работа с базами данных Greenplum,       href: greenplum.md }
 - name: Работа с бакетами S3
   include: { path: s3/toc_i.yaml, mode: link }

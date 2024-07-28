@@ -20,4 +20,8 @@ void ParsePoolSettings(const NKikimrSchemeOp::TResourcePoolDescription& descript
     }
 }
 
+ui64 SaturationSub(ui64 x, ui64 y) {
+    return (x > y) ? x - y : 0;
+}
+
 }  // NKikimr::NKqp::NWorkload

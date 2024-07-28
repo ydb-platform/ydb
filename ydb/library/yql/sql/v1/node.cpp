@@ -45,7 +45,7 @@ TColumnConstraints::TColumnConstraints(TNodePtr defaultExpr, bool nullable)
 
 
 TColumnSchema::TColumnSchema(TPosition pos, const TString& name, const TNodePtr& type, bool nullable,
-        TVector<TIdentifier> families, bool serial, TNodePtr defaultExpr)
+        TVector<TIdentifier> families, bool serial, TNodePtr defaultExpr, ETypeOfChange typeOfChange)
     : Pos(pos)
     , Name(name)
     , Type(type)
@@ -53,6 +53,7 @@ TColumnSchema::TColumnSchema(TPosition pos, const TString& name, const TNodePtr&
     , Families(families)
     , Serial(serial)
     , DefaultExpr(defaultExpr)
+    , TypeOfChange(typeOfChange)
 {
 }
 
@@ -3409,5 +3410,20 @@ TNodePtr BuildNamedExpr(TNodePtr parent) {
     return new TNamedExprNode(parent);
 }
 
+bool TVectorIndexSettings::Validate(TContext& ctx) const {
+    if (Metric.index() == 0) {
+        ctx.Error() << "either distance or similarity should be set";
+        return false;
+    } 
+    if (!VectorType) {
+        ctx.Error() << "vector_type should be set";
+        return false;
+    }
+    if (!VectorDimension) {
+        ctx.Error() << "vector_dimension should be set";
+        return false;
+    }
+    return true;
+}
 
 } // namespace NSQLTranslationV1

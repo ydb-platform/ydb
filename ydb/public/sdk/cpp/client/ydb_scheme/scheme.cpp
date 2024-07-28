@@ -17,6 +17,13 @@ namespace NScheme {
 using namespace NThreading;
 using namespace Ydb::Scheme;
 
+void TPermissions::SerializeTo(::Ydb::Scheme::Permissions& proto) const {
+    proto.set_subject(Subject);
+    for (const auto& name : PermissionNames) {
+        *proto.mutable_permission_names()->Add() = name;
+    }
+}
+
 TVirtualTimestamp::TVirtualTimestamp(ui64 planStep, ui64 txId)
     : PlanStep(planStep)
     , TxId(txId)
@@ -95,6 +102,8 @@ static ESchemeEntryType ConvertProtoEntryType(::Ydb::Scheme::Entry::Type entry) 
         return ESchemeEntryType::ExternalDataSource;
     case ::Ydb::Scheme::Entry::VIEW:
         return ESchemeEntryType::View;
+    case ::Ydb::Scheme::Entry::RESOURCE_POOL:
+        return ESchemeEntryType::ResourcePool;
     default:
         return ESchemeEntryType::Unknown;
     }
@@ -118,6 +127,13 @@ void TSchemeEntry::Out(IOutputStream& out) const {
         << ", size_bytes: " << SizeBytes
         << ", created_at: " << CreatedAt
         << " }";
+}
+
+void TSchemeEntry::SerializeTo(::Ydb::Scheme::ModifyPermissionsRequest& request) const {
+    request.mutable_actions()->Add()->set_change_owner(Owner);
+    for (const auto& permission : Permissions) {
+        permission.SerializeTo(*request.mutable_actions()->Add()->mutable_set());
+    }
 }
 
 class TSchemeClient::TImpl : public TClientImplCommon<TSchemeClient::TImpl> {

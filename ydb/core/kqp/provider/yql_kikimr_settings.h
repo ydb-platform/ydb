@@ -51,6 +51,8 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> EnableLlvm;
     NCommon::TConfSetting<NDq::EHashJoinMode, false> HashJoinMode;
     NCommon::TConfSetting<TString, false> OverrideStatistics;
+    NCommon::TConfSetting<ui64, false> EnableSpillingNodes;
+    NCommon::TConfSetting<TString, false> OverridePlanner;
 
     /* Disable optimizer rules */
     NCommon::TConfSetting<bool, false> OptDisableTopSort;
@@ -143,7 +145,6 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     NKikimrConfig::TFeatureFlags FeatureFlags;
 
     bool EnableKqpScanQuerySourceRead = false;
-    bool EnableKqpDataQuerySourceRead = false;
     bool EnableKqpScanQueryStreamLookup = false;
     bool EnableKqpDataQueryStreamLookup = false;
     bool EnableKqpScanQueryStreamIdxLookupJoin = false;
@@ -165,6 +166,10 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableSpillingGenericQuery = false;
     ui32 DefaultCostBasedOptimizationLevel = 3;
     bool EnableConstantFolding = true;
+    ui64 DefaultEnableSpillingNodes = 0;
+
+    void SetDefaultEnabledSpillingNodes(const TString& node);
+    ui64 GetEnabledSpillingNodes() const;
 };
 
 }

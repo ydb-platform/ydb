@@ -56,7 +56,10 @@ typedef struct MemoryContextCallback
  * Avoid accessing it directly!  Instead, use MemoryContextSwitchTo()
  * to change the setting.
  */
-extern __thread PGDLLIMPORT MemoryContext CurrentMemoryContext;
+DECLARE_THREAD_VAR(MemoryContext, CurrentMemoryContext);
+#ifdef BUILD_PG_EXTENSION
+#define CurrentMemoryContext (*PtrCurrentMemoryContext())
+#endif
 
 /*
  * Flags for MemoryContextAllocExtended.
@@ -139,7 +142,7 @@ MemoryContextSwitchTo(MemoryContext context)
 {
 	MemoryContext old = CurrentMemoryContext;
 
-	CurrentMemoryContext = context;
+	*PtrCurrentMemoryContext() = context;
 	return old;
 }
 #endif							/* FRONTEND */

@@ -453,9 +453,10 @@ public:
             auto subgroup = GetWorkloadManagerCounters(nodeIndex)
                 ->GetSubgroup("pool", CanonizePath(TStringBuilder() << Settings_.DomainName_ << "/" << (poolId ? poolId : Settings_.PoolId_)));
 
-            CheckCommonCounters(subgroup);
+            const TString description = TStringBuilder() << "Node id: " << GetRuntime()->GetNodeId(nodeIndex);
+            CheckCommonCounters(subgroup, description);
             if (checkTableCounters) {
-                CheckTableCounters(subgroup);
+                CheckTableCounters(subgroup, description);
             }
         }
     }
@@ -497,37 +498,30 @@ private:
             ->GetSubgroup("subsystem", "workload_manager");
     }
 
-    static void CheckCommonCounters(NMonitoring::TDynamicCounterPtr subgroup) {
-        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("LocalInFly", false)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("LocalDelayedRequests", false)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("ContinueOverloaded", true)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("ContinueError", true)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("CleanupError", true)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("Cancelled", true)->Val(), 0);
-
-        UNIT_ASSERT_GE(subgroup->GetCounter("ContinueOk", true)->Val(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("ContinueOk", true)->Val(), subgroup->GetCounter("CleanupOk", true)->Val());
+    static void CheckCommonCounters(NMonitoring::TDynamicCounterPtr subgroup, const TString& description) {
+        UNIT_ASSERT_VALUES_EQUAL_C(subgroup->GetCounter("LocalInFly", false)->Val(), 0, description);
+        UNIT_ASSERT_VALUES_EQUAL_C(subgroup->GetCounter("LocalDelayedRequests", false)->Val(), 0, description);
+        UNIT_ASSERT_VALUES_EQUAL_C(subgroup->GetCounter("ContinueOverloaded", true)->Val(), 0, description);
+        UNIT_ASSERT_VALUES_EQUAL_C(subgroup->GetCounter("ContinueError", true)->Val(), 0, description);
+        UNIT_ASSERT_VALUES_EQUAL_C(subgroup->GetCounter("CleanupError", true)->Val(), 0, description);
+        UNIT_ASSERT_VALUES_EQUAL_C(subgroup->GetCounter("Cancelled", true)->Val(), 0, description);
     }
 
-    static void CheckTableCounters(NMonitoring::TDynamicCounterPtr subgroup) {
-        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("PendingRequestsCount", false)->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(subgroup->GetCounter("FinishingRequestsCount", false)->Val(), 0);
+    static void CheckTableCounters(NMonitoring::TDynamicCounterPtr subgroup, const TString& description) {
+        UNIT_ASSERT_VALUES_EQUAL_C(subgroup->GetCounter("PendingRequestsCount", false)->Val(), 0, description);
+        UNIT_ASSERT_VALUES_EQUAL_C(subgroup->GetCounter("FinishingRequestsCount", false)->Val(), 0, description);
 
-        const std::vector<std::pair<TString, bool>> tableQueries = {
-            {"TCleanupTablesQuery", false},
-            {"TRefreshPoolStateQuery", true},
-            {"TDelayRequestQuery", true},
-            {"TStartFirstDelayedRequestQuery", true},
-            {"TStartRequestQuery", false},
-            {"TCleanupRequestsQuery", true},
+        const std::vector<TString> tableQueries = {
+            "TCleanupTablesQuery",
+            "TRefreshPoolStateQuery",
+            "TDelayRequestQuery",
+            "TStartFirstDelayedRequestQuery",
+            "TStartRequestQuery",
+            "TCleanupRequestsQuery",
         };
-        for (const auto& [operation, runExpected] : tableQueries) {
+        for (const auto& operation : tableQueries) {
             auto operationSubgroup = subgroup->GetSubgroup("operation", operation);
-
-            UNIT_ASSERT_VALUES_EQUAL_C(operationSubgroup->GetCounter("FinishError", true)->Val(), 0, TStringBuilder() << "Unexpected vaule for operation " << operation);
-            if (runExpected) {
-                UNIT_ASSERT_GE_C(operationSubgroup->GetCounter("FinishOk", true)->Val(), 1, TStringBuilder() << "Unexpected vaule for operation " << operation);
-            }
+            UNIT_ASSERT_VALUES_EQUAL_C(operationSubgroup->GetCounter("FinishError", true)->Val(), 0, TStringBuilder() << description << ", unexpected vaule for operation " << operation);
         }
     }
 

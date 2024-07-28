@@ -76,15 +76,25 @@ class BasePackageManager(object):
         pass
 
     @abstractmethod
-    def create_node_modules(self):
-        pass
-
-    @abstractmethod
-    def calc_node_modules_inouts(self):
+    def create_node_modules(self, yatool_prebuilder_path=None, local_cli=False, bundle=True):
         pass
 
     @abstractmethod
     def extract_packages_meta_from_lockfiles(self, lf_paths):
+        pass
+
+    @abstractmethod
+    def calc_prepare_deps_inouts_and_resources(
+        self, store_path: str, has_deps: bool
+    ) -> tuple[list[str], list[str], list[str]]:
+        pass
+
+    @abstractmethod
+    def calc_node_modules_inouts(self, local_cli=False) -> tuple[list[str], list[str]]:
+        pass
+
+    @abstractmethod
+    def build_workspace(self, tarballs_store: str):
         pass
 
     def get_local_peers_from_package_json(self):
@@ -104,7 +114,7 @@ class BasePackageManager(object):
 
         return [p[prefix_len:] for p in pj.get_workspace_map(ignore_self=True).keys()]
 
-    def _exec_command(self, args, include_defaults=True, script_path=None):
+    def _exec_command(self, args, include_defaults=True, script_path=None, env=None):
         if not self.nodejs_bin_path:
             raise PackageManagerError("Unable to execute command: nodejs_bin_path is not configured")
 
@@ -114,11 +124,7 @@ class BasePackageManager(object):
             + (self._get_default_options() if include_defaults else [])
         )
         p = subprocess.Popen(
-            cmd,
-            cwd=self.build_path,
-            stdin=None,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            cmd, cwd=self.build_path, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env
         )
         stdout, stderr = p.communicate()
 

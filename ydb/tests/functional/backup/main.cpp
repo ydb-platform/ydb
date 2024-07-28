@@ -113,10 +113,11 @@ Y_UNIT_TEST_SUITE(Backup)
 
         auto ob = NTestUtils::GetObjectKeys(bucketName);
         std::sort(ob.begin(), ob.end());
-        UNIT_ASSERT_VALUES_EQUAL(ob.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(ob.size(), 4);
         UNIT_ASSERT_VALUES_EQUAL(ob[0], "ProducerUuidValueBackup/data_00.csv");
         UNIT_ASSERT_VALUES_EQUAL(ob[1], "ProducerUuidValueBackup/metadata.json");
-        UNIT_ASSERT_VALUES_EQUAL(ob[2], "ProducerUuidValueBackup/scheme.pb");
+        UNIT_ASSERT_VALUES_EQUAL(ob[2], "ProducerUuidValueBackup/permissions.pb");
+        UNIT_ASSERT_VALUES_EQUAL(ob[3], "ProducerUuidValueBackup/scheme.pb");
 
         {
             NImport::TImportFromS3Settings settings;

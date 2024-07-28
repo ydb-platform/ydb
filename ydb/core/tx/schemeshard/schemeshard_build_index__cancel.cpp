@@ -14,7 +14,6 @@ public:
     {}
 
     bool DoExecute(TTransactionContext& txc, const TActorContext&) override {
-        std::cerr << "canceling!!!" << std::endl;
         const auto& record = Request->Get()->Record;
         LOG_N("DoExecute " << record.ShortDebugString());
 

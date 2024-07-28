@@ -49,7 +49,6 @@ TActorId CreatePipeClient(ui64 id, const TActorContext& ctx) {
 }
 
 Ydb::TOperationId ToOperationId(const NKikimrIndexBuilder::TIndexBuild& build) {
-    std::cerr << "gello!!!" << std::endl;
     Ydb::TOperationId operationId;
     operationId.SetKind(Ydb::TOperationId::BUILD_INDEX);
     NOperationId::AddOptionalValue(operationId, "id", ToString(build.GetId()));

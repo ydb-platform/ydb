@@ -2984,7 +2984,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         AssertTableStats(result, "/Root/Test", {
-            .ExpectedReads = 2,
+            .ExpectedReads = 1,
             .ExpectedDeletes = 2,
         });
 

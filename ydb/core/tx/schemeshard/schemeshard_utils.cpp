@@ -317,7 +317,7 @@ NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
         result.AddKeyColumnNames(keyName);
     }
 
-    if (result.HasReplicationConfig()) {
+    if (indexTableDesc.HasReplicationConfig()) {
         result.MutableReplicationConfig()->CopyFrom(indexTableDesc.GetReplicationConfig());
     }
 
@@ -388,7 +388,7 @@ NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
         result.AddKeyColumnNames(keyName);
     }
 
-    if (result.HasReplicationConfig()) {
+    if (indexTableDesc.HasReplicationConfig()) {
         result.MutableReplicationConfig()->CopyFrom(indexTableDesc.GetReplicationConfig());
     }
 

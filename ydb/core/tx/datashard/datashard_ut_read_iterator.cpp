@@ -478,7 +478,7 @@ struct TTestHelper {
 
         return ::NKikimr::GetBaseReadRequest(
             table.TableId,
-            table.UserTable,
+            table.UserTable.GetDescription(),
             readId,
             format,
             readVersion

@@ -29,7 +29,7 @@ void TAnalyzeActor::Bootstrap() {
     Become(&TAnalyzeActor::StateWork);
 }
 
-void TAnalyzeActor::Handle(NStat::TEvStatistics::TEvScanTableResponse::TPtr& ev, const TActorContext& ctx) {
+void TAnalyzeActor::Handle(NStat::TEvStatistics::TEvAnalyzeResponse::TPtr& ev, const TActorContext& ctx) {
     NYql::IKikimrGateway::TGenericResult result;
     result.SetSuccess();
     Promise.SetValue(std::move(result));
@@ -69,7 +69,7 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
 
     if (navigate->Cookie == SecondRoundCookie) {
         if (entry.DomainInfo->Params.HasStatisticsAggregator()) {
-            SendStatisticsAggregatorAnalyze(entry.DomainInfo->Params.GetStatisticsAggregator());
+            SendStatisticsAggregatorAnalyze(entry, ctx);
         } else {
             Promise.SetValue(
                 NYql::NCommon::ResultFromIssues<NYql::IKikimrGateway::TGenericResult>(
@@ -102,7 +102,7 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
 
     if (!domainInfo->IsServerless()) {
         if (domainInfo->Params.HasStatisticsAggregator()) {
-            SendStatisticsAggregatorAnalyze(domainInfo->Params.GetStatisticsAggregator());
+            SendStatisticsAggregatorAnalyze(entry, ctx);
             return;
         }
             
@@ -112,15 +112,41 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
     }
 }
 
-void TAnalyzeActor::SendStatisticsAggregatorAnalyze(ui64 statisticsAggregatorId) {
-    auto scanTable = std::make_unique<NStat::TEvStatistics::TEvScanTable>();
-    auto& record = scanTable->Record;
-    PathIdFromPathId(PathId, record.MutablePathId());
+void TAnalyzeActor::SendStatisticsAggregatorAnalyze(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TActorContext& ctx) {
+    Y_ASSERT(entry.DomainInfo->Params.HasStatisticsAggregator());
 
+    auto analyzeRequest = std::make_unique<NStat::TEvStatistics::TEvAnalyze>();
+    auto& record = analyzeRequest->Record;
+    auto table = record.AddTables();
     
+    PathIdFromPathId(PathId, table->MutablePathId());
+
+
+    THashMap<TString, ui32> tagByColumnName;
+    for (const auto& [_, tableInfo]: entry.Columns) {
+        tagByColumnName[TString(tableInfo.Name)] = tableInfo.Id;
+    }
+
+    for (const auto& columnName: Columns) {
+        if (!tagByColumnName.contains(columnName)){
+            Promise.SetValue(
+                NYql::NCommon::ResultFromError<NYql::IKikimrGateway::TGenericResult>(
+                    YqlIssue(
+                        {}, NYql::TIssuesIds::UNEXPECTED, 
+                        TStringBuilder() << "No such column: " << columnName << " in the " << TablePath
+                    )
+                )
+            );
+            this->Die(ctx);
+            return;
+        }
+
+        *table->MutableColumnTags()->Add() = tagByColumnName[columnName];
+    }
+
     Send(
         MakePipePerNodeCacheID(false),
-        new TEvPipeCache::TEvForward(scanTable.release(), statisticsAggregatorId, true),
+        new TEvPipeCache::TEvForward(analyzeRequest.release(), entry.DomainInfo->Params.GetStatisticsAggregator(), true),
         IEventHandle::FlagTrackDelivery
     );
 }

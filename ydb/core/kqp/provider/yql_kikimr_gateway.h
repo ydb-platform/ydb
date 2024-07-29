@@ -820,6 +820,7 @@ struct TDropReplicationSettings {
 
 struct TAnalyzeSettings {
     TString TablePath;
+    TVector<TString> Columns;
 };
 
 struct TKikimrListPathItem {

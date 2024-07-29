@@ -1024,6 +1024,7 @@ public:
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Table().Build(key.GetTablePath())
+                        .Columns(settings.Columns.Cast())
                         .Done()
                         .Ptr();
                 } else {

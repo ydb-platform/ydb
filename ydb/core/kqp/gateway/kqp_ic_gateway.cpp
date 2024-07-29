@@ -1390,7 +1390,7 @@ public:
     TFuture<TGenericResult> Analyze(const TString& cluster, const NYql::TAnalyzeSettings& settings) override {
         try {
             auto analyzePromise = NewPromise<TGenericResult>();
-            IActor* analyzeActor = new TAnalyzeActor(settings.TablePath, analyzePromise);
+            IActor* analyzeActor = new TAnalyzeActor(settings.TablePath, settings.Columns, analyzePromise);
             RegisterActor(analyzeActor);
             
             return analyzePromise.GetFuture();

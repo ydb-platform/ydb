@@ -10,8 +10,9 @@ namespace NKikimr::NKqp {
 
 class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> { 
 public:
-    TAnalyzeActor(const TString& tablePath, NThreading::TPromise<NYql::IKikimrGateway::TGenericResult> promise)
-        : TablePath(tablePath) 
+    TAnalyzeActor(TString tablePath, TVector<TString> columns, NThreading::TPromise<NYql::IKikimrGateway::TGenericResult> promise)
+        : TablePath(tablePath)
+        , Columns(columns) 
         , Promise(promise)
     {}
 
@@ -20,26 +21,25 @@ public:
     STFUNC(StateWork) {
         switch(ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            HFunc(NStat::TEvStatistics::TEvScanTableResponse, Handle);
-            IgnoreFunc(NStat::TEvStatistics::TEvScanTableAccepted);
+            HFunc(NStat::TEvStatistics::TEvAnalyzeResponse, Handle);
             default: 
                 HandleUnexpectedEvent(ev->GetTypeRewrite());
         }
     }
 
 private:
-    void Handle(NStat::TEvStatistics::TEvScanTableResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NStat::TEvStatistics::TEvAnalyzeResponse::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
 
     void HandleUnexpectedEvent(ui32 typeRewrite);
 
-    void SendStatisticsAggregatorAnalyze(ui64 statisticsAggregatorId);
+    void SendStatisticsAggregatorAnalyze(const NSchemeCache::TSchemeCacheNavigate::TEntry&, const TActorContext&);
 
 private:
     TString TablePath;
+    TVector<TString> Columns;
     NThreading::TPromise<NYql::IKikimrGateway::TGenericResult> Promise;
-    
     // For Statistics Aggregator
     TPathId PathId;
 };

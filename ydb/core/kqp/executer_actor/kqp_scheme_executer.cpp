@@ -312,7 +312,9 @@ public:
                 const auto& analyzeOperation = schemeOp.GetAnalyzeTable();
                 
                 auto analyzePromise = NewPromise<IKqpGateway::TGenericResult>();
-                IActor* analyzeActor = new TAnalyzeActor(analyzeOperation.GetTablePath(), analyzePromise);
+                
+                TVector<TString> columns{analyzeOperation.columns().begin(), analyzeOperation.columns().end()};
+                IActor* analyzeActor = new TAnalyzeActor(analyzeOperation.GetTablePath(), columns, analyzePromise);
 
                 auto actorSystem = TlsActivationContext->AsActorContext().ExecutorThread.ActorSystem;
                 RegisterWithSameMailbox(analyzeActor);

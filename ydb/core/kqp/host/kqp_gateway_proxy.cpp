@@ -2073,6 +2073,9 @@ public:
         try {
             NKqpProto::TKqpAnalyzeOperation analyzeTx;
             analyzeTx.SetTablePath(settings.TablePath);
+            for (const auto& column: settings.Columns) {
+                *analyzeTx.AddColumns() = column;
+            }
 
             if (IsPrepare()) {
                 auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();

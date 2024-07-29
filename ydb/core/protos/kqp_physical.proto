@@ -389,6 +389,7 @@ message TKqpPhyResult {
 
 message TKqpAnalyzeOperation {
     string TablePath = 1;
+    repeated string Columns = 2;
 }
 
 message TKqpPhyMetadataOperation {

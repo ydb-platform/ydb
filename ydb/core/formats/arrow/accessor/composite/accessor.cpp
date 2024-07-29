@@ -5,17 +5,11 @@ namespace {
 class TCompositeChunkAccessor {
 private:
     const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& Chunks;
-    std::optional<IChunkedArray::TCurrentChunkAddress>* ResultChunkAddress = nullptr;
-    std::optional<IChunkedArray::TCurrentArrayAddress>* ResultArrayAddress = nullptr;
+    std::optional<IChunkedArray::TLocalChunkedArrayAddress>* ResultArrayAddress = nullptr;
 
 public:
-    TCompositeChunkAccessor(
-        const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& chunks, std::optional<IChunkedArray::TCurrentChunkAddress>& result)
-        : Chunks(chunks)
-        , ResultChunkAddress(&result) {
-    }
-    TCompositeChunkAccessor(
-        const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& chunks, std::optional<IChunkedArray::TCurrentArrayAddress>& result)
+    TCompositeChunkAccessor(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& chunks,
+        std::optional<IChunkedArray::TLocalChunkedArrayAddress>& result)
         : Chunks(chunks)
         , ResultArrayAddress(&result) {
     }
@@ -25,31 +19,23 @@ public:
     ui64 GetChunkLength(const ui32 idx) const {
         return Chunks[idx]->GetRecordsCount();
     }
-    void OnArray(const ui32 chunkIdx, const ui32 startPosition, const ui32 internalPosition) const {
-        if (ResultChunkAddress) {
-            auto internalAddress = Chunks[chunkIdx]->GetChunk({}, internalPosition);
-            *ResultChunkAddress = NArrow::NAccessor::IChunkedArray::TCurrentChunkAddress(
-                internalAddress.GetArray(), startPosition + internalAddress.GetStartPosition(), chunkIdx);
-        }
+    void OnArray(const ui32 chunkIdx, const ui32 startPosition) const {
         if (ResultArrayAddress) {
-            *ResultArrayAddress = NArrow::NAccessor::IChunkedArray::TCurrentArrayAddress(Chunks[chunkIdx], startPosition, chunkIdx);
+            *ResultArrayAddress = NArrow::NAccessor::IChunkedArray::TLocalChunkedArrayAddress(Chunks[chunkIdx], startPosition, chunkIdx);
         }
     }
 };
 }   // namespace
 
-NArrow::NAccessor::IChunkedArray::TCurrentChunkAddress TCompositeChunkedArray::DoGetChunk(
-    const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position) const {
-    std::optional<IChunkedArray::TCurrentChunkAddress> result;
-    TCompositeChunkAccessor accessor(Chunks, result);
-    SelectChunk(chunkCurrent, position, accessor);
-    AFL_VERIFY(result);
-    return *result;
+IChunkedArray::TLocalDataAddress TCompositeChunkedArray::DoGetLocalData(
+    const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
+    AFL_VERIFY(false);
+    return IChunkedArray::TLocalDataAddress(nullptr, 0, 0);
 }
 
-NArrow::NAccessor::IChunkedArray::TCurrentArrayAddress TCompositeChunkedArray::DoGetArray(
-    const std::optional<TCurrentArrayAddress>& chunkCurrent, const ui64 position, const std::shared_ptr<IChunkedArray>& /*selfPtr*/) const {
-    std::optional<IChunkedArray::TCurrentArrayAddress> result;
+IChunkedArray::TLocalChunkedArrayAddress TCompositeChunkedArray::DoGetLocalChunkedArray(
+    const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
+    std::optional<IChunkedArray::TLocalChunkedArrayAddress> result;
     TCompositeChunkAccessor accessor(Chunks, result);
     SelectChunk(chunkCurrent, position, accessor);
     AFL_VERIFY(result);

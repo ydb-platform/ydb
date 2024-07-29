@@ -32,10 +32,10 @@ namespace {
 class TChunkAccessor {
 private:
     std::shared_ptr<arrow::ChunkedArray> ChunkedArray;
-    std::optional<IChunkedArray::TCurrentChunkAddress>* Result;
+    std::optional<IChunkedArray::TLocalDataAddress>* Result;
 
 public:
-    TChunkAccessor(const std::shared_ptr<arrow::ChunkedArray>& chunkedArray, std::optional<IChunkedArray::TCurrentChunkAddress>& result)
+    TChunkAccessor(const std::shared_ptr<arrow::ChunkedArray>& chunkedArray, std::optional<IChunkedArray::TLocalDataAddress>& result)
         : ChunkedArray(chunkedArray)
         , Result(&result) {
     }
@@ -45,16 +45,17 @@ public:
     ui64 GetChunkLength(const ui32 idx) const {
         return (ui64)ChunkedArray->chunk(idx)->length();
     }
-    void OnArray(const ui32 idx, const ui32 startPosition, const ui32 /*internalPosition*/) const {
-        *Result = IChunkedArray::TCurrentChunkAddress(ChunkedArray->chunk(idx), startPosition, idx);
+    void OnArray(const ui32 idx, const ui32 startPosition) const {
+        const auto& arr = ChunkedArray->chunk(idx);
+        *Result = IChunkedArray::TLocalDataAddress(arr, startPosition, idx);
     }
 };
 
 }   // namespace
 
-IChunkedArray::TCurrentChunkAddress TTrivialChunkedArray::DoGetChunk(
-    const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position) const {
-    std::optional<IChunkedArray::TCurrentChunkAddress> result;
+IChunkedArray::TLocalDataAddress TTrivialChunkedArray::DoGetLocalData(
+    const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
+    std::optional<IChunkedArray::TLocalDataAddress> result;
     TChunkAccessor accessor(Array, result);
     SelectChunk(chunkCurrent, position, accessor);
     AFL_VERIFY(result);

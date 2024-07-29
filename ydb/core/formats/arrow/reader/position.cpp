@@ -147,9 +147,7 @@ void TSortableScanData::AppendPositionTo(
     const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const ui64 position, ui64* recordSize) const {
     AFL_VERIFY(builders.size() == PositionAddress.size());
     for (ui32 i = 0; i < PositionAddress.size(); ++i) {
-        AFL_VERIFY(PositionAddress[i].GetStartPosition() <= position)("pos", position)("start", PositionAddress[i].GetStartPosition());
-        AFL_VERIFY(position < PositionAddress[i].GetFinishPosition())("pos", position)("finish", PositionAddress[i].GetFinishPosition());
-        AFL_VERIFY(NArrow::Append(*builders[i], *PositionAddress[i].GetArray(), position - PositionAddress[i].GetStartPosition(), recordSize));
+        AFL_VERIFY(NArrow::Append(*builders[i], *PositionAddress[i].GetArray(), PositionAddress[i].GetAddress().GetLocalIndex(position), recordSize));
     }
 }
 
@@ -160,9 +158,9 @@ void TSortableScanData::BuildPosition(const ui64 position) {
     StartPosition = 0;
     LastInit = position;
     for (auto&& i : Columns) {
-        PositionAddress.emplace_back(i->GetChunk({}, position));
-        StartPosition = std::max<ui64>(StartPosition, PositionAddress.back().GetStartPosition());
-        FinishPosition = std::min<ui64>(FinishPosition, PositionAddress.back().GetFinishPosition());
+        PositionAddress.emplace_back(i->GetChunkSlow(position));
+        StartPosition = std::max<ui64>(StartPosition, PositionAddress.back().GetAddress().GetGlobalStartPosition());
+        FinishPosition = std::min<ui64>(FinishPosition, PositionAddress.back().GetAddress().GetGlobalFinishPosition());
         if (!recordsCount) {
             recordsCount = i->GetRecordsCount();
         } else {
@@ -185,13 +183,12 @@ bool TSortableScanData::InitPosition(const ui64 position) {
     FinishPosition = Max<ui64>();
     StartPosition = 0;
     for (auto&& i : PositionAddress) {
-        if (!i.Contains(position)) {
-            i = Columns[idx]->GetChunk(i, position);
+        if (!i.GetAddress().Contains(position)) {
+            i = Columns[idx]->GetChunk(i.GetAddress(), position);
         }
-        StartPosition = std::max<ui64>(StartPosition, i.GetStartPosition());
-        FinishPosition = std::min<ui64>(FinishPosition, i.GetFinishPosition());
-        AFL_VERIFY(position < i.GetFinishPosition());
-        AFL_VERIFY(i.GetStartPosition() <= position);
+        StartPosition = std::max<ui64>(StartPosition, i.GetAddress().GetGlobalStartPosition());
+        FinishPosition = std::min<ui64>(FinishPosition, i.GetAddress().GetGlobalFinishPosition());
+        AFL_VERIFY(i.GetAddress().Contains(position));
         ++idx;
     }
     AFL_VERIFY(StartPosition < FinishPosition);
@@ -226,7 +223,7 @@ void TCursor::AppendPositionTo(const std::vector<std::unique_ptr<arrow::ArrayBui
     AFL_VERIFY(builders.size() == PositionAddress.size());
     for (ui32 i = 0; i < PositionAddress.size(); ++i) {
         AFL_VERIFY_DEBUG(builders[i]->type()->Equals(PositionAddress[i].GetArray()->type()));
-        AFL_VERIFY(NArrow::Append(*builders[i], *PositionAddress[i].GetArray(), Position - PositionAddress[i].GetStartPosition(), recordSize));
+        AFL_VERIFY(NArrow::Append(*builders[i], *PositionAddress[i].GetArray(), PositionAddress[i].GetAddress().GetLocalIndex(Position), recordSize));
     }
 }
 

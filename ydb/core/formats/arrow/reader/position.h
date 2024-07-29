@@ -22,12 +22,12 @@ class TSortableScanData;
 class TCursor {
 private:
     YDB_READONLY(ui64, Position, 0);
-    std::vector<NAccessor::IChunkedArray::TCurrentChunkAddress> PositionAddress;
+    std::vector<NAccessor::IChunkedArray::TFullDataAddress> PositionAddress;
 public:
     TCursor() = default;
     TCursor(const std::shared_ptr<arrow::Table>& table, const ui64 position, const std::vector<std::string>& columns);
 
-    TCursor(const ui64 position, const std::vector<NAccessor::IChunkedArray::TCurrentChunkAddress>& addresses)
+    TCursor(const ui64 position, const std::vector<NAccessor::IChunkedArray::TFullDataAddress>& addresses)
         : Position(position)
         , PositionAddress(addresses)
     {
@@ -64,7 +64,7 @@ public:
 class TSortableScanData {
 private:
     ui64 RecordsCount = 0;
-    YDB_READONLY_DEF(std::vector<NAccessor::IChunkedArray::TCurrentChunkAddress>, PositionAddress);
+    YDB_READONLY_DEF(std::vector<NAccessor::IChunkedArray::TFullDataAddress>, PositionAddress);
     YDB_READONLY_DEF(std::vector<std::shared_ptr<NAccessor::IChunkedArray>>, Columns);
     YDB_READONLY_DEF(std::vector<std::shared_ptr<arrow::Field>>, Fields);
     ui64 StartPosition = 0;
@@ -87,15 +87,14 @@ public:
         BuildPosition(position);
     }
 
-    const NAccessor::IChunkedArray::TCurrentChunkAddress& GetPositionAddress(const ui32 colIdx) const {
+    const NAccessor::IChunkedArray::TFullDataAddress& GetPositionAddress(const ui32 colIdx) const {
         AFL_VERIFY(colIdx < PositionAddress.size());
         return PositionAddress[colIdx];
     }
 
     ui32 GetPositionInChunk(const ui32 colIdx, const ui32 pos) const {
         AFL_VERIFY(colIdx < PositionAddress.size());
-        AFL_VERIFY(pos >= PositionAddress[colIdx].GetStartPosition());
-        return pos - PositionAddress[colIdx].GetStartPosition();
+        return PositionAddress[colIdx].GetAddress().GetLocalIndex(pos);
     }
 
     std::shared_ptr<TSortableScanData> BuildCopy(const ui64 position) const {
@@ -109,8 +108,8 @@ public:
         auto addresses = PositionAddress;
         ui32 idx = 0;
         for (auto&& i : addresses) {
-            if (!i.Contains(position)) {
-                i = Columns[idx]->GetChunk(i, position);
+            if (!i.GetAddress().Contains(position)) {
+                i = Columns[idx]->GetChunk(i.GetAddress(), position);
             }
             ++idx;
         }
@@ -129,15 +128,15 @@ public:
         } else {
             for (ui32 idx = 0; idx < PositionAddress.size(); ++idx) {
                 std::partial_ordering cmp = std::partial_ordering::equivalent;
-                const bool containsSelf = PositionAddress[idx].Contains(position);
-                const bool containsItem = item.PositionAddress[idx].Contains(itemPosition);
+                const bool containsSelf = PositionAddress[idx].GetAddress().Contains(position);
+                const bool containsItem = item.PositionAddress[idx].GetAddress().Contains(itemPosition);
                 if (containsSelf && containsItem) {
                     cmp = PositionAddress[idx].Compare(position, item.PositionAddress[idx], itemPosition);
                 } else if (containsSelf) {
-                    auto temporaryAddress = item.Columns[idx]->GetChunk(item.PositionAddress[idx], itemPosition);
+                    auto temporaryAddress = item.Columns[idx]->GetChunk(item.PositionAddress[idx].GetAddress(), itemPosition);
                     cmp = PositionAddress[idx].Compare(position, temporaryAddress, itemPosition);
                 } else if (containsItem) {
-                    auto temporaryAddress = Columns[idx]->GetChunk(PositionAddress[idx], position);
+                    auto temporaryAddress = Columns[idx]->GetChunk(PositionAddress[idx].GetAddress(), position);
                     cmp = temporaryAddress.Compare(position, item.PositionAddress[idx], itemPosition);
                 } else {
                     AFL_VERIFY(false);

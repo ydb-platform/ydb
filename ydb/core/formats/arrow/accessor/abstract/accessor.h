@@ -62,37 +62,133 @@ public:
         }
     };
 
-    class TCurrentArrayAddress: public TCommonChunkAddress {
+    class TAddressChain {
     private:
-        YDB_READONLY_DEF(std::shared_ptr<IChunkedArray>, Array);
+        YDB_READONLY_DEF(std::deque<TCommonChunkAddress>, Addresses);
+        YDB_READONLY(ui32, GlobalStartPosition, 0);
+        YDB_READONLY(ui32, GlobalFinishPosition, 0);
 
     public:
-        TCurrentArrayAddress(const std::shared_ptr<IChunkedArray>& arr, const ui32 pos, const ui32 idx)
-            : TCommonChunkAddress(pos, pos + TValidator::CheckNotNull(arr)->GetRecordsCount(), idx)
-            , Array(arr) {
+        TAddressChain() = default;
+
+        ui32 GetSize() const {
+            return Addresses.size();
+        }
+
+        ui32 GetLocalIndex(const ui32 position) const {
+            AFL_VERIFY(Contains(position));
+            return position - GlobalStartPosition;
+        }
+
+        bool Contains(const ui32 position) const {
+            return GlobalStartPosition <= position && position < GlobalFinishPosition;
+        }
+
+        const TCommonChunkAddress& GetAddress(const ui32 index) const {
+            AFL_VERIFY(index < Addresses.size());
+            return Addresses[index];
+        }
+
+        void Add(const TCommonChunkAddress& address) {
+            if (Addresses.size()) {
+                AFL_VERIFY(address.GetFinishPosition() <= Addresses.back().GetLength());
+            }
+            Addresses.emplace_back(address);
+            GlobalStartPosition += address.GetStartPosition();
+            GlobalFinishPosition = GlobalStartPosition + address.GetLength();
+        }
+
+        const TCommonChunkAddress& GetLastAddress() const {
+            AFL_VERIFY(Addresses.size());
+            return Addresses.back();
+        }
+
+        TString DebugString() const {
+            return TStringBuilder() << "start=" << GlobalStartPosition << ";finish=" << GlobalFinishPosition
+                                    << ";addresses_count=" << Addresses.size() << ";";
+        }
+    };
+
+    class TFullChunkedArrayAddress {
+    private:
+        YDB_READONLY_DEF(std::shared_ptr<IChunkedArray>, Array);
+        YDB_ACCESSOR_DEF(TAddressChain, Address);
+
+    public:
+        TFullChunkedArrayAddress(const std::shared_ptr<IChunkedArray>& arr, TAddressChain&& address)
+            : Array(arr)
+            , Address(std::move(address))
+        {
+            AFL_VERIFY(Address.GetSize());
             AFL_VERIFY(Array);
             AFL_VERIFY(Array->GetRecordsCount());
         }
     };
 
-    class TCurrentChunkAddress: public TCommonChunkAddress {
+    class TLocalChunkedArrayAddress {
     private:
-        using TBase = TCommonChunkAddress;
-        YDB_READONLY_DEF(std::shared_ptr<arrow::Array>, Array);
+        YDB_READONLY_DEF(std::shared_ptr<IChunkedArray>, Array);
+        TCommonChunkAddress Address;
 
     public:
-        using TBase::DebugString;
+        const TCommonChunkAddress& GetAddress() const {
+            return Address;
+        }
+
+        TLocalChunkedArrayAddress(const std::shared_ptr<IChunkedArray>& arr, const TCommonChunkAddress& address)
+            : Array(arr)
+            , Address(address) {
+            AFL_VERIFY(arr);
+            AFL_VERIFY(address.GetLength() == (ui32)arr->GetRecordsCount());
+        }
+
+        TLocalChunkedArrayAddress(const std::shared_ptr<IChunkedArray>& arr, const ui32 start, const ui32 chunkIdx)
+            : Array(arr)
+            , Address(TCommonChunkAddress(start, start + TValidator::CheckNotNull(arr)->GetRecordsCount(), chunkIdx)) {
+        }
+    };
+
+    class TFullDataAddress {
+    private:
+        YDB_READONLY_DEF(std::shared_ptr<arrow::Array>, Array);
+        YDB_ACCESSOR_DEF(TAddressChain, Address);
+
+    public:
         TString DebugString(const ui64 position) const;
 
         std::shared_ptr<arrow::Array> CopyRecord(const ui64 recordIndex) const;
 
-        std::partial_ordering Compare(const ui64 position, const TCurrentChunkAddress& item, const ui64 itemPosition) const;
+        std::partial_ordering Compare(const ui64 position, const TFullDataAddress& item, const ui64 itemPosition) const;
 
-        TCurrentChunkAddress(const std::shared_ptr<arrow::Array>& arr, const ui64 pos, const ui32 chunkIdx)
-            : TCommonChunkAddress(pos, pos + TValidator::CheckNotNull(arr)->length(), chunkIdx)
-            , Array(arr) {
+        TFullDataAddress(const std::shared_ptr<arrow::Array>& arr, TAddressChain&& address)
+            : Array(arr)
+            , Address(std::move(address))
+        {
             AFL_VERIFY(Array);
-            AFL_VERIFY(Array->length());
+            AFL_VERIFY(Address.GetSize());
+        }
+    };
+
+    class TLocalDataAddress {
+    private:
+        YDB_READONLY_DEF(std::shared_ptr<arrow::Array>, Array);
+        TCommonChunkAddress Address;
+
+    public:
+        const TCommonChunkAddress& GetAddress() const {
+            return Address;
+        }
+
+        TLocalDataAddress(const std::shared_ptr<arrow::Array>& arr, const ui32 start, const ui32 chunkIdx)
+            : Array(arr)
+            , Address(start, start + TValidator::CheckNotNull(arr)->length(), chunkIdx)
+        {
+        }
+
+        TLocalDataAddress(const std::shared_ptr<arrow::Array>& arr, const TCommonChunkAddress& address)
+            : Array(arr)
+            , Address(address) {
+            AFL_VERIFY(address.GetLength() == (ui32)arr->length());
         }
     };
 
@@ -100,7 +196,6 @@ public:
     private:
         YDB_READONLY_DEF(std::shared_ptr<arrow::Array>, Array);
         YDB_READONLY(ui64, Position, 0);
-        YDB_READONLY(ui64, ChunkIdx, 0);
 
     public:
         bool NextPosition() {
@@ -111,10 +206,12 @@ public:
             return false;
         }
 
-        TAddress(const std::shared_ptr<arrow::Array>& arr, const ui64 position, const ui64 chunkIdx)
+        TAddress(const std::shared_ptr<arrow::Array>& arr, const ui64 position)
             : Array(arr)
             , Position(position)
-            , ChunkIdx(chunkIdx) {
+        {
+            AFL_VERIFY(!!Array);
+            AFL_VERIFY(position < (ui32)Array->length());
         }
 
         const std::partial_ordering Compare(const TAddress& item) const;
@@ -127,11 +224,17 @@ private:
     virtual std::optional<ui64> DoGetRawSize() const = 0;
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const = 0;
 
+    virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const = 0;
+    virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const = 0;
+
 protected:
     virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray() const = 0;
-    virtual TCurrentArrayAddress DoGetArray(
-        const std::optional<TCurrentArrayAddress>& chunkCurrent, const ui64 position, const std::shared_ptr<IChunkedArray>& selfPtr) const = 0;
-    virtual TCurrentChunkAddress DoGetChunk(const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position) const = 0;
+    TLocalChunkedArrayAddress GetLocalChunkedArray(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
+        return DoGetLocalChunkedArray(chunkCurrent, position);
+    }
+    TLocalDataAddress GetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
+        return DoGetLocalData(chunkCurrent, position);
+    }
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const = 0;
     virtual std::vector<TChunkedArraySerialized> DoSplitBySizes(
         const TColumnSaver& saver, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) = 0;
@@ -144,7 +247,7 @@ protected:
             if (chunkCurrent) {
                 if (position < chunkCurrent->GetFinishPosition()) {
                     return accessor.OnArray(
-                        chunkCurrent->GetChunkIndex(), chunkCurrent->GetStartPosition(), position - chunkCurrent->GetStartPosition());
+                        chunkCurrent->GetChunkIndex(), chunkCurrent->GetStartPosition());
                 }
                 AFL_VERIFY(chunkCurrent->GetChunkIndex() < accessor.GetChunksCount());
                 startIndex = chunkCurrent->GetChunkIndex();
@@ -153,7 +256,7 @@ protected:
             for (ui32 i = startIndex; i < accessor.GetChunksCount(); ++i) {
                 const ui64 nextIdx = idx + accessor.GetChunkLength(i);
                 if (idx <= position && position < nextIdx) {
-                    return accessor.OnArray(i, idx, position - idx);
+                    return accessor.OnArray(i, idx);
                 }
                 idx = nextIdx;
             }
@@ -164,7 +267,7 @@ protected:
                 AFL_VERIFY(idx >= accessor.GetChunkLength(i))("idx", idx)("length", accessor.GetChunkLength(i));
                 const ui64 nextIdx = idx - accessor.GetChunkLength(i);
                 if (nextIdx <= position && position < idx) {
-                    return accessor.OnArray(i, nextIdx, position - nextIdx);
+                    return accessor.OnArray(i, nextIdx);
                 }
                 idx = nextIdx;
             }
@@ -188,7 +291,7 @@ public:
     class TReader {
     private:
         std::shared_ptr<IChunkedArray> ChunkedArray;
-        mutable std::optional<TCurrentChunkAddress> CurrentChunkAddress;
+        mutable std::optional<TFullDataAddress> CurrentChunkAddress;
 
     public:
         TReader(const std::shared_ptr<IChunkedArray>& data)
@@ -240,16 +343,48 @@ public:
 
     std::shared_ptr<arrow::ChunkedArray> Slice(const ui32 offset, const ui32 count) const;
 
-    TCurrentArrayAddress GetArray(
-        const std::optional<TCurrentArrayAddress>& chunkCurrent, const ui64 position, const std::shared_ptr<IChunkedArray>& selfPtr) const {
-        AFL_VERIFY(position < GetRecordsCount());
-        return DoGetArray(chunkCurrent, position, selfPtr);
+    bool IsDataOwner() const {
+        switch (Type) {
+            case EType::SparsedArray:
+            case EType::ChunkedArray:
+            case EType::Array:
+                return true;
+            case EType::Undefined:
+                AFL_VERIFY(false);
+            case EType::SerializedChunkedArray:
+                return false;
+        };
     }
 
-    TCurrentChunkAddress GetChunk(const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position) const {
-        AFL_VERIFY(position < GetRecordsCount());
-        return DoGetChunk(chunkCurrent, position);
+    TFullChunkedArrayAddress GetArray(
+        const std::optional<TAddressChain>& chunkCurrent, const ui64 position, const std::shared_ptr<IChunkedArray>& selfPtr) const;
+
+    TFullDataAddress GetChunk(const std::optional<TFullDataAddress>& chunkCurrent, const ui64 position) const {
+        if (chunkCurrent) {
+            return GetChunk(chunkCurrent->GetAddress(), position);
+        } else {
+            return GetChunk(std::optional<TAddressChain>(), position);
+        }
     }
+
+    TFullDataAddress GetChunkSlow(const ui64 position) const {
+        return GetChunk(std::optional<TAddressChain>(), position);
+    }
+
+    TFullChunkedArrayAddress GetArray(
+        const std::optional<TFullChunkedArrayAddress>& chunkCurrent, const ui64 position, const std::shared_ptr<IChunkedArray>& selfPtr) const {
+        if (chunkCurrent) {
+            return GetArray(chunkCurrent->GetAddress(), position, selfPtr);
+        } else {
+            return GetArray(std::optional<TAddressChain>(), position, selfPtr);
+        }
+    }
+
+    TFullChunkedArrayAddress GetArraySlow(const ui64 position, const std::shared_ptr<IChunkedArray>& selfPtr) const {
+        return GetArray(std::optional<TAddressChain>(), position, selfPtr);
+    }
+
+    TFullDataAddress GetChunk(const std::optional<TAddressChain>& chunkCurrent, const ui64 position) const;
 
     IChunkedArray(const ui64 recordsCount, const EType type, const std::shared_ptr<arrow::DataType>& dataType)
         : DataType(dataType)

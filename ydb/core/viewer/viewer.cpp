@@ -541,7 +541,7 @@ private:
                     "HTTP/1.1 204 No Content\r\n"
                     "Access-Control-Allow-Origin: " + AllowOrigin + "\r\n"
                     "Access-Control-Allow-Credentials: true\r\n"
-                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
+                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace\r\n"
                     "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n"
                     "Allow: OPTIONS, GET, POST\r\n"
                     "Content-Type: " + type + "\r\n"
@@ -553,7 +553,7 @@ private:
                         "HTTP/1.1 204 No Content\r\n"
                         "Access-Control-Allow-Origin: " + origin + "\r\n"
                         "Access-Control-Allow-Credentials: true\r\n"
-                        "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
+                        "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace\r\n"
                         "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n"
                         "Allow: OPTIONS, GET, POST\r\n"
                         "Content-Type: " + type + "\r\n"
@@ -672,7 +672,7 @@ void TViewer::FillCORS(TStringBuilder& stream, const TRequestState& request) {
     if (origin) {
         stream << "Access-Control-Allow-Origin: " << origin << "\r\n"
                << "Access-Control-Allow-Credentials: true\r\n"
-               << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
+               << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace\r\n"
                << "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n";
     }
 }

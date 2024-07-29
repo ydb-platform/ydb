@@ -14,6 +14,7 @@ from typing import List, Optional, Dict
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from junit_utils import get_property_value, iter_xml_files
 from gh_status import update_pr_comment_text
+from get_test_history import get_test_history
 
 
 class TestStatus(Enum):
@@ -226,12 +227,13 @@ def render_pm(value, url, diff=None):
     return text
 
 
-def render_testlist_html(rows, fn):
+def render_testlist_html(rows, fn , build_preset):
     TEMPLATES_PATH = os.path.join(os.path.dirname(__file__), "templates")
 
     env = Environment(loader=FileSystemLoader(TEMPLATES_PATH), undefined=StrictUndefined)
 
     status_test = {}
+    last_N_runs=5
     has_any_log = set()
 
     for t in rows:
@@ -246,6 +248,12 @@ def render_testlist_html(rows, fn):
 
     # remove status group without tests
     status_order = [s for s in status_order if s in status_test]
+
+    #get failed tests
+    failed_tests_array=[]
+    for test in status_test[TestStatus.FAIL]:
+        failed_tests_array.append(test.full_name)
+
     history={
         "ydb/core/kqp/ut/scheme/KqpScheme.AlterTableAddExplicitSyncVectorKMeansTreeIndex" :
         [
@@ -256,6 +264,7 @@ def render_testlist_html(rows, fn):
             ["passed","green" ]
         ]
     }
+    history = get_test_history(failed_tests_array,last_N_runs,build_preset)
     content = env.get_template("summary.html").render(
         status_order=status_order, tests=status_test, has_any_log=has_any_log, history=history
     )
@@ -283,7 +292,7 @@ def write_summary(summary: TestSummary):
         fp.close()
 
 
-def gen_summary(public_dir, public_dir_url, paths):
+def gen_summary(public_dir, public_dir_url, paths, build_preset):
     summary = TestSummary()
 
     for title, html_fn, path in paths:
@@ -298,7 +307,7 @@ def gen_summary(public_dir, public_dir_url, paths):
 
         report_url = f"{public_dir_url}/{html_fn}"
 
-        render_testlist_html(summary_line.tests, os.path.join(public_dir, html_fn))
+        render_testlist_html(summary_line.tests, os.path.join(public_dir, html_fn),build_preset)
         summary_line.add_report(html_fn, report_url)
         summary.add_line(summary_line)
 
@@ -351,7 +360,7 @@ def main():
     paths = iter(args.args)
     title_path = list(zip(paths, paths, paths))
 
-    summary = gen_summary(args.public_dir, args.public_dir_url, title_path)
+    summary = gen_summary(args.public_dir, args.public_dir_url, title_path, args.build_preset)
     write_summary(summary)
 
     if summary.is_empty | summary.is_failed:

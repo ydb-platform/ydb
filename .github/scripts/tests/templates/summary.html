@@ -27,13 +27,65 @@
         span.test_mute {
             color: blue;
         }
-        .circle {
+        .circle_passed {
+           background-color: green;
+       }
+       .circle_failure {
+           background-color: red;
+       }
+       .circle_skipped {
+           background-color: gray;
+       }
+       .circle_mute {
+           background-color: #f7cf8f;
+       }
+
+       .circle {
             display: inline-block;
             width: 10px;
             height: 10px;
             margin-right: 5px;
             border-radius: 50%;
+            position: relative; /* Essential for tooltips */
+            cursor: pointer;
         }
+
+        .tooltip {
+            visibility: hidden;
+            width: 180px;
+            background-color: #7d7d92;
+            color: #fff;
+            text-align: left;
+            border-radius: 5px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 200%; /* Positioned above the circle */
+            left: 50%; /* Center the tooltip */
+            margin-left: -95px; /* Use negative margin to actually center the tooltip */
+            opacity: 0;
+            transition: opacity 0.3s;
+            overflow: hidden;
+            white-space: nowrap; /* Don't forget this one */
+            text-overflow: ellipsis;
+        }
+
+        .tooltip::after {
+            content: "";
+            position: absolute;
+            top: 100%; /* Arrow will be positioned at the bottom of the tooltip */
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: #555 transparent transparent transparent; /* Arrow color */
+        }
+
+        .circle:hover .tooltip, .circle:focus .tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
+
         button.copy {
             float: right;
         }
@@ -41,6 +93,22 @@
         table > tbody > tr > td:nth-child(3),
         table > tbody > tr > td:nth-child(4) {
             text-align: center;
+        }
+
+        .collapsible-content {
+            display: none;
+        }
+
+        .collapsible-content.active {
+            display: table-row-group;
+        }
+
+        .collapsible-header {
+            cursor: pointer;
+            background-color: #f2f2f2;
+            padding: 10px;
+            border: 1px solid #ddd;
+            margin-bottom: 5px;
         }
     </style>
     <script>
@@ -76,19 +144,30 @@
             event.preventDefault();
             copyTestNameToClipboard(event.target.previousElementSibling.textContent)
         }
-
         document.addEventListener("DOMContentLoaded", function() {
             const els = document.getElementsByClassName("copy");
             for (let i = 0; i < els.length; i++) {
                 els[i].addEventListener('click', copyOnPress);
+            }
+            const headers = document.getElementsByClassName("collapsible-header");
+            for (let i = 0; i < headers.length; i++) {
+                headers[i].addEventListener('click', function() {
+
+    const content = this.nextElementSibling;
+                    if (content.classList.contains('active')) {
+                        content.classList.remove('active');
+                    } else {
+                        content.classList.add('active');
+                    }
+                });
             }
         });
     </script>
 </head>
 <body>
 {% for status in status_order %}
-<h1 id="{{ status.name}}">{{ status.name }} ({{ tests[status] | length }})</h1>
-<table style="width:100%;" border="1">
+<h1 id="{{ status.name}}" class="collapsible-header">{{ status.name }} ({{ tests[status] | length }})</h1>
+<table class="collapsible-content{% if status.name == 'FAIL' %} active{% endif %}" border="1">
     <thead>
     <tr>
         <th>test name</th>
@@ -112,7 +191,14 @@
         {% if (status.name == 'FAIL' and t.full_name in history) %}
         <td>
             {% for h in history[t.full_name] %}
-                <span class="circle" style="background-color: {{h[1]}}"></span>
+                <span class="circle circle_{{history[t.full_name][h].status}}">
+                    <span class="tooltip">
+                        Status: {{history[t.full_name][h].status}}<br>
+                        Date: {{ history[t.full_name][h].datetime }}<br>
+                        SHA: <a href="https://github.com/ydb-platform/ydb//commit/{{ history[t.full_name][h].commit }}" style="color: #00f;" target="_blank">{{history[t.full_name][h].commit}}</a>
+                    </span>
+
+                </span>
             {% endfor %}
         </td> 
         {% elif status.name == 'FAIL' %}

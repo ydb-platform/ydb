@@ -651,25 +651,25 @@ namespace {
 
         if (dstSettings.ConnectionString && (dstSettings.Endpoint || dstSettings.Database)) {
             ctx.AddError(TIssue(ctx.GetPosition(pos),
-                TStringBuilder() << "Connection string and Endpoint/Database are mutually exclusive"));
+                "CONNECTION_STRING and ENDPOINT/DATABASE are mutually exclusive"));
             return false;
         }
 
         if (dstSettings.OAuthToken && dstSettings.StaticCredentials) {
             ctx.AddError(TIssue(ctx.GetPosition(pos),
-                TStringBuilder() << "Token and User/Password are mutually exclusive"));
+                "TOKEN and USER/PASSWORD are mutually exclusive"));
             return false;
         }
 
         if (const auto& x = dstSettings.OAuthToken; x && x->Token && x->TokenSecretName) {
             ctx.AddError(TIssue(ctx.GetPosition(pos),
-                TStringBuilder() << "TOKEN and TOKEN_SECRET_NAME are mutually exclusive"));
+                "TOKEN and TOKEN_SECRET_NAME are mutually exclusive"));
             return false;
         }
 
         if (const auto& x = dstSettings.StaticCredentials; x && x->Password && x->PasswordSecretName) {
             ctx.AddError(TIssue(ctx.GetPosition(pos),
-                TStringBuilder() << "PASSWORD and PASSWORD_SECRET_NAME are mutually exclusive"));
+                "PASSWORD and PASSWORD_SECRET_NAME are mutually exclusive"));
             return false;
         }
 
@@ -2097,21 +2097,21 @@ public:
                 return SyncError();
             }
 
-            if (!settings.Settings.ConnectionString && !settings.Settings.Endpoint) {
+            if (!settings.Settings.ConnectionString && (!settings.Settings.Endpoint || !settings.Settings.Database)) {
                 ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
-                    TStringBuilder() << "Neither Connection string nor Endpoint/Database are provided"));
+                    "Neither CONNECTION_STRING nor ENDPOINT/DATABASE are provided"));
                 return SyncError();
             }
 
-            if (!settings.Settings.OAuthToken && !settings.Settings.StaticCredentials) {
+            if (const auto& x = settings.Settings.StaticCredentials; x && !x->UserName) {
                 ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
-                    TStringBuilder() << "Neither Token nor User/Password are provided"));
+                    "USER is not provided"));
                 return SyncError();
             }
 
-            if (const auto& x = settings.Settings.StaticCredentials; x && (!x->UserName && x->Password || !x->UserName && x->PasswordSecretName)) {
+            if (const auto& x = settings.Settings.StaticCredentials; x && (!x->Password || !x->PasswordSecretName)) {
                 ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
-                    TStringBuilder() << "USER for PASSWORD or PASSWORD_SECRET_NAME are not provided"));
+                    "PASSWORD or PASSWORD_SECRET_NAME are not provided"));
                 return SyncError();
             }
 

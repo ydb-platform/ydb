@@ -53,8 +53,8 @@ struct TStatisticsAggregator::TTxStatisticsScanResponse : public TTxBase {
                     *current += *sketch;
 
                     auto currentStr = TString(current->AsStringBuf());
-                    db.Table<Schema::Statistics>().Key(tag).Update(
-                        NIceDb::TUpdate<Schema::Statistics::CountMinSketch>(currentStr));
+                    db.Table<Schema::ColumnStatistics>().Key(tag).Update(
+                        NIceDb::TUpdate<Schema::ColumnStatistics::CountMinSketch>(currentStr));
                 }
             }
         }

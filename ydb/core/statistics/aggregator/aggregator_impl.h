@@ -216,7 +216,7 @@ private:
     TDuration PropagateTimeout;
     static constexpr TDuration FastCheckInterval = TDuration::MilliSeconds(50);
 
-    std::unordered_map<TSSId, TString> BaseStats; // schemeshard id -> serialized stats for all paths
+    std::unordered_map<TSSId, TString> BaseStatistics; // schemeshard id -> serialized stats for all paths
 
     std::unordered_map<TSSId, size_t> SchemeShards; // all connected schemeshards
     std::unordered_map<TActorId, TSSId> SchemeShardPipes; // schemeshard pipe servers

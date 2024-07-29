@@ -21,10 +21,10 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
             << ", stats size# " << stats.size());
 
         NIceDb::TNiceDb db(txc.DB);
-        db.Table<Schema::BaseStats>().Key(schemeShardId).Update(
-            NIceDb::TUpdate<Schema::BaseStats::Stats>(stats));
+        db.Table<Schema::BaseStatistics>().Key(schemeShardId).Update(
+            NIceDb::TUpdate<Schema::BaseStatistics::Stats>(stats));
 
-        Self->BaseStats[schemeShardId] = stats;
+        Self->BaseStatistics[schemeShardId] = stats;
 
         if (!Self->EnableColumnStatistics) {
             return true;

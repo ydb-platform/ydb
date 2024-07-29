@@ -383,8 +383,8 @@ size_t TStatisticsAggregator::PropagatePart(const std::vector<TNodeId>& nodeIds,
         auto ssId = ssIds[index];
         auto* entry = record->AddEntries();
         entry->SetSchemeShardId(ssId);
-        auto itStats = BaseStats.find(ssId);
-        if (itStats != BaseStats.end()) {
+        auto itStats = BaseStatistics.find(ssId);
+        if (itStats != BaseStatistics.end()) {
             entry->SetStats(itStats->second);
             size += itStats->second.size();
         } else {
@@ -675,7 +675,7 @@ void TStatisticsAggregator::ResetScanState(NIceDb::TNiceDb& db) {
     ReplyToActorIds.clear();
 
     for (auto& [tag, _] : CountMinSketches) {
-        db.Table<Schema::Statistics>().Key(tag).Delete();
+        db.Table<Schema::ColumnStatistics>().Key(tag).Delete();
     }
     CountMinSketches.clear();
 
@@ -728,7 +728,7 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
         PRE() {
             str << "---- StatisticsAggregator ----" << Endl << Endl;
             str << "Database: " << Database << Endl;
-            str << "BaseStats: " << BaseStats.size() << Endl;
+            str << "BaseStatistics: " << BaseStatistics.size() << Endl;
             str << "SchemeShards: " << SchemeShards.size() << Endl;
             {
                 std::function<TSSId(const std::pair<const TSSId, size_t>&)> extr =

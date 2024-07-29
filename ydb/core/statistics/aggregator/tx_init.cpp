@@ -19,13 +19,13 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
 
         { // precharge
             auto sysParamsRowset = db.Table<Schema::SysParams>().Range().Select();
-            auto baseStatsRowset = db.Table<Schema::BaseStats>().Range().Select();
-            auto statisticsRowset = db.Table<Schema::Statistics>().Range().Select();
+            auto baseStatisticsRowset = db.Table<Schema::BaseStatistics>().Range().Select();
+            auto statisticsRowset = db.Table<Schema::ColumnStatistics>().Range().Select();
             auto scanTablesRowset = db.Table<Schema::ScanTables>().Range().Select();
             auto scanOperationsRowset = db.Table<Schema::ScanOperations>().Range().Select();
 
             if (!sysParamsRowset.IsReady() ||
-                !baseStatsRowset.IsReady() ||
+                !baseStatisticsRowset.IsReady() ||
                 !statisticsRowset.IsReady() ||
                 !scanTablesRowset.IsReady() ||
                 !scanOperationsRowset.IsReady())
@@ -95,20 +95,20 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             }
         }
 
-        // BaseStats
+        // BaseStatistics
         {
-            Self->BaseStats.clear();
+            Self->BaseStatistics.clear();
 
-            auto rowset = db.Table<Schema::BaseStats>().Range().Select();
+            auto rowset = db.Table<Schema::BaseStatistics>().Range().Select();
             if (!rowset.IsReady()) {
                 return false;
             }
 
             while (!rowset.EndOfSet()) {
-                ui64 schemeShardId = rowset.GetValue<Schema::BaseStats::SchemeShardId>();
-                TString stats = rowset.GetValue<Schema::BaseStats::Stats>();
+                ui64 schemeShardId = rowset.GetValue<Schema::BaseStatistics::SchemeShardId>();
+                TString stats = rowset.GetValue<Schema::BaseStatistics::Stats>();
 
-                Self->BaseStats[schemeShardId] = stats;
+                Self->BaseStatistics[schemeShardId] = stats;
 
                 if (!rowset.Next()) {
                     return false;
@@ -116,21 +116,21 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             }
 
             SA_LOG_D("[" << Self->TabletID() << "] Loading base stats: "
-                << "schemeshard count# " << Self->BaseStats.size());
+                << "schemeshard count# " << Self->BaseStatistics.size());
         }
 
-        // Statistics
+        // ColumnStatistics
         {
             Self->CountMinSketches.clear();
 
-            auto rowset = db.Table<Schema::Statistics>().Range().Select();
+            auto rowset = db.Table<Schema::ColumnStatistics>().Range().Select();
             if (!rowset.IsReady()) {
                 return false;
             }
 
             while (!rowset.EndOfSet()) {
-                ui32 columnTag = rowset.GetValue<Schema::Statistics::ColumnTag>();
-                TString sketch = rowset.GetValue<Schema::Statistics::CountMinSketch>();
+                ui32 columnTag = rowset.GetValue<Schema::ColumnStatistics::ColumnTag>();
+                TString sketch = rowset.GetValue<Schema::ColumnStatistics::CountMinSketch>();
 
                 Self->CountMinSketches[columnTag].reset(
                     TCountMinSketch::FromString(sketch.data(), sketch.size()));

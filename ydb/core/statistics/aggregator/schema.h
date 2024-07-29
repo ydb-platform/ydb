@@ -13,7 +13,7 @@ struct TAggregatorSchema : NIceDb::Schema {
         using TColumns = TableColumns<Id, Value>;
     };
 
-    struct BaseStats : Table<2> {
+    struct BaseStatistics : Table<2> {
         struct SchemeShardId : Column<1, NScheme::NTypeIds::Uint64> {};
         struct Stats         : Column<2, NScheme::NTypeIds::String> {};
 
@@ -21,7 +21,7 @@ struct TAggregatorSchema : NIceDb::Schema {
         using TColumns = TableColumns<SchemeShardId, Stats>;
     };
 
-    struct Statistics : Table<3> {
+    struct ColumnStatistics : Table<3> {
         struct ColumnTag      : Column<1, NScheme::NTypeIds::Uint32> {};
         struct CountMinSketch : Column<2, NScheme::NTypeIds::String> {};
 
@@ -61,8 +61,8 @@ struct TAggregatorSchema : NIceDb::Schema {
 
     using TTables = SchemaTables<
         SysParams,
-        BaseStats,
-        Statistics,
+        BaseStatistics,
+        ColumnStatistics,
         ScanTables,
         ScanOperations
     >;

@@ -45,7 +45,7 @@ private:
     struct TTxInit;
     struct TTxConfigure;
     struct TTxSchemeShardStats;
-    struct TTxScanTable;
+    struct TTxAnalyzeTable;
     struct TTxNavigate;
     struct TTxResolve;
     struct TTxStatisticsScanResponse;

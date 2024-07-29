@@ -4,12 +4,12 @@
 
 namespace NKikimr::NStat {
 
-struct TStatisticsAggregator::TTxScanTable : public TTxBase {
+struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
     TPathId PathId;
     TActorId ReplyToActorId;
     ui64 OperationId = 0;
 
-    TTxScanTable(TSelf* self, const TPathId& pathId, TActorId replyToActorId)
+    TTxAnalyzeTable(TSelf* self, const TPathId& pathId, TActorId replyToActorId)
         : TTxBase(self)
         , PathId(pathId)
         , ReplyToActorId(replyToActorId)
@@ -18,7 +18,7 @@ struct TStatisticsAggregator::TTxScanTable : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_SCAN_TABLE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxScanTable::Execute");
+        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTable::Execute");
 
         if (!Self->EnableColumnStatistics) {
             return true;
@@ -51,7 +51,7 @@ struct TStatisticsAggregator::TTxScanTable : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxScanTable::Complete");
+        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTable::Complete");
     }
 };
 
@@ -60,7 +60,7 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyze::TPtr& ev) {
 
     // TODO: replace by queue
     for (const auto& table : record.GetTables()) {
-        Execute(new TTxScanTable(this, PathIdFromPathId(table.GetPathId()), ev->Sender), TActivationContext::AsActorContext());
+        Execute(new TTxAnalyzeTable(this, PathIdFromPathId(table.GetPathId()), ev->Sender), TActivationContext::AsActorContext());
     }
 
 }

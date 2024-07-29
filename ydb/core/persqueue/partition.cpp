@@ -276,9 +276,17 @@ ui64 TPartition::GetUsedStorage(const TInstant& now) {
     const auto duration = now - LastUsedStorageMeterTimestamp;
     LastUsedStorageMeterTimestamp = now;
 
-    auto dataSize = MeteringDataSize();
-    auto reservedSize = ReserveSize();
-    ui64 size = dataSize > reservedSize ? dataSize - reservedSize : 0;
+    ui64 size = 0;
+    if (IsActive()) {
+        auto dataSize = MeteringDataSize();
+        auto reservedSize = ReserveSize();
+        size = dataSize > reservedSize ? dataSize - reservedSize : 0;
+    } else if (!IsActive() && DataKeysBody.size() > 1) {
+        auto expirationTimestamp = now - TDuration::Seconds(Config.GetPartitionConfig().GetLifetimeSeconds()) - WAKE_TIMEOUT;
+        for (size_t i = 1; i < DataKeysBody.size() && DataKeysBody[i].Timestamp < expirationTimestamp; ++i) {
+            size += DataKeysBody[i].Size;
+        }
+    }
     return size * duration.MilliSeconds() / 1000 / 1_MB; // mb*seconds
 }
 

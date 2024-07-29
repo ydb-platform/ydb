@@ -1,4 +1,4 @@
-{% if backend_name == "YDB" and oss %}
+{% if oss == "true" and backend_name == "YDB" %}
 
 {% note alert %}
 

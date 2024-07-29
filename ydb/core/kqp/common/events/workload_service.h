@@ -24,7 +24,6 @@ struct TEvPlaceRequestIntoPool : public NActors::TEventLocal<TEvPlaceRequestInto
     const TString SessionId;
     TString PoolId;  // Can be changed to default pool id
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    bool FromCache = false;
 };
 
 struct TEvContinueRequest : public NActors::TEventLocal<TEvContinueRequest, TKqpWorkloadServiceEvents::EvContinueRequest> {

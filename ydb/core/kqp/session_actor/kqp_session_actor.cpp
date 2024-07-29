@@ -242,20 +242,20 @@ public:
     }
 
     void PassRequestToResourcePool() {
-        const TString& poolId = QueryState->UserRequestContext->PoolId;
-        auto event = std::make_unique<NWorkload::TEvPlaceRequestIntoPool>(QueryState->Database, SessionId, poolId, QueryState->UserToken);
-
-        TEventFlags flags = 0;
         if (QueryState->UserRequestContext->PoolConfig) {
-            LOG_D("request placed into pool from cache: " << poolId);
-            event->FromCache = true;
+            LOG_D("request placed into pool from cache: " << QueryState->UserRequestContext->PoolId);
             CompileQuery();
-        } else {
-            flags |= IEventHandle::FlagTrackDelivery;
-            Become(&TKqpSessionActor::ExecuteState);
+            return;
         }
 
-        Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), event.release(), flags);
+        Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvPlaceRequestIntoPool(
+            QueryState->Database,
+            SessionId,
+            QueryState->UserRequestContext->PoolId,
+            QueryState->UserToken
+        ), IEventHandle::FlagTrackDelivery);
+
+        Become(&TKqpSessionActor::ExecuteState);
     }
 
     void ForwardRequest(TEvKqp::TEvQueryRequest::TPtr& ev) {

@@ -7,6 +7,7 @@
 #include <ydb/core/mon_alloc/stats.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/memory_controller_config.pb.h>
+#include <ydb/core/protos/memory_stats.pb.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
@@ -208,7 +209,7 @@ private:
         Counters->GetCounter("Stats/ResultingConsumersConsumption")->Set(resultingConsumersConsumption);
         Counters->GetCounter("Stats/Coefficient")->Set(coefficient * 1e9);
 
-        NKikimrWhiteboard::TSystemStateInfo::TMemoryStats memoryStats;
+        NKikimrMemory::TMemoryStats memoryStats;
         if (processMemoryInfo.AnonRss.has_value()) memoryStats.SetAnonRss(processMemoryInfo.AnonRss.value());
         if (processMemoryInfo.CGroupLimit.has_value()) memoryStats.SetCGroupLimit(processMemoryInfo.CGroupLimit.value());
         if (processMemoryInfo.MemTotal.has_value()) memoryStats.SetMemTotal(processMemoryInfo.MemTotal.value());
@@ -340,7 +341,7 @@ private:
         }).first->second;
     }
 
-    void SetMemoryStats(const TConsumerState& consumer, NKikimrWhiteboard::TSystemStateInfo::TMemoryStats& stats, ui64 limitBytes) const {
+    void SetMemoryStats(const TConsumerState& consumer, NKikimrMemory::TMemoryStats& stats, ui64 limitBytes) const {
         switch (consumer.Kind) {
             case EMemoryConsumerKind::MemTable: {
                 stats.SetMemTableConsumption(consumer.Consumption);

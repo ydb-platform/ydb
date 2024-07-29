@@ -2,6 +2,7 @@ import "ydb/library/actors/protos/interconnect.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
+import "ydb/core/protos/memory_stats.proto";
 import "google/protobuf/descriptor.proto";
 import "ydb/core/protos/tracing.proto";
 
@@ -299,31 +300,6 @@ message TSystemStateInfo {
         optional uint64 LimitBytes = 2;
     }
 
-    message TMemoryStats {
-        optional uint64 AnonRss = 1;
-        optional uint64 CGroupLimit = 2;
-        optional uint64 MemTotal = 3;
-        optional uint64 MemAvailable = 4;
-
-        optional uint64 AllocatedMemory = 5;
-        optional uint64 AllocatorCachesMemory = 6;
-
-        optional uint64 HardLimit = 7;
-        optional uint64 SoftLimit = 8;
-        optional uint64 TargetUtilization = 9;
-
-        optional uint64 ConsumersConsumption = 10;
-        optional uint64 ConsumersLimit = 11;
-        optional uint64 OtherConsumption = 12;
-        optional uint64 ExternalConsumption = 13;
-
-        optional uint64 SharedCacheConsumption = 14;
-        optional uint64 SharedCacheLimit = 15;
-
-        optional uint64 MemTableConsumption = 16;
-        optional uint64 MemTableLimit = 17;
-    }
-
     optional uint64 StartTime = 1;
     optional uint64 ChangeTime = 2;
     optional TLegacyNodeLocation SystemLocation = 3;
@@ -358,7 +334,7 @@ message TSystemStateInfo {
     optional TNodeSharedCache SharedCacheStats = 35; // TODO: use memory stats
     optional uint32 TotalSessions = 36;
     optional string NodeName = 37;
-    optional TMemoryStats MemoryStats = 38;
+    optional NKikimrMemory.TMemoryStats MemoryStats = 38;
 }
 
 message TEvSystemStateRequest {

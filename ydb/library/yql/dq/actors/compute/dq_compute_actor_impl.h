@@ -1362,6 +1362,7 @@ protected:
                         .OutputIndex = outputIndex,
                         .StatsLevel = collectStatsLevel,
                         .TxId = TxId,
+                        .TaskId = Task.GetId(),
                         .Callback = static_cast<TSinkCallbacks*>(this),
                         .SecureParams = secureParams,
                         .TaskParams = taskParams,

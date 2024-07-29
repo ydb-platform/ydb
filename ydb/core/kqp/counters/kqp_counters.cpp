@@ -834,8 +834,6 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     ComputeActorExecutions = KqpGroup->GetHistogram("NodeScheduler/BatchUs", NMonitoring::ExponentialHistogram(20, 2, 1));
     ThrottledActorsSpuriousActivations = KqpGroup->GetCounter("NodeScheduler/SpuriousActivations", true);
     SchedulerDelays = KqpGroup->GetHistogram("NodeScheduler/Delay", NMonitoring::ExponentialHistogram(20, 2, 1));
-    AccountIntervals = KqpGroup->GetHistogram("NodeScheduler/MailboxUsageCounterDifference", NMonitoring::ExponentialHistogram(20, 2, 1));
-    ComputeActorsRegistrations = KqpGroup->GetCounter("NodeScheduler/Registrations", true);
 }
 
 ::NMonitoring::TDynamicCounterPtr TKqpCounters::GetKqpCounters() const {

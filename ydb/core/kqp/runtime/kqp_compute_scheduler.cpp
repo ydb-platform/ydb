@@ -431,13 +431,7 @@ bool TComputeScheduler::Disabled(TString group) {
 }
 
 
-::NMonitoring::TDynamicCounters::TCounterPtr TComputeScheduler::GetGroupUsageCounter(TString group, bool marked) const {
-    if (marked) {
-        return Impl->Counters
-            ->GetKqpCounters()
-            ->GetSubgroup("NodeScheduler/Group", group)
-            ->GetCounter("MarkedUsage", true);
-    }
+::NMonitoring::TDynamicCounters::TCounterPtr TComputeScheduler::GetGroupUsageCounter(TString group) const {
     return Impl->Counters
         ->GetKqpCounters()
         ->GetSubgroup("NodeScheduler/Group", group)

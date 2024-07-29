@@ -415,8 +415,6 @@ public:
     NMonitoring::THistogramPtr ComputeActorExecutions;
     ::NMonitoring::TDynamicCounters::TCounterPtr ThrottledActorsSpuriousActivations;
     NMonitoring::THistogramPtr SchedulerDelays;
-    NMonitoring::THistogramPtr AccountIntervals;
-    NMonitoring::TDynamicCounters::TCounterPtr ComputeActorsRegistrations;
 
     // Sequences counters
     ::NMonitoring::TDynamicCounters::TCounterPtr SequencerActorsCount;

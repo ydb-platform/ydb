@@ -74,7 +74,7 @@ public:
 
     void SetPriorities(TDistributionRule rootRule, double cores, TMonotonic now);
     void SetMaxDeviation(TDuration);
-    ::NMonitoring::TDynamicCounters::TCounterPtr GetGroupUsageCounter(TString group, bool marked) const;
+    ::NMonitoring::TDynamicCounters::TCounterPtr GetGroupUsageCounter(TString group) const;
 
     TSchedulerEntityHandle Enroll(TString group, double weight, TMonotonic now);
 
@@ -145,9 +145,7 @@ public:
         if (!NoThrottle) {
             Y_ABORT_UNLESS(Counters);
             Y_ABORT_UNLESS(SelfHandle);
-            GroupUsage = options.Scheduler->GetGroupUsageCounter(options.Group, false);
-            MarkedUsage = options.Scheduler->GetGroupUsageCounter(options.Group, true);
-            Counters->ComputeActorsRegistrations->Inc();
+            GroupUsage = options.Scheduler->GetGroupUsageCounter(options.Group);
         } else {
             Y_ABORT_UNLESS(!SelfHandle);
         }
@@ -171,7 +169,7 @@ public:
     }
 
     STFUNC(BaseStateFuncBody) {
-        AccountActorSysmemStats(TlsActivationContext->Monotonic());
+        AccountActorSystemStats(TlsActivationContext->Monotonic());
         // we assume that exception handling is done in parents/descendents
         switch (ev->GetTypeRewrite()) {
             hFunc(NActors::TEvents::TEvWakeup, TSchedulableComputeActorBase<TDerived>::HandleWakeup);
@@ -181,10 +179,12 @@ public:
     }
 
     void DoBoostrap() {
-        OldActivationStats = TlsActivationContext->AsActorContext().Mailbox.TimeElapsed;
-        //if (OldActivationStats > 0) {
-        //    CA_LOG_E("strange leftover activation " << OldActivationStats); 
-        //}
+        TlsActivationContext->AsActorContext().Mailbox.EnableStats();
+        OldActivationStats = TlsActivationContext->AsActorContext().Mailbox.GetElapsedCycles();
+        Y_ABORT_UNLESS(OldActivationStats.has_value());
+        if (*OldActivationStats > 0) {
+            CA_LOG_E("strange leftover activation " << OldActivationStats); 
+        }
     }
 
 private:
@@ -209,7 +209,7 @@ protected:
         }
 
         TMonotonic now = Now();
-        AccountActorSysmemStats(now);
+        AccountActorSystemStats(now);
         TMaybe<TDuration> delay = CalcDelay(now);
         bool executed = false;
         if (NoThrottle || !delay) {
@@ -247,18 +247,15 @@ protected:
         ExecutionTimer.Clear();
     }
 
-    void AccountActorSysmemStats(NMonotonic::TMonotonic now) {
-        ui64 newStats = TlsActivationContext->AsActorContext().Mailbox.TimeElapsed;
-        Y_ABORT_UNLESS(OldActivationStats.Defined());
-        Y_ABORT_UNLESS(newStats >= *OldActivationStats);
-        //if (newStats < OldActivationStats) {
-        //    return;
-        //}
-        auto toAccount = TDuration::MicroSeconds(newStats - *OldActivationStats);
-        if (toAccount.MicroSeconds() > 262000) {
+    void AccountActorSystemStats(NMonotonic::TMonotonic now) {
+        auto newStats = TlsActivationContext->AsActorContext().Mailbox.GetElapsedCycles();
+        Y_ABORT_UNLESS(OldActivationStats.has_value());
+        Y_ABORT_UNLESS(newStats.has_value());
+        Y_ABORT_UNLESS(*newStats >= *OldActivationStats);
+        auto toAccount = TDuration::MicroSeconds(NHPTimer::GetSeconds(*newStats - *OldActivationStats) * 1e6);
+        if (toAccount.MicroSeconds() > 100000) {
             CA_LOG_E("very huge account " << toAccount.MicroSeconds() << " newStats=" << newStats << " oldStats=" << OldActivationStats << " trackedWork=" << TrackedWork.MicroSeconds());
         }
-        Counters->AccountIntervals->Collect(toAccount.MicroSeconds());
         {
             auto minTime = Min(toAccount, TrackedWork);
             TrackedWork -= minTime;
@@ -266,7 +263,6 @@ protected:
         }
 
         GroupUsage->Add(toAccount.MicroSeconds());
-        MarkedUsage->Add(toAccount.MicroSeconds());
         SelfHandle.TrackTime(toAccount, now);
         OldActivationStats = newStats;
     }
@@ -309,10 +305,10 @@ private:
     bool NoThrottle;
     bool Finished = false;
 
-    TMaybe<ui64> OldActivationStats;
+    std::optional<ui64> OldActivationStats;
 
     TIntrusivePtr<TKqpCounters> Counters;
-    ::NMonitoring::TDynamicCounters::TCounterPtr GroupUsage, MarkedUsage;
+    ::NMonitoring::TDynamicCounters::TCounterPtr GroupUsage;
 
     TString Group;
     double Weight;

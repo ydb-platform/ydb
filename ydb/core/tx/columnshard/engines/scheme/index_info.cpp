@@ -98,8 +98,6 @@ TString TIndexInfo::GetColumnName(ui32 id, bool required) const {
         return SPEC_COL_PLAN_STEP;
     } else if (ESpecialColumn(id) == ESpecialColumn::TX_ID) {
         return SPEC_COL_TX_ID;
-    } else if (ESpecialColumn(id) == ESpecialColumn::DELETE_FLAG) {
-        return SPEC_COL_DELETE_FLAG;
     } else {
         const auto ci = Columns.find(id);
 

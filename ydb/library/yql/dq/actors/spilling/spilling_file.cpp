@@ -241,7 +241,7 @@ public:
             return;
         }
         
-        Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(Root_, nodeId, sessionId));
+        Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(rootToRemoveOldTmp, nodeId, sessionId));
 
         Become(&TDqLocalFileSpillingService::WorkState);
     }

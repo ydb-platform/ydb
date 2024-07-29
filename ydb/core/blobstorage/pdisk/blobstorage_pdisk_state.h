@@ -27,6 +27,7 @@ enum EOwner {
     OwnerUnallocated = 1, // Unallocated chunks, Trim scheduling, Slay commands
     OwnerBeginUser = 2,
     OwnerEndUser = 241,
+    OwnerMetadata = 250, // Metadata chunks, the real owner
     OwnerSystemLog = 251, // Not used to actually mark chunks, just for space tracking
     OwnerSystemReserve = 252, // Not used to actually mark chunks, just for space tracking, means "for static" in requests
     OwnerCommonStaticLog = 253, // Not used to actually mark chunks, just for space tracking

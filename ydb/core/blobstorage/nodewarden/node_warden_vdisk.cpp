@@ -60,13 +60,19 @@ namespace NKikimr::NStorage {
         Y_VERIFY_S(!donorMode || !readOnly, "Only one of modes should be enabled: donorMode " << donorMode << ", readOnly " << readOnly);
 
         STLOG(PRI_DEBUG, BS_NODE, NW23, "StartLocalVDiskActor", (SlayInFlight, SlayInFlight.contains(vslotId)),
-            (VDiskId, vdisk.GetVDiskId()), (VSlotId, vslotId), (PDiskGuid, pdiskGuid), (DonorMode, donorMode));
+            (VDiskId, vdisk.GetVDiskId()), (VSlotId, vslotId), (PDiskGuid, pdiskGuid), (DonorMode, donorMode),
+            (PDiskRestartInFlight, PDiskRestartInFlight.contains(vslotId.PDiskId)),
+            (PDisksWaitingToStart, PDisksWaitingToStart.contains(vslotId.PDiskId)));
 
         if (SlayInFlight.contains(vslotId)) {
             return;
         }
 
         if (PDiskRestartInFlight.contains(vslotId.PDiskId)) {
+            return;
+        }
+
+        if (PDisksWaitingToStart.contains(vslotId.PDiskId)) {
             return;
         }
 

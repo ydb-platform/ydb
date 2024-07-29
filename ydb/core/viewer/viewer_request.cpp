@@ -16,10 +16,10 @@ using namespace NActors;
 using namespace NNodeWhiteboard;
 
 template<typename TRequestEventType, typename TResponseEventType>
-class TViewerWhiteboardRequest : public TWhiteboardRequest<TViewerWhiteboardRequest<TRequestEventType, TResponseEventType>, TRequestEventType, TResponseEventType> {
+class TViewerWhiteboardRequest : public TWhiteboardRequest<TRequestEventType, TResponseEventType> {
 protected:
     using TThis = TViewerWhiteboardRequest<TRequestEventType, TResponseEventType>;
-    using TBase = TWhiteboardRequest<TThis, TRequestEventType, TResponseEventType>;
+    using TBase = TWhiteboardRequest<TRequestEventType, TResponseEventType>;
     using TResponseType = typename TResponseEventType::ProtoRecordType;
     IViewer* Viewer;
     TEvViewer::TEvViewerRequest::TPtr Event;
@@ -54,7 +54,7 @@ public:
         NKikimr::NViewer::MergeWhiteboardResponses(*(response->Record.MutableSystemResponse()), perNodeStateInfo, fields);
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         auto response = MakeHolder<TEvViewer::TEvViewerResponse>();
         auto& locationResponded = (*response->Record.MutableLocationResponded());
         for (const auto& [nodeId, nodeResponse] : TBase::PerNodeStateInfo) {

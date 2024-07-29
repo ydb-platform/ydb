@@ -71,6 +71,7 @@ protected:
     std::unordered_map<TString, TSysTables::TTableColumnInfo> KeyColumns;
     std::vector<TSysTables::TTableColumnInfo*> LookupKeyColumns;
     std::vector<TSysTables::TTableColumnInfo> Columns;
+    const NKqpProto::EStreamLookupStrategy Strategy;
 };
 
 std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSettings&& settings,

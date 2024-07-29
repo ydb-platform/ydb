@@ -14,6 +14,8 @@ inline constexpr const char* LevelTable_EmbeddingColumn = "-embedding";
 inline constexpr const char* PostingTable = "indexImplPostingTable";
 inline constexpr const char* PostingTable_ParentIdColumn = "-parent";
 
+inline constexpr const char* TmpPostingTableSuffix0 = "0tmp";
+inline constexpr const char* TmpPostingTableSuffix1 = "1tmp";
 
 }
 

@@ -512,6 +512,7 @@
 "hashinet",
 "hashint2",
 "hashint4",
+"hashint4extended",
 "hashint8",
 "hashmacaddr",
 "hashmacaddr8",

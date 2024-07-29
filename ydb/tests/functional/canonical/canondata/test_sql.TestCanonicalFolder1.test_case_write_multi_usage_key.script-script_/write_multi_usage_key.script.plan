@@ -101,7 +101,7 @@
                 "Plans": [
                     {
                         "Node Type": "Effect",
-                        "PlanNodeId": 7,
+                        "PlanNodeId": 8,
                         "Plans": [
                             {
                                 "CTE Name": "precompute_0_0",
@@ -122,7 +122,7 @@
                                         "Name": "Iterator"
                                     }
                                 ],
-                                "PlanNodeId": 6,
+                                "PlanNodeId": 7,
                                 "Tables": [
                                     "base_write_multi_usage_key_script_script/Temp"
                                 ]
@@ -132,48 +132,57 @@
                     {
                         "Node Type": "Precompute_0",
                         "Parent Relationship": "InitPlan",
-                        "PlanNodeId": 4,
+                        "PlanNodeId": 5,
                         "PlanNodeType": "Materialize",
                         "Plans": [
                             {
                                 "Node Type": "Collect",
-                                "PlanNodeId": 3,
+                                "PlanNodeId": 4,
                                 "Plans": [
                                     {
                                         "Node Type": "UnionAll",
-                                        "PlanNodeId": 2,
+                                        "PlanNodeId": 3,
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "Filter-TableFullScan",
+                                                "Node Type": "Filter",
                                                 "Operators": [
                                                     {
                                                         "Inputs": [
                                                             {
-                                                                "InternalOperatorId": 1
+                                                                "ExternalPlanNodeId": 1
                                                             }
                                                         ],
                                                         "Name": "Filter",
                                                         "Predicate": "item.Name == Concat"
-                                                    },
-                                                    {
-                                                        "Inputs": [],
-                                                        "Name": "TableFullScan",
-                                                        "ReadColumns": [
-                                                            "Amount",
-                                                            "Name"
-                                                        ],
-                                                        "ReadRanges": [
-                                                            "Group (-\u221e, +\u221e)",
-                                                            "Name (-\u221e, +\u221e)"
-                                                        ],
-                                                        "Scan": "Parallel",
-                                                        "Table": "base_write_multi_usage_key_script_script/Input1"
                                                     }
                                                 ],
-                                                "PlanNodeId": 1,
-                                                "Tables": [
-                                                    "base_write_multi_usage_key_script_script/Input1"
+                                                "PlanNodeId": 2,
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "TableFullScan",
+                                                        "Operators": [
+                                                            {
+                                                                "Inputs": [],
+                                                                "Name": "TableFullScan",
+                                                                "ReadColumns": [
+                                                                    "Amount",
+                                                                    "Name"
+                                                                ],
+                                                                "ReadRanges": [
+                                                                    "Group (-\u221e, +\u221e)",
+                                                                    "Name (-\u221e, +\u221e)"
+                                                                ],
+                                                                "ReadRangesPointPrefixLen": "0",
+                                                                "Scan": "Parallel",
+                                                                "Table": "base_write_multi_usage_key_script_script/Input1"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 1,
+                                                        "Tables": [
+                                                            "base_write_multi_usage_key_script_script/Input1"
+                                                        ]
+                                                    }
                                                 ]
                                             }
                                         ]

@@ -548,7 +548,7 @@ std::shared_ptr<arrow::Scalar> DefaultScalar(const std::shared_ptr<arrow::DataTy
         }
         return true;
     });
-    Y_ABORT_UNLESS(out);
+    AFL_VERIFY(out)("type", type->ToString());
     return out;
 }
 
@@ -631,6 +631,19 @@ int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y) {
 int ScalarCompare(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
     Y_ABORT_UNLESS(x);
     Y_ABORT_UNLESS(y);
+    return ScalarCompare(*x, *y);
+}
+
+int ScalarCompareNullable(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
+    if (!x && !!y) {
+        return -1;
+    }
+    if (!!x && !y) {
+        return 1;
+    }
+    if (!x && !y) {
+        return 0;
+    }
     return ScalarCompare(*x, *y);
 }
 

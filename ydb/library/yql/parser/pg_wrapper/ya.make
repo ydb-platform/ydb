@@ -100,6 +100,13 @@ PEERDIR(
 
 INCLUDE(cflags.inc)
 
+IF (OS_LINUX)
+    SRCS(
+        postgresql/src/port/strlcat.c
+        postgresql/src/port/strlcpy.c
+    )
+ENDIF()
+
 IF (OS_LINUX OR OS_DARWIN)
     SRCS(
         postgresql/src/backend/port/posix_sema.c

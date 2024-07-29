@@ -353,6 +353,8 @@ public:
 
 };
 
+TString EncodeAnchor(const TString& value);
+
 NKikimrPQ::EConsumerScalingSupport DefaultScalingSupport();
 
 }

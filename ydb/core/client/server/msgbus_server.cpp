@@ -124,7 +124,6 @@ public:
             MTYPE(TBusFillNode)
             MTYPE(TBusDrainNode)
             MTYPE(TBusTestShardControlRequest)
-            MTYPE(TBusLoginRequest)
 #undef MTYPE
         }
 
@@ -543,8 +542,6 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
         return ClientActorRequest(CreateMessageBusConsoleRequest, msg);
     case MTYPE_CLIENT_TEST_SHARD_CONTROL:
         return ClientActorRequest(CreateMessageBusTestShardControl, msg);
-    case MTYPE_CLIENT_LOGIN_REQUEST:
-        return ClientActorRequest(CreateMessageBusLoginRequest, msg);
     default:
         return UnknownMessage(msg);
     }

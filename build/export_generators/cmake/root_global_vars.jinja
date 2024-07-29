@@ -10,6 +10,10 @@
   set({{ platform_var_name }} {{ platform_vars[platform_var_name] }})
 {%-             endfor -%}
 {%-         endif -%}
+{%-         if "windows" in platform_name %}
+  set(ENV{PYTHONIOENCODING} utf-8)
+  set(ENV{PYTHONUTF8} 1)
+{%-         endif %}
 {%-     endfor %}
 endif()
 

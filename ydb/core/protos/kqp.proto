@@ -66,12 +66,6 @@ enum EIsolationLevel {
     ISOLATION_LEVEL_READ_STALE = 4;
 };
 
-enum EQueryReplyFlags {
-    QUERY_REPLY_FLAG_RESULTS = 1;
-    QUERY_REPLY_FLAG_PLAN = 2;
-    QUERY_REPLY_FLAG_AST = 4;
-};
-
 message TTopicOperationsRequest {
     optional string Consumer = 1;
     repeated Ydb.Topic.UpdateOffsetsInTransactionRequest.TopicOffsets Topics = 2;
@@ -99,7 +93,8 @@ message TQueryRequest {
     optional EQueryAction Action = 9;
     reserved 10; // (deprecated) Profile
     optional bytes PreparedQuery = 11;
-    optional uint32 ReplyFlags = 12 [default = 1];
+    // optional uint32 ReplyFlags = 12 [default = 1];
+    reserved 12;
     optional Ydb.Table.TransactionControl TxControl = 13;
     optional string Database = 14;
     optional Ydb.Table.QueryCachePolicy QueryCachePolicy = 15;
@@ -130,6 +125,10 @@ message TKqpPathIdProto {
     optional uint32 TableId = 2;
 }
 
+message TVectorIndexKmeansTreeDescription {
+    optional Ydb.Table.VectorIndexSettings Settings = 1;
+}
+
 message TIndexDescriptionProto {
     optional string Name = 1;
     optional uint32 Type = 2;
@@ -139,6 +138,9 @@ message TIndexDescriptionProto {
     optional uint32 PathOwnerId = 6;
     repeated string KeyColumns = 7;
     repeated string DataColumns = 8;
+    oneof SpecializedIndexDescription {
+        TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 9;
+    }
 };
 
 message TKqpColumnMetadataProto {
@@ -184,6 +186,7 @@ message TKqpTableMetadataProto {
     repeated TKqpTableMetadataProto SecondaryGlobalIndexMetadata = 12;
     optional uint64 RecordsCount = 13;
     optional uint64 DataSize = 14;
+    optional bool StatsLoaded = 15;
 }
 
 message TRlPath {
@@ -203,35 +206,6 @@ message TEvQueryRequest {
     optional Ydb.StatusIds.StatusCode YdbStatus = 8;
     optional NActorsProto.TActorId CancelationActor = 9;
 }
-
-message TMkqlProfile {
-    optional string Query = 1;
-    optional NKikimrQueryStats.TTxStats TxStats = 2;
-};
-
-message TTransformProfile {
-    optional string Name = 1;
-    optional uint64 TransformDurationUs = 2;
-    optional uint64 WaitDurationUs = 3;
-    optional int32 NewExprNodes = 4;
-    optional int32 NewTypeNodes = 5;
-    optional uint32 Repeats = 6;
-    optional uint32 Restarts = 7;
-
-    repeated TTransformProfile Stages = 100;
-}
-
-message TKqlProfile {
-    optional string Query = 1;
-    repeated TMkqlProfile MkqlProfiles = 2;
-    optional EIsolationLevel EffectiveIsolationLevel = 3;
-    optional TTransformProfile TransformStats = 4;
-}
-
-message TQueryProfile {
-    repeated TKqlProfile KqlProfiles = 1;
-    optional TTransformProfile TransformStats = 2;
-};
 
 message TParameterBinding {
     optional string Name = 1;
@@ -322,13 +296,6 @@ message TEvCloseSessionResponse {
     optional Ydb.StatusIds.StatusCode Status = 1;
     repeated Ydb.Issue.IssueMessage Issues = 2;
     optional TCloseSessionResponse Response = 3;
-}
-
-message TEvProcessResponse {
-    reserved 1; // (deprecated) KqpStatus
-    optional bytes Error = 2;
-    optional Ydb.StatusIds.StatusCode YdbStatus = 3;
-    optional bool WorkerIsClosing = 4 [default = false];
 }
 
 message TSessionInfo {
@@ -580,7 +547,7 @@ message TEvStartKqpTasksRequest {
     optional NActorsProto.TActorId ExecuterActorId = 4;
     optional TKqpSnapshot Snapshot = 5;
     optional bool StartAllOrFail = 6 [default = true];
-    optional uint64 OutputChunkMaxSize = 7 [default = 0]; // 0 - use some default value 
+    optional uint64 OutputChunkMaxSize = 7 [default = 0]; // 0 - use some default value
     optional string SerializedGUCSettings = 8;
 }
 

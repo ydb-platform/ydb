@@ -19,8 +19,14 @@ TEMPORARY_ERROR_MESSAGES = [
 
 # Node exit codes
 class ExitCodes(object):
+    GENERIC_ERROR = 1
+    # 2 is reserved not to be confused with bash's exit code
+    # For more info see https://www.gnu.org/software/bash/manual/html_node/Exit-Status.html
+    _ = 2
+    UNHANDLED_EXCEPTION = 3
+    CONFIGURE_ERROR = 8
+    NO_TESTS_COLLECTED = 9
     TEST_FAILED = 10
-    COMPILATION_FAILED = 11
     INFRASTRUCTURE_ERROR = 12
     NOT_RETRIABLE_ERROR = 13
     YT_STORE_FETCH_ERROR = 14

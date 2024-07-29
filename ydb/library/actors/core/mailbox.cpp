@@ -373,9 +373,9 @@ namespace NActors {
         CleanupActors();
     }
 
-    bool TMailboxHeader::CleanupActors() {
+    bool TMailboxHeader::CleanupActors(TMailboxActorPack::EType &actorPack, TActorsInfo &ActorsInfo) {
         bool done = true;
-        switch (ActorPack) {
+        switch (actorPack) {
             case TMailboxActorPack::Simple: {
                 if (ActorsInfo.Simple.ActorId != 0) {
                     delete ActorsInfo.Simple.Actor;
@@ -399,11 +399,29 @@ namespace NActors {
                 done = false;
                 break;
             }
+            case TMailboxActorPack::Complex:
+                Y_ABORT("Unexpected ActorPack type");
         }
-        ActorPack = TMailboxActorPack::Simple;
+        actorPack = TMailboxActorPack::Simple;
         ActorsInfo.Simple.ActorId = 0;
         ActorsInfo.Simple.Actor = nullptr;
         return done;
+    }
+
+    bool TMailboxHeader::CleanupActors() {
+        if (ActorPack != TMailboxActorPack::Complex) {
+            TMailboxActorPack::EType pack = ActorPack;
+            bool done = CleanupActors(pack, ActorsInfo);
+            ActorPack = pack;
+            return done;
+        } else {
+            bool done = CleanupActors(ActorsInfo.Complex->ActorPack, ActorsInfo.Complex->ActorsInfo);
+            delete ActorsInfo.Complex;
+            ActorPack = TMailboxActorPack::Simple;
+            ActorsInfo.Simple.ActorId = 0;
+            ActorsInfo.Simple.Actor = nullptr;
+            return done;
+        }
     }
 
     std::pair<ui32, ui32> TMailboxHeader::CountMailboxEvents(ui64 localActorId, ui32 maxTraverse) {

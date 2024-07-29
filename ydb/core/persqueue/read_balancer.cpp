@@ -27,6 +27,14 @@ NKikimrPQ::EConsumerScalingSupport DefaultScalingSupport() {
                                                               : NKikimrPQ::EConsumerScalingSupport::NOT_SUPPORT;
 }
 
+TString EncodeAnchor(const TString& v) {
+    auto r = Base64Encode(v);
+    while (r.EndsWith('=')) {
+        r.resize(r.size() - 1);
+    }
+    return r;
+}
+
 TPersQueueReadBalancer::TPersQueueReadBalancer(const TActorId &tablet, TTabletStorageInfo *info)
         : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
@@ -211,7 +219,7 @@ TString TPersQueueReadBalancer::GenerateStat() {
             }
             for (auto& consumer : balancerStatistcs.Consumers) {
                 LI() {
-                    str << "<a href=\"#client_" << Base64Encode(consumer.ConsumerName) << "\" data-toggle=\"tab\">" << NPersQueue::ConvertOldConsumerName(consumer.ConsumerName) << "</a>";
+                    str << "<a href=\"#c_" << EncodeAnchor(consumer.ConsumerName) << "\" data-toggle=\"tab\">" << NPersQueue::ConvertOldConsumerName(consumer.ConsumerName) << "</a>";
                 }
             }
         }
@@ -221,74 +229,21 @@ TString TPersQueueReadBalancer::GenerateStat() {
                     TABLEHEAD() {
                         TABLER() {
                             TABLEH() {str << "partition";}
-                            TABLEH() {str << "tabletId";}
+                            TABLEH() { str << "tabletId";}
                         }
                     }
                     TABLEBODY() {
                         for (auto& p : PartitionsInfo) {
                             TABLER() {
                                 TABLED() { str << p.first;}
-                                TABLED() { str << p.second.TabletId;}
+                                TABLED() { HREF(TStringBuilder() << "?TabletID=" << p.second.TabletId) { str << p.second.TabletId; } }
                             }
                         }
                     }
                 }
             }
-            for (auto& consumer : balancerStatistcs.Consumers) {
-                DIV_CLASS_ID("tab-pane fade", "client_" + Base64Encode(consumer.ConsumerName)) {
-                    TABLE_SORTABLE_CLASS("table") {
-                        TABLEHEAD() {
-                            TABLER() {
-                                TABLEH() {str << "partition";}
-                                TABLEH() {str << "tabletId";}
-                                TABLEH() {str << "state";}
-                                TABLEH() {str << "session";}
-                            }
-                        }
-                        TABLEBODY() {
-                            for (auto& partition : consumer.Partitions) {
-                                TABLER() {
-                                    TABLED() { str << partition.PartitionId;}
-                                    TABLED() { str << partition.TabletId;}
-                                    TABLED() { str << partition.State;}
-                                    TABLED() { str << partition.Session;}
-                                }
-                            }
-                        }
-                    }
 
-                    TABLE_SORTABLE_CLASS("table") {
-                        TABLEHEAD() {
-                            TABLER() {
-                                TABLEH() {str << "session";}
-                                TABLEH() {str << "suspended partitions";}
-                                TABLEH() {str << "active partitions";}
-                                TABLEH() {str << "inactive partitions";}
-                                TABLEH() {str << "total partitions";}
-                            }
-                        }
-                        TABLEBODY() {
-
-                            for (auto& session : balancerStatistcs.Sessions) {
-                                TABLER() {
-                                    TABLED() { str << session.Session;}
-                                    TABLED() { str << session.SuspendedPartitionCount;}
-                                    TABLED() { str << session.ActivePartitionCount;}
-                                    TABLED() { str << session.InactivePartitionCount;}
-                                    TABLED() { str << session.TotalPartitionCount;}
-                                }
-                            }
-
-                            TABLER() {
-                                TABLED() { str << "FREE";}
-                                TABLED() { str << 0;}
-                                TABLED() { str << balancerStatistcs.FreePartitions;}
-                                TABLED() { str << balancerStatistcs.FreePartitions;}
-                            }
-                        }
-                    }
-                }
-            }
+            Balancer->RenderApp(str);
         }
     }
     return str.Str();

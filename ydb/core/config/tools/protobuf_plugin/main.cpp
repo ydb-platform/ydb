@@ -82,7 +82,7 @@ private:
         WITH_PLUGIN_MARKUP(Header, PLUGIN_NAME) {
             Header->Print(vars, "inline static const std::unordered_set<TString>& GetReservedChildrenPaths() {\n");
             WITH_INDENT(Header) {
-                Header->Print(vars, "static const std::unordered_set<TString>& reserved = {\n");
+                Header->Print(vars, "static const std::unordered_set<TString> reserved = {\n");
                 WITH_INDENT(Header) {
                     for (const auto& path : reservedPaths) {
                         vars["reservedPath"] = path;

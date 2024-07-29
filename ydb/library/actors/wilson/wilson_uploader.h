@@ -25,10 +25,13 @@ namespace NWilson {
         return NActors::TActorId(0, TStringBuf("WilsonUpload", 12));
     }
 
+    using TRegisterMonPageCallback = std::function<void(NActors::TActorSystem* actorSystem, const NActors::TActorId& actorId)>;
+
     struct TWilsonUploaderParams {
         TString CollectorUrl;
         TString ServiceName;
         std::unique_ptr<IGrpcSigner> GrpcSigner;
+        TMap<TString, TString> Headers;
 
         ui64 MaxExportedSpansPerSecond = Max<ui64>();
         ui64 MaxSpansInBatch = 150;
@@ -36,6 +39,8 @@ namespace NWilson {
         ui64 MaxBatchAccumulationMilliseconds = 1'000;
         ui32 SpanExportTimeoutSeconds = 60 * 60 * 24 * 365;
         ui64 MaxExportRequestsInflight = 1;
+
+        TRegisterMonPageCallback RegisterMonPage;
 
         NActors::IActor* CreateUploader() &&;
     };

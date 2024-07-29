@@ -1645,6 +1645,7 @@ message TTracingConfig {
         message TOpentelemetryBackend {
             optional string CollectorUrl = 1;
             optional string ServiceName = 2;
+            map<string, string> Headers = 3;
         }
 
 

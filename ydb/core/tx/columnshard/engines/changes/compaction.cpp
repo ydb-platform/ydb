@@ -53,7 +53,7 @@ void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
 void TCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
     TBase::DoWriteIndexOnComplete(self, context);
     if (self) {
-        self->IncCounter(NColumnShard::COUNTER_COMPACTION_TIME, context.Duration.MilliSeconds());
+        self->Stats.GetTabletCounters().IncCounter(NColumnShard::COUNTER_COMPACTION_TIME, context.Duration.MilliSeconds());
     }
 }
 

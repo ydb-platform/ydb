@@ -15,13 +15,13 @@ void TWriteAction::DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& self, co
     ui64 blobsWritten = BlobBatch.GetBlobCount();
     ui64 bytesWritten = BlobBatch.GetTotalSize();
     if (blobsWroteSuccessfully) {
-        self.IncCounter(NColumnShard::COUNTER_UPSERT_BLOBS_WRITTEN, blobsWritten);
-        self.IncCounter(NColumnShard::COUNTER_UPSERT_BYTES_WRITTEN, bytesWritten);
-        //    self.IncCounter(NColumnShard::COUNTER_RAW_BYTES_UPSERTED, insertedBytes);
-        self.IncCounter(NColumnShard::COUNTER_WRITE_SUCCESS);
+        self.Stats.GetTabletCounters().IncCounter(NColumnShard::COUNTER_UPSERT_BLOBS_WRITTEN, blobsWritten);
+        self.Stats.GetTabletCounters().IncCounter(NColumnShard::COUNTER_UPSERT_BYTES_WRITTEN, bytesWritten);
+        //    self.Stats.GetTabletCounters().IncCounter(NColumnShard::COUNTER_RAW_BYTES_UPSERTED, insertedBytes);
+        self.Stats.GetTabletCounters().IncCounter(NColumnShard::COUNTER_WRITE_SUCCESS);
         Manager->SaveBlobBatchOnComplete(std::move(BlobBatch));
     } else {
-        self.IncCounter(NColumnShard::COUNTER_WRITE_FAIL);
+        self.Stats.GetTabletCounters().IncCounter(NColumnShard::COUNTER_WRITE_FAIL);
     }
 }
 

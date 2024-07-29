@@ -13,6 +13,7 @@
 #include "transactions/tx_controller.h"
 #include "inflight_request_tracker.h"
 #include "counters/columnshard.h"
+#include "counters/statistics_store.h"
 #include "resource_subscriber/counters.h"
 #include "resource_subscriber/task.h"
 #include "normalizer/abstract/abstract.h"
@@ -276,14 +277,6 @@ class TColumnShard
         putStatus.OnYellowChannels(Executor());
     }
 
-    void SetCounter(NColumnShard::ESimpleCounters counter, ui64 num) const {
-        TabletCounters->Simple()[counter].Set(num);
-    }
-
-    void IncCounter(NColumnShard::ECumulativeCounters counter, ui64 num = 1) const {
-        TabletCounters->Cumulative()[counter].Increment(num);
-    }
-
     void ActivateTiering(const ui64 pathId, const TString& useTiering);
     void OnTieringModified(const std::optional<ui64> pathId = {});
 public:
@@ -297,25 +290,17 @@ public:
         None /* "none" */
     };
 
-    void IncCounter(NColumnShard::EPercentileCounters counter, const TDuration& latency) const {
-        TabletCounters->Percentile()[counter].IncrementFor(latency.MicroSeconds());
-    }
-
-    void IncCounter(NDataShard::ESimpleCounters counter, ui64 num = 1) const {
-        TabletCounters->Simple()[counter].Add(num);
-    }
-
     // For syslocks
     void IncCounter(NDataShard::ECumulativeCounters counter, ui64 num = 1) const {
-        TabletCounters->Cumulative()[counter].Increment(num);
+        Stats.GetTabletCounters().IncCounter(counter, num);
     }
 
     void IncCounter(NDataShard::EPercentileCounters counter, ui64 num) const {
-        TabletCounters->Percentile()[counter].IncrementFor(num);
+        Stats.GetTabletCounters().IncCounter(counter, num);
     }
 
     void IncCounter(NDataShard::EPercentileCounters counter, const TDuration& latency) const {
-        TabletCounters->Percentile()[counter].IncrementFor(latency.MilliSeconds());
+        Stats.GetTabletCounters().IncCounter(counter, latency);
     }
 
     inline TRowVersion LastCompleteTxVersion() const {
@@ -431,70 +416,6 @@ private:
         std::optional<ui32> GranuleShardingVersionId;
     };
 
-    struct TColumnTableStats {
-        ui64 RowCount = 0;
-        ui64 DataSize = 0;
-        ui64 Portions = 0;
-        TInstant AccessTime;
-        TInstant UpdateTime;
-        TInstant LastFullCompaction;
-    };
-
-    struct TTableStatsCollection {
-        TColumnTableStats TotalStats;
-        THashMap<ui64, TColumnTableStats> StatsByPathId;
-    };
-
-    class TWritesMonitor {
-    private:
-        TColumnShard& Owner;
-        YDB_READONLY(ui64, WritesInFlight, 0);
-        YDB_READONLY(ui64, WritesSizeInFlight, 0);
-
-    public:
-        class TGuard: public TNonCopyable {
-            friend class TWritesMonitor;
-        private:
-            TWritesMonitor& Owner;
-
-            explicit TGuard(TWritesMonitor& owner)
-                : Owner(owner)
-            {}
-
-        public:
-            ~TGuard() {
-                Owner.UpdateCounters();
-            }
-        };
-
-        TWritesMonitor(TColumnShard& owner)
-            : Owner(owner)
-        {}
-
-        TGuard RegisterWrite(const ui64 dataSize) {
-            ++WritesInFlight;
-            WritesSizeInFlight += dataSize;
-            return TGuard(*this);
-        }
-
-        TGuard FinishWrite(const ui64 dataSize, const ui32 writesCount = 1) {
-            Y_ABORT_UNLESS(WritesInFlight > 0);
-            Y_ABORT_UNLESS(WritesSizeInFlight >= dataSize);
-            WritesInFlight -= writesCount;
-            WritesSizeInFlight -= dataSize;
-            return TGuard(*this);
-        }
-
-        TString DebugString() const {
-            return TStringBuilder() << "{object=write_monitor;count=" << WritesInFlight << ";size=" << WritesSizeInFlight << "}";
-        }
-
-    private:
-        void UpdateCounters() {
-            Owner.SetCounter(COUNTER_WRITES_IN_FLY, WritesInFlight);
-        }
-    };
-
     ui64 CurrentSchemeShardId = 0;
     TMessageSeqNo LastSchemaSeqNo;
     std::optional<NKikimrSubDomains::TProcessingParams> ProcessingParams;
@@ -514,32 +435,25 @@ private:
     const TDuration PeriodicWakeupActivationPeriod;
     TDuration FailActivationDelay = TDuration::Seconds(1);
     const TDuration StatsReportInterval;
-    TInstant LastAccessTime;
     TInstant LastStatsReport;
 
     TActorId ResourceSubscribeActor;
     TActorId BufferizationWriteActorId;
     TActorId StatsReportPipe;
 
+    std::unique_ptr<TTabletCountersBase> TabletCountersHolder;
+    TStatisticsStore Stats;
+
     TInFlightReadsTracker InFlightReadsTracker;
     TTablesManager TablesManager;
     std::shared_ptr<NSubscriber::TManager> Subscribers;
     std::shared_ptr<TTiersManager> Tiers;
-    std::unique_ptr<TTabletCountersBase> TabletCountersPtr;
-    TTabletCountersBase* TabletCounters;
     std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
     std::unique_ptr<NOlap::TInsertTable> InsertTable;
-    std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters> SubscribeCounters;
     NOlap::NResourceBroker::NSubscribe::TTaskContext InsertTaskSubscription;
     NOlap::NResourceBroker::NSubscribe::TTaskContext CompactTaskSubscription;
     NOlap::NResourceBroker::NSubscribe::TTaskContext TTLTaskSubscription;
-    const TScanCounters ScanCounters;
-    const TIndexationCounters CompactionCounters = TIndexationCounters("GeneralCompaction");
-    const TIndexationCounters IndexationCounters = TIndexationCounters("Indexation");
-    const TIndexationCounters EvictionCounters = TIndexationCounters("Eviction");
 
-    const TCSCounters CSCounters;
-    TWritesMonitor WritesMonitor;
     bool ProgressTxInFlight = false;
     THashMap<ui64, TInstant> ScanTxInFlight;
     THashMap<TWriteId, TLongTxWriteInfo> LongTxWrites;
@@ -605,12 +519,9 @@ private:
     void UpdateResourceMetrics(const TActorContext& ctx, const TUsage& usage);
     ui64 MemoryUsage() const;
 
-    std::optional<TTableStatsCollection> CollectTableStats() const;
     void SendPeriodicStats();
-    void FillOlapStats(const TActorContext& ctx, const std::optional<TTableStatsCollection>& tableStats, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
-    void FillColumnTableStats(const TActorContext& ctx, const std::optional<TTableStatsCollection>& tableStats, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
-    void ConfigureStats(const TColumnTableStats& inputStats, ::NKikimrTableStats::TTableStats* outputStats);
-    void FillTxTableStats(::NKikimrTableStats::TTableStats* tableStats) const;
+    void FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
+    void FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
 
 public:
     ui64 TabletTxCounter = 0;

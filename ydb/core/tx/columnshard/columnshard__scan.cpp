@@ -5,6 +5,7 @@
 #include "engines/reader/transaction/tx_internal_scan.h"
 
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/base/appdata_fwd.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -29,9 +30,9 @@ void TColumnShard::Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext
         return;
     }
 
-    TablesManager.RegisterAccess(record.GetLocalPathId());
-    ScanTxInFlight.insert({txId, LastAccessTime});
-    SetCounter(COUNTER_SCAN_IN_FLY, ScanTxInFlight.size());
+    Stats.GetColumnTableCounters().GetPathIdCounter(record.GetLocalPathId()).OnAccess();
+    ScanTxInFlight.insert({txId, TAppData::TimeProvider->Now()});
+    Stats.GetTabletCounters().SetCounter(COUNTER_SCAN_IN_FLY, ScanTxInFlight.size());
     Execute(new NOlap::NReader::TTxScan(this, ev), ctx);
 }
 

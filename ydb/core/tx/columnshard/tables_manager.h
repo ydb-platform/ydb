@@ -88,9 +88,6 @@ public:
     std::optional<NOlap::TSnapshot> DropVersion;
     YDB_READONLY_DEF(TSet<NOlap::TSnapshot>, Versions);
 
-    YDB_READONLY(TInstant, LastAccessTime, TInstant::Zero());
-    YDB_READONLY(TInstant, LastUpdateTime, TInstant::Zero());
-
 public:
     const TString& GetTieringUsage() const {
         return TieringUsage;
@@ -119,18 +116,6 @@ public:
 
     bool IsDropped() const {
         return DropVersion.has_value();
-    }
-
-    void UpdateLastAccessTime(TInstant value) {
-        if (LastAccessTime < value) {
-            LastAccessTime = value;
-        }
-    }
-
-    void UpdateLastUpdateTime(TInstant value) {
-        if (LastUpdateTime < value) {
-            LastUpdateTime = value;
-        }
     }
 
     TTableInfo() = default;
@@ -257,14 +242,6 @@ public:
     void AddSchemaVersion(const ui32 presetId, const NOlap::TSnapshot& version, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb& db, std::shared_ptr<TTiersManager>& manager);
     void AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& version, const NKikimrTxColumnShard::TTableVersionInfo& versionInfo, NIceDb::TNiceDb& db, std::shared_ptr<TTiersManager>& manager);
     bool FillMonitoringReport(NTabletFlatExecutor::TTransactionContext& txc, NJson::TJsonValue& json);
-
-    void RegisterAccess(ui64 pathId, TInstant time = TAppData::TimeProvider->Now()) {
-        Tables[pathId].UpdateLastAccessTime(time);
-    }
-
-    void RegisterUpdate(ui64 pathId, TInstant time = TAppData::TimeProvider->Now()) {
-        Tables[pathId].UpdateLastUpdateTime(time);
-    }
 
     [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateAddShardingInfoTx(TColumnShard& owner, const ui64 pathId, const ui64 versionId, const NSharding::TGranuleShardingLogicContainer& tabletShardingLogic) const;
 };

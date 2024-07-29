@@ -1,6 +1,7 @@
 #pragma once
 #include "engines/changes/abstract/compaction_info.h"
 #include "engines/portions/meta.h"
+#include <ydb/core/tx/columnshard/counters/statistics_store.h>
 #include <ydb/core/base/appdata.h>
 
 namespace NKikimr::NOlap {
@@ -15,13 +16,16 @@ private:
 
     using TCurrentCompaction = THashMap<ui64, NOlap::TPlanCompactionInfo>;
     TCurrentCompaction ActiveCompactionInfo;
-    THashMap<ui64, TInstant> LastCompactionFinishByPathId;
 
+    TBackgroundControllerCounters& Stats;
     bool ActiveCleanupPortions = false;
     bool ActiveCleanupTables = false;
     bool ActiveCleanupInsertTable = false;
     YDB_READONLY(TMonotonic, LastIndexationInstant, TMonotonic::Zero());
 public:
+    TBackgroundController(TBackgroundControllerCounters& stats) : Stats(stats) {
+    }
+
     THashSet<NOlap::TPortionAddress> GetConflictTTLPortions() const;
     THashSet<NOlap::TPortionAddress> GetConflictCompactionPortions() const;
 
@@ -31,8 +35,7 @@ public:
     bool StartCompaction(const NOlap::TPlanCompactionInfo& info);
     void FinishCompaction(const NOlap::TPlanCompactionInfo& info) {
         Y_ABORT_UNLESS(ActiveCompactionInfo.erase(info.GetPathId()));
-        TInstant& lastFinishInstant = LastCompactionFinishByPathId[info.GetPathId()];
-        lastFinishInstant = std::max(lastFinishInstant, TAppData::TimeProvider->Now());
+        Stats.OnCompactionFinish(info.GetPathId());
     }
     const TCurrentCompaction& GetActiveCompaction() const {
         return ActiveCompactionInfo;

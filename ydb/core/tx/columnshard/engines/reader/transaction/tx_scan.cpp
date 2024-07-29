@@ -191,7 +191,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     auto dataFormat = request.GetDataFormat();
     const TDuration timeout = TDuration::MilliSeconds(request.GetTimeoutMs());
     if (scanGen > 1) {
-        Self->IncCounter(NColumnShard::COUNTER_SCAN_RESTARTED);
+        Self->Stats.GetTabletCounters().IncCounter(NColumnShard::COUNTER_SCAN_RESTARTED);
     }
     const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()
         ("tx_id", txId)("scan_id", scanId)("gen", scanGen)("table", table)("snapshot", snapshot)("tablet", Self->TabletID())("timeout", timeout);
@@ -226,22 +226,22 @@ void TTxScan::Complete(const TActorContext& ctx) {
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE, TStringBuilder()
             << "Table " << table << " (shard " << Self->TabletID() << ") scan failed, reason: " << requestCookie.GetErrorMessage());
         NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
-        Self->ScanCounters.OnScanDuration(NColumnShard::TScanCounters::EStatusFinish::CannotAddInFlight, TDuration::Zero());
+        Self->Stats.GetScanCounters().OnScanDuration(NColumnShard::TScanCounters::EStatusFinish::CannotAddInFlight, TDuration::Zero());
         ctx.Send(scanComputeActor, ev.Release());
         return;
     }
     auto statsDelta = Self->InFlightReadsTracker.GetSelectStatsDelta();
 
-    Self->IncCounter(NColumnShard::COUNTER_READ_INDEX_PORTIONS, statsDelta.Portions);
-    Self->IncCounter(NColumnShard::COUNTER_READ_INDEX_BLOBS, statsDelta.Blobs);
-    Self->IncCounter(NColumnShard::COUNTER_READ_INDEX_ROWS, statsDelta.Rows);
-    Self->IncCounter(NColumnShard::COUNTER_READ_INDEX_BYTES, statsDelta.Bytes);
+    Self->Stats.GetTabletCounters().IncCounter(NColumnShard::COUNTER_READ_INDEX_PORTIONS, statsDelta.Portions);
+    Self->Stats.GetTabletCounters().IncCounter(NColumnShard::COUNTER_READ_INDEX_BLOBS, statsDelta.Blobs);
+    Self->Stats.GetTabletCounters().IncCounter(NColumnShard::COUNTER_READ_INDEX_ROWS, statsDelta.Rows);
+    Self->Stats.GetTabletCounters().IncCounter(NColumnShard::COUNTER_READ_INDEX_BYTES, statsDelta.Bytes);
 
     TComputeShardingPolicy shardingPolicy;
     AFL_VERIFY(shardingPolicy.DeserializeFromProto(request.GetComputeShardingPolicy()));
 
     auto scanActor = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
-        shardingPolicy, scanId, txId, scanGen, *requestCookie, Self->TabletID(), timeout, ReadMetadataRange, dataFormat, Self->ScanCounters));
+        shardingPolicy, scanId, txId, scanGen, *requestCookie, Self->TabletID(), timeout, ReadMetadataRange, dataFormat, Self->Stats.GetScanCounters()));
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan started")("actor_id", scanActor)("trace_detailed", detailedInfo);
 }

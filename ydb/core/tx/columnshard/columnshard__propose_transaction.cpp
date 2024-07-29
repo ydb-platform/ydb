@@ -25,7 +25,7 @@ public:
         txc.DB.NoMoreReadsForTx();
         NIceDb::TNiceDb db(txc.DB);
 
-        Self->IncCounter(COUNTER_PREPARE_REQUEST);
+        Self->Stats.GetTabletCounters().IncCounter(COUNTER_PREPARE_REQUEST);
 
         auto& record = Proto(Ev->Get());
         const auto txKind = record.GetTxKind();

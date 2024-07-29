@@ -54,9 +54,9 @@ namespace NKikimr::NColumnShard {
 
             auto counters = owner.InsertTable->Commit(dbTable, version.GetPlanStep(), version.GetTxId(), WriteIds, pathExists);
 
-            owner.IncCounter(COUNTER_BLOBS_COMMITTED, counters.Rows);
-            owner.IncCounter(COUNTER_BYTES_COMMITTED, counters.Bytes);
-            owner.IncCounter(COUNTER_RAW_BYTES_COMMITTED, counters.RawBytes);
+            owner.Stats.GetTabletCounters().IncCounter(COUNTER_BLOBS_COMMITTED, counters.Rows);
+            owner.Stats.GetTabletCounters().IncCounter(COUNTER_BYTES_COMMITTED, counters.Bytes);
+            owner.Stats.GetTabletCounters().IncCounter(COUNTER_RAW_BYTES_COMMITTED, counters.RawBytes);
 
             NIceDb::TNiceDb db(txc.DB);
             for (TWriteId writeId : WriteIds) {

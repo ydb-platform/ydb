@@ -80,13 +80,13 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE, TStringBuilder()
             << "Table " << request.GetPathId() << " (shard " << Self->TabletID() << ") scan failed, reason: " << requestCookie.GetErrorMessage());
         NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
-        Self->ScanCounters.OnScanDuration(NColumnShard::TScanCounters::EStatusFinish::CannotAddInFlight, TDuration::Zero());
+        Self->Stats.GetScanCounters().OnScanDuration(NColumnShard::TScanCounters::EStatusFinish::CannotAddInFlight, TDuration::Zero());
         ctx.Send(scanComputeActor, ev.Release());
         return;
     }
     auto scanActor = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
         TComputeShardingPolicy(), ScanId, TxId, ScanGen, *requestCookie, Self->TabletID(), TDuration::Max(), ReadMetadataRange,
-        NKikimrDataEvents::FORMAT_ARROW, Self->ScanCounters));
+        NKikimrDataEvents::FORMAT_ARROW, Self->Stats.GetScanCounters()));
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxInternalScan started")("actor_id", scanActor)("trace_detailed", detailedInfo);
 }

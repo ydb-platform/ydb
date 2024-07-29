@@ -53,7 +53,6 @@ namespace NKikimr::NOlap {
     enum class ENormalizerSequentialId : ui32 {
         Granules = 1,
         Chunks,
-        DeleteUnsupportedSpecialColumns,
         PortionsCleaner,
         TablesCleaner,
         // PortionsMetadata

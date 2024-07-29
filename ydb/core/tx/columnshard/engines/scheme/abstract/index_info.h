@@ -9,13 +9,11 @@ class IIndexInfo {
 public:
     enum class ESpecialColumn: ui32 {
         PLAN_STEP = NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP_INDEX,
-        TX_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_TX_ID_INDEX,
-        DELETE_FLAG = NOlap::NPortion::TSpecialColumns::SPEC_COL_DELETE_FLAG_INDEX
+        TX_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_TX_ID_INDEX
     };
 
     static constexpr const char* SPEC_COL_PLAN_STEP = NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP;
     static constexpr const char* SPEC_COL_TX_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_TX_ID;
-    static constexpr const char* SPEC_COL_DELETE_FLAG = NOlap::NPortion::TSpecialColumns::SPEC_COL_DELETE_FLAG;
     static const TString STORE_INDEX_STATS_TABLE;
     static const TString STORE_INDEX_PORTION_STATS_TABLE;
     static const TString STORE_INDEX_GRANULE_STATS_TABLE;

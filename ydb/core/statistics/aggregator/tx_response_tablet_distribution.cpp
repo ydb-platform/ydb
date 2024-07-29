@@ -33,7 +33,7 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
         Request = std::make_unique<TEvStatistics::TEvAggregateStatistics>();
         auto& outRecord = Request->Record;
 
-        PathIdFromPathId(Self->ScanTableId.PathId, outRecord.MutablePathId());
+        PathIdFromPathId(Self->TraversalTableId.PathId, outRecord.MutablePathId());
 
         bool hasTablets = false;
         for (auto& inNode : Record.GetNodes()) {
@@ -62,7 +62,7 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
         }
 
         if (!hasTablets) {
-            Self->FinishScan(db);
+            Self->FinishTraversal(db);
             return true;
         }
 

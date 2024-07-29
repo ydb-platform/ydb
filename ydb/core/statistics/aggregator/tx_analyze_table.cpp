@@ -15,7 +15,7 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
         , ReplyToActorId(replyToActorId)
     {}
 
-    TTxType GetTxType() const override { return TXTYPE_SCAN_TABLE; }
+    TTxType GetTxType() const override { return TXTYPE_ANALYZE_TABLE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTable::Execute");
@@ -24,8 +24,8 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
             return true;
         }
 
-        auto itOp = Self->ScanOperationsByPathId.find(PathId);
-        if (itOp != Self->ScanOperationsByPathId.end()) {
+        auto itOp = Self->ForceTraversalsByPathId.find(PathId);
+        if (itOp != Self->ForceTraversalsByPathId.end()) {
             itOp->second.ReplyToActorIds.insert(ReplyToActorId);
             OperationId = itOp->second.OperationId;
             return true;
@@ -33,17 +33,17 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
 
         NIceDb::TNiceDb db(txc.DB);
 
-        TScanOperation& operation = Self->ScanOperationsByPathId[PathId];
+        TForceTraversal& operation = Self->ForceTraversalsByPathId[PathId];
         operation.PathId = PathId;
-        operation.OperationId = ++Self->LastScanOperationId;
+        operation.OperationId = ++Self->LastForceTraversalOperationId;
         operation.ReplyToActorIds.insert(ReplyToActorId);
-        Self->ScanOperations.PushBack(&operation);
+        Self->ForceTraversals.PushBack(&operation);
 
-        Self->PersistLastScanOperationId(db);
+        Self->PersistLastForceTraversalOperationId(db);
 
-        db.Table<Schema::ScanOperations>().Key(operation.OperationId).Update(
-            NIceDb::TUpdate<Schema::ScanOperations::OwnerId>(PathId.OwnerId),
-            NIceDb::TUpdate<Schema::ScanOperations::LocalPathId>(PathId.LocalPathId));
+        db.Table<Schema::ForceTraversals>().Key(operation.OperationId).Update(
+            NIceDb::TUpdate<Schema::ForceTraversals::OwnerId>(PathId.OwnerId),
+            NIceDb::TUpdate<Schema::ForceTraversals::LocalPathId>(PathId.LocalPathId));
 
         OperationId = operation.OperationId;
 

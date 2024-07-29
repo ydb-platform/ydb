@@ -4,11 +4,11 @@
 
 namespace NKikimr::NStat {
 
-struct TStatisticsAggregator::TTxStatisticsScanResponse : public TTxBase {
+struct TStatisticsAggregator::TTxDatashardScanResponse : public TTxBase {
     NKikimrStat::TEvStatisticsResponse Record;
     bool IsCorrectShardId = false;
 
-    TTxStatisticsScanResponse(TSelf* self, NKikimrStat::TEvStatisticsResponse&& record)
+    TTxDatashardScanResponse(TSelf* self, NKikimrStat::TEvStatisticsResponse&& record)
         : TTxBase(self)
         , Record(std::move(record))
     {}
@@ -16,7 +16,7 @@ struct TStatisticsAggregator::TTxStatisticsScanResponse : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_SCAN_RESPONSE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxStatisticsScanResponse::Execute");
+        SA_LOG_D("[" << Self->TabletID() << "] TTxDatashardScanResponse::Execute");
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -59,14 +59,14 @@ struct TStatisticsAggregator::TTxStatisticsScanResponse : public TTxBase {
             }
         }
 
-        Self->StartKey = range.EndKey;
+        Self->TraversalStartKey = range.EndKey;
         Self->PersistStartKey(db);
 
         return true;
     }
 
     void Complete(const TActorContext&) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxStatisticsScanResponse::Complete");
+        SA_LOG_D("[" << Self->TabletID() << "] TTxDatashardScanResponse::Complete");
 
         if (IsCorrectShardId && !Self->DatashardRanges.empty()) {
             Self->DatashardRanges.pop_front();
@@ -77,7 +77,7 @@ struct TStatisticsAggregator::TTxStatisticsScanResponse : public TTxBase {
 
 void TStatisticsAggregator::Handle(NStat::TEvStatistics::TEvStatisticsResponse::TPtr& ev) {
     auto& record = ev->Get()->Record;
-    Execute(new TTxStatisticsScanResponse(this, std::move(record)),
+    Execute(new TTxDatashardScanResponse(this, std::move(record)),
         TActivationContext::AsActorContext());
 }
 

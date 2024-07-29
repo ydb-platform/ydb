@@ -17,7 +17,7 @@ struct TStatisticsAggregator::TTxInitSchema : public TTxBase {
         static constexpr NIceDb::TTableId bigTableIds[] = {
             Schema::BaseStatistics::TableId,
             Schema::ColumnStatistics::TableId,
-            Schema::ScanTables::TableId
+            Schema::ScheduleTraversals::TableId
         };
 
         for (auto id : bigTableIds) {

@@ -30,14 +30,14 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
             if (entry.Status == NSchemeCache::TSchemeCacheRequest::EStatus::PathErrorNotExist) {
                 Self->DeleteStatisticsFromTable();
             } else {
-                Self->FinishScan(db);
+                Self->FinishTraversal(db);
             }
             return true;
         }
 
         auto& partitioning = entry.KeyDescription->GetPartitions();
 
-        if (Self->IsColumnTable) {
+        if (Self->TraversalIsColumnTable) {
             Self->TabletsForReqDistribution.clear();
         } else {
             Self->DatashardRanges.clear();
@@ -47,7 +47,7 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
             if (!part.Range) {
                 continue;
             }
-            if (Self->IsColumnTable) {
+            if (Self->TraversalIsColumnTable) {
                 Self->TabletsForReqDistribution.insert(part.ShardId);
             } else {
                 TRange range;
@@ -67,7 +67,7 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
             return;
         }
 
-        if (Self->IsColumnTable) {
+        if (Self->TraversalIsColumnTable) {
             ctx.Send(Self->SelfId(), new TEvPrivate::TEvRequestDistribution);
         } else {
             Self->ScanNextDatashardRange();

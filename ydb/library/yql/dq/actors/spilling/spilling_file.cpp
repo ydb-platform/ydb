@@ -199,10 +199,10 @@ private:
         struct TEvRemoveOldTmp : public TEventLocal<TEvRemoveOldTmp, EvRemoveOldTmp> {
             TFsPath TmpRoot;
             ui32 NodeId;
-            TString GuidString;
+            TString SpillingSessionId;
 
-            TEvRemoveOldTmp(TFsPath tmpRoot, ui32 nodeId, TString guidString) 
-                : TmpRoot(std::move(tmpRoot)), NodeId(nodeId), GuidString(std::move(guidString)) {}
+            TEvRemoveOldTmp(TFsPath tmpRoot, ui32 nodeId, TString spillingSessionId) 
+                : TmpRoot(std::move(tmpRoot)), NodeId(nodeId), SpillingSessionId(std::move(spillingSessionId)) {}
         };
     };
 
@@ -221,12 +221,12 @@ public:
 
     void Bootstrap() {
         Root_ = Config_.Root;
+        const auto sessionId = Config_.SpillingSessionId;
         const auto nodeId = SelfId().NodeId();
-        const auto guidString = TGUID::Create().AsGuidString();
 
-        Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(Root_, nodeId, guidString));
+        Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(Root_, nodeId, sessionId));
 
-        Root_ /= (TStringBuilder() << "node_" << nodeId << "_" << guidString);
+        Root_ /= (TStringBuilder() << "node_" << nodeId << "_" << sessionId);
         Cerr << "Root from config: " << Config_.Root << ", actual root: " << Root_ << "\n";
         LOG_I("Init DQ local file spilling service at " << Root_ << ", actor: " << SelfId());
 
@@ -268,6 +268,8 @@ private:
             }
             hFunc(NMon::TEvHttpInfo, HandleBroken);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
+            case TEvPrivate::TEvRemoveOldTmp::EventType:
+                break;
             default:
                 Y_DEBUG_ABORT_UNLESS(false, "%s: unexpected message type 0x%08" PRIx32, __func__, ev->GetTypeRewrite());
         }
@@ -734,12 +736,28 @@ private:
     }
 
     void HandleWork(TEvPrivate::TEvRemoveOldTmp::TPtr& ev) {
-        auto& msg = *ev->Get();
-        auto& root = msg.TmpRoot;
-        auto nodeIdString = ToString(msg.NodeId);
-        auto& guidString = msg.GuidString;
+        const auto& msg = *ev->Get();
+        const auto& root = msg.TmpRoot;
+        const auto nodeIdString = ToString(msg.NodeId);
+        const auto& sessionId = msg.SpillingSessionId;
 
         LOG_I("[RemoveOldTmp] removing at root: " << root);
+
+        static const auto isDirOldTmp = [&nodeIdString, &sessionId](TString dirName) -> bool {
+            // dirName: node_<nodeId>_<sessionId>
+            static constexpr size_t NodeIdBegin = 5;
+            if (dirName.Size() < NodeIdBegin || dirName.substr(0, NodeIdBegin) != "node_") {
+                return false;
+            }  
+            const auto nodeIdEnd = dirName.find('_', NodeIdBegin);
+            if (nodeIdEnd == TString::npos || dirName.substr(NodeIdBegin, nodeIdEnd - NodeIdBegin) != nodeIdString) {
+                return false;
+            }
+            if (dirName.substr(nodeIdEnd + 1) == sessionId) {
+                return false;
+            }
+            return true;
+        };
 
         try {
             TDirIterator iter(root, TDirIterator::TOptions().SetMaxLevel(1));
@@ -750,11 +768,9 @@ private:
                     // skip postorder visit
                     continue;
                 }
-                TString dirName = dirEntry.fts_name;
-                TVector<TString> parts;
-                StringSplitter(dirName).Split('_').Collect(&parts);
                 
-                if (parts.size() == 3 && parts[0] == "node" && parts[1] == nodeIdString && parts[2] != guidString) {
+                const auto dirName = dirEntry.fts_name;
+                if (isDirOldTmp(dirName)) {
                     LOG_D("[RemoveOldTmp] found old temporary at " << (root / dirName));
                     oldTmps.emplace_back(std::move(dirName));
                 }

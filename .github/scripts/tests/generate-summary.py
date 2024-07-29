@@ -246,9 +246,18 @@ def render_testlist_html(rows, fn):
 
     # remove status group without tests
     status_order = [s for s in status_order if s in status_test]
-
+    history={
+        "ydb/core/kqp/ut/scheme/KqpScheme.AlterTableAddExplicitSyncVectorKMeansTreeIndex" :
+        [
+            [ "passed", "green"],
+            [ "passed","green" ],
+            [ "failed", "red"] ,
+            ["muted", "grey"],
+            ["passed","green" ]
+        ]
+    }
     content = env.get_template("summary.html").render(
-        status_order=status_order, tests=status_test, has_any_log=has_any_log
+        status_order=status_order, tests=status_test, has_any_log=has_any_log, history=history
     )
 
     with open(fn, "w") as fp:

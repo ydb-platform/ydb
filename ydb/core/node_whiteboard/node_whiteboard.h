@@ -401,7 +401,7 @@ struct TEvWhiteboard{
             request->Record.SetMemoryUsedInAlloc(memoryStats.GetAllocatedMemory());
         }
 
-        // Note: is rendered in UI as 'Tablet Caches', so let's pass aggregated caches stats (not only Shared Cache stats)
+        // Note: is rendered in UI as 'Caches', so let's pass aggregated caches stats (not only Shared Cache stats)
         auto *sharedCacheStats = request->Record.MutableSharedCacheStats();
         if (memoryStats.HasConsumersConsumption()) {
             sharedCacheStats->SetUsedBytes(memoryStats.GetConsumersConsumption());

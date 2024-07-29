@@ -15,9 +15,7 @@ TProcessMemoryInfo TProcessMemoryInfoProvider::Get() const {
 
     NActors::TProcStat procStat;
     if (procStat.Fill(getpid())) {
-        if (procStat.AnonRss) {
-            result.AnonRss.emplace(procStat.AnonRss);
-        }
+        result.AnonRss.emplace(procStat.AnonRss);
         if (procStat.CGroupMemLim) {
             result.CGroupLimit.emplace(procStat.CGroupMemLim);
         }

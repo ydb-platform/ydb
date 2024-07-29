@@ -118,15 +118,22 @@ public:
 };
 
 class TQuorumCheckerMirror3of4 : public TQuorumCheckerBase {
+    const bool Robust;
+    const ui32 MaxLostDisks;
+
 public:
-    using TQuorumCheckerBase::TQuorumCheckerBase;
+    TQuorumCheckerMirror3of4(const TBlobStorageGroupInfo::TTopology *top)
+        : TQuorumCheckerBase(top)
+        , Robust(top->GType.IsRobust())
+        , MaxLostDisks(Robust ? 3 : 2)
+    {}
 
     bool CheckFailModelForSubgroup(const TBlobStorageGroupInfo::TSubgroupVDisks& failedSubgroupDisks) const override {
-        return failedSubgroupDisks.GetNumSetItems() <= 2;
+        return failedSubgroupDisks.GetNumSetItems() <= MaxLostDisks;
     }
 
     bool CheckFailModelForGroupDomains(const TBlobStorageGroupInfo::TGroupFailDomains& failedDomains) const override {
-        return failedDomains.GetNumSetItems() <= 2;
+        return failedDomains.GetNumSetItems() <= MaxLostDisks;
     }
 
     bool CheckQuorumForSubgroup(const TBlobStorageGroupInfo::TSubgroupVDisks& subgroupDisks) const override {
@@ -140,20 +147,20 @@ public:
     bool IsDegraded(const TBlobStorageGroupInfo::TGroupVDisks& failedDisks) const override {
         const auto& domains = TBlobStorageGroupInfo::TGroupFailDomains::CreateFromGroupDiskSet(failedDisks,
             TBlobStorageGroupInfo::TGroupFailDomains::EDiskCondition::ANY);
-        return domains.GetNumSetItems() == 2;
+        return domains.GetNumSetItems() == MaxLostDisks;
     }
 
     bool OneStepFromDegradedOrWorse(const TBlobStorageGroupInfo::TGroupVDisks& failedDisks) const override {
         const auto& domains = TBlobStorageGroupInfo::TGroupFailDomains::CreateFromGroupDiskSet(failedDisks,
             TBlobStorageGroupInfo::TGroupFailDomains::EDiskCondition::ANY);
-        return domains.GetNumSetItems() + 1 >= 2;
+        return domains.GetNumSetItems() + 1 >= MaxLostDisks;
     }
 
     TBlobStorageGroupInfo::EBlobState GetBlobState(const TSubgroupPartLayout& parts,
             const TBlobStorageGroupInfo::TSubgroupVDisks& failedDisks) const override {
         if (!CheckFailModelForSubgroup(failedDisks)) {
             return TBlobStorageGroupInfo::EBS_DISINTEGRATED;
-        } else if (auto [data, any] = parts.GetMirror3of4State(); data >= 3 && any >= 5) {
+        } else if (auto [data, any] = parts.GetMirror3of4State(); data >= MaxLostDisks + 1 && any >= 5) {
             return TBlobStorageGroupInfo::EBS_FULL;
         } else if (data) {
             return TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY;
@@ -166,7 +173,7 @@ public:
         auto [data, any] = parts.GetMirror3of4State();
         if (!data) {
             return 0; // nowhere to restore from
-        } else if (data < 3) {
+        } else if (data < 3 || Robust) {
             // not enough data parts -- we must restore them first
             if ((parts.GetDisksWithPart(0) | parts.GetDisksWithPart(1)) & (1 << idxInSubgroup)) {
                 return 0; // this disk already has data part and we can't help the group
@@ -474,6 +481,7 @@ IBlobToDiskMapper *TBlobStorageGroupInfo::TTopology::CreateMapper(TBlobStorageGr
         case TBlobStorageGroupType::Erasure2Plus2Block:
         case TBlobStorageGroupType::Erasure2Plus2Stripe:
         case TBlobStorageGroupType::ErasureMirror3of4:
+        case TBlobStorageGroupType::ErasureMirror3of4Robust:
             return IBlobToDiskMapper::CreateBasicMapper(topology);
 
         case TBlobStorageGroupType::ErasureMirror3dc:
@@ -511,6 +519,7 @@ TBlobStorageGroupInfo::IQuorumChecker *TBlobStorageGroupInfo::TTopology::CreateQ
             return new TQuorumCheckerMirror3dc(topology);
 
         case TBlobStorageGroupType::ErasureMirror3of4:
+        case TBlobStorageGroupType::ErasureMirror3of4Robust:
             return new TQuorumCheckerMirror3of4(topology);
 
         default:

@@ -112,6 +112,7 @@ bool DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::set<s
         switch (info->Type.GetErasure()) {
             case TBlobStorageGroupType::ErasureMirror3dc:
             case TBlobStorageGroupType::ErasureMirror3of4:
+            case TBlobStorageGroupType::ErasureMirror3of4Robust:
                 break;
 
             default: {
@@ -232,6 +233,7 @@ void DoTest(TBlobStorageGroupType::EErasureSpecies erasure) {
                 break;
 
             case TBlobStorageGroupType::ErasureMirror3of4:
+            case TBlobStorageGroupType::ErasureMirror3of4Robust:
                 v.push_back(1 << 2); // meta
                 v.push_back(1 << (i & 1)); // data
                 break;
@@ -272,7 +274,8 @@ void DoTest(TBlobStorageGroupType::EErasureSpecies erasure) {
                     (!layout.GetDisksWithPart(0) && !layout.GetDisksWithPart(1) && !layout.GetDisksWithPart(2));
                 break;
 
-            case TBlobStorageGroupType::ErasureMirror3of4: {
+            case TBlobStorageGroupType::ErasureMirror3of4:
+            case TBlobStorageGroupType::ErasureMirror3of4Robust: {
                 auto [data, any] = layout.GetMirror3of4State();
                 doNotNeedToRestore = !data || (data >= 3 && any >= 5);
                 break;
@@ -342,6 +345,7 @@ Y_UNIT_TEST_SUITE(Osiris) {
 
     Y_UNIT_TEST(mirror3dc) { DoTest(TBlobStorageGroupType::ErasureMirror3dc); }
     Y_UNIT_TEST(mirror3of4) { DoTest(TBlobStorageGroupType::ErasureMirror3of4); }
+    Y_UNIT_TEST(mirror3of4robust) { DoTest(TBlobStorageGroupType::ErasureMirror3of4Robust); }
     Y_UNIT_TEST(block42) { DoTest(TBlobStorageGroupType::Erasure4Plus2Block); }
 
 }

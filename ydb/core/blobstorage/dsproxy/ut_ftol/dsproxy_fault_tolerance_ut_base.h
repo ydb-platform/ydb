@@ -72,7 +72,7 @@ public:
                     NKikimrBlobStorage::TabletLog, tactic));
         auto resp = WaitForSpecificEvent<TEvBlobStorage::TEvPutResult>(&TFaultToleranceTestBase::ProcessUnexpectedEvent);
         CTEST << (TStringBuilder() << "PutResult: " << resp->Get()->ToString() << Endl);
-        if (resp->Get()->Status == NKikimrProto::OK && Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3of4) {
+        if (resp->Get()->Status == NKikimrProto::OK && Info->Type.IsMirror3of4()) {
             auto layout = GetActualPartLayout(id);
             const ui32 disksWithData = layout.GetDisksWithPart(0) | layout.GetDisksWithPart(1);
             const ui32 disksWithMetadata = layout.GetDisksWithPart(2);

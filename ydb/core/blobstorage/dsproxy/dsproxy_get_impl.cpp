@@ -69,6 +69,7 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
                                     break;
 
                                 case TBlobStorageGroupType::ErasureMirror3of4:
+                                case TBlobStorageGroupType::ErasureMirror3of4Robust:
                                     possible = idxInSubgroup >= 4 || partIdx == (idxInSubgroup & 1) || partIdx == 2;
                                     break;
 
@@ -104,6 +105,7 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
                             break;
 
                         case TBlobStorageGroupType::ErasureMirror3of4:
+                        case TBlobStorageGroupType::ErasureMirror3of4Robust:
                             if (possiblyWritten.GetDisksWithPart(0) || possiblyWritten.GetDisksWithPart(1)) {
                                 okay = false;
                             }
@@ -309,8 +311,7 @@ void TGetImpl::PrepareRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBl
 void TGetImpl::PrepareVPuts(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> &outVPuts) {
     for (auto& put : Blackboard.GroupDiskRequests.PutsPending) {
         const TVDiskID vdiskId = Info->GetVDiskId(put.OrderNumber);
-        Y_DEBUG_ABORT_UNLESS(Info->Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3of4 ||
-            put.Id.PartId() != 3 || put.Buffer.IsEmpty());
+        Y_DEBUG_ABORT_UNLESS(!Info->Type.IsMirror3of4() || put.Id.PartId() != 3 || put.Buffer.IsEmpty());
         auto vput = std::make_unique<TEvBlobStorage::TEvVPut>(put.Id, put.Buffer, vdiskId, true, nullptr, Deadline,
             Blackboard.PutHandleClass);
         R_LOG_DEBUG_SX(logCtx, "BPG15", "Send put to orderNumber# " << put.OrderNumber << " vput# " << vput->ToString());
@@ -341,7 +342,7 @@ EStrategyOutcome TGetImpl::RunMirror3of4Strategy(TLogContext &logCtx) {
     TStackVec<IStrategy*, 1> strategies;
     TMirror3of4GetStrategy s1;
     strategies.push_back(&s1);
-    TPut3of4Strategy s2(TEvBlobStorage::TEvPut::TacticMaxThroughput);
+    TPut3of4Strategy s2(TEvBlobStorage::TEvPut::TacticMaxThroughput, false, Info->Type.IsRobust());
     if (MustRestoreFirst) {
         strategies.push_back(&s2);
     }
@@ -351,7 +352,7 @@ EStrategyOutcome TGetImpl::RunMirror3of4Strategy(TLogContext &logCtx) {
 EStrategyOutcome TGetImpl::RunStrategies(TLogContext &logCtx) {
     if (Info->Type.GetErasure() == TErasureType::ErasureMirror3dc) {
         return RunMirror3dcStrategy(logCtx);
-    } else if (Info->Type.GetErasure() == TErasureType::ErasureMirror3of4) {
+    } else if (Info->Type.IsMirror3of4()) {
         return RunMirror3of4Strategy(logCtx);
     } else if (MustRestoreFirst || PhantomCheck) {
         return RunBoldStrategy(logCtx);

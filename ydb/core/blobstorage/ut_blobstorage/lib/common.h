@@ -13,6 +13,8 @@ inline TBlobStorageGroupType GetErasureTypeByString(const TString& erasure) {
         return TBlobStorageGroupType::ErasureMirror3;
     } else if (erasure == "mirror-3of4") {
         return TBlobStorageGroupType::ErasureMirror3of4;
+    } else if (erasure == "mirror-3of4-robust") {
+        return TBlobStorageGroupType::ErasureMirror3of4Robust;
     } else if (erasure == "mirror-3-dc") {
         return TBlobStorageGroupType::ErasureMirror3dc;
     }

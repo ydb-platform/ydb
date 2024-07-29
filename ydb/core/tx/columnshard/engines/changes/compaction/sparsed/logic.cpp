@@ -101,8 +101,8 @@ bool TSparsedMerger::TCursor::AddIndexTo(const ui32 index, TWriter& writer) {
 }
 
 void TSparsedMerger::TCursor::InitArrays(const ui32 position) {
-    if (!CurrentOwnedArray || CurrentOwnedArray->GetFinishPosition() <= position) {
-        CurrentOwnedArray = Array->GetArray({}, position, Array);
+    if (!CurrentOwnedArray || !CurrentOwnedArray->GetAddress().Contains(position)) {
+        CurrentOwnedArray = Array->GetArray(CurrentOwnedArray, position, Array);
         if (CurrentOwnedArray->GetArray()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SparsedArray) {
             CurrentSparsedArray = static_pointer_cast<NArrow::NAccessor::TSparsedArray>(CurrentOwnedArray->GetArray());
         } else {
@@ -111,14 +111,15 @@ void TSparsedMerger::TCursor::InitArrays(const ui32 position) {
         Chunk.reset();
     }
     if (!Chunk || Chunk->GetFinishPosition() <= position) {
-        Chunk = CurrentSparsedArray->GetSparsedChunk(position - CurrentOwnedArray->GetStartPosition());
+        Chunk = CurrentSparsedArray->GetSparsedChunk(CurrentOwnedArray->GetAddress().GetLocalIndex(position));
         AFL_VERIFY(Chunk->GetRecordsCount());
-        AFL_VERIFY(CurrentOwnedArray->GetStartPosition() + Chunk->GetStartPosition() <= position && position < CurrentOwnedArray->GetStartPosition() + Chunk->GetFinishPosition())
-            ("pos", position)("start", Chunk->GetStartPosition())("finish", Chunk->GetFinishPosition())
-            ("shift", CurrentOwnedArray->GetStartPosition());
+        AFL_VERIFY(CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetStartPosition() <= position && 
+            position < CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetFinishPosition())
+            ("pos", position)("start", Chunk->GetStartPosition())("finish", Chunk->GetFinishPosition())(
+            "shift", CurrentOwnedArray->GetAddress().GetGlobalStartPosition());
     }
-    CommonShift = CurrentOwnedArray->GetStartPosition() + Chunk->GetStartPosition();
-    NextGlobalPosition = CurrentOwnedArray->GetStartPosition() + Chunk->GetFirstIndexNotDefault();
+    CommonShift = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetStartPosition();
+    NextGlobalPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetFirstIndexNotDefault();
     NextLocalPosition = 0;
 }
 

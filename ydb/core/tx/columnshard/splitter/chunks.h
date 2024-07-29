@@ -56,7 +56,7 @@ private:
     std::shared_ptr<TColumnLoader> Loader;
 
     std::shared_ptr<NArrow::NAccessor::IChunkedArray> CurrentChunk;
-    std::optional<NArrow::NAccessor::IChunkedArray::TCurrentChunkAddress> CurrentChunkArray;
+    std::optional<NArrow::NAccessor::IChunkedArray::TFullDataAddress> CurrentChunkArray;
     ui32 CurrentChunkIndex = 0;
     ui32 CurrentRecordIndex = 0;
 public:
@@ -77,7 +77,7 @@ public:
     }
 
     const std::shared_ptr<arrow::Array>& GetCurrentChunk() {
-        if (!CurrentChunkArray || CurrentChunkArray->GetFinishPosition() <= CurrentRecordIndex) {
+        if (!CurrentChunkArray || !CurrentChunkArray->GetAddress().Contains(CurrentRecordIndex)) {
             CurrentChunkArray = CurrentChunk->GetChunk(CurrentChunkArray, CurrentRecordIndex);
         }
         AFL_VERIFY(CurrentChunkArray);
@@ -90,10 +90,10 @@ public:
     }
 
     ui32 GetCurrentRecordIndex() {
-        if (!CurrentChunkArray || CurrentChunkArray->GetFinishPosition() <= CurrentRecordIndex) {
-            CurrentChunkArray = CurrentChunk->GetChunk(CurrentChunkArray, CurrentRecordIndex);
+        if (!CurrentChunkArray || !CurrentChunkArray->GetAddress().Contains(CurrentRecordIndex)) {
+            CurrentChunkArray = CurrentChunk->GetChunk(CurrentChunkArray->GetAddress(), CurrentRecordIndex);
         }
-        return CurrentRecordIndex - CurrentChunkArray->GetStartPosition();
+        return CurrentChunkArray->GetAddress().GetLocalIndex(CurrentRecordIndex);
     }
 
     bool IsCorrect() const {

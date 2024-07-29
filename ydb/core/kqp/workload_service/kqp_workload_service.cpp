@@ -132,9 +132,6 @@ public:
             return;
         }
 
-        // Add AllAuthenticatedUsers group SID into user token
-        ev->Get()->UserToken = GetUserToken(ev->Get()->UserToken);
-
         LOG_D("Recieved new request from " << workerActorId << ", Database: " << ev->Get()->Database << ", PoolId: " << ev->Get()->PoolId << ", SessionId: " << ev->Get()->SessionId);
         bool hasDefaultPool = DatabasesWithDefaultPool.contains(CanonizePath(ev->Get()->Database));
         Register(CreatePoolResolverActor(std::move(ev), hasDefaultPool, EnabledResourcePoolsOnServerless));
@@ -473,25 +470,6 @@ private:
     void ReplyCleanupError(const TActorId& replyActorId, Ydb::StatusIds::StatusCode status, const TString& message) const {
         LOG_W("Reply cleanup error " << status << " to " << replyActorId << ": " << message);
         Send(replyActorId, new TEvCleanupResponse(status, {NYql::TIssue(message)}));
-    }
-
-    static TIntrusivePtr<NACLib::TUserToken> GetUserToken(TIntrusiveConstPtr<NACLib::TUserToken> userToken) {
-        auto token = MakeIntrusive<NACLib::TUserToken>(userToken ? userToken->GetUserSID() : NACLib::TSID(), TVector<NACLib::TSID>{});
-
-        bool hasAllAuthenticatedUsersSID = false;
-        const auto& allAuthenticatedUsersSID = AppData()->AllAuthenticatedUsers;
-        if (userToken) {
-            for (const auto& groupSID : userToken->GetGroupSIDs()) {
-                token->AddGroupSID(groupSID);
-                hasAllAuthenticatedUsersSID = hasAllAuthenticatedUsersSID || groupSID == allAuthenticatedUsersSID;
-            }
-        }
-
-        if (!hasAllAuthenticatedUsersSID) {
-            token->AddGroupSID(allAuthenticatedUsersSID);
-        }
-
-        return token;
     }
 
     TPoolState* GetPoolState(const TString& database, const TString& poolId) {

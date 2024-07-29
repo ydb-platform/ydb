@@ -1,8 +1,9 @@
 #include "aggregator_impl.h"
 
+#include <ydb/core/statistics/database/database.h>
+#include <ydb/core/statistics/service/service.h>
+
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
-#include <ydb/core/statistics/save_load_stats.h>
-#include <ydb/core/statistics/stat_service.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -217,7 +218,7 @@ void TStatisticsAggregator::Handle(TEvPrivate::TEvFastPropagateCheck::TPtr&) {
 }
 
 void TStatisticsAggregator::Handle(TEvPrivate::TEvPropagate::TPtr&) {
-    SA_LOG_D("[" << TabletID() << "] EvPropagate");
+    SA_LOG_T("[" << TabletID() << "] EvPropagate");
 
     if (EnableStatistics) {
         PropagateStatistics();
@@ -308,13 +309,14 @@ void TStatisticsAggregator::SendStatisticsToNode(TNodeId nodeId, const std::vect
 }
 
 void TStatisticsAggregator::PropagateStatistics() {
+    if (Nodes.empty() || RequestedSchemeShards.empty()) {
+        SA_LOG_T("[" << TabletID() << "] PropagateStatistics() No data");
+        return;
+    }
+
     SA_LOG_D("[" << TabletID() << "] PropagateStatistics()"
         << ", node count = " << Nodes.size()
         << ", schemeshard count = " << RequestedSchemeShards.size());
-
-    if (Nodes.empty() || RequestedSchemeShards.empty()) {
-        return;
-    }
 
     std::vector<TNodeId> nodeIds;
     nodeIds.reserve(Nodes.size());
@@ -396,15 +398,26 @@ size_t TStatisticsAggregator::PropagatePart(const std::vector<TNodeId>& nodeIds,
 }
 
 void TStatisticsAggregator::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+    if (!ScanTableId.PathId) {
+        return;
+    }
     auto tabletId = ev->Get()->TabletId;
-    if (ShardRanges.empty()) {
-        return;
+    if (IsColumnTable) {
+        if (tabletId == HiveId) {
+            Schedule(HiveRetryInterval, new TEvPrivate::TEvRequestDistribution);
+        } else {
+            SA_LOG_CRIT("[" << TabletID() << "] TEvDeliveryProblem with unexpected tablet " << tabletId);
+        }
+    } else {
+        if (ShardRanges.empty()) {
+            return;
+        }
+        auto& range = ShardRanges.front();
+        if (tabletId != range.DataShardId) {
+            return;
+        }
+        Resolve();
     }
-    auto& range = ShardRanges.front();
-    if (tabletId != range.DataShardId) {
-        return;
-    }
-    Resolve();
 }
 
 void TStatisticsAggregator::Handle(TEvStatistics::TEvStatTableCreationResponse::TPtr&) {
@@ -419,24 +432,48 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvStatTableCreationResponse::
     }
 }
 
-void TStatisticsAggregator::Handle(TEvStatistics::TEvGetScanStatus::TPtr& ev) {
+void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeStatus::TPtr& ev) {
     auto& inRecord = ev->Get()->Record;
     auto pathId = PathIdFromPathId(inRecord.GetPathId());
 
-    auto response = std::make_unique<TEvStatistics::TEvGetScanStatusResponse>();
+    auto response = std::make_unique<TEvStatistics::TEvAnalyzeStatusResponse>();
     auto& outRecord = response->Record;
 
     if (ScanTableId.PathId == pathId) {
-        outRecord.SetStatus(NKikimrStat::TEvGetScanStatusResponse::IN_PROGRESS);
+        outRecord.SetStatus(NKikimrStat::TEvAnalyzeStatusResponse::STATUS_IN_PROGRESS);
     } else {
         auto it = ScanOperationsByPathId.find(pathId);
         if (it != ScanOperationsByPathId.end()) {
-            outRecord.SetStatus(NKikimrStat::TEvGetScanStatusResponse::ENQUEUED);
+            outRecord.SetStatus(NKikimrStat::TEvAnalyzeStatusResponse::STATUS_ENQUEUED);
         } else {
-            outRecord.SetStatus(NKikimrStat::TEvGetScanStatusResponse::NO_OPERATION);
+            outRecord.SetStatus(NKikimrStat::TEvAnalyzeStatusResponse::STATUS_NO_OPERATION);
         }
     }
     Send(ev->Sender, response.release(), 0, ev->Cookie);
+}
+
+void TStatisticsAggregator::Handle(TEvPrivate::TEvResolve::TPtr&) {
+    Resolve();
+}
+
+void TStatisticsAggregator::Handle(TEvPrivate::TEvRequestDistribution::TPtr&) {
+    ++HiveRequestRound;
+
+    auto reqDistribution = std::make_unique<TEvHive::TEvRequestTabletDistribution>();
+    reqDistribution->Record.MutableTabletIds()->Reserve(TabletsForReqDistribution.size());
+    for (auto& tablet : TabletsForReqDistribution) {
+        reqDistribution->Record.AddTabletIds(tablet);
+    }
+
+    Send(MakePipePerNodeCacheID(false),
+        new TEvPipeCache::TEvForward(reqDistribution.release(), HiveId, true));
+}
+
+void TStatisticsAggregator::Handle(TEvStatistics::TEvAggregateKeepAlive::TPtr& ev) {
+    auto ack = std::make_unique<TEvStatistics::TEvAggregateKeepAliveAck>();
+    ack->Record.SetRound(ev->Get()->Record.GetRound());
+    Send(ev->Sender, ack.release());
+    Schedule(KeepAliveTimeout, new TEvPrivate::TEvAckTimeout(++KeepAliveSeqNo));
 }
 
 void TStatisticsAggregator::InitializeStatisticsTable() {
@@ -460,6 +497,8 @@ void TStatisticsAggregator::Navigate() {
 }
 
 void TStatisticsAggregator::Resolve() {
+    ++ResolveRound;
+
     TVector<TCell> plusInf;
     TTableRange range(StartKey.GetCells(), true, plusInf, true, false);
     auto keyDesc = MakeHolder<TKeyDesc>(
@@ -480,8 +519,9 @@ void TStatisticsAggregator::NextRange() {
     auto& range = ShardRanges.front();
     auto request = std::make_unique<NStat::TEvStatistics::TEvStatisticsRequest>();
     auto& record = request->Record;
-    record.MutableTableId()->SetOwnerId(ScanTableId.PathId.OwnerId);
-    record.MutableTableId()->SetTableId(ScanTableId.PathId.LocalPathId);
+    auto* path = record.MutableTable()->MutablePathId();
+    path->SetOwnerId(ScanTableId.PathId.OwnerId);
+    path->SetLocalId(ScanTableId.PathId.LocalPathId);
     record.SetStartKey(StartKey.GetBuffer());
 
     Send(MakePipePerNodeCacheID(false),
@@ -500,6 +540,9 @@ void TStatisticsAggregator::SaveStatisticsToTable() {
     std::vector<ui32> columnTags;
     std::vector<TString> data;
     auto count = CountMinSketches.size();
+    if (count == 0) {
+        return;
+    }
     columnTags.reserve(count);
     data.reserve(count);
 
@@ -533,28 +576,44 @@ void TStatisticsAggregator::ScheduleNextScan(NIceDb::TNiceDb& db) {
         auto* operation = ScanOperations.Front();
         ReplyToActorIds.swap(operation->ReplyToActorIds);
 
-        StartScan(db, operation->PathId);
-
+        bool doStartScan = true;
+        bool isColumnTable = false;
+        auto pathId = operation->PathId;
+        auto itPath = ScanTables.find(pathId);
+        if (itPath != ScanTables.end()) {
+            isColumnTable = itPath->second.IsColumnTable;
+        } else {
+            doStartScan = false;
+        }
+        if (doStartScan) {
+            StartScan(db, pathId, isColumnTable);
+        }
         db.Table<Schema::ScanOperations>().Key(operation->OperationId).Delete();
         ScanOperations.PopFront();
-        ScanOperationsByPathId.erase(operation->PathId);
+        ScanOperationsByPathId.erase(pathId);
         return;
     }
     if (ScanTablesByTime.Empty()) {
         return;
     }
     auto* topTable = ScanTablesByTime.Top();
-    auto now = TInstant::Now();
-    auto updateTime = topTable->LastUpdateTime;
-    if (now - updateTime < ScanIntervalTime) {
+    if (TInstant::Now() < topTable->LastUpdateTime + ScanIntervalTime) {
         return;
     }
-    StartScan(db, topTable->PathId);
+    bool isColumnTable = false;
+    auto itPath = ScanTables.find(topTable->PathId);
+    if (itPath != ScanTables.end()) {
+        isColumnTable = itPath->second.IsColumnTable;
+    } else {
+        return;
+    }
+    StartScan(db, topTable->PathId, isColumnTable);
 }
 
-void TStatisticsAggregator::StartScan(NIceDb::TNiceDb& db, TPathId pathId) {
+void TStatisticsAggregator::StartScan(NIceDb::TNiceDb& db, TPathId pathId, bool isColumnTable) {
     ScanTableId.PathId = pathId;
     ScanStartTime = TInstant::Now();
+    IsColumnTable = isColumnTable;
     PersistCurrentScan(db);
 
     StartKey = TSerializedCellVec();
@@ -590,6 +649,7 @@ void TStatisticsAggregator::PersistCurrentScan(NIceDb::TNiceDb& db) {
     PersistSysParam(db, Schema::SysParam_ScanTableOwnerId, ToString(ScanTableId.PathId.OwnerId));
     PersistSysParam(db, Schema::SysParam_ScanTableLocalPathId, ToString(ScanTableId.PathId.LocalPathId));
     PersistSysParam(db, Schema::SysParam_ScanStartTime, ToString(ScanStartTime.MicroSeconds()));
+    PersistSysParam(db, Schema::SysParam_IsColumnTable, ToString(IsColumnTable));
 }
 
 void TStatisticsAggregator::PersistStartKey(NIceDb::TNiceDb& db) {
@@ -598,6 +658,10 @@ void TStatisticsAggregator::PersistStartKey(NIceDb::TNiceDb& db) {
 
 void TStatisticsAggregator::PersistLastScanOperationId(NIceDb::TNiceDb& db) {
     PersistSysParam(db, Schema::SysParam_LastScanOperationId, ToString(LastScanOperationId));
+}
+
+void TStatisticsAggregator::PersistGlobalTraversalRound(NIceDb::TNiceDb& db) {
+    PersistSysParam(db, Schema::SysParam_GlobalTraversalRound, ToString(GlobalTraversalRound));
 }
 
 void TStatisticsAggregator::ResetScanState(NIceDb::TNiceDb& db) {
@@ -620,6 +684,12 @@ void TStatisticsAggregator::ResetScanState(NIceDb::TNiceDb& db) {
     KeyColumnTypes.clear();
     Columns.clear();
     ColumnNames.clear();
+
+    TabletsForReqDistribution.clear();
+
+    ResolveRound = 0;
+    HiveRequestRound = 0;
+    TraversalRound = 0;
 }
 
 template <typename T, typename S>

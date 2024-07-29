@@ -481,7 +481,7 @@ public:
                 paths.clear();
                 ReadPathsList(srcDesc, {}, serialized, paths);
 
-                NDq::TS3ReadActorFactoryConfig readActorConfig;
+                const NDq::TS3ReadActorFactoryConfig& readActorConfig = State_->Configuration->S3ReadActorFactoryConfig;
                 ui64 fileSizeLimit = readActorConfig.FileSizeLimit;
                 if (srcDesc.HasFormat()) {
                     if (auto it = readActorConfig.FormatSizeLimits.find(srcDesc.GetFormat()); it != readActorConfig.FormatSizeLimits.end()) {

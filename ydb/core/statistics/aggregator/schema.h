@@ -34,13 +34,15 @@ struct TAggregatorSchema : NIceDb::Schema {
         struct LocalPathId    : Column<2, NScheme::NTypeIds::Uint64> {};
         struct LastUpdateTime : Column<3, NScheme::NTypeIds::Timestamp> {};
         struct SchemeShardId  : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct IsColumnTable  : Column<5, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<OwnerId, LocalPathId>;
         using TColumns = TableColumns<
             OwnerId,
             LocalPathId,
             LastUpdateTime,
-            SchemeShardId
+            SchemeShardId,
+            IsColumnTable
         >;
     };
 
@@ -76,6 +78,8 @@ struct TAggregatorSchema : NIceDb::Schema {
     static constexpr ui64 SysParam_ScanTableLocalPathId = 4;
     static constexpr ui64 SysParam_ScanStartTime = 5;
     static constexpr ui64 SysParam_LastScanOperationId = 6;
+    static constexpr ui64 SysParam_IsColumnTable = 7;
+    static constexpr ui64 SysParam_GlobalTraversalRound = 8;
 };
 
 } // NKikimr::NStat

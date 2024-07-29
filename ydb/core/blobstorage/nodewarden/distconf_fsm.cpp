@@ -54,7 +54,6 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(!Scepter);
         RootState = ERootState::INITIAL;
         ErrorReason = {};
-        IssueNextBindRequest();
     }
 
     void TDistributedConfigKeeper::ProcessGather(TEvGather *res) {
@@ -328,8 +327,7 @@ namespace NKikimr::NStorage {
                 }
                 std::sort(drives.begin(), drives.end());
                 drives.erase(std::unique(drives.begin(), drives.end()), drives.end());
-                auto query = std::bind(&TThis::ReadConfig, TActivationContext::ActorSystem(), SelfId(), drives, Cfg, cookie);
-                Send(MakeIoDispatcherActorId(), new TEvInvokeQuery(std::move(query)));
+                ReadConfig(cookie);
                 ++task.AsyncOperationsPending;
                 break;
             }

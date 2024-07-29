@@ -20,6 +20,7 @@ import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/core/protos/index_builder.proto";
 import "ydb/core/tx/columnshard/engines/scheme/defaults/protos/data.proto";
 import "ydb/core/tx/columnshard/common/protos/snapshot.proto";
+import "ydb/core/formats/arrow/protos/accessor.proto";
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
@@ -347,6 +348,7 @@ message TTableReplicationConfig {
     enum EReplicationMode {
         REPLICATION_MODE_NONE = 0;
         REPLICATION_MODE_READ_ONLY = 1;
+        REPLICATION_MODE_RESTORE_INCREMENTAL_BACKUP = 2;
     }
 
     enum EConsistency {
@@ -425,6 +427,7 @@ message TOlapColumnDiff {
     optional TOlapColumn.TSerializer Serializer = 5;
     optional string StorageId = 6;
     optional string DefaultValue = 7;
+    optional NKikimrArrowAccessorProto.TRequestedConstructor DataAccessorConstructor = 8;
 }
 
 message TOlapColumnDescription {
@@ -444,6 +447,7 @@ message TOlapColumnDescription {
     optional TOlapColumn.TSerializer Serializer = 10;
     optional string StorageId = 11;
     optional NKikimrColumnShardColumnDefaults.TColumnDefault DefaultValue = 12;
+    optional NKikimrArrowAccessorProto.TConstructor DataAccessorConstructor = 13;
 }
 
 message TRequestedBloomFilter {
@@ -886,6 +890,7 @@ enum ECdcStreamMode {
     ECdcStreamModeNewImage = 3;
     ECdcStreamModeOldImage = 4;
     ECdcStreamModeNewAndOldImages = 5;
+    ECdcStreamModeRestoreIncrBackup = 106;
 }
 
 enum ECdcStreamFormat {
@@ -961,6 +966,7 @@ message TAlterContinuousBackup {
     }
 
     message TTakeIncrementalBackup {
+        optional string DstPath = 1;
     }
 
     oneof Action {
@@ -971,6 +977,11 @@ message TAlterContinuousBackup {
 
 message TDropContinuousBackup {
     optional string TableName = 1;
+}
+
+message TRestoreIncrementalBackup {
+    optional string SrcTableName = 1;
+    optional string DstTableName = 2;
 }
 
 enum EIndexType {
@@ -1614,6 +1625,8 @@ enum EOperationType {
     ESchemeOpCreateResourcePool = 100;
     ESchemeOpDropResourcePool = 101;
     ESchemeOpAlterResourcePool = 102;
+
+    ESchemeOpRestoreIncrementalBackup = 103;
 }
 
 message TApplyIf {
@@ -1795,6 +1808,8 @@ message TModifyScheme {
     optional bool AllowCreateInTempDir = 71 [default = false];
 
     optional TResourcePoolDescription CreateResourcePool = 72;
+
+    optional TRestoreIncrementalBackup RestoreIncrementalBackup = 73;
 }
 
 message TCopySequence {

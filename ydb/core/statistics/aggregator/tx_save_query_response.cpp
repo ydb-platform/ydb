@@ -28,7 +28,7 @@ struct TStatisticsAggregator::TTxSaveQueryResponse : public TTxBase {
         SA_LOG_D("[" << Self->TabletID() << "] TTxSaveQueryResponse::Complete");
 
         for (auto& id : ReplyToActorIds) {
-            ctx.Send(id, new TEvStatistics::TEvScanTableResponse);
+            ctx.Send(id, new TEvStatistics::TEvAnalyzeResponse);
         }
     }
 };

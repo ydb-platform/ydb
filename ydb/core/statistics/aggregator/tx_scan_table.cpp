@@ -5,13 +5,13 @@
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxScanTable : public TTxBase {
-    NKikimrStat::TEvScanTable Record;
+    TPathId PathId;
     TActorId ReplyToActorId;
     ui64 OperationId = 0;
 
-    TTxScanTable(TSelf* self, NKikimrStat::TEvScanTable&& record, TActorId replyToActorId)
+    TTxScanTable(TSelf* self, const TPathId& pathId, TActorId replyToActorId)
         : TTxBase(self)
-        , Record(std::move(record))
+        , PathId(pathId)
         , ReplyToActorId(replyToActorId)
     {}
 
@@ -24,9 +24,7 @@ struct TStatisticsAggregator::TTxScanTable : public TTxBase {
             return true;
         }
 
-        auto pathId = PathIdFromPathId(Record.GetPathId());
-
-        auto itOp = Self->ScanOperationsByPathId.find(pathId);
+        auto itOp = Self->ScanOperationsByPathId.find(PathId);
         if (itOp != Self->ScanOperationsByPathId.end()) {
             itOp->second.ReplyToActorIds.insert(ReplyToActorId);
             OperationId = itOp->second.OperationId;
@@ -35,8 +33,8 @@ struct TStatisticsAggregator::TTxScanTable : public TTxBase {
 
         NIceDb::TNiceDb db(txc.DB);
 
-        TScanOperation& operation = Self->ScanOperationsByPathId[pathId];
-        operation.PathId = pathId;
+        TScanOperation& operation = Self->ScanOperationsByPathId[PathId];
+        operation.PathId = PathId;
         operation.OperationId = ++Self->LastScanOperationId;
         operation.ReplyToActorIds.insert(ReplyToActorId);
         Self->ScanOperations.PushBack(&operation);
@@ -44,8 +42,8 @@ struct TStatisticsAggregator::TTxScanTable : public TTxBase {
         Self->PersistLastScanOperationId(db);
 
         db.Table<Schema::ScanOperations>().Key(operation.OperationId).Update(
-            NIceDb::TUpdate<Schema::ScanOperations::OwnerId>(pathId.OwnerId),
-            NIceDb::TUpdate<Schema::ScanOperations::LocalPathId>(pathId.LocalPathId));
+            NIceDb::TUpdate<Schema::ScanOperations::OwnerId>(PathId.OwnerId),
+            NIceDb::TUpdate<Schema::ScanOperations::LocalPathId>(PathId.LocalPathId));
 
         OperationId = operation.OperationId;
 
@@ -54,21 +52,17 @@ struct TStatisticsAggregator::TTxScanTable : public TTxBase {
 
     void Complete(const TActorContext& ctx) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxScanTable::Complete");
-
-        if (!Self->EnableColumnStatistics) {
-            return;
-        }
-
-        auto accepted = std::make_unique<TEvStatistics::TEvScanTableAccepted>();
-        accepted->Record.SetOperationId(OperationId);
-        ctx.Send(ReplyToActorId, accepted.release());
     }
 };
 
-void TStatisticsAggregator::Handle(TEvStatistics::TEvScanTable::TPtr& ev) {
-    auto& record = ev->Get()->Record;
-    Execute(new TTxScanTable(this, std::move(record), ev->Sender),
-        TActivationContext::AsActorContext());
+void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyze::TPtr& ev) {
+    const auto& record = ev->Get()->Record;
+
+    // TODO: replace by queue
+    for (const auto& table : record.GetTables()) {
+        Execute(new TTxScanTable(this, PathIdFromPathId(table.GetPathId()), ev->Sender), TActivationContext::AsActorContext());
+    }
+
 }
 
 } // NKikimr::NStat

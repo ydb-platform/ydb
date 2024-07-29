@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet",
-                "PlanNodeId": 9,
+                "PlanNodeId": 11,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,18 +14,18 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 7
+                                        "ExternalPlanNodeId": 9
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 8,
+                        "PlanNodeId": 10,
                         "Plans": [
                             {
                                 "Node Type": "Merge",
-                                "PlanNodeId": 7,
+                                "PlanNodeId": 9,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
@@ -45,65 +45,75 @@
                                                 "Condition": "x = _equijoin_column_0",
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 5
+                                                        "ExternalPlanNodeId": 7
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 3
+                                                        "ExternalPlanNodeId": 5
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
                                             }
                                         ],
-                                        "PlanNodeId": 6,
+                                        "PlanNodeId": 8,
                                         "Plans": [
                                             {
-                                                "KeyColumns": [
-                                                    "_yql_dq_key_right_0"
-                                                ],
-                                                "Node Type": "HashShuffle",
-                                                "PlanNodeId": 3,
+                                                "Node Type": "Broadcast",
+                                                "PlanNodeId": 5,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "LeftJoin (MapJoin)",
-                                                        "Operators": [
-                                                            {
-                                                                "Condition": "q2 = id",
-                                                                "Inputs": [
-                                                                    {
-                                                                        "ExternalPlanNodeId": 1
-                                                                    },
-                                                                    {
-                                                                        "Other": "ConstantExpression"
-                                                                    }
-                                                                ],
-                                                                "Name": "LeftJoin (MapJoin)"
-                                                            }
-                                                        ],
-                                                        "PlanNodeId": 2,
+                                                        "Node Type": "Collect",
+                                                        "PlanNodeId": 4,
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "TableFullScan",
-                                                                "Operators": [
+                                                                "Node Type": "UnionAll",
+                                                                "PlanNodeId": 3,
+                                                                "PlanNodeType": "Connection",
+                                                                "Plans": [
                                                                     {
-                                                                        "Inputs": [],
-                                                                        "Name": "TableFullScan",
-                                                                        "ReadColumns": [
-                                                                            "q1",
-                                                                            "q2"
+                                                                        "Node Type": "LeftJoin (MapJoin)",
+                                                                        "Operators": [
+                                                                            {
+                                                                                "Condition": "q2 = id",
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "ExternalPlanNodeId": 1
+                                                                                    },
+                                                                                    {
+                                                                                        "Other": "ConstantExpression"
+                                                                                    }
+                                                                                ],
+                                                                                "Name": "LeftJoin (MapJoin)"
+                                                                            }
                                                                         ],
-                                                                        "ReadRanges": [
-                                                                            "q1 (-\u221e, +\u221e)",
-                                                                            "q2 (-\u221e, +\u221e)"
-                                                                        ],
-                                                                        "ReadRangesPointPrefixLen": "0",
-                                                                        "Scan": "Parallel",
-                                                                        "Table": "postgres_jointest/join3.test_plan/int8_tbl"
+                                                                        "PlanNodeId": 2,
+                                                                        "Plans": [
+                                                                            {
+                                                                                "Node Type": "TableFullScan",
+                                                                                "Operators": [
+                                                                                    {
+                                                                                        "Inputs": [],
+                                                                                        "Name": "TableFullScan",
+                                                                                        "ReadColumns": [
+                                                                                            "q1",
+                                                                                            "q2"
+                                                                                        ],
+                                                                                        "ReadRanges": [
+                                                                                            "q1 (-\u221e, +\u221e)",
+                                                                                            "q2 (-\u221e, +\u221e)"
+                                                                                        ],
+                                                                                        "ReadRangesPointPrefixLen": "0",
+                                                                                        "Scan": "Parallel",
+                                                                                        "Table": "postgres_jointest/join3.test_plan/int8_tbl"
+                                                                                    }
+                                                                                ],
+                                                                                "PlanNodeId": 1,
+                                                                                "Tables": [
+                                                                                    "postgres_jointest/join3.test_plan/int8_tbl"
+                                                                                ]
+                                                                            }
+                                                                        ]
                                                                     }
-                                                                ],
-                                                                "PlanNodeId": 1,
-                                                                "Tables": [
-                                                                    "postgres_jointest/join3.test_plan/int8_tbl"
                                                                 ]
                                                             }
                                                         ]
@@ -111,11 +121,8 @@
                                                 ]
                                             },
                                             {
-                                                "KeyColumns": [
-                                                    "x"
-                                                ],
-                                                "Node Type": "HashShuffle",
-                                                "PlanNodeId": 5,
+                                                "Node Type": "Map",
+                                                "PlanNodeId": 7,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
@@ -127,7 +134,7 @@
                                                                 "Name": "Iterator"
                                                             }
                                                         ],
-                                                        "PlanNodeId": 4
+                                                        "PlanNodeId": 6
                                                     }
                                                 ]
                                             }

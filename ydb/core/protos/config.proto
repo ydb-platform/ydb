@@ -1472,6 +1472,7 @@ message THiveConfig {
     optional bool EnableDestroyOperations = 74 [default = false];
     optional double NodeUsageRangeToKick = 75 [default = 0.2];
     optional bool LessSystemTabletsMoves = 77 [default = true];
+    optional uint64 MaxPingsInFlight = 78 [default = 1000];
 }
 
 message TBlobCacheConfig {
@@ -1519,6 +1520,7 @@ message TColumnShardConfig {
 
     optional uint32 MaxInFlightIntervalsOnRequest = 16;
     optional uint32 MaxInFlightMemoryOnRequest = 17;
+    optional uint32 MaxReadStaleness_ms = 18 [default = 300000];
 }
 
 message TSchemeShardConfig {

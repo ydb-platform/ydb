@@ -1,5 +1,5 @@
 #pragma once
-#include "accessor.h"
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 
 #include <ydb/core/formats/arrow/modifier/schema.h>
 

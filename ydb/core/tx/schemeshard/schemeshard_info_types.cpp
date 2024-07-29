@@ -590,6 +590,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
             break;
+        case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_RESTORE_INCREMENTAL_BACKUP:
+            break;
         default:
             errStr = "Unknown replication mode";
             return nullptr;

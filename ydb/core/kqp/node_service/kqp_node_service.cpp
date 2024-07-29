@@ -183,12 +183,16 @@ private:
             rlPath.ConstructInPlace(msgRtSettings.GetRlPath());
         }
 
+        TIntrusivePtr<NRm::TTxState> txInfo = MakeIntrusive<NRm::TTxState>(
+            txId, TInstant::Now(), ResourceManager_->GetCounters());
+
         const ui32 tasksCount = msg.GetTasks().size();
         for (auto& dqTask: *msg.MutableTasks()) {
             auto result = CaFactory_->CreateKqpComputeActor({
                 .ExecuterId = request.Executer,
                 .TxId = txId,
                 .Task = &dqTask,
+                .TxInfo = txInfo,
                 .RuntimeSettings = runtimeSettingsBase,
                 .TraceId = NWilson::TTraceId(ev->TraceId),
                 .Arena = ev->Get()->Arena,

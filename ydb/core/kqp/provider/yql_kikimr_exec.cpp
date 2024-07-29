@@ -1682,9 +1682,25 @@ public:
                     for (const auto& indexSetting : listNode) {
                         auto settingName = indexSetting.Name().Value();
                         if (settingName == "indexName") {
-                            auto indexName = indexSetting.Value().Cast<TCoAtom>().StringValue();
-                            auto indexTablePath = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(table.Metadata->Name, indexName);
-                            alterTableRequest.set_path(std::move(indexTablePath));
+                            const auto indexName = indexSetting.Value().Cast<TCoAtom>().StringValue();
+                            const auto indexIter = std::find_if(table.Metadata->Indexes.begin(), table.Metadata->Indexes.end(), [&indexName] (const auto& index) {
+                                return index.Name == indexName;
+                            });
+                            if (indexIter == table.Metadata->Indexes.end()) {
+                                ctx.AddError(
+                                    YqlIssue(ctx.GetPosition(indexSetting.Name().Pos()),
+                                        TIssuesIds::KIKIMR_SCHEME_ERROR,
+                                        TStringBuilder() << "Unknown index name: " << indexName));                                
+                                return SyncError();
+                            }                            
+                            auto indexTablePaths = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(table.Metadata->Name, indexIter->Type, indexName);
+                            if (indexTablePaths.size() != 1) {
+                                ctx.AddError(
+                                    TIssue(ctx.GetPosition(indexSetting.Name().Pos()),
+                                        TStringBuilder() << "Only index with one impl table is supported"));
+                                return SyncError();
+                            }
+                            alterTableRequest.set_path(std::move(indexTablePaths[0]));
                         } else if (settingName == "tableSettings") {
                             auto tableSettings = indexSetting.Value().Cast<TCoNameValueTupleList>();
                             for (const auto& tableSetting : tableSettings) {

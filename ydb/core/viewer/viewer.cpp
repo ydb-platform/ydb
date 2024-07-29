@@ -197,15 +197,15 @@ public:
                 JsonHandlers.JsonHandlersIndex[oldPath] = JsonHandlers.JsonHandlersIndex[newPath];
             }
 
-            // TODO: redirect old paths
-            Redirect307["/viewer/v2/json/config"] = "/viewer/config";
-            Redirect307["/viewer/v2/json/sysinfo"] = "/viewer/sysinfo";
-            Redirect307["/viewer/v2/json/pdiskinfo"] = "/viewer/pdiskinfo";
-            Redirect307["/viewer/v2/json/vdiskinfo"] = "/viewer/vdiskinfo";
-            Redirect307["/viewer/v2/json/storage"] = "/viewer/storage";
-            Redirect307["/viewer/v2/json/nodelist"] = "/viewer/nodelist";
-            Redirect307["/viewer/v2/json/tabletinfo"] = "/viewer/tabletinfo";
-            Redirect307["/viewer/v2/json/nodeinfo"] = "/viewer/nodeinfo";
+            // TODO: redirect of very old paths
+            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/config"] = JsonHandlers.JsonHandlersIndex["/viewer/config"];
+            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/sysinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/sysinfo"];
+            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/pdiskinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/pdiskinfo"];
+            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/vdiskinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/vdiskinfo"];
+            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/storage"] = JsonHandlers.JsonHandlersIndex["/viewer/storage"];
+            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/nodelist"] = JsonHandlers.JsonHandlersIndex["/viewer/nodelist"];
+            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/tabletinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/tabletinfo"];
+            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/nodeinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/nodeinfo"];
 
             TWhiteboardInfo<NKikimrWhiteboard::TEvNodeStateResponse>::InitMerger();
             TWhiteboardInfo<NKikimrWhiteboard::TEvBSGroupStateResponse>::InitMerger();
@@ -541,7 +541,7 @@ private:
                     "HTTP/1.1 204 No Content\r\n"
                     "Access-Control-Allow-Origin: " + AllowOrigin + "\r\n"
                     "Access-Control-Allow-Credentials: true\r\n"
-                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
+                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace\r\n"
                     "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n"
                     "Allow: OPTIONS, GET, POST\r\n"
                     "Content-Type: " + type + "\r\n"
@@ -553,7 +553,7 @@ private:
                         "HTTP/1.1 204 No Content\r\n"
                         "Access-Control-Allow-Origin: " + origin + "\r\n"
                         "Access-Control-Allow-Credentials: true\r\n"
-                        "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
+                        "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace\r\n"
                         "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n"
                         "Allow: OPTIONS, GET, POST\r\n"
                         "Content-Type: " + type + "\r\n"
@@ -672,7 +672,7 @@ void TViewer::FillCORS(TStringBuilder& stream, const TRequestState& request) {
     if (origin) {
         stream << "Access-Control-Allow-Origin: " << origin << "\r\n"
                << "Access-Control-Allow-Credentials: true\r\n"
-               << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
+               << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace\r\n"
                << "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n";
     }
 }

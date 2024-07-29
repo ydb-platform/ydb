@@ -1094,12 +1094,14 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                     GetPrefix() << "Reading of the partition " << partitionId << " was finished by " << ConsumerName
                     << " but the partition hasn't family");
+        return;
     }
 
     if (!family->Session) {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                     GetPrefix() << "Reading of the partition " << partitionId << " was finished by " << ConsumerName
                     << " but the partition hasn't reading session");
+        return;
     }
 
     auto& partition = Partitions[partitionId];

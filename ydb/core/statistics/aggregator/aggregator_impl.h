@@ -5,6 +5,7 @@
 #include <ydb/core/protos/statistics.pb.h>
 #include <ydb/core/protos/counters_statistics_aggregator.pb.h>
 
+#include <ydb/core/base/hive.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/statistics/common.h>
@@ -51,6 +52,9 @@ private:
     struct TTxSaveQueryResponse;
     struct TTxScheduleScan;
     struct TTxDeleteQueryResponse;
+    struct TTxAggregateStatisticsResponse;
+    struct TTxResponseTabletDistribution;
+    struct TTxAckTimeout;
 
     struct TEvPrivate {
         enum EEv {
@@ -59,6 +63,9 @@ private:
             EvProcessUrgent,
             EvPropagateTimeout,
             EvScheduleScan,
+            EvRequestDistribution,
+            EvResolve,
+            EvAckTimeout,
 
             EvEnd
         };
@@ -68,6 +75,15 @@ private:
         struct TEvProcessUrgent : public TEventLocal<TEvProcessUrgent, EvProcessUrgent> {};
         struct TEvPropagateTimeout : public TEventLocal<TEvPropagateTimeout, EvPropagateTimeout> {};
         struct TEvScheduleScan : public TEventLocal<TEvScheduleScan, EvScheduleScan> {};
+        struct TEvRequestDistribution : public TEventLocal<TEvRequestDistribution, EvRequestDistribution> {};
+        struct TEvResolve : public TEventLocal<TEvResolve, EvResolve> {};
+
+        struct TEvAckTimeout : public TEventLocal<TEvAckTimeout, EvAckTimeout> {
+            size_t SeqNo = 0;
+            explicit TEvAckTimeout(size_t seqNo) {
+                SeqNo = seqNo;
+            }
+        };
     };
 
 private:
@@ -104,7 +120,7 @@ private:
     size_t PropagatePart(const std::vector<TNodeId>& nodeIds, const std::vector<TSSId>& ssIds,
         size_t lastSSIndex, bool useSizeLimit);
 
-    void Handle(TEvStatistics::TEvScanTable::TPtr& ev);
+    void Handle(TEvStatistics::TEvAnalyze::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev);
     void Handle(NStat::TEvStatistics::TEvStatisticsResponse::TPtr& ev);
@@ -113,7 +129,13 @@ private:
     void Handle(TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr& ev);
     void Handle(TEvStatistics::TEvDeleteStatisticsQueryResponse::TPtr& ev);
     void Handle(TEvPrivate::TEvScheduleScan::TPtr& ev);
-    void Handle(TEvStatistics::TEvGetScanStatus::TPtr& ev);
+    void Handle(TEvStatistics::TEvAnalyzeStatus::TPtr& ev);
+    void Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev);
+    void Handle(TEvStatistics::TEvAggregateStatisticsResponse::TPtr& ev);
+    void Handle(TEvPrivate::TEvResolve::TPtr& ev);
+    void Handle(TEvPrivate::TEvRequestDistribution::TPtr& ev);
+    void Handle(TEvStatistics::TEvAggregateKeepAlive::TPtr& ev);
+    void Handle(TEvPrivate::TEvAckTimeout::TPtr& ev);
 
     void InitializeStatisticsTable();
     void Navigate();
@@ -126,12 +148,12 @@ private:
     void PersistCurrentScan(NIceDb::TNiceDb& db);
     void PersistStartKey(NIceDb::TNiceDb& db);
     void PersistLastScanOperationId(NIceDb::TNiceDb& db);
+    void PersistGlobalTraversalRound(NIceDb::TNiceDb& db);
 
     void ResetScanState(NIceDb::TNiceDb& db);
     void ScheduleNextScan(NIceDb::TNiceDb& db);
-    void StartScan(NIceDb::TNiceDb& db, TPathId pathId);
+    void StartScan(NIceDb::TNiceDb& db, TPathId pathId, bool isColumnTable);
     void FinishScan(NIceDb::TNiceDb& db);
-
 
     STFUNC(StateInit) {
         StateInitImpl(ev, SelfId());
@@ -154,7 +176,7 @@ private:
             hFunc(TEvPrivate::TEvProcessUrgent, Handle);
             hFunc(TEvPrivate::TEvPropagateTimeout, Handle);
 
-            hFunc(TEvStatistics::TEvScanTable, Handle);
+            hFunc(TEvStatistics::TEvAnalyze, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
             hFunc(NStat::TEvStatistics::TEvStatisticsResponse, Handle);
@@ -163,7 +185,13 @@ private:
             hFunc(TEvStatistics::TEvSaveStatisticsQueryResponse, Handle);
             hFunc(TEvStatistics::TEvDeleteStatisticsQueryResponse, Handle);
             hFunc(TEvPrivate::TEvScheduleScan, Handle);
-            hFunc(TEvStatistics::TEvGetScanStatus, Handle);
+            hFunc(TEvStatistics::TEvAnalyzeStatus, Handle);
+            hFunc(TEvHive::TEvResponseTabletDistribution, Handle);
+            hFunc(TEvStatistics::TEvAggregateStatisticsResponse, Handle);
+            hFunc(TEvPrivate::TEvResolve, Handle);
+            hFunc(TEvPrivate::TEvRequestDistribution, Handle);
+            hFunc(TEvStatistics::TEvAggregateKeepAlive, Handle);
+            hFunc(TEvPrivate::TEvAckTimeout, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
@@ -214,6 +242,7 @@ private:
     //
 
     TTableId ScanTableId; // stored in local db
+    bool IsColumnTable = false; // stored in local db
     std::unordered_set<TActorId> ReplyToActorIds;
 
     bool IsStatisticsTableCreated = false;
@@ -241,6 +270,7 @@ private:
         TPathId PathId;
         ui64 SchemeShardId = 0;
         TInstant LastUpdateTime;
+        bool IsColumnTable = false;
 
         size_t HeapIndexByTime = -1;
 
@@ -275,6 +305,24 @@ private:
     ui64 LastScanOperationId = 0; // stored in local db
 
     TInstant ScanStartTime;
+
+    size_t ResolveRound = 0;
+    static constexpr size_t MaxResolveRoundCount = 5;
+    static constexpr TDuration ResolveRetryInterval = TDuration::Seconds(1);
+
+    ui64 HiveId = 0;
+    std::unordered_set<ui64> TabletsForReqDistribution;
+
+    size_t HiveRequestRound = 0;
+    static constexpr size_t MaxHiveRequestRoundCount = 5;
+    static constexpr TDuration HiveRetryInterval = TDuration::Seconds(1);
+
+    size_t TraversalRound = 0;
+    static constexpr size_t MaxTraversalRoundCount = 5;
+    size_t GlobalTraversalRound = 1; // stored in local db
+
+    size_t KeepAliveSeqNo = 0;
+    static constexpr TDuration KeepAliveTimeout = TDuration::Seconds(3);
 };
 
 } // NKikimr::NStat

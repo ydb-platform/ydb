@@ -1,4 +1,7 @@
 #include "position.h"
+
+#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr::NArrow::NMerger {
@@ -15,11 +18,13 @@ NJson::TJsonValue TSortableBatchPosition::DebugJson() const {
     return result;
 }
 
-std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::FindPosition(TRWSortableBatchPosition& position, const ui64 posStartExt, const ui64 posFinishExt, const TSortableBatchPosition& forFound, const bool greater) {
+std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::FindPosition(TRWSortableBatchPosition& position,
+    const ui64 posStartExt, const ui64 posFinishExt, const TSortableBatchPosition& forFound, const bool greater) {
     ui64 posStart = posStartExt;
     ui64 posFinish = posFinishExt;
+    auto guard = position.CreateAsymmetricAccessGuard();
     {
-        AFL_VERIFY(position.InitPosition(posStart));
+        AFL_VERIFY(guard.InitSortingPosition(posStart));
         auto cmp = position.Compare(forFound);
         if (cmp == std::partial_ordering::greater) {
             return TFoundPosition::Greater(posStart);
@@ -28,7 +33,7 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
         }
     }
     {
-        AFL_VERIFY(position.InitPosition(posFinish));
+        AFL_VERIFY(guard.InitSortingPosition(posFinish));
         auto cmp = position.Compare(forFound);
         if (cmp == std::partial_ordering::less) {
             return TFoundPosition::Less(posFinish);
@@ -37,7 +42,7 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
         }
     }
     while (posFinish > posStart + 1) {
-        Y_ABORT_UNLESS(position.InitPosition(0.5 * (posStart + posFinish)));
+        AFL_VERIFY(guard.InitSortingPosition(0.5 * (posStart + posFinish)));
         const auto comparision = position.Compare(forFound);
         if (comparision == std::partial_ordering::less) {
             posStart = position.Position;
@@ -47,17 +52,18 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
             return TFoundPosition::Equal(position.Position);
         }
     }
-    Y_ABORT_UNLESS(posFinish != posStart);
+    AFL_VERIFY(posFinish != posStart);
     if (greater) {
-        Y_ABORT_UNLESS(position.InitPosition(posFinish));
+        AFL_VERIFY(guard.InitSortingPosition(posFinish));
         return TFoundPosition::Greater(posFinish);
     } else {
-        Y_ABORT_UNLESS(position.InitPosition(posStart));
+        AFL_VERIFY(guard.InitSortingPosition(posStart));
         return TFoundPosition::Less(posStart);
     }
 }
 
-std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::FindPosition(const std::shared_ptr<arrow::RecordBatch>& batch, const TSortableBatchPosition& forFound, const bool greater, const std::optional<ui32> includedStartPosition) {
+std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::FindPosition(const std::shared_ptr<arrow::RecordBatch>& batch,
+    const TSortableBatchPosition& forFound, const bool greater, const std::optional<ui32> includedStartPosition) {
     if (!batch || !batch->num_rows()) {
         return {};
     }
@@ -75,10 +81,12 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
 }
 
 NKikimr::NArrow::NMerger::TRWSortableBatchPosition TSortableBatchPosition::BuildRWPosition() const {
-    return TRWSortableBatchPosition(Position, RecordsCount, ReverseSort, Sorting->BuildCopy(Position), Data ? Data->BuildCopy(Position) : nullptr);
+    return TRWSortableBatchPosition(
+        Position, RecordsCount, ReverseSort, Sorting->BuildCopy(Position), Data ? Data->BuildCopy(Position) : nullptr);
 }
 
-NKikimr::NArrow::NMerger::TRWSortableBatchPosition TSortableBatchPosition::BuildRWPosition(std::shared_ptr<arrow::RecordBatch> batch, const ui32 position) const {
+NKikimr::NArrow::NMerger::TRWSortableBatchPosition TSortableBatchPosition::BuildRWPosition(
+    std::shared_ptr<arrow::RecordBatch> batch, const ui32 position) const {
     std::vector<std::string> dataColumns;
     if (Data) {
         dataColumns = Data->GetFieldNames();
@@ -98,7 +106,8 @@ TSortableBatchPosition::TFoundPosition TRWSortableBatchPosition::SkipToLower(con
     return *pos;
 }
 
-TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<TGeneralContainer>& batch, const std::vector<std::string>& columns) {
+TSortableScanData::TSortableScanData(
+    const ui64 position, const std::shared_ptr<TGeneralContainer>& batch, const std::vector<std::string>& columns) {
     for (auto&& i : columns) {
         auto c = batch->GetAccessorByNameOptional(i);
         AFL_VERIFY(c)("column_name", i)("columns", JoinSeq(",", columns))("batch", batch->DebugString());
@@ -110,7 +119,8 @@ TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<
     BuildPosition(position);
 }
 
-TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns) {
+TSortableScanData::TSortableScanData(
+    const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns) {
     for (auto&& i : columns) {
         auto c = batch->GetColumnByName(i);
         AFL_VERIFY(c)("column_name", i)("columns", JoinSeq(",", columns));
@@ -134,10 +144,11 @@ TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<
     BuildPosition(position);
 }
 
-void TSortableScanData::AppendPositionTo(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const ui64 position, ui64* recordSize) const {
+void TSortableScanData::AppendPositionTo(
+    const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const ui64 position, ui64* recordSize) const {
     AFL_VERIFY(builders.size() == PositionAddress.size());
     for (ui32 i = 0; i < PositionAddress.size(); ++i) {
-        AFL_VERIFY(NArrow::Append(*builders[i], *PositionAddress[i].GetArray(), position - PositionAddress[i].GetStartPosition(), recordSize));
+        AFL_VERIFY(NArrow::Append(*builders[i], *PositionAddress[i].GetArray(), PositionAddress[i].GetAddress().GetLocalIndex(position), recordSize));
     }
 }
 
@@ -148,9 +159,9 @@ void TSortableScanData::BuildPosition(const ui64 position) {
     StartPosition = 0;
     LastInit = position;
     for (auto&& i : Columns) {
-        PositionAddress.emplace_back(i->GetChunk({}, position));
-        StartPosition = std::max<ui64>(StartPosition, PositionAddress.back().GetStartPosition());
-        FinishPosition = std::min<ui64>(FinishPosition, PositionAddress.back().GetFinishPosition());
+        PositionAddress.emplace_back(i->GetChunkSlow(position));
+        StartPosition = std::max<ui64>(StartPosition, PositionAddress.back().GetAddress().GetGlobalStartPosition());
+        FinishPosition = std::min<ui64>(FinishPosition, PositionAddress.back().GetAddress().GetGlobalFinishPosition());
         if (!recordsCount) {
             recordsCount = i->GetRecordsCount();
         } else {
@@ -166,18 +177,19 @@ void TSortableScanData::BuildPosition(const ui64 position) {
 bool TSortableScanData::InitPosition(const ui64 position) {
     AFL_VERIFY(position < RecordsCount);
     if (position < FinishPosition && StartPosition <= position) {
-        return false;
+        return true;
     }
     LastInit = position;
     ui32 idx = 0;
     FinishPosition = Max<ui64>();
     StartPosition = 0;
     for (auto&& i : PositionAddress) {
-        if (!i.Contains(position)) {
-            i = Columns[idx]->GetChunk(i, position);
+        if (!i.GetAddress().Contains(position)) {
+            i = Columns[idx]->GetChunk(i.GetAddress(), position);
         }
-        StartPosition = std::max<ui64>(StartPosition, i.GetStartPosition());
-        FinishPosition = std::min<ui64>(FinishPosition, i.GetFinishPosition());
+        StartPosition = std::max<ui64>(StartPosition, i.GetAddress().GetGlobalStartPosition());
+        FinishPosition = std::min<ui64>(FinishPosition, i.GetAddress().GetGlobalFinishPosition());
+        AFL_VERIFY(i.GetAddress().Contains(position));
         ++idx;
     }
     AFL_VERIFY(StartPosition < FinishPosition);
@@ -212,14 +224,13 @@ void TCursor::AppendPositionTo(const std::vector<std::unique_ptr<arrow::ArrayBui
     AFL_VERIFY(builders.size() == PositionAddress.size());
     for (ui32 i = 0; i < PositionAddress.size(); ++i) {
         AFL_VERIFY_DEBUG(builders[i]->type()->Equals(PositionAddress[i].GetArray()->type()));
-        AFL_VERIFY(NArrow::Append(*builders[i], *PositionAddress[i].GetArray(), Position - PositionAddress[i].GetStartPosition(), recordSize));
+        AFL_VERIFY(NArrow::Append(*builders[i], *PositionAddress[i].GetArray(), PositionAddress[i].GetAddress().GetLocalIndex(Position), recordSize));
     }
 }
 
 TCursor::TCursor(const std::shared_ptr<arrow::Table>& table, const ui64 position, const std::vector<std::string>& columns)
-    : Position(position)
-{
+    : Position(position) {
     PositionAddress = TSortableScanData(position, table, columns).GetPositionAddress();
 }
 
-}
+}   // namespace NKikimr::NArrow::NMerger

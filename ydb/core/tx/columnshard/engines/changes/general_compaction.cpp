@@ -81,7 +81,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
     auto resultSchema = context.SchemaVersions.GetLastSchema();
     auto shardingActual = context.SchemaVersions.GetShardingInfoActual(GranuleMeta->GetPathId());
 
-    std::shared_ptr<TSerializationStats> stats = std::make_shared<TSerializationStats>();
+    std::shared_ptr<NArrow::NSplitter::TSerializationStats> stats = std::make_shared<NArrow::NSplitter::TSerializationStats>();
     std::shared_ptr<TFilteredSnapshotSchema> resultFiltered;
     NCompaction::TMerger merger(context, SaverContext);
     {
@@ -115,12 +115,11 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
                 pkColumnIds.emplace((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG);
             }
         }
-
         resultFiltered = std::make_shared<TFilteredSnapshotSchema>(resultSchema, dataColumnIds);
         {
             auto seqDataColumnIds = dataColumnIds;
             for (auto&& i : pkColumnIds) {
-                AFL_VERIFY(seqDataColumnIds.erase(i));
+                AFL_VERIFY(seqDataColumnIds.erase(i))("id", i);
             }
             THashSet<ui64> usedPortionIds;
             for (auto&& i : portions) {
@@ -213,7 +212,7 @@ NColumnShard::ECumulativeCounters TGeneralCompactColumnEngineChanges::GetCounter
 
 void TGeneralCompactColumnEngineChanges::AddCheckPoint(
     const NArrow::NMerger::TSortableBatchPosition& position, const bool include) {
-    CheckPoints.AddPosition(position, include);
+    CheckPoints.InsertPosition(position, include);
 }
 
 std::shared_ptr<TGeneralCompactColumnEngineChanges::IMemoryPredictor> TGeneralCompactColumnEngineChanges::BuildMemoryPredictor() {

@@ -1,7 +1,10 @@
 #include "container.h"
-#include <ydb/library/actors/core/log.h>
+
+#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/simple_arrays_cache.h>
+
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NArrow {
 
@@ -13,8 +16,9 @@ TConclusionStatus TGeneralContainer::MergeColumnsStrictly(const TGeneralContaine
         RecordsCount = container.RecordsCount;
     }
     if (*RecordsCount != *container.RecordsCount) {
-        return TConclusionStatus::Fail(TStringBuilder() << "inconsistency records count in additional container: " <<
-            container.GetSchema()->ToString() << ". expected: " << RecordsCount << ", reality: " << container.GetRecordsCount());
+        return TConclusionStatus::Fail(TStringBuilder()
+                                       << "inconsistency records count in additional container: " << container.GetSchema()->ToString()
+                                       << ". expected: " << RecordsCount << ", reality: " << container.GetRecordsCount());
     }
     for (i32 i = 0; i < container.Schema->num_fields(); ++i) {
         auto addFieldResult = AddField(container.Schema->field(i), container.Columns[i]);
@@ -29,11 +33,12 @@ TConclusionStatus TGeneralContainer::AddField(const std::shared_ptr<arrow::Field
     AFL_VERIFY(f);
     AFL_VERIFY(data);
     if (RecordsCount && data->GetRecordsCount() != *RecordsCount) {
-        return TConclusionStatus::Fail(TStringBuilder() << "inconsistency records count in new column: " <<
-            f->name() << ". expected: " << RecordsCount << ", reality: " << data->GetRecordsCount());
+        return TConclusionStatus::Fail(TStringBuilder() << "inconsistency records count in new column: " << f->name()
+                                                        << ". expected: " << RecordsCount << ", reality: " << data->GetRecordsCount());
     }
     if (!data->GetDataType()->Equals(f->type())) {
-        return TConclusionStatus::Fail("schema and data type are not equals: " + data->GetDataType()->ToString() + " vs " + f->type()->ToString());
+        return TConclusionStatus::Fail(
+            "schema and data type are not equals: " + data->GetDataType()->ToString() + " vs " + f->type()->ToString());
     }
     {
         auto conclusion = Schema->AddField(f);
@@ -64,7 +69,8 @@ void TGeneralContainer::Initialize() {
             recordsCount = Columns[i]->GetRecordsCount();
         } else {
             AFL_VERIFY(*recordsCount == Columns[i]->GetRecordsCount())
-                ("event", "inconsistency_records_count")("expect", *recordsCount)("real", Columns[i]->GetRecordsCount())("field_name", Schema->field(i)->name());
+            ("event", "inconsistency_records_count")("expect", *recordsCount)("real", Columns[i]->GetRecordsCount())(
+                "field_name", Schema->field(i)->name());
         }
     }
     AFL_VERIFY(recordsCount);
@@ -72,24 +78,24 @@ void TGeneralContainer::Initialize() {
     RecordsCount = *recordsCount;
 }
 
-TGeneralContainer::TGeneralContainer(const std::vector<std::shared_ptr<arrow::Field>>& fields, std::vector<std::shared_ptr<NAccessor::IChunkedArray>>&& columns)
+TGeneralContainer::TGeneralContainer(
+    const std::vector<std::shared_ptr<arrow::Field>>& fields, std::vector<std::shared_ptr<NAccessor::IChunkedArray>>&& columns)
     : Schema(std::make_shared<NModifier::TSchema>(fields))
-    , Columns(std::move(columns))
-{
+    , Columns(std::move(columns)) {
     Initialize();
 }
 
-TGeneralContainer::TGeneralContainer(const std::shared_ptr<NModifier::TSchema>& schema, std::vector<std::shared_ptr<NAccessor::IChunkedArray>>&& columns)
+TGeneralContainer::TGeneralContainer(
+    const std::shared_ptr<NModifier::TSchema>& schema, std::vector<std::shared_ptr<NAccessor::IChunkedArray>>&& columns)
     : Schema(std::make_shared<NModifier::TSchema>(schema))
-    , Columns(std::move(columns))
-{
+    , Columns(std::move(columns)) {
     Initialize();
 }
 
-TGeneralContainer::TGeneralContainer(const std::shared_ptr<arrow::Schema>& schema, std::vector<std::shared_ptr<NAccessor::IChunkedArray>>&& columns)
+TGeneralContainer::TGeneralContainer(
+    const std::shared_ptr<arrow::Schema>& schema, std::vector<std::shared_ptr<NAccessor::IChunkedArray>>&& columns)
     : Schema(std::make_shared<NModifier::TSchema>(schema))
-    , Columns(std::move(columns))
-{
+    , Columns(std::move(columns)) {
     Initialize();
 }
 
@@ -164,7 +170,8 @@ std::shared_ptr<NArrow::NAccessor::IChunkedArray> TGeneralContainer::GetAccessor
     return Columns[idx];
 }
 
-TConclusionStatus TGeneralContainer::SyncSchemaTo(const std::shared_ptr<arrow::Schema>& schema, const IFieldsConstructor* defaultFieldsConstructor, const bool forceDefaults) {
+TConclusionStatus TGeneralContainer::SyncSchemaTo(
+    const std::shared_ptr<arrow::Schema>& schema, const IFieldsConstructor* defaultFieldsConstructor, const bool forceDefaults) {
     std::shared_ptr<NModifier::TSchema> schemaNew = std::make_shared<NModifier::TSchema>();
     std::vector<std::shared_ptr<NAccessor::IChunkedArray>> columnsNew;
     if (!RecordsCount) {
@@ -181,12 +188,14 @@ TConclusionStatus TGeneralContainer::SyncSchemaTo(const std::shared_ptr<arrow::S
                 if (defConclusion.IsFail()) {
                     return defConclusion;
                 }
-                columnsNew.emplace_back(std::make_shared<NAccessor::TTrivialArray>(NArrow::TThreadSimpleArraysCache::Get(i->type(), *defConclusion, *RecordsCount)));
+                columnsNew.emplace_back(
+                    std::make_shared<NAccessor::TTrivialArray>(NArrow::TThreadSimpleArraysCache::Get(i->type(), *defConclusion, *RecordsCount)));
             }
         } else {
             const auto& fOwned = Schema->GetFieldVerified(idx);
             if (!fOwned->type()->Equals(i->type())) {
-                return TConclusionStatus::Fail("different field types for '" + i->name() + "'. Have " + fOwned->type()->ToString() + ", need " + i->type()->ToString());
+                return TConclusionStatus::Fail(
+                    "different field types for '" + i->name() + "'. Have " + fOwned->type()->ToString() + ", need " + i->type()->ToString());
             }
             schemaNew->AddField(fOwned).Validate();
             columnsNew.emplace_back(Columns[idx]);
@@ -206,7 +215,8 @@ TString TGeneralContainer::DebugString() const {
     return result;
 }
 
-TConclusion<std::shared_ptr<arrow::Scalar>> IFieldsConstructor::GetDefaultColumnElementValue(const std::shared_ptr<arrow::Field>& field, const bool force) const {
+TConclusion<std::shared_ptr<arrow::Scalar>> IFieldsConstructor::GetDefaultColumnElementValue(
+    const std::shared_ptr<arrow::Field>& field, const bool force) const {
     AFL_VERIFY(field);
     auto result = DoGetDefaultColumnElementValue(field->name());
     if (result) {
@@ -218,4 +228,4 @@ TConclusion<std::shared_ptr<arrow::Scalar>> IFieldsConstructor::GetDefaultColumn
     return TConclusionStatus::Fail("have not default value for column " + field->name());
 }
 
-}
+}   // namespace NKikimr::NArrow

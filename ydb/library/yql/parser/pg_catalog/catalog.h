@@ -72,6 +72,7 @@ struct TProcDesc {
     ui32 VariadicType = 0;
     ui32 VariadicArgType = 0;
     TString VariadicArgName;
+    ui32 ExtensionIndex = 0;
 };
 
 // Copied from pg_collation_d.h
@@ -128,6 +129,8 @@ struct TTypeDesc {
 
     // If TypType is 'c', typrelid is the OID of the class' entry in pg_class.
     ETypType TypType = ETypType::Base;
+
+    ui32 ExtensionIndex = 0;
 };
 
 enum class ECastMethod {
@@ -355,6 +358,49 @@ struct TColumnInfo {
 const TVector<TTableInfo>& GetStaticTables();
 const TTableInfo& LookupStaticTable(const TTableInfoKey& tableKey);
 const THashMap<TTableInfoKey, TVector<TColumnInfo>>& GetStaticColumns();
+
+bool AreAllFunctionsAllowed();
+
+struct TExtensionDesc {
+    TString Name;           // postgis
+    TString InstallName;    // $libdir/postgis-3
+    TString DDLPath;        // DDL path (CREATE TYPE/CREATE FUNCTION/etc)
+    TString LibraryPath;    // file path
+    bool TypesOnly = false; // Can't be loaded if true
+};
+
+class IExtensionDDLBuilder {
+public:
+    virtual ~IExtensionDDLBuilder() = default;
+
+    virtual void CreateProc(const TProcDesc& desc) = 0;
+
+    virtual void PrepareType(ui32 extensionIndex,const TString& name) = 0;
+
+    virtual void UpdateType(const TTypeDesc& desc) = 0;
+};
+
+class IExtensionDDLParser {
+public:
+    virtual ~IExtensionDDLParser() = default;
+    virtual void Parse(ui32 extensionIndex, const TString& sql, IExtensionDDLBuilder& builder) = 0;
+};
+
+class IExtensionLoader {
+public:
+    virtual ~IExtensionLoader() = default;
+    virtual void Load(ui32 extensionIndex, const TString& name, const TString& path) = 0;
+};
+
+// should be called at most once before other catalog functions
+void RegisterExtensions(const TVector<TExtensionDesc>& extensions, bool typesOnly,
+    IExtensionDDLParser& parser, IExtensionLoader* loader);
+
+void EnumExtensions(std::function<void(ui32 extensionIndex, const TExtensionDesc&)> f);
+const TExtensionDesc& LookupExtension(ui32 extensionIndex);
+ui32 LookupExtensionByName(const TString& name);
+ui32 LookupExtensionByInstallName(const TString& installName);
+
 }
 
 template <>

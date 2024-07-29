@@ -464,6 +464,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
     ui64 DataSize = 0;
     ui64 MemorySize = 0;
     ui32 ShardsCount = 0;
+    bool StatsLoaded = false;
 
     TInstant LastAccessTime;
     TInstant LastUpdateTime;
@@ -500,6 +501,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
         , Kind(static_cast<EKikimrTableKind>(message->GetKind()))
         , RecordsCount(message->GetRecordsCount())
         , DataSize(message->GetDataSize())
+        , StatsLoaded(message->GetStatsLoaded())
         , KeyColumnNames(message->GetKeyColunmNames().begin(), message->GetKeyColunmNames().end())
 
     {
@@ -565,6 +567,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
         PathId.ToMessage(message->MutablePathId());
         message->SetSchemaVersion(SchemaVersion);
         message->SetKind(static_cast<ui32>(Kind));
+        message->SetStatsLoaded(StatsLoaded);
         message->SetRecordsCount(RecordsCount);
         message->SetDataSize(DataSize);
         for(auto& [key, value] : Attributes) {
@@ -884,7 +887,6 @@ public:
     struct TQueryResult : public TGenericResult {
         TString SessionId;
         TVector<NKikimrMiniKQL::TResult*> Results;
-        TMaybe<NKikimrKqp::TQueryProfile> Profile; // TODO: Deprecate.
         NKqpProto::TKqpStatsQuery QueryStats;
         std::unique_ptr<NKikimrKqp::TPreparedQuery> PreparingQuery;
         std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery;

@@ -1325,12 +1325,13 @@ private:
     public:
         using TResult = std::pair<TString, bool>;
 
-        TSkiffExprResultFactory(TMaybe<ui64> rowLimit, TMaybe<ui64> byteLimit, bool hasListResult, const NYT::TNode& attrs, const TString& optLLVM)
+        TSkiffExprResultFactory(TMaybe<ui64> rowLimit, TMaybe<ui64> byteLimit, bool hasListResult, const NYT::TNode& attrs, const TString& optLLVM, const TVector<TString>& columns)
             : RowLimit_(rowLimit)
             , ByteLimit_(byteLimit)
             , HasListResult_(hasListResult)
             , Attrs_(attrs)
             , OptLLVM_(optLLVM)
+            , Columns_(columns)
         {
         }
 
@@ -1341,7 +1342,7 @@ private:
         THolder<TSkiffExecuteResOrPull> Create(TCodecContext& codecCtx, const NKikimr::NMiniKQL::THolderFactory& holderFactory) const {
             THolder<TSkiffExecuteResOrPull> res;
 
-            res = MakeHolder<TSkiffExecuteResOrPull>(RowLimit_, ByteLimit_, codecCtx, holderFactory, Attrs_, OptLLVM_);
+            res = MakeHolder<TSkiffExecuteResOrPull>(RowLimit_, ByteLimit_, codecCtx, holderFactory, Attrs_, OptLLVM_, Columns_);
             if (HasListResult_) {
                 res->SetListResult();
             }
@@ -1358,6 +1359,7 @@ private:
         const bool HasListResult_;
         const NYT::TNode Attrs_;
         const TString OptLLVM_;
+        const TVector<TString> Columns_;
     };
 
     static TFinalizeResult ExecFinalize(const TSession::TPtr& session, bool abort, bool detachSnapshotTxs) {
@@ -2952,10 +2954,18 @@ private:
                     structColumns.emplace(columns[index], index);
                 }
 
-                auto skiffNode = SingleTableSpecToInputSkiff(rowSpec[YqlIOSpecTables][0], structColumns, false, false, false);
+                auto skiffNode = TablesSpecToOutputSkiff(rowSpec);
 
                 writer.OnKeyedItem("SkiffType");
                 writer.OnRaw(NodeToYsonString(skiffNode), ::NYson::EYsonType::Node);
+
+                writer.OnKeyedItem("Columns");
+                writer.OnBeginList();
+                for (auto& column : columns) {
+                    writer.OnListItem();
+                    writer.OnStringScalar(column);
+                }
+                writer.OnEndList();
 
                 TSkiffExecuteResOrPull pullData(execCtx->Options_.FillSettings().RowsLimitPerWrite,
                     execCtx->Options_.FillSettings().AllResultsBytesLimit,
@@ -3048,7 +3058,8 @@ private:
                             execCtx->Options_.FillSettings().AllResultsBytesLimit,
                             hasListResult,
                             rowSpec,
-                            execCtx->Options_.OptLLVM()),
+                            execCtx->Options_.OptLLVM(),
+                            columns),
                         &columns,
                         execCtx->Options_.FillSettings().Format);
                 default:

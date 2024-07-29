@@ -71,12 +71,20 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                         break;
                     }
                     case Schema::SysParam_LastScanOperationId: {
-                        auto id = FromString<ui64>(value);
-                        Self->LastScanOperationId = id;
-                        SA_LOG_D("[" << Self->TabletID() << "] Loading last scan operation id: " << id);
+                        Self->LastScanOperationId = FromString<ui64>(value);
+                        SA_LOG_D("[" << Self->TabletID() << "] Loading last scan operation id: " << value);
                         break;
                     }
-
+                    case Schema::SysParam_IsColumnTable: {
+                        Self->IsColumnTable = FromString<bool>(value);
+                        SA_LOG_D("[" << Self->TabletID() << "] Loading IsColumnTable: " << value);
+                        break;
+                    }
+                    case Schema::SysParam_GlobalTraversalRound: {
+                        Self->GlobalTraversalRound = FromString<ui64>(value);
+                        SA_LOG_D("[" << Self->TabletID() << "] Loading global traversal round: " << value);
+                        break;
+                    }
                     default:
                         SA_LOG_CRIT("[" << Self->TabletID() << "] Unexpected SysParam id: " << id);
                 }
@@ -152,6 +160,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 ui64 localPathId = rowset.GetValue<Schema::ScanTables::LocalPathId>();
                 ui64 lastUpdateTime = rowset.GetValue<Schema::ScanTables::LastUpdateTime>();
                 ui64 schemeShardId = rowset.GetValue<Schema::ScanTables::SchemeShardId>();
+                bool isColumnTable = rowset.GetValue<Schema::ScanTables::IsColumnTable>();
 
                 auto pathId = TPathId(ownerId, localPathId);
 
@@ -159,6 +168,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 scanTable.PathId = pathId;
                 scanTable.SchemeShardId = schemeShardId;
                 scanTable.LastUpdateTime = TInstant::MicroSeconds(lastUpdateTime);
+                scanTable.IsColumnTable = isColumnTable;
 
                 auto [it, _] = Self->ScanTables.emplace(pathId, scanTable);
                 Self->ScanTablesByTime.Add(&it->second);

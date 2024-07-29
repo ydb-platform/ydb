@@ -17,6 +17,7 @@ private:
     std::unique_ptr<arrow::ArrayBuilder> Builder;
     std::shared_ptr<arrow::DataType> Type;
     const TColumnMergeContext& Context;
+    const TChunkMergeContext& ChunkContext;
     YDB_READONLY(ui64, CurrentChunkRawSize, 0);
     double PredictedPackedBytes = 0;
     const TSimpleColumnInfo ColumnInfo;
@@ -24,22 +25,22 @@ private:
     ui64 CurrentPortionRecords = 0;
 
 public:
-    TColumnPortion(const TColumnMergeContext& context)
+    TColumnPortion(const TColumnMergeContext& context, const TChunkMergeContext& chunkContext)
         : TBase(context.GetColumnId())
         , Context(context)
+        , ChunkContext(chunkContext)
         , ColumnInfo(Context.GetIndexInfo().GetColumnFeaturesVerified(context.GetColumnId())) {
         Builder = Context.MakeBuilder();
         Type = Builder->type();
     }
 
     bool IsFullPortion() const {
-        Y_ABORT_UNLESS(CurrentPortionRecords <= Context.GetPortionRowsCountLimit());
-        return CurrentPortionRecords == Context.GetPortionRowsCountLimit();
+        Y_ABORT_UNLESS(CurrentPortionRecords <= ChunkContext.GetPortionRowsCountLimit());
+        return CurrentPortionRecords == ChunkContext.GetPortionRowsCountLimit();
     }
 
     bool FlushBuffer();
 
-    std::shared_ptr<arrow::Array> AppendBlob(const TString& data, const TColumnRecord& columnChunk, ui32& remained);
     ui32 AppendSlice(const std::shared_ptr<arrow::Array>& a, const ui32 startIndex, const ui32 length);
 };
 

@@ -1,6 +1,4 @@
 items:
-- name: Обзор
-  href: index.md
 - name: YDB SDK
   include:
     mode: link

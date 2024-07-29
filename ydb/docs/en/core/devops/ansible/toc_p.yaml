@@ -1,6 +1,4 @@
 items:
-- name: Overview
-  href: index.md
 - name: Initial deployment
   href: initial-deployment.md
 - name: Preparing VMs with Terraform
@@ -10,6 +8,7 @@ items:
 - name: Update config
   href: update-config.md
 - name: Observability
+  href: observability/index.md
   include:
     mode: link
     path: observability/toc_p.yaml

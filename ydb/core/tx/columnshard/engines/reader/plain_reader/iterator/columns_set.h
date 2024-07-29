@@ -62,19 +62,25 @@ public:
 
     bool ColumnsOnly(const std::vector<std::string>& fieldNames) const;
 
-    TColumnsSet(const std::set<ui32>& columnIds, const TIndexInfo& indexInfo, const ISnapshotSchema::TPtr& fullReadSchema)
+    std::shared_ptr<TColumnsSet> BuildSamePtr(const std::set<ui32>& columnIds) const {
+        return std::make_shared<TColumnsSet>(columnIds, FullReadSchema);
+    }
+
+    TColumnsSet(const std::set<ui32>& columnIds, const ISnapshotSchema::TPtr& fullReadSchema)
         : ColumnIds(columnIds)
         , FullReadSchema(fullReadSchema)
     {
-        Schema = indexInfo.GetColumnsSchema(ColumnIds);
+        AFL_VERIFY(!!FullReadSchema);
+        Schema = FullReadSchema->GetIndexInfo().GetColumnsSchema(ColumnIds);
         Rebuild();
     }
 
-    TColumnsSet(const std::vector<ui32>& columnIds, const TIndexInfo& indexInfo, const ISnapshotSchema::TPtr& fullReadSchema)
+    TColumnsSet(const std::vector<ui32>& columnIds, const ISnapshotSchema::TPtr& fullReadSchema)
         : ColumnIds(columnIds.begin(), columnIds.end())
         , FullReadSchema(fullReadSchema)
     {
-        Schema = indexInfo.GetColumnsSchema(ColumnIds);
+        AFL_VERIFY(!!FullReadSchema);
+        Schema = FullReadSchema->GetIndexInfo().GetColumnsSchema(ColumnIds);
         Rebuild();
     }
 

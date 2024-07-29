@@ -296,26 +296,27 @@ TBytesStatistics WriteColumnValuesFromArrowSpecImpl(TAccessor editAccessor,
     auto trivialChunkedArray = std::make_shared<NArrow::NAccessor::TTrivialChunkedArray>(chunkedArrayExt);
     NArrow::NAccessor::IChunkedArray::TReader reader(trivialChunkedArray);
 
-    std::optional<ui32> chunkIdx;
     std::optional<ui32> currentIdxFrom;
     std::optional<NArrow::NAccessor::IChunkedArray::TAddress> address;
     const typename TElementAccessor::TArrayType* currentArray = nullptr;
     const auto applyToIndex = [&](const ui32 rowIndexFrom, const ui32 rowIndexTo) {
+        bool changed = false;
         if (!currentIdxFrom) {
             address = reader.GetReadChunk(rowIndexFrom);
             AFL_ENSURE(rowIndexFrom == 0)("real", rowIndexFrom);
+            changed = true;
         } else {
             AFL_ENSURE(rowIndexFrom == *currentIdxFrom + 1)("next", rowIndexFrom)("current", *currentIdxFrom);
             if (!address->NextPosition()) {
                 address = reader.GetReadChunk(rowIndexFrom);
+                changed = true;
             }
         }
         currentIdxFrom = rowIndexFrom;
 
-        if (!chunkIdx || *chunkIdx != address->GetChunkIdx()) {
+        if (changed) {
             currentArray = static_cast<const typename TElementAccessor::TArrayType*>(address->GetArray().get());
             TElementAccessor::Validate(*currentArray);
-            chunkIdx = address->GetChunkIdx();
         }
 
         auto& rowItem = editAccessor(rowIndexTo, columnIndex);

@@ -92,15 +92,16 @@ using namespace llvm;
 
 Type* GetCompContextType(LLVMContext &context);
 
+class DISubprogramAnnotator;
+
 struct TCodegenContext {
     TCodegenContext(NYql::NCodegen::ICodegen& codegen) : Codegen(codegen) {}
 
     NYql::NCodegen::ICodegen& Codegen;
     Function* Func = nullptr;
     Argument* Ctx = nullptr;
+    DISubprogramAnnotator* Annotator = nullptr;
     bool AlwaysInline = false;
-    DISubprogram* Subprogram = nullptr;
-    DIBuilder* DebugBuilder = nullptr;
 
     Value* GetFactory() const;
     Value* GetStat() const;
@@ -1215,16 +1216,34 @@ Value* GetMemoryUsed(ui64 limit, const TCodegenContext& ctx, BasicBlock* block);
 template <bool TrackRss>
 Value* CheckAdjustedMemLimit(ui64 limit, Value* init, const TCodegenContext& ctx, BasicBlock*& block);
 
-DISubprogram* MakeDISubprogram(const TCodegenContext& ctx, const TString &name, const std::source_location& location = std::source_location::current());
+class DIScopeAnnotator;
 
-class DIScopeAnnotator {
+class DISubprogramAnnotator final {
 public:
-    explicit DIScopeAnnotator(const TCodegenContext& ctx, const std::source_location& location = std::source_location::current());
+    explicit DISubprogramAnnotator(const TCodegenContext& ctx, Function* subprogramFunc, const std::source_location& location = std::source_location::current());
 
-    Instruction* operator()(Instruction *inst, const std::source_location& location = std::source_location::current()) const;
+    DIFile* MakeDIFile(const std::source_location& location);
+
+    ~DISubprogramAnnotator();
 
 private:
+    DISubprogram* MakeDISubprogram(const StringRef& name, const std::source_location& location = std::source_location::current());
+
+    friend DIScopeAnnotator;
+
     const TCodegenContext& Ctx;
+    std::unique_ptr<DIBuilder> DebugBuilder;
+    DISubprogram* Subprogram;
+};
+
+class DIScopeAnnotator final {
+public:
+    explicit DIScopeAnnotator(DISubprogramAnnotator* subprogramAnnotator, const std::source_location& location = std::source_location::current());
+
+    Instruction* operator()(Instruction* inst, const std::source_location& location = std::source_location::current()) const;
+
+private:
+    DISubprogramAnnotator* SubprogramAnnotator;
     DIScope* Scope;
 };
 

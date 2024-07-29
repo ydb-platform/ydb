@@ -2558,12 +2558,24 @@ Y_NO_INLINE Function* TCodegeneratorRootNodeBase::GenerateGetValueImpl(
     return ctx.Func;
 }
 
+DISubprogramAnnotator::DISubprogramAnnotator(const TCodegenContext& ctx, Function* subprogramFunc, const std::source_location& location)
+    : Ctx(ctx)
+    , DebugBuilder(std::make_unique<DIBuilder>(ctx.Codegen.GetModule()))
+    , Subprogram(MakeDISubprogram(subprogramFunc->getName(), location))
+{
+    subprogramFunc->setSubprogram(Subprogram);
+}
+
+DISubprogramAnnotator::~DISubprogramAnnotator() {
+    DebugBuilder->finalizeSubprogram(Subprogram);
+}
+
 static const char *BUILD_PATH_ACNHOR_COMPUTATION = "/minikql/computation/llvm14";
 static const char *BUILD_PATH_ACNHOR_COMP_NODES = "/minikql/comp_nodes/llvm14";
 static const char *BUILD_PATH_REPLACEMENT_COMPUTATION = "/-Q/computation/";
 static const char *BUILD_PATH_REPLACEMENT_COMP_NODES = "/-Q/comp_nodes/";
 
-DIFile* MakeDIFile(const TCodegenContext& ctx, const std::source_location& location) {
+DIFile* DISubprogramAnnotator::MakeDIFile(const std::source_location& location) {
     TString pathStr = location.file_name();
     size_t pos = pathStr.find(BUILD_PATH_ACNHOR_COMPUTATION);
     if (pos != TString::npos) {
@@ -2576,29 +2588,29 @@ DIFile* MakeDIFile(const TCodegenContext& ctx, const std::source_location& locat
         const TFsPath path = pathStr;
     }
     TFsPath path = pathStr;
-    return ctx.DebugBuilder->createFile(path.GetName().c_str(), path.Parent().GetPath().c_str());
+    return DebugBuilder->createFile(path.GetName().c_str(), path.Parent().GetPath().c_str());
 }
 
-DISubprogram* MakeDISubprogram(const TCodegenContext& ctx, const TString& name, const std::source_location& location) {
-    const auto file = MakeDIFile(ctx, location);
-    const auto unit = ctx.DebugBuilder->createCompileUnit(llvm::dwarf::DW_LANG_C_plus_plus, file, "MKQL", false, "", 0);
-    const auto subroutineType = ctx.DebugBuilder->createSubroutineType(ctx.DebugBuilder->getOrCreateTypeArray({}));
-    return ctx.DebugBuilder->createFunction(
+DISubprogram* DISubprogramAnnotator::MakeDISubprogram(const StringRef& name, const std::source_location& location) {
+    const auto file = MakeDIFile(location);
+    const auto unit = DebugBuilder->createCompileUnit(llvm::dwarf::DW_LANG_C_plus_plus, file, "MKQL", false, "", 0);
+    const auto subroutineType = DebugBuilder->createSubroutineType(DebugBuilder->getOrCreateTypeArray({}));
+    return DebugBuilder->createFunction(
         unit,
-        name.c_str(),
+        name,
         llvm::StringRef(),
         file, 0,
         subroutineType, 0, llvm::DINode::FlagPrototyped, llvm::DISubprogram::SPFlagDefinition
     );
 }
 
-DIScopeAnnotator::DIScopeAnnotator(const TCodegenContext& ctx, const std::source_location& location)
-    : Ctx(ctx)
-    , Scope(ctx.DebugBuilder->createLexicalBlock(ctx.Subprogram, MakeDIFile(ctx, location), location.line(), location.column()))
+DIScopeAnnotator::DIScopeAnnotator(DISubprogramAnnotator* subprogramAnnotator, const std::source_location& location)
+    : SubprogramAnnotator(subprogramAnnotator)
+    , Scope(SubprogramAnnotator->DebugBuilder->createLexicalBlock(SubprogramAnnotator->Subprogram, SubprogramAnnotator->MakeDIFile(location), location.line(), location.column()))
 {}
 
-Instruction* DIScopeAnnotator::operator()(Instruction *inst, const std::source_location& location) const {
-    inst->setDebugLoc(DILocation::get(Ctx.Codegen.GetContext(), location.line(), location.column(), Scope));
+Instruction* DIScopeAnnotator::operator()(Instruction* inst, const std::source_location& location) const {
+    inst->setDebugLoc(DILocation::get(SubprogramAnnotator->Ctx.Codegen.GetContext(), location.line(), location.column(), Scope));
     return inst;
 }
 

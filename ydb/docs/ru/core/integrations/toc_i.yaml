@@ -1,4 +1,6 @@
 items:
+- name: Интеграции
+  href: index.md
 - name: Сбор логов с помощью FluentBit
   href: fluent-bit.md
 - name: Плагин-источник данных Grafana
@@ -15,3 +17,17 @@ items:
   href: hibernate.md
 - name: Импорт из источников JDBC
   href: import-jdbc.md
+- name: Подключение из IDE
+  href: connect-from-ide.md
+- name: Apache Airflow
+  href: airflow.md
+  when: ydb-airflow
+- name: Apache SuperSet
+  href: superset.md
+  when: ydb-superset
+- name: FineBI
+  href: finebi.md
+  when: ydb-finebi
+- name: DataLens
+  href: datalens.md
+  when: ydb-datalens

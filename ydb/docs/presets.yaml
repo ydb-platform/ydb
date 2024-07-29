@@ -53,3 +53,8 @@ default:
   corporate-paste: https://www.paste.example.com
   corporate-yt: https://www.yt.example.com
   corporate-yt-cluster: example-cluster
+
+  datalens-name: DataLens
+  airflow-name: Apache Airflow
+  ydb-airflow: false
+  ydb-finebi: false

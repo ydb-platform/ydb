@@ -103,13 +103,14 @@ namespace NKikimr::NPDisk {
                     << " ChunkIdx# " << key.ChunkIdx
                     << " OffsetInSectors# " << key.OffsetInSectors);
                 PDisk->BlockDevice->PwriteAsync(buffer.data(), buffer.size(), writeOffset, this, {}, nullptr);
-                WriteQueue.pop_front();
             }
 
             void Exec(TActorSystem *actorSystem) override {
                 LOG_DEBUG_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId
                     << " TCompletionWriteMetadata::Exec"
                     << " Result# " << Result);
+                Y_ABORT_UNLESS(!WriteQueue.empty());
+                WriteQueue.pop_front();
                 if (Result != EIoResult::Ok) {
                     PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TWriteMetadataResult>(false, Sender));
                 } else if (WriteQueue.empty()) {

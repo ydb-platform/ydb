@@ -221,7 +221,7 @@ private:
         memoryStats.SetTargetUtilization(targetUtilizationBytes);
         memoryStats.SetConsumersConsumption(consumersConsumption);
         memoryStats.SetOtherConsumption(otherConsumption);
-        memoryStats.SetExternalConsumption(externalConsumption);
+        if (hasMemTotalHardLimit) memoryStats.SetExternalConsumption(externalConsumption);
 
         ui64 consumersLimitBytes = 0;
         for (const auto& consumer : consumers) {

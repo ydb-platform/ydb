@@ -1,6 +1,8 @@
 # DROP ASYNC REPLICATION
 
-Вызов `DROP ASYNC REPLICATION` удаляет экземпляр [асинхронной репликации](../../../concepts/async-replication.md).
+Вызов `DROP ASYNC REPLICATION` удаляет экземпляр [асинхронной репликации](../../../concepts/async-replication.md). Вместе с экземпляром асинхронной репликации [удаляются](../../../concepts/async-replication.md#drop):
+* автоматически созданные потоки изменений;
+* объекты-реплики (опционально).
 
 ## Синтаксис {#syntax}
 
@@ -25,13 +27,13 @@ WITH (
 );
 ```
 
-Удаление экземпляра асинхронной репликации, таблица `replica_table` остается:
+Удаление экземпляра асинхронной репликации и автоматически созданного потока изменений в таблице `table`, таблица `replica_table` остается:
 
 ```sql
 DROP ASYNC REPLICATION `my_replication`;
 ```
 
-Удаление экземпляра асинхронной репликации вместе с таблицей `replica_table`:
+Удаление экземпляра асинхронной репликации, автоматически созданного потока изменений в таблице `table` и таблицы `replica_table`:
 
 ```sql
 DROP ASYNC REPLICATION `my_replication` CASCADE;

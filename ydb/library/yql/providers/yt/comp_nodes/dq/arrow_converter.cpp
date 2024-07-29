@@ -264,6 +264,7 @@ struct TYtColumnConverterSettings {
     arrow::MemoryPool& Pool;
     const bool IsNative;
     const bool IsTopOptional;
+    const bool OriginalTopOptional;
     std::shared_ptr<arrow::DataType> ArrowType;
     std::unique_ptr<NKikimr::NUdf::IArrayBuilder> Builder;
     std::unique_ptr<NKikimr::NUdf::IArrayBuilder> BuilderForPg;
@@ -338,7 +339,9 @@ public:
         if (buf.Current() == ListItemSeparatorSymbol) {
             buf.Next();
         }
-        YQL_ENSURE(buf.Current() == EndListSymbol);
+        if (buf.Current() != EndListSymbol) {
+            YQL_ENSURE(buf.Current() == EndListSymbol);
+        }
         buf.Next();
         return result.MakeOptional();
     }
@@ -504,7 +507,7 @@ public:
         , PgTopLevelReader_(BuildPgTopLevelColumnReader(std::move(Settings_.BuilderForPg), Settings_.Type->IsPg() ? static_cast<const TPgType*>(Settings_.Type) : nullptr)) {}
 
     arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> block) override {
-        if (Settings_.Type->IsPg()) {
+        if (!Settings_.IsTopOptional && Settings_.Type->IsPg()) {
             // Top-level PG is a special case
             return PgTopLevelReader_->Convert(block);
         }
@@ -549,11 +552,13 @@ private:
 };
 
 TYtColumnConverterSettings::TYtColumnConverterSettings(NKikimr::NMiniKQL::TType* type, const NUdf::IPgBuilder* pgBuilder, arrow::MemoryPool& pool, bool isNative) 
-    : Type(type), PgBuilder(pgBuilder), Pool(pool), IsNative(isNative), IsTopOptional(!isNative && type->IsOptional())
+    : Type(type), PgBuilder(pgBuilder), Pool(pool), IsNative(isNative), IsTopOptional(!isNative && type->IsOptional()), OriginalTopOptional(type->IsOptional())
 {
     if (!isNative) {
         if (Type->IsOptional()) {
-            Type = static_cast<NKikimr::NMiniKQL::TOptionalType*>(Type)->GetItemType();
+            if (!(isNative && static_cast<NKikimr::NMiniKQL::TOptionalType*>(Type)->GetItemType()->IsPg())) {
+                Type = static_cast<NKikimr::NMiniKQL::TOptionalType*>(Type)->GetItemType();
+            }
         }
     }
     YQL_ENSURE(ConvertArrowType(type, ArrowType), "Can't convert type to arrow");

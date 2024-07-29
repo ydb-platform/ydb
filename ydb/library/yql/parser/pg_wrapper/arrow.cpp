@@ -332,10 +332,11 @@ NUdf::TBlockItem BlockItemFromDatum(Datum datum, const NPg::TTypeDesc& desc, std
     } else {
         len = typeLen;
     }
+    auto objlen = len;
     len += sizeof(void*);
     len = AlignUp<i32>(len, 8);
     tmp.resize(len);
-    memcpy(tmp.data() + sizeof(void*), (const char*) datum, len);
+    memcpy(tmp.data() + sizeof(void*), (const char*) datum, objlen);
     return NUdf::TBlockItem(std::string_view(tmp.data(), len));
 }
 
@@ -401,7 +402,7 @@ constexpr Datum FixedToDatum(T v) {
 }
 
 template<bool Native, typename T>
-class PgYsonFixedColumnReader : public IYsonBlockReaderWithNativeFlag<Native> {
+class PgYsonFixedColumnReader : public IYsonBlockReaderForPg {
 public:
     NUdf::TBlockItem GetItem(TYsonReaderDetails& buf) override final {
         return this->GetNullableItem(buf);
@@ -424,6 +425,8 @@ public:
                 val = FixedToDatum<T>(buf.ReadVarUI64());
             }
         } else {
+            Y_ENSURE(buf.Current() == NYson::NDetail::DoubleMarker);
+            buf.Next();
             val = FixedToDatum<T>(buf.NextDouble());
         }
         return NUdf::TBlockItem(val);
@@ -431,7 +434,7 @@ public:
 };
 
 template<bool Native, bool IsCString, bool Fixed>
-class PgYsonStringColumnReader : public IYsonBlockReaderWithNativeFlag<Native> {
+class PgYsonStringColumnReader : public IYsonBlockReaderForPg {
 public:
     PgYsonStringColumnReader() {
         static_assert(!Fixed, "PgYsonStringColumnReader ctor w/o typeLen available only on non-fixed types");
@@ -484,7 +487,7 @@ private:
 };
 
 template<bool Native>
-class PgYsonOtherColumnReader : public IYsonBlockReaderWithNativeFlag<Native> {
+class PgYsonOtherColumnReader : public IYsonBlockReaderForPg {
 public:
     PgYsonOtherColumnReader(Oid typeId) : TypeId_(typeId) {}
     NUdf::TBlockItem GetItem(TYsonReaderDetails& buf) override final {
@@ -544,7 +547,11 @@ std::unique_ptr<IYsonBlockReader> BuildPgYsonColumnReader(const NUdf::TPgTypeDes
 }
 
 std::unique_ptr<IYsonBlockReader> BuildPgYsonColumnReader(bool Native, const NUdf::TPgTypeDescription& desc) {
-    return BuildPgYsonColumnReader<true>(desc);
+    if (Native) {
+        return BuildPgYsonColumnReader<true>(desc);
+    } else {
+        return BuildPgYsonColumnReader<false>(desc);
+    }
 }
 
 template<typename T, arrow::Type::type Expected, typename ArrType>

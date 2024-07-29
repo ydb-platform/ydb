@@ -113,7 +113,9 @@ public:
         if (prev == NYson::NDetail::EntitySymbol) {
             return NUdf::TBlockItem();
         }
-        Y_ENSURE(prev == NYson::NDetail::BeginListSymbol);
+        if (prev != NYson::NDetail::BeginListSymbol) {
+            Y_ENSURE(prev == NYson::NDetail::BeginListSymbol);
+        }
         auto result = GetNotNull(buf);
         if (buf.Current() == NYson::NDetail::ListItemSeparatorSymbol) {
             buf.Next();
@@ -121,6 +123,19 @@ public:
         Y_ENSURE(buf.Current() == NYson::NDetail::EndListSymbol);
         buf.Next();
         return result.MakeOptional();
+    }
+};
+
+class IYsonBlockReaderForPg : public IYsonBlockReader {
+public:
+    virtual NUdf::TBlockItem GetNotNull(TYsonReaderDetails&) = 0;
+    NUdf::TBlockItem GetNullableItem(TYsonReaderDetails& buf) {
+        char prev = buf.Current();
+        if (prev == NYson::NDetail::EntitySymbol) {
+            buf.Next();
+            return NUdf::TBlockItem();
+        }
+        return GetNotNull(buf).MakeOptional();
     }
 };
 

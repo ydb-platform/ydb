@@ -1,4 +1,6 @@
 #pragma once
+#include <ydb/core/formats/arrow/common/container.h>
+
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/saver.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/loader.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
@@ -36,17 +38,20 @@ public:
 
     std::vector<std::shared_ptr<arrow::Field>> GetAbsentFields(const std::shared_ptr<arrow::Schema>& existsSchema) const;
 
-    std::shared_ptr<arrow::Scalar> GetDefaultValueVerified(const std::string& columnName) const;
-    std::shared_ptr<arrow::Scalar> GetDefaultValueVerified(const ui32 columnId) const;
+    std::shared_ptr<arrow::Scalar> GetExternalDefaultValueVerified(const std::string& columnName) const;
+    std::shared_ptr<arrow::Scalar> GetExternalDefaultValueVerified(const ui32 columnId) const;
 
-    TConclusion<std::shared_ptr<arrow::RecordBatch>> BuildDefaultBatch(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ui32 rowsCount) const;
-    TConclusion<std::shared_ptr<arrow::RecordBatch>> AddDefault(const std::shared_ptr<arrow::RecordBatch>& batch, const bool force) const;
-
+    TConclusion<std::shared_ptr<arrow::RecordBatch>> BuildDefaultBatch(
+        const std::vector<std::shared_ptr<arrow::Field>>& fields, const ui32 rowsCount, const bool force) const;
+    TConclusionStatus CheckColumnsDefault(const std::vector<std::shared_ptr<arrow::Field>>& fields) const;
 
     std::vector<std::string> GetPKColumnNames() const;
 
     virtual std::optional<ui32> GetColumnIdOptional(const std::string& columnName) const = 0;
     virtual int GetFieldIndex(const ui32 columnId) const = 0;
+    bool HasColumnId(const ui32 columnId) const {
+        return GetFieldIndex(columnId) >= 0;
+    }
 
     ui32 GetColumnId(const std::string& columnName) const;
     std::shared_ptr<arrow::Field> GetFieldByIndex(const int index) const;
@@ -64,7 +69,10 @@ public:
 
     std::set<ui32> GetPkColumnsIds() const;
 
-    [[nodiscard]] TConclusion<std::shared_ptr<arrow::RecordBatch>> NormalizeBatch(const ISnapshotSchema& dataSchema, const std::shared_ptr<arrow::RecordBatch> batch) const;
+    static std::set<ui32> GetColumnsWithDifferentDefaults(const THashMap<ui64, ISnapshotSchema::TPtr>& schemas, const ISnapshotSchema::TPtr& targetSchema);
+
+    [[nodiscard]] TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> NormalizeBatch(
+        const ISnapshotSchema& dataSchema, const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::set<ui32>& restoreColumnIds) const;
     [[nodiscard]] TConclusion<std::shared_ptr<arrow::RecordBatch>> PrepareForModification(
         const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType) const;
 };

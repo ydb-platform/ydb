@@ -92,6 +92,8 @@ private:
     YDB_ACCESSOR_DEF(std::vector<TWideSerializedBatch>, SplittedBlobs);
     YDB_READONLY_DEF(TVector<TWriteId>, WriteIds);
     YDB_READONLY_DEF(std::shared_ptr<NOlap::IBlobsWritingAction>, BlobsAction);
+    YDB_READONLY_DEF(NArrow::TSchemaSubset, SchemaSubset);
+
 public:
     const NEvWrite::TWriteMeta& GetWriteMeta() const {
         return WriteMeta;
@@ -110,6 +112,7 @@ public:
         , SchemaVersion(writeData.GetData()->GetSchemaVersion())
         , Size(writeData.GetSize())
         , BlobsAction(writeData.GetBlobsAction())
+        , SchemaSubset(writeData.GetSchemaSubsetVerified())
     {
         for (auto&& s : splittedBlobs) {
             SplittedBlobs.emplace_back(std::move(s), *this);
@@ -120,8 +123,8 @@ public:
         : WriteMeta(writeData.GetWriteMeta())
         , SchemaVersion(writeData.GetData()->GetSchemaVersion()) 
         , Size(writeData.GetSize())
-        , BlobsAction(writeData.GetBlobsAction())
-    {
+        , BlobsAction(writeData.GetBlobsAction()) {
+        AFL_VERIFY(!writeData.GetSchemaSubset());
     }
 };
 

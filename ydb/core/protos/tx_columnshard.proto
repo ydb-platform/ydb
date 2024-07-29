@@ -4,6 +4,7 @@ import "ydb/core/protos/long_tx_service.proto";
 import "ydb/core/protos/statistics.proto";
 import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/tx.proto";
+import "ydb/core/formats/arrow/protos/fields.proto";
 
 package NKikimrTxColumnShard;
 option java_package = "ru.yandex.kikimr.proto";
@@ -88,6 +89,7 @@ message TLogicalMetadata {
     optional uint64 DirtyWriteTimeSeconds = 5;
     optional string SpecialKeysRawData = 6;
     optional TEvWrite.EModificationType ModificationType = 7;
+    optional NKikimrArrowSchema.TSchemaSubset SchemaSubset = 8;
 }
 
 message TEvWriteResult {

@@ -38,6 +38,7 @@ ui32 TColumnPortion::AppendSlice(const std::shared_ptr<arrow::Array>& a, const u
     Y_ABORT_UNLESS(length);
     Y_ABORT_UNLESS(CurrentPortionRecords < Context.GetPortionRowsCountLimit());
     Y_ABORT_UNLESS(startIndex + length <= a->length());
+    AFL_VERIFY(Type->id() == a->type_id())("own", Type->ToString())("a", a->type()->ToString());
     ui32 i = startIndex;
     const ui32 packedRecordSize = Context.GetColumnStat() ? Context.GetColumnStat()->GetPackedRecordSize() : 0;
     for (; i < startIndex + length; ++i) {

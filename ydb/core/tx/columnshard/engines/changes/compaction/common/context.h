@@ -23,6 +23,7 @@ private:
     YDB_READONLY(bool, UseWholeChunksOptimization, true);
 
     std::optional<TColumnSerializationStat> ColumnStat;
+
     const TIndexInfo& IndexInfo;
 public:
     ISnapshotSchema::TPtr GetSchemaInfo() const {
@@ -41,8 +42,9 @@ public:
         return IndexInfo;
     }
 
-    TColumnMergeContext(const ui32 columnId, const ISnapshotSchema::TPtr& schema, const ui32 portionRowsCountLimit, const ui32 chunkRawBytesLimit,
-        const std::optional<TColumnSerializationStat>& columnStat)
+    TColumnMergeContext(const ui32 columnId, const ISnapshotSchema::TPtr& schema, const ui32 portionRowsCountLimit,
+        const ui32 chunkRawBytesLimit, const std::optional<TColumnSerializationStat>& columnStat,
+        const NArrow::NSerialization::TSerializerContainer& overrideSerializer)
         : ColumnId(columnId)
         , SchemaInfo(schema)
         , Saver(schema->GetColumnSaver(columnId))
@@ -52,10 +54,12 @@ public:
         , ChunkRawBytesLimit(chunkRawBytesLimit)
         , UseWholeChunksOptimization(!schema->GetIndexInfo().GetReplaceKey()->GetFieldByName(ResultField->name()))
         , ColumnStat(columnStat)
-        , IndexInfo(schema->GetIndexInfo())
-    {
+        , IndexInfo(schema->GetIndexInfo()) {
         Y_ABORT_UNLESS(PortionRowsCountLimit);
         Y_ABORT_UNLESS(ChunkRawBytesLimit);
+        if (!!overrideSerializer) {
+            Saver.ResetSerializer(overrideSerializer);
+        }
     }
 };
 

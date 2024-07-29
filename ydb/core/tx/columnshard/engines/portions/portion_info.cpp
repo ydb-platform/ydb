@@ -684,6 +684,24 @@ bool TPortionInfo::NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) 
     return true;
 }
 
+std::shared_ptr<NArrow::NAccessor::IChunkedArray> TPortionInfo::TPreparedColumn::AssembleAccessor() const {
+    Y_ABORT_UNLESS(!Blobs.empty());
+
+    std::vector<std::shared_ptr<arrow::Array>> chunks;
+    chunks.reserve(Blobs.size());
+    for (auto& blob : Blobs) {
+        auto batch = blob.BuildRecordBatch(*Loader);
+        Y_ABORT_UNLESS(batch);
+        AFL_VERIFY(batch->num_columns() == 1);
+        chunks.emplace_back(batch->column(0));
+    }
+    if (chunks.size() > 1) {
+        return std::make_shared<NArrow::NAccessor::TTrivialChunkedArray>(NArrow::TStatusValidator::GetValid(arrow::ChunkedArray::Make(chunks)));
+    } else {
+        return std::make_shared<NArrow::NAccessor::TTrivialArray>(chunks.front());
+    }
+}
+
 std::shared_ptr<TDeserializeChunkedArray> TPortionInfo::TPreparedColumn::AssembleForSeqAccess() const {
     Y_ABORT_UNLESS(!Blobs.empty());
 
@@ -692,7 +710,11 @@ std::shared_ptr<TDeserializeChunkedArray> TPortionInfo::TPreparedColumn::Assembl
     ui64 recordsCount = 0;
     for (auto& blob : Blobs) {
         chunks.push_back(blob.BuildDeserializeChunk(Loader));
-        recordsCount += blob.GetExpectedRowsCountVerified();
+        if (!!blob.GetData()) {
+            recordsCount += blob.GetExpectedRowsCountVerified();
+        } else {
+            recordsCount += blob.GetDefaultRowsCount();
+        }
     }
 
     return std::make_shared<TDeserializeChunkedArray>(recordsCount, Loader, std::move(chunks));
@@ -701,16 +723,16 @@ std::shared_ptr<TDeserializeChunkedArray> TPortionInfo::TPreparedColumn::Assembl
 std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() const {
     Y_ABORT_UNLESS(!Blobs.empty());
 
-    std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
-    batches.reserve(Blobs.size());
+    std::vector<std::shared_ptr<arrow::Array>> chunks;
+    chunks.reserve(Blobs.size());
     for (auto& blob : Blobs) {
-        batches.push_back(blob.BuildRecordBatch(*Loader));
-        Y_ABORT_UNLESS(batches.back());
+        auto batch = blob.BuildRecordBatch(*Loader);
+        Y_ABORT_UNLESS(batch);
+        Y_ABORT_UNLESS(batch->num_columns() == 1);
+        chunks.emplace_back(batch->column(0));
     }
 
-    auto res = arrow::Table::FromRecordBatches(batches);
-    Y_VERIFY_S(res.ok(), res.status().message());
-    return (*res)->column(0);
+    return NArrow::TStatusValidator::GetValid(arrow::ChunkedArray::Make(chunks));
 }
 
 TDeserializeChunkedArray::TChunk TPortionInfo::TAssembleBlobInfo::BuildDeserializeChunk(const std::shared_ptr<TColumnLoader>& loader) const {
@@ -752,32 +774,23 @@ std::shared_ptr<NArrow::TGeneralContainer> TPortionInfo::TPreparedBatchData::Ass
         fields.emplace_back(i.GetField());
     }
 
-    return std::make_shared<NArrow::TGeneralContainer>(std::make_shared<arrow::Schema>(fields), std::move(columns));
+    return std::make_shared<NArrow::TGeneralContainer>(fields, std::move(columns));
 }
 
-std::shared_ptr<arrow::Table> TPortionInfo::TPreparedBatchData::AssembleTable(const TAssembleOptions& options) const {
-    std::vector<std::shared_ptr<arrow::ChunkedArray>> columns;
+std::shared_ptr<NArrow::TGeneralContainer> TPortionInfo::TPreparedBatchData::AssembleToGeneralContainer(
+    const std::set<ui32>& sequentialColumnIds) const {
+    std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> columns;
     std::vector<std::shared_ptr<arrow::Field>> fields;
     for (auto&& i : Columns) {
-        if (!options.IsAcceptedColumn(i.GetColumnId())) {
-            continue;
-        }
-        std::shared_ptr<arrow::Scalar> scalar;
-        if (options.IsConstantColumn(i.GetColumnId(), scalar)) {
-            auto type = i.GetField()->type();
-            std::shared_ptr<arrow::Array> arr = NArrow::TThreadSimpleArraysCache::Get(type, scalar, RowsCount);
-            columns.emplace_back(std::make_shared<arrow::ChunkedArray>(arr));
+        if (sequentialColumnIds.contains(i.GetColumnId())) {
+            columns.emplace_back(i.AssembleForSeqAccess());
         } else {
-            columns.emplace_back(i.Assemble());
+            columns.emplace_back(i.AssembleAccessor());
         }
         fields.emplace_back(i.GetField());
     }
 
-    return arrow::Table::Make(std::make_shared<arrow::Schema>(fields), columns);
-}
-
-std::shared_ptr<arrow::RecordBatch> TPortionInfo::TPreparedBatchData::Assemble(const TAssembleOptions& options) const {
-    return NArrow::ToBatch(AssembleTable(options), true);
+    return std::make_shared<NArrow::TGeneralContainer>(fields, std::move(columns));
 }
 
 }

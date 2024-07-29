@@ -11,7 +11,7 @@ private:
     using TBase = IPortionColumnChunk;
     const std::shared_ptr<arrow::Scalar> DefaultValue;
     const ui32 RecordsCount;
-    const ui64 RawBytes;
+    ui64 RawBytes = 0;
     TString Data;
 protected:
     virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplitImpl(const TColumnSaver& /*saver*/, const std::shared_ptr<NColumnShard::TSplitterCounters>& /*counters*/,
@@ -43,15 +43,16 @@ protected:
     }
 
 public:
-    TDefaultChunkPreparation(const ui32 columnId, const ui32 recordsCount, const ui32 rawBytes, const std::shared_ptr<arrow::Field>& f, 
+    TDefaultChunkPreparation(const ui32 columnId, const ui32 recordsCount, const std::shared_ptr<arrow::Field>& f, 
         const std::shared_ptr<arrow::Scalar>& defaultValue, const TColumnSaver& saver)
         : TBase(columnId)
         , DefaultValue(defaultValue)
         , RecordsCount(recordsCount)
-        , RawBytes(rawBytes)
     {
         Y_ABORT_UNLESS(RecordsCount);
-        Data = saver.Apply(NArrow::TThreadSimpleArraysCache::Get(f->type(), defaultValue, RecordsCount), f);
+        auto arrowData = NArrow::TThreadSimpleArraysCache::Get(f->type(), defaultValue, RecordsCount);
+        RawBytes = NArrow::GetArrayDataSize(arrowData);
+        Data = saver.Apply(arrowData, f);
         SetChunkIdx(0);
     }
 };

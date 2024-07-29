@@ -40,7 +40,7 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
         if (Self->IsColumnTable) {
             Self->TabletsForReqDistribution.clear();
         } else {
-            Self->ShardRanges.clear();
+            Self->DatashardRanges.clear();
         }
 
         for (auto& part : partitioning) {
@@ -53,7 +53,7 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
                 TRange range;
                 range.EndKey = part.Range->EndKeyPrefix;
                 range.DataShardId = part.ShardId;
-                Self->ShardRanges.push_back(range);
+                Self->DatashardRanges.push_back(range);
             }
         }
 
@@ -70,7 +70,7 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
         if (Self->IsColumnTable) {
             ctx.Send(Self->SelfId(), new TEvPrivate::TEvRequestDistribution);
         } else {
-            Self->NextRange();
+            Self->ScanNextDatashardRange();
         }
     }
 };

@@ -409,10 +409,10 @@ void TStatisticsAggregator::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
             SA_LOG_CRIT("[" << TabletID() << "] TEvDeliveryProblem with unexpected tablet " << tabletId);
         }
     } else {
-        if (ShardRanges.empty()) {
+        if (DatashardRanges.empty()) {
             return;
         }
-        auto& range = ShardRanges.front();
+        auto& range = DatashardRanges.front();
         if (tabletId != range.DataShardId) {
             return;
         }
@@ -510,13 +510,13 @@ void TStatisticsAggregator::Resolve() {
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request.release()));
 }
 
-void TStatisticsAggregator::NextRange() {
-    if (ShardRanges.empty()) {
+void TStatisticsAggregator::ScanNextDatashardRange() {
+    if (DatashardRanges.empty()) {
         SaveStatisticsToTable();
         return;
     }
 
-    auto& range = ShardRanges.front();
+    auto& range = DatashardRanges.front();
     auto request = std::make_unique<NStat::TEvStatistics::TEvStatisticsRequest>();
     auto& record = request->Record;
     auto* path = record.MutableTable()->MutablePathId();
@@ -679,7 +679,7 @@ void TStatisticsAggregator::ResetScanState(NIceDb::TNiceDb& db) {
     }
     CountMinSketches.clear();
 
-    ShardRanges.clear();
+    DatashardRanges.clear();
 
     KeyColumnTypes.clear();
     Columns.clear();
@@ -775,7 +775,7 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
 
             str << "ScanTableId: " << ScanTableId << Endl;
             str << "Columns: " << Columns.size() << Endl;
-            str << "ShardRanges: " << ShardRanges.size() << Endl;
+            str << "ShardRanges: " << DatashardRanges.size() << Endl;
             str << "CountMinSketches: " << CountMinSketches.size() << Endl << Endl;
 
             str << "ScanTablesByTime: " << ScanTablesByTime.Size() << Endl;

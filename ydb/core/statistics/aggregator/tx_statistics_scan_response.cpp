@@ -22,11 +22,11 @@ struct TStatisticsAggregator::TTxStatisticsScanResponse : public TTxBase {
 
         // TODO: handle scan errors
 
-        if (Self->ShardRanges.empty()) {
+        if (Self->DatashardRanges.empty()) {
             return true;
         }
 
-        auto& range = Self->ShardRanges.front();
+        auto& range = Self->DatashardRanges.front();
         auto replyShardId = Record.GetShardTabletId();
 
         if (replyShardId != range.DataShardId) {
@@ -68,9 +68,9 @@ struct TStatisticsAggregator::TTxStatisticsScanResponse : public TTxBase {
     void Complete(const TActorContext&) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxStatisticsScanResponse::Complete");
 
-        if (IsCorrectShardId && !Self->ShardRanges.empty()) {
-            Self->ShardRanges.pop_front();
-            Self->NextRange();
+        if (IsCorrectShardId && !Self->DatashardRanges.empty()) {
+            Self->DatashardRanges.pop_front();
+            Self->ScanNextDatashardRange();
         }
     }
 };

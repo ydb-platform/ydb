@@ -140,7 +140,7 @@ private:
     void InitializeStatisticsTable();
     void Navigate();
     void Resolve();
-    void NextRange();
+    void ScanNextDatashardRange();
     void SaveStatisticsToTable();
     void DeleteStatisticsFromTable();
 
@@ -257,7 +257,7 @@ private:
         TSerializedCellVec EndKey;
         ui64 DataShardId = 0;
     };
-    std::deque<TRange> ShardRanges;
+    std::deque<TRange> DatashardRanges;
 
     TSerializedCellVec StartKey; // stored in local db
 

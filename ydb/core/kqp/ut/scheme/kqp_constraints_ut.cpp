@@ -1278,12 +1278,12 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 return _isNull;
             }
 
-            TString ToString() const {
+            std::string ToString() const {
                 if (IsNull()) {
                     return "NULL";
                 }
 
-                return TString(std::to_string(GetValue()));
+                return std::to_string(GetValue());
             }
         };
 

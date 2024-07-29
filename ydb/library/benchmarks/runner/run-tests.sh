@@ -1,15 +1,21 @@
 #!/bin/sh -e
 if [ "X$1" = "X--help" ]; then
-    echo "Usage: $0 [datasize [variant [tasks]]]"
+    echo "Usage: $0 [--perf] [datasize [variant [tasks]]]"
     echo "Also can be specified by envirnoment variables: "
-    echo '  $datasize     1, 10, 100; 1 is default]'
+    echo '  $datasize     1, 10, 100; 1 is default'
     echo '  $variant      h or ds; h is default'
     echo '  $tasks        1 is default'
-    echo '  $syntax      yql or pg; yql is default'
+    echo '  $syntax       yql or pg; yql is default'
     echo '  $script_path  default is deduced from argv0'
     echo '  $ydb_path     default is $script_path/../../../..'
-    echo '  $rebuild      0 [default] or 1; requires clean git repository and presence of {current branch}-base tag'
-    echo 'When $rebuild is 0, requires pre-built $ydb_path/ydb/library/yql/udfs, $ydb_path/ydb/library/yql/tools/dqrun/dqrun and $ydb_path/ydb/library/yql/tools/dqrun/dqrun'
+    echo '  $rebuild      0 [default] or build type (relwithdebinfo [default if empty]|release|profile); requires clean git repository and presence of {current branch name}-base tag'
+    echo 'When $rebuild is 0, requires pre-built $ydb_path/ydb/library/yql/udfs, $ydb_path/ydb/library/yql/tools/dqrun/dqrun-unspilled and $ydb_path/ydb/library/yql/tools/dqrun/dqrun'
+    echo '  $decimal      setting to empty string disables DECIMAL support requirement'
+    echo '  $cbo          setting to empty string disables CostBasedOptimizer support requirement'
+    echo '  $runner_opts  extra options passed to runner'
+    echo '  $dqrun_opts   extra options passed to dqrun'
+    echo '  $enable_spilling'
+    echo '                setting to empty string allows compare runs without --enable-spilling'
     exit 0
 fi
 if [ "X$1" = "X--perf" ]; then

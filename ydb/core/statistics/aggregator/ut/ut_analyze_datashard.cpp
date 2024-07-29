@@ -17,7 +17,7 @@ namespace {
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(StatisticsAggregator) {
+Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
 
     Y_UNIT_TEST(ScanOneTable) {
         TTestEnv env(1, 1);
@@ -212,29 +212,6 @@ Y_UNIT_TEST_SUITE(StatisticsAggregator) {
         runtime.SimulateSleep(TDuration::Seconds(60));
 
         ValidateCountMinAbsense(runtime, pathId);
-    }
-
-    Y_UNIT_TEST(ScanOneColumnTable) {
-        TTestEnv env(1, 1);
-        auto init = [&] () {
-            CreateDatabase(env, "Database");
-            CreateColumnStoreTable(env, "Database", "Table", 10);
-        };
-        std::thread initThread(init);
-
-        auto& runtime = *env.GetServer().GetRuntime();
-        runtime.SimulateSleep(TDuration::Seconds(30));
-        initThread.join();
-
-        auto pathId = ResolvePathId(runtime, "/Root/Database/Table");
-
-        runtime.SimulateSleep(TDuration::Seconds(30));
-
-        auto countMin = ExtractCountMin(runtime, pathId);
-
-        ui32 value = 1;
-        auto probe = countMin->Probe((const char *)&value, sizeof(value));
-        UNIT_ASSERT_VALUES_EQUAL(probe, 10);
     }
 }
 

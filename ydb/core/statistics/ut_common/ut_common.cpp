@@ -323,7 +323,7 @@ void ValidateCountMinAbsense(TTestActorRuntime& runtime, TPathId pathId) {
     UNIT_ASSERT(!rsp.Success);
 }
 
-void AnalyzeTable(TTestActorRuntime& runtime, ui64 tabletId, const TPathId& pathId) {
+void AnalyzeTable(TTestActorRuntime& runtime, const TPathId& pathId, ui64 tabletId) {
     auto ev = std::make_unique<TEvStatistics::TEvAnalyzeTable>();
     auto& record = ev->Record;
     PathIdFromPathId(pathId, record.MutableTable()->MutablePathId());

@@ -221,13 +221,12 @@ public:
 
     void Bootstrap() {
         Root_ = Config_.Root;
+        const auto rootToRemoveOldTmp = Root_;
         const auto sessionId = Config_.SpillingSessionId;
         const auto nodeId = SelfId().NodeId();
 
-        Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(Root_, nodeId, sessionId));
-
         Root_ /= (TStringBuilder() << "node_" << nodeId << "_" << sessionId);
-        Cerr << "Root from config: " << Config_.Root << ", actual root: " << Root_ << "\n";
+        // Cerr << "Root from config: " << Config_.Root << ", actual root: " << Root_ << "\n";
         LOG_I("Init DQ local file spilling service at " << Root_ << ", actor: " << SelfId());
 
         try {
@@ -241,6 +240,8 @@ public:
             Become(&TDqLocalFileSpillingService::BrokenState);
             return;
         }
+        
+        Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(Root_, nodeId, sessionId));
 
         Become(&TDqLocalFileSpillingService::WorkState);
     }
@@ -268,8 +269,6 @@ private:
             }
             hFunc(NMon::TEvHttpInfo, HandleBroken);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
-            case TEvPrivate::TEvRemoveOldTmp::EventType:
-                break;
             default:
                 Y_DEBUG_ABORT_UNLESS(false, "%s: unexpected message type 0x%08" PRIx32, __func__, ev->GetTypeRewrite());
         }

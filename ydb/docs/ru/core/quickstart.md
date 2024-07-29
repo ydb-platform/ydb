@@ -93,7 +93,17 @@
       ```
 
       Если контейнер успешно запустился, вы увидите его идентификатор. Контейнеру может потребоваться несколько минут для инициализации. База данных будет недоступна до окончания инициализации.
-
+ 
+      ## Переменные окружения
+      | Имя                                                                                                         | Тип                            | Значение по умолчанию  | yandex-cloud | Описание                                                                                                                                                                                       |
+      |--------------------------------------------------------------------------------------------------------------|----------------------------------|------------|--------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+      | [`POSTGRES_USER`](https://github.com/ydb-platform/ydb/blob/c113fcffa7b1a20ad8dcb1b1760ae5bfa25370ca/ydb/public/tools/lib/cmds/__init__.py#L240) | `string` | `postgres` | `-`          | имя пользователя postgres          |
+      | [`POSTGRES_PASSWORD`](https://github.com/ydb-platform/ydb/blob/c113fcffa7b1a20ad8dcb1b1760ae5bfa25370ca/ydb/public/tools/lib/cmds/__init__.py#L240) | `string` | '' | `+/-` | пароль пользователя postgres     |
+      | [`YDB_LOCAL_SURVIVE_RESTART`](https://github.com/ydb-platform/ydb/blob/c113fcffa7b1a20ad8dcb1b1760ae5bfa25370ca/ydb/public/tools/lib/cmds/__init__.py#L254) | `0` or `1` | `1` | `-`          | при заданном значении `True` будут использованны файлы конфигурации созданные при прошлых запусках, если таковые имеются. В иных случаях будут сгенерированны новые файлы конфигурации |
+      | [`YDB_GRPC_ENABLE_TLS`](https://github.com/ydb-platform/ydb/blob/c113fcffa7b1a20ad8dcb1b1760ae5bfa25370ca/ydb/public/tools/lib/cmds/__init__.py#L258) | `0` or `1` | `1` | `+` | включить использование TLS для GRPC |
+      | [`FQ_CONNECTOR_ENDPOINT`](https://github.com/ydb-platform/ydb/blob/c113fcffa7b1a20ad8dcb1b1760ae5bfa25370ca/ydb/public/tools/lib/cmds/__init__.py#L261)  | `string` | `None` | `+`          | помогите     |
+      | [`YDB_USE_IN_MEMORY_PDISKS`](https://github.com/ydb-platform/ydb/blob/c113fcffa7b1a20ad8dcb1b1760ae5bfa25370ca/ydb/public/tools/lib/cmds/__init__.py#L230) | `0` or `1` | `0` | `+` | делает все данные волатильными, хранящимися только в оперативной памяти. В настоящее время сохранение данных путем её отключения поддерживается только на x86_64 процессорах |                                                
+ 
       Настройка `YDB_USE_IN_MEMORY_PDISKS` делает все данные волатильными, хранящимися только в оперативной памяти. В настоящее время сохранение данных путем её отключения поддерживается только на x86_64 процессорах.
 
 - Minikube

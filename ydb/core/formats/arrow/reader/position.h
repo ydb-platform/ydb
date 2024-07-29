@@ -152,7 +152,7 @@ public:
 
     void AppendPositionTo(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const ui64 position, ui64* recordSize) const;
 
-    bool InitPosition(const ui64 position);
+    [[nodiscard]] bool InitPosition(const ui64 position);
 
     std::shared_ptr<arrow::Table> Slice(const ui64 offset, const ui64 count) const {
         std::vector<std::shared_ptr<arrow::ChunkedArray>> slicedArrays;
@@ -244,9 +244,8 @@ public:
         , RecordsCount(recordsCount)
         , ReverseSort(reverseSort)
         , Sorting(sorting)
-        , Data(data)
-    {
-
+        , Data(data) {
+        AFL_VERIFY(IsAvailablePosition(Position));
     }
 
     TSortableBatchPosition(const TRWSortableBatchPosition& source) = delete;
@@ -315,7 +314,12 @@ public:
         }
     };
 
-    static std::optional<TFoundPosition> FindPosition(const std::shared_ptr<arrow::RecordBatch>& batch, const TSortableBatchPosition& forFound, const bool needGreater, const std::optional<ui32> includedStartPosition);
+    [[nodiscard]] bool IsAvailablePosition(const i64 position) const {
+        return 0 <= position && position < RecordsCount;
+    }
+
+    static std::optional<TFoundPosition> FindPosition(const std::shared_ptr<arrow::RecordBatch>& batch, const TSortableBatchPosition& forFound,
+        const bool needGreater, const std::optional<ui32> includedStartPosition);
     static std::optional<TSortableBatchPosition::TFoundPosition> FindPosition(TRWSortableBatchPosition& position, const ui64 posStart, const ui64 posFinish, const TSortableBatchPosition& forFound, const bool greater);
 
     const TSortableScanData& GetData() const {
@@ -487,7 +491,7 @@ public:
     void AddPosition(TSortableBatchPosition&& position, const bool includePositionToLeftInterval) {
         TIntervalPosition intervalPosition(std::move(position), includePositionToLeftInterval);
         AddPosition(std::move(intervalPosition));
-        }
+    }
 
     void AddPosition(const TSortableBatchPosition& position, const bool includePositionToLeftInterval) {
         TIntervalPosition intervalPosition(position, includePositionToLeftInterval);
@@ -501,23 +505,53 @@ private:
 public:
     using TBase::TBase;
 
-    bool NextPosition(const i64 delta) {
+    [[nodiscard]] bool NextPosition(const i64 delta) {
         return InitPosition(Position + delta);
     }
 
-    bool InitPosition(const i64 position) {
-        if (position < RecordsCount && position >= 0) {
-            Sorting->InitPosition(position);
-            if (Data) {
-                Data->InitPosition(position);
-            }
-            Position = position;
-            return true;
-        } else {
+    [[nodiscard]] bool InitPosition(const i64 position) {
+        if (!IsAvailablePosition(position)) {
             return false;
         }
-
+        AFL_VERIFY(Sorting->InitPosition(position))("pos", position)("count", RecordsCount);
+        if (Data) {
+            AFL_VERIFY(Data->InitPosition(position))("pos", position)("count", RecordsCount);
+        }
+        Position = position;
+        return true;
     }
+
+    class TAsymmetricPositionGuard: TNonCopyable {
+    private:
+        TRWSortableBatchPosition& Owner;
+    public:
+        TAsymmetricPositionGuard(TRWSortableBatchPosition& owner)
+            : Owner(owner)
+        {
+        }
+
+        [[nodiscard]] bool InitSortingPosition(const i64 position) {
+            if (!Owner.IsAvailablePosition(position)) {
+                return false;
+            }
+            AFL_VERIFY(Owner.Sorting->InitPosition(position));
+            Owner.Position = position;
+            return true;
+        }
+
+        ~TAsymmetricPositionGuard() {
+            if (Owner.IsAvailablePosition(Owner.Position)) {
+                if (Owner.Data) {
+                    AFL_VERIFY(Owner.Data->InitPosition(Owner.Position));
+                }
+            }
+        }
+    };
+
+    TAsymmetricPositionGuard CreateAsymmetricAccessGuard() {
+        return TAsymmetricPositionGuard(*this);
+    }
+
     TSortableBatchPosition::TFoundPosition SkipToLower(const TSortableBatchPosition& forFound);
 
     //  (-inf, it1), [it1, it2), [it2, it3), ..., [itLast, +inf)

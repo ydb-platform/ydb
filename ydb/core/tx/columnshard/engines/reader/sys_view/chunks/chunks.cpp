@@ -16,6 +16,10 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
         if (Reverse) {
             std::reverse(records.begin(), records.end());
         }
+        THashMap<ui32, TString> blobsIds;
+        std::optional<ui32> lastColumnId;
+        TString lastColumnName;
+        TString lastTierName;
         for (auto&& r : records) {
             NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId());
             NArrow::Append<arrow::StringType>(*builders[1], prod);
@@ -24,17 +28,27 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
             NArrow::Append<arrow::UInt64Type>(*builders[4], r->GetMeta().GetRawBytes());
             NArrow::Append<arrow::UInt64Type>(*builders[5], portion.GetPortionId());
             NArrow::Append<arrow::UInt64Type>(*builders[6], r->GetChunkIdx());
-            NArrow::Append<arrow::StringType>(*builders[7], ReadMetadata->GetColumnNameDef(r->GetColumnId()).value_or("undefined"));
+            if (!lastColumnId || *lastColumnId != r->GetColumnId()) {
+                lastColumnName = ReadMetadata->GetColumnNameDef(r->GetColumnId()).value_or("undefined");
+                lastTierName = portionSchema->GetIndexInfo().GetEntityStorageId(r->GetColumnId(), portion.GetMeta().GetTierName());
+                lastColumnId = r->GetColumnId();
+            }
+            NArrow::Append<arrow::StringType>(*builders[7], arrow::util::string_view(lastColumnName.data(), lastColumnName.size()));
             NArrow::Append<arrow::UInt32Type>(*builders[8], r->GetColumnId());
-            std::string blobIdString = portion.GetBlobId(r->GetBlobRange().GetBlobIdxVerified()).ToStringLegacy();
-            NArrow::Append<arrow::StringType>(*builders[9], blobIdString);
+            {
+                auto itBlobIdString = blobsIds.find(r->GetBlobRange().GetBlobIdxVerified());
+                if (itBlobIdString == blobsIds.end()) {
+                    itBlobIdString = blobsIds.emplace(
+                        r->GetBlobRange().GetBlobIdxVerified(), portion.GetBlobId(r->GetBlobRange().GetBlobIdxVerified()).ToStringLegacy()).first;
+                }
+                NArrow::Append<arrow::StringType>(
+                    *builders[9], arrow::util::string_view(itBlobIdString->second.data(), itBlobIdString->second.size()));
+            }
             NArrow::Append<arrow::UInt64Type>(*builders[10], r->BlobRange.Offset);
             NArrow::Append<arrow::UInt64Type>(*builders[11], r->BlobRange.Size);
             NArrow::Append<arrow::BooleanType>(*builders[12], activity);
 
-            const auto tierName = portionSchema->GetIndexInfo().GetEntityStorageId(r->GetColumnId(), portion.GetMeta().GetTierName());
-            std::string strTierName(tierName.data(), tierName.size());
-            NArrow::Append<arrow::StringType>(*builders[13], strTierName);
+            NArrow::Append<arrow::StringType>(*builders[13], arrow::util::string_view(lastTierName.data(), lastTierName.size()));
             NArrow::Append<arrow::StringType>(*builders[14], "COL");
         }
     }

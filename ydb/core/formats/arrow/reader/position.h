@@ -407,7 +407,7 @@ public:
 class TIntervalPosition {
 private:
     TSortableBatchPosition Position;
-    const bool LeftIntervalInclude;
+    bool LeftIntervalInclude;
 public:
     const TSortableBatchPosition& GetPosition() const {
         return Position;
@@ -459,20 +459,40 @@ public:
         return Positions.end();
     }
 
-    void AddPosition(TSortableBatchPosition&& position, const bool includeLeftInterval) {
-        TIntervalPosition intervalPosition(std::move(position), includeLeftInterval);
+    void InsertPosition(TIntervalPosition&& intervalPosition) {
+        Positions.emplace_back(std::move(intervalPosition));
+        ui32 index = Positions.size() - 1;
+        while (index >= 1 && Positions[index] < Positions[index - 1]) {
+            std::swap(Positions[index], Positions[index - 1]);
+            index = index - 1;
+        }
+    }
+
+    void InsertPosition(TSortableBatchPosition&& position, const bool includePositionToLeftInterval) {
+        TIntervalPosition intervalPosition(std::move(position), includePositionToLeftInterval);
+        InsertPosition(std::move(intervalPosition));
+    }
+
+    void InsertPosition(const TSortableBatchPosition& position, const bool includePositionToLeftInterval) {
+        TIntervalPosition intervalPosition(position, includePositionToLeftInterval);
+        InsertPosition(std::move(intervalPosition));
+    }
+
+    void AddPosition(TIntervalPosition&& intervalPosition) {
         if (Positions.size()) {
             AFL_VERIFY(Positions.back() < intervalPosition)("back", Positions.back().DebugJson())("pos", intervalPosition.DebugJson());
         }
         Positions.emplace_back(std::move(intervalPosition));
     }
 
-    void AddPosition(const TSortableBatchPosition& position, const bool includeLeftInterval) {
-        TIntervalPosition intervalPosition(position, includeLeftInterval);
-        if (Positions.size()) {
-            AFL_VERIFY(Positions.back() < intervalPosition)("back", Positions.back().DebugJson())("pos", intervalPosition.DebugJson());
+    void AddPosition(TSortableBatchPosition&& position, const bool includePositionToLeftInterval) {
+        TIntervalPosition intervalPosition(std::move(position), includePositionToLeftInterval);
+        AddPosition(std::move(intervalPosition));
         }
-        Positions.emplace_back(std::move(intervalPosition));
+
+    void AddPosition(const TSortableBatchPosition& position, const bool includePositionToLeftInterval) {
+        TIntervalPosition intervalPosition(position, includePositionToLeftInterval);
+        AddPosition(std::move(intervalPosition));
     }
 };
 

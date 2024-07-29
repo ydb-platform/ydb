@@ -84,6 +84,7 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 class TSchemeShard;
+class TPath;
 
 struct TOperationContext {
 public:
@@ -619,6 +620,9 @@ ISubOperation::TPtr CreateAlterResourcePool(TOperationId id, TTxState::ETxState 
 // Drop
 ISubOperation::TPtr CreateDropResourcePool(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropResourcePool(TOperationId id, TTxState::ETxState state);
+
+// returns Reject in case of error, nullptr otherwise
+ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& result, const TOperationId& id, const TPath& table);
 
 }
 }

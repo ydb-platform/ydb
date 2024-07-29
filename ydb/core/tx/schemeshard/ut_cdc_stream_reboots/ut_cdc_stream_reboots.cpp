@@ -6,40 +6,38 @@
 
 using namespace NSchemeShardUT_Private;
 
-static const TString createTableProto = R"(
-    Name: "Table"
-    Columns { Name: "key" Type: "Uint64" }
-    Columns { Name: "value" Type: "Uint64" }
-    KeyColumnNames: ["key"]
-)";
-
-static const TString createTableWithIndexProto = R"(
-    TableDescription {
-        Name: "Table"
-        Columns { Name: "key" Type: "Uint64" }
-        Columns { Name: "value" Type: "Uint64" }
-        KeyColumnNames: ["key"]
-    }
-    IndexDescription {
-        Name: "SyncIndex"
-        KeyColumnNames: ["value"]
-    }
-)";
-
 Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     template <typename T>
-    void CreateStream(const TMaybe<NKikimrSchemeOp::ECdcStreamState>& state = Nothing(), bool vt = false, bool tableWithIndex = false) {
+    void CreateStream(const TMaybe<NKikimrSchemeOp::ECdcStreamState>& state = Nothing(), bool vt = false, bool onIndex = false) {
         T t;
-        t.GetTestEnvOptions().EnableChangefeedInitialScan(true);
+        t.GetTestEnvOptions()
+            .EnableChangefeedInitialScan(true)
+            .EnableChangefeedsOnIndexTables(true);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
                 runtime.GetAppData().DisableCdcAutoSwitchingToReadyStateForTests = true;
-                if (tableWithIndex) {
-                    TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", createTableWithIndexProto);
+                if (!onIndex) {
+                    TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                        Name: "Table"
+                        Columns { Name: "key" Type: "Uint64" }
+                        Columns { Name: "value" Type: "Uint64" }
+                        KeyColumnNames: ["key"]
+                    )");
                 } else {
-                    TestCreateTable(runtime, ++t.TxId, "/MyRoot", createTableProto);
+                    TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
+                        TableDescription {
+                          Name: "Table"
+                          Columns { Name: "key" Type: "Uint64" }
+                          Columns { Name: "indexed" Type: "Uint64" }
+                          KeyColumnNames: ["key"]
+                        }
+                        IndexDescription {
+                          Name: "Index"
+                          KeyColumnNames: ["indexed"]
+                        }
+                    )");
                 }
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
@@ -58,24 +56,19 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
             const bool ok = google::protobuf::TextFormat::PrintToString(streamDesc, &strDesc);
             UNIT_ASSERT_C(ok, "protobuf serialization failed");
 
-            TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", Sprintf(R"(
-                TableName: "Table"
+            const TString path = !onIndex ? "/MyRoot" : "/MyRoot/Table/Index";
+            const TString tableName = !onIndex ? "Table": "indexImplTable";
+
+            TestCreateCdcStream(runtime, ++t.TxId, path, Sprintf(R"(
+                TableName: "%s"
                 StreamDescription { %s }
-                AllIndexes {}
-            )", strDesc.c_str()));
+            )", tableName.c_str(), strDesc.c_str()));
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+            TestDescribeResult(DescribePrivatePath(runtime, path + "/" + tableName + "/Stream"), {
                 NLs::PathExist,
                 NLs::StreamVirtualTimestamps(vt),
             });
-
-            if (tableWithIndex) {
-                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/SyncIndex/indexImplTable/Stream"), {
-                    NLs::PathExist,
-                    NLs::StreamVirtualTimestamps(vt),
-                });
-            }
         });
     }
 
@@ -83,15 +76,15 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         CreateStream<T>();
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(CreateStreamTableWithIndex) {
-        CreateStream<T>(Nothing(), false, true);
+    Y_UNIT_TEST_WITH_REBOOTS(CreateStreamOnIndexTable) {
+        CreateStream<T>({}, false, true);
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(CreateStreamExplicitReady) {
         CreateStream<T>(NKikimrSchemeOp::ECdcStreamStateReady);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(CreateStreamExplicitReadyTableWithIndex) {
+    Y_UNIT_TEST_WITH_REBOOTS(CreateStreamOnIndexTableExplicitReady) {
         CreateStream<T>(NKikimrSchemeOp::ECdcStreamStateReady, false, true);
     }
 
@@ -99,12 +92,16 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         CreateStream<T>(NKikimrSchemeOp::ECdcStreamStateScan);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(CreateStreamWithInitialScanTableWithIndex) {
+    Y_UNIT_TEST_WITH_REBOOTS(CreateStreamOnIndexTableWithInitialScan) {
         CreateStream<T>(NKikimrSchemeOp::ECdcStreamStateScan, false, true);
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(CreateStreamWithVirtualTimestamps) {
         CreateStream<T>({}, true);
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS(CreateStreamOnIndexTableWithVirtualTimestamps) {
+        CreateStream<T>({}, true, true);
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(CreateStreamWithAwsRegion) {
@@ -293,21 +290,41 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     }
 
     template <typename T>
-    void DropStream(const TMaybe<NKikimrSchemeOp::ECdcStreamState>& state = Nothing()) {
+    void DropStream(const TMaybe<NKikimrSchemeOp::ECdcStreamState>& state = Nothing(), bool onIndex = false) {
         T t;
-        t.GetTestEnvOptions().EnableChangefeedInitialScan(true);
+        t.GetTestEnvOptions()
+            .EnableChangefeedInitialScan(true)
+            .EnableChangefeedsOnIndexTables(true);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            const TString path = !onIndex ? "/MyRoot" : "/MyRoot/Table/Index";
+            const TString tableName = !onIndex ? "Table": "indexImplTable";
+
             {
                 TInactiveZone inactive(activeZone);
                 runtime.GetAppData().DisableCdcAutoSwitchingToReadyStateForTests = true;
 
-                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
-                    Name: "Table"
-                    Columns { Name: "key" Type: "Uint64" }
-                    Columns { Name: "value" Type: "Uint64" }
-                    KeyColumnNames: ["key"]
-                )");
+                if (!onIndex) {
+                    TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                        Name: "Table"
+                        Columns { Name: "key" Type: "Uint64" }
+                        Columns { Name: "value" Type: "Uint64" }
+                        KeyColumnNames: ["key"]
+                    )");
+                } else {
+                    TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
+                        TableDescription {
+                          Name: "Table"
+                          Columns { Name: "key" Type: "Uint64" }
+                          Columns { Name: "indexed" Type: "Uint64" }
+                          KeyColumnNames: ["key"]
+                        }
+                        IndexDescription {
+                          Name: "Index"
+                          KeyColumnNames: ["indexed"]
+                        }
+                    )");
+                }
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
                 NKikimrSchemeOp::TCdcStreamDescription streamDesc;
@@ -323,20 +340,20 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
                 const bool ok = google::protobuf::TextFormat::PrintToString(streamDesc, &strDesc);
                 UNIT_ASSERT_C(ok, "protobuf serialization failed");
 
-                TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", Sprintf(R"(
-                    TableName: "Table"
+                TestCreateCdcStream(runtime, ++t.TxId, path, Sprintf(R"(
+                    TableName: "%s"
                     StreamDescription { %s }
-                )", strDesc.c_str()));
+                )", tableName.c_str(), strDesc.c_str()));
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
-            TestDropCdcStream(runtime, ++t.TxId, "/MyRoot", R"(
-                TableName: "Table"
+            TestDropCdcStream(runtime, ++t.TxId, path, Sprintf(R"(
+                TableName: "%s"
                 StreamName: "Stream"
-            )");
+            )", tableName.c_str()));
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathNotExist});
+            TestDescribeResult(DescribePrivatePath(runtime, path + "/" + tableName + "/Stream"), {NLs::PathNotExist});
         });
     }
 
@@ -344,12 +361,24 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         DropStream<T>();
     }
 
+    Y_UNIT_TEST_WITH_REBOOTS(DropStreamOnIndexTable) {
+        DropStream<T>({}, true);
+    }
+
     Y_UNIT_TEST_WITH_REBOOTS(DropStreamExplicitReady) {
         DropStream<T>(NKikimrSchemeOp::ECdcStreamStateReady);
     }
 
+    Y_UNIT_TEST_WITH_REBOOTS(DropStreamOnIndexTableExplicitReady) {
+        DropStream<T>(NKikimrSchemeOp::ECdcStreamStateReady, true);
+    }
+
     Y_UNIT_TEST_WITH_REBOOTS(DropStreamCreatedWithInitialScan) {
         DropStream<T>(NKikimrSchemeOp::ECdcStreamStateScan);
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS(DropStreamOnIndexTableCreatedWithInitialScan) {
+        DropStream<T>(NKikimrSchemeOp::ECdcStreamStateScan, true);
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(CreateDropRecreate) {

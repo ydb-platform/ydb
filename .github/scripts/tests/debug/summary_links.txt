@@ -1,3 +1,0 @@
-10 [Test history](https://nebius.testmo.net/automation/runs/view/39586)
-10 [Ya make output](https://storage.yandexcloud.net/ydb-gh-logs/ydb-platform/ydb/PR-check/10058257094/ya-x86-64/ya_make_output.log)
-00 [Workflow artifacts](https://storage.yandexcloud.net/ydb-gh-logs/ydb-platform/ydb/PR-check/10058257094/ya-x86-64/index.html)

@@ -13,7 +13,7 @@ from pathlib import Path
 import cyson as yson
 
 # 2024-05-28 19:23:57.817 INFO  dqrun(pid=59479, tid=0x00007A180B80B640) [default] mkql_wide_combine.cpp:439: switching Memory mode to Spilling
-RE_SPILLING = re.compile(r'mkql_([a-z_]*)\.cpp:([0-9]+): [Ss]witching Memory mode to Spilling')
+RE_SPILLING = re.compile(r'mkql_([a-z_]*)\.cpp:([0-9]+): (0x[0-9a-fA-F]+# )?[Ss]witching Memory mode to Spilling')
 SPILLING_MAP = {
     'wide_combine': 'c',
     'wide_top_sort': 's',

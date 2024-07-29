@@ -183,8 +183,16 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         settings.ModuleMapping = modules;
         settings.EnableGenericUdfs = true;
         settings.File = "generated.sql";
+        settings.Flags = {
+            "AnsiOrderByLimitInUnionAll",
+            "AnsiRankForNullableKeys",
+            "DisableAnsiOptionalAs",
+            "DisableCoalesceJoinKeysOnQualifiedAll",
+            "DisableUnorderedSubqueries",
+            "FlexibleTypes"
+        };
         if (BlockEngineMode_ != EBlockEngineMode::Disable) {
-            settings.Flags = {"EmitAggApply"};
+            settings.Flags.insert("EmitAggApply");
         }
         for (const auto& [key, block] : UserData_) {
             TStringBuf alias(key.Alias());

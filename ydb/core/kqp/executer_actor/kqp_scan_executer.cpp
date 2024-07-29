@@ -204,8 +204,8 @@ private:
             }
 
             {
-                //const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
-                const bool useLlvm = /*PreparedQuery ? PreparedQuery->GetLlvmSettings().GetUseLlvm(stage.GetProgram().GetSettings()) : */ false;
+                const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+                const bool useLlvm = PreparedQuery ? PreparedQuery->GetLlvmSettings().GetUseLlvm(stage.GetProgram().GetSettings()) : false;
                 for (auto& taskId : stageInfo.Tasks) {
                     auto& task = TasksGraph.GetTask(taskId);
                     task.SetUseLlvm(useLlvm);

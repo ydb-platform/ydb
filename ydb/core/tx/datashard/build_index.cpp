@@ -679,7 +679,7 @@ public:
             columnNames.push_back(col.GetColumnName());
         }
 
-        ScanTags = BuildTags(tableInfo, columnNames);
+        ScanTags = BuildTags(tableInfo, std::move(columnNames));
         UploadColumnsTypes = BuildTypes(tableInfo, checkingNotNullSettings);
         UploadMode = NTxProxy::EUploadRowsMode::Normal;
     }

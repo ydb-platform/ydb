@@ -12,17 +12,4 @@ TColumnsTags GetAllTags(const TUserTable& tableInfo) {
 
     return result;
 }
-
-void AddTags(TTags& tags, const TColumnsTags& allTags, TProtoColumnsCRef columns) {
-    for (const auto& colName : columns) {
-        tags.push_back(allTags.at(colName));
-    }
-}
-
-void AddTags(TTags& tags, const TColumnsTags& allTags, const TVector<TString>& columns) {
-    for (const auto& colName : columns) {
-        tags.push_back(allTags.at(colName));
-    }
-}
-
 }

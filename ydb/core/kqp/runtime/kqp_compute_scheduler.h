@@ -116,14 +116,6 @@ struct TEvSchedulerDeregister : public TEventLocal<TEvSchedulerDeregister, TKqpC
     }
 };
 
-//struct TEvSchedulerAccountTime : public TEventLocal<TEvSchedulerAccountTime, TKqpComputeSchedulerEvents::EvAccountTime> {
-//    TDuration Time;
-//
-//    TEvSchedulerAccountTime(TDuration time) {
-//        Time = time;
-//    }
-//};
-
 template<typename TDerived>
 class TSchedulableComputeActorBase : public NYql::NDq::TDqSyncComputeActorBase<TDerived> {
 private:

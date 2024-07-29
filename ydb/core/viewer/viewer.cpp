@@ -188,15 +188,15 @@ public:
                 JsonHandlers.JsonHandlersIndex[oldPath] = JsonHandlers.JsonHandlersIndex[newPath];
             }
 
-            // TODO: redirect old paths
-            Redirect307["/viewer/v2/json/config"] = "/viewer/config";
-            Redirect307["/viewer/v2/json/sysinfo"] = "/viewer/sysinfo";
-            Redirect307["/viewer/v2/json/pdiskinfo"] = "/viewer/pdiskinfo";
-            Redirect307["/viewer/v2/json/vdiskinfo"] = "/viewer/vdiskinfo";
-            Redirect307["/viewer/v2/json/storage"] = "/viewer/storage";
-            Redirect307["/viewer/v2/json/nodelist"] = "/viewer/nodelist";
-            Redirect307["/viewer/v2/json/tabletinfo"] = "/viewer/tabletinfo";
-            Redirect307["/viewer/v2/json/nodeinfo"] = "/viewer/nodeinfo";
+            // TODO: redirect of very old paths
+            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/config"] = JsonHandlers.JsonHandlersIndex["/viewer/config"];
+            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/sysinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/sysinfo"];
+            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/pdiskinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/pdiskinfo"];
+            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/vdiskinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/vdiskinfo"];
+            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/storage"] = JsonHandlers.JsonHandlersIndex["/viewer/storage"];
+            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/nodelist"] = JsonHandlers.JsonHandlersIndex["/viewer/nodelist"];
+            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/tabletinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/tabletinfo"];
+            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/nodeinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/nodeinfo"];
 
             TWhiteboardInfo<NKikimrWhiteboard::TEvNodeStateResponse>::InitMerger();
             TWhiteboardInfo<NKikimrWhiteboard::TEvBSGroupStateResponse>::InitMerger();

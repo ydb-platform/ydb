@@ -135,7 +135,7 @@ public:
             buf.Next();
             return NUdf::TBlockItem();
         }
-        return GetNotNull(buf).MakeOptional();
+        return GetNotNull(buf);
     }
 };
 

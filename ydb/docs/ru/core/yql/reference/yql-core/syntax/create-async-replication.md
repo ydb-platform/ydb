@@ -47,7 +47,7 @@ WITH (
 
 Для подключения к базе `/Root/another_database` используется [эндпоинт](../../../concepts/connect.md#endpoint) `grpcs://example.com:2135`, а для аутентификации — токен из секрета `my_secret`.
 
-Создание экземпляра асинхронной репликации для таблиц `table1` и `table2`:
+Создание экземпляра асинхронной репликации для таблиц `table1` и `table2` в `replica_table1` и `replica_table2`, соответственно:
 
 ```sql
 CREATE ASYNC REPLICATION `my_replication_for_multiple_tables`

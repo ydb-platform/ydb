@@ -144,6 +144,9 @@ namespace NKikimr::NStorage {
                 case TQuery::kReassignStateStorageNode:
                     return ReassignStateStorageNode(record.GetReassignStateStorageNode());
 
+                case TQuery::kAdvanceGeneration:
+                    return AdvanceGeneration();
+
                 case TQuery::REQUEST_NOT_SET:
                     return FinishWithError(TResult::ERROR, "Request field not set");
             }
@@ -597,6 +600,14 @@ namespace NKikimr::NStorage {
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Configuration proposition
+
+        void AdvanceGeneration() {
+            if (RunCommonChecks()) {
+                NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+                config.SetGeneration(config.GetGeneration() + 1);
+                StartProposition(&config);
+            }
+        }
 
         void StartProposition(NKikimrBlobStorage::TStorageConfig *config) {
             config->MutablePrevConfig()->CopyFrom(*Self->StorageConfig);

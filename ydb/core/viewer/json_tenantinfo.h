@@ -227,6 +227,10 @@ public:
 
     void SendViewerTabletRequest(const TString& tenantId) {
         const std::vector<TNodeId>& nodesIds = TenantNodes[tenantId];
+        if (TenantOffloadMergeTablets[tenantId] >= nodesIds.size()) {
+            // we tried all nodes already
+            return;
+        }
         TNodeId nodeId = SelectTargetNode(nodesIds, TenantOffloadMergeTablets[tenantId]++);
         SubscribedNodeIds.insert(nodeId);
         TActorId viewerServiceId = MakeViewerID(nodeId);
@@ -244,6 +248,10 @@ public:
 
     void SendViewerSystemRequest(const TString& tenantId) {
         const std::vector<TNodeId>& nodesIds = TenantNodes[tenantId];
+        if (TenantOffloadNodesInfo[tenantId] >= nodesIds.size()) {
+            // we tried all nodes already
+            return;
+        }
         TNodeId nodeId = SelectTargetNode(nodesIds, TenantOffloadNodesInfo[tenantId]++);
         SubscribedNodeIds.insert(nodeId);
         TActorId viewerServiceId = MakeViewerID(nodeId);

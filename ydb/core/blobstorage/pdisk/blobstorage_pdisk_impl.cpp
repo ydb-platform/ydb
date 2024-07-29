@@ -419,8 +419,12 @@ bool ParseSectorOffset(const TDiskFormat& format, TActorSystem *actorSystem, ui3
     const ui64 chunkSizeUsableSectors = format.ChunkSize / format.SectorSize;
     const ui64 sectorPayloadSize = format.SectorPayloadSize();
     Y_ABORT_UNLESS(sectorPayloadSize > 0);
-    ui64 lastSectorIdx = (offset + size + sectorPayloadSize - 1) / sectorPayloadSize - 1;
-    outLastSectorIdx = lastSectorIdx;
+
+    if (offset != 0 || size != 0) {
+        outLastSectorIdx = (offset + size + sectorPayloadSize -1 ) / sectorPayloadSize - 1;
+    } else {
+        outLastSectorIdx = 0;
+    }
 
     ui64 sectorIdx = offset / sectorPayloadSize;
     outSectorIdx = sectorIdx;

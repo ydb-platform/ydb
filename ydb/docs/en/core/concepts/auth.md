@@ -4,7 +4,7 @@ Once a network connection is established, the server starts to accept client req
 
 The following authentication modes are supported:
 
-* Anonymous access is enabled by default and available immediately when you [install the cluster](../deploy/index.md).
+* Anonymous access is enabled by default and available immediately when you [install the cluster](../devops/index.md).
 * [Authentication through a third-party IAM provider](#iam), for example, [Yandex Identity and Access Management]{% if lang == "en" %}(https://cloud.yandex.com/en/docs/iam/){% endif %}{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/){% endif %}.
 * Authentication by [username and password](#static-credentials).
 

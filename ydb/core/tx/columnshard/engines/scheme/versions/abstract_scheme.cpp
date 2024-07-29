@@ -46,9 +46,8 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
                 return conclusion;
             }
         } else if (restoreColumnIds.contains(columnId)) {
-            result->AddField(resultField,
-                    NArrow::TThreadSimpleArraysCache::Get(resultField->type(), GetExternalDefaultValueVerified(columnId), batch->num_rows()))
-                .Validate();
+            AFL_VERIFY(!!GetExternalDefaultValueVerified(columnId) || GetIndexInfo().IsNullableVerified(columnId));
+            result->AddField(resultField, GetColumnLoaderVerified(columnId)->BuildDefaultAccessor(batch->num_rows())).Validate();
         }
     }
     return result;
@@ -78,7 +77,8 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
     for (auto&& i : batch->schema()->fields()) {
         AFL_VERIFY(GetIndexInfo().HasColumnName(i->name()));
         if (!dstSchema->GetFieldByName(i->name())->Equals(i)) {
-            return TConclusionStatus::Fail("not equal field types for column '" + i->name() + "'");
+            return TConclusionStatus::Fail("not equal field types for column '" + i->name() + "': " + i->ToString() + " vs " +
+                                           dstSchema->GetFieldByName(i->name())->ToString());
         }
         if (GetIndexInfo().IsNullableVerified(i->name())) {
             continue;
@@ -144,19 +144,19 @@ std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByColumnIdVerified(const 
     return result;
 }
 
-std::shared_ptr<NKikimr::NOlap::TColumnLoader> ISnapshotSchema::GetColumnLoaderVerified(const ui32 columnId) const {
+std::shared_ptr<NArrow::NAccessor::TColumnLoader> ISnapshotSchema::GetColumnLoaderVerified(const ui32 columnId) const {
     auto result = GetColumnLoaderOptional(columnId);
     AFL_VERIFY(result);
     return result;
 }
 
-std::shared_ptr<NKikimr::NOlap::TColumnLoader> ISnapshotSchema::GetColumnLoaderVerified(const std::string& columnName) const {
+std::shared_ptr<NArrow::NAccessor::TColumnLoader> ISnapshotSchema::GetColumnLoaderVerified(const std::string& columnName) const {
     auto result = GetColumnLoaderOptional(columnName);
     AFL_VERIFY(result);
     return result;
 }
 
-std::shared_ptr<NKikimr::NOlap::TColumnLoader> ISnapshotSchema::GetColumnLoaderOptional(const std::string& columnName) const {
+std::shared_ptr<NArrow::NAccessor::TColumnLoader> ISnapshotSchema::GetColumnLoaderOptional(const std::string& columnName) const {
     const std::optional<ui32> id = GetColumnIdOptional(columnName);
     if (id) {
         return GetColumnLoaderOptional(*id);

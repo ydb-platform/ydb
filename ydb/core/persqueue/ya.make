@@ -29,6 +29,7 @@ SRCS(
     pq_l2_cache.cpp
     pq_rl_helpers.cpp
     quota_tracker.cpp
+    read_balancer__balancing_app.cpp
     read_balancer__balancing.cpp
     read_balancer.cpp
     account_read_quoter.cpp

@@ -351,6 +351,8 @@ public:
     void Handle(TEvPQ::TEvBalanceConsumer::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx);
 
+    void RenderApp(TStringStream& str) const;
+
 private:
     TString GetPrefix() const;
     ui32 NextStep();

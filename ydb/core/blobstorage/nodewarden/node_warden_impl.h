@@ -108,6 +108,7 @@ namespace NKikimr::NStorage {
             std::optional<NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk> Pending; // pending
         };
         THashMap<TString, TPDiskByPathInfo> PDiskByPath;
+        THashSet<ui32> PDisksWaitingToStart;
 
         ui64 LastScrubCookie = RandomNumber<ui64>();
 

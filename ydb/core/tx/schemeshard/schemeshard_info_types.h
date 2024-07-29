@@ -447,13 +447,14 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     const NKikimrSchemeOp::TPartitionConfig& PartitionConfig() const { return TableDescription.GetPartitionConfig(); }
     NKikimrSchemeOp::TPartitionConfig& MutablePartitionConfig() { return *TableDescription.MutablePartitionConfig(); }
 
-    bool HasReplicationConfig() { return TableDescription.HasReplicationConfig(); }
-    const NKikimrSchemeOp::TTableReplicationConfig& ReplicationConfig() { return TableDescription.GetReplicationConfig(); }
+    bool HasReplicationConfig() const { return TableDescription.HasReplicationConfig(); }
+    const NKikimrSchemeOp::TTableReplicationConfig& ReplicationConfig() const { return TableDescription.GetReplicationConfig(); }
     NKikimrSchemeOp::TTableReplicationConfig& MutableReplicationConfig() { return *TableDescription.MutableReplicationConfig(); }
 
     bool IsAsyncReplica() const {
         switch (TableDescription.GetReplicationConfig().GetMode()) {
-            case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE:
+            case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE: [[fallthrough]];
+            case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_RESTORE_INCREMENTAL_BACKUP:
                 return false;
             default:
                 return true;

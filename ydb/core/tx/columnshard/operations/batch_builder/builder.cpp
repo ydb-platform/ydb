@@ -11,6 +11,7 @@
 namespace NKikimr::NOlap {
 
 void TBuildBatchesTask::ReplyError(const TString& message) {
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "cannot build batch for insert")("reason", message)("data", WriteData.GetWriteMeta().GetLongTxIdOptional());
     auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
     TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(*writeDataPtr) });
     auto result = NColumnShard::TEvPrivate::TEvWriteBlobsResult::Error(NKikimrProto::EReplyStatus::CORRUPTED, std::move(buffer), message);

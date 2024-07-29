@@ -98,6 +98,7 @@ NKikimr::NMiniKQL::TRuntimeNode CompileMkql(const TExprNode::TPtr& exprRoot, TEx
     NCommon::TMkqlCommonCallableCompiler compiler;
 
     compiler.AddCallable(PurecalcInputCallableName, MakeSelfCallableCompiler());
+    compiler.AddCallable(PurecalcBlockInputCallableName, MakeSelfCallableCompiler());
     compiler.OverrideCallable("FileContent", MakeFileContentCallableCompiler(userData));
     compiler.OverrideCallable("FilePath", MakeFilePathCallableCompiler(userData));
     compiler.OverrideCallable("FolderPath", MakeFolderPathCallableCompiler(userData));

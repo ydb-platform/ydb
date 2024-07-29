@@ -60,6 +60,8 @@ extern "C" {
 #undef locale_t
 }
 
+#include "utils.h"
+
 extern "C" {
 
 extern __thread Latch LocalLatchData;
@@ -237,6 +239,7 @@ TString GetCommandName(Node* node) {
 extern "C" void setup_pg_thread_cleanup() {
     struct TThreadCleanup {
         ~TThreadCleanup() {
+            NYql::TExtensionsRegistry::Instance().CleanupThread();
             destroy_timezone_hashtable();
             destroy_typecache_hashtable();
             RE_cleanup_cache();

@@ -18,3 +18,5 @@
 "pg_get_function_arguments",//psql
 "pg_table_is_visible",//psql
 
+// postgis
+"postgis_lib_version",

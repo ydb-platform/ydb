@@ -152,10 +152,6 @@ class TestSummary:
         self.is_failed |= line.is_failed
         self.lines.append(line)
 
-    @property
-    def is_empty(self):
-        return len(self.lines) == 0
-
     def render_line(self, items):
         return f"| {' | '.join(items)} |"
 
@@ -262,11 +258,8 @@ def write_summary(summary: TestSummary):
     else:
         fp = sys.stdout
 
-    if summary.is_empty:
-        fp.write(f":red_circle: Test run completed, no test results found. Please check ya make output.")
-    else:
-        for line in summary.render(add_footnote=True):
-            fp.write(f"{line}\n")
+    for line in summary.render(add_footnote=True):
+        fp.write(f"{line}\n")
 
     fp.write("\n")
 
@@ -283,9 +276,6 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool):
         for fn, suite, case in iter_xml_files(path):
             test_result = TestResult.from_junit(case)
             summary_line.add(test_result)
-
-        if not summary_line.tests:
-            continue
         
         if os.path.isabs(html_fn):
             html_fn = os.path.relpath(html_fn, public_dir)
@@ -298,16 +288,15 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool):
     return summary
 
 
-def get_comment_text(pr: PullRequest, summary: TestSummary, summary_links: str, is_last_retry: bool):
-    if summary.is_empty:
-        return [
-            f"Test run completed, no test results found for commit {pr.head.sha}. "
-        ]
-    elif summary.is_failed:
+def get_comment_text(pr: PullRequest, summary: TestSummary, summary_links: str, is_last_retry: bool)->tuple[str, list[str]]:
+    color = "red"
+    if summary.is_failed:
+        color = "red" if is_last_retry else "yellow"
         result = f"Some tests failed, follow the links below."
         if not is_last_retry:
             result += " Going to retry failed tests..."
     else:
+        color = "green"
         result = f"Tests successful."
 
     body = []
@@ -338,7 +327,7 @@ def get_comment_text(pr: PullRequest, summary: TestSummary, summary_links: str, 
     else:
         body.append("")
 
-    return body
+    return color, body
 
 
 def main():
@@ -363,11 +352,9 @@ def main():
     summary = gen_summary(args.public_dir, args.public_dir_url, title_path, is_retry=bool(args.is_retry))
     write_summary(summary)
 
-    if summary.is_empty | summary.is_failed:
-        color = 'red'
+    if summary.is_failed:
         overall_status = "failure"
     else:
-        color = 'green'
         overall_status = "success"
 
     if os.environ.get("GITHUB_EVENT_NAME") in ("pull_request", "pull_request_target"):
@@ -378,7 +365,7 @@ def main():
             event = json.load(fp)
 
         pr = gh.create_from_raw_data(PullRequest, event["pull_request"])
-        text = get_comment_text(pr, summary, args.summary_links, is_last_retry=bool(args.is_last_retry))
+        color, text = get_comment_text(pr, summary, args.summary_links, is_last_retry=bool(args.is_last_retry))
 
         update_pr_comment_text(pr, args.build_preset, run_number, color, text='\n'.join(text), rewrite=False)
 

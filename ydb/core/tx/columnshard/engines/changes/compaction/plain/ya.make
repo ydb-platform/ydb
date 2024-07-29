@@ -4,7 +4,7 @@ SRCS(
     column_cursor.cpp
     column_portion_chunk.cpp
     merged_column.cpp
-    logic.cpp
+    GLOBAL logic.cpp
 )
 
 PEERDIR(

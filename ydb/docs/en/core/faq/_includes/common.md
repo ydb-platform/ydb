@@ -1,8 +1,3 @@
----
-title: "YDB. FAQ"
-description: "What is YDB? For what tasks is it worth using YDB, and for which virtual machines with databases? What part of the management and maintenance of databases does YDB take on? Answers to these and other questions in this article."
----
-
 # General questions about {{ ydb-short-name }}
 
 #### What is {{ ydb-short-name }}? {#what-is-ydb}

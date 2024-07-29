@@ -104,10 +104,8 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
         std::vector<std::shared_ptr<IPortionDataChunk>> newChunks;
         if (it != columnChunks.end()) {
             newChunks = to->GetIndexInfo().ActualizeColumnData(it->second, from->GetIndexInfo(), i);
-        } else {
-            newChunks = to->GetIndexInfo().MakeEmptyChunks(i, pageSizes, to->GetIndexInfo().GetColumnFeaturesVerified(i));
+            AFL_VERIFY(entityChunksNew.emplace(i, std::move(newChunks)).second);
         }
-        AFL_VERIFY(entityChunksNew.emplace(i, std::move(newChunks)).second);
     }
 
     TPortionInfoConstructor constructor(source.PortionInfo, false, true);
@@ -122,7 +120,7 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
     }
 
     const NSplitter::TEntityGroups groups = to->GetIndexInfo().GetEntityGroupsByStorageId(targetTier, *storages);
-    auto schemaTo = std::make_shared<TDefaultSchemaDetails>(to, std::make_shared<TSerializationStats>());
+    auto schemaTo = std::make_shared<TDefaultSchemaDetails>(to, std::make_shared<NArrow::NSplitter::TSerializationStats>());
     TGeneralSerializedSlice slice(secondaryData.GetExternalData(), schemaTo, counters);
 
     return TWritePortionInfoWithBlobsConstructor::BuildByBlobs(

@@ -2,6 +2,7 @@
 
 #include "abstract/merger.h"
 #include "plain/logic.h"
+#include "sparsed/logic.h"
 
 #include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
@@ -11,7 +12,7 @@
 
 namespace NKikimr::NOlap::NCompaction {
 
-std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared_ptr<TSerializationStats>& stats,
+std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats,
     const NArrow::NMerger::TIntervalPositions& checkPoints, const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered, const ui64 pathId,
     const std::optional<ui64> shardingActualVersion) {
     AFL_VERIFY(Batches.size() == Filters.size());
@@ -20,7 +21,10 @@ std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> TMerger::Execute(c
         arrow::FieldVector indexFields;
         indexFields.emplace_back(IColumnMerger::PortionIdField);
         indexFields.emplace_back(IColumnMerger::PortionRecordIndexField);
-        IIndexInfo::AddSpecialFields(indexFields);
+        if (resultFiltered->HasColumnId((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG)) {
+            IIndexInfo::AddDeleteFields(indexFields);
+        }
+        IIndexInfo::AddSnapshotFields(indexFields);
         auto dataSchema = std::make_shared<arrow::Schema>(indexFields);
         NArrow::NMerger::TMergePartialStream mergeStream(
             resultFiltered->GetIndexInfo().GetReplaceKey(), dataSchema, false, IIndexInfo::GetSnapshotColumnNames());
@@ -52,7 +56,20 @@ std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> TMerger::Execute(c
             NActors::TLogContextBuilder::Build()("field_name", resultFiltered->GetIndexInfo().GetColumnName(columnId)));
         auto columnInfo = stats->GetColumnInfo(columnId);
         auto resultField = resultFiltered->GetIndexInfo().GetColumnFieldVerified(columnId);
-        std::shared_ptr<IColumnMerger> merger = std::make_shared<TPlainMerger>();
+
+        TColumnMergeContext commonContext(
+            columnId, resultFiltered, NSplitter::TSplitSettings().GetExpectedUnpackColumnChunkRawSize(), columnInfo);
+        if (OptimizationWritingPackMode) {
+            commonContext.MutableSaver().AddSerializerWithBorder(
+                100, std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::UNCOMPRESSED));
+            commonContext.MutableSaver().AddSerializerWithBorder(
+                Max<ui32>(), std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::LZ4_FRAME));
+        }
+
+        THolder<IColumnMerger> merger =
+            IColumnMerger::TFactory::MakeHolder(commonContext.GetLoader()->GetAccessorConstructor().GetClassName(), commonContext);
+        AFL_VERIFY(!!merger)("problem", "cannot create merger")(
+            "class_name", commonContext.GetLoader()->GetAccessorConstructor().GetClassName());
         //        resultFiltered->BuildColumnMergerVerified(columnId);
 
         {
@@ -70,19 +87,7 @@ std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> TMerger::Execute(c
             const ui32 portionRecordsCountLimit =
                 batchResult->num_rows() / (batchResult->num_rows() / NSplitter::TSplitSettings().GetExpectedRecordsCountOnPage() + 1) + 1;
 
-            NArrow::NSerialization::TSerializerContainer externalSaver;
-            if (OptimizationWritingPackMode) {
-                if (batchResult->num_rows() < 100) {
-                    externalSaver = NArrow::NSerialization::TSerializerContainer(
-                        std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::UNCOMPRESSED));
-                } else {
-                    externalSaver = NArrow::NSerialization::TSerializerContainer(
-                        std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::LZ4_FRAME));
-                }
-            }
-
-            NCompaction::TColumnMergeContext context(columnId, resultFiltered, portionRecordsCountLimit,
-                NSplitter::TSplitSettings().GetExpectedUnpackColumnChunkRawSize(), columnInfo, externalSaver);
+            TChunkMergeContext context(portionRecordsCountLimit);
 
             chunkGroups[batchIdx][columnId] = merger->Execute(context, batchResult);
             ++batchIdx;
@@ -125,7 +130,7 @@ std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> TMerger::Execute(c
             }
             batchSlices.emplace_back(portionColumns, schemaDetails, Context.Counters.SplitterCounters);
         }
-        TSimilarPacker slicer(NSplitter::TSplitSettings().GetExpectedPortionSize());
+        NArrow::NSplitter::TSimilarPacker slicer(NSplitter::TSplitSettings().GetExpectedPortionSize());
         auto packs = slicer.Split(batchSlices);
 
         ui32 recordIdx = 0;
@@ -137,7 +142,7 @@ std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> TMerger::Execute(c
             TGeneralSerializedSlice slice(dataWithSecondary.GetExternalData(), schemaDetails, Context.Counters.SplitterCounters);
 
             auto b = batchResult->Slice(recordIdx, slice.GetRecordsCount());
-            const ui32 deletionsCount = IIndexInfo::CalcDeletions(b, true);
+            const ui32 deletionsCount = IIndexInfo::CalcDeletions(b, false);
             auto constructor = TWritePortionInfoWithBlobsConstructor::BuildByBlobs(slice.GroupChunksByBlobs(groups),
                 dataWithSecondary.GetSecondaryInplaceData(), pathId, resultFiltered->GetVersion(), resultFiltered->GetSnapshot(),
                 SaverContext.GetStoragesManager());

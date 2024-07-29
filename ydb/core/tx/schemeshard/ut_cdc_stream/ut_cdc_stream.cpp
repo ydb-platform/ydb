@@ -1200,9 +1200,38 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         }
     }
 
+    Y_UNIT_TEST(StreamOnIndexTableNegative) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableChangefeedsOnIndexTables(false));
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "indexed" Type: "Uint64" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "Index"
+              KeyColumnNames: ["indexed"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot/Table/Index", R"(
+            TableName: "indexImplTable"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )", {NKikimrScheme::StatusPreconditionFailed});
+    }
+
     Y_UNIT_TEST(StreamOnIndexTable) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableChangefeedsOnIndexTables(true));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -1298,7 +1327,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
     Y_UNIT_TEST(StreamOnBuildingIndexTable) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableChangefeedsOnIndexTables(true));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -1350,7 +1379,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
     Y_UNIT_TEST(DropIndexWithStream) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableChangefeedsOnIndexTables(true));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -1393,7 +1422,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
     Y_UNIT_TEST(DropTableWithIndexWithStream) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableChangefeedsOnIndexTables(true));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(

@@ -43,6 +43,7 @@ extern "C" {
 #include <ydb/library/yql/utils/log/log.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
+#include <util/string/join.h>
 #include <util/generic/scope.h>
 #include <util/generic/stack.h>
 #include <util/generic/hash_set.h>
@@ -5153,4 +5154,163 @@ TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQ
     return results;
 }
 
-}  // NSQLTranslationPG
+class TExtensionHandler : public IPGParseEvents {
+public:
+    TExtensionHandler(NYql::NPg::IExtensionDDLBuilder& builder)
+        : Builder(builder)
+    {}
+
+    void OnResult(const List* raw) final {
+        for (int i = 0; i < ListLength(raw); ++i) {
+            if (!ParseRawStmt(LIST_CAST_NTH(RawStmt, raw, i))) {
+                continue;
+            }
+        }
+    }
+
+    void OnError(const TIssue& issue) final {
+        throw yexception() << "Can't parse extension DDL: " << issue.ToString();
+    }
+
+    [[nodiscard]]
+    bool ParseRawStmt(const RawStmt* value) {
+        auto node = value->stmt;
+        switch (NodeTag(node)) {
+        case T_CreateFunctionStmt:
+            return ParseCreateFunctionStmt(CAST_NODE(CreateFunctionStmt, node));
+        default:
+            return false;
+        }
+    }
+
+    [[nodiscard]]
+    bool ParseCreateFunctionStmt(const CreateFunctionStmt* value) {
+        NYql::NPg::TProcDesc desc;
+        if (value->sql_body) {
+            return false;
+        }
+
+        if (ListLength(value->funcname) != 1) {
+            return false;
+        }
+
+        auto nameNode = ListNodeNth(value->funcname, 0);
+        auto name = to_lower(TString(StrVal(nameNode)));
+        desc.Name = name;
+        desc.IsStrict = false;
+        if (value->returnType) {
+            if (ListLength(value->returnType->names) != 1) {
+                return false;
+            }
+
+            auto resultTypeNode = ListNodeNth(value->returnType->names, 0);
+            auto resultTypeStr = TString(StrVal(resultTypeNode));
+            if (!NPg::HasType(resultTypeStr)) {
+                return false;
+            }
+
+            desc.ResultType = NPg::LookupType(resultTypeStr).TypeId;
+        } else {
+            desc.ResultType = NPg::LookupType("record").TypeId;
+        }
+
+        for (ui32 pass = 0; pass < 2; ++pass) {
+            for (int i = 0; i < ListLength(value->options); ++i) {
+                auto node = LIST_CAST_NTH(DefElem, value->options, i);
+                TString defnameStr(node->defname);
+                if (pass == 1 && defnameStr == "as") {
+                    auto asList = CAST_NODE(List, node->arg);
+                    auto asListLen = ListLength(asList);
+                    if (asListLen < 1 || asListLen > 2) {
+                        return false;
+                    }
+
+                    auto extStr = to_lower(TString(StrVal(ListNodeNth(asList, 0))));
+                    auto srcStr = asListLen > 1 ?
+                        to_lower(TString(StrVal(ListNodeNth(asList, 1)))) :
+                        name;
+
+                    desc.ExtensionIndex = NPg::LookupExtensionByInstallName(extStr);
+                    desc.Src = srcStr;
+                } else if (pass == 0 && defnameStr == "strict") {
+                    desc.IsStrict  = CAST_NODE(Boolean, node->arg)->boolval;
+                } else if (pass == 0 && defnameStr == "language") {
+                    auto langStr = TString(CAST_NODE(String, node->arg)->sval);
+                    if (langStr == "c") {
+                        desc.Lang = NPg::LangC;
+                    } else {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        bool hasArgNames = false;
+        for (int i = 0; i < ListLength(value->parameters); ++i) {
+            auto node = LIST_CAST_NTH(FunctionParameter, value->parameters, i);
+            hasArgNames = hasArgNames || (node->name != nullptr);
+            if (node->mode == FUNC_PARAM_IN) {
+                desc.InputArgNames.push_back(node->name ? node->name : "");
+            } else if (node->mode == FUNC_PARAM_OUT) {
+                desc.OutputArgNames.push_back(node->name ? node->name : "");
+            } else if (node->mode == FUNC_PARAM_VARIADIC) {
+                desc.VariadicArgName = node->name ? node->name : "";
+            } else {
+                return false;
+            }
+
+            auto argTypeLen = ListLength(node->argType->names);
+            if (argTypeLen < 1 || argTypeLen > 2) {
+                return false;
+            }
+
+            if (argTypeLen == 2) {
+                auto schemaStr = to_lower(TString(StrVal(ListNodeNth(node->argType->names, 0))));
+                if (schemaStr != "pg_catalog") {
+                    return false;
+                }
+            }
+
+            auto argTypeStr = to_lower(TString(StrVal(ListNodeNth(node->argType->names, argTypeLen - 1))));
+            if (!NPg::HasType(argTypeStr)) {
+                return false;
+            }
+
+            auto argTypeId = NPg::LookupType(argTypeStr).TypeId;
+            if (node->mode == FUNC_PARAM_IN) {
+                desc.ArgTypes.push_back(argTypeId);
+            } else if (node->mode == FUNC_PARAM_VARIADIC) {
+                desc.VariadicType = argTypeId;
+                desc.VariadicArgType = argTypeId;
+            } else if (node->mode == FUNC_PARAM_OUT) {
+                desc.OutputArgTypes.push_back(argTypeId);
+            }
+        }
+
+        if (!hasArgNames) {
+            desc.InputArgNames.clear();
+            desc.VariadicArgName.clear();
+            desc.OutputArgNames.clear();
+        }
+
+        Builder.CreateProc(desc);
+        return true;
+    }
+
+private:
+    NYql::NPg::IExtensionDDLBuilder& Builder;
+};
+
+class TExtensionDDLParser : public NYql::NPg::IExtensionDDLParser {
+public:
+    void Parse(const TString& sql, NYql::NPg::IExtensionDDLBuilder& builder) final {
+        TExtensionHandler handler(builder);
+        NYql::PGParse(sql, handler);
+    }
+};
+
+std::unique_ptr<NPg::IExtensionDDLParser> CreateExtensionDDLParser() {
+    return std::make_unique<TExtensionDDLParser>();
+}
+
+} // NSQLTranslationPG

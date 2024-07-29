@@ -143,6 +143,14 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
     return true;
 }
 
+TVector<TString> GetImplTables(NKikimrSchemeOp::EIndexType indexType) {
+    if (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+        return { NTableVectorKmeansTreeIndex::LevelTable, NTableVectorKmeansTreeIndex::PostingTable };
+    } else {
+        return { ImplTable };
+    }
+}
+
 bool IsImplTable(std::string_view tableName) {
     return Contains(ImplTables, tableName);
 }

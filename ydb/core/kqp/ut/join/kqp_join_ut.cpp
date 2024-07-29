@@ -874,10 +874,11 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         }
         {
             auto result = db.ExecuteQuery(R"(
-                SELECT ta.a, tb.bval, tc.cval FROM ta INNER JOIN tb ON ta.b = tb.b LEFT JOIN tc ON ta.c = tc.cval;
+                SELECT ta.a, tb.bval, tc.cval FROM ta INNER JOIN tb ON ta.b = tb.b LEFT JOIN tc ON ta.c = tc.cval
+                ORDER BY ta.a, tb.bval, tc.cval;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            CompareYson(R"([[[1];[1001];[2001]];[[3];[1003];[2003]];[[2];[1002];[2002]]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[[1];[1001];[2001]];[[2];[1002];[2002]];[[3];[1003];[2003]]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 
@@ -1739,6 +1740,160 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
             ])", FormatResultSetYson(result.GetResultSet(0)));
             AssertTableReads(result, "/Root/Join2", 2);
             UNIT_ASSERT(result.GetQueryPlan().Contains("Lookup"));
+        }
+    }
+
+    Y_UNIT_TEST(ComplexJoin) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {  // init tables
+            AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+
+                CREATE TABLE Input1
+                (
+                    k1 String,
+                    v1 String,
+                    u1 String,
+                    PRIMARY KEY (k1, v1, u1)
+                );
+
+                CREATE TABLE Input2
+                (
+                    k2 String,
+                    v2 String,
+                    u2 String,
+                    PRIMARY KEY (k2, v2, u2)
+                );
+
+                CREATE TABLE Input3
+                (
+                    k3 String,
+                    v3 String,
+                    u3 String,
+                    PRIMARY KEY (k3, v3, u3)
+                );
+
+                CREATE TABLE Input4
+                (
+                    k4 String,
+                    v4 String,
+                    u4 String,
+                    PRIMARY KEY (k4, v4, u4)
+                );
+
+                CREATE TABLE Input5
+                (
+                    k5 String,
+                    v5 String,
+                    u5 String,
+                    PRIMARY KEY (k5, v5, u5)
+                );
+            )").GetValueSync());
+
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                REPLACE INTO Input1 (k1, v1, u1) VALUES
+                    ("01","1","01"),
+                    ("01","2","02"),
+                    ("02","1","03"),
+                    ("02","2","05"),
+                    ("02","2","06"),
+                    ("03",NULL,"07"),
+                    ("03","1","08"),
+                    ("03","2","09"),
+                    ("04","1","10"),
+                    ("04","2","11"),
+                    ("05","1","12"),
+                    ("05","2","13"),
+                    ("06","1","14"),
+                    ("06","2","15"),
+                    ("07","1","16"),
+                    ("07","2","17"),
+                    ("08","1","18"),
+                    ("08","2","19"),
+                    ("09","1","20"),
+                    ("09","2","21"),
+                    ("10","1","22"),
+                    ("10","2","23");
+
+                REPLACE INTO Input2 (k2, v2, u2) VALUES
+                    ("02","1","01"),
+                    ("02","1","02"),
+                    ("02","2","03"),
+                    ("02","2","04"),
+                    ("03","1","05"),
+                    ("03","2","06"),
+                    ("04","1","07"),
+                    ("04","2","08"),
+                    ("05","1","09"),
+                    ("05","2","10"),                   
+                    ("06","1","11"),
+                    ("06","2","12"),    
+                    ("07","1","13"),
+                    ("07","2","14"), 
+                    ("09","1","15"),
+                    ("09","2","16");
+
+                REPLACE INTO Input3 (k3, v3, u3) VALUES
+                    (NULL,"1","01"),
+                    (NULL,"2","02"),
+                    ("04","1","03"),
+                    ("04","2","04"),
+                    ("05","1","05"),
+                    ("05","2","06");
+
+                REPLACE INTO Input4 (k4, v4, u4) VALUES
+                    ("03",NULL,"01"),
+                    ("03","1","02"),
+                    ("03","2","03"),
+                    ("04","1","04"),
+                    ("04","2","05"),
+                    ("05","1","06"),
+                    ("05","2","07"),
+                    ("06","1","08"),
+                    ("06","2","09"),
+                    ("07","1","10"),
+                    ("07","2","11"),
+                    ("08","1","12"),
+                    ("08","2","13");
+
+                REPLACE INTO Input5 (k5, v5, u5) VALUES
+                    (NULL,"1","01"),
+                    (NULL,"2","02"),
+                    ("02","1","03"),
+                    ("02","1","04"),         
+                    ("02","2","05"),
+                    ("02","2","06"),
+                    ("03","1","07"),
+                    ("03","2","08"),                                     
+                    ("09","1","09"),
+                    ("09","2","10");
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                    pragma ydb.OverrideStatistics = '{"/Root/Input1": {"n_rows":10000}, "/Root/Input2" : {"n_rows":10000}, "/Root/Input3":{"n_rows":10000}, "/Root/Input4":{"n_rows":10000}, "/Root/Input5":{"n_rows":10000}}';
+
+                    $rightSemi = select * from Input2 as b right semi join Input1 as a on a.v1 = b.v2 and a.k1 = b.k2;
+                    $leftOnly = select * from $rightSemi as rs left only join Input3 as c on rs.k1 = c.k3 and rs.v1 = c.v3;
+                    $right = select * from Input4 as d right join $leftOnly as lo on d.v4 = lo.v1 and lo.k1 = d.k4;
+                    $inner = select * from $right as r join any Input5 as e on r.k1 = e.k5 and e.v5 = r.v1;
+
+                    select * from $inner order by u1,u5;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            Cout << FormatResultSetYson(result.GetResultSet(0));
+            CompareYson(R"(
+            [[["02"];#;["02"];["03"];#;["03"];["1"];#;["1"]];[["02"];#;["02"];["03"];#;["04"];["1"];#;["1"]];[["02"];#;["02"];["05"];#;["05"];["2"];#;["2"]];[["02"];#;["02"];["05"];#;["06"];["2"];#;["2"]];[["02"];#;["02"];["06"];#;["05"];["2"];#;["2"]];[["02"];#;["02"];["06"];#;["06"];["2"];#;["2"]];[["03"];["03"];["03"];["08"];["02"];["07"];["1"];["1"];["1"]];[["03"];["03"];["03"];["09"];["03"];["08"];["2"];["2"];["2"]];[["09"];#;["09"];["20"];#;["09"];["1"];#;["1"]];[["09"];#;["09"];["21"];#;["10"];["2"];#;["2"]]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 }

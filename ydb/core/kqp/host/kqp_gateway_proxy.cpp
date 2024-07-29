@@ -1912,6 +1912,7 @@ public:
                 const auto parseResult = NYdb::ParseConnectionString(*connectionString);
                 params.SetEndpoint(parseResult.Endpoint);
                 params.SetDatabase(parseResult.Database);
+                params.SetEnableSsl(parseResult.EnableSsl);
             }
             if (const auto& endpoint = settings.Settings.Endpoint) {
                 params.SetEndpoint(*endpoint);

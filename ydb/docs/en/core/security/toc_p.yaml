@@ -1,6 +1,4 @@
 items:
-- name: Overview
-  href: index.md
 - name: Access management
   href: access-management.md
 - name: Audit log

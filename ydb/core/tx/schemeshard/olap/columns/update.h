@@ -4,6 +4,7 @@
 #include <ydb/core/tx/schemeshard/olap/common/common.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
+#include <ydb/core/formats/arrow/accessor/abstract/request.h>
 #include <ydb/core/formats/arrow/dictionary/object.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/tx/columnshard/engines/scheme/defaults/common/scalar.h>
@@ -17,6 +18,7 @@ private:
     YDB_READONLY_DEF(NArrow::NDictionary::TEncodingDiff, DictionaryEncoding);
     YDB_READONLY_DEF(std::optional<TString>, StorageId);
     YDB_READONLY_DEF(std::optional<TString>, DefaultValue);
+    YDB_READONLY_DEF(NArrow::NAccessor::TRequestedConstructorContainer, AccessorConstructor);
 public:
     bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors) {
         Name = columnSchema.GetName();
@@ -29,6 +31,12 @@ public:
         }
         if (columnSchema.HasDefaultValue()) {
             DefaultValue = columnSchema.GetDefaultValue();
+        }
+        if (columnSchema.HasDataAccessorConstructor()) {
+            if (!AccessorConstructor.DeserializeFromProto(columnSchema.GetDataAccessorConstructor())) {
+                errors.AddError("cannot parse accessor constructor from proto");
+                return false;
+            }
         }
         if (columnSchema.HasSerializer()) {
             if (!Serializer.DeserializeFromProto(columnSchema.GetSerializer())) {
@@ -55,6 +63,7 @@ private:
     YDB_READONLY_DEF(std::optional<NArrow::NSerialization::TSerializerContainer>, Serializer);
     YDB_READONLY_DEF(std::optional<NArrow::NDictionary::TEncodingSettings>, DictionaryEncoding);
     YDB_READONLY_DEF(NOlap::TColumnDefaultScalarValue, DefaultValue);
+    YDB_READONLY_DEF(NArrow::NAccessor::TConstructorContainer, AccessorConstructor);
 public:
     TOlapColumnAdd(const std::optional<ui32>& keyOrder)
         : KeyOrder(keyOrder) {

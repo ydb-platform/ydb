@@ -222,7 +222,7 @@ void _DqOptimizeEquiJoinWithCosts(const std::function<IOptimizerNew*()>& optFact
         auto rel = std::make_shared<TRelOptimizerNode>(TString(label), stats);
         rels.push_back(rel);
     };
-    auto res = DqOptimizeEquiJoinWithCosts(equiJoin, ctx, typeCtx, 1, *opt, providerCollect);
+    auto res = DqOptimizeEquiJoinWithCosts(equiJoin, ctx, typeCtx, 2, *opt, providerCollect);
     UNIT_ASSERT(equiJoin.Ptr() != res.Ptr());
     UNIT_ASSERT(equiJoin.Ptr()->ChildrenSize() == res.Ptr()->ChildrenSize());
     UNIT_ASSERT(equiJoin.Maybe<TCoEquiJoin>());

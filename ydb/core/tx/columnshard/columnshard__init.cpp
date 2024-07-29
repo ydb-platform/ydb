@@ -250,7 +250,6 @@ bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 }
 
 void TTxInit::Complete(const TActorContext& ctx) {
-    Self->ProgressTxController->StartOperators();
     Self->ProgressTxController->OnTabletInit();
     Self->SwitchToWork(ctx);
     NYDBTest::TControllers::GetColumnShardController()->OnTabletInitCompleted(*Self);

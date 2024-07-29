@@ -47,7 +47,8 @@ namespace NKikimr {
     bool HugeHeapDefragmentationRequired(
             const TOutOfSpaceState& oos,
             ui32 hugeCanBeFreedChunks,
-            ui32 hugeTotalChunks);
+            ui32 hugeTotalChunks,
+            double defaultPercent);
 
     ////////////////////////////////////////////////////////////////////////////
     // VDISK DEFRAG ACTOR CREATOR

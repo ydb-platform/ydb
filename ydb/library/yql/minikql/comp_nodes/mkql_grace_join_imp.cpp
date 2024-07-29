@@ -480,6 +480,8 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         // strSize only present if HasKeyStrCol || HasKeyICol
         // strPos is only present if (HasKeyStrCol || HasKeyICol) && strSize + headerSize >= slotSize
         // slotSize, slotIdx and strPos is only for hashtable (table2)
+        ui64 bloomHits = 0;
+        ui64 bloomLookups = 0;
         
         for (ui64 keysValSize = headerSize1; it1 != bucket1->KeyIntVals.end(); it1 += keysValSize, ++tuple1Idx ) {
 
@@ -495,9 +497,9 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
             }
 
             if (initHashTable) {
-                BloomLookups_++;
+                bloomLookups++;
                 if (bloomFilter.IsMissing(hash)) {
-                    BloomHits_++;
+                    bloomHits++;
                     continue;
                 }
             }
@@ -570,10 +572,12 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
             bloomFilter.Shrink();
         }
 
-        if (BloomHits_ * 8 < BloomLookups_) {
+        if (bloomHits < bloomLookups/8) {
             // Bloomfilter was inefficient, drop it
             bloomFilter.Shrink();
         }
+        BloomHits_ += bloomHits;
+        BloomLookups_ += bloomLookups;
 
         std::sort(joinResults.begin(), joinResults.end(), [](JoinTuplesIds a, JoinTuplesIds b)
         {

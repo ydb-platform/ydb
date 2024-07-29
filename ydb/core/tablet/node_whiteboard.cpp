@@ -3,11 +3,9 @@
 #include <util/system/info.h>
 #include <util/system/hostname.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/mon_alloc/stats.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/process_stats.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/counters.h>
@@ -58,10 +56,6 @@ public:
         }
 
         SystemStateInfo.SetStartTime(ctx.Now().MilliSeconds());
-        ProcessStats.Fill(getpid());
-        if (ProcessStats.CGroupMemLim != 0) {
-            SystemStateInfo.SetMemoryLimit(ProcessStats.CGroupMemLim);
-        }
         ctx.Send(ctx.SelfID, new TEvPrivate::TEvUpdateRuntimeStats());
 
         auto group = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils")
@@ -84,7 +78,6 @@ protected:
     ui32 MaxClockSkewPeerId;
     NKikimrWhiteboard::TSystemStateInfo SystemStateInfo;
     THolder<NTracing::ITraceCollection> TabletIntrospectionData;
-    TProcStat ProcessStats;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewWithPeerUsCounter;
     ::NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewPeerIdCounter;
@@ -943,14 +936,6 @@ protected:
         for (double d : loadAverage) {
             systemStatsUpdate->Record.AddLoadAverage(d);
         }
-        ProcessStats.Fill(getpid());
-        if (ProcessStats.AnonRss != 0) {
-            systemStatsUpdate->Record.SetMemoryUsed(ProcessStats.AnonRss);
-        }
-        if (ProcessStats.CGroupMemLim != 0) {
-            systemStatsUpdate->Record.SetMemoryLimit(ProcessStats.CGroupMemLim);
-        }
-        systemStatsUpdate->Record.SetMemoryUsedInAlloc(TAllocState::Get().AllocatedMemory);
         if (CheckedMerge(SystemStateInfo, systemStatsUpdate->Record)) {
             SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
         }

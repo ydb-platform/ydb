@@ -1192,14 +1192,6 @@ public:
         bool& finished,
         i64 freeSpace) override
     {
-        THPTimer timer;
-
-        auto reportTime = [&]() {
-            //static constexpr double SecToUsec = 1e6;
-            //double passed = timer.Passed() * SecToUsec;
-            //Send(ComputeActorId, new TEvSchedulerAccountTime(TDuration::MicroSeconds(passed)));
-        };
-        
         if (!ScanStarted) {
             BufSize = freeSpace;
             StartTableScan();
@@ -1240,7 +1232,6 @@ public:
                 if (ProcessedRowCount == Settings->GetItemsLimit()) {
                     finished = true;
                     CA_LOG_D(TStringBuilder() << " returned async data because limit reached");
-                    reportTime();
                     return bytes;
                 }
             }
@@ -1308,7 +1299,6 @@ public:
             << " has limit " << (Settings->GetItemsLimit() != 0)
             << " limit reached " << LimitReached());
 
-        reportTime();
         return bytes;
     }
 

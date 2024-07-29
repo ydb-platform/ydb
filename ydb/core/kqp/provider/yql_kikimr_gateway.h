@@ -424,6 +424,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
     ui64 DataSize = 0;
     ui64 MemorySize = 0;
     ui32 ShardsCount = 0;
+    bool StatsLoaded = false;
 
     TInstant LastAccessTime;
     TInstant LastUpdateTime;
@@ -460,6 +461,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
         , Kind(static_cast<EKikimrTableKind>(message->GetKind()))
         , RecordsCount(message->GetRecordsCount())
         , DataSize(message->GetDataSize())
+        , StatsLoaded(message->GetStatsLoaded())
         , KeyColumnNames(message->GetKeyColunmNames().begin(), message->GetKeyColunmNames().end())
 
     {
@@ -527,6 +529,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
         message->SetKind(static_cast<ui32>(Kind));
         message->SetRecordsCount(RecordsCount);
         message->SetDataSize(DataSize);
+        message->SetStatsLoaded(StatsLoaded);
         for(auto& [key, value] : Attributes) {
             message->AddAttributes()->SetKey(key);
             message->AddAttributes()->SetValue(value);

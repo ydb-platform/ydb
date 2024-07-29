@@ -218,7 +218,7 @@ void TStatisticsAggregator::Handle(TEvPrivate::TEvFastPropagateCheck::TPtr&) {
 }
 
 void TStatisticsAggregator::Handle(TEvPrivate::TEvPropagate::TPtr&) {
-    SA_LOG_D("[" << TabletID() << "] EvPropagate");
+    SA_LOG_T("[" << TabletID() << "] EvPropagate");
 
     if (EnableStatistics) {
         PropagateStatistics();
@@ -309,13 +309,14 @@ void TStatisticsAggregator::SendStatisticsToNode(TNodeId nodeId, const std::vect
 }
 
 void TStatisticsAggregator::PropagateStatistics() {
+    if (Nodes.empty() || RequestedSchemeShards.empty()) {
+        SA_LOG_T("[" << TabletID() << "] PropagateStatistics() No data");
+        return;
+    }
+
     SA_LOG_D("[" << TabletID() << "] PropagateStatistics()"
         << ", node count = " << Nodes.size()
         << ", schemeshard count = " << RequestedSchemeShards.size());
-
-    if (Nodes.empty() || RequestedSchemeShards.empty()) {
-        return;
-    }
 
     std::vector<TNodeId> nodeIds;
     nodeIds.reserve(Nodes.size());

@@ -433,8 +433,8 @@ class KikimrConfigGenerator(object):
             self.yaml_config["feature_flags"]["enable_external_data_sources"] = True
             self.yaml_config["feature_flags"]["enable_script_execution_operations"] = True
             
-        if os.getenv("YAML_CONFIG") is not None:      
-            with open("/ydb_data/" + os.getenv("YAML_CONFIG")) as fh:
+        if os.getenv("YDB_YAML_CONFIG") is not None:      
+            with open(os.path.join("/ydb_data", os.getenv("YDB_YAML_CONFIG"))) as fh:
                 self.additional_yaml_config = yaml.load(fh, Loader=yaml.FullLoader)
 
             self.yaml_config = self.merge_two_dicts(self.yaml_config, self.additional_yaml_config)

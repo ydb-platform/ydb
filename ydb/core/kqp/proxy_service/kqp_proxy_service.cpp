@@ -1576,9 +1576,10 @@ private:
             return true;
         }
 
-        if (const auto& securityObject = poolInfo->SecurityObject) {
-            const auto& userToken = ev->Get()->GetUserToken();
-            if (!userToken || !securityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *userToken)) {
+        const auto& securityObject = poolInfo->SecurityObject;
+        const auto& userToken = ev->Get()->GetUserToken();
+        if (securityObject && userToken && !userToken->GetSerializedToken().empty()) {
+            if (!securityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *userToken)) {
                 ReplyProcessError(Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Resource pool " << poolId << " not found or you don't have access permissions", requestId);
                 return false;
             }

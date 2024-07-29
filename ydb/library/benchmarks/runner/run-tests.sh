@@ -23,6 +23,7 @@ fi
 : ${ydb_path=$script_path/../../../..}
 : ${enable_spilling=--enable-spilling}
 : ${decimal=--decimal=True}
+: ${cbo=--pragma=CostBasedOptimizer=native}
 if [ -w /proc/self/oom_score_adj ]; then
     # tests sometimes run into OOM; mark ourself as preferred victim
     echo 500 > /proc/self/oom_score_adj
@@ -71,6 +72,7 @@ qsL=5spilling+llvm${syntax+-$syntax}
 ${ydb_path}/ydb/library/benchmarks/gen_queries/gen_queries \
         --output ${ql}-${datasize}-$tasks --variant ${variant} --syntax ${syntax-yql} --dataset-size $datasize \
         $xpragma \
+        $cbo \
         #
 
 [ -f ${qs}-${datasize}-$tasks/$variant/bindings.json ] ||
@@ -82,6 +84,7 @@ ${ydb_path}/ydb/library/benchmarks/gen_queries/gen_queries \
     --pragma dq.ComputeActorType="async" \
     --pragma dq.UseFinalizeByKey=true \
     --pragma dq.EnableSpillingNodes=All \
+    $cbo \
     $xpragma \
     #
 [ -e ${qX}-${datasize}-$tasks ] || ln -s ${qs}-${datasize}-$tasks ${qX}-${datasize}-$tasks
@@ -96,6 +99,7 @@ ${ydb_path}/ydb/library/benchmarks/gen_queries/gen_queries \
     --pragma dq.UseFinalizeByKey=true \
     --pragma dq.OptLLVM=ON \
     --pragma dq.EnableSpillingNodes=GraceJoin \
+    $cbo \
     $xpragma \
 #
 [ -e ${qL}-${datasize}-$tasks ] || ln -s ${qsL}-${datasize}-$tasks ${qL}-${datasize}-$tasks

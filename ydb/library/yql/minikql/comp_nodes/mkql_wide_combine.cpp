@@ -398,16 +398,6 @@ public:
         Throat = InMemoryProcessingState.Throat;
     }
 
-    bool HasAnyData() const {
-        return !SpilledBuckets.empty();
-    }
-
-    bool IsProcessingRequired() const {
-        if (InputStatus != EFetchResult::Finish) return true;
-
-        return !SpilledBuckets.empty() && SpilledBuckets.front().BucketState != TSpilledBucket::EBucketState::InMemory;
-    }
-
     EUpdateResult Update() {
         if (IsEverythingExtracted) return EUpdateResult::Finish;
 
@@ -1348,19 +1338,24 @@ public:
         const auto state = new LoadInst(valueType, statePtr, "state", block);
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
-        const auto boolFuncType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType()}, false);
         BranchInst::Create(more, block);
 
         const auto full = BasicBlock::Create(context, "full", ctx.Func);
+        const auto done = BasicBlock::Create(context, "done", ctx.Func);
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
         const auto result = PHINode::Create(statusType, 4U, "result", over);
 
         {
-            const auto test = BasicBlock::Create(context, "test", ctx.Func);
+
             const auto pull = BasicBlock::Create(context, "pull", ctx.Func);
             const auto rest = BasicBlock::Create(context, "rest", ctx.Func);
-            const auto proc = BasicBlock::Create(context, "proc", ctx.Func);
+            const auto test = BasicBlock::Create(context, "test", ctx.Func);
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
+            const auto load = BasicBlock::Create(context, "load", ctx.Func);
+
+            std::vector<PHINode*> phis(Nodes.ItemNodes.size(), nullptr);
+            auto j = 0U;
+            std::generate(phis.begin(), phis.end(), [&](){ return PHINode::Create(valueType, 2U, (TString("item_") += ToString(j++)).c_str(), test); });
 
             block = more;
 
@@ -1371,19 +1366,31 @@ public:
 
             result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
 
-            const auto updateWay = SwitchInst::Create(update, test, 3U, block);
+            const auto updateWay = SwitchInst::Create(update, more, 5U, block);
             updateWay->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::EUpdateResult::Yield)), over);
-            // TODO add exctraction code and jmp there
-            updateWay->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::EUpdateResult::ExtractRawData)), test);
-            updateWay->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::EUpdateResult::Extract)), test);
+            updateWay->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::EUpdateResult::Extract)), full);
+            updateWay->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::EUpdateResult::Finish)), done);
+            updateWay->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::EUpdateResult::ReadInput)), pull);
+            updateWay->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::EUpdateResult::ExtractRawData)), load);
 
-            block = test;
+            block = load;
 
-            const auto statusPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetStatus() }, "last", block);
-            const auto last = new LoadInst(statusType, statusPtr, "last", block);
-            const auto finish = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, last, ConstantInt::get(last->getType(), static_cast<i32>(EFetchResult::Finish)), "finish", block);
+            const auto extractorPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetThroat() }, "extractor_ptr", block);
+            const auto extractor = new LoadInst(ptrValueType, extractorPtr, "extractor", block);
 
-            BranchInst::Create(good, pull, finish, block);
+            std::vector<Value*> items(phis.size(), nullptr);
+            for (ui32 i = 0U; i < items.size(); ++i) {
+                const auto ptr = GetElementPtrInst::CreateInBounds(valueType, extractor, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("load_ptr_") += ToString(i)).c_str(), block);
+                items[i] = new LoadInst(valueType, ptr, (TString("load_") += ToString(i)).c_str(), block);
+                if (Nodes.ItemNodes[i]->GetDependencesCount() > 0U)
+                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.ItemNodes[i])->CreateSetValue(ctx, block, items[i]);
+            }
+
+            for (ui32 i = 0U; i < phis.size(); ++i) {
+                phis[i]->addIncoming(items[i], block);
+            }
+
+            BranchInst::Create(test, block);
 
             block = pull;
 
@@ -1396,26 +1403,25 @@ public:
             choise->addCase(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), rest);
 
             block = rest;
+            const auto statusPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetStatus() }, "last", block);
             new StoreInst(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), statusPtr, block);
             BranchInst::Create(more, block);
 
             block = good;
 
-            const auto processingFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::IsProcessingRequired));
-            const auto processingFuncPtr = CastInst::Create(Instruction::IntToPtr, processingFunc, PointerType::getUnqual(boolFuncType), "processing_func", block);
-            const auto processing = CallInst::Create(boolFuncType, processingFuncPtr, { stateArg }, "processing", block);
-
-            BranchInst::Create(proc, full, processing, block);
-
-            block = proc;
-
-            std::vector<Value*> items(Nodes.ItemNodes.size(), nullptr);
             for (ui32 i = 0U; i < items.size(); ++i) {
+                items[i] = getres.second[i](ctx, block);
                 if (Nodes.ItemNodes[i]->GetDependencesCount() > 0U)
-                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.ItemNodes[i])->CreateSetValue(ctx, block, items[i] = getres.second[i](ctx, block));
-                else if (Nodes.PasstroughtItems[i])
-                    items[i] = getres.second[i](ctx, block);
+                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.ItemNodes[i])->CreateSetValue(ctx, block, items[i]);
             }
+
+            for (ui32 i = 0U; i < phis.size(); ++i) {
+                phis[i]->addIncoming(items[i], block);
+            }
+
+            BranchInst::Create(test, block);
+
+            block = test;
 
             const auto tonguePtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetTongue() }, "tongue_ptr", block);
             const auto tongue = new LoadInst(ptrValueType, tonguePtr, "tongue", block);
@@ -1425,10 +1431,7 @@ public:
                 auto& key = keys[i];
                 const auto keyPtr = keyPointers[i] = GetElementPtrInst::CreateInBounds(valueType, tongue, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("key_") += ToString(i)).c_str(), block);
                 if (const auto map = Nodes.KeysOnItems[i]) {
-                    auto& it = items[*map];
-                    if (!it)
-                        it = getres.second[*map](ctx, block);
-                    key = it;
+                    key = phis[*map];
                 } else {
                     key = GetNodeValue(Nodes.KeyResultNodes[i], ctx, block);
                 }
@@ -1446,19 +1449,22 @@ public:
 
             const auto init = BasicBlock::Create(context, "init", ctx.Func);
             const auto next = BasicBlock::Create(context, "next", ctx.Func);
+            const auto save = BasicBlock::Create(context, "save", ctx.Func);
 
             const auto throatPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetThroat() }, "throat_ptr", block);
             const auto throat = new LoadInst(ptrValueType, throatPtr, "throat", block);
 
             std::vector<Value*> pointers;
-            pointers.reserve(Nodes.StateNodes.size());
-            for (ui32 i = 0U; i < Nodes.StateNodes.size(); ++i) {
+            const auto width = std::max(Nodes.StateNodes.size(), phis.size());
+            pointers.reserve(width);
+            for (ui32 i = 0U; i < width; ++i) {
                 pointers.emplace_back(GetElementPtrInst::CreateInBounds(valueType, throat, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("state_") += ToString(i)).c_str(), block));
             }
 
-            const auto way = SwitchInst::Create(taste, more, 2U, block);
+            const auto way = SwitchInst::Create(taste, more, 3U, block);
             way->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::ETasteResult::Init)), init);
             way->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::ETasteResult::Update)), next);
+            way->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::ETasteResult::ConsumeRawData)), save);
 
             block = init;
 
@@ -1468,11 +1474,9 @@ public:
 
             for (ui32 i = 0U; i < Nodes.InitResultNodes.size(); ++i) {
                 if (const auto map = Nodes.InitOnItems[i]) {
-                    auto& it = items[*map];
-                    if (!it)
-                        it = getres.second[*map](ctx, block);
-                    new StoreInst(it, pointers[i], block);
-                    ValueAddRef(Nodes.InitResultNodes[i]->GetRepresentation(), it, ctx, block);
+                    const auto item = phis[*map];
+                    new StoreInst(item, pointers[i], block);
+                    ValueAddRef(Nodes.InitResultNodes[i]->GetRepresentation(), item, ctx, block);
                 }  else if (const auto map = Nodes.InitOnKeys[i]) {
                     const auto key = keys[*map];
                     new StoreInst(key, pointers[i], block);
@@ -1505,19 +1509,15 @@ public:
             for (ui32 i = 0U; i < Nodes.UpdateResultNodes.size(); ++i) {
                 if (const auto map = Nodes.UpdateOnState[i]) {
                     if (const auto j = *map; i != j) {
-                        auto& it = stored[j];
-                        if (!it)
-                            it = new LoadInst(valueType, pointers[j], (TString("state_") += ToString(j)).c_str(), block);
+                        const auto it = stored[j];
                         new StoreInst(it, pointers[i], block);
                         if (i != *Nodes.StateOnUpdate[j])
                             ValueAddRef(Nodes.UpdateResultNodes[i]->GetRepresentation(), it, ctx, block);
                     }
                 } else if (const auto map = Nodes.UpdateOnItems[i]) {
-                    auto& it = items[*map];
-                    if (!it)
-                        it = getres.second[*map](ctx, block);
-                    new StoreInst(it, pointers[i], block);
-                    ValueAddRef(Nodes.UpdateResultNodes[i]->GetRepresentation(), it, ctx, block);
+                    const auto item = phis[*map];
+                    new StoreInst(item, pointers[i], block);
+                    ValueAddRef(Nodes.UpdateResultNodes[i]->GetRepresentation(), item, ctx, block);
                 }  else if (const auto map = Nodes.UpdateOnKeys[i]) {
                     const auto key = keys[*map];
                     new StoreInst(key, pointers[i], block);
@@ -1528,13 +1528,22 @@ public:
             }
 
             BranchInst::Create(more, block);
+
+            block = save;
+
+            for (ui32 i = 0U; i < phis.size(); ++i) {
+                const auto item = phis[i];
+                new StoreInst(item, pointers[i], block);
+                ValueAddRef(Nodes.ItemNodes[i]->GetRepresentation(), item, ctx, block);
+            }
+
+            BranchInst::Create(more, block);
         }
 
         {
             block = full;
 
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
-            const auto last = BasicBlock::Create(context, "last", ctx.Func);
 
             const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::Extract));
             const auto extractType = FunctionType::get(ptrValueType, {stateArg->getType()}, false);
@@ -1542,7 +1551,7 @@ public:
             const auto out = CallInst::Create(extractType, extractPtr, {stateArg}, "out", block);
             const auto has = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, out, ConstantPointerNull::get(ptrValueType), "has", block);
 
-            BranchInst::Create(good, last, has, block);
+            BranchInst::Create(good, more, has, block);
 
             block = good;
 
@@ -1556,17 +1565,12 @@ public:
 
             result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::One)), block);
             BranchInst::Create(over, block);
-
-            block = last;
-
-            const auto hasDataFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::HasAnyData));
-            const auto hasDataFuncPtr = CastInst::Create(Instruction::IntToPtr, hasDataFunc, PointerType::getUnqual(boolFuncType), "has_data_func", block);
-            const auto hasData = CallInst::Create(boolFuncType, hasDataFuncPtr, { stateArg }, "has_data", block);
-
-            result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), block);
-
-            BranchInst::Create(more, over, hasData, block);
         }
+
+        block = done;
+
+        result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), block);
+        BranchInst::Create(over, block);
 
         block = over;
 
@@ -1716,15 +1720,8 @@ IComputationNode* WrapWideCombinerT(TCallable& callable, const TComputationNodeF
     if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
         if constexpr (Last) {
             const auto inputItemTypes = GetWideComponents(inputType);
-            std::vector<TType *> usedInputItemTypes;
-            usedInputItemTypes.reserve(inputItemTypes.size());
-            for (size_t i = 0; i != inputItemTypes.size(); ++i) {
-                if (nodes.IsInputItemNodeUsed(i)) {
-                    usedInputItemTypes.push_back(inputItemTypes[i]);
-                }
-            }
             return new TWideLastCombinerWrapper(ctx.Mutables, wide, std::move(nodes),
-                TMultiType::Create(usedInputItemTypes.size(), usedInputItemTypes.data(), ctx.Env),
+                TMultiType::Create(inputItemTypes.size(), inputItemTypes.data(), ctx.Env),
                 std::move(keyTypes),
                 TMultiType::Create(keyAndStateItemTypes.size(),keyAndStateItemTypes.data(), ctx.Env),
                 allowSpilling

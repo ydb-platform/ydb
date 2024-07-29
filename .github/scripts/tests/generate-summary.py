@@ -250,16 +250,6 @@ def render_testlist_html(rows, fn , build_preset):
     for test in status_test[TestStatus.FAIL]:
         failed_tests_array.append(test.full_name)
 
-    history={
-        "ydb/core/kqp/ut/scheme/KqpScheme.AlterTableAddExplicitSyncVectorKMeansTreeIndex" :
-        [
-            [ "passed", "green"],
-            [ "passed","green" ],
-            [ "failed", "red"] ,
-            ["muted", "grey"],
-            ["passed","green" ]
-        ]
-    }
     history = get_test_history(failed_tests_array,last_N_runs,build_preset)
     content = env.get_template("summary.html").render(
         status_order=status_order, tests=status_test, has_any_log=has_any_log, history=history
@@ -367,7 +357,7 @@ def main():
     paths = iter(args.args)
     title_path = list(zip(paths, paths, paths))
 
-    summary = gen_summary(args.public_dir, args.public_dir_url, title_path, is_retry=bool(args.is_retry),args.build_preset)
+    summary = gen_summary(args.public_dir, args.public_dir_url, title_path, is_retry=bool(args.is_retry),build_preset=args.build_preset)
     write_summary(summary)
 
     if summary.is_failed:

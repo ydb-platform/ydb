@@ -453,7 +453,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
         , Kind(static_cast<EKikimrTableKind>(message->GetKind()))
         , RecordsCount(message->GetRecordsCount())
         , DataSize(message->GetDataSize())
-        , StatsLoaded(message->GetStatsLoaded)
+        , StatsLoaded(message->GetStatsLoaded())
         , KeyColumnNames(message->GetKeyColunmNames().begin(), message->GetKeyColunmNames().end())
 
     {

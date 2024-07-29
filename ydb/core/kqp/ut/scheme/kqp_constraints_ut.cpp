@@ -1290,8 +1290,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
-        appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
-        appConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
+        appConfig.MutableFeatureFlags()->SetEnableChangeNotNullConstraint(true);
 
         TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false).SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
         auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );

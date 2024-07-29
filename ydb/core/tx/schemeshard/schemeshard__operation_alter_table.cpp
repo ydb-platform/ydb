@@ -110,6 +110,13 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
             return nullptr;
         }
 
+        bool hasSetNotNull = col.HasIsCheckingNotNullInProgress();
+        if (hasSetNotNull && !context.SS->EnableChangeNotNullConstraint) {
+            errStr = Sprintf("Set/drop not null is not supported now.");
+            status = NKikimrScheme::StatusInvalidParameter;
+            return nullptr;
+        }
+
         if (col.GetNotNull() && !hasDefault) {
             errStr = Sprintf("Not null columns without defaults are not supported.");
             status = NKikimrScheme::StatusInvalidParameter;

@@ -2602,17 +2602,6 @@ Instruction* DIScopeAnnotator::operator()(Instruction *inst, const std::source_l
     return inst;
 }
 
-void AnnotateInstruction(const TCodegenContext& ctx, Instruction* instr) {
-    std::unique_ptr<DIBuilder> dBuilder = std::make_unique<DIBuilder>(ctx.Codegen.GetModule());
-    auto *file =  dBuilder->createFile("mkql_computation_node_codegen.cpp", "ydb/library/yql/minikql/computation");
-    auto *unit = dBuilder->createCompileUnit(dwarf::DW_LANG_C99, file, "MKQL", false, "", 0);
-    auto *subroutineType = dBuilder->createSubroutineType(dBuilder->getOrCreateTypeArray({}));
-    auto *subroutine = dBuilder->createFunction(unit, "AnnotateInstruction", StringRef(), file, 2041, subroutineType, 0, DINode::FlagPrototyped, DISubprogram::SPFlagDefinition);
-    ctx.Func->setSubprogram(subroutine);
-    instr->setDebugLoc(DILocation::get(ctx.Codegen.GetContext(), 2047, 4, subroutine));
-    dBuilder->finalize();
-}
-
 }
 }
 #endif

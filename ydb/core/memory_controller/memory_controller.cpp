@@ -142,9 +142,8 @@ private:
     void HandleWakeup(const TActorContext& ctx) noexcept {
         auto processMemoryInfo = ProcessMemoryInfoProvider->Get();
 
-        bool memTotalHardLimit = false;
-        ui64 hardLimitBytes = GetHardLimitBytes(processMemoryInfo, memTotalHardLimit);
-        // TODO: pass hard limit to node whiteboard and mem observer
+        bool hasMemTotalHardLimit = false;
+        ui64 hardLimitBytes = GetHardLimitBytes(processMemoryInfo, hasMemTotalHardLimit);
         ui64 softLimitBytes = GetSoftLimitBytes(hardLimitBytes);
         ui64 targetUtilizationBytes = GetTargetUtilizationBytes(hardLimitBytes);
 
@@ -159,7 +158,7 @@ private:
         ui64 otherConsumption = SafeDiff(processMemoryInfo.AllocatedMemory, consumersConsumption);
 
         ui64 externalConsumption = 0;
-        if (memTotalHardLimit && processMemoryInfo.AnonRss.has_value() 
+        if (hasMemTotalHardLimit && processMemoryInfo.AnonRss.has_value() 
                 && processMemoryInfo.MemTotal.has_value() && processMemoryInfo.MemAvailable.has_value()) {
             // externalConsumption + AnonRss + MemAvailable = MemTotal
             externalConsumption = SafeDiff(processMemoryInfo.MemTotal.value(),
@@ -188,25 +187,40 @@ private:
             << " AnonRss: " << processMemoryInfo.AnonRss << " CGroupLimit: " << processMemoryInfo.CGroupLimit 
             << " MemTotal: " << processMemoryInfo.MemTotal << " MemAvailable: " << processMemoryInfo.MemAvailable
             << " AllocatedMemory: " << processMemoryInfo.AllocatedMemory << " AllocatorCachesMemory: " << processMemoryInfo.AllocatorCachesMemory
-            << " HardLimitBytes: " << hardLimitBytes << " SoftLimitBytes: " << softLimitBytes << " TargetUtilizationBytes: " << targetUtilizationBytes
-            << " ConsumersConsumption: " << consumersConsumption << " OtherConsumption: " << otherConsumption<< " ExternalConsumption: " << externalConsumption
+            << " HardLimit: " << hardLimitBytes << " SoftLimit: " << softLimitBytes << " TargetUtilization: " << targetUtilizationBytes
+            << " ConsumersConsumption: " << consumersConsumption << " OtherConsumption: " << otherConsumption << " ExternalConsumption: " << externalConsumption
             << " TargetConsumersConsumption: " << targetConsumersConsumption << " ResultingConsumersConsumption: " << resultingConsumersConsumption
             << " Coefficient: " << coefficient);
+
         Counters->GetCounter("Stats/AnonRss")->Set(processMemoryInfo.AnonRss.value_or(0));
         Counters->GetCounter("Stats/CGroupLimit")->Set(processMemoryInfo.CGroupLimit.value_or(0));
         Counters->GetCounter("Stats/MemTotal")->Set(processMemoryInfo.MemTotal.value_or(0));
         Counters->GetCounter("Stats/MemAvailable")->Set(processMemoryInfo.MemAvailable.value_or(0));
         Counters->GetCounter("Stats/AllocatedMemory")->Set(processMemoryInfo.AllocatedMemory);
         Counters->GetCounter("Stats/AllocatorCachesMemory")->Set(processMemoryInfo.AllocatorCachesMemory);
-        Counters->GetCounter("Stats/HardLimitBytes")->Set(hardLimitBytes);
-        Counters->GetCounter("Stats/SoftLimitBytes")->Set(softLimitBytes);
-        Counters->GetCounter("Stats/TargetUtilizationBytes")->Set(targetUtilizationBytes);
+        Counters->GetCounter("Stats/HardLimit")->Set(hardLimitBytes);
+        Counters->GetCounter("Stats/SoftLimit")->Set(softLimitBytes);
+        Counters->GetCounter("Stats/TargetUtilization")->Set(targetUtilizationBytes);
         Counters->GetCounter("Stats/ConsumersConsumption")->Set(consumersConsumption);
-        Counters->GetCounter("Stats/ExternalConsumption")->Set(externalConsumption);
         Counters->GetCounter("Stats/OtherConsumption")->Set(otherConsumption);
+        Counters->GetCounter("Stats/ExternalConsumption")->Set(externalConsumption);
         Counters->GetCounter("Stats/TargetConsumersConsumption")->Set(targetConsumersConsumption);
         Counters->GetCounter("Stats/ResultingConsumersConsumption")->Set(resultingConsumersConsumption);
         Counters->GetCounter("Stats/Coefficient")->Set(coefficient * 1e9);
+
+        NKikimrWhiteboard::TSystemStateInfo::TMemoryStats memoryStats;
+        if (processMemoryInfo.AnonRss.has_value()) memoryStats.SetAnonRss(processMemoryInfo.AnonRss.value());
+        if (processMemoryInfo.CGroupLimit.has_value()) memoryStats.SetCGroupLimit(processMemoryInfo.CGroupLimit.value());
+        if (processMemoryInfo.MemTotal.has_value()) memoryStats.SetMemTotal(processMemoryInfo.MemTotal.value());
+        if (processMemoryInfo.MemAvailable.has_value()) memoryStats.SetMemAvailable(processMemoryInfo.MemAvailable.value());
+        memoryStats.SetAllocatedMemory(processMemoryInfo.AllocatedMemory);
+        memoryStats.SetAllocatorCachesMemory(processMemoryInfo.AllocatorCachesMemory);
+        memoryStats.SetHardLimit(hardLimitBytes);
+        memoryStats.SetSoftLimit(softLimitBytes);
+        memoryStats.SetTargetUtilization(targetUtilizationBytes);
+        memoryStats.SetConsumersConsumption(consumersConsumption);
+        memoryStats.SetOtherConsumption(otherConsumption);
+        memoryStats.SetExternalConsumption(externalConsumption);
 
         ui64 consumersLimitBytes = 0;
         for (const auto& consumer : consumers) {
@@ -217,20 +231,24 @@ private:
             consumersLimitBytes += limitBytes;
 
             LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Consumer " << consumer.Kind << " state:"
-                << " Consumption: " << consumer.Consumption << " LimitBytes: " << limitBytes
-                << " MinBytes: " << consumer.MinBytes << " MaxBytes: " << consumer.MaxBytes);
+                << " Consumption: " << consumer.Consumption << " Limit: " << limitBytes
+                << " Min: " << consumer.MinBytes << " Max: " << consumer.MaxBytes);
             auto& counters = GetConsumerCounters(consumer.Kind);
             counters.Consumption->Set(consumer.Consumption);
             counters.Reservation->Set(SafeDiff(limitBytes, consumer.Consumption));
             counters.LimitBytes->Set(limitBytes);
             counters.LimitMinBytes->Set(consumer.MinBytes);
             counters.LimitMaxBytes->Set(consumer.MaxBytes);
+            SetMemoryStats(consumer, memoryStats, limitBytes);
 
             ApplyLimit(consumer, limitBytes);
         }
 
+        Counters->GetCounter("Stats/ConsumersLimit")->Set(consumersLimitBytes);
+        memoryStats.SetConsumersLimit(consumersLimitBytes);
+
         Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), 
-            NNodeWhiteboard::TEvWhiteboard::CreateCachesConsumptionUpdateRequest(consumersConsumption, consumersLimitBytes));
+            NNodeWhiteboard::TEvWhiteboard::CreateMemoryStatsUpdateRequest(memoryStats));
 
         ctx.Schedule(Interval, new TEvents::TEvWakeup());
     }
@@ -316,10 +334,27 @@ private:
         return ConsumerCounters.emplace(consumer, TConsumerCounters{
             Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/Consumption"),
             Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/Reservation"),
-            Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/LimitBytes"),
-            Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/LimitMinBytes"),
-            Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/LimitMaxBytes"),
+            Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/Limit"),
+            Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/LimitMin"),
+            Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/LimitMax"),
         }).first->second;
+    }
+
+    void SetMemoryStats(const TConsumerState& consumer, NKikimrWhiteboard::TSystemStateInfo::TMemoryStats& stats, ui64 limitBytes) const {
+        switch (consumer.Kind) {
+            case EMemoryConsumerKind::MemTable: {
+                stats.SetMemTableConsumption(consumer.Consumption);
+                stats.SetMemTableLimit(limitBytes);
+                break;
+            }
+            case EMemoryConsumerKind::SharedCache: {
+                stats.SetSharedCacheConsumption(consumer.Consumption);
+                stats.SetSharedCacheLimit(limitBytes);
+                break;
+            }
+            default:
+                Y_ABORT("Unhandled consumer");
+        }
     }
 
     TConsumerState BuildConsumerState(const TMemoryConsumer& consumer, ui64 availableMemory) const {
@@ -404,22 +439,22 @@ private:
         return result;
     }
 
-    ui64 GetHardLimitBytes(const TProcessMemoryInfo& info, bool& memTotalHardLimit) const {
+    ui64 GetHardLimitBytes(const TProcessMemoryInfo& info, bool& hasMemTotalHardLimit) const {
         if (Config.HasHardLimitBytes()) {
             ui64 hardLimitBytes = Config.GetHardLimitBytes();
             if (info.CGroupLimit.has_value()) {
                 hardLimitBytes = Min(hardLimitBytes, info.CGroupLimit.value());
             }
-            return Config.GetHardLimitBytes();
+            return hardLimitBytes;
         }
         if (info.CGroupLimit.has_value()) {
             return info.CGroupLimit.value();
         }
         if (info.MemTotal) {
-            memTotalHardLimit = true;
+            hasMemTotalHardLimit = true;
             return info.MemTotal.value();
         }
-        return 512_MB;
+        return 512_MB; // fallback
     }
 
     ui64 GetSoftLimitBytes(ui64 hardLimitBytes) const {

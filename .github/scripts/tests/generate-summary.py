@@ -285,7 +285,7 @@ def write_summary(summary: TestSummary):
         fp.close()
 
 
-def gen_summary(public_dir, public_dir_url, paths, is_retry: bool):
+def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset):
     summary = TestSummary(is_retry=is_retry)
 
     for title, html_fn, path in paths:
@@ -367,7 +367,7 @@ def main():
     paths = iter(args.args)
     title_path = list(zip(paths, paths, paths))
 
-    summary = gen_summary(args.public_dir, args.public_dir_url, title_path, is_retry=bool(args.is_retry))
+    summary = gen_summary(args.public_dir, args.public_dir_url, title_path, is_retry=bool(args.is_retry),args.build_preset)
     write_summary(summary)
 
     if summary.is_failed:

@@ -6,6 +6,7 @@
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/split.h>
+#include <util/stream/file.h>
 #include <util/system/env.h>
 #include <util/system/mutex.h>
 #include <util/system/tempfile.h>
@@ -67,6 +68,9 @@ using TAmProcs = THashMap<std::tuple<ui32, ui32, ui32, ui32>, TAmProcDesc>;
 using TConversions = THashMap<std::pair<TString, TString>, TConversionDesc>;
 
 using TLanguages = THashMap<ui32, TLanguageDesc>;
+
+using TExtensions = TVector<TExtensionDesc>;
+using TExtensionsByName = THashMap<TString, ui32>;
 
 bool IsCompatibleTo(ui32 actualTypeId, ui32 expectedTypeId, const TTypes& types) {
     if (actualTypeId == expectedTypeId) {
@@ -1592,7 +1596,7 @@ const char* AllowedProcsRaw[] = {
 #include "used_procs.h"
 };
 
-struct TCatalog {
+struct TCatalog : public IExtensionDDLBuilder {
     TCatalog() {
         for (size_t i = 0; i < Y_ARRAY_SIZE(AllStaticTablesRaw); ++i) {
             const auto& raw = AllStaticTablesRaw[i];
@@ -1932,9 +1936,26 @@ struct TCatalog {
         }
     }
 
+    void CreateProc(const TProcDesc& desc) final {
+        TProcDesc newDesc = desc;
+        newDesc.ProcId = 16000 + Procs.size();
+        Procs[newDesc.ProcId] = newDesc;
+        ProcByName[newDesc.Name].push_back(newDesc.ProcId);
+    }
+
     static const TCatalog& Instance() {
         return *Singleton<TCatalog>();
     }
+
+    static TCatalog& MutableInstance() {
+        return *Singleton<TCatalog>();
+    }    
+
+    TMutex ExtensionsGuard;
+    bool ExtensionsInit = false;
+
+    TExtensionsByName ExtensionsByName, ExtensionsByInstallName;
+    TExtensions Extensions;
 
     TOperators Operators;
     TProcs Procs;
@@ -2035,7 +2056,9 @@ const TProcDesc& LookupProc(ui32 procId) {
 void EnumProc(std::function<void(ui32, const TProcDesc&)> f) {
     const auto& catalog = TCatalog::Instance();
     for (const auto& x : catalog.Procs) {
-        f(x.first, x.second);
+        if (catalog.ExportFile || catalog.AllowedProcs.contains(x.second.Name)) {
+            f(x.first, x.second);
+        }
     }
 }
 
@@ -3234,5 +3257,74 @@ const TTableInfo& LookupStaticTable(const TTableInfoKey& tableKey) {
     return *tablePtr;
 }
 
+bool IsExportFunctionsEnabled() {
+    const auto& catalog = TCatalog::Instance();
+    return catalog.ExportFile.Defined();
+}
+
+void RegisterExtensions(const TVector<TExtensionDesc>& extensions, bool typesOnly,
+    IExtensionDDLParser& parser, IExtensionLoader* loader) {
+    auto& catalog = TCatalog::MutableInstance();
+    with_lock (catalog.ExtensionsGuard) {
+        Y_ENSURE(!catalog.ExtensionsInit);
+        for (ui32 i = 0; i < extensions.size(); ++i) {
+            auto e = extensions[i];
+            e.TypesOnly = e.TypesOnly && typesOnly;
+            if (e.Name.empty()) {
+                throw yexception() << "Empty extension name";
+            }
+
+            if (!catalog.ExtensionsByName.insert(std::make_pair(e.Name, i + 1)).second) {
+                throw yexception() << "Duplicated extension name: " << e.Name;
+            }
+
+            if (!catalog.ExtensionsByInstallName.insert(std::make_pair(e.InstallName, i + 1)).second) {
+                throw yexception() << "Duplicated extension install name: " << e.InstallName;
+            }
+
+            catalog.Extensions.push_back(e);
+            TString sql = TFileInput(e.DDLPath).ReadAll();;
+            parser.Parse(sql, catalog);
+            if (loader && !e.TypesOnly) {
+                loader->Load(i + 1, e.Name, e.LibraryPath);
+            }
+        }
+
+        catalog.ExtensionsInit = true;
+    }
+}
+
+void EnumExtensions(std::function<void(ui32, const TExtensionDesc&)> f) {
+    const auto& catalog = TCatalog::Instance();
+    for (ui32 i = 0; i < catalog.Extensions.size(); ++i) {
+        f(i + 1, catalog.Extensions[i]);
+    }
+}
+
+const TExtensionDesc& LookupExtension(ui32 extIndex) {
+    const auto& catalog = TCatalog::Instance();
+    Y_ENSURE(extIndex > 0 && extIndex <= catalog.Extensions.size());
+    return catalog.Extensions[extIndex - 1];
+}
+
+ui32 LookupExtensionByName(const TString& name) {
+    const auto& catalog = TCatalog::Instance();
+    auto indexPtr = catalog.ExtensionsByName.FindPtr(name);
+    if (!indexPtr) {
+        throw yexception() << "Unknown extension name: " << name;
+    }
+
+    return *indexPtr;
+}
+
+ui32 LookupExtensionByInstallName(const TString& installName) {
+    const auto& catalog = TCatalog::Instance();
+    auto indexPtr = catalog.ExtensionsByInstallName.FindPtr(installName);
+    if (!indexPtr) {
+        throw yexception() << "Unknown extension install name: " << installName;
+    }
+
+    return *indexPtr;
+}
 
 }

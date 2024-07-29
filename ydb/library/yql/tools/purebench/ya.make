@@ -22,6 +22,7 @@ PEERDIR(
     library/cpp/skiff
     library/cpp/yson
     ydb/library/yql/public/purecalc/io_specs/mkql
+    ydb/library/yql/public/purecalc/io_specs/arrow
     ydb/library/yql/public/purecalc
 )
 

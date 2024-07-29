@@ -131,7 +131,7 @@ TConclusion<bool> TBuildFakeSpec::DoExecuteInplace(const std::shared_ptr<IDataSo
     for (auto&& f : IIndexInfo::ArrowSchemaSnapshot()->fields()) {
         columns.emplace_back(NArrow::TThreadSimpleArraysCache::GetConst(f->type(), NArrow::DefaultScalar(f->type()), Count));
     }
-    source->MutableStageData().AddBatch(arrow::RecordBatch::Make(TIndexInfo::ArrowSchemaSnapshot(), Count, columns));
+    source->MutableStageData().AddBatch(std::make_shared<NArrow::TGeneralContainer>(arrow::RecordBatch::Make(TIndexInfo::ArrowSchemaSnapshot(), Count, columns)));
     return true;
 }
 

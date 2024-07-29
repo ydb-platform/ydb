@@ -298,6 +298,12 @@ TEST(TFederatedClientTest, Transactions)
 
     auto transaction = federatedClient->StartTransaction(NTransactionClient::ETransactionType::Tablet).Get().Value();
 
+    // Check mock transaction doesn't work with sticky proxy address.
+    {
+        auto* derived = transaction->As<IFederatedClientTransactionMixin>();
+        ASSERT_EQ(std::nullopt, derived->TryGetStickyProxyAddress());
+    }
+
     // From `vla`.
     {
         auto result = transaction->LookupRows(data.Path, data.NameTable, data.Keys);

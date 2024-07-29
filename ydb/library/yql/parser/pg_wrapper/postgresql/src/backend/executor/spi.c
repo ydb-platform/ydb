@@ -43,7 +43,9 @@
  * when entering/exiting a SPI nesting level.
  */
 __thread uint64		SPI_processed = 0;
+uint64* ImplPtrSPI_processed() { return &SPI_processed; }
 __thread SPITupleTable *SPI_tuptable = NULL;
+SPITupleTable ** ImplPtrSPI_tuptable() { return &SPI_tuptable; }
 __thread int			SPI_result = 0;
 
 static __thread _SPI_connection *_SPI_stack = NULL;

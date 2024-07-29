@@ -4,8 +4,8 @@
         "PlanNodeType": "Query",
         "Plans": [
             {
-                "Node Type": "ResultSet_2",
-                "PlanNodeId": 22,
+                "Node Type": "ResultSet_4",
+                "PlanNodeId": 31,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,18 +14,18 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 20
+                                        "ExternalPlanNodeId": 29
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 21,
+                        "PlanNodeId": 30,
                         "Plans": [
                             {
                                 "Node Type": "UnionAll",
-                                "PlanNodeId": 20,
+                                "PlanNodeId": 29,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
@@ -41,158 +41,92 @@
                                                 "Name": "Limit"
                                             },
                                             {
-                                                "Condition": "f2 = f3",
+                                                "Condition": "zt3.f3 = f1",
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 18
+                                                        "ExternalPlanNodeId": 27
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 16
+                                                        "ExternalPlanNodeId": 25
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
                                             }
                                         ],
-                                        "PlanNodeId": 19,
+                                        "PlanNodeId": 28,
                                         "Plans": [
                                             {
-                                                "KeyColumns": [
-                                                    "f2"
-                                                ],
-                                                "Node Type": "HashShuffle",
-                                                "PlanNodeId": 18,
+                                                "Node Type": "Broadcast",
+                                                "PlanNodeId": 25,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "TablePointLookup-ConstantExpr",
-                                                        "Operators": [
-                                                            {
-                                                                "Inputs": [
-                                                                    {
-                                                                        "InternalOperatorId": 1
-                                                                    }
-                                                                ],
-                                                                "Name": "TablePointLookup",
-                                                                "ReadColumns": [
-                                                                    "f2"
-                                                                ],
-                                                                "Table": "postgres_jointest/join4.test_plan/zt2"
-                                                            },
-                                                            {
-                                                                "Inputs": [],
-                                                                "Iterator": "[{f2: 53}]",
-                                                                "Name": "Iterator"
-                                                            }
-                                                        ],
-                                                        "PlanNodeId": 17,
-                                                        "Tables": [
-                                                            "postgres_jointest/join4.test_plan/zt2"
-                                                        ]
-                                                    }
-                                                ]
-                                            },
-                                            {
-                                                "KeyColumns": [
-                                                    "zt3.f3"
-                                                ],
-                                                "Node Type": "HashShuffle",
-                                                "PlanNodeId": 16,
-                                                "PlanNodeType": "Connection",
-                                                "Plans": [
-                                                    {
-                                                        "Node Type": "LeftJoin (MapJoin)",
-                                                        "Operators": [
-                                                            {
-                                                                "Condition": "f3 = f1",
-                                                                "Inputs": [
-                                                                    {
-                                                                        "ExternalPlanNodeId": 14
-                                                                    },
-                                                                    {
-                                                                        "ExternalPlanNodeId": 12
-                                                                    }
-                                                                ],
-                                                                "Name": "LeftJoin (MapJoin)"
-                                                            }
-                                                        ],
-                                                        "PlanNodeId": 15,
+                                                        "Node Type": "Collect",
+                                                        "PlanNodeId": 24,
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "Map",
-                                                                "PlanNodeId": 14,
+                                                                "Node Type": "UnionAll",
+                                                                "PlanNodeId": 23,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "CTE Name": "precompute_0_0",
-                                                                        "Node Type": "ConstantExpr",
+                                                                        "CTE Name": "precompute_3_0",
+                                                                        "Node Type": "Filter-TablePointLookup-ConstantExpr",
                                                                         "Operators": [
                                                                             {
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "InternalOperatorId": 1
+                                                                                    }
+                                                                                ],
+                                                                                "Name": "Filter",
+                                                                                "Predicate": "Exist(item.f1)"
+                                                                            },
+                                                                            {
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "InternalOperatorId": 2
+                                                                                    }
+                                                                                ],
+                                                                                "Name": "TablePointLookup",
+                                                                                "ReadColumns": [
+                                                                                    "f1"
+                                                                                ],
+                                                                                "Table": "postgres_jointest/join4.test_plan/zt1"
+                                                                            },
+                                                                            {
                                                                                 "Inputs": [],
-                                                                                "Iterator": "precompute_0_0",
+                                                                                "Iterator": "precompute_3_0",
                                                                                 "Name": "Iterator"
                                                                             }
                                                                         ],
-                                                                        "PlanNodeId": 13
-                                                                    }
-                                                                ]
-                                                            },
-                                                            {
-                                                                "Node Type": "Broadcast",
-                                                                "PlanNodeId": 12,
-                                                                "PlanNodeType": "Connection",
-                                                                "Plans": [
-                                                                    {
-                                                                        "Node Type": "Collect",
-                                                                        "PlanNodeId": 11,
-                                                                        "Plans": [
-                                                                            {
-                                                                                "Node Type": "UnionAll",
-                                                                                "PlanNodeId": 10,
-                                                                                "PlanNodeType": "Connection",
-                                                                                "Plans": [
-                                                                                    {
-                                                                                        "CTE Name": "precompute_1_0",
-                                                                                        "Node Type": "Filter-TablePointLookup-ConstantExpr",
-                                                                                        "Operators": [
-                                                                                            {
-                                                                                                "Inputs": [
-                                                                                                    {
-                                                                                                        "InternalOperatorId": 1
-                                                                                                    }
-                                                                                                ],
-                                                                                                "Name": "Filter",
-                                                                                                "Predicate": "Exist(item.f1)"
-                                                                                            },
-                                                                                            {
-                                                                                                "Inputs": [
-                                                                                                    {
-                                                                                                        "InternalOperatorId": 2
-                                                                                                    }
-                                                                                                ],
-                                                                                                "Name": "TablePointLookup",
-                                                                                                "ReadColumns": [
-                                                                                                    "f1"
-                                                                                                ],
-                                                                                                "Table": "postgres_jointest/join4.test_plan/zt1"
-                                                                                            },
-                                                                                            {
-                                                                                                "Inputs": [],
-                                                                                                "Iterator": "precompute_1_0",
-                                                                                                "Name": "Iterator"
-                                                                                            }
-                                                                                        ],
-                                                                                        "PlanNodeId": 9,
-                                                                                        "Tables": [
-                                                                                            "postgres_jointest/join4.test_plan/zt1"
-                                                                                        ]
-                                                                                    }
-                                                                                ]
-                                                                            }
+                                                                        "PlanNodeId": 22,
+                                                                        "Tables": [
+                                                                            "postgres_jointest/join4.test_plan/zt1"
                                                                         ]
                                                                     }
                                                                 ]
                                                             }
                                                         ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "Node Type": "Map",
+                                                "PlanNodeId": 27,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "CTE Name": "precompute_2_0",
+                                                        "Node Type": "ConstantExpr",
+                                                        "Operators": [
+                                                            {
+                                                                "Inputs": [],
+                                                                "Iterator": "precompute_2_0",
+                                                                "Name": "Iterator"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 26
                                                     }
                                                 ]
                                             }
@@ -205,9 +139,147 @@
                 ]
             },
             {
+                "Node Type": "Precompute_3",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 20,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "CTE Name": "precompute_2_0",
+                        "Node Type": "Aggregate",
+                        "Operators": [
+                            {
+                                "Input": "precompute_2_0",
+                                "Inputs": [],
+                                "Name": "PartitionByKey"
+                            }
+                        ],
+                        "PlanNodeId": 19
+                    }
+                ],
+                "Subplan Name": "CTE precompute_3_0"
+            },
+            {
+                "Node Type": "Precompute_2",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 17,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Collect",
+                        "PlanNodeId": 16,
+                        "Plans": [
+                            {
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 15,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "LeftJoin (MapJoin)",
+                                        "Operators": [
+                                            {
+                                                "Condition": "f2 = f3",
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 13
+                                                    },
+                                                    {
+                                                        "ExternalPlanNodeId": 11
+                                                    }
+                                                ],
+                                                "Name": "LeftJoin (MapJoin)"
+                                            }
+                                        ],
+                                        "PlanNodeId": 14,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "Broadcast",
+                                                "PlanNodeId": 11,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "Collect",
+                                                        "PlanNodeId": 10,
+                                                        "Plans": [
+                                                            {
+                                                                "Node Type": "UnionAll",
+                                                                "PlanNodeId": 9,
+                                                                "PlanNodeType": "Connection",
+                                                                "Plans": [
+                                                                    {
+                                                                        "CTE Name": "precompute_1_0",
+                                                                        "Node Type": "Filter-TablePointLookup-ConstantExpr",
+                                                                        "Operators": [
+                                                                            {
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "InternalOperatorId": 1
+                                                                                    }
+                                                                                ],
+                                                                                "Name": "Filter",
+                                                                                "Predicate": "Exist(item.f3)"
+                                                                            },
+                                                                            {
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "InternalOperatorId": 2
+                                                                                    }
+                                                                                ],
+                                                                                "Name": "TablePointLookup",
+                                                                                "ReadColumns": [
+                                                                                    "f3"
+                                                                                ],
+                                                                                "Table": "postgres_jointest/join4.test_plan/zt3"
+                                                                            },
+                                                                            {
+                                                                                "Inputs": [],
+                                                                                "Iterator": "precompute_1_0",
+                                                                                "Name": "Iterator"
+                                                                            }
+                                                                        ],
+                                                                        "PlanNodeId": 8,
+                                                                        "Tables": [
+                                                                            "postgres_jointest/join4.test_plan/zt3"
+                                                                        ]
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "Node Type": "Map",
+                                                "PlanNodeId": 13,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "CTE Name": "precompute_0_0",
+                                                        "Node Type": "ConstantExpr",
+                                                        "Operators": [
+                                                            {
+                                                                "Inputs": [],
+                                                                "Iterator": "precompute_0_0",
+                                                                "Name": "Iterator"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 12
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE precompute_2_0"
+            },
+            {
                 "Node Type": "Precompute_1",
                 "Parent Relationship": "InitPlan",
-                "PlanNodeId": 7,
+                "PlanNodeId": 6,
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
@@ -220,7 +292,7 @@
                                 "Name": "PartitionByKey"
                             }
                         ],
-                        "PlanNodeId": 6
+                        "PlanNodeId": 5
                     }
                 ],
                 "Subplan Name": "CTE precompute_1_0"
@@ -228,39 +300,32 @@
             {
                 "Node Type": "Precompute_0",
                 "Parent Relationship": "InitPlan",
-                "PlanNodeId": 4,
+                "PlanNodeId": 3,
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
                         "Node Type": "Collect",
-                        "PlanNodeId": 3,
+                        "PlanNodeId": 2,
                         "Plans": [
                             {
-                                "Node Type": "UnionAll",
-                                "PlanNodeId": 2,
-                                "PlanNodeType": "Connection",
-                                "Plans": [
+                                "Node Type": "TablePointLookup",
+                                "Operators": [
                                     {
-                                        "Node Type": "TableFullScan",
-                                        "Operators": [
-                                            {
-                                                "Inputs": [],
-                                                "Name": "TableFullScan",
-                                                "ReadColumns": [
-                                                    "f3"
-                                                ],
-                                                "ReadRanges": [
-                                                    "f3 (-\u221e, +\u221e)"
-                                                ],
-                                                "Scan": "Parallel",
-                                                "Table": "postgres_jointest/join4.test_plan/zt3"
-                                            }
+                                        "Inputs": [],
+                                        "Name": "TablePointLookup",
+                                        "ReadColumns": [
+                                            "f2"
                                         ],
-                                        "PlanNodeId": 1,
-                                        "Tables": [
-                                            "postgres_jointest/join4.test_plan/zt3"
-                                        ]
+                                        "ReadRange": [
+                                            "f2 (53)"
+                                        ],
+                                        "Scan": "Parallel",
+                                        "Table": "postgres_jointest/join4.test_plan/zt2"
                                     }
+                                ],
+                                "PlanNodeId": 1,
+                                "Tables": [
+                                    "postgres_jointest/join4.test_plan/zt2"
                                 ]
                             }
                         ]
@@ -293,6 +358,9 @@
                     "columns": [
                         "f2"
                     ],
+                    "lookup_by": [
+                        "f2 (53)"
+                    ],
                     "type": "Lookup"
                 }
             ]
@@ -304,10 +372,7 @@
                     "columns": [
                         "f3"
                     ],
-                    "scan_by": [
-                        "f3 (-\u221e, +\u221e)"
-                    ],
-                    "type": "FullScan"
+                    "type": "Lookup"
                 }
             ]
         }

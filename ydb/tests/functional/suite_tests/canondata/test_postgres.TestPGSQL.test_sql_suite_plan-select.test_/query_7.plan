@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet",
-                "PlanNodeId": 4,
+                "PlanNodeId": 5,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,51 +14,59 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 2
+                                        "ExternalPlanNodeId": 3
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 3,
+                        "PlanNodeId": 4,
                         "Plans": [
                             {
                                 "Node Type": "Merge",
-                                "PlanNodeId": 2,
+                                "PlanNodeId": 3,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-TableRangeScan",
+                                        "Node Type": "TopSort",
                                         "Operators": [
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 1
+                                                        "ExternalPlanNodeId": 1
                                                     }
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
                                                 "TopSortBy": ""
-                                            },
-                                            {
-                                                "Inputs": [],
-                                                "Name": "TableRangeScan",
-                                                "ReadColumns": [
-                                                    "string4",
-                                                    "unique1"
-                                                ],
-                                                "ReadRange": [
-                                                    "unique1 (null, 20)",
-                                                    "unique2 (-\u221e, +\u221e)"
-                                                ],
-                                                "Scan": "Parallel",
-                                                "Table": "postgres_select.test_plan/onek"
                                             }
                                         ],
-                                        "PlanNodeId": 1,
-                                        "Tables": [
-                                            "postgres_select.test_plan/onek"
+                                        "PlanNodeId": 2,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "TableRangeScan",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [],
+                                                        "Name": "TableRangeScan",
+                                                        "ReadColumns": [
+                                                            "string4",
+                                                            "unique1"
+                                                        ],
+                                                        "ReadRange": [
+                                                            "unique1 (null, 20)",
+                                                            "unique2 (-\u221e, +\u221e)"
+                                                        ],
+                                                        "Scan": "Parallel",
+                                                        "Table": "postgres_select.test_plan/onek"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 1,
+                                                "Tables": [
+                                                    "postgres_select.test_plan/onek"
+                                                ]
+                                            }
                                         ]
                                     }
                                 ],

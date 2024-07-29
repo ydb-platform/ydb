@@ -624,5 +624,7 @@ ISubOperation::TPtr CreateDropResourcePool(TOperationId id, TTxState::ETxState s
 // returns Reject in case of error, nullptr otherwise
 ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& result, const TOperationId& id, const TPath& table);
 
+TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
+
 }
 }

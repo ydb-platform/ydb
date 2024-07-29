@@ -4,7 +4,7 @@ from ydb.tests.library.common import yatest_common
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.oss.ydb_sdk_import import ydb
 
-from hamcrest import assert_that, is_, is_not, contains_inanyorder, has_item, has_items
+from hamcrest import assert_that, is_, is_not, contains_inanyorder, has_items
 import os
 import logging
 import pytest
@@ -192,12 +192,12 @@ class BaseTestBackupInFiles(object):
             if check_data:
                 assert_that(
                     os.listdir(backup_files_dir + "/" + _dir),
-                    contains_inanyorder("data_00.csv", "scheme.pb")
+                    contains_inanyorder("data_00.csv", "scheme.pb", "permissions.pb")
                 )
             else:
                 assert_that(
                     os.listdir(backup_files_dir + "/" + _dir),
-                    has_item("scheme.pb")
+                    has_items("scheme.pb", "permissions.pb")
                 )
 
 

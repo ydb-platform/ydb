@@ -262,7 +262,7 @@ private:
         THashSet<TString> RequestedAddresses_;
         THashSet<TString> RequestingAddresses_;
 
-        constexpr static int MaxDiscoveryErrorsToKeep = 100;
+        static constexpr int MaxDiscoveryErrorsToKeep = 100;
         std::deque<TError> PeerDiscoveryErrors_;
 
         void DoRun()

@@ -502,6 +502,7 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     SetupLogLevelFromTestParam(NKikimrServices::KQP_TASKS_RUNNER);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_EXECUTER);
     SetupLogLevelFromTestParam(NKikimrServices::TX_PROXY_SCHEME_CACHE);
+    SetupLogLevelFromTestParam(NKikimrServices::TX_PROXY);
     SetupLogLevelFromTestParam(NKikimrServices::SCHEME_BOARD_REPLICA);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_WORKER);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_SESSION);

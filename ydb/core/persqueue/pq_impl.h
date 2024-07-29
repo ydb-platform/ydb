@@ -503,6 +503,8 @@ private:
     bool CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& operation,
                                const TWriteId& writeId) const;
     bool CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBody) const;
+
+    void MoveTopTxToCalculating(TDistributedTransaction& tx, const TActorContext& ctx);
 };
 
 

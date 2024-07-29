@@ -35,9 +35,10 @@ class TestCounter:
 
     def on_test_start(self):
         self.number_tests += 1
-        assert self.number_tests <= self.tests_count_limit, \
-            f"{self.error_string} exceeded limit {self.number_tests} vs {self.tests_count_limit}, " \
+        assert self.number_tests <= self.tests_count_limit, (
+            f"{self.error_string} exceeded limit {self.number_tests} vs {self.tests_count_limit}, "
             "this may lead timeouts on CI, please split this file"
+        )
 
 
 @pytest.fixture(scope="module")
@@ -104,7 +105,9 @@ def kikimr_starts_counter():
 
 
 @pytest.fixture(scope="module")
-def kikimr_yqv1(kikimr_params: pytest.FixtureRequest, s3: S3, kikimr_settings, mvp_external_ydb_endpoint, kikimr_starts_counter):
+def kikimr_yqv1(
+    kikimr_params: pytest.FixtureRequest, s3: S3, kikimr_settings, mvp_external_ydb_endpoint, kikimr_starts_counter
+):
     kikimr_starts_counter.on_test_start()
     kikimr_extensions = get_kikimr_extensions(s3, YQV1_VERSION_NAME, kikimr_settings, mvp_external_ydb_endpoint)
     with start_kikimr(kikimr_params, kikimr_extensions) as kikimr:
@@ -112,7 +115,9 @@ def kikimr_yqv1(kikimr_params: pytest.FixtureRequest, s3: S3, kikimr_settings, m
 
 
 @pytest.fixture(scope="module")
-def kikimr_yqv2(kikimr_params: pytest.FixtureRequest, s3: S3, kikimr_settings, mvp_external_ydb_endpoint, kikimr_starts_counter):
+def kikimr_yqv2(
+    kikimr_params: pytest.FixtureRequest, s3: S3, kikimr_settings, mvp_external_ydb_endpoint, kikimr_starts_counter
+):
     kikimr_starts_counter.on_test_start()
     kikimr_extensions = get_kikimr_extensions(s3, YQV2_VERSION_NAME, kikimr_settings, mvp_external_ydb_endpoint)
     with start_kikimr(kikimr_params, kikimr_extensions) as kikimr:

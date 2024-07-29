@@ -185,13 +185,13 @@ void TMergePartialStream::DrainCurrentPosition(TRecordBatchBuilder* builder, std
     SortHeap.CleanFinished();
 }
 
-std::vector<std::shared_ptr<arrow::RecordBatch>> TMergePartialStream::DrainAllParts(const std::map<TSortableBatchPosition, bool>& positions,
+std::vector<std::shared_ptr<arrow::RecordBatch>> TMergePartialStream::DrainAllParts(const TIntervalPositions& positions,
     const std::vector<std::shared_ptr<arrow::Field>>& resultFields)
 {
     std::vector<std::shared_ptr<arrow::RecordBatch>> result;
     for (auto&& i : positions) {
         TRecordBatchBuilder indexesBuilder(resultFields);
-        DrainCurrentTo(indexesBuilder, i.first, i.second);
+        DrainCurrentTo(indexesBuilder, i.GetPosition(), i.IsIncludedToLeftInterval());
         result.emplace_back(indexesBuilder.Finalize());
         if (result.back()->num_rows() == 0) {
             result.pop_back();

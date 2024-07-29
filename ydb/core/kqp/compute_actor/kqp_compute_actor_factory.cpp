@@ -12,75 +12,71 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
     TMemoryQuotaManager(std::shared_ptr<NRm::IKqpResourceManager> resourceManager
         , NRm::EKqpMemoryPool memoryPool
         , std::shared_ptr<IKqpNodeState> state
-        , ui64 txId
-        , ui64 taskId
+        , TIntrusivePtr<NRm::TTxState> tx
+        , TIntrusivePtr<NRm::TTaskState> task
         , ui64 limit
         , ui64 reasonableSpillingTreshold)
     : NYql::NDq::TGuaranteeQuotaManager(limit, limit)
     , ResourceManager(std::move(resourceManager))
     , MemoryPool(memoryPool)
     , State(std::move(state))
-    , TxId(txId)
-    , TaskId(taskId)
+    , Tx(std::move(tx))
+    , Task(std::move(task))
     , ReasonableSpillingTreshold(reasonableSpillingTreshold)
     {
     }
 
     ~TMemoryQuotaManager() override {
         if (State) {
-            State->OnTaskTerminate(TxId, TaskId, Success);
+            State->OnTaskTerminate(Tx->TxId, Task->TaskId, Success);
         }
 
-        ResourceManager->FreeResources(TxId, TaskId);
+        ResourceManager->FreeResources(Tx, Task);
     }
 
     bool AllocateExtraQuota(ui64 extraSize) override {
-        auto result = ResourceManager->AllocateResources(TxId, TaskId,
+        auto result = ResourceManager->AllocateResources(Tx, Task,
             NRm::TKqpResourcesRequest{.MemoryPool = MemoryPool, .Memory = extraSize});
 
         if (!result) {
             AFL_WARN(NKikimrServices::KQP_COMPUTE)
                 ("problem", "cannot_allocate_memory")
-                ("tx_id", TxId)
-                ("task_id", TaskId)
+                ("tx_id", Tx->TxId)
+                ("task_id", Task->TaskId)
                 ("memory", extraSize);
 
             return false;
         }
 
-        TotalQueryAllocationsSize = result.TotalAllocatedQueryMemory;
-
         return true;
     }
 
     void FreeExtraQuota(ui64 extraSize) override {
-        ResourceManager->FreeResources(TxId, TaskId,
-            NRm::TKqpResourcesRequest{.MemoryPool = MemoryPool, .Memory = extraSize}
-        );
+        NRm::TKqpResourcesRequest request = NRm::TKqpResourcesRequest{.MemoryPool = MemoryPool, .Memory = extraSize};
+        ResourceManager->FreeResources(Tx, Task, Task->FitRequest(request));
     }
 
     bool IsReasonableToUseSpilling() const override {
-        return TotalQueryAllocationsSize >= ReasonableSpillingTreshold;
+        return Tx->GetExtraMemoryAllocatedSize() >= ReasonableSpillingTreshold;
     }
 
     TString MemoryConsumptionDetails() const override {
-        return ResourceManager->GetTxResourcesUsageDebugInfo(TxId);
+        return Tx->ToString();
     }
 
     void TerminateHandler(bool success, const NYql::TIssues& issues) {
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)
             ("problem", "finish_compute_actor")
-            ("tx_id", TxId)("task_id", TaskId)("success", success)("message", issues.ToOneLineString());
+            ("tx_id", Tx->TxId)("task_id", Task->TaskId)("success", success)("message", issues.ToOneLineString());
         Success = success;
     }
 
     std::shared_ptr<NRm::IKqpResourceManager> ResourceManager;
     NRm::EKqpMemoryPool MemoryPool;
     std::shared_ptr<IKqpNodeState> State;
-    ui64 TxId;
-    ui64 TaskId;
+    TIntrusivePtr<NRm::TTxState> Tx;
+    TIntrusivePtr<NRm::TTaskState> Task;
     bool Success = true;
-    ui64 TotalQueryAllocationsSize = 0;
     ui64 ReasonableSpillingTreshold = 0;
 };
 
@@ -126,8 +122,10 @@ public:
         resourcesRequest.ExecutionUnits = 1;
         resourcesRequest.Memory =  memoryLimits.MkqlLightProgramMemoryLimit;
 
+        TIntrusivePtr<NRm::TTaskState> task = MakeIntrusive<NRm::TTaskState>(args.Task->GetId(), args.TxInfo->CreatedAt);
+
         auto rmResult = ResourceManager_->AllocateResources(
-            args.TxId, args.Task->GetId(), resourcesRequest);
+            args.TxInfo, task, resourcesRequest);
 
         if (!rmResult) {
             return NRm::TKqpRMAllocateResult{rmResult};
@@ -158,8 +156,8 @@ public:
             ResourceManager_,
             args.MemoryPool,
             std::move(args.State),
-            args.TxId,
-            args.Task->GetId(),
+            std::move(args.TxInfo),
+            std::move(task),
             limit,
             ReasonableSpillingTreshold.load());
 
@@ -167,6 +165,10 @@ public:
         runtimeSettings.ExtraMemoryAllocationPool = args.MemoryPool;
         runtimeSettings.UseSpilling = args.WithSpilling;
         runtimeSettings.StatsMode = args.StatsMode;
+
+        if (runtimeSettings.UseSpilling) {
+            args.Task->SetEnableSpilling(runtimeSettings.UseSpilling);
+        }
 
         if (args.Deadline) {
             runtimeSettings.Timeout = args.Deadline - TAppData::TimeProvider->Now();

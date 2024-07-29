@@ -1598,6 +1598,14 @@ public:
                                 add_index->mutable_global_index();
                             } else if (type == "asyncGlobal") {
                                 add_index->mutable_global_async_index();
+                            } else if (type == "globalVectorKmeansTree") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableVectorIndex()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        TStringBuilder() << "Vector index support is disabled"));
+                                    return SyncError();
+                                }
+
+                                add_index->mutable_global_vector_kmeans_tree_index();
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                     TStringBuilder() << "Unknown index type: " << type));
@@ -1629,22 +1637,39 @@ public:
                                     return SyncError();
                                 }
                             }
-                        } else {
-                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
-                                TStringBuilder() << "Unknown add index setting: " << name));
+                        } else if (name == "indexSettings") {
+                            YQL_ENSURE(add_index->type_case() == Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex);
+                            auto& protoVectorSettings = *add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
+                            auto indexSettings = columnTuple.Item(1).Cast<TCoAtomList>();
+                            YQL_ENSURE(indexSettings.Maybe<TCoNameValueTupleList>());
+                            for (const auto& vectorSetting : indexSettings.Cast<TCoNameValueTupleList>()) {
+                                YQL_ENSURE(vectorSetting.Value().Maybe<TCoAtom>());
+                                if (vectorSetting.Name().Value() == "distance") {
+                                    protoVectorSettings.set_distance(VectorIndexSettingsParseDistance(vectorSetting.Value().Cast<TCoAtom>().StringValue()));
+                                } else if (vectorSetting.Name().Value() == "similarity") {
+                                    protoVectorSettings.set_similarity(VectorIndexSettingsParseSimilarity(vectorSetting.Value().Cast<TCoAtom>().StringValue()));
+                                } else if (vectorSetting.Name().Value() == "vector_type") {
+                                    protoVectorSettings.set_vector_type(VectorIndexSettingsParseVectorType(vectorSetting.Value().Cast<TCoAtom>().StringValue()));
+                                } else if (vectorSetting.Name().Value() == "vector_dimension") {
+                                    auto parseInt = [] (const TString vectorDimensionStr) {
+                                        ui32 vectorDimension;
+                                        YQL_ENSURE(TryFromString(vectorDimensionStr, vectorDimension), "Wrong vector_dimension: " << vectorDimensionStr);
+                                        return vectorDimension;
+                                    };
+                                    protoVectorSettings.set_vector_dimension(parseInt(vectorSetting.Value().Cast<TCoAtom>().StringValue()));
+                                } else {
+                                    YQL_ENSURE(false, "Wrong vector setting name: " << vectorSetting.Name().Value());
+                                }
+                            }
+                        }
+                        else {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() << "Unknown add vector index setting: " << name));
                             return SyncError();
                         }
                     }
-                    switch (add_index->type_case()) {
-                        case Ydb::Table::TableIndex::kGlobalIndex:
-                            *add_index->mutable_global_index() = Ydb::Table::GlobalIndex();
-                            break;
-                        case Ydb::Table::TableIndex::kGlobalAsyncIndex:
-                            *add_index->mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex();
-                            break;
-                        default:
-                            YQL_ENSURE(false, "Unknown index type: " << (ui32)add_index->type_case());
-                    }
+                    YQL_ENSURE(add_index->name());
+                    YQL_ENSURE(add_index->type_case() != Ydb::Table::TableIndex::TYPE_NOT_SET);
+                    YQL_ENSURE(add_index->index_columns_size());
                 } else if (name == "alterIndex") {
                     if (maybeAlter.Cast().Actions().Size() > 1) {
                         ctx.AddError(
@@ -1658,9 +1683,25 @@ public:
                     for (const auto& indexSetting : listNode) {
                         auto settingName = indexSetting.Name().Value();
                         if (settingName == "indexName") {
-                            auto indexName = indexSetting.Value().Cast<TCoAtom>().StringValue();
-                            auto indexTablePath = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(table.Metadata->Name, indexName);
-                            alterTableRequest.set_path(std::move(indexTablePath));
+                            const auto indexName = indexSetting.Value().Cast<TCoAtom>().StringValue();
+                            const auto indexIter = std::find_if(table.Metadata->Indexes.begin(), table.Metadata->Indexes.end(), [&indexName] (const auto& index) {
+                                return index.Name == indexName;
+                            });
+                            if (indexIter == table.Metadata->Indexes.end()) {
+                                ctx.AddError(
+                                    YqlIssue(ctx.GetPosition(indexSetting.Name().Pos()),
+                                        TIssuesIds::KIKIMR_SCHEME_ERROR,
+                                        TStringBuilder() << "Unknown index name: " << indexName));                                
+                                return SyncError();
+                            }                            
+                            auto indexTablePaths = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(table.Metadata->Name, indexIter->Type, indexName);
+                            if (indexTablePaths.size() != 1) {
+                                ctx.AddError(
+                                    TIssue(ctx.GetPosition(indexSetting.Name().Pos()),
+                                        TStringBuilder() << "Only index with one impl table is supported"));
+                                return SyncError();
+                            }
+                            alterTableRequest.set_path(std::move(indexTablePaths[0]));
                         } else if (settingName == "tableSettings") {
                             auto tableSettings = indexSetting.Value().Cast<TCoNameValueTupleList>();
                             for (const auto& tableSetting : tableSettings) {

@@ -347,6 +347,52 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         });
     }
 
+    Y_UNIT_TEST(AlterReplicatedIndexTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(CreateIndexedTableRequest(++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "indexed" Type: "Uint64" }
+              KeyColumnNames: ["key"]
+              ReplicationConfig {
+                Mode: REPLICATION_MODE_READ_ONLY
+              }
+            }
+            IndexDescription {
+              Name: "Index"
+              KeyColumnNames: ["indexed"]
+              IndexImplTableDescriptions: [ {
+                ReplicationConfig {
+                  Mode: REPLICATION_MODE_READ_ONLY
+                }
+              } ]
+            }
+        )")));
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Index/indexImplTable"), {
+            NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY),
+        });
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(AlterTableRequest(++txId, "/MyRoot/Table/Index", R"(
+            Name: "indexImplTable"
+            ReplicationConfig {
+              Mode: REPLICATION_MODE_NONE
+            }
+        )")));
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Index/indexImplTable"), {
+            NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE),
+        });
+    }
+
     Y_UNIT_TEST(CopyReplicatedTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

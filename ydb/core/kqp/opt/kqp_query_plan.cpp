@@ -592,9 +592,7 @@ private:
                 }
 
                 if (auto literal = key.Maybe<TCoUuid>()) {
-                    TStringStream out;
-                    NUuid::UuidBytesToString(literal.Cast().Literal().Value().Data(), out);
-                    return out.Str();
+                    return NUuid::UuidBytesToString(literal.Cast().Literal().StringValue());
                 }
 
                 if (auto literal = key.Maybe<TCoDataCtor>()) {
@@ -2553,6 +2551,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                     stats["UseLlvm"] = "undefined";
                 }
 
+                stats["PhysicalStageId"] = (*stat)->GetStageId();
                 stats["Tasks"] = (*stat)->GetTotalTasksCount();
 
                 stats["StageDurationUs"] = (*stat)->GetStageDurationUs();

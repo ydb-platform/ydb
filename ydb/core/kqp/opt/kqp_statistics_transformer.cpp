@@ -44,6 +44,10 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
         Y_ENSURE(false, "Invalid node type for InferStatisticsForReadTable");
     }
 
+    if (!inputStats) {
+        return;
+    }
+
     auto keyColumns = inputStats->KeyColumns;
     if (auto indexRead = inputNode.Maybe<TKqlReadTableIndex>()) {
         const auto& tableData = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, indexRead.Cast().Table().Path().Value());
@@ -93,6 +97,10 @@ void InferStatisticsForKqpTable(const TExprNode::TPtr& input, TTypeAnnotationCon
     auto path = readTable.Path();
 
     const auto& tableData = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, path.Value());
+    if (!tableData.Metadata->StatsLoaded && !kqpCtx.Config->OverrideStatistics.Get()) {
+        return;
+    }
+
     double nRows = tableData.Metadata->RecordsCount;
     double byteSize = tableData.Metadata->DataSize;
     int nAttrs = tableData.Metadata->Columns.size();
@@ -128,6 +136,9 @@ void InferStatisticsForSteamLookup(const TExprNode::TPtr& input, TTypeAnnotation
 
     int nAttrs = streamLookup.Columns().Size();
     auto inputStats = typeCtx->GetStats(streamLookup.Table().Raw());
+    if (!inputStats) {
+        return;
+    }
     auto byteSize = inputStats->ByteSize * (nAttrs / (double) inputStats->Ncols);
 
     typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(
@@ -155,6 +166,9 @@ void InferStatisticsForLookupTable(const TExprNode::TPtr& input, TTypeAnnotation
     double byteSize = 0;
 
     auto inputStats = typeCtx->GetStats(lookupTable.Table().Raw());
+    if (!inputStats) {
+        return;
+    }
 
     if (lookupTable.LookupKeys().Maybe<TCoIterator>()) {
         if (inputStats) {
@@ -316,6 +330,10 @@ void InferStatisticsForDqSourceWrap(const TExprNode::TPtr& input, TTypeAnnotatio
                         }
                     }
                     if (stats->ByteSize != 0.0) {
+                        if (stats->Ncols) {
+                            auto n = wrapBase.Cast().RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>()->GetSize();
+                            stats->ByteSize = stats->ByteSize * n / stats->Ncols;
+                        }
                         YQL_CLOG(TRACE, CoreDq) << "Infer statistics for s3 data source " << path;
                         typeCtx->SetStats(input.Get(), stats);
                         typeCtx->SetStats(s3DataSource.Raw(), stats);

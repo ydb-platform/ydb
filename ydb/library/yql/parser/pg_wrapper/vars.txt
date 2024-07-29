@@ -523,6 +523,8 @@ Unix_socket_group
 Unix_socket_permissions
 UsableBytesInSegment
 UseSemiNewlineNewline
+UsedShmemSegAddr
+UsedShmemSegID
 Utf8ToServerConvProc
 VacuumActiveNWorkers
 VacuumBufferUsageLimit
@@ -663,6 +665,7 @@ baseTempCreationPending
 base_yyparse.yyloc_default
 base_yyparse.yyval_default
 beforeConstraints
+before_shmem_exit_index
 before_shmem_exit_list
 begininsert_called
 bgwriter_flush_after
@@ -982,6 +985,7 @@ lo_index_r
 localBackendStatusTable
 localNumBackends
 local_map
+local_my_wait_event_info
 local_preload_libraries_string
 locale_messages
 locale_monetary
@@ -1078,6 +1082,7 @@ myTempNamespaceSubID
 myTempToastNamespace
 my_bio_methods
 my_exec_path
+my_wait_event_info
 nCurConstraints
 nDeadlockDetails
 nParallelCurrentXids
@@ -1126,7 +1131,9 @@ oldrs_initialized
 on_commit_launcher_wakeup
 on_commit_wakeup_workers_subids
 on_commits
+on_proc_exit_index
 on_proc_exit_list
+on_shmem_exit_index
 on_shmem_exit_list
 one_minus_cos_60
 opCtx

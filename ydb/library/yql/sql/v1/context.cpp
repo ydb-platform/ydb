@@ -63,6 +63,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"UnorderedResult", &TContext::UnorderedResult},
     {"CompactNamedExprs", &TContext::CompactNamedExprs},
     {"ValidateUnusedExprs", &TContext::ValidateUnusedExprs},
+    {"AnsiImplicitCrossJoin", &TContext::AnsiImplicitCrossJoin},
 };
 
 typedef TMaybe<bool> TContext::*TPragmaMaybeField;

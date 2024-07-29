@@ -36,6 +36,8 @@ struct TOrderedByIdTableDescriptor
         const int UnrecognizedSpec;
         const int FullSpec;
         const int RuntimeParameters;
+        const int SchedulingAttributesPerPoolTree;
+        // COMPAT(omgronny)
         const int SlotIndexPerPoolTree;
         const int TaskNames;
         const int ExperimentAssignments;

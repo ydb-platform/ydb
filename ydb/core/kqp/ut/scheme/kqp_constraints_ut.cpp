@@ -1269,21 +1269,21 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             TValue(int value) : _value(value) {}
             TValue() : _isNull(true) {}
 
-            int GetValue() {
+            int GetValue() const {
                 assert(!_isNull);
                 return _value;
             }
 
-            bool IsNull() {
+            bool IsNull() const {
                 return _isNull;
             }
 
-            std::string ToString() {
+            TString ToString() const {
                 if (IsNull()) {
                     return "NULL";
                 }
 
-                return std::to_string(GetValue());
+                return TString(std::to_string(GetValue()));
             }
         };
 

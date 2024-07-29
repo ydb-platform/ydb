@@ -14,8 +14,9 @@ namespace NViewer {
 
 using namespace NActors;
 
-class TJsonHiveInfo : public TViewerPipeClient<TJsonHiveInfo> {
-    using TBase = TViewerPipeClient<TJsonHiveInfo>;
+class TJsonHiveInfo : public TViewerPipeClient {
+    using TThis = TJsonHiveInfo;
+    using TBase = TViewerPipeClient;
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
     TAutoPtr<TEvHive::TEvResponseHiveInfo> HiveInfo;
@@ -24,16 +25,12 @@ class TJsonHiveInfo : public TViewerPipeClient<TJsonHiveInfo> {
     TNodeId NodeId = 0;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TJsonHiveInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
         : Viewer(viewer)
         , Event(ev)
     {}
 
-    void Bootstrap() {
+    void Bootstrap() override {
         const auto& params(Event->Get()->Request.GetParams());
         ui64 hiveId = FromStringWithDefault<ui64>(params.Get("hive_id"), 0);
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
@@ -75,7 +72,7 @@ public:
         RequestDone();
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         TStringStream json;
         if (HiveInfo != nullptr) {
             if (NodeId != 0) {

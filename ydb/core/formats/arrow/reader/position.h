@@ -406,7 +406,7 @@ public:
 class TIntervalPosition {
 private:
     TSortableBatchPosition Position;
-    const bool LeftIntervalInclude;
+    bool LeftIntervalInclude;
 public:
     const TSortableBatchPosition& GetPosition() const {
         return Position;

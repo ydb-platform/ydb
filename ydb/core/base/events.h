@@ -171,8 +171,14 @@ struct TKikimrEvents : TEvents {
         ES_TABLE_CREATOR,
         ES_PQ_PARTITION_CHOOSER,
         ES_GRAPH,
-        ES_REPLICATION_SERVICE,
+        ES_REPLICATION_SERVICE, //Be aware it's ES_REPLICATION_WORKER since https://github.com/ydb-platform/ydb/pull/2744
         ES_CHANGE_EXCHANGE,
+        ES_S3_PROVIDER,
+        ES_NEBIUS_ACCESS_SERVICE,
+        ES_REPLICATION_SERVICE_FIXME, //renamed to avoid clash
+        ES_BACKUP_SERVICE,
+        ES_TX_BACKGROUND,
+        ES_SS_BG_TASKS,
         ES_LIMITER
     };
 };

@@ -15,7 +15,7 @@ struct TKikimrEvents : TEvents {
            Please mind that you should never change values,
            you should consider issues about "rolling update".
         */
-        ES_KIKIMR_ES_BEGIN = 4096, 
+        ES_KIKIMR_ES_BEGIN = ES_USERSPACE, // 4096, 
         ES_STATESTORAGE = 4097, 
         ES_DEPRECATED_4098 = 4098, 
         ES_BLOBSTORAGE = 4099, 

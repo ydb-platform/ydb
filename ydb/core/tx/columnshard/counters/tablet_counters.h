@@ -4,6 +4,8 @@
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/protos/counters_datashard.pb.h>
+#include <ydb/core/tx/columnshard/engines/column_engine.h>
+#include <ydb/core/tx/columnshard/engines/insert_table/rt_insertion.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -77,6 +79,19 @@ public:
 
     void OnWriteFailure() const {
         IncCounter(NColumnShard::COUNTER_WRITE_FAIL);
+    }
+
+    void OnScanStarted(const NOlap::TSelectInfo::TStats& countersDelta) {
+        IncCounter(NColumnShard::COUNTER_READ_INDEX_PORTIONS, countersDelta.Portions);
+        IncCounter(NColumnShard::COUNTER_READ_INDEX_BLOBS, countersDelta.Blobs);
+        IncCounter(NColumnShard::COUNTER_READ_INDEX_ROWS, countersDelta.Rows);
+        IncCounter(NColumnShard::COUNTER_READ_INDEX_BYTES, countersDelta.Bytes);
+    }
+
+    void OnWriteCommitted(const NOlap::TInsertionSummary::TCounters& countersDelta) {
+        IncCounter(COUNTER_BLOBS_COMMITTED, countersDelta.Rows);
+        IncCounter(COUNTER_BYTES_COMMITTED, countersDelta.Bytes);
+        IncCounter(COUNTER_RAW_BYTES_COMMITTED, countersDelta.RawBytes);
     }
 
     void FillStats(::NKikimrTableStats::TTableStats& output) const {

@@ -16,14 +16,14 @@ private:
     using TCurrentCompaction = THashMap<ui64, NOlap::TPlanCompactionInfo>;
     TCurrentCompaction ActiveCompactionInfo;
 
-    TBackgroundControllerCounters& Stats;
+    TBackgroundControllerCounters& Counters;
     bool ActiveCleanupPortions = false;
     bool ActiveCleanupTables = false;
     bool ActiveCleanupInsertTable = false;
     YDB_READONLY(TMonotonic, LastIndexationInstant, TMonotonic::Zero());
 public:
-    TBackgroundController(TBackgroundControllerCounters& stats)
-        : Stats(stats) {
+    TBackgroundController(TBackgroundControllerCounters& counters)
+        : Counters(counters) {
     }
 
     THashSet<NOlap::TPortionAddress> GetConflictTTLPortions() const;
@@ -35,7 +35,7 @@ public:
     bool StartCompaction(const NOlap::TPlanCompactionInfo& info);
     void FinishCompaction(const NOlap::TPlanCompactionInfo& info) {
         Y_ABORT_UNLESS(ActiveCompactionInfo.erase(info.GetPathId()));
-        Stats.OnCompactionFinish(info.GetPathId());
+        Counters.OnCompactionFinish(info.GetPathId());
     }
     const TCurrentCompaction& GetActiveCompaction() const {
         return ActiveCompactionInfo;

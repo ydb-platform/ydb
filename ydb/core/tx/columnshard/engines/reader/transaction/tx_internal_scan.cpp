@@ -86,7 +86,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     }
     auto scanActor = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
         TComputeShardingPolicy(), ScanId, TxId, ScanGen, *requestCookie, Self->TabletID(), TDuration::Max(), ReadMetadataRange,
-        NKikimrDataEvents::FORMAT_ARROW, Self->Stats.GetScanCounters()));
+        NKikimrDataEvents::FORMAT_ARROW, Self->Counters.GetScanCounters()));
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxInternalScan started")("actor_id", scanActor)("trace_detailed", detailedInfo);
 }

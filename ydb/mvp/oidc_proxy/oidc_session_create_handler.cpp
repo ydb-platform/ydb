@@ -13,11 +13,11 @@ TSessionCreateHandler::TSessionCreateHandler(const NActors::TActorId& httpProxyI
 void TSessionCreateHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx) {
     NHttp::THttpIncomingRequestPtr request = event->Get()->Request;
     if (request->Method == "GET") {
-        switch (Settings.AuthProfile) {
-            case NMVP::EAuthProfile::Yandex:
+        switch (Settings.AccessServiceType) {
+            case NMVP::EAccessServiceType::YandexV2:
                 ctx.Register(new THandlerSessionCreateYandex(event->Sender, request, HttpProxyId, Settings));
                 return;
-            case NMVP::EAuthProfile::Nebius:
+            case NMVP::EAccessServiceType::NebiusV1:
                 ctx.Register(new THandlerSessionCreateNebius(event->Sender, request, HttpProxyId, Settings));
                 return;
         }

@@ -8,8 +8,8 @@
 
 namespace NMVP {
 
-TMvpTokenator* TMvpTokenator::CreateTokenator(const NMvp::TTokensConfig& tokensConfig,  const NActors::TActorId& httpProxy, const NMVP::EAuthProfile authProfile) {
-    return new TMvpTokenator(tokensConfig, httpProxy, authProfile);
+TMvpTokenator* TMvpTokenator::CreateTokenator(const NMvp::TTokensConfig& tokensConfig,  const NActors::TActorId& httpProxy, const NMVP::EAccessServiceType accessServiceType) {
+    return new TMvpTokenator(tokensConfig, httpProxy, accessServiceType);
 }
 
 TString TMvpTokenator::GetToken(const TString& name) {
@@ -24,9 +24,9 @@ TString TMvpTokenator::GetToken(const TString& name) {
     return token;
 }
 
-TMvpTokenator::TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TActorId& httpProxy, const NMVP::EAuthProfile authProfile)
+TMvpTokenator::TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TActorId& httpProxy, NMVP::EAccessServiceType accessServiceType)
     : HttpProxy(httpProxy)
-    , AuthProfile(authProfile)
+    , AccessServiceType(accessServiceType)
 {
     if (tokensConfig.HasStaffApiUserTokenInfo()) {
         UpdateStaffApiUserToken(&tokensConfig.staffapiusertokeninfo());
@@ -246,8 +246,8 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
     std::set<std::string> audience;
     audience.insert(jwtInfo->audience());
 
-    switch (AuthProfile) {
-        case NMVP::EAuthProfile::Yandex: {
+    switch (AccessServiceType) {
+        case NMVP::EAccessServiceType::YandexV2: {
             auto algorithm = jwt::algorithm::ps256(jwtInfo->publickey(), jwtInfo->privatekey());
             auto encodedToken = jwt::create()
                     .set_key_id(keyId)
@@ -265,7 +265,7 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
 
             break;
         }
-        case NMVP::EAuthProfile::Nebius: {
+        case NMVP::EAccessServiceType::NebiusV1: {
             auto algorithm = jwt::algorithm::rs256(jwtInfo->publickey(), jwtInfo->privatekey());
             auto encodedToken = jwt::create()
                     .set_key_id(keyId)

@@ -15,9 +15,9 @@ struct TOpenIdConnectSettings {
     static const inline TString SESSION_COOKIE = "session_cookie";
 
     static const inline TString DEFAULT_CLIENT_ID = "yc.oauth.ydb-viewer";
-    static const inline TString DEFAULT_AUTH_ENDPOINT = "/oauth/authorize";
-    static const inline TString DEFAULT_TOKEN_ENDPOINT = "/oauth/token";
-    static const inline TString DEFAULT_EXCHANGE_ENDPOINT = "/oauth2/session/exchange";
+    static const inline TString DEFAULT_AUTH_URL_PATH = "/oauth/authorize";
+    static const inline TString DEFAULT_TOKEN_URL_PATH = "/oauth/token";
+    static const inline TString DEFAULT_EXCHANGE_URL_PATH = "/oauth2/session/exchange";
 
     TString ClientId = DEFAULT_CLIENT_ID;
     TString SessionServiceEndpoint;
@@ -26,25 +26,25 @@ struct TOpenIdConnectSettings {
     TString ClientSecret;
     std::vector<TString> AllowedProxyHosts;
 
-    NMVP::EAuthProfile AuthProfile = NMVP::EAuthProfile::Yandex;
-    TString AuthEndpoint = DEFAULT_AUTH_ENDPOINT;
-    TString TokenEndpoint = DEFAULT_TOKEN_ENDPOINT;
-    TString ExchangeEndpoint = DEFAULT_EXCHANGE_ENDPOINT;
+    NMVP::EAccessServiceType AccessServiceType = NMVP::EAccessServiceType::YandexV2;
+    TString AuthUrlPath = DEFAULT_AUTH_URL_PATH;
+    TString TokenUrlPath = DEFAULT_TOKEN_URL_PATH;
+    TString ExchangeUrlPath = DEFAULT_EXCHANGE_URL_PATH;
 
     TString GetAuthorizationString() const {
         return "Basic " + Base64Encode(ClientId + ":" + ClientSecret);
     }
 
     TString GetAuthEndpointURL() const {
-        return AuthorizationServerAddress + AuthEndpoint;
+        return AuthorizationServerAddress + AuthUrlPath;
     }
 
     TString GetTokenEndpointURL() const {
-        return AuthorizationServerAddress + TokenEndpoint;
+        return AuthorizationServerAddress + TokenUrlPath;
     }
 
     TString GetExchangeEndpointURL() const {
-        return AuthorizationServerAddress + ExchangeEndpoint;
+        return AuthorizationServerAddress + ExchangeUrlPath;
     }
 };
 

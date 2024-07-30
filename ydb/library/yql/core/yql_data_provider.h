@@ -210,28 +210,6 @@ struct TDataProviderInfo {
     bool WaitForActiveProcesses = true;
     bool SupportsHidden = false;
 
-    std::function<TMaybe<TString>(const TMaybe<TSet<TString>>& usedClusters, const TMaybe<TSet<TString>>& usedProviders,
-        ESourceSyntax syntax)> RemoteClusterProvider;
-
-    std::function<TFutureStatus(const TString& cluster, ESourceSyntax sourceSyntax, const TString& sourceCode,
-        TExprContext& ctx)> RemoteValidate;
-
-    std::function<TFutureStatus(const TString& cluster,
-        ESourceSyntax sourceSyntax, const TString& sourceCode,
-        const IPipelineConfigurator* pipelineConf,
-        TIntrusivePtr<TTypeAnnotationContext> typeCtx,
-        TExprNode::TPtr& root, TExprContext& ctx,
-        TMaybe<TString>& externalQueryAst, TMaybe<TString>& externalQueryPlan)> RemoteOptimize;
-
-    std::function<TFutureStatus(const TString& cluster,
-        ESourceSyntax sourceSyntax, const TString& sourceCode,
-        const NYson::EYsonFormat& outputFormat, const NYson::EYsonFormat& resultFormat,
-        const IPipelineConfigurator* pipelineConf,
-        TIntrusivePtr<TTypeAnnotationContext> typeCtx,
-        TExprNode::TPtr& root, TExprContext& ctx,
-        TMaybe<TString>& externalQueryAst, TMaybe<TString>& externalQueryPlan, TMaybe<TString>& externalDiagnostics,
-        TIntrusivePtr<TResultProviderConfig> resultProviderConfig)> RemoteRun;
-
     std::function<NThreading::TFuture<void>(const TString& sessionId, const TString& username,
         const TOperationProgressWriter& progressWriter, const TYqlOperationOptions& operationOptions,
         TIntrusivePtr<IRandomProvider> randomProvider, TIntrusivePtr<ITimeProvider> timeProvider)> OpenSession;

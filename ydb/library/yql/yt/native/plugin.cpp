@@ -398,21 +398,8 @@ public:
             };
         }
 
-        auto usedClusters = program->GetUsedClusters();
-        if (!usedClusters) {
-            return TClustersResult{
-                .YsonError = MessageToYtErrorYson("Can't get clusters from query"),
-            };
-        }
-
-        if (DefaultCluster_ && !usedClusters->contains(*DefaultCluster_)) {
-            usedClusters->insert(*DefaultCluster_);
-        }
-
-        std::vector<TString> clustersList(usedClusters->begin(), usedClusters->end());
-
         return TClustersResult{
-            .Clusters = clustersList,
+            .YsonError = MessageToYtErrorYson("Can't get clusters from query"),
         };
     }
 

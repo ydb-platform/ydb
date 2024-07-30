@@ -60,34 +60,24 @@ bool TPKRangeFilter::IsPortionInUsage(const TPortionInfo& info, const TIndexInfo
 }
 
 bool TPKRangeFilter::IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end, const TIndexInfo& indexInfo) const {
-    bool startUsage = false;
-    bool endUsage = false;
+    bool fromInternal = false;
     if (auto from = PredicateFrom.ExtractKey(indexInfo.GetPrimaryKey())) {
-        AFL_VERIFY(from->Size() <= start.Size());
-        if (PredicateFrom.IsInclude()) {
-            startUsage = std::is_lt(start.ComparePartNotNull(*from, from->Size()));
-        } else {
-            startUsage = std::is_lteq(start.ComparePartNotNull(*from, from->Size()));
-        }
-    } else {
-        startUsage = true;
+        bool cmpStart = std::is_lteq(start.ComparePartNotNull(*from, from->Size()));
+        bool cmpEnd = std::is_gteq(end.ComparePartNotNull(*from, from->Size()));
+        fromInternal = cmpStart && cmpEnd;
     }
 
+    bool toInternal = false;
     if (auto to = PredicateTo.ExtractKey(indexInfo.GetPrimaryKey())) {
-        AFL_VERIFY(to->Size() <= end.Size());
-        if (PredicateTo.IsInclude()) {
-            endUsage = std::is_gt(end.ComparePartNotNull(*to, to->Size()));
-        } else {
-            endUsage = std::is_gteq(end.ComparePartNotNull(*to, to->Size()));
-        }
-    } else {
-        endUsage = true;
+        bool cmpStart = std::is_lteq(start.ComparePartNotNull(*to, to->Size()));
+        bool cmpEnd = std::is_gteq(end.ComparePartNotNull(*to, to->Size()));
+        toInternal = cmpStart && cmpEnd;
     }
 
 //    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("start", start.DebugString())("end", end.DebugString())("from", PredicateFrom.DebugString())("to", PredicateTo.DebugString())
 //        ("start_usage", startUsage)("end_usage", endUsage);
 
-    return endUsage ^ startUsage;
+    return toInternal != fromInternal;
 }
 
 std::optional<NKikimr::NOlap::TPKRangeFilter> TPKRangeFilter::Build(TPredicateContainer&& from, TPredicateContainer&& to) {

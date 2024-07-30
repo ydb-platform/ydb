@@ -96,6 +96,11 @@ const char* StrVal(const ValUnion& val) {
     return strVal(&val.node);
 }
 
+int BoolVal(const Node* node) {
+    Y_ENSURE(node->type == T_Boolean);
+    return boolVal(node);
+}
+
 int IntVal(const Node* node) {
     Y_ENSURE(node->type == T_Integer);
     return intVal(node);
@@ -5156,8 +5161,9 @@ TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQ
 
 class TExtensionHandler : public IPGParseEvents {
 public:
-    TExtensionHandler(NYql::NPg::IExtensionDDLBuilder& builder)
-        : Builder(builder)
+    TExtensionHandler(ui32 extensionIndex, NYql::NPg::IExtensionDDLBuilder& builder)
+        : ExtensionIndex(extensionIndex)
+        , Builder(builder)
     {}
 
     void OnResult(const List* raw) final {
@@ -5178,9 +5184,177 @@ public:
         switch (NodeTag(node)) {
         case T_CreateFunctionStmt:
             return ParseCreateFunctionStmt(CAST_NODE(CreateFunctionStmt, node));
+        case T_DefineStmt:
+            return ParseDefineStmt(CAST_NODE(DefineStmt, node));
         default:
             return false;
         }
+    }
+
+    [[nodiscard]]
+    bool ParseDefineStmt(const DefineStmt* value) {
+        switch (value->kind) {
+        case OBJECT_TYPE:
+            return ParseDefineType(value);
+        default:
+            return false;
+        }
+    }
+
+    [[nodiscard]]
+    bool ParseDefineType(const DefineStmt* value) {
+        if (ListLength(value->defnames) != 1) {
+            return false;
+        }
+
+        auto nameNode = ListNodeNth(value->defnames, 0);
+        auto name = to_lower(TString(StrVal(nameNode)));
+        if (!NPg::HasType(name)) {
+            Builder.PrepareType(ExtensionIndex, name);
+        }
+
+        NPg::TTypeDesc desc = NPg::LookupType(name);
+
+        for (int i = 0; i < ListLength(value->definition); ++i) {
+            auto node = LIST_CAST_NTH(DefElem, value->definition, i);
+            TString defnameStr(node->defname);
+            if (defnameStr == "internallength") {
+                if (NodeTag(node->arg) == T_Integer) {
+                    desc.TypeLen = IntVal(node->arg);
+                } else if (NodeTag(node->arg) == T_TypeName) {
+                    TString value;
+                    if (!ParseTypeName(CAST_NODE_EXT(PG_TypeName, T_TypeName, node->arg), value)) {
+                        return false;
+                    }
+
+                    if (value == "variable") {
+                        desc.TypeLen = -1;
+                    } else {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            } else if (defnameStr == "alignment") {
+                if (NodeTag(node->arg) != T_TypeName) {
+                    return false;
+                }
+
+                TString value;
+                if (!ParseTypeName(CAST_NODE_EXT(PG_TypeName, T_TypeName, node->arg), value)) {
+                    return false;
+                }
+
+                if (value == "double") {
+                    desc.TypeAlign = 'd';
+                } else if (value == "int") {
+                    desc.TypeAlign = 'i';
+                } else if (value == "short") {
+                    desc.TypeAlign = 's';
+                } else if (value == "char") {
+                    desc.TypeAlign = 'c';
+                } else {
+                    throw yexception() << "Unsupported alignment: " << value;
+                }
+            } else if (defnameStr == "input") {
+                if (NodeTag(node->arg) != T_TypeName) {
+                    return false;
+                }
+
+                TString value;
+                if (!ParseTypeName(CAST_NODE_EXT(PG_TypeName, T_TypeName, node->arg), value)) {
+                    return false;
+                }
+
+                try {
+                    desc.InFuncId = NPg::LookupProc(value, {NPg::LookupType("cstring").TypeId}).ProcId;
+                } catch (const yexception&) {
+                    desc.InFuncId = NPg::LookupProc(value, {
+                        NPg::LookupType("cstring").TypeId,
+                        NPg::LookupType("oid").TypeId,
+                        NPg::LookupType("integer").TypeId
+                    }).ProcId;
+                }
+            } else if (defnameStr == "output") {
+                if (NodeTag(node->arg) != T_TypeName) {
+                    return false;
+                }
+
+                TString value;
+                if (!ParseTypeName(CAST_NODE_EXT(PG_TypeName, T_TypeName, node->arg), value)) {
+                    return false;
+                }
+
+                desc.OutFuncId = NPg::LookupProc(value, {desc.TypeId}).ProcId;
+            } else if (defnameStr == "send") {
+                if (NodeTag(node->arg) != T_TypeName) {
+                    return false;
+                }
+
+                TString value;
+                if (!ParseTypeName(CAST_NODE_EXT(PG_TypeName, T_TypeName, node->arg), value)) {
+                    return false;
+                }
+
+                desc.SendFuncId = NPg::LookupProc(value, {desc.TypeId}).ProcId;
+            } else if (defnameStr == "receive") {
+                if (NodeTag(node->arg) != T_TypeName) {
+                    return false;
+                }
+
+                TString value;
+                if (!ParseTypeName(CAST_NODE_EXT(PG_TypeName, T_TypeName, node->arg), value)) {
+                    return false;
+                }
+
+                try {
+                    desc.ReceiveFuncId = NPg::LookupProc(value, {NPg::LookupType("internal").TypeId}).ProcId;
+                } catch (const yexception&) {
+                    desc.ReceiveFuncId = NPg::LookupProc(value, {
+                        NPg::LookupType("internal").TypeId,
+                        NPg::LookupType("oid").TypeId,
+                        NPg::LookupType("integer").TypeId
+                    }).ProcId;
+                }
+            } else if (defnameStr == "delimiter") {
+                if (NodeTag(node->arg) != T_String) {
+                    return false;
+                }
+
+                TString value(StrVal(node->arg));
+                Y_ENSURE(value.size() == 1);
+                desc.TypeDelim = value[0];
+            } else if (defnameStr == "typmod_in") {
+                if (NodeTag(node->arg) != T_TypeName) {
+                    return false;
+                }
+
+                TString value;
+                if (!ParseTypeName(CAST_NODE_EXT(PG_TypeName, T_TypeName, node->arg), value)) {
+                    return false;
+                }
+
+                desc.TypeModInFuncId = NPg::LookupProc(value, {NPg::LookupType("_cstring").TypeId}).ProcId;
+            } else if (defnameStr == "typmod_out") {
+                if (NodeTag(node->arg) != T_TypeName) {
+                    return false;
+                }
+
+                TString value;
+                if (!ParseTypeName(CAST_NODE_EXT(PG_TypeName, T_TypeName, node->arg), value)) {
+                    return false;
+                }
+
+                desc.TypeModInFuncId = NPg::LookupProc(value, {NPg::LookupType("int4").TypeId}).ProcId;
+            }
+        }
+
+        if (desc.TypeLen >= 0 && desc.TypeLen <= 8) {
+            desc.PassByValue = true;
+        }
+
+        Builder.UpdateType(desc);
+        return true;
     }
 
     [[nodiscard]]
@@ -5199,14 +5373,13 @@ public:
         desc.Name = name;
         desc.IsStrict = false;
         if (value->returnType) {
-            if (ListLength(value->returnType->names) != 1) {
+            TString resultTypeStr;
+            if (!ParseTypeName(value->returnType, resultTypeStr)) {
                 return false;
             }
 
-            auto resultTypeNode = ListNodeNth(value->returnType->names, 0);
-            auto resultTypeStr = TString(StrVal(resultTypeNode));
             if (!NPg::HasType(resultTypeStr)) {
-                return false;
+                Builder.PrepareType(ExtensionIndex, resultTypeStr);
             }
 
             desc.ResultType = NPg::LookupType(resultTypeStr).TypeId;
@@ -5225,17 +5398,18 @@ public:
                         return false;
                     }
 
-                    auto extStr = to_lower(TString(StrVal(ListNodeNth(asList, 0))));
+                    auto extStr = TString(StrVal(ListNodeNth(asList, 0)));
                     auto srcStr = asListLen > 1 ?
-                        to_lower(TString(StrVal(ListNodeNth(asList, 1)))) :
+                        TString(StrVal(ListNodeNth(asList, 1))) :
                         name;
 
-                    desc.ExtensionIndex = NPg::LookupExtensionByInstallName(extStr);
+                    Y_ENSURE(ExtensionIndex == NPg::LookupExtensionByInstallName(extStr));
+                    desc.ExtensionIndex = ExtensionIndex;
                     desc.Src = srcStr;
                 } else if (pass == 0 && defnameStr == "strict") {
-                    desc.IsStrict  = CAST_NODE(Boolean, node->arg)->boolval;
+                    desc.IsStrict  = BoolVal(node->arg);
                 } else if (pass == 0 && defnameStr == "language") {
-                    auto langStr = TString(CAST_NODE(String, node->arg)->sval);
+                    auto langStr = TString(StrVal(node->arg));
                     if (langStr == "c") {
                         desc.Lang = NPg::LangC;
                     } else {
@@ -5246,10 +5420,17 @@ public:
         }
 
         bool hasArgNames = false;
+        ui32 defArgsCount = 0;
         for (int i = 0; i < ListLength(value->parameters); ++i) {
             auto node = LIST_CAST_NTH(FunctionParameter, value->parameters, i);
             hasArgNames = hasArgNames || (node->name != nullptr);
-            if (node->mode == FUNC_PARAM_IN) {
+            if (node->mode == FUNC_PARAM_IN || node->mode == FUNC_PARAM_DEFAULT) {
+                if (node->defexpr) {
+                    ++defArgsCount;
+                } else {
+                    Y_ENSURE(!defArgsCount);
+                }
+
                 desc.InputArgNames.push_back(node->name ? node->name : "");
             } else if (node->mode == FUNC_PARAM_OUT) {
                 desc.OutputArgNames.push_back(node->name ? node->name : "");
@@ -5259,25 +5440,17 @@ public:
                 return false;
             }
 
-            auto argTypeLen = ListLength(node->argType->names);
-            if (argTypeLen < 1 || argTypeLen > 2) {
+            TString argTypeStr;
+            if (!ParseTypeName(node->argType, argTypeStr)) {
                 return false;
             }
 
-            if (argTypeLen == 2) {
-                auto schemaStr = to_lower(TString(StrVal(ListNodeNth(node->argType->names, 0))));
-                if (schemaStr != "pg_catalog") {
-                    return false;
-                }
-            }
-
-            auto argTypeStr = to_lower(TString(StrVal(ListNodeNth(node->argType->names, argTypeLen - 1))));
             if (!NPg::HasType(argTypeStr)) {
-                return false;
+                Builder.PrepareType(ExtensionIndex, argTypeStr);
             }
 
             auto argTypeId = NPg::LookupType(argTypeStr).TypeId;
-            if (node->mode == FUNC_PARAM_IN) {
+            if (node->mode == FUNC_PARAM_IN || node->mode == FUNC_PARAM_DEFAULT) {
                 desc.ArgTypes.push_back(argTypeId);
             } else if (node->mode == FUNC_PARAM_VARIADIC) {
                 desc.VariadicType = argTypeId;
@@ -5294,17 +5467,50 @@ public:
         }
 
         Builder.CreateProc(desc);
+        if (defArgsCount) {
+            Y_ENSURE(!desc.VariadicType);
+            for (ui32 i = 0; i < defArgsCount; ++i) {
+                desc.ArgTypes.pop_back();
+                if (!desc.InputArgNames.empty()) {
+                    desc.InputArgNames.pop_back();
+                }
+
+                Builder.CreateProc(desc);
+            }
+        }
+        return true;
+    }
+
+    bool ParseTypeName(const PG_TypeName* typeName, TString& value) {
+        auto len = ListLength(typeName->names);
+        if (len < 1 || len > 2) {
+            return false;
+        }
+
+        if (len == 2) {
+            auto schemaStr = to_lower(TString(StrVal(ListNodeNth(typeName->names, 0))));
+            if (schemaStr != "pg_catalog") {
+                return false;
+            }
+        }
+
+        value = to_lower(TString(StrVal(ListNodeNth(typeName->names, len - 1))));
+        if (ListLength(typeName->arrayBounds) && !value.StartsWith('_')) {
+            value = "_" + value;
+        }
+
         return true;
     }
 
 private:
+    const ui32 ExtensionIndex;
     NYql::NPg::IExtensionDDLBuilder& Builder;
 };
 
 class TExtensionDDLParser : public NYql::NPg::IExtensionDDLParser {
 public:
-    void Parse(const TString& sql, NYql::NPg::IExtensionDDLBuilder& builder) final {
-        TExtensionHandler handler(builder);
+    void Parse(ui32 extensionIndex, const TString& sql, NYql::NPg::IExtensionDDLBuilder& builder) final {
+        TExtensionHandler handler(extensionIndex, builder);
         NYql::PGParse(sql, handler);
     }
 };

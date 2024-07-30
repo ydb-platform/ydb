@@ -37,7 +37,7 @@ namespace NKikimr::NColumnShard {
     public:
         using TBase::TBase;
 
-        void OnTabletInit(TColumnShard& owner) override {
+        virtual void DoOnTabletInit(TColumnShard& owner) override {
             for (auto&& writeId : WriteIds) {
                 AFL_VERIFY(owner.LongTxWrites.contains(writeId))("problem", "ltx_not_exists_for_write_id")("txId", GetTxId())("writeId", (ui64)writeId);
                 owner.AddLongTxWrite(writeId, GetTxId());

@@ -2419,6 +2419,10 @@ void TPartitionActor::InitLockPartition(const TActorContext& ctx) {
 
 
 void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
+    if (ReadingFinishedSent) {
+        return;
+    }
+
     if (WaitDataInfly.size() > 1) { //already got 2 requests inflight
         return;
     }

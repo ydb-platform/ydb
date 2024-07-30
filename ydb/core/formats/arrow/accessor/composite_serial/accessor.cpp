@@ -8,16 +8,13 @@ private:
     const std::vector<TDeserializeChunkedArray::TChunk>& Chunks;
     const std::shared_ptr<TColumnLoader>& Loader;
     TDeserializeChunkedArray::TChunkCacheInfo* CachedDataOwner;
-    std::optional<NArrow::NAccessor::IChunkedArray::TCurrentChunkAddress>* ResultAddress;
 
 public:
     TSerializedChunkAccessor(const std::vector<TDeserializeChunkedArray::TChunk>& chunks, const std::shared_ptr<TColumnLoader>& loader,
-        TDeserializeChunkedArray::TChunkCacheInfo* cachedDataOwner,
-        std::optional<NArrow::NAccessor::IChunkedArray::TCurrentChunkAddress>* resultAddress)
+        TDeserializeChunkedArray::TChunkCacheInfo* cachedDataOwner)
         : Chunks(chunks)
         , Loader(loader)
-        , CachedDataOwner(cachedDataOwner)
-        , ResultAddress(resultAddress) {
+        , CachedDataOwner(cachedDataOwner) {
     }
     ui64 GetChunksCount() const {
         return Chunks.size();
@@ -25,35 +22,27 @@ public:
     ui64 GetChunkLength(const ui32 idx) const {
         return Chunks[idx].GetRecordsCount();
     }
-    void OnArray(const ui32 chunkIdx, const ui32 startPosition, const ui32 internalPosition) const {
+    void OnArray(const ui32 chunkIdx, const ui32 startPosition) const {
         if (!CachedDataOwner->GetChunk() || CachedDataOwner->GetIndex() != chunkIdx) {
             CachedDataOwner->SetChunk(Chunks[chunkIdx].GetArrayVerified(Loader));
             CachedDataOwner->SetIndex(chunkIdx);
             CachedDataOwner->SetStartPosition(startPosition);
         }
-        if (ResultAddress) {
-            auto addressInternal = CachedDataOwner->GetChunk()->GetChunk({}, internalPosition);
-            *ResultAddress = NArrow::NAccessor::IChunkedArray::TCurrentChunkAddress(
-                addressInternal.GetArray(), startPosition + addressInternal.GetStartPosition(), chunkIdx);
-        }
     }
 };
 }   // namespace
 
-NArrow::NAccessor::IChunkedArray::TCurrentChunkAddress TDeserializeChunkedArray::DoGetChunk(
-    const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position) const {
-    std::optional<IChunkedArray::TCurrentChunkAddress> result;
-    TSerializedChunkAccessor accessor(Chunks, Loader, CurrentChunkCache.get(), &result);
-    SelectChunk(chunkCurrent, position, accessor);
-    AFL_VERIFY(result);
-    return *result;
+IChunkedArray::TLocalDataAddress TDeserializeChunkedArray::DoGetLocalData(
+    const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
+    AFL_VERIFY(false);
+    return IChunkedArray::TLocalDataAddress(nullptr, 0, 0);
 }
 
-NArrow::NAccessor::IChunkedArray::TCurrentArrayAddress TDeserializeChunkedArray::DoGetArray(
-    const std::optional<TCurrentArrayAddress>& chunkCurrent, const ui64 position, const std::shared_ptr<IChunkedArray>& /*selfPtr*/) const {
-    TSerializedChunkAccessor accessor(Chunks, Loader, CurrentChunkCache.get(), nullptr);
+IChunkedArray::TLocalChunkedArrayAddress TDeserializeChunkedArray::DoGetLocalChunkedArray(
+    const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
+    TSerializedChunkAccessor accessor(Chunks, Loader, CurrentChunkCache.get());
     SelectChunk(chunkCurrent, position, accessor);
-    return IChunkedArray::TCurrentArrayAddress(
+    return IChunkedArray::TLocalChunkedArrayAddress(
         CurrentChunkCache->GetChunk(), CurrentChunkCache->GetStartPosition(), CurrentChunkCache->GetIndex());
 }
 

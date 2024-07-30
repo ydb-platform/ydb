@@ -23,7 +23,6 @@
 #include "flat_abi_evol.h"
 #include "probes.h"
 #include "shared_sausagecache.h"
-#include "shared_cache_memtable.h"
 #include "util_fmt_desc.h"
 
 #include <ydb/core/base/appdata.h>
@@ -61,34 +60,34 @@ struct TCompactionChangesCtx {
     { }
 };
 
-class TSharedPageCacheMemTableObserver : public NSharedCache::ISharedPageCacheMemTableObserver {
+class TMemTableMemoryConsumersCollection : public NTable::IMemTableMemoryConsumersCollection {
 public:
-    TSharedPageCacheMemTableObserver(TActorSystem* actorSystem, TActorId owner)
+    TMemTableMemoryConsumersCollection(TActorSystem* actorSystem, TActorId owner)
         : ActorSystem(actorSystem)
         , Owner(owner)
-        , SharedCacheId(MakeSharedPageCacheId())
+        , MemoryControllerId(NMemory::MakeMemoryControllerId())
     {}
 
     void Register(ui32 table) override {
-        Send(new NSharedCache::TEvMemTableRegister(table));
+        Send(new NMemory::TEvMemTableRegister(table));
     }
 
     void Unregister(ui32 table) override {
-        Send(new NSharedCache::TEvMemTableUnregister(table));
+        Send(new NMemory::TEvMemTableUnregister(table));
     }
 
-    void CompactionComplete(TIntrusivePtr<NSharedCache::ISharedPageCacheMemTableRegistration> registration) override {
-        Send(new NSharedCache::TEvMemTableCompacted(std::move(registration)));
+    void CompactionComplete(TIntrusivePtr<NMemory::IMemoryConsumer> consumer) override {
+        Send(new NMemory::TEvMemTableCompacted(std::move(consumer)));
     }
 
 private:
     void Send(IEventBase* ev) {
-        ActorSystem->Send(new IEventHandle(SharedCacheId, Owner, ev));
+        ActorSystem->Send(new IEventHandle(MemoryControllerId, Owner, ev));
     }
 
     TActorSystem* ActorSystem;
     const TActorId Owner;
-    const TActorId SharedCacheId;
+    const TActorId MemoryControllerId;
 };
 
 TTableSnapshotContext::TTableSnapshotContext() = default;
@@ -157,6 +156,7 @@ void TExecutor::Registered(TActorSystem *sys, const TActorId&)
     Broker = new TBroker(this, Emitter);
     Scans = new TScans(Logger.Get(), this, Emitter, Owner, OwnerActorId);
     Memory = new TMemory(Logger.Get(), this, Emitter, Sprintf(" at tablet %" PRIu64, Owner->TabletID()));
+    MemTableMemoryConsumersCollection = new TMemTableMemoryConsumersCollection(NActors::TActivationContext::ActorSystem(), SelfId());
     TString myTabletType = TTabletTypes::TypeToStr(Owner->TabletType());
     AppData()->Icb->RegisterSharedControl(LogFlushDelayOverrideUsec, myTabletType + "_LogFlushDelayOverrideUsec");
     AppData()->Icb->RegisterSharedControl(MaxCommitRedoMB, "TabletControls.MaxCommitRedoMB");
@@ -446,8 +446,7 @@ void TExecutor::Active(const TActorContext &ctx) {
 
     CommitManager->Start(this, Owner->Tablet(), &Step0, Counters.Get());
 
-    auto sharedPageCacheMemTableObserver = MakeHolder<TSharedPageCacheMemTableObserver>(NActors::TActivationContext::ActorSystem(), SelfId());
-    CompactionLogic = THolder<TCompactionLogic>(new TCompactionLogic(std::move(sharedPageCacheMemTableObserver), Logger.Get(), Broker.Get(), this, loadedState->Comp,
+    CompactionLogic = THolder<TCompactionLogic>(new TCompactionLogic(MemTableMemoryConsumersCollection.Get(), Logger.Get(), Broker.Get(), this, loadedState->Comp,
                                                                      Sprintf("tablet-%" PRIu64, Owner->TabletID())));
     LogicRedo->InstallCounters(Counters.Get(), nullptr);
 
@@ -3891,15 +3890,15 @@ bool TExecutor::CompactTables() {
     }
 }
 
-void TExecutor::Handle(NSharedCache::TEvMemTableRegistered::TPtr &ev) {
+void TExecutor::Handle(NMemory::TEvMemTableRegistered::TPtr &ev) {
     const auto *msg = ev->Get();
 
     if (CompactionLogic) {
-        CompactionLogic->ProvideSharedPageCacheMemTableRegistration(msg->Table, std::move(msg->Registration));
+        CompactionLogic->ProvideMemTableMemoryConsumer(msg->Table, std::move(msg->Consumer));
     }
 }
 
-void TExecutor::Handle(NSharedCache::TEvMemTableCompact::TPtr &ev) {
+void TExecutor::Handle(NMemory::TEvMemTableCompact::TPtr &ev) {
     const auto *msg = ev->Get();
 
     if (CompactionLogic) {
@@ -3955,8 +3954,8 @@ STFUNC(TExecutor::StateWork) {
         HFunc(NOps::TEvScanStat, Handle);
         hFunc(NOps::TEvResult, Handle);
         HFunc(NBlockIO::TEvStat, Handle);
-        hFunc(NSharedCache::TEvMemTableRegistered, Handle);
-        hFunc(NSharedCache::TEvMemTableCompact, Handle);
+        hFunc(NMemory::TEvMemTableRegistered, Handle);
+        hFunc(NMemory::TEvMemTableCompact, Handle);
     default:
         break;
     }

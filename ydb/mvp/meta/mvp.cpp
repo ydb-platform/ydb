@@ -210,6 +210,10 @@ void TMVP::TryGetGenericOptionsFromConfig(
             TYdbLocation::UserToken = auth["token"].as<std::string>("");
         }
         ydbTokenFile = auth["token_file"].as<std::string>("");
+
+        if (auth["access_service_type"]) {
+            AccessServiceType = GetAccessServiceTypeFromString(auth["access_service_type"].as<std::string>(""));
+        }
     }
 
     if (generic["server"]) {
@@ -224,10 +228,6 @@ void TMVP::TryGetGenericOptionsFromConfig(
         if (opts.FindLongOptParseResult("https-port") == nullptr) {
             HttpsPort = server["https_port"].as<ui16>(0);
         }
-    }
-
-    if (generic["access_service_type"]) {
-        AccessServiceType = GetAccessServiceTypeFromString(generic["access_service_type"].as<std::string>(""));
     }
 }
 

@@ -29,4 +29,6 @@ void RegisterS3ReadActorFactory(
     const TS3ReadActorFactoryConfig& = {},
     ::NMonitoring::TDynamicCounterPtr counters = nullptr);
 
+TS3ReadActorFactoryConfig CreateReadActorFactoryConfig(const ::NYql::TS3GatewayConfig& s3Config);
+
 }

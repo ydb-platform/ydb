@@ -34,4 +34,30 @@ void RegisterS3ReadActorFactory(
 #endif
 }
 
+TS3ReadActorFactoryConfig CreateReadActorFactoryConfig(const ::NYql::TS3GatewayConfig& s3Config) {
+    TS3ReadActorFactoryConfig s3ReadActoryConfig;
+    if (const ui64 rowsInBatch = s3Config.GetRowsInBatch()) {
+        s3ReadActoryConfig.RowsInBatch = rowsInBatch;
+    }
+    if (const ui64 maxInflight = s3Config.GetMaxInflight()) {
+        s3ReadActoryConfig.MaxInflight = maxInflight;
+    }
+    if (const ui64 dataInflight = s3Config.GetDataInflight()) {
+        s3ReadActoryConfig.DataInflight = dataInflight;
+    }
+    for (auto& formatSizeLimit: s3Config.GetFormatSizeLimit()) {
+        if (formatSizeLimit.GetName()) { // ignore unnamed limits
+            s3ReadActoryConfig.FormatSizeLimits.emplace(
+                formatSizeLimit.GetName(), formatSizeLimit.GetFileSizeLimit());
+        }
+    }
+    if (s3Config.HasFileSizeLimit()) {
+        s3ReadActoryConfig.FileSizeLimit = s3Config.GetFileSizeLimit();
+    }
+    if (s3Config.HasBlockFileSizeLimit()) {
+        s3ReadActoryConfig.BlockFileSizeLimit = s3Config.GetBlockFileSizeLimit();
+    }
+    return s3ReadActoryConfig;
+}
+
 }

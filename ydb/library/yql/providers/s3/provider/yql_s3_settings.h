@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/providers/common/config/yql_dispatch.h>
 #include <ydb/library/yql/providers/common/config/yql_setting.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
 
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 
@@ -68,6 +69,7 @@ struct TS3Configuration : public TS3Settings, public NCommon::TSettingDispatcher
     bool WriteThroughDqIntegration = false;
     ui64 MaxListingResultSizePerPhysicalPartition;
     bool AllowAtomicUploadCommit = true;
+    NYql::NDq::TS3ReadActorFactoryConfig S3ReadActorFactoryConfig;
 };
 
 } // NYql

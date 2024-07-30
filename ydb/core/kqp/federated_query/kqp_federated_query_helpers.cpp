@@ -53,6 +53,8 @@ namespace NKikimr::NKqp {
 
         S3GatewayConfig = queryServiceConfig.GetS3();
 
+        S3ReadActorFactoryConfig = NYql::NDq::CreateReadActorFactoryConfig(S3GatewayConfig);
+
         // Initialize Token Accessor
         if (appConfig.GetAuthConfig().HasTokenAccessorConfig()) {
             const auto& tokenAccessorConfig = appConfig.GetAuthConfig().GetTokenAccessorConfig();
@@ -102,7 +104,8 @@ namespace NKikimr::NKqp {
             CredentialsFactory,
             nullptr,
             S3GatewayConfig,
-            GenericGatewaysConfig};
+            GenericGatewaysConfig,
+            S3ReadActorFactoryConfig};
 
         // Init DatabaseAsyncResolver only if all requirements are met
         if (DatabaseResolverActorId && MdbEndpointGenerator &&

@@ -18,7 +18,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "execute");
         Y_ABORT_UNLESS(Self->ProgressTxInFlight);
-        Self->Stats.GetTabletCounters().SetCounter(COUNTER_TX_COMPLETE_LAG, Self->GetTxCompleteLag().MilliSeconds());
+        Self->Counters.GetTabletCounters().SetCounter(COUNTER_TX_COMPLETE_LAG, Self->GetTxCompleteLag().MilliSeconds());
 
         const size_t removedCount = Self->ProgressTxController->CleanExpiredTxs(txc);
         if (removedCount > 0) {
@@ -43,7 +43,7 @@ public:
             TxOperator = Self->ProgressTxController->GetVerifiedTxOperator(txId);
             AFL_VERIFY(TxOperator->ProgressOnExecute(*Self, NOlap::TSnapshot(step, txId), txc));
             Self->ProgressTxController->FinishPlannedTx(txId, txc);
-            Self->Stats.GetTabletCounters().IncCounter(COUNTER_PLANNED_TX_COMPLETED);
+            Self->Counters.GetTabletCounters().IncCounter(COUNTER_PLANNED_TX_COMPLETED);
         }
         return true;
     }

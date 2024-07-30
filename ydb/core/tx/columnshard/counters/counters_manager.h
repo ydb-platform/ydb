@@ -19,7 +19,7 @@
 
 namespace NKikimr::NColumnShard {
 
-class TStatisticsStore {
+class TCountersManager {
 private:
     YDB_READONLY(TCSCounters, CSCounters, {});
     YDB_READONLY(TIndexationCounters, EvictionCounters, TIndexationCounters("Eviction"));
@@ -35,7 +35,7 @@ private:
     TWritesMonitor WritesMonitor;
 
 public:
-    TStatisticsStore(TTabletCountersBase& tabletCounters)
+    TCountersManager(TTabletCountersBase& tabletCounters)
         : SubscribeCounters(std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>())
         , TabletCounters(tabletCounters)
         , WritesMonitor(tabletCounters) {

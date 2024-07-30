@@ -1,7 +1,7 @@
 #pragma once
 #include "engines/changes/abstract/compaction_info.h"
 #include "engines/portions/meta.h"
-#include <ydb/core/tx/columnshard/counters/statistics_store.h>
+#include <ydb/core/tx/columnshard/counters/counters_manager.h>
 
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;

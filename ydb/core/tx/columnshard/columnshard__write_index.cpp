@@ -41,7 +41,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorConte
         if (IsAnyChannelYellowStop()) {
             ACFL_ERROR("event", "TEvWriteIndex failed")("reason", "channel yellow stop");
 
-            Stats.GetTabletCounters().IncCounter(COUNTER_OUT_OF_SPACE);
+            Counters.GetTabletCounters().IncCounter(COUNTER_OUT_OF_SPACE);
             ev->Get()->SetPutStatus(NKikimrProto::TRYLATER);
             NOlap::TChangesFinishContext context("out of disk space");
             ev->Get()->IndexChanges->Abort(*this, context);

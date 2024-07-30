@@ -13,7 +13,7 @@
 #include "transactions/tx_controller.h"
 #include "inflight_request_tracker.h"
 #include "counters/columnshard.h"
-#include "counters/statistics_store.h"
+#include "counters/counters_manager.h"
 #include "resource_subscriber/counters.h"
 #include "resource_subscriber/task.h"
 #include "normalizer/abstract/abstract.h"
@@ -292,15 +292,15 @@ public:
 
     // For syslocks
     void IncCounter(NDataShard::ECumulativeCounters counter, ui64 num = 1) const {
-        Stats.GetTabletCounters().IncCounter(counter, num);
+        Counters.GetTabletCounters().IncCounter(counter, num);
     }
 
     void IncCounter(NDataShard::EPercentileCounters counter, ui64 num) const {
-        Stats.GetTabletCounters().IncCounter(counter, num);
+        Counters.GetTabletCounters().IncCounter(counter, num);
     }
 
     void IncCounter(NDataShard::EPercentileCounters counter, const TDuration& latency) const {
-        Stats.GetTabletCounters().IncCounter(counter, latency);
+        Counters.GetTabletCounters().IncCounter(counter, latency);
     }
 
     inline TRowVersion LastCompleteTxVersion() const {
@@ -442,7 +442,7 @@ private:
     TActorId StatsReportPipe;
 
     std::unique_ptr<TTabletCountersBase> TabletCountersHolder;
-    TStatisticsStore Stats;
+    TCountersManager Counters;
 
     TInFlightReadsTracker InFlightReadsTracker;
     TTablesManager TablesManager;

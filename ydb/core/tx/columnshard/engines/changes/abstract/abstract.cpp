@@ -46,7 +46,7 @@ void TColumnEngineChanges::WriteIndexOnComplete(NColumnShard::TColumnShard* self
     DoWriteIndexOnComplete(self, context);
     if (self) {
         OnFinish(*self, context);
-        self->Stats.GetTabletCounters().IncCounter(GetCounterIndex(context.FinishedSuccessfully));
+        self->Counters.GetTabletCounters().IncCounter(GetCounterIndex(context.FinishedSuccessfully));
     }
 
 }

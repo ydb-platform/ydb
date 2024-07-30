@@ -41,9 +41,9 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::T
         }
     }
     if (self) {
-        self->Stats.GetTabletCounters().IncCounter(NColumnShard::COUNTER_PORTIONS_ERASED, PortionsToDrop.size());
+        self->Counters.GetTabletCounters().IncCounter(NColumnShard::COUNTER_PORTIONS_ERASED, PortionsToDrop.size());
         for (auto&& p : PortionsToDrop) {
-            self->Stats.GetTabletCounters().IncCounter(NColumnShard::COUNTER_RAW_BYTES_ERASED, p.GetTotalRawBytes());
+            self->Counters.GetTabletCounters().IncCounter(NColumnShard::COUNTER_RAW_BYTES_ERASED, p.GetTotalRawBytes());
         }
     }
 }

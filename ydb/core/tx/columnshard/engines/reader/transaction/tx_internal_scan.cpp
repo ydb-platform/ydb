@@ -80,7 +80,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE, TStringBuilder()
             << "Table " << request.GetPathId() << " (shard " << Self->TabletID() << ") scan failed, reason: " << requestCookie.GetErrorMessage());
         NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
-        Self->Stats.GetScanCounters().OnScanFinished(NColumnShard::TScanCounters::EStatusFinish::CannotAddInFlight, TDuration::Zero());
+        Self->Counters.GetScanCounters().OnScanFinished(NColumnShard::TScanCounters::EStatusFinish::CannotAddInFlight, TDuration::Zero());
         ctx.Send(scanComputeActor, ev.Release());
         return;
     }

@@ -52,9 +52,9 @@ namespace NKikimr::NColumnShard {
             auto counters = owner.InsertTable->Commit(dbTable, snapshot.GetPlanStep(), snapshot.GetTxId(), { gWriteId },
                                                       pathExists);
 
-            owner.Stats.GetTabletCounters().IncCounter(COUNTER_BLOBS_COMMITTED, counters.Rows);
-            owner.Stats.GetTabletCounters().IncCounter(COUNTER_BYTES_COMMITTED, counters.Bytes);
-            owner.Stats.GetTabletCounters().IncCounter(COUNTER_RAW_BYTES_COMMITTED, counters.RawBytes);
+            owner.Counters.GetTabletCounters().IncCounter(COUNTER_BLOBS_COMMITTED, counters.Rows);
+            owner.Counters.GetTabletCounters().IncCounter(COUNTER_BYTES_COMMITTED, counters.Bytes);
+            owner.Counters.GetTabletCounters().IncCounter(COUNTER_RAW_BYTES_COMMITTED, counters.RawBytes);
         }
         owner.UpdateInsertTableCounters();
     }

@@ -32,7 +32,7 @@ class TEnv {
         Database = "/" + ToString(DomainName);
 
         YdbProxy = Server.GetRuntime()->Register(CreateYdbProxy(
-            Endpoint, UseDatabase ? Database : "", std::forward<Args>(args)...));
+            Endpoint, UseDatabase ? Database : "", false /* ssl */, std::forward<Args>(args)...));
         Sender = Server.GetRuntime()->AllocateEdgeActor();
     }
 

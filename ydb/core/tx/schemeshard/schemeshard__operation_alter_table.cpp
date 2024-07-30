@@ -40,6 +40,18 @@ bool IsSuperUser(const NACLib::TUserToken* userToken) {
     return (it != adminSids.end());
 }
 
+template <typename TMessage>
+bool CheckAllowedFields(const TMessage& message, THashSet<TString>&& allowedFields) {
+    std::vector<const google::protobuf::FieldDescriptor*> fields;
+    message.GetReflection()->ListFields(message, &fields);
+    for (const auto* field : fields) {
+        if (!allowedFields.contains(field->name())) {
+            return false;
+        }
+    }
+    return true;
+}
+
 TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table, const NKikimrSchemeOp::TTableDescription& alter,
                                       const bool shadowDataAllowed,
                                       TString& errStr, NKikimrScheme::EStatus& status, TOperationContext& context) {
@@ -682,16 +694,19 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
         return {CreateAlterTable(id, tx)};
     }
 
-    TVector<ISubOperation::TPtr> result;
-
-    // only for super user use
-    // until correct and safe altering index api is released
-    if (!IsSuperUser(context.UserToken.Get())) {
+    // Admins can alter indexImplTable unconditionally.
+    // Regular users can only alter allowed fields.
+    if (!IsSuperUser(context.UserToken.Get())
+        && !CheckAllowedFields(alter, {"Name", "PathId", "ReplicationConfig"})
+    ) {
         return {CreateAlterTable(id, tx)};
     }
 
+    TVector<ISubOperation::TPtr> result;
+
     {
         auto tableIndexAltering = TransactionTemplate(parent.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
+        tableIndexAltering.SetInternal(tx.GetInternal());
         auto alterIndex = tableIndexAltering.MutableAlterTableIndex();
         alterIndex->SetName(parent.LeafName());
         alterIndex->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);

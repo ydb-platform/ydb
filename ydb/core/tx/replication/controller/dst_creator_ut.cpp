@@ -13,6 +13,26 @@ namespace NKikimr::NReplication::NController {
 Y_UNIT_TEST_SUITE(DstCreator) {
     using namespace NTestHelpers;
 
+    void CheckTableReplica(const TTestTableDescription& tableDesc, const NKikimrSchemeOp::TTableDescription& replicatedDesc) {
+        UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.KeyColumnNamesSize(), tableDesc.KeyColumns.size());
+        for (ui32 i = 0; i < replicatedDesc.KeyColumnNamesSize(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.GetKeyColumnNames(i), tableDesc.KeyColumns[i]);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.ColumnsSize(), tableDesc.Columns.size());
+        for (ui32 i = 0; i < replicatedDesc.ColumnsSize(); ++i) {
+            auto pred = [name = replicatedDesc.GetColumns(i).GetName()](const auto& column) {
+                return name == column.Name;
+            };
+
+            UNIT_ASSERT(FindIfPtr(tableDesc.Columns, pred));
+        }
+
+        const auto& replCfg = replicatedDesc.GetReplicationConfig();
+        UNIT_ASSERT_VALUES_EQUAL(replCfg.GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        UNIT_ASSERT_VALUES_EQUAL(replCfg.GetConsistency(), NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK);
+    }
+
     void Basic(const TString& replicatedPath) {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
@@ -39,23 +59,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         auto desc = env.GetDescription(replicatedPath);
         const auto& replicatedDesc = desc.GetPathDescription().GetTable();
 
-        UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.KeyColumnNamesSize(), tableDesc.KeyColumns.size());
-        for (ui32 i = 0; i < replicatedDesc.KeyColumnNamesSize(); ++i) {
-            UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.GetKeyColumnNames(i), tableDesc.KeyColumns[i]);
-        }
-
-        UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.ColumnsSize(), tableDesc.Columns.size());
-        for (ui32 i = 0; i < replicatedDesc.ColumnsSize(); ++i) {
-            auto pred = [name = replicatedDesc.GetColumns(i).GetName()](const auto& column) {
-                return name == column.Name;
-            };
-
-            UNIT_ASSERT(FindIfPtr(tableDesc.Columns, pred));
-        }
-
-        const auto& replCfg = replicatedDesc.GetReplicationConfig();
-        UNIT_ASSERT_VALUES_EQUAL(replCfg.GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
-        UNIT_ASSERT_VALUES_EQUAL(replCfg.GetConsistency(), NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK);
+        CheckTableReplica(tableDesc, replicatedDesc);
     }
 
     Y_UNIT_TEST(Basic) {

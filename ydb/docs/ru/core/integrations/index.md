@@ -18,17 +18,8 @@
 
 ## SDK {#sdk}
 
-|  Библиотеки  | Язык программирования  | Репозиторий |
-| --- | :---:|--- |
-| database/sql | Go | [Репозиторий](https://github.com/ydb-platform/ydb-go-sdk/blob/master/SQL.md) |
-| ydb-go-sdk | Go |  [Репозиторий](https://github.com/ydb-platform/ydb-go-sdk) |
-| JDBC | Java |  [Репозиторий](https://github.com/ydb-platform/ydb-jdbc-driver) |
-| ydb-java-sdk | Java |  [Репозиторий](https://github.com/ydb-platform/ydb-java-sdk) |
-| ydb-python-sdk | Python |  [Репозиторий](https://github.com/ydb-platform/ydb-python-sdk) |
-| ydb-php-sdk | PHP |  [Репозиторий](https://github.com/ydb-platform/ydb-php-sdk) |
-| ydb-cpp-sdk | C++ |  [Репозиторий](https://github.com/ydb-platform/ydb-cpp-sdk) |
-| ydb-dotnet-sdk | .Net |  [Репозиторий](https://github.com/ydb-platform/ydb-dotnet-sdk) |
-| ydb-rs-sdk | Rust |  [Репозиторий](https://github.com/ydb-platform/ydb-rs-sdk) |
+{{ydb-name}} содержит [набор SDK](../reference/ydb-sdk/index.md) для различных языков программирования.
+
 
 ## GUI Clients {#gui}
 
@@ -48,7 +39,7 @@
 {% if ydb-datalens %}
 | [{{ datalens-name }}](https://datalens.tech/ru) | Полный | [Инструкция](datalens.md) |
 {% endif %}
-{% if ydb-finebi %}
+{% if ydb-superset %}
 
 | [Apache Superset](https://superset.apache.org) | Через [PostgreSQL-совместимость](https://ydb.tech/docs/ru/postgresql/intro) | [Инструкция](superset.md) |
 
@@ -61,7 +52,7 @@
 | [Grafana](https://grafana.com) | Полный| [Инструкция](grafana.md) |
 
 {% if ydb-airflow %}
-## Оркестрация {#scheduling}
+## Оркестрация {#orchestration}
 
 | Среда | Инструкция |
 | --- | --- |

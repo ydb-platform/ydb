@@ -19,15 +19,4 @@ items:
   href: import-jdbc.md
 - name: Подключение из IDE
   href: connect-from-ide.md
-- name: Apache Airflow
-  href: airflow.md
-  when: ydb-airflow
-- name: Apache SuperSet
-  href: superset.md
-  when: ydb-superset
-- name: FineBI
-  href: finebi.md
-  when: ydb-finebi
-- name: DataLens
-  href: datalens.md
-  when: ydb-datalens
+

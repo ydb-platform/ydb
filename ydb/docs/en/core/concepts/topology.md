@@ -15,7 +15,7 @@ Cluster topology is based on the chosen operating mode, which is determined by t
 
 The following operating modes are available:
 
-* `none` - There is no redundancy. Any hardware failure causes the storage pool to become unavailable. This mode is only recommended for functional testing.
+* `none` - There is no redundancy. Any hardware failure causes the storage to become unavailable. This mode is only recommended for functional testing.
 * `block-4-2` - [Erasure coding](https://en.wikipedia.org/wiki/Erasure_code) with two blocks of redundancy added to the four blocks of source data is applied. Storage nodes are placed in at least 8 failure domains (usually racks). The storage pool is available if any two domains fail, continuing to record all 6 data parts in the remaining domains. This mode is recommended for storage pools within a single availability zone (usually a data processing center).
 * `mirror-3-dc` - Data is replicated to 3 availability zones using 3 failure domains (usually racks) within each zone. The storage pool is available if one availability zone and one failure domain fail in the remaining zones. This mode is recommended for multi-data center installations.
 * `mirror-3-dc-3-nodes` - A simplified version of `mirror-3-dc`. This mode requires at least 3 servers with 3 disks each. Each server must be located in an independent data center in order to provide the best fault tolerance. Health in this mode is maintained if no more than 1 node fails. This mode is only recommended for functional testing.
@@ -88,6 +88,15 @@ Auto reconfiguration of storage groups reduces the risk of data loss in the even
 Once a group is reconfigured, a new VDisk is automatically populated with data to restore the required storage redundancy. This process increases the load on other VDisks in the group as well as on the network. The total data replication speed is limited on both the source and target VDisks to minimize the impact of redundancy recovery on system performance.
 
 The time required to restore redundancy depends on the amount of data and hardware performance. For example, replication on fast NVMe SSDs may take an hour, while it could take more than 24 hours on large HDDs. To ensure reconfiguration is possible, a cluster should have free slots available for creating VDisks in different fail domains. When determining the number of slots to keep free, consider the risk of hardware failure, the time required to replicate data, and the time needed to replace failed hardware.
+
+## Database availability
+
+A [database](./glossary.md#database) within a {{ ydb-short-name }} cluster is available if both its storage and compute is operational:
+
+* all [storage groups](./glossary.md#storage-group) allocated for the database should be operational, e.g. stay within the allowed level of failures;
+* the compute resources of the currently available [database nodes](./glossary.md#database-node) (primarily, the amount of main memory) should be sufficient to start all the user objects (tables, topics) within the database, and to handle the user sessions.
+
+To survive a data center failure at the database level, assuming a cluster configured for `mirror-3-dc` operating mode, the database nodes have to be running in all 3 data centers, and include sufficient resources to handle the full workload when running in just 2 of 3 data centers. This means having at least `35%` extra resources in terms of CPU and main memory when running on top of 3 fully available data centers.
 
 ## See also
 

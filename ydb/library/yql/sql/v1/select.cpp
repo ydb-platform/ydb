@@ -1455,6 +1455,17 @@ private:
     TSet<TString> GroupingCols;
 };
 
+namespace {
+    TString FullColumnName(const TColumnNode& column) {
+        YQL_ENSURE(column.GetColumnName());
+        TString columnName = *column.GetColumnName();
+        if (column.IsUseSource()) {
+            columnName = DotJoin(*column.GetSourceName(), columnName);
+        }
+        return columnName;
+    }
+}
+
 /// \todo simplify class
 class TSelectCore: public IRealSource, public IComposableSource {
 public:
@@ -1848,40 +1859,52 @@ public:
     }
 
     TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) override {
-        if (OrderByInit && Source->GetJoin()) {
+        const bool aggregated = Source->HasAggregations() || Distinct;
+        if (OrderByInit && (Source->GetJoin() || !aggregated)) {
+            // ORDER BY will try to find column not only in projection items, but also in Source.
+            // ```SELECT a, b FROM T ORDER BY c``` should work if c is present in T
+            const bool reliable = column.IsReliable();
             column.SetAsNotReliable();
             auto maybeExist = IRealSource::AddColumn(ctx, column);
-            if (maybeExist && maybeExist.GetRef()) {
-                return true;
-            }
-            return Source->AddColumn(ctx, column);
-        }
-
-        if (OrderByInit && !Distinct && !GroupBy) {
-            bool reliable = column.IsReliable();
-            column.SetAsNotReliable();
-            auto maybeExist = IRealSource::AddColumn(ctx, column);
-            if (reliable) {
+            if (reliable && !Source->GetJoin()) {
                 column.ResetAsReliable();
             }
-            if (maybeExist && maybeExist.GetRef()) {
-                return true;
+            if (!maybeExist || !maybeExist.GetRef()) {
+                maybeExist = Source->AddColumn(ctx, column);
             }
-
-            auto maybeSourceExist = Source->AddColumn(ctx, column);
-            if (!maybeSourceExist.Defined()) {
-                return maybeSourceExist;
+            if (!maybeExist.Defined()) {
+                return maybeExist;
             }
-
-            // order by references column which is missing in projection, but may exists in source
-            const auto columnName = column.GetColumnName();
-            if (columnName) {
-                ExtraSortColumns.emplace(*columnName, TNodePtr(&column));
+            if (!aggregated && column.GetColumnName() && IsMissingInProjection(ctx, column)) {
+                ExtraSortColumns[FullColumnName(column)] = &column;
             }
-            return true;
+            return maybeExist;
         }
 
         return IRealSource::AddColumn(ctx, column);
+    }
+
+    bool IsMissingInProjection(TContext& ctx, const TColumnNode& column) const {
+        TString columnName = FullColumnName(column);
+        if (Columns.Real.contains(columnName) || Columns.Artificial.contains(columnName)) {
+            return false;
+        }
+
+        if (!Columns.IsColumnPossible(ctx, columnName)) {
+            return true;
+        }
+
+        for (auto without: Without) {
+            auto name = *without->GetColumnName();
+            if (Source && Source->GetJoin()) {
+                name = DotJoin(*without->GetSourceName(), name);
+            }
+            if (name == columnName) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     TNodePtr PrepareWithout(const TNodePtr& base) {
@@ -2211,14 +2234,14 @@ private:
                 ++column;
                 ++isNamedColumn;
             }
+        }
 
-            for (const auto& [columnName, column]: ExtraSortColumns) {
-                auto body = Y();
-                body = L(body, Y("let", "res", column));
-                TPosition pos = column->GetPos();
-                auto projectItem = Y("SqlProjectItem", "projectCoreType", BuildQuotedAtom(pos, columnName), BuildLambda(pos, Y("row"), body, "res"));
-                sqlProjectArgs = L(sqlProjectArgs, projectItem);
-            }
+        for (const auto& [columnName, column]: ExtraSortColumns) {
+            auto body = Y();
+            body = L(body, Y("let", "res", column));
+            TPosition pos = column->GetPos();
+            auto projectItem = Y("SqlProjectItem", "projectCoreType", BuildQuotedAtom(pos, columnName), BuildLambda(pos, Y("row"), body, "res"));
+            sqlProjectArgs = L(sqlProjectArgs, projectItem);
         }
 
         auto block(Y(Y("let", "projectCoreType", Y("TypeOf", "core"))));

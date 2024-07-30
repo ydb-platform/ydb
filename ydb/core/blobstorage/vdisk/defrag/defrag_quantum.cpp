@@ -94,8 +94,8 @@ namespace NKikimr {
 
                 Compact();
 
-                // auto hugeStat = GetHugeStat();
-                // Y_ABORT_UNLESS(hugeStat.LockedChunks.size() < 100);
+                auto hugeStat = GetHugeStat();
+                Y_DEBUG_ABORT_UNLESS(hugeStat.LockedChunks.size() < 100);
             }
 
             Send(ParentActorId, new TEvDefragQuantumResult(std::move(stat)));

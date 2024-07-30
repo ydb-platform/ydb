@@ -35,7 +35,7 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
     AFL_VERIFY(dataSchema.GetSnapshot() < GetSnapshot());
     const std::shared_ptr<arrow::Schema>& resultArrowSchema = GetSchema();
 
-    std::shared_ptr<NArrow::TGeneralContainer> result = std::make_shared<NArrow::TGeneralContainer>();
+    std::shared_ptr<NArrow::TGeneralContainer> result = std::make_shared<NArrow::TGeneralContainer>(batch->GetRecordsCountVerified());
     for (size_t i = 0; i < resultArrowSchema->fields().size(); ++i) {
         auto& resultField = resultArrowSchema->fields()[i];
         auto columnId = GetIndexInfo().GetColumnId(resultField->name());

@@ -140,9 +140,9 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
   * `NEW_AND_OLD_IMAGES` - комбинация режимов `NEW_IMAGE` и `OLD_IMAGE`. Будут записаны значения всех столбцов _до_ и _в результате_ изменения.
 * `FORMAT` — формат данных, в котором будут записаны данные.
   * `JSON` — записывать данные в формате {% if oss == "true" %}[JSON](../../../../concepts/cdc.md#json-record-structure){% else %}JSON{% endif %}.
+  * `DEBEZIUM_JSON` — записывать данные в {% if oss == "true" %}[JSON-формате, аналогичном Debezium формату](../../../../concepts/cdc.md#debezium-json-record-structure){% else %}JSON-формате, аналогичном Debezium формату{% endif %}.
 {% if audience == "tech" %}
   * `DYNAMODB_STREAMS_JSON` — записывать данные в {% if oss == "true" %}[JSON-формате, совместимом с Amazon DynamoDB Streams](../../../../concepts/cdc#dynamodb-streams-json-record-structure){% else %}JSON-формате, совместимом с Amazon DynamoDB Streams{% endif %}.
-  * `DEBEZIUM_JSON` — записывать данные в {% if oss == "true" %}[JSON-формате, аналогичном Debezium формату](../../../../concepts/cdc.md#debezium-json-record-structure){% else %}JSON-формате, аналогичном Debezium формату{% endif %}.
 {% endif %}
 * `VIRTUAL_TIMESTAMPS` — включение-выключение {% if oss == "true" %}[виртуальных меток времени](../../../../concepts/cdc.md#virtual-timestamps){% else %}виртуальных меток времени{% endif %}. По умолчанию выключено.
 * `RETENTION_PERIOD` — {% if oss == "true" %}[время хранения записей](../../../../concepts/cdc.md#retention-period){% else %}время хранения записей{% endif %}. Тип значения — `Interval`, значение по умолчанию — 24 часа (`Interval('PT24H')`).

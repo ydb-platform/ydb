@@ -9,7 +9,7 @@ namespace NKikimr::NSchemeShard {
 class TTablesStorage {
 private:
     THashMap<TPathId, TColumnTableInfo::TPtr> Tables;
-    THashMap<TString, std::set<TPathId>> PathsByTieringId;
+    THashMap<TString, THashSet<TPathId>> PathsByTieringId;
     THashMap<ui64, TColumnTablesLayout::TTableIdsGroup> TablesByShard;
 
     void OnAddObject(const TPathId& pathId, TColumnTableInfo::TPtr object);
@@ -20,7 +20,7 @@ public:
 
     TColumnTablesLayout GetTablesLayout(const std::vector<ui64>& tabletIds) const;
 
-    const std::set<TPathId>& GetTablesWithTiering(const TString& tieringId) const;
+    const THashSet<TPathId>& GetTablesWithTiering(const TString& tieringId) const;
 
     class TTableReadGuard {
     protected:

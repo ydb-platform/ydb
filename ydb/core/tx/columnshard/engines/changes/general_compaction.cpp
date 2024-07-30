@@ -212,7 +212,7 @@ NColumnShard::ECumulativeCounters TGeneralCompactColumnEngineChanges::GetCounter
 
 void TGeneralCompactColumnEngineChanges::AddCheckPoint(
     const NArrow::NMerger::TSortableBatchPosition& position, const bool include) {
-    CheckPoints.AddPosition(position, include);
+    CheckPoints.InsertPosition(position, include);
 }
 
 std::shared_ptr<TGeneralCompactColumnEngineChanges::IMemoryPredictor> TGeneralCompactColumnEngineChanges::BuildMemoryPredictor() {

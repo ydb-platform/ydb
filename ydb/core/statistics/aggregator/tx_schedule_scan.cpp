@@ -12,7 +12,7 @@ struct TStatisticsAggregator::TTxScheduleScan : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_SCHEDULE_SCAN; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxScheduleScan::Execute");
+        SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleScan::Execute");
 
         Self->Schedule(Self->ScheduleScanIntervalTime, new TEvPrivate::TEvScheduleScan());
 
@@ -30,7 +30,7 @@ struct TStatisticsAggregator::TTxScheduleScan : public TTxBase {
     }
 
     void Complete(const TActorContext&) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxScheduleScan::Complete");
+        SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleScan::Complete");
     }
 };
 

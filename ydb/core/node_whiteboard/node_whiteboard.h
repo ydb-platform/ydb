@@ -386,11 +386,11 @@ struct TEvWhiteboard{
         }
     };
 
-    static TEvSystemStateUpdate *CreateSharedCacheStatsUpdateRequest(ui64 memUsedBytes, ui64 memLimitBytes) {
+    static TEvSystemStateUpdate *CreateCachesConsumptionUpdateRequest(ui64 consumptionBytes, ui64 limitBytes) {
         TEvSystemStateUpdate *request = new TEvSystemStateUpdate();
         auto *pb = request->Record.MutableSharedCacheStats();
-        pb->SetUsedBytes(memUsedBytes);
-        pb->SetLimitBytes(memLimitBytes);
+        pb->SetUsedBytes(consumptionBytes);
+        pb->SetLimitBytes(limitBytes);
         return request;
     }
 

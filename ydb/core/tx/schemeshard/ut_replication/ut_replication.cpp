@@ -143,6 +143,31 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         }
     }
 
+    Y_UNIT_TEST(CreateWithoutCredentials) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication"
+            Config {
+              Specific {
+                Targets {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot2/Table"
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto desc = DescribePath(runtime, "/MyRoot/Replication");
+        const auto& params = desc.GetPathDescription().GetReplicationDescription().GetConfig().GetSrcConnectionParams();
+        UNIT_ASSERT_VALUES_UNEQUAL("root@builtin", params.GetOAuthToken().GetToken());
+    }
+
     Y_UNIT_TEST(Alter) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));

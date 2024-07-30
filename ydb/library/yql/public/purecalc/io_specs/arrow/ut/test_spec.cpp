@@ -241,8 +241,8 @@ Y_UNIT_TEST_SUITE(TestMorePullListArrowIO) {
                 TArrowInputSpec({schema}),
                 TArrowOutputSpec(schema),
                 R"(SELECT
-                    `uint64` + 1 as `uint64`,
-                    `int64`  - 2  as `int64`,
+                    uint64 + 1 as uint64,
+                    int64  - 2  as int64,
                 FROM Input)",
                 ETranslationMode::SQL
             );
@@ -318,8 +318,8 @@ Y_UNIT_TEST_SUITE(TestMorePullStreamArrowIO) {
                 TArrowInputSpec({schema}),
                 TArrowOutputSpec(schema),
                 R"(SELECT
-                    `uint64` + 1 as `uint64`,
-                    `int64`  - 2  as `int64`,
+                    uint64 + 1 as uint64,
+                    int64  - 2  as int64,
                 FROM Input)",
                 ETranslationMode::SQL
             );
@@ -393,8 +393,8 @@ Y_UNIT_TEST_SUITE(TestMorePushStreamArrowIO) {
                 TArrowInputSpec({schema}),
                 TArrowOutputSpec(schema),
                 R"(SELECT
-                    `uint64` + 1 as `uint64`,
-                    `int64`  - 2  as `int64`,
+                    uint64 + 1 as uint64,
+                    int64  - 2  as int64,
                 FROM Input)",
                 ETranslationMode::SQL
             );

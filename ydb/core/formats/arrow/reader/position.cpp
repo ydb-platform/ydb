@@ -22,8 +22,9 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
     const ui64 posStartExt, const ui64 posFinishExt, const TSortableBatchPosition& forFound, const bool greater) {
     ui64 posStart = posStartExt;
     ui64 posFinish = posFinishExt;
+    auto guard = position.CreateAsymmetricAccessGuard();
     {
-        AFL_VERIFY(position.InitPosition(posStart));
+        AFL_VERIFY(guard.InitSortingPosition(posStart));
         auto cmp = position.Compare(forFound);
         if (cmp == std::partial_ordering::greater) {
             return TFoundPosition::Greater(posStart);
@@ -32,7 +33,7 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
         }
     }
     {
-        AFL_VERIFY(position.InitPosition(posFinish));
+        AFL_VERIFY(guard.InitSortingPosition(posFinish));
         auto cmp = position.Compare(forFound);
         if (cmp == std::partial_ordering::less) {
             return TFoundPosition::Less(posFinish);
@@ -41,7 +42,7 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
         }
     }
     while (posFinish > posStart + 1) {
-        Y_ABORT_UNLESS(position.InitPosition(0.5 * (posStart + posFinish)));
+        AFL_VERIFY(guard.InitSortingPosition(0.5 * (posStart + posFinish)));
         const auto comparision = position.Compare(forFound);
         if (comparision == std::partial_ordering::less) {
             posStart = position.Position;
@@ -51,12 +52,12 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
             return TFoundPosition::Equal(position.Position);
         }
     }
-    Y_ABORT_UNLESS(posFinish != posStart);
+    AFL_VERIFY(posFinish != posStart);
     if (greater) {
-        Y_ABORT_UNLESS(position.InitPosition(posFinish));
+        AFL_VERIFY(guard.InitSortingPosition(posFinish));
         return TFoundPosition::Greater(posFinish);
     } else {
-        Y_ABORT_UNLESS(position.InitPosition(posStart));
+        AFL_VERIFY(guard.InitSortingPosition(posStart));
         return TFoundPosition::Less(posStart);
     }
 }
@@ -79,9 +80,10 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
     return FindPosition(position, posStart, posFinish, forFound, greater);
 }
 
-NKikimr::NArrow::NMerger::TRWSortableBatchPosition TSortableBatchPosition::BuildRWPosition() const {
-    return TRWSortableBatchPosition(
-        Position, RecordsCount, ReverseSort, Sorting->BuildCopy(Position), Data ? Data->BuildCopy(Position) : nullptr);
+NKikimr::NArrow::NMerger::TRWSortableBatchPosition TSortableBatchPosition::BuildRWPosition(const bool needData, const bool deepCopy) const {
+    return TRWSortableBatchPosition(Position, RecordsCount, ReverseSort,
+        deepCopy ? Sorting->BuildCopy(Position) : Sorting,
+        (needData && Data) ? (deepCopy ? Data->BuildCopy(Position) : Data) : nullptr);
 }
 
 NKikimr::NArrow::NMerger::TRWSortableBatchPosition TSortableBatchPosition::BuildRWPosition(
@@ -176,7 +178,7 @@ void TSortableScanData::BuildPosition(const ui64 position) {
 bool TSortableScanData::InitPosition(const ui64 position) {
     AFL_VERIFY(position < RecordsCount);
     if (position < FinishPosition && StartPosition <= position) {
-        return false;
+        return true;
     }
     LastInit = position;
     ui32 idx = 0;

@@ -103,10 +103,6 @@ struct TEvPrivate {
 
     struct TEvSchedulePublishResources : public TEventLocal<TEvSchedulePublishResources, EEv::EvSchedulePublishResources> {
     };
-
-    struct TEvTakeResourcesSnapshot : public TEventLocal<TEvTakeResourcesSnapshot, EEv::EvTakeResourcesSnapshot> {
-        std::function<void(TVector<NKikimrKqp::TKqpNodeResources>&&)> Callback;
-    };
 };
 
 class TKqpResourceManager : public IKqpResourceManager {
@@ -117,7 +113,6 @@ public:
         , ExecutionUnitsResource(config.GetComputeActorsCount())
         , ExecutionUnitsLimit(config.GetComputeActorsCount())
         , ScanQueryMemoryResource(config.GetQueryMemoryLimit())
-        , PublishResourcesByExchanger(config.GetEnablePublishResourcesByExchanger())
     {
         SetConfigValues(config);
     }
@@ -132,10 +127,7 @@ public:
             config.GetKqpPatternCacheCompiledCapacityBytes(),
             config.GetKqpPatternCachePatternAccessTimesBeforeTryToCompile());
 
-        if (PublishResourcesByExchanger) {
-            CreateResourceInfoExchanger(config.GetInfoExchangerSettings());
-            return;
-        }
+        CreateResourceInfoExchanger(config.GetInfoExchangerSettings());
     }
 
     const TIntrusivePtr<TKqpCounters>& GetCounters() const override {
@@ -144,14 +136,10 @@ public:
 
     void CreateResourceInfoExchanger(
             const NKikimrConfig::TTableServiceConfig::TResourceManager::TInfoExchangerSettings& settings) {
-        PublishResourcesByExchanger = true;
-        if (!ResourceInfoExchanger) {
-            ResourceSnapshotState = std::make_shared<TResourceSnapshotState>();
-            auto exchanger = CreateKqpResourceInfoExchangerActor(
-                Counters, ResourceSnapshotState, settings);
-            ResourceInfoExchanger = ActorSystem->Register(exchanger);
-            return;
-        }
+        ResourceSnapshotState = std::make_shared<TResourceSnapshotState>();
+        auto exchanger = CreateKqpResourceInfoExchangerActor(
+            Counters, ResourceSnapshotState, settings);
+        ResourceInfoExchanger = ActorSystem->Register(exchanger);
     }
 
     bool AllocateExecutionUnits(ui32 cnt) {
@@ -328,16 +316,12 @@ public:
 
     TVector<NKikimrKqp::TKqpNodeResources> GetClusterResources() const override {
         TVector<NKikimrKqp::TKqpNodeResources> resources;
-        Y_ABORT_UNLESS(PublishResourcesByExchanger);
-
-        if (PublishResourcesByExchanger) {
-            std::shared_ptr<TVector<NKikimrKqp::TKqpNodeResources>> infos;
-            with_lock (ResourceSnapshotState->Lock) {
-                infos = ResourceSnapshotState->Snapshot;
-            }
-            if (infos != nullptr) {
-                resources = *infos;
-            }
+        std::shared_ptr<TVector<NKikimrKqp::TKqpNodeResources>> infos;
+        with_lock (ResourceSnapshotState->Lock) {
+            infos = ResourceSnapshotState->Snapshot;
+        }
+        if (infos != nullptr) {
+            resources = *infos;
         }
 
         return resources;
@@ -345,22 +329,15 @@ public:
 
     void RequestClusterResourcesInfo(TOnResourcesSnapshotCallback&& callback) override {
         LOG_AS_D("Schedule Snapshot request");
-        if (PublishResourcesByExchanger) {
-            std::shared_ptr<TVector<NKikimrKqp::TKqpNodeResources>> infos;
-            with_lock (ResourceSnapshotState->Lock) {
-                infos = ResourceSnapshotState->Snapshot;
-            }
-            TVector<NKikimrKqp::TKqpNodeResources> resources;
-            if (infos != nullptr) {
-                resources = *infos;
-            }
-            callback(std::move(resources));
-            return;
+        std::shared_ptr<TVector<NKikimrKqp::TKqpNodeResources>> infos;
+        with_lock (ResourceSnapshotState->Lock) {
+            infos = ResourceSnapshotState->Snapshot;
         }
-        auto ev = MakeHolder<TEvPrivate::TEvTakeResourcesSnapshot>();
-        ev->Callback = std::move(callback);
-        TAutoPtr<IEventHandle> handle = new IEventHandle(SelfId, SelfId, ev.Release());
-        ActorSystem->Send(handle);
+        TVector<NKikimrKqp::TKqpNodeResources> resources;
+        if (infos != nullptr) {
+            resources = *infos;
+        }
+        callback(std::move(resources));
     }
 
     TKqpLocalNodeResources GetLocalResources() const override {
@@ -470,7 +447,6 @@ public:
 
     // state for resource info exchanger
     std::shared_ptr<TResourceSnapshotState> ResourceSnapshotState;
-    bool PublishResourcesByExchanger;
     TActorId ResourceInfoExchanger = TActorId();
 };
 
@@ -500,7 +476,6 @@ public:
         : Config(config)
         , ResourceBrokerId(resourceBrokerId ? resourceBrokerId : MakeResourceBrokerID())
         , KqpProxySharedResources(std::move(kqpProxySharedResources))
-        , PublishResourcesByExchanger(config.GetEnablePublishResourcesByExchanger())
     {
         ResourceManager = std::make_shared<TKqpResourceManager>(config, counters);
         with_lock (ResourceManagers.Lock) {
@@ -575,7 +550,6 @@ private:
             hFunc(TEvInterconnect::TEvNodeInfo, Handle);
             hFunc(TEvPrivate::TEvPublishResources, HandleWork);
             hFunc(TEvPrivate::TEvSchedulePublishResources, HandleWork);
-            hFunc(TEvPrivate::TEvTakeResourcesSnapshot, HandleWork);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(TEvKqp::TEvKqpProxyPublishRequest, HandleWork);
             hFunc(TEvResourceBroker::TEvConfigResponse, HandleWork);
@@ -609,20 +583,6 @@ private:
             return;
         }
         PublishResourceUsage("kqp_proxy");
-    }
-
-    void HandleWork(TEvPrivate::TEvTakeResourcesSnapshot::TPtr& ev) {
-        if (WbState.DomainNotFound) {
-            LOG_E("Can not take resources snapshot, ssGroupId not set. Tenant: " << WbState.Tenant
-                << ", Board: " << WbState.BoardPath);
-            ev->Get()->Callback({});
-            return;
-        }
-
-        LOG_D("Create Snapshot actor, board: " << WbState.BoardPath);
-
-        Register(
-            CreateTakeResourcesSnapshotActor(WbState.BoardPath, std::move(ev->Get()->Callback)));
     }
 
     void HandleWork(TEvResourceBroker::TEvConfigResponse::TPtr& ev) {
@@ -699,23 +659,6 @@ private:
             config.GetKqpPatternCacheCompiledCapacityBytes(),
             config.GetKqpPatternCachePatternAccessTimesBeforeTryToCompile());
 
-        bool enablePublishResourcesByExchanger = config.GetEnablePublishResourcesByExchanger();
-        if (enablePublishResourcesByExchanger != PublishResourcesByExchanger) {
-            PublishResourcesByExchanger = enablePublishResourcesByExchanger;
-            if (enablePublishResourcesByExchanger) {
-                ResourceManager->CreateResourceInfoExchanger(config.GetInfoExchangerSettings());
-                PublishResourceUsage("exchanger enabled");
-            } else {
-                if (ResourceManager->ResourceInfoExchanger) {
-                    Send(ResourceManager->ResourceInfoExchanger, new TEvents::TEvPoison);
-                    ResourceManager->ResourceInfoExchanger = TActorId();
-                }
-                ResourceManager->PublishResourcesByExchanger = false;
-                ResourceManager->ResourceSnapshotState.reset();
-                PublishResourceUsage("exchanger disabled");
-            }
-        }
-
 #define FORCE_VALUE(name) if (!config.Has ## name ()) config.Set ## name(config.Get ## name());
         FORCE_VALUE(ComputeActorsCount)
         FORCE_VALUE(ChannelBufferSize)
@@ -762,14 +705,7 @@ private:
         TStringStream str;
         str.Reserve(8 * 1024);
 
-        auto snapshot = TVector<NKikimrKqp::TKqpNodeResources>();
-
-        if (PublishResourcesByExchanger) {
-            ResourceManager->RequestClusterResourcesInfo(
-                [&snapshot](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
-                    snapshot = std::move(resources);
-                });
-        }
+        auto snapshot = ResourceManager->GetClusterResources();
 
         HTML(str) {
             PRE() {
@@ -823,9 +759,6 @@ private:
             ResourceManager->ResourceInfoExchanger = TActorId();
         }
         ResourceManager->ResourceSnapshotState.reset();
-        if (WbState.BoardPublisherActorId) {
-            Send(WbState.BoardPublisherActorId, new TEvents::TEvPoison);
-        }
         TActor::PassAway();
     }
 
@@ -882,39 +815,14 @@ private:
             pool->SetAvailable(ResourceManager->ScanQueryMemoryResource.Available());
         }
 
-        if (PublishResourcesByExchanger) {
-            LOG_I("Send to publish resource usage for "
-                << "reason: " << reason
-                << ", payload: " << payload.ShortDebugString());
-            WbState.LastPublishTime = now;
-            if (ResourceManager->ResourceInfoExchanger) {
-                Send(ResourceManager->ResourceInfoExchanger,
-                    new TEvKqpResourceInfoExchanger::TEvPublishResource(std::move(payload)));
-            }
-            return;
-        }
-
-        if (WbState.BoardPublisherActorId) {
-            LOG_I("Kill previous board publisher for '" << WbState.BoardPath
-                << "' at " << WbState.BoardPublisherActorId << ", reason: " << reason);
-            Send(WbState.BoardPublisherActorId, new TEvents::TEvPoison);
-        }
-
-        WbState.BoardPublisherActorId = TActorId();
-
-        if (WbState.DomainNotFound) {
-            LOG_E("Can not find default state storage group for database " << WbState.Tenant);
-            return;
-        }
-
-        auto boardPublisher = CreateBoardPublishActor(WbState.BoardPath, payload.SerializeAsString(), SelfId(),
-            /* ttlMs */ 0, /* reg */ true);
-        WbState.BoardPublisherActorId = Register(boardPublisher);
-
+        LOG_I("Send to publish resource usage for "
+            << "reason: " << reason
+            << ", payload: " << payload.ShortDebugString());
         WbState.LastPublishTime = now;
-
-        LOG_I("Publish resource usage for '" << WbState.BoardPath << "' at " << WbState.BoardPublisherActorId
-            << ", reason: " << reason << ", payload: " << payload.ShortDebugString());
+        if (ResourceManager->ResourceInfoExchanger) {
+            Send(ResourceManager->ResourceInfoExchanger,
+                new TEvKqpResourceInfoExchanger::TEvPublishResource(std::move(payload)));
+        }
     }
 
 private:
@@ -927,7 +835,6 @@ private:
         TString Tenant;
         TString BoardPath;
         bool DomainNotFound = false;
-        TActorId BoardPublisherActorId;
         std::optional<TInstant> LastPublishTime;
     };
     TWhiteBoardState WbState;
@@ -940,7 +847,6 @@ private:
     std::shared_ptr<TKqpResourceManager> ResourceManager;
 
     std::optional<TInstant> PublishResourcesScheduledAt;
-    bool PublishResourcesByExchanger;
     std::optional<TString> SelfDataCenterId;
 };
 

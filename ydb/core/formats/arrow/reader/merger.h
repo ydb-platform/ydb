@@ -37,6 +37,9 @@ private:
     void DrainCurrentPosition(TRecordBatchBuilder* builder, std::shared_ptr<TSortableScanData>* resultScanData, ui64* resultPosition);
 
     void CheckSequenceInDebug(const TRWSortableBatchPosition& nextKeyColumnsPosition);
+    bool DrainCurrentTo(TRecordBatchBuilder& builder, const TSortableBatchPosition& readTo, const bool includeFinish,
+        std::optional<TCursor>* lastResultPosition = nullptr);
+
 public:
     TMergePartialStream(std::shared_ptr<arrow::Schema> sortSchema, std::shared_ptr<arrow::Schema> dataSchema, const bool reverse, const std::vector<std::string>& versionColumnNames)
         : SortSchema(sortSchema)
@@ -49,6 +52,7 @@ public:
         Y_ABORT_UNLESS(!DataSchema || DataSchema->num_fields());
     }
 
+    void PutControlPoint(const TSortableBatchPosition& point, const bool deepCopy);
     void SkipToLowerBound(const TSortableBatchPosition& pos, const bool include);
 
     void SetPossibleSameVersion(const bool value) {
@@ -66,8 +70,6 @@ public:
     TString DebugString() const {
         return TStringBuilder() << "sort_heap=" << SortHeap.DebugJson();
     }
-
-    void PutControlPoint(const TSortableBatchPosition& point);
 
     void RemoveControlPoint();
 
@@ -92,7 +94,6 @@ public:
 
     void DrainAll(TRecordBatchBuilder& builder);
     std::shared_ptr<arrow::Table> SingleSourceDrain(const TSortableBatchPosition& readTo, const bool includeFinish, std::optional<TCursor>* lastResultPosition = nullptr);
-    bool DrainCurrentTo(TRecordBatchBuilder& builder, const TSortableBatchPosition& readTo, const bool includeFinish, std::optional<TCursor>* lastResultPosition = nullptr);
     bool DrainToControlPoint(TRecordBatchBuilder& builder, const bool includeFinish, std::optional<TCursor>* lastResultPosition = nullptr);
     std::vector<std::shared_ptr<arrow::RecordBatch>> DrainAllParts(const TIntervalPositions& positions,
         const std::vector<std::shared_ptr<arrow::Field>>& resultFields);

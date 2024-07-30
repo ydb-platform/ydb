@@ -124,13 +124,29 @@ public:
         return Increment(delta);
     }
 
+    struct TException {
+        TException(ui64 value, ui64 baseLineValue) :
+            Value(value),
+            BaseLineValue(baseLineValue)
+        {
+        }
+
+        ui64 Value;
+        ui64 BaseLineValue;
+    };
+
 private:
     //
     void Initialize(const TTabletCumulativeCounter& rp) {
         SetTo(rp);
     }
     void AdjustToBaseLine(const TTabletCumulativeCounter& baseLine) {
-        Y_DEBUG_ABORT_UNLESS(Value >= baseLine.Value);
+        if (Value < baseLine.Value) {
+            throw TException(Value, baseLine.Value);
+        }
+        Y_DEBUG_ABORT_UNLESS(Value >= baseLine.Value,
+                             "Value=%" PRIu64 ", baseLine.Value=%" PRIu64,
+                             Value, baseLine.Value);
         Value -= baseLine.Value;
     }
     void SetTo(const TTabletCumulativeCounter& rp) {

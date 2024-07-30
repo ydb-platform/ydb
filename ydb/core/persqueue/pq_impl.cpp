@@ -1292,34 +1292,46 @@ TPartitionInfo& TPersQueue::GetPartitionInfo(const TPartitionId& partitionId)
 
 void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorContext& ctx)
 {
-    const auto& partitionId = ev->Get()->Partition;
-    auto& partition = GetPartitionInfo(partitionId);
-    auto diff = ev->Get()->Counters.MakeDiffForAggr(partition.Baseline);
-    ui64 cpuUsage = diff->Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE].Get();
-    ui64 networkBytesUsage = diff->Cumulative()[COUNTER_PQ_TABLET_NETWORK_BYTES_USAGE].Get();
-    if (ResourceMetrics) {
-        if (cpuUsage > 0) {
-            ResourceMetrics->CPU.Increment(cpuUsage);
+    try {
+        PQ_LOG_D("Handle TEvPQ::TEvPartitionCounters" <<
+                 " PartitionId " << ev->Get()->Partition);
+        const auto& partitionId = ev->Get()->Partition;
+        auto& partition = GetPartitionInfo(partitionId);
+        auto diff = ev->Get()->Counters.MakeDiffForAggr(partition.Baseline);
+        ui64 cpuUsage = diff->Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE].Get();
+        ui64 networkBytesUsage = diff->Cumulative()[COUNTER_PQ_TABLET_NETWORK_BYTES_USAGE].Get();
+        if (ResourceMetrics) {
+            if (cpuUsage > 0) {
+                ResourceMetrics->CPU.Increment(cpuUsage);
+            }
+            if (networkBytesUsage > 0) {
+                ResourceMetrics->Network.Increment(networkBytesUsage);
+            }
+            if (cpuUsage > 0 || networkBytesUsage > 0) {
+                ResourceMetrics->TryUpdate(ctx);
+            }
         }
-        if (networkBytesUsage > 0) {
-            ResourceMetrics->Network.Increment(networkBytesUsage);
-        }
-        if (cpuUsage > 0 || networkBytesUsage > 0) {
-            ResourceMetrics->TryUpdate(ctx);
-        }
-    }
 
-    Counters->Populate(*diff.Get());
-    ev->Get()->Counters.RememberCurrentStateAsBaseline(partition.Baseline);
+        Counters->Populate(*diff.Get());
+        ev->Get()->Counters.RememberCurrentStateAsBaseline(partition.Baseline);
 
-    // restore cache's simple counters cleaned by partition's counters
-    SetCacheCounters(CacheCounters);
-    ui64 reservedSize = 0;
-    for (auto& p : Partitions) {
-        if (p.second.Baseline.Simple().Size() > 0) //there could be no counters from this partition yet
-            reservedSize += p.second.Baseline.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Get();
+        // restore cache's simple counters cleaned by partition's counters
+        SetCacheCounters(CacheCounters);
+        ui64 reservedSize = 0;
+        for (auto& p : Partitions) {
+            if (p.second.Baseline.Simple().Size() > 0) //there could be no counters from this partition yet
+                reservedSize += p.second.Baseline.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Get();
+        }
+        Counters->Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(reservedSize);
+    } catch (const TTabletCumulativeCounter::TException& ex) {
+        PQ_LOG_D("exception TTabletCumulativeCounter::TException" <<
+                 " PartitionId " << ev->Get()->Partition <<
+                 ", Value " << ex.Value <<
+                 ", baseLine.Value " << ex.BaseLineValue);
+        Y_ABORT_UNLESS(false,
+                       "Value=%" PRIu64 ", baseLine.Value=%" PRIu64,
+                       ex.Value, ex.BaseLineValue);
     }
-    Counters->Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(reservedSize);
 }
 
 
@@ -4609,8 +4621,6 @@ void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& e
         PQ_LOG_D("subscribed WriteId " << writeId);
         return;
     }
-
-    PQ_LOG_D("delete write info for WriteId " << writeId << " and TxId " << writeInfo.TxId);
 
     if (!writeInfo.TxId.Defined()) {
         PQ_LOG_D("delete write info for WriteId " << writeId);

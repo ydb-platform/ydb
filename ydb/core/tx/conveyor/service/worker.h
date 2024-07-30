@@ -91,13 +91,20 @@ struct TEvInternal {
 class TWorker: public NActors::TActorBootstrapped<TWorker> {
 private:
     using TBase = NActors::TActorBootstrapped<TWorker>;
-public:
+    const double CPUUsage = 1;
+    bool WaitWakeUp = false;
+    const NActors::TActorId DistributorId;
+    std::optional<TWorkerTask> WaitTask;
+    void ExecuteTask(const TWorkerTask& workerTask);
     void HandleMain(TEvInternal::TEvNewTask::TPtr& ev);
+    void HandleMain(NActors::TEvents::TEvWakeup::TPtr& ev);
+public:
 
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvInternal::TEvNewTask, HandleMain);
-            default:
+            hFunc(NActors::TEvents::TEvWakeup, HandleMain);
+        default:
                 ALS_ERROR(NKikimrServices::TX_CONVEYOR) << "unexpected event for task executor: " << ev->GetTypeRewrite();
                 break;
         }
@@ -107,8 +114,10 @@ public:
         Become(&TWorker::StateMain);
     }
 
-    TWorker(const TString& conveyorName)
+    TWorker(const TString& conveyorName, const double cpuUsage, const NActors::TActorId& distributorId)
         : TBase("CONVEYOR::" + conveyorName + "::WORKER")
+        , CPUUsage(cpuUsage)
+        , DistributorId(distributorId)
     {
 
     }

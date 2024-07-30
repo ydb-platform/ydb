@@ -16,10 +16,6 @@ static TString GetSdkBuildInfo(NYdbGrpc::IRequestContextBase* reqCtx) {
     return TString{res[0]};
 }
 
-void TGRpcDiscoveryService::SetDynamicNodeAuthParams(const TDynamicNodeAuthorizationParams& dynamicNodeAuthorizationParams) {
-    DynamicNodeAuthorizationParams = dynamicNodeAuthorizationParams;
-}
-
 void TGRpcDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
      auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
      using namespace Ydb;
@@ -38,10 +34,7 @@ void TGRpcDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             #NAME, logger, getCounterBlock("discovery", #NAME))->Run();
 
     ADD_REQUEST(WhoAmI, &DoWhoAmIRequest)
-    NodeRegistrationRequest = [authParams = this->DynamicNodeAuthorizationParams] (std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-        DoNodeRegistrationRequest(std::move(p), f, authParams);
-    };
-    ADD_REQUEST(NodeRegistration, NodeRegistrationRequest)
+    ADD_REQUEST(NodeRegistration, &DoNodeRegistrationRequest)
 
 #ifdef ADD_LEGACY_REQUEST
 #error macro already defined

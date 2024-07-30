@@ -69,21 +69,28 @@ protected:
             TTabletInfo* tablet = Hive->FindTablet(tabletId);
             if (tablet != nullptr && tablet->IsAlive() && tablet->NodeId == NodeId) {
                 THive::TBestNodeResult result = Hive->FindBestNode(*tablet);
-                if (result.BestNode != nullptr) {
+                if (std::holds_alternative<TNodeInfo*>(result)) {
+                    TNodeInfo* node = std::get<TNodeInfo*>(result);
                     tablet->ActorsToNotifyOnRestart.emplace_back(SelfId()); // volatile settings, will not persist upon restart
                     ++KickInFlight;
                     ++Movements;
                     BLOG_D("Drain " << SelfId() << " moving tablet "
                                 << tablet->ToString() << " " << tablet->GetResourceValues()
                                 << " from node " << tablet->Node->Id << " " << tablet->Node->ResourceValues
-                                << " to node " << result.BestNode->Id << " " << result.BestNode->ResourceValues);
+                                << " to node " << node->Id << " " << node->ResourceValues);
                     Hive->TabletCounters->Cumulative()[NHive::COUNTER_DRAIN_EXECUTED].Increment(1);
-                    Hive->RecordTabletMove(THive::TTabletMoveInfo(TInstant::Now(), *tablet, tablet->Node->Id, result.BestNode->Id));
-                    Hive->Execute(Hive->CreateRestartTablet(tabletId, result.BestNode->Id));
+                    Hive->RecordTabletMove(THive::TTabletMoveInfo(TInstant::Now(), *tablet, tablet->Node->Id, node->Id));
+                    Hive->Execute(Hive->CreateRestartTablet(tabletId, node->Id));
                 } else {
-                    Hive->TabletCounters->Cumulative()[NHive::COUNTER_DRAIN_FAILED].Increment(1);
-                    BLOG_D("Drain " << SelfId() << " could not move tablet " << tablet->ToString() << " " << tablet->GetResourceValues()
-                                << " from node " << tablet->Node->Id << " " << tablet->Node->ResourceValues);
+                    if (std::holds_alternative<THive::TNoNodeFound>(result)) {
+                        Hive->TabletCounters->Cumulative()[NHive::COUNTER_DRAIN_FAILED].Increment(1);
+                        BLOG_D("Drain " << SelfId() << " could not move tablet " << tablet->ToString() << " " << tablet->GetResourceValues()
+                               << " from node " << tablet->Node->Id << " " << tablet->Node->ResourceValues);
+                    } else if (std::holds_alternative<THive::TTooManyTabletsStarting>(result)){
+                        BLOG_D("Drain " << SelfId() << " could not move tablet " << tablet->ToString() << " and will try again later");
+                        Hive->WaitToMoveTablets(SelfId());
+                        return;
+                    }
                 }
             }
             ++NextKick;
@@ -209,6 +216,7 @@ public:
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             cFunc(TEvents::TSystem::Wakeup, Timeout);
+            cFunc(TEvPrivate::EvCanMoveTablets, KickNextTablet);
         }
     }
 };

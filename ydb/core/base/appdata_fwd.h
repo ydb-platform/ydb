@@ -240,7 +240,9 @@ struct TAppData {
     TVector<TString> AdministrationAllowedSIDs; // users/groups which allowed to perform administrative tasks
     TVector<TString> DefaultUserSIDs;
     TString AllAuthenticatedUsers = "all-users@well-known";
+    TVector<TString> RegisterDynamicNodeAllowedSIDs;
     TString TenantName;
+    TString NodeName;
 
     TIntrusivePtr<TResourceProfiles> ResourceProfiles;
 

@@ -538,13 +538,26 @@ namespace NKikimr {
                 }
                 Y_ABORT_UNLESS(loadedIt == loadedEnd);
             } else {
-                // entry point size rollback case
                 Y_ABORT_UNLESS(size > ChainDelegators.size());
-                ui32 curChainDelegatorsSize = ChainDelegators.size();
-                Y_FAIL_S("Impossible case; MinHugeBlobInBytes# " << MinHugeBlobInBytes
-                        << " MilestoneBlobInBytes# " << MilestoneBlobInBytes
-                        << " loadedSize# " << size
-                        << " curChainDelegatorsSize# " << curChainDelegatorsSize);
+
+                // skip first delegators, which must not be used
+                for (size_t i = ChainDelegators.size(); i < size; ++i) {
+                    ui32 slotsInChunk;
+                    ::Load(s, slotsInChunk);
+                    ui32 allocatedSlots;
+                    ::Load(s, allocatedSlots);
+                    TMap<ui32, TMask> freeSpace;
+                    ::Load(s, freeSpace);
+                    Y_ABORT_UNLESS(slotsInChunk > ChainDelegators.front().SlotsInChunk, "incompatible format");
+                    Y_ABORT_UNLESS(!allocatedSlots, "incompatible format");
+                    Y_ABORT_UNLESS(freeSpace.empty(), "incompatible format");
+                }
+
+                // load the rest as usual
+                StartMode = EStartMode::Loaded;
+                for (TChainDelegator& delegator : ChainDelegators) {
+                    ::Load(s, delegator);
+                }
             }
         }
 

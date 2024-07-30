@@ -175,6 +175,7 @@ struct TKikimrEvents : TEvents {
         ES_CHANGE_EXCHANGE,
         ES_S3_FILE_QUEUE,
         ES_NEBIUS_ACCESS_SERVICE,
+        ES_LIMITER = 4258
     };
 };
 

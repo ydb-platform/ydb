@@ -31,7 +31,8 @@ public:
     bool IsBufferExhausted() const {
         return MemoryBufferLimit && *MemoryBufferLimit < CurrentBytesUsed;
     }
-    void AddRecord(const TSortableBatchPosition& position);
+    void AddRecord(const TCursor& position);
+    void AddRecord(const TRWSortableBatchPosition& position);
     void ValidateDataSchema(const std::shared_ptr<arrow::Schema>& schema);
 };
 

@@ -2720,15 +2720,12 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
 }
 
 TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats) {
-    ui64 totalCpuTimeUs = 0;
     TVector<const TString> txPlans;
     for (const auto& execStats: queryStats.GetExecutions()) {
-        totalCpuTimeUs += execStats.GetCpuTimeUs();
         for (const auto& txPlan: execStats.GetTxPlansWithStats()) {
             txPlans.push_back(txPlan);
         }
     }
-    totalCpuTimeUs += queryStats.GetWorkerCpuTimeUs();
 
     NJsonWriter::TBuf writer;
     writer.BeginObject();
@@ -2742,12 +2739,9 @@ TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats) {
         writer.WriteKey("DurationUs").WriteLongLong(compilation.GetDurationUs());
         writer.WriteKey("CpuTimeUs").WriteLongLong(compilation.GetCpuTimeUs());
         writer.EndObject();
-
-        totalCpuTimeUs += compilation.GetCpuTimeUs();
     }
 
     writer.WriteKey("ProcessCpuTimeUs").WriteLongLong(queryStats.GetWorkerCpuTimeUs());
-    writer.WriteKey("TotalCpuTimeUs").WriteLongLong(totalCpuTimeUs);
     writer.WriteKey("TotalDurationUs").WriteLongLong(queryStats.GetDurationUs());
     writer.WriteKey("QueuedTimeUs").WriteLongLong(queryStats.GetQueuedTimeUs());
     writer.EndObject();

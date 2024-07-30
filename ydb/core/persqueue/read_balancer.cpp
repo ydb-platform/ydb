@@ -192,11 +192,13 @@ TString TPersQueueReadBalancer::GenerateStat() {
     TStringStream str;
     HTML(str) {
         str << "<style>"
-            << " .properties { border-bottom-style: solid; border-top-style: solid; border-width: 1px; border-color: darkgrey; } "
-            << " .properties>tr { padding-left: 10px; padding-right: 10px; } "
+            << " .properties { border-bottom-style: solid; border-top-style: solid; border-width: 1px; border-color: darkgrey; padding-bottom: 10px; } "
+            << " .properties>tbody>tr>td { padding-left: 10px; padding-right: 10px; } "
+            << " .tgrid { width: 100%; border: 0; }"
+            << " .tgrid>tbody>tr>td { vertical-align: top; }"
             << "</style>";
 
-        TAG(TH3) {str << "PersQueueReadBalancer " << TabletID() << "(" << Topic << ")";}
+        TAG(TH3) {str << "PersQueueReadBalancer " << TabletID() << " (" << Path << ")";}
 
         auto property = [&](const TString& name, const auto value) {
             TABLER() {
@@ -205,35 +207,11 @@ TString TPersQueueReadBalancer::GenerateStat() {
             }
         };
 
-        TABLE_CLASS("properties") {
-            CAPTION() { str << "Tablet info"; }
-            TABLEBODY() {
-                property("Topic", Topic);
-                property("Initialized", Inited ? "yes" : "no");
-                property("SchemeShard", TStringBuilder() << "<a href=\"?TabletID=" << SchemeShardId << "\">" << SchemeShardId << "</a>");
-                property("Generation", Generation);
-            }
-        }
-
-        if (Inited) {
-            TABLE_CLASS("properties") {
-                CAPTION() { str << "Statistics"; }
-                TABLEBODY() {
-                    property("Active pipes", balancerStatistcs.Sessions.size());
-                    property("Active partitions", NumActiveParts);
-                    property("Total data size", AggregatedStats.TotalDataSize);
-                    property("Reserve size", PartitionReserveSize());
-                    property("Used reserve size", AggregatedStats.TotalUsedReserveSize);
-                    property("[Total/Max/Avg]WriteSpeedSec", TStringBuilder() << metrics.TotalAvgWriteSpeedPerSec << "/" << metrics.MaxAvgWriteSpeedPerSec << "/" << metrics.TotalAvgWriteSpeedPerSec / NumActiveParts);
-                    property("[Total/Max/Avg]WriteSpeedMin", TStringBuilder() << metrics.TotalAvgWriteSpeedPerMin << "/" << metrics.MaxAvgWriteSpeedPerMin << "/" << metrics.TotalAvgWriteSpeedPerMin / NumActiveParts);
-                    property("[Total/Max/Avg]WriteSpeedHour", TStringBuilder() << metrics.TotalAvgWriteSpeedPerHour << "/" << metrics.MaxAvgWriteSpeedPerHour << "/" << metrics.TotalAvgWriteSpeedPerHour / NumActiveParts);
-                    property("[Total/Max/Avg]WriteSpeedDay", TStringBuilder() << metrics.TotalAvgWriteSpeedPerDay << "/" << metrics.MaxAvgWriteSpeedPerDay << "/" << metrics.TotalAvgWriteSpeedPerDay / NumActiveParts);
-                }
-            }
-        }
-
         UL_CLASS("nav nav-tabs") {
             LI_CLASS("active") {
+                str << "<a href=\"#generic\" data-toggle=\"tab\">Generic Info</a>";
+            }
+            LI() {
                 str << "<a href=\"#partitions\" data-toggle=\"tab\">Partitions</a>";
             }
             for (auto& consumer : balancerStatistcs.Consumers) {
@@ -242,8 +220,50 @@ TString TPersQueueReadBalancer::GenerateStat() {
                 }
             }
         }
+
         DIV_CLASS("tab-content") {
-            DIV_CLASS_ID("tab-pane fade in active", "partitions") {
+            DIV_CLASS_ID("tab-pane fade in active", "generic") {
+                TABLE_CLASS("tgrid") {
+                    TABLEBODY() {
+                        TABLER() {
+                            TABLED() {
+                                TABLE_CLASS("properties") {
+                                    CAPTION() { str << "Tablet info"; }
+                                    TABLEBODY() {
+                                        property("Topic", Topic);
+                                        property("Path", Path);
+                                        property("Initialized", Inited ? "yes" : "no");
+                                        property("SchemeShard", TStringBuilder() << "<a href=\"?TabletID=" << SchemeShardId << "\">" << SchemeShardId << "</a>");
+                                        property("PathId", PathId);
+                                        property("Version", Version);
+                                        property("Generation", Generation);
+                                    }
+                                }
+                            }
+                            TABLED() {
+                                if (Inited) {
+                                    TABLE_CLASS("properties") {
+                                        CAPTION() { str << "Statistics"; }
+                                        TABLEBODY() {
+                                            property("Active pipes", balancerStatistcs.Sessions.size());
+                                            property("Active partitions", NumActiveParts);
+                                            property("Total data size", AggregatedStats.TotalDataSize);
+                                            property("Reserve size", PartitionReserveSize());
+                                            property("Used reserve size", AggregatedStats.TotalUsedReserveSize);
+                                            property("[Total/Max/Avg]WriteSpeedSec", TStringBuilder() << metrics.TotalAvgWriteSpeedPerSec << "/" << metrics.MaxAvgWriteSpeedPerSec << "/" << metrics.TotalAvgWriteSpeedPerSec / NumActiveParts);
+                                            property("[Total/Max/Avg]WriteSpeedMin", TStringBuilder() << metrics.TotalAvgWriteSpeedPerMin << "/" << metrics.MaxAvgWriteSpeedPerMin << "/" << metrics.TotalAvgWriteSpeedPerMin / NumActiveParts);
+                                            property("[Total/Max/Avg]WriteSpeedHour", TStringBuilder() << metrics.TotalAvgWriteSpeedPerHour << "/" << metrics.MaxAvgWriteSpeedPerHour << "/" << metrics.TotalAvgWriteSpeedPerHour / NumActiveParts);
+                                            property("[Total/Max/Avg]WriteSpeedDay", TStringBuilder() << metrics.TotalAvgWriteSpeedPerDay << "/" << metrics.MaxAvgWriteSpeedPerDay << "/" << metrics.TotalAvgWriteSpeedPerDay / NumActiveParts);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            DIV_CLASS_ID("tab-pane fade", "partitions") {
                 TABLE_CLASS("table") {
                     TABLEHEAD() {
                         TABLER() {

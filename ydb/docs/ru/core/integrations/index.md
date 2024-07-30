@@ -32,7 +32,7 @@
 
 ## GUI Clients {#gui}
 
-|  Среда | Инструкция | Описание |
+|  Среда | Инструкция | Уровень поддержки |
 | --- | --- | --- |
 | Embedded UI | [Инструкция](../reference/embedded-ui/index.md) | |
 | [DBeaver](https://dbeaver.com)  |  [Инструкция](connect-from-ide.md) | C помощью [JDBC-драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
@@ -63,8 +63,8 @@
 {% if ydb-airflow %}
 ## Оркестрация {#scheduling}
 
-| Среда | Уровень поддержки  | Инструкция |
-| --- | :---: | --- |
+| Среда | Инструкция |
+| --- | --- |
 | [{{ airflow-name }}](https://airflow.apache.org) |   [Инструкция](airflow.md) |
 
 {% endif %}

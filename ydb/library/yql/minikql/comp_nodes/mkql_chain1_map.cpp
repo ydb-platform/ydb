@@ -246,6 +246,9 @@ public:
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
+        DISubprogramAnnotator annotator(ctx, ctx.Func);
+        ctx.Annotator = &annotator;
+
         auto args = ctx.Func->arg_begin();
 
         ctx.Ctx = &*args;

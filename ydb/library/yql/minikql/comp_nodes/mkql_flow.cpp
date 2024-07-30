@@ -255,6 +255,9 @@ private:
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
+        DISubprogramAnnotator annotator(ctx, ctx.Func);
+        ctx.Annotator = &annotator;
+
         auto args = ctx.Func->arg_begin();
 
         ctx.Ctx = &*args;
@@ -480,14 +483,14 @@ private:
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
+        DISubprogramAnnotator annotator(ctx, ctx.Func);
+        ctx.Annotator = &annotator;
+
         auto args = ctx.Func->arg_begin();
 
         ctx.Ctx = &*args;
         const auto valuesPtr = &*++args;
         const auto width = &*++args;
-
-        DISubprogramAnnotator annotator(ctx, ctx.Func);
-        ctx.Annotator = &annotator;
 
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         const auto work = BasicBlock::Create(context, "work", ctx.Func);

@@ -87,7 +87,7 @@ struct TEvPrivate {
 
 } // namespace
 
-class TDqPqRdReadActor : public NActors::TActorBootstrapped<TDqPqRdReadActor>, public IDqComputeActorAsyncInput {
+class TDqPqRdReadActor : public NActors::TActorBootstrapped<TDqPqRdReadActor>, public IDqComputeActorAsyncInput, public NYql::NDq::TRetryEventsQueue::ICallbacks {
 public:
     using TPartitionKey = std::pair<TString, ui64>; // Cluster, partition id.
     using TDebugOffsets = TMaybe<std::pair<ui64, ui64>>;
@@ -124,11 +124,13 @@ private:
             Started,
         };
         SessionInfo(
+            TDqPqRdReadActor* ptr,
             const TTxId& txId,
             const NActors::TActorId selfId,
             TActorId rowDispatcherActorId,
             ui64 eventQueueId)
-            : RowDispatcherActorId(rowDispatcherActorId) {
+            : EventsQueue(ptr)
+            , RowDispatcherActorId(rowDispatcherActorId) {
             EventsQueue.Init(txId, selfId, selfId, eventQueueId, /* KeepAlive */ true);
             EventsQueue.OnNewRecipientId(rowDispatcherActorId);
         }
@@ -139,7 +141,6 @@ private:
         TVector<TString> Data;
         NYql::NDq::TRetryEventsQueue EventsQueue;
         bool NewDataArrived = false;
-    //private:
         TActorId RowDispatcherActorId;
     };
     
@@ -171,6 +172,7 @@ public:
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvPing::TPtr&);
     
+    void SessionClosed(ui64 eventQueueId) override;
 
     STRICT_STFUNC(
         StateFunc, {
@@ -538,7 +540,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr 
                 Sessions.emplace(
                     std::piecewise_construct,
                     std::forward_as_tuple(partitionId),
-                    std::forward_as_tuple(TxId, SelfId(), rowDispatcherActorId, partitionId));
+                    std::forward_as_tuple(this, TxId, SelfId(), rowDispatcherActorId, partitionId));
             }
         }
     }
@@ -613,6 +615,10 @@ std::pair<NUdf::TUnboxedValuePod, i64> TDqPqRdReadActor::CreateItem(const TStrin
     return std::make_pair(item, usedSpace);
 }
 
+void TDqPqRdReadActor::SessionClosed(ui64 eventQueueId) {
+    SRC_LOG_D("Session closed to " << eventQueueId);
+    Stop("SessionClosed");
+}
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     NPq::NProto::TDqPqTopicSource&& settings,

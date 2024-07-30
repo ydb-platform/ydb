@@ -11,8 +11,10 @@ void TRetryEventsQueue::Init(
     const NActors::TActorId& senderId,
     const NActors::TActorId& selfId,
     ui64 eventQueueId,
-    bool keepAlive) {
+    bool keepAlive,
+    ICallbacks* cbs) {
     
+    Cbs = cbs;
     std::cerr << "Init()" << std::endl;
     TxId = txId;
     SenderId = senderId;
@@ -75,7 +77,11 @@ bool TRetryEventsQueue::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr
 
     if (ev->Sender == RecipientId && ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
         std::cerr << "TRetryEventsQueue::ReasonActorUnknown" << std::endl;
-
+        if (Cbs) {
+            Cbs->SessionClosed(EventQueueId);
+            Cbs = nullptr;
+        }
+        // TODO
         return true;
     }
 
@@ -94,17 +100,24 @@ void TRetryEventsQueue::Retry() {
 }
 
 void TRetryEventsQueue::Ping() {
-
+    PingScheduled = false;
     std::cerr << "TRetryEventsQueue::Ping" << std::endl;
 
     if (!Connected) {
-        PingScheduled = false;
         std::cerr << "TRetryEventsQueue::Ping not connected" << std::endl;    
         return;
     }
 
+    if (TInstant::Now() - LastReceivedDataTime < TDuration::Seconds(PingPeriodSeconds)) {
+        std::cerr << "send TEvPing / no time" << std::endl;    
+        SchedulePing();
+        return;
+    }
+    
+    std::cerr << "send TEvPing" << std::endl;    
+
     auto ev = MakeHolder<NActors::TEvents::TEvPing>();
-    NActors::TActivationContext::Send(new NActors::IEventHandle(RecipientId, SenderId, ev.Release()));
+    NActors::TActivationContext::Send(new NActors::IEventHandle(RecipientId, SenderId, ev.Release(), NActors::IEventHandle::FlagTrackDelivery));
     SchedulePing();
 }
 
@@ -155,17 +168,12 @@ void TRetryEventsQueue::ScheduleRetry() {
 }
 
 void TRetryEventsQueue::SchedulePing() {
-    if (!KeepAlive) {
+
+    std::cerr << "SchedulePing" << std::endl;
+    if (!KeepAlive || PingScheduled) {
         return;
     }
 
-    if (TInstant::Now() - LastReceivedDataTime < TDuration::Seconds(PingPeriodSeconds)) {
-        return;
-    }
-
-    if (PingScheduled) {
-        return;
-    }
     PingScheduled = true;
     std::cerr << "SchedulePing" << std::endl;
     auto ev = MakeHolder<TEvRetryQueuePrivate::TEvPing>(EventQueueId);

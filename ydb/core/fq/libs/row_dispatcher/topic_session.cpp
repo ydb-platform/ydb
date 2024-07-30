@@ -61,7 +61,7 @@ struct TEvPrivate {
 ////////////////////////////////////////////////////////////////////////////////
 
 
-class TTopicSession : public TActorBootstrapped<TTopicSession> {
+class TTopicSession : public TActorBootstrapped<TTopicSession>, public NYql::NDq::TRetryEventsQueue::ICallbacks {
 
     struct TReadyBatch {
     public:
@@ -96,12 +96,14 @@ private:
     std::vector<std::tuple<TString, NYql::NDq::TPqMetaExtractor::TPqMetaExtractorLambda>> MetadataFields;
     //TInstant StartingMessageTimestamp;
    // NKikimr::NMiniKQL::TScopedAlloc Alloc; // TODO ?
+    ui64 NextEventQueueId = 0;
 
     struct ConsumersInfo {
         THolder<NFq::Consumer> Consumer; 
        
         ui64 LastSendedMessage = 0;
         std::unique_ptr<TJsonFilter> Filter;
+        ui64 EventQueueId = 0;
     };
     TMap<NActors::TActorId, ConsumersInfo> Consumers;
     std::unique_ptr<TJsonParser> Parser;
@@ -133,6 +135,7 @@ public:
     TString GetSessionId() const;
     void HandleNewEvents();
     void PassAway() override;
+    void SessionClosed(ui64 eventQueueId) override;
 
 
     std::optional<NYql::TIssues> ProcessDataReceivedEvent(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event);
@@ -563,6 +566,8 @@ void TTopicSession::Handle(TEvRowDispatcher::TEvSessionAddConsumer::TPtr& ev) {
 
     auto& consumerInfo = Consumers[ev->Get()->Consumer->ReadActorId];
     consumerInfo.Consumer = std::move(ev->Get()->Consumer);
+    consumerInfo.EventQueueId = NextEventQueueId++;
+    consumerInfo.Consumer->EventsQueue.Init("txId", SelfId(), SelfId(), consumerInfo.EventQueueId, /* KeepAlive */ true, this);
     consumerInfo.Consumer->EventsQueue.Send(new NFq::TEvRowDispatcher::TEvAck(consumerInfo.Consumer->Proto));
 
     TString predicate;
@@ -607,7 +612,7 @@ void TTopicSession::Handle(TEvRowDispatcher::TEvSessionDeleteConsumer::TPtr& ev)
 void TTopicSession::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& /*ev*/) {
     LOG_ROW_DISPATCHER_DEBUG("TEvRetry");
     for (auto& [actorId, info] : Consumers) {
-        info.Consumer->EventsQueue.Retry();
+        info.Consumer->EventsQueue.Retry(); // TODO: find EventsQueue
     }
 }
 
@@ -620,27 +625,25 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev) {
         return;
     }
 
-    // auto event = std::make_unique<TEvRowDispatcher::TEvSessionConsumerDeleted>();
-    // event->ReadActorId = ev->Sender;
     Send(RowDispatcherActorId, new TEvRowDispatcher::TEvSessionConsumerDeleted(std::move(it->second.Consumer)));
     Consumers.erase(it);
 
     if (Consumers.empty()) {
-        //Send(RowDispatcherActorId, ev->Get());
         LOG_ROW_DISPATCHER_DEBUG("No consumer, delete this session");
         TActorBootstrapped<TTopicSession>::PassAway();
     }
-    // Send(SelfId(), new NActors::TEvents::TEvPoisonPill());
-    // LOG_ROW_DISPATCHER_DEBUG("TEvStopSession end ");
 }
 
 void TTopicSession::Handle(NActors::TEvents::TEvPing::TPtr &/*ev*/) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvPing");
+    LOG_ROW_DISPATCHER_DEBUG("NActors::TEvents::TEvPing");
 }
 
 void TTopicSession::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvPing::TPtr& /*ev*/) {
     LOG_ROW_DISPATCHER_DEBUG("TEvRetryQueuePrivate::TEvPing");
-    // TODO
+    
+    for (auto& [actorId, info] : Consumers) {
+        info.Consumer->EventsQueue.Ping(); // TODO: find EventsQueue
+    }
 }
 
 void TTopicSession::InitParser() {
@@ -672,6 +675,26 @@ void TTopicSession::SendDataArrived() {
         info.Consumer->EventsQueue.Send(event.release());
     }
 }
+
+void TTopicSession::SessionClosed(ui64 eventQueueId) {
+    LOG_ROW_DISPATCHER_DEBUG("SessionClosed ");
+     for (auto& [readActorId, info] : Consumers) {
+        if (info.EventQueueId != eventQueueId) {
+            continue;
+        }
+
+        LOG_ROW_DISPATCHER_DEBUG("Found session ");
+        
+        // Send(RowDispatcherActorId, new TEvRowDispatcher::TEvSessionConsumerDeleted(std::move(info.Consumer)));
+        // Consumers.erase(readActorId);
+
+        // if (Consumers.empty()) {
+        //     LOG_ROW_DISPATCHER_DEBUG("No consumer, delete this session");
+        //     TActorBootstrapped<TTopicSession>::PassAway();
+        // }
+     }
+}
+
 
 } // namespace
 

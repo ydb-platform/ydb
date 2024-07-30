@@ -75,12 +75,9 @@ public:
         virtual ui64 GetSeqNo() const = 0;
     };
 
-    TRetryEventsQueue(ICallbacks* cbs = nullptr)
-        : Cbs(cbs) {
-           // Cbs->SessionClosed(0);
-        }
+    TRetryEventsQueue() {};
 
-    void Init(const TTxId& txId, const NActors::TActorId& senderId, const NActors::TActorId& selfId, ui64 eventQueueId = 0, bool keepAlive = false);
+    void Init(const TTxId& txId, const NActors::TActorId& senderId, const NActors::TActorId& selfId, ui64 eventQueueId = 0, bool keepAlive = false, ICallbacks* cbs = nullptr);
 
     template <TProtobufEventWithTransportMeta T>
     void Send(T* ev, ui64 cookie = 0) {
@@ -112,6 +109,7 @@ public:
 
     template <TProtobufEventWithTransportMeta T>
     bool OnEventReceived(const T* ev) { // Returns true if event was not processed (== it was received first time).
+        LastReceivedDataTime = TInstant::Now();
         if (LocalRecipient) {
             return true;
         }
@@ -224,7 +222,7 @@ private:
     bool PingScheduled = false;
     TMaybe<TRetryState> RetryState;
     TTxId TxId;
-    [[maybe_unused]] ICallbacks* const Cbs;
+    ICallbacks* Cbs = nullptr;
     bool KeepAlive = false;
     TInstant LastReceivedDataTime = TInstant::Now();
 };

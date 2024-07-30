@@ -321,6 +321,51 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 UNIT_ASSERT(env.ParsePDisks(response.GetStatus(baseConfigIndex).GetBaseConfig()) == env.ExpectedPDisks); });
     }
 
+    Y_UNIT_TEST(PDiskUpdate) {
+        TEnvironmentSetup env(10, 1);
+        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
+                TFinalizer finalizer(env);
+                env.Prepare(dispatchName, setup, outActiveZone);
+
+                {
+                    NKikimrBlobStorage::TConfigRequest request;
+                    env.DefineBox(1, "test box", {
+                            {"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0},
+                        }, env.GetNodes(), request);
+
+                    size_t baseConfigIndex = request.CommandSize();
+                    request.AddCommand()->MutableQueryBaseConfig();
+
+                    NKikimrBlobStorage::TConfigResponse response = env.Invoke(request);
+                    UNIT_ASSERT(response.GetSuccess());
+                    UNIT_ASSERT(env.ParsePDisks(response.GetStatus(baseConfigIndex).GetBaseConfig()) == env.ExpectedPDisks);
+                }
+
+                {
+                    NKikimrBlobStorage::TConfigRequest request;
+
+                    auto& hostcfg = *request.AddCommand()->MutableDefineHostConfig();
+                    hostcfg.SetHostConfigId(env.NextHostConfigId - 1);
+                    hostcfg.SetItemConfigGeneration(1);
+                    
+                    auto& drive = *hostcfg.AddDrive();
+                    drive.SetPath("/dev/disk1");
+                    drive.SetType(NKikimrBlobStorage::ROT);
+                    drive.SetSharedWithOs(false);
+                    drive.SetReadCentric(false);
+                    drive.SetKind(0);
+                    drive.MutablePDiskConfig()->SetChunkBaseLimit(65);
+
+                    size_t baseConfigIndex = request.CommandSize();
+                    request.AddCommand()->MutableQueryBaseConfig();
+
+                    NKikimrBlobStorage::TConfigResponse response = env.Invoke(request);
+                    UNIT_ASSERT(response.GetSuccess());
+                    UNIT_ASSERT(env.ParsePDisks(response.GetStatus(baseConfigIndex).GetBaseConfig()) == env.ExpectedPDisks);
+                }
+         });
+    }
+
     Y_UNIT_TEST(ManyPDisksRestarts) {
         int nodes = 100;
         TEnvironmentSetup env(nodes, 1);

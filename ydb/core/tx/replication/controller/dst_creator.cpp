@@ -217,7 +217,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         FillReplicationConfig(*desc->MutableReplicationConfig());
         if (scheme.indexes_size()) {
             for (auto& index : *TxBody.MutableCreateIndexedTable()->MutableIndexDescription()) {
-                FillReplicationConfig(*index.MutableIndexImplTableDescriptions(0)->MutableReplicationConfig());
+                FillReplicationConfig(*index.MutableIndexImplTableDescription()->MutableReplicationConfig());
             }
         }
 

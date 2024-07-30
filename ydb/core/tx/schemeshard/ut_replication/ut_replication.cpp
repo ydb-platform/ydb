@@ -365,11 +365,11 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
             IndexDescription {
               Name: "Index"
               KeyColumnNames: ["indexed"]
-              IndexImplTableDescriptions: [ {
+              IndexImplTableDescription: {
                 ReplicationConfig {
                   Mode: REPLICATION_MODE_READ_ONLY
                 }
-              } ]
+              }
             }
         )")));
         TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});

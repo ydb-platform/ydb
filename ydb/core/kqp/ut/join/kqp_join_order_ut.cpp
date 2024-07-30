@@ -269,7 +269,7 @@ void ExecuteJoinOrderTestDataQueryWithStats(const TString& queryPath, const TStr
 }
 
     Y_UNIT_TEST_TWIN(TPCDS87, StreamLookupJoin) {
-        ExecuteJoinOrderTestDataQueryWithStats("queries/tpcds87.sql", "stats/tpcds1000s.json", StreamLookupJoin); 
+        ExecuteJoinOrderTestDataQueryWithStats("queries/tpcds87.sql", "stats/tpcds1000s.json", StreamLookupJoin);
     }
 
     Y_UNIT_TEST_TWIN(TPCDS88, StreamLookupJoin) {

@@ -1200,6 +1200,10 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
     }
 
     const bool singleSide = joinType.ends_with("Semi"sv) || joinType.ends_with("Only"sv);
+    if (singleSide) {
+        auto fake = true;
+        Y_UNUSED(fake);
+    }
     std::string_view leftTableName;
     if (join.LeftLabel().Ref().IsAtom()) {
         leftTableName = join.LeftLabel().Cast<TCoAtom>().Value();

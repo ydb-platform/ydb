@@ -245,7 +245,7 @@ void TPartition::EmplaceResponse(TMessage&& message, const TActorContext& ctx) {
     );
 }
 
-ui64 TPartition::MeteringDataSize() const {
+ui64 TPartition::UserDataSize() const {
     if (DataKeysBody.size() <= 1) {
         // tiny optimization - we do not meter very small queues up to 16MB
         return 0;
@@ -260,33 +260,38 @@ ui64 TPartition::MeteringDataSize() const {
     return size >= lastBlobSize ? size - lastBlobSize : 0;
 }
 
+ui64 TPartition::MeteringDataSize(TInstant now) const {
+    if (IsActive() || NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS == Config.GetMeteringMode()) {
+        return UserDataSize();
+    } else {
+        ui64 size = 0;
+        auto expirationTimestamp = now - TDuration::Seconds(Config.GetPartitionConfig().GetLifetimeSeconds()) - WAKE_TIMEOUT;
+        for (size_t i = 1; i < DataKeysBody.size() && DataKeysBody[i].Timestamp < expirationTimestamp; ++i) {
+            size += DataKeysBody[i].Size;
+        }
+        return size;
+    }
+}
+
 ui64 TPartition::ReserveSize() const {
-    return TopicPartitionReserveSize(Config);
+    return IsActive() ? TopicPartitionReserveSize(Config) : 0;
 }
 
 ui64 TPartition::StorageSize(const TActorContext&) const {
-    return std::max<ui64>(MeteringDataSize(), ReserveSize());
+    return std::max<ui64>(UserDataSize(), ReserveSize());
 }
 
-ui64 TPartition::UsedReserveSize(const TActorContext&) const {
-    return std::min<ui64>(MeteringDataSize(), ReserveSize());
+ui64 TPartition::UsedReserveSize(const TActorContext& ctx) const {
+    return std::min<ui64>(UserDataSize(), ReserveSize());
 }
 
 ui64 TPartition::GetUsedStorage(const TInstant& now) {
     const auto duration = now - LastUsedStorageMeterTimestamp;
     LastUsedStorageMeterTimestamp = now;
 
-    ui64 size = 0;
-    if (IsActive()) {
-        auto dataSize = MeteringDataSize();
-        auto reservedSize = ReserveSize();
-        size = dataSize > reservedSize ? dataSize - reservedSize : 0;
-    } else if (!IsActive() && DataKeysBody.size() > 1) {
-        auto expirationTimestamp = now - TDuration::Seconds(Config.GetPartitionConfig().GetLifetimeSeconds()) - WAKE_TIMEOUT;
-        for (size_t i = 1; i < DataKeysBody.size() && DataKeysBody[i].Timestamp < expirationTimestamp; ++i) {
-            size += DataKeysBody[i].Size;
-        }
-    }
+    auto dataSize = MeteringDataSize(now);
+    auto reservedSize = ReserveSize();
+    auto size = dataSize > reservedSize ? dataSize - reservedSize : 0;
     return size * duration.MilliSeconds() / 1000 / 1_MB; // mb*seconds
 }
 
@@ -757,7 +762,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
 
         result.SetReadBytesQuota(maxQuota);
 
-        result.SetPartitionSize(MeteringDataSize());
+        result.SetPartitionSize(UserDataSize());
         result.SetUsedReserveSize(UsedReserveSize(ctx));
 
         result.SetLastWriteTimestampMs(WriteTimestamp.MilliSeconds());

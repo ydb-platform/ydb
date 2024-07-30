@@ -87,7 +87,7 @@ bool TPKRangeFilter::IsPortionInPartialUsage(const NArrow::TReplaceKey& start, c
 //    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("start", start.DebugString())("end", end.DebugString())("from", PredicateFrom.DebugString())("to", PredicateTo.DebugString())
 //        ("start_usage", startUsage)("end_usage", endUsage);
 
-    return endUsage || startUsage;
+    return endUsage ^ startUsage;
 }
 
 std::optional<NKikimr::NOlap::TPKRangeFilter> TPKRangeFilter::Build(TPredicateContainer&& from, TPredicateContainer&& to) {

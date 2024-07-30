@@ -209,7 +209,6 @@ private:
 
         const ui32 tasksCount = msg.GetTasks().size();
         for (auto& dqTask: *msg.MutableTasks()) {
-            auto result = CaFactory_->CreateKqpComputeActor({
             TString group = msg.GetSchedulerGroup();
 
             TComputeActorSchedulingOptions schedulingOptions {
@@ -228,7 +227,7 @@ private:
                 schedulingOptions.Handle = Scheduler.Enroll(schedulingOptions.Group, schedulingOptions.Weight, schedulingOptions.Now);
             }
 
-            taskCtx.ComputeActorId = CaFactory_->CreateKqpComputeActor({
+            auto result = CaFactory_->CreateKqpComputeActor({
                 .ExecuterId = request.Executer,
                 .TxId = txId,
                 .Task = &dqTask,

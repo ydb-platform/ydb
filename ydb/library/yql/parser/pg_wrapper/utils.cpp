@@ -164,4 +164,21 @@ bool GetPgFuncAddr(ui32 procOid, FmgrInfo& finfo) {
     return true;
 }
 
+extern "C" Oid get_extension_oid(const char *extname, bool missing_ok)
+{
+    Oid result = InvalidOid;
+    try {
+        result = NPg::LookupExtensionByName(extname);
+    } catch (const yexception&) {
+    }
+    
+    if (!OidIsValid(result) && !missing_ok)
+        ereport(ERROR,
+            (errcode(ERRCODE_UNDEFINED_OBJECT),
+                errmsg("extension \"%s\" does not exist",
+                    extname)));
+
+    return result;
+}
+
 }

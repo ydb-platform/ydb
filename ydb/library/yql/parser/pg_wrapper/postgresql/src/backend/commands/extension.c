@@ -141,7 +141,7 @@ static char *read_whole_file(const char *filename, int *length);
  * true, just return InvalidOid.
  */
 Oid
-get_extension_oid(const char *extname, bool missing_ok)
+get_extension_oid_original(const char *extname, bool missing_ok)
 {
 	Oid			result;
 	Relation	rel;

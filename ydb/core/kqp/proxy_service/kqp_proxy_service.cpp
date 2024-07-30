@@ -45,7 +45,8 @@
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/resource/resource.h>
-#include <util/generic/guid.h>
+
+#include <util/folder/dirut.h>
 
 namespace NKikimr::NKqp {
 
@@ -238,7 +239,8 @@ public:
         if (auto& cfg = TableServiceConfig.GetSpillingServiceConfig().GetLocalFileConfig(); cfg.GetEnable()) {
             TString spillingRoot = cfg.GetRoot();
             if (spillingRoot.empty()) {
-                spillingRoot = TStringBuilder() << "/tmp/ydb_spilling_" << CreateGuidAsString() << "/";
+                spillingRoot = NYql::NDq::GetTmpSpillingRootForCurrentUser();
+                MakeDirIfNotExist(spillingRoot);
             }
 
             SpillingService = TlsActivationContext->ExecutorThread.RegisterActor(NYql::NDq::CreateDqLocalFileSpillingService(

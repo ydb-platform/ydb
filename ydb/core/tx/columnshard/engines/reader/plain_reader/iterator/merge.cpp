@@ -103,7 +103,7 @@ TConclusionStatus TStartMergeTask::DoExecuteImpl() {
             return TConclusionStatus::Success();
         }
     }
-    Merger->PutControlPoint(MergingContext->GetFinish());
+    Merger->PutControlPoint(MergingContext->GetFinish(), false);
     Merger->SkipToLowerBound(MergingContext->GetStart(), MergingContext->GetIncludeStart());
     const ui32 originalSourcesCount = Sources.size();
     Sources.clear();

@@ -225,6 +225,9 @@ private:
 
 template <NKikimrServices::TActivity::EType Activity>
 class TBuildScanUpload: public TActor<TBuildScanUpload<Activity>>, public NTable::IScan {
+    using TThis = TBuildScanUpload<Activity>;
+    using TBase = TActor<TThis>;
+
 protected:
     const TUploadLimits Limits;
 
@@ -265,7 +268,7 @@ protected:
                      const TSerializedTableRange& range,
                      const TUserTable& tableInfo,
                      TUploadLimits limits)
-        : TActor(&TThis::StateWork)
+        : TBase(&TThis::StateWork)
         , Limits(limits)
         , BuildIndexId(buildIndexId)
         , TargetTable(target)
@@ -355,7 +358,7 @@ public:
     }
 
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
-        auto ctx = TActivationContext::AsActorContext().MakeFor(SelfId());
+        auto ctx = TActivationContext::AsActorContext().MakeFor(TBase::SelfId());
 
         if (Uploader) {
             TAutoPtr<TEvents::TEvPoisonPill> poison = new TEvents::TEvPoisonPill;
@@ -387,7 +390,7 @@ public:
         LOG_D("Finish " << Debug());
 
         Driver = nullptr;
-        PassAway();
+        this->PassAway();
         return nullptr;
     }
 
@@ -520,13 +523,13 @@ private:
         LOG_D("Upload, last key " << DebugPrintPoint(KeyTypes, WriteBuf.GetLastKey().GetCells(), *AppData()->TypeRegistry) << " " << Debug());
 
         auto actor = NTxProxy::CreateUploadRowsInternal(
-            SelfId(), TargetTable,
+            TBase::SelfId(), TargetTable,
             UploadColumnsTypes,
             WriteBuf.GetRowsData(),
             UploadMode,
             true /*writeToPrivateTable*/);
 
-        Uploader = TActivationContext::AsActorContext().MakeFor(SelfId()).Register(actor);
+        Uploader = TActivationContext::AsActorContext().MakeFor(TBase::SelfId()).Register(actor);
     }
 };
 

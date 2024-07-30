@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    background_controller.cpp
     column_tables.cpp
     indexation.cpp
     scan.cpp

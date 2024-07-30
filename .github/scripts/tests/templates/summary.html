@@ -8,7 +8,7 @@
             width: 100%;
         }
         h1 { 
-            font-size: 30px; 
+            font-size: 22px; 
         }
         th {
             text-transform: uppercase;
@@ -22,6 +22,7 @@
 
         table {
             border-collapse: collapse;
+            width: 100%;
         }
 
         span.test_status {
@@ -39,24 +40,24 @@
         span.test_mute {
             color: blue;
         }
-        .circle_passed {
-           background-color: green;
+        .svg_passed {
+           fill: green;
        }
-       .circle_failure {
-           background-color: red;
+       .svg_failure {
+           fill: red;
        }
-       .circle_skipped {
-           background-color: gray;
+       .svg_skipped {
+           fill: gray;
        }
-       .circle_mute {
-           background-color: blue;
+       .svg_mute {
+           fill: blue;
        }
 
-       .circle {
+       .svg-icon {
             display: inline-block;
-            width: 12px;
-            height: 12px;
-            margin-right: 5px;
+            width: 16px;
+            height: 16px;
+            margin-right: 0px;
             border-radius: 50%;
             position: relative; /* Essential for tooltips */
             cursor: pointer;
@@ -93,7 +94,7 @@
             border-color: #555 transparent transparent transparent; /* Arrow color */
         }
 
-        .circle:hover .tooltip, .circle:focus .tooltip {
+        .svg-icon:hover .tooltip, .svg-icon:focus .tooltip {
             visibility: visible;
             opacity: 1;
         }
@@ -203,7 +204,20 @@
         {% if (status.name == 'FAIL' and t.full_name in history) %}
         <td>
             {% for h in history[t.full_name] %}
-                <span class="circle circle_{{history[t.full_name][h].status}}">
+                <span class="svg-icon">
+                    {% if history[t.full_name][h].status == 'failure' %}
+                    <svg class="svg_failure" viewBox="0 0 16 16" >
+                        <path  fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0M6.53 5.47a.75.75 0 0 0-1.06 1.06L6.94 8 5.47 9.47a.75.75 0 1 0 1.06 1.06L8 9.06l1.47 1.47a.75.75 0 1 0 1.06-1.06L9.06 8l1.47-1.47a.75.75 0 1 0-1.06-1.06L8 6.94z" clip-rule="evenodd"></path>
+                    </svg>
+                    {% elif history[t.full_name][h].status == 'passed' %}
+                    <svg class="svg_passed" viewBox="0 0 16 16" >
+                        <path fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0m-3.9-1.55a.75.75 0 1 0-1.2-.9L7.419 8.858 6.03 7.47a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.13-.08z" clip-rule="evenodd"></path>
+                    </svg>
+                    {% elif history[t.full_name][h].status == 'mute' %}
+                    <svg class="svg_mute" viewBox="0 0 16 16" >
+                        <path  fill-rule="evenodd" d="M5.06 9.94A1.5 1.5 0 0 0 4 9.5H2a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5h2a1.5 1.5 0 0 0 1.06-.44l2.483-2.482a.268.268 0 0 1 .457.19v8.464a.268.268 0 0 1-.457.19zM2 5h2l2.482-2.482A1.768 1.768 0 0 1 9.5 3.768v8.464a1.768 1.768 0 0 1-3.018 1.25L4 11H2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m10.28.72a.75.75 0 1 0-1.06 1.06L12.44 8l-1.22 1.22a.75.75 0 1 0 1.06 1.06l1.22-1.22 1.22 1.22a.75.75 0 1 0 1.06-1.06L14.56 8l1.22-1.22a.75.75 0 0 0-1.06-1.06L13.5 6.94z" clip-rule="evenodd"></path>                    </svg>
+                    </svg>
+                    {% endif %}
                     <span class="tooltip">
                         Status: {{history[t.full_name][h].status}}<br>
                         Date: {{ history[t.full_name][h].datetime }}<br>

@@ -129,9 +129,8 @@ private:
             const NActors::TActorId selfId,
             TActorId rowDispatcherActorId,
             ui64 eventQueueId)
-            : EventsQueue(ptr)
-            , RowDispatcherActorId(rowDispatcherActorId) {
-            EventsQueue.Init(txId, selfId, selfId, eventQueueId, /* KeepAlive */ true);
+            : RowDispatcherActorId(rowDispatcherActorId) {
+            EventsQueue.Init(txId, selfId, selfId, eventQueueId, /* KeepAlive */ true, ptr);
             EventsQueue.OnNewRecipientId(rowDispatcherActorId);
         }
 
@@ -171,6 +170,7 @@ public:
     void Handle(NActors::TEvents::TEvUndelivered::TPtr &ev);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvPing::TPtr&);
+    void Handle(const NActors::TEvents::TEvPing::TPtr&);
     
     void SessionClosed(ui64 eventQueueId) override;
 
@@ -186,6 +186,9 @@ public:
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvPing, Handle);
+        hFunc(NActors::TEvents::TEvPing, Handle);
+        
+
 
         // hFunc(NActors::TEvents::TEvWakeup, Handle)
     })
@@ -498,12 +501,17 @@ void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::T
 }
 
 void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvPing::TPtr& ev) {
-    SRC_LOG_D("TEvPing");
+    SRC_LOG_D("TEvRetryQueuePrivate::TEvPing");
     ui64 partitionId = ev->Get()->EventQueueId;
 
     auto sessionIt = Sessions.find(partitionId);
     YQL_ENSURE(sessionIt != Sessions.end(), "Unknown partition id");
     sessionIt->second.EventsQueue.Ping();
+}
+
+void TDqPqRdReadActor::Handle(const NActors::TEvents::TEvPing::TPtr&) {
+    SRC_LOG_D("NActors::TEvents::TEvPing");
+    // TODO
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr &ev) {

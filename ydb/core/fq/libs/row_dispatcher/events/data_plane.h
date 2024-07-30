@@ -103,6 +103,7 @@ struct TEvRowDispatcher {
     struct TEvNewDataArrived : public NActors::TEventPB<TEvNewDataArrived,
         NFq::NRowDispatcherProto::TEvNewDataArrived, EEv::EvNewDataArrived> {
         TEvNewDataArrived() = default;
+        NActors::TActorId ReadActorId;
     };
 
     struct TEvGetNextBatch : public NActors::TEventPB<TEvGetNextBatch,
@@ -119,6 +120,7 @@ struct TEvRowDispatcher {
     struct TEvMessageBatch : public NActors::TEventPB<TEvMessageBatch,
         NFq::NRowDispatcherProto::TEvMessageBatch, EEv::EvMessageBatch> {
         TEvMessageBatch() = default;
+        NActors::TActorId ReadActorId;
     };
 
     struct TEvSessionError : public NActors::TEventPB<TEvSessionError,
@@ -127,13 +129,13 @@ struct TEvRowDispatcher {
     };
 
 
-    //  Row_dispatcher  <->  session: 
-    struct TEvSessionAddConsumer : public NActors::TEventLocal<TEvSessionAddConsumer, EEv::EvSessionAddConsumer> {
-        TEvSessionAddConsumer(THolder<NFq::Consumer>&& consumer) 
-            : Consumer(consumer.Release()) // TODO 
-            {}
-        THolder<NFq::Consumer> Consumer;
-    };
+    // //  Row_dispatcher  <->  session: 
+    // struct TEvSessionAddConsumer : public NActors::TEventLocal<TEvSessionAddConsumer, EEv::EvSessionAddConsumer> {
+    //     TEvSessionAddConsumer(THolder<NFq::Consumer>&& consumer) 
+    //         : Consumer(consumer.Release()) // TODO 
+    //         {}
+    //     THolder<NFq::Consumer> Consumer;
+   // };
 
     struct TEvSessionDeleteConsumer : public NActors::TEventLocal<TEvSessionDeleteConsumer, EEv::EvSessionDeleteConsumer> {
         NActors::TActorId ReadActorId;

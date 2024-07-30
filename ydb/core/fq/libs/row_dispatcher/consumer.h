@@ -12,6 +12,7 @@ struct Consumer  {
     Consumer(
         NActors::TActorId readActorId,
         NActors::TActorId selfId,
+        ui64 eventQueueId,
         NFq::NRowDispatcherProto::TEvAddConsumer& proto)
         : ReadActorId(readActorId)
         , SourceParams(proto.GetSource())
@@ -20,7 +21,7 @@ struct Consumer  {
         , StartingMessageTimestampMs(proto.GetStartingMessageTimestampMs())
         , Proto(proto) {
 
-        EventsQueue.Init("txId", selfId, selfId, 1, /* KeepAlive */ true);    // TODO 1
+        EventsQueue.Init("txId", selfId, selfId, eventQueueId, /* KeepAlive */ true);
         EventsQueue.OnNewRecipientId(readActorId);
     }
 

@@ -37,6 +37,7 @@ message TEvAck {
 }
 
 message TEvGetNextBatch {
+    uint32 PartitionId = 1;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 

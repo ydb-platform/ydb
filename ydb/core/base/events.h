@@ -172,6 +172,7 @@ struct TKikimrEvents : TEvents {
         ES_GRAPH = 4249, 
         ES_REPLICATION_SERVICE = 4250, 
         ES_CHANGE_EXCHANGE = 4251, 
+        // skipped 4252-4257, defined in stable-24-3
         ES_LIMITER = 4258,
     };
 };

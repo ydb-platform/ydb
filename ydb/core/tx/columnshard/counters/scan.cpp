@@ -88,12 +88,14 @@ TScanCounters::TScanCounters(const TString& module)
     ScanIntervalState = std::make_shared<TScanIntervalState>(*this);
     ResourcesSubscriberCounters = std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>();
     ScanDurationByStatus.resize((ui32)EStatusFinish::COUNT);
+    ScansFinishedByStatus.resize((ui32)EStatusFinish::COUNT);
     ui32 idx = 0;
     for (auto&& i : GetEnumAllValues<EStatusFinish>()) {
         if (i == EStatusFinish::COUNT) {
             continue;
         }
         ScanDurationByStatus[(ui32)i] = TBase::GetHistogram("ScanDuration/" + ::ToString(i) + "/Milliseconds", NMonitoring::ExponentialHistogram(18, 2, 1));
+        ScansFinishedByStatus[(ui32)i] = TBase::GetDeriviative("ScansFinised/" + ::ToString(i));
         AFL_VERIFY(idx == (ui32)i);
         ++idx;
     }
@@ -101,6 +103,10 @@ TScanCounters::TScanCounters(const TString& module)
 
 NKikimr::NColumnShard::TScanAggregations TScanCounters::BuildAggregations() {
     return TScanAggregations(GetModuleId());
+}
+
+void TScanCounters::FillStats(::NKikimrTableStats::TTableStats& output) const {
+    output.SetRangeReads(ScansFinishedByStatus[(ui32)EStatusFinish::Success]->Val());
 }
 
 }

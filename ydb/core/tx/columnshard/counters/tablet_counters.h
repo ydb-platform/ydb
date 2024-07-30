@@ -72,13 +72,13 @@ public:
         output.SetRowUpdates(GetValue(COUNTER_WRITE_SUCCESS));
         output.SetRowDeletes(0); // manual deletes are not supported
         output.SetRowReads(0);   // all reads are range reads
-        output.SetRangeReads(GetValue(COUNTER_READ_SUCCESS));
         output.SetRangeReadRows(GetValue(COUNTER_READ_INDEX_ROWS));
 
         output.SetImmediateTxCompleted(GetValue(COUNTER_IMMEDIATE_TX_COMPLETED));
         output.SetTxRejectedByOverload(GetValue(COUNTER_WRITE_OVERLOAD));
         output.SetTxRejectedBySpace(GetValue(COUNTER_OUT_OF_SPACE));
         output.SetPlannedTxCompleted(GetValue(COUNTER_PLANNED_TX_COMPLETED));
+        output.SetTxCompleteLagMsec(GetValue(COUNTER_TX_COMPLETE_LAG));
     }
 };
 

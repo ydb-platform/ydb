@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/columnshard/counters/column_tables.h>
 #include <ydb/core/tx/columnshard/counters/tablet_counters.h>
@@ -26,9 +27,9 @@ public:
     void FillBackgroundControllerStats(const TBackgroundControllerCounters& stats, ui64 pathId);
     void FillBackgroundControllerStats(const TBackgroundControllerCounters& stats);
 
-    void FillExecutorStats(const NTabletFlatExecutor::NFlatExecutorSetup::IExecutor& executor);
+    void FillScanCountersStats(const TScanCounters& stats);
 
-    void FillTxCompleteLag(TDuration txCompleteLag);
+    void FillExecutorStats(const NTabletFlatExecutor::NFlatExecutorSetup::IExecutor& executor);
 
     void FillColumnEngineStats(const NOlap::TColumnEngineStats& stats);
 };

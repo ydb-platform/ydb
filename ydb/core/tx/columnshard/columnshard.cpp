@@ -164,18 +164,12 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
     InFlightReadsTracker.RemoveInFlightRequest(ev->Get()->RequestCookie, index);
 
     ui64 txId = ev->Get()->TxId;
-    bool success = ev->Get()->Success;
     if (ScanTxInFlight.contains(txId)) {
         TDuration duration = TAppData::TimeProvider->Now() - ScanTxInFlight[txId];
         Stats.GetTabletCounters().IncCounter(COUNTER_SCAN_LATENCY, duration);
         ScanTxInFlight.erase(txId);
         Stats.GetTabletCounters().SetCounter(COUNTER_SCAN_IN_FLY, ScanTxInFlight.size());
         Stats.GetTabletCounters().IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
-        if (success) {
-            Stats.GetTabletCounters().IncCounter(COUNTER_READ_SUCCESS);
-        } else {
-            Stats.GetTabletCounters().IncCounter(COUNTER_READ_FAIL);
-        }
     }
 }
 
@@ -337,8 +331,8 @@ void TColumnShard::FillOlapStats(
     statsBuilder.FillColumnTableStats(Stats.GetColumnTableCounters());
     statsBuilder.FillTabletStats(Stats.GetTabletCounters());
     statsBuilder.FillBackgroundControllerStats(Stats.GetBackgroundControllerCounters());
+    statsBuilder.FillScanCountersStats(Stats.GetScanCounters());
     statsBuilder.FillExecutorStats(*Executor());
-    statsBuilder.FillTxCompleteLag(GetTxCompleteLag());
     if (TablesManager.HasPrimaryIndex()) {
         statsBuilder.FillColumnEngineStats(TablesManager.MutablePrimaryIndex().GetTotalStats());
     }
@@ -370,8 +364,8 @@ void TColumnShard::FillColumnTableStats(
         statsBuilder.FillColumnTableStats(Stats.GetColumnTableCounters().GetPathIdCounter(pathId));
         statsBuilder.FillTabletStats(Stats.GetTabletCounters());
         statsBuilder.FillBackgroundControllerStats(Stats.GetBackgroundControllerCounters(), pathId);
+        statsBuilder.FillScanCountersStats(Stats.GetScanCounters());
         statsBuilder.FillExecutorStats(*Executor());
-        statsBuilder.FillTxCompleteLag(GetTxCompleteLag());
         if (TablesManager.HasPrimaryIndex()) {
             auto columnEngineStats = TablesManager.GetPrimaryIndexSafe().GetStats().FindPtr(pathId);
             if (columnEngineStats && *columnEngineStats) {

@@ -141,13 +141,13 @@ struct TEvPrivate {
     };
 
     struct TEvReadFinished : public TEventLocal<TEvReadFinished, EvReadFinished> {
-        explicit TEvReadFinished(ui64 requestCookie, ui64 txId, bool success)
-            : RequestCookie(requestCookie), TxId(txId), Success(success)
-        {}
+        explicit TEvReadFinished(ui64 requestCookie, ui64 txId)
+            : RequestCookie(requestCookie)
+            , TxId(txId) {
+        }
 
         ui64 RequestCookie;
         ui64 TxId;
-        bool Success;
     };
 
     struct TEvPeriodicWakeup : public TEventLocal<TEvPeriodicWakeup, EvPeriodicWakeup> {

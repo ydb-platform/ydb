@@ -400,10 +400,9 @@ void TColumnShardScan::Finish(const NColumnShard::TScanCounters::EStatusFinish s
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
         "Scan " << ScanActorId << " finished for tablet " << TabletId);
 
-    bool success = (status == NColumnShard::TScanCounters::EStatusFinish::Success);
-    Send(ColumnShardActorId, new NColumnShard::TEvPrivate::TEvReadFinished(RequestCookie, TxId, success));
+    Send(ColumnShardActorId, new NColumnShard::TEvPrivate::TEvReadFinished(RequestCookie, TxId));
     AFL_VERIFY(StartInstant);
-    ScanCountersPool.OnScanDuration(status, TMonotonic::Now() - *StartInstant);
+    ScanCountersPool.OnScanFinished(status, TMonotonic::Now() - *StartInstant);
     ReportStats();
     PassAway();
 }

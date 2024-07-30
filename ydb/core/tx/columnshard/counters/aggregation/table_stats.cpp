@@ -22,13 +22,13 @@ void TTableStatsBuilder::FillBackgroundControllerStats(const TBackgroundControll
     stats.FillTotalStats(TableStats);
 }
 
+void TTableStatsBuilder::FillScanCountersStats(const TScanCounters& stats) {
+    stats.FillStats(TableStats);
+}
+
 void TTableStatsBuilder::FillExecutorStats(const NTabletFlatExecutor::NFlatExecutorSetup::IExecutor& executor) {
     TableStats.SetInFlightTxCount(executor.GetStats().TxInFly);
     TableStats.SetHasLoanedParts(executor.HasLoanedParts());
-}
-
-void TTableStatsBuilder::FillTxCompleteLag(TDuration txCompleteLag) {
-    TableStats.SetTxCompleteLagMsec(txCompleteLag.MilliSeconds());
 }
 
 void TTableStatsBuilder::FillColumnEngineStats(const NOlap::TColumnEngineStats& stats) {

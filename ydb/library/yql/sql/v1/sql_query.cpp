@@ -1443,9 +1443,12 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (analyzeTable.HasBlock2()) {
                 auto columnsNode = 
                     analyzeTable.GetBlock2().GetBlock1().GetRule_column_list_in_parens1().GetRule_column_list2();
-                columns.push_back(Id(columnsNode.GetRule_column_name1().GetRule_an_id2(), *this));
-                for (const auto& columnNode: columnsNode.GetBlock2()) {
-                    columns.push_back(Id(columnNode.GetRule_column_name2().GetRule_an_id2(), *this));
+
+                if (columnsNode.HasRule_column_name1()) {
+                    columns.push_back(Id(columnsNode.GetRule_column_name1().GetRule_an_id2(), *this));
+                    for (const auto& columnNode: columnsNode.GetBlock2()) {
+                        columns.push_back(Id(columnNode.GetRule_column_name2().GetRule_an_id2(), *this));
+                    }
                 }
             }
 

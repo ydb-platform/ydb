@@ -17,7 +17,6 @@ import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/core/protos/index_builder.proto";
-import "ydb/core/tx/columnshard/engines/scheme/statistics/protos/data.proto";
 import "ydb/core/tx/columnshard/engines/scheme/defaults/protos/data.proto";
 import "ydb/core/tx/columnshard/common/protos/snapshot.proto";
 
@@ -449,6 +448,10 @@ message TRequestedBloomFilter {
     repeated string ColumnNames = 3;
 }
 
+message TRequestedMaxIndex {
+    optional string ColumnName = 1;
+}
+
 message TOlapIndexRequested {
     optional string Name = 1;
     optional TCompressionOptions Compression = 3;
@@ -457,6 +460,7 @@ message TOlapIndexRequested {
     optional string ClassName = 39;
     oneof Implementation {
         TRequestedBloomFilter BloomFilter = 40;
+        TRequestedMaxIndex MaxIndex = 41;
     }
 }
 
@@ -464,6 +468,10 @@ message TBloomFilter {
     optional double FalsePositiveProbability = 1 [default = 0.1];
     optional uint64 MaxBytesCount = 2 [default = 8196];
     repeated uint32 ColumnIds = 3;
+}
+
+message TMaxIndex {
+    optional uint32 ColumnId = 1;
 }
 
 message TOlapIndexDescription {
@@ -478,6 +486,7 @@ message TOlapIndexDescription {
     optional string ClassName = 40;
     oneof Implementation {
         TBloomFilter BloomFilter = 41;
+        TMaxIndex MaxIndex = 42;
     }
 }
 
@@ -541,7 +550,6 @@ message TColumnTableSchema {
 
     optional bool CompositeMarksDeprecated = 9 [ default = false ];
     repeated TOlapIndexDescription Indexes = 10;
-    repeated NKikimrColumnShardStatisticsProto.TOperatorContainer Statistics = 11;
     optional TColumnTableSchemeOptions Options = 12;
 }
 
@@ -558,8 +566,6 @@ message TAlterColumnTableSchema {
     repeated TOlapColumnDiff AlterColumns = 7;
     repeated TOlapIndexRequested UpsertIndexes = 8;
     repeated string DropIndexes = 9;
-    repeated NKikimrColumnShardStatisticsProto.TConstructorContainer UpsertStatistics = 10;
-    repeated string DropStatistics = 11;
     optional TColumnTableRequestedOptions Options = 12;
 }
 
@@ -913,10 +919,6 @@ message TCreateCdcStream {
     optional TCdcStreamDescription StreamDescription = 2;
     optional uint64 RetentionPeriodSeconds = 3 [default = 86400]; // 1d by default
     optional uint32 TopicPartitions = 4;
-    oneof IndexMode {
-        google.protobuf.Empty AllIndexes = 5; // Create topic per each index
-        string IndexName = 6;
-    }
 }
 
 message TAlterCdcStream {
@@ -1631,7 +1633,6 @@ message TIndexBuildControl {
 
 message TLockConfig {
     optional string Name = 1;
-    optional bool AllowIndexImplLock = 2;
 }
 
 message TLockGuard {

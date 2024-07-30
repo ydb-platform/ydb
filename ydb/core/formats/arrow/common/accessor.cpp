@@ -1,4 +1,5 @@
 #include "accessor.h"
+#include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/formats/arrow/switch/compare.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/library/actors/core/log.h>
@@ -94,6 +95,10 @@ public:
 
 }
 
+std::optional<ui64> TTrivialArray::DoGetRawSize() const {
+    return NArrow::GetArrayDataSize(Array);
+}
+
 std::partial_ordering IChunkedArray::TCurrentChunkAddress::Compare(const ui64 position, const TCurrentChunkAddress& item, const ui64 itemPosition) const {
     AFL_VERIFY(StartPosition <= position);
     AFL_VERIFY(position < FinishPosition);
@@ -117,6 +122,14 @@ TString IChunkedArray::TCurrentChunkAddress::DebugString(const ui64 position) co
 IChunkedArray::TCurrentChunkAddress TTrivialChunkedArray::DoGetChunk(const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position) const {
     TChunkAccessor accessor(Array);
     return SelectChunk(chunkCurrent, position, accessor);
+}
+
+std::optional<ui64> TTrivialChunkedArray::DoGetRawSize() const {
+    ui64 result = 0;
+    for (auto&& i : Array->chunks()) {
+        result += NArrow::GetArrayDataSize(i);
+    }
+    return result;
 }
 
 }

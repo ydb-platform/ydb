@@ -13,7 +13,7 @@ protected:
 public:
     virtual ~TScanIteratorBase() = default;
 
-    virtual void Apply(IDataTasksProcessor::ITask::TPtr /*processor*/) {
+    virtual void Apply(const std::shared_ptr<IApplyAction>& /*task*/) {
 
     }
 

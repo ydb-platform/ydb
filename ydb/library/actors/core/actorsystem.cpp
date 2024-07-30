@@ -338,4 +338,13 @@ namespace NActors {
         CpuManager->Cleanup();
         Scheduler.Destroy();
     }
+
+    void TActorSystem::GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const {
+        CpuManager->GetExecutorPoolState(poolId, state);
+    }
+
+    void TActorSystem::GetExecutorPoolStates(std::vector<TExecutorPoolState> &states) const {
+        CpuManager->GetExecutorPoolStates(states);
+    }
+
 }

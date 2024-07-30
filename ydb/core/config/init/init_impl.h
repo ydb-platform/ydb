@@ -1119,7 +1119,7 @@ public:
     }
 
     void FillData(const NConfig::TCommonAppOptions& cf) {
-        if (cf.TenantName && ScopeId.IsEmpty()) {
+        if (!cf.TenantName && ScopeId.IsEmpty()) {
             const TString myDomain = DeduceNodeDomain(cf, AppConfig);
             for (const auto& domain : AppConfig.GetDomainsConfig().GetDomain()) {
                 if (domain.GetName() == myDomain) {

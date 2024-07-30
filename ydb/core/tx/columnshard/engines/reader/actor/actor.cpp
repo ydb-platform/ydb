@@ -98,17 +98,18 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
     }
 }
 
-void TColumnShardScan::HandleScan(NConveyor::TEvExecution::TEvTaskProcessedResult::TPtr& ev) {
+void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResult::TPtr& ev) {
     --InFlightReads;
     auto g = Stats->MakeGuard("task_result");
-    if (ev->Get()->GetErrorMessage()) {
-        ACFL_ERROR("event", "TEvTaskProcessedResult")("error", ev->Get()->GetErrorMessage());
-        SendScanError("task_error:" + ev->Get()->GetErrorMessage());
+    auto result = ev->Get()->ExtractResult();
+    if (result.IsFail()) {
+        ACFL_ERROR("event", "TEvTaskProcessedResult")("error", result.GetErrorMessage());
+        SendScanError("task_error:" + result.GetErrorMessage());
         Finish(NColumnShard::TScanCounters::EStatusFinish::ConveyorInternalError);
     } else {
         ACFL_DEBUG("event", "TEvTaskProcessedResult");
-        auto t = static_pointer_cast<IDataTasksProcessor::ITask>(ev->Get()->GetResult());
-        Y_DEBUG_ABORT_UNLESS(dynamic_pointer_cast<IDataTasksProcessor::ITask>(ev->Get()->GetResult()));
+        auto t = static_pointer_cast<IApplyAction>(result.GetResult());
+        Y_DEBUG_ABORT_UNLESS(dynamic_pointer_cast<IDataTasksProcessor::ITask>(result.GetResult()));
         if (!ScanIterator->Finished()) {
             ScanIterator->Apply(t);
         }

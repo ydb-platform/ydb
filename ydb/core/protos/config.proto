@@ -1470,6 +1470,7 @@ message THiveConfig {
     optional uint64 StorageBalancerInflight = 73 [default = 1];
     optional bool EnableDestroyOperations = 74 [default = false];
     optional double NodeUsageRangeToKick = 75 [default = 0.2];
+    optional bool LessSystemTabletsMoves = 77 [default = true];
     optional uint64 MaxPingsInFlight = 78 [default = 1000];
 }
 
@@ -1497,7 +1498,6 @@ message TColumnShardConfig {
     optional bool TTLEnabled = 6 [default = true];
     optional bool WritingEnabled = 7 [default = true];
     optional uint32 WritingBufferDurationMs = 8 [default = 0];
-    optional bool UseChunkedMergeOnCompaction = 9 [default = true];
     optional uint64 CompactionMemoryLimit = 10 [default = 536870912];
     optional uint64 TieringsMemoryLimit = 11 [default = 536870912];
     message TIndexMetadataMemoryLimit {
@@ -1518,6 +1518,7 @@ message TColumnShardConfig {
     repeated TRepairInfo Repairs = 15;
 
     optional uint32 MaxInFlightIntervalsOnRequest = 16;
+    optional uint32 MaxInFlightMemoryOnRequest = 17;
 }
 
 message TSchemeShardConfig {

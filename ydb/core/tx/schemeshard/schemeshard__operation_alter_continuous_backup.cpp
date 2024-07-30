@@ -1,8 +1,7 @@
-#include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
-
 #include "schemeshard__operation_alter_cdc_stream.h"
+#include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard_impl.h"
 
 #include <ydb/core/tx/schemeshard/backup/constants.h>
 
@@ -111,7 +110,7 @@ TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId opId, cons
 
     TVector<ISubOperation::TPtr> result;
 
-    NCdc::DoAlterStream(alterCdcStreamOp, opId, workingDirPath, tablePath, result);
+    NCdc::DoAlterStream(result, alterCdcStreamOp, opId, workingDirPath, tablePath);
 
     if (cbOp.GetActionCase() == NKikimrSchemeOp::TAlterContinuousBackup::kTakeIncrementalBackup) {
         DoCreateIncBackupTable(opId, backupTablePath, schema, result);

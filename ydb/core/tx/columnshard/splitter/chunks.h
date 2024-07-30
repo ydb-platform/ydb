@@ -15,6 +15,12 @@ private:
 protected:
     virtual TSimpleChunkMeta DoBuildSimpleChunkMeta() const = 0;
     virtual ui32 DoGetRecordsCountImpl() const = 0;
+    virtual ui64 DoGetRawBytesImpl() const = 0;
+
+    virtual std::optional<ui64> DoGetRawBytes() const final {
+        return DoGetRawBytesImpl();
+    }
+
     virtual std::optional<ui32> DoGetRecordsCount() const override final {
         return DoGetRecordsCountImpl();
     }
@@ -78,11 +84,7 @@ public:
         return !!CurrentChunk;
     }
 
-    bool ReadNext() {
-        AFL_VERIFY(!!CurrentChunk);
-        if (++CurrentRecordIndex < CurrentChunk->length()) {
-            return true;
-        } 
+    bool ReadNextChunk() {
         while (++CurrentChunkIndex < Chunks.size()) {
             CurrentChunk = Loader->ApplyVerifiedColumn(Chunks[CurrentChunkIndex]->GetData());
             CurrentRecordIndex = 0;
@@ -92,6 +94,14 @@ public:
         }
         CurrentChunk = nullptr;
         return false;
+    }
+
+    bool ReadNext() {
+        AFL_VERIFY(!!CurrentChunk);
+        if (++CurrentRecordIndex < CurrentChunk->length()) {
+            return true;
+        }
+        return ReadNextChunk();
     }
 };
 
@@ -133,6 +143,10 @@ public:
             IsCorrectFlag = false;
         }
         return *result;
+    }
+
+    ui32 GetColumnsCount() const {
+        return Columns.size();
     }
 
     std::vector<TChunkedColumnReader>::const_iterator begin() const {

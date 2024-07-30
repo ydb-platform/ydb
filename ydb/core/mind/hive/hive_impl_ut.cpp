@@ -109,7 +109,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
         auto CheckSpeedAndDistribution = [](
             std::unordered_map<ui64, TLeaderTabletInfo>& allTablets,
-            std::function<void(std::vector<TTabletInfo*>&, EResourceToBalance)> func,
+            std::function<void(std::vector<TTabletInfo*>::iterator, std::vector<TTabletInfo*>::iterator, EResourceToBalance)> func,
             EResourceToBalance resource) -> void {
 
             std::vector<TTabletInfo*> tablets;
@@ -119,7 +119,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
             TProfileTimer timer;
 
-            func(tablets, resource);
+            func(tablets.begin(), tablets.end(), resource);
 
             double passed = timer.Get().SecondsFloat();
 

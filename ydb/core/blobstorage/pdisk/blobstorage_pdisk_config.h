@@ -132,6 +132,9 @@ struct TPDiskConfig : public TThrRefBase {
 
     ui64 ExpectedSlotCount = 0;
 
+    // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
+    ui32 ChunkBaseLimit = 130;
+
     NKikimrConfig::TFeatureFlags FeatureFlags;
 
     ui64 MinLogChunksTotal = 4ull; // for tiny disks
@@ -374,6 +377,10 @@ struct TPDiskConfig : public TThrRefBase {
 
         if (cfg->HasExpectedSlotCount()) {
             ExpectedSlotCount = cfg->GetExpectedSlotCount();
+        }
+
+        if (cfg->HasChunkBaseLimit()) {
+            ChunkBaseLimit = cfg->GetChunkBaseLimit();
         }
     }
 };

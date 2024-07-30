@@ -16,13 +16,15 @@
 
         th, td {
             padding: 5px;
-            min-width: 105px;
+            min-width: 80px;
             word-break: break-word; /* Allow breaking long words */
+            font-size: 12px;
         }
 
         table {
             border-collapse: collapse;
             width: 100%;
+            min-width: 100vw; /* Minimum width equals viewport width */
         }
 
         span.test_status {
@@ -41,20 +43,23 @@
             color: blue;
         }
         .svg_passed {
-           fill: green;
-       }
-       .svg_failure {
-           fill: red;
-       }
-       .svg_skipped {
-           fill: gray;
-       }
-       .svg_mute {
-           fill: blue;
-       }
+            fill: green;
+        }
+    
+        .svg_failure {
+            fill: red;
+        }
+    
+        .svg_skipped {
+            fill: gray;
+        }
+    
+        .svg_mute {
+            fill: blue;
+        }
 
-       .svg-icon {
-            display: inline-block;
+        .svg-icon {
+            float: left;
             width: 16px;
             height: 16px;
             margin-right: 0px;
@@ -62,7 +67,7 @@
             position: relative; /* Essential for tooltips */
             cursor: pointer;
         }
-
+    
         .tooltip {
             visibility: hidden;
             width: 180px;
@@ -72,8 +77,8 @@
             border-radius: 5px;
             padding: 5px;
             position: absolute;
-            z-index: 1;
-            bottom: 100%; /* Positioned above the circle */
+            z-index: 3;
+            bottom: 100%; /* Positioned above the svg icon */
             left: 50%; /* Center the tooltip */
             margin-left: -95px; /* Use negative margin to actually center the tooltip */
             opacity: 0;
@@ -91,31 +96,40 @@
             margin-left: -5px;
             border-width: 5px;
             border-style: solid;
-            border-color: #555 transparent transparent transparent; /* Arrow color */
+            border-color: #7d7d92 transparent transparent transparent; /* Arrow color */
         }
 
         .tooltip.visible {
-        visibility: visible;
-        opacity: 1;
-         }
-
+            visibility: visible;
+            opacity: 1;
+        }
+    
         button.copy {
             float: right;
+            position: relative; /* To hold the copied tooltip */
         }
         table > tbody > tr > td:nth-child(2),
         table > tbody > tr > td:nth-child(3),
         table > tbody > tr > td:nth-child(4) {
             text-align: center;
         }
-
+    
         .collapsible-content {
-            display: none;
-        }
-
-        .collapsible-content.active {
             display: table-row-group;
+            position: absolute;
+            top: -9999px;
+            left: -9999px;
+            height: 0;
+            overflow: hidden;
         }
-
+    
+        .collapsible-content.active {
+            position: relative;
+            top: 0;
+            left: 0;
+            height: auto;
+        }
+    
         .collapsible-header {
             cursor: pointer;
             background-color: #f2f2f2;
@@ -123,97 +137,120 @@
             border: 1px solid #ddd;
             margin-bottom: 5px;
         }
+    
+       
+        .toggle-visibility-buttons {
+            margin-bottom: 10px;
+            overflow:hidden;
+            float: right;
+        }
     </style>
-    <script>
-        function copyTestNameToClipboard(text) {
-            const full_name = text.trim();
-            const pieces = /(.+)\/([^$]+)$/.exec(full_name);
+<script>
+    function copyTestNameToClipboard(text) {
+        const full_name = text.trim();
+        const pieces = /(.+)\/([^$]+)$/.exec(full_name);
 
-            if (!pieces) {
-                console.error("Unable to split path/test name from %o", full_name);
-                return;
-            }
-            let [path, testName] = [pieces[1], pieces[2]];
-
-            const namePieces = testName.split('.');
-
-            if (namePieces.length === 2) {
-                testName = namePieces[0] + '::' + namePieces[1];
-            } else {
-                testName = namePieces[0] + '.' + namePieces[1] + '::' + namePieces.slice(2).join('::');
-            }
-
-            const cmdArg = `${path} -F '${testName}'`;
-
-            console.log(cmdArg);
-
-            navigator.clipboard.writeText(cmdArg).catch(
-                () => {
-                    console.error("Unable to copy %o to clipboard", cmdArg);
-                }
-            );
+        if (!pieces) {
+            console.error("Unable to split path/test name from %o", full_name);
+            return;
         }
-    
-        let lastOpenedTooltip = null;
-    
-        function toggleTooltip(event) {
-            event.stopPropagation();
-            const tooltip =
-    
-    event.currentTarget.querySelector('.tooltip');
-    
-            if (tooltip.classList.contains('visible')) {
-                tooltip.classList.remove('visible');
-                lastOpenedTooltip = null;
-            } else {
+        let [path, testName] = [pieces[1], pieces[2]];
+
+        const namePieces = testName.split('.');
+
+        if (namePieces.length === 2) {
+            testName = namePieces[0] + '::' + namePieces[1];
+        } else {
+            testName = namePieces[0] + '.' + namePieces[1] + '::' + namePieces.slice(2).join('::');
+        }
+
+        const cmdArg = `${path} -F '${testName}'`;
+
+        console.log(cmdArg);
+
+        navigator.clipboard.writeText(cmdArg).then(
+            () => {
+                console.log("Copied!");
+                showCopiedTooltip();
+            },
+            () => {
+                console.error("Unable to copy %o to clipboard", cmdArg);
+            }
+        );
+    }
+
+    let lastOpenedTooltip = null;
+
+    function toggleTooltip(event) {
+        event.stopPropagation();
+        const tooltip = event.currentTarget.querySelector('.tooltip');
+
+        if (tooltip.classList.contains('visible')) {
+            tooltip.classList.remove('visible');
+            lastOpenedTooltip = null;
+        } else {
+            hideTooltips();
+            tooltip.classList.add('visible');
+            lastOpenedTooltip = tooltip;
+        }
+    }
+
+    function hideTooltips() {
+        if (lastOpenedTooltip) {
+            lastOpenedTooltip.classList.remove('visible');
+            lastOpenedTooltip = null;
+        }
+    }
+
+
+    function toggleAllTables(action) {
+        const contents = document.querySelectorAll('.collapsible-content');
+        if (action === 'expand') {
+            contents.forEach(content => content.classList.add('active'));
+        } else if (action === 'collapse') {
+            contents.forEach(content => content.classList.remove('active'));
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        document.addEventListener('click', function(event) {
+            if (!event.target.closest('.svg-icon') && !event.target.classList.contains('copy')) {
                 hideTooltips();
-                tooltip.classList.add('visible');
-                lastOpenedTooltip = tooltip;
             }
-        }
-    
-        function hideTooltips() {
-            if (lastOpenedTooltip) {
-                lastOpenedTooltip.classList.remove('visible');
-                lastOpenedTooltip = null;
-            }
-        }
-    
-        document.addEventListener("DOMContentLoaded", function() {
-            document.addEventListener('click', function(event) {
-                if (!event.target.closest('.svg-icon')) {
-                    hideTooltips();
-                }
-            });
-    
-            const svgIcons = document.querySelectorAll('.svg-icon');
-            svgIcons.forEach(icon => {
-                icon.addEventListener('click', toggleTooltip);
-            });
-    
-            const copyButtons = document.querySelectorAll(".copy");
-            copyButtons.forEach(button => {
-                button.addEventListener('click', function(event) {
-                    event.preventDefault();
-                    copyTestNameToClipboard(event.target.parentElement.previousElementSibling.textContent);
-                });
-            });
-    
-            const headers = document.querySelectorAll(".collapsible-header");
-            headers.forEach(header => {
-                header.addEventListener('click', function() {
-                    const content = this.nextElementSibling;
-                    if (content.classList.contains('active')) {
-                        content.classList.remove('active');
-                    } else {
-                        content.classList.add('active');
-                    }
-                });
+        });
+        const svgIcons = document.querySelectorAll('.svg-icon');
+        svgIcons.forEach(icon => {
+            icon.addEventListener('click', toggleTooltip);
+        });
+        const copyButtons = document.querySelectorAll(".copy");
+        copyButtons.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                copyTestNameToClipboard(event.target.closest('.copy').previousElementSibling.textContent);
             });
         });
-    </script>
+        const headers = document.querySelectorAll(".collapsible-header");
+        headers.forEach(header => {
+            header.addEventListener('click', function() {
+                const content = this.nextElementSibling;
+                if (content.classList.contains('active')) {
+                    content.classList.remove('active');
+                } else {
+                    content.classList.add('active');
+                }
+            });
+        });
+
+        document.getElementById('expand-all').addEventListener('click', () => toggleAllTables('expand'));
+        document.getElementById('collapse-all').addEventListener('click', () => toggleAllTables('collapse'));
+    });
+</script>
 </head>
 <body>
+    <div class="toggle-visibility-buttons">
+        <button id="expand-all">Expand All for Search</button>
+        <button id="collapse-all">Collapse All</button>
+    </div>
 {% for status in status_order %}
 <h1 id="{{ status.name}}" class="collapsible-header">{{ status.name }} ({{ tests[status] | length }})</h1>
 <table class="collapsible-content{% if status.name == 'FAIL' %} active{% endif %}" border="1">
@@ -221,7 +258,9 @@
     <tr>
         <th>test name</th>
     {% if status.name == 'FAIL' and history%}
-        <th>history</th>
+        <th>history<br>
+            old->new
+        </th>
     {% endif %}
         <th>elapsed</th>
         <th>status</th>
@@ -283,7 +322,7 @@
         <td>
             {% if t.log_urls %}
                 {% for log_name, log_url in t.log_urls.items() %}
-                <a href="{{ log_url }}">{{ log_name.upper() }}</a>{% if not loop.last %} | {% endif %}
+                <a href="{{ log_url }}">{{ log_name }}</a>{% if not loop.last %} | {% endif %}
 
                 {% endfor %}
             {% else %}

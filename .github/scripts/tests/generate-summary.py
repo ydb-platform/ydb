@@ -39,6 +39,7 @@ class TestResult:
     status: TestStatus
     log_urls: Dict[str, str]
     elapsed: float
+    count_of_passed: int
 
     @property
     def status_display(self):
@@ -65,14 +66,6 @@ class TestResult:
     @property
     def full_name(self):
         return f"{self.classname}/{self.name}"
-    
-    @property
-    def count_of_passed(self):
-        return f"{self._count_of_passed}"
-
-    @count_of_passed.setter
-    def count_of_passed(self, value):
-        self._count_of_passed = value
 
     @classmethod
     def from_junit(cls, testcase):
@@ -106,7 +99,7 @@ class TestResult:
             elapsed = 0
             print(f"Unable to cast elapsed time for {classname}::{name}  value={elapsed!r}")
 
-        return cls(classname, name, status, log_urls, elapsed)
+        return cls(classname, name, status, log_urls, elapsed, 0)
 
 
 class TestSummaryLine:
@@ -231,13 +224,13 @@ def render_pm(value, url, diff=None):
     return text
 
 
-def render_testlist_html(rows, fn , build_preset):
+def render_testlist_html(rows, fn, build_preset):
     TEMPLATES_PATH = os.path.join(os.path.dirname(__file__), "templates")
 
     env = Environment(loader=FileSystemLoader(TEMPLATES_PATH), undefined=StrictUndefined)
 
     status_test = {}
-    last_N_runs=5
+    last_n_runs = 5
     has_any_log = set()
 
     for t in rows:
@@ -253,25 +246,34 @@ def render_testlist_html(rows, fn , build_preset):
     # remove status group without tests
     status_order = [s for s in status_order if s in status_test]
 
-    #get failed tests
-    failed_tests_array=[]
-    if TestStatus.FAIL in status_test:
-        for test in status_test[TestStatus.FAIL]:
-            failed_tests_array.append(test.full_name)
+    # get failed tests
+    failed_tests_array = []
+    for test in status_test.get(TestStatus.FAIL, []):
+        failed_tests_array.append(test.full_name)
 
-    history = get_test_history(failed_tests_array,last_N_runs,build_preset)
-
+    try:
+        history = get_test_history(failed_tests_array, last_n_runs, build_preset)
+    except Exception as e:
+        history={}
+        print(f'Error:{e}')
+        
     # sorting, at first show tests with passed resuts in history
-    if TestStatus.FAIL in status_test and history:
-        for test in status_test[TestStatus.FAIL]:
+
+    if TestStatus.FAIL in status_test:
+        for test in status_test.get(TestStatus.FAIL, []):
             if test.full_name in history:
-                test.count_of_passed=history[test.full_name][next(iter(history[test.full_name]))]['count_of_passed']
+                test.count_of_passed = history[test.full_name][
+                    next(iter(history[test.full_name]))
+                ]["count_of_passed"]
             else:
-                test.count_of_passed=0
-        status_test[TestStatus.FAIL].sort(key=attrgetter("_count_of_passed"),reverse=True)
+                test.count_of_passed = 0
+        status_test[TestStatus.FAIL].sort(key=attrgetter("count_of_passed"), reverse=True)
 
     content = env.get_template("summary.html").render(
-        status_order=status_order, tests=status_test, has_any_log=has_any_log, history=history
+        status_order=status_order,
+        tests=status_test,
+        has_any_log=has_any_log,
+        history=history,
     )
 
     with open(fn, "w") as fp:

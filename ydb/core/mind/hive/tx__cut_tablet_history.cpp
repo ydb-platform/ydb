@@ -19,7 +19,7 @@ public:
         auto tabletId = msg->Record.GetTabletID();
         BLOG_D("THive::TTxCutTabletHistory::Execute(" << tabletId << ")");
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);
-        if (tablet != nullptr && tablet->IsReadyToReassignTablet() && !Self->IsInCutHistoryDenyList(tablet->Type)) {
+        if (tablet != nullptr && tablet->IsReadyToReassignTablet() && Self->IsCutHistoryAllowed(tablet->Type)) {
             auto channel = msg->Record.GetChannel();
             Y_ABORT_UNLESS(channel < tablet->TabletStorageInfo->Channels.size());
             TTabletChannelInfo& channelInfo = tablet->TabletStorageInfo->Channels[channel];

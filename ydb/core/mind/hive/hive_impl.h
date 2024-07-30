@@ -453,6 +453,7 @@ protected:
     // normalized to be sorted list of unique values
     std::vector<TTabletTypes::EType> BalancerIgnoreTabletTypes; // built from CurrentConfig
     std::vector<TTabletTypes::EType> CutHistoryDenyList; // built from CurrentConfig
+    std::vector<TTabletTypes::EType> CutHistoryAllowList; // built from CurrentConfig
 
     struct TTabletMoveInfo {
         TInstant Timestamp;
@@ -898,10 +899,19 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
         return (found != ignoreList.end());
     }
 
-    bool IsInCutHistoryDenyList(TTabletTypes::EType type) const {
+    bool IsCutHistoryAllowed(TTabletTypes::EType type) const {
+        bool allowed = true;
         const auto& denyList = CutHistoryDenyList;
-        auto found = std::find(denyList.begin(), denyList.end(), type);
-        return (found != denyList.end());
+        if (!denyList.empty()) {
+            auto found = std::find(denyList.begin(), denyList.end(), type);
+            allowed &= (found != denyList.end());
+        }
+        const auto& allowList = CutHistoryAllowList;
+        if (!allowList.empty()) {
+            auto found = std::find(allowList.begin(), allowList.end(), type);
+            allowed &= (found == allowList.end());
+        }
+        return allowed;
     }
 
     double GetSpaceUsagePenaltyThreshold() {

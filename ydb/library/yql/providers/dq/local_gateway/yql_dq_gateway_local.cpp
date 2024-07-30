@@ -81,6 +81,7 @@ public:
 
         if (withSpilling) {
             auto tempDir = NDq::GetTmpSpillingRootForCurrentUser();
+            MakeDirIfNotExist(tempDir);
 
             auto spillingActor = NDq::CreateDqLocalFileSpillingService(NDq::TFileSpillingServiceConfig{.Root = tempDir, .CleanupOnShutdown = false}, MakeIntrusive<NDq::TSpillingCounters>(lwmGroup));
 

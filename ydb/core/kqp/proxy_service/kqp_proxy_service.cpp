@@ -45,6 +45,8 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/resource/resource.h>
 
+#include <util/folder/dirut.h>
+
 namespace NKikimr::NKqp {
 
 namespace {
@@ -236,6 +238,7 @@ public:
             TString spillingRoot = cfg.GetRoot();
             if (spillingRoot.empty()) {
                 spillingRoot = NYql::NDq::GetTmpSpillingRootForCurrentUser();
+                MakeDirIfNotExist(spillingRoot);
             }
 
             SpillingService = TlsActivationContext->ExecutorThread.RegisterActor(NYql::NDq::CreateDqLocalFileSpillingService(

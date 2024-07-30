@@ -225,8 +225,7 @@ public:
         const auto sessionId = Config_.SpillingSessionId;
         const auto nodeId = SelfId().NodeId();
 
-        Root_ /= (TStringBuilder() << "node_" << nodeId << "_" << sessionId);
-        // Cerr << "Root from config: " << Config_.Root << ", actual root: " << Root_ << "\n";
+        Root_ /= (TStringBuilder() << NodePrefix_ << "_" << nodeId << "_" << sessionId);
         LOG_I("Init DQ local file spilling service at " << Root_ << ", actor: " << SelfId());
 
         try {
@@ -739,32 +738,27 @@ private:
         const auto& root = msg.TmpRoot;
         const auto nodeIdString = ToString(msg.NodeId);
         const auto& sessionId = msg.SpillingSessionId;
+        const auto& nodePrefix = this->NodePrefix_;
 
         LOG_I("[RemoveOldTmp] removing at root: " << root);
 
-        static const auto isDirOldTmp = [&nodeIdString, &sessionId](TString dirName) -> bool {
+        const auto isDirOldTmp = [&nodePrefix, &nodeIdString, &sessionId](const TString& dirName) -> bool {            
             // dirName: node_<nodeId>_<sessionId>
-            static constexpr size_t NodeIdBegin = 5;
-            if (dirName.Size() < NodeIdBegin || dirName.substr(0, NodeIdBegin) != "node_") {
-                return false;
-            }  
-            const auto nodeIdEnd = dirName.find('_', NodeIdBegin);
-            if (nodeIdEnd == TString::npos || dirName.substr(NodeIdBegin, nodeIdEnd - NodeIdBegin) != nodeIdString) {
+            TVector<TString> parts;
+            StringSplitter(dirName).Split('_').Limit(3).Collect(&parts);
+
+            if (parts.size() < 3) {
                 return false;
             }
-            if (dirName.substr(nodeIdEnd + 1) == sessionId) {
-                return false;
-            }
-            return true;
+            return parts[0] == nodePrefix && parts[1] == nodeIdString && parts[2] != sessionId;
         };
 
         try {
             TDirIterator iter(root, TDirIterator::TOptions().SetMaxLevel(1));
             
             TVector<TString> oldTmps;
-            for (const auto &dirEntry : iter) {
+            for (const auto& dirEntry : iter) {
                 if (dirEntry.fts_info == FTS_DP) {
-                    // skip postorder visit
                     continue;
                 }
                 
@@ -775,9 +769,9 @@ private:
                 }
             }
 
-            ForEach(oldTmps.begin(), oldTmps.end(), [&root](const auto& dirName) {
+            for (const auto& dirName : oldTmps) {
                 (root / dirName).ForceDelete();
-            });
+            }
         } catch (const yexception& e) {
             LOG_E("[RemoveOldTmp] removing failed due to: " << e.what());
         }
@@ -1012,6 +1006,7 @@ private:
 
 private:
     const TFileSpillingServiceConfig Config_;
+    const TString NodePrefix_ = "node";
     TFsPath Root_;
     TIntrusivePtr<TSpillingCounters> Counters_;
 
@@ -1026,7 +1021,6 @@ private:
 TFsPath GetTmpSpillingRootForCurrentUser() {
     auto root = TFsPath{GetSystemTempDir()};
     root /= "spilling-tmp-" + GetUsername();
-    MakeDirIfNotExist(root);
     return root;
 }
 

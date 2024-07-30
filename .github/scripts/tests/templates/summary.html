@@ -195,7 +195,7 @@
             copyButtons.forEach(button => {
                 button.addEventListener('click', function(event) {
                     event.preventDefault();
-                    copyTestNameToClipboard(event.target.previousElementSibling.textContent);
+                    copyTestNameToClipboard(event.target.parentElement.previousElementSibling.textContent);
                 });
             });
     
@@ -235,7 +235,15 @@
     <tr>
         <td>
             <span>{{ t.full_name }}</span>
-            {% if status.is_error %}<button class="copy" title="Copy test filter to clipboard">Copy test filter</button>{% endif %}
+            {% if status.is_error %} 
+            <button class="copy" title="Copy test filter to clipboard" >
+                <svg  xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="14" height="14" class="g-icon" fill="currentColor" stroke="none" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 16 16">
+                        <path class="copy_svg" fill="currentColor" fill-rule="evenodd" d="M12 2.5H8A1.5 1.5 0 0 0 6.5 4v1H8a3 3 0 0 1 3 3v1.5h1A1.5 1.5 0 0 0 13.5 8V4A1.5 1.5 0 0 0 12 2.5M11 11h1a3 3 0 0 0 3-3V4a3 3 0 0 0-3-3H8a3 3 0 0 0-3 3v1H4a3 3 0 0 0-3 3v4a3 3 0 0 0 3 3h4a3 3 0 0 0 3-3zM4 6.5h4A1.5 1.5 0 0 1 9.5 8v4A1.5 1.5 0 0 1 8 13.5H4A1.5 1.5 0 0 1 2.5 12V8A1.5 1.5 0 0 1 4 6.5" clip-rule="evenodd"></path>
+                    </svg>
+                </svg>
+            </button>
+            {% endif %}
         </td>
         {% if (status.name == 'FAIL' and t.full_name in history) %}
         <td>

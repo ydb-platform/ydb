@@ -74,7 +74,7 @@ PEERDIR(
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/grpc_services
-    ydb/core/grpc_services/auth_processor
+    ydb/core/security/certificate_check
     ydb/core/grpc_services/base
     ydb/core/keyvalue
     ydb/core/kqp/common

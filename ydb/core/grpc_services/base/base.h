@@ -12,6 +12,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/api/protos/ydb_common.pb.h>
+#include <ydb/public/api/protos/ydb_discovery.pb.h>
 
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 
@@ -376,6 +377,7 @@ public:
     virtual const NYdbGrpc::TAuthState& GetAuthState() const = 0;
     virtual void ReplyUnauthenticated(const TString& msg = "") = 0;
     virtual void ReplyUnavaliable() = 0;
+    virtual TVector<TStringBuf> FindClientCertPropertyValues() const = 0;
 
     // tracing
     virtual void StartTracing(NWilson::TSpan&& span) = 0;
@@ -618,6 +620,10 @@ public:
         Y_UNUSED(database);
     }
 
+    TVector<TStringBuf> FindClientCertPropertyValues() const override {
+        return {};
+    }
+
     TActorId GetFromId() const {
         return From_;
     }
@@ -840,6 +846,10 @@ public:
 
     void UseDatabase(const TString& database) override {
         Ctx_->UseDatabase(database);
+    }
+
+    TVector<TStringBuf> FindClientCertPropertyValues() const override {
+        return {};
     }
 
     IStreamCtx* GetStreamCtx() {
@@ -1122,6 +1132,10 @@ public:
     }
 
     TVector<TStringBuf> FindClientCert() const override {
+        return Ctx_->FindClientCert();
+    }
+
+    TVector<TStringBuf> FindClientCertPropertyValues() const override {
         return Ctx_->FindClientCert();
     }
 
@@ -1697,6 +1711,10 @@ public:
 
     void RaiseIssues(const NYql::TIssues& issues) override {
         IssueManager.RaiseIssues(issues);
+    }
+
+    TVector<TStringBuf> FindClientCertPropertyValues() const override {
+        return {};
     }
 
     void StartTracing(NWilson::TSpan&& span) override {

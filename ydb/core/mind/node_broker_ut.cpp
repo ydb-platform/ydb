@@ -174,8 +174,10 @@ void SetupServices(TTestActorRuntime &runtime,
     auto dnConfig = runtime.GetAppData().DynamicNameserviceConfig;
     dnConfig->MaxStaticNodeId = 1023;
     dnConfig->MinDynamicNodeId = 1024;
+
     dnConfig->MaxDynamicNodeId = 1024 + (singleDomainMode ? (maxDynNodes - 1) : 32 * (maxDynNodes - 1));
     runtime.GetAppData().FeatureFlags.SetEnableNodeBrokerSingleDomainMode(singleDomainMode);
+    runtime.GetAppData().FeatureFlags.SetEnableStableNodeNames(true);
 
     if (!runtime.IsRealThreads()) {
         TDispatchOptions options;
@@ -227,7 +229,8 @@ void SetBannedIds(TTestActorRuntime& runtime,
 
 void Setup(TTestActorRuntime& runtime,
            ui32 maxDynNodes = 3,
-           bool singleDomainMode = false)
+           bool singleDomainMode = false,
+           const TVector<TString>& databases = {})
 {
     using namespace NMalloc;
     TMallocInfo mallocInfo = MallocInfo();
@@ -243,6 +246,30 @@ void Setup(TTestActorRuntime& runtime,
 
     SetupLogging(runtime);
     SetupServices(runtime, maxDynNodes, singleDomainMode);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    ui32 txId = 100;
+    for (const auto& database : databases) {
+        auto splittedPath = SplitPath(database);
+        const auto databaseName = splittedPath.back();
+        splittedPath.pop_back();
+        do {
+            auto modifyScheme = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>();
+            modifyScheme->Record.SetTxId(++txId);
+            auto* transaction = modifyScheme->Record.AddTransaction();
+            transaction->SetWorkingDir(CanonizePath(splittedPath));
+            transaction->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExtSubDomain);
+            auto* subdomain = transaction->MutableSubDomain();
+            subdomain->SetName(databaseName);
+            runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, modifyScheme.Release());
+            TAutoPtr<IEventHandle> handle;
+            auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(handle, TDuration::MilliSeconds(100));
+            if (reply) {
+                UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
+                break;
+            }
+        } while (true);
+    }
 }
 
 bool IsTabletActiveEvent(IEventHandle& ev)
@@ -298,7 +325,8 @@ void CheckRegistration(TTestActorRuntime &runtime,
                        ui64 expire = 0,
                        bool fixed = false,
                        const TString &path = DOMAIN_NAME,
-                       const TMaybe<TKikimrScopeId> &scopeId = {})
+                       const TMaybe<TKikimrScopeId> &scopeId = {},
+                       const TString &name = "")
 {
     auto event = MakeRegistrationRequest(host, port, resolveHost, address, path, dc, room, rack, body, fixed);
     runtime.SendToPipe(MakeNodeBrokerID(0), sender, event.Release(), 0, GetPipeConfigWithRetries());
@@ -326,7 +354,24 @@ void CheckRegistration(TTestActorRuntime &runtime,
             UNIT_ASSERT_VALUES_EQUAL(rec.GetScopeTabletId(), scopeId->GetSchemeshardId());
             UNIT_ASSERT_VALUES_EQUAL(rec.GetScopePathId(), scopeId->GetPathItemId());
         }
+        if (name) {
+            UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetName(), name);
+        }
     }
+}
+
+void CheckRegistration(TTestActorRuntime &runtime,
+                       TActorId sender,
+                       const TString &host,
+                       ui16 port,
+                       const TString &path,
+                       TStatus::ECode code = TStatus::OK,
+                       ui32 nodeId = 0,
+                       ui64 expire = 0,
+                       const TString &name = "")
+{
+    CheckRegistration(runtime, sender, host, port, host, "", 0, 0, 0, 0, code, nodeId, expire,
+                      false, path, Nothing(), name);
 }
 
 NKikimrNodeBroker::TEpoch GetEpoch(TTestActorRuntime &runtime,
@@ -1373,6 +1418,152 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                           epoch.GetNextEnd(), false, "/dc-1/ServerlessDB",
                           sharedScopeId);
     }
+
+    static constexpr ui32 NODE1 = 1024;
+    static constexpr ui32 NODE2 = 1056;
+    static constexpr ui32 NODE3 = 1088;
+    static constexpr ui32 NODE4 = 1120;
+
+    Y_UNIT_TEST(NodeNameExpiration)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4, false, { "/dc-1/my-database" });
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        auto epoch = GetEpoch(runtime, sender);
+
+        // Register nodes for my-database
+        CheckRegistration(runtime, sender, "host1", 19001, "/dc-1/my-database",
+                          TStatus::OK, NODE1, epoch.GetNextEnd(), "slot-0");
+        CheckRegistration(runtime, sender, "host2", 19001, "/dc-1/my-database",
+                          TStatus::OK, NODE2, epoch.GetNextEnd(), "slot-1");
+        CheckRegistration(runtime, sender, "host3", 19001, "/dc-1/my-database",
+                          TStatus::OK, NODE3, epoch.GetNextEnd(), "slot-2");
+
+        // Wait until epoch expiration
+        epoch = WaitForEpochUpdate(runtime, sender);
+
+        // Extend lease for NODE1 and NODE3
+        CheckLeaseExtension(runtime, sender, NODE1, TStatus::OK, epoch);
+        CheckLeaseExtension(runtime, sender, NODE3, TStatus::OK, epoch);
+
+        // After this epoch update NODE2 is expired, but stil holds name
+        epoch = WaitForEpochUpdate(runtime, sender);
+
+        // Extend lease for NODE1 and NODE3
+        CheckLeaseExtension(runtime, sender, NODE1, TStatus::OK, epoch);
+        CheckLeaseExtension(runtime, sender, NODE3, TStatus::OK, epoch);
+
+        // Register one more node
+        CheckRegistration(runtime, sender, "host4", 19001, "/dc-1/my-database",
+                          TStatus::OK, NODE4, epoch.GetNextEnd(), "slot-3");
+
+        // After this epoch update NODE2 is removed and name is free 
+        epoch = WaitForEpochUpdate(runtime, sender);
+
+        // Register node using new host, it reuses name
+        CheckRegistration(runtime, sender, "host5", 19001, "/dc-1/my-database",
+                          TStatus::OK, NODE2, epoch.GetNextEnd(), "slot-1");
+    }
+
+    Y_UNIT_TEST(NodeNameReuseRestart)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4, false, { "/dc-1/my-database" });
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        auto epoch = GetEpoch(runtime, sender);
+
+        // Register nodes for my-database
+        CheckRegistration(runtime, sender, "host1", 19001, "/dc-1/my-database",
+                          TStatus::OK, NODE1, epoch.GetNextEnd(), "slot-0");
+        CheckRegistration(runtime, sender, "host2", 19001, "/dc-1/my-database",
+                          TStatus::OK, NODE2, epoch.GetNextEnd(), "slot-1");
+
+        // Restart
+        CheckRegistration(runtime, sender, "host1", 19001, "/dc-1/my-database",
+                          TStatus::OK, NODE1, epoch.GetNextEnd(), "slot-0");
+        CheckRegistration(runtime, sender, "host2", 19001, "/dc-1/my-database",
+                          TStatus::OK, NODE2, epoch.GetNextEnd(), "slot-1");
+
+        // One more restart with different order
+        CheckRegistration(runtime, sender, "host2", 19001, "/dc-1/my-database",
+                          TStatus::OK, NODE2, epoch.GetNextEnd(), "slot-1");
+        CheckRegistration(runtime, sender, "host1", 19001, "/dc-1/my-database",
+                          TStatus::OK, NODE1, epoch.GetNextEnd(), "slot-0");
+    }
+
+    Y_UNIT_TEST(NodeNameReuseRestartWithHostChanges)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4, false, { "/dc-1/my-database" });
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        auto epoch = GetEpoch(runtime, sender);
+
+        // Register nodes for my-database
+        CheckRegistration(runtime, sender, "host1", 19001, "/dc-1/my-database",
+                          TStatus::OK, NODE1, epoch.GetNextEnd(), "slot-0");
+        CheckRegistration(runtime, sender, "host2", 19001, "/dc-1/my-database",
+                          TStatus::OK, NODE2, epoch.GetNextEnd(), "slot-1");
+
+        // Restart that caused the hosts to change
+        CheckRegistration(runtime, sender, "host3", 19001, "/dc-1/my-database",
+                          TStatus::OK, NODE3, epoch.GetNextEnd(), "slot-2");
+        CheckRegistration(runtime, sender, "host4", 19001, "/dc-1/my-database",
+                          TStatus::OK, NODE4, epoch.GetNextEnd(), "slot-3");
+
+        // Wait until epoch expiration
+        epoch = WaitForEpochUpdate(runtime, sender);
+
+        CheckLeaseExtension(runtime, sender, NODE3, TStatus::OK, epoch);
+        CheckLeaseExtension(runtime, sender, NODE4, TStatus::OK, epoch);
+
+        // After this epoch update NODE1 and NODE2 are expired, but stil hold names
+        epoch = WaitForEpochUpdate(runtime, sender);
+
+        CheckLeaseExtension(runtime, sender, NODE3, TStatus::OK, epoch);
+        CheckLeaseExtension(runtime, sender, NODE4, TStatus::OK, epoch);
+
+         // After this epoch update NODE1 and NODE2 are removed
+        epoch = WaitForEpochUpdate(runtime, sender);
+
+        // One more restart that caused the hosts to change
+        CheckRegistration(runtime, sender, "host5", 19001, "/dc-1/my-database",
+                          TStatus::OK, NODE1, epoch.GetNextEnd(), "slot-0");
+        CheckRegistration(runtime, sender, "host6", 19001, "/dc-1/my-database",
+                          TStatus::OK, NODE2, epoch.GetNextEnd(), "slot-1");
+    }
+
+    Y_UNIT_TEST(NodeNameWithDifferentTenants)
+    {
+        TTestBasicRuntime runtime(8, false);
+
+        Setup(runtime, 4, false, { "/dc-1/my-database" , "/dc-1/yet-another-database" });
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        auto epoch = GetEpoch(runtime, sender);
+
+        // Register nodes for my-database
+        CheckRegistration(runtime, sender, "host1", 19001, "/dc-1/my-database",
+                          TStatus::OK, NODE1, epoch.GetNextEnd(), "slot-0");
+        CheckRegistration(runtime, sender, "host2", 19001, "/dc-1/my-database",
+                          TStatus::OK, NODE2, epoch.GetNextEnd(), "slot-1");
+
+        // Register node for yet-another-database
+        CheckRegistration(runtime, sender, "host3", 19001, "/dc-1/yet-another-database",
+                          TStatus::OK, NODE3, epoch.GetNextEnd(), "slot-0");
+        // Restart NODE1 to serve yet-another-database
+        CheckRegistration(runtime, sender, "host1", 19001, "/dc-1/yet-another-database",
+                          TStatus::OK, NODE1, epoch.GetNextEnd(), "slot-1");
+
+        // Register one more node for my-database
+        CheckRegistration(runtime, sender, "host4", 19001, "/dc-1/my-database",
+                          TStatus::OK, NODE4, epoch.GetNextEnd(), "slot-0");
+        // Restart NODE1 to serve my-database
+        CheckRegistration(runtime, sender, "host1", 19001, "/dc-1/my-database",
+                          TStatus::OK, NODE1, epoch.GetNextEnd(), "slot-2");
+    }
 }
 
 Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
@@ -1527,6 +1718,97 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         CheckResolveUnknownNode(runtime, sender, 1024);
         CheckResolveNode(runtime, sender, 1056, "1.2.3.5");
         UNIT_ASSERT_VALUES_EQUAL(resolveRequests.size(), 3);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TSlotIndexesPoolTest) {
+    Y_UNIT_TEST(Init)
+    {
+        TSlotIndexesPool pool;
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(pool.Capacity(), 64);
+
+        for (size_t i = 0; i < pool.Capacity(); ++i) {
+            UNIT_ASSERT(!pool.IsAcquired(i));
+        }
+    }
+
+    Y_UNIT_TEST(Basic)
+    {
+        TSlotIndexesPool pool;
+        
+        pool.Acquire(10);
+        UNIT_ASSERT(pool.IsAcquired(10));
+
+        pool.Acquire(45);
+        UNIT_ASSERT(pool.IsAcquired(45));
+
+        pool.AcquireLowestFreeIndex();
+        UNIT_ASSERT(pool.IsAcquired(0));
+
+        pool.AcquireLowestFreeIndex();
+        UNIT_ASSERT(pool.IsAcquired(1));
+
+        pool.Release(0);
+        UNIT_ASSERT(!pool.IsAcquired(0));
+
+        pool.AcquireLowestFreeIndex();
+        UNIT_ASSERT(pool.IsAcquired(0));
+
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(pool.Capacity(), 64);
+
+        pool.ReleaseAll();
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(pool.Capacity(), 64);
+    }
+
+    Y_UNIT_TEST(Expansion)
+    {
+        TSlotIndexesPool pool;
+        for (size_t i = 0; i < pool.Capacity(); ++i) {
+            pool.Acquire(i);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 64);
+        UNIT_ASSERT_VALUES_EQUAL(pool.Capacity(), 64);
+
+        pool.AcquireLowestFreeIndex();
+
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 65);
+        UNIT_ASSERT_VALUES_EQUAL(pool.Capacity(), 192);
+        for (size_t i = pool.Size(); i < pool.Capacity(); ++i) {
+            UNIT_ASSERT(!pool.IsAcquired(i));
+        }
+    }
+
+    Y_UNIT_TEST(Ranges)
+    {
+        TSlotIndexesPool pool;
+
+        pool.Acquire(63);
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(pool.Capacity(), 64);
+
+        pool.Release(63);
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(pool.Capacity(), 64);
+
+        pool.Acquire(64);
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(pool.Capacity(), 128);
+
+        for (size_t i = 0; i < pool.Capacity(); ++i) {
+            if (i == 64) {
+                UNIT_ASSERT(pool.IsAcquired(i));
+            } else {
+                UNIT_ASSERT(!pool.IsAcquired(i));
+            }
+        }
+
+        pool.Release(128);
+        pool.Release(200);
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(pool.Capacity(), 128);
     }
 }
 

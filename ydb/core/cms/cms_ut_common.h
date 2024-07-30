@@ -86,6 +86,7 @@ struct TTestEnvOpts {
     bool UseMirror3dcErasure;
     bool AdvanceCurrentTime;
     bool EnableSentinel;
+    bool EnableCMSRequestPriorities;
 
     TTestEnvOpts() = default;
 
@@ -102,6 +103,7 @@ struct TTestEnvOpts {
         , UseMirror3dcErasure(false)
         , AdvanceCurrentTime(false)
         , EnableSentinel(false)
+        , EnableCMSRequestPriorities(false)
     {
     }
 
@@ -112,6 +114,11 @@ struct TTestEnvOpts {
 
     TTestEnvOpts& WithoutSentinel() {
         EnableSentinel = false;
+        return *this;
+    }
+
+    TTestEnvOpts& WithEnableCMSRequestPriorities() {
+        EnableCMSRequestPriorities = true;
         return *this;
     }
 };
@@ -159,6 +166,7 @@ public:
             bool defaultTenantPolicy,
             TDuration duration,
             NKikimrCms::EAvailabilityMode availabilityMode,
+            i32 priority,
             NKikimrCms::TStatus::ECode code,
             Ts... actions)
     {
@@ -168,6 +176,8 @@ public:
         if (duration)
             req->Record.SetDuration(duration.GetValue());
         req->Record.SetAvailabilityMode(availabilityMode);
+        if (priority)
+            req->Record.SetPriority(priority);
         return CheckPermissionRequest(req, code);
     }
 
@@ -184,7 +194,7 @@ public:
     {
         return CheckPermissionRequest(user, partial, dry, schedule,
                                       defaultTenantPolicy, TDuration::Zero(),
-                                      availabilityMode,
+                                      availabilityMode, 0,
                                       code, actions...);
     }
     template <typename... Ts>
@@ -199,7 +209,7 @@ public:
             Ts... actions)
     {
         return CheckPermissionRequest(user, partial, dry, schedule, defaultTenantPolicy,
-            duration, NKikimrCms::MODE_MAX_AVAILABILITY, code, actions...);
+            duration, NKikimrCms::MODE_MAX_AVAILABILITY, 0, code, actions...);
     }
 
     template <typename... Ts>
@@ -214,6 +224,21 @@ public:
     {
         return CheckPermissionRequest(user, partial, dry, schedule, defaultTenantPolicy,
             NKikimrCms::MODE_MAX_AVAILABILITY, code, actions...);
+    }
+
+    template <typename... Ts>
+    NKikimrCms::TPermissionResponse CheckPermissionRequest(
+            const TString &user,
+            bool partial,
+            bool dry,
+            bool schedule,
+            bool defaultTenantPolicy,
+            i32 priority,
+            NKikimrCms::TStatus::ECode code,
+            Ts... actions)
+    {
+        return CheckPermissionRequest(user, partial, dry, schedule, defaultTenantPolicy,
+            TDuration::Zero(), NKikimrCms::MODE_MAX_AVAILABILITY, priority, code, actions...);
     }
 
     NKikimrCms::TPermissionResponse CheckPermissionRequest(TAutoPtr<NCms::TEvCms::TEvPermissionRequest> req,

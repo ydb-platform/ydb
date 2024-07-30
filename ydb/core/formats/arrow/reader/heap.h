@@ -10,6 +10,8 @@ class TRecordBatchBuilder;
 
 template <class TSortCursor>
 class TSortingHeap {
+private:
+    std::deque<TSortCursor> FinishedCursors;
 public:
     TSortingHeap() = default;
 
@@ -40,14 +42,19 @@ public:
         }
     }
 
+    void CleanFinished() {
+        FinishedCursors.clear();
+    }
+
     void RemoveTop() {
         std::pop_heap(Queue.begin(), Queue.end());
+        FinishedCursors.emplace_back(std::move(Queue.back()));
         Queue.pop_back();
         NextIdx = 0;
     }
 
     void Push(TSortCursor&& cursor) {
-        Queue.emplace_back(cursor);
+        Queue.emplace_back(std::move(cursor));
         std::push_heap(Queue.begin(), Queue.end());
         NextIdx = 0;
     }

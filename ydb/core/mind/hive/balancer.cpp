@@ -303,17 +303,18 @@ protected:
             }
             BLOG_TRACE("Balancer selected tablet " << tablet->ToString());
             THive::TBestNodeResult result = Hive->FindBestNode(*tablet);
-            if (result.BestNode != nullptr && result.BestNode != tablet->Node) {
-                if (Hive->IsTabletMoveExpedient(*tablet, *result.BestNode)) {
+            if (std::holds_alternative<TNodeInfo*>(result)) {
+                TNodeInfo* node = std::get<TNodeInfo*>(result);
+                if (node != tablet->Node && Hive->IsTabletMoveExpedient(*tablet, *node)) {
                     tablet->MakeBalancerDecision(now);
                     tablet->ActorsToNotifyOnRestart.emplace_back(SelfId()); // volatile settings, will not persist upon restart
                     ++KickInFlight;
                     ++Movements;
                     BLOG_D("Balancer moving tablet " << tablet->ToString() << " " << tablet->GetResourceValues()
                            << " from node " << tablet->Node->Id << " " << tablet->Node->ResourceValues
-                           << " to node " << result.BestNode->Id << " " << result.BestNode->ResourceValues);
-                    Hive->RecordTabletMove(THive::TTabletMoveInfo(now, *tablet, tablet->Node->Id, result.BestNode->Id));
-                    Hive->Execute(Hive->CreateRestartTablet(tablet->GetFullTabletId(), result.BestNode->Id));
+                           << " to node " << node->Id << " " << node->ResourceValues);
+                    Hive->RecordTabletMove(THive::TTabletMoveInfo(now, *tablet, tablet->Node->Id, node->Id));
+                    Hive->Execute(Hive->CreateRestartTablet(tablet->GetFullTabletId(), node->Id));
                     UpdateProgress();
                 }
             }

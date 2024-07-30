@@ -233,6 +233,7 @@ message TDomainsConfig {
         repeated string DefaultUserSIDs = 4;
         optional string AllAuthenticatedUsers = 5;
         repeated string ViewerAllowedSIDs = 6;
+        repeated string RegisterDynamicNodeAllowedSIDs = 8;
 
         message TUser {
             optional string Name = 1;
@@ -472,6 +473,10 @@ message TInterconnectConfig {
     optional NKikimrConfigUnits.TDuration LostConnectionDuration = 28;
     optional NKikimrConfigUnits.TDuration BatchPeriodDuration = 29;
 
+    optional NKikimrConfigUnits.TDuration FirstErrorSleep = 46;
+    optional NKikimrConfigUnits.TDuration MaxErrorSleep = 47;
+    optional double ErrorSleepRetryMultiplier = 48;
+
     optional uint32 OutgoingHandshakeInflightLimit = 43;
 }
 
@@ -624,6 +629,13 @@ message TConveyorConfig {
     optional uint32 WorkersCount = 2;
     optional uint32 QueueSizeLimit = 3;
     optional double DefaultFractionOfThreadsCount = 4;
+    optional double WorkersCountDouble = 5;
+}
+
+message TLimiterConfig {
+    optional bool Enabled = 1 [default = true];
+    optional uint64 Limit = 2;
+    optional uint64 PeriodMilliSeconds = 3 [default = 1000];
 }
 
 message TExternalIndexConfig {
@@ -1525,6 +1537,9 @@ message TSchemeShardConfig {
     optional uint32 StatsMaxExecuteMs = 3 [default = 10];
 
     repeated TInFlightCounterConfig InFlightCounterConfig = 4;
+
+    // number of shards per table
+    optional uint32 MaxCdcInitialScanShardsInFlight = 5 [default = 10];
 }
 
 message TCompactionConfig {
@@ -1736,12 +1751,16 @@ message TClientCertificateAuthorization {
         repeated string Suffixes = 3;
     }
 
-    message TDynamicNodeDefinition {
+    message TClientCertificateDefinition {
         repeated TSubjectTerm SubjectTerms = 1;
         optional bool CanCheckNodeHostByCN = 2 [default = false];
+        repeated string MemberGroups = 3;
+        optional bool RequireSameIssuer = 4 [default = true];
     }
 
-    optional TDynamicNodeDefinition DynamicNodeAuthorization = 1;
+    repeated TClientCertificateDefinition ClientCertificateDefinitions = 1;
+    optional bool RequestClientCertificate = 2 [default = false];
+    optional string DefaultGroup = 3 [default = "DefaultClientAuth@cert"];
 }
 
 message TLocalPgWireConfig {
@@ -1854,6 +1873,7 @@ message TAppConfig {
     optional bool AllowEditYamlInUi = 75;
     optional TS3ProxyResolverConfig S3ProxyResolverConfig = 76;
     optional TBackgroundCleaningConfig BackgroundCleaningConfig = 77;
+    optional TLimiterConfig CompDiskLimiterConfig = 79;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

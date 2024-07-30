@@ -223,7 +223,8 @@ private:
     TSerializedCellVec LastKey;
 };
 
-class TBuildScanUpload: public TActor<TBuildScanUpload>, public NTable::IScan {
+template <NKikimrServices::TActivity::EType Activity>
+class TBuildScanUpload: public TActor<TBuildScanUpload<Activity>>, public NTable::IScan {
 protected:
     const TUploadLimits Limits;
 
@@ -300,8 +301,8 @@ protected:
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::BUILD_INDEX_SCAN_ACTOR;
+    static constexpr auto ActorActivityType() {
+        return Activity;
     }
 
     ~TBuildScanUpload() override = default;
@@ -529,7 +530,7 @@ private:
     }
 };
 
-class TBuildIndexScan final: public TBuildScanUpload {
+class TBuildIndexScan final: public TBuildScanUpload<NKikimrServices::TActivity::BUILD_INDEX_SCAN_ACTOR> {
     const ui32 TargetDataColumnPos; // positon of first data column in target table
 
 public:
@@ -563,7 +564,7 @@ public:
     }
 };
 
-class TBuildColumnsScan final: public TBuildScanUpload {
+class TBuildColumnsScan final: public TBuildScanUpload<NKikimrServices::TActivity::BUILD_COLUMNS_SCAN_ACTOR> {
     TString ValueSerialized;
 
 public:

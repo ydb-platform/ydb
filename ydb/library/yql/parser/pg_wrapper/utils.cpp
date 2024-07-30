@@ -6,6 +6,7 @@ extern "C" {
 #include "fmgr.h"
 #include "utils/array.h"
 #include "pgstat.h"
+#include "catalog/pg_namespace_d.h"
 }
 
 #undef Max
@@ -179,6 +180,18 @@ extern "C" Oid get_extension_oid(const char *extname, bool missing_ok)
                     extname)));
 
     return result;
+}
+
+extern "C" char *get_extension_name(Oid ext_oid) {
+    try {
+        return pstrdup(NPg::LookupExtension(ext_oid).Name.c_str());
+    } catch (const yexception&) {
+        return nullptr;
+    }
+}
+
+extern "C" Oid get_extension_schema(Oid) {
+    return PG_CATALOG_NAMESPACE;
 }
 
 }

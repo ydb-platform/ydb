@@ -186,7 +186,7 @@ get_extension_oid_original(const char *extname, bool missing_ok)
  * Returns a palloc'd string, or NULL if no such extension.
  */
 char *
-get_extension_name(Oid ext_oid)
+get_extension_name_original(Oid ext_oid)
 {
 	char	   *result;
 	Relation	rel;
@@ -225,7 +225,7 @@ get_extension_name(Oid ext_oid)
  * Returns InvalidOid if no such extension.
  */
 Oid
-get_extension_schema(Oid ext_oid)
+get_extension_schema_original(Oid ext_oid)
 {
 	Oid			result;
 	Relation	rel;

@@ -203,7 +203,7 @@ struct TSysCache {
         InitializeTypes();
         InitializeDatabase();
         InitializeAuthId();
-        InitializeNameNamespaces();
+        InitializeNameAndOidNamespaces();
         InitializeRelNameNamespaces();
         for (auto& item : Items) {
             if (item) {
@@ -408,12 +408,12 @@ struct TSysCache {
         FillAttr(tupleDesc, Anum_pg_type_typdefaultbin, PG_NODE_TREEOID);
         FillAttr(tupleDesc, Anum_pg_type_typdefault, TEXTOID);
         FillAttr(tupleDesc, Anum_pg_type_typacl, ACLITEMARRAYOID);
-        auto& cacheItem = Items[TYPEOID] = std::make_unique<TSysCacheItem>(OidHasher1, OidEquals1, tupleDesc);
-        auto& lookupMap = cacheItem->LookupMap;
+        auto& cacheItem1 = Items[TYPEOID] = std::make_unique<TSysCacheItem>(OidHasher1, OidEquals1, tupleDesc);
+        auto& lookupMap1 = cacheItem1->LookupMap;
+        auto& cacheItem2 = Items[TYPENAMENSP] = std::make_unique<TSysCacheItem>(NsNameHasher, NsNameEquals, tupleDesc);
+        auto& lookupMap2 = cacheItem2->LookupMap;
 
         NPg::EnumTypes([&](ui32 oid, const NPg::TTypeDesc& desc){
-            auto key = THeapTupleKey(oid, 0, 0, 0);
-
             Datum values[Natts_pg_type];
             bool nulls[Natts_pg_type];
             Zero(values);
@@ -463,7 +463,11 @@ struct TSysCache {
             Y_ENSURE(row->typmodout == desc.TypeModOutFuncId);
             Y_ENSURE(row->typalign == desc.TypeAlign);
             Y_ENSURE(row->typstorage == storage);
-            lookupMap.emplace(key, h);
+
+            auto key1 = THeapTupleKey(oid, 0, 0, 0);            
+            lookupMap1.emplace(key1, h);
+            auto key2 = THeapTupleKey((Datum)desc.Name.c_str(), PG_CATALOG_NAMESPACE, 0, 0);
+            lookupMap2.emplace(key2, h);
         });
 
     }
@@ -692,14 +696,16 @@ struct TSysCache {
         }
     }
 
-    void InitializeNameNamespaces() {
+    void InitializeNameAndOidNamespaces() {
         TupleDesc tupleDesc = CreateTemplateTupleDesc(Natts_pg_namespace);
         FillAttr(tupleDesc, Anum_pg_namespace_oid, OIDOID);
         FillAttr(tupleDesc, Anum_pg_namespace_nspname, NAMEOID);
         FillAttr(tupleDesc, Anum_pg_namespace_nspowner, OIDOID);
         FillAttr(tupleDesc, Anum_pg_namespace_nspacl, ACLITEMARRAYOID);
-        auto& cacheItem = Items[NAMESPACENAME] = std::make_unique<TSysCacheItem>(NsNameHasher, NsNameEquals, tupleDesc);
-        auto& lookupMap = cacheItem->LookupMap;
+        auto& cacheItem1 = Items[NAMESPACENAME] = std::make_unique<TSysCacheItem>(NsNameHasher, NsNameEquals, tupleDesc);
+        auto& lookupMap1 = cacheItem1->LookupMap;
+        auto& cacheItem2 = Items[NAMESPACEOID] = std::make_unique<TSysCacheItem>(OidHasher1, OidEquals1, tupleDesc);
+        auto& lookupMap2 = cacheItem2->LookupMap;
 
         NPg::EnumNamespace([&](ui32 oid, const NPg::TNamespaceDesc& desc) {
             Datum values[Natts_pg_namespace];
@@ -716,8 +722,10 @@ struct TSysCache {
             Y_ENSURE(NameStr(row->nspname) == desc.Name);
             Y_ENSURE(row->nspowner == 1);
 
-            auto key = THeapTupleKey((Datum)name, 0, 0, 0);
-            lookupMap.emplace(key, h);
+            auto key1 = THeapTupleKey((Datum)name, 0, 0, 0);
+            lookupMap1.emplace(key1, h);
+            auto key2 = THeapTupleKey((Datum)oid, 0, 0, 0);
+            lookupMap2.emplace(key2, h);
         });
     }
 };

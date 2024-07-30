@@ -1041,6 +1041,7 @@ get_call_result_type;
 get_commutator;
 get_element_type;
 get_extension_oid;
+get_extension_schema;
 get_fn_expr_argtype;
 get_func_name;
 get_func_namespace;

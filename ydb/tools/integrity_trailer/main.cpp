@@ -3,9 +3,12 @@
 #include <util/string/cast.h>
 #include <fstream>
 #include <sstream>
-#include "ydb/core/scheme/scheme_tablecell.h"
-#include "ydb/library/dynumber/dynumber.h"
-#include "ydb/library/uuid/uuid.h"
+#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
+#define USE_CURRENT_UDF_ABI_VERSION true
+#include <ydb/core/tx/datashard/datashard_integrity_trails.h>
+#include <ydb/library/dynumber/dynumber.h>
+#include <ydb/library/yql/core/sql_types/simple_types.h>
 
 using namespace NKikimr;
 
@@ -14,8 +17,14 @@ using namespace NKikimr;
         resolved = NScheme::NTypeIds::typeName; \
     }
 
-NScheme::TTypeId resolveOption(std::string type) {
-    NScheme::TTypeId resolved = NScheme::NTypeIds::String;
+std::optional<NScheme::TTypeId> ResolveType(std::string typeAlias) {
+    auto type = NYql::LookupSimpleTypeBySqlAlias(typeAlias, true);
+
+    if (!type) {
+        return {};
+    }
+
+    std::optional<NScheme::TTypeId> resolved = {};
 
     if (type == "Bool") {
         resolved = NScheme::NTypeIds::Bool;
@@ -53,15 +62,20 @@ NScheme::TTypeId resolveOption(std::string type) {
 #define EXTRACT_VAL(cellType, protoType, cppType) \
     case NScheme::NTypeIds::cellType : { \
             cppType v = FromString<cppType>(val); \
-            c = TCell((const char*)&v, sizeof(v)); \
+            cell = TCell((const char*)&v, sizeof(v)); \
             break; \
         }
 
-void celler(std::string type, std::string val) {
-    NScheme::TTypeId typeId = resolveOption(type);
-    TCell c;
+std::optional<TCell> ParseCell(std::string type, std::string val) {
+    auto typeId = ResolveType(type);
 
-    switch (typeId) {
+    std::optional<TCell> cell = {};
+
+    if (!typeId) {
+        return {};
+    }
+
+    switch (*typeId) {
     EXTRACT_VAL(Bool, bool, ui8);
     EXTRACT_VAL(Int8, int32, i8);
     EXTRACT_VAL(Uint8, uint32, ui8);
@@ -83,54 +97,41 @@ void celler(std::string type, std::string val) {
     EXTRACT_VAL(Interval64, int64, i64);
     case NScheme::NTypeIds::Json :
     case NScheme::NTypeIds::Utf8 : {
-        c = TCell(val.data(), val.size());
+        cell = TCell(val.data(), val.size());
         break;
     }
     case NScheme::NTypeIds::DyNumber : {
         const auto dyNumber = NDyNumber::ParseDyNumberString(val);
         if (!dyNumber.Defined()) {
-            Cerr << "Invalid DyNumber string representation";
-            return;
+            return {};
         }
-        c = TCell(dyNumber->data(), dyNumber->size());
+        cell = TCell(dyNumber->data(), dyNumber->size());
         break;
     }
     case NScheme::NTypeIds::Yson :
     case NScheme::NTypeIds::String : {
-            c = TCell(val.data(), val.size());
+            cell = TCell(val.data(), val.size());
             break;
         }
     case NScheme::NTypeIds::Decimal :
     case NScheme::NTypeIds::Uuid : {
         char uuid[16];
-        NUuid::ParseUuidToArray(TString("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), reinterpret_cast<ui16*>(uuid), false);
-        c = TCell(uuid, sizeof(uuid));
+        cell = TCell(uuid, sizeof(uuid));
         break;
     }
     default:
-        Cerr << "Unexpected type " << type;
-        return;
+        return {};
     };
+
+    return cell;
 }
 
-int main() {
-    std::stringstream buffer;
-
-    std::string path = "/home/ee8jsmrbc5t8l9r7duiv/tmp/scheme.json";
-    std::ifstream fileStream(path);
-    buffer << fileStream.rdbuf();
-    
-    std::string json = buffer.str();
-
-    NJson::TJsonValue jsonValue;
-
-    NJson::ReadJsonTree(json, &jsonValue);
-
+std::vector<std::string> ReadPK(NJson::TJsonValue& jsonValue) {
     auto &pkField = jsonValue["primary_key"];
 
     if (!pkField.IsArray()) {
-        Cerr << "Scheme parsing error, primary key is not an array";
-        return 0;
+        Cerr << "Scheme parsing error, primary key is not an array" << Endl;
+        return {};
     }
 
     std::vector<std::string> pk;
@@ -140,18 +141,22 @@ int main() {
 
         for (size_t i = 0; i < pkArray.size(); ++i) {
             if (!pkArray[i].IsString()) {
-                Cerr << "Scheme parsing error, primary key array element is not a string";
-                return 0;
+                Cerr << "Scheme parsing error, primary key array element is not a string" << Endl;
+                return {};
             }
             pk.push_back(pkArray[i].GetString());
         }
     }
 
+    return pk;
+}
+
+std::map<std::string, std::string> ReadColumnMapping(NJson::TJsonValue& jsonValue) {
     auto &columnsField = jsonValue["columns"];
 
     if (!columnsField.IsArray()) {
         Cerr << "Scheme parsing error, columns is not an array";
-        return 0;
+        return {};
     }
 
     auto &columnsArray = columnsField.GetArray();
@@ -163,7 +168,7 @@ int main() {
 
         if (!column.IsMap()) {
             Cerr << "Scheme parsing error, column is not an object";
-            return 0;
+            return {};
         }
 
         auto &nameField = column["name"].GetString();
@@ -180,9 +185,79 @@ int main() {
         colToType[nameField] = typeId;
     }
 
-    Cout << pk.size() << Endl;
+    return colToType;
+}
 
-    Cout << colToType.size() << Endl;
+int main(int argc, char* argv[]) {
+    if (argc < 3) {
+        Cerr << "Usage: path-to-scheme.json key-column1-value ... key-columnN-value" << Endl;
+        return 1;
+    }
+
+    std::string path = argv[1];
+
+    std::vector<std::string> values;
+
+    for (int i = 2; i < argc; ++i) {
+        values.push_back(argv[i]);
+    }
+
+    std::stringstream buffer;
+
+    std::ifstream fileStream(path);
+    buffer << fileStream.rdbuf();
+    
+    std::string json = buffer.str();
+
+    NJson::TJsonValue jsonValue;
+
+    NJson::ReadJsonTree(json, &jsonValue);
+
+    std::vector<std::string> pk = ReadPK(jsonValue);
+
+    if (pk.empty()) {
+        Cerr << "Primary key is empty" << Endl;
+        return 1;
+    }
+
+    std::map<std::string, std::string> colToType = ReadColumnMapping(jsonValue);
+    
+    if (colToType.empty()) {
+        Cerr << "Column mapping is empty" << Endl;
+        return 1;
+    }
+
+    if (values.size() != pk.size()) {
+        Cerr << "Key's columns count doesn't match scheme" << Endl;
+
+        return 1;
+    }
+
+    TVector<TCell> arr(pk.size());
+
+    for (size_t i = 0; i < values.size(); ++i) {
+        auto col = pk[i];
+        auto type = colToType[col];
+        auto cell = ParseCell(colToType[pk[i]], values[i]);
+
+        if (!cell) {
+            Cerr << "Unexpected type " << type << " of column " << col << Endl;
+
+            return 1;
+        }
+
+        arr[i] = *cell;
+    }
+
+    TSerializedCellVec vec(arr);
+
+    Cout << "Obfuscated key: " << Endl;
+
+    std::stringstream output;
+
+    WritePoint(vec.GetCells(), output);
+
+    Cout << output.str() << Endl;
 
     return 0;
 }

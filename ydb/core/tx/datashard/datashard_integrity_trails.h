@@ -1,6 +1,6 @@
 #pragma once
 
-#include "library/cpp/string_utils/base64/base64.h"
+#include <library/cpp/string_utils/base64/base64.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/library/actors/core/log.h>

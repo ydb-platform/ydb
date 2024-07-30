@@ -5,11 +5,10 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/pop_count
-    library/cpp/streams/bzip2
-    ydb/core/blobstorage
-    ydb/core/blobstorage/groupinfo
-    ydb/core/blobstorage/vdisk/query
+    ydb/core/engine
+    ydb/core/scheme
+    ydb/library/yql/public/udf/service/stub
+    ydb/library/yql/sql/pg_dummy
 )
 
 END()

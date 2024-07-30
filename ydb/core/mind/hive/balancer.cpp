@@ -62,17 +62,17 @@ void BalanceNodes<NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_RANDOM>
 }
 
 template<>
-void BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>(std::vector<TTabletInfo*>& tablets, EResourceToBalance resourceToBalance) {
+void BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>(std::vector<TTabletInfo*>::iterator first, std::vector<TTabletInfo*>::iterator last, EResourceToBalance resourceToBalance) {
     auto& randGen = *TAppData::RandomProvider.Get();
     // weighted random shuffle
     std::vector<double> weights;
-    weights.reserve(tablets.size());
-    for (auto it = tablets.begin(); it != tablets.end(); ++it) {
+    weights.reserve(last - first);
+    for (auto it = first; it != last; ++it) {
         weights.emplace_back((*it)->GetWeight(resourceToBalance));
     }
-    auto itT = tablets.begin();
+    auto itT = first;
     auto itW = weights.begin();
-    while (itT != tablets.end() && itW != weights.end()) {
+    while (itT != last && itW != weights.end()) {
         auto idx = std::discrete_distribution(itW, weights.end())(randGen);
         if (idx != 0) {
             std::iter_swap(itT, std::next(itT, idx));
@@ -84,32 +84,32 @@ void BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD
 }
 
 template<>
-void BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST>(std::vector<TTabletInfo*>& tablets, EResourceToBalance resourceToBalance) {
-    std::sort(tablets.begin(), tablets.end(), [resourceToBalance](const TTabletInfo* a, const TTabletInfo* b) -> bool {
+void BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST>(std::vector<TTabletInfo*>::iterator first, std::vector<TTabletInfo*>::iterator last, EResourceToBalance resourceToBalance) {
+    std::sort(first, last, [resourceToBalance](const TTabletInfo* a, const TTabletInfo* b) -> bool {
         return a->GetWeight(resourceToBalance) > b->GetWeight(resourceToBalance);
     });
 }
 
 template<>
-void BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM>(std::vector<TTabletInfo*>& tablets, EResourceToBalance) {
+void BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM>(std::vector<TTabletInfo*>::iterator first, std::vector<TTabletInfo*>::iterator last, EResourceToBalance) {
     auto& randGen = *TAppData::RandomProvider.Get();
-    std::shuffle(tablets.begin(), tablets.end(), randGen);
+    std::shuffle(first, last, randGen);
 }
 
 template<>
-void BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM>(std::vector<TTabletInfo*>& tablets, EResourceToBalance resourceToBalance) {
+void BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM>(std::vector<TTabletInfo*>::iterator first, std::vector<TTabletInfo*>::iterator last, EResourceToBalance resourceToBalance) {
     auto& randGen = *TAppData::RandomProvider.Get();
     std::vector<std::pair<double, TTabletInfo*>> weights;
-    weights.reserve(tablets.size());
-    for (TTabletInfo* tablet : tablets) {
-        double weight = tablet->GetWeight(resourceToBalance);
-        weights.emplace_back(weight * randGen(), tablet);
+    weights.reserve(last - first);
+    for (auto it = first; it != last; ++it) {
+        double weight = (*it)->GetWeight(resourceToBalance);
+        weights.emplace_back(weight * randGen(), *it);
     }
     std::sort(weights.begin(), weights.end(), [](const auto& a, const auto& b) -> bool {
         return a.first > b.first;
     });
     for (size_t n = 0; n < weights.size(); ++n) {
-        tablets[n] = weights[n].second;
+        first[n] = weights[n].second;
     }
 }
 
@@ -245,25 +245,38 @@ protected:
             for (TTabletInfo* tablet : nodeTablets) {
                 if (tablet->IsGoodForBalancer(now) && 
                     (!Settings.FilterObjectId || tablet->GetObjectId() == *Settings.FilterObjectId) &&
-                    tablet->HasAllowedMetric(Settings.ResourceToBalance)) {
+                    tablet->HasMetric(Settings.ResourceToBalance)) {
                     tablet->UpdateWeight();
                     tablets.emplace_back(tablet);
                 }
             }
             BLOG_TRACE("Balancer on node " << node->Id <<  ": " << tablets.size() << "/" << nodeTablets.size() << " tablets are suitable for balancing");
             if (!tablets.empty()) {
+                // avoid moving system tablets if possible
+                std::vector<TTabletInfo*>::iterator partitionIt;
+                if (Hive->GetLessSystemTabletsMoves()) {
+                    partitionIt = std::partition(tablets.begin(), tablets.end(), [](TTabletInfo* tablet) {
+                        return !THive::IsSystemTablet(tablet->GetTabletType());
+                    });
+                } else {
+                    partitionIt = tablets.end();
+                }
                 switch (Hive->GetTabletBalanceStrategy()) {
                 case NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM:
-                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>(tablets, Settings.ResourceToBalance);
+                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>(tablets.begin(), partitionIt, Settings.ResourceToBalance);
+                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>(partitionIt, tablets.end(), Settings.ResourceToBalance);
                     break;
                 case NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM:
-                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM>(tablets, Settings.ResourceToBalance);
+                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM>(tablets.begin(), partitionIt, Settings.ResourceToBalance);
+                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM>(partitionIt, tablets.end(), Settings.ResourceToBalance);
                     break;
                 case NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST:
-                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST>(tablets, Settings.ResourceToBalance);
+                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST>(tablets.begin(), partitionIt, Settings.ResourceToBalance);
+                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST>(partitionIt, tablets.end(), Settings.ResourceToBalance);
                     break;
                 case NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM:
-                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM>(tablets, Settings.ResourceToBalance);
+                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM>(tablets.begin(), partitionIt, Settings.ResourceToBalance);
+                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM>(partitionIt, tablets.end(), Settings.ResourceToBalance);
                     break;
                 }
                 Tablets.clear();

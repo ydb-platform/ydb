@@ -832,14 +832,19 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .MessageGroupId("src_id");
 
         int acks = 0;
-        writeSettings.EventHandlers_.AcksHandler([&acks](NTopic::TWriteSessionEvent::TAcksEvent& ev) {
+        int messageCount = 100;
+
+        auto gotAllAcks = NThreading::NewPromise();
+        writeSettings.EventHandlers_.AcksHandler([&](NTopic::TWriteSessionEvent::TAcksEvent& ev) {
             acks += ev.Acks.size();
+            if (acks == messageCount) {
+                gotAllAcks.SetValue();
+            }
         });
 
         auto WriteSession = topicClient.CreateWriteSession(writeSettings);
         Cerr << "Session was created" << Endl;
 
-        int messageCount = 100;
         for (int i = 0; i < messageCount; ++i) {
             auto event = WriteSession->GetEvent(true);
             auto* readyToAcceptEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event);
@@ -851,6 +856,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         // Close method should wait until all messages have been acked.
         WriteSession->Close();
+        gotAllAcks.GetFuture().Wait();
         UNIT_ASSERT_VALUES_EQUAL(acks, messageCount);
     }
 
@@ -1089,6 +1095,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .EventHandlers_.SessionClosedHandler([&](const NTopic::TSessionClosedEvent &ev) {
                 ++(ev.IsSuccess() ? successfulSessionClosedEvents : otherSessionClosedEvents);
             });
+
+        writeSettings.EventHandlers_.HandlersExecutor(NTopic::CreateSyncExecutor());
 
         auto WriteSession = topicClient.CreateWriteSession(writeSettings);
 

@@ -224,7 +224,7 @@ TPartitioningSettings::TPartitioningSettings(const Ydb::Topic::PartitioningSetti
     : MinActivePartitions_(settings.min_active_partitions())
     , MaxActivePartitions_(settings.max_active_partitions())
     , PartitionCountLimit_(settings.partition_count_limit())
-    , AutoscalingSettings_(settings.autoscaling_settings())
+    , AutoPartitioningSettings_(settings.auto_partitioning_settings())
 {}
 
 ui64 TPartitioningSettings::GetMinActivePartitions() const {
@@ -239,31 +239,31 @@ ui64 TPartitioningSettings::GetPartitionCountLimit() const {
     return PartitionCountLimit_;
 }
 
-TAutoscalingSettings TPartitioningSettings::GetAutoscalingSettings() const {
-    return AutoscalingSettings_;
+TAutoPartitioningSettings TPartitioningSettings::GetAutoPartitioningSettings() const {
+    return AutoPartitioningSettings_;
 }
 
-TAutoscalingSettings::TAutoscalingSettings(const Ydb::Topic::AutoscalingSettings& settings)
-    : Strategy_(static_cast<EAutoscalingStrategy>(settings.strategy()))
-    , ThresholdTime_(TDuration::Seconds(settings.partition_write_speed().threshold_time().seconds()))
-    , ScaleDownThresholdPercent_(settings.partition_write_speed().scale_down_threshold_percent())
-    , ScaleUpThresholdPercent_(settings.partition_write_speed().scale_up_threshold_percent())
+TAutoPartitioningSettings::TAutoPartitioningSettings(const Ydb::Topic::AutoPartitioningSettings& settings)
+    : Strategy_(static_cast<EAutoPartitioningStrategy>(settings.strategy()))
+    , StabilizationWindow_(TDuration::Seconds(settings.partition_write_speed().stabilization_window().seconds()))
+    , DownUtilizationPercent_(settings.partition_write_speed().down_utilization_percent())
+    , UpUtilizationPercent_(settings.partition_write_speed().up_utilization_percent())
 {}
 
-EAutoscalingStrategy TAutoscalingSettings::GetStrategy() const {
+EAutoPartitioningStrategy TAutoPartitioningSettings::GetStrategy() const {
     return Strategy_;
 }
 
-TDuration TAutoscalingSettings::GetThresholdTime() const {
-    return ThresholdTime_;
+TDuration TAutoPartitioningSettings::GetStabilizationWindow() const {
+    return StabilizationWindow_;
 }
 
-ui32 TAutoscalingSettings::GetScaleUpThresholdPercent() const {
-    return ScaleUpThresholdPercent_;
+ui32 TAutoPartitioningSettings::GetUpUtilizationPercent() const {
+    return UpUtilizationPercent_;
 }
 
-ui32 TAutoscalingSettings::GetScaleDownThresholdPercent() const {
-    return ScaleDownThresholdPercent_;
+ui32 TAutoPartitioningSettings::GetDownUtilizationPercent() const {
+    return DownUtilizationPercent_;
 }
 
 TTopicStats::TTopicStats(const Ydb::Topic::DescribeTopicResult::TopicStats& topicStats)

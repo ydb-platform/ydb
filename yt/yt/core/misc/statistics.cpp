@@ -93,33 +93,8 @@ bool TSummary::operator ==(const TSummary& other) const
 
 TSummary& TStatistics::GetSummary(const NYPath::TYPath& path)
 {
-    auto result = Data_.emplace(path, TSummary());
-    auto it = result.first;
-    if (result.second) {
-        // This is a new statistic, check validity.
-        if (it != Data_.begin()) {
-            auto prev = std::prev(it);
-            if (HasPrefix(it->first, prev->first)) {
-                Data_.erase(it);
-                THROW_ERROR_EXCEPTION(
-                    "Incompatible statistic paths: old %v, new %v",
-                    prev->first,
-                    path);
-            }
-        }
-        auto next = std::next(it);
-        if (next != Data_.end()) {
-            if (HasPrefix(next->first, it->first)) {
-                Data_.erase(it);
-                THROW_ERROR_EXCEPTION(
-                    "Incompatible statistic paths: old %v, new %v",
-                    next->first,
-                    path);
-            }
-        }
-    }
-
-    return it->second;
+    auto [iterator, _] = CheckedEmplaceStatistic(Data_, path, TSummary());
+    return iterator->second;
 }
 
 void TStatistics::AddSample(const NYPath::TYPath& path, i64 sample)

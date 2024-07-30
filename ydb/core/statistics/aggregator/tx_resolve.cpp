@@ -1,5 +1,6 @@
 #include "aggregator_impl.h"
 
+#include <ydb/core/base/hive.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
 namespace NKikimr::NStat {
@@ -29,34 +30,48 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
             if (entry.Status == NSchemeCache::TSchemeCacheRequest::EStatus::PathErrorNotExist) {
                 Self->DeleteStatisticsFromTable();
             } else {
-                Self->FinishScan(db);
+                Self->FinishTraversal(db);
             }
             return true;
         }
 
-        Self->ShardRanges.clear();
+        auto& partitioning = entry.KeyDescription->GetPartitions();
 
-        auto& partitioning = entry.KeyDescription->Partitioning;
-        for (auto& part : *partitioning) {
+        if (Self->TraversalIsColumnTable) {
+            Self->TabletsForReqDistribution.clear();
+        } else {
+            Self->DatashardRanges.clear();
+        }
+
+        for (auto& part : partitioning) {
             if (!part.Range) {
                 continue;
             }
-            TRange range;
-            range.EndKey = part.Range->EndKeyPrefix;
-            range.DataShardId = part.ShardId;
-            Self->ShardRanges.push_back(range);
+            if (Self->TraversalIsColumnTable) {
+                Self->TabletsForReqDistribution.insert(part.ShardId);
+            } else {
+                TRange range;
+                range.EndKey = part.Range->EndKeyPrefix;
+                range.DataShardId = part.ShardId;
+                Self->DatashardRanges.push_back(range);
+            }
         }
+
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext& ctx) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxResolve::Complete");
 
         if (Cancelled) {
             return;
         }
 
-        Self->NextRange();
+        if (Self->TraversalIsColumnTable) {
+            ctx.Send(Self->SelfId(), new TEvPrivate::TEvRequestDistribution);
+        } else {
+            Self->ScanNextDatashardRange();
+        }
     }
 };
 

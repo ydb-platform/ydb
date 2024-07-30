@@ -3,7 +3,7 @@
 # pg_amproc.dat
 #    Initial contents of the pg_amproc system catalog.
 #
-# Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+# Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
 # Portions Copyright (c) 1994, Regents of the University of California
 #
 # src/include/catalog/pg_amproc.dat
@@ -172,8 +172,6 @@
 { amprocfamily => 'btree/interval_ops', amproclefttype => 'interval',
   amprocrighttype => 'interval', amprocnum => '3',
   amproc => 'in_range(interval,interval,interval,bool,bool)' },
-{ amprocfamily => 'btree/interval_ops', amproclefttype => 'interval',
-  amprocrighttype => 'interval', amprocnum => '4', amproc => 'btequalimage' },
 { amprocfamily => 'btree/macaddr_ops', amproclefttype => 'macaddr',
   amprocrighttype => 'macaddr', amprocnum => '1', amproc => 'macaddr_cmp' },
 { amprocfamily => 'btree/macaddr_ops', amproclefttype => 'macaddr',

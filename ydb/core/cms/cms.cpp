@@ -43,7 +43,8 @@ void TCms::DefaultSignalTabletActive(const TActorContext &)
 
 void TCms::OnActivateExecutor(const TActorContext &ctx)
 {
-    EnableCMSRequestPriorities = AppData(ctx)->FeatureFlags.GetEnableCMSRequestPriorities();
+    State->EnableCMSRequestPriorities = AppData(ctx)->FeatureFlags.GetEnableCMSRequestPriorities();
+    State->EnableSingleCompositeActionGroup = AppData(ctx)->FeatureFlags.GetEnableSingleCompositeActionGroup();
 
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr.Release());
 
@@ -1469,7 +1470,7 @@ void TCms::CheckAndEnqueueRequest(TEvCms::TEvPermissionRequest::TPtr &ev, const 
         }
     }
 
-    if (rec.HasPriority() && !EnableCMSRequestPriorities) {
+    if (rec.HasPriority() && !State->EnableCMSRequestPriorities) {
         if (rec.GetUser() == WALLE_CMS_USER) {
             rec.ClearPriority();
         } else {
@@ -2271,7 +2272,8 @@ void TCms::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
 {
     const auto& appConfig = ev->Get()->Record.GetConfig();
     if (appConfig.HasFeatureFlags()) {
-        EnableCMSRequestPriorities = appConfig.GetFeatureFlags().GetEnableCMSRequestPriorities();
+        State->EnableCMSRequestPriorities = appConfig.GetFeatureFlags().GetEnableCMSRequestPriorities();
+        State->EnableSingleCompositeActionGroup = appConfig.GetFeatureFlags().GetEnableSingleCompositeActionGroup();
     }
 
     if (ev->Get()->Record.HasLocal() && ev->Get()->Record.GetLocal()) {

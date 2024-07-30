@@ -17,9 +17,10 @@ items:
 - { name: CREATE VIEW,                  href: create-view.md,                when: feature_view }
 - { name: CREATE TOPIC,                 href: create-topic.md,               when: feature_topic_control_plane }
 - { name: CREATE USER,                  href: create-user.md,                when: feature_user_and_group }
+- { name: COMMIT,                       href: commit.md                                                   }
 - { name: DECLARE,                      href: declare.md }
 - { name: DELETE,                       href: delete.md,                     when: feature_map_tables }
-- { name: DISCARD,                      href: discard.md }
+- { name: DISCARD,                      href: discard.md,                    when: backend_name != "YDB" }
 - { name: DROP GROUP,                   href: drop-group.md,                 when: feature_user_and_group }
 - { name: DROP EXTERNAL DATA SOURCE,    href: drop-external-data-source.md,  when: feature_federated_queries}
 - { name: DROP EXTERNAL TABLE,          href: drop-external-table.md,        when: feature_federated_queries}
@@ -42,7 +43,7 @@ items:
 - { name: REDUCE,                       href: reduce.md,                     when: feature_mapreduce and reduce_command == "REDUCE" }
 - { name: REPLACE,                      href: replace_into.md,               when: feature_replace }
 - { name: REVOKE,                       href: revoke.md,                     when: feature_user_and_group }
-- { name: SELECT,                       href: select.md }
+- { name: SELECT,                       include: { mode: link, path: select/toc_p.yaml } }
 - { name: SELECT STREAM,                href: select_stream.md,              when: feature_mapreduce and process_command == "PROCESS STREAM" }
 - { name: SUBQUERY,                     href: subquery.md,                   when: feature_subquery }
 - { name: UPDATE,                       href: update.md,                     when: feature_map_tables }

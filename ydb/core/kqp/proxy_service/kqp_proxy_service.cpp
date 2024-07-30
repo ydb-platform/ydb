@@ -18,6 +18,7 @@
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/workload_service/kqp_workload_service.h>
+#include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_file.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling.h>
@@ -43,7 +44,7 @@
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/resource/resource.h>
-
+#include <util/generic/guid.h>
 
 namespace NKikimr::NKqp {
 
@@ -187,6 +188,7 @@ public:
         ): LogConfig(logConfig)
         , TableServiceConfig(tableServiceConfig)
         , QueryServiceConfig(queryServiceConfig)
+        , FeatureFlags()
         , KqpSettings(std::make_shared<const TKqpSettings>(std::move(settings)))
         , FederatedQuerySetupFactory(federatedQuerySetupFactory)
         , QueryReplayFactory(std::move(queryReplayFactory))
@@ -199,6 +201,7 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(KQP_PROVIDER));
         Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &TlsActivationContext->AsActorContext());
+        FeatureFlags = AppData()->FeatureFlags;
         // NOTE: some important actors are constructed within next call
         FederatedQuerySetup = FederatedQuerySetupFactory->Make(ctx.ActorSystem());
         AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, FederatedQuerySetup, S3ActorsFactory);
@@ -219,20 +222,26 @@ public:
 
         UpdateYqlLogLevels();
 
-        // Subscribe for TableService & Logger config changes
+        // Subscribe for TableService & Logger & FeatureFlags config changes
         ui32 tableServiceConfigKind = (ui32)NKikimrConsole::TConfigItem::TableServiceConfigItem;
         ui32 logConfigKind = (ui32)NKikimrConsole::TConfigItem::LogConfigItem;
+        ui32 featureFlagsKind = (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem;
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
-                {tableServiceConfigKind, logConfigKind}),
+                {tableServiceConfigKind, logConfigKind, featureFlagsKind}),
             IEventHandle::FlagTrackDelivery);
 
         WhiteBoardService = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
 
         if (auto& cfg = TableServiceConfig.GetSpillingServiceConfig().GetLocalFileConfig(); cfg.GetEnable()) {
+            TString spillingRoot = cfg.GetRoot();
+            if (spillingRoot.empty()) {
+                spillingRoot = TStringBuilder() << "/tmp/ydb_spilling_" << CreateGuidAsString() << "/";
+            }
+
             SpillingService = TlsActivationContext->ExecutorThread.RegisterActor(NYql::NDq::CreateDqLocalFileSpillingService(
                 NYql::NDq::TFileSpillingServiceConfig{
-                    .Root = cfg.GetRoot(),
+                    .Root = spillingRoot,
                     .MaxTotalSize = cfg.GetMaxTotalSize(),
                     .MaxFileSize = cfg.GetMaxFileSize(),
                     .MaxFilePartSize = cfg.GetMaxFilePartSize(),
@@ -265,13 +274,17 @@ public:
                 MakeKqpCompileComputationPatternServiceID(SelfId().NodeId()), CompileComputationPatternService);
         }
 
-        KqpNodeService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpNodeService(TableServiceConfig, Counters, AsyncIoFactory, FederatedQuerySetup));
+        ResourceManager_ = GetKqpResourceManager();
+        CaFactory_ = NComputeActor::MakeKqpCaFactory(
+            TableServiceConfig.GetResourceManager(), ResourceManager_, AsyncIoFactory, FederatedQuerySetup);
+
+        KqpNodeService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpNodeService(TableServiceConfig, ResourceManager_, CaFactory_, Counters, AsyncIoFactory, FederatedQuerySetup));
         TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
             MakeKqpNodeServiceID(SelfId().NodeId()), KqpNodeService);
 
-        auto kqpWorkloadService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpWorkloadService(Counters->GetWorkloadManagerCounters()));
+        KqpWorkloadService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpWorkloadService(Counters->GetWorkloadManagerCounters()));
         TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
-            MakeKqpWorkloadServiceId(SelfId().NodeId()), kqpWorkloadService);
+            MakeKqpWorkloadServiceId(SelfId().NodeId()), KqpWorkloadService);
 
         NActors::TMon* mon = AppData()->Mon;
         if (mon) {
@@ -460,6 +473,8 @@ public:
             Send(BoardPublishActor, new TEvents::TEvPoison);
         }
 
+        Send(KqpWorkloadService, new TEvents::TEvPoison());
+
         LocalSessions->ForEachNode([this](TNodeId node) {
             Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe);
         });
@@ -479,6 +494,8 @@ public:
 
         LogConfig.Swap(event.MutableConfig()->MutableLogConfig());
         UpdateYqlLogLevels();
+
+        FeatureFlags.Swap(event.MutableConfig()->MutableFeatureFlags());
 
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
@@ -677,6 +694,13 @@ public:
 
         if (sessionInfo) {
             LocalSessions->AttachQueryText(sessionInfo, ev->Get()->GetQuery());
+        }
+
+        if (!FeatureFlags.GetEnableResourcePools()) {
+            ev->Get()->SetPoolId("");
+        } else if (!ev->Get()->GetPoolId()) {
+            // TODO: do not use default pool if there is no limits
+            ev->Get()->SetPoolId(NResourcePool::DEFAULT_POOL_ID);
         }
 
         TActorId targetId;
@@ -1307,7 +1331,6 @@ public:
             hFunc(TEvKqp::TEvCloseSessionRequest, Handle);
             hFunc(TEvKqp::TEvQueryResponse, ForwardEvent);
             hFunc(TEvKqpExecuter::TEvExecuterProgress, ForwardProgress);
-            hFunc(TEvKqp::TEvProcessResponse, Handle);
             hFunc(TEvKqp::TEvCreateSessionRequest, Handle);
             hFunc(TEvKqp::TEvPingSessionRequest, Handle);
             hFunc(TEvKqp::TEvCancelQueryRequest, Handle);
@@ -1336,16 +1359,6 @@ public:
     }
 
 private:
-    void LogResponse(const TKqpRequestInfo& requestInfo,
-        const NKikimrKqp::TEvProcessResponse& event, TKqpDbCountersPtr dbCounters)
-    {
-        auto status = event.GetYdbStatus();
-        if (status != Ydb::StatusIds::SUCCESS) {
-            KQP_PROXY_LOG_W(requestInfo << event.GetError());
-        }
-
-        Counters->ReportResponseStatus(dbCounters, event.ByteSize(), status);
-    }
 
     void LogResponse(const TKqpRequestInfo&,
         const NKikimrKqp::TEvCreateSessionResponse& event, TKqpDbCountersPtr dbCounters)
@@ -1358,11 +1371,6 @@ private:
         const NKikimrKqp::TEvPingSessionResponse& event, TKqpDbCountersPtr dbCounters)
     {
         Counters->ReportResponseStatus(dbCounters, event.ByteSize(), event.GetStatus());
-    }
-
-
-    void Handle(TEvKqp::TEvProcessResponse::TPtr&ev) {
-        ReplyProcessError(ev->Get()->Record.GetYdbStatus(), ev->Get()->Record.GetError(), ev->Cookie);
     }
 
     bool ReplyProcessError(Ydb::StatusIds::StatusCode ydbStatus, const TString& message, ui64 requestId)
@@ -1464,7 +1472,7 @@ private:
 
         auto config = CreateConfig(KqpSettings, workerSettings);
 
-        IActor* sessionActor = CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings,
+        IActor* sessionActor = CreateKqpSessionActor(SelfId(), ResourceManager_, CaFactory_, sessionId, KqpSettings, workerSettings,
             FederatedQuerySetup, AsyncIoFactory, ModuleResolverState, Counters,
             QueryServiceConfig, KqpTempTablesAgentActor);
         auto workerId = TlsActivationContext->ExecutorThread.RegisterActor(sessionActor, TMailboxType::HTSwap, AppData()->UserPoolId);
@@ -1740,6 +1748,7 @@ private:
     NKikimrConfig::TLogConfig LogConfig;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+    NKikimrConfig::TFeatureFlags FeatureFlags;
     TKqpSettings::TConstPtr KqpSettings;
     IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory;
     std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
@@ -1752,6 +1761,8 @@ private:
     THashMap<ui64, NKikimrConsole::TConfigItem::EKind> ConfigSubscriptions;
     THashMap<ui64, TActorId> TimeoutTimers;
 
+    std::shared_ptr<NRm::IKqpResourceManager> ResourceManager_;
+    std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
     TIntrusivePtr<TKqpShutdownState> ShutdownState;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
 
@@ -1777,6 +1788,7 @@ private:
     TActorId KqpNodeService;
     TActorId SpillingService;
     TActorId WhiteBoardService;
+    TActorId KqpWorkloadService;
     NKikimrKqp::TKqpProxyNodeResources NodeResources;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
 

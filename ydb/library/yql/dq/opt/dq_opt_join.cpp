@@ -376,12 +376,17 @@ bool CheckJoinColumns(const TExprBase& node) {
     }
 }
 
+TExprBase DqRewriteEquiJoin(const TExprBase& node, EHashJoinMode mode, bool useCBO, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
+    int dummyJoinCounter;
+    return DqRewriteEquiJoin(node, mode, useCBO, ctx, typeCtx, dummyJoinCounter);
+}
+
 /**
  * Rewrite `EquiJoin` to a number of `DqJoin` callables. This is done to simplify next step of building
  * physical stages with join operators.
  * Potentially this optimizer can also perform joins reorder given cardinality information.
  */
-TExprBase DqRewriteEquiJoin(const TExprBase& node, EHashJoinMode mode, bool useCBO, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
+TExprBase DqRewriteEquiJoin(const TExprBase& node, EHashJoinMode mode, bool useCBO, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, int& joinCounter) {
     if (!node.Maybe<TCoEquiJoin>()) {
         return node;
     }
@@ -410,6 +415,8 @@ TExprBase DqRewriteEquiJoin(const TExprBase& node, EHashJoinMode mode, bool useC
     if (columnsToRename.empty() && columnsToDrop.empty()) {
         return result->Input;
     }
+
+    joinCounter += equiJoin.ArgCount() - 2;
 
     auto row = Build<TCoArgument>(ctx, node.Pos())
             .Name("row")
@@ -616,6 +623,19 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
     if (!supportedTypes.contains(joinType)) {
         return join;
     }
+
+    TExprNode::TListType flags;
+    if (const auto maybeFlags = join.Flags()) {
+        flags = maybeFlags.Cast().Ref().ChildrenList();
+    }
+
+    for (auto& flag : flags) {
+        if (flag->IsAtom("LeftAny") || flag->IsAtom("RightAny")) {
+            ctx.AddError(TIssue(ctx.GetPosition(join.Ptr()->Pos()), "ANY join kind is not currently supported"));
+            return join;
+        }
+    }
+
 
     YQL_ENSURE(join.LeftInput().Maybe<TDqCnUnionAll>());
     TDqCnUnionAll leftCn = join.LeftInput().Cast<TDqCnUnionAll>();

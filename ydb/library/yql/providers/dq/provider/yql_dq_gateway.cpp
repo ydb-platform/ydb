@@ -446,7 +446,11 @@ public:
             if (maybeStage == labels.end()) {
                 continue;
             }
-            auto& stage = ret[atoi(maybeStage->second.data())];
+            auto stageId = atoi(maybeStage->second.data());
+            if (!stageId) {
+                continue;
+            }
+            auto& stage = ret[stageId];
 
             if (name == "OutputRows") {
                 stage.OutputRows += metric.GetSum();

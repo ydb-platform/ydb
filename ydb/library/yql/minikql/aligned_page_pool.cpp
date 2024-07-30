@@ -504,6 +504,7 @@ void TAlignedPagePoolImpl<T>::Free(void* ptr, size_t size) noexcept {
 template<typename T>
 void TAlignedPagePoolImpl<T>::UpdateMemoryYellowZone() {
     if (Limit == 0) return;
+    if (IsMemoryYellowZoneForcefullyChanged) return;
     if (IncreaseMemoryLimitCallback && !IsMaximumLimitValueReached) return;
 
     ui8 usedMemoryPercent = 100 * GetUsed() / Limit;

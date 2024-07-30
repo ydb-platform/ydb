@@ -10,9 +10,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(3.0)
+VERSION(3.3.2)
 
-ORIGINAL_SOURCE(mirror://gnu/bison/bison-3.0.tar.gz)
+ORIGINAL_SOURCE(mirror://gnu/bison/bison-3.3.2.tar.gz)
 
 PEERDIR(
     contrib/tools/bison/lib
@@ -28,6 +28,8 @@ NO_COMPILER_WARNINGS()
 NO_RUNTIME()
 
 CFLAGS(
+    -DEXEEXT=\"\"
+    -DINSTALLDIR=\"/var/empty/bison-3.3.2/bin\"
     -DBISON_DATA_DIR=contrib/tools/bison/data
 )
 
@@ -43,6 +45,7 @@ SRCS(
     src/conflicts.c
     src/derives.c
     src/files.c
+    src/fixits.c
     src/getargs.c
     src/gram.c
     src/graphviz.c

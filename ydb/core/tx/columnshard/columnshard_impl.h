@@ -31,6 +31,7 @@
 #include "subscriber/abstract/manager/manager.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/statistics/events.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
@@ -223,6 +224,9 @@ class TColumnShard
     void Handle(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
     void Handle(TEvPrivate::TEvNormalizerResult::TPtr& ev, const TActorContext&);
 
+    void Handle(NStat::TEvStatistics::TEvAnalyzeTable::TPtr& ev, const TActorContext& ctx);
+    void Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext& ctx);
+
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext&);
 
     void Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs::TPtr& ev, const TActorContext& ctx);
@@ -377,6 +381,9 @@ protected:
             HFunc(TEvPrivate::TEvGarbageCollectionFinished, Handle);
             HFunc(TEvPrivate::TEvTieringModified, Handle);
 
+            HFunc(NStat::TEvStatistics::TEvAnalyzeTable, Handle);
+            HFunc(NStat::TEvStatistics::TEvStatisticsRequest, Handle);
+
             HFunc(NActors::TEvents::TEvUndelivered, Handle);
 
             HFunc(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs, Handle);
@@ -527,9 +534,11 @@ private:
     TLimits Limits;
     NOlap::TNormalizationController NormalizerController;
     NDataShard::TSysLocks SysLocks;
+    const TDuration MaxReadStaleness;
 
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();
+    void TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TWriteId>&& writesToAbort);
 
     bool WaitPlanStep(ui64 step);
     void SendWaitPlanStep(ui64 step);
@@ -546,8 +555,7 @@ private:
     TWriteId GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId, const ui32 partId, const std::optional<ui32> granuleShardingVersionId);
     void AddLongTxWrite(TWriteId writeId, ui64 txId);
     void LoadLongTxWrite(TWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId, const std::optional<ui32> granuleShardingVersion);
-    bool RemoveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, ui64 txId = 0);
-    void TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TWriteId>&& writesToAbort);
+    bool RemoveLongTxWrite(NIceDb::TNiceDb& db, const TWriteId writeId, const ui64 txId);
 
     TWriteId BuildNextWriteId(NTabletFlatExecutor::TTransactionContext& txc);
     TWriteId BuildNextWriteId(NIceDb::TNiceDb& db);

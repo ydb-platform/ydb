@@ -25,6 +25,7 @@ select
        s_store_sk = sc.ss_store_sk and
        i_item_sk = sc.ss_item_sk
  order by s_store_name, i_item_desc
+	, i_wholesale_cost, sc.revenue, i_current_price
 limit 100;
 
 -- end query 1 in stream 0 using template ../query_templates/query65.tpl

@@ -60,7 +60,7 @@ ui64 TJobCounter::GetValue(const TStringBuf key) const
 
 ////////////////////////////////////////////////////////////////////
 
-TJobCounters::TJobCounters(const NYT::TNode& counters)
+TJobCounters::TJobCounters(const TNode& counters)
     : Total_(0)
 {
     if (!counters.IsMap()) {

@@ -110,7 +110,7 @@ public:
             TVector<const TItemExprType*> items;
             for (auto& name : YAMR_FIELDS) {
                 items.push_back(ctx.MakeType<TItemExprType>(name, ctx.MakeType<TDataExprType>(EDataSlot::String)));
-                columnOrder->push_back(TString(name));
+                columnOrder->AddColumn(TString(name));
             }
             itemType = ctx.MakeType<TStructExprType>(items);
         } else {
@@ -327,22 +327,26 @@ public:
             if (pathInfo.Columns) {
                 auto& renames = pathInfo.Columns->GetRenames();
                 if (renames) {
-                    for (auto &col : *columnOrder) {
+                    TColumnOrder renamedOrder;
+                    for (auto& [col, gen_col] : *columnOrder) {
                         if (auto renamed = renames->FindPtr(col)) {
-                            col = *renamed;
+                            renamedOrder.AddColumn(*renamed);
+                        } else {
+                            renamedOrder.AddColumn(col);
                         }
                     }
+                    *columnOrder = renamedOrder;
                 }
             }
 
             // sync with output type (add weak columns, etc.)
             TSet<TStringBuf> allColumns = GetColumnsOfStructOrSequenceOfStruct(*itemType);
-            EraseIf(*columnOrder, [&](const TString& col) { return !allColumns.contains(col); });
-            for (auto& col : *columnOrder) {
-                allColumns.erase(allColumns.find(col));
+            columnOrder->EraseIf([&](const TString& col) { return !allColumns.contains(col); });
+            for (auto& [col, gen_col] : *columnOrder) {
+                allColumns.erase(allColumns.find(gen_col));
             }
             for (auto& col : allColumns) {
-                columnOrder->push_back(TString(col));
+                columnOrder->AddColumn(TString(col));
             }
 
             return State_->Types->SetColumnOrder(input.Ref(), *columnOrder, ctx);
@@ -647,7 +651,7 @@ public:
 
         for (ui32 i = 1; i < paths.size(); ++i) {
             auto current = State_->Types->LookupColumnOrder(*paths[i]);
-            if (!current || common != current) {
+            if (!current || *common != *current) {
                 return TStatus::Ok;
             }
         }
@@ -658,8 +662,9 @@ public:
             sys = TString(YqlSysColumnPrefix).append(sys);
         }
         Sort(extraColumns);
-
-        common->insert(common->end(), extraColumns.begin(), extraColumns.end());
+        for (auto &e: extraColumns) {
+            common->AddColumn(e);
+        }
         return State_->Types->SetColumnOrder(input.Ref(), *common,  ctx);
     }
 

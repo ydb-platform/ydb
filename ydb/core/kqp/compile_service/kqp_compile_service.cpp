@@ -507,19 +507,14 @@ private:
         bool enableKqpDataQueryStreamIdxLookupJoin = TableServiceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin();
         bool enableKqpScanQueryStreamIdxLookupJoin = TableServiceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin();
 
-        bool enableKqpDataQuerySourceRead = TableServiceConfig.GetEnableKqpDataQuerySourceRead();
         bool enableKqpScanQuerySourceRead = TableServiceConfig.GetEnableKqpScanQuerySourceRead();
 
-        bool predicateExtract20 = TableServiceConfig.GetPredicateExtract20();
-
         bool defaultSyntaxVersion = TableServiceConfig.GetSqlVersion();
-        bool enableKqpImmediateEffects = TableServiceConfig.GetEnableKqpImmediateEffects();
 
         auto indexAutoChooser = TableServiceConfig.GetIndexAutoChooseMode();
 
         ui64 rangesLimit = TableServiceConfig.GetExtractPredicateRangesLimit();
         ui64 idxLookupPointsLimit = TableServiceConfig.GetIdxLookupJoinPointsLimit();
-        bool oldLookupJoinBehaviour = TableServiceConfig.GetOldLookupJoinBehaviour();
 
         bool enableSequences = TableServiceConfig.GetEnableSequences();
         bool enableColumnsWithDefault = TableServiceConfig.GetEnableColumnsWithDefault();
@@ -528,9 +523,18 @@ private:
         bool enableCreateTableAs = TableServiceConfig.GetEnableCreateTableAs();
         auto blockChannelsMode = TableServiceConfig.GetBlockChannelsMode();
 
+        bool enableAstCache = TableServiceConfig.GetEnableAstCache();
+        bool enableImplicitQueryParameterTypes = TableServiceConfig.GetEnableImplicitQueryParameterTypes();
+        bool enablePgConstsToParams = TableServiceConfig.GetEnablePgConstsToParams();
+        bool enablePerStatementQueryExecution = TableServiceConfig.GetEnablePerStatementQueryExecution();
+
         auto mkqlHeavyLimit = TableServiceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit();
 
         bool enableQueryServiceSpilling = TableServiceConfig.GetEnableQueryServiceSpilling();
+        ui64 defaultCostBasedOptimizationLevel = TableServiceConfig.GetDefaultCostBasedOptimizationLevel();
+        bool enableConstantFolding = TableServiceConfig.GetEnableConstantFolding();
+
+        TString enableSpillingNodes = TableServiceConfig.GetEnableSpillingNodes();
 
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
@@ -543,10 +547,7 @@ private:
             TableServiceConfig.GetEnableKqpScanQueryStreamLookup() != enableKqpScanQueryStreamLookup ||
             TableServiceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin() != enableKqpScanQueryStreamIdxLookupJoin ||
             TableServiceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin() != enableKqpDataQueryStreamIdxLookupJoin ||
-            TableServiceConfig.GetEnableKqpDataQuerySourceRead() != enableKqpDataQuerySourceRead ||
             TableServiceConfig.GetEnableKqpScanQuerySourceRead() != enableKqpScanQuerySourceRead ||
-            TableServiceConfig.GetPredicateExtract20() != predicateExtract20 ||
-            TableServiceConfig.GetEnableKqpImmediateEffects() != enableKqpImmediateEffects ||
             TableServiceConfig.GetIndexAutoChooseMode() != indexAutoChooser ||
             TableServiceConfig.GetEnableSequences() != enableSequences ||
             TableServiceConfig.GetEnableColumnsWithDefault() != enableColumnsWithDefault ||
@@ -554,11 +555,17 @@ private:
             TableServiceConfig.GetEnableOltpSink() != enableOltpSink ||
             TableServiceConfig.GetEnableCreateTableAs() != enableCreateTableAs ||
             TableServiceConfig.GetBlockChannelsMode() != blockChannelsMode ||
-            TableServiceConfig.GetOldLookupJoinBehaviour() != oldLookupJoinBehaviour ||
             TableServiceConfig.GetExtractPredicateRangesLimit() != rangesLimit ||
             TableServiceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit() != mkqlHeavyLimit ||
             TableServiceConfig.GetIdxLookupJoinPointsLimit() != idxLookupPointsLimit ||
-            TableServiceConfig.GetEnableQueryServiceSpilling() != enableQueryServiceSpilling) {
+            TableServiceConfig.GetEnableSpillingNodes() != enableSpillingNodes ||
+            TableServiceConfig.GetEnableQueryServiceSpilling() != enableQueryServiceSpilling ||
+            TableServiceConfig.GetDefaultCostBasedOptimizationLevel() != defaultCostBasedOptimizationLevel ||
+            TableServiceConfig.GetEnableConstantFolding() != enableConstantFolding ||
+            TableServiceConfig.GetEnableAstCache() != enableAstCache ||
+            TableServiceConfig.GetEnableImplicitQueryParameterTypes() != enableImplicitQueryParameterTypes ||
+            TableServiceConfig.GetEnablePgConstsToParams() != enablePgConstsToParams ||
+            TableServiceConfig.GetEnablePerStatementQueryExecution() != enablePerStatementQueryExecution) {
 
             QueryCache.Clear();
 
@@ -611,6 +618,7 @@ private:
             << ", queryUid: " << (request.Uid ? *request.Uid : "<empty>")
             << ", queryText: \"" << (request.Query ? EscapeC(request.Query->Text) : "<empty>") << "\""
             << ", keepInCache: " << request.KeepInCache
+            << ", split: " << request.Split
             << *request.UserRequestContext);
 
         *Counters->CompileQueryCacheSize = QueryCache.Size();
@@ -697,7 +705,7 @@ private:
             request.Deadline,
             ev->Get()->Split
                 ? ECompileActorAction::SPLIT
-                : TableServiceConfig.GetEnableAstCache()
+                : (TableServiceConfig.GetEnableAstCache() && !request.QueryAst)
                     ? ECompileActorAction::PARSE
                     : ECompileActorAction::COMPILE);
         TKqpCompileRequest compileRequest(ev->Sender, CreateGuidAsString(), std::move(*request.Query),
@@ -760,7 +768,16 @@ private:
 
             NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, ev->Get() ? std::move(ev->TraceId) : NWilson::TTraceId(), "CompileService");
 
-            TKqpCompileSettings compileSettings(true, request.IsQueryActionPrepare, false, request.Deadline, TableServiceConfig.GetEnableAstCache() ? ECompileActorAction::PARSE : ECompileActorAction::COMPILE);
+            TKqpCompileSettings compileSettings(
+                true,
+                request.IsQueryActionPrepare,
+                false,
+                request.Deadline,
+                ev->Get()->Split
+                    ? ECompileActorAction::SPLIT
+                    : (TableServiceConfig.GetEnableAstCache() && !request.QueryAst)
+                        ? ECompileActorAction::PARSE
+                        : ECompileActorAction::COMPILE);
             TKqpCompileRequest compileRequest(ev->Sender, request.Uid, request.Query ? *request.Query : *compileResult->Query,
                 compileSettings, request.UserToken, dbCounters, request.GUCSettings, request.ApplicationName,
                 ev->Cookie, std::move(ev->Get()->IntrestedInResult),
@@ -824,6 +841,7 @@ private:
         if (compileResult->NeedToSplit) {
             Reply(compileRequest.Sender, compileResult, compileStats, ctx,
                 compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan), (CollectDiagnostics ? ev->Get()->ReplayMessageUserView : std::nullopt));
+            ProcessQueue(ctx);
             return;
         }
 
@@ -961,7 +979,6 @@ private:
             compileRequest.Orbit,
             compileRequest.Query.UserSid);
 
-        compileRequest.CompileSettings.Action = ECompileActorAction::COMPILE;
         compileRequest.QueryAst = std::move(queryAst);
 
         if (!RequestsQueue.Enqueue(std::move(compileRequest))) {
@@ -994,6 +1011,7 @@ private:
             return;
         }
 
+        compileRequest.CompileSettings.Action = ECompileActorAction::COMPILE;
         CompileByAst(astStatements.front(), compileRequest, ctx);
     }
 

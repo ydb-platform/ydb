@@ -1,6 +1,6 @@
 #include "yql_generic_match_predicate.h"
 
-namespace NYql {
+namespace NYql::NGenericPushDown {
 
     namespace {
 
@@ -323,4 +323,4 @@ namespace NYql {
         return MatchPredicateImpl(columns, predicate) != Triple::False;
     }
 
-} // namespace NYql
+}

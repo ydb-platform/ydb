@@ -656,6 +656,13 @@ public:
         GetHeader()->Count = count;
     }
 
+    void PushBack(TUnversionedValue value)
+    {
+        ui32 count = GetCount();
+        SetCount(count + 1);
+        Begin()[count] = value;
+    }
+
     TUnversionedValue& operator[] (ui32 index)
     {
         YT_ASSERT(index < GetHeader()->Count);

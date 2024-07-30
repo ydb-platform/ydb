@@ -82,6 +82,7 @@ PEERDIR(
     ydb/core/load_test
     ydb/core/local_pgwire
     ydb/core/log_backend
+    ydb/core/memory_controller
     ydb/core/metering
     ydb/core/mind
     ydb/core/mind/address_classification
@@ -97,8 +98,9 @@ PEERDIR(
     ydb/core/scheme
     ydb/core/scheme_types
     ydb/core/security
-    ydb/core/statistics
+    ydb/core/security/ldap_auth_provider
     ydb/core/statistics/aggregator
+    ydb/core/statistics/service    
     ydb/core/sys_view/processor
     ydb/core/sys_view/service
     ydb/core/tablet

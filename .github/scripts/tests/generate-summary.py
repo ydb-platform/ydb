@@ -143,22 +143,19 @@ class TestSummaryLine:
 
 
 class TestSummary:
-    def __init__(self):
+    def __init__(self, is_retry: bool):
         self.lines: List[TestSummaryLine] = []
         self.is_failed = False
+        self.is_retry = is_retry
 
     def add_line(self, line: TestSummaryLine):
         self.is_failed |= line.is_failed
         self.lines.append(line)
 
-    @property
-    def is_empty(self):
-        return len(self.lines) == 0
-
     def render_line(self, items):
         return f"| {' | '.join(items)} |"
 
-    def render(self, add_footnote=False):
+    def render(self, add_footnote=False, is_retry=False):
         github_srv = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
         repo = os.environ.get("GITHUB_REPOSITORY", "ydb-platform/ydb")
 
@@ -175,9 +172,9 @@ class TestSummary:
         if need_first_column:
             columns.insert(0, "")
 
-        result = [
-            self.render_line(columns),
-        ]
+        result = []
+
+        result.append(self.render_line(columns))
 
         if need_first_column:
             result.append(self.render_line([':---'] + ['---:'] * (len(columns) - 1)))
@@ -190,7 +187,7 @@ class TestSummary:
             if need_first_column:
                 row.append(line.title)
             row.extend([
-                render_pm(line.test_count, f"{report_url}", 0),
+                render_pm(f"{line.test_count}" + (" (only retried tests)" if self.is_retry else ""), f"{report_url}", 0),
                 render_pm(line.passed, f"{report_url}#PASS", 0),
                 render_pm(line.errors, f"{report_url}#ERROR", 0),
                 render_pm(line.failed, f"{report_url}#FAIL", 0),
@@ -202,8 +199,7 @@ class TestSummary:
         if add_footnote:
             result.append("")
             result.append(f"[^1]: All mute rules are defined [here]({footnote_url}).")
-            
-        result.append("")
+        
         return result
 
 
@@ -255,18 +251,15 @@ def render_testlist_html(rows, fn):
         fp.write(content)
 
 
-def write_summary(summary: TestSummary, test_log_url: str):
+def write_summary(summary: TestSummary):
     summary_fn = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary_fn:
         fp = open(summary_fn, "at")
     else:
         fp = sys.stdout
 
-    if summary.is_empty:
-        fp.write(f":red_circle: Test run completed, no test results found. Please check [test logs]({test_log_url}).")
-    else:
-        for line in summary.render(add_footnote=True):
-            fp.write(f"{line}\n")
+    for line in summary.render(add_footnote=True):
+        fp.write(f"{line}\n")
 
     fp.write("\n")
 
@@ -274,8 +267,8 @@ def write_summary(summary: TestSummary, test_log_url: str):
         fp.close()
 
 
-def gen_summary(summary_url_prefix, summary_out_folder, paths):
-    summary = TestSummary()
+def gen_summary(public_dir, public_dir_url, paths, is_retry: bool):
+    summary = TestSummary(is_retry=is_retry)
 
     for title, html_fn, path in paths:
         summary_line = TestSummaryLine(title)
@@ -283,58 +276,69 @@ def gen_summary(summary_url_prefix, summary_out_folder, paths):
         for fn, suite, case in iter_xml_files(path):
             test_result = TestResult.from_junit(case)
             summary_line.add(test_result)
+        
+        if os.path.isabs(html_fn):
+            html_fn = os.path.relpath(html_fn, public_dir)
+        report_url = f"{public_dir_url}/{html_fn}"
 
-        if not summary_line.tests:
-            continue
-
-        report_url = f"{summary_url_prefix}{html_fn}"
-
-        render_testlist_html(summary_line.tests, os.path.join(summary_out_folder, html_fn))
+        render_testlist_html(summary_line.tests, os.path.join(public_dir, html_fn))
         summary_line.add_report(html_fn, report_url)
         summary.add_line(summary_line)
 
     return summary
 
 
-def get_comment_text(pr: PullRequest, summary: TestSummary, test_history_url: str, test_log_file_url: str):
-    if summary.is_empty:
-        return [
-            f"Test run completed, no test results found for commit {pr.head.sha}. "
-            f"Please check [test log]({test_log_file_url})."
-        ]
-    elif summary.is_failed:
+def get_comment_text(pr: PullRequest, summary: TestSummary, summary_links: str, is_last_retry: bool)->tuple[str, list[str]]:
+    color = "red"
+    if summary.is_failed:
+        color = "red" if is_last_retry else "yellow"
         result = f"Some tests failed, follow the links below."
+        if not is_last_retry:
+            result += " Going to retry failed tests..."
     else:
+        color = "green"
         result = f"Tests successful."
 
-    body = [
-        result
-    ]
-    links = []
+    body = []
 
-    if test_history_url:
-        links.append(f"[Test history]({test_history_url})")
+    body.append(result)
 
-    if test_log_file_url:
-        links.append(f"[Test log]({test_log_file_url})")
+    if not is_last_retry:
+        body.append("")
+        body.append("<details>")
+        body.append("")
+
+    with open(summary_links) as f:
+        links = f.readlines()
+    
+    links.sort()
+    links = [line.split(" ", 1)[1].strip() for line in links]
 
     if links:
         body.append("")
         body.append(" | ".join(links))
-
+    
     body.extend(summary.render())
 
-    return body
+    if not is_last_retry:
+        body.append("")
+        body.append("</details>")
+        body.append("")
+    else:
+        body.append("")
+
+    return color, body
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--summary-out-path", required=True)
-    parser.add_argument("--summary-url-prefix", required=True)
-    parser.add_argument('--test-history-url', required=False)
-    parser.add_argument('--test-log-url', required=False)
-    parser.add_argument('--build-preset', default="default-linux-x86-64-relwithdebinfo", required=False)
-    parser.add_argument('--status-report-file', required=False)
+    parser.add_argument("--public_dir", required=True)
+    parser.add_argument("--public_dir_url", required=True)
+    parser.add_argument("--summary_links", required=True)
+    parser.add_argument('--build_preset', default="default-linux-x86-64-relwithdebinfo", required=False)
+    parser.add_argument('--status_report_file', required=False)
+    parser.add_argument('--is_retry', required=True, type=int)
+    parser.add_argument('--is_last_retry', required=True, type=int)
     parser.add_argument("args", nargs="+", metavar="TITLE html_out path")
     args = parser.parse_args()
 
@@ -345,14 +349,12 @@ def main():
     paths = iter(args.args)
     title_path = list(zip(paths, paths, paths))
 
-    summary = gen_summary(args.summary_url_prefix, args.summary_out_path, title_path)
-    write_summary(summary, args.test_log_url)
+    summary = gen_summary(args.public_dir, args.public_dir_url, title_path, is_retry=bool(args.is_retry))
+    write_summary(summary)
 
-    if summary.is_empty | summary.is_failed:
-        color = 'red'
+    if summary.is_failed:
         overall_status = "failure"
     else:
-        color = 'green'
         overall_status = "success"
 
     if os.environ.get("GITHUB_EVENT_NAME") in ("pull_request", "pull_request_target"):
@@ -363,7 +365,7 @@ def main():
             event = json.load(fp)
 
         pr = gh.create_from_raw_data(PullRequest, event["pull_request"])
-        text = get_comment_text(pr, summary, args.test_history_url, args.test_log_url)
+        color, text = get_comment_text(pr, summary, args.summary_links, is_last_retry=bool(args.is_last_retry))
 
         update_pr_comment_text(pr, args.build_preset, run_number, color, text='\n'.join(text), rewrite=False)
 

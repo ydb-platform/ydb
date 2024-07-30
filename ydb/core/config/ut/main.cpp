@@ -1,4 +1,5 @@
 #include <ydb/core/config/utils/config_traverse.h>
+#include <ydb/core/protos/config.pb.h>
 
 #include <library/cpp/colorizer/colors.h>
 #include <library/cpp/protobuf/json/util.h>
@@ -115,7 +116,8 @@ public:
                     << " " << (field ? FieldName(field) : RootName())
                     << " = " << (field ? field->number() : 0) << ";"
                     << (loop != -1 ? Loop() : "")  << std::endl;
-        });
+        },
+        NKikimrConfig::TAppConfig::default_instance().GetDescriptor());
     }
 
     void PrintLoops() const {
@@ -130,7 +132,8 @@ public:
                 path.push_back(DescriptorName(d));
                 std::cout << JoinSeq(" -> ", path) << std::endl;
             }
-        });
+        },
+        NKikimrConfig::TAppConfig::default_instance().GetDescriptor());
 
     }
 
@@ -141,7 +144,8 @@ public:
             if (field && field->is_required()) {
                 fields[typePath.back()->file()][typePath.back()][field].insert(ConstructFullFieldPath(fieldPath, field));
             }
-        });
+        },
+        NKikimrConfig::TAppConfig::default_instance().GetDescriptor());
         return fields;
     }
 
@@ -246,6 +250,8 @@ Y_UNIT_TEST_SUITE(ConfigProto) {
             "/AppConfig/FederatedQueryConfig/Gateways/Pq/DefaultSettings/Value/Value",
             "/AppConfig/FederatedQueryConfig/Gateways/Pq/ClusterMapping/Settings/Value/Value",
             "/AppConfig/FederatedQueryConfig/Gateways/YqlCore/Flags/Name/Name",
+            "/AppConfig/FederatedQueryConfig/Gateways/YqlCore/QPlayerActivation/ByHour/Hour/Hour",
+            "/AppConfig/FederatedQueryConfig/Gateways/YqlCore/QPlayerActivation/ByHour/Percentage/Percentage",
             "/AppConfig/FederatedQueryConfig/Gateways/Solomon/ClusterMapping/Path/Project/Project",
             "/AppConfig/FederatedQueryConfig/Gateways/Solomon/ClusterMapping/Path/Cluster/Cluster",
             "/AppConfig/FederatedQueryConfig/Gateways/Dq/WithHiddenByHour/Hour/Hour",
@@ -332,6 +338,8 @@ Y_UNIT_TEST_SUITE(ConfigProto) {
             {58, 9, 3, 1, 100, 2, 2}, // /AppConfig/FederatedQueryConfig/Gateways/Pq/ClusterMapping/Settings/Value/Value
             {58, 9, 10, 6, 2, 2}, // /AppConfig/FederatedQueryConfig/Gateways/Generic/DefaultSettings/Value/Value
             {58, 9, 9, 1, 1, 1}, // /AppConfig/FederatedQueryConfig/Gateways/YqlCore/Flags/Name/Name
+            {58, 9, 9, 2, 2, 1, 1}, // /AppConfig/FederatedQueryConfig/Gateways/YqlCore/QPlayerActivation/ByHour/Hour/Hour
+            {58, 9, 9, 2, 2, 2, 2}, // /AppConfig/FederatedQueryConfig/Gateways/YqlCore/QPlayerActivation/ByHour/Percentage/Percentage
             {58, 9, 6, 1, 8, 1, 1}, // /AppConfig/FederatedQueryConfig/Gateways/Solomon/ClusterMapping/Path/Project/Project
             {58, 9, 6, 1, 8, 2, 2}, // /AppConfig/FederatedQueryConfig/Gateways/Solomon/ClusterMapping/Path/Cluster/Cluster
             {58, 9, 2, 6, 1, 1}, // /AppConfig/FederatedQueryConfig/Gateways/Dq/WithHiddenByHour/Hour/Hour

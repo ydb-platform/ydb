@@ -8,7 +8,7 @@ select  item.i_item_id
        ,item.i_class
        ,item.i_current_price
        ,sum(cs_ext_sales_price) as itemrevenue
-       ,sum(cs_ext_sales_price)*100/sum(sum(cs_ext_sales_price)) over
+       ,$upscale(sum(cs_ext_sales_price)*100)/sum($upscale(sum(cs_ext_sales_price))) over
            (partition by item.i_class) as revenueratio
  from	{{catalog_sales}} as catalog_sales
      cross join {{item}} as item

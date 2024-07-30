@@ -17,9 +17,6 @@ bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, u
         }
     }
 
-    // TODO: enable b-tree index after benchmarks
-    mixedIndex = true;
-
     return mixedIndex
         ? BuildStatsMixedIndex(subset, stats, rowCountResolution, dataSizeResolution, env, yieldHandler)
         : BuildStatsBTreeIndex(subset, stats, histogramBucketsCount, env, yieldHandler);

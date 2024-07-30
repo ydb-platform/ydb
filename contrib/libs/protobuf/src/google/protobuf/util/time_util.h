@@ -40,8 +40,8 @@
 #ifdef _MSC_VER
 #ifdef _XBOX_ONE
 struct timeval {
-  int64 tv_sec;  /* seconds */
-  int64 tv_usec; /* and microseconds */
+  arc_i64 tv_sec;  /* seconds */
+  arc_i64 tv_usec; /* and microseconds */
 };
 #else
 #include <winsock2.h>
@@ -53,6 +53,7 @@ struct timeval {
 #include <google/protobuf/duration.pb.h>
 #include <google/protobuf/timestamp.pb.h>
 
+// Must be included last.
 #include <google/protobuf/port_def.inc>
 
 namespace google {

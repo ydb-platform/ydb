@@ -13,7 +13,7 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
 #include <ydb/core/statistics/events.h>
-#include <ydb/core/statistics/stat_service.h>
+#include <ydb/core/statistics/service/service.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
@@ -598,8 +598,9 @@ void TSchemeShard::ClearDescribePathCaches(const TPathElement::TPtr node, bool f
     } else if (node->PathType == NKikimrSchemeOp::EPathType::EPathTypeTable) {
         Y_ABORT_UNLESS(Tables.contains(node->PathId));
         TTableInfo::TPtr tabletInfo = Tables.at(node->PathId);
-        tabletInfo->PreSerializedPathDescription.clear();
-        tabletInfo->PreSerializedPathDescriptionWithoutRangeKey.clear();
+        tabletInfo->PreserializedTablePartitions.clear();
+        tabletInfo->PreserializedTablePartitionsNoKeys.clear();
+        tabletInfo->PreserializedTableSplitBoundaries.clear();
     }
 }
 
@@ -4446,6 +4447,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableReplaceIfExistsForExternalEntities = appData->FeatureFlags.GetEnableReplaceIfExistsForExternalEntities();
     EnableTempTables = appData->FeatureFlags.GetEnableTempTables();
     EnableTableDatetime64 = appData->FeatureFlags.GetEnableTableDatetime64();
+    EnableVectorIndex = appData->FeatureFlags.GetEnableVectorIndex();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
@@ -4461,6 +4463,8 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     appData->Icb->RegisterSharedControl(AllowConditionalEraseOperations, "SchemeShard_AllowConditionalEraseOperations");
     appData->Icb->RegisterSharedControl(DisablePublicationsOfDropping, "SchemeShard_DisablePublicationsOfDropping");
     appData->Icb->RegisterSharedControl(FillAllocatePQ, "SchemeShard_FillAllocatePQ");
+
+    appData->Icb->RegisterSharedControl(MaxCommitRedoMB, "TabletControls.MaxCommitRedoMB");
 
     AllowDataColumnForIndexTable = appData->FeatureFlags.GetEnableDataColumnForIndexTable();
     appData->Icb->RegisterSharedControl(AllowDataColumnForIndexTable, "SchemeShard_AllowDataColumnForIndexTable");
@@ -6538,6 +6542,12 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
             *patch);
     }
 
+    if (alterData->TableDescriptionFull.Defined() && alterData->TableDescriptionFull->HasReplicationConfig()) {
+        proto->MutableReplicationConfig()->CopyFrom(alterData->TableDescriptionFull->GetReplicationConfig());
+    } else if (tableInfo->HasReplicationConfig()) {
+        proto->MutableReplicationConfig()->CopyFrom(tableInfo->ReplicationConfig());
+    }
+
     TString txBody;
     Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
     return txBody;
@@ -6675,7 +6685,9 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
             case NKikimrSchemeOp::EPathTypeTableIndex: {
                 Y_ABORT_UNLESS(Indexes.contains(childPathId));
                 auto info = Indexes.at(childPathId);
-                DescribeTableIndex(childPathId, childName, newTable ? info->AlterData : info, *tableDescr->MutableTableIndexes()->Add());
+                DescribeTableIndex(childPathId, childName, newTable ? info->AlterData : info, false, false,
+                    *tableDescr->MutableTableIndexes()->Add()
+                );
                 break;
             }
 
@@ -7001,6 +7013,8 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableTempTables = featureFlags.GetEnableTempTables();
     EnableReplaceIfExistsForExternalEntities = featureFlags.GetEnableReplaceIfExistsForExternalEntities();
     EnableTableDatetime64 = featureFlags.GetEnableTableDatetime64();
+    EnableResourcePoolsOnServerless = featureFlags.GetEnableResourcePoolsOnServerless();
+    EnableVectorIndex = featureFlags.GetEnableVectorIndex();
 }
 
 void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {
@@ -7359,6 +7373,7 @@ void TSchemeShard::SendBaseStatsToSA() {
         entryPathId->SetLocalId(pathId.LocalPathId);
         entry->SetRowCount(aggregated.RowCount);
         entry->SetBytesSize(aggregated.DataSize);
+        entry->SetIsColumnTable(false);
         ++count;
     }
     auto columnTablesPathIds = ColumnTables.GetAllPathIds();
@@ -7371,6 +7386,7 @@ void TSchemeShard::SendBaseStatsToSA() {
         entryPathId->SetLocalId(pathId.LocalPathId);
         entry->SetRowCount(aggregated.RowCount);
         entry->SetBytesSize(aggregated.DataSize);
+        entry->SetIsColumnTable(true);
         ++count;
     }
 

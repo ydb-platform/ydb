@@ -27,25 +27,25 @@ The information about each operation is saved to the audit log as a separate eve
 | Attribute | Description |
 |:----|:----|
 | **Common attributes** |
-| `subject` | Event source SID (`<login>@<subsystem>` format). Unless mandatory authentication is enabled, the attribute will be set to `{none}`.<br>Required. |
-| `operation` | Names of operations or actions are similar to the YQL syntax (for example, `ALTER DATABASE`, `CREATE TABLE`).<br>Required. |
+| `subject` | Event source SID (`<login>@<subsystem>` format). Unless mandatory authentication is enabled, the attribute will be set to `{none}`.<br/>Required. |
+| `operation` | Names of operations or actions are similar to the YQL syntax (for example, `ALTER DATABASE`, `CREATE TABLE`).<br/>Required. |
 | `status` | Operation completion status.<br/>Acceptable values:<ul><li>`SUCCESS`: The operation completed successfully.</li><li>`ERROR`: The operation failed.</li><li>`IN-PROCESS`: The operation is in progress.</li></ul>Required. |
-| `reason` | Error message.<br>Optional. |
-| `component` | Name of the {{ ydb-short-name }} component that generated the event (for example, `schemeshard`).<br>Optional. |
-| `request_id` | Unique ID of the request that invoked the operation. You can use the `request_id` to differentiate events related to different operations and link the events together to build a single audit-related operation context.<br>Optional. |
-| `remote_address` | The IP of the client that delivered the request.<br>Optional. |
-| `detailed_status` | The status delivered by a {{ ydb-short-name }} component (for example, `StatusAccepted`, `StatusInvalidParameter `, `StatusNameConflict`).<br>Optional. |
+| `reason` | Error message.<br/>Optional. |
+| `component` | Name of the {{ ydb-short-name }} component that generated the event (for example, `schemeshard`).<br/>Optional. |
+| `request_id` | Unique ID of the request that invoked the operation. You can use the `request_id` to differentiate events related to different operations and link the events together to build a single audit-related operation context.<br/>Optional. |
+| `remote_address` | The IP of the client that delivered the request.<br/>Optional. |
+| `detailed_status` | The status delivered by a {{ ydb-short-name }} component (for example, `StatusAccepted`, `StatusInvalidParameter `, `StatusNameConflict`).<br/>Optional. |
 | **Ownership and permission attributes** |
-| `new_owner` | The SID of the new owner of the object when ownership is transferred. <br>Optional. |
-| `acl_add` | List of added permissions in [short notation](./short-access-control-notation.md) (for example, `[+R:someuser]`).<br>Optional. |
-| `acl_remove` | List of revoked permissions in [short notation](./short-access-control-notation.md) (for example, `[-R:someuser]`).<br>Optional. |
+| `new_owner` | The SID of the new owner of the object when ownership is transferred. <br/>Optional. |
+| `acl_add` | List of added permissions in [short notation](./short-access-control-notation.md) (for example, `[+R:someuser]`).<br/>Optional. |
+| `acl_remove` | List of revoked permissions in [short notation](./short-access-control-notation.md) (for example, `[-R:someuser]`).<br/>Optional. |
 | **Custom attributes** |
-| `user_attrs_add` | List of custom attributes added when creating objects or updating attributes (for example, `[attr_name1: A, attr_name2: B]`).<br>Optional. |
-| `user_attrs_remove` | List of custom attributes removed when creating objects or updating attributes (for example, `[attr_name1, attr_name2]`).<br>Optional. |
+| `user_attrs_add` | List of custom attributes added when creating objects or updating attributes (for example, `[attr_name1: A, attr_name2: B]`).<br/>Optional. |
+| `user_attrs_remove` | List of custom attributes removed when creating objects or updating attributes (for example, `[attr_name1, attr_name2]`).<br/>Optional. |
 | **Attributes of the SchemeShard component** |
-| `tx_id` | Unique transaction ID. Similarly to `request_id`, this ID can be used to differentiate events related to different operations.<br>Required. |
-| `database` | Database path (for example, `/my_dir/db`).<br>Required. |
-| `paths` | List of paths in the database that are changed by the operation (for example, `[/my_dir/db/table-a, /my_dir/db/table-b]`).<br>Required. |
+| `tx_id` | Unique transaction ID. Similarly to `request_id`, this ID can be used to differentiate events related to different operations.<br/>Required. |
+| `database` | Database path (for example, `/my_dir/db`).<br/>Required. |
+| `paths` | List of paths in the database that are changed by the operation (for example, `[/my_dir/db/table-a, /my_dir/db/table-b]`).<br/>Required. |
 
 ## Enabling audit log {#enabling-audit-log}
 
@@ -66,10 +66,10 @@ audit_config:
 | Key | Description |
 --- | ---
 | `file_backend` | Write the audit log to a file at each cluster node.</ul>Optional. |
-| `format` | Audit log format. The default value is `JSON`.<br>Acceptable values:<ul><li>`JSON`: Serialized [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %}.</li><li>`TXT`: Text format.</ul>Optional. |
-| `file_path` | Path to the file that the audit log will be streamed to. If the path and the file are missing, they will be created on each node at cluster startup. If the file exists, the data will be appended to it.<br>This parameter is required if you use `file_backend`. |
+| `format` | Audit log format. The default value is `JSON`.<br/>Acceptable values:<ul><li>`JSON`: Serialized [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %}.</li><li>`TXT`: Text format.</ul>Optional. |
+| `file_path` | Path to the file that the audit log will be streamed to. If the path and the file are missing, they will be created on each node at cluster startup. If the file exists, the data will be appended to it.<br/>This parameter is required if you use `file_backend`. |
 | `unified_agent_backend` | Stream the audit log to the Unified Agent. In addition, you need to define the `uaclient_config` section in the [cluster configuration](../deploy/configuration/config.md).</ul>Optional. |
-| `log_name` | The session metadata delivered with the message. Using the metadata, you can redirect the log stream to one or more child channels based on the condition: `_log_name: "session_meta_log_name"`.<br>Optional. |
+| `log_name` | The session metadata delivered with the message. Using the metadata, you can redirect the log stream to one or more child channels based on the condition: `_log_name: "session_meta_log_name"`.<br/>Optional. |
 | `stderr_backend` | Forward the audit log to the standard error stream (`stderr`).</ul>Optional. |
 
 Sample configuration that saves the audit log text to `/var/log/ydb-audit.log`:

@@ -22,8 +22,9 @@ namespace NViewer {
 
 using namespace NActors;
 
-class TJsonNetInfo : public TViewerPipeClient<TJsonNetInfo> {
-    using TBase = TViewerPipeClient<TJsonNetInfo>;
+class TJsonNetInfo : public TViewerPipeClient {
+    using TThis = TJsonNetInfo;
+    using TBase = TViewerPipeClient;
     IViewer* Viewer;
     std::unordered_map<TString, NKikimrViewer::TTenant> TenantByPath;
     std::unordered_map<TPathId, NKikimrViewer::TTenant> TenantBySubDomainKey;
@@ -40,16 +41,12 @@ class TJsonNetInfo : public TViewerPipeClient<TJsonNetInfo> {
     TString Path;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TJsonNetInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : Viewer(viewer)
         , Event(ev)
     {}
 
-    void Bootstrap() {
+    void Bootstrap() override {
         const auto& params(Event->Get()->Request.GetParams());
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
@@ -195,7 +192,7 @@ public:
         }
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         THashMap<TNodeId, const TEvInterconnect::TNodeInfo*> nodeInfoIndex;
         if (NodesInfo) {
             for (const TEvInterconnect::TNodeInfo& nodeInfo : NodesInfo->Nodes) {

@@ -44,7 +44,7 @@ struct TTestReadSession {
 
     static constexpr size_t SemCount = 1;
 
-    TTestReadSession(const TString& name, TTopicClient& client, size_t expectedMessagesCount = Max<size_t>(), bool autoCommit = true, std::set<ui32> partitions = {}, bool autoscalingSupport = true);
+    TTestReadSession(const TString& name, TTopicClient& client, size_t expectedMessagesCount = Max<size_t>(), bool autoCommit = true, std::set<ui32> partitions = {}, bool autoPartitioningSupport = true);
 
     void WaitAllMessages();
 

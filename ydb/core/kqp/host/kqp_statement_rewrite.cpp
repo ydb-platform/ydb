@@ -187,9 +187,10 @@ namespace {
         const TString createTableName = !isAtomicOperation
             ? tableName
             : (TStringBuilder()
-                << "/Root/.tmp/sessions/"
+                << CanonizePath(AppData()->TenantName)
+                << "/.tmp/sessions/"
                 << sessionCtx->GetSessionId()
-                << tmpTableName);
+                << CanonizePath(tmpTableName));
 
         create = exprCtx.ReplaceNode(std::move(create), *columns, exprCtx.NewList(pos, std::move(columnNodes)));
 

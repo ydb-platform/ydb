@@ -383,7 +383,7 @@ TKeyComparer::TKeyComparer()
     : TBase(
         New<TCaller>(
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-            FROM_HERE,
+            YT_CURRENT_SOURCE_LOCATION,
 #endif
             nullptr,
             &ComparePrefix),

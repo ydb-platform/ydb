@@ -285,6 +285,16 @@ bool IsUploadTransactionType(EObjectType type)
         type == EObjectType::UploadNestedTransaction;
 }
 
+bool IsCompositeNodeType(EObjectType type)
+{
+    return type == EObjectType::MapNode || type == EObjectType::ListNode;
+}
+
+bool IsLinkType(EObjectType type)
+{
+    return type == EObjectType::Link || type == EObjectType::SequoiaLink;
+}
+
 bool HasSchema(EObjectType type)
 {
     if (type == EObjectType::Master) {

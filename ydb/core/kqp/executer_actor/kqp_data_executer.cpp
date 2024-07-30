@@ -2489,7 +2489,9 @@ private:
             .FederatedQuerySetup = FederatedQuerySetup,
             .OutputChunkMaxSize = Request.OutputChunkMaxSize,
             .GUCSettings = GUCSettings,
-            .MayRunTasksLocally = mayRunTasksLocally
+            .MayRunTasksLocally = mayRunTasksLocally,
+            .ResourceManager_ = Request.ResourceManager_,
+            .CaFactory_ = Request.CaFactory_
         });
 
         auto err = Planner->PlanExecution();
@@ -2594,7 +2596,9 @@ private:
             auto ev = std::make_unique<TEvPersQueue::TEvProposeTransaction>();
 
             if (writeId.Defined()) {
-                transaction.SetWriteId(*writeId);
+                auto* w = transaction.MutableWriteId();
+                w->SetNodeId(SelfId().NodeId());
+                w->SetKeyId(*writeId);
             }
             transaction.SetImmediate(ImmediateTx);
 

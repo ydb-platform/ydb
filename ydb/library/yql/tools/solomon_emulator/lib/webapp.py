@@ -63,7 +63,7 @@ async def write(request):
     logging.debug("write: {}".format(await request.read()))
     handle_auth(request)
 
-    folder_id = request.rel_url.query['folder_id']
+    folder_id = request.rel_url.query['folderId']
     service = request.rel_url.query['service']
 
     shard = _data_from_request(request).get_or_create(folder_id, folder_id, service)
@@ -149,7 +149,7 @@ async def sensors_data(request):
 
 @routes.get("/metrics")
 async def metrics(request):
-    cluster = request.rel_url.query.get('cluster', None) or request.rel_url.query['folder_id']
+    cluster = request.rel_url.query.get('cluster', None) or request.rel_url.query['folderId']
     project = request.rel_url.query.get('project', cluster)
     service = request.rel_url.query['service']
 
@@ -163,7 +163,7 @@ async def metrics(request):
 
 @routes.post("/cleanup")
 async def cleanup(request):
-    cluster = request.rel_url.query.get('cluster', None) or request.rel_url.query.get('folder_id', None)
+    cluster = request.rel_url.query.get('cluster', None) or request.rel_url.query.get('folderId', None)
     project = request.rel_url.query.get('project', cluster)
     service = request.rel_url.query.get('service')
     request.app["features"] = {"response_code": 200}

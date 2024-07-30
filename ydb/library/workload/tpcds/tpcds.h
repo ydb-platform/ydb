@@ -1,11 +1,11 @@
 #pragma once
 
-#include <ydb/library/workload/benchmark_base/workload.h>
+#include <ydb/library/workload/tpc_base/tpc_base.h>
 #include <util/folder/path.h>
 
 namespace NYdbWorkload {
 
-class TTpcdsWorkloadParams final: public TWorkloadBaseParams {
+class TTpcdsWorkloadParams final: public TTpcBaseWorkloadParams {
 public:
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
     THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
@@ -18,7 +18,7 @@ public:
     YDB_READONLY_DEF(TFsPath, ExternalQueriesDir);
 };
 
-class TTpcdsWorkloadGenerator final: public TWorkloadGeneratorBase {
+class TTpcdsWorkloadGenerator final: public TTpcBaseWorkloadGenerator {
 public:
     explicit TTpcdsWorkloadGenerator(const TTpcdsWorkloadParams& params);
     TQueryInfoList GetWorkload(int type) override;

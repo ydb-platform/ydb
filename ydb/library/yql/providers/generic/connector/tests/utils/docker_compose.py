@@ -157,3 +157,29 @@ class DockerComposeHelper:
                 result.append(item['path'])
 
         return result
+
+    def list_mysql_tables(self) -> Sequence[str]:
+        params = self.docker_compose_yml_data["services"]["mysql"]
+        password = params["environment"]["MYSQL_ROOT_PASSWORD"]
+        db = params["environment"]["MYSQL_DATABASE"]
+        cmd = [
+            self.docker_bin_path,
+            'exec',
+            params["container_name"],
+            'mysql',
+            f'--password={password}',
+            db,
+            '-e',
+            f'SELECT table_name FROM information_schema.tables WHERE table_schema = "{db}"',
+        ]
+
+        LOGGER.debug("calling command: " + " ".join(cmd))
+
+        out = None
+
+        try:
+            out = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf8')
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"docker cmd failed: {e.output} (code {e.returncode})")
+        else:
+            return out.splitlines()[2:]

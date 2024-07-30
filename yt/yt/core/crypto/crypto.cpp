@@ -38,9 +38,8 @@ TMD5Hasher::TMD5Hasher()
 }
 
 TMD5Hasher::TMD5Hasher(const TMD5State& data)
-{
-    State_ = data;
-}
+    : State_(data)
+{ }
 
 TMD5Hasher& TMD5Hasher::Append(TStringBuf data)
 {
@@ -54,22 +53,23 @@ TMD5Hasher& TMD5Hasher::Append(TRef data)
     return *this;
 }
 
-TMD5Hash TMD5Hasher::GetDigest()
+TMD5Hash TMD5Hasher::GetDigest() const
 {
     TMD5Hash hash;
+    auto stateCopy = State_;
     MD5_Final(
         reinterpret_cast<unsigned char*>(hash.data()),
-        reinterpret_cast<MD5_CTX*>(State_.data()));
+        reinterpret_cast<MD5_CTX*>(stateCopy.data()));
     return hash;
 }
 
-TString TMD5Hasher::GetHexDigestUpperCase()
+TString TMD5Hasher::GetHexDigestUpperCase() const
 {
     auto md5 = GetDigest();
     return HexEncode(md5.data(), md5.size());
 }
 
-TString TMD5Hasher::GetHexDigestLowerCase()
+TString TMD5Hasher::GetHexDigestLowerCase() const
 {
     return to_lower(GetHexDigestUpperCase());
 }
@@ -132,22 +132,23 @@ TSha1Hasher& TSha1Hasher::Append(TStringBuf data)
     return *this;
 }
 
-TSha1Hash TSha1Hasher::GetDigest()
+TSha1Hash TSha1Hasher::GetDigest() const
 {
     TSha1Hash hash;
+    auto stateCopy = CtxStorage_;
     SHA1_Final(
         reinterpret_cast<unsigned char*>(hash.data()),
-        reinterpret_cast<SHA_CTX*>(CtxStorage_.data()));
+        reinterpret_cast<SHA_CTX*>(stateCopy.data()));
     return hash;
 }
 
-TString TSha1Hasher::GetHexDigestUpperCase()
+TString TSha1Hasher::GetHexDigestUpperCase() const
 {
     auto sha1 = GetDigest();
     return HexEncode(sha1.data(), sha1.size());
 }
 
-TString TSha1Hasher::GetHexDigestLowerCase()
+TString TSha1Hasher::GetHexDigestLowerCase() const
 {
     return to_lower(GetHexDigestUpperCase());
 }
@@ -172,22 +173,23 @@ TSha256Hasher& TSha256Hasher::Append(TStringBuf data)
     return *this;
 }
 
-TSha256Hasher::TDigest TSha256Hasher::GetDigest()
+TSha256Hasher::TDigest TSha256Hasher::GetDigest() const
 {
     TDigest digest;
+    auto stateCopy = CtxStorage_;
     SHA256_Final(
         reinterpret_cast<unsigned char*>(digest.data()),
-        reinterpret_cast<SHA256_CTX*>(CtxStorage_.data()));
+        reinterpret_cast<SHA256_CTX*>(stateCopy.data()));
     return digest;
 }
 
-TString TSha256Hasher::GetHexDigestUpperCase()
+TString TSha256Hasher::GetHexDigestUpperCase() const
 {
     auto digest = GetDigest();
     return HexEncode(digest.data(), digest.size());
 }
 
-TString TSha256Hasher::GetHexDigestLowerCase()
+TString TSha256Hasher::GetHexDigestLowerCase() const
 {
     return to_lower(GetHexDigestUpperCase());
 }
@@ -216,7 +218,7 @@ TSha256Hmac CreateSha256HmacImpl(TStringBuf key, TStringBuf message)
 {
     TSha256Hmac hmac;
     unsigned int opensslIsInsane;
-    auto result = HMAC(
+    auto* result = HMAC(
         EVP_sha256(),
         key.data(),
         key.size(),
@@ -286,7 +288,7 @@ TString GenerateCryptoStrongRandomString(int length)
 {
     std::vector<unsigned char> bytes(length);
     if (RAND_bytes(bytes.data(), bytes.size())) {
-        auto data = reinterpret_cast<char*>(bytes.data());
+        auto* data = reinterpret_cast<char*>(bytes.data());
         return TString{data, static_cast<size_t>(length)};
     } else {
         THROW_ERROR_EXCEPTION("Failed to generate %v random bytes")
@@ -313,6 +315,7 @@ void ToProto(NCrypto::NProto::TMD5Hasher* protoHasher, const std::optional<NYT::
 void FromProto(std::optional<NYT::NCrypto::TMD5Hasher>* hasher, const NCrypto::NProto::TMD5Hasher& protoHasher)
 {
     const auto& inputBytes = protoHasher.state();
+    hasher->reset();
     if (inputBytes.empty()) {
         return;
     }
@@ -321,6 +324,28 @@ void FromProto(std::optional<NYT::NCrypto::TMD5Hasher>* hasher, const NCrypto::N
     std::copy(inputBytes.begin(), inputBytes.end(), state.data());
 
     hasher->emplace(state);
+}
+
+void ToProto(NCrypto::NProto::TMD5Hash* protoHash, const std::optional<NYT::NCrypto::TMD5Hash>& hash)
+{
+    auto* outputBytes = protoHash->mutable_data();
+    outputBytes->clear();
+    if (!hash) {
+        return;
+    }
+
+    outputBytes->assign(hash->begin(), hash->end());
+}
+
+void FromProto(std::optional<NYT::NCrypto::TMD5Hash>* hash, const NCrypto::NProto::TMD5Hash& protoHash)
+{
+    const auto& inputBytes = protoHash.data();
+    hash->reset();
+    if (inputBytes.empty()) {
+        return;
+    }
+
+    hash->emplace(MD5FromString(inputBytes));
 }
 
 } // namespace NProto

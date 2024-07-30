@@ -12,7 +12,7 @@ where
 
 $threshold = (
 select
-    0.2 * avg(l_quantity) as threshold,
+    $z0_2_12 * avg(l_quantity) as threshold,
     l.l_partkey as l_partkey
 from
     {{lineitem}} as l
@@ -33,7 +33,7 @@ on
     p.p_partkey = l.l_partkey;
 
 select
-    sum(l.l_extendedprice) / 7.0 as avg_yearly
+    sum(l.l_extendedprice) / $z7_35 as avg_yearly
 from
     $l as l
 join

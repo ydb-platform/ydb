@@ -33,14 +33,15 @@ protected:
         using TSelf = TTxControl;
 
         static TTxControl CommitTx();
-        static TTxControl BeginTx();
-        static TTxControl BeginAndCommitTx();
+        static TTxControl BeginTx(bool snapshotRead = false);
+        static TTxControl BeginAndCommitTx(bool snapshotRead = false);
         static TTxControl ContinueTx();
         static TTxControl ContinueAndCommitTx();
 
         FLUENT_SETTING_DEFAULT(bool, Begin, false);
         FLUENT_SETTING_DEFAULT(bool, Commit, false);
         FLUENT_SETTING_DEFAULT(bool, Continue, false);
+        FLUENT_SETTING_DEFAULT(bool, SnapshotRead, false);
     };
 
     using TQueryResultHandler = void (TQueryBase::*)();

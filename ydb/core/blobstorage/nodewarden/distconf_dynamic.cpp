@@ -39,16 +39,19 @@ namespace NKikimr::NStorage {
         StaticNodeSessionId = sessionId;
     }
 
-    void TDistributedConfigKeeper::OnStaticNodeDisconnected(ui32 nodeId, TActorId /*sessionId*/) {
-        Y_ABORT_UNLESS(nodeId == ConnectedToStaticNode);
+    void TDistributedConfigKeeper::OnStaticNodeDisconnected(ui32 nodeId, TActorId sessionId) {
+        if (nodeId != ConnectedToStaticNode || (StaticNodeSessionId && StaticNodeSessionId != sessionId)) {
+            return; // possible race with unsubscription
+        }
         ConnectedToStaticNode = 0;
         StaticNodeSessionId = {};
         ConnectToStaticNode();
     }
 
     void TDistributedConfigKeeper::Handle(TEvNodeWardenDynamicConfigPush::TPtr ev) {
-        Y_ABORT_UNLESS(StaticNodeSessionId);
-        Y_ABORT_UNLESS(ev->InterconnectSession == StaticNodeSessionId);
+        if (ev->Sender.NodeId() != ConnectedToStaticNode || !StaticNodeSessionId || ev->InterconnectSession != StaticNodeSessionId) {
+            return; // this may be a race with unsubscription
+        }
         auto& record = ev->Get()->Record;
         if (record.HasConfig()) {
             ApplyStorageConfig(record.GetConfig());
@@ -69,15 +72,15 @@ namespace NKikimr::NStorage {
         if (drop) {
             Y_ABORT_UNLESS(!PartOfNodeQuorum());
             DynamicConfigSubscribers.clear();
-            for (ui32 nodeId : std::exchange(ConnectedDynamicNodes, {})) {
-                UnsubscribeInterconnect(nodeId);
-            }
+            UnsubscribeQueue.insert(ConnectedDynamicNodes.begin(), ConnectedDynamicNodes.end());
+            ConnectedDynamicNodes.clear();
         }
     }
 
     void TDistributedConfigKeeper::OnDynamicNodeDisconnected(ui32 nodeId, TActorId sessionId) {
         ConnectedDynamicNodes.erase(nodeId);
         DynamicConfigSubscribers.erase(sessionId);
+        UnsubscribeQueue.insert(nodeId);
     }
 
     void TDistributedConfigKeeper::HandleDynamicConfigSubscribe(STATEFN_SIG) {
@@ -93,10 +96,7 @@ namespace NKikimr::NStorage {
         }
 
         const ui32 peerNodeId = ev->Sender.NodeId();
-        if (const auto [it, inserted] = SubscribedSessions.try_emplace(peerNodeId); inserted) {
-            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Subscribe, IEventHandle::FlagTrackDelivery,
-                sessionId, SelfId(), nullptr, 0));
-        }
+        SubscribeToPeerNode(peerNodeId, sessionId);
         ConnectedDynamicNodes.insert(peerNodeId);
         const auto [_, inserted] = DynamicConfigSubscribers.try_emplace(sessionId, ev->Sender);
         Y_ABORT_UNLESS(inserted);

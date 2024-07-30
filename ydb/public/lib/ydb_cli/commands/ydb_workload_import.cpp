@@ -73,23 +73,23 @@ TAsyncStatus TWorkloadCommandImport::TUploadCommand::SendDataPortion(NYdbWorkloa
     auto convertResult = [](const NTable::TAsyncBulkUpsertResult& result) {
             return TStatus(result.GetValueSync());
         };
-    if (auto* value = std::get_if<TValue>(&portion->Data)) {
-        return TableClient->BulkUpsert(portion->Table, std::move(*value)).Apply(convertResult);
+    if (auto* value = std::get_if<TValue>(&portion->MutableData())) {
+        return TableClient->BulkUpsert(portion->GetTable(), std::move(*value)).Apply(convertResult);
     }
     NRetry::TRetryOperationSettings retrySettings;
     retrySettings.RetryUndefined(true);
-    retrySettings.MaxRetries(10000);
-    if (auto* value = std::get_if<NYdbWorkload::IBulkDataGenerator::TDataPortion::TCsv>(&portion->Data)) {
+    retrySettings.MaxRetries(30);
+    if (auto* value = std::get_if<NYdbWorkload::IBulkDataGenerator::TDataPortion::TCsv>(&portion->MutableData())) {
         return TableClient->RetryOperation([value, portion, convertResult](NTable::TTableClient& client) {
             NTable::TBulkUpsertSettings settings;
             settings.FormatSettings(value->FormatString);
-            return client.BulkUpsert(portion->Table, NTable::EDataFormat::CSV, value->Data, TString(), settings)
+            return client.BulkUpsert(portion->GetTable(), NTable::EDataFormat::CSV, value->Data, TString(), settings)
                 .Apply(convertResult);
         }, retrySettings);
     }
-    if (auto* value = std::get_if<NYdbWorkload::IBulkDataGenerator::TDataPortion::TArrow>(&portion->Data)) {
+    if (auto* value = std::get_if<NYdbWorkload::IBulkDataGenerator::TDataPortion::TArrow>(&portion->MutableData())) {
         return TableClient->RetryOperation([value, portion, convertResult](NTable::TTableClient& client) {
-            return client.BulkUpsert(portion->Table, NTable::EDataFormat::ApacheArrow, value->Data, value->Schema)
+            return client.BulkUpsert(portion->GetTable(), NTable::EDataFormat::ApacheArrow, value->Data, value->Schema)
                 .Apply(convertResult);
         }, retrySettings);
     }
@@ -106,12 +106,14 @@ void TWorkloadCommandImport::TUploadCommand::ProcessDataGenerator(std::shared_pt
                     return SendDataPortion(data).Apply(
                         [ar, data, this](const TAsyncStatus& result) {
                             const auto& res = result.GetValueSync();
+                            data->SetSendResult(res);
                             auto guard = Guard(Lock);
                             if (!res.IsSuccess()) {
-                                Cerr << "Bulk upset to " << data->Table << " failed, " << res.GetStatus() << ", " << res.GetIssues().ToString() << Endl;
+                                Cerr << "Bulk upset to " << data->GetTable() << " failed, " << res.GetStatus() << ", " << res.GetIssues().ToString() << Endl;
                                 AtomicIncrement(ErrorsCount);
+                            } else {
+                                Bar->AddProgress(data->GetSize());
                             }
-                            Bar->AddProgress(data->Size);
                         });
                     }
                 )
@@ -119,6 +121,9 @@ void TWorkloadCommandImport::TUploadCommand::ProcessDataGenerator(std::shared_pt
             while(sendings.size() > UploadParams.MaxInFlight) {
                 sendings.pop_front();
             }
+        }
+        if (AtomicGet(ErrorsCount)) {
+            break;
         }
     }
     NThreading::WaitAll(sendings).GetValueSync();

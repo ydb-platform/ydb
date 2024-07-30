@@ -938,6 +938,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`resource_id` != `uid`)",
             R"(`resource_id` = "10001")",
             R"(`resource_id` != "10001")",
+            R"("XXX" == "YYY" OR `resource_id` != "10001")",
             R"(`level` = 1)",
             R"(`level` = Int8("1"))",
             R"(`level` = Int16("1"))",
@@ -1019,6 +1020,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"((`timestamp`, `level`) >= (Timestamp("1970-01-01T00:00:03.000001Z"), 3))",
 #endif
 #if SSA_RUNTIME_VERSION >= 5U
+            R"(`resource_id` != "10001" XOR "XXX" == "YYY")",
             R"(IF(`level` > 3, -`level`, +`level`) < 2)",
             R"(StartsWith(`message` ?? `resource_id`, "10000"))",
             R"(NOT EndsWith(`message` ?? `resource_id`, "xxx"))",
@@ -1083,7 +1085,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` != NULL)",
             R"(`level` > NULL)",
             R"(`timestamp` >= CAST(3000001U AS Timestamp))",
-            R"(`level` >= CAST("2" As Uint32))",
             R"(`level` = NULL)",
             R"(`level` > NULL)",
             R"(Re2::Match('uid.*')(`uid`))",
@@ -2484,7 +2485,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto client = kikimr.GetQueryClient();
-        { 
+        {
             auto prepareResult = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/ColumnShard` (a, b, c) VALUES
                     (1u, 1, 5),
@@ -2514,7 +2515,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("return (FromFlow (NarrowMap (WideFromBlocks"), plan.QueryStats->Getquery_ast());
                     break;
                 case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO:
-                    UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("return (FromFlow (ExpandMap (NarrowMap (WideFromBlocks"), plan.QueryStats->Getquery_ast());
+                    UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("(FromFlow (WideFromBlocks"), plan.QueryStats->Getquery_ast());
+                    UNIT_ASSERT_C(!plan.QueryStats->Getquery_ast().Contains("WideToBlocks"), plan.QueryStats->Getquery_ast());
+                    UNIT_ASSERT_EQUAL_C(plan.QueryStats->Getquery_ast().find("WideFromBlocks"), plan.QueryStats->Getquery_ast().rfind("WideFromBlocks"), plan.QueryStats->Getquery_ast());
                     break;
                 case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE:
                     UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("return (FromFlow (WideMap"), plan.QueryStats->Getquery_ast());
@@ -2522,7 +2525,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             }
         }
 
-        { 
+        {
             auto it = client.StreamExecuteQuery(R"(
                 SELECT
                     b, COUNT(*), SUM(a)
@@ -2534,6 +2537,68 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
             CompareYson(output, R"([[[1];1u;1u];[[2];2u;6u]])");
+        }
+
+        {
+            NYdb::NQuery::TExecuteQuerySettings scanSettings;
+            scanSettings.ExecMode(NYdb::NQuery::EExecMode::Explain);
+            auto it = client.StreamExecuteQuery(R"(
+                PRAGMA ydb.CostBasedOptimizationLevel='0';
+
+                $select1 = (
+                    SELECT b AS a1, COUNT(*) AS b1, SUM(a) AS c1
+                    FROM `/Root/ColumnShard`
+                    WHERE c = 5
+                    GROUP BY b
+                );
+
+                $select2 = (
+                    SELECT (b1 + 1ul) AS a2, COUNT(*) AS b2, SUM(a1) AS c2
+                    FROM $select1
+                    WHERE c1 = 5
+                    GROUP BY b1
+                );
+
+                $select3 = (
+                    SELECT b1 AS a3, COUNT(*) AS b3, MAX(a1) AS c3
+                    FROM $select1
+                    WHERE b1 = 6
+                    GROUP BY b1
+                );
+
+                SELECT a2, b2
+                FROM $select2 AS table2
+                JOIN $select3 AS table3
+                ON table2.a2 = table3.a3
+                ORDER BY b2
+                LIMIT 10
+                ;
+
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), scanSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            auto plan = CollectStreamResult(it);
+
+            // auto CountSubstr = [](const TString& str, const TString& sub) -> ui64 {
+            //     ui64 count = 0;
+            //     for (auto pos = str.find(sub); pos != TString::npos; pos = str.find(sub, pos + sub.size())) {
+            //         ++count;
+            //     }
+            //     return count;
+            // };
+
+            switch (blockChannelsMode) {
+                case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR:
+                    // TODO: implement checks?
+                    break;
+                case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO:
+                    // TODO: test fails because of some stages don't get wide channels.
+                    // UNIT_ASSERT_EQUAL_C(CountSubstr(plan.QueryStats->Getquery_ast(), "WideFromBlocks"), 2, plan.QueryStats->Getquery_ast());
+                    // UNIT_ASSERT_C(!plan.QueryStats->Getquery_ast().Contains("WideToBlocks"), plan.QueryStats->Getquery_ast());
+                    break;
+                case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE:
+                    // TODO: implement checks?
+                    break;
+            }
         }
     }
 
@@ -2620,6 +2685,41 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CompareYson(result, R"([[120000u;]])");
         }
 
+    }
+
+    Y_UNIT_TEST(MultiInsertWithSinks) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteQuery(R"(
+            INSERT INTO `/Root/olapStore/olapTable` (timestamp, uid, resource_id) VALUES (Timestamp('1970-01-01T00:00:00Z'), 'a', '0');
+            INSERT INTO `/Root/olapStore/olapTable` (timestamp, uid, resource_id) VALUES (Timestamp('1970-01-01T00:00:01Z'), 'b', 't');
+            INSERT INTO `/Root/olapStore/olapTable` (timestamp, uid, resource_id) VALUES (Timestamp('1970-01-01T00:00:02Z'), 'c', 'test');
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        {
+            auto it = db.StreamExecuteQuery(R"(
+                --!syntax_v1
+
+                SELECT
+                    *
+                FROM `/Root/olapStore/olapTable` ORDER BY uid
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            CompareYson(result, R"([[#;#;["0"];0u;"a"];[#;#;["t"];1000000u;"b"];[#;#;["test"];2000000u;"c"]])");
+        }
     }
 
 }

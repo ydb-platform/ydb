@@ -1,4 +1,4 @@
-UNITTEST_FOR(kikimr/tests/acceptance/olap/cli/workload_base)
+UNITTEST_FOR(ydb/library/workload/benchmark_base)
     SRCS(
         state_ut.cpp
     )

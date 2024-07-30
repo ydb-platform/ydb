@@ -1,7 +1,7 @@
 /* Parse command line arguments for Bison.
 
-   Copyright (C) 1984, 1986, 1989, 1992, 2000-2013 Free Software
-   Foundation, Inc.
+   Copyright (C) 1984, 1986, 1989, 1992, 2000-2015, 2018-2019 Free
+   Software Foundation, Inc.
 
    This file is part of Bison, the GNU Compiler Compiler.
 
@@ -36,12 +36,13 @@
 #include "quote.h"
 #include "uniqstr.h"
 
-bool defines_flag;
-bool graph_flag;
-bool xml_flag;
-bool no_lines_flag;
-bool token_table_flag;
-bool yacc_flag; /* for -y */
+bool defines_flag = false;
+bool graph_flag = false;
+bool xml_flag = false;
+bool no_lines_flag = false;
+bool token_table_flag = false;
+location yacc_loc = EMPTY_LOCATION_INIT;
+bool update_flag = false; /* for -u */
 
 bool nondeterministic_parser = false;
 bool glr_parser = false;
@@ -51,8 +52,10 @@ int report_flag = report_none;
 int trace_flag = trace_none;
 
 static struct bison_language const valid_languages[] = {
-  { "c", "c-skel.m4", ".c", ".h", true },
-  { "c++", "c++-skel.m4", ".cc", ".hh", true },
+  /* lang,  skeleton,       ext,     hdr,     add_tab */
+  { "c",    "c-skel.m4",    ".c",    ".h",    true },
+  { "c++",  "c++-skel.m4",  ".cc",   ".hh",   true },
+  { "d",    "d-skel.m4",    ".d",    ".d",    false },
   { "java", "java-skel.m4", ".java", ".java", false },
   { "", "", "", "", false }
 };
@@ -66,7 +69,7 @@ const char* m4_path = NULL;
 
 /** Decode an option's key.
  *
- *  \param option   option being decoded.
+ *  \param opt      option being decoded.
  *  \param keys     array of valid subarguments.
  *  \param values   array of corresponding (int) values.
  *  \param all      the all value.
@@ -81,11 +84,11 @@ const char* m4_path = NULL;
  *  flags from \c all.  Thus no-none = all and no-all = none.
  */
 static void
-flag_argmatch (const char *option,
-               const char * const keys[], const int values[],
+flag_argmatch (const char *opt,
+               const char *const keys[], const int values[],
                int all, int *flags, char *arg, size_t no)
 {
-  int value = XARGMATCH (option, arg + no, keys, values);
+  int value = XARGMATCH (opt, arg + no, keys, values);
 
   /* -rnone == -rno-all, and -rno-none == -rall.  */
   if (!value)
@@ -102,7 +105,7 @@ flag_argmatch (const char *option,
 
 /** Decode an option's set of keys.
  *
- *  \param option   option being decoded.
+ *  \param opt      option being decoded (e.g., --report).
  *  \param keys     array of valid subarguments.
  *  \param values   array of corresponding (int) values.
  *  \param all      the all value.
@@ -111,7 +114,7 @@ flag_argmatch (const char *option,
  *                  If 0, then activate all the flags.
  */
 static void
-flags_argmatch (const char *option,
+flags_argmatch (const char *opt,
                 const char * const keys[], const int values[],
                 int all, int *flags, char *args)
 {
@@ -119,7 +122,7 @@ flags_argmatch (const char *option,
     for (args = strtok (args, ","); args; args = strtok (NULL, ","))
       {
         size_t no = STRPREFIX_LIT ("no-", args) ? 3 : 0;
-        flag_argmatch (option, keys,
+        flag_argmatch (opt, keys,
                        values, all, flags, args, no);
       }
   else
@@ -129,7 +132,7 @@ flags_argmatch (const char *option,
 
 /** Decode a set of sub arguments.
  *
- *  \param FlagName  the flag familly to update.
+ *  \param FlagName  the flag family to update.
  *  \param Args      the effective sub arguments to decode.
  *  \param All       the "all" value.
  *
@@ -228,6 +231,7 @@ static const char * const feature_args[] =
 {
   "none",
   "caret", "diagnostics-show-caret",
+  "fixit", "diagnostics-parseable-fixits",
   "all",
   0
 };
@@ -236,6 +240,7 @@ static const int feature_types[] =
 {
   feature_none,
   feature_caret, feature_caret,
+  feature_fixit_parsable, feature_fixit_parsable,
   feature_all
 };
 
@@ -281,7 +286,10 @@ Operation modes:\n\
   -h, --help                 display this help and exit\n\
   -V, --version              output version information and exit\n\
       --print-localedir      output directory containing locale-dependent data\n\
+                             and exit\n\
       --print-datadir        output directory containing skeletons and XSLT\n\
+                             and exit\n\
+  -u, --update               apply fixes to the source grammar file and exit\n\
   -y, --yacc                 emulate POSIX Yacc\n\
   -W, --warnings[=CATEGORY]  report the warnings falling in CATEGORY\n\
   -f, --feature[=FEATURE]    activate miscellaneous features\n\
@@ -362,9 +370,21 @@ FEATURE is a list of comma separated words that can include:\n\
       fputs (_("General help using GNU software: "
                "<http://www.gnu.org/gethelp/>.\n"),
              stdout);
+
+#if (defined __GLIBC__ && __GLIBC__ >= 2) && !defined __UCLIBC__
       /* Don't output this redundant message for English locales.
          Note we still output for 'C' so that it gets included in the
          man page.  */
+      const char *lc_messages = setlocale (LC_MESSAGES, NULL);
+      if (lc_messages && !STREQ (lc_messages, "en_"))
+        /* TRANSLATORS: Replace LANG_CODE in this URL with your language
+           code <http://translationproject.org/team/LANG_CODE.html> to
+           form one of the URLs at http://translationproject.org/team/.
+           Otherwise, replace the entire URL with your translation team's
+           email address.  */
+        fputs (_("Report translation bugs to "
+                 "<http://translationproject.org/team/>.\n"), stdout);
+#endif
       fputs (_("For complete documentation, run: info bison.\n"), stdout);
     }
 
@@ -422,8 +442,7 @@ language_argmatch (char const *arg, int prio, location loc)
 
   if (prio < language_prio)
     {
-      int i;
-      for (i = 0; valid_languages[i].language[0]; i++)
+      for (int i = 0; valid_languages[i].language[0]; ++i)
         if (c_strcasecmp (arg, valid_languages[i].language) == 0)
           {
             language_prio = prio;
@@ -465,6 +484,7 @@ static char const short_options[] =
   "p:"
   "r:"
   "t"
+  "u"   /* --update */
   "v"
   "x::"
   "y"
@@ -487,6 +507,7 @@ static struct option const long_options[] =
   { "version",         no_argument,       0,   'V' },
   { "print-localedir", no_argument,       0,   PRINT_LOCALEDIR_OPTION },
   { "print-datadir",   no_argument,       0,   PRINT_DATADIR_OPTION   },
+  { "update",          no_argument,       0,   'u' },
   { "warnings",        optional_argument, 0,   'W' },
 
   /* Parser. */
@@ -673,6 +694,10 @@ getargs (int argc, char *argv[])
                                       MUSCLE_PERCENT_DEFINE_D);
         break;
 
+      case 'u':
+        update_flag = true;
+        break;
+
       case 'v':
         report_flag |= report_states;
         break;
@@ -687,8 +712,8 @@ getargs (int argc, char *argv[])
         break;
 
       case 'y':
-        warning_argmatch ("error=yacc", 0, 6);
-        yacc_flag = true;
+        warning_argmatch ("yacc", 0, 0);
+        yacc_loc = command_line_location ();
         break;
 
       case LOCATIONS_OPTION:
@@ -720,7 +745,7 @@ getargs (int argc, char *argv[])
   if (argc - optind != 1)
     {
       if (argc - optind < 1)
-        error (0, 0, _("%s: missing operand"), quotearg_colon (argv[argc - 1]));
+        error (0, 0, _("missing operand"));
       else
         error (0, 0, _("extra operand %s"), quote (argv[optind + 1]));
       usage (EXIT_FAILURE);

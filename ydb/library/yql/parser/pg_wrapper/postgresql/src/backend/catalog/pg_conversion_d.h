@@ -3,7 +3,7 @@
  * pg_conversion_d.h
  *    Macro definitions for pg_conversion
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -19,6 +19,9 @@
 #define PG_CONVERSION_D_H
 
 #define ConversionRelationId 2607
+#define ConversionDefaultIndexId 2668
+#define ConversionNameNspIndexId 2669
+#define ConversionOidIndexId 2670
 
 #define Anum_pg_conversion_oid 1
 #define Anum_pg_conversion_conname 2

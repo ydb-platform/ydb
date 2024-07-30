@@ -314,11 +314,12 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, MapJoinUseFlow);
     REGISTER_SETTING(*this, EvaluationTableSizeLimit).Upper(10_MB); // Max 10Mb
     REGISTER_SETTING(*this, LookupJoinLimit).Upper(10_MB); // Same as EvaluationTableSizeLimit
-    REGISTER_SETTING(*this, LookupJoinMaxRows).Upper(1000);
+    REGISTER_SETTING(*this, LookupJoinMaxRows).Upper(10000);
     REGISTER_SETTING(*this, DisableOptimizers);
     REGISTER_SETTING(*this, MaxInputTables).Lower(2).Upper(3000); // 3000 - default max limit on YT clusters
     REGISTER_SETTING(*this, MaxOutputTables).Lower(1).Upper(100); // https://ml.yandex-team.ru/thread/yt/166633186212752141/
     REGISTER_SETTING(*this, MaxInputTablesForSortedMerge).Lower(2).Upper(1000); // https://st.yandex-team.ru/YTADMINREQ-16742
+    REGISTER_SETTING(*this, DisableFuseOperations);
     REGISTER_SETTING(*this, MaxExtraJobMemoryToFuseOperations);
     REGISTER_SETTING(*this, MaxReplicationFactorToFuseOperations).Lower(1.0);
     REGISTER_SETTING(*this, MaxOperationFiles).Lower(2).Upper(1000);
@@ -447,7 +448,7 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, DqPruneKeyFilterLambda);
     REGISTER_SETTING(*this, MergeAdjacentPointRanges);
     REGISTER_SETTING(*this, KeyFilterForStartsWith);
-    REGISTER_SETTING(*this, MaxKeyRangeCount).Upper(1000);
+    REGISTER_SETTING(*this, MaxKeyRangeCount).Upper(10000);
     REGISTER_SETTING(*this, MaxChunksForDqRead).Lower(1);
     REGISTER_SETTING(*this, NetworkProject);
     REGISTER_SETTING(*this, FileCacheTtl);

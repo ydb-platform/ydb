@@ -3,6 +3,7 @@
 #include "defs.h"
 
 #include <arrow/array/array_base.h>
+#include <arrow/array/util.h>
 #include <arrow/chunked_array.h>
 #include <arrow/record_batch.h>
 
@@ -28,6 +29,21 @@ ui64 GetSizeOfArrayDataInBytes(const arrow::ArrayData& data) {
     }
 
     return size;
+}
+
+ui64 GetSizeOfDatumInBytes(const arrow::Datum& datum) {
+    ui64 size = sizeof(datum);
+    if (datum.is_scalar()) {
+        const auto& scarray = ARROW_RESULT(arrow::MakeArrayFromScalar(*datum.scalar(), 1));
+        return size + GetSizeOfArrayDataInBytes(*scarray->data());
+    }
+    if (datum.is_arraylike()) {
+        ForEachArrayData(datum, [&size](const auto& arrayData) {
+            size += GetSizeOfArrayDataInBytes(*arrayData);
+        });
+        return size;
+    }
+    Y_ABORT("Not yet implemented");
 }
 
 } // namespace
@@ -132,5 +148,14 @@ ui64 GetSizeOfArrowBatchInBytes(const arrow::RecordBatch& batch) {
     return size;
 }
 
+ui64 GetSizeOfArrowExecBatchInBytes(const arrow::compute::ExecBatch& batch) {
+    ui64 size = sizeof(batch);
+    size += batch.num_values() * sizeof(void*);
+    for (const auto& datum : batch.values) {
+        size += GetSizeOfDatumInBytes(datum);
+    }
+
+    return size;
+}
 }
 }

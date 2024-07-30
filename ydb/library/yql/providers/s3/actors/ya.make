@@ -53,6 +53,7 @@ IF (CLANG AND NOT WITH_VALGRIND)
 
     SRCS(
         yql_arrow_column_converters.cpp
+        yql_s3_decompressor_actor.cpp
         yql_s3_read_actor.cpp
         yql_s3_source_queue.cpp
     )
@@ -69,3 +70,7 @@ IF (CLANG AND NOT WITH_VALGRIND)
 ENDIF()
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

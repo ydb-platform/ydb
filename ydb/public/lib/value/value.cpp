@@ -448,6 +448,12 @@ TString TValue::GetDataText() const {
         return ToString(Value.GetUint64());
     case NScheme::NTypeIds::Interval:
         return ToString(Value.GetInt64());
+    case NScheme::NTypeIds::Date32:
+        return ToString(Value.GetInt32());
+    case NScheme::NTypeIds::Datetime64:
+    case NScheme::NTypeIds::Timestamp64:
+    case NScheme::NTypeIds::Interval64:
+        return ToString(Value.GetInt64());        
     case NScheme::NTypeIds::JsonDocument:
         return "\"<JsonDocument>\"";
     case NScheme::NTypeIds::Uuid:

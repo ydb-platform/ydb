@@ -11,6 +11,7 @@
 namespace Ydb::Replication {
     class ConnectionParams;
     class DescribeReplicationResult;
+    class DescribeReplicationResult_Stats;
 }
 
 namespace NYdb {
@@ -25,7 +26,11 @@ namespace NYdb::NReplication {
 
 class TDescribeReplicationResult;
 using TAsyncDescribeReplicationResult = NThreading::TFuture<TDescribeReplicationResult>;
-struct TDescribeReplicationSettings: public TOperationRequestSettings<TDescribeReplicationSettings> {};
+
+struct TDescribeReplicationSettings: public TOperationRequestSettings<TDescribeReplicationSettings> {
+    using TSelf = TDescribeReplicationSettings;
+    FLUENT_SETTING_DEFAULT(bool, IncludeStats, false);
+};
 
 struct TStaticCredentials {
     TString User;
@@ -47,6 +52,7 @@ public:
 
     const TString& GetDiscoveryEndpoint() const;
     const TString& GetDatabase() const;
+    bool GetEnableSsl() const;
 
     ECredentials GetCredentials() const;
     const TStaticCredentials& GetStaticCredentials() const;
@@ -59,15 +65,28 @@ private:
     > Credentials_;
 };
 
-struct TRunningState {
+class TStats {
 public:
-    TRunningState() = default;
-    explicit TRunningState(const std::optional<TDuration>& lag);
+    TStats() = default;
+    TStats(const Ydb::Replication::DescribeReplicationResult_Stats& stats);
 
     const std::optional<TDuration>& GetLag() const;
+    const std::optional<float>& GetInitialScanProgress() const;
 
 private:
     std::optional<TDuration> Lag_;
+    std::optional<float> InitialScanProgress_;
+};
+
+class TRunningState {
+public:
+    TRunningState() = default;
+    explicit TRunningState(const TStats& stats);
+
+    const TStats& GetStats() const;
+
+private:
+    TStats Stats_;
 };
 
 struct TDoneState {};
@@ -90,6 +109,7 @@ public:
         ui64 Id;
         TString SrcPath;
         TString DstPath;
+        TStats Stats;
         std::optional<TString> SrcChangefeedName;
     };
 

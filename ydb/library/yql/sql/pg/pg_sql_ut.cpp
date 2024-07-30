@@ -312,7 +312,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
     }
 
-    Y_UNIT_TEST(AlterTableStmt) {
+    Y_UNIT_TEST(AlterTableSetDefaultNextvalStmt) {
         auto res = PgSqlToYql("ALTER TABLE public.t ALTER COLUMN id SET DEFAULT nextval('seq');");
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
         TString program = R"(
@@ -320,6 +320,36 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
                 (let world (Configure! world (DataSource 'config) 'OrderedColumns)) 
                 (let world (Write! world (DataSink '"kikimr" '"") 
                     (Key '('tablescheme (String '"t"))) (Void) '('('mode 'alter) '('actions '('('alterColumns '('('"id" '('setDefault '('nextval 'seq)))))))))) 
+                (let world (CommitAll! world)) (return world)
+            )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableStmtWithCast) {
+        auto res = PgSqlToYql("ALTER TABLE public.t ALTER COLUMN id SET DEFAULT nextval('seq'::regclass);");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+        TString program = R"(
+            (
+                (let world (Configure! world (DataSource 'config) 'OrderedColumns)) 
+                (let world (Write! world (DataSink '"kikimr" '"") 
+                    (Key '('tablescheme (String '"t"))) (Void) '('('mode 'alter) '('actions '('('alterColumns '('('"id" '('setDefault '('nextval 'seq)))))))))) 
+                (let world (CommitAll! world)) (return world)
+            )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableDropDefaultStmt) {
+        auto res = PgSqlToYql("ALTER TABLE public.t ALTER COLUMN id DROP DEFAULT;");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+        TString program = R"(
+            (
+                (let world (Configure! world (DataSource 'config) 'OrderedColumns)) 
+                (let world (Write! world (DataSink '"kikimr" '"") 
+                    (Key '('tablescheme (String '"t"))) (Void) '('('mode 'alter) '('actions '('('alterColumns '('('"id" '('setDefault '('Null))))))))))
                 (let world (CommitAll! world)) (return world)
             )
         )";

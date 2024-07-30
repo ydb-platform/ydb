@@ -21,7 +21,7 @@
 
   [Примеры на GitHub](https://github.com/ydb-platform/ydb-java-examples/tree/master/ydb-cookbook/src/main/java/tech/ydb/examples/topic)
 
-- {Python}
+- Python
 
   [Примеры на GitHub](https://github.com/ydb-platform/ydb-python-sdk/tree/main/examples/topic)
 
@@ -206,7 +206,14 @@
 
 - Python
 
-  Функциональность находится в разработке.
+  Пример изменения списка поддерживаемых кодеков и минимального количества партиций у топика 
+
+  ```python
+  driver.topic_client.alter_topic(topic_path,
+      set_supported_codecs=[ydb.TopicCodec.RAW, ydb.TopicCodec.GZIP], # optional
+      set_min_active_partitions=3,                                    # optional
+  )
+  ```
 
 - Java
 

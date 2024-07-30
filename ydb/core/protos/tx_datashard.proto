@@ -12,6 +12,7 @@ import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/tx.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/table_stats.proto";
+import "ydb/core/protos/statistics.proto";
 import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/query_stats.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
@@ -815,7 +816,7 @@ message TObjectStorageListingFilter {
     }
     optional bytes Values = 1;
     repeated uint32 Columns = 2;
-    repeated EMatchType MatchTypes = 3; 
+    repeated EMatchType MatchTypes = 3;
 }
 
 message TEvObjectStorageListingRequest {
@@ -1452,6 +1453,51 @@ message TEvBuildIndexProgressResponse {
     optional uint64 RequestSeqNoRound = 13;
 }
 
+message TEvSampleKRequest {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional NKikimrProto.TPathID PathId = 3;
+
+    optional uint64 K = 4;
+    optional uint64 Seed = 5;
+
+    repeated string Columns = 6;
+    optional NKikimrTx.TKeyRange KeyRange = 7;
+
+    optional uint64 SnapshotTxId = 8;
+    optional uint64 SnapshotStep = 9;
+
+    optional uint64 SeqNoGeneration = 10;
+    optional uint64 SeqNoRound = 11;
+}
+
+message TEvSampleKResponse {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional NKikimrProto.TPathID PathId = 3;
+
+    enum EStatus {
+        INVALID = 0;
+        DONE = 1;
+
+        ABORTED = 2;
+        BAD_REQUEST = 3;
+    }
+
+    optional EStatus Status = 4;
+    repeated Ydb.Issue.IssueMessage Issues = 5;
+
+    optional NKikimrTx.TKeyRange RequestedKeyRange = 6;
+
+    optional uint64 RequestSeqNoGeneration = 7;
+    optional uint64 RequestSeqNoRound = 8;
+
+    repeated uint64 Probabilities = 9;
+    repeated bytes Rows = 10;
+}
+
 message TEvCdcStreamScanRequest {
     message TLimits {
         optional uint32 BatchMaxBytes = 1 [default = 512000];
@@ -1490,32 +1536,6 @@ message TEvCdcStreamScanResponse {
     optional EStatus Status = 4;
     optional string ErrorDescription = 5;
     optional TStats Stats = 6;
-}
-
-message TEvStatisticsScanRequest {
-    optional NKikimrDataEvents.TTableId TableId = 1;
-    optional bytes StartKey = 2;
-}
-
-message TEvStatisticsScanResponse {
-    message TStatistic {
-        optional uint32 Type = 1;
-        optional bytes Data = 2;
-    }
-    message TColumn {
-        optional uint32 Tag = 1;
-        repeated TStatistic Statistics = 2;
-    }
-    repeated TColumn Columns = 1;
-
-    enum EStatus {
-        SUCCESS = 1;
-        ABORTED = 2;
-        ERROR = 3;
-    }
-    optional EStatus Status = 2;
-
-    optional fixed64 ShardTabletId = 3;
 }
 
 message TComputeShardingPolicy {
@@ -1854,6 +1874,7 @@ message TEvApplyReplicationChangesResult {
         REASON_SCHEME_ERROR = 2;
         REASON_BAD_REQUEST = 3;
         REASON_UNEXPECTED_ROW_OPERATION = 4;
+        REASON_OUTDATED_SCHEME = 6;
     }
 
     optional EStatus Status = 1;

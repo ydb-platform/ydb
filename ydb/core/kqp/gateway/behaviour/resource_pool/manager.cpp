@@ -136,6 +136,18 @@ void FillResourcePoolDescription(NKikimrSchemeOp::TResourcePoolDescription& reso
     if (!featuresExtractor.IsFinished()) {
         ythrow yexception() << "Unknown property: " << featuresExtractor.GetRemainedParamsString();
     }
+
+    if (settings.GetObjectId() == NResourcePool::DEFAULT_POOL_ID) {
+        std::vector<TString> forbiddenProperties = {
+            "concurrent_query_limit",
+            "database_load_cpu_threshold"
+        };
+        for (const TString& property : forbiddenProperties) {
+            if (properties.contains(property)) {
+                ythrow yexception() << "Can not change property " << property << " for default pool";
+            }
+        }
+    }
 }
 
 TResourcePoolManager::TYqlConclusionStatus StatusFromActivityType(TResourcePoolManager::EActivityType activityType) {
@@ -180,19 +192,19 @@ TResourcePoolManager::TAsyncStatus TResourcePoolManager::DoModify(const NYql::TO
 TResourcePoolManager::TAsyncStatus TResourcePoolManager::CreateResourcePool(const NYql::TCreateObjectSettings& settings, TInternalModificationContext& context, ui32 nodeId) const {
     NKqpProto::TKqpSchemeOperation schemeOperation;
     PrepareCreateResourcePool(schemeOperation, settings, context);
-    return ExecuteSchemeRequest(schemeOperation.GetCreateResourcePool(), context.GetExternalData(), nodeId);
+    return ExecuteSchemeRequest(schemeOperation.GetCreateResourcePool(), context.GetExternalData(), nodeId, NKqpProto::TKqpSchemeOperation::kCreateResourcePool);
 }
 
 TResourcePoolManager::TAsyncStatus TResourcePoolManager::AlterResourcePool(const NYql::TCreateObjectSettings& settings, TInternalModificationContext& context, ui32 nodeId) const {
     NKqpProto::TKqpSchemeOperation schemeOperation;
     PrepareAlterResourcePool(schemeOperation, settings, context);
-    return ExecuteSchemeRequest(schemeOperation.GetAlterResourcePool(), context.GetExternalData(), nodeId);
+    return ExecuteSchemeRequest(schemeOperation.GetAlterResourcePool(), context.GetExternalData(), nodeId, NKqpProto::TKqpSchemeOperation::kAlterResourcePool);
 }
 
 TResourcePoolManager::TAsyncStatus TResourcePoolManager::DropResourcePool(const NYql::TCreateObjectSettings& settings, TInternalModificationContext& context, ui32 nodeId) const {
     NKqpProto::TKqpSchemeOperation schemeOperation;
     PrepareDropResourcePool(schemeOperation, settings, context);
-    return ExecuteSchemeRequest(schemeOperation.GetDropResourcePool(), context.GetExternalData(), nodeId);
+    return ExecuteSchemeRequest(schemeOperation.GetDropResourcePool(), context.GetExternalData(), nodeId, NKqpProto::TKqpSchemeOperation::kDropResourcePool);
 }
 
 //// Deferred modification
@@ -223,6 +235,10 @@ TResourcePoolManager::TYqlConclusionStatus TResourcePoolManager::DoPrepare(NKqpP
 
 void TResourcePoolManager::PrepareCreateResourcePool(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TCreateObjectSettings& settings, TInternalModificationContext& context) const {
     ValidateObjectId(settings.GetObjectId());
+
+    if (settings.GetObjectId() == NResourcePool::DEFAULT_POOL_ID) {
+        ythrow yexception() << "Cannot create default pool manually, pool will be created automatically during first request execution";
+    }
 
     auto& schemeTx = *schemeOperation.MutableCreateResourcePool();
     schemeTx.SetWorkingDir(JoinPath({context.GetExternalData().GetDatabase(), ".resource_pools/"}));
@@ -255,11 +271,11 @@ TResourcePoolManager::TAsyncStatus TResourcePoolManager::ExecutePrepared(const N
     try {
         switch (schemeOperation.GetOperationCase()) {
             case NKqpProto::TKqpSchemeOperation::kCreateResourcePool:
-                return ExecuteSchemeRequest(schemeOperation.GetCreateResourcePool(), context, nodeId);
+                return ExecuteSchemeRequest(schemeOperation.GetCreateResourcePool(), context, nodeId, schemeOperation.GetOperationCase());
             case NKqpProto::TKqpSchemeOperation::kAlterResourcePool:
-                return ExecuteSchemeRequest(schemeOperation.GetAlterResourcePool(), context, nodeId);
+                return ExecuteSchemeRequest(schemeOperation.GetAlterResourcePool(), context, nodeId, schemeOperation.GetOperationCase());
             case NKqpProto::TKqpSchemeOperation::kDropResourcePool:
-                return ExecuteSchemeRequest(schemeOperation.GetDropResourcePool(), context, nodeId);
+                return ExecuteSchemeRequest(schemeOperation.GetDropResourcePool(), context, nodeId, schemeOperation.GetOperationCase());
             default:
                 return NThreading::MakeFuture(TYqlConclusionStatus::Fail(TStringBuilder() << "Execution of prepare operation for RESOURCE_POOL object: unsupported operation: " << static_cast<i32>(schemeOperation.GetOperationCase())));
         }
@@ -278,8 +294,13 @@ TResourcePoolManager::TAsyncStatus TResourcePoolManager::ChainFeatures(TAsyncSta
     });
 }
 
-TResourcePoolManager::TAsyncStatus TResourcePoolManager::ExecuteSchemeRequest(const NKikimrSchemeOp::TModifyScheme& schemeTx, const TExternalModificationContext& context, ui32 nodeId) const {
-    auto validationFuture = CheckFeatureFlag(context, nodeId);
+TResourcePoolManager::TAsyncStatus TResourcePoolManager::ExecuteSchemeRequest(const NKikimrSchemeOp::TModifyScheme& schemeTx, const TExternalModificationContext& context, ui32 nodeId, NKqpProto::TKqpSchemeOperation::OperationCase operationCase) const {
+    TAsyncStatus validationFuture = NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Success());
+    if (operationCase != NKqpProto::TKqpSchemeOperation::kDropResourcePool) {
+        validationFuture = ChainFeatures(validationFuture, [context, nodeId] {
+            return CheckFeatureFlag(context, nodeId);
+        });
+    }
     return ChainFeatures(validationFuture, [schemeTx, context] {
         return SendSchemeRequest(schemeTx, context);
     });

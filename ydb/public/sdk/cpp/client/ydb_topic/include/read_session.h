@@ -193,8 +193,8 @@ struct TReadSessionSettings: public TRequestSettings<TReadSessionSettings> {
 
     FLUENT_SETTING_DEFAULT(TDuration, ConnectTimeout, TDuration::Seconds(30));
 
-    //! AutoscalingSupport.
-    FLUENT_SETTING_DEFAULT(bool, AutoscalingSupport, false);
+    //! AutoPartitioningSupport.
+    FLUENT_SETTING_DEFAULT(bool, AutoPartitioningSupport, false);
 
     //! Log.
     FLUENT_SETTING_OPTIONAL(TLog, Log);

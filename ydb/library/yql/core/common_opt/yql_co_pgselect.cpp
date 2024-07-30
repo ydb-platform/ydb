@@ -791,7 +791,7 @@ TExprNode::TPtr NormalizeColumnOrder(const TExprNode::TPtr& node, const TColumnO
         return node;
     }
 
-    YQL_ENSURE(sourceColumnOrder.size() == targetColumnOrder.size());
+    YQL_ENSURE(sourceColumnOrder.Size() == targetColumnOrder.Size());
     return ctx.Builder(node->Pos())
         .Callable("OrderedMap")
             .Add(0, node)
@@ -799,13 +799,13 @@ TExprNode::TPtr NormalizeColumnOrder(const TExprNode::TPtr& node, const TColumnO
                 .Param("row")
                 .Callable("AsStruct")
                 .Do([&](TExprNodeBuilder &parent) -> TExprNodeBuilder & {
-                    for (size_t i = 0; i < sourceColumnOrder.size(); ++i) {
+                    for (size_t i = 0; i < sourceColumnOrder.Size(); ++i) {
                         parent
                             .List(i)
-                                .Atom(0, targetColumnOrder[i])
+                                .Atom(0, targetColumnOrder[i].PhysicalName)
                                 .Callable(1, "Member")
                                     .Arg(0, "row")
-                                    .Atom(1, sourceColumnOrder[i])
+                                    .Atom(1, sourceColumnOrder[i].PhysicalName)
                                 .Seal()
                             .Seal();
                     }
@@ -1077,7 +1077,7 @@ void FillInputIndices(const TExprNode::TPtr& from, const TExprNode::TPtr& finalE
                     for (ui32 i = 0; i < columns.ChildrenSize(); ++i) {
                         if (columns.Child(i)->Content() == column) {
                             foundColumn = true;
-                            x.second.second = (*readOrder)[i];
+                            x.second.second = readOrder->at(i).PhysicalName;
                             break;
                         }
                     }
@@ -1163,13 +1163,13 @@ TExprNode::TListType BuildCleanedColumns(TPositionHandle pos, const TExprNode::T
                                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
                                         auto originalColumnOrder = typeCtx.LookupColumnOrder(*originalList);
                                         YQL_ENSURE(originalColumnOrder);
-                                        YQL_ENSURE(originalColumnOrder->size() == columns.ChildrenSize());
+                                        YQL_ENSURE(originalColumnOrder->Size() == columns.ChildrenSize());
                                         for (ui32 i = 0; i < columns.ChildrenSize(); ++i) {
                                             parent.List(i)
                                                 .Atom(0, columns.Child(i)->Content())
                                                 .Callable(1, "Member")
                                                     .Arg(0, "item")
-                                                    .Atom(1, (*originalColumnOrder)[i])
+                                                    .Atom(1, originalColumnOrder->at(i).PhysicalName)
                                                 .Seal()
                                                 .Seal();
                                         }
@@ -1213,7 +1213,7 @@ TExprNode::TListType BuildCleanedColumns(TPositionHandle pos, const TExprNode::T
                 }
             }
         }
-
+        TColumnOrder order;
         auto cleaned = ctx.Builder(pos)
             .Callable("OrderedMap")
                 .Add(0, list)
@@ -1232,7 +1232,7 @@ TExprNode::TListType BuildCleanedColumns(TPositionHandle pos, const TExprNode::T
                                 listBuilder.Atom(0, x.first);
                                 listBuilder.Callable(1, "Member")
                                     .Arg(0, "row")
-                                    .Atom(1, x.second.second ? x.second.second : NTypeAnnImpl::RemoveAlias(x.first))
+                                    .Atom(1, order.AddColumn(TString(x.second.second ? x.second.second : NTypeAnnImpl::RemoveAlias(x.first))))
                                 .Seal();
                                 listBuilder.Seal();
                             }
@@ -1950,12 +1950,14 @@ TExprNode::TPtr BuildProjectionLambda(TPositionHandle pos, const TExprNode::TPtr
     const TColumnOrder& nodeColumnOrder, const TColumnOrder& setItemColumnOrder,
     bool subLink, bool emitPgStar, TExprContext& ctx) {
 
-    YQL_ENSURE(nodeColumnOrder.size() == setItemColumnOrder.size());
+    YQL_ENSURE(nodeColumnOrder.Size() == setItemColumnOrder.Size());
 
     TMap<TStringBuf, TStringBuf> columnNamesMap;
-    for (size_t i = 0; i < nodeColumnOrder.size(); ++i) {
-        columnNamesMap[setItemColumnOrder[i]] = nodeColumnOrder[i];
+    for (size_t i = 0; i < nodeColumnOrder.Size(); ++i) {
+        columnNamesMap[setItemColumnOrder[i].PhysicalName] = nodeColumnOrder[i].PhysicalName;
     }
+
+    TColumnOrder order;
 
     return ctx.Builder(pos)
         .Lambda()
@@ -2025,28 +2027,38 @@ TExprNode::TPtr BuildProjectionLambda(TPositionHandle pos, const TExprNode::TPtr
                             continue;
                         }
                         const auto& columnName = x->Head().Content();
+                        auto rightColumnName = order.AddColumn(TString(columnName));
 
                         auto listBuilder = parent.List(index++);
-                        listBuilder.Add(0, x->HeadPtr());
-                        addPgCast(listBuilder, 1, columnName, x->GetTypeAnn(),
+                        listBuilder.Add(0, ctx.NewAtom(x->Pos(), rightColumnName));
+                        addPgCast(listBuilder, 1, rightColumnName, x->GetTypeAnn(),
                              [&addResultItem, &x] (TExprNodeBuilder& builder, ui32 idx) { addResultItem(builder, idx, x.Get()); });
                     } else {
                         auto type = x->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
                         Y_ENSURE(type);
+                        TColumnOrder localOrder;
+                        for (auto& c: x->Child(0)->Children()) {
+                            if (c->IsAtom()) {
+                                localOrder.AddColumn(TString(c->Content()));
+                            } else {
+                                localOrder.AddColumn(TString(c->HeadPtr()->Content()));
+                            }
+                        }
 
                         for (const auto& item : type->GetItems()) {
                             TStringBuf column = item->GetName();
                             auto columnName = subLink ? column : NTypeAnnImpl::RemoveAlias(column);
+                            auto rightColumnName = order.AddColumn(localOrder.Find(TString(columnName)));
 
                             auto listBuilder = parent.List(index++);
                             if (auto* columnNode = overrideColumns.FindPtr(columnName)) {
                                 // we never get here while processing SELECTs,
                                 // so no need to add PgCasts due to query combining with UNION ALL et al
-                                listBuilder.Add(0, (*columnNode)->HeadPtr());
+                                listBuilder.Add(0, ctx.NewAtom(x->Pos(), rightColumnName));
                                 addResultItem(listBuilder, 1, *columnNode);
                             } else {
-                                listBuilder.Atom(0, columnName);
-                                addPgCast(listBuilder, 1, columnName, item->GetItemType(),
+                                listBuilder.Add(0, ctx.NewAtom(x->Pos(), rightColumnName));
+                                addPgCast(listBuilder, 1, rightColumnName, item->GetItemType(),
                                     [&addStructMember, &column] (TExprNodeBuilder& builder, ui32 idx) { addStructMember(builder, idx, column); });
                             }
                         }
@@ -3668,7 +3680,7 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
     auto order = optCtx.Types->LookupColumnOrder(*node);
     YQL_ENSURE(order);
     TExprNode::TListType columnsItems;
-    for (const auto& x : *order) {
+    for (const auto& [x, gen_x] : *order) {
         columnsItems.push_back(ctx.NewAtom(node->Pos(), x));
     }
 
@@ -3679,7 +3691,7 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
         for (const auto& x : extColumns) {
             auto name = TString("_yql_join_sublink_") + ToString(*subLinkId) + "_" + x.first;
             columnsItems.push_back(ctx.NewAtom(node->Pos(), name));
-            targetOrder.push_back(name);
+            targetOrder.AddColumn(name);
         }
     }
 
@@ -3701,7 +3713,9 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
         columnOrders.push_back(*childOrder);
         if (subLinkId) {
             auto& setOrder = columnOrders.back();
-            setOrder.insert(setOrder.end(), targetOrder.end() - extColumns.size(), targetOrder.end());
+            for (size_t i = targetOrder.Size() - extColumns.size(); i < targetOrder.Size(); ++i) {
+                setOrder.AddColumn(targetOrder[i].LogicalName);
+            }
         }
 
         auto finalExtTypes = GetSetting(setItem->Tail(), "final_ext_types");

@@ -4,7 +4,7 @@
  *	  definition of the system catalog containing the state for each
  *	  replicated table in each subscription (pg_subscription_rel)
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_subscription_rel.h
@@ -49,8 +49,7 @@ CATALOG(pg_subscription_rel,6102,SubscriptionRelRelationId)
 
 typedef FormData_pg_subscription_rel *Form_pg_subscription_rel;
 
-DECLARE_UNIQUE_INDEX_PKEY(pg_subscription_rel_srrelid_srsubid_index, 6117, on pg_subscription_rel using btree(srrelid oid_ops, srsubid oid_ops));
-#define SubscriptionRelSrrelidSrsubidIndexId 6117
+DECLARE_UNIQUE_INDEX_PKEY(pg_subscription_rel_srrelid_srsubid_index, 6117, SubscriptionRelSrrelidSrsubidIndexId, on pg_subscription_rel using btree(srrelid oid_ops, srsubid oid_ops));
 
 #ifdef EXPOSE_TO_CLIENT_CODE
 
@@ -88,7 +87,7 @@ extern void UpdateSubscriptionRelState(Oid subid, Oid relid, char state,
 extern char GetSubscriptionRelState(Oid subid, Oid relid, XLogRecPtr *sublsn);
 extern void RemoveSubscriptionRel(Oid subid, Oid relid);
 
-extern List *GetSubscriptionRelations(Oid subid);
-extern List *GetSubscriptionNotReadyRelations(Oid subid);
+extern bool HasSubscriptionRelations(Oid subid);
+extern List *GetSubscriptionRelations(Oid subid, bool not_ready);
 
 #endif							/* PG_SUBSCRIPTION_REL_H */

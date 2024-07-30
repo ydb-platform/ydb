@@ -627,12 +627,10 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         TYsonFieldChecker check(ysonString, 29);
 
-        bool iterators = env.GetSettings()->AppConfig->GetTableServiceConfig().GetEnableKqpDataQuerySourceRead();
-
         check.Uint64GreaterOrEquals(0); // CPUTime
         check.Uint64GreaterOrEquals(0); // CompileCPUTime
         check.Int64GreaterOrEquals(0); // CompileDuration
-        check.Uint64(iterators ? 2 : 1); // ComputeNodesCount
+        check.Uint64(2); // ComputeNodesCount
         check.Uint64(0); // DeleteBytes
         check.Uint64(0); // DeleteRows
         check.Int64Greater(0); // Duration
@@ -653,7 +651,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Uint64Greater(0); // RequestUnits
 
         // https://a.yandex-team.ru/arcadia/ydb/core/sys_view/query_stats/query_stats.cpp?rev=r9637451#L356
-        check.Uint64(iterators ? 0 : 3); // ShardCount
+        check.Uint64(0); // ShardCount
         check.Uint64GreaterOrEquals(0); // SumComputeCPUTime
         check.Uint64GreaterOrEquals(0); // SumShardCPUTime
         check.String("data"); // Type
@@ -1551,7 +1549,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 21);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 23);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -1569,7 +1567,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 15);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 17);
 
             THashSet<TString> names;
             for (const auto& child : children) {

@@ -19,9 +19,9 @@ using namespace NActors;
 using namespace NNodeWhiteboard;
 using ::google::protobuf::FieldDescriptor;
 
-class TJsonCluster : public TViewerPipeClient<TJsonCluster> {
+class TJsonCluster : public TViewerPipeClient {
     using TThis = TJsonCluster;
-    using TBase = TViewerPipeClient<TJsonCluster>;
+    using TBase = TViewerPipeClient;
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
     THolder<TEvInterconnect::TEvNodesInfo> NodesInfo;
@@ -50,10 +50,6 @@ class TJsonCluster : public TViewerPipeClient<TJsonCluster> {
     };
     TEventLog EventLog;
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TJsonCluster(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : Viewer(viewer)
         , Event(ev)
@@ -66,7 +62,7 @@ public:
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
     }
 
-    void Bootstrap(const TActorContext& ) {
+    void Bootstrap() override {
         EventLog.StartTime = TActivationContext::Now();
         SendRequest(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
         RequestConsoleListTenants();
@@ -315,7 +311,7 @@ public:
     TMap<NKikimrBlobStorage::TVDiskID, const NKikimrWhiteboard::TVDiskStateInfo&> VDisksIndex;
     TMap<std::pair<ui32, ui32>, const NKikimrWhiteboard::TPDiskStateInfo&> PDisksIndex;
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         EventLog.StartMergeBSGroupsTime = TActivationContext::Now();
         MergeWhiteboardResponses(MergedBSGroupInfo, BSGroupInfo);
         EventLog.StartMergeVDisksTime = TActivationContext::Now();

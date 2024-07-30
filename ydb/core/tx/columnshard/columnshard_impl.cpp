@@ -83,6 +83,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , WritesMonitor(*this)
     , NormalizerController(StoragesManager, SubscribeCounters)
     , SysLocks(this)
+    , MaxReadStaleness(TDuration::MilliSeconds(AppDataVerified().ColumnShardConfig.GetMaxReadStaleness_ms()))
 {
     TabletCountersPtr.reset(new TProtobufTabletCounters<
         ESimpleCounters_descriptor,
@@ -192,7 +193,7 @@ ui64 TColumnShard::GetOutdatedStep() const {
 }
 
 ui64 TColumnShard::GetMinReadStep() const {
-    const TDuration maxReadStaleness = NYDBTest::TControllers::GetColumnShardController()->GetReadTimeoutClean(TDuration::Minutes(5));
+    const TDuration maxReadStaleness = NYDBTest::TControllers::GetColumnShardController()->GetReadTimeoutClean(MaxReadStaleness);
     ui64 delayMillisec = maxReadStaleness.MilliSeconds();
     ui64 passedStep = GetOutdatedStep();
     ui64 minReadStep = (passedStep > delayMillisec ? passedStep - delayMillisec : 0);
@@ -258,7 +259,7 @@ void TColumnShard::LoadLongTxWrite(TWriteId writeId, const ui32 writePartId, con
     LongTxWritesByUniqueId[longTxId.UniqueId][writePartId] = &lw;
 }
 
-bool TColumnShard::RemoveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, ui64 txId) {
+bool TColumnShard::RemoveLongTxWrite(NIceDb::TNiceDb& db, const TWriteId writeId, const ui64 txId) {
     if (auto* lw = LongTxWrites.FindPtr(writeId)) {
         ui64 prepared = lw->PreparedTxId;
         if (!prepared || txId == prepared) {
@@ -278,12 +279,12 @@ bool TColumnShard::RemoveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, ui64
 void TColumnShard::TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TWriteId>&& writesToAbort) {
     std::vector<TWriteId> failedAborts;
     for (auto& writeId : writesToAbort) {
-        if (!RemoveLongTxWrite(db, writeId)) {
+        if (!RemoveLongTxWrite(db, writeId, 0)) {
             failedAborts.push_back(writeId);
         }
     }
     if (failedAborts.size()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "failed_aborts")("count", failedAborts.size())("writes_count", writesToAbort.size());
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "failed_aborts")("count", failedAborts.size())("writes_count", writesToAbort.size());
     }
     for (auto& writeId : failedAborts) {
         writesToAbort.erase(writeId);
@@ -510,7 +511,6 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     StoragesManager->GetOperatorVerified(NOlap::IStoragesManager::DefaultStorageId);
     StoragesManager->GetSharedBlobsManager()->GetStorageManagerVerified(NOlap::IStoragesManager::DefaultStorageId);
     CSCounters.OnStartBackground();
-    SendPeriodicStats();
 
     if (!TablesManager.HasPrimaryIndex()) {
         AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("problem", "Background activities cannot be started: no index at tablet");
@@ -537,7 +537,7 @@ private:
     TString ClassId;
     NOlap::TSnapshot LastCompletedTx;
 protected:
-    virtual bool DoExecute() override {
+    virtual TConclusionStatus DoExecute(const std::shared_ptr<NConveyor::ITask>& /*taskPtr*/) override {
         NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent_id", ParentActorId));
         {
             NOlap::TConstructionContext context(*TxEvent->IndexInfo, Counters, LastCompletedTx);
@@ -547,7 +547,7 @@ protected:
             }
         }
         TActorContext::AsActorContext().Send(ParentActorId, std::move(TxEvent));
-        return true;
+        return TConclusionStatus::Success();
     }
 public:
     virtual TString GetTaskClassIdentifier() const override {
@@ -589,7 +589,8 @@ protected:
     }
     virtual bool DoOnError(const TString& storageId, const NOlap::TBlobRange& range, const NOlap::IBlobsReadingAction::TErrorStatus& status) override {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DoOnError")("storage_id", storageId)("blob_id", range)("status", status.GetErrorMessage())("status_code", status.GetStatus());
-        AFL_VERIFY(status.GetStatus() != NKikimrProto::EReplyStatus::NODATA)("blob_id", range)("status", status.GetStatus())("error", status.GetErrorMessage())("type", TxEvent->IndexChanges->TypeString())("task_id", TxEvent->IndexChanges->GetTaskIdentifier())
+        AFL_VERIFY(status.GetStatus() != NKikimrProto::EReplyStatus::NODATA)("blob_id", range)("status", status.GetStatus())
+            ("error", status.GetErrorMessage())("type", TxEvent->IndexChanges->TypeString())("task_id", TxEvent->IndexChanges->GetTaskIdentifier())
             ("debug", TxEvent->IndexChanges->DebugString());
         TxEvent->SetPutStatus(NKikimrProto::ERROR);
         Counters.ReadErrors->Add(1);
@@ -864,7 +865,6 @@ void TColumnShard::SetupCleanupInsertTable() {
 }
 
 void TColumnShard::Die(const TActorContext& ctx) {
-    // TODO
     CleanupActors(ctx);
     NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);
     UnregisterMediatorTimeCast();
@@ -1073,9 +1073,13 @@ void TColumnShard::Handle(TAutoPtr<TEventHandle<NOlap::NBackground::TEvExecuteGe
 void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs::TPtr& ev, const TActorContext& ctx) {
     if (SharingSessionsManager->IsSharingInProgress()) {
         ctx.Send(NActors::ActorIdFromProto(ev->Get()->Record.GetSourceActorId()),
-            new NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobsFinished((NOlap::TTabletId)TabletID(),
-                NKikimrColumnShardBlobOperationsProto::TEvDeleteSharedBlobsFinished::DestinationCurrenlyLocked));
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "sharing_in_progress");
+            new NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobsFinished(
+                (NOlap::TTabletId)TabletID(), NKikimrColumnShardBlobOperationsProto::TEvDeleteSharedBlobsFinished::DestinationCurrenlyLocked));
+        for (auto&& i : ev->Get()->Record.GetBlobIds()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)("event", "sharing_in_progress")("blob_id", i)(
+                "from_tablet", ev->Get()->Record.GetSourceTabletId());
+        }
+
         return;
     }
 

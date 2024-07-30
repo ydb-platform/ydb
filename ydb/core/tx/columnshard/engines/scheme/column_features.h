@@ -1,6 +1,4 @@
 #pragma once
-#include "abstract/loader.h"
-#include "abstract/saver.h"
 #include "column/info.h"
 
 #include <ydb/core/formats/arrow/dictionary/object.h>
@@ -10,6 +8,7 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/splitter/abstract/chunks.h>
 #include <ydb/core/formats/arrow/common/validation.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
@@ -35,8 +34,8 @@ private:
 public:
     TColumnFeatures(const ui32 columnId, const std::shared_ptr<arrow::Field>& arrowField, const NArrow::NSerialization::TSerializerContainer& serializer,
         const std::shared_ptr<IBlobsStorageOperator>& bOperator, const bool needMinMax, const bool isSorted,
-        const std::shared_ptr<arrow::Scalar>& defaultWriteValue, const std::shared_ptr<arrow::Scalar>& defaultReadValue)
-        : TBase(columnId, arrowField, serializer, needMinMax, isSorted, defaultWriteValue, defaultReadValue)
+        const std::shared_ptr<arrow::Scalar>& defaultValue)
+        : TBase(columnId, arrowField, serializer, needMinMax, isSorted, defaultValue)
         , Operator(bOperator)
     {
         AFL_VERIFY(Operator);

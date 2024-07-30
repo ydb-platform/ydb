@@ -31,10 +31,10 @@
 #ifndef GOOGLE_PROTOBUF_PYTHON_CPP_MAP_CONTAINER_H__
 #define GOOGLE_PROTOBUF_PYTHON_CPP_MAP_CONTAINER_H__
 
+#define PY_SSIZE_T_CLEAN
 #include <Python.h>
 
 #include <cstdint>
-#include <memory>
 
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/message.h>

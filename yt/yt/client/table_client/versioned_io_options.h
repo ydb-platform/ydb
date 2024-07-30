@@ -8,7 +8,7 @@ namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DEFINE_ENUM(EVersionedIoMode,
+DEFINE_ENUM(EVersionedIOMode,
     ((Default)              (0))
     ((LatestTimestamp)      (1))
 );
@@ -16,7 +16,7 @@ DEFINE_ENUM(EVersionedIoMode,
 struct TVersionedReadOptions
     : public NYTree::TYsonStructLite
 {
-    EVersionedIoMode ReadMode;
+    EVersionedIOMode ReadMode;
 
     REGISTER_YSON_STRUCT_LITE(TVersionedReadOptions);
 

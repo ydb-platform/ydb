@@ -132,6 +132,12 @@ struct TSimpleArithmeticUnary : public TArithmeticConstraintsSame<TInput, TOutpu
         return NUdf::TUnboxedValuePod(TImpl::Do(arg.template Get<TInput>()));
     }
 
+    static void DoPtr(
+        const typename TPrimitiveDataType<TInput>::TLayout* arg,
+        typename TPrimitiveDataType<TOutput>::TLayout* res) {
+        *res = TImpl::Do(*arg);
+    }
+
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
@@ -148,6 +154,13 @@ template <typename TLeft, typename TRight, typename TOutput, class TImpl, bool C
 struct TSimpleArithmeticBinary : public TArithmeticConstraintsBinary<TLeft, TRight, TOutput> {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
         return NUdf::TUnboxedValuePod(TImpl::Do(left.template Get<TLeft>(), right.template Get<TRight>()));
+    }
+
+    static void DoPtr(
+        const typename TPrimitiveDataType<TLeft>::TLayout* left,
+        const typename TPrimitiveDataType<TRight>::TLayout* right,
+        typename TPrimitiveDataType<TOutput>::TLayout* res) {
+        *res = TImpl::Do(*left, *right);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -843,190 +856,161 @@ enum class EPropagateTz {
     FromRight
 };
 
-inline std::shared_ptr<arrow::DataType> AddTzType(bool addTz, const std::shared_ptr<arrow::DataType>& type) {
-    if (!addTz) {
-        return type;
-    }
-
-    std::vector<std::shared_ptr<arrow::Field>> fields {
-        std::make_shared<arrow::Field>("datetime", type, false),
-        std::make_shared<arrow::Field>("timezoneId", arrow::uint16(), false)
-    };
-
-    return std::make_shared<arrow::StructType>(fields);
-}
-
-inline std::shared_ptr<arrow::DataType> AddTzType(EPropagateTz propagateTz, const std::shared_ptr<arrow::DataType>& type) {
-    return AddTzType(propagateTz != EPropagateTz::None, type);
-}
-
+std::shared_ptr<arrow::DataType> AddTzType(bool addTz, const std::shared_ptr<arrow::DataType>& type);
+std::shared_ptr<arrow::DataType> AddTzType(EPropagateTz propagateTz, const std::shared_ptr<arrow::DataType>& type);
 
 template <typename T>
-arrow::compute::InputType GetPrimitiveInputArrowType(bool tz = false) {
-    return arrow::compute::InputType(AddTzType(tz, GetPrimitiveDataType<T>()), arrow::ValueDescr::ANY);
-}
+arrow::compute::InputType GetPrimitiveInputArrowType(bool tz = false);
+
+arrow::compute::InputType GetPrimitiveInputArrowType(NUdf::EDataSlot slot);
 
 template <typename T>
-arrow::compute::OutputType GetPrimitiveOutputArrowType(bool tz = false) {
-    return arrow::compute::OutputType(AddTzType(tz, GetPrimitiveDataType<T>()));
-}
+arrow::compute::OutputType GetPrimitiveOutputArrowType(bool tz = false);
 
-template<typename TDerived>
-struct TUnaryKernelExecsBase {
-    static arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-        MKQL_ENSURE(batch.values.size() == 1, "Expected single argument");
-        const auto& arg = batch.values[0];
-        if (arg.is_scalar()) {
-            return TDerived::ExecScalar(ctx, batch, res);
-        } else {
-            return TDerived::ExecArray(ctx, batch, res);
-        }
-    }
-};
+arrow::compute::OutputType GetPrimitiveOutputArrowType(NUdf::EDataSlot slot);
 
-template<typename TDerived>
-struct TBinaryKernelExecsBase {
-    static arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-        MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
-        const auto& arg1 = batch.values[0];
-        const auto& arg2 = batch.values[1];
-        if (arg1.is_scalar()) {
-            if (arg2.is_scalar()) {
-                return TDerived::ExecScalarScalar(ctx, batch, res);
-            } else {
-                return TDerived::ExecScalarArray(ctx, batch, res);
-            }
-        } else {
-            if (arg2.is_scalar()) {
-                return TDerived::ExecArrayScalar(ctx, batch, res);
-            } else {
-                return TDerived::ExecArrayArray(ctx, batch, res);
-            }
-        }
-    }
-};
+std::shared_ptr<arrow::Scalar> ExtractTz(bool isTz, const std::shared_ptr<arrow::Scalar>& value);
+std::shared_ptr<arrow::ArrayData> ExtractTz(bool isTz, const std::shared_ptr<arrow::ArrayData>& value);
+std::shared_ptr<arrow::Scalar> WithTz(bool propagateTz, const std::shared_ptr<arrow::Scalar>& input,
+    const std::shared_ptr<arrow::Scalar>& value);
 
-inline std::shared_ptr<arrow::Scalar> ExtractTz(bool isTz, const std::shared_ptr<arrow::Scalar>& value) {
-    if (!isTz) {
-        return value;
-    }
-
-    const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(*value);
-    return structScalar.value[0];
-}
-
-inline std::shared_ptr<arrow::ArrayData> ExtractTz(bool isTz, const std::shared_ptr<arrow::ArrayData>& value) {
-    if (!isTz) {
-        return value;
-    }
-
-    return value->child_data[0];
-}
-
-inline std::shared_ptr<arrow::Scalar> WithTz(bool propagateTz, const std::shared_ptr<arrow::Scalar>& input,
-    const std::shared_ptr<arrow::Scalar>& value) {
-    if (!propagateTz) {
-        return value;
-    }
-
-    const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(*input);
-    auto tzId = structScalar.value[1];
-    return std::make_shared<arrow::StructScalar>(arrow::StructScalar::ValueType{value, tzId}, input->type);
-}
-
-inline std::shared_ptr<arrow::Scalar> WithTz(EPropagateTz propagateTz,
+std::shared_ptr<arrow::Scalar> WithTz(EPropagateTz propagateTz,
     const std::shared_ptr<arrow::Scalar>& input1,
     const std::shared_ptr<arrow::Scalar>& input2,
-    const std::shared_ptr<arrow::Scalar>& value) {
-    if (propagateTz == EPropagateTz::None) {
-        return value;
-    }
+    const std::shared_ptr<arrow::Scalar>& value);
 
-    const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(propagateTz == EPropagateTz::FromLeft ? *input1 : *input2);
-    const auto tzId = structScalar.value[1];
-    return std::make_shared<arrow::StructScalar>(arrow::StructScalar::ValueType{value,tzId}, propagateTz == EPropagateTz::FromLeft ? input1->type : input2->type);
-}
+std::shared_ptr<arrow::ArrayData> CopyTzImpl(const std::shared_ptr<arrow::ArrayData>& res, bool propagateTz,
+    const std::shared_ptr<arrow::ArrayData>& input, arrow::MemoryPool* pool,
+    size_t sizeOf, const std::shared_ptr<arrow::DataType>& outputType);
 
 template <typename TOutput>
 inline std::shared_ptr<arrow::ArrayData> CopyTz(const std::shared_ptr<arrow::ArrayData>& res, bool propagateTz,
     const std::shared_ptr<arrow::ArrayData>& input, arrow::MemoryPool* pool) {
-    if (!propagateTz) {
-        return res;
-    }
-
-    Y_ENSURE(res->child_data.empty());
-    std::shared_ptr<arrow::Buffer> buffer(NUdf::AllocateResizableBuffer(sizeof(TOutput) * res->length, pool));
-    res->child_data.push_back(arrow::ArrayData::Make(GetPrimitiveDataType<TOutput>(), res->length, { nullptr, buffer }));
-    res->child_data.push_back(input->child_data[1]);
-    return res->child_data[0];
+    return CopyTzImpl(res, propagateTz, input, pool, sizeof(TOutput), GetPrimitiveDataType<TOutput>());
 }
+
+std::shared_ptr<arrow::ArrayData> CopyTzImpl(const std::shared_ptr<arrow::ArrayData>& res, EPropagateTz propagateTz,
+    const std::shared_ptr<arrow::ArrayData>& input1,
+    const std::shared_ptr<arrow::Scalar>& input2,
+    arrow::MemoryPool* pool,
+    size_t sizeOf, const std::shared_ptr<arrow::DataType>& outputType);
 
 template <typename TOutput>
 inline std::shared_ptr<arrow::ArrayData> CopyTz(const std::shared_ptr<arrow::ArrayData>& res, EPropagateTz propagateTz,
     const std::shared_ptr<arrow::ArrayData>& input1,
     const std::shared_ptr<arrow::Scalar>& input2,
     arrow::MemoryPool* pool) {
-    if (propagateTz == EPropagateTz::None) {
-        return res;
-    }
-
-    Y_ENSURE(res->child_data.empty());
-    std::shared_ptr<arrow::Buffer> buffer(NUdf::AllocateResizableBuffer(sizeof(TOutput) * res->length, pool));
-    res->child_data.push_back(arrow::ArrayData::Make(GetPrimitiveDataType<TOutput>(), res->length, { nullptr, buffer }));
-    if (propagateTz == EPropagateTz::FromLeft) {
-        res->child_data.push_back(input1->child_data[1]);
-    } else {
-        const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(*input2);
-        auto tzId = ARROW_RESULT(arrow::MakeArrayFromScalar(*structScalar.value[1], res->length, pool))->data();
-        res->child_data.push_back(tzId);
-    }
-
-    return res->child_data[0];
+    return CopyTzImpl(res, propagateTz, input1, input2, pool, sizeof(TOutput), GetPrimitiveDataType<TOutput>());
 }
+
+std::shared_ptr<arrow::ArrayData> CopyTzImpl(const std::shared_ptr<arrow::ArrayData>& res, EPropagateTz propagateTz,
+    const std::shared_ptr<arrow::Scalar>& input1,
+    const std::shared_ptr<arrow::ArrayData>& input2,
+    arrow::MemoryPool* pool,
+    size_t sizeOf, const std::shared_ptr<arrow::DataType>& outputType);
 
 template <typename TOutput>
 inline std::shared_ptr<arrow::ArrayData> CopyTz(const std::shared_ptr<arrow::ArrayData>& res, EPropagateTz propagateTz,
     const std::shared_ptr<arrow::Scalar>& input1,
     const std::shared_ptr<arrow::ArrayData>& input2,
     arrow::MemoryPool* pool) {
-    if (propagateTz == EPropagateTz::None) {
-        return res;
-    }
-
-    Y_ENSURE(res->child_data.empty());
-    std::shared_ptr<arrow::Buffer> buffer(NUdf::AllocateResizableBuffer(sizeof(TOutput) * res->length, pool));
-    res->child_data.push_back(arrow::ArrayData::Make(GetPrimitiveDataType<TOutput>(), res->length, { nullptr, buffer }));
-    if (propagateTz == EPropagateTz::FromLeft) {
-        const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(*input1);
-        auto tzId = ARROW_RESULT(arrow::MakeArrayFromScalar(*structScalar.value[1], res->length, pool))->data();
-        res->child_data.push_back(tzId);
-    } else {
-        res->child_data.push_back(input2->child_data[1]);
-    }
-
-    return res->child_data[0];
+    return CopyTzImpl(res, propagateTz, input1, input2, pool, sizeof(TOutput), GetPrimitiveDataType<TOutput>());
 }
+
+std::shared_ptr<arrow::ArrayData> CopyTzImpl(const std::shared_ptr<arrow::ArrayData>& res, EPropagateTz propagateTz,
+    const std::shared_ptr<arrow::ArrayData>& input1,
+    const std::shared_ptr<arrow::ArrayData>& input2,
+    arrow::MemoryPool* pool,
+    size_t sizeOf, const std::shared_ptr<arrow::DataType>& outputType);
 
 template <typename TOutput>
 inline std::shared_ptr<arrow::ArrayData> CopyTz(const std::shared_ptr<arrow::ArrayData>& res, EPropagateTz propagateTz,
     const std::shared_ptr<arrow::ArrayData>& input1,
     const std::shared_ptr<arrow::ArrayData>& input2,
     arrow::MemoryPool* pool) {
-    if (propagateTz == EPropagateTz::None) {
-        return res;
-    }
-
-    Y_ENSURE(res->child_data.empty());
-    std::shared_ptr<arrow::Buffer> buffer(NUdf::AllocateResizableBuffer(sizeof(TOutput) * res->length, pool));
-    res->child_data.push_back(arrow::ArrayData::Make(GetPrimitiveDataType<TOutput>(), res->length, { nullptr, buffer }));
-    if (propagateTz == EPropagateTz::FromLeft) {
-        res->child_data.push_back(input1->child_data[1]);
-    } else {
-        res->child_data.push_back(input2->child_data[1]);
-    }
-
-    return res->child_data[0];
+    return CopyTzImpl(res, propagateTz, input1, input2, pool, sizeof(TOutput), GetPrimitiveDataType<TOutput>());
 }
+
+using TPrimitiveDataTypeGetter = std::shared_ptr<arrow::DataType>(*)();
+using TPrimitiveDataScalarGetter= arrow::Datum(*)();
+using TUntypedBinaryScalarFuncPtr = void(*)(const void*, const void*, void*);
+using TUntypedBinaryArrayFuncPtr = void(*)(const void*, const void*, void*, int64_t length, int64_t offset1, int64_t offset2);
+using TUntypedBinaryScalarOptFuncPtr = bool(*)(const void*, const void*, void*);
+using TUntypedBinaryArrayOptFuncPtr = void(*)(const void*, const ui8*, const void*, const ui8*, void*, ui8*, int64_t length, int64_t offset1, int64_t offset2);
+using TUntypedUnaryScalarFuncPtr = void(*)(const void*, void*);
+using TUntypedUnaryArrayFuncPtr = void(*)(const void*, void*, int64_t length, int64_t offset);
+
+
+arrow::Status ExecScalarImpl(const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetter scalarGetter, TUntypedUnaryScalarFuncPtr func,
+    bool tz, bool propagateTz);
+
+arrow::Status ExecArrayImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TUntypedUnaryArrayFuncPtr func, size_t outputSizeOf, TPrimitiveDataTypeGetter outputTypeGetter,
+    bool tz, bool propagateTz);
+
+arrow::Status ExecUnaryImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetter scalarGetter,
+    bool tz, bool propagateTz, size_t outputSizeOf,
+    TUntypedUnaryScalarFuncPtr scalarFunc, TUntypedUnaryArrayFuncPtr arrayFunc);
+
+arrow::Status ExecScalarScalarImpl(const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetter scalarGetter, TUntypedBinaryScalarFuncPtr func,
+    bool tz1, bool tz2, EPropagateTz propagateTz);
+
+arrow::Status ExecScalarArrayImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TUntypedBinaryArrayFuncPtr func, size_t outputSizeOf, TPrimitiveDataTypeGetter outputTypeGetter,
+    bool tz1, bool tz2, EPropagateTz propagateTz);
+
+arrow::Status ExecArrayScalarImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TUntypedBinaryArrayFuncPtr func, size_t outputSizeOf, TPrimitiveDataTypeGetter outputTypeGetter,
+    bool tz1, bool tz2, EPropagateTz propagateTz);
+
+arrow::Status ExecArrayArrayImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TUntypedBinaryArrayFuncPtr func, size_t outputSizeOf, TPrimitiveDataTypeGetter outputTypeGetter,
+    bool tz1, bool tz2, EPropagateTz propagateTz);
+
+arrow::Status ExecBinaryImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetter scalarGetter,
+    bool tz1, bool tz2, EPropagateTz propagateTz, size_t outputSizeOf,
+    TUntypedBinaryScalarFuncPtr scalarScalarFunc,
+    TUntypedBinaryArrayFuncPtr scalarArrayFunc,
+    TUntypedBinaryArrayFuncPtr arrayScalarFunc,
+    TUntypedBinaryArrayFuncPtr arrayArrayFunc);
+
+arrow::Status ExecScalarScalarOptImpl(const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetter scalarGetter, TUntypedBinaryScalarOptFuncPtr func,
+    bool tz1, bool tz2, EPropagateTz propagateTz);
+
+arrow::Status ExecScalarArrayOptImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TUntypedBinaryArrayOptFuncPtr func, size_t outputSizeOf, TPrimitiveDataTypeGetter outputTypeGetter,
+    bool tz1, bool tz2, EPropagateTz propagateTz);
+
+arrow::Status ExecArrayScalarOptImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TUntypedBinaryArrayOptFuncPtr func, size_t outputSizeOf, TPrimitiveDataTypeGetter outputTypeGetter,
+    bool tz1, bool tz2, EPropagateTz propagateTz);
+
+arrow::Status ExecArrayArrayOptImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TUntypedBinaryArrayOptFuncPtr func, size_t outputSizeOf, TPrimitiveDataTypeGetter outputTypeGetter,
+    bool tz1, bool tz2, EPropagateTz propagateTz);
+
+arrow::Status ExecBinaryOptImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetter scalarGetter,
+    bool tz1, bool tz2, EPropagateTz propagateTz, size_t outputSizeOf,
+    TUntypedBinaryScalarOptFuncPtr scalarScalarFunc,
+    TUntypedBinaryArrayOptFuncPtr scalarArrayFunc,
+    TUntypedBinaryArrayOptFuncPtr arrayScalarFunc,
+    TUntypedBinaryArrayOptFuncPtr arrayArrayFunc);
 
 template<typename TInput1, bool Tz1, typename TInput2, bool Tz2, typename TOutput, EPropagateTz PropagateTz,
          typename TFuncInstance, TKernel::ENullMode NullMode>
@@ -1034,254 +1018,273 @@ struct TBinaryKernelExecs;
 
 template<typename TInput1, bool Tz1, typename TInput2, bool Tz2, typename TOutput, EPropagateTz PropagateTz,
         typename TFuncInstance>
-struct TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFuncInstance, TKernel::ENullMode::Default> : TBinaryKernelExecsBase<TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFuncInstance, TKernel::ENullMode::Default>>
+struct TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFuncInstance, TKernel::ENullMode::Default>
 {
-    static arrow::Status ExecScalarScalar(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-        MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
-        const auto& arg1 = batch.values[0];
-        const auto& arg2 = batch.values[1];
-        if (!arg1.scalar()->is_valid || !arg2.scalar()->is_valid) {
-            *res = arrow::MakeNullScalar(AddTzType(PropagateTz, GetPrimitiveDataType<TOutput>()));
-        } else {
-            const auto val1 = GetPrimitiveScalarValue<TInput1>(*ExtractTz(Tz1, arg1.scalar()));
-            const auto val2 = GetPrimitiveScalarValue<TInput2>(*ExtractTz(Tz2, arg2.scalar()));
-            *res = WithTz(PropagateTz, arg1.scalar(), arg2.scalar(), MakeScalarDatum<TOutput>(TFuncInstance::Do(val1, val2)).scalar());
-        }
+    using TTypedBinaryScalarFuncPtr = void(*)(
+        const typename TPrimitiveDataType<TInput1>::TLayout*,
+        const typename TPrimitiveDataType<TInput2>::TLayout*,
+        typename TPrimitiveDataType<TOutput>::TLayout*
+    );
 
-        return arrow::Status::OK();
-    }
+    using TTypedBinaryArrayFuncPtr = void(*)(
+        const typename TPrimitiveDataType<TInput1>::TLayout*,
+        const typename TPrimitiveDataType<TInput2>::TLayout*,
+        typename TPrimitiveDataType<TOutput>::TLayout*,
+        int64_t,
+        int64_t,
+        int64_t
+    );
 
-    static arrow::Status ExecScalarArray(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-        MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
-        const auto& arg1 = batch.values[0];
-        const auto& arg2 = batch.values[1];
-        auto& resArr = *CopyTz<TOutput>(res->array(), PropagateTz, arg1.scalar(), arg2.array(), kernelCtx->memory_pool());
-        if (arg1.scalar()->is_valid) {
-            const auto val1 = GetPrimitiveScalarValue<TInput1>(*ExtractTz(Tz1, arg1.scalar()));
-            const auto& arr2 = *ExtractTz(Tz2, arg2.array());
-            auto length = arr2.length;
-            const auto values2 = arr2.GetValues<TInput2>(1);
-            auto resValues = resArr.template GetMutableValues<TOutput>(1);
-            for (int64_t i = 0; i < length; ++i) {
-                resValues[i] = TFuncInstance::Do(val1, values2[i]);
-            }
-        }
-
-        return arrow::Status::OK();
-    }
-
-    static arrow::Status ExecArrayScalar(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-        MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
-        const auto& arg1 = batch.values[0];
-        const auto& arg2 = batch.values[1];
-        auto& resArr = *CopyTz<TOutput>(res->array(), PropagateTz, arg1.array(), arg2.scalar(), kernelCtx->memory_pool());
-        if (arg2.scalar()->is_valid) {
-            const auto& arr1 = *ExtractTz(Tz1, arg1.array());
-            auto length = arr1.length;
-            const auto values1 = arr1.GetValues<TInput1>(1);
-            const auto val2 = GetPrimitiveScalarValue<TInput2>(*ExtractTz(Tz2, arg2.scalar()));
-            auto resValues = resArr.template GetMutableValues<TOutput>(1);
-            for (int64_t i = 0; i < length; ++i) {
-                resValues[i] = TFuncInstance::Do(values1[i], val2);
-            }
-        }
-
-        return arrow::Status::OK();
-    }
-
-    static arrow::Status ExecArrayArray(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-        MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
-        const auto& arg1 = batch.values[0];
-        const auto& arg2 = batch.values[1];
-        const auto& arr1 = *ExtractTz(Tz1, arg1.array());
-        const auto& arr2 = *ExtractTz(Tz2, arg2.array());
-        auto& resArr = *CopyTz<TOutput>(res->array(), PropagateTz, arg1.array(), arg2.array(), kernelCtx->memory_pool());
-        MKQL_ENSURE(arr1.length == arr2.length, "Expected same length");
-        auto length = arr1.length;
-        const auto values1 = arr1.GetValues<TInput1>(1);
-        const auto values2 = arr2.GetValues<TInput2>(1);
-        auto resValues = resArr.template GetMutableValues<TOutput>(1);
+    static void ScalarArrayCore(
+        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
+        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
+        int64_t length, int64_t offset1, int64_t offset2) {
+        TTypedBinaryScalarFuncPtr func = &TFuncInstance::DoPtr;
+        Y_UNUSED(offset1);
+        val2Ptr += offset2;
         for (int64_t i = 0; i < length; ++i) {
-            resValues[i] = TFuncInstance::Do(values1[i], values2[i]);
+            func(val1Ptr, val2Ptr, resPtr);
+            ++val2Ptr;
+            ++resPtr;
         }
+    }
 
-        return arrow::Status::OK();
+    static void ArrayScalarCore(
+        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
+        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
+        int64_t length, int64_t offset1, int64_t offset2) {
+        TTypedBinaryScalarFuncPtr func = &TFuncInstance::DoPtr;
+        Y_UNUSED(offset2);
+        val1Ptr += offset1;
+        for (int64_t i = 0; i < length; ++i) {
+            func(val1Ptr, val2Ptr, resPtr);
+            ++val1Ptr;
+            ++resPtr;
+        }
+    }
+
+    static void ArrayArrayCore(
+        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
+        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
+        int64_t length, int64_t offset1, int64_t offset2) {
+        TTypedBinaryScalarFuncPtr func = &TFuncInstance::DoPtr;
+        val1Ptr += offset1;
+        val2Ptr += offset2;
+        for (int64_t i = 0; i < length; ++i) {
+            func(val1Ptr, val2Ptr, resPtr);
+            ++val1Ptr;
+            ++val2Ptr;
+            ++resPtr;
+        }
+    }
+
+    static arrow::Status Exec(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        TTypedBinaryScalarFuncPtr scalarScalarFunc = &TFuncInstance::DoPtr;
+        TTypedBinaryArrayFuncPtr scalarArrayFunc = &ScalarArrayCore;
+        TTypedBinaryArrayFuncPtr arrayScalarFunc = &ArrayScalarCore;
+        TTypedBinaryArrayFuncPtr arrayArrayFunc = &ArrayArrayCore;
+        return ExecBinaryImpl(kernelCtx, batch, res,
+            &GetPrimitiveDataType<TOutput>,
+            &MakeDefaultScalarDatum<TOutput>,
+            Tz1, Tz2, PropagateTz, sizeof(TOutput),
+            (TUntypedBinaryScalarFuncPtr)scalarScalarFunc,
+            (TUntypedBinaryArrayFuncPtr)scalarArrayFunc,
+            (TUntypedBinaryArrayFuncPtr)arrayScalarFunc,
+            (TUntypedBinaryArrayFuncPtr)arrayArrayFunc);
     }
 };
 
 template<typename TInput1, bool Tz1, typename TInput2, bool Tz2, typename TOutput, EPropagateTz PropagateTz,
         typename TFuncInstance>
-struct TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFuncInstance, TKernel::ENullMode::AlwaysNull> : TBinaryKernelExecsBase<TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFuncInstance, TKernel::ENullMode::AlwaysNull>>
+struct TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFuncInstance, TKernel::ENullMode::AlwaysNull>
 {
-    static arrow::Status ExecScalarScalar(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-        MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
-        const auto& arg1 = batch.values[0];
-        const auto& arg2 = batch.values[1];
-        if (!arg1.scalar()->is_valid || !arg2.scalar()->is_valid) {
-            *res = arrow::MakeNullScalar(AddTzType(PropagateTz, GetPrimitiveDataType<TOutput>()));
-        } else {
-            const auto val1 = GetPrimitiveScalarValue<TInput1>(*ExtractTz(Tz1, arg1.scalar()));
-            const auto val2 = GetPrimitiveScalarValue<TInput2>(*ExtractTz(Tz2, arg2.scalar()));
-            auto podRes = TFuncInstance::Execute(NUdf::TUnboxedValuePod(val1), NUdf::TUnboxedValuePod(val2));
-            if (!podRes) {
-                *res = arrow::MakeNullScalar(AddTzType(PropagateTz, GetPrimitiveDataType<TOutput>()));
-            } else {
-                *res = WithTz(PropagateTz, arg1.scalar(), arg2.scalar(), MakeScalarDatum<TOutput>(podRes.template Get<TOutput>()).scalar());
-            }
+    using TTypedBinaryScalarOptFuncPtr = bool(*)(
+        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
+        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr
+    );
+
+    using TTypedBinaryArrayOptFuncPtr = void(*)(
+        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
+        const ui8* valid1,
+        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
+        const ui8* valid2,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
+        ui8* resValid,
+        int64_t length,
+        int64_t offset1,
+        int64_t offset2
+    );
+
+    static bool ScalarScalarCoreOpt(
+        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
+        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr) {
+        auto resPod = TFuncInstance::Execute(NUdf::TUnboxedValuePod(*val1Ptr), NUdf::TUnboxedValuePod(*val2Ptr));
+        if (!resPod) {
+            return false;
         }
 
-        return arrow::Status::OK();
+        *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
+        return true;
     }
 
-    static arrow::Status ExecScalarArray(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-        MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
-        const auto& arg1 = batch.values[0];
-        const auto& arg2 = batch.values[1];
-        auto& resArr = *CopyTz<TOutput>(res->array(), PropagateTz, arg1.scalar(), arg2.array(), kernelCtx->memory_pool());
-        if (arg1.scalar()->is_valid) {
-            const auto val1 = GetPrimitiveScalarValue<TInput1>(*ExtractTz(Tz1, arg1.scalar()));
-            const auto& arr2 = *ExtractTz(Tz2, arg2.array());
-            auto length = arr2.length;
-            const auto values2 = arr2.GetValues<TInput2>(1);
-            const auto valid2 = arr2.GetValues<uint8_t>(0);
-            const auto nullCount2 = arr2.GetNullCount();
-            auto resValues = resArr.template GetMutableValues<TOutput>(1);
-            auto resValid = res->array()->GetMutableValues<uint8_t>(0);
-
-            for (int64_t i = 0; i < length; ++i) {
-                if (nullCount2 == 0 || arrow::BitUtil::GetBit(valid2, i + arr2.offset)) {
-                    auto podRes = TFuncInstance::Execute(NUdf::TUnboxedValuePod(val1), NUdf::TUnboxedValuePod(values2[i]));
-                    if (podRes) {
-                        resValues[i] = podRes.template Get<TOutput>();
-                        arrow::BitUtil::SetBit(resValid, i + resArr.offset);
-                        continue;
-                    }
-                }
-
-                arrow::BitUtil::ClearBit(resValid, i + resArr.offset);
-            }
-        } else {
-            GetBitmap(resArr, 0).SetBitsTo(false);
-        }
-
-        return arrow::Status::OK();
-    }
-
-    static arrow::Status ExecArrayScalar(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-        MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
-        const auto& arg1 = batch.values[0];
-        const auto& arg2 = batch.values[1];
-        auto& resArr = *CopyTz<TOutput>(res->array(), PropagateTz, arg1.array(), arg2.scalar(), kernelCtx->memory_pool());
-        if (arg2.scalar()->is_valid) {
-            const auto val2 = GetPrimitiveScalarValue<TInput2>(*ExtractTz(Tz2, arg2.scalar()));
-            const auto& arr1 = *ExtractTz(Tz1, arg1.array());
-            auto length = arr1.length;
-            const auto values1 = arr1.GetValues<TInput1>(1);
-            const auto valid1 = arr1.GetValues<uint8_t>(0);
-            const auto nullCount1 = arr1.GetNullCount();
-            auto resValues = resArr.template GetMutableValues<TOutput>(1);
-            auto resValid = res->array()->GetMutableValues<uint8_t>(0);
-
-            for (int64_t i = 0; i < length; ++i) {
-                if (nullCount1 == 0 || arrow::BitUtil::GetBit(valid1, i + arr1.offset)) {
-                    auto podRes = TFuncInstance::Execute(NUdf::TUnboxedValuePod(values1[i]), NUdf::TUnboxedValuePod(val2));
-                    if (podRes) {
-                        resValues[i] = podRes.template Get<TOutput>();
-                        arrow::BitUtil::SetBit(resValid, i + resArr.offset);
-                        continue;
-                    }
-                }
-
-                arrow::BitUtil::ClearBit(resValid, i + resArr.offset);
-            }
-        } else {
-            GetBitmap(resArr, 0).SetBitsTo(false);
-        }
-
-        return arrow::Status::OK();
-    }
-
-    static arrow::Status ExecArrayArray(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-        MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
-        const auto& arg1 = batch.values[0];
-        const auto& arg2 = batch.values[1];
-        const auto& arr1 = *ExtractTz(Tz1, arg1.array());
-        const auto& arr2 = *ExtractTz(Tz2, arg2.array());
-        MKQL_ENSURE(arr1.length == arr2.length, "Expected same length");
-        auto length = arr1.length;
-        const auto values1 = arr1.GetValues<TInput1>(1);
-        const auto valid1 = arr1.GetValues<uint8_t>(0);
-        const auto nullCount1 = arr1.GetNullCount();
-        const auto values2 = arr2.GetValues<TInput2>(1);
-        const auto valid2 = arr2.GetValues<uint8_t>(0);
-        const auto nullCount2 = arr2.GetNullCount();
-        auto& resArr = *CopyTz<TOutput>(res->array(), PropagateTz, arg1.array(), arg2.array(), kernelCtx->memory_pool());
-        auto resValues = resArr.template GetMutableValues<TOutput>(1);
-        auto resValid = res->array()->GetMutableValues<uint8_t>(0);
-        for (int64_t i = 0; i < length; ++i) {
-            if ((nullCount1 == 0 || arrow::BitUtil::GetBit(valid1, i + arr1.offset)) &&
-                (nullCount2 == 0 || arrow::BitUtil::GetBit(valid2, i + arr2.offset))) {
-                auto podRes = TFuncInstance::Execute(NUdf::TUnboxedValuePod(values1[i]), NUdf::TUnboxedValuePod(values2[i]));
-                if (podRes) {
-                    resValues[i] = podRes.template Get<TOutput>();
-                    arrow::BitUtil::SetBit(resValid, i + resArr.offset);
+    static void ScalarArrayCoreOpt(
+        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
+        const ui8* valid1,
+        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
+        const ui8* valid2,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
+        ui8* resValid,
+        int64_t length,
+        int64_t offset1,
+        int64_t offset2) {
+        val2Ptr += offset2;
+        Y_UNUSED(valid1);
+        Y_UNUSED(offset1);
+        for (int64_t i = 0; i < length; ++i, ++val2Ptr, ++resPtr) {
+            if (!valid2 || arrow::BitUtil::GetBit(valid2, i + offset2)) {
+                auto resPod = TFuncInstance::Execute(NUdf::TUnboxedValuePod(*val1Ptr), NUdf::TUnboxedValuePod(*val2Ptr));
+                if (resPod) {
+                    *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
+                    arrow::BitUtil::SetBit(resValid, i);
                     continue;
                 }
             }
 
-            arrow::BitUtil::ClearBit(resValid, i + resArr.offset);
+            arrow::BitUtil::ClearBit(resValid, i);
         }
+    }
 
-        return arrow::Status::OK();
+    static void ArrayScalarCoreOpt(
+        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
+        const ui8* valid1,
+        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
+        const ui8* valid2,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
+        ui8* resValid,
+        int64_t length,
+        int64_t offset1,
+        int64_t offset2) {
+        val1Ptr += offset1;
+        Y_UNUSED(valid2);
+        Y_UNUSED(offset2);
+        for (int64_t i = 0; i < length; ++i, ++val1Ptr, ++resPtr) {
+            if (!valid1 || arrow::BitUtil::GetBit(valid1, i + offset1)) {
+                auto resPod = TFuncInstance::Execute(NUdf::TUnboxedValuePod(*val1Ptr), NUdf::TUnboxedValuePod(*val2Ptr));
+                if (resPod) {
+                    *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
+                    arrow::BitUtil::SetBit(resValid, i);
+                    continue;
+                }
+            }
+
+            arrow::BitUtil::ClearBit(resValid, i);
+        }
+    }
+
+    static void ArrayArrayCoreOpt(
+        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
+        const ui8* valid1,
+        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
+        const ui8* valid2,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
+        ui8* resValid,
+        int64_t length,
+        int64_t offset1,
+        int64_t offset2) {
+        val1Ptr += offset1;
+        val2Ptr += offset2;
+        for (int64_t i = 0; i < length; ++i, ++val1Ptr, ++val2Ptr, ++resPtr) {
+            if ((!valid1 || arrow::BitUtil::GetBit(valid1, i + offset1)) && 
+                (!valid2 || arrow::BitUtil::GetBit(valid2, i + offset2))) {
+                auto resPod = TFuncInstance::Execute(NUdf::TUnboxedValuePod(*val1Ptr), NUdf::TUnboxedValuePod(*val2Ptr));
+                if (resPod) {
+                    *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
+                    arrow::BitUtil::SetBit(resValid, i);
+                    continue;
+                }
+            }
+
+            arrow::BitUtil::ClearBit(resValid, i);
+        }
+    }
+
+    static arrow::Status Exec(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        TTypedBinaryScalarOptFuncPtr scalarScalarFunc = &ScalarScalarCoreOpt;
+        TTypedBinaryArrayOptFuncPtr scalarArrayFunc = &ScalarArrayCoreOpt;
+        TTypedBinaryArrayOptFuncPtr arrayScalarFunc = &ArrayScalarCoreOpt;
+        TTypedBinaryArrayOptFuncPtr arrayArrayFunc = &ArrayArrayCoreOpt;
+        return ExecBinaryOptImpl(kernelCtx, batch, res,
+            &GetPrimitiveDataType<TOutput>,
+            &MakeDefaultScalarDatum<TOutput>,
+            Tz1, Tz2, PropagateTz, sizeof(TOutput),
+            (TUntypedBinaryScalarOptFuncPtr)scalarScalarFunc,
+            (TUntypedBinaryArrayOptFuncPtr)scalarArrayFunc,
+            (TUntypedBinaryArrayOptFuncPtr)arrayScalarFunc,
+            (TUntypedBinaryArrayOptFuncPtr)arrayArrayFunc);
     }
 };
 
 class TPlainKernel : public TKernel {
 public:
-    TPlainKernel(const TKernelFamily& family, const std::vector<NUdf::TDataTypeId>& argTypes, NUdf::TDataTypeId returnType, const arrow::compute::ScalarKernel& arrowKernel, TKernel::ENullMode nullMode)
-        : TKernel(family, argTypes, returnType, nullMode)
-        , ArrowKernel(arrowKernel)
-    {
-    }
+    TPlainKernel(const TKernelFamily& family, const std::vector<NUdf::TDataTypeId>& argTypes,
+        NUdf::TDataTypeId returnType, std::unique_ptr<arrow::compute::ScalarKernel>&& arrowKernel,
+        TKernel::ENullMode nullMode);
 
-    const arrow::compute::ScalarKernel& GetArrowKernel() const final {
-        return ArrowKernel;
-    }
+    const arrow::compute::ScalarKernel& GetArrowKernel() const final;
 
 private:
-    const arrow::compute::ScalarKernel ArrowKernel;
+    const std::unique_ptr<arrow::compute::ScalarKernel> ArrowKernel;
 };
 
 template<typename TInput, bool Tz, typename TOutput, bool PropagateTz, class TFuncInstance>
-struct TUnaryKernelExecs : TUnaryKernelExecsBase<TUnaryKernelExecs<TInput, Tz, TOutput, PropagateTz, TFuncInstance>>
+struct TUnaryKernelExecs
 {
-    static arrow::Status ExecScalar(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-        if (const auto& arg = batch.values.front(); !arg.scalar()->is_valid) {
-            *res = arrow::MakeNullScalar(AddTzType(PropagateTz, GetPrimitiveDataType<TOutput>()));
-        } else {
-            const auto val = GetPrimitiveScalarValue<TInput>(*ExtractTz(Tz, arg.scalar()));
-            *res = WithTz(PropagateTz, arg.scalar(), MakeScalarDatum<TOutput>(TFuncInstance::Do(val)).scalar());
+   using TTypedUnaryScalarFuncPtr = void(*)(
+        const typename TPrimitiveDataType<TInput>::TLayout*,
+        typename TPrimitiveDataType<TOutput>::TLayout*
+    );
+
+    using TTypedUnaryArrayFuncPtr = void(*)(
+        const typename TPrimitiveDataType<TInput>::TLayout*,
+        typename TPrimitiveDataType<TOutput>::TLayout*,
+        int64_t,
+        int64_t
+    );
+
+    static void ArrayCore(
+        const typename TPrimitiveDataType<TInput>::TLayout* valPtr,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
+        int64_t length, int64_t offset) {
+        TTypedUnaryScalarFuncPtr func = &TFuncInstance::DoPtr;
+        valPtr += offset;
+        for (int64_t i = 0; i < length; ++i) {
+            func(valPtr, resPtr);
+            ++valPtr;
+            ++resPtr;
         }
-        return arrow::Status::OK();
     }
 
-    static arrow::Status ExecArray(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-        static_assert(!std::is_same<TOutput, bool>::value);
-
-        const auto& arg = batch.values.front();
-        auto& resArr = *CopyTz<TOutput>(res->array(), PropagateTz, arg.array(), kernelCtx->memory_pool());
-
-        const auto& arr = *ExtractTz(Tz, arg.array());
-        auto length = arr.length;
-        const auto values = arr.GetValues<TInput>(1);
-        auto resValues = resArr.template GetMutableValues<TOutput>(1);
-        for (int64_t i = 0; i < length; ++i) {
-            resValues[i] = TFuncInstance::Do(values[i]);
-        }
-
-        return arrow::Status::OK();
+    static arrow::Status Exec(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        TTypedUnaryScalarFuncPtr func = &TFuncInstance::DoPtr;
+        TTypedUnaryArrayFuncPtr arrayFunc = &ArrayCore;
+        return ExecUnaryImpl(kernelCtx, batch, res,
+            &GetPrimitiveDataType<TOutput>,
+            &MakeDefaultScalarDatum<TOutput>,
+            Tz, PropagateTz, sizeof(TOutput), 
+            (TUntypedUnaryScalarFuncPtr)func,
+            (TUntypedUnaryArrayFuncPtr)arrayFunc);
     }
 };
+
+using TStatelessArrayKernelExec = arrow::Status(*)(arrow::compute::KernelContext*, const arrow::compute::ExecBatch&, arrow::Datum*);
+
+void AddUnaryKernelImpl(TKernelFamilyBase& owner, NUdf::EDataSlot arg1, NUdf::EDataSlot res,
+    TStatelessArrayKernelExec exec, TKernel::ENullMode nullMode);
 
 template<typename TInput, typename TOutput,
     template<typename, typename> class TFunc>
@@ -1295,26 +1298,11 @@ void AddUnaryKernel(TKernelFamilyBase& owner) {
     using TFuncInstance = TFunc<TInputLayout, TOutputLayout>;
     using TExecs = TUnaryKernelExecs<TInputLayout, tz, TOutputLayout, propagateTz, TFuncInstance>;
 
-    std::vector<NUdf::TDataTypeId> argTypes({ TInput::Id });
-    NUdf::TDataTypeId returnType = TOutput::Id;
-
-    arrow::compute::ScalarKernel k({
-        GetPrimitiveInputArrowType<TInputLayout>(tz)
-    }, GetPrimitiveOutputArrowType<TOutputLayout>(propagateTz), &TExecs::Exec);
-
-    switch (TFuncInstance::NullMode) {
-        case TKernel::ENullMode::Default:
-            k.null_handling = arrow::compute::NullHandling::INTERSECTION;
-            break;
-        case TKernel::ENullMode::AlwaysNull:
-            k.null_handling = arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
-            break;
-        case TKernel::ENullMode::AlwaysNotNull:
-            k.null_handling = arrow::compute::NullHandling::OUTPUT_NOT_NULL;
-            break;
-    }
-    owner.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(owner, argTypes, returnType, k, TFuncInstance::NullMode));
+    AddUnaryKernelImpl(owner, TInput::Slot, TOutput::Slot, &TExecs::Exec, TFuncInstance::NullMode);
 }
+
+void AddBinaryKernelImpl(TKernelFamilyBase& owner, NUdf::EDataSlot arg1, NUdf::EDataSlot arg2, NUdf::EDataSlot res,
+    TStatelessArrayKernelExec exec, TKernel::ENullMode nullMode);
 
 template<typename TInput1, typename TInput2, typename TOutput,
     template<typename, typename, typename> class TFunc>
@@ -1332,26 +1320,7 @@ void AddBinaryKernel(TKernelFamilyBase& owner) {
     using TFuncInstance = TFunc<TInput1Layout, TInput2Layout, TOutputLayout>;
     using TExecs = TBinaryKernelExecs<TInput1Layout, tz1, TInput2Layout, tz2, TOutputLayout, propagateTz, TFuncInstance, TFuncInstance::NullMode>;
 
-    std::vector<NUdf::TDataTypeId> argTypes({ TInput1::Id, TInput2::Id });
-    NUdf::TDataTypeId returnType = TOutput::Id;
-
-    arrow::compute::ScalarKernel k({
-        GetPrimitiveInputArrowType<TInput1Layout>(tz1),
-        GetPrimitiveInputArrowType<TInput2Layout>(tz2)
-    }, GetPrimitiveOutputArrowType<TOutputLayout>(propagateTz != EPropagateTz::None), &TExecs::Exec);
-
-    switch (TFuncInstance::NullMode) {
-        case TKernel::ENullMode::Default:
-            k.null_handling = arrow::compute::NullHandling::INTERSECTION;
-            break;
-        case TKernel::ENullMode::AlwaysNull:
-            k.null_handling = arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
-            break;
-        case TKernel::ENullMode::AlwaysNotNull:
-            k.null_handling = arrow::compute::NullHandling::OUTPUT_NOT_NULL;
-            break;
-    }
-    owner.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(owner, argTypes, returnType, k, TFuncInstance::NullMode));
+    AddBinaryKernelImpl(owner, TInput1::Slot, TInput2::Slot, TOutput::Slot, &TExecs::Exec, TFuncInstance::NullMode);
 }
 
 template<typename TInput1, typename TInput2, typename TOutput,
@@ -1370,26 +1339,7 @@ void AddBinaryKernelPoly(TKernelFamilyBase& owner) {
     using TFuncInstance = TFunc<TInput1, TInput2, TOutput>;
     using TExecs = TBinaryKernelExecs<TInput1Layout, tz1, TInput2Layout, tz2, TOutputLayout, propagateTz, TFuncInstance, TFuncInstance::NullMode>;
 
-    std::vector<NUdf::TDataTypeId> argTypes({ TInput1::Id, TInput2::Id });
-    NUdf::TDataTypeId returnType = TOutput::Id;
-
-    arrow::compute::ScalarKernel k({
-        GetPrimitiveInputArrowType<TInput1Layout>(tz1),
-        GetPrimitiveInputArrowType<TInput2Layout>(tz2)
-    }, GetPrimitiveOutputArrowType<TOutputLayout>(propagateTz != EPropagateTz::None), &TExecs::Exec);
-
-    switch (TFuncInstance::NullMode) {
-        case TKernel::ENullMode::Default:
-            k.null_handling = arrow::compute::NullHandling::INTERSECTION;
-            break;
-        case TKernel::ENullMode::AlwaysNull:
-            k.null_handling = arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
-            break;
-        case TKernel::ENullMode::AlwaysNotNull:
-            k.null_handling = arrow::compute::NullHandling::OUTPUT_NOT_NULL;
-            break;
-    }
-    owner.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(owner, argTypes, returnType, k, TFuncInstance::NullMode));
+    AddBinaryKernelImpl(owner, TInput1::Slot, TInput2::Slot, TOutput::Slot, &TExecs::Exec, TFuncInstance::NullMode);
 }
 
 template<template<typename, typename> class TFunc>

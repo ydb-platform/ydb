@@ -2,7 +2,7 @@
  * brin_minmax_multi.c
  *		Implementation of Multi Min/Max opclass for BRIN
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -142,19 +142,23 @@ typedef struct MinMaxMultiOptions
  * The Ranges struct stores the boundary values in a single array, but we
  * treat regular and single-point ranges differently to save space. For
  * regular ranges (with different boundary values) we have to store both
- * values, while for "single-point ranges" we only need to save one value.
+ * the lower and upper bound of the range, while for "single-point ranges"
+ * we only need to store a single value.
  *
  * The 'values' array stores boundary values for regular ranges first (there
  * are 2*nranges values to store), and then the nvalues boundary values for
  * single-point ranges. That is, we have (2*nranges + nvalues) boundary
  * values in the array.
  *
- * +---------------------------------+-------------------------------+
- * | ranges (sorted pairs of values) | sorted values (single points) |
- * +---------------------------------+-------------------------------+
+ * +-------------------------+----------------------------------+
+ * | ranges (2 * nranges of) | single point values (nvalues of) |
+ * +-------------------------+----------------------------------+
  *
  * This allows us to quickly add new values, and store outliers without
- * making the other ranges very wide.
+ * having to widen any of the existing range values.
+ *
+ * 'nsorted' denotes how many of 'nvalues' in the values[] array are sorted.
+ * When nsorted == nvalues, all single point values are sorted.
  *
  * We never store more than maxvalues values (as set by values_per_range
  * reloption). If needed we merge some of the ranges.
@@ -173,10 +177,10 @@ typedef struct Ranges
 	FmgrInfo   *cmp;
 
 	/* (2*nranges + nvalues) <= maxvalues */
-	int			nranges;		/* number of ranges in the array (stored) */
-	int			nsorted;		/* number of sorted values (ranges + points) */
-	int			nvalues;		/* number of values in the data array (all) */
-	int			maxvalues;		/* maximum number of values (reloption) */
+	int			nranges;		/* number of ranges in the values[] array */
+	int			nsorted;		/* number of nvalues which are sorted */
+	int			nvalues;		/* number of point values in values[] array */
+	int			maxvalues;		/* number of elements in the values[] array */
 
 	/*
 	 * We simply add the values into a large buffer, without any expensive
@@ -198,7 +202,7 @@ typedef struct Ranges
  * with basic metadata, followed by the boundary values. It has a varlena
  * header, so can be treated as varlena directly.
  *
- * See range_serialize/range_deserialize for serialization details.
+ * See brin_range_serialize/brin_range_deserialize for serialization details.
  */
 typedef struct SerializedRanges
 {
@@ -217,9 +221,10 @@ typedef struct SerializedRanges
 	char		data[FLEXIBLE_ARRAY_MEMBER];
 } SerializedRanges;
 
-static SerializedRanges *range_serialize(Ranges *range);
+static SerializedRanges *brin_range_serialize(Ranges *range);
 
-static Ranges *range_deserialize(int maxvalues, SerializedRanges *range);
+static Ranges *brin_range_deserialize(int maxvalues,
+									  SerializedRanges *serialized);
 
 
 /*
@@ -310,7 +315,7 @@ AssertCheckRanges(Ranges *ranges, FmgrInfo *cmpFn, Oid colloid)
 	 */
 	AssertArrayOrder(cmpFn, colloid, ranges->values, 2 * ranges->nranges);
 
-	/* then the single-point ranges (with nvalues boundar values ) */
+	/* then the single-point ranges (with nvalues boundary values ) */
 	AssertArrayOrder(cmpFn, colloid, &ranges->values[2 * ranges->nranges],
 					 ranges->nsorted);
 
@@ -318,102 +323,99 @@ AssertCheckRanges(Ranges *ranges, FmgrInfo *cmpFn, Oid colloid)
 	 * Check that none of the values are not covered by ranges (both sorted
 	 * and unsorted)
 	 */
-	for (i = 0; i < ranges->nvalues; i++)
+	if (ranges->nranges > 0)
 	{
-		Datum		compar;
-		int			start,
-					end;
-		Datum		minvalue,
-					maxvalue;
-
-		Datum		value = ranges->values[2 * ranges->nranges + i];
-
-		if (ranges->nranges == 0)
-			break;
-
-		minvalue = ranges->values[0];
-		maxvalue = ranges->values[2 * ranges->nranges - 1];
-
-		/*
-		 * Is the value smaller than the minval? If yes, we'll recurse to the
-		 * left side of range array.
-		 */
-		compar = FunctionCall2Coll(cmpFn, colloid, value, minvalue);
-
-		/* smaller than the smallest value in the first range */
-		if (DatumGetBool(compar))
-			continue;
-
-		/*
-		 * Is the value greater than the maxval? If yes, we'll recurse to the
-		 * right side of range array.
-		 */
-		compar = FunctionCall2Coll(cmpFn, colloid, maxvalue, value);
-
-		/* larger than the largest value in the last range */
-		if (DatumGetBool(compar))
-			continue;
-
-		start = 0;				/* first range */
-		end = ranges->nranges - 1;	/* last range */
-		while (true)
+		for (i = 0; i < ranges->nvalues; i++)
 		{
-			int			midpoint = (start + end) / 2;
+			Datum		compar;
+			int			start,
+						end;
+			Datum		minvalue = ranges->values[0];
+			Datum		maxvalue = ranges->values[2 * ranges->nranges - 1];
+			Datum		value = ranges->values[2 * ranges->nranges + i];
 
-			/* this means we ran out of ranges in the last step */
-			if (start > end)
-				break;
-
-			/* copy the min/max values from the ranges */
-			minvalue = ranges->values[2 * midpoint];
-			maxvalue = ranges->values[2 * midpoint + 1];
-
-			/*
-			 * Is the value smaller than the minval? If yes, we'll recurse to
-			 * the left side of range array.
-			 */
 			compar = FunctionCall2Coll(cmpFn, colloid, value, minvalue);
 
-			/* smaller than the smallest value in this range */
-			if (DatumGetBool(compar))
-			{
-				end = (midpoint - 1);
-				continue;
-			}
-
 			/*
-			 * Is the value greater than the minval? If yes, we'll recurse to
-			 * the right side of range array.
+			 * If the value is smaller than the lower bound in the first range
+			 * then it cannot possibly be in any of the ranges.
 			 */
+			if (DatumGetBool(compar))
+				continue;
+
 			compar = FunctionCall2Coll(cmpFn, colloid, maxvalue, value);
 
-			/* larger than the largest value in this range */
+			/*
+			 * Likewise, if the value is larger than the upper bound of the
+			 * final range, then it cannot possibly be inside any of the
+			 * ranges.
+			 */
 			if (DatumGetBool(compar))
-			{
-				start = (midpoint + 1);
 				continue;
-			}
 
-			/* hey, we found a matching range */
-			Assert(false);
+			/* bsearch the ranges to see if 'value' fits within any of them */
+			start = 0;			/* first range */
+			end = ranges->nranges - 1;	/* last range */
+			while (true)
+			{
+				int			midpoint = (start + end) / 2;
+
+				/* this means we ran out of ranges in the last step */
+				if (start > end)
+					break;
+
+				/* copy the min/max values from the ranges */
+				minvalue = ranges->values[2 * midpoint];
+				maxvalue = ranges->values[2 * midpoint + 1];
+
+				/*
+				 * Is the value smaller than the minval? If yes, we'll recurse
+				 * to the left side of range array.
+				 */
+				compar = FunctionCall2Coll(cmpFn, colloid, value, minvalue);
+
+				/* smaller than the smallest value in this range */
+				if (DatumGetBool(compar))
+				{
+					end = (midpoint - 1);
+					continue;
+				}
+
+				/*
+				 * Is the value greater than the minval? If yes, we'll recurse
+				 * to the right side of range array.
+				 */
+				compar = FunctionCall2Coll(cmpFn, colloid, maxvalue, value);
+
+				/* larger than the largest value in this range */
+				if (DatumGetBool(compar))
+				{
+					start = (midpoint + 1);
+					continue;
+				}
+
+				/* hey, we found a matching range */
+				Assert(false);
+			}
 		}
 	}
 
-	/* and values in the unsorted part must not be in sorted part */
-	for (i = ranges->nsorted; i < ranges->nvalues; i++)
+	/* and values in the unsorted part must not be in the sorted part */
+	if (ranges->nsorted > 0)
 	{
 		compare_context cxt;
-		Datum		value = ranges->values[2 * ranges->nranges + i];
-
-		if (ranges->nsorted == 0)
-			break;
 
 		cxt.colloid = ranges->colloid;
 		cxt.cmpFn = ranges->cmp;
 
-		Assert(bsearch_arg(&value, &ranges->values[2 * ranges->nranges],
-						   ranges->nsorted, sizeof(Datum),
-						   compare_values, (void *) &cxt) == NULL);
+		for (i = ranges->nsorted; i < ranges->nvalues; i++)
+		{
+			Datum		value = ranges->values[2 * ranges->nranges + i];
+
+			Assert(bsearch_arg(&value, &ranges->values[2 * ranges->nranges],
+							   ranges->nsorted, sizeof(Datum),
+							   compare_values, (void *) &cxt) == NULL);
+		}
 	}
 #endif
 }
@@ -541,7 +543,7 @@ range_deduplicate_values(Ranges *range)
 	 */
 	qsort_arg(&range->values[start],
 			  range->nvalues, sizeof(Datum),
-			  compare_values, (void *) &cxt);
+			  compare_values, &cxt);
 
 	n = 1;
 	for (i = 1; i < range->nvalues; i++)
@@ -566,14 +568,14 @@ range_deduplicate_values(Ranges *range)
 
 
 /*
- * range_serialize
+ * brin_range_serialize
  *	  Serialize the in-memory representation into a compact varlena value.
  *
  * Simply copy the header and then also the individual values, as stored
  * in the in-memory value array.
  */
 static SerializedRanges *
-range_serialize(Ranges *range)
+brin_range_serialize(Ranges *range)
 {
 	Size		len;
 	int			nvalues;
@@ -582,7 +584,6 @@ range_serialize(Ranges *range)
 	int			typlen;
 	bool		typbyval;
 
-	int			i;
 	char	   *ptr;
 
 	/* simple sanity checks */
@@ -662,7 +663,7 @@ range_serialize(Ranges *range)
 	 */
 	ptr = serialized->data;		/* start of the serialized data */
 
-	for (i = 0; i < nvalues; i++)
+	for (int i = 0; i < nvalues; i++)
 	{
 		if (typbyval)			/* simple by-value data types */
 		{
@@ -712,14 +713,14 @@ range_serialize(Ranges *range)
 }
 
 /*
- * range_deserialize
+ * brin_range_deserialize
  *	  Serialize the in-memory representation into a compact varlena value.
  *
  * Simply copy the header and then also the individual values, as stored
  * in the in-memory value array.
  */
 static Ranges *
-range_deserialize(int maxvalues, SerializedRanges *serialized)
+brin_range_deserialize(int maxvalues, SerializedRanges *serialized)
 {
 	int			i,
 				nvalues;
@@ -775,12 +776,12 @@ range_deserialize(int maxvalues, SerializedRanges *serialized)
 			datalen += MAXALIGN(typlen);
 		else if (typlen == -1)	/* varlena */
 		{
-			datalen += MAXALIGN(VARSIZE_ANY(DatumGetPointer(ptr)));
-			ptr += VARSIZE_ANY(DatumGetPointer(ptr));
+			datalen += MAXALIGN(VARSIZE_ANY(ptr));
+			ptr += VARSIZE_ANY(ptr);
 		}
 		else if (typlen == -2)	/* cstring */
 		{
-			Size		slen = strlen(DatumGetCString(ptr)) + 1;
+			Size		slen = strlen(ptr) + 1;
 
 			datalen += MAXALIGN(slen);
 			ptr += slen;
@@ -924,8 +925,8 @@ has_matching_range(BrinDesc *bdesc, Oid colloid, Ranges *ranges,
 {
 	Datum		compar;
 
-	Datum		minvalue = ranges->values[0];
-	Datum		maxvalue = ranges->values[2 * ranges->nranges - 1];
+	Datum		minvalue;
+	Datum		maxvalue;
 
 	FmgrInfo   *cmpLessFn;
 	FmgrInfo   *cmpGreaterFn;
@@ -936,6 +937,9 @@ has_matching_range(BrinDesc *bdesc, Oid colloid, Ranges *ranges,
 
 	if (ranges->nranges == 0)
 		return false;
+
+	minvalue = ranges->values[0];
+	maxvalue = ranges->values[2 * ranges->nranges - 1];
 
 	/*
 	 * Otherwise, need to compare the new value with boundaries of all the
@@ -1193,7 +1197,7 @@ sort_expanded_ranges(FmgrInfo *cmp, Oid colloid,
 	 * some of the points) and do merge sort.
 	 */
 	qsort_arg(eranges, neranges, sizeof(ExpandedRange),
-			  compare_expanded_ranges, (void *) &cxt);
+			  compare_expanded_ranges, &cxt);
 
 	/*
 	 * Deduplicate the ranges - simply compare each range to the preceding
@@ -1331,7 +1335,11 @@ build_distances(FmgrInfo *distanceFn, Oid colloid,
 	int			ndistances;
 	DistanceValue *distances;
 
-	Assert(neranges >= 2);
+	Assert(neranges > 0);
+
+	/* If there's only a single range, there's no distance to calculate. */
+	if (neranges == 1)
+		return NULL;
 
 	ndistances = (neranges - 1);
 	distances = (DistanceValue *) palloc0(sizeof(DistanceValue) * ndistances);
@@ -1527,7 +1535,7 @@ reduce_expanded_ranges(ExpandedRange *eranges, int neranges,
 	 * sorted result.
 	 */
 	qsort_arg(values, nvalues, sizeof(Datum),
-			  compare_values, (void *) &cxt);
+			  compare_values, &cxt);
 
 	/* We have nvalues boundary values, which means nvalues/2 ranges. */
 	for (i = 0; i < (nvalues / 2); i++)
@@ -2067,13 +2075,15 @@ brin_minmax_multi_distance_uuid(PG_FUNCTION_ARGS)
 Datum
 brin_minmax_multi_distance_date(PG_FUNCTION_ARGS)
 {
+	float8		delta = 0;
 	DateADT		dateVal1 = PG_GETARG_DATEADT(0);
 	DateADT		dateVal2 = PG_GETARG_DATEADT(1);
 
-	if (DATE_NOT_FINITE(dateVal1) || DATE_NOT_FINITE(dateVal2))
-		PG_RETURN_FLOAT8(0);
+	delta = (float8) dateVal2 - (float8) dateVal1;
 
-	PG_RETURN_FLOAT8(dateVal1 - dateVal2);
+	Assert(delta >= 0);
+
+	PG_RETURN_FLOAT8(delta);
 }
 
 /*
@@ -2127,10 +2137,7 @@ brin_minmax_multi_distance_timestamp(PG_FUNCTION_ARGS)
 	Timestamp	dt1 = PG_GETARG_TIMESTAMP(0);
 	Timestamp	dt2 = PG_GETARG_TIMESTAMP(1);
 
-	if (TIMESTAMP_NOT_FINITE(dt1) || TIMESTAMP_NOT_FINITE(dt2))
-		PG_RETURN_FLOAT8(0);
-
-	delta = dt2 - dt1;
+	delta = (float8) dt2 - (float8) dt1;
 
 	Assert(delta >= 0);
 
@@ -2147,34 +2154,9 @@ brin_minmax_multi_distance_interval(PG_FUNCTION_ARGS)
 
 	Interval   *ia = PG_GETARG_INTERVAL_P(0);
 	Interval   *ib = PG_GETARG_INTERVAL_P(1);
-	Interval   *result;
 
 	int64		dayfraction;
 	int64		days;
-
-	result = (Interval *) palloc(sizeof(Interval));
-
-	result->month = ib->month - ia->month;
-	/* overflow check copied from int4mi */
-	if (!SAMESIGN(ib->month, ia->month) &&
-		!SAMESIGN(result->month, ib->month))
-		ereport(ERROR,
-				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
-				 errmsg("interval out of range")));
-
-	result->day = ib->day - ia->day;
-	if (!SAMESIGN(ib->day, ia->day) &&
-		!SAMESIGN(result->day, ib->day))
-		ereport(ERROR,
-				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
-				 errmsg("interval out of range")));
-
-	result->time = ib->time - ia->time;
-	if (!SAMESIGN(ib->time, ia->time) &&
-		!SAMESIGN(result->time, ib->time))
-		ereport(ERROR,
-				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
-				 errmsg("interval out of range")));
 
 	/*
 	 * Delta is (fractional) number of days between the intervals. Assume
@@ -2182,10 +2164,10 @@ brin_minmax_multi_distance_interval(PG_FUNCTION_ARGS)
 	 * don't need to be exact, in the worst case we'll build a bit less
 	 * efficient ranges. But we should not contradict interval_cmp.
 	 */
-	dayfraction = result->time % USECS_PER_DAY;
-	days = result->time / USECS_PER_DAY;
-	days += result->month * INT64CONST(30);
-	days += result->day;
+	dayfraction = (ib->time % USECS_PER_DAY) - (ia->time % USECS_PER_DAY);
+	days = (ib->time / USECS_PER_DAY) - (ia->time / USECS_PER_DAY);
+	days += (int64) ib->day - (int64) ia->day;
+	days += ((int64) ib->month - (int64) ia->month) * INT64CONST(30);
 
 	/* convert to double precision */
 	delta = (double) days + dayfraction / (double) USECS_PER_DAY;
@@ -2356,14 +2338,14 @@ brin_minmax_multi_distance_inet(PG_FUNCTION_ARGS)
 		unsigned char mask;
 		int			nbits;
 
-		nbits = lena - (i * 8);
+		nbits = Max(0, lena - (i * 8));
 		if (nbits < 8)
 		{
 			mask = (0xFF << (8 - nbits));
 			addra[i] = (addra[i] & mask);
 		}
 
-		nbits = lenb - (i * 8);
+		nbits = Max(0, lenb - (i * 8));
 		if (nbits < 8)
 		{
 			mask = (0xFF << (8 - nbits));
@@ -2405,7 +2387,7 @@ brin_minmax_multi_serialize(BrinDesc *bdesc, Datum src, Datum *dst)
 	/* At this point everything has to be fully sorted. */
 	Assert(ranges->nsorted == ranges->nvalues);
 
-	s = range_serialize(ranges);
+	s = brin_range_serialize(ranges);
 	dst[0] = PointerGetDatum(s);
 }
 
@@ -2528,7 +2510,7 @@ brin_minmax_multi_add_value(PG_FUNCTION_ARGS)
 		maxvalues = Max(maxvalues, MINMAX_BUFFER_MIN);
 		maxvalues = Min(maxvalues, MINMAX_BUFFER_MAX);
 
-		ranges = range_deserialize(maxvalues, serialized);
+		ranges = brin_range_deserialize(maxvalues, serialized);
 
 		ranges->attno = attno;
 		ranges->colloid = colloid;
@@ -2581,7 +2563,7 @@ brin_minmax_multi_consistent(PG_FUNCTION_ARGS)
 	attno = column->bv_attno;
 
 	serialized = (SerializedRanges *) PG_DETOAST_DATUM(column->bv_values[0]);
-	ranges = range_deserialize(serialized->maxvalues, serialized);
+	ranges = brin_range_deserialize(serialized->maxvalues, serialized);
 
 	/* inspect the ranges, and for each one evaluate the scan keys */
 	for (rangeno = 0; rangeno < ranges->nranges; rangeno++)
@@ -2776,8 +2758,8 @@ brin_minmax_multi_union(PG_FUNCTION_ARGS)
 	serialized_a = (SerializedRanges *) PG_DETOAST_DATUM(col_a->bv_values[0]);
 	serialized_b = (SerializedRanges *) PG_DETOAST_DATUM(col_b->bv_values[0]);
 
-	ranges_a = range_deserialize(serialized_a->maxvalues, serialized_a);
-	ranges_b = range_deserialize(serialized_b->maxvalues, serialized_b);
+	ranges_a = brin_range_deserialize(serialized_a->maxvalues, serialized_a);
+	ranges_b = brin_range_deserialize(serialized_b->maxvalues, serialized_b);
 
 	/* make sure neither of the ranges is NULL */
 	Assert(ranges_a && ranges_b);
@@ -2859,7 +2841,7 @@ brin_minmax_multi_union(PG_FUNCTION_ARGS)
 
 	/* cleanup and update the serialized value */
 	pfree(serialized_a);
-	col_a->bv_values[0] = PointerGetDatum(range_serialize(ranges_a));
+	col_a->bv_values[0] = PointerGetDatum(brin_range_serialize(ranges_a));
 
 	PG_RETURN_VOID();
 }
@@ -2945,7 +2927,6 @@ minmax_multi_get_strategy_procinfo(BrinDesc *bdesc, uint16 attno, Oid subtype,
 		HeapTuple	tuple;
 		Oid			opfamily,
 					oprid;
-		bool		isNull;
 
 		opfamily = bdesc->bd_index->rd_opfamily[attno - 1];
 		attr = TupleDescAttr(bdesc->bd_tupdesc, attno - 1);
@@ -2957,10 +2938,10 @@ minmax_multi_get_strategy_procinfo(BrinDesc *bdesc, uint16 attno, Oid subtype,
 			elog(ERROR, "missing operator %d(%u,%u) in opfamily %u",
 				 strategynum, attr->atttypid, subtype, opfamily);
 
-		oprid = DatumGetObjectId(SysCacheGetAttr(AMOPSTRATEGY, tuple,
-												 Anum_pg_amop_amopopr, &isNull));
+		oprid = DatumGetObjectId(SysCacheGetAttrNotNull(AMOPSTRATEGY, tuple,
+														Anum_pg_amop_amopopr));
 		ReleaseSysCache(tuple);
-		Assert(!isNull && RegProcedureIsValid(oprid));
+		Assert(RegProcedureIsValid(oprid));
 
 		fmgr_info_cxt(get_opcode(oprid),
 					  &opaque->strategy_procinfos[strategynum - 1],
@@ -3034,16 +3015,16 @@ brin_minmax_multi_summary_out(PG_FUNCTION_ARGS)
 	 * Detoast to get value with full 4B header (can't be stored in a toast
 	 * table, but can use 1B header).
 	 */
-	ranges = (SerializedRanges *) PG_DETOAST_DATUM(PG_GETARG_BYTEA_PP(0));
+	ranges = (SerializedRanges *) PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
 
 	/* lookup output func for the type */
 	getTypeOutputInfo(ranges->typid, &outfunc, &isvarlena);
 	fmgr_info(outfunc, &fmgrinfo);
 
 	/* deserialize the range info easy-to-process pieces */
-	ranges_deserialized = range_deserialize(ranges->maxvalues, ranges);
+	ranges_deserialized = brin_range_deserialize(ranges->maxvalues, ranges);
 
-	appendStringInfo(&str, "nranges: %u  nvalues: %u  maxvalues: %u",
+	appendStringInfo(&str, "nranges: %d  nvalues: %d  maxvalues: %d",
 					 ranges_deserialized->nranges,
 					 ranges_deserialized->nvalues,
 					 ranges_deserialized->maxvalues);
@@ -3055,16 +3036,16 @@ brin_minmax_multi_summary_out(PG_FUNCTION_ARGS)
 		char	   *a,
 				   *b;
 		text	   *c;
-		StringInfoData str;
+		StringInfoData buf;
 
-		initStringInfo(&str);
+		initStringInfo(&buf);
 
 		a = OutputFunctionCall(&fmgrinfo, ranges_deserialized->values[idx++]);
 		b = OutputFunctionCall(&fmgrinfo, ranges_deserialized->values[idx++]);
 
-		appendStringInfo(&str, "%s ... %s", a, b);
+		appendStringInfo(&buf, "%s ... %s", a, b);
 
-		c = cstring_to_text(str.data);
+		c = cstring_to_text_with_len(buf.data, buf.len);
 
 		astate_values = accumArrayResult(astate_values,
 										 PointerGetDatum(c),
@@ -3082,7 +3063,7 @@ brin_minmax_multi_summary_out(PG_FUNCTION_ARGS)
 
 		getTypeOutputInfo(ANYARRAYOID, &typoutput, &typIsVarlena);
 
-		val = PointerGetDatum(makeArrayResult(astate_values, CurrentMemoryContext));
+		val = makeArrayResult(astate_values, CurrentMemoryContext);
 
 		extval = OidOutputFunctionCall(typoutput, val);
 
@@ -3096,15 +3077,9 @@ brin_minmax_multi_summary_out(PG_FUNCTION_ARGS)
 	{
 		Datum		a;
 		text	   *b;
-		StringInfoData str;
-
-		initStringInfo(&str);
 
 		a = FunctionCall1(&fmgrinfo, ranges_deserialized->values[idx++]);
-
-		appendStringInfoString(&str, DatumGetCString(a));
-
-		b = cstring_to_text(str.data);
+		b = cstring_to_text(DatumGetCString(a));
 
 		astate_values = accumArrayResult(astate_values,
 										 PointerGetDatum(b),
@@ -3122,7 +3097,7 @@ brin_minmax_multi_summary_out(PG_FUNCTION_ARGS)
 
 		getTypeOutputInfo(ANYARRAYOID, &typoutput, &typIsVarlena);
 
-		val = PointerGetDatum(makeArrayResult(astate_values, CurrentMemoryContext));
+		val = makeArrayResult(astate_values, CurrentMemoryContext);
 
 		extval = OidOutputFunctionCall(typoutput, val);
 

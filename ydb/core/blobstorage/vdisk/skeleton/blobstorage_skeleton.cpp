@@ -225,12 +225,19 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
 
         void Handle(TEvBlobStorage::TEvVMovedPatch::TPtr &ev, const TActorContext &ctx) {
+            LOG_DEBUG_S(ctx, BS_VDISK_PATCH, VCtx->VDiskLogPrefix << "TEvVMovedPatch: receive request;"
+                    << " Event# " << ev->Get()->ToString());
             if (!CheckIfWriteAllowed(ev, ctx)) {
+                LOG_DEBUG_S(ctx, BS_VDISK_PATCH, VCtx->VDiskLogPrefix << "TEvVMovedPatch: is not allowed;"
+                        << " Event# " << ev->Get()->ToString());
                 return;
             }
             const bool postpone = OverloadHandler->PostponeEvent(ev);
             if (!postpone) {
                 PrivateHandle(ev, ctx);
+            } else {
+                LOG_DEBUG_S(ctx, BS_VDISK_PATCH, VCtx->VDiskLogPrefix << "TEvVMovedPatch: is postponned;"
+                        << " Event# " << ev->Get()->ToString());
             }
         }
 
@@ -270,11 +277,16 @@ namespace NKikimr {
 
         void Handle(TEvBlobStorage::TEvVPatchStart::TPtr &ev, const TActorContext &ctx) {
             if (!CheckIfWriteAllowed(ev, ctx)) {
+                LOG_DEBUG_S(ctx, BS_VDISK_PATCH, VCtx->VDiskLogPrefix << "TEvVPatchStart: receive request;"
+                        << " Event# " << ev->Get()->ToString());
                 return;
             }
             const bool postpone = OverloadHandler->PostponeEvent(ev);
             if (!postpone) {
                 PrivateHandle(ev, ctx);
+            } else {
+                LOG_DEBUG_S(ctx, BS_VDISK_PATCH, VCtx->VDiskLogPrefix << "TEvVPatchStart: postponned;"
+                        << " Event# " << ev->Get()->ToString());
             }
         }
 
@@ -307,24 +319,32 @@ namespace NKikimr {
         template <typename TEvDiffPtr>
         void HandleVPatchDiffResending(TEvDiffPtr &ev, const TActorContext &ctx) {
             if (!CheckIfWriteAllowed(ev, ctx)) {
+                LOG_DEBUG_S(ctx, BS_VDISK_PATCH, VCtx->VDiskLogPrefix << "TEvVPatch: is not allowed;"
+                        << " Event# " << ev->Get()->ToString());
                 return;
             }
             if constexpr (std::is_same_v<TEvDiffPtr, TEvBlobStorage::TEvVPatchDiff::TPtr>) {
                 LOG_DEBUG_S(ctx, BS_VDISK_PATCH, VCtx->VDiskLogPrefix << "TEvVPatch: recieve diff;"
                         << " Event# " << ev->Get()->ToString());
                 IFaceMonGroup->PatchDiffMsgs()++;
-            }
-            if constexpr (std::is_same_v<TEvDiffPtr, TEvBlobStorage::TEvVPatchXorDiff::TPtr>) {
+            } else if constexpr (std::is_same_v<TEvDiffPtr, TEvBlobStorage::TEvVPatchXorDiff::TPtr>) {
                 LOG_DEBUG_S(ctx, BS_VDISK_PATCH, VCtx->VDiskLogPrefix << "TEvVPatch: recieve xor diff;"
                         << " Event# " << ev->Get()->ToString());
                 IFaceMonGroup->PatchXorDiffMsgs()++;
+            } else {
+                LOG_ERROR_S(ctx, BS_VDISK_PATCH, VCtx->VDiskLogPrefix << "TEvVPatch: UNKNOWN diff;"
+                        << " Event# " << ev->Get()->ToString());
             }
             TLogoBlobID patchedBlobId = LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetPatchedPartBlobId()).FullID();
             auto it = VPatchActors.find(patchedBlobId);
             if (it != VPatchActors.end()) {
                 TActivationContext::Send(ev->Forward(it->second));
+                LOG_DEBUG_S(ctx, BS_VDISK_PATCH, VCtx->VDiskLogPrefix << "TEvVPatch: diff sent to actor;"
+                        << " Event# " << ev->Get()->ToString());
             } else {
                 ReplyError(NKikimrProto::ERROR, "VPatchActor doesn't exist", ev, ctx, TAppData::TimeProvider->Now());
+                LOG_DEBUG_S(ctx, BS_VDISK_PATCH, VCtx->VDiskLogPrefix << "TEvVPatch: diff didn't send to actor; actor didn't exist"
+                        << " Event# " << ev->Get()->ToString());
             }
         }
 
@@ -853,7 +873,7 @@ namespace NKikimr {
 
             std::unique_ptr<NSyncLog::TEvSyncLogPut> syncLogMsg(
                     new NSyncLog::TEvSyncLogPut(Db->GType, seg.Point(), msg->Id, msg->Ingress));
-            std::unique_ptr<TEvDelLogoBlobDataSyncLogResult> result(new TEvDelLogoBlobDataSyncLogResult(msg->OrderId, now,
+            std::unique_ptr<TEvDelLogoBlobDataSyncLogResult> result(new TEvDelLogoBlobDataSyncLogResult(msg->Id, msg->OrderId, now,
                     nullptr, nullptr));
 
             bool confirmSyncLogAlso = static_cast<bool>(syncLogMsg);
@@ -2539,8 +2559,7 @@ namespace NKikimr {
                 ActiveActors.Erase(BalancingId);
             }
             auto balancingCtx = std::make_shared<TBalancingCtx>(
-                VCtx, PDiskCtx, SelfId(), Hull->GetSnapshot(), Config, GInfo
-            );
+                VCtx, PDiskCtx, HugeBlobCtx, SelfId(), Hull->GetSnapshot(), Config, GInfo, MinREALHugeBlobInBytes);
             BalancingId = ctx.Register(CreateBalancingActor(balancingCtx));
             ActiveActors.Insert(BalancingId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }

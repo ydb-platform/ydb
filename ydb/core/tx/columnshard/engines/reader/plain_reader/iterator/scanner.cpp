@@ -9,7 +9,7 @@ void TScanHead::OnIntervalResult(const std::optional<NArrow::TShardedRecordBatch
     std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger, const ui32 intervalIdx, TPlainReadData& reader) {
     if (Context->GetReadMetadata()->Limit && (!newBatch || newBatch->GetRecordsCount() == 0) && InFlightLimit < 1000) {
         if (++ZeroCount == std::max<ui64>(16, InFlightLimit)) {
-            InFlightLimit *= 2;
+            InFlightLimit = std::min<ui32>(MaxInFlight, InFlightLimit * 2);
             ZeroCount = 0;
         }
     } else {
@@ -97,7 +97,22 @@ TConclusionStatus TScanHead::Start() {
 TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<TSpecialReadContext>& context)
     : Context(context)
 {
-    InFlightLimit = Context->GetReadMetadata()->Limit ? 1 : Max<ui32>();
+    
+    if (HasAppData()) {
+        if (AppDataVerified().ColumnShardConfig.HasMaxInFlightMemoryOnRequest()) {
+            MaxInFlightMemory = AppDataVerified().ColumnShardConfig.GetMaxInFlightMemoryOnRequest();
+        }
+
+        if (AppDataVerified().ColumnShardConfig.HasMaxInFlightIntervalsOnRequest()) {
+            MaxInFlight = AppDataVerified().ColumnShardConfig.GetMaxInFlightIntervalsOnRequest();
+        }
+    }
+
+    if (Context->GetReadMetadata()->Limit) {
+        InFlightLimit = 1;
+    } else {
+        InFlightLimit = MaxInFlight;
+    }
     while (sources.size()) {
         auto source = sources.front();
         BorderPoints[source->GetStart()].AddStart(source);
@@ -229,19 +244,31 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
     if (AbortFlag) {
         return false;
     }
-    while (BorderPoints.size() && (FetchingIntervals.size() < InFlightLimit || BorderPoints.begin()->second.GetStartSources().empty())) {
+    while (BorderPoints.size()) {
+        if (BorderPoints.begin()->second.GetStartSources().size()) {
+            if (FetchingIntervals.size() >= InFlightLimit) {
+                AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_next_interval")("reason", "too many intervals in flight")(
+                    "count", FetchingIntervals.size())("limit", InFlightLimit);
+                return false;
+            }
+            if (Context->GetCommonContext()->GetCounters().GetRequestedMemoryBytes() >= MaxInFlightMemory) {
+                AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_next_interval")("reason", "a lot of memory in usage")(
+                    "volume", Context->GetCommonContext()->GetCounters().GetRequestedMemoryBytes())("limit", MaxInFlightMemory);
+                return false;
+            }
+        }
         auto firstBorderPointInfo = std::move(BorderPoints.begin()->second);
         CurrentState.OnStartPoint(firstBorderPointInfo);
 
         if (CurrentState.GetIsSpecialPoint()) {
             const ui32 intervalIdx = SegmentIdxCounter++;
-            auto interval = std::make_shared<TFetchingInterval>(
-                BorderPoints.begin()->first, BorderPoints.begin()->first, intervalIdx, CurrentState.GetCurrentSources(),
-                Context, true, true, false);
+            auto interval = std::make_shared<TFetchingInterval>(BorderPoints.begin()->first, BorderPoints.begin()->first, intervalIdx,
+                CurrentState.GetCurrentSources(), Context, true, true, false);
             FetchingIntervals.emplace(intervalIdx, interval);
             IntervalStats.emplace_back(CurrentState.GetCurrentSources().size(), true);
             NResourceBroker::NSubscribe::ITask::StartResourceSubscription(Context->GetCommonContext()->GetResourceSubscribeActorId(), interval);
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "new_interval")("interval_idx", intervalIdx)("interval", interval->DebugJson());
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "new_interval")("interval_idx", intervalIdx)(
+                "interval", interval->DebugJson());
         }
 
         CurrentState.OnFinishPoint(firstBorderPointInfo);
@@ -252,11 +279,13 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
             Y_ABORT_UNLESS(BorderPoints.size());
             CurrentState.OnNextPointInfo(BorderPoints.begin()->second);
             const ui32 intervalIdx = SegmentIdxCounter++;
-            auto interval = std::make_shared<TFetchingInterval>(*CurrentStart, BorderPoints.begin()->first, intervalIdx, CurrentState.GetCurrentSources(), Context,
-                CurrentState.GetIncludeFinish(), CurrentState.GetIncludeStart(), CurrentState.GetIsExclusiveInterval());
+            auto interval =
+                std::make_shared<TFetchingInterval>(*CurrentStart, BorderPoints.begin()->first, intervalIdx, CurrentState.GetCurrentSources(),
+                    Context, CurrentState.GetIncludeFinish(), CurrentState.GetIncludeStart(), CurrentState.GetIsExclusiveInterval());
             FetchingIntervals.emplace(intervalIdx, interval);
             IntervalStats.emplace_back(CurrentState.GetCurrentSources().size(), false);
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "new_interval")("interval_idx", intervalIdx)("interval", interval->DebugJson());
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "new_interval")("interval_idx", intervalIdx)(
+                "interval", interval->DebugJson());
             NResourceBroker::NSubscribe::ITask::StartResourceSubscription(Context->GetCommonContext()->GetResourceSubscribeActorId(), interval);
             return true;
         } else {

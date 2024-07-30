@@ -239,6 +239,7 @@ config:
 ```
 ||
 |#
+
 ### !append
 
 **Scope:** [YAML sequence](https://yaml.org/spec/1.2.2/#sequence)

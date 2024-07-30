@@ -27,7 +27,7 @@ public:
     }
 
     bool Has(const TString& key) const noexcept override {
-        return YamlProfile[key];
+        return static_cast<bool>(YamlProfile[key]);
     }
 
     void SetValue(const TString& key, const YAML::Node& value) override {

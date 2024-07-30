@@ -6,7 +6,7 @@
 #include <util/generic/string.h>
 #include <util/datetime/base.h>
 
-namespace NYql {
+namespace NYql::NGenericPushDown {
 
     struct TBooleanColumnStatsData {
         TMaybe<i64> numTrues;
@@ -83,4 +83,4 @@ namespace NYql {
         TMaybe<TTimestampColumnStatsData> Timestamp;
     };
 
-} // namespace NYql
+}

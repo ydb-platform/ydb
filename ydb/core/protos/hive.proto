@@ -246,6 +246,7 @@ message TEvTabletMetrics {
     repeated TTabletMetrics TabletMetrics = 1;
     optional NKikimrTabletBase.TMetrics TotalResourceUsage = 2;
     optional double TotalNodeUsage = 3;
+    optional NKikimrTabletBase.TMetrics ResourceMaximum = 4;
 }
 
 message TEvReassignTablet {
@@ -574,4 +575,16 @@ message TEvUpdateDomain {
 message TEvUpdateDomainReply {
     optional fixed64 Origin = 1;
     optional uint64 TxId = 2;
+}
+
+message TEvRequestTabletDistribution {
+    repeated fixed64 TabletIds = 1;
+}
+
+message TEvResponseTabletDistribution {
+    message TNode {
+        optional uint32 NodeId = 1;
+        repeated fixed64 TabletIds = 2;
+    }
+    repeated TNode Nodes = 1;
 }

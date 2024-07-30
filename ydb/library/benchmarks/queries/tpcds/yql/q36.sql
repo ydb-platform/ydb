@@ -3,14 +3,14 @@
 -- NB: Subquerys
 -- start query 1 in stream 0 using template query36.tpl and seed 1544728811
 select
-    sum(ss_net_profit)/sum(ss_ext_sales_price) as gross_margin
+    $upscale(sum(ss_net_profit))/$upscale(sum(ss_ext_sales_price)) as gross_margin
    ,item.i_category
    ,item.i_class
    ,grouping(item.i_category)+grouping(item.i_class) as lochierarchy
    ,rank() over (
  	partition by grouping(item.i_category)+grouping(item.i_class),
  	case when grouping(item.i_class) = 0 then item.i_category else null end
- 	order by sum(ss_net_profit)/sum(ss_ext_sales_price) asc) as rank_within_parent
+ 	order by $upscale(sum(ss_net_profit))/$upscale(sum(ss_ext_sales_price)) asc) as rank_within_parent
  from
     {{store_sales}} as store_sales
    cross join {{date_dim}}       d1

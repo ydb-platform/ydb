@@ -11,7 +11,7 @@ on:
 jobs:
   build_and_test:
     if: ${{vars.CHECKS_SWITCH != '' && fromJSON(vars.CHECKS_SWITCH).postcommit_relwithdebinfo == true}}
-    runs-on: [ self-hosted, auto-provisioned, build-preset-relwithdebinfo ]
+    runs-on: [ self-hosted, auto-provisioned, build-preset-relwithdebinfo, postcommit ]
     name: Build and test relwithdebinfo
     steps:
     - name: Checkout

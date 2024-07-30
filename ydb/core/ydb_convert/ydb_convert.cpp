@@ -15,6 +15,7 @@
 #include <ydb/library/yql/minikql/dom/json.h>
 #include <ydb/library/yql/minikql/dom/yson.h>
 #include <ydb/library/yql/public/udf/udf_types.h>
+#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/utils/utf8.h>
 
 namespace NKikimr {
@@ -1166,8 +1167,6 @@ bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
 
     return ok;
 }
-
-
 
 bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
                                 TCell& c, TString& err, TMemoryPool& valueDataPool)

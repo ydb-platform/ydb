@@ -70,8 +70,8 @@ public:
 
         txState->ClearShardsInProgress();
         TString columnShardTxBody;
+        const auto seqNo = context.SS->StartRound(*txState);
         {
-            auto seqNo = context.SS->StartRound(*txState);
             NKikimrTxColumnShard::TSchemaTxBody tx;
             context.SS->FillSeqNo(tx, seqNo);
 
@@ -96,7 +96,7 @@ public:
                     context.SS->TabletID(),
                     context.Ctx.SelfID,
                     ui64(OperationId.GetTxId()),
-                    columnShardTxBody,
+                    columnShardTxBody, seqNo,
                     context.SS->SelectProcessingParams(txState->TargetPathId));
 
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
@@ -327,12 +327,10 @@ public:
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
-            if (AppData()->ColumnShardConfig.GetDisabledOnSchemeShard()) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                    "OLAP schema operations are not supported");
-                return result;
-            }
+        if (AppData()->ColumnShardConfig.GetDisabledOnSchemeShard() && context.SS->OlapStores.empty()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "OLAP schema operations are not supported");
+            return result;
         }
 
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);

@@ -11,7 +11,7 @@
  * is too slow to be very useful :-(
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -37,7 +37,7 @@
 #define NUM_EMULATION_SEMAPHORES (NUM_SPINLOCK_SEMAPHORES + NUM_ATOMICS_SEMAPHORES)
 #else
 #define NUM_EMULATION_SEMAPHORES (NUM_SPINLOCK_SEMAPHORES)
-#endif							/* DISABLE_ATOMICS */
+#endif							/* HAVE_ATOMICS */
 
 PGSemaphore *SpinlockSemaArray;
 

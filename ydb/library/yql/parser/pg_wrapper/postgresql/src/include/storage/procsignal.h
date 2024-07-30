@@ -4,7 +4,7 @@
  *	  Routines for interprocess signaling
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/storage/procsignal.h
@@ -35,12 +35,14 @@ typedef enum
 	PROCSIG_WALSND_INIT_STOPPING,	/* ask walsenders to prepare for shutdown  */
 	PROCSIG_BARRIER,			/* global barrier interrupt  */
 	PROCSIG_LOG_MEMORY_CONTEXT, /* ask backend to log the memory contexts */
+	PROCSIG_PARALLEL_APPLY_MESSAGE, /* Message from parallel apply workers */
 
 	/* Recovery conflict reasons */
 	PROCSIG_RECOVERY_CONFLICT_DATABASE,
 	PROCSIG_RECOVERY_CONFLICT_TABLESPACE,
 	PROCSIG_RECOVERY_CONFLICT_LOCK,
 	PROCSIG_RECOVERY_CONFLICT_SNAPSHOT,
+	PROCSIG_RECOVERY_CONFLICT_LOGICALSLOT,
 	PROCSIG_RECOVERY_CONFLICT_BUFFERPIN,
 	PROCSIG_RECOVERY_CONFLICT_STARTUP_DEADLOCK,
 
@@ -49,12 +51,7 @@ typedef enum
 
 typedef enum
 {
-	/*
-	 * XXX. PROCSIGNAL_BARRIER_PLACEHOLDER should be replaced when the first
-	 * real user of the ProcSignalBarrier mechanism is added. It's just here
-	 * for now because we can't have an empty enum.
-	 */
-	PROCSIGNAL_BARRIER_PLACEHOLDER = 0
+	PROCSIGNAL_BARRIER_SMGRRELEASE	/* ask smgr to close files */
 } ProcSignalBarrierType;
 
 /*

@@ -136,7 +136,7 @@ void TCommandDescribe::Config(TConfig& config) {
     // Table options
     config.Opts->AddLongOption("partition-boundaries", "[Table] Show partition key boundaries").StoreTrue(&ShowKeyShardBoundaries)
         .AddLongName("shard-boundaries");
-    config.Opts->AddLongOption("stats", "[Table|Topic] Show table/topic statistics").StoreTrue(&ShowStats);
+    config.Opts->AddLongOption("stats", "[Table|Topic|Replication] Show table/topic/replication statistics").StoreTrue(&ShowStats);
     config.Opts->AddLongOption("partition-stats", "[Table|Topic] Show partition statistics").StoreTrue(&ShowPartitionStats);
 
     AddDeprecatedJsonOption(config, "(Deprecated, will be removed soon. Use --format option instead) [Table] Output in json format");
@@ -402,14 +402,34 @@ int TCommandDescribe::DescribeCoordinationNode(const TDriver& driver) {
     return PrintDescription(this, OutputFormat, desc, &TCommandDescribe::PrintCoordinationNodeResponsePretty);
 }
 
+template <typename T, typename U>
+static TString ValueOr(const std::optional<T>& value, const U& orValue) {
+    if (value) {
+        return TStringBuilder() << *value;
+    } else {
+        return TStringBuilder() << orValue;
+    }
+}
+
+template <typename U>
+static TString ProgressOr(const std::optional<float>& value, const U& orValue) {
+    if (value) {
+        return TStringBuilder() << FloatToString(*value, PREC_POINT_DIGITS, 2) << "%";
+    } else {
+        return TStringBuilder() << orValue;
+    }
+}
+
 int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result) const {
     const auto& desc = result.GetReplicationDescription();
 
     Cout << Endl << "State: " << desc.GetState();
     switch (desc.GetState()) {
     case NReplication::TReplicationDescription::EState::Running:
-        if (const auto& lag = desc.GetRunningState().GetLag()) {
-            Cout << Endl << "Lag: " << *lag;
+        if (ShowStats) {
+            const auto& stats = desc.GetRunningState().GetStats();
+            Cout << Endl << "Lag: " << ValueOr(stats.GetLag(), "n/a");
+            Cout << Endl << "Initial Scan progress: " << ProgressOr(stats.GetInitialScanProgress(), "n/a");
         }
         break;
     case NReplication::TReplicationDescription::EState::Error:
@@ -434,13 +454,24 @@ int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::T
     }
 
     if (const auto& items = desc.GetItems()) {
-        TPrettyTable table({ "#", "Source", "Changefeed", "Destination" }, TPrettyTableConfig().WithoutRowDelimiters());
+        TVector<TString> columnNames = { "#", "Source", "Destination", "Changefeed" };
+        if (ShowStats) {
+            columnNames.push_back("Lag");
+            columnNames.push_back("Progress");
+        }
+
+        TPrettyTable table(columnNames, TPrettyTableConfig().WithoutRowDelimiters());
         for (const auto& item : items) {
-            table.AddRow()
+            auto& row = table.AddRow()
                 .Column(0, item.Id)
                 .Column(1, item.SrcPath)
-                .Column(2, item.SrcChangefeedName.value_or("n/a"))
-                .Column(3, item.DstPath);
+                .Column(2, item.DstPath)
+                .Column(3, ValueOr(item.SrcChangefeedName, "n/a"));
+            if (ShowStats) {
+                row
+                    .Column(4, ValueOr(item.Stats.GetLag(), "n/a"))
+                    .Column(5, ProgressOr(item.Stats.GetInitialScanProgress(), "n/a"));
+            }
         }
         Cout << Endl << "Items:" << Endl << table;
     }
@@ -451,8 +482,12 @@ int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::T
 
 int TCommandDescribe::DescribeReplication(const TDriver& driver) {
     NReplication::TReplicationClient client(driver);
-    auto result = client.DescribeReplication(Path).ExtractValueSync();
+    auto settings = NReplication::TDescribeReplicationSettings()
+        .IncludeStats(ShowStats);
+
+    auto result = client.DescribeReplication(Path, settings).ExtractValueSync();
     ThrowOnError(result);
+
     return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintReplicationResponsePretty);
 }
 
@@ -517,12 +552,18 @@ namespace {
             TPrettyTableConfig().WithoutRowDelimiters());
 
         for (const auto& changefeed : changefeeds) {
-            table.AddRow()
+            auto& row = table.AddRow()
                 .Column(0, changefeed.GetName())
                 .Column(1, changefeed.GetMode())
                 .Column(2, changefeed.GetFormat())
-                .Column(3, changefeed.GetState())
                 .Column(4, changefeed.GetVirtualTimestamps() ? "on" : "off");
+            if (changefeed.GetState() == NTable::EChangefeedState::InitialScan && changefeed.GetInitialScanProgress()) {
+                const float percentage = changefeed.GetInitialScanProgress()->GetProgress();
+                row.Column(3, TStringBuilder() << changefeed.GetState()
+                    << " (" << FloatToString(percentage, PREC_POINT_DIGITS, 2) << "%)");
+            } else {
+                row.Column(3, changefeed.GetState());
+            }
         }
 
         Cout << Endl << "Changefeeds:" << Endl << table;

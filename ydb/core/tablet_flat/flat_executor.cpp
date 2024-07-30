@@ -23,11 +23,9 @@
 #include "flat_abi_evol.h"
 #include "probes.h"
 #include "shared_sausagecache.h"
-#include "shared_cache_memtable.h"
 #include "util_fmt_desc.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
@@ -62,34 +60,34 @@ struct TCompactionChangesCtx {
     { }
 };
 
-class TSharedPageCacheMemTableObserver : public NSharedCache::ISharedPageCacheMemTableObserver {
+class TMemTableMemoryConsumersCollection : public NTable::IMemTableMemoryConsumersCollection {
 public:
-    TSharedPageCacheMemTableObserver(TActorSystem* actorSystem, TActorId owner)
+    TMemTableMemoryConsumersCollection(TActorSystem* actorSystem, TActorId owner)
         : ActorSystem(actorSystem)
         , Owner(owner)
-        , SharedCacheId(MakeSharedPageCacheId())
+        , MemoryControllerId(NMemory::MakeMemoryControllerId())
     {}
 
     void Register(ui32 table) override {
-        Send(new NSharedCache::TEvMemTableRegister(table));
+        Send(new NMemory::TEvMemTableRegister(table));
     }
 
     void Unregister(ui32 table) override {
-        Send(new NSharedCache::TEvMemTableUnregister(table));
+        Send(new NMemory::TEvMemTableUnregister(table));
     }
 
-    void CompactionComplete(TIntrusivePtr<NSharedCache::ISharedPageCacheMemTableRegistration> registration) override {
-        Send(new NSharedCache::TEvMemTableCompacted(std::move(registration)));
+    void CompactionComplete(TIntrusivePtr<NMemory::IMemoryConsumer> consumer) override {
+        Send(new NMemory::TEvMemTableCompacted(std::move(consumer)));
     }
 
 private:
     void Send(IEventBase* ev) {
-        ActorSystem->Send(new IEventHandle(SharedCacheId, Owner, ev));
+        ActorSystem->Send(new IEventHandle(MemoryControllerId, Owner, ev));
     }
 
     TActorSystem* ActorSystem;
     const TActorId Owner;
-    const TActorId SharedCacheId;
+    const TActorId MemoryControllerId;
 };
 
 TTableSnapshotContext::TTableSnapshotContext() = default;
@@ -158,6 +156,7 @@ void TExecutor::Registered(TActorSystem *sys, const TActorId&)
     Broker = new TBroker(this, Emitter);
     Scans = new TScans(Logger.Get(), this, Emitter, Owner, OwnerActorId);
     Memory = new TMemory(Logger.Get(), this, Emitter, Sprintf(" at tablet %" PRIu64, Owner->TabletID()));
+    MemTableMemoryConsumersCollection = new TMemTableMemoryConsumersCollection(NActors::TActivationContext::ActorSystem(), SelfId());
     TString myTabletType = TTabletTypes::TypeToStr(Owner->TabletType());
     AppData()->Icb->RegisterSharedControl(LogFlushDelayOverrideUsec, myTabletType + "_LogFlushDelayOverrideUsec");
     AppData()->Icb->RegisterSharedControl(MaxCommitRedoMB, "TabletControls.MaxCommitRedoMB");
@@ -447,8 +446,7 @@ void TExecutor::Active(const TActorContext &ctx) {
 
     CommitManager->Start(this, Owner->Tablet(), &Step0, Counters.Get());
 
-    auto sharedPageCacheMemTableObserver = MakeHolder<TSharedPageCacheMemTableObserver>(NActors::TActivationContext::ActorSystem(), SelfId());
-    CompactionLogic = THolder<TCompactionLogic>(new TCompactionLogic(std::move(sharedPageCacheMemTableObserver), Logger.Get(), Broker.Get(), this, loadedState->Comp,
+    CompactionLogic = THolder<TCompactionLogic>(new TCompactionLogic(MemTableMemoryConsumersCollection.Get(), Logger.Get(), Broker.Get(), this, loadedState->Comp,
                                                                      Sprintf("tablet-%" PRIu64, Owner->TabletID())));
     LogicRedo->InstallCounters(Counters.Get(), nullptr);
 
@@ -1193,7 +1191,7 @@ bool TExecutor::PrepareExternalPart(TPendingPartSwitch &partSwitch, TPendingPart
     }
 
     if (auto* stage = bundle.GetStage<TPendingPartSwitch::TLoaderStage>()) {
-        if (auto fetch = stage->Loader.Run()) {
+        if (auto fetch = stage->Loader.Run(PreloadTablesData.contains(partSwitch.TableId))) {
             Y_ABORT_UNLESS(fetch.size() == 1, "Cannot handle loads from more than one page collection");
 
             for (auto req : fetch) {
@@ -1935,6 +1933,17 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
 
         const std::pair<ui32, ui64> toLoad = PrivatePageCache->Request(pages, pad, pageCollectionInfo);
         if (toLoad.first) {
+            if (auto logl = Logger->Log(ELnLev::Dbg03)) {
+                logl
+                    << NFmt::Do(*this) << " requests PageCollection " << pageCollectionInfo->PageCollection->Label()
+                    << " " << toLoad.second << " bytes, " << toLoad.first << " pages: [";
+                for (auto i : xrange(pages.size())) {
+                    if (i != 0) logl << ", ";
+                    logl << pages[i] << " " << ui32(pageCollectionInfo->GetPageType(pages[i]));
+                }
+                logl << "]";
+            }
+            
             auto *req = new NPageCollection::TFetch(0, pageCollectionInfo->PageCollection, std::move(pages), pad->GetWaitingTraceId());
 
             loadPages += toLoad.first;
@@ -3411,21 +3420,11 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 
         UtilizeSubset(*ops->Subset, *ops->Trace, std::move(reusedBundles), commit.Get());
 
-        const bool writeBundleDeltas = KIKIMR_TABLET_WRITE_BUNDLE_DELTAS;
-
         for (auto &gone: ops->Subset->Flatten) {
             if (auto *found = updatedSlices.FindPtr(gone->Label)) {
-                if (writeBundleDeltas) {
-                    auto *deltaProto = proto.AddBundleDeltas();
-                    LogoBlobIDFromLogoBlobID(gone->Label, deltaProto->MutableLabel());
-                    deltaProto->SetDelta(NTable::TOverlay::EncodeRemoveSlices(gone.Slices));
-                } else {
-                    auto *changed = proto.AddChangedBundles();
-                    LogoBlobIDFromLogoBlobID(gone->Label, changed->MutableLabel());
-                    changed->SetLegacy(NTable::TOverlay{ (*found)->ToScreen(), nullptr }.Encode());
-                    changed->SetOpaque(NTable::TOverlay{ nullptr, *found }.Encode());
-                    bundleChanges[gone->Label] = changed;
-                }
+                auto *deltaProto = proto.AddBundleDeltas();
+                LogoBlobIDFromLogoBlobID(gone->Label, deltaProto->MutableLabel());
+                deltaProto->SetDelta(NTable::TOverlay::EncodeRemoveSlices(gone.Slices));
             } else {
                 LogoBlobIDFromLogoBlobID(gone->Label, proto.AddLeavingBundles());
             }
@@ -3469,7 +3468,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
             const auto &newPart = result.Part;
 
             TPageCollectionProtoHelper::Snap(snap, newPart, tableId, logicResult.Changes.NewPartsLevel);
-            TPageCollectionProtoHelper(true, true).Do(bySwitchAux->AddHotBundles(), newPart);
+            TPageCollectionProtoHelper(true, false).Do(bySwitchAux->AddHotBundles(), newPart);
         }
     }
 
@@ -3545,23 +3544,23 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 }
 
 void TExecutor::UpdateUsedTabletMemory() {
-    UsedTabletMemory = 0;
-    // Estimate memory usage for internal executor structures.
-    UsedTabletMemory += 50 << 10; // 50kb
-    // Count the number of bytes exclusive to private cache.
+    // Estimate memory usage for internal executor structures:
+    UsedTabletMemory = 50 << 10; // 50kb
+
+    // Count the number of bytes kept in private cache (can't be offloaded right now):
     if (PrivatePageCache) {
-        UsedTabletMemory += PrivatePageCache->GetStats().TotalExclusive;
+        UsedTabletMemory += PrivatePageCache->GetStats().TotalPinnedBody;
+        UsedTabletMemory += PrivatePageCache->GetStats().PinnedLoadSize;
     }
-    // Estimate memory used by database structures.
+
+    // Estimate memory used by internal database structures:
     auto &counters = Database->Counters();
     UsedTabletMemory += counters.MemTableWaste;
     UsedTabletMemory += counters.MemTableBytes;
-    UsedTabletMemory += counters.Parts.IndexBytes;
     UsedTabletMemory += counters.Parts.OtherBytes;
-    UsedTabletMemory += counters.Parts.ByKeyBytes;
     UsedTabletMemory += Stats->PacksMetaBytes;
 
-    // Add tablet memory usage.
+    // Add tablet memory usage:
     UsedTabletMemory += Owner->GetMemoryUsage();
 }
 
@@ -3762,12 +3761,10 @@ TString TExecutor::BorrowSnapshot(ui32 table, const TTableSnapshotContext &snap,
     proto.SetLenderTablet(TabletId());
     proto.MutableParts()->Reserve(subset->Flatten.size());
 
-    const bool includeMeta = !bool(KIKIMR_TABLET_BORROW_WITHOUT_META);
-
     for (const auto &partView : subset->Flatten) {
         auto *x = proto.AddParts();
 
-        TPageCollectionProtoHelper(includeMeta, false).Do(x->MutableBundle(), partView);
+        TPageCollectionProtoHelper(false, false).Do(x->MutableBundle(), partView);
         snap.Impl->Borrowed(Step(), table, partView->Label, loaner);
     }
 
@@ -3893,15 +3890,15 @@ bool TExecutor::CompactTables() {
     }
 }
 
-void TExecutor::Handle(NSharedCache::TEvMemTableRegistered::TPtr &ev) {
+void TExecutor::Handle(NMemory::TEvMemTableRegistered::TPtr &ev) {
     const auto *msg = ev->Get();
 
     if (CompactionLogic) {
-        CompactionLogic->ProvideSharedPageCacheMemTableRegistration(msg->Table, std::move(msg->Registration));
+        CompactionLogic->ProvideMemTableMemoryConsumer(msg->Table, std::move(msg->Consumer));
     }
 }
 
-void TExecutor::Handle(NSharedCache::TEvMemTableCompact::TPtr &ev) {
+void TExecutor::Handle(NMemory::TEvMemTableCompact::TPtr &ev) {
     const auto *msg = ev->Get();
 
     if (CompactionLogic) {
@@ -3957,8 +3954,8 @@ STFUNC(TExecutor::StateWork) {
         HFunc(NOps::TEvScanStat, Handle);
         hFunc(NOps::TEvResult, Handle);
         HFunc(NBlockIO::TEvStat, Handle);
-        hFunc(NSharedCache::TEvMemTableRegistered, Handle);
-        hFunc(NSharedCache::TEvMemTableCompact, Handle);
+        hFunc(NMemory::TEvMemTableRegistered, Handle);
+        hFunc(NMemory::TEvMemTableCompact, Handle);
     default:
         break;
     }
@@ -4726,8 +4723,6 @@ void TExecutor::ApplyCompactionChanges(
 
         auto pendingChanges = Database->LookupSlices(tableId, labels);
 
-        const bool writeBundleDeltas = KIKIMR_TABLET_WRITE_BUNDLE_DELTAS;
-
         for (const auto &sliceChange : changes.SliceChanges) {
             auto* current = pendingChanges.FindPtr(sliceChange.Label);
             Y_ABORT_UNLESS(current, "[%" PRIu64 "] cannot apply changes to table %" PRIu32 " part %s: not found",
@@ -4737,7 +4732,7 @@ void TExecutor::ApplyCompactionChanges(
 
             if (auto *result = results.Value(sliceChange.Label, nullptr)) {
                 result->Part.Slices = *current;
-            } else if (writeBundleDeltas) {
+            } else {
                 auto *deltaProto = ctx.Proto.AddBundleDeltas();
                 LogoBlobIDFromLogoBlobID(sliceChange.Label, deltaProto->MutableLabel());
                 deltaProto->SetDelta(NTable::TOverlay::EncodeChangeSlices(sliceChange.NewSlices));
@@ -4745,32 +4740,11 @@ void TExecutor::ApplyCompactionChanges(
         }
 
         Database->ReplaceSlices(tableId, pendingChanges);
-
-        if (!writeBundleDeltas) {
-            // Changes may be to parts that had previous changes (partial compaction)
-            THashMap<TLogoBlobID, NKikimrExecutorFlat::TBundleChange*> bundleChanges;
-            for (size_t index = 0; index < ctx.Proto.ChangedBundlesSize(); ++index) {
-                auto* changedProto = ctx.Proto.MutableChangedBundles(index);
-                bundleChanges[LogoBlobIDFromLogoBlobID(changedProto->GetLabel())] = changedProto;
-            }
-
-            for (auto &kv : pendingChanges) {
-                const auto &label = kv.first;
-                if (results.contains(label)) {
-                    // Changes to compaction results don't go into bundle changes
-                    continue;
-                }
-                auto *changedProto = bundleChanges.Value(label, nullptr);
-                if (!changedProto) {
-                    // This was not part of compaction, create a new bundle change
-                    changedProto = ctx.Proto.AddChangedBundles();
-                    LogoBlobIDFromLogoBlobID(label, changedProto->MutableLabel());
-                }
-                changedProto->SetLegacy(NTable::TOverlay{ kv.second->ToScreen(), nullptr }.Encode());
-                changedProto->SetOpaque(NTable::TOverlay{ nullptr, kv.second }.Encode());
-            }
-        }
     }
+}
+
+void TExecutor::SetPreloadTablesData(THashSet<ui32> tables) {
+    PreloadTablesData = std::move(tables);
 }
 
 }

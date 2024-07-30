@@ -1,5 +1,6 @@
 #pragma once
 #include "switch_type.h"
+#include "process_columns.h"
 #include <ydb/core/formats/factory.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <library/cpp/json/writer/json_value.h>
@@ -56,37 +57,6 @@ std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob,
 std::shared_ptr<arrow::RecordBatch> MakeEmptyBatch(const std::shared_ptr<arrow::Schema>& schema, const ui32 rowsCount = 0);
 std::shared_ptr<arrow::Table> ToTable(const std::shared_ptr<arrow::RecordBatch>& batch);
 
-std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-    const std::vector<TString>& columnNames);
-std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-    const std::vector<std::string>& columnNames);
-std::shared_ptr<arrow::Table> ExtractColumns(const std::shared_ptr<arrow::Table>& srcBatch,
-    const std::vector<TString>& columnNames);
-std::shared_ptr<arrow::Table> ExtractColumns(const std::shared_ptr<arrow::Table>& srcBatch,
-    const std::vector<std::string>& columnNames);
-std::shared_ptr<arrow::Table> ExtractColumnsValidate(const std::shared_ptr<arrow::Table>& srcBatch,
-    const std::vector<TString>& columnNames);
-std::shared_ptr<arrow::RecordBatch> ExtractColumnsValidate(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-    const std::vector<TString>& columnNames);
-
-std::vector<TString> ConvertStrings(const std::vector<std::string>& input);
-std::vector<std::string> ConvertStrings(const std::vector<TString>& input);
-
-std::shared_ptr<arrow::Table> ExtractColumnsOptional(const std::shared_ptr<arrow::Table>& srcBatch,
-    const std::vector<TString>& columnNames);
-std::shared_ptr<arrow::RecordBatch> ExtractColumnsOptional(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-    const std::vector<TString>& columnNames);
-std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-                                                   const std::shared_ptr<arrow::Schema>& dstSchema,
-                                                   bool addNotExisted = false);
-std::shared_ptr<arrow::RecordBatch> ExtractExistedColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-                                                          const arrow::FieldVector& fields);
-inline std::shared_ptr<arrow::RecordBatch> ExtractExistedColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-                                                                 const std::shared_ptr<arrow::Schema>& dstSchema)
-{
-    return ExtractExistedColumns(srcBatch, dstSchema->fields());
-}
-
 std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>& combinedTable, const bool combine);
 std::shared_ptr<arrow::RecordBatch> CombineBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches);
 std::shared_ptr<arrow::RecordBatch> MergeColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& rb);
@@ -128,6 +98,7 @@ std::shared_ptr<arrow::Scalar> GetScalar(const std::shared_ptr<arrow::Array>& ar
 bool IsGoodScalar(const std::shared_ptr<arrow::Scalar>& x);
 int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y);
 int ScalarCompare(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y);
+int ScalarCompareNullable(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y);
 std::partial_ordering ColumnsCompare(const std::vector<std::shared_ptr<arrow::Array>>& x, const ui32 xRow, const std::vector<std::shared_ptr<arrow::Array>>& y, const ui32 yRow);
 bool ScalarLess(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y);
 bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y);

@@ -19,13 +19,18 @@ NArrow::NTransformation::ITransformer::TPtr TSimpleColumnInfo::GetLoadTransforme
     return transformer;
 }
 
-TConclusionStatus TSimpleColumnInfo::DeserializeFromProto(const NKikimrSchemeOp::TOlapColumnDescription& columnInfo)
-{
+TConclusionStatus TSimpleColumnInfo::DeserializeFromProto(const NKikimrSchemeOp::TOlapColumnDescription& columnInfo) {
     AFL_VERIFY(columnInfo.GetId() == ColumnId);
     if (columnInfo.HasSerializer()) {
         AFL_VERIFY(Serializer.DeserializeFromProto(columnInfo.GetSerializer()));
     } else if (columnInfo.HasCompression()) {
         Serializer.DeserializeFromProto(columnInfo.GetCompression()).Validate();
+    }
+    if (columnInfo.HasDefaultValue()) {
+        DefaultValue.DeserializeFromProto(columnInfo.GetDefaultValue()).Validate();
+    }
+    if (columnInfo.HasDataAccessorConstructor()) {
+        AFL_VERIFY(DataAccessorConstructor.DeserializeFromProto(columnInfo.GetDataAccessorConstructor()));
     }
     AFL_VERIFY(Serializer);
     if (columnInfo.HasDictionaryEncoding()) {
@@ -33,24 +38,23 @@ TConclusionStatus TSimpleColumnInfo::DeserializeFromProto(const NKikimrSchemeOp:
         Y_ABORT_UNLESS(settings.IsSuccess());
         DictionaryEncoding = *settings;
     }
-    Loader = std::make_shared<TColumnLoader>(GetLoadTransformer(), Serializer, ArrowSchema, ColumnId);
+    Loader = std::make_shared<TColumnLoader>(GetLoadTransformer(), Serializer, DataAccessorConstructor, ArrowField, DefaultValue.GetValue(), ColumnId);
     return TConclusionStatus::Success();
 }
 
 TSimpleColumnInfo::TSimpleColumnInfo(const ui32 columnId, const std::shared_ptr<arrow::Field>& arrowField, const NArrow::NSerialization::TSerializerContainer& serializer,
     const bool needMinMax, const bool isSorted,
-    const std::shared_ptr<arrow::Scalar>& defaultWriteValue, const std::shared_ptr<arrow::Scalar>& defaultReadValue)
+    const std::shared_ptr<arrow::Scalar>& defaultValue)
     : ColumnId(columnId)
     , ArrowField(arrowField)
-    , ArrowSchema(std::make_shared<arrow::Schema>(arrow::FieldVector({arrowField})))
     , Serializer(serializer)
     , NeedMinMax(needMinMax)
     , IsSorted(isSorted)
-    , DefaultWriteValue(defaultWriteValue)
-    , DefaultReadValue(defaultReadValue)
+    , DefaultValue(defaultValue)
 {
     ColumnName = ArrowField->name();
-    Loader = std::make_shared<TColumnLoader>(GetLoadTransformer(), Serializer, ArrowSchema, ColumnId);
+    Loader = std::make_shared<TColumnLoader>(
+        GetLoadTransformer(), Serializer, DataAccessorConstructor, ArrowField, DefaultValue.GetValue(), ColumnId);
 }
 
 std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TSimpleColumnInfo::ActualizeColumnData(const std::vector<std::shared_ptr<IPortionDataChunk>>& source, const TSimpleColumnInfo& sourceColumnFeatures) const {
@@ -84,7 +88,7 @@ std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TSimpleColumnInf
     }
     std::vector<std::shared_ptr<IPortionDataChunk>> result;
     for (auto&& s : source) {
-        auto data = NArrow::TStatusValidator::GetValid(sourceColumnFeatures.Loader->Apply(s->GetData()));
+        auto data = sourceColumnFeatures.Loader->ApplyRawVerified(s->GetData());
         result.emplace_back(s->CopyWithAnotherBlob(GetColumnSaver().Apply(data), *this));
     }
     return result;

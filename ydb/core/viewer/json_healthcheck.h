@@ -25,8 +25,9 @@ enum HealthCheckResponseFormat {
     PROMETHEUS
 };
 
-class TJsonHealthCheck : public TViewerPipeClient<TJsonHealthCheck> {
-    using TBase = TViewerPipeClient<TJsonHealthCheck>;
+class TJsonHealthCheck : public TViewerPipeClient {
+    using TThis = TJsonHealthCheck;
+    using TBase = TViewerPipeClient;
     IViewer* Viewer;
     static const bool WithRetry = false;
     NMon::TEvHttpInfo::TPtr Event;
@@ -41,10 +42,6 @@ class TJsonHealthCheck : public TViewerPipeClient<TJsonHealthCheck> {
     Ydb::Monitoring::StatusFlag::Status MinStatus = Ydb::Monitoring::StatusFlag::UNSPECIFIED;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TJsonHealthCheck(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : Viewer(viewer)
         , Event(ev)
@@ -75,7 +72,7 @@ public:
         Send(NHealthCheck::MakeHealthCheckID(), request.Release());
     }
 
-    void Bootstrap() {
+    void Bootstrap() override {
         const auto& params(Event->Get()->Request.GetParams());
         InitConfig(params);
 
@@ -217,7 +214,7 @@ public:
         Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKTEXT(Event->Get()) + ss.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         if (Result) {
             if (Format == HealthCheckResponseFormat::JSON) {
                 HandleJSON();

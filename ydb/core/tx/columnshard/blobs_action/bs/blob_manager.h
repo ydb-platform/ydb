@@ -145,7 +145,7 @@ private:
     ui32 CurrentStep;
     std::optional<TGenStep> CollectGenStepInFlight;
     // Lists of blobs that need Keep flag to be set
-    std::map<TGenStep, std::set<TLogoBlobID>> BlobsToKeep;
+    TBlobsByGenStep BlobsToKeep;
     // Lists of blobs that need DoNotKeep flag to be set
     TTabletsByBlob BlobsToDelete;
 
@@ -173,7 +173,7 @@ private:
     virtual void DoSaveBlobBatchOnExecute(const TBlobBatch& blobBatch, IBlobManagerDb& db) override;
     virtual void DoSaveBlobBatchOnComplete(TBlobBatch&& blobBatch) override;
     void DrainDeleteTo(const TGenStep& dest, TGCContext& gcContext);
-    void DrainKeepTo(const TGenStep& dest, TGCContext& gcContext);
+    [[nodiscard]] bool DrainKeepTo(const TGenStep& dest, TGCContext& gcContext);
 public:
     TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, const ui32 gen, const TTabletId selfTabletId);
 
@@ -215,11 +215,11 @@ public:
         const std::shared_ptr<TBlobManager>& manager, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobsInfo,
         const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters) noexcept;
 
-    void OnGCFinishedOnExecute(const TGenStep& genStep, IBlobManagerDb& db);
-    void OnGCFinishedOnComplete(const TGenStep& genStep);
+    void OnGCFinishedOnExecute(const std::optional<TGenStep>& genStep, IBlobManagerDb& db);
+    void OnGCFinishedOnComplete(const std::optional<TGenStep>& genStep);
 
-    void OnGCStartOnExecute(const TGenStep& genStep, IBlobManagerDb& db);
-    void OnGCStartOnComplete(const TGenStep& genStep);
+    void OnGCStartOnExecute(const std::optional<TGenStep>& genStep, IBlobManagerDb& db);
+    void OnGCStartOnComplete(const std::optional<TGenStep>& genStep);
 
     TBlobManagerCounters GetCountersUpdate() {
         TBlobManagerCounters res = CountersUpdate;
@@ -239,7 +239,7 @@ private:
     bool ExtractEvicted(TEvictedBlob& evict, TEvictMetadata& meta, bool fromDropped = false);
 
     TGenStep EdgeGenStep() const {
-        return CollectGenStepInFlight ? *CollectGenStepInFlight : LastCollectedGenStep;
+        return CollectGenStepInFlight ? *CollectGenStepInFlight : std::max(GCBarrierPreparation, LastCollectedGenStep);
     }
 };
 

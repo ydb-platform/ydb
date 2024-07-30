@@ -123,7 +123,7 @@ public:
         , RequestType(requestType)
         , InternalCall(internalCall)
     {
-        if (token) {
+        if (token && !token->empty()) {
             InternalToken = new NACLib::TUserToken(*token);
         }
     }

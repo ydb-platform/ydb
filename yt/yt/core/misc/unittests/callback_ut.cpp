@@ -42,7 +42,7 @@ public:
     TBindState()
         : TBindStateBase(
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-            FROM_HERE
+            YT_CURRENT_SOURCE_LOCATION
 #endif
         )
     { }
@@ -56,7 +56,7 @@ struct TBindState<true, void(), void(), void(TFakeInvoker, TFakeInvoker)>
     TBindState()
         : TBindStateBase(
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-            FROM_HERE
+            YT_CURRENT_SOURCE_LOCATION
 #endif
         )
     { }

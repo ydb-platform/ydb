@@ -3,7 +3,7 @@
  * windowfuncs.c
  *	  Standard window functions defined in SQL spec.
  *
- * Portions Copyright (c) 2000-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2000-2023, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -13,6 +13,8 @@
  */
 #include "postgres.h"
 
+#include "nodes/supportnodes.h"
+#include "optimizer/optimizer.h"
 #include "utils/builtins.h"
 #include "windowapi.h"
 
@@ -88,6 +90,44 @@ window_row_number(PG_FUNCTION_ARGS)
 	PG_RETURN_INT64(curpos + 1);
 }
 
+/*
+ * window_row_number_support
+ *		prosupport function for window_row_number()
+ */
+Datum
+window_row_number_support(PG_FUNCTION_ARGS)
+{
+	Node	   *rawreq = (Node *) PG_GETARG_POINTER(0);
+
+	if (IsA(rawreq, SupportRequestWFuncMonotonic))
+	{
+		SupportRequestWFuncMonotonic *req = (SupportRequestWFuncMonotonic *) rawreq;
+
+		/* row_number() is monotonically increasing */
+		req->monotonic = MONOTONICFUNC_INCREASING;
+		PG_RETURN_POINTER(req);
+	}
+
+	if (IsA(rawreq, SupportRequestOptimizeWindowClause))
+	{
+		SupportRequestOptimizeWindowClause *req = (SupportRequestOptimizeWindowClause *) rawreq;
+
+		/*
+		 * The frame options can always become "ROWS BETWEEN UNBOUNDED
+		 * PRECEDING AND CURRENT ROW".  row_number() always just increments by
+		 * 1 with each row in the partition.  Using ROWS instead of RANGE
+		 * saves effort checking peer rows during execution.
+		 */
+		req->frameOptions = (FRAMEOPTION_NONDEFAULT |
+							 FRAMEOPTION_ROWS |
+							 FRAMEOPTION_START_UNBOUNDED_PRECEDING |
+							 FRAMEOPTION_END_CURRENT_ROW);
+
+		PG_RETURN_POINTER(req);
+	}
+
+	PG_RETURN_POINTER(NULL);
+}
 
 /*
  * rank
@@ -111,6 +151,48 @@ window_rank(PG_FUNCTION_ARGS)
 }
 
 /*
+ * window_rank_support
+ *		prosupport function for window_rank()
+ */
+Datum
+window_rank_support(PG_FUNCTION_ARGS)
+{
+	Node	   *rawreq = (Node *) PG_GETARG_POINTER(0);
+
+	if (IsA(rawreq, SupportRequestWFuncMonotonic))
+	{
+		SupportRequestWFuncMonotonic *req = (SupportRequestWFuncMonotonic *) rawreq;
+
+		/* rank() is monotonically increasing */
+		req->monotonic = MONOTONICFUNC_INCREASING;
+		PG_RETURN_POINTER(req);
+	}
+
+	if (IsA(rawreq, SupportRequestOptimizeWindowClause))
+	{
+		SupportRequestOptimizeWindowClause *req = (SupportRequestOptimizeWindowClause *) rawreq;
+
+		/*
+		 * rank() is coded in such a way that it returns "(COUNT (*) OVER
+		 * (<opt> RANGE UNBOUNDED PRECEDING) - COUNT (*) OVER (<opt> RANGE
+		 * CURRENT ROW) + 1)" regardless of the frame options.  We'll set the
+		 * frame options to "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"
+		 * so they agree with what window_row_number_support() optimized the
+		 * frame options to be.  Using ROWS instead of RANGE saves from doing
+		 * peer row checks during execution.
+		 */
+		req->frameOptions = (FRAMEOPTION_NONDEFAULT |
+							 FRAMEOPTION_ROWS |
+							 FRAMEOPTION_START_UNBOUNDED_PRECEDING |
+							 FRAMEOPTION_END_CURRENT_ROW);
+
+		PG_RETURN_POINTER(req);
+	}
+
+	PG_RETURN_POINTER(NULL);
+}
+
+/*
  * dense_rank
  * Rank increases by 1 when key columns change.
  */
@@ -128,6 +210,45 @@ window_dense_rank(PG_FUNCTION_ARGS)
 		context->rank++;
 
 	PG_RETURN_INT64(context->rank);
+}
+
+/*
+ * window_dense_rank_support
+ *		prosupport function for window_dense_rank()
+ */
+Datum
+window_dense_rank_support(PG_FUNCTION_ARGS)
+{
+	Node	   *rawreq = (Node *) PG_GETARG_POINTER(0);
+
+	if (IsA(rawreq, SupportRequestWFuncMonotonic))
+	{
+		SupportRequestWFuncMonotonic *req = (SupportRequestWFuncMonotonic *) rawreq;
+
+		/* dense_rank() is monotonically increasing */
+		req->monotonic = MONOTONICFUNC_INCREASING;
+		PG_RETURN_POINTER(req);
+	}
+
+	if (IsA(rawreq, SupportRequestOptimizeWindowClause))
+	{
+		SupportRequestOptimizeWindowClause *req = (SupportRequestOptimizeWindowClause *) rawreq;
+
+		/*
+		 * dense_rank() is unaffected by the frame options.  Here we set the
+		 * frame options to match what's done in row_number's support
+		 * function.  Using ROWS instead of RANGE (the default) saves the
+		 * executor from having to check for peer rows.
+		 */
+		req->frameOptions = (FRAMEOPTION_NONDEFAULT |
+							 FRAMEOPTION_ROWS |
+							 FRAMEOPTION_START_UNBOUNDED_PRECEDING |
+							 FRAMEOPTION_END_CURRENT_ROW);
+
+		PG_RETURN_POINTER(req);
+	}
+
+	PG_RETURN_POINTER(NULL);
 }
 
 /*
@@ -158,6 +279,46 @@ window_percent_rank(PG_FUNCTION_ARGS)
 
 	PG_RETURN_FLOAT8((float8) (context->rank - 1) / (float8) (totalrows - 1));
 }
+
+/*
+ * window_percent_rank_support
+ *		prosupport function for window_percent_rank()
+ */
+Datum
+window_percent_rank_support(PG_FUNCTION_ARGS)
+{
+	Node	   *rawreq = (Node *) PG_GETARG_POINTER(0);
+
+	if (IsA(rawreq, SupportRequestWFuncMonotonic))
+	{
+		SupportRequestWFuncMonotonic *req = (SupportRequestWFuncMonotonic *) rawreq;
+
+		/* percent_rank() is monotonically increasing */
+		req->monotonic = MONOTONICFUNC_INCREASING;
+		PG_RETURN_POINTER(req);
+	}
+
+	if (IsA(rawreq, SupportRequestOptimizeWindowClause))
+	{
+		SupportRequestOptimizeWindowClause *req = (SupportRequestOptimizeWindowClause *) rawreq;
+
+		/*
+		 * percent_rank() is unaffected by the frame options.  Here we set the
+		 * frame options to match what's done in row_number's support
+		 * function.  Using ROWS instead of RANGE (the default) saves the
+		 * executor from having to check for peer rows.
+		 */
+		req->frameOptions = (FRAMEOPTION_NONDEFAULT |
+							 FRAMEOPTION_ROWS |
+							 FRAMEOPTION_START_UNBOUNDED_PRECEDING |
+							 FRAMEOPTION_END_CURRENT_ROW);
+
+		PG_RETURN_POINTER(req);
+	}
+
+	PG_RETURN_POINTER(NULL);
+}
+
 
 /*
  * cume_dist
@@ -200,6 +361,45 @@ window_cume_dist(PG_FUNCTION_ARGS)
 	}
 
 	PG_RETURN_FLOAT8((float8) context->rank / (float8) totalrows);
+}
+
+/*
+ * window_cume_dist_support
+ *		prosupport function for window_cume_dist()
+ */
+Datum
+window_cume_dist_support(PG_FUNCTION_ARGS)
+{
+	Node	   *rawreq = (Node *) PG_GETARG_POINTER(0);
+
+	if (IsA(rawreq, SupportRequestWFuncMonotonic))
+	{
+		SupportRequestWFuncMonotonic *req = (SupportRequestWFuncMonotonic *) rawreq;
+
+		/* cume_dist() is monotonically increasing */
+		req->monotonic = MONOTONICFUNC_INCREASING;
+		PG_RETURN_POINTER(req);
+	}
+
+	if (IsA(rawreq, SupportRequestOptimizeWindowClause))
+	{
+		SupportRequestOptimizeWindowClause *req = (SupportRequestOptimizeWindowClause *) rawreq;
+
+		/*
+		 * cume_dist() is unaffected by the frame options.  Here we set the
+		 * frame options to match what's done in row_number's support
+		 * function.  Using ROWS instead of RANGE (the default) saves the
+		 * executor from having to check for peer rows.
+		 */
+		req->frameOptions = (FRAMEOPTION_NONDEFAULT |
+							 FRAMEOPTION_ROWS |
+							 FRAMEOPTION_START_UNBOUNDED_PRECEDING |
+							 FRAMEOPTION_END_CURRENT_ROW);
+
+		PG_RETURN_POINTER(req);
+	}
+
+	PG_RETURN_POINTER(NULL);
 }
 
 /*
@@ -273,6 +473,64 @@ window_ntile(PG_FUNCTION_ARGS)
 	}
 
 	PG_RETURN_INT32(context->ntile);
+}
+
+/*
+ * window_ntile_support
+ *		prosupport function for window_ntile()
+ */
+Datum
+window_ntile_support(PG_FUNCTION_ARGS)
+{
+	Node	   *rawreq = (Node *) PG_GETARG_POINTER(0);
+
+	if (IsA(rawreq, SupportRequestWFuncMonotonic))
+	{
+		SupportRequestWFuncMonotonic *req = (SupportRequestWFuncMonotonic *) rawreq;
+		WindowFunc *wfunc = req->window_func;
+
+		if (list_length(wfunc->args) == 1)
+		{
+			Node *expr = eval_const_expressions(NULL, linitial(wfunc->args));
+
+			/*
+			 * Due to the Node representation of WindowClause runConditions in
+			 * version prior to v17, we need to insist that ntile arg is Const
+			 * to allow safe application of the runCondition optimization.
+			 */
+			if (IsA(expr, Const))
+			{
+				/*
+				 * ntile() is monotonically increasing as the number of
+				 * buckets cannot change after the first call
+				 */
+				req->monotonic = MONOTONICFUNC_INCREASING;
+				PG_RETURN_POINTER(req);
+			}
+		}
+
+		PG_RETURN_POINTER(NULL);
+	}
+
+	if (IsA(rawreq, SupportRequestOptimizeWindowClause))
+	{
+		SupportRequestOptimizeWindowClause *req = (SupportRequestOptimizeWindowClause *) rawreq;
+
+		/*
+		 * ntile() is unaffected by the frame options.  Here we set the frame
+		 * options to match what's done in row_number's support function.
+		 * Using ROWS instead of RANGE (the default) saves the executor from
+		 * having to check for peer rows.
+		 */
+		req->frameOptions = (FRAMEOPTION_NONDEFAULT |
+							 FRAMEOPTION_ROWS |
+							 FRAMEOPTION_START_UNBOUNDED_PRECEDING |
+							 FRAMEOPTION_END_CURRENT_ROW);
+
+		PG_RETURN_POINTER(req);
+	}
+
+	PG_RETURN_POINTER(NULL);
 }
 
 /*

@@ -448,13 +448,11 @@ void TGRpcService::SetupIncomingRequests() {
     ADD_ACTOR_REQUEST(TabletKillRequest,         TTabletKillRequest,                MTYPE_CLIENT_TABLET_KILL_REQUEST)
     ADD_ACTOR_REQUEST(SchemeOperationStatus,     TSchemeOperationStatus,            MTYPE_CLIENT_FLAT_TX_STATUS_REQUEST)
     ADD_ACTOR_REQUEST(ChooseProxy,               TChooseProxyRequest,               MTYPE_CLIENT_CHOOSE_PROXY)
-    ADD_ACTOR_REQUEST(WhoAmI,                    TWhoAmI,                           MTYPE_CLIENT_WHOAMI)
     ADD_ACTOR_REQUEST(ResolveNode,               TResolveNodeRequest,               MTYPE_CLIENT_RESOLVE_NODE)
     ADD_ACTOR_REQUEST(FillNode,                  TFillNodeRequest,                  MTYPE_CLIENT_FILL_NODE)
     ADD_ACTOR_REQUEST(DrainNode,                 TDrainNodeRequest,                 MTYPE_CLIENT_DRAIN_NODE)
     ADD_ACTOR_REQUEST(InterconnectDebug,         TInterconnectDebug,                MTYPE_CLIENT_INTERCONNECT_DEBUG)
     ADD_ACTOR_REQUEST(TestShardControl,          TTestShardControlRequest,          MTYPE_CLIENT_TEST_SHARD_CONTROL)
-    ADD_ACTOR_REQUEST(LoginRequest,              TLoginRequest,                     MTYPE_CLIENT_LOGIN_REQUEST)
 
     // dynamic node registration
     ADD_REQUEST(RegisterNode, TNodeRegistrationRequest, TNodeRegistrationResponse, {

@@ -786,7 +786,7 @@ private:
                     LogPrefix() << "no data or conversion error", ctx);
             }
 
-            auto batch = NArrow::ExtractColumns(Batch, outputColumns);
+            auto batch = NArrow::TColumnOperator().NullIfAbsent().Extract(Batch, outputColumns);
             if (!batch) {
                 for (auto& columnName : outputColumns) {
                     if (Batch->schema()->GetFieldIndex(columnName) < 0) {

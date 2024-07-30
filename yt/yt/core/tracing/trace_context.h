@@ -55,7 +55,7 @@ TTracingTransportConfigPtr GetTracingTransportConfig();
 DEFINE_ENUM(ETraceContextState,
     (Disabled) // Used to propagate TraceId, RequestId and LoggingTag.
     (Recorded) // May be sampled later.
-    (Sampled)  // Sampled and will be reported to jaeger.
+    (Sampled)  // Sampled and will be reported to tracer.
 );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -67,7 +67,7 @@ DEFINE_ENUM(ETraceContextState,
  *  1) TraceId, RequestId and LoggingTag are recorded inside trace context and
  *     passed to logger.
  *  2) ElapsedCpu time is tracked by fiber scheduler during context switch.
- *  3) Opentracing compatible information is recorded and later pushed to jaeger.
+ *  3) Opentracing compatible information is recorded and later pushed to tracer.
  *
  *  TTraceContext objects within a single process form a tree.
  *
@@ -79,14 +79,16 @@ class TTraceContext
     : public TRefCounted
 {
 public:
+    //! Returns the flag indicating that this trace is finished (via call to #Finish).
+    bool IsFinished() const;
     //! Finalizes and publishes the context (if sampling is enabled).
     /*!
      *  Safe to call multiple times from arbitrary threads; only the first call matters.
      */
-    void Finish();
-    bool IsFinished();
+    void Finish(
+        std::optional<NProfiling::TCpuInstant> finishTime = {});
 
-    //! IsRecorded returns a flag indicating that this trace may be sent to jaeger.
+    //! Returns the flag indicating that this trace may be sent to tracer.
     /*!
      *  This flag should be used for fast-path optimization to skip trace annotation and child span creation.
      */
@@ -96,7 +98,7 @@ public:
     bool IsSampled() const;
     void SetSampled(bool value = true);
 
-    //! IsPropagated returns a flag indicating that trace is serialized to proto.
+    //! Returns the flag indicating that trace is serialized to protobuf.
     /*!
      *  By default trace context is propagated.
      *  Not thread-safe.
@@ -126,23 +128,18 @@ public:
     TRequestId GetRequestId() const;
 
     void SetAllocationTags(TAllocationTags::TTags&& tags);
-
     TAllocationTags::TTags GetAllocationTags() const;
 
     TAllocationTagsPtr GetAllocationTagsPtr() const noexcept;
-
     void SetAllocationTagsPtr(TAllocationTagsPtr allocationTags) noexcept;
-
     void ClearAllocationTagsPtr() noexcept;
 
     template <typename TTag>
     std::optional<TTag> FindAllocationTag(const TString& key) const;
-
     template <typename TTag>
     std::optional<TTag> SetAllocationTag(
         const TString& key,
         TTag value);
-
     template <typename TTag>
     std::optional<TTag> RemoveAllocationTag(const TString& key);
 
@@ -175,7 +172,7 @@ public:
     template <class T>
     void AddTag(const TString& tagName, const T& tagValue);
 
-    //! Adds error tag. Spans containing errors are highlighted in Jaeger UI.
+    //! Adds error tag. Spans containing errors are highlighted in tracing UI.
     void AddErrorTag();
 
     struct TTraceLogEntry
@@ -209,7 +206,9 @@ public:
         std::optional<TString> endpoint = {},
         NYson::TYsonString baggage = NYson::TYsonString());
 
-    TTraceContextPtr CreateChild(TString spanName);
+    TTraceContextPtr CreateChild(
+        TString spanName,
+        std::optional<NProfiling::TCpuInstant> startTime = {});
 
     void AddProfilingTag(const TString& name, const TString& value);
     void AddProfilingTag(const TString& name, i64 value);
@@ -221,12 +220,11 @@ private:
     const TTraceId TraceId_;
     const TSpanId SpanId_;
     const TSpanId ParentSpanId_;
-
-    // Right now, debug flag is just passed as-is. It is part of opentracing, but we do not interpret it in any way.
+    // Right now, debug flag is just passed as-is. It is part of OpenTracing, but we do not interpret it in any way.
     const bool Debug_;
 
-    mutable std::atomic<ETraceContextState> State_;
-    bool Propagated_;
+    std::atomic<ETraceContextState> State_;
+    bool Propagated_ = true;
 
     const TTraceContextPtr ParentContext_;
     const TString SpanName_;
@@ -237,8 +235,7 @@ private:
 
     std::atomic<bool> Finished_ = false;
     std::atomic<bool> Submitted_ = false;
-    std::atomic<NProfiling::TCpuDuration> Duration_ = {0};
-
+    std::atomic<NProfiling::TCpuInstant> FinishTime_ = 0;
     std::atomic<NProfiling::TCpuDuration> ElapsedCpuTime_ = 0;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
@@ -257,10 +254,9 @@ private:
     TTraceContext(
         TSpanContext parentSpanContext,
         TString spanName,
-        TTraceContextPtr parentTraceContext = nullptr);
+        TTraceContextPtr parentTraceContext = nullptr,
+        std::optional<NProfiling::TCpuInstant> startTime = {});
     DECLARE_NEW_FRIEND()
-
-    void SetDuration();
 
     void DoSetAllocationTags(TAllocationTags::TTags&& tags);
 
@@ -271,6 +267,8 @@ private:
 
     template <typename TTag>
     std::optional<TTag> DoFindAllocationTag(const TString& key) const;
+
+    void SubmitToTracer(const ITracerPtr& tracer);
 };
 
 DEFINE_REFCOUNTED_TYPE(TTraceContext)
@@ -304,7 +302,7 @@ class TCurrentTraceContextGuard
 public:
     explicit TCurrentTraceContextGuard(
         TTraceContextPtr traceContext,
-        TSourceLocation location = FROM_HERE);
+        TSourceLocation location = YT_CURRENT_SOURCE_LOCATION);
     TCurrentTraceContextGuard(TCurrentTraceContextGuard&& other);
     ~TCurrentTraceContextGuard();
 
@@ -324,7 +322,7 @@ private:
 class TNullTraceContextGuard
 {
 public:
-    TNullTraceContextGuard(TSourceLocation location = FROM_HERE);
+    TNullTraceContextGuard(TSourceLocation location = YT_CURRENT_SOURCE_LOCATION);
     TNullTraceContextGuard(TNullTraceContextGuard&& other);
     ~TNullTraceContextGuard();
 
@@ -353,7 +351,8 @@ public:
     TTraceContextFinishGuard& operator=(const TTraceContextFinishGuard&) = delete;
     TTraceContextFinishGuard& operator=(TTraceContextFinishGuard&&);
 
-    void Release();
+    void Release(
+        std::optional<NProfiling::TCpuInstant> finishTime = {});
 private:
     TTraceContextPtr TraceContext_;
 };
@@ -367,6 +366,9 @@ class TTraceContextGuard
 public:
     explicit TTraceContextGuard(TTraceContextPtr traceContext);
     TTraceContextGuard(TTraceContextGuard&& other) = default;
+
+    void Release(
+        std::optional<NProfiling::TCpuInstant> finishTime = {});
 
 private:
     TCurrentTraceContextGuard TraceContextGuard_;
@@ -382,10 +384,15 @@ class TChildTraceContextGuard
 public:
     TChildTraceContextGuard(
         const TTraceContextPtr& traceContext,
-        TString spanName);
+        TString spanName,
+        std::optional<NProfiling::TCpuInstant> startTime = {});
     explicit TChildTraceContextGuard(
-        TString spanName);
+        TString spanName,
+        std::optional<NProfiling::TCpuInstant> startTime = {});
     TChildTraceContextGuard(TChildTraceContextGuard&& other) = default;
+
+    void Finish(
+        std::optional<NProfiling::TCpuInstant> finishTime = {});
 
 private:
     TCurrentTraceContextGuard TraceContextGuard_;

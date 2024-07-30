@@ -835,10 +835,14 @@ private:
 void DoCalculateWithSpilling(TComputationContext& ctx) {
     UpdateSpilling();
 
+    ui32 cnt = 0;
     while (*HaveMoreLeftRows || *HaveMoreRightRows) {
-        if (!HasMemoryForProcessing() && !IsSpillingFinalized) {
-            bool isWaitingForReduce = TryToReduceMemoryAndWait();
-            if (isWaitingForReduce) return;
+        if ((cnt++ % GraceJoin::SpillingRowLimit) == 0) {
+            if (!HasMemoryForProcessing() && !IsSpillingFinalized) {
+                bool isWaitingForReduce = TryToReduceMemoryAndWait();
+     
+                if (isWaitingForReduce) return;
+            }
         }
         bool isYield = FetchAndPackData(ctx);
         if (isYield) return;
@@ -1092,7 +1096,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
 
 }
 
-IComputationNode* WrapGraceJoinCommon(TCallable& callable, const TComputationNodeFactoryContext& ctx, bool isSelfJoin, bool  isSpillingAllowed) {
+IComputationNode* WrapGraceJoinCommon(TCallable& callable, const TComputationNodeFactoryContext& ctx, bool isSelfJoin, bool isSpillingAllowed) {
     const auto leftFlowNodeIndex = 0;
     const auto rightFlowNodeIndex = 1;
     const auto joinKindNodeIndex = isSelfJoin ? 1 : 2;
@@ -1171,27 +1175,14 @@ IComputationNode* WrapGraceJoinCommon(TCallable& callable, const TComputationNod
 IComputationNode* WrapGraceJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 8, "Expected 8 args");
 
-    return WrapGraceJoinCommon(callable, ctx, false, false);
+    return WrapGraceJoinCommon(callable, ctx, false, HasSpillingFlag(callable));
 }
 
 IComputationNode* WrapGraceSelfJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 7, "Expected 7 args");
     
-    return WrapGraceJoinCommon(callable, ctx, true, false);
+    return WrapGraceJoinCommon(callable, ctx, true, HasSpillingFlag(callable));
 }
-
-IComputationNode* WrapGraceJoinWithSpilling(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 8, "Expected 8 args");
-
-    return WrapGraceJoinCommon(callable, ctx, false, true);
-}
-
-IComputationNode* WrapGraceSelfJoinWithSpilling(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 7, "Expected 7 args");
-    
-    return WrapGraceJoinCommon(callable, ctx, true, true);
-}
-
 
 }
 

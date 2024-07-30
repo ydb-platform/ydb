@@ -388,10 +388,13 @@ private:
 
 namespace NTableCreator {
 
-THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(const TVector<TVector<TString>>& pathsComponents) {
+THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(const TVector<TVector<TString>>& pathsComponents, const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken) {
     auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-    auto databasePath = SplitPath(AppData()->TenantName);
+    auto databasePath = SplitPath(database);
     request->DatabaseName = CanonizePath(databasePath);
+    if (userToken && !userToken->GetSerializedToken().empty()) {
+        request->UserToken = userToken;
+    }
 
     for (const auto& pathComponents : pathsComponents) {
         auto& entry = request->ResultSet.emplace_back();
@@ -403,6 +406,10 @@ THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(cons
     }
 
     return request;
+}
+
+THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(const TVector<TVector<TString>>& pathsComponents) {
+    return BuildSchemeCacheNavigateRequest(pathsComponents, AppData()->TenantName, nullptr);
 }
 
 NKikimrSchemeOp::TColumnDescription TMultiTableCreator::Col(const TString& columnName, const char* columnType) {

@@ -202,7 +202,8 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join, IProvide
             *join->RightArg->Stats,
             join->LeftJoinKeys, 
             join->RightJoinKeys, 
-            EJoinAlgoType::GraceJoin
+            EJoinAlgoType::GraceJoin,
+            join->JoinType
         )
     );
 }
@@ -239,6 +240,7 @@ private:
         TDPHypSolver<TNodeSet> solver(hypergraph, this->Pctx);
 
         if (solver.CountCC(MaxDPhypTableSize_) >= MaxDPhypTableSize_) {
+            YQL_CLOG(TRACE, CoreDq) << "Maximum DPhyp threshold exceeded\n";
             ComputeStatistics(joinTree, this->Pctx);
             return joinTree;
         }
@@ -262,7 +264,20 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     IOptimizerNew& opt,
     const TProviderCollectFunction& providerCollect
 ) {
-    if (optLevel == 0) {
+    int dummyEquiJoinCounter;
+    return DqOptimizeEquiJoinWithCosts(node, ctx, typesCtx, optLevel, opt, providerCollect, dummyEquiJoinCounter);
+}
+
+TExprBase DqOptimizeEquiJoinWithCosts(
+    const TExprBase& node,
+    TExprContext& ctx,
+    TTypeAnnotationContext& typesCtx,
+    ui32 optLevel,
+    IOptimizerNew& opt,
+    const TProviderCollectFunction& providerCollect,
+    int& equiJoinCounter
+) {
+    if (optLevel <= 1) {
         return node;
     }
 
@@ -289,6 +304,8 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     }
 
     YQL_CLOG(TRACE, CoreDq) << "All statistics for join in place";
+
+    equiJoinCounter++;
 
     auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
 

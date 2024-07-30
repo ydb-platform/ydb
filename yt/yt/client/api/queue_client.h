@@ -75,13 +75,15 @@ struct TListQueueConsumerRegistrationsResult
 
 struct TCreateQueueProducerSessionOptions
     : public TTimeoutOptions
-{ };
+{
+    NYTree::INodePtr UserMeta;
+};
 
 struct TCreateQueueProducerSessionResult
 {
-    i64 SequenceNumber;
-    i64 Epoch;
-    std::optional<NYson::TYsonString> UserMeta;
+    NQueueClient::TQueueProducerSequenceNumber SequenceNumber;
+    NQueueClient::TQueueProducerEpoch Epoch;
+    NYTree::INodePtr UserMeta;
 };
 
 struct TRemoveQueueProducerSessionOptions
@@ -144,14 +146,13 @@ struct IQueueClient
     virtual TFuture<TCreateQueueProducerSessionResult> CreateQueueProducerSession(
         const NYPath::TRichYPath& producerPath,
         const NYPath::TRichYPath& queuePath,
-        const TString& sessionId,
-        const std::optional<NYson::TYsonString>& userMeta = {},
+        const NQueueClient::TQueueProducerSessionId& sessionId,
         const TCreateQueueProducerSessionOptions& options = {}) = 0;
 
     virtual TFuture<void> RemoveQueueProducerSession(
         const NYPath::TRichYPath& producerPath,
         const NYPath::TRichYPath& queuePath,
-        const TString& sessionId,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
         const TRemoveQueueProducerSessionOptions& options = {}) = 0;
 };
 

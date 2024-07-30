@@ -52,7 +52,7 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
         }
 
         if (inputColumn) {
-            if (inputColumn->StableName() != outputColumn.StableName()) {
+            if (!options.IgnoreStableNamesDifference && inputColumn->StableName() != outputColumn.StableName()) {
                 return {
                     ESchemaCompatibility::Incompatible,
                     TError("Column %Qv has stable name %Qv in input and %Qv in output schema",
@@ -192,7 +192,7 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
     for (int index = 0; index < outputKeySchema->GetColumnCount(); ++index) {
         const auto& inputColumn = inputKeySchema->Columns()[index];
         const auto& outputColumn = outputKeySchema->Columns()[index];
-        if (inputColumn.StableName() != outputColumn.StableName()) {
+        if (!options.IgnoreStableNamesDifference && inputColumn.StableName() != outputColumn.StableName()) {
             return {
                 ESchemaCompatibility::Incompatible,
                 TError("Key columns do not match: input column %v, output column %v",

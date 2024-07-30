@@ -18,7 +18,7 @@ host_configs:
     type: <type>
   - path: ...
 - host_config_id: 2
-  ...  
+  ...
 ```
 
 The `host_config_id` attribute specifies a numeric configuration ID. The `drive` attribute contains a collection of descriptions of connected drives. Each description consists of two attributes:
@@ -186,7 +186,7 @@ State Storage availability is key for a YDB cluster because it affects all datab
 
 The following guidelines can be used to select State Storage nodes:
 
-| Cluster type | Min number of<br>nodes | Selection guidelines |
+| Cluster type | Min number of<br/>nodes | Selection guidelines |
 |---------|-----------------------|-----------------|
 | Without fault tolerance | 1 | Select one random node. |
 | Within a single availability zone | 5 | Select five nodes in different block-4-2 storage pool failure domains to ensure that a majority of 3 working nodes (out of 5) remain when two domains fail. |
@@ -223,7 +223,7 @@ domains_config:
 
 | Key | Description |
 --- | ---
-| `enforce_user_token_requirement` | Require a user token.</br>Acceptable values:</br><ul><li>`false`: Anonymous authentication mode, no token needed (used by default if the parameter is omitted).</li><li>`true`: Username/password authentication mode. A valid user token is needed for authentication.</li></ul> |
+| `enforce_user_token_requirement` | Require a user token.<br/>Acceptable values:<br/><ul><li>`false`: Anonymous authentication mode, no token needed (used by default if the parameter is omitted).</li><li>`true`: Username/password authentication mode. A valid user token is needed for authentication.</li></ul> |
 
 ### Examples {#domains-examples}
 
@@ -444,15 +444,15 @@ actor_system_config:
 
 | Parameter | Description |
 --- | ---
-| `executor` | Pool configuration.<br>You should only change the number of CPU cores (the `threads` parameter) in the pool configs. |
+| `executor` | Pool configuration.<br/>You should only change the number of CPU cores (the `threads` parameter) in the pool configs. |
 | `name` | Pool name that indicates its purpose. Possible values:<ul><li>`System`: A pool that is designed for running quick internal operations in {{ ydb-full-name }} (it serves system tablets, state storage, distributed storage I/O, and erasure coding).</li><li>`User`: A pool that serves the user load (user tablets, queries run in the Query Processor).</li><li>`Batch`: A pool that serves tasks with no strict limit on the execution time, background operations like garbage collection and heavy queries run in the Query Processor.</li><li>`IO`: A pool responsible for performing any tasks with blocking operations (such as authentication or writing logs to a file).</li><li>`IC`: Interconnect, it serves the load related to internode communication (system calls to wait for sending and send data across the network, data serialization, as well as message splits and merges).</li></ul> |
 | `spin_threshold` | The number of CPU cycles before going to sleep if there are no messages. In sleep mode, there is less power consumption, but it may increase request latency under low loads. |
-| `threads` | The number of CPU cores allocated per pool.<br>Make sure the total number of cores assigned to the System, User, Batch, and IC pools does not exceed the number of available system cores. |
-| `max_threads` | Maximum vCPU that can be allocated to the pool from idle cores of other pools. When you set this parameter, the system enables the mechanism of expanding the pool at full utilization, provided that idle vCPUs are available.<br>The system checks the current utilization and reallocates vCPUs once per second.  |
+| `threads` | The number of CPU cores allocated per pool.<br/>Make sure the total number of cores assigned to the System, User, Batch, and IC pools does not exceed the number of available system cores. |
+| `max_threads` | Maximum vCPU that can be allocated to the pool from idle cores of other pools. When you set this parameter, the system enables the mechanism of expanding the pool at full utilization, provided that idle vCPUs are available.<br/>The system checks the current utilization and reallocates vCPUs once per second.  |
 | `max_avg_ping_deviation` | Additional condition to expand the pool's vCPU. When more than 90% of vCPUs allocated to the pool are utilized, you need to worsen SelfPing by more than `max_avg_ping_deviation` microseconds from 10 milliseconds expected. |
 | `time_per_mailbox_micro_secs` | The number of messages per actor to be handled before switching to a different actor. |
 | `type` | Pool type. Possible values:<ul><li>`IO` should be set for IO pools.</li><li>`BASIC` should be set for any other pool.</li></ul> |
-| `scheduler` | Scheduler configuration. The actor system scheduler is responsible for the delivery of deferred messages exchanged by actors.<br>We do not recommend changing the default scheduler parameters. |
+| `scheduler` | Scheduler configuration. The actor system scheduler is responsible for the delivery of deferred messages exchanged by actors.<br/>We do not recommend changing the default scheduler parameters. |
 | `progress_threshold` | The actor system supports requesting message sending scheduled for a later point in time. The system might fail to send all scheduled messages at some point. In this case, it starts sending them in "virtual time" by handling message sending in each loop over a period that doesn't exceed the `progress_threshold` value in microseconds and shifting the virtual time by the `progress_threshold` value until it reaches real time. |
 | `resolution` | When making a schedule for sending messages, discrete time slots are used. The slot duration is set by the `resolution` parameter in microseconds. |
 
@@ -482,8 +482,8 @@ For a configuration located in 3 availability zones, specify 3 rings. For a conf
 ## Enabling stable node names {#node-broker-config}
 
 Node names are assigned through the Node Broker, which is a system tablet that registers dynamic nodes in the {{ ydb-short-name }} cluster.
-
-Node Broker gives names to dynamic nodes when they register. By default, a node name consists of the hostname and the port on which the node is running.
+  
+Node Broker assigns names to dynamic nodes when they register in the cluster. By default, a node name consists of the hostname and the port on which the node is running.
 
 In a dynamic environment where hostnames often change, such as in Kubernetes, using hostname and port leads to an uncontrollable increase in the number of unique node names. This is true even for a database with a handful of dynamic nodes. Such behavior may be undesirable for a time series monitoring system as the number of metrics grows uncontrollably. To solve this problem, the system administrator can set up *stable* node names.
 

@@ -1015,7 +1015,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
     req->set_use_canonical_null_relations(options.UseCanonicalNullRelations);
     req->set_merge_versioned_rows(options.MergeVersionedRows);
-    req->set_versioned_read_options(ConvertToYsonString(options.VersionedReadOptions).ToString());
+    ToProto(req->mutable_versioned_read_options(), options.VersionedReadOptions);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspSelectRowsPtr& rsp) {
         TSelectRowsResult result;
@@ -1059,7 +1059,7 @@ TFuture<TPullRowsResult> TClientBase::PullRows(
         req->set_upper_timestamp(options.UpperTimestamp);
     }
     for (auto [tabletId, rowIndex] : options.StartReplicationRowIndexes) {
-        auto *protoReplicationRowIndex = req->add_start_replication_row_indexes();
+        auto* protoReplicationRowIndex = req->add_start_replication_row_indexes();
         ToProto(protoReplicationRowIndex->mutable_tablet_id(), tabletId);
         protoReplicationRowIndex->set_row_index(rowIndex);
     }

@@ -43,8 +43,7 @@ namespace NKikimr {
 
 
         void TestEmptySyncLog(const TVector<ui32> &chunksToDeleteDelayed,
-                ui64 recoveryLogConfirmedLsn,
-                bool oldFormat)
+                ui64 recoveryLogConfirmedLsn)
         {
             TSyncLogPtr syncLog = CreateEmpty();
 
@@ -53,42 +52,25 @@ namespace NKikimr {
             TEntryPointSerializer serializer(syncLogSnap, std::move(copyOfChunksToDeleteDelayed),
                 recoveryLogConfirmedLsn);
             TDeltaToDiskRecLog delta(10);
-            serializer.Serialize(delta, oldFormat);
+            serializer.Serialize(delta);
             TString serializedData = serializer.GetSerializedData();
 
             auto recoveredSyncLog = Parse(serializedData);
             TEntryPointParser parser = MakeParser(serializedData);
             UNIT_ASSERT(parser.GetChunksToDelete() == chunksToDeleteDelayed);
-            if (oldFormat) {
-                UNIT_ASSERT(parser.GetRecoveryLogConfirmedLsn() == 0);
-            } else {
-                UNIT_ASSERT(parser.GetRecoveryLogConfirmedLsn() == recoveryLogConfirmedLsn);
-            }
-        }
-
-
-        Y_UNIT_TEST(SerializeParseEmpty1_Old) {
-            TVector<ui32> chunksToDeleteDelayed;
-            ui64 recoveryLogConfirmedLsn = 0;
-            TestEmptySyncLog(chunksToDeleteDelayed, recoveryLogConfirmedLsn, true);
-        }
-
-        Y_UNIT_TEST(SerializeParseEmpty2_Old) {
-            TVector<ui32> chunksToDeleteDelayed = {78, 3};
-            ui64 recoveryLogConfirmedLsn = 783246;
-            TestEmptySyncLog(chunksToDeleteDelayed, recoveryLogConfirmedLsn, true);
+            UNIT_ASSERT(parser.GetRecoveryLogConfirmedLsn() == recoveryLogConfirmedLsn);
         }
 
         Y_UNIT_TEST(SerializeParseEmpty1_Proto) {
             TVector<ui32> chunksToDeleteDelayed;
             ui64 recoveryLogConfirmedLsn = 0;
-            TestEmptySyncLog(chunksToDeleteDelayed, recoveryLogConfirmedLsn, false);
+            TestEmptySyncLog(chunksToDeleteDelayed, recoveryLogConfirmedLsn);
         }
 
         Y_UNIT_TEST(SerializeParseEmpty2_Proto) {
             TVector<ui32> chunksToDeleteDelayed = {78, 3};
             ui64 recoveryLogConfirmedLsn = 783246;
-            TestEmptySyncLog(chunksToDeleteDelayed, recoveryLogConfirmedLsn, false);
+            TestEmptySyncLog(chunksToDeleteDelayed, recoveryLogConfirmedLsn);
         }
     }
 

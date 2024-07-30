@@ -223,8 +223,6 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
         Self->SharingSessionsManager = local;
     }
 
-    Self->ProgressTxController->StartOperators();
-
     Self->UpdateInsertTableCounters();
     Self->UpdateIndexCounters();
     Self->UpdateResourceMetrics(ctx, {});

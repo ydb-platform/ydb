@@ -15,8 +15,9 @@ namespace NViewer {
 
 using namespace NActors;
 
-class TJsonTenants : public TViewerPipeClient<TJsonTenants> {
-    using TBase = TViewerPipeClient<TJsonTenants>;
+class TJsonTenants : public TViewerPipeClient {
+    using TThis = TJsonTenants;
+    using TBase = TViewerPipeClient;
     IViewer* Viewer;
     NKikimrViewer::TTenants Result;
     NMon::TEvHttpInfo::TPtr Event;
@@ -26,16 +27,12 @@ class TJsonTenants : public TViewerPipeClient<TJsonTenants> {
     THashMap<TString, NKikimrViewer::TTenant*> TenantIndex;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TJsonTenants(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
         : Viewer(viewer)
         , Event(ev)
     {}
 
-    void Bootstrap() {
+    void Bootstrap() override {
         const auto& params(Event->Get()->Request.GetParams());
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
@@ -87,7 +84,7 @@ public:
         RequestDone();
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         TStringStream json;
         TProtoToJson::ProtoToJson(json, Result, JsonSettings);
         Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), json.Str()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));

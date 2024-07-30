@@ -86,6 +86,10 @@ class AbstractExpiringTokenCredentials(credentials.AbstractExpiringTokenCredenti
             await asyncio.sleep(1)
             self._tp.submit(self._refresh)
 
+        except BaseException as e:
+            self.last_error = str(e)
+            raise
+
     async def token(self):
         current_time = time.time()
         if current_time > self._refresh_in:

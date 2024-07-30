@@ -15,10 +15,12 @@ generic:
     token_file: path/to/ydb_token
 
 oidc:
+  client_id: "client-id"
   secret_name: "oidc-secret"
   session_service_endpoint: "grpcs://ss.private-api.cloud-preprod.yandex.net:8655"
   session_service_token_name: "ss-token"
   authorization_server_address: "https://auth-preprod.cloud.yandex.ru"
+  auth_profile: "yandex"
   allowed_proxy_hosts:
     - "*.yandex.net"
     - "*.yandex-team.ru"

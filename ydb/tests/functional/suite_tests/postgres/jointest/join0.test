@@ -146,9 +146,11 @@ where a.unique1 = 42 and
 
 --
 -- test case where a PlaceHolderVar is used as a nestloop parameter
+-- needs a fix: CBO generates a different plan that is valid, however rule based optimizer breaks: https://github.com/ydb-platform/ydb/issues/6371
 --
 
 statement query
+PRAGMA ydb.CostBasedOptimizationLevel='0';
 SELECT qq, unique1
 FROM (
  select * from

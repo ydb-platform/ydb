@@ -311,8 +311,13 @@ message TOffloadConfig {
         optional NKikimrProto.TPathID DstPathId = 2;
     }
 
+    message TIncrementalRestore {
+        optional NKikimrProto.TPathID DstPathId = 1;
+    }
+
     oneof Strategy {
         TIncrementalBackup IncrementalBackup = 1;
+        TIncrementalRestore IncrementalRestore = 2;
     }
 }
 
@@ -404,6 +409,7 @@ message TPQTabletConfig {
         CAN_SPLIT = 1;
         // The autoscaling algorithm will both increase and decrease partitions count depending on the load characteristics.
         CAN_SPLIT_AND_MERGE = 2;
+        PAUSED = 3;
     }
 
     // Strategy for automatically changing the number of topic partitions depending on the load
@@ -946,6 +952,11 @@ message TPartitionOperation {
     optional uint32 SupportivePartition = 6;
 };
 
+message TWriteId {
+    optional uint64 NodeId = 1;
+    optional fixed64 KeyId = 2;
+};
+
 message TDataTransaction {
     enum ELocksOp {
         Unspecified = 0;
@@ -959,7 +970,7 @@ message TDataTransaction {
     repeated uint64 SendingShards = 3;
     repeated uint64 ReceivingShards = 4;
     optional bool Immediate = 5;
-    optional fixed64 WriteId = 6;
+    optional TWriteId WriteId = 6;
 }
 
 message TConfigTransaction {
@@ -1079,15 +1090,21 @@ message TTransaction {
     enum EState {
         UNKNOWN = 0;
         PREPARING = 1;
-        PREPARED = 2;     // хранится
+        PREPARED = 2;     // persist
         PLANNING = 3;
-        PLANNED = 4;      // хранится. хотим выкинуть и не персистить
+        PLANNED = 4;      // persist
         CALCULATING = 5;
         CALCULATED = 6;
-        WAIT_RS = 7;      // хранится
+        WAIT_RS = 7;      // persist
         EXECUTING = 8;
         EXECUTED = 9;
+        DELETING = 10;
     };
+
+    message TPredicateReceived {
+        optional uint64 TabletId = 1;
+        optional bool Predicate = 2;
+    }
 
     optional EKind Kind = 11;
     optional uint64 Step = 8;
@@ -1096,14 +1113,14 @@ message TTransaction {
     optional uint64 MinStep = 3;
     optional uint64 MaxStep = 4;
 
+    repeated TPredicateReceived PredicatesReceived = 5;
+    repeated uint64 PredicateRecipients = 6;
+    optional bool Predicate = 9;
+
     //
     // TDataTransaction
     //
-    repeated uint64 Senders = 5;
-    repeated uint64 Receivers = 6;
     repeated TPartitionOperation Operations = 7;
-    optional bool SelfPredicate = 9;  // только предикаты партиций. предикаты коллег отдельно
-    optional bool AggrPredicate = 10;
 
     //
     // TConfigTransaction
@@ -1116,18 +1133,20 @@ message TTransaction {
     //
     optional NActorsProto.TActorId SourceActor = 14;
 
-    optional uint64 WriteId = 15;
+    optional TWriteId WriteId = 15;
 };
 
 message TTabletTxInfo {
     message TTxWriteInfo {
-        optional uint64 WriteId = 1;
+        optional TWriteId WriteId = 1;
         optional uint32 OriginalPartitionId = 2;
         optional uint32 InternalPartitionId = 3;
     };
 
-    optional uint64 LastStep = 2;
-    optional uint64 LastTxId = 3;
+    optional uint64 PlanStep = 2;
+    optional uint64 PlanTxId = 3;
     repeated TTxWriteInfo TxWrites = 4;
     optional uint64 NextSupportivePartitionId = 5;
+    optional uint64 ExecStep = 6;
+    optional uint64 ExecTxId = 7;
 }

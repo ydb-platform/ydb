@@ -1,0 +1,12 @@
+{
+    "": "build/config/tests/py_style/config.toml",
+    "devtools/contrib/piglet/template_generator/": "maps/infra/pyproject.toml",
+    "devtools/dwh/intrasearch/utils/": "devtools/dwh/pyproject.toml",
+    "devtools/rnd/": "devtools/rnd/pyproject.toml",
+    "devtools/yamaker/": "devtools/yamaker/pyproject.toml",
+    "dj/services/arcanum/": "dj/services/arcanum/pyproject.toml",
+    "intranet/search/": "intranet/search/pyproject.toml",
+    "maps/": "maps/infra/pyproject.toml",
+    "ml/tensorflow/models/userbert/pipeline/multipart/data/": "ml/tensorflow/models/userbert/pipeline/multipart/data/pyproject.toml",
+    "partner/python/": "partner/python/pyproject.toml"
+}

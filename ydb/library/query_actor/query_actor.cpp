@@ -42,12 +42,12 @@ TQueryBase::TTxControl TQueryBase::TTxControl::CommitTx() {
     return TTxControl().Commit(true);
 }
 
-TQueryBase::TTxControl TQueryBase::TTxControl::BeginTx() {
-    return TTxControl().Begin(true);
+TQueryBase::TTxControl TQueryBase::TTxControl::BeginTx(bool snapshotRead) {
+    return TTxControl().Begin(true).SnapshotRead(snapshotRead);
 }
 
-TQueryBase::TTxControl TQueryBase::TTxControl::BeginAndCommitTx() {
-    return BeginTx().Commit(true);
+TQueryBase::TTxControl TQueryBase::TTxControl::BeginAndCommitTx(bool snapshotRead) {
+    return BeginTx(snapshotRead).Commit(true);
 }
 
 TQueryBase::TTxControl TQueryBase::TTxControl::ContinueTx() {
@@ -206,7 +206,12 @@ void TQueryBase::RunDataQuery(const TString& sql, NYdb::TParamsBuilder* params, 
 
     auto txControlProto = request.mutable_tx_control();
     if (txControl.Begin_) {
-        txControlProto->mutable_begin_tx()->mutable_serializable_read_write();
+        auto& beginTx = *txControlProto->mutable_begin_tx();
+        if (txControl.SnapshotRead_) {
+            beginTx.mutable_snapshot_read_only();
+        } else {
+            beginTx.mutable_serializable_read_write();
+        }
     } else if (txControl.Continue_) {
         Y_ABORT_UNLESS(TxId);
         txControlProto->set_tx_id(TxId);

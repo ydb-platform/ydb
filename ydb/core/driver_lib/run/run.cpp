@@ -3,6 +3,7 @@
 #include "service_initializer.h"
 #include "kikimr_services_initializers.h"
 
+#include <ydb/core/memory_controller/memory_controller.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -23,7 +24,6 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
 #include <ydb/library/actors/interconnect/interconnect_mon.h>
-#include <ydb/core/actorlib_impl/mad_squirrel.h>
 #include <ydb/core/config/init/dummy.h>
 
 #include <ydb/core/control/immediate_control_board_actor.h>
@@ -399,8 +399,8 @@ public:
 TKikimrRunner::TKikimrRunner(std::shared_ptr<TModuleFactories> factories)
     : ModuleFactories(std::move(factories))
     , Counters(MakeIntrusive<::NMonitoring::TDynamicCounters>())
-    , PollerThreads(new NInterconnect::TPollerThreads)
-    , MemObserver(MakeIntrusive<TMemObserver>())
+    , PollerThreads(MakeIntrusive<NInterconnect::TPollerThreads>())
+    , ProcessMemoryInfoProvider(MakeIntrusive<NMemory::TProcessMemoryInfoProvider>())
 {
 }
 
@@ -1126,6 +1126,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->MetadataCacheConfig.CopyFrom(runConfig.AppConfig.GetMetadataCacheConfig());
     }
 
+    if (runConfig.AppConfig.HasMemoryControllerConfig()) {
+        AppData->MemoryControllerConfig.CopyFrom(runConfig.AppConfig.GetMemoryControllerConfig());
+    }
+
     // setup resource profiles
     AppData->ResourceProfiles = new TResourceProfiles;
     if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())
@@ -1425,7 +1429,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TLocalServiceInitializer(runConfig));
     }
     if (serviceMask.EnableSharedCache) {
-        sil->AddServiceInitializer(new TSharedCacheInitializer(runConfig, MemObserver));
+        sil->AddServiceInitializer(new TSharedCacheInitializer(runConfig));
     }
     if (serviceMask.EnableBlobCache) {
         sil->AddServiceInitializer(new TBlobCacheInitializer(runConfig));
@@ -1526,13 +1530,15 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TNetClassifierInitializer(runConfig));
     }
 
-    sil->AddServiceInitializer(new TMemProfMonitorInitializer(runConfig, MemObserver));
+    sil->AddServiceInitializer(new TMemProfMonitorInitializer(runConfig));
 
 #if defined(ENABLE_MEMORY_TRACKING)
     if (serviceMask.EnableMemoryTracker) {
         sil->AddServiceInitializer(new TMemoryTrackerInitializer(runConfig));
     }
 #endif
+
+    sil->AddServiceInitializer(new TMemoryControllerInitializer(runConfig, ProcessMemoryInfoProvider));
 
     if (serviceMask.EnableKqp) {
         sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories, *this));

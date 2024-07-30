@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(24.0)
+VERSION(24.1.2)
 
 LICENSE(MIT)
 
@@ -10,6 +10,7 @@ NO_LINT()
 
 NO_CHECK_IMPORTS(
     pip.__pip-runner__
+    pip._internal.locations._distutils
     pip._vendor.*
 )
 
@@ -26,6 +27,7 @@ PY_SRCS(
     pip/_internal/cli/base_command.py
     pip/_internal/cli/cmdoptions.py
     pip/_internal/cli/command_context.py
+    pip/_internal/cli/index_command.py
     pip/_internal/cli/main.py
     pip/_internal/cli/main_parser.py
     pip/_internal/cli/parser.py
@@ -149,7 +151,6 @@ PY_SRCS(
     pip/_internal/utils/hashes.py
     pip/_internal/utils/logging.py
     pip/_internal/utils/misc.py
-    pip/_internal/utils/models.py
     pip/_internal/utils/packaging.py
     pip/_internal/utils/setuptools_build.py
     pip/_internal/utils/subprocess.py
@@ -181,60 +182,6 @@ PY_SRCS(
     pip/_vendor/certifi/__init__.py
     pip/_vendor/certifi/__main__.py
     pip/_vendor/certifi/core.py
-    pip/_vendor/chardet/__init__.py
-    pip/_vendor/chardet/big5freq.py
-    pip/_vendor/chardet/big5prober.py
-    pip/_vendor/chardet/chardistribution.py
-    pip/_vendor/chardet/charsetgroupprober.py
-    pip/_vendor/chardet/charsetprober.py
-    pip/_vendor/chardet/cli/__init__.py
-    pip/_vendor/chardet/cli/chardetect.py
-    pip/_vendor/chardet/codingstatemachine.py
-    pip/_vendor/chardet/codingstatemachinedict.py
-    pip/_vendor/chardet/cp949prober.py
-    pip/_vendor/chardet/enums.py
-    pip/_vendor/chardet/escprober.py
-    pip/_vendor/chardet/escsm.py
-    pip/_vendor/chardet/eucjpprober.py
-    pip/_vendor/chardet/euckrfreq.py
-    pip/_vendor/chardet/euckrprober.py
-    pip/_vendor/chardet/euctwfreq.py
-    pip/_vendor/chardet/euctwprober.py
-    pip/_vendor/chardet/gb2312freq.py
-    pip/_vendor/chardet/gb2312prober.py
-    pip/_vendor/chardet/hebrewprober.py
-    pip/_vendor/chardet/jisfreq.py
-    pip/_vendor/chardet/johabfreq.py
-    pip/_vendor/chardet/johabprober.py
-    pip/_vendor/chardet/jpcntx.py
-    pip/_vendor/chardet/langbulgarianmodel.py
-    pip/_vendor/chardet/langgreekmodel.py
-    pip/_vendor/chardet/langhebrewmodel.py
-    pip/_vendor/chardet/langhungarianmodel.py
-    pip/_vendor/chardet/langrussianmodel.py
-    pip/_vendor/chardet/langthaimodel.py
-    pip/_vendor/chardet/langturkishmodel.py
-    pip/_vendor/chardet/latin1prober.py
-    pip/_vendor/chardet/macromanprober.py
-    pip/_vendor/chardet/mbcharsetprober.py
-    pip/_vendor/chardet/mbcsgroupprober.py
-    pip/_vendor/chardet/mbcssm.py
-    pip/_vendor/chardet/metadata/__init__.py
-    pip/_vendor/chardet/metadata/languages.py
-    pip/_vendor/chardet/resultdict.py
-    pip/_vendor/chardet/sbcharsetprober.py
-    pip/_vendor/chardet/sbcsgroupprober.py
-    pip/_vendor/chardet/sjisprober.py
-    pip/_vendor/chardet/universaldetector.py
-    pip/_vendor/chardet/utf1632prober.py
-    pip/_vendor/chardet/utf8prober.py
-    pip/_vendor/chardet/version.py
-    pip/_vendor/colorama/__init__.py
-    pip/_vendor/colorama/ansi.py
-    pip/_vendor/colorama/ansitowin32.py
-    pip/_vendor/colorama/initialise.py
-    pip/_vendor/colorama/win32.py
-    pip/_vendor/colorama/winterm.py
     pip/_vendor/distlib/__init__.py
     pip/_vendor/distlib/compat.py
     pip/_vendor/distlib/database.py
@@ -263,12 +210,15 @@ PY_SRCS(
     pip/_vendor/msgpack/exceptions.py
     pip/_vendor/msgpack/ext.py
     pip/_vendor/msgpack/fallback.py
-    pip/_vendor/packaging/__about__.py
     pip/_vendor/packaging/__init__.py
+    pip/_vendor/packaging/_elffile.py
     pip/_vendor/packaging/_manylinux.py
     pip/_vendor/packaging/_musllinux.py
+    pip/_vendor/packaging/_parser.py
     pip/_vendor/packaging/_structures.py
+    pip/_vendor/packaging/_tokenizer.py
     pip/_vendor/packaging/markers.py
+    pip/_vendor/packaging/metadata.py
     pip/_vendor/packaging/requirements.py
     pip/_vendor/packaging/specifiers.py
     pip/_vendor/packaging/tags.py
@@ -315,20 +265,10 @@ PY_SRCS(
     pip/_vendor/pygments/sphinxext.py
     pip/_vendor/pygments/style.py
     pip/_vendor/pygments/styles/__init__.py
+    pip/_vendor/pygments/styles/_mapping.py
     pip/_vendor/pygments/token.py
     pip/_vendor/pygments/unistring.py
     pip/_vendor/pygments/util.py
-    pip/_vendor/pyparsing/__init__.py
-    pip/_vendor/pyparsing/actions.py
-    pip/_vendor/pyparsing/common.py
-    pip/_vendor/pyparsing/core.py
-    pip/_vendor/pyparsing/diagram/__init__.py
-    pip/_vendor/pyparsing/exceptions.py
-    pip/_vendor/pyparsing/helpers.py
-    pip/_vendor/pyparsing/results.py
-    pip/_vendor/pyparsing/testing.py
-    pip/_vendor/pyparsing/unicode.py
-    pip/_vendor/pyparsing/util.py
     pip/_vendor/pyproject_hooks/__init__.py
     pip/_vendor/pyproject_hooks/_compat.py
     pip/_vendor/pyproject_hooks/_impl.py
@@ -436,7 +376,6 @@ PY_SRCS(
     pip/_vendor/rich/themes.py
     pip/_vendor/rich/traceback.py
     pip/_vendor/rich/tree.py
-    pip/_vendor/six.py
     pip/_vendor/tenacity/__init__.py
     pip/_vendor/tenacity/_asyncio.py
     pip/_vendor/tenacity/_utils.py
@@ -498,10 +437,6 @@ PY_SRCS(
     pip/_vendor/urllib3/util/timeout.py
     pip/_vendor/urllib3/util/url.py
     pip/_vendor/urllib3/util/wait.py
-    pip/_vendor/webencodings/__init__.py
-    pip/_vendor/webencodings/labels.py
-    pip/_vendor/webencodings/mklabels.py
-    pip/_vendor/webencodings/x_user_defined.py
 )
 
 RESOURCE_FILES(
@@ -512,12 +447,10 @@ RESOURCE_FILES(
     pip/_vendor/cachecontrol/py.typed
     pip/_vendor/certifi/cacert.pem
     pip/_vendor/certifi/py.typed
-    pip/_vendor/chardet/py.typed
     pip/_vendor/distro/py.typed
     pip/_vendor/idna/py.typed
     pip/_vendor/packaging/py.typed
     pip/_vendor/platformdirs/py.typed
-    pip/_vendor/pyparsing/py.typed
     pip/_vendor/resolvelib/py.typed
     pip/_vendor/rich/py.typed
     pip/_vendor/tenacity/py.typed

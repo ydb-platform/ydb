@@ -1,11 +1,15 @@
 #include "catalog.h"
+#include <util/generic/array_size.h>
 #include <util/generic/utility.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/split.h>
+#include <util/stream/file.h>
 #include <util/system/env.h>
+#include <util/system/mutex.h>
+#include <util/system/tempfile.h>
 #include <library/cpp/resource/resource.h>
 
 namespace NYql::NPg {
@@ -13,12 +17,29 @@ namespace NYql::NPg {
 constexpr ui32 FuncMaxArgs = 100;
 constexpr ui32 InvalidOid = 0;
 constexpr ui32 Int2VectorOid = 22;
+constexpr ui32 RegProcOid = 24;
+constexpr ui32 OidOid = 26;
 constexpr ui32 OidVectorOid = 30;
+constexpr ui32 RegProcedureOid = 2202;
+constexpr ui32 RegOperOid = 2203;
+constexpr ui32 RegOperatorOid = 2204;
+constexpr ui32 RegClassOid = 2205;
+constexpr ui32 RegTypeOid = 2206;
 //constexpr ui32 AnyElementOid = 2283;
 //constexpr ui32 AnyNonArrayOid = 2776;
+constexpr ui32 RegConfigOid = 3734;
+constexpr ui32 RegDictionaryOid = 3769;
+constexpr ui32 RegNamespaceOid = 4089;
+constexpr ui32 RegRoleOid = 4096;
 //constexpr ui32 AnyCompatibleOid = 5077;
 //constexpr ui32 AnyCompatibleArrayOid = 5078;
 //constexpr ui32 AnyCompatibleNonArrayOid = 5079;
+
+// See GetCCHashEqFuncs in PG sources
+// https://doxygen.postgresql.org/catcache_8c.html#a8a2dc395011dba02c083bfbf6b87ce6c
+const THashSet<ui32> regClasses({
+    RegProcOid, RegProcedureOid, RegOperOid, RegOperatorOid, RegClassOid, RegTypeOid,
+    RegConfigOid, RegDictionaryOid, RegRoleOid, RegNamespaceOid});
 
 using TOperators = THashMap<ui32, TOperDesc>;
 
@@ -47,6 +68,9 @@ using TAmProcs = THashMap<std::tuple<ui32, ui32, ui32, ui32>, TAmProcDesc>;
 using TConversions = THashMap<std::pair<TString, TString>, TConversionDesc>;
 
 using TLanguages = THashMap<ui32, TLanguageDesc>;
+
+using TExtensions = TVector<TExtensionDesc>;
+using TExtensionsByName = THashMap<TString, ui32>;
 
 bool IsCompatibleTo(ui32 actualTypeId, ui32 expectedTypeId, const TTypes& types) {
     if (actualTypeId == expectedTypeId) {
@@ -1542,76 +1566,52 @@ TNamespaces FillNamespaces() {
     };
 }
 
-struct TCatalog {
-    TCatalog()
-        : ProhibitedProcs({
-            // revoked from public
-            "pg_start_backup",
-            "pg_stop_backup",
-            "pg_create_restore_point",
-            "pg_switch_wal",
-            "pg_wal_replay_pause",
-            "pg_wal_replay_resume",
-            "pg_rotate_logfile",
-            "pg_reload_conf",
-            "pg_current_logfile",
-            "pg_promote",
-            "pg_stat_reset",
-            "pg_stat_reset_shared",
-            "pg_stat_reset_slru",
-            "pg_stat_reset_single_table_counters",
-            "pg_stat_reset_single_function_counters",
-            "pg_stat_reset_replication_slot",
-            "lo_import",
-            "lo_export",
-            "pg_ls_logdir",
-            "pg_ls_waldir",
-            "pg_ls_archive_statusdir",
-            "pg_ls_tmpdir",
-            "pg_read_file",
-            "pg_read_binary_file",
-            "pg_replication_origin_advance",
-            "pg_replication_origin_create",
-            "pg_replication_origin_drop",
-            "pg_replication_origin_oid",
-            "pg_replication_origin_progress",
-            "pg_replication_origin_session_is_setup",
-            "pg_replication_origin_session_progress",
-            "pg_replication_origin_session_reset",
-            "pg_replication_origin_session_setup",
-            "pg_replication_origin_xact_reset",
-            "pg_replication_origin_xact_setup",
-            "pg_show_replication_origin_status",
-            "pg_stat_file",
-            "pg_ls_dir",
-            // transactions
-            "pg_last_committed_xact",
-            "pg_current_wal_lsn",
-            // large_objects
-            "lo_creat",
-            "lo_create",
-            "lo_import",
-            "lo_import_with_oid",
-            "lo_export",
-            "lo_open",
-            "lo_write",
-            "lo_read",
-            "lo_lseek",
-            "lo_lseek64",
-            "lo_tell",
-            "lo_tell64",
-            "lo_truncate",
-            "lo_truncate64",
-            "lo_close",
-            "lo_unlink"
-        }),
-        AllStaticTables({
+struct TTableInfoKeyRaw {
+    const char* Schema;
+    const char* Name;
+};
+
+struct TTableInfoRaw : public TTableInfoKeyRaw {
+    ERelKind Kind;
+    ui32 Oid;
+};
+
+struct TColumnInfoRaw {
+    const char* Schema;
+    const char* TableName;
+    const char* Name;
+    const char* UdtType;
+};
+
+const TTableInfoRaw AllStaticTablesRaw[] = {
 #include "pg_class.generated.h"
-        }),
-        AllStaticColumns({
+};
+
+const TColumnInfoRaw AllStaticColumnsRaw[] = {
 #include "columns.generated.h"
-        })
-    {
+};
+
+const char* AllowedProcsRaw[] = {
+#include "safe_procs.h"
+#include "used_procs.h"
+};
+
+struct TCatalog : public IExtensionDDLBuilder {
+    TCatalog() {
+        for (size_t i = 0; i < Y_ARRAY_SIZE(AllStaticTablesRaw); ++i) {
+            const auto& raw = AllStaticTablesRaw[i];
+            AllStaticTables.push_back(
+                {{TString(raw.Schema), TString(raw.Name)}, raw.Kind, raw.Oid}
+            );
+        }
+
+        for (size_t i = 0; i < Y_ARRAY_SIZE(AllStaticColumnsRaw); ++i) {
+            const auto& raw = AllStaticColumnsRaw[i];
+            AllStaticColumns.push_back(
+                {TString(raw.Schema), TString(raw.TableName), TString(raw.Name), TString(raw.UdtType)}
+            );
+        }
+
         if ( GetEnv("YDB_EXPERIMENTAL_PG") == "1"){
             // grafana migration_log
             AllStaticTables.push_back(
@@ -1835,6 +1835,9 @@ struct TCatalog {
         for (auto& [k, v] : Types) {
             if (v.TypeId != v.ArrayTypeId) {
                 auto lookupId = (v.TypeId == VarcharOid ? TextOid : v.TypeId);
+                if (regClasses.contains(lookupId)) {
+                    lookupId = OidOid;
+                }
                 auto btreeOpClassPtr = OpClasses.FindPtr(std::make_pair(EOpClassMethod::Btree, lookupId));
                 if (btreeOpClassPtr) {
                     auto lessAmOpPtr = AmOps.FindPtr(std::make_tuple(btreeOpClassPtr->FamilyId, ui32(EBtreeAmStrategy::Less), lookupId, lookupId));
@@ -1864,11 +1867,159 @@ struct TCatalog {
 
         Conversions = ParseConversions(conversionData, ProcByName);
         Languages = ParseLanguages(languagesData);
+
+        if (GetEnv("YQL_ALLOW_ALL_PG_FUNCTIONS")) {
+            AllowAllFunctions = true;
+        } else if (auto exportDir = GetEnv("YQL_EXPORT_PG_FUNCTIONS_DIR")) {
+            AllowAllFunctions = true;
+            ExportFile.ConstructInPlace(MakeTempName(exportDir.c_str(), "procs"), CreateAlways | RdWr);
+            for (const auto& a : Aggregations) {
+                const auto& desc = a.second;
+                ExportFunction(desc.TransFuncId);
+                ExportFunction(desc.FinalFuncId);
+                ExportFunction(desc.CombineFuncId);
+                ExportFunction(desc.SerializeFuncId);
+                ExportFunction(desc.DeserializeFuncId);
+            }
+
+            for (const auto& t : Types) {
+                const auto& desc = t.second;
+                ExportFunction(desc.InFuncId);
+                ExportFunction(desc.OutFuncId);
+                ExportFunction(desc.SendFuncId);
+                ExportFunction(desc.ReceiveFuncId);
+                ExportFunction(desc.TypeModInFuncId);
+                ExportFunction(desc.TypeModOutFuncId);
+                ExportFunction(desc.TypeSubscriptFuncId);
+                ExportFunction(desc.LessProcId);
+                ExportFunction(desc.EqualProcId);
+                ExportFunction(desc.CompareProcId);
+                ExportFunction(desc.HashProcId);
+            }
+
+            for (const auto& o : Operators) {
+                const auto& desc = o.second;
+                ExportFunction(desc.ProcId);
+            }
+
+            for (const auto& c : Casts) {
+                const auto& desc = c.second;
+                ExportFunction(desc.FunctionId);
+            }
+        } else {
+            for (size_t i = 0; i < Y_ARRAY_SIZE(AllowedProcsRaw); ++i) {
+                const auto& raw = AllowedProcsRaw[i];
+                AllowedProcs.insert(raw);
+            }
+
+            for (const auto& t : Types) {
+                AllowedProcs.insert(t.second.Name);
+            }
+        }
+    }
+
+    void ExportFunction(ui32 procOid) const {
+        if (!procOid || !ExportFile) {
+            return;
+        }
+
+        auto procPtr = Procs.FindPtr(procOid);
+        Y_ENSURE(procPtr);
+        ExportFunction(procPtr->Name);
+    }
+
+    void ExportFunction(const TString& name) const {
+        if (!ExportFile) {
+            return;
+        }
+
+        TString line = TStringBuilder() << "\"" << name << "\",\n";
+        with_lock(ExportGuard) {
+            ExportFile->Write(line.Data(), line.Size());
+        }
+    }
+
+    void CreateProc(const TProcDesc& desc) final {
+        TProcDesc newDesc = desc;
+        newDesc.ProcId = 16000 + Procs.size();
+        Procs[newDesc.ProcId] = newDesc;
+        ProcByName[newDesc.Name].push_back(newDesc.ProcId);
+    }
+
+    void PrepareType(ui32 extensionIndex, const TString& name) final {
+        Y_ENSURE(extensionIndex);
+        Y_ENSURE(!TypeByName.contains(name));
+        TTypeDesc newDesc;
+        newDesc.Name = name;
+        newDesc.TypeId = 16000 + Types.size();
+        newDesc.ExtensionIndex = extensionIndex;
+        newDesc.ArrayTypeId = newDesc.TypeId + 1;
+        newDesc.Category = 'U';
+        Types[newDesc.TypeId] = newDesc;
+        TypeByName[newDesc.Name] = newDesc.TypeId;
+        TTypeDesc newArrayDesc = newDesc;
+        newArrayDesc.TypeId += 1; 
+        newArrayDesc.Name = "_" + newArrayDesc.Name;
+        newArrayDesc.ElementTypeId = newDesc.TypeId;
+        newArrayDesc.ArrayTypeId = newArrayDesc.TypeId;
+        newArrayDesc.PassByValue = false;
+        newArrayDesc.TypeLen = -1;
+        newArrayDesc.SendFuncId = (*ProcByName.FindPtr("array_send"))[0];
+        newArrayDesc.ReceiveFuncId = (*ProcByName.FindPtr("array_recv"))[0];
+        newArrayDesc.InFuncId = (*ProcByName.FindPtr("array_in"))[0];
+        newArrayDesc.OutFuncId = (*ProcByName.FindPtr("array_out"))[0];
+        newArrayDesc.Category = 'A';
+        Types[newArrayDesc.TypeId] = newArrayDesc;
+        TypeByName[newArrayDesc.Name] = newArrayDesc.TypeId;
+    }
+
+    void UpdateType(const TTypeDesc& desc) final {
+        auto byIdPtr = Types.FindPtr(desc.TypeId);
+        Y_ENSURE(byIdPtr);
+        Y_ENSURE(byIdPtr->Name == desc.Name);
+        Y_ENSURE(byIdPtr->ArrayTypeId == desc.ArrayTypeId);
+        Y_ENSURE(byIdPtr->TypeId == desc.TypeId);
+        Y_ENSURE(byIdPtr->ExtensionIndex == desc.ExtensionIndex);
+        if (desc.InFuncId) {
+            AllowedProcs.insert(Procs.FindPtr(desc.InFuncId)->Name);
+        }
+
+        if (desc.OutFuncId) {
+            AllowedProcs.insert(Procs.FindPtr(desc.OutFuncId)->Name);
+        }
+
+        if (desc.SendFuncId) {
+            AllowedProcs.insert(Procs.FindPtr(desc.SendFuncId)->Name);
+        }
+
+        if (desc.ReceiveFuncId) {
+            AllowedProcs.insert(Procs.FindPtr(desc.ReceiveFuncId)->Name);
+        }
+
+        if (desc.TypeModInFuncId) {
+            AllowedProcs.insert(Procs.FindPtr(desc.TypeModInFuncId)->Name);
+        }
+
+        if (desc.TypeModOutFuncId) {
+            AllowedProcs.insert(Procs.FindPtr(desc.TypeModOutFuncId)->Name);
+        }
+
+        *byIdPtr = desc;
     }
 
     static const TCatalog& Instance() {
         return *Singleton<TCatalog>();
     }
+
+    static TCatalog& MutableInstance() {
+        return *Singleton<TCatalog>();
+    }    
+
+    TMutex ExtensionsGuard;
+    bool ExtensionsInit = false;
+
+    TExtensionsByName ExtensionsByName, ExtensionsByInstallName;
+    TExtensions Extensions;
 
     TOperators Operators;
     TProcs Procs;
@@ -1887,12 +2038,17 @@ struct TCatalog {
     THashMap<std::pair<ui32, ui32>, ui32> CastsByDir;
     THashMap<TString, TVector<ui32>> OperatorsByName;
     THashMap<TString, TVector<ui32>> AggregationsByName;
-    THashSet<TString> ProhibitedProcs;
 
     TVector<TTableInfo> AllStaticTables;
     TVector<TColumnInfo> AllStaticColumns;
     THashMap<TTableInfoKey, TTableInfo> StaticTables;
     THashMap<TTableInfoKey, TVector<TColumnInfo>> StaticColumns;
+
+    mutable TMaybe<TFile> ExportFile;
+    bool AllowAllFunctions = false;
+    TMutex ExportGuard;
+
+    THashSet<TString> AllowedProcs;
 };
 
 bool ValidateProcArgs(const TProcDesc& d, const TVector<ui32>& argTypeIds) {
@@ -1907,21 +2063,22 @@ const TProcDesc& LookupProc(ui32 procId, const TVector<ui32>& argTypeIds) {
         throw yexception() << "No such proc: " << procId;
     }
 
+    if (!catalog.AllowAllFunctions && !catalog.AllowedProcs.contains(procPtr->Name)) {
+        throw yexception() << "No access to proc: " << procPtr->Name;
+    }
+
     if (!ValidateProcArgs(*procPtr, argTypeIds)) {
         throw yexception() << "Unable to find an overload for proc with oid " << procId << " with given argument types: " <<
             ArgTypesList(argTypeIds);
     }
 
+    catalog.ExportFunction(procId);
     return *procPtr;
 }
 
 const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds) {
     const auto& catalog = TCatalog::Instance();
     auto lower = to_lower(name);
-    if (catalog.ProhibitedProcs.contains(lower)) {
-        throw yexception() << "No access to proc: " << name;
-    }
-
     auto procIdPtr = catalog.ProcByName.FindPtr(lower);
     if (!procIdPtr) {
         throw yexception() << "No such proc: " << name;
@@ -1930,10 +2087,15 @@ const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds
     for (const auto& id : *procIdPtr) {
         const auto& d = catalog.Procs.FindPtr(id);
         Y_ENSURE(d);
+        if (!catalog.AllowAllFunctions && !catalog.AllowedProcs.contains(d->Name)) {
+            throw yexception() << "No access to proc: " << d->Name;
+        }
+
         if (!ValidateProcArgs(*d, argTypeIds)) {
             continue;
         }
 
+        catalog.ExportFunction(d->Name);
         return *d;
     }
 
@@ -1948,13 +2110,20 @@ const TProcDesc& LookupProc(ui32 procId) {
         throw yexception() << "No such proc: " << procId;
     }
 
+    if (!catalog.AllowAllFunctions && !catalog.AllowedProcs.contains(procPtr->Name)) {
+        throw yexception() << "No access to proc: " << procPtr->Name;
+    }
+
+    catalog.ExportFunction(procId);
     return *procPtr;
 }
 
 void EnumProc(std::function<void(ui32, const TProcDesc&)> f) {
     const auto& catalog = TCatalog::Instance();
     for (const auto& x : catalog.Procs) {
-        f(x.first, x.second);
+        if (catalog.AllowAllFunctions || catalog.AllowedProcs.contains(x.second.Name)) {
+            f(x.first, x.second);
+        }
     }
 }
 
@@ -2557,10 +2726,6 @@ bool IsCoercible(ui32 fromTypeId, ui32 toTypeId, ECoercionCode coercionType) {
 std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TString& name, const TVector<ui32>& argTypeIds) {
     const auto& catalog = TCatalog::Instance();
     auto lower = to_lower(name);
-    if (catalog.ProhibitedProcs.contains(lower)) {
-        throw yexception() << "No access to proc: " << name;
-    }
-
     auto procIdPtr = catalog.ProcByName.FindPtr(lower);
     if (!procIdPtr) {
         throw yexception() << "No such proc: " << name;
@@ -2572,6 +2737,10 @@ std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TStri
     for (const auto& id : *procIdPtr) {
         const auto& d = catalog.Procs.FindPtr(id);
         Y_ENSURE(d);
+
+        if (!catalog.AllowAllFunctions && !catalog.AllowedProcs.contains(d->Name)) {
+            throw yexception() << "No access to proc: " << d->Name;
+        }
 
         if (NPrivate::IsExactMatch(d->ArgTypes, d->VariadicType, argTypeIds)) {
             // At most one exact match is possible, so look no further
@@ -3153,5 +3322,77 @@ const TTableInfo& LookupStaticTable(const TTableInfoKey& tableKey) {
     return *tablePtr;
 }
 
+bool AreAllFunctionsAllowed() {
+    const auto& catalog = TCatalog::Instance();
+    return catalog.AllowAllFunctions;
+}
+
+void RegisterExtensions(const TVector<TExtensionDesc>& extensions, bool typesOnly,
+    IExtensionDDLParser& parser, IExtensionLoader* loader) {
+    auto& catalog = TCatalog::MutableInstance();
+    with_lock (catalog.ExtensionsGuard) {
+        Y_ENSURE(!catalog.ExtensionsInit);
+        auto savedAllowAllFunctions = catalog.AllowAllFunctions;
+        catalog.AllowAllFunctions = true;
+        for (ui32 i = 0; i < extensions.size(); ++i) {
+            auto e = extensions[i];
+            e.TypesOnly = e.TypesOnly && typesOnly;
+            if (e.Name.empty()) {
+                throw yexception() << "Empty extension name";
+            }
+
+            if (!catalog.ExtensionsByName.insert(std::make_pair(e.Name, i + 1)).second) {
+                throw yexception() << "Duplicated extension name: " << e.Name;
+            }
+
+            if (!catalog.ExtensionsByInstallName.insert(std::make_pair(e.InstallName, i + 1)).second) {
+                throw yexception() << "Duplicated extension install name: " << e.InstallName;
+            }
+
+            catalog.Extensions.push_back(e);
+            TString sql = TFileInput(e.DDLPath).ReadAll();;
+            parser.Parse(i + 1, sql, catalog);
+            if (loader && !e.TypesOnly) {
+                loader->Load(i + 1, e.Name, e.LibraryPath);
+            }
+        }
+
+        catalog.AllowAllFunctions = savedAllowAllFunctions;
+        catalog.ExtensionsInit = true;
+    }
+}
+
+void EnumExtensions(std::function<void(ui32, const TExtensionDesc&)> f) {
+    const auto& catalog = TCatalog::Instance();
+    for (ui32 i = 0; i < catalog.Extensions.size(); ++i) {
+        f(i + 1, catalog.Extensions[i]);
+    }
+}
+
+const TExtensionDesc& LookupExtension(ui32 extIndex) {
+    const auto& catalog = TCatalog::Instance();
+    Y_ENSURE(extIndex > 0 && extIndex <= catalog.Extensions.size());
+    return catalog.Extensions[extIndex - 1];
+}
+
+ui32 LookupExtensionByName(const TString& name) {
+    const auto& catalog = TCatalog::Instance();
+    auto indexPtr = catalog.ExtensionsByName.FindPtr(name);
+    if (!indexPtr) {
+        throw yexception() << "Unknown extension name: " << name;
+    }
+
+    return *indexPtr;
+}
+
+ui32 LookupExtensionByInstallName(const TString& installName) {
+    const auto& catalog = TCatalog::Instance();
+    auto indexPtr = catalog.ExtensionsByInstallName.FindPtr(installName);
+    if (!indexPtr) {
+        throw yexception() << "Unknown extension install name: " << installName;
+    }
+
+    return *indexPtr;
+}
 
 }

@@ -167,21 +167,16 @@ struct TTestInfoProduct {
 };
 
 template<class T>
-auto ValueToDouble(const T& value) {
+double DurationToDouble(const T& value) {
     return value;
 }
 
 template<>
-auto ValueToDouble<double>(const double& value) {
-    return  0.001 * value;
+double DurationToDouble<TDuration>(const TDuration& value) {
+    return value.MillisecondsFloat();
 }
 
-template<>
-auto ValueToDouble<TDuration>(const TDuration& value) {
-    return 0.001 *value.MilliSeconds();
-}
-
-template<class T, bool is_float = std::is_floating_point<T>::value>
+template<class T, bool isDuration>
 struct TValueToTable {
     static void Do(TPrettyTable::TRow& tableRow, ui32 index, const T& value) {
         if (value) {
@@ -193,19 +188,12 @@ struct TValueToTable {
 template<class T>
 struct TValueToTable<T, true>{
     static void Do(TPrettyTable::TRow& tableRow, ui32 index, const T& value) {
-        tableRow.Column(index, Sprintf("%7.3f", value));
+        tableRow.Column(index, Sprintf("%7.3f", 0.001 * DurationToDouble(value)));
     }
 };
 
-template<class T, bool is_integer = std::is_integral<T>::value>
+template<class T, bool isDuration>
 struct TValueToCsv {
-    static void Do(IOutputStream& csv, const T& value) {
-        csv << value;
-    }
-};
-
-template<class T>
-struct TValueToCsv<T, true> {
     static void Do(IOutputStream& csv, const T& value) {
         if (value) {
             csv << value;
@@ -213,7 +201,16 @@ struct TValueToCsv<T, true> {
     }
 };
 
-template<class T, bool is_arr = std::is_arithmetic<T>::value>
+template<class T>
+struct TValueToCsv<T, true> {
+    static void Do(IOutputStream& csv, const T& value) {
+        if (value) {
+            csv << 0.001 * DurationToDouble(value);
+        }
+    }
+};
+
+template<class T, bool isDuration, bool is_arr = std::is_arithmetic<T>::value>
 struct TValueToJson {
     static void Do(NJson::TJsonValue& json, ui32 index, ui32 queryN, const T& value) {
         Y_UNUSED(json);
@@ -223,27 +220,33 @@ struct TValueToJson {
     }
 };
 
+template<class T, bool is_arr>
+struct TValueToJson<T, true, is_arr> {
+    static void Do(NJson::TJsonValue& json, ui32 index, ui32 queryN, const T& value) {
+        json.AppendValue(BenchmarkUtils::GetSensorValue(ColumnNames[index], DurationToDouble(value), queryN));
+    }
+};
+
 template<class T>
-struct TValueToJson<T, true> {
+struct TValueToJson<T, false, true> {
     static void Do(NJson::TJsonValue& json, ui32 index, ui32 queryN, const T& value) {
         json.AppendValue(BenchmarkUtils::GetSensorValue(ColumnNames[index], value, queryN));
     }
 };
 
 
-template <class T>
+template <bool isDuration = false, class T>
 void CollectField(TPrettyTable::TRow& tableRow, ui32 index, IOutputStream* csv, NJson::TJsonValue* json, TStringBuf rowName, const T& value) {
-    auto v = ValueToDouble(value);
-    TValueToTable<decltype(v)>::Do(tableRow, index, v);
+    TValueToTable<T, isDuration>::Do(tableRow, index, value);
     if (csv) {
         if (index) {
             *csv << ",";
         }
-        TValueToCsv<decltype(v)>::Do(*csv, v);
+        TValueToCsv<T, isDuration>::Do(*csv, value);
     }
     auto queryN = rowName;
     if(json && queryN.SkipPrefix("Query")) {
-        TValueToJson<decltype(v)>::Do(*json, index, FromString<ui32>(queryN), v);
+        TValueToJson<T, isDuration>::Do(*json, index, FromString<ui32>(queryN), value);
     }
 }
 
@@ -252,16 +255,16 @@ void CollectStats(TPrettyTable& table, IOutputStream* csv, NJson::TJsonValue* js
     auto& row = table.AddRow();
     ui32 index = 0;
     CollectField(row, index++, csv, json, name, name);
-    CollectField(row, index++, csv, json, name, testInfo.ColdTime);
-    CollectField(row, index++, csv, json, name, testInfo.Min);
-    CollectField(row, index++, csv, json, name, testInfo.Max);
-    CollectField(row, index++, csv, json, name, testInfo.Mean);
-    CollectField(row, index++, csv, json, name, testInfo.Median);
-    CollectField(row, index++, csv, json, name, testInfo.UnixBench);
-    CollectField(row, index++, csv, json, name, testInfo.Std);
-    CollectField(row, index++, csv, json, name, testInfo.RttMin);
-    CollectField(row, index++, csv, json, name, testInfo.RttMax);
-    CollectField(row, index++, csv, json, name, testInfo.RttMean);
+    CollectField<true>(row, index++, csv, json, name, testInfo.ColdTime);
+    CollectField<true>(row, index++, csv, json, name, testInfo.Min);
+    CollectField<true>(row, index++, csv, json, name, testInfo.Max);
+    CollectField<true>(row, index++, csv, json, name, testInfo.Mean);
+    CollectField<true>(row, index++, csv, json, name, testInfo.Median);
+    CollectField<true>(row, index++, csv, json, name, testInfo.UnixBench);
+    CollectField<true>(row, index++, csv, json, name, testInfo.Std);
+    CollectField<true>(row, index++, csv, json, name, testInfo.RttMin);
+    CollectField<true>(row, index++, csv, json, name, testInfo.RttMax);
+    CollectField<true>(row, index++, csv, json, name, testInfo.RttMean);
     CollectField(row, index++, csv, json, name, sCount);
     CollectField(row, index++, csv, json, name, fCount);
     CollectField(row, index++, csv, json, name, dCount);
@@ -361,7 +364,7 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
             } else {
                 ++failsCount;
                 Cout << "failed\t" << duration << " seconds" << Endl;
-                Cerr << queryN << ": " << query << Endl
+                Cerr << queryN << ": " << Endl
                     << res.GetErrorInfo() << Endl;
                 Cerr << "Query text:" << Endl;
                 Cerr << query << Endl << Endl;

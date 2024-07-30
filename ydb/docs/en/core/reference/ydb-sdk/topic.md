@@ -200,7 +200,14 @@ When you update a topic, you must specify the topic path and the parameters to b
 
 - Python
 
-   This feature is under development.
+  Example of updating a topic's list of supported codecs and minimum number of partitions:
+
+  ```python
+  driver.topic_client.create_topic(topic_path,
+      set_supported_codecs=[ydb.TopicCodec.RAW, ydb.TopicCodec.GZIP], # optional
+      set_min_active_partitions=3,                                    # optional
+  )
+  ```
 
 - Java
 

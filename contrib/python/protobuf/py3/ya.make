@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(3.19.0)
+VERSION(4.21.7)
 
-ORIGINAL_SOURCE(mirror://pypi/p/protobuf/protobuf-3.19.0.tar.gz)
+ORIGINAL_SOURCE(mirror://pypi/p/protobuf/protobuf-4.21.7.tar.gz)
 
 PEERDIR(
     contrib/libs/protobuf
@@ -46,6 +46,7 @@ SRCS(
     google/protobuf/pyext/message_module.cc
     google/protobuf/pyext/repeated_composite_container.cc
     google/protobuf/pyext/repeated_scalar_container.cc
+    google/protobuf/pyext/unknown_field_set.cc
     google/protobuf/pyext/unknown_fields.cc
 )
 
@@ -64,6 +65,7 @@ PY_SRCS(
     google/protobuf/descriptor_pool.py
     google/protobuf/internal/__init__.py
     google/protobuf/internal/api_implementation.py
+    google/protobuf/internal/builder.py
     google/protobuf/internal/containers.py
     google/protobuf/internal/decoder.py
     google/protobuf/internal/encoder.py
@@ -86,6 +88,7 @@ PY_SRCS(
     google/protobuf/symbol_database.py
     google/protobuf/text_encoding.py
     google/protobuf/text_format.py
+    google/protobuf/unknown_fields.py
     google/protobuf/util/__init__.py
 )
 

@@ -19,7 +19,9 @@ namespace NKikimr::NStorage {
                     }
 
                     AllocateStaticGroup(config, 0 /*groupId*/, 1 /*groupGeneration*/, TBlobStorageGroupType(species),
-                        settings.GetGeometry(), settings.GetPDiskFilter(), {}, {}, 0, nullptr, false, true, false);
+                        settings.GetGeometry(), settings.GetPDiskFilter(),
+                        settings.HasPDiskType() ? std::make_optional(settings.GetPDiskType()) : std::nullopt, {}, {}, 0,
+                        nullptr, false, true, false);
                     changes = true;
                     STLOG(PRI_DEBUG, BS_NODE, NWDC33, "Allocated static group", (Group, bsConfig.GetServiceSet().GetGroups(0)));
                 } catch (const TExConfigError& ex) {
@@ -51,6 +53,7 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config, ui32 groupId,
             ui32 groupGeneration, TBlobStorageGroupType gtype, const NKikimrBlobStorage::TGroupGeometry& geometry,
             const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TPDiskFilter>& pdiskFilters,
+            std::optional<NKikimrBlobStorage::EPDiskType> pdiskType,
             THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks,
             const NBsController::TGroupMapper::TForbiddenPDisks& forbid, i64 requiredSpace,
             NKikimrBlobStorage::TBaseConfig *baseConfig, bool convertToDonor, bool ignoreVSlotQuotaCheck,
@@ -77,6 +80,9 @@ namespace NKikimr::NStorage {
         THashMap<TPDiskId, TPDiskInfo> pdisks;
 
         auto checkMatch = [&](NKikimrBlobStorage::EPDiskType type, bool sharedWithOs, bool readCentric, ui64 kind) {
+            if (type == pdiskType) {
+                return true;
+            }
             for (const auto& pdiskFilter : pdiskFilters) {
                 bool m = true;
                 for (const auto& p : pdiskFilter.GetProperty()) {

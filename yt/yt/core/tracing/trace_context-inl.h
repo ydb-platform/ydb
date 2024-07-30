@@ -185,7 +185,7 @@ namespace NDetail {
 
 YT_DECLARE_THREAD_LOCAL(TTraceContext*, CurrentTraceContext);
 
-TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext);
+TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext, TSourceLocation loc);
 
 } // namespace NDetail
 
@@ -193,8 +193,7 @@ Y_FORCE_INLINE TCurrentTraceContextGuard::TCurrentTraceContextGuard(TTraceContex
     : Active_(static_cast<bool>(traceContext))
 {
     if (Active_) {
-        OldTraceContext_ = NDetail::SwapTraceContext(std::move(traceContext));
-        NConcurrency::GetCurrentPropagatingStorage().RecordLocation(location);
+        OldTraceContext_ = NDetail::SwapTraceContext(std::move(traceContext), location);
     }
 }
 
@@ -218,8 +217,7 @@ Y_FORCE_INLINE bool TCurrentTraceContextGuard::IsActive() const
 Y_FORCE_INLINE void TCurrentTraceContextGuard::Release()
 {
     if (Active_) {
-        NDetail::SwapTraceContext(std::move(OldTraceContext_));
-        NConcurrency::GetCurrentPropagatingStorage().RecordLocation(FROM_HERE);
+        NDetail::SwapTraceContext(std::move(OldTraceContext_), YT_CURRENT_SOURCE_LOCATION);
         Active_ = false;
     }
 }
@@ -233,10 +231,8 @@ Y_FORCE_INLINE const TTraceContextPtr& TCurrentTraceContextGuard::GetOldTraceCon
 
 Y_FORCE_INLINE TNullTraceContextGuard::TNullTraceContextGuard(TSourceLocation location)
     : Active_(true)
-    , OldTraceContext_(NDetail::SwapTraceContext(nullptr))
-{
-    NConcurrency::GetCurrentPropagatingStorage().RecordLocation(location);
-}
+    , OldTraceContext_(NDetail::SwapTraceContext(nullptr, location))
+{ }
 
 Y_FORCE_INLINE TNullTraceContextGuard::TNullTraceContextGuard(TNullTraceContextGuard&& other)
     : Active_(other.Active_)
@@ -258,8 +254,7 @@ Y_FORCE_INLINE bool TNullTraceContextGuard::IsActive() const
 Y_FORCE_INLINE void TNullTraceContextGuard::Release()
 {
     if (Active_) {
-        NDetail::SwapTraceContext(std::move(OldTraceContext_));
-        NConcurrency::GetCurrentPropagatingStorage().RecordLocation(FROM_HERE);
+        NDetail::SwapTraceContext(std::move(OldTraceContext_), YT_CURRENT_SOURCE_LOCATION);
         Active_ = false;
     }
 }
@@ -276,6 +271,12 @@ inline TTraceContextGuard::TTraceContextGuard(TTraceContextPtr traceContext)
     , FinishGuard_(TryGetCurrentTraceContext())
 { }
 
+inline void TTraceContextGuard::Release(
+    std::optional<NProfiling::TCpuInstant> finishTime)
+{
+    FinishGuard_.Release(finishTime);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 inline bool TChildTraceContextGuard::IsRecorded(const TTraceContextPtr& traceContext)
@@ -285,17 +286,26 @@ inline bool TChildTraceContextGuard::IsRecorded(const TTraceContextPtr& traceCon
 
 inline TChildTraceContextGuard::TChildTraceContextGuard(
     const TTraceContextPtr& traceContext,
-    TString spanName)
-    : TraceContextGuard_(IsRecorded(traceContext) ? traceContext->CreateChild(spanName) : nullptr)
+    TString spanName,
+    std::optional<NProfiling::TCpuInstant> startTime)
+    : TraceContextGuard_(IsRecorded(traceContext) ? traceContext->CreateChild(spanName, startTime) : nullptr)
     , FinishGuard_(IsRecorded(traceContext) ? TryGetCurrentTraceContext() : nullptr)
 { }
 
 inline TChildTraceContextGuard::TChildTraceContextGuard(
-    TString spanName)
+    TString spanName,
+    std::optional<NProfiling::TCpuInstant> startTime)
     : TChildTraceContextGuard(
         TryGetCurrentTraceContext(),
-        std::move(spanName))
+        std::move(spanName),
+        startTime)
 { }
+
+inline void TChildTraceContextGuard::Finish(
+    std::optional<NProfiling::TCpuInstant> finishTime)
+{
+    FinishGuard_.Release(finishTime);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -317,10 +327,11 @@ inline TTraceContextFinishGuard& TTraceContextFinishGuard::operator=(TTraceConte
     return *this;
 }
 
-inline void TTraceContextFinishGuard::Release()
+inline void TTraceContextFinishGuard::Release(
+    std::optional<NProfiling::TCpuInstant> finishTime)
 {
     if (TraceContext_) {
-        TraceContext_->Finish();
+        TraceContext_->Finish(finishTime);
         TraceContext_ = {};
     }
 }

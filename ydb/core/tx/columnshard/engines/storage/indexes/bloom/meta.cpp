@@ -10,32 +10,26 @@
 
 namespace NKikimr::NOlap::NIndexes {
 
-std::shared_ptr<arrow::RecordBatch> TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
+TString TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
     std::set<ui64> hashes;
-    for (ui32 i = 0; i < HashesCount; ++i) {
-        NArrow::NHash::NXX64::TStreamStringHashCalcer hashCalcer(3 * i);
+    {
+        NArrow::NHash::NXX64::TStreamStringHashCalcer hashCalcer(0);
         for (reader.Start(); reader.IsCorrect(); reader.ReadNext()) {
             hashCalcer.Start();
             for (auto&& i : reader) {
                 NArrow::NHash::TXX64::AppendField(i.GetCurrentChunk(), i.GetCurrentRecordIndex(), hashCalcer);
             }
-            const ui64 h = hashCalcer.Finish();
-            hashes.emplace(h);
+            hashes.emplace(hashCalcer.Finish());
         }
     }
-    const ui32 bitsCount = hashes.size() / std::log(2);
-    std::vector<bool> flags(bitsCount, false);
-    for (auto&& i : hashes) {
-        flags[i % flags.size()] = true;
-    }
 
-    arrow::BooleanBuilder builder;
-    auto res = builder.Reserve(flags.size());
-    NArrow::TStatusValidator::Validate(builder.AppendValues(flags));
-    std::shared_ptr<arrow::BooleanArray> out;
-    NArrow::TStatusValidator::Validate(builder.Finish(&out));
-
-    return arrow::RecordBatch::Make(ResultSchema, bitsCount, {out});
+    const ui32 bitsCount = HashesCount * hashes.size() / std::log(2);
+    TFixStringBitsStorage bits(bitsCount);
+    const auto pred = [&bits](const ui64 hash) {
+        bits.Set(true, hash % bits.GetSizeBits());
+    };
+    BuildHashesSet(hashes, pred);
+    return bits.GetData();
 }
 
 void TBloomIndexMeta::DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const {
@@ -57,14 +51,16 @@ void TBloomIndexMeta::DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataF
             continue;
         }
         std::set<ui64> hashes;
+        const auto pred = [&hashes](const ui64 hash) {
+            hashes.emplace(hash);
+        };
+        NArrow::NHash::NXX64::TStreamStringHashCalcer calcer(0);
         for (ui32 i = 0; i < HashesCount; ++i) {
-            NArrow::NHash::NXX64::TStreamStringHashCalcer calcer(3 * i);
             calcer.Start();
             for (auto&& i : foundColumns) {
                 NArrow::NHash::TXX64::AppendField(i.second, calcer);
             }
-            const ui64 hash = calcer.Finish();
-            hashes.emplace(hash);
+            BuildHashesSet(calcer.Finish(), pred);
         }
         branch->MutableIndexes().emplace_back(std::make_shared<TBloomFilterChecker>(GetIndexId(), std::move(hashes)));
     }

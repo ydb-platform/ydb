@@ -92,43 +92,6 @@ TFuture<IKikimrGateway::TGenericResult> IKikimrGateway::CreatePath(const TString
     return pathPromise.GetFuture();
 }
 
-void IKikimrGateway::BuildIndexMetadata(TTableMetadataResult& loadTableMetadataResult) {
-    auto tableMetadata = loadTableMetadataResult.Metadata;
-    YQL_ENSURE(tableMetadata);
-
-    if (tableMetadata->Indexes.empty()) {
-        return;
-    }
-
-    const auto& cluster = tableMetadata->Cluster;
-    const auto& tableName = tableMetadata->Name;
-    const size_t indexesCount = tableMetadata->Indexes.size();
-
-    NKikimr::NTableIndex::TTableColumns tableColumns;
-    tableColumns.Columns.reserve(tableMetadata->Columns.size());
-    for (auto& column: tableMetadata->Columns) {
-        tableColumns.Columns.insert_noresize(column.first);
-    }
-    tableColumns.Keys = tableMetadata->KeyColumnNames;
-
-    tableMetadata->SecondaryGlobalIndexMetadata.resize(indexesCount);
-    for (size_t i = 0; i < indexesCount; i++) {
-        const auto& index = tableMetadata->Indexes[i];
-        auto indexTablePath = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(tableName, index.Name);
-        NKikimr::NTableIndex::TTableColumns indexTableColumns = NKikimr::NTableIndex::CalcTableImplDescription(
-                    tableColumns,
-                    NKikimr::NTableIndex::TIndexColumns{index.KeyColumns, {}});
-
-        TKikimrTableMetadataPtr indexTableMetadata = new TKikimrTableMetadata(cluster, indexTablePath);
-        indexTableMetadata->DoesExist = true;
-        indexTableMetadata->KeyColumnNames = indexTableColumns.Keys;
-        for (auto& column: indexTableColumns.Columns) {
-            indexTableMetadata->Columns[column] = tableMetadata->Columns.at(column);
-        }
-
-        tableMetadata->SecondaryGlobalIndexMetadata[i] = indexTableMetadata;
-    }
-}
 
 bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSettings& settings, TString& error) {
     using namespace NNodes;

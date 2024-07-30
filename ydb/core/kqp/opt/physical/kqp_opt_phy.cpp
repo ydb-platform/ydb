@@ -430,7 +430,7 @@ protected:
         // It is now possible as we don't use datashard transactions for reads in data queries.
         bool pushLeftStage = !KqpCtx.IsDataQuery() && AllowFuseJoinInputs(node);
         TExprBase output = DqBuildJoin(node, ctx, optCtx, *getParents(), IsGlobal,
-            pushLeftStage, KqpCtx.Config->GetHashJoinMode()
+            pushLeftStage, KqpCtx.Config->GetHashJoinMode(), false
         );
         DumpAppliedRule("BuildJoin", node.Ptr(), output.Ptr(), ctx);
         return output;

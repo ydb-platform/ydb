@@ -30,7 +30,7 @@ NKikimr::TConclusionStatus TInStoreShardsTransfer::DoInitializeImpl(const TUpdat
         for (auto&& i : alter.GetSourceTabletIds()) {
             destinationSession.MutableTransferContext()->AddSourceTabletIds(i);
         }
-        DestinationSessions.emplace_back(destinationSession);
+        AFL_VERIFY(DestinationSessions.emplace(destinationSession.GetTransferContext().GetDestinationTabletId(), destinationSession).second);
         AFL_VERIFY(ShardIdsUsage.emplace(alter.GetDestinationTabletId()).second);
     }
     const auto& inStoreOriginal = context.GetOriginalEntityAsVerified<TInStoreTable>();

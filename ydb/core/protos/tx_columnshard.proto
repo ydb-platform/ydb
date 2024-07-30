@@ -1,11 +1,10 @@
 import "ydb/library/actors/protos/actors.proto";
-import "ydb/core/tx/columnshard/engines/scheme/statistics/protos/data.proto";
-import "ydb/core/tx/columnshard/engines/protos/portion_info.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/long_tx_service.proto";
+import "ydb/core/protos/statistics.proto";
 import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/tx.proto";
-import "ydb/core/formats/arrow/protos/ssa.proto";
+import "ydb/core/formats/arrow/protos/fields.proto";
 
 package NKikimrTxColumnShard;
 option java_package = "ru.yandex.kikimr.proto";
@@ -74,11 +73,11 @@ message TEvWrite {
     optional uint32 WritePartId = 9 [default = 0];
     optional uint32 GranuleShardingVersion = 10;
     enum EModificationType {
-        UPSERT = 1;
-        INSERT = 2;
-        UPDATE = 3;
-        REPLACE = 4;
-        DELETE = 5;
+        OPERATION_UPSERT = 1;
+        OPERATION_INSERT = 2;
+        OPERATION_UPDATE = 3;
+        OPERATION_REPLACE = 4;
+        OPERATION_DELETE = 5;
     }
     optional EModificationType ModificationType = 11;
 
@@ -90,6 +89,7 @@ message TLogicalMetadata {
     optional uint64 DirtyWriteTimeSeconds = 5;
     optional string SpecialKeysRawData = 6;
     optional TEvWrite.EModificationType ModificationType = 7;
+    optional NKikimrArrowSchema.TSchemaSubset SchemaSubset = 8;
 }
 
 message TEvWriteResult {

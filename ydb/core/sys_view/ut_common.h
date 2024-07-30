@@ -23,13 +23,7 @@ public:
 
 public:
     TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 4, ui32 storagePools = 0,
-        ui32 pqTabletsN = 0, bool enableSVP = false, bool disableSources = false);
-
-    template<typename... Args>
-    TTestEnv(TDisableSourcesTag, Args&&... args)
-        : TTestEnv(std::forward<Args>(args)..., false)
-    {
-    }
+        ui32 pqTabletsN = 0, bool enableSVP = false);
 
     ~TTestEnv();
 

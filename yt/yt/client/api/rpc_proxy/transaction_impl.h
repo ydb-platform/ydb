@@ -22,6 +22,7 @@ DEFINE_ENUM(ETransactionState,
     (FlushedModifications)
     (Aborting)
     (Aborted)
+    (AbortFailed)
     (Detached)
 );
 
@@ -89,8 +90,8 @@ public:
     TFuture<TPushQueueProducerResult> PushQueueProducer(
         const NYPath::TRichYPath& producerPath,
         const NYPath::TRichYPath& queuePath,
-        const TString& sessionId,
-        i64 epoch,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
+        NQueueClient::TQueueProducerEpoch epoch,
         NTableClient::TNameTablePtr nameTable,
         TSharedRange<NTableClient::TUnversionedRow> rows,
         const TPushQueueProducerOptions& options) override;
@@ -269,7 +270,7 @@ private:
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
     ETransactionState State_ = ETransactionState::Active;
-    const TPromise<void> AbortPromise_ = NewPromise<void>();
+    TPromise<void> AbortPromise_;
     std::vector<NApi::ITransactionPtr> AlienTransactions_;
 
     THashSet<NObjectClient::TCellId> AdditionalParticipantCellIds_;

@@ -20,6 +20,7 @@ SET(ORIG_SOURCES
     mkql_builtins_dec.cpp
     mkql_builtins_div.cpp
     mkql_builtins_find.cpp
+    mkql_builtins_impl.cpp
     mkql_builtins_inc.cpp
     mkql_builtins_invprestr.cpp
     mkql_builtins_max.cpp

@@ -2,7 +2,7 @@
 #include "blobs_action/transaction/tx_write.h"
 #include "blobs_action/transaction/tx_draft.h"
 #include "counters/columnshard.h"
-#include "operations/slice_builder.h"
+#include "operations/batch_builder/builder.h"
 #include "operations/write_data.h"
 
 #include <ydb/core/tx/conveyor/usage/service.h>
@@ -42,9 +42,8 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
             Y_ABORT("invalid function usage");
     }
 
-    LOG_S_INFO("Write (overload) " << writeData.GetSize() << " bytes into pathId " << writeData.GetWriteMeta().GetTableId()
-        << " overload reason: [" << overloadReason << "]"
-        << " at tablet " << TabletID());
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "write_overload")("size", writeData.GetSize())
+        ("path_id", writeData.GetWriteMeta().GetTableId())("reason", overloadReason);
 
     ctx.Send(writeData.GetWriteMeta().GetSource(), event.release(), 0, cookie);
 }
@@ -93,7 +92,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
     auto wg = WritesMonitor.FinishWrite(wBuffer.GetSumSize(), wBuffer.GetAggregations().size());
 
     for (auto&& aggr : baseAggregations) {
-        const auto& writeMeta = aggr->GetWriteData()->GetWriteMeta();
+        const auto& writeMeta = aggr->GetWriteMeta();
 
         if (!TablesManager.IsReadyForWrite(writeMeta.GetTableId())) {
             ACFL_ERROR("event", "absent_pathId")("path_id", writeMeta.GetTableId())("has_index", TablesManager.HasPrimaryIndex());

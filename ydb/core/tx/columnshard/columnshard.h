@@ -3,6 +3,7 @@
 #include "blob.h"
 #include "common/snapshot.h"
 
+#include <ydb/core/protos/statistics.pb.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/message_seqno.h>
@@ -148,13 +149,11 @@ struct TEvColumnShard {
         }
 
         TEvProposeTransaction(NKikimrTxColumnShard::ETransactionKind txKind, ui64 ssId, const TActorId& source,
-            ui64 txId, TString txBody, const NKikimrSubDomains::TProcessingParams& processingParams, const std::optional<TMessageSeqNo>& seqNo = {}, const ui32 flags = 0)
+            ui64 txId, TString txBody, const TMessageSeqNo& seqNo, const NKikimrSubDomains::TProcessingParams& processingParams, const ui32 flags = 0)
             : TEvProposeTransaction(txKind, ssId, source, txId, std::move(txBody), flags)
         {
             Record.MutableProcessingParams()->CopyFrom(processingParams);
-            if (seqNo) {
-                *Record.MutableSeqNo() = seqNo->SerializeToProto();
-            }
+            *Record.MutableSeqNo() = seqNo.SerializeToProto();
         }
 
         TActorId GetSource() const {
@@ -289,7 +288,6 @@ struct TEvColumnShard {
     };
 
     using TEvScan = TEvDataShard::TEvKqpScan;
-
 };
 
 inline auto& Proto(TEvColumnShard::TEvProposeTransaction* ev) {

@@ -3,6 +3,7 @@
 #include "knn-distance.h"
 
 #include <ydb/library/yql/public/udf/udf_helpers.h>
+#include <ydb/library/yql/public/udf/udf_type_printer.h>
 
 #include <util/generic/buffer.h>
 #include <util/generic/queue.h>
@@ -164,7 +165,11 @@ public:
             }
         }
         if (type == EType::None) {
-            builder.SetError("'List<Double|Float|Uint8|Int8>' is expected");
+            TStringBuilder sb;
+            sb << "'List<Double|Float|Uint8|Int8>' is expected but got '";
+            TTypePrinter(*typeInfoHelper, argsTuple.GetElementType(0)).Out(sb.Out);
+            sb << "'";
+            builder.SetError(std::move(sb));
             return true;
         }
 
@@ -229,7 +234,11 @@ public:
         auto argType = argsTuple.GetElementType(0);
         auto argTag = GetArg(*typeInfoHelper, argType, builder);
         if (!ValidTag(argTag, {TagStoredVector, TagFloatVector, TagInt8Vector, TagUint8Vector})) {
-            builder.SetError("A result from 'ToBinaryString[Float|Int8|Uint8]' is expected as an argument");
+            TStringBuilder sb;
+            sb << "A result from 'ToBinaryString[Float|Int8|Uint8]' is expected as an argument but got '";
+            TTypePrinter(*typeInfoHelper, argsTuple.GetElementType(0)).Out(sb.Out);
+            sb << "'";
+            builder.SetError(std::move(sb));
             return true;
         }
 
@@ -279,7 +288,13 @@ public:
 
         if (!Base::ValidTag(arg0Tag, {TagStoredVector, TagFloatVector, TagInt8Vector, TagUint8Vector, TagBitVector}) ||
             !Base::ValidTag(arg1Tag, {TagStoredVector, TagFloatVector, TagInt8Vector, TagUint8Vector, TagBitVector})) {
-            builder.SetError("A result from 'ToBinaryString[Float|Int8|Uint8]' is expected as an argument");
+            TStringBuilder sb;
+            sb << "Both arguments are expected to be results from 'ToBinaryString[Float|Int8|Uint8]' but got '";
+            TTypePrinter(*typeInfoHelper, argsTuple.GetElementType(0)).Out(sb.Out);
+            sb << "' and '";
+            TTypePrinter(*typeInfoHelper, argsTuple.GetElementType(1)).Out(sb.Out);
+            sb << "'";
+            builder.SetError(std::move(sb));
             return true;
         }
 

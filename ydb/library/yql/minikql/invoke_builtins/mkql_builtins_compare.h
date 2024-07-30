@@ -12,6 +12,13 @@ struct TCompareArithmeticBinary : public TArithmeticConstraintsBinary<TLeft, TRi
         return NUdf::TUnboxedValuePod(TImpl::Do(left.template Get<TLeft>(), right.template Get<TRight>()));
     }
 
+    static void DoPtr(
+        const typename TPrimitiveDataType<TLeft>::TLayout* left,
+        const typename TPrimitiveDataType<TRight>::TLayout* right,
+        typename TPrimitiveDataType<bool>::TLayout* res) {
+        *res = TImpl::Do(*left, *right);
+    }
+
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {

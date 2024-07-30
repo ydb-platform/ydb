@@ -759,7 +759,7 @@ TTypedColumn CompileYqlKernelTernaryOperation(const TKqpOlapFilterTernaryOp& ope
 }
 
 template<typename TFunc>
-const TTypedColumn BuildLogicalProgram(const TExprNode::TChildrenType& args, const TFunc function, TKqpOlapCompileContext& ctx)
+const TTypedColumn BuildLogicalProgram(TPositionHandle pos, const TExprNode::TChildrenType& args, const TFunc function, TKqpOlapCompileContext& ctx)
 {
     const auto childrenCount = args.size();
     if (childrenCount == 1) {
@@ -770,22 +770,24 @@ const TTypedColumn BuildLogicalProgram(const TExprNode::TChildrenType& args, con
 
     const bool twoArgs = 2U == childrenCount;
     const auto half = childrenCount >> 1U;
-    const auto left = twoArgs ? GetOrCreateColumnIdAndType(TExprBase(args.front()), ctx) : BuildLogicalProgram(args.subspan(0U, half), function, ctx);
-    const auto right = twoArgs ? GetOrCreateColumnIdAndType(TExprBase(args.back()), ctx) : BuildLogicalProgram(args.subspan(half), function, ctx);
+    const auto left = twoArgs ? GetOrCreateColumnIdAndType(TExprBase(args.front()), ctx) : BuildLogicalProgram(pos, args.subspan(0U, half), function, ctx);
+    const auto right = twoArgs ? GetOrCreateColumnIdAndType(TExprBase(args.back()), ctx) : BuildLogicalProgram(pos, args.subspan(half), function, ctx);
 
     auto *const logicalOp = ctx.CreateAssignCmd();
     auto *const logicalFunc = logicalOp->MutableFunction();
     logicalFunc->AddArguments()->SetId(left.Id);
     logicalFunc->AddArguments()->SetId(right.Id);
 
-    const auto block = ctx.ExprCtx().MakeType<TBlockExprType>(ctx.ExprCtx().MakeType<TOptionalExprType>(ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool)));
+    const TTypeAnnotationNode* block = nullptr;
     if constexpr (std::is_same<TFunc, TKernelRequestBuilder::EBinaryOp>()) {
-        const auto idx = ctx.GetKernelRequestBuilder().AddBinaryOp(function, block, block, block);
-        logicalFunc->SetKernelIdx(idx);
+        const auto kernel = ctx.AddYqlKernelBinaryFunc(pos, function, *left.Type, *right.Type, nullptr);
+        block = kernel.second;
+        logicalFunc->SetKernelIdx(kernel.first);
         logicalFunc->SetFunctionType(TProgram::YQL_KERNEL);
         logicalFunc->SetYqlOperationId((ui32)function);
     } else {
         logicalFunc->SetId((ui32)function);
+        block = ctx.ExprCtx().MakeType<TBlockExprType>(ctx.ExprCtx().MakeType<TOptionalExprType>(ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool)));
     }
 
     return {logicalOp->GetColumn().GetId(), block};
@@ -837,23 +839,25 @@ TTypedColumn GetOrCreateColumnIdAndType(const TExprBase& node, TKqpOlapCompileCo
         return CompileYqlKernelTernaryOperation(maybeTernaryOp.Cast(), ctx);
     } else if (const auto& maybeAnd = node.Maybe<TKqpOlapAnd>()) {
         if constexpr (NSsa::RuntimeVersion >= 4U)
-            return BuildLogicalProgram(maybeAnd.Ref().Children(), TKernelRequestBuilder::EBinaryOp::And, ctx);
+            return BuildLogicalProgram(node.Pos(), maybeAnd.Ref().Children(), TKernelRequestBuilder::EBinaryOp::And, ctx);
         else
-            return BuildLogicalProgram(maybeAnd.Ref().Children(), TProgram::TAssignment::FUNC_BINARY_AND, ctx);
+            return BuildLogicalProgram(node.Pos(), maybeAnd.Ref().Children(), TProgram::TAssignment::FUNC_BINARY_AND, ctx);
     } else if (const auto& maybeOr = node.Maybe<TKqpOlapOr>()) {
         if constexpr (NSsa::RuntimeVersion >= 4U)
-            return BuildLogicalProgram(maybeOr.Ref().Children(), TKernelRequestBuilder::EBinaryOp::Or, ctx);
+            return BuildLogicalProgram(node.Pos(), maybeOr.Ref().Children(), TKernelRequestBuilder::EBinaryOp::Or, ctx);
         else
-            return BuildLogicalProgram(maybeOr.Ref().Children(), TProgram::TAssignment::FUNC_BINARY_OR, ctx);
+            return BuildLogicalProgram(node.Pos(), maybeOr.Ref().Children(), TProgram::TAssignment::FUNC_BINARY_OR, ctx);
     } else if (const auto& maybeXor = node.Maybe<TKqpOlapXor>()) {
         if constexpr (NSsa::RuntimeVersion >= 4U)
-            return BuildLogicalProgram(maybeXor.Ref().Children(), TKernelRequestBuilder::EBinaryOp::Xor, ctx);
+            return BuildLogicalProgram(node.Pos(), maybeXor.Ref().Children(), TKernelRequestBuilder::EBinaryOp::Xor, ctx);
         else
-            return BuildLogicalProgram(maybeXor.Ref().Children(), TProgram::TAssignment::FUNC_BINARY_XOR, ctx);
+            return BuildLogicalProgram(node.Pos(), maybeXor.Ref().Children(), TProgram::TAssignment::FUNC_BINARY_XOR, ctx);
     } else if (const auto& maybeNot = node.Maybe<TKqpOlapNot>()) {
         return BuildLogicalNot(maybeNot.Cast().Value(), ctx);
     } else if (const auto& maybeJsonValue = node.Maybe<TKqpOlapJsonValue>()) {
         return ConvertJsonValueToColumn(maybeJsonValue.Cast(), ctx);
+    } else if (const auto& maybeJsonValue = node.Maybe<TKqpOlapJsonExists>()) {
+        return CompileJsonExists(maybeJsonValue.Cast(), ctx);
     } else if (const auto& maybeApply = node.Maybe<TKqpOlapApply>()) {
         return CompileYqlKernelScalarApply(maybeApply.Cast(), ctx);
     }
@@ -927,9 +931,9 @@ ui64 CompileCondition(const TExprBase& condition, TKqpOlapCompileContext& ctx) {
     }
 
     if constexpr (NSsa::RuntimeVersion >= 4U)
-        return BuildLogicalProgram(condition.Ref().Children(), op, ctx).Id;
+        return BuildLogicalProgram(condition.Pos(), condition.Ref().Children(), op, ctx).Id;
     else
-        return BuildLogicalProgram(condition.Ref().Children(), function, ctx).Id;
+        return BuildLogicalProgram(condition.Pos(), condition.Ref().Children(), function, ctx).Id;
 }
 
 void CompileFilter(const TKqpOlapFilter& filterNode, TKqpOlapCompileContext& ctx) {

@@ -1,9 +1,11 @@
 items:
 - name: YQL
+  href: ../yql/reference/index.md
   include: 
     mode: link
     path: ../yql/toc_p.yaml
 - name: Совместимость с PostgreSQL
+  href: ../postgresql/intro.md
   include:
     mode: link
     path: ../postgresql/toc_p.yaml
@@ -16,22 +18,32 @@ items:
     mode: link
     path: ../integrations/toc_p.yaml
 - name: YDB CLI
+  href: ydb-cli/index.md
   include:
     mode: link
     path: ydb-cli/toc_p.yaml
 - name: YDB SDK
+  href: ydb-sdk/index.md
   include:
     mode: link
     path: ydb-sdk/toc_p.yaml
 - name: Kafka API
+  href: kafka-api/index.md
   include:
     mode: link
     path: kafka-api/toc_p.yaml
 - name: YDB DStool
+  href: ydb-dstool/index.md
   include:
     mode: link
     path: ydb-dstool/toc_p.yaml
+- name: ydbops
+  href: ydbops/index.md
+  include:
+    mode: link
+    path: ydbops/toc_p.yaml
 - name: Observability
+  href: observability/index.md
   include:
     mode: link
     path: observability/toc_p.yaml

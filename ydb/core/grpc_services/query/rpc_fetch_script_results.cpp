@@ -25,7 +25,7 @@ using TEvFetchScriptResultsRequest = TGrpcRequestNoOperationCall<Ydb::Query::Fet
     Ydb::Query::FetchScriptResultsResponse>;
 
 constexpr i64 MAX_ROWS_LIMIT = 1000;
-constexpr i64 MAX_SIZE_LIMIT = 60_MB;
+constexpr i64 MAX_SIZE_LIMIT = 50_MB;
 
 class TFetchScriptResultsRPC : public TRpcRequestActor<TFetchScriptResultsRPC, TEvFetchScriptResultsRequest, false> {
 public:

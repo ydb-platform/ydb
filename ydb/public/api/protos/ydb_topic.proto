@@ -322,8 +322,8 @@ message StreamReadMessage {
         string reader_name = 3;
         // Direct reading from a partition node.
         bool direct_read = 4;
-        // Indicates that the SDK supports autoscaling.
-        bool autoscaling_support = 5;
+        // Indicates that the SDK supports auto partitioning.
+        bool auto_partitioning_support = 5;
 
         message TopicReadSettings {
             // Topic path.
@@ -832,16 +832,18 @@ message AlterConsumer {
     map<string, string> alter_attributes = 6;
 }
 
-enum AutoscalingStrategy {
-    // The autoscaling algorithm is not specified. The default value will be used.
-    AUTOSCALING_STRATEGY_UNSPECIFIED = 0;
-    // The autoscaling is disabled.
-    AUTOSCALING_STRATEGY_DISABLED = 1;
-    // The autoscaling algorithm will increase partitions count depending on the load characteristics.
-    // The autoscaling algorithm will never decrease the number of partitions.
-    AUTOSCALING_STRATEGY_SCALE_UP = 2;
-    // The autoscaling algorithm will both increase and decrease partitions count depending on the load characteristics.
-    AUTOSCALING_STRATEGY_SCALE_UP_AND_DOWN = 3;
+enum AutoPartitioningStrategy {
+    // The auto partitioning algorithm is not specified. The default value will be used.
+    AUTO_PARTITIONING_STRATEGY_UNSPECIFIED = 0;
+    // The auto partitioning is disabled.
+    AUTO_PARTITIONING_STRATEGY_DISABLED = 1;
+    // The auto partitioning algorithm will increase partitions count depending on the load characteristics.
+    // The auto partitioning algorithm will never decrease the number of partitions.
+    AUTO_PARTITIONING_STRATEGY_SCALE_UP = 2;
+    // The auto partitioning algorithm will both increase and decrease partitions count depending on the load characteristics.
+    AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN = 3;
+    // The auto partitioning is paused.
+    AUTO_PARTITIONING_STRATEGY_PAUSED = 4;
 }
 
 // Partitioning settings for topic.
@@ -856,31 +858,31 @@ message PartitioningSettings {
     // Zero value means default - 100.
     // Use max_active_partitions
     int64 partition_count_limit = 2 [(Ydb.value) = ">= 0", deprecated = true];
-    // Settings for the partitions count autoscaling.
-    AutoscalingSettings autoscaling_settings = 4;
+    // Settings for the partitions count auto partitioning.
+    AutoPartitioningSettings auto_partitioning_settings = 4;
 }
 
-message AutoscalingSettings {
-    // Strategy of autoscaling.
-    AutoscalingStrategy strategy = 1;
-    // Partition write speed autoscaling options.
-    AutoscalingPartitionWriteSpeedStrategy partition_write_speed = 2;
+message AutoPartitioningSettings {
+    // Strategy of auto partitioning.
+    AutoPartitioningStrategy strategy = 1;
+    // Partition write speed auto partitioning options.
+    AutoPartitioningWriteSpeedStrategy partition_write_speed = 2;
 }
 
-message AutoscalingPartitionWriteSpeedStrategy {
-    //Partition will be autoscaled up (divided into 2 partitions)
-    //after write speed to the partition exceeds scale_up_threshold_percent (in percentage of maximum write speed to the partition) for the period of time threshold_time_seconds
+message AutoPartitioningWriteSpeedStrategy {
+    //Partition will be auto partitioned up (divided into 2 partitions)
+    //after write speed to the partition exceeds up_utilization_percent (in percentage of maximum write speed to the partition) for the period of time stabilization_window
 
-    //Partition will become a candidate to the autoscaling down
-    //after write speed doesn’t reach scale_down_threshold_percent (in percentage of maximum write speed to the partition) for the period of time threshold_time_seconds
-    //This candidate partition will be autoscaled down when other neighbour partition will become a candidate to the autoscaling down and not earlier than a retention period.
+    //Partition will become a candidate to the auto partitioned down
+    //after write speed doesn’t reach down_utilization_percent (in percentage of maximum write speed to the partition) for the period of time stabilization_window
+    //This candidate partition will be auto partitioned down when other neighbour partition will become a candidate to the auto partitioning down and not earlier than a retention period.
 
     // Zero value means default - 300.
-    google.protobuf.Duration threshold_time = 1;
+    google.protobuf.Duration stabilization_window = 1;
     // Zero value means default - 90.
-    int32 scale_up_threshold_percent = 2 [(Ydb.value) = ">= 0"];
+    int32 up_utilization_percent = 2 [(Ydb.value) = ">= 0"];
     // Zero value means default - 30.
-    int32 scale_down_threshold_percent = 3 [(Ydb.value) = ">= 0"];
+    int32 down_utilization_percent = 3 [(Ydb.value) = ">= 0"];
 }
 
 // Partitioning settings for topic.
@@ -895,30 +897,30 @@ message AlterPartitioningSettings {
     // Zero value means default - 100.
     // Use set_max_active_partitions
     optional int64 set_partition_count_limit = 2 [(Ydb.value) = ">= 0", deprecated = true];
-    // Settings for autoscaling the partition number
-    optional AlterAutoscalingSettings alter_autoscaling_settings = 4;
+    // Settings for auto partitioning the partition number
+    optional AlterAutoPartitioningSettings alter_auto_partitioning_settings = 4;
 }
 
-message AlterAutoscalingSettings {
-    // Strategy of autoscaling
-    optional AutoscalingStrategy set_strategy = 1;
-    // Autoscaling partition write speed options.
-    optional AlterAutoscalingPartitionWriteSpeedStrategy set_partition_write_speed = 2;
+message AlterAutoPartitioningSettings {
+    // Strategy of auto partitioning
+    optional AutoPartitioningStrategy set_strategy = 1;
+    // Auto partitioning write speed options.
+    optional AlterAutoPartitioningWriteSpeedStrategy set_partition_write_speed = 2;
 }
 
-message AlterAutoscalingPartitionWriteSpeedStrategy {
+message AlterAutoPartitioningWriteSpeedStrategy {
     // The time of exceeding the threshold value, after which the partition will be
-    // autoscaling.
+    // auto partitioning.
     // Zero value means default - 300.
-    optional google.protobuf.Duration set_threshold_time = 1;
+    optional google.protobuf.Duration set_stabilization_window = 1;
     // The threshold value of the write speed to the partition as a percentage, when exceeded,
     // the partition will be auto split.
     // Zero value means default - 90.
-    optional int32 set_scale_up_threshold_percent = 2 [(Ydb.value) = ">= 0"];
+    optional int32 set_up_utilization_percent = 2 [(Ydb.value) = ">= 0"];
     // The threshold value of the write speed to the partition as a percentage, if it is not reached,
     // the partition will be auto merged.
     // Zero value means default - 30.
-    optional int32 set_scale_down_threshold_percent = 3 [(Ydb.value) = ">= 0"];
+    optional int32 set_down_utilization_percent = 3 [(Ydb.value) = ">= 0"];
 }
 
 // Metering mode specifies the method used to determine consumption of resources by the topic.

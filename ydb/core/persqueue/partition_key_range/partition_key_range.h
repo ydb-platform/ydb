@@ -53,6 +53,31 @@ TString AsKeyBound(const NYql::TWide<Type>& value) {
 
 template <typename Type>
     requires std::integral<Type>
+TString ToHex(const Type value) {
+    static constexpr char prefix[] = "0x";
+    static constexpr char alphabet[] = "0123456789ABCDEF";
+
+    TString result;
+    result.reserve((sizeof(Type) << 1) + sizeof(prefix));
+    result.append(prefix);
+
+#ifdef WORDS_BIGENDIAN
+    char* c = (char*)&value;
+    char* e = c + sizeof(Type);
+    for (; c != e; ++c) {
+#else
+    unsigned char* e = (unsigned char*)&value;
+    unsigned char* c = e + sizeof(Type);
+    while (c-- != e) {
+#endif
+        result.append(alphabet[(*c & 0xF0u ) >> 4]);
+        result.append(alphabet[*c & 0x0Fu]);
+    }
+
+    return result;
+}
+
+template <typename Type>
 Type AsInt(const TString& bound) {
     Type result = 0;
 #ifdef WORDS_BIGENDIAN
@@ -67,6 +92,31 @@ Type AsInt(const TString& bound) {
     }
 #endif
     return result;
+}
+
+template<typename T>
+inline NYql::TWide<T> AsWide(const TString& bound) {
+    NYql::TWide<T> result = 0;
+    if (bound.size() <= sizeof(T)) {
+        result = AsInt<T>(bound);
+        result <<= sizeof(T) << 3;
+    } else {
+        result = AsInt<T>(bound.substr(0, sizeof(T)));
+        result <<= sizeof(T) << 3;
+        result += AsInt<T>(bound.substr(sizeof(T)));
+    }
+    return result;
+}
+
+
+template<>
+inline NYql::TWide<ui64> AsInt<NYql::TWide<ui64>>(const TString& bound) {
+    return AsWide<ui64>(bound);
+}
+
+template<>
+inline NYql::TWide<ui16> AsInt<NYql::TWide<ui16>>(const TString& bound) {
+    return AsWide<ui16>(bound);
 }
 
 TString MiddleOf(const TString& fromBound, const TString& toBound);

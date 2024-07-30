@@ -51,7 +51,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes,
     const ui64 &diskGuid, const NPDisk::TKey &chunkKey, const NPDisk::TKey &logKey, const NPDisk::TKey &sysLogKey,
     const NPDisk::TKey &mainKey, TString textMessage, const bool isErasureEncodeUserLog, bool trimEntireDevice,
-    TIntrusivePtr<NPDisk::TSectorMap> sectorMap, bool enableSmallDiskOptimization)
+    TIntrusivePtr<NPDisk::TSectorMap> sectorMap, bool enableSmallDiskOptimization, std::optional<TRcBuf> metadata)
 {
     TActorSystemCreator creator;
 
@@ -117,7 +117,8 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
         ythrow yexception() << "Device with path# " << path << " is not good, info# " << pDisk->BlockDevice->DebugInfo();
     }
     pDisk->WriteDiskFormat(diskSizeBytes, sectorSizeBytes, userAccessibleChunkSizeBytes, diskGuid,
-        chunkKey, logKey, sysLogKey, mainKey, textMessage, isErasureEncodeUserLog, trimEntireDevice);
+        chunkKey, logKey, sysLogKey, mainKey, textMessage, isErasureEncodeUserLog, trimEntireDevice,
+        std::move(metadata));
 }
 
 bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, TPDiskInfo &outInfo,
@@ -215,7 +216,7 @@ bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, T
                     (sector + format.SectorSize - sizeof(NPDisk::TDataSectorFooter));
 
                 ui64 sectorOffset = sysLogOffset + (ui64)((idx / 3) * 3) * (ui64)format.SectorSize;
-                bool isCrcOk = NPDisk::TPDiskHashCalculator(KIKIMR_PDISK_ENABLE_T1HA_HASH_WRITING).CheckSectorHash(
+                bool isCrcOk = NPDisk::TPDiskHashCalculator().CheckSectorHash(
                         sectorOffset, format.MagicSysLogChunk, sector, format.SectorSize, logFooter->Hash);
                 outInfo.SectorInfo.push_back(TPDiskInfo::TSectorInfo(logFooter->Nonce, logFooter->Version, isCrcOk));
             }

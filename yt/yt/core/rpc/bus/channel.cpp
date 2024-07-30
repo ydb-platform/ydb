@@ -377,10 +377,11 @@ private:
             }
 
             if (auto readyFuture = GetBusReadyFuture()) {
-                YT_LOG_DEBUG("Waiting for bus to become ready (RequestId: %v, Method: %v.%v)",
+                YT_LOG_DEBUG("Waiting for bus to become ready (RequestId: %v, Method: %v.%v, Endpoint: %v)",
                     requestControl->GetRequestId(),
                     requestControl->GetService(),
-                    requestControl->GetMethod());
+                    requestControl->GetMethod(),
+                    Bus_->GetEndpointDescription());
 
                 readyFuture.Subscribe(BIND(
                     [

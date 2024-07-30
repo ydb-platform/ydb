@@ -31,6 +31,11 @@ private:
 public:
     TGeneralContainer(const ui32 recordsCount);
 
+    ui32 GetRecordsCountVerified() const {
+        AFL_VERIFY(RecordsCount);
+        return *RecordsCount;
+    }
+
     TString DebugString() const;
 
     [[nodiscard]] TConclusionStatus SyncSchemaTo(const std::shared_ptr<arrow::Schema>& schema,

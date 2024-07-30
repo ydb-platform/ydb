@@ -262,7 +262,7 @@ def render_testlist_html(rows, fn , build_preset):
     history = get_test_history(failed_tests_array,last_N_runs,build_preset)
 
     # sorting, at first show tests with passed resuts in history
-    if TestStatus.FAIL in status_test:
+    if TestStatus.FAIL in status_test and history:
         for test in status_test[TestStatus.FAIL]:
             test.count_of_passed=history[test.full_name][next(iter(history[test.full_name]))]['count_of_passed']
         

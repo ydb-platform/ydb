@@ -1,12 +1,23 @@
 <head>
     <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            width: 100%;
+        }
+        h1 { 
+            font-size: 30px; 
+        }
         th {
             text-transform: uppercase;
         }
 
         th, td {
             padding: 5px;
-            min-width: 95px;
+            min-width: 105px;
+            word-break: break-word; /* Allow breaking long words */
         }
 
         table {
@@ -43,8 +54,8 @@
 
        .circle {
             display: inline-block;
-            width: 10px;
-            height: 10px;
+            width: 12px;
+            height: 12px;
             margin-right: 5px;
             border-radius: 50%;
             position: relative; /* Essential for tooltips */
@@ -172,9 +183,9 @@
     <thead>
     <tr>
         <th>test name</th>
-        {% if status.name == 'FAIL' %}
-            <th>history</th>
-        {% endif %}
+    {% if status.name == 'FAIL' and history%}
+        <th>history</th>
+    {% endif %}
         <th>elapsed</th>
         <th>status</th>
     {% if status in has_any_log %}
@@ -203,7 +214,7 @@
             {% endfor %}
         </td> 
         {% elif status.name == 'FAIL' %}
-        <td></td>
+       
         {% endif %}
         <td><span title="{{ t.elapsed }}s">{{ t.elapsed_display }}</span></td>
         <td>

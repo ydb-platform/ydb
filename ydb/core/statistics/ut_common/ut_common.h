@@ -74,7 +74,8 @@ std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, TPa
 void ValidateCountMin(TTestActorRuntime& runtime, TPathId pathId);
 void ValidateCountMinAbsense(TTestActorRuntime& runtime, TPathId pathId);
 
-void AnalyzeTable(TTestActorRuntime& runtime, const TPathId& pathId, ui64 tabletId);
+void Analyze(TTestActorRuntime& runtime, const std::vector<TPathId>& pathIds, ui64 saTabletId);
+void AnalyzeTable(TTestActorRuntime& runtime, const TPathId& pathId, ui64 shardTabletId);
 
 } // namespace NStat
 } // namespace NKikimr

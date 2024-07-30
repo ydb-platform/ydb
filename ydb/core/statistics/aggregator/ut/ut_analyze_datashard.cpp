@@ -36,13 +36,7 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
 
         runtime.SimulateSleep(TDuration::Seconds(30));
 
-        auto ev = std::make_unique<TEvStatistics::TEvAnalyze>();
-        auto& record = ev->Record;
-        PathIdFromPathId(pathId, record.AddTables()->MutablePathId());
-
-        auto sender = runtime.AllocateEdgeActor();
-        runtime.SendToPipe(saTabletId, sender, ev.release());
-        runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+        Analyze(runtime, {{pathId}}, saTabletId);
 
         ValidateCountMin(runtime, pathId);
     }
@@ -68,15 +62,7 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
         auto pathId1 = ResolvePathId(runtime, "/Root/Database/Table1", nullptr, &saTabletId1);
         auto pathId2 = ResolvePathId(runtime, "/Root/Database/Table2");
 
-        auto ev = std::make_unique<TEvStatistics::TEvAnalyze>();
-        auto& record = ev->Record;
-        PathIdFromPathId(pathId1, record.AddTables()->MutablePathId());
-        PathIdFromPathId(pathId2, record.AddTables()->MutablePathId());
-
-        auto sender = runtime.AllocateEdgeActor();
-        runtime.SendToPipe(saTabletId1, sender, ev.release());
-        runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
-        runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+        Analyze(runtime, {pathId1, pathId2}, saTabletId1);
 
         ValidateCountMin(runtime, pathId1);
         ValidateCountMin(runtime, pathId2);
@@ -106,12 +92,7 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
         runtime.SimulateSleep(TDuration::Seconds(5));
         init2Thread.join();
 
-        auto ev = std::make_unique<TEvStatistics::TEvAnalyze>();
-        auto& record = ev->Record;
-        PathIdFromPathId(pathId, record.AddTables()->MutablePathId());
-
-        auto sender = runtime.AllocateEdgeActor();
-        runtime.SendToPipe(saTabletId, sender, ev.release());
+        Analyze(runtime, {pathId}, saTabletId);
 
         runtime.SimulateSleep(TDuration::Seconds(60));
 

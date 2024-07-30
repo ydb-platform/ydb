@@ -323,14 +323,25 @@ void ValidateCountMinAbsense(TTestActorRuntime& runtime, TPathId pathId) {
     UNIT_ASSERT(!rsp.Success);
 }
 
-void AnalyzeTable(TTestActorRuntime& runtime, const TPathId& pathId, ui64 tabletId) {
+void Analyze(TTestActorRuntime& runtime, const std::vector<TPathId>& pathIds, ui64 saTabletId) {
+    auto ev = std::make_unique<TEvStatistics::TEvAnalyze>();
+    auto& record = ev->Record;
+    for (const TPathId& pathId : pathIds)
+        PathIdFromPathId(pathId, record.AddTables()->MutablePathId());
+
+    auto sender = runtime.AllocateEdgeActor();
+    runtime.SendToPipe(saTabletId, sender, ev.release());
+    runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+}
+
+void AnalyzeTable(TTestActorRuntime& runtime, const TPathId& pathId, ui64 shardTabletId) {
     auto ev = std::make_unique<TEvStatistics::TEvAnalyzeTable>();
     auto& record = ev->Record;
     PathIdFromPathId(pathId, record.MutableTable()->MutablePathId());
     record.AddTypes(NKikimrStat::EColumnStatisticType::TYPE_COUNT_MIN_SKETCH);
 
     auto sender = runtime.AllocateEdgeActor();
-    runtime.SendToPipe(tabletId, sender, ev.release());
+    runtime.SendToPipe(shardTabletId, sender, ev.release());
     runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeTableResponse>(sender);
 }
 

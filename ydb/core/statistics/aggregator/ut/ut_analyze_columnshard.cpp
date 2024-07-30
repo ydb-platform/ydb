@@ -29,9 +29,12 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         auto sender = runtime.AllocateEdgeActor();
         ui64 columnShardId = GetColumnTableShards(runtime, sender, "/Root/Database/Table").at(0);
 
-        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr);
+        ui64 saTabletId = 0;
+        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
 
         AnalyzeTable(runtime, pathId, columnShardId);
+
+        Analyze(runtime, {pathId}, saTabletId);
     }
 }
 

@@ -66,6 +66,7 @@ sql_stmt_core:
   | create_resource_pool_stmt
   | alter_resource_pool_stmt
   | drop_resource_pool_stmt
+  | create_backup_collection_stmt
 ;
 
 expr:
@@ -643,6 +644,10 @@ create_table_entry:
   | changefeed
   | an_id_schema
 ;
+
+create_backup_collection_stmt: CREATE BACKUP COLLECTION object_ref create_backup_collection_features?;
+create_backup_collection_features: WITH object_features;
+backup_collection_ref: object_ref;
 
 table_inherits: INHERITS LPAREN simple_table_ref_core (COMMA simple_table_ref_core)* RPAREN;
 table_partition_by: PARTITION BY HASH pure_column_list;
@@ -1727,6 +1732,8 @@ ATTACH: A T T A C H;
 ATTRIBUTES: A T T R I B U T E S;
 AUTOINCREMENT: A U T O I N C R E M E N T;
 AUTOMAP: A U T O M A P;
+BACKUP: B A C K U P;
+COLLECTION: C O L L E C T I O N;
 BEFORE: B E F O R E;
 BEGIN: B E G I N;
 BERNOULLI: B E R N O U L L I;

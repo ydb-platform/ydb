@@ -741,6 +741,10 @@ public:
         }
 
         alterData->TotalPartitionCount = topic->TotalPartitionCount + alterData->PartitionsToAdd.size();
+        if (!splitMergeEnabled) {
+            alterData->ActivePartitionCount = alterData->TotalPartitionCount;
+        }
+
         alterData->NextPartitionId = topic->NextPartitionId;
         for (const auto& p : alterData->PartitionsToAdd) {
             if (p.GroupId == 0 || p.GroupId > alterData->TotalGroupCount) {

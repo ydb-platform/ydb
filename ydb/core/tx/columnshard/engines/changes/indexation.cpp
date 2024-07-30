@@ -36,7 +36,7 @@ void TInsertColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnSha
         if (!DataToIndex.empty()) {
             self->UpdateInsertTableCounters();
         }
-        self->Counters.GetTabletCounters().OnInsertWriteIndexCompleted(context);
+        self->Counters.GetTabletCounters().OnInsertionWriteIndexCompleted(context.BlobsWritten, context.BytesWritten, context.Duration);
     }
 }
 

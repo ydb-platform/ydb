@@ -229,6 +229,19 @@ class InferringColumnBuilder : public ConcreteColumnBuilder {
     return converter_->type();
   }
 
+  Result<std::shared_ptr<ChunkedArray>> FinishUnlocked() {
+    auto type = this->type();
+    for (const auto& chunk : chunks_) {
+      if (chunk == nullptr) {
+        return Status::UnknownError("a chunk failed converting for an unknown reason");
+      }
+      DCHECK_EQ(chunk->type()->id(), type->id()) << "Chunk types not equal!";
+    }
+
+    auto return_type = infer_status_.kind() == InferKind::Null ? utf8() : type;
+    return std::make_shared<ChunkedArray>(chunks_, std::move(return_type));
+  }
+
   Status UpdateType();
   Status TryConvertChunk(int64_t chunk_index);
   // This must be called unlocked!

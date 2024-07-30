@@ -11,7 +11,9 @@ To ensure the fault tolerance of a {{ ydb-short-name }} cluster, properly config
 
 ## Cluster operating modes {#cluster-config}
 
-Cluster topology is based on the chosen operating mode, which is determined by the fault tolerance requirements. The following operating modes are available:
+Cluster topology is based on the chosen operating mode, which is determined by the fault tolerance requirements. A fail model of {{ ydb-short-name }} is based on concepts such as [fail domain](./glossary.md#fail-domain) and [fail realm](./glossary.md#fail-realm).
+
+The following operating modes are available:
 
 * `none` - There is no redundancy. Any hardware failure causes the storage pool to become unavailable. This mode is only recommended for functional testing.
 * `block-4-2` - [Erasure coding](https://en.wikipedia.org/wiki/Erasure_code) with two blocks of redundancy added to the four blocks of source data is applied. Storage nodes are placed in at least 8 failure domains (usually racks). The storage pool is available if any two domains fail, continuing to record all 6 data parts in the remaining domains. This mode is recommended for storage pools within a single availability zone (usually a data processing center).
@@ -24,15 +26,15 @@ Node failure means both its total and partial unavailability, for example, failu
 
 {% endnote %}
 
-A fail model of {{ ydb-short-name }} is based on concepts such as [fail domain](./glossary.md#fail-domain) and [fail realm](./glossary.md#fail-realm). The table below describes the requirements and fault tolerance levels for different operating modes:
+The table below describes the requirements and fault tolerance levels for different operating modes:
 
 | Mode | Storage<br>volume multiplier | Minimum<br>number<br>of nodes | Fail<br>domain | Fail<br>realm | Number of<br>data centers | Number of<br>server racks | Fault tolerance<br>level |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `none` | 1 | 1 | Node | Node | 1 | 1 | No fault tolerance |
-| `block-4-2` | 1.5 | 8 | Rack | Data center | 1 | 8 | Can stand a failure of 2 racks |
-| `mirror-3-dc` | 3 | 9 | Rack | Data center | 3 | 3 in each data center | Can stand a failure of a data center and 1 rack in one of the two other data centers. |
+| `block-4-2` | 1.5 | 8 (10 recommended) | Rack | Data center | 1 | 8 | Can stand a failure of 2 racks |
+| `mirror-3-dc` | 3 | 9 (12 recommended) | Rack | Data center | 3 | 3 in each data center | Can stand a failure of a data center and 1 rack in one of the two other data centers. |
 | `block-4-2`<br>(reduced) | 1.5 | 10 | ½ a rack | Data center | 1 | 5 | Can stand a failure of 1 rack. |
-| `mirror-3-dc`<br>(reduced) | 3 | 6 | Server | Data center | 3 | Doesn't matter | Can stand a failure of a data center and 1 server in one of the two other data centers. |
+| `mirror-3-dc`<br>(reduced) | 3 | 12 | ½ a rack | Data center | 3 | 6 | Can stand a failure of a data center and 1 server in one of the two other data centers. |
 | `mirror-3-dc`<br>(3 nodes) | 3 | 3 | Server | Data center | 3 | Doesn't matter | Can stand a failure of a single server, or a failure of a data center. |
 
 {% note info %}

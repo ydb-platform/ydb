@@ -19,7 +19,46 @@ namespace {
 
 Y_UNIT_TEST_SUITE(TraverseDatashard) {
 
-    Y_UNIT_TEST(ScanOneTableServerless) {
+    Y_UNIT_TEST(TraverseOneTable) {
+        TTestEnv env(1, 1);
+        auto init = [&] () {
+            CreateDatabase(env, "Database");
+            CreateUniformTable(env, "Database", "Table");
+        };
+        std::thread initThread(init);
+
+        auto& runtime = *env.GetServer().GetRuntime();
+        runtime.SimulateSleep(TDuration::Seconds(5));
+        initThread.join();
+
+        runtime.SimulateSleep(TDuration::Seconds(60));
+
+        auto pathId = ResolvePathId(runtime, "/Root/Database/Table");
+        ValidateCountMin(runtime, pathId);
+    }
+
+    Y_UNIT_TEST(TraverseTwoTables) {
+        TTestEnv env(1, 1);
+        auto init = [&] () {
+            CreateDatabase(env, "Database");
+            CreateUniformTable(env, "Database", "Table1");
+            CreateUniformTable(env, "Database", "Table2");
+        };
+        std::thread initThread(init);
+
+        auto& runtime = *env.GetServer().GetRuntime();
+        runtime.SimulateSleep(TDuration::Seconds(5));
+        initThread.join();
+
+        runtime.SimulateSleep(TDuration::Seconds(60));
+
+        auto pathId1 = ResolvePathId(runtime, "/Root/Database/Table1");
+        auto pathId2 = ResolvePathId(runtime, "/Root/Database/Table2");
+        ValidateCountMin(runtime, pathId1);
+        ValidateCountMin(runtime, pathId2);
+    }    
+
+    Y_UNIT_TEST(TraverseOneTableServerless) {
         TTestEnv env(1, 1);
 
         auto init = [&] () {
@@ -49,7 +88,7 @@ Y_UNIT_TEST_SUITE(TraverseDatashard) {
         ValidateCountMin(runtime, pathId);
     }
 
-    Y_UNIT_TEST(ScanTwoTablesServerless) {
+    Y_UNIT_TEST(TraverseTwoTablesServerless) {
         TTestEnv env(1, 1);
 
         auto init = [&] () {
@@ -82,7 +121,7 @@ Y_UNIT_TEST_SUITE(TraverseDatashard) {
         ValidateCountMin(runtime, pathId2);
     }
 
-    Y_UNIT_TEST(ScanTwoTablesTwoServerlessDbs) {
+    Y_UNIT_TEST(TraverseTwoTablesTwoServerlessDbs) {
         TTestEnv env(1, 1);
 
         auto init = [&] () {

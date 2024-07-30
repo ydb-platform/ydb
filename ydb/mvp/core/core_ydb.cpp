@@ -109,16 +109,13 @@ NYdb::NTable::TTableClient TYdbLocation::GetTableClient(const TRequest& request,
     NYdb::NTable::TClientSettings clientSettings(defaultClientSettings);
 
     TString authToken;
-    switch (location.MetaDatabaseTokenSource) {
-    case TYdbLocation::EAuthTokenSource::Client:
+    if (location.MetaDatabaseTokenName.empty()) {
         authToken = request.GetAuthToken();
-        break;
-    case TYdbLocation::EAuthTokenSource::Service:
+    } else {
         NMVP::TMvpTokenator* tokenator = MVPAppData()->Tokenator;
         if (tokenator && !location.MetaDatabaseTokenName.empty()) {
             authToken = tokenator->GetToken(location.MetaDatabaseTokenName);
         }
-        break;
     }
     if (authToken) {
         clientSettings.AuthToken(authToken);
@@ -194,24 +191,6 @@ TString TYdbLocation::GetServerlessProxyUrl(const TString& database) const {
         return ServerlessDocumentProxyEndpoint + database;
     } else {
         return {};
-    }
-}
-
-TYdbLocation::EAuthTokenSource TYdbLocation::GetTokenSourceFromString(const TString& name) {
-    static const THashMap<TString, EAuthTokenSource> TokenSourceTypeByName = {
-        { "client", EAuthTokenSource::Client },
-        { "service", EAuthTokenSource::Service }
-    };
-    if (name.empty()) {
-        return EAuthTokenSource::Client;
-    }
-
-    auto lower = to_lower(name);
-    auto it = TokenSourceTypeByName.find(lower);
-    if (it != TokenSourceTypeByName.end()) {
-        return it->second;
-    } else {
-        ythrow yexception() << "Unknown token source: " << name;
     }
 }
 

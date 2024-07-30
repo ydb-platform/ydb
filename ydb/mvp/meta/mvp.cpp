@@ -175,7 +175,6 @@ void TMVP::TryGetMetaOptionsFromConfig(const YAML::Node& config) {
     MetaDatabase = meta["meta_database"].as<std::string>("");
     MetaCache = meta["meta_cache"].as<bool>(false);
     MetaDatabaseTokenName = meta["meta_database_token_name"].as<std::string>("");
-    MetaDatabaseTokenSource = TYdbLocation::GetTokenSourceFromString(meta["meta_database_token_source"].as<std::string>(""));
 }
 
 void TMVP::TryGetGenericOptionsFromConfig(

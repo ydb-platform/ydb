@@ -144,10 +144,6 @@ struct TYdbUnitResources {
 extern TMap<std::pair<TStringBuf, TStringBuf>, TYdbUnitResources> DefaultUnitResources;
 
 struct TYdbLocation {
-    enum EAuthTokenSource {
-        Client,
-        Service
-    };
     TString Name;
     TString Environment;
     TVector<std::pair<TString, TString>> Endpoints;
@@ -161,7 +157,6 @@ struct TYdbLocation {
     static TString UserToken;
     static TString CaCertificate;
     static TString SslCertificate;
-    EAuthTokenSource MetaDatabaseTokenSource = EAuthTokenSource::Client;
     TString MetaDatabaseTokenName;
     TString ServerlessDocumentProxyEndpoint;
     TString ServerlessYdbProxyEndpoint;
@@ -352,7 +347,6 @@ struct TYdbLocation {
 
     TString GetDatabaseName(const TRequest& request) const;
     TString GetServerlessProxyUrl(const TString& database) const;
-    static TYdbLocation::EAuthTokenSource GetTokenSourceFromString(const TString& name);
 
 private:
     NYdbGrpc::TGRpcClientLow& GetGRpcClientLow() const {

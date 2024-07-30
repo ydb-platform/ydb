@@ -142,7 +142,6 @@ void TMVP::InitMeta() {
     MetaLocation.Endpoints.emplace_back("cluster-api", MetaApiEndpoint);
     MetaLocation.RootDomain = MetaDatabase;
     MetaLocation.MetaDatabaseTokenName = MetaDatabaseTokenName;
-    MetaLocation.MetaDatabaseTokenSource = MetaDatabaseTokenSource;
 
     LocalEndpoint = TStringBuilder() << "http://" << FQDNHostName() << ":" << HttpPort;
 

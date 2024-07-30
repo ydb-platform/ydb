@@ -1,0 +1,22 @@
+package NKikimrConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TMemoryControllerConfig {
+    optional uint64 HardLimitBytes = 1 [default = 536870912];
+
+    optional float SoftLimitPercent = 2 [default = 75];
+    optional uint64 SoftLimitBytes = 3;
+
+    optional float TargetUtilizationPercent = 4 [default = 50];
+    optional uint64 TargetUtilizationBytes = 5;
+
+    optional float SharedCacheMinPercent = 100 [default = 20];
+    optional uint64 SharedCacheMinBytes = 101;
+    optional float SharedCacheMaxPercent = 102 [default = 50];
+    optional uint64 SharedCacheMaxBytes = 103;
+
+    optional float MemTableMinPercent = 110 [default = 1];
+    optional uint64 MemTableMinBytes = 111;
+    optional float MemTableMaxPercent = 112 [default = 3];
+    optional uint64 MemTableMaxBytes = 113;
+}

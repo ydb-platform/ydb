@@ -10,6 +10,7 @@ namespace NYdb {
 namespace NDump {
 
 extern const char SCHEME_FILE_NAME[10];
+extern const char PERMISSIONS_FILE_NAME[15];
 extern const char INCOMPLETE_FILE_NAME[11];
 extern const char EMPTY_FILE_NAME[10];
 

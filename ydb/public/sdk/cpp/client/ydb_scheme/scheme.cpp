@@ -17,10 +17,15 @@ namespace NScheme {
 using namespace NThreading;
 using namespace Ydb::Scheme;
 
+TPermissions::TPermissions(const ::Ydb::Scheme::Permissions& proto)
+    : Subject(proto.subject())
+    , PermissionNames(proto.permission_names().begin(), proto.permission_names().end())
+{}
+
 void TPermissions::SerializeTo(::Ydb::Scheme::Permissions& proto) const {
     proto.set_subject(Subject);
     for (const auto& name : PermissionNames) {
-        *proto.mutable_permission_names()->Add() = name;
+        proto.add_permission_names(name);
     }
 }
 
@@ -136,6 +141,27 @@ void TSchemeEntry::SerializeTo(::Ydb::Scheme::ModifyPermissionsRequest& request)
     }
 }
 
+TModifyPermissionsSettings::TModifyPermissionsSettings(const ::Ydb::Scheme::ModifyPermissionsRequest& request) {
+    for (const auto& action : request.actions()) {
+        switch (action.GetActionCase()) {
+            case Ydb::Scheme::PermissionsAction::kGrant:
+                AddGrantPermissions(action.grant());
+                break;
+            case Ydb::Scheme::PermissionsAction::kRevoke:
+                AddGrantPermissions(action.revoke());
+                break;
+            case Ydb::Scheme::PermissionsAction::kSet:
+                AddGrantPermissions(action.set());
+                break;
+            case Ydb::Scheme::PermissionsAction::kChangeOwner:
+                AddGrantPermissions(action.change_owner());
+                break;
+            case Ydb::Scheme::PermissionsAction::ACTION_NOT_SET:
+                break;
+        }
+    }
+}
+
 class TSchemeClient::TImpl : public TClientImplCommon<TSchemeClient::TImpl> {
 public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings)
@@ -221,13 +247,6 @@ public:
 
     }
 
-    void PermissionsToRequest(const TPermissions& permissions, Permissions* to) {
-        to->set_subject(permissions.Subject);
-        for (const auto& perm : permissions.PermissionNames) {
-            to->add_permission_names(perm);
-        }
-    }
-
     TAsyncStatus ModifyPermissions(const TString& path, const TModifyPermissionsSettings& settings) {
         auto request = MakeOperationRequest<Ydb::Scheme::ModifyPermissionsRequest>(settings);
         request.set_path(path);
@@ -243,15 +262,15 @@ public:
                 }
                 break;
                 case EModifyPermissionsAction::Grant: {
-                    PermissionsToRequest(action.second, protoAction->mutable_grant());
+                    action.second.SerializeTo(*protoAction->mutable_grant());
                 }
                 break;
                 case EModifyPermissionsAction::Revoke: {
-                    PermissionsToRequest(action.second, protoAction->mutable_revoke());
+                    action.second.SerializeTo(*protoAction->mutable_revoke());
                 }
                 break;
                 case EModifyPermissionsAction::Set: {
-                    PermissionsToRequest(action.second, protoAction->mutable_set());
+                    action.second.SerializeTo(*protoAction->mutable_set());
                 }
                 break;
             }

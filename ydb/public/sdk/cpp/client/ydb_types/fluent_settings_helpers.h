@@ -50,3 +50,10 @@
         name##_->push_back(value); \
         return static_cast<TSelf&>(*this); \
     }
+
+#define FLUENT_SETTING_HASHSET(type, name) \
+    THashSet<type> name##_; \
+    TSelf& Insert##name(const type& value) { \
+        name##_.insert(value); \
+        return static_cast<TSelf&>(*this); \
+    }

@@ -69,6 +69,18 @@ def create_table_with_data(session, path, not_null=False):
     upsert_simple(session, path)
 
 
+def create_table_with_data_and_permissions(scheme_client, session, path):
+    create_table_with_data(session, path)
+    scheme_client.modify_permissions(
+        path,
+        ydb.ModifyPermissionsSettings()
+        .grant_permissions(
+            'pixcc@staff', (
+                'ydb.generic.read',
+            )
+        )
+    )
+
 def is_tables_the_same(session, path_left, path_right, check_data=True):
     table_desc_left = session.describe_table(path_left)
     table_desc_right = session.describe_table(path_right)
@@ -124,6 +136,11 @@ def is_tables_the_same(session, path_left, path_right, check_data=True):
         right_rows = right_rows[rows_to_process:]
     return True
 
+def is_tables_the_same_with_permissions(session, scheme_client, path_left, path_right, check_data=True):
+    path_left_permissions = scheme_client.describe_path(path_left).permissions
+    path_right_permissions = scheme_client.describe_path(path_right).permissions
+    return is_tables_the_same(session, path_left, path_right, check_data) \
+        and set(path_left_permissions) == set(path_right_permissions)
 
 def list_all_dirs(prefix, path=""):
     paths = []
@@ -525,7 +542,7 @@ class TestBackupRestoreInRootSchemeOnly(BaseTestBackupInFiles):
         session = self.driver.table_client.session().create()
 
         # Create table and fill with data
-        create_table_with_data(session, "folder/table")
+        create_table_with_data_and_permissions(session, self.driver.scheme_client, "folder/table")
 
         # Backup table
         backup_files_dir = output_path(self.test_name, 'test_single_table_with_data_backup_restore', "backup_files_dir")
@@ -567,7 +584,7 @@ class TestBackupRestoreInRootSchemeOnly(BaseTestBackupInFiles):
             contains_inanyorder("folder", "table", ".sys")
         )
         assert_that(
-            is_tables_the_same(session, "/Root/folder/table", "/Root/table", False),
+            is_tables_the_same_with_permissions(session, self.driver.scheme_client, "/Root/folder/table", "/Root/table", False),
             is_(True)
         )
 

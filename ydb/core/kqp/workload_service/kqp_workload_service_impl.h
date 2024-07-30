@@ -36,8 +36,7 @@ struct TDatabaseState {
 
     void UpdateDatabaseInfo(const TEvPrivate::TEvFetchDatabaseResponse::TPtr& ev) {
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            auto issues = GroupIssues(ev->Get()->Issues, "Failed to fetch database info");
-            ReplyContinueError(ev->Get()->Status, issues);
+            ReplyContinueError(ev->Get()->Status, GroupIssues(ev->Get()->Issues, "Failed to fetch database info"));
             return;
         }
 
@@ -60,7 +59,7 @@ private:
     }
 
     void ReplyContinueError(Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
-        for (auto& ev : PendingRequersts) {
+        for (const auto& ev : PendingRequersts) {
             ActorContext.Send(ev->Sender, new TEvContinueRequest(status, {}, {}, issues));
         }
         PendingRequersts.clear();

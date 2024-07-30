@@ -295,6 +295,7 @@ runs:
             RERUN_FAILED_OPT="-X"
           fi
 
+          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
           echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
           CURRENT_PUBLIC_DIR_RELATIVE=try_$RETRY
@@ -346,8 +347,6 @@ runs:
           if [ $TESTS_RESULT = 0 ] || [ $RETRY = $TEST_RETRY_COUNT ]; then
             IS_LAST_RETRY=1
           fi
-
-          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
 
           if [ $FAILED_TESTS_COUNT -gt 500 ]; then 
             IS_LAST_RETRY=1

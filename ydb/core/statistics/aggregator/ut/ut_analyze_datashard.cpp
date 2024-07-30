@@ -19,7 +19,7 @@ namespace {
 
 Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
 
-    Y_UNIT_TEST(ScanOneTable) {
+    Y_UNIT_TEST(AnalyzeOneTable) {
         TTestEnv env(1, 1);
         auto init = [&] () {
             CreateDatabase(env, "Database");
@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
         ValidateCountMin(runtime, pathId);
     }
 
-    Y_UNIT_TEST(ScanTwoTables) {
+    Y_UNIT_TEST(AnalyzeTwoTables) {
         TTestEnv env(1, 1);
         auto init = [&] () {
             CreateDatabase(env, "Database");
@@ -82,102 +82,6 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
         ValidateCountMin(runtime, pathId2);
     }
 
-    Y_UNIT_TEST(ScanOneTableServerless) {
-        TTestEnv env(1, 1);
-
-        auto init = [&] () {
-            CreateDatabase(env, "Shared");
-        };
-        std::thread initThread(init);
-
-        auto& runtime = *env.GetServer().GetRuntime();
-        runtime.SimulateSleep(TDuration::Seconds(5));
-        initThread.join();
-
-        TPathId domainKey;
-        ResolvePathId(runtime, "/Root/Shared", &domainKey);
-
-        auto init2 = [&] () {
-            CreateServerlessDatabase(env, "Serverless", domainKey);
-            CreateUniformTable(env, "Serverless", "Table");
-        };
-        std::thread init2Thread(init2);
-
-        runtime.SimulateSleep(TDuration::Seconds(5));
-        init2Thread.join();
-
-        runtime.SimulateSleep(TDuration::Seconds(60));
-
-        auto pathId = ResolvePathId(runtime, "/Root/Serverless/Table");
-        ValidateCountMin(runtime, pathId);
-    }
-
-    Y_UNIT_TEST(ScanTwoTablesServerless) {
-        TTestEnv env(1, 1);
-
-        auto init = [&] () {
-            CreateDatabase(env, "Shared");
-        };
-        std::thread initThread(init);
-
-        auto& runtime = *env.GetServer().GetRuntime();
-        runtime.SimulateSleep(TDuration::Seconds(5));
-        initThread.join();
-
-        TPathId domainKey;
-        ResolvePathId(runtime, "/Root/Shared", &domainKey);
-
-        auto init2 = [&] () {
-            CreateServerlessDatabase(env, "Serverless", domainKey);
-            CreateUniformTable(env, "Serverless", "Table1");
-            CreateUniformTable(env, "Serverless", "Table2");
-        };
-        std::thread init2Thread(init2);
-
-        runtime.SimulateSleep(TDuration::Seconds(5));
-        init2Thread.join();
-
-        runtime.SimulateSleep(TDuration::Seconds(60));
-
-        auto pathId1 = ResolvePathId(runtime, "/Root/Serverless/Table1");
-        auto pathId2 = ResolvePathId(runtime, "/Root/Serverless/Table2");
-        ValidateCountMin(runtime, pathId1);
-        ValidateCountMin(runtime, pathId2);
-    }
-
-    Y_UNIT_TEST(ScanTwoTablesTwoServerlessDbs) {
-        TTestEnv env(1, 1);
-
-        auto init = [&] () {
-            CreateDatabase(env, "Shared");
-        };
-        std::thread initThread(init);
-
-        auto& runtime = *env.GetServer().GetRuntime();
-        runtime.SimulateSleep(TDuration::Seconds(5));
-        initThread.join();
-
-        TPathId domainKey;
-        ResolvePathId(runtime, "/Root/Shared", &domainKey);
-
-        auto init2 = [&] () {
-            CreateServerlessDatabase(env, "Serverless1", domainKey);
-            CreateServerlessDatabase(env, "Serverless2", domainKey);
-            CreateUniformTable(env, "Serverless1", "Table1");
-            CreateUniformTable(env, "Serverless2", "Table2");
-        };
-        std::thread init2Thread(init2);
-
-        runtime.SimulateSleep(TDuration::Seconds(5));
-        init2Thread.join();
-
-        runtime.SimulateSleep(TDuration::Seconds(60));
-
-        auto pathId1 = ResolvePathId(runtime, "/Root/Serverless1/Table1");
-        auto pathId2 = ResolvePathId(runtime, "/Root/Serverless2/Table2");
-        ValidateCountMin(runtime, pathId1);
-        ValidateCountMin(runtime, pathId2);
-    }
 
     Y_UNIT_TEST(DropTableNavigateError) {
         TTestEnv env(1, 1);

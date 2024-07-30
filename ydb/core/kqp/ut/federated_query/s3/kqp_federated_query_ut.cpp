@@ -24,7 +24,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";
         const TString bucket = "test_bucket1";
-        const TString object = "test_object";
+        const TString object = UrlEscapeRet("name with sybmols \"<>|!#@;.,");
 
         CreateBucketWithObject(bucket, object, TEST_CONTENT);
 

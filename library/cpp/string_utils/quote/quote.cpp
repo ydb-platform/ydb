@@ -281,7 +281,7 @@ char* UrlEscape(char* to, const char* from, bool forceEscape) {
         const bool escapePercent = (*from == '%') &&
                                    (forceEscape || !((*(from + 1) && IsAsciiHex(*(from + 1)) && *(from + 2) && IsAsciiHex(*(from + 2)))));
 
-        if (escapePercent || (unsigned char)*from <= ' ' || (unsigned char)*from > '~') {
+        if (escapePercent || (unsigned char)*from <= ' ' || (unsigned char)*from == '#' || (unsigned char)*from > '~') {
             *to++ = '%';
             *to++ = d2x((unsigned char)*from >> 4);
             *to++ = d2x((unsigned char)*from & 0xF);

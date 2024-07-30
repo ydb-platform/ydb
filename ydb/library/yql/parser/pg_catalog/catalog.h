@@ -390,6 +390,7 @@ class IExtensionLoader {
 public:
     virtual ~IExtensionLoader() = default;
     virtual void Load(ui32 extensionIndex, const TString& name, const TString& path) = 0;
+    virtual void Finish() = 0;
 };
 
 // should be called at most once before other catalog functions

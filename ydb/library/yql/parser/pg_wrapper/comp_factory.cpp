@@ -4994,6 +4994,10 @@ public:
     void Load(ui32 extensionIndex, const TString& name, const TString& path) final {
         TExtensionsRegistry::Instance().Load(extensionIndex, name, path);
     }
+
+    void Finish() final {
+        RebuildSysCache();
+    }
 };
 
 std::unique_ptr<NYql::NPg::IExtensionLoader> CreateExtensionLoader() {

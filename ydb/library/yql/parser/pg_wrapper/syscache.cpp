@@ -197,25 +197,38 @@ struct TSysCache {
         return *Singleton<TSysCache>();
     }
 
+    static TSysCache& MutableInstance() {
+        return *Singleton<TSysCache>();
+    }    
+
     TSysCache()
     {
-        InitializeProcs();
-        InitializeTypes();
-        InitializeDatabase();
-        InitializeAuthId();
-        InitializeNameAndOidNamespaces();
-        InitializeRelNameNamespaces();
-        for (auto& item : Items) {
-            if (item) {
-                item->FinalizeRangeMaps();
-            }
-        }
-
         Arena.Release();
+        Rebuild();
     }
 
     ~TSysCache() {
         Arena.Acquire();
+    }
+
+    void Rebuild() {
+        with_lock(Arena) {
+            for (auto& x : Items) {
+                x.reset();
+            }
+
+            InitializeProcs();
+            InitializeTypes();
+            InitializeDatabase();
+            InitializeAuthId();
+            InitializeNameAndOidNamespaces();
+            InitializeRelNameNamespaces();
+            for (auto& item : Items) {
+                if (item) {
+                    item->FinalizeRangeMaps();
+                }
+            }
+        }
     }
 
     static void FillDatum(ui32 count, Datum* values, bool* nulls, ui32 attrNum, Datum value) {
@@ -731,6 +744,11 @@ struct TSysCache {
 };
 
 }
+
+void RebuildSysCache() {
+    TSysCache::MutableInstance().Rebuild();
+}
+
 }
 namespace NKikimr {
 namespace NMiniKQL {

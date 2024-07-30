@@ -3358,6 +3358,10 @@ void RegisterExtensions(const TVector<TExtensionDesc>& extensions, bool typesOnl
             }
         }
 
+        if (loader) {
+            loader->Finish();
+        }
+
         catalog.AllowAllFunctions = savedAllowAllFunctions;
         catalog.ExtensionsInit = true;
     }

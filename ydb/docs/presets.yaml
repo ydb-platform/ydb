@@ -58,3 +58,5 @@ default:
   airflow-name: Apache Airflow
   ydb-airflow: false
   ydb-finebi: false
+  ydb-superset: false
+  ydb-datalens: false

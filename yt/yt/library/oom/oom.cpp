@@ -21,7 +21,9 @@
 
 namespace NYT {
 
-static NYT::NLogging::TLogger Logger{"OOM"};
+////////////////////////////////////////////////////////////////////////////////
+
+YT_DEFINE_GLOBAL(const NYT::NLogging::TLogger, Logger, "OOM");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -45,10 +47,10 @@ static const char* TCMallocStats[] = {
     "tcmalloc.transfer_cache_free",
     "tcmalloc.hard_usage_limit_bytes",
     "tcmalloc.desired_usage_limit_bytes",
-    "tcmalloc.required_bytes"
+    "tcmalloc.required_bytes",
 };
 
-void OOMWatchdog(TOOMOptions options)
+void OomWatchdog(TOomWatchdogOptions options)
 {
     while (true) {
         auto rss = GetProcessMemoryUsage().Rss;
@@ -124,12 +126,12 @@ void OOMWatchdog(TOOMOptions options)
     }
 }
 
-void EnableEarlyOOMWatchdog(TOOMOptions options)
+void EnableEarlyOomWatchdog(TOomWatchdogOptions options)
 {
     static std::once_flag onceFlag;
 
     std::call_once(onceFlag, [options] {
-        std::thread(OOMWatchdog, options).detach();
+        std::thread(OomWatchdog, options).detach();
     });
 }
 

@@ -23,7 +23,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/protobuf
+    library/cpp/protobuf/runtime
     library/cpp/type_info
     library/cpp/threading/future
     library/cpp/yson/node

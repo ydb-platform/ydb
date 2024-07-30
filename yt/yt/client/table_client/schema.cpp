@@ -751,7 +751,14 @@ bool TTableSchema::IsEmpty() const
 
 bool TTableSchema::IsCGComparatorApplicable() const
 {
-    return GetKeyColumnCount() <= MaxKeyColumnCountInDynamicTable;
+    if (GetKeyColumnCount() > MaxKeyColumnCountInDynamicTable) {
+        return false;
+    }
+
+    auto keyTypes = GetKeyColumnTypes();
+    return std::none_of(keyTypes.begin(), keyTypes.end(), [] (auto type) {
+        return type == EValueType::Any;
+    });
 }
 
 std::optional<int> TTableSchema::GetTtlColumnIndex() const

@@ -14,7 +14,7 @@ namespace {
 TEST(EarlyOOM, Crash)
 {
     auto checkOOM = [] {
-        EnableEarlyOOMWatchdog(TOOMOptions{
+        EnableEarlyOomWatchdog(TOomWatchdogOptions{
             .MemoryLimit = 0,
         });
 
@@ -28,7 +28,7 @@ TEST(EarlyOOM, Crash)
 
 TEST(EarlyOOM, NoCrash)
 {
-    EnableEarlyOOMWatchdog(TOOMOptions{
+    EnableEarlyOomWatchdog(TOomWatchdogOptions{
         .MemoryLimit = 1_GB,
     });
 

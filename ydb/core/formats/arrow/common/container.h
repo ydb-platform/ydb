@@ -29,6 +29,8 @@ private:
     std::vector<std::shared_ptr<NAccessor::IChunkedArray>> Columns;
     void Initialize();
 public:
+    TGeneralContainer(const ui32 recordsCount);
+
     TString DebugString() const;
 
     [[nodiscard]] TConclusionStatus SyncSchemaTo(const std::shared_ptr<arrow::Schema>& schema,
@@ -67,7 +69,6 @@ public:
 
     [[nodiscard]] TConclusionStatus AddField(const std::shared_ptr<arrow::Field>& f, const std::shared_ptr<arrow::ChunkedArray>& data);
 
-    TGeneralContainer() = default;
     TGeneralContainer(const std::shared_ptr<arrow::Table>& table);
     TGeneralContainer(const std::shared_ptr<arrow::RecordBatch>& table);
     TGeneralContainer(const std::shared_ptr<arrow::Schema>& schema, std::vector<std::shared_ptr<NAccessor::IChunkedArray>>&& columns);

@@ -2243,7 +2243,7 @@ TString AddSimplifiedPlan(const TString& planText, TIntrusivePtr<NOpt::TKqpOptim
     return planJson.GetStringRobust();
 }
 
-TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx, const TString commonPlanInfo = "") {
+TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx, const TString commonPlanInfo = "", const TString& queryStats = "") {
     NJsonWriter::TBuf writer;
     writer.SetIndentSpaces(2);
 
@@ -2266,6 +2266,15 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NO
     writer.BeginObject();
     writer.WriteKey("Node Type").WriteString("Query");
     writer.WriteKey("PlanNodeType").WriteString("Query");
+
+    if (queryStats) {
+        NJson::TJsonValue queryStatsJson;
+        NJson::ReadJsonTree(queryStats, &queryStatsJson, true);
+
+        writer.WriteKey("Stats");
+        writer.WriteJsonValue(&queryStatsJson);
+    }
+
     writer.WriteKey("Plans");
     writer.BeginList();
 
@@ -2705,7 +2714,27 @@ TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats) {
             txPlans.push_back(txPlan);
         }
     }
-    return SerializeTxPlans(txPlans, TIntrusivePtr<NOpt::TKqpOptimizeContext>());
+
+    NJsonWriter::TBuf writer;
+    writer.BeginObject();
+
+    if (queryStats.HasCompilation()) {
+        const auto& compilation = queryStats.GetCompilation();
+
+        writer.WriteKey("Compilation");
+        writer.BeginObject();
+        writer.WriteKey("FromCache").WriteBool(compilation.GetFromCache());
+        writer.WriteKey("DurationUs").WriteLongLong(compilation.GetDurationUs());
+        writer.WriteKey("CpuTimeUs").WriteLongLong(compilation.GetCpuTimeUs());
+        writer.EndObject();
+    }
+
+    writer.WriteKey("ProcessCpuTimeUs").WriteLongLong(queryStats.GetWorkerCpuTimeUs());
+    writer.WriteKey("TotalDurationUs").WriteLongLong(queryStats.GetDurationUs());
+    writer.WriteKey("QueuedTimeUs").WriteLongLong(queryStats.GetQueuedTimeUs());
+    writer.EndObject();
+
+    return SerializeTxPlans(txPlans, TIntrusivePtr<NOpt::TKqpOptimizeContext>(), "", writer.Str());
 }
 
 TString SerializeScriptPlan(const TVector<const TString>& queryPlans) {

@@ -24,11 +24,43 @@
  *
  * SPDX-License-Identifier: MIT
  */
-#ifndef HEADER_CARES_STRDUP_H
-#define HEADER_CARES_STRDUP_H
+#ifndef __ARES_STR_H
+#define __ARES_STR_H
 
 #include "ares_setup.h"
+#include "ares.h"
 
-extern char *ares_strdup(const char *s1);
+char         *ares_strdup(const char *s1);
 
-#endif /* HEADER_CARES_STRDUP_H */
+size_t        ares_strlen(const char *str);
+
+/*! Copy string from source to destination with destination buffer size
+ *  provided.  The destination is guaranteed to be null terminated, if the
+ *  provided buffer isn't large enough, only those bytes from the source that
+ *  will fit will be copied.
+ *
+ *  \param[out] dest       Destination buffer
+ *  \param[in]  src        Source to copy
+ *  \param[in]  dest_size  Size of destination buffer
+ *  \return String length.  Will be at most dest_size-1
+ */
+size_t        ares_strcpy(char *dest, const char *src, size_t dest_size);
+
+ares_bool_t   ares_str_isnum(const char *str);
+
+void          ares__str_ltrim(char *str);
+void          ares__str_rtrim(char *str);
+void          ares__str_trim(char *str);
+
+unsigned char ares__tolower(unsigned char c);
+ares_bool_t   ares__memeq_ci(const unsigned char *ptr, const unsigned char *val,
+                             size_t len);
+
+ares_bool_t   ares__isspace(int ch);
+ares_bool_t   ares__isprint(int ch);
+ares_bool_t   ares__is_hostnamech(int ch);
+
+ares_bool_t   ares__is_hostname(const char *str);
+
+
+#endif /* __ARES_STR_H */

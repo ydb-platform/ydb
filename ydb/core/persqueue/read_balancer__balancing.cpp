@@ -65,6 +65,7 @@ bool TPartition::Reset() {
     bool result = IsInactive();
 
     ScaleAwareSDK = false;
+    StartedReadingFromEndOffset = false;
     ReadingFinished = false;
     Commited = false;
     ++Cookie;

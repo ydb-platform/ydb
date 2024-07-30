@@ -20,9 +20,9 @@ void TBalancer::RenderApp(TStringStream& str) const {
             return TStringBuilder() << consumerAnchor << "_P" << partitionId;
         };
 
-        TAG(TH3) { str << "Families"; }
         DIV_CLASS_ID("tab-pane fade", consumerAnchor) {
             TABLE_CLASS("table") {
+                CAPTION() { str << "Families"; }
                 TABLEHEAD() {
                     TABLER() {
                         TABLEH() { str << "Id"; }
@@ -49,19 +49,20 @@ void TBalancer::RenderApp(TStringStream& str) const {
                 }
             }
 
-            TAG(TH3) { str << "Partitions"; }
+            size_t free = 0;
+            size_t finished = 0;
+            size_t read = 0;
+            size_t ready = 0;
+
             TABLE_CLASS("table") {
+                CAPTION() { str << "Partitions"; }
                 TABLEHEAD() {
                     TABLER() {
                         TABLEH() { str << "Id"; }
                         TABLEH() { str << "Family"; }
                         TABLEH() { str << "Status"; };
                         TABLEH() { str << "Parents"; }
-                        TABLEH() { str << "Commited"; }
-                        TABLEH() { str << "Reading finished"; }
-                        TABLEH() { str << "Scale aware SDK"; }
-                        TABLEH() { str << "Read from end"; }
-                        TABLEH() { str << "Iteration"; }
+                        TABLEH() { str << "Description"; }
                         TABLEH() { str << "P Generation"; }
                         TABLEH() { str << "P Cookie"; }
                     }
@@ -71,12 +72,6 @@ void TBalancer::RenderApp(TStringStream& str) const {
                             const auto* family = consumer->FindFamily(partitionId);
                             const auto* node = consumer->GetPartitionGraph().GetPartition(partitionId);
                             TString style = node && node->Children.empty() ? "text-success" : "text-muted";
-                            TString status = "Free";
-                            if (family) {
-                                status = partition.IsInactive() ? "Finished" : "Read";
-                            } else if (consumer->IsReadable(partitionId)) {
-                                status = "Ready";
-                            }
 
                             TABLER() {
                                 TABLED() { DIV_CLASS_ID(style, partitionAnchor(partitionId)) { str << partitionId; } }
@@ -85,7 +80,23 @@ void TBalancer::RenderApp(TStringStream& str) const {
                                         HREF("#" + familyAnchor(family->Id)) { str << family->Id; }
                                     }
                                 }
-                                TABLED() { str << status; }
+                                TABLED() {
+                                    if (family) {
+                                        if (partition.IsInactive()) {
+                                            str << "Finished";
+                                            ++finished;
+                                        } else {
+                                            str << "Read";
+                                            ++read;
+                                        }
+                                    } else if (consumer->IsReadable(partitionId)) {
+                                        str << "Ready";
+                                        ++ready;
+                                    } else {
+                                        str << "Free";
+                                        ++free;
+                                    }
+                                }
                                 TABLED() {
                                     if (node) {
                                         for (auto* parent : node->Parents) {
@@ -96,11 +107,21 @@ void TBalancer::RenderApp(TStringStream& str) const {
                                         str << "error: not found";
                                     }
                                 }
-                                TABLED() { str << partition.Commited; }
-                                TABLED() { str << partition.ReadingFinished; }
-                                TABLED() { str << partition.ScaleAwareSDK; }
-                                TABLED() { str << partition.StartedReadingFromEndOffset; }
-                                TABLED() { str << partition.Iteration; }
+                                TABLED() {
+                                    if (partition.Commited) {
+                                        str << "commited";
+                                    } else if (partition.ReadingFinished) {
+                                        if (partition.ScaleAwareSDK) {
+                                            str << "reading child";
+                                        } else if (partition.StartedReadingFromEndOffset) {
+                                            str << "finished";
+                                        } else {
+                                            str << "scheduled. iteration: " << partition.Iteration;
+                                        }
+                                    } else if (partition.Iteration) {
+                                        str << "iteration: " << partition.Iteration;
+                                    }
+                                }
                                 TABLED() { str << partition.PartitionGeneration; }
                                 TABLED() { str << partition.PartitionCookie; }
                             }
@@ -108,38 +129,32 @@ void TBalancer::RenderApp(TStringStream& str) const {
                     }
                 }
             }
-/*
-            TABLE_SORTABLE_CLASS("table") {
-                TABLEHEAD() {
-                    TABLER() {
-                        TABLEH() { str << "session"; }
-                        TABLEH() { str << "suspended partitions"; }
-                        TABLEH() { str << "active partitions"; }
-                        TABLEH() { str << "inactive partitions"; }
-                        TABLEH() { str << "total partitions"; }
-                    }
-                }
+
+            TABLE_CLASS("table") {
+                CAPTION() { str << "Statistics"; }
                 TABLEBODY() {
-
-                    for (auto& session : balancerStatistcs.Sessions) {
-                        TABLER() {
-                            TABLED() { str << session.Session; }
-                            TABLED() { str << session.SuspendedPartitionCount; }
-                            TABLED() { str << session.ActivePartitionCount; }
-                            TABLED() { str << session.InactivePartitionCount; }
-                            TABLED() { str << session.TotalPartitionCount; }
-                        }
-                    }
-
                     TABLER() {
-                        TABLED() { str << "FREE"; }
-                        TABLED() { str << 0; }
-                        TABLED() { str << balancerStatistcs.FreePartitions; }
-                        TABLED() { str << balancerStatistcs.FreePartitions; }
+                        TABLED() { str << "Free"; }
+                        TABLED() { str << free; }
+                    }
+                    TABLER() {
+                        TABLED() { str << "Ready"; }
+                        TABLED() { str << ready; }
+                    }
+                    TABLER() {
+                        TABLED() { str << "Read"; }
+                        TABLED() { str << read; }
+                    }
+                    TABLER() {
+                        TABLED() { str << "Finished"; }
+                        TABLED() { str << finished; }
+                    }
+                    TABLER() {
+                        TABLED() { STRONG() { str << "Total"; }}
+                        TABLED() { str << (finished + read + ready + free); }
                     }
                 }
             }
-        */
         }
     }
 }

@@ -21,12 +21,6 @@ static constexpr TDuration ACL_SUCCESS_RETRY_TIMEOUT = TDuration::Seconds(30);
 static constexpr TDuration ACL_ERROR_RETRY_TIMEOUT = TDuration::Seconds(5);
 static constexpr TDuration ACL_EXPIRATION_TIMEOUT = TDuration::Minutes(5);
 
-NKikimrPQ::EConsumerScalingSupport DefaultScalingSupport() {
-    // TODO fix me after support of paremeter ConsumerScalingSupport
-    return AppData()->FeatureFlags.GetEnableTopicSplitMerge() ? NKikimrPQ::EConsumerScalingSupport::FULL_SUPPORT
-                                                              : NKikimrPQ::EConsumerScalingSupport::NOT_SUPPORT;
-}
-
 TString EncodeAnchor(const TString& v) {
     auto r = Base64Encode(v);
     while (r.EndsWith('=')) {
@@ -197,25 +191,50 @@ TString TPersQueueReadBalancer::GenerateStat() {
 
     TStringStream str;
     HTML(str) {
-        TAG(TH2) {str << "PersQueueReadBalancer Tablet";}
-        TAG(TH3) {str << "Topic: " << Topic;}
-        TAG(TH3) {str << "Generation: " << Generation;}
-        TAG(TH3) {str << "Inited: " << Inited;}
-        TAG(TH3) {str << "ActivePipes: " << balancerStatistcs.Sessions.size();}
+        str << "<style>"
+            << " .properties { border-bottom-style: solid; border-top-style: solid; border-width: 1px; border-color: darkgrey; } "
+            << " .properties>tr { padding-left: 10px; padding-right: 10px; } "
+            << "</style>";
+
+        TAG(TH3) {str << "PersQueueReadBalancer " << TabletID() << "(" << Topic << ")";}
+
+        auto property = [&](const TString& name, const auto value) {
+            TABLER() {
+                TABLED() { str << name;}
+                TABLED() { str << value; }
+            }
+        };
+
+        TABLE_CLASS("properties") {
+            CAPTION() { str << "Tablet info"; }
+            TABLEBODY() {
+                property("Topic", Topic);
+                property("Initialized", Inited ? "yes" : "no");
+                property("SchemeShard", TStringBuilder() << "<a href=\"?TabletID=" << SchemeShardId << "\">" << SchemeShardId << "</a>");
+                property("Generation", Generation);
+            }
+        }
+
         if (Inited) {
-            TAG(TH3) {str << "Active partitions: " << NumActiveParts;}
-            TAG(TH3) {str << "[Total/Max/Avg]WriteSpeedSec: " << metrics.TotalAvgWriteSpeedPerSec << "/" << metrics.MaxAvgWriteSpeedPerSec << "/" << metrics.TotalAvgWriteSpeedPerSec / NumActiveParts;}
-            TAG(TH3) {str << "[Total/Max/Avg]WriteSpeedMin: " << metrics.TotalAvgWriteSpeedPerMin << "/" << metrics.MaxAvgWriteSpeedPerMin << "/" << metrics.TotalAvgWriteSpeedPerMin / NumActiveParts;}
-            TAG(TH3) {str << "[Total/Max/Avg]WriteSpeedHour: " << metrics.TotalAvgWriteSpeedPerHour << "/" << metrics.MaxAvgWriteSpeedPerHour << "/" << metrics.TotalAvgWriteSpeedPerHour / NumActiveParts;}
-            TAG(TH3) {str << "[Total/Max/Avg]WriteSpeedDay: " << metrics.TotalAvgWriteSpeedPerDay << "/" << metrics.MaxAvgWriteSpeedPerDay << "/" << metrics.TotalAvgWriteSpeedPerDay / NumActiveParts;}
-            TAG(TH3) {str << "TotalDataSize: " << AggregatedStats.TotalDataSize;}
-            TAG(TH3) {str << "ReserveSize: " << PartitionReserveSize();}
-            TAG(TH3) {str << "TotalUsedReserveSize: " << AggregatedStats.TotalUsedReserveSize;}
+            TABLE_CLASS("properties") {
+                CAPTION() { str << "Statistics"; }
+                TABLEBODY() {
+                    property("Active pipes", balancerStatistcs.Sessions.size());
+                    property("Active partitions", NumActiveParts);
+                    property("Total data size", AggregatedStats.TotalDataSize);
+                    property("Reserve size", PartitionReserveSize());
+                    property("Used reserve size", AggregatedStats.TotalUsedReserveSize);
+                    property("[Total/Max/Avg]WriteSpeedSec", TStringBuilder() << metrics.TotalAvgWriteSpeedPerSec << "/" << metrics.MaxAvgWriteSpeedPerSec << "/" << metrics.TotalAvgWriteSpeedPerSec / NumActiveParts);
+                    property("[Total/Max/Avg]WriteSpeedMin", TStringBuilder() << metrics.TotalAvgWriteSpeedPerMin << "/" << metrics.MaxAvgWriteSpeedPerMin << "/" << metrics.TotalAvgWriteSpeedPerMin / NumActiveParts);
+                    property("[Total/Max/Avg]WriteSpeedHour", TStringBuilder() << metrics.TotalAvgWriteSpeedPerHour << "/" << metrics.MaxAvgWriteSpeedPerHour << "/" << metrics.TotalAvgWriteSpeedPerHour / NumActiveParts);
+                    property("[Total/Max/Avg]WriteSpeedDay", TStringBuilder() << metrics.TotalAvgWriteSpeedPerDay << "/" << metrics.MaxAvgWriteSpeedPerDay << "/" << metrics.TotalAvgWriteSpeedPerDay / NumActiveParts);
+                }
+            }
         }
 
         UL_CLASS("nav nav-tabs") {
             LI_CLASS("active") {
-                str << "<a href=\"#main\" data-toggle=\"tab\">partitions</a>";
+                str << "<a href=\"#partitions\" data-toggle=\"tab\">Partitions</a>";
             }
             for (auto& consumer : balancerStatistcs.Consumers) {
                 LI() {
@@ -224,19 +243,23 @@ TString TPersQueueReadBalancer::GenerateStat() {
             }
         }
         DIV_CLASS("tab-content") {
-            DIV_CLASS_ID("tab-pane fade in active", "main") {
-                TABLE_SORTABLE_CLASS("table") {
+            DIV_CLASS_ID("tab-pane fade in active", "partitions") {
+                TABLE_CLASS("table") {
                     TABLEHEAD() {
                         TABLER() {
                             TABLEH() {str << "partition";}
                             TABLEH() { str << "tabletId";}
+                            TABLEH() { str << "Size";}
                         }
                     }
                     TABLEBODY() {
-                        for (auto& p : PartitionsInfo) {
+                        for (auto& [partitionId, partitionInfo] : PartitionsInfo) {
+                            const auto& stats = AggregatedStats.Stats[partitionId];
+
                             TABLER() {
-                                TABLED() { str << p.first;}
-                                TABLED() { HREF(TStringBuilder() << "?TabletID=" << p.second.TabletId) { str << p.second.TabletId; } }
+                                TABLED() { str << partitionId;}
+                                TABLED() { HREF(TStringBuilder() << "?TabletID=" << partitionInfo.TabletId) { str << partitionInfo.TabletId; } }
+                                TABLED() { str << stats.DataSize;}
                             }
                         }
                     }

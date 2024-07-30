@@ -55,7 +55,7 @@ public:
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx) {
-        Client = std::make_shared<NYdb::NTable::TTableClient>(std::move(Location.GetTableClient(Request, Location)));
+        Client = std::make_shared<NYdb::NTable::TTableClient>(std::move(Location.GetTableClient(Request, NYdb::NTable::TClientSettings().Database(Location.RootDomain), TMVP::MetaDatabaseTokenName)));
 
         NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
         NActors::TActorId actorId = ctx.SelfID;

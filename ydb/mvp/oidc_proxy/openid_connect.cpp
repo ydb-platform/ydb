@@ -24,12 +24,12 @@ struct TRedirectUrlParameters {
     TStringBuf State;
     TStringBuf Scheme;
     TStringBuf Host;
-    NMVP::EAccessServiceType AccessServiceType;
+    NMvp::EAccessServiceType AccessServiceType;
     TStringBuf AuthEndpoint;
 };
 
 bool TryAppendAuthEndpointFromDetailsYandexProfile(const TRedirectUrlParameters& parameters, TStringBuilder& locationHeaderValue) {
-    if (parameters.AccessServiceType != NMVP::EAccessServiceType::YandexV2) {
+    if (parameters.AccessServiceType != NMvp::yandex_v2) {
         return false;
     }
     const auto& eventDetails = parameters.SessionServerCheckDetails;

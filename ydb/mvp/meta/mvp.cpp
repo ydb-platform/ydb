@@ -62,7 +62,7 @@ int TMVP::Init() {
     ActorSystem.Register(NActors::CreateProcStatCollector(TDuration::Seconds(5), AppData.MetricRegistry = std::make_shared<NMonitoring::TMetricRegistry>()));
 
     HttpProxyId = ActorSystem.Register(NHttp::CreateHttpProxy(AppData.MetricRegistry));
-    ActorSystem.Register(AppData.Tokenator = TMvpTokenator::CreateTokenator(TokensConfig, HttpProxyId, AccessServiceType));
+    ActorSystem.Register(AppData.Tokenator = TMvpTokenator::CreateTokenator(TokensConfig, HttpProxyId));
 
     if (Http) {
         auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(HttpPort, FQDNHostName());
@@ -133,6 +133,7 @@ TString TMVP::GetAppropriateEndpoint(const NHttp::THttpIncomingRequestPtr& req) 
 }
 
 NMvp::TTokensConfig TMVP::TokensConfig;
+TString TMVP::MetaDatabaseTokenName;
 
 TMVP::TMVP(int argc, char** argv)
     : ActorSystemStoppingLock()
@@ -174,7 +175,7 @@ void TMVP::TryGetMetaOptionsFromConfig(const YAML::Node& config) {
     MetaApiEndpoint = meta["meta_api_endpoint"].as<std::string>("");
     MetaDatabase = meta["meta_database"].as<std::string>("");
     MetaCache = meta["meta_cache"].as<bool>(false);
-    MetaDatabaseTokenName = meta["meta_database_token_name"].as<std::string>("");
+    TMVP::MetaDatabaseTokenName = meta["meta_database_token_name"].as<std::string>("");
 }
 
 void TMVP::TryGetGenericOptionsFromConfig(
@@ -184,7 +185,8 @@ void TMVP::TryGetGenericOptionsFromConfig(
     TString& caCertificateFile,
     TString& sslCertificateFile,
     bool& useStderr,
-    bool& mlock
+    bool& mlock,
+    NMvp::EAccessServiceType& accessServiceType
 ) {
     if (!config["generic"]) {
         return;
@@ -211,7 +213,10 @@ void TMVP::TryGetGenericOptionsFromConfig(
         ydbTokenFile = auth["token_file"].as<std::string>("");
 
         if (auth["access_service_type"]) {
-            AccessServiceType = GetAccessServiceTypeFromString(auth["access_service_type"].as<std::string>(""));
+            auto accessServiceTypeStr = TString(auth["access_service_type"].as<std::string>(""));
+            if (!NMvp::EAccessServiceType_Parse(to_lower(accessServiceTypeStr), &accessServiceType)) {
+                ythrow yexception() << "Unknown access_service_type value: " << accessServiceTypeStr;
+            }
         }
     }
 
@@ -243,6 +248,8 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
     TString defaultMetaDatabase = "/Root";
     TString defaultMetaApiEndpoint = "grpc://meta.ydb.yandex.net:2135";
 
+    NMvp::EAccessServiceType accessServiceType = NMvp::EAccessServiceType::yandex_v2;
+
     opts.AddLongOption("stderr", "Redirect log to stderr").NoArgument().SetFlag(&useStderr);
     opts.AddLongOption("mlock", "Lock resident memory").NoArgument().SetFlag(&mlock);
 
@@ -265,7 +272,8 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
                 caCertificateFile,
                 sslCertificateFile,
                 useStderr,
-                mlock
+                mlock,
+                accessServiceType
             );
         } catch (const YAML::Exception& e) {
             std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
@@ -308,6 +316,9 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
                 TYdbLocation::UserToken = tokens.GetStaffApiUserTokenInfo().GetToken();
             } else if (tokens.HasStaffApiUserToken()) {
                 TYdbLocation::UserToken = tokens.GetStaffApiUserToken();
+            }
+            if (!tokens.HasAccessServiceType()) {
+                tokens.SetAccessServiceType(accessServiceType);
             }
             TokensConfig = tokens;
         } else {

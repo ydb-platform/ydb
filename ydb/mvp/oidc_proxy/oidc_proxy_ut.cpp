@@ -23,7 +23,7 @@ void EatWholeString(TIntrusivePtr<HttpType>& request, const TString& data) {
 }
 
 Y_UNIT_TEST_SUITE(Mvp) {
-    void OpenIdConnectRequestWithIamTokenTest(NMVP::EAccessServiceType profile) {
+    void OpenIdConnectRequestWithIamTokenTest(NMvp::EAccessServiceType profile) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -62,14 +62,14 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OpenIdConnectRequestWithIamTokenYandex) {
-        OpenIdConnectRequestWithIamTokenTest(NMVP::EAccessServiceType::YandexV2);
+        OpenIdConnectRequestWithIamTokenTest(NMvp::yandex_v2);
     }
 
     Y_UNIT_TEST(OpenIdConnectRequestWithIamTokenNebius) {
-        OpenIdConnectRequestWithIamTokenTest(NMVP::EAccessServiceType::NebiusV1);
+        OpenIdConnectRequestWithIamTokenTest(NMvp::nebius_v1);
     }
 
-    void OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAccessServiceType profile) {
+    void OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMvp::EAccessServiceType profile) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -115,14 +115,14 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OpenIdConnectNonAuthorizeRequestWithOptionMethodYandex) {
-        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAccessServiceType::YandexV2);
+        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMvp::yandex_v2);
     }
 
     Y_UNIT_TEST(OpenIdConnectNonAuthorizeRequestWithOptionMethodNebius) {
-        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAccessServiceType::NebiusV1);
+        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMvp::nebius_v1);
     }
 
-    void OpenIdConnectSessionServiceCheckValidCookieTest(NMVP::EAccessServiceType profile) {
+    void OpenIdConnectSessionServiceCheckValidCookieTest(NMvp::EAccessServiceType profile) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
@@ -166,11 +166,11 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OpenIdConnectSessionServiceCheckValidCookieYandex) {
-        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAccessServiceType::YandexV2);
+        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMvp::yandex_v2);
     }
 
     Y_UNIT_TEST(OpenIdConnectSessionServiceCheckValidCookieNebius) {
-        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMVP::EAccessServiceType::NebiusV1);
+        OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMvp::nebius_v1);
     }
 
     Y_UNIT_TEST(OpenIdConnectProxyOnHttpsHost) {
@@ -184,7 +184,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TOpenIdConnectSettings settings {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
             .AllowedProxyHosts = {allowedProxyHost},
-            .AccessServiceType = NMVP::EAccessServiceType::YandexV2
+            .AccessServiceType = NMvp::yandex_v2
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
@@ -247,7 +247,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
             .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
             .AuthorizationServerAddress = "https://auth.test.net",
             .AllowedProxyHosts = {allowedProxyHost},
-            .AccessServiceType = NMVP::EAccessServiceType::NebiusV1
+            .AccessServiceType = NMvp::nebius_v1
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();

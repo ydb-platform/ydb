@@ -22,7 +22,7 @@ class TMvpTokenator : public NActors::TActorBootstrapped<TMvpTokenator> {
 public:
     using TBase = NActors::TActorBootstrapped<TMvpTokenator>;
 
-    static TMvpTokenator* CreateTokenator(const NMvp::TTokensConfig& tokensConfig, const NActors::TActorId& httpProxy, const NMVP::EAccessServiceType accessServiceType = NMVP::EAccessServiceType::YandexV2);
+    static TMvpTokenator* CreateTokenator(const NMvp::TTokensConfig& tokensConfig, const NActors::TActorId& httpProxy);
     TString GetToken(const TString& name);
 
 protected:
@@ -71,7 +71,7 @@ protected:
         using TEvUpdateStaticCredentialsToken = TEvUpdateToken<EvUpdateStaticCredentialsToken, Ydb::Auth::LoginResponse>;
     };
 
-    TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TActorId& httpProxy, EAccessServiceType accessServiceType);
+    TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TActorId& httpProxy);
     void Bootstrap();
     void HandlePeriodic();
     void Handle(TEvPrivate::TEvRefreshToken::TPtr event);
@@ -105,6 +105,7 @@ protected:
         THashMap<TString, NMvp::TJwtInfo> JwtTokenConfigs;
         THashMap<TString, NMvp::TOAuthInfo> OauthTokenConfigs;
         THashMap<TString, NMvp::TStaticCredentialsInfo> StaticCredentialsConfigs;
+        NMvp::EAccessServiceType AccessServiceType;
 
         const NMvp::TMetadataTokenInfo* GetMetadataTokenConfig(const TString& name);
         const NMvp::TJwtInfo* GetJwtTokenConfig(const TString& name);
@@ -128,7 +129,6 @@ protected:
     TTokenConfigs TokenConfigs;
     TSpinLock TokensLock;
     NActors::TActorId HttpProxy;
-    const NMVP::EAccessServiceType AccessServiceType;
     THashMap<NHttp::THttpRequest*, TString> HttpRequestNames;
 
     template <typename TGRpcService>

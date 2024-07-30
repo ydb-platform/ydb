@@ -11,10 +11,10 @@ TProtectedPageHandler::TProtectedPageHandler(const NActors::TActorId& httpProxyI
 
 void TProtectedPageHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx) {
     switch (Settings.AccessServiceType) {
-        case NMVP::EAccessServiceType::YandexV2:
+        case NMvp::yandex_v2:
             ctx.Register(new THandlerSessionServiceCheckYandex(event->Sender, event->Get()->Request, HttpProxyId, Settings));
             break;
-        case NMVP::EAccessServiceType::NebiusV1:
+        case NMvp::nebius_v1:
             ctx.Register(new THandlerSessionServiceCheckNebius(event->Sender, event->Get()->Request, HttpProxyId, Settings));
             break;
     }

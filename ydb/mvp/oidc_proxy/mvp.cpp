@@ -74,7 +74,7 @@ int TMVP::Init() {
     ActorSystem.Register(NActors::CreateProcStatCollector(TDuration::Seconds(5), AppData.MetricRegistry = std::make_shared<NMonitoring::TMetricRegistry>()));
 
     BaseHttpProxyId = ActorSystem.Register(NHttp::CreateHttpProxy(AppData.MetricRegistry));
-    ActorSystem.Register(AppData.Tokenator = TMvpTokenator::CreateTokenator(TokensConfig, BaseHttpProxyId, OpenIdConnectSettings.AccessServiceType));
+    ActorSystem.Register(AppData.Tokenator = TMvpTokenator::CreateTokenator(TokensConfig, BaseHttpProxyId));
 
     HttpProxyId = ActorSystem.Register(NHttp::CreateHttpCache(BaseHttpProxyId, GetCachePolicy));
 
@@ -289,7 +289,10 @@ void TMVP::TryGetGenericOptionsFromConfig(
     }
 
     if (generic["access_service_type"]) {
-        OpenIdConnectSettings.AccessServiceType = GetAccessServiceTypeFromString(generic["access_service_type"].as<std::string>(""));
+        auto accessServiceTypeStr = TString(generic["access_service_type"].as<std::string>(""));
+        if (!NMvp::EAccessServiceType_Parse(to_lower(accessServiceTypeStr), &OpenIdConnectSettings.AccessServiceType)) {
+            ythrow yexception() << "Unknown access_service_type value: " << accessServiceTypeStr;
+        }
     }
 }
 
@@ -357,6 +360,9 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
                 TYdbLocation::UserToken = tokens.GetStaffApiUserTokenInfo().GetToken();
             } else if (tokens.HasStaffApiUserToken()) {
                 TYdbLocation::UserToken = tokens.GetStaffApiUserToken();
+            }
+            if (!tokens.HasAccessServiceType()) {
+                tokens.SetAccessServiceType(OpenIdConnectSettings.AccessServiceType);
             }
             TokensConfig = tokens;
         } else {

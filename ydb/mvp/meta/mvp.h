@@ -37,8 +37,7 @@ public:
     TString MetaApiEndpoint;
     TString MetaDatabase;
     bool MetaCache = false;
-    TString MetaDatabaseTokenName;
-    EAccessServiceType AccessServiceType = EAccessServiceType::YandexV2;
+    static TString MetaDatabaseTokenName;
 
     TMVP(int argc, char** argv);
     int Init();
@@ -57,7 +56,8 @@ public:
         TString& caCertificateFile,
         TString& sslCertificateFile,
         bool& useStderr,
-        bool& mlock);
+        bool& mlock,
+        NMvp::EAccessServiceType& accessServiceType);
 
     TMVPAppData AppData;
     TIntrusivePtr<NActors::NLog::TSettings> LoggerSettings;

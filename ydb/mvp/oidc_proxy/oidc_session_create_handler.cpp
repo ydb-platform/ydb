@@ -14,10 +14,10 @@ void TSessionCreateHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::
     NHttp::THttpIncomingRequestPtr request = event->Get()->Request;
     if (request->Method == "GET") {
         switch (Settings.AccessServiceType) {
-            case NMVP::EAccessServiceType::YandexV2:
+            case NMvp::yandex_v2:
                 ctx.Register(new THandlerSessionCreateYandex(event->Sender, request, HttpProxyId, Settings));
                 return;
-            case NMVP::EAccessServiceType::NebiusV1:
+            case NMvp::nebius_v1:
                 ctx.Register(new THandlerSessionCreateNebius(event->Sender, request, HttpProxyId, Settings));
                 return;
         }

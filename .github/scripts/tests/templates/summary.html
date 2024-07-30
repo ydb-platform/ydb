@@ -94,10 +94,10 @@
             border-color: #555 transparent transparent transparent; /* Arrow color */
         }
 
-        .svg-icon:hover .tooltip, .svg-icon:focus .tooltip {
-            visibility: visible;
-            opacity: 1;
-        }
+        .tooltip.visible {
+        visibility: visible;
+        opacity: 1;
+         }
 
         button.copy {
             float: right;
@@ -130,7 +130,7 @@
             const pieces = /(.+)\/([^$]+)$/.exec(full_name);
 
             if (!pieces) {
-                console.error("Unable to split path/test for %o", full_name);
+                console.error("Unable to split path/test name from %o", full_name);
                 return;
             }
             let [path, testName] = [pieces[1], pieces[2]];
@@ -153,27 +153,63 @@
                 }
             );
         }
-        function copyOnPress(event) {
-            event.preventDefault();
-            copyTestNameToClipboard(event.target.previousElementSibling.textContent)
-        }
-        document.addEventListener("DOMContentLoaded", function() {
-            const els = document.getElementsByClassName("copy");
-            for (let i = 0; i < els.length; i++) {
-                els[i].addEventListener('click', copyOnPress);
+    
+        let lastOpenedTooltip = null;
+    
+        function toggleTooltip(event) {
+            event.stopPropagation();
+            const tooltip =
+    
+    event.currentTarget.querySelector('.tooltip');
+    
+            if (tooltip.classList.contains('visible')) {
+                tooltip.classList.remove('visible');
+                lastOpenedTooltip = null;
+            } else {
+                hideTooltips();
+                tooltip.classList.add('visible');
+                lastOpenedTooltip = tooltip;
             }
-            const headers = document.getElementsByClassName("collapsible-header");
-            for (let i = 0; i < headers.length; i++) {
-                headers[i].addEventListener('click', function() {
-
-    const content = this.nextElementSibling;
+        }
+    
+        function hideTooltips() {
+            if (lastOpenedTooltip) {
+                lastOpenedTooltip.classList.remove('visible');
+                lastOpenedTooltip = null;
+            }
+        }
+    
+        document.addEventListener("DOMContentLoaded", function() {
+            document.addEventListener('click', function(event) {
+                if (!event.target.closest('.svg-icon')) {
+                    hideTooltips();
+                }
+            });
+    
+            const svgIcons = document.querySelectorAll('.svg-icon');
+            svgIcons.forEach(icon => {
+                icon.addEventListener('click', toggleTooltip);
+            });
+    
+            const copyButtons = document.querySelectorAll(".copy");
+            copyButtons.forEach(button => {
+                button.addEventListener('click', function(event) {
+                    event.preventDefault();
+                    copyTestNameToClipboard(event.target.previousElementSibling.textContent);
+                });
+            });
+    
+            const headers = document.querySelectorAll(".collapsible-header");
+            headers.forEach(header => {
+                header.addEventListener('click', function() {
+                    const content = this.nextElementSibling;
                     if (content.classList.contains('active')) {
                         content.classList.remove('active');
                     } else {
                         content.classList.add('active');
                     }
                 });
-            }
+            });
         });
     </script>
 </head>
@@ -227,8 +263,9 @@
                 </span>
             {% endfor %}
         </td> 
-        {% elif status.name == 'FAIL' %}
-       
+        {% elif (status.name == 'FAIL' and  history) %}
+        <td></td>
+        {% elif (status.name == 'FAIL') %}
         {% endif %}
         <td><span title="{{ t.elapsed }}s">{{ t.elapsed_display }}</span></td>
         <td>

@@ -699,7 +699,7 @@ public:
             LocalSessions->AttachQueryText(sessionInfo, ev->Get()->GetQuery());
         }
 
-        if (!TryGetPoolInfoFromCache(ev, requestId)) {
+        if (!TryFillPoolInfoFromCache(ev, requestId)) {
             return;
         }
 
@@ -1560,7 +1560,7 @@ private:
         }
     }
 
-    bool TryGetPoolInfoFromCache(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 requestId) {
+    bool TryFillPoolInfoFromCache(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 requestId) {
         if (!FeatureFlags.GetEnableResourcePools()) {
             ev->Get()->SetPoolId("");
             return true;

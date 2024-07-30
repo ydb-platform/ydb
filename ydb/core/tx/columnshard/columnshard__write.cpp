@@ -19,24 +19,25 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
             Stats.GetTabletCounters().IncCounter(COUNTER_OUT_OF_SPACE);
             break;
         case EOverloadStatus::InsertTable:
+            // TODO: Move all IncCounter's below under OnWriteOverload*
             Stats.GetTabletCounters().IncCounter(COUNTER_WRITE_OVERLOAD);
-            Stats.GetCSCounters().OnOverloadInsertTable(writeData.GetSize());
+            Stats.GetCSCounters().OnWriteOverloadInsertTable(writeData.GetSize());
             break;
         case EOverloadStatus::OverloadMetadata:
             Stats.GetTabletCounters().IncCounter(COUNTER_WRITE_OVERLOAD);
-            Stats.GetCSCounters().OnOverloadMetadata(writeData.GetSize());
+            Stats.GetCSCounters().OnWriteOverloadMetadata(writeData.GetSize());
             break;
         case EOverloadStatus::ShardTxInFly:
             Stats.GetTabletCounters().IncCounter(COUNTER_WRITE_OVERLOAD);
-            Stats.GetCSCounters().OnOverloadShardTx(writeData.GetSize());
+            Stats.GetCSCounters().OnWriteOverloadShardTx(writeData.GetSize());
             break;
         case EOverloadStatus::ShardWritesInFly:
             Stats.GetTabletCounters().IncCounter(COUNTER_WRITE_OVERLOAD);
-            Stats.GetCSCounters().OnOverloadShardWrites(writeData.GetSize());
+            Stats.GetCSCounters().OnWriteOverloadShardWrites(writeData.GetSize());
             break;
         case EOverloadStatus::ShardWritesSizeInFly:
             Stats.GetTabletCounters().IncCounter(COUNTER_WRITE_OVERLOAD);
-            Stats.GetCSCounters().OnOverloadShardWritesSize(writeData.GetSize());
+            Stats.GetCSCounters().OnWriteOverloadShardWritesSize(writeData.GetSize());
             break;
         case EOverloadStatus::None:
             Y_ABORT("invalid function usage");

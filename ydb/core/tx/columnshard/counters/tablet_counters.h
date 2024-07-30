@@ -68,6 +68,17 @@ public:
         return TabletCounters.Percentile()[counter];
     }
 
+    void OnWriteSuccess(const ui64 blobsWritten, const ui64 bytesWritten) const {
+        IncCounter(NColumnShard::COUNTER_UPSERT_BLOBS_WRITTEN, blobsWritten);
+        IncCounter(NColumnShard::COUNTER_UPSERT_BYTES_WRITTEN, bytesWritten);
+        //    self.Stats.GetTabletCounters().IncCounter(NColumnShard::COUNTER_RAW_BYTES_UPSERTED, insertedBytes);
+        IncCounter(NColumnShard::COUNTER_WRITE_SUCCESS);
+    }
+
+    void OnWriteFailure() const {
+        IncCounter(NColumnShard::COUNTER_WRITE_FAIL);
+    }
+
     void FillStats(::NKikimrTableStats::TTableStats& output) const {
         output.SetRowUpdates(GetValue(COUNTER_WRITE_SUCCESS));
         output.SetRowDeletes(0); // manual deletes are not supported

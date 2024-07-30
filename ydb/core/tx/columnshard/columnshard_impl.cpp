@@ -68,26 +68,16 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , ProgressTxController(std::make_unique<TTxController>(*this))
     , StoragesManager(std::make_shared<NOlap::TStoragesManager>(*this))
     , DataLocksManager(std::make_shared<NOlap::NDataLocks::TManager>())
-    , PeriodicWakeupActivationPeriod(
-          NYDBTest::TControllers::GetColumnShardController()->GetPeriodicWakeupActivationPeriod(
-              TSettings::DefaultPeriodicWakeupActivationPeriod
-          )
-      )
-    , StatsReportInterval(NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval(
-          TSettings::DefaultStatsReportInterval
-      ))
-    , TabletCountersHolder(new TProtobufTabletCounters<
-                           ESimpleCounters_descriptor,
-                           ECumulativeCounters_descriptor,
-                           EPercentileCounters_descriptor,
-                           ETxTypes_descriptor>())
+    , PeriodicWakeupActivationPeriod(NYDBTest::TControllers::GetColumnShardController()->GetPeriodicWakeupActivationPeriod(
+          TSettings::DefaultPeriodicWakeupActivationPeriod))
+    , StatsReportInterval(NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval(TSettings::DefaultStatsReportInterval))
+    , TabletCountersHolder(new TProtobufTabletCounters<ESimpleCounters_descriptor, ECumulativeCounters_descriptor,
+          EPercentileCounters_descriptor, ETxTypes_descriptor>())
     , Stats(*TabletCountersHolder)
     , InFlightReadsTracker(StoragesManager)
     , TablesManager(StoragesManager, info->TabletID)
     , Subscribers(std::make_shared<NSubscriber::TManager>(*this))
-    , PipeClientCache(
-          NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig())
-      )
+    , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
     , InsertTable(std::make_unique<NOlap::TInsertTable>())
     , InsertTaskSubscription(NOlap::TInsertColumnEngineChanges::StaticTypeName(), Stats.GetSubscribeCounters())
     , CompactTaskSubscription(NOlap::TCompactColumnEngineChanges::StaticTypeName(), Stats.GetSubscribeCounters())

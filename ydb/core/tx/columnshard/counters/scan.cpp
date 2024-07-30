@@ -95,7 +95,7 @@ TScanCounters::TScanCounters(const TString& module)
             continue;
         }
         ScanDurationByStatus[(ui32)i] = TBase::GetHistogram("ScanDuration/" + ::ToString(i) + "/Milliseconds", NMonitoring::ExponentialHistogram(18, 2, 1));
-        ScansFinishedByStatus[(ui32)i] = TBase::GetDeriviative("ScansFinised/" + ::ToString(i));
+        ScansFinishedByStatus[(ui32)i] = TBase::GetDeriviative("ScansFinished/" + ::ToString(i));
         AFL_VERIFY(idx == (ui32)i);
         ++idx;
     }

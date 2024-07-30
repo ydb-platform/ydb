@@ -264,6 +264,7 @@ ui64 TPartition::MeteringDataSize(TInstant now) const {
     if (IsActive() || NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS == Config.GetMeteringMode()) {
         return UserDataSize();
     } else {
+        // We only add the amount of data that is blocked by an important consumer.
         ui64 size = 0;
         auto expirationTimestamp = now - TDuration::Seconds(Config.GetPartitionConfig().GetLifetimeSeconds()) - WAKE_TIMEOUT;
         for (size_t i = 1; i < DataKeysBody.size() && DataKeysBody[i].Timestamp < expirationTimestamp; ++i) {
@@ -281,7 +282,7 @@ ui64 TPartition::StorageSize(const TActorContext&) const {
     return std::max<ui64>(UserDataSize(), ReserveSize());
 }
 
-ui64 TPartition::UsedReserveSize(const TActorContext& ctx) const {
+ui64 TPartition::UsedReserveSize(const TActorContext&) const {
     return std::min<ui64>(UserDataSize(), ReserveSize());
 }
 

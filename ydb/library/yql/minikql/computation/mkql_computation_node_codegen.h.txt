@@ -1234,6 +1234,7 @@ private:
     const TCodegenContext& Ctx;
     std::unique_ptr<DIBuilder> DebugBuilder;
     DISubprogram* Subprogram;
+    Function* Func;
 };
 
 class DIScopeAnnotator final {

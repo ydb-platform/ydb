@@ -2595,11 +2595,25 @@ DISubprogramAnnotator::DISubprogramAnnotator(const TCodegenContext& ctx, Functio
     : Ctx(ctx)
     , DebugBuilder(std::make_unique<DIBuilder>(ctx.Codegen.GetModule()))
     , Subprogram(MakeDISubprogram(subprogramFunc->getName(), location))
+    , Func(subprogramFunc)
 {
     subprogramFunc->setSubprogram(Subprogram);
 }
 
 DISubprogramAnnotator::~DISubprogramAnnotator() {
+    { // necessary stub annotation of "CallInst"s
+        DIScopeAnnotator stubAnnotate(this);
+        for (BasicBlock& block : *Func) {
+            for (Instruction& inst : block) {
+                if (CallInst* callInst = dyn_cast_or_null<CallInst>(&inst)) {
+                    const auto& debugLoc = callInst->getDebugLoc();
+                    if (!debugLoc) {
+                        stubAnnotate(callInst);
+                    }
+                }
+            }
+        }
+    }
     DebugBuilder->finalizeSubprogram(Subprogram);
 }
 

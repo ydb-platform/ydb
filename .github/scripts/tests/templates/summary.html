@@ -9,7 +9,7 @@
             width: 100%;
         }
         h1 { 
-            font-size: 22px; 
+            font-size: 20px; 
         }
         th {
             text-transform: uppercase;
@@ -17,15 +17,23 @@
 
         th, td {
             padding: 5px;
-            min-width: 80px;
             word-break: break-word; /* Allow breaking long words */
-            font-size: 12px;
+            font-size: 14px;
+            min-width: 80px;
+        }
+        td.test_name{
+            min-width: 79vw;
+            max-width: 79vw;
+        }
+        td.test_name.with_history{
+            min-width: 70vw;
+            max-width: 70vw;
         }
 
         table {
             border-collapse: collapse;
             width: 100%;
-            min-width: 100vw; /* Minimum width equals viewport width */
+            left: 5;
         }
 
         span.test_status {
@@ -112,7 +120,7 @@
         table > tbody > tr > td:nth-child(2),
         table > tbody > tr > td:nth-child(3),
         table > tbody > tr > td:nth-child(4) {
-            text-align: center;
+            text-align: left;
         }
     
         .collapsible-content {
@@ -127,7 +135,7 @@
         .collapsible-content.active {
             position: relative;
             top: 0;
-            left: 0;
+            left: 5;
             height: auto;
         }
     
@@ -273,7 +281,11 @@
     <tbody>
     {% for t in tests[status] %}
     <tr>
-        <td>
+        {% if status.name == 'FAIL' %} 
+        <td class="test_name with_history">
+        {% else %} 
+        <td class="test_name">
+        {% endif %}
             <span>{{ t.full_name }}</span>
             {% if status.is_error %} 
             <button class="copy" title="Copy test filter to clipboard" >

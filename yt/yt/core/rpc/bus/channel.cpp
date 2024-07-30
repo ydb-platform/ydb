@@ -150,7 +150,7 @@ public:
         return requestCount;
     }
 
-    IMemoryUsageTrackerPtr GetChannelMemoryTracker() override
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
     {
         return MemoryUsageTracker_;
     }

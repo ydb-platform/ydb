@@ -29,7 +29,7 @@ public:
 
     int GetInflightRequestCount() override;
 
-    IMemoryUsageTrackerPtr GetChannelMemoryTracker() override;
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override;
 
 protected:
     const IChannelPtr UnderlyingChannel_;

@@ -2,7 +2,6 @@
 #include "engines/changes/abstract/compaction_info.h"
 #include "engines/portions/meta.h"
 #include <ydb/core/tx/columnshard/counters/statistics_store.h>
-#include <ydb/core/base/appdata.h>
 
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;
@@ -23,7 +22,8 @@ private:
     bool ActiveCleanupInsertTable = false;
     YDB_READONLY(TMonotonic, LastIndexationInstant, TMonotonic::Zero());
 public:
-    TBackgroundController(TBackgroundControllerCounters& stats) : Stats(stats) {
+    TBackgroundController(TBackgroundControllerCounters& stats)
+        : Stats(stats) {
     }
 
     THashSet<NOlap::TPortionAddress> GetConflictTTLPortions() const;
@@ -43,7 +43,6 @@ public:
     ui32 GetCompactionsCount() const {
         return ActiveCompactionInfo.size();
     }
-    TInstant GetLastCompactionFinishInstant(ui64 pathId) const;
 
     void StartIndexing(const NOlap::TColumnEngineChanges& changes);
     void FinishIndexing(const NOlap::TColumnEngineChanges& changes);

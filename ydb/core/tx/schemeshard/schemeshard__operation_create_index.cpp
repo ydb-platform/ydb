@@ -138,8 +138,11 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsCommonSensePath()
-                .IsTable()
-                .NotAsyncReplicaTable();
+                .IsTable();
+
+            if (!Transaction.GetInternal()) {
+                checks.NotAsyncReplicaTable();
+            }
 
             if (tableIndexCreation.GetState() == NKikimrSchemeOp::EIndexState::EIndexStateReady) {
                 checks

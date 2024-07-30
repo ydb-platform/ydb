@@ -13,15 +13,17 @@ struct Consumer  {
         NActors::TActorId readActorId,
         NActors::TActorId selfId,
         ui64 eventQueueId,
-        NFq::NRowDispatcherProto::TEvAddConsumer& proto)
+        NFq::NRowDispatcherProto::TEvAddConsumer& proto,
+        NYql::NDq::TRetryEventsQueue::ICallbacks* cbs)
         : ReadActorId(readActorId)
         , SourceParams(proto.GetSource())
         , PartitionId(proto.GetPartitionId())
         , Offset(proto.HasOffset() ? TMaybe<ui64>(proto.GetOffset()) : TMaybe<ui64>())
         , StartingMessageTimestampMs(proto.GetStartingMessageTimestampMs())
+        , EventQueueId(eventQueueId)
         , Proto(proto) {
 
-        EventsQueue.Init("txId", selfId, selfId, eventQueueId, /* KeepAlive */ true);
+        EventsQueue.Init("txId", selfId, selfId, eventQueueId, /* KeepAlive */ true, cbs);
         EventsQueue.OnNewRecipientId(readActorId);
     }
 
@@ -36,7 +38,7 @@ struct Consumer  {
 
     NYql::NDq::TRetryEventsQueue EventsQueue;
     TQueue<std::pair<ui64, TString>> Buffer;
-
+    ui64 EventQueueId;
     NFq::NRowDispatcherProto::TEvAddConsumer Proto;
 };
 } // namespace NFq

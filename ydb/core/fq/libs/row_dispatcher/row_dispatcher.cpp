@@ -97,6 +97,8 @@ public:
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvPing::TPtr&);
 
+    void DeleteConsumer(const ConsumerSessionKey& key);
+
     STRICT_STFUNC(
         StateFunc, {
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, Handle);
@@ -234,7 +236,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvAddConsumer::TPtr &ev) {
     TopicSessionKey key2{ev->Get()->Record.GetSource().GetTopicPath(), ev->Get()->Record.GetPartitionId()};
     TopicSessionInfo& topicSessionInfo = TopicSessions[key2];
 
-    auto consumer = MakeHolder<NFq::Consumer>(ev->Sender, SelfId(), NextEventQueueId++, ev->Get()->Record);
+    auto consumer = MakeHolder<NFq::Consumer>(ev->Sender, SelfId(), NextEventQueueId++, ev->Get()->Record, this);
     if (topicSessionInfo.Sessions.empty() || readOffset) {
         LOG_ROW_DISPATCHER_DEBUG("Create new session " << readOffset);
         auto actorId = Register(NewTopicSession(
@@ -301,15 +303,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev) {
         " partitionId " << ev->Get()->Record.GetPartitionId());
     ConsumerSessionKey key{ev->Sender, ev->Get()->Record.GetPartitionId()};
 
-    auto it = Consumers.find(key);
-    if (it == Consumers.end()) {
-        LOG_ROW_DISPATCHER_DEBUG("Wrong consumer"); // TODO
-        return;
-    }
-
-    Forward(ev, it->second.TopicSessionId);
-    Consumers.erase(it);
-
+    DeleteConsumer(key);
     // todo update TopicSessionInfo
     
 
@@ -344,9 +338,34 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev) {
     // }
 }
 
+void TRowDispatcher::DeleteConsumer(const ConsumerSessionKey& key) {
+    LOG_ROW_DISPATCHER_DEBUG("DeleteConsumer, readActorId " << key.first <<
+        " partitionId " << key.second);
+
+    auto it = Consumers.find(key);
+    if (it == Consumers.end()) {
+        LOG_ROW_DISPATCHER_DEBUG("Wrong consumer"); // TODO
+        return;
+    }
+    const auto& consumer = it->second.Consumer;
+
+    auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
+    event->Record.MutableSource()->CopyFrom(consumer->SourceParams);
+    event->Record.SetPartitionId(consumer->PartitionId);
+    //Send(, event.release());
+    Send(new IEventHandle(it->second.TopicSessionId, consumer->ReadActorId, event.release(), 0));
+    Consumers.erase(it);
+}
+
 void TRowDispatcher::SessionClosed(ui64 eventQueueId) {
     LOG_ROW_DISPATCHER_DEBUG("SessionClosed " << eventQueueId);
-
+    for (auto& [consumerKey, consumerInfo] : Consumers) {
+        if (consumerInfo.Consumer->EventQueueId != eventQueueId) {
+            continue;
+        }
+        DeleteConsumer(consumerKey);
+        break;
+    }
 }
 
 void TRowDispatcher::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& /*ev*/) {

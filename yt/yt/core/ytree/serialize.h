@@ -6,6 +6,7 @@
 
 #include <yt/yt/core/misc/guid.h>
 #include <yt/yt/core/misc/mpl.h>
+#include <yt/yt/core/misc/statistic_path.h>
 
 #include <yt/yt/core/yson/writer.h>
 
@@ -161,6 +162,8 @@ void Serialize(
 template <class T, class TTag>
 void Serialize(const TStrongTypedef<T, TTag>& value, NYson::IYsonConsumer* consumer);
 
+void Serialize(const NStatisticPath::TStatisticPath& path, NYson::IYsonConsumer* consumer);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
@@ -259,6 +262,8 @@ void Deserialize(
 
 template <class T, class TTag>
 void Deserialize(TStrongTypedef<T, TTag>& value, INodePtr node);
+
+void Deserialize(NStatisticPath::TStatisticPath& path, INodePtr node);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -171,12 +171,17 @@ public:
     }
 
     void DoBoostrap() {
-        TlsActivationContext->AsActorContext().Mailbox.EnableStats();
-        OldActivationStats = TlsActivationContext->AsActorContext().Mailbox.GetElapsedCycles();
-        Y_ABORT_UNLESS(OldActivationStats.has_value());
-        if (*OldActivationStats > 0) {
-            CA_LOG_E("strange leftover activation " << OldActivationStats); 
+        if (!SelfHandle.Defined()) {
+            return;
         }
+
+        OldActivationStats = TlsActivationContext->AsActorContext().Mailbox.GetElapsedCycles();
+        if (!OldActivationStats.has_value()) {
+            TlsActivationContext->AsActorContext().Mailbox.EnableStats();
+            OldActivationStats = TlsActivationContext->AsActorContext().Mailbox.GetElapsedCycles();
+        }
+
+        Y_ABORT_UNLESS(OldActivationStats.has_value());
     }
 
 private:
@@ -240,6 +245,10 @@ protected:
     }
 
     void AccountActorSystemStats(NMonotonic::TMonotonic now) {
+        if (!SelfHandle.Defined()) {
+            return;
+        }
+
         auto newStats = TlsActivationContext->AsActorContext().Mailbox.GetElapsedCycles();
         Y_ABORT_UNLESS(OldActivationStats.has_value());
         Y_ABORT_UNLESS(newStats.has_value());

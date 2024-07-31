@@ -1375,7 +1375,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore49: {
-            // alter_backup_collection_stmt: ALTER BACKUP COLLECTION name WITH (k=v,...);
+            // alter_backup_collection_stmt: ALTER BACKUP COLLECTION name alter_backup_collection_action (COMMA alter_backup_collection_action)*;
             auto& node = core.GetAlt_sql_stmt_core49().GetRule_alter_backup_collection_stmt1();
             TObjectOperatorContext context(Ctx.Scoped);
             if (node.GetRule_backup_collection2().GetRule_object_ref3().HasBlock1()) {
@@ -1388,7 +1388,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             std::map<TString, TDeferredAtom> kv;
-            if (!ParseBackupCollectionSettings(kv, node.GetRule_backup_collection_settings5())) {
+            std::set<TString> toReset;
+            if (!ParseBackupCollectionSettings(kv, toReset, node.GetRule_alter_backup_collection_actions3())) {
                 return false;
             }
 
@@ -1399,7 +1400,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                                                             objectId,
                                                             typeId,
                                                             std::move(kv),
-                                                            {},
+                                                            std::move(toReset),
                                                             context));
             break;
         }

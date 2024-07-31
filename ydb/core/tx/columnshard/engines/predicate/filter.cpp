@@ -84,13 +84,18 @@ bool TPKRangesFilter::IsPortionInUsage(const TPortionInfo& info) const {
     return SortedRanges.empty();
 }
 
-bool TPKRangesFilter::IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const {
+TPKRangeFilter::EUsageClass TPKRangesFilter::IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const {
     for (auto&& i : SortedRanges) {
-        if (i.IsPortionInPartialUsage(start, end)) {
-            return true;
+        switch (i.IsPortionInPartialUsage(start, end)) {
+            case TPKRangeFilter::EUsageClass::FullUsage:
+                return TPKRangeFilter::EUsageClass::FullUsage;
+            case TPKRangeFilter::EUsageClass::PartialUsage:
+                return TPKRangeFilter::EUsageClass::PartialUsage;
+            case TPKRangeFilter::EUsageClass::DontUsage:
+                break;
         }
     }
-    return false;
+    return TPKRangeFilter::EUsageClass::DontUsage;
 }
 
 TPKRangesFilter::TPKRangesFilter(const bool reverse)

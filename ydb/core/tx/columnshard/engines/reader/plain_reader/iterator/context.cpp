@@ -34,8 +34,23 @@ ui64 TSpecialReadContext::GetMemoryForSources(const THashMap<ui32, std::shared_p
 std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(const std::shared_ptr<IDataSource>& source) const {
     const bool needSnapshots = !source->GetExclusiveIntervalOnly() || ReadMetadata->GetRequestSnapshot() < source->GetRecordSnapshotMax() ||
                                !source->IsSourceInMemory();
-    const bool partialUsageByPK =
-        ReadMetadata->GetPKRangesFilter().IsPortionInPartialUsage(source->GetStartReplaceKey(), source->GetFinishReplaceKey());
+    bool partialUsageByPK = false;
+    {
+        const TPKRangeFilter::EUsageClass usage =
+            ReadMetadata->GetPKRangesFilter().IsPortionInPartialUsage(source->GetStartReplaceKey(), source->GetFinishReplaceKey());
+        switch (usage) {
+            case TPKRangeFilter::EUsageClass::PartialUsage:
+                partialUsageByPK = true;
+            case TPKRangeFilter::EUsageClass::DontUsage: {
+                std::shared_ptr<TFetchingScript> result = std::make_shared<TFetchingScript>();
+                result->SetBranchName("FAKE");
+                result->AddStep(std::make_shared<TBuildFakeSpec>(0));
+                return result;
+            }
+            case TPKRangeFilter::EUsageClass::FullUsage:
+                partialUsageByPK = false;
+        }
+    }
     const bool useIndexes = (IndexChecker ? source->HasIndexes(IndexChecker->GetIndexIds()) : false);
     const bool isWholeExclusiveSource = source->GetExclusiveIntervalOnly() && source->IsSourceInMemory();
     const bool hasDeletions = source->GetHasDeletions();

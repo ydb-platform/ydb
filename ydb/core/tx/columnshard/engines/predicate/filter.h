@@ -38,7 +38,7 @@ public:
     }
 
     bool IsPortionInUsage(const TPortionInfo& info) const;
-    bool IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const;
+    TPKRangeFilter::EUsageClass IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const;
 
     NArrow::TColumnFilter BuildFilter(const arrow::Datum& data) const;
 

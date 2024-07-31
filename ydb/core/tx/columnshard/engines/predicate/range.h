@@ -33,7 +33,14 @@ public:
     NArrow::TColumnFilter BuildFilter(const arrow::Datum& data) const;
 
     bool IsPortionInUsage(const TPortionInfo& info) const;
-    bool IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const;
+
+    enum class EUsageClass {
+        DontUsage,
+        PartialUsage,
+        FullUsage
+    };
+
+    EUsageClass IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const;
 
     std::set<ui32> GetColumnIds(const TIndexInfo& indexInfo) const;
     TString DebugString() const;

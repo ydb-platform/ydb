@@ -59,23 +59,37 @@ bool TPKRangeFilter::IsPortionInUsage(const TPortionInfo& info) const {
     return true;
 }
 
-bool TPKRangeFilter::IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const {
+TPKRangeFilter::EUsageClass TPKRangeFilter::IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const {
     if (const auto& from = PredicateFrom.GetReplaceKey()) {
-        if (std::is_lt(end.ComparePartNotNull(*from, from->Size()))) {
-            return false;
+        const std::partial_ordering equalityEndWithFrom = end.ComparePartNotNull(*from, from->Size());
+        if (equalityEndWithFrom == std::partial_ordering::less) {
+            return EUsageClass::DontUsage;
+        } else if (equalityEndWithFrom == std::partial_ordering::equivalent) {
+            if (PredicateFrom.IsInclude()) {
+                return EUsageClass::PartialUsage;
+            } else {
+                return EUsageClass::DontUsage;
+            }
         }
     }
 
     if (const auto& to = PredicateTo.GetReplaceKey()) {
-        if (std::is_gt(start.ComparePartNotNull(*to, to->Size()))) {
-            return false;
+        const std::partial_ordering equalityStartWithTo = start.ComparePartNotNull(*to, to->Size());
+        if (equalityStartWithTo == std::partial_ordering::greater) {
+            return EUsageClass::DontUsage;
+        } else if (equalityStartWithTo == std::partial_ordering::equivalent) {
+            if (PredicateTo.IsInclude()) {
+                return EUsageClass::PartialUsage;
+            } else {
+                return EUsageClass::DontUsage;
+            }
         }
     }
 
 //    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("start", start.DebugString())("end", end.DebugString())("from", PredicateFrom.DebugString())(
 //        "to", PredicateTo.DebugString());
 
-    return true;
+    return EUsageClass::FullUsage;
 }
 
 std::optional<NKikimr::NOlap::TPKRangeFilter> TPKRangeFilter::Build(TPredicateContainer&& from, TPredicateContainer&& to) {

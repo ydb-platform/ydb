@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         UNIT_ASSERT_VALUES_EQUAL(probe, 10);
     }
 
-    Y_UNIT_TEST(TraverseColumnTableRebootTabletBeforeResolve) {
+    Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeResolve) {
         TTestEnv env(1, 1);
         auto init = [&] () {
             CreateDatabase(env, "Database");
@@ -54,13 +54,12 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
 
         auto sender = runtime.AllocateEdgeActor();
         int observerCount = 0;
-        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::EvResolveKeySetResult &&
-                observerCount++ == 2)
-            {
+        auto observer = runtime.AddObserver<TEvTxProxySchemeCache::TEvResolveKeySetResult>(
+            [&](TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev)
+        {
+            if (observerCount++ == 2) {
                 RebootTablet(runtime, saTabletId, sender);
             }
-            return TTestActorRuntime::EEventAction::PROCESS;
         });
 
         runtime.SimulateSleep(TDuration::Seconds(30));
@@ -72,7 +71,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         UNIT_ASSERT_VALUES_EQUAL(probe, 10);
     }
 
-    Y_UNIT_TEST(TraverseColumnTableRebootTabletBeforeReqDistribution) {
+    Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeReqDistribution) {
         TTestEnv env(1, 1);
         auto init = [&] () {
             CreateDatabase(env, "Database");
@@ -88,14 +87,14 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
 
         auto sender = runtime.AllocateEdgeActor();
-        int observerCount = 0;
-        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvHive::EvRequestTabletDistribution &&
-                observerCount++ == 0)
-            {
+        bool observerFirstExec = true;
+        auto observer = runtime.AddObserver<TEvHive::TEvRequestTabletDistribution>(
+            [&](TEvHive::TEvRequestTabletDistribution::TPtr& ev)
+        {
+            if (observerFirstExec) {
+                observerFirstExec = false;
                 RebootTablet(runtime, saTabletId, sender);
             }
-            return TTestActorRuntime::EEventAction::PROCESS;
         });
 
         runtime.SimulateSleep(TDuration::Seconds(30));
@@ -107,7 +106,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         UNIT_ASSERT_VALUES_EQUAL(probe, 10);
     }
 
-    Y_UNIT_TEST(TraverseColumnTableRebootTabletBeforeAggregate) {
+    Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeAggregate) {
         TTestEnv env(1, 1);
         auto init = [&] () {
             CreateDatabase(env, "Database");
@@ -123,14 +122,14 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
 
         auto sender = runtime.AllocateEdgeActor();
-        int observerCount = 0;
-        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvStatistics::EvAggregateStatistics &&
-                observerCount++ == 0)
-            {
+        bool observerFirstExec = true;
+        auto observer = runtime.AddObserver<TEvStatistics::TEvAggregateStatistics>(
+            [&](TEvStatistics::TEvAggregateStatistics::TPtr& ev)
+        {
+            if (observerFirstExec) {
+                observerFirstExec = false;
                 RebootTablet(runtime, saTabletId, sender);
             }
-            return TTestActorRuntime::EEventAction::PROCESS;
         });
 
         runtime.SimulateSleep(TDuration::Seconds(30));
@@ -142,7 +141,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         UNIT_ASSERT_VALUES_EQUAL(probe, 10);
     }
 
-    Y_UNIT_TEST(TraverseColumnTableRebootTabletBeforeSave) {
+    Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeSave) {
         TTestEnv env(1, 1);
         auto init = [&] () {
             CreateDatabase(env, "Database");
@@ -158,14 +157,14 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
 
         auto sender = runtime.AllocateEdgeActor();
-        int observerCount = 0;
-        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvStatistics::EvAggregateStatisticsResponse &&
-                observerCount++ == 0)
-            {
+        bool observerFirstExec = true;
+        auto observer = runtime.AddObserver<TEvStatistics::TEvAggregateStatisticsResponse>(
+            [&](TEvStatistics::TEvAggregateStatisticsResponse::TPtr& ev)
+        {
+            if (observerFirstExec) {
+                observerFirstExec = false;
                 RebootTablet(runtime, saTabletId, sender);
             }
-            return TTestActorRuntime::EEventAction::PROCESS;
         });
 
         runtime.SimulateSleep(TDuration::Seconds(30));
@@ -177,7 +176,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         UNIT_ASSERT_VALUES_EQUAL(probe, 10);
     }
 
-    Y_UNIT_TEST(TraverseColumnTableRebootInAggregate) {
+    Y_UNIT_TEST(TraverseColumnTableRebootSaTabletInAggregate) {
         TTestEnv env(1, 1);
         auto init = [&] () {
             CreateDatabase(env, "Database");
@@ -194,13 +193,12 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
 
         auto sender = runtime.AllocateEdgeActor();
         int observerCount = 0;
-        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvStatistics::EvStatisticsRequest &&
-                observerCount++ == 5)
-            {
+        auto observer = runtime.AddObserver<TEvStatistics::TEvStatisticsRequest>(
+            [&](TEvStatistics::TEvStatisticsRequest::TPtr& ev)
+        {
+            if (observerCount++ == 5) {
                 RebootTablet(runtime, saTabletId, sender);
             }
-            return TTestActorRuntime::EEventAction::PROCESS;
         });
 
         runtime.SimulateSleep(TDuration::Seconds(30));

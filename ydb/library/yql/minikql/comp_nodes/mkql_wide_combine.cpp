@@ -132,7 +132,7 @@ struct TCombinerNodes {
         }
     }
 
-    void ExtractValues(TComputationContext& ctx, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue** from, NUdf::TUnboxedValue* to) const {
+    void ConsumeRawData(TComputationContext& ctx, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue** from, NUdf::TUnboxedValue* to) const {
         std::fill_n(keys, KeyResultNodes.size(), NUdf::TUnboxedValuePod());
         for (ui32 i = 0U; i < ItemNodes.size(); ++i) {
             if (from[i]) {
@@ -141,13 +141,15 @@ struct TCombinerNodes {
         }
     }
 
-    void ExtractValues(TComputationContext& ctx, NUdf::TUnboxedValue* from, NUdf::TUnboxedValue** to) const {
-        for (size_t i = 0, j = 0; i != ItemNodes.size(); ++i) {
+    void ExtractRawData(TComputationContext& ctx, NUdf::TUnboxedValue* from, NUdf::TUnboxedValue* keys) const {
+        for (ui32 i = 0U; i != ItemNodes.size(); ++i) {
             if (IsInputItemNodeUsed(i)) {
-                *to[i] = std::move(from[j++]);
-            } else {
-                to[i] = nullptr;
+                ItemNodes[i]->SetValue(ctx, std::move(from[i]));
             }
+        }
+        for (ui32 i = 0U; i < KeyNodes.size(); ++i) {
+            auto& key = KeyNodes[i]->RefValue(ctx);
+            *keys++ = key = KeyResultNodes[i]->GetValue(ctx);
         }
     }
 
@@ -1251,12 +1253,13 @@ public:
                             case EFetchResult::Yield:
                                 return EFetchResult::Yield;
                         }
+                        Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
                         break;
                     }
                     case TSpillingSupportState::EUpdateResult::Yield:
                         return EFetchResult::Yield;
                     case TSpillingSupportState::EUpdateResult::ExtractRawData:
-                        Nodes.ExtractValues(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Throat), fields);
+                        Nodes.ExtractRawData(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Throat), static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
                         break;
                     case TSpillingSupportState::EUpdateResult::Extract:
                         if (const auto values = static_cast<NUdf::TUnboxedValue*>(ptr->Extract())) {
@@ -1268,8 +1271,6 @@ public:
                         return EFetchResult::Finish;
                 }
 
-                Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
-
                 switch(ptr->TasteIt()) {
                     case TSpillingSupportState::ETasteResult::Init:
                         Nodes.ProcessItem(ctx, nullptr, static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
@@ -1278,7 +1279,7 @@ public:
                         Nodes.ProcessItem(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
                         break;
                     case TSpillingSupportState::ETasteResult::ConsumeRawData:
-                        Nodes.ExtractValues(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), fields, static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
+                        Nodes.ConsumeRawData(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), fields, static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
                         break;
                 }
 
@@ -1338,9 +1339,8 @@ public:
             std::vector<PHINode*> phis(Nodes.ItemNodes.size(), nullptr);
             auto j = 0U;
             std::generate(phis.begin(), phis.end(), [&]() {
-                const auto i = j++;
-                return Nodes.ItemNodes[i]->GetDependencesCount() > 0U || Nodes.PasstroughtItems[i] ?
-                    PHINode::Create(valueType, 2U, (TString("item_") += ToString(i)).c_str(), test) : nullptr;
+                return Nodes.IsInputItemNodeUsed(j++) ?
+                    PHINode::Create(valueType, 2U, (TString("item_") += ToString(j)).c_str(), test) : nullptr;
             });
 
             block = more;

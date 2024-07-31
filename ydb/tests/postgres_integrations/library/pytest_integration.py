@@ -13,6 +13,9 @@ import yatest
 
 import logging
 
+from ydb.tests.library.harness.daemon import DaemonError
+from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 
 class TestState(Enum):
     PASSED = 1
@@ -33,6 +36,7 @@ class IntegrationTests:
     _selected_test: Set[str]
     _docker_executed: bool
     _test_results: Dict[str, TestCase]
+    _kikimr_factory: KiKiMR
 
     def __init__(self, folder: str, image_name: str = 'ydb-pg-test-image'):
         self._folder = folder
@@ -43,6 +47,7 @@ class IntegrationTests:
 
         self._docker_executed = False
         self._test_results = dict()
+        self._kikimr_factory = kikimr_cluster_factory()
 
     def pytest_generate_tests(self, metafunc: pytest.Metafunc):
         """
@@ -68,11 +73,16 @@ class IntegrationTests:
             print("rekby-selected-tests: ", self._selected_test)
             print(f"rekby-test-name: '{execute_test_filter}'")
 
-            self._run_tests_in_docker(execute_test_filter)
+            try:
+                self._run_tests_in_docker(execute_test_filter)
+                print(f"rekby docker test finished")
+            except BaseException as e:
+                print("docker test exception", e)
+                raise
+
             test_results_file=path.join(self._test_result_folder, "raw", "result.xml")
             self._test_results = _read_tests_result(test_results_file)
             print(f"rekby result parsed tests:\n\n{self._test_results}")
-
         self._check_test_results(testname)
 
     def _check_test_results(self, testname: str):
@@ -93,71 +103,92 @@ class IntegrationTests:
 
         raise Exception(f"Unexpected test state: '{test.state}'")
 
-    def _run_tests_in_docker(self, test_name: Optional[str]):
+    def _run_tests_in_docker(self, test_filter: str):
         if self._docker_executed:
             return
         self._docker_executed = True
-
-        if test_name is None:
-            test_name=""
-
-        client: docker.Client = docker.from_env()
-
-
-        client.images.build(
-            path = self._folder,
-            tag=self._image_name,
-            network_mode='host',
-        )
+        print("rekby start docker tests")
 
         try:
-            exchange_folder=path.join(yatest.common.output_path(), "exchange")
-            os.mkdir(exchange_folder)
-        except FileExistsError:
-            pass
-
-        try:
-            os.mkdir(self._test_result_folder)
-        except FileExistsError:
-            pass
+            print("rekby, start ydbd")
+            self._kikimr_factory.start()
+            print("rekby, ydbd started")
+            print("rekby, ydbd nodes", self._kikimr_factory.nodes)
+            node = self._kikimr_factory.nodes[1]
+            pgwire_port = node.pgwire_port
+            print("rekby, pgwire port: ", pgwire_port)
 
 
-        # TODO: run YDB with scripts/receipt and get connection port/database with runtime
-        container = client.containers.create(
-            image=self._image_name,
-            # command="/docker-start.bash",
-            # detach=True,
-            # auto_remove=True,
-            environment = [
-                "PGUSER=root",
-                "PGPASSWORD=1234",
-                "PGHOST=localhost",
-                "PGPORT=5432",
-                "PGDATABASE=local",
-                "PQGOSSLTESTS=0",
-                "PQSSLCERTTEST_PATH=certs",
-                f"YDB_PG_TESTNAME={test_name}",
-            ],
-            mounts = [
-                docker.types.Mount(
-                    target="/exchange",
-                    source=exchange_folder,
-                    type="bind",
-                ),
-                docker.types.Mount(
-                    target="/test-result",
-                    source=self._test_result_folder,
-                    type="bind",
-                ),
-            ],
-            network_mode='host',
-        )
-        try:
-            container.start()
-            container.wait()
-            print(container.logs().decode())
+
+            client: docker.Client = docker.from_env()
+
+
+            client.images.build(
+                path = self._folder,
+                tag=self._image_name,
+                network_mode='host',
+            )
+
+            try:
+                exchange_folder=path.join(yatest.common.output_path(), "exchange")
+                os.mkdir(exchange_folder)
+            except FileExistsError:
+                pass
+
+            try:
+                os.mkdir(self._test_result_folder)
+            except FileExistsError:
+                pass
+
+
+            # TODO: run YDB with scripts/receipt and get connection port/database with runtime
+            container = client.containers.create(
+                image=self._image_name,
+                # command="/docker-start.bash",
+                # detach=True,
+                # auto_remove=True,
+                environment = [
+                    "PGUSER=root",
+                    "PGPASSWORD=1234",
+                    "PGHOST=localhost",
+                    f"PGPORT={pgwire_port}",
+                    "PGDATABASE=local",
+                    "PQGOSSLTESTS=0",
+                    "PQSSLCERTTEST_PATH=certs",
+                    f"YDB_PG_TESTNAME={test_filter}",
+                ],
+                mounts = [
+                    docker.types.Mount(
+                        target="/exchange",
+                        source=exchange_folder,
+                        type="bind",
+                    ),
+                    docker.types.Mount(
+                        target="/test-result",
+                        source=self._test_result_folder,
+                        type="bind",
+                    ),
+                ],
+                network_mode='host',
+            )
+            try:
+                container.start()
+                container.wait()
+                print(container.logs().decode())
+            finally:
+                container.remove()
+        except BaseException as e:
+            print("rekby ydbd exception: ", e)
+            raise
         finally:
-            container.remove()
+            print("rekby, stop ydbd")
+            try:
+                self._kikimr_factory.stop()
+            except RuntimeError as e:
+                print("rekby, stop ydbd runtime failed:", e)
+                pass
+                # TODO
+                # handle crash ydbdb as mark in tests
 
 
     @property

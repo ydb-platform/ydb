@@ -55,6 +55,8 @@ bool TPKRangeFilter::IsPortionInUsage(const TPortionInfo& info) const {
             return false;
         }
     }
+//    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("start", info.IndexKeyStart().DebugString())("end", info.IndexKeyEnd().DebugString())(
+//        "from", PredicateFrom.DebugString())("to", PredicateTo.DebugString());
 
 //    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("start", info.IndexKeyStart().DebugString())("end", info.IndexKeyEnd().DebugString())(
 //        "from", PredicateFrom.DebugString())("to", PredicateTo.DebugString());

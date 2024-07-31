@@ -420,6 +420,9 @@ private:
     using TSchemaPreset = TSchemaPreset;
     using TTableInfo = TTableInfo;
 
+    const TMonotonic CreateInstant = TMonotonic::Now();
+    std::optional<TMonotonic> StartInstant;
+
     struct TLongTxWriteInfo {
         ui64 WriteId;
         ui32 WritePartId;

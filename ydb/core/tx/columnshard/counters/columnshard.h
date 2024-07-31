@@ -169,10 +169,6 @@ public:
         WritePutBlobsCount->Add(1);
     }
 
-    void OnTabletInitialized(const TDuration d) const {
-        HistogramTabletInitializationMs->Collect(d.MilliSeconds());
-    }
-
     void OnWriteTxComplete(const TDuration d) const {
         HistogramWriteTxCompleteDurationMs->Collect(d.MilliSeconds());
     }

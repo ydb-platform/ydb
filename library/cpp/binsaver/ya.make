@@ -1,5 +1,6 @@
 LIBRARY()
 
+
 SRCS(
     class_factory.h
     bin_saver.cpp

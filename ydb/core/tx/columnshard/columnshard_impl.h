@@ -329,6 +329,8 @@ public:
     }
 
 private:
+    const TMonotonic CreateInstant = TMonotonic::Now();
+    std::optional<TMonotonic> StartInstant;
     void OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteData& writeData, const ui64 cookie, std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
     EOverloadStatus CheckOverloaded(const ui64 tableId) const;
 
@@ -419,6 +421,8 @@ private:
 
     using TSchemaPreset = TSchemaPreset;
     using TTableInfo = TTableInfo;
+
+    const TInstant CreateInstant = TMonotonic::Now();
 
     struct TLongTxWriteInfo {
         ui64 WriteId;

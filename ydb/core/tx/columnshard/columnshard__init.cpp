@@ -19,6 +19,9 @@ namespace NKikimr::NColumnShard {
 using namespace NTabletFlatExecutor;
 
 class TTxInit : public TTransactionBase<TColumnShard> {
+private:
+    const TMonotonic Start = TMonotonic::Now();
+
 public:
     TTxInit(TColumnShard* self)
         : TBase(self)
@@ -250,6 +253,7 @@ bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 }
 
 void TTxInit::Complete(const TActorContext& ctx) {
+    Self->CSCounters.Initialization.OnTxInitFinished(TMonotonic::Now() - StartInstant);
     Self->ProgressTxController->OnTabletInit();
     Self->SwitchToWork(ctx);
     NYDBTest::TControllers::GetColumnShardController()->OnTabletInitCompleted(*Self);
@@ -257,6 +261,8 @@ void TTxInit::Complete(const TActorContext& ctx) {
 
 class TTxUpdateSchema : public TTransactionBase<TColumnShard> {
     std::vector<NOlap::INormalizerTask::TPtr> NormalizerTasks;
+    const TMonotonic Start = TMonotonic::Now();
+
 public:
     TTxUpdateSchema(TColumnShard* self)
         : TBase(self)
@@ -295,6 +301,7 @@ bool TTxUpdateSchema::Execute(TTransactionContext& txc, const TActorContext&) {
 
 void TTxUpdateSchema::Complete(const TActorContext& ctx) {
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxUpdateSchema.Complete");
+    Self->CSCounters.Initializer.OnTxUpdateSchemaFinished(TMonotonic::Now() - StartInstant);
     if (NormalizerTasks.empty()) {
         AFL_VERIFY(Self->NormalizerController.IsNormalizationFinished())("details", Self->NormalizerController.DebugString());
         Self->Execute(new TTxInit(Self), ctx);
@@ -360,6 +367,9 @@ void TTxApplyNormalizer::Complete(const TActorContext& ctx) {
 
 /// Create local database on tablet start if none
 class TTxInitSchema : public TTransactionBase<TColumnShard> {
+private:
+    const TMonotonic StartInstant = TMonotonic::Now();
+
 public:
     TTxInitSchema(TColumnShard* self)
         : TBase(self)
@@ -422,6 +432,7 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
 }
 
 void TTxInitSchema::Complete(const TActorContext& ctx) {
+    Self->CSCounters.Initialization.OnTxInitSchemaFinished(TMonotonic::Now() - StartInstant);
     LOG_S_DEBUG("TxInitSchema.Complete at tablet " << Self->TabletID(););
     Self->Execute(new TTxUpdateSchema(Self), ctx);
 }

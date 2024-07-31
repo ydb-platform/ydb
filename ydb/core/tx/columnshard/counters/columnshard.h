@@ -16,6 +16,55 @@ enum class EWriteFailReason {
     Overload /* "overload" */
 };
 
+class TCSInitialization: public TCommonCountersOwner {
+private:
+    using TBase = TCommonCountersOwner;
+
+    const NMonitoring::THistogramPtr HistogramTabletInitializationMs;
+    const NMonitoring::THistogramPtr HistogramTxInitDurationMs;
+    const NMonitoring::THistogramPtr HistogramTxUpdateSchemaDurationMs;
+    const NMonitoring::THistogramPtr HistogramTxInitSchemaDurationMs;
+    const NMonitoring::THistogramPtr HistogramActivateExecutorFromActivationDurationMs;
+    const NMonitoring::THistogramPtr HistogramSwitchToWorkFromActivationDurationMs;
+    const NMonitoring::THistogramPtr HistogramSwitchToWorkFromCreateDurationMs;
+
+public:
+    
+    void OnTxInitFinished(const TDuration d) const {
+        HistogramTxInitDurationMs->Collect(d.MilliSeconds());
+    }
+
+    void OnTxUpdateSchemaFinished(const TDuration d) {
+        HistogramTxUpdateSchemaDurationMs->Collect(d.MilliSeconds());
+    }
+
+    void OnTxInitSchemaFinished(const TDuration d) {
+        HistogramTxInitSchemaDurationMs->Collect(d.MilliSeconds());
+    }
+
+    void OnActivateExecutor(const TDuration fromCreate) {
+        HistogramActivateExecutorFromActivationDurationMs->Collect(fromCreate.MilliSeconds());
+    }
+    void OnSwitchToWork(const TDuration fromStart, const TDuration fromCreate) {
+        HistogramSwitchToWorkFromActivationDurationMs->Collect(fromStart.MilliSeconds());
+        HistogramSwitchToWorkFromCreateDurationMs->Collect(fromCreate.MilliSeconds());
+    }
+
+    TCSInitialization(TCommonCountersOwner& owner)
+        : TBase(owner, "stage", "initialization")
+        , HistogramTabletInitializationMs(TBase::GetHistogram("TabletInitializationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
+        , HistogramTxInitDurationMs(TBase::GetHistogram("TxInitDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
+        , HistogramTxUpdateSchemaDurationMs(TBase::GetHistogram("TxInitDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
+        , HistogramTxInitSchemaDurationMs(TBase::GetHistogram("TxInitSchemaDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
+        , HistogramActivateExecutorFromActivationDurationMs(
+              TBase::GetHistogram("ActivateExecutorFromActivationDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
+        , HistogramSwitchToWorkFromActivationDurationMs(
+              TBase::GetHistogram("SwitchToWorkFromActivationDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
+        , HistogramSwitchToWorkFromCreateDurationMs(
+              TBase::GetHistogram("SwitchToWorkFromCreateDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32))) {
+    }
+};
+
 class TCSCounters: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
@@ -62,11 +111,15 @@ private:
     NMonitoring::THistogramPtr HistogramSuccessWriteMiddle6PutBlobsDurationMs;
     NMonitoring::THistogramPtr HistogramFailedWritePutBlobsDurationMs;
     NMonitoring::THistogramPtr HistogramWriteTxCompleteDurationMs;
+
     NMonitoring::TDynamicCounters::TCounterPtr WritePutBlobsCount;
     NMonitoring::TDynamicCounters::TCounterPtr WriteRequests;
     THashMap<EWriteFailReason, NMonitoring::TDynamicCounters::TCounterPtr> FailedWriteRequests;
     NMonitoring::TDynamicCounters::TCounterPtr SuccessWriteRequests;
+
 public:
+    const TCSInitialization Initialization;
+
     void OnStartWriteRequest() const {
         WriteRequests->Add(1);
     }
@@ -114,6 +167,10 @@ public:
 
     void OnWritePutBlobsStart() const {
         WritePutBlobsCount->Add(1);
+    }
+
+    void OnTabletInitialized(const TDuration d) const {
+        HistogramTabletInitializationMs->Collect(d.MilliSeconds());
     }
 
     void OnWriteTxComplete(const TDuration d) const {

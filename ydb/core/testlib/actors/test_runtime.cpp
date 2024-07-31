@@ -24,10 +24,10 @@
 namespace NActors {
 
     void TTestActorRuntime::TNodeData::Stop() {
-        TNodeDataBase::Stop();
         if (Mon) {
             Mon->Stop();
         }
+        TNodeDataBase::Stop();
     }
 
     TTestActorRuntime::TNodeData::~TNodeData() {

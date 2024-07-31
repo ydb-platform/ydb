@@ -8,22 +8,29 @@
 
 namespace NKikimr::NColumnShard {
 
+class TSingleColumnTableCounters;
+
 class TColumnTablesCounters {
 private:
-    YDB_READONLY(TInstant, LastAccessTime, TInstant::Zero());
-    YDB_READONLY(TInstant, LastUpdateTime, TInstant::Zero());
+    YDB_READONLY_CONST(std::shared_ptr<TInstant>, LastAccessTime);
+    YDB_READONLY_CONST(std::shared_ptr<TInstant>, LastUpdateTime);
 
-    THashMap<ui64, class TSingleColumnTableCounters> PathIdCounters;
+    THashMap<ui64, std::shared_ptr<TSingleColumnTableCounters>> PathIdCounters;
 
     friend class TSingleColumnTableCounters;
 
 public:
-    void FillStats(::NKikimrTableStats::TTableStats& output) const {
-        output.SetLastAccessTime(LastAccessTime.MilliSeconds());
-        output.SetLastUpdateTime(LastUpdateTime.MilliSeconds());
+    TColumnTablesCounters()
+        : LastAccessTime(std::make_shared<TInstant>())
+        , LastUpdateTime(std::make_shared<TInstant>()) {
     }
 
-    TSingleColumnTableCounters& GetPathIdCounter(ui64 pathId);
+    void FillStats(::NKikimrTableStats::TTableStats& output) const {
+        output.SetLastAccessTime(LastAccessTime->MilliSeconds());
+        output.SetLastUpdateTime(LastUpdateTime->MilliSeconds());
+    }
+
+    std::shared_ptr<TSingleColumnTableCounters> GetPathIdCounter(ui64 pathId);
 };
 
 class TSingleColumnTableCounters {
@@ -31,8 +38,8 @@ private:
     YDB_READONLY(TInstant, PathIdLastAccessTime, TInstant::Zero());
     YDB_READONLY(TInstant, PathIdLastUpdateTime, TInstant::Zero());
 
-    TInstant& TotalLastAccessTime;
-    TInstant& TotalLastUpdateTime;
+    const std::shared_ptr<TInstant> TotalLastAccessTime;
+    const std::shared_ptr<TInstant> TotalLastUpdateTime;
 
 public:
     TSingleColumnTableCounters(TColumnTablesCounters& owner)
@@ -60,8 +67,8 @@ private:
         if (PathIdLastAccessTime < value) {
             PathIdLastAccessTime = value;
         }
-        if (TotalLastAccessTime < value) {
-            TotalLastAccessTime = value;
+        if (*TotalLastAccessTime < value) {
+            *TotalLastAccessTime = value;
         }
     }
 
@@ -69,8 +76,8 @@ private:
         if (PathIdLastUpdateTime < value) {
             PathIdLastUpdateTime = value;
         }
-        if (TotalLastUpdateTime < value) {
-            TotalLastUpdateTime = value;
+        if (*TotalLastUpdateTime < value) {
+            *TotalLastUpdateTime = value;
         }
     }
 };

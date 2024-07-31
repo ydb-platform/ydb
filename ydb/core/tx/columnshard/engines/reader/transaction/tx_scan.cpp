@@ -191,7 +191,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     auto dataFormat = request.GetDataFormat();
     const TDuration timeout = TDuration::MilliSeconds(request.GetTimeoutMs());
     if (scanGen > 1) {
-        Self->Counters.GetTabletCounters().IncCounter(NColumnShard::COUNTER_SCAN_RESTARTED);
+        Self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_SCAN_RESTARTED);
     }
     const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()
         ("tx_id", txId)("scan_id", scanId)("gen", scanGen)("table", table)("snapshot", snapshot)("tablet", Self->TabletID())("timeout", timeout);
@@ -231,7 +231,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
         return;
     }
 
-    Self->Counters.GetTabletCounters().OnScanStarted(Self->InFlightReadsTracker.GetSelectStatsDelta());
+    Self->Counters.GetTabletCounters()->OnScanStarted(Self->InFlightReadsTracker.GetSelectStatsDelta());
 
     TComputeShardingPolicy shardingPolicy;
     AFL_VERIFY(shardingPolicy.DeserializeFromProto(request.GetComputeShardingPolicy()));

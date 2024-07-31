@@ -51,7 +51,7 @@ namespace NKikimr::NColumnShard {
 
             const auto counters = owner.InsertTable->Commit(dbTable, snapshot.GetPlanStep(), snapshot.GetTxId(), { gWriteId },
                                                       pathExists);
-            owner.Counters.GetTabletCounters().OnWriteCommitted(counters);
+            owner.Counters.GetTabletCounters()->OnWriteCommitted(counters);
         }
         owner.UpdateInsertTableCounters();
     }

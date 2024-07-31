@@ -416,9 +416,9 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
 
     TablesManager.AddTableVersion(pathId, version, tableVerProto, db, Tiers);
 
-    Counters.GetTabletCounters().SetCounter(COUNTER_TABLES, TablesManager.GetTables().size());
-    Counters.GetTabletCounters().SetCounter(COUNTER_TABLE_PRESETS, TablesManager.GetSchemaPresets().size());
-    Counters.GetTabletCounters().SetCounter(COUNTER_TABLE_TTLS, TablesManager.GetTtl().PathsCount());
+    Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, TablesManager.GetTables().size());
+    Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, TablesManager.GetSchemaPresets().size());
+    Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_TTLS, TablesManager.GetTtl().PathsCount());
 }
 
 void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterProto, const NOlap::TSnapshot& version,

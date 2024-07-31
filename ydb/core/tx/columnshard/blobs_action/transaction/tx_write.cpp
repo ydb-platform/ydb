@@ -70,7 +70,7 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
 
             if (!InsertOneBlob(txc, i, writeId)) {
                 LOG_S_DEBUG(TxPrefix() << "duplicate writeId " << (ui64)writeId << TxSuffix());
-                Self->Counters.GetTabletCounters().IncCounter(COUNTER_WRITE_DUPLICATE);
+                Self->Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_DUPLICATE);
             }
         }
     }
@@ -143,7 +143,7 @@ void TTxWrite::Complete(const TActorContext& ctx) {
         Self->Counters.GetCSCounters().OnWriteTxComplete(now - writeMeta.GetWriteStartInstant());
         Self->Counters.GetCSCounters().OnSuccessWriteResponse();
     }
-    Self->Counters.GetTabletCounters().IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
+    Self->Counters.GetTabletCounters()->IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
 }
 
 }

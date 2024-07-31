@@ -192,7 +192,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
 void TGeneralCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
     TBase::DoWriteIndexOnComplete(self, context);
     if (self) {
-        self->Counters.GetTabletCounters().OnCompactionWriteIndexCompleted(
+        self->Counters.GetTabletCounters()->OnCompactionWriteIndexCompleted(
             context.FinishedSuccessfully, context.BlobsWritten, context.BytesWritten);
     }
 }

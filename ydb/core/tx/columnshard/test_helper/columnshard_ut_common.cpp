@@ -125,26 +125,25 @@ bool WriteDataImpl(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shar
 }
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId, const ui64 writeId, const ui64 tableId, const TString& data,
-    const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>* writeIds, const NEvWrite::EModificationType mType,
-    const std::set<std::string>& notNullColumns) {
+    const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>* writeIds, const NEvWrite::EModificationType mType) {
     NLongTxService::TLongTxId longTxId;
     UNIT_ASSERT(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1"));
     return WriteDataImpl(
-        runtime, sender, shardId, tableId, longTxId, writeId, data, NArrow::MakeArrowSchema(ydbSchema, notNullColumns), writeIds, mType);
+        runtime, sender, shardId, tableId, longTxId, writeId, data, NArrow::MakeArrowSchema(ydbSchema), writeIds, mType);
 }
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 writeId, const ui64 tableId, const TString& data,
     const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, bool waitResult, std::vector<ui64>* writeIds,
-    const NEvWrite::EModificationType mType, const std::set<std::string>& notNullColumns) {
+    const NEvWrite::EModificationType mType) {
     NLongTxService::TLongTxId longTxId;
     UNIT_ASSERT(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1"));
     if (writeIds) {
         return WriteDataImpl(runtime, sender, TTestTxConfig::TxTablet0, tableId, longTxId, writeId, data,
-            NArrow::MakeArrowSchema(ydbSchema, notNullColumns), writeIds, mType);
+            NArrow::MakeArrowSchema(ydbSchema), writeIds, mType);
     }
     std::vector<ui64> ids;
     return WriteDataImpl(runtime, sender, TTestTxConfig::TxTablet0, tableId, longTxId, writeId, data,
-        NArrow::MakeArrowSchema(ydbSchema, notNullColumns), waitResult ? &ids : nullptr, mType);
+        NArrow::MakeArrowSchema(ydbSchema), waitResult ? &ids : nullptr, mType);
 }
 
 std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, const NLongTxService::TLongTxId& longTxId,

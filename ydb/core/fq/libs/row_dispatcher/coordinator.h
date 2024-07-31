@@ -18,6 +18,7 @@ std::unique_ptr<NActors::IActor> NewCoordinator(
     NActors::TActorId rowDispatcherId,
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const TYqSharedResources::TPtr& yqSharedResources);
+    const TYqSharedResources::TPtr& yqSharedResources,
+    const TString& tenant);
 
 } // namespace NFq

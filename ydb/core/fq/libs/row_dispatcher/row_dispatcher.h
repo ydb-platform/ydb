@@ -17,6 +17,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const NConfig::TCommonConfig& commonConfig,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory);
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    const TString& tenant);
 
 } // namespace NFq

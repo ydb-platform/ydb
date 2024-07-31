@@ -20,6 +20,8 @@
 namespace NYql::NDq {
 class TDqAsyncIoFactory;
 
+const i64 PQRdReadDefaultFreeSpace = 16_MB;
+
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     NPq::NProto::TDqPqTopicSource&& settings,
     ui64 inputIndex,
@@ -30,8 +32,9 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     const THashMap<TString, TString>& taskParams,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const NActors::TActorId& computeActorId,
-    const NKikimr::NMiniKQL::THolderFactory& holderFactory);
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    i64 bufferSize = PQRdReadDefaultFreeSpace);
 
-void RegisterDqPqRdReadActorFactory(TDqAsyncIoFactory& factory, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory);
+void RegisterDqPqRdReadActorFactory(TDqAsyncIoFactory& factory, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory);
 
 } // namespace NYql::NDq

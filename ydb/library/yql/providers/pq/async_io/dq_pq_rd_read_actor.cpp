@@ -87,7 +87,7 @@ struct TEvPrivate {
 
 } // namespace
 
-class TDqPqRdReadActor : public NActors::TActorBootstrapped<TDqPqRdReadActor>, public IDqComputeActorAsyncInput, public NYql::NDq::TRetryEventsQueue::ICallbacks {
+class TDqPqRdReadActor : public NActors::TActor<TDqPqRdReadActor>, public IDqComputeActorAsyncInput, public NYql::NDq::TRetryEventsQueue::ICallbacks {
 public:
     using TPartitionKey = std::pair<TString, ui64>; // Cluster, partition id.
     using TDebugOffsets = TMaybe<std::pair<ui64, ui64>>;
@@ -111,7 +111,6 @@ private:
     std::vector<std::tuple<TString, TPqMetaExtractor::TPqMetaExtractorLambda>> MetadataFields;
     TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
     TMaybe<TInstant> NextIdlenesCheckAt;
-    NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory2;
     const TString Token;
     bool AddBearerToToken;
     TMaybe<NActors::TActorId> CoordinatorActorId;
@@ -156,7 +155,6 @@ public:
         NPq::NProto::TDqReadTaskParams&& readParams,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const NActors::TActorId& computeActorId,
-        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory2,
         const TString& token,
         bool addBearerToToken);
 
@@ -187,14 +185,9 @@ public:
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvPing, Handle);
         hFunc(NActors::TEvents::TEvPing, Handle);
-        
-
-
-        // hFunc(NActors::TEvents::TEvWakeup, Handle)
     })
     static constexpr char ActorName[] = "DQ_PQ_READ_ACTOR";
 
-    void Bootstrap();
     void SaveState(const NDqProto::TCheckpoint& checkpoint, TSourceState& state) override;
     void LoadState(const TSourceState& state) override;
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override;
@@ -219,11 +212,10 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         NPq::NProto::TDqReadTaskParams&& readParams,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const NActors::TActorId& computeActorId,
-        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory2,
         const TString& token,
         bool addBearerToToken)
-       // : Alloc(__LOCATION__)
-        : InputIndex(inputIndex)
+        : TActor<TDqPqRdReadActor>(&TDqPqRdReadActor::StateFunc)
+        , InputIndex(inputIndex)
         , TxId(txId)
         , HolderFactory(holderFactory)
         , LogPrefix(TStringBuilder() << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << taskId << ". PQ source. ")
@@ -232,7 +224,6 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         , ReadParams(std::move(readParams))
         , StartingMessageTimestamp(TInstant::MilliSeconds(TInstant::Now().MilliSeconds())) // this field is serialized as milliseconds, so drop microseconds part to be consistent with storage
         , ComputeActorId(computeActorId)
-        , CredentialsProviderFactory2(credentialsProviderFactory2)
         , Token(token)
         , AddBearerToToken(addBearerToToken)
 {
@@ -280,12 +271,6 @@ void TDqPqRdReadActor::ProcessState() {
             sessionInfo.Status = SessionInfo::ESessionStatus::Started;
         }
     }
-}
-
-void TDqPqRdReadActor::Bootstrap() {
-    Become(&TDqPqRdReadActor::StateFunc);
-    SRC_LOG_D("TDqPqRdReadActor::Bootstrap");
-   // ProcessState();
 }
 
 void TDqPqRdReadActor::SaveState(const NDqProto::TCheckpoint& checkpoint, TSourceState& state) {
@@ -385,7 +370,7 @@ void TDqPqRdReadActor::PassAway() { // Is called from Compute Actor
         //Send(sessionInfo.RowDispatcherActorId, event.release());
         sessionInfo.EventsQueue.Send(event.release());
     }
-    TActorBootstrapped<TDqPqRdReadActor>::PassAway();
+    TActor<TDqPqRdReadActor>::PassAway();
 }
 
 i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) {
@@ -639,7 +624,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const NActors::TActorId& computeActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory)
+    i64 /*bufferSize*/) // TODO
 {
     auto taskParamsIt = taskParams.find("pq");
     YQL_ENSURE(taskParamsIt != taskParams.end(), "Failed to get pq task params");
@@ -661,7 +646,6 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
         std::move(readTaskParamsMsg),
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         computeActorId,
-        credentialsProviderFactory,
         token,
         addBearerToToken
     );
@@ -671,10 +655,9 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
 
 void RegisterDqPqRdReadActorFactory(
     TDqAsyncIoFactory& factory,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory) {
+    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) {
     factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqRdSource",
-        [credentialsFactory = std::move(credentialsFactory), credentialsProviderFactory = std::move(credentialsProviderFactory)](
+        [credentialsFactory = std::move(credentialsFactory)](
             NPq::NProto::TDqPqTopicSource&& settings,
             IDqAsyncIoFactory::TSourceArguments&& args)
     {
@@ -690,7 +673,7 @@ void RegisterDqPqRdReadActorFactory(
             credentialsFactory,
             args.ComputeActorId,
             args.HolderFactory,
-            credentialsProviderFactory);
+            PQRdReadDefaultFreeSpace);
     });
 }
 

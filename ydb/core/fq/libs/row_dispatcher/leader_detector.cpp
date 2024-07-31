@@ -68,13 +68,15 @@ class TLeaderDetector : public TActorBootstrapped<TLeaderDetector> {
     TMaybe<TActorId> LeaderActorId;
     bool HasSubcription = false;
     const TString LogPrefix;
+    const TString Tenant;
 
 public:
     TLeaderDetector(
         NActors::TActorId rowDispatcherId,
         const NConfig::TRowDispatcherCoordinatorConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-        NYdb::TDriver driver);
+        NYdb::TDriver driver,
+        const TString& tenant);
 
     void Bootstrap();
 
@@ -108,12 +110,14 @@ TLeaderDetector::TLeaderDetector(
     NActors::TActorId parentId,
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    NYdb::TDriver driver)
+    NYdb::TDriver driver,
+    const TString& tenant)
     : Config(config)
     , YdbConnection(NewYdbConnection(config.GetStorage(), credentialsProviderFactory, driver))
-    , CoordinationNodePath(JoinPath(YdbConnection->TablePathPrefix, Config.GetNodePath()))
+    , CoordinationNodePath(JoinPath(YdbConnection->TablePathPrefix, tenant))
     , ParentId(parentId)
-    , LogPrefix("LeaderDetector: ") {
+    , LogPrefix("LeaderDetector: ")
+    , Tenant(tenant) {
 }
 
 void TLeaderDetector::Bootstrap() {
@@ -241,9 +245,10 @@ std::unique_ptr<NActors::IActor> NewLeaderDetector(
     NActors::TActorId parentId,
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    NYdb::TDriver driver)
+    NYdb::TDriver driver,
+    const TString& tenant)
 {
-    return std::unique_ptr<NActors::IActor>(new TLeaderDetector(parentId, config, credentialsProviderFactory, driver));
+    return std::unique_ptr<NActors::IActor>(new TLeaderDetector(parentId, config, credentialsProviderFactory, driver, tenant));
 }
 
 } // namespace NFq

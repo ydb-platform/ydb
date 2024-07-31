@@ -482,6 +482,10 @@ public:
                     }
                 }
 
+                YQL_CLOG(INFO, Core) << "UseRowDispatcher " << useRowDispatcher;
+                YQL_CLOG(INFO, Core) << "UseRowDispatcher format" << format;
+
+                //useRowDispatcher = true; // TODO
                 protoSettings.PackFrom(srcDesc);
                 useRowDispatcher = useRowDispatcher && (format == "json_each_row");
                 sourceType = !useRowDispatcher ? "PqSource" : "PqRdSource";

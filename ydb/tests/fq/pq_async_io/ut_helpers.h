@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/providers/common/ut_helpers/dq_fake_ca.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
+#include <ydb/library/yql/providers/pq/async_io/dq_pq_rd_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
@@ -47,6 +48,10 @@ struct TPqIoTestFixture : public NUnitTest::TBaseFixture {
     {
         InitSource(BuildPqTopicSourceSettings(topic), freeSpace);
     }
+
+    void InitRdSource(
+        NYql::NPq::NProto::TDqPqTopicSource&& settings,
+        i64 freeSpace = 1_MB);
 
     template<typename T>
     std::vector<std::variant<T, TInstant>> SourceRead(const TReadValueParser<T> parser, i64 freeSpace = 12345) {

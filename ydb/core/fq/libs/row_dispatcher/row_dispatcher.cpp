@@ -44,6 +44,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> , public NYql::
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     const TString LogPrefix;
     ui64 NextEventQueueId = 0;
+    TString Tenant;
 
     using ConsumerSessionKey = std::pair<TActorId, ui32>;   // ReadActorId / PartitionId
     using TopicSessionKey = std::pair<TString, ui32>;       // TopicPath / PartitionId
@@ -71,7 +72,8 @@ public:
         const NConfig::TCommonConfig& commonConfig,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const TYqSharedResources::TPtr& yqSharedResources,
-        NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory);
+        NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+        const TString& tenant);
 
     void Bootstrap();
 
@@ -131,23 +133,25 @@ TRowDispatcher::TRowDispatcher(
     const NConfig::TCommonConfig& commonConfig,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    const TString& tenant)
     : Config(config)
     , CommonConfig(commonConfig)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , YqSharedResources(yqSharedResources)
     , CredentialsFactory(credentialsFactory)
-    , LogPrefix("RowDispatcher: ")  {
+    , LogPrefix("RowDispatcher: ")
+    , Tenant(tenant) {
 }
 
 void TRowDispatcher::Bootstrap() {
     Become(&TRowDispatcher::StateFunc);
-    LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped row dispatcher, id " << SelfId());
+    LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped row dispatcher, id " << SelfId() << ", tenant " << Tenant);
 
     if (Config.GetCoordinator().GetEnabled()) {
         const auto& config = Config.GetCoordinator();
-        Register(NewLeaderDetector(SelfId(), config, CredentialsProviderFactory, YqSharedResources->UserSpaceYdbDriver).release());
-        Register(NewCoordinator(SelfId(), config, CredentialsProviderFactory, YqSharedResources).release());
+        Register(NewLeaderDetector(SelfId(), config, CredentialsProviderFactory, YqSharedResources->UserSpaceYdbDriver, Tenant).release());
+        Register(NewCoordinator(SelfId(), config, CredentialsProviderFactory, YqSharedResources, Tenant).release());
     }
 }
 
@@ -416,9 +420,10 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const NConfig::TCommonConfig& commonConfig,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    const TString& tenant)
 {
-    return std::unique_ptr<NActors::IActor>(new TRowDispatcher(config, commonConfig, credentialsProviderFactory, yqSharedResources, credentialsFactory));
+    return std::unique_ptr<NActors::IActor>(new TRowDispatcher(config, commonConfig, credentialsProviderFactory, yqSharedResources, credentialsFactory, tenant));
 }
 
 } // namespace NFq

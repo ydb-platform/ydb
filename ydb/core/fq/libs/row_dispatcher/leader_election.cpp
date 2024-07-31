@@ -67,6 +67,7 @@ class TLeaderElection: public TActorBootstrapped<TLeaderElection> {
     TMaybe<NYdb::NCoordination::TSession> Session;
     TActorId ParentId;
     const TString LogPrefix;
+    const TString Tenant;
 
     struct NodeInfo {
         bool Connected = false;
@@ -78,7 +79,8 @@ public:
         NActors::TActorId parentId,
         const NConfig::TRowDispatcherCoordinatorConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-        const TYqSharedResources::TPtr& yqSharedResources);
+        const TYqSharedResources::TPtr& yqSharedResources,
+        const TString tenant);
 
     void Bootstrap();
 
@@ -110,14 +112,16 @@ TLeaderElection::TLeaderElection(
     NActors::TActorId parentId,
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const TYqSharedResources::TPtr& yqSharedResources)
+    const TYqSharedResources::TPtr& yqSharedResources,
+    const TString tenant)
     : Config(config)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , YqSharedResources(yqSharedResources)
     , YdbConnection(NewYdbConnection(config.GetStorage(), credentialsProviderFactory, yqSharedResources->UserSpaceYdbDriver))
-    , CoordinationNodePath(JoinPath(YdbConnection->TablePathPrefix, Config.GetNodePath()))
+    , CoordinationNodePath(JoinPath(YdbConnection->TablePathPrefix, tenant))
     , ParentId(parentId)
-    , LogPrefix("TLeaderElection: ") {
+    , LogPrefix("TLeaderElection: ")
+    , Tenant(tenant) {
 }
 
 ERetryErrorClass RetryFunc(const NYdb::TStatus& status) {
@@ -151,7 +155,9 @@ TYdbSdkRetryPolicy::TPtr MakeSchemaRetryPolicy() {
 
 void TLeaderElection::Bootstrap() {
     Become(&TLeaderElection::StateFunc);
-    Register(NewLeaderDetector(SelfId(), Config, CredentialsProviderFactory, YqSharedResources->UserSpaceYdbDriver).release());
+    LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << SelfId());
+
+    Register(NewLeaderDetector(SelfId(), Config, CredentialsProviderFactory, YqSharedResources->UserSpaceYdbDriver, Tenant).release());
 
     Register(MakeCreateCoordinationNodeActor(
         SelfId(),
@@ -241,9 +247,10 @@ std::unique_ptr<NActors::IActor> NewLeaderElection(
     NActors::TActorId rowDispatcherId,
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const TYqSharedResources::TPtr& yqSharedResources)
+    const TYqSharedResources::TPtr& yqSharedResources,
+    const TString& tenant)
 {
-    return std::unique_ptr<NActors::IActor>(new TLeaderElection(rowDispatcherId, config, credentialsProviderFactory, yqSharedResources));
+    return std::unique_ptr<NActors::IActor>(new TLeaderElection(rowDispatcherId, config, credentialsProviderFactory, yqSharedResources, tenant));
 }
 
 } // namespace NFq

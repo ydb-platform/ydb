@@ -172,7 +172,7 @@ void Init(
     }
 
     if (protoConfig.GetRowDispatcher().GetEnabled()) {
-        auto rowDispatcher = NFq::NewRowDispatcherService(protoConfig.GetRowDispatcher(), protoConfig.GetCommon(), NKikimr::CreateYdbCredentialsProviderFactory, yqSharedResources, credentialsFactory);
+        auto rowDispatcher = NFq::NewRowDispatcherService(protoConfig.GetRowDispatcher(), protoConfig.GetCommon(), NKikimr::CreateYdbCredentialsProviderFactory, yqSharedResources, credentialsFactory, tenant);
         actorRegistrator(NFq::RowDispatcherServiceActorId(), rowDispatcher.release());
     }
 
@@ -221,7 +221,7 @@ void Init(
 
         RegisterDqInputTransformLookupActorFactory(*asyncIoFactory);
         RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, yqCounters->GetSubgroup("subsystem", "DqSourceTracker"));
-        RegisterDqPqRdReadActorFactory(*asyncIoFactory, credentialsFactory, NKikimr::CreateYdbCredentialsProviderFactory);
+        RegisterDqPqRdReadActorFactory(*asyncIoFactory, credentialsFactory);
         RegisterYdbReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
 
         s3ActorsFactory->RegisterS3ReadActorFactory(*asyncIoFactory, credentialsFactory, httpGateway, s3HttpRetryPolicy, readActorFactoryCfg,

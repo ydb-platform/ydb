@@ -32,7 +32,8 @@ public:
             commonConfig,
             credentialsProviderFactory,
             yqSharedResources,
-            credentialsFactory
+            credentialsFactory,
+            "Tenant"
             ).release());
 
         Runtime.EnableScheduleForActor(RowDispatcher);

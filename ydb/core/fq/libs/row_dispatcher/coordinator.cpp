@@ -56,6 +56,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
     TYqSharedResources::TPtr YqSharedResources;
     TMaybe<TActorId> LeaderActorId;
     const TString LogPrefix;
+    const TString Tenant;
 
     struct NodeInfo {
         bool Connected = false;
@@ -69,7 +70,8 @@ public:
         NActors::TActorId rowDispatcherId,
         const NConfig::TRowDispatcherCoordinatorConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-        const TYqSharedResources::TPtr& yqSharedResources);
+        const TYqSharedResources::TPtr& yqSharedResources,
+        const TString& tenant);
 
     void Bootstrap();
 
@@ -100,17 +102,19 @@ TActorCoordinator::TActorCoordinator(
     NActors::TActorId /*rowDispatcherId*/,
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const TYqSharedResources::TPtr& yqSharedResources)
+    const TYqSharedResources::TPtr& yqSharedResources,
+    const TString& tenant)
     : Config(config)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , YqSharedResources(yqSharedResources)
-    , LogPrefix("Coordinator: ") {
+    , LogPrefix("Coordinator: ")
+    , Tenant(tenant) {
 }
 
 void TActorCoordinator::Bootstrap() {
     Become(&TActorCoordinator::StateFunc);
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped coordinator, id " << SelfId());
-    Register(NewLeaderElection(SelfId(), Config, CredentialsProviderFactory, YqSharedResources).release());
+    Register(NewLeaderElection(SelfId(), Config, CredentialsProviderFactory, YqSharedResources, Tenant).release());
 }
 
 void TActorCoordinator::Handle(NActors::TEvents::TEvPing::TPtr& ev) {
@@ -194,9 +198,10 @@ std::unique_ptr<NActors::IActor> NewCoordinator(
     NActors::TActorId rowDispatcherId,
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const TYqSharedResources::TPtr& yqSharedResources)
+    const TYqSharedResources::TPtr& yqSharedResources,
+    const TString& tenant)
 {
-    return std::unique_ptr<NActors::IActor>(new TActorCoordinator(rowDispatcherId, config, credentialsProviderFactory, yqSharedResources));
+    return std::unique_ptr<NActors::IActor>(new TActorCoordinator(rowDispatcherId, config, credentialsProviderFactory, yqSharedResources, tenant));
 }
 
 } // namespace NFq

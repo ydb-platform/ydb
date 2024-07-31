@@ -1344,10 +1344,87 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx.Pos(), objectId, "RESOURCE_POOL", false, {}, context));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore48:
-        case TRule_sql_stmt_core::kAltSqlStmtCore49:
+        case TRule_sql_stmt_core::kAltSqlStmtCore48: {
+            // create_backup_collection_stmt: CREATE BACKUP COLLECTION name WITH (k=v,...);
+            auto& node = core.GetAlt_sql_stmt_core48().GetRule_create_backup_collection_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_backup_collection2().GetRule_object_ref3().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_backup_collection2().GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
+                                 false,
+                                 context.ServiceId,
+                                 context.Cluster)) {
+                    return false;
+                }
+            }
+
+            std::map<TString, TDeferredAtom> kv;
+            if (!ParseBackupCollectionSettings(kv, node.GetRule_backup_collection_settings5())) {
+                 return false;
+            }
+
+            const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
+            constexpr const char* typeId = "BACKUP_COLLECTION";
+            AddStatementToBlocks(blocks,
+                                 BuildCreateObjectOperation(Ctx.Pos(),
+                                                            objectId,
+                                                            typeId,
+                                                            false,
+                                                            false,
+                                                            std::move(kv),
+                                                            context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore49: {
+            // alter_backup_collection_stmt: ALTER BACKUP COLLECTION name WITH (k=v,...);
+            auto& node = core.GetAlt_sql_stmt_core49().GetRule_alter_backup_collection_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_backup_collection2().GetRule_object_ref3().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_backup_collection2().GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
+                                 false,
+                                 context.ServiceId,
+                                 context.Cluster)) {
+                    return false;
+                }
+            }
+
+            std::map<TString, TDeferredAtom> kv;
+            if (!ParseBackupCollectionSettings(kv, node.GetRule_backup_collection_settings5())) {
+                return false;
+            }
+
+            const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
+            constexpr const char* typeId = "BACKUP_COLLECTION";
+            AddStatementToBlocks(blocks,
+                                 BuildAlterObjectOperation(Ctx.Pos(),
+                                                            objectId,
+                                                            typeId,
+                                                            std::move(kv),
+                                                            {},
+                                                            context));
+            break;
+        }
         case TRule_sql_stmt_core::kAltSqlStmtCore50: {
-            // FIXME: innokentii
+            // drop_backup_collection_stmt: DROP BACKUP COLLECTION name;
+            auto& node = core.GetAlt_sql_stmt_core50().GetRule_drop_backup_collection_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_backup_collection2().GetRule_object_ref3().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_backup_collection2().GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
+                                 false,
+                                 context.ServiceId,
+                                 context.Cluster)) {
+                    return false;
+                }
+            }
+
+            const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
+            constexpr const char* typeId = "BACKUP_COLLECTION";
+            AddStatementToBlocks(blocks,
+                                 BuildDropObjectOperation(Ctx.Pos(),
+                                                          objectId,
+                                                          typeId,
+                                                          false,
+                                                          {},
+                                                          context));
             break;
         }
         case TRule_sql_stmt_core::ALT_NOT_SET:

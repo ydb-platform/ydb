@@ -647,14 +647,13 @@ create_table_entry:
   | an_id_schema
 ;
 
-create_backup_collection_stmt: CREATE backup_collection WITH LPAREN changefeed_settings RPAREN;
-alter_backup_collection_stmt: ALTER backup_collection WITH LPAREN changefeed_settings RPAREN;
+create_backup_collection_stmt: CREATE backup_collection WITH LPAREN backup_collection_settings RPAREN;
+alter_backup_collection_stmt: ALTER backup_collection WITH LPAREN backup_collection_settings RPAREN;
 drop_backup_collection_stmt: DROP backup_collection;
 
-backup_collection: BACKUP COLLECTION an_id;
+backup_collection: BACKUP COLLECTION object_ref;
 backup_collection_settings: backup_collection_settings_entry (COMMA backup_collection_settings_entry)*;
-backup_collection_settings_entry: an_id EQUALS backup_collection_setting_value;
-backup_collection_setting_value: expr;
+backup_collection_settings_entry: an_id EQUALS table_setting_value;
 
 table_inherits: INHERITS LPAREN simple_table_ref_core (COMMA simple_table_ref_core)* RPAREN;
 table_partition_by: PARTITION BY HASH pure_column_list;
@@ -1216,6 +1215,7 @@ keyword_as_compat:
   | ATTACH
   | ATTRIBUTES
   | AUTOINCREMENT
+  | BACKUP
   | BEFORE
   | BEGIN
   | BERNOULLI
@@ -1224,6 +1224,7 @@ keyword_as_compat:
   | CHANGEFEED
   | CHECK
   // | COLLATE
+  | COLLECTION
   | COMMIT
   | CONDITIONAL
   | CONFLICT
@@ -1428,6 +1429,7 @@ keyword_compat: (
   | ATTACH
   | ATTRIBUTES
   | AUTOINCREMENT
+  | BACKUP
   | BEFORE
   | BEGIN
   | BERNOULLI
@@ -1436,6 +1438,7 @@ keyword_compat: (
   | CHANGEFEED
   | CHECK
   | COLLATE
+  | COLLECTION
   | COMMIT
   | CONDITIONAL
   | CONFLICT

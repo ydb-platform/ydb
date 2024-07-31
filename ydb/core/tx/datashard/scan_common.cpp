@@ -12,4 +12,16 @@ TColumnsTags GetAllTags(const TUserTable& tableInfo) {
 
     return result;
 }
+
+TColumnsTypes GetAllTypes(const TUserTable& tableInfo) {
+    TColumnsTypes result;
+    result.reserve(tableInfo.Columns.size());
+
+    for (const auto& it : tableInfo.Columns) {
+        result[it.second.Name] = it.second.Type;
+    }
+
+    return result;
+}
+
 }

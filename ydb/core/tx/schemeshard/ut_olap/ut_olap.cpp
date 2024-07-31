@@ -40,7 +40,7 @@ static const TString defaultTableSchema = R"(
 )";
 
 static const TVector<NArrow::NTest::TTestColumn> defaultYdbSchema = {
-    NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp).SetNullable(false) ),
+    NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)).SetNullable(false),
     NArrow::NTest::TTestColumn("data", TTypeInfo(NTypeIds::Utf8) )
 };
 

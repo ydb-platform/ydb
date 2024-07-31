@@ -120,8 +120,8 @@ private:
         serverSettings.SetFrFactory(functionRegistryFactory);
     }
 
-    NKikimr::Tests::TServerSettings GetServerSettings() {
-        ui32 msgBusPort = PortManager_.GetPort();
+    NKikimr::Tests::TServerSettings GetServerSettings(ui32 grpcPort) {
+        const ui32 msgBusPort = PortManager_.GetPort();
 
         NKikimr::Tests::TServerSettings serverSettings(msgBusPort, Settings_.AppConfig.GetAuthConfig(), Settings_.AppConfig.GetPQConfig());
         serverSettings.SetNodeCount(Settings_.NodeCount);
@@ -152,14 +152,22 @@ private:
             serverSettings.SetNeedStatsCollectors(true);
         }
 
+        if (Settings_.GrpcEnabled) {
+            serverSettings.SetGrpcPort(grpcPort);
+        }
+
         return serverSettings;
     }
 
-    void InitializeServer() {
-        NKikimr::Tests::TServerSettings serverSettings = GetServerSettings();
+    void InitializeServer(ui32 grpcPort) {
+        NKikimr::Tests::TServerSettings serverSettings = GetServerSettings(grpcPort);
 
         Server_ = MakeHolder<NKikimr::Tests::TServer>(serverSettings);
         Server_->GetRuntime()->SetDispatchTimeout(TDuration::Max());
+
+        if (Settings_.GrpcEnabled) {
+            Server_->EnableGRpc(grpcPort);
+        }
 
         Client_ = MakeHolder<NKikimr::Tests::TClient>(serverSettings);
         Client_->InitRootScheme();
@@ -204,14 +212,20 @@ public:
         : Settings_(settings)
         , CoutColors_(NColorizer::AutoColors(Cout))
     {
+        const ui32 grpcPort = Settings_.GrpcPort ? Settings_.GrpcPort : PortManager_.GetPort();
+
         InitializeYqlLogger();
-        InitializeServer();
+        InitializeServer(grpcPort);
         WaitResourcesPublishing();
 
         if (Settings_.MonitoringEnabled) {
             for (ui32 nodeIndex = 0; nodeIndex < Settings_.NodeCount; ++nodeIndex) {
                 Cout << CoutColors_.Cyan() << "Monitoring port" << (Settings_.NodeCount > 1 ? TStringBuilder() << " for node " << nodeIndex + 1 : TString()) << ": " << CoutColors_.Default() << Server_->GetRuntime()->GetMonPort(nodeIndex) << Endl;
             }
+        }
+
+        if (Settings_.GrpcEnabled) {
+            Cout << CoutColors_.Cyan() << "gRPC port: " << CoutColors_.Default() << grpcPort << Endl;
         }
     }
 
@@ -274,7 +288,7 @@ public:
 
     void QueryRequestAsync(const TRequestOptions& query) {
         if (!AsyncQueryRunnerActorId_) {
-            AsyncQueryRunnerActorId_ = GetRuntime()->Register(CreateAsyncQueryRunnerActor(Settings_.InFlightLimit));
+            AsyncQueryRunnerActorId_ = GetRuntime()->Register(CreateAsyncQueryRunnerActor(Settings_.AsyncQueriesSettings));
         }
 
         auto request = GetQueryRequest(query);

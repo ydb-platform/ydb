@@ -14,6 +14,16 @@ namespace NKqpRun {
 
 constexpr char YQL_TOKEN_VARIABLE[] = "YQL_TOKEN";
 
+struct TAsyncQueriesSettings {
+    enum class EVerbose {
+        EachQuery,
+        Final,
+    };
+
+    ui64 InFlightLimit = 0;
+    EVerbose Verbose = EVerbose::EachQuery;
+};
+
 struct TYdbSetupSettings {
     ui32 NodeCount = 1;
     TString DomainName = "Root";
@@ -21,6 +31,10 @@ struct TYdbSetupSettings {
 
     bool MonitoringEnabled = false;
     ui16 MonitoringPortOffset = 0;
+
+    bool GrpcEnabled = false;
+    ui16 GrpcPort = 0;
+
     bool TraceOptEnabled = false;
     TString LogOutputFile;
 
@@ -29,8 +43,7 @@ struct TYdbSetupSettings {
     NKikimr::NMiniKQL::TComputationNodeFactory ComputationFactory;
     TIntrusivePtr<NYql::IYtGateway> YtGateway;
     NKikimrConfig::TAppConfig AppConfig;
-
-    ui64 InFlightLimit = 0;
+    TAsyncQueriesSettings AsyncQueriesSettings;
 };
 
 

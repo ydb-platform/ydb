@@ -30,30 +30,30 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
             if (entry.Status == NSchemeCache::TSchemeCacheRequest::EStatus::PathErrorNotExist) {
                 Self->DeleteStatisticsFromTable();
             } else {
-                Self->FinishScan(db);
+                Self->FinishTraversal(db);
             }
             return true;
         }
 
         auto& partitioning = entry.KeyDescription->GetPartitions();
 
-        if (Self->IsColumnTable) {
+        if (Self->TraversalIsColumnTable) {
             Self->TabletsForReqDistribution.clear();
         } else {
-            Self->ShardRanges.clear();
+            Self->DatashardRanges.clear();
         }
 
         for (auto& part : partitioning) {
             if (!part.Range) {
                 continue;
             }
-            if (Self->IsColumnTable) {
+            if (Self->TraversalIsColumnTable) {
                 Self->TabletsForReqDistribution.insert(part.ShardId);
             } else {
                 TRange range;
                 range.EndKey = part.Range->EndKeyPrefix;
                 range.DataShardId = part.ShardId;
-                Self->ShardRanges.push_back(range);
+                Self->DatashardRanges.push_back(range);
             }
         }
 
@@ -67,10 +67,10 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
             return;
         }
 
-        if (Self->IsColumnTable) {
+        if (Self->TraversalIsColumnTable) {
             ctx.Send(Self->SelfId(), new TEvPrivate::TEvRequestDistribution);
         } else {
-            Self->NextRange();
+            Self->ScanNextDatashardRange();
         }
     }
 };

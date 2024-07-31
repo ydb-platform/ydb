@@ -14,6 +14,7 @@ from typing import List, Optional, Dict
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from junit_utils import get_property_value, iter_xml_files
 from gh_status import update_pr_comment_text
+from get_test_history import get_test_history
 
 
 class TestStatus(Enum):
@@ -38,6 +39,7 @@ class TestResult:
     status: TestStatus
     log_urls: Dict[str, str]
     elapsed: float
+    count_of_passed: int
 
     @property
     def status_display(self):
@@ -97,7 +99,7 @@ class TestResult:
             elapsed = 0
             print(f"Unable to cast elapsed time for {classname}::{name}  value={elapsed!r}")
 
-        return cls(classname, name, status, log_urls, elapsed)
+        return cls(classname, name, status, log_urls, elapsed, 0)
 
 
 class TestSummaryLine:
@@ -222,12 +224,13 @@ def render_pm(value, url, diff=None):
     return text
 
 
-def render_testlist_html(rows, fn):
+def render_testlist_html(rows, fn, build_preset):
     TEMPLATES_PATH = os.path.join(os.path.dirname(__file__), "templates")
 
     env = Environment(loader=FileSystemLoader(TEMPLATES_PATH), undefined=StrictUndefined)
 
     status_test = {}
+    last_n_runs = 5
     has_any_log = set()
 
     for t in rows:
@@ -243,8 +246,35 @@ def render_testlist_html(rows, fn):
     # remove status group without tests
     status_order = [s for s in status_order if s in status_test]
 
+    # get failed tests
+    failed_tests_array = []
+    history={}
+    for test in status_test.get(TestStatus.FAIL, []):
+        failed_tests_array.append(test.full_name)
+
+    if failed_tests_array:
+        try:
+            history = get_test_history(failed_tests_array, last_n_runs, build_preset)
+        except Exception as e:
+            print(f'Error:{e}')
+        
+    # sorting, at first show tests with passed resuts in history
+
+    if TestStatus.FAIL in status_test:
+        for test in status_test.get(TestStatus.FAIL, []):
+            if test.full_name in history:
+                test.count_of_passed = history[test.full_name][
+                    next(iter(history[test.full_name]))
+                ]["count_of_passed"]
+            else:
+                test.count_of_passed = 0
+        status_test[TestStatus.FAIL].sort(key=lambda val: (val.count_of_passed, val.full_name), reverse=True)
+
     content = env.get_template("summary.html").render(
-        status_order=status_order, tests=status_test, has_any_log=has_any_log
+        status_order=status_order,
+        tests=status_test,
+        has_any_log=has_any_log,
+        history=history,
     )
 
     with open(fn, "w") as fp:
@@ -267,7 +297,7 @@ def write_summary(summary: TestSummary):
         fp.close()
 
 
-def gen_summary(public_dir, public_dir_url, paths, is_retry: bool):
+def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset):
     summary = TestSummary(is_retry=is_retry)
 
     for title, html_fn, path in paths:
@@ -281,7 +311,7 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool):
             html_fn = os.path.relpath(html_fn, public_dir)
         report_url = f"{public_dir_url}/{html_fn}"
 
-        render_testlist_html(summary_line.tests, os.path.join(public_dir, html_fn))
+        render_testlist_html(summary_line.tests, os.path.join(public_dir, html_fn),build_preset)
         summary_line.add_report(html_fn, report_url)
         summary.add_line(summary_line)
 
@@ -349,7 +379,7 @@ def main():
     paths = iter(args.args)
     title_path = list(zip(paths, paths, paths))
 
-    summary = gen_summary(args.public_dir, args.public_dir_url, title_path, is_retry=bool(args.is_retry))
+    summary = gen_summary(args.public_dir, args.public_dir_url, title_path, is_retry=bool(args.is_retry),build_preset=args.build_preset)
     write_summary(summary)
 
     if summary.is_failed:

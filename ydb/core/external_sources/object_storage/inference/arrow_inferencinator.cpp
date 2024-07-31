@@ -177,7 +177,14 @@ std::variant<ArrowFields, TString> InferCsvTypes(std::shared_ptr<arrow::io::Rand
         return TStringBuilder{} << "couldn't read table from data: " << readerStatus.ToString();
     }
 
-    return table->fields();
+    ArrowFields fields = table->fields();
+    for (auto &field : fields) {
+        if (field->type()->id() == arrow::Type::NA) {
+            field = field->WithType(arrow::utf8());
+        }
+    }
+
+    return fields;
 }
 
 std::variant<ArrowFields, TString> InferType(EFileFormat format, std::shared_ptr<arrow::io::RandomAccessFile> file, const FormatConfig& config) {

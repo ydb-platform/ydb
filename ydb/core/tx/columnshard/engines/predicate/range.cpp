@@ -71,6 +71,11 @@ TPKRangeFilter::EUsageClass TPKRangeFilter::IsPortionInPartialUsage(const NArrow
                 return EUsageClass::DontUsage;
             }
         }
+        const std::partial_ordering equalityStartWithFrom = start.ComparePartNotNull(*from, from->Size());
+        if ((equalityStartWithFrom == std::partial_ordering::equivalent && !PredicateFrom.IsInclude()) ||
+            equalityStartWithFrom == std::partial_ordering::less) {
+            return EUsageClass::PartialUsage;
+        }
     }
 
     if (const auto& to = PredicateTo.GetReplaceKey()) {
@@ -84,10 +89,15 @@ TPKRangeFilter::EUsageClass TPKRangeFilter::IsPortionInPartialUsage(const NArrow
                 return EUsageClass::DontUsage;
             }
         }
+        const std::partial_ordering equalityEndWithTo = end.ComparePartNotNull(*to, to->Size());
+        if ((equalityEndWithTo == std::partial_ordering::equivalent && !PredicateTo.IsInclude()) ||
+            equalityEndWithTo == std::partial_ordering::greater) {
+            return EUsageClass::PartialUsage;
+        }
     }
 
-//    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("start", start.DebugString())("end", end.DebugString())("from", PredicateFrom.DebugString())(
-//        "to", PredicateTo.DebugString());
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("start", start.DebugString())("end", end.DebugString())("from", PredicateFrom.DebugString())(
+        "to", PredicateTo.DebugString());
 
     return EUsageClass::FullUsage;
 }

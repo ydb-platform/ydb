@@ -41,14 +41,13 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(con
         switch (usage) {
             case TPKRangeFilter::EUsageClass::PartialUsage:
                 partialUsageByPK = true;
-            case TPKRangeFilter::EUsageClass::DontUsage: {
-                std::shared_ptr<TFetchingScript> result = std::make_shared<TFetchingScript>();
-                result->SetBranchName("FAKE");
-                result->AddStep(std::make_shared<TBuildFakeSpec>(0));
-                return result;
-            }
+                break;
+            case TPKRangeFilter::EUsageClass::DontUsage:
+                partialUsageByPK = true;
+                break;
             case TPKRangeFilter::EUsageClass::FullUsage:
                 partialUsageByPK = false;
+                break;
         }
     }
     const bool useIndexes = (IndexChecker ? source->HasIndexes(IndexChecker->GetIndexIds()) : false);

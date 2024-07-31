@@ -195,8 +195,6 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
 TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TString& dbPath,
     const TRestoreSettings& settings, const THashSet<TString>& oldEntries)
 {   
-    Cerr << "RestoreFolder " << "fsPath# " << fsPath << " dbPath# " << dbPath << "\n";
-
     if (!fsPath) {
         return Result<TRestoreResult>(EStatus::BAD_REQUEST, "Folder is not specified");
     }
@@ -464,7 +462,6 @@ TRestoreResult TRestoreClient::RestoreIndexes(const TString& dbPath, const TTabl
 TRestoreResult TRestoreClient::RestorePermissions(const TFsPath& fsPath, const TString& dbPath,
     const TRestoreSettings& settings, const THashSet<TString>& oldEntries)
 {   
-    Cerr << "RestorePermissions " << "fsPath# " << fsPath << " dbPath# " << dbPath << "\n";
     if (oldEntries.contains(dbPath)) {
         return Result<TRestoreResult>();
     }

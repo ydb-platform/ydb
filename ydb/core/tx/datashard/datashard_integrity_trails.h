@@ -1,14 +1,17 @@
 #pragma once
 
+#include <openssl/sha.h>
+#include <sstream>
+
 #include <library/cpp/string_utils/base64/base64.h>
+
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
-#include <ydb/library/actors/core/actor.h>
-#include <openssl/sha.h>
-#include <sstream>
+#include <ydb/core/tx/locks/sys_tables.h>
 
 namespace NKikimr {
 
@@ -57,11 +60,16 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
             ss << "TabletId# " << tabletId << " TxId# " << txId << " ";
 
             for (size_t i = offset, j = 0; i < keys.size() && j < batchSize; i++, j++) {
+                auto& keyDef = keys[i].Key;
+
+                if (TSysTables::IsSystemTable(keyDef->TableId)) {
+                    continue;
+                }
+                
                 if (j > 0) {
                     ss << ", ";
                 }
 
-                auto& keyDef = keys[i].Key;
                 auto& range = keyDef->Range;
                 TString rowOp;
                 switch (keyDef->RowOperation) {

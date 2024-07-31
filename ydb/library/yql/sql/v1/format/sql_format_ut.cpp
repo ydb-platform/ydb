@@ -1605,4 +1605,18 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
         TSetup setup;
         setup.Run(cases);
     }
+
+    Y_UNIT_TEST(BackupCollectionOperations) {
+        TCases cases = {
+            {"creAte  BackuP colLection `-naMe` wIth (a = \"b\")",
+             "CREATE BACKUP COLLECTION `-naMe` WITH (a = \"b\");\n"},
+            {"alter BackuP  colLection naMe wIth (a = \"b\",c=false)",
+             "ALTER BACKUP COLLECTION naMe WITH (a = \"b\", c = FALSE);\n"},
+            {"DROP backup collection       `/some/path`",
+             "DROP BACKUP COLLECTION `/some/path`;\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
 }

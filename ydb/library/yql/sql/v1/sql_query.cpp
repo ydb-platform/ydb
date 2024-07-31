@@ -1344,7 +1344,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx.Pos(), objectId, "RESOURCE_POOL", false, {}, context));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore48: {
+        case TRule_sql_stmt_core::kAltSqlStmtCore48:
+        case TRule_sql_stmt_core::kAltSqlStmtCore49:
+        case TRule_sql_stmt_core::kAltSqlStmtCore50: {
             // FIXME: innokentii
             break;
         }

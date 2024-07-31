@@ -72,8 +72,9 @@ private:
     TExprNode::TPtr GenerateCondenseSwitch(const TExprNode::TPtr& keyExtractor);
     TExprNode::TPtr BuildFinalizeByKeyLambda(const TExprNode::TPtr& preprocessLambda, const TExprNode::TPtr& keyExtractor);
     TExprNode::TPtr GeneratePostAggregateInitPhase();
-    TExprNode::TPtr GeneratePostAggregateSavePhase();
+    TExprNode::TPtr GeneratePostAggregateFinishPhase();
     TExprNode::TPtr GeneratePostAggregateMergePhase();
+    TExprNode::TPtr GeneratePostAggregateSavePhase();
 
     std::function<TExprNodeBuilder& (TExprNodeBuilder&)> GetPartialAggArgExtractor(ui32 i, bool deserialize);
     TExprNode::TPtr GetFinalAggStateExtractor(ui32 i);

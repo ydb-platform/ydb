@@ -466,14 +466,14 @@
         {
             "Name": "TCoFinalizeByKeyWithSpilling",
             "Base": "TCoInputBase",
-            "Match": {"Type": "Callable", "Name": "FinalizeByKey"},
+            "Match": {"Type": "Callable", "Name": "FinalizeByKeyWithSpilling"},
             "Children": [
                 {"Index": 1, "Name": "PreMapLambda",        "Type": "TCoLambda"},
                 {"Index": 2, "Name": "KeySelectorLambda",   "Type": "TCoLambda"},
                 {"Index": 3, "Name": "InitHandlerLambda",   "Type": "TCoLambda"},
                 {"Index": 4, "Name": "UpdateHandlerLambda", "Type": "TCoLambda"},
                 {"Index": 5, "Name": "FinishHandlerLambda", "Type": "TCoLambda"},
-                {"Index": 6, "Name": "SaveHandlerLambda", "Type": "TCoLambda"}
+                {"Index": 6, "Name": "SaveHandlerLambda",   "Type": "TCoLambda"}
             ]
         },
         {

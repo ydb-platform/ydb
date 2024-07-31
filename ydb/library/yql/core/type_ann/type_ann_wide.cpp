@@ -446,7 +446,7 @@ IGraphTransformer::TStatus WideCombinerWithSpillingWrapper(const TExprNode::TPtr
     auto& initHandler = input->ChildRef(3U);
     auto& updateHandler = input->ChildRef(4U);
     auto& finishHandler = input->ChildRef(5U);
-    auto& loadHandler = input->ChildRef(6U);
+    auto& serdeHandler = input->ChildRef(6U);
 
     if (const auto status = ConvertToLambda(keyExtractor, ctx.Expr, multiType->GetSize()); status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
@@ -535,23 +535,19 @@ IGraphTransformer::TStatus WideCombinerWithSpillingWrapper(const TExprNode::TPtr
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    auto retType = GetWideLambdaOutputType(*finishHandler, ctx.Expr);
-
-    argTypes.clear();
-    auto &retWideItems = retType->GetItems();
-    argTypes.insert(argTypes.begin(), retWideItems.begin(), retWideItems.end());
-
-    if (const auto status = ConvertToLambda(loadHandler, ctx.Expr, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
+    if (const auto status = ConvertToLambda(serdeHandler, ctx.Expr, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
     }
 
-    if (!UpdateLambdaAllArgumentsTypes(loadHandler, argTypes, ctx.Expr)) {
+    if (!UpdateLambdaAllArgumentsTypes(serdeHandler, argTypes, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!loadHandler->GetTypeAnn()) {
+    if (!serdeHandler->GetTypeAnn()) {
         return IGraphTransformer::TStatus::Repeat;
     }
+
+    auto retType = GetWideLambdaOutputType(*finishHandler, ctx.Expr);
 
     input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(retType));
     return IGraphTransformer::TStatus::Ok;

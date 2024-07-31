@@ -1324,6 +1324,57 @@ TExprBase DqBuildFinalizeByKeyStage(TExprBase node, TExprContext& ctx,
         .Done();
 }
 
+TExprBase DqBuildFinalizeByKeyWithSpillingStage(TExprBase node, TExprContext& ctx,
+    const TParentsMap& parentsMap, bool allowStageMultiUsage)
+{
+    auto finalizeInput = node.Maybe<TCoFinalizeByKeyWithSpilling>().Input();
+    if (!finalizeInput.Maybe<TDqCnUnionAll>()) {
+        return node;
+    }
+
+    auto finalize = node.Cast<TCoFinalizeByKeyWithSpilling>();
+    auto dqUnion = finalize.Input().Cast<TDqCnUnionAll>();
+
+    if (!IsSingleConsumerConnection(dqUnion, parentsMap, allowStageMultiUsage)) {
+        return node;
+    }
+
+    auto keyLambda = finalize.KeySelectorLambda();
+
+    TVector<TCoArgument> inputArgs;
+    TVector<TExprBase> inputConns;
+
+    inputConns.push_back(dqUnion);
+
+    auto finalizeStage = Build<TDqStage>(ctx, node.Pos())
+        .Inputs()
+            .Add(inputConns)
+            .Build()
+        .Program()
+            .Args({ "input" })
+            .Body<TCoToStream>()
+                .Input<TCoFinalizeByKeyWithSpilling>()
+                    .Input("input")
+                    .PreMapLambda(finalize.PreMapLambda())
+                    .KeySelectorLambda(finalize.KeySelectorLambda())
+                    .InitHandlerLambda(finalize.InitHandlerLambda())
+                    .UpdateHandlerLambda(finalize.UpdateHandlerLambda())
+                    .FinishHandlerLambda(finalize.FinishHandlerLambda())
+                    .SaveHandlerLambda(finalize.SaveHandlerLambda())
+                    .Build()
+                .Build()
+            .Build()
+        .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+        .Done();
+
+    return Build<TDqCnUnionAll>(ctx, node.Pos())
+        .Output()
+            .Stage(finalizeStage)
+            .Index().Build("0")
+            .Build()
+        .Done();
+}
+
 /*
  * Optimizer rule which handles a switch to scalar expression context for aggregation results.
  * This switch happens for full aggregations, such as @code select sum(column) from table @endcode).

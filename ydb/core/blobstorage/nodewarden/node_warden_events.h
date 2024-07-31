@@ -21,10 +21,14 @@ namespace NKikimr::NStorage {
     {
         TEvNodeConfigReversePush() = default;
 
-        TEvNodeConfigReversePush(ui32 rootNodeId, const NKikimrBlobStorage::TStorageConfig *committedConfig) {
+        TEvNodeConfigReversePush(ui32 rootNodeId, const NKikimrBlobStorage::TStorageConfig *committedConfig,
+                bool recurseConfigUpdate) {
             Record.SetRootNodeId(rootNodeId);
             if (committedConfig) {
                 Record.MutableCommittedStorageConfig()->CopyFrom(*committedConfig);
+            }
+            if (recurseConfigUpdate) {
+                Record.SetRecurseConfigUpdate(recurseConfigUpdate);
             }
         }
 

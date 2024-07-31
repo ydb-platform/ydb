@@ -577,6 +577,8 @@ public:
             return result;
         }
 
+        alterData->ActivePartitionCount = topic->ActivePartitionCount;
+
         bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge()
                 && NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
                 && NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
@@ -593,6 +595,7 @@ public:
 
             for (const auto& split : alter.GetSplit()) {
                 alterData->TotalGroupCount += 2;
+                ++alterData->ActivePartitionCount;
 
                 const auto splittedPartitionId = split.GetPartition();
                 if (!topic->Partitions.contains(splittedPartitionId)) {
@@ -654,6 +657,7 @@ public:
             }
             for (const auto& merge : alter.GetMerge()) {
                 alterData->TotalGroupCount += 1;
+                --alterData->ActivePartitionCount;
 
                 const auto partitionId = merge.GetPartition();
                 if (!topic->Partitions.contains(partitionId)) {
@@ -737,6 +741,10 @@ public:
         }
 
         alterData->TotalPartitionCount = topic->TotalPartitionCount + alterData->PartitionsToAdd.size();
+        if (!splitMergeEnabled) {
+            alterData->ActivePartitionCount = alterData->TotalPartitionCount;
+        }
+
         alterData->NextPartitionId = topic->NextPartitionId;
         for (const auto& p : alterData->PartitionsToAdd) {
             if (p.GroupId == 0 || p.GroupId > alterData->TotalGroupCount) {
@@ -780,8 +788,8 @@ public:
             return result;
         }
 
-        const PQGroupReserve reserve(newTabletConfig, alterData->TotalPartitionCount);
-        const PQGroupReserve oldReserve(tabletConfig, topic->TotalPartitionCount);
+        const PQGroupReserve reserve(newTabletConfig, alterData->ActivePartitionCount);
+        const PQGroupReserve oldReserve(tabletConfig, topic->ActivePartitionCount);
 
         const ui64 storageToReserve = reserve.Storage > oldReserve.Storage ? reserve.Storage - oldReserve.Storage : 0;
 

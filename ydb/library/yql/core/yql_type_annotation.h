@@ -150,7 +150,73 @@ struct TYqlOperationOptions {
     TMaybe<NYT::TNode> ParametersYson;
 };
 
-using TColumnOrder = TVector<TString>;
+class TColumnOrder {
+public:
+    struct TOrderedItem {
+        TString LogicalName;
+        TString PhysicalName;
+        TOrderedItem(const TString& logical, const TString& physical) : LogicalName(logical), PhysicalName(physical) {}
+        TOrderedItem(TOrderedItem&&) = default;
+        TOrderedItem(const TOrderedItem&) = default;
+        TOrderedItem& operator=(const TOrderedItem&) = default;
+        bool operator==(const TOrderedItem& other) const {
+            return LogicalName == other.LogicalName && PhysicalName == other.PhysicalName;
+        }
+    };
+    TColumnOrder() = default;
+    TColumnOrder(const TColumnOrder&) = default;
+    TColumnOrder(TColumnOrder&&) = default;
+    TColumnOrder& operator=(const TColumnOrder&);
+    explicit TColumnOrder(const TVector<TString>& order);
+    TString AddColumn(const TString& name);
+
+    bool IsDuplicated(const TString& name) const;
+
+    void Shrink(size_t remain);
+
+    void Reserve(size_t);
+    void EraseIf(const std::function<bool(const TString&)>& fn);
+    void EraseIf(const std::function<bool(const TOrderedItem&)>& fn);
+    void Clear();
+
+    size_t Size() const;
+
+    TString Find(const TString&) const;
+
+    TVector<TOrderedItem>::const_pointer begin() const {
+        return Order_.cbegin();
+    }
+
+    TVector<TOrderedItem>::const_pointer end() const {
+        return Order_.cend();
+    }
+
+    const TOrderedItem& operator[](size_t i) const {
+        return Order_[i];
+    }
+
+    bool operator==(const TColumnOrder& other) const {
+        return Order_ == other.Order_;
+    }
+
+    const TOrderedItem& at(size_t i) const {
+        return Order_[i];
+    }
+
+    const TOrderedItem& front() const {
+        return Order_.front();
+    }
+
+    const TOrderedItem& back() const {
+        return Order_.back();
+    }
+private:
+    THashMap<TString, TString> GeneratedToOriginal_;
+    THashMap<TString, uint64_t> UseCount_;
+    // (name, generated_name)
+    TVector<TOrderedItem> Order_;
+};
+
 TString FormatColumnOrder(const TMaybe<TColumnOrder>& columnOrder, TMaybe<size_t> maxColumns = {});
 ui64 AddColumnOrderHash(const TMaybe<TColumnOrder>& columnOrder, ui64 hash);
 

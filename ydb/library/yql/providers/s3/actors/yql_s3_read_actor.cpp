@@ -38,6 +38,7 @@
 
 #include "yql_arrow_column_converters.h"
 #include "yql_arrow_push_down.h"
+#include "yql_s3_decompressor_actor.h"
 #include "yql_s3_actors_util.h"
 #include "yql_s3_raw_read_actor.h"
 #include "yql_s3_read_actor.h"
@@ -364,22 +365,49 @@ public:
         TString RawDataBuffer;
     };
 
+    class TCoroDecompressorBuffer : public NDB::ReadBuffer {
+    public:
+        TCoroDecompressorBuffer(TS3ReadCoroImpl* coro)
+            : NDB::ReadBuffer(nullptr, 0ULL)
+            , Coro(coro)
+        { }
+    private:
+        bool nextImpl() final {
+            while (!Coro->DecompressedInputFinished || !Coro->DeferredDecompressedDataParts.empty()) {
+                Coro->CpuTime += Coro->GetCpuTimeDelta();
+                Coro->ProcessOneEvent();
+                Coro->StartCycleCount = GetCycleCountFast();
+                auto decompressed = Coro->ExtractDecompressedDataPart();
+                if (decompressed) {
+                    RawDataBuffer.swap(decompressed);
+                    auto rawData = const_cast<char*>(RawDataBuffer.data());
+                    working_buffer = NDB::BufferBase::Buffer(rawData, rawData + RawDataBuffer.size());
+                    return true;
+                } else if (Coro->InputBuffer) {
+                    Coro->Send(Coro->DecompressorActorId, new TEvS3Provider::TEvDecompressDataRequest(std::move(Coro->InputBuffer)));
+                }
+            }
+            return false;
+        }
+        TS3ReadCoroImpl *const Coro;
+        TString RawDataBuffer;
+    };
+
     void RunClickHouseParserOverHttp() {
 
         LOG_CORO_D("RunClickHouseParserOverHttp");
 
-        std::unique_ptr<NDB::ReadBuffer> coroBuffer = std::make_unique<TCoroReadBuffer>(this);
+        std::unique_ptr<NDB::ReadBuffer> coroBuffer = AsyncDecompressing ? std::unique_ptr<NDB::ReadBuffer>(std::make_unique<TCoroDecompressorBuffer>(this)) : std::unique_ptr<NDB::ReadBuffer>(std::make_unique<TCoroReadBuffer>(this));
         std::unique_ptr<NDB::ReadBuffer> decompressorBuffer;
         NDB::ReadBuffer* buffer = coroBuffer.get();
 
         // lz4 decompressor reads signature in ctor, w/o actual data it will be deadlocked
         DownloadStart(RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize);
 
-        if (ReadSpec->Compression) {
+        if (ReadSpec->Compression && !AsyncDecompressing) {
             decompressorBuffer = MakeDecompressor(*buffer, ReadSpec->Compression);
             YQL_ENSURE(decompressorBuffer, "Unsupported " << ReadSpec->Compression << " compression.");
             buffer = decompressorBuffer.get();
-            
         }
 
         auto stream = std::make_unique<NDB::InputStreamFromInputFormat>(
@@ -413,11 +441,11 @@ public:
 
         TString fileName = Url.substr(7) + Path;
 
-        std::unique_ptr<NDB::ReadBuffer> coroBuffer = std::make_unique<NDB::ReadBufferFromFile>(fileName);
+        std::unique_ptr<NDB::ReadBuffer> coroBuffer = AsyncDecompressing ? std::unique_ptr<NDB::ReadBuffer>(std::make_unique<TCoroDecompressorBuffer>(this)) : std::unique_ptr<NDB::ReadBuffer>(std::make_unique<NDB::ReadBufferFromFile>(fileName));
         std::unique_ptr<NDB::ReadBuffer> decompressorBuffer;
         NDB::ReadBuffer* buffer = coroBuffer.get();
 
-        if (ReadSpec->Compression) {
+        if (ReadSpec->Compression && !AsyncDecompressing) {
             decompressorBuffer = MakeDecompressor(*buffer, ReadSpec->Compression);
             YQL_ENSURE(decompressorBuffer, "Unsupported " << ReadSpec->Compression << " compression.");
             buffer = decompressorBuffer.get();
@@ -840,6 +868,8 @@ public:
         hFunc(TEvS3Provider::TEvDownloadStart, Handle);
         hFunc(TEvS3Provider::TEvDownloadData, Handle);
         hFunc(TEvS3Provider::TEvDownloadFinish, Handle);
+        hFunc(TEvS3Provider::TEvDecompressDataResult, Handle);
+        hFunc(TEvS3Provider::TEvDecompressDataFinish, Handle);
         hFunc(TEvS3Provider::TEvContinue, Handle);
         hFunc(TEvS3Provider::TEvReadResult2, Handle);
         hFunc(NActors::TEvents::TEvPoison, Handle);
@@ -869,6 +899,18 @@ public:
         Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived(InputIndex));
     }
 
+    TString ExtractDecompressedDataPart() {
+        if (!DeferredDecompressedDataParts.empty()) {
+            auto result = std::move(DeferredDecompressedDataParts.front());
+            DeferredDecompressedDataParts.pop();
+            if (result->Exception) {
+                throw result->Exception;
+            }
+            return result->Data;
+        }
+        return {};
+    }
+
     void Handle(TEvS3Provider::TEvDownloadStart::TPtr& ev) {
         HttpResponseCode = ev->Get()->HttpResponseCode;
         CurlResponseCode = ev->Get()->CurlResponseCode;
@@ -896,6 +938,17 @@ public:
                 ErrorText.append(TruncatedSuffix);
             LOG_CORO_W("TEvDownloadData, ERROR: " << ErrorText << ", LastOffset: " << LastOffset << ", LastData: " << GetLastDataAsText());
         }
+    }
+
+    void Handle(TEvS3Provider::TEvDecompressDataResult::TPtr& ev) {
+        CpuTime += ev->Get()->CpuTime;
+        DeferredDecompressedDataParts.push(std::move(ev->Release()));
+        
+    }
+
+    void Handle(TEvS3Provider::TEvDecompressDataFinish::TPtr& ev) {
+        CpuTime += ev->Get()->CpuTime;
+        DecompressedInputFinished = true;
     }
 
     void Handle(TEvS3Provider::TEvDownloadFinish::TPtr& ev) {
@@ -933,6 +986,7 @@ public:
                 // can't retry here: fail download
                 RetryStuff->RetryState = nullptr;
                 InputFinished = true;
+                FinishDecompressor();
                 LOG_CORO_W("ReadError: " << Issues.ToOneLineString() << ", LastOffset: " << LastOffset << ", LastData: " << GetLastDataAsText());
                 throw TS3ReadError(); // Don't pass control to data parsing, because it may validate eof and show wrong issues about incorrect data format
             }
@@ -951,6 +1005,7 @@ public:
         } else {
             LOG_CORO_D("TEvDownloadFinish, LastOffset: " << LastOffset << ", Error: " << ServerReturnedError);
             InputFinished = true;
+            FinishDecompressor();
             if (ServerReturnedError) {
                 throw TS3ReadError(); // Don't pass control to data parsing, because it may validate eof and show wrong issues about incorrect data format
             }
@@ -973,7 +1028,14 @@ public:
     void Handle(NActors::TEvents::TEvPoison::TPtr&) {
         LOG_CORO_D("TEvPoison");
         RetryStuff->Cancel();
+        FinishDecompressor(true);
         throw TS3ReadAbort();
+    }
+
+    void FinishDecompressor(bool force = false) {
+        if (AsyncDecompressing) {
+            Send(DecompressorActorId, new NActors::TEvents::TEvPoison(), 0, force);
+        }
     }
 
 private:
@@ -987,13 +1049,14 @@ public:
         const ::NMonitoring::TDynamicCounters::TCounterPtr& deferredQueueSize,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& httpInflightSize,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& httpDataRps,
-        const ::NMonitoring::TDynamicCounters::TCounterPtr& rawInflightSize)
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& rawInflightSize,
+        bool asyncDecompressing)
         : TActorCoroImpl(256_KB), ReadActorFactoryCfg(readActorFactoryCfg), InputIndex(inputIndex),
         TxId(txId), RetryStuff(retryStuff), ReadSpec(readSpec), ComputeActorId(computeActorId),
         PathIndex(pathIndex), Path(path), Url(url), RowsRemained(maxRows),
         SourceContext(queueBufferCounter),
         DeferredQueueSize(deferredQueueSize), HttpInflightSize(httpInflightSize),
-        HttpDataRps(httpDataRps), RawInflightSize(rawInflightSize) {
+        HttpDataRps(httpDataRps), RawInflightSize(rawInflightSize), AsyncDecompressing(asyncDecompressing) {
     }
 
     ~TS3ReadCoroImpl() override {
@@ -1048,6 +1111,9 @@ private:
     }
 
     void Run() final {
+        if (AsyncDecompressing) {
+            DecompressorActorId = Register(CreateS3DecompressorActor(SelfActorId, ReadSpec->Compression));
+        }
 
         NYql::NDqProto::StatusIds::StatusCode fatalCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
 
@@ -1158,12 +1224,14 @@ private:
     const TString Url;
 
     bool InputFinished = false;
+    bool DecompressedInputFinished = false;
     long HttpResponseCode = 0L;
     CURLcode CurlResponseCode = CURLE_OK;
     bool ServerReturnedError = false;
     TString ErrorText;
     TIssues Issues;
 
+    NActors::TActorId DecompressorActorId;
     std::size_t LastOffset = 0;
     TString LastData;
     ui64 IngressBytes = 0;
@@ -1174,11 +1242,13 @@ private:
     std::optional<ui64> RowsRemained;
     bool Paused = false;
     std::queue<THolder<TEvS3Provider::TEvDownloadData>> DeferredDataParts;
+    std::queue<THolder<TEvS3Provider::TEvDecompressDataResult>> DeferredDecompressedDataParts;
     TSourceContext::TPtr SourceContext;
     const ::NMonitoring::TDynamicCounters::TCounterPtr DeferredQueueSize;
     const ::NMonitoring::TDynamicCounters::TCounterPtr HttpInflightSize;
     const ::NMonitoring::TDynamicCounters::TCounterPtr HttpDataRps;
     const ::NMonitoring::TDynamicCounters::TCounterPtr RawInflightSize;
+    const bool AsyncDecompressing;
 };
 
 class TS3ReadCoroActor : public TActorCoro {
@@ -1201,7 +1271,7 @@ public:
         IHTTPGateway::TPtr gateway,
         const THolderFactory& holderFactory,
         const TString& url,
-        const TS3Credentials::TAuthInfo& authInfo,
+        const TS3Credentials& credentials,
         const TString& pattern,
         ES3PatternVariant patternVariant,
         TPathList&& paths,
@@ -1221,7 +1291,8 @@ public:
         ui64 fileQueueBatchSizeLimit,
         ui64 fileQueueBatchObjectCountLimit,
         ui64 fileQueueConsumersCountDelta,
-        bool asyncDecoding
+        bool asyncDecoding,
+        bool asyncDecompressing
     )   : ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
@@ -1230,7 +1301,7 @@ public:
         , ComputeActorId(computeActorId)
         , RetryPolicy(retryPolicy)
         , Url(url)
-        , AuthInfo(authInfo)
+        , Credentials(credentials)
         , Pattern(pattern)
         , PatternVariant(patternVariant)
         , Paths(std::move(paths))
@@ -1247,7 +1318,8 @@ public:
         , FileQueueBatchSizeLimit(fileQueueBatchSizeLimit)
         , FileQueueBatchObjectCountLimit(fileQueueBatchObjectCountLimit)
         , FileQueueConsumersCountDelta(fileQueueConsumersCountDelta)
-        , AsyncDecoding(asyncDecoding) {
+        , AsyncDecoding(asyncDecoding)
+        , AsyncDecompressing(asyncDecompressing) {
         if (Counters) {
             QueueDataSize = Counters->GetCounter("QueueDataSize");
             QueueDataLimit = Counters->GetCounter("QueueDataLimit");
@@ -1321,7 +1393,7 @@ public:
                 Gateway,
                 RetryPolicy,
                 Url,
-                AuthInfo,
+                Credentials,
                 Pattern,
                 PatternVariant,
                 ES3PatternType::Wildcard));
@@ -1385,10 +1457,11 @@ public:
                                       << pathIndex);
 
         TActorId actorId;
+        const auto& authInfo = Credentials.GetAuthInfo();
         auto stuff = std::make_shared<TRetryStuff>(
             Gateway,
             Url + object.GetPath(),
-            IHTTPGateway::MakeYcHeaders(requestId, AuthInfo.GetToken(), {}, AuthInfo.GetAwsUserPwd(), AuthInfo.GetAwsSigV4()),
+            IHTTPGateway::MakeYcHeaders(requestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
             object.GetSize(),
             TxId,
             requestId,
@@ -1408,7 +1481,8 @@ public:
             DeferredQueueSize,
             HttpInflightSize,
             HttpDataRps,
-            RawInflightSize
+            RawInflightSize,
+            AsyncDecompressing
         );
         if (AsyncDecoding) {
             actorId = Register(new TS3ReadCoroActor(std::move(impl)));
@@ -1786,7 +1860,7 @@ private:
     const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
 
     const TString Url;
-    const TS3Credentials::TAuthInfo AuthInfo;
+    const TS3Credentials Credentials;
     const TString Pattern;
     const ES3PatternVariant PatternVariant;
     TPathList Paths;
@@ -1829,6 +1903,7 @@ private:
     ui64 FileQueueBatchObjectCountLimit;
     ui64 FileQueueConsumersCountDelta;
     const bool AsyncDecoding;
+    const bool AsyncDecompressing;
     bool IsCurrentBatchEmpty = false;
     bool IsFileQueueEmpty = false;
     bool IsWaitingFileQueueResponse = false;
@@ -2000,7 +2075,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     ReadPathsList(params, taskParams, readRanges, paths);
 
     const auto token = secureParams.Value(params.GetToken(), TString{});
-    const auto authInfo = GetAuthInfo(credentialsFactory, token);
+    const TS3Credentials credentials(credentialsFactory, token);
 
     const auto& settings = params.GetSettings();
     TString pathPattern = "*";
@@ -2178,11 +2253,11 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
             sizeLimit = FromString<ui64>(it->second);
         }
 
-        const auto actor = new TS3StreamReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), authInfo, pathPattern, pathPatternVariant,
+        const auto actor = new TS3StreamReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), credentials, pathPattern, pathPatternVariant,
                                                   std::move(paths), addPathIndex, readSpec, computeActorId, retryPolicy,
                                                   cfg, counters, taskCounters, fileSizeLimit, sizeLimit, rowsLimitHint, memoryQuotaManager,
                                                   params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta,
-                                                  params.GetAsyncDecoding());
+                                                  params.GetAsyncDecoding(), params.GetAsyncDecompressing());
 
         return {actor, actor};
     } else {
@@ -2190,7 +2265,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         if (const auto it = settings.find("sizeLimit"); settings.cend() != it)
             sizeLimit = FromString<ui64>(it->second);
 
-        return CreateRawReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), authInfo, pathPattern, pathPatternVariant,
+        return CreateRawReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), credentials, pathPattern, pathPatternVariant,
                                             std::move(paths), addPathIndex, computeActorId, sizeLimit, retryPolicy,
                                             cfg, counters, taskCounters, fileSizeLimit, rowsLimitHint,
                                             params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta);

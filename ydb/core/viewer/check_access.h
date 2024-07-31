@@ -17,24 +17,21 @@ using namespace NActors;
 using NSchemeShard::TEvSchemeShard;
 using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
-class TCheckAccess : public TViewerPipeClient<TCheckAccess> {
-    using TBase = TViewerPipeClient<TCheckAccess>;
+class TCheckAccess : public TViewerPipeClient {
+    using TThis = TCheckAccess;
+    using TBase = TViewerPipeClient;
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
     TAutoPtr<TEvTxProxySchemeCache::TEvNavigateKeySetResult> CacheResult;
     TVector<TString> Permissions;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TCheckAccess(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
         : Viewer(viewer)
         , Event(ev)
     {}
 
-    void Bootstrap() {
+    void Bootstrap() override {
         const auto& params(Event->Get()->Request.GetParams());
         ui32 timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         TString database;
@@ -110,7 +107,7 @@ public:
         return object->CheckAccess(access, *token);
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         std::unique_ptr<NACLib::TUserToken> token;
         if (Event->Get()->UserToken) {
             token = std::make_unique<NACLib::TUserToken>(Event->Get()->UserToken);

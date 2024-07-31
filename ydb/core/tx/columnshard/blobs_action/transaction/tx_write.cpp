@@ -18,10 +18,13 @@ bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSeriali
 
     const auto& writeMeta = batch.GetAggregation().GetWriteMeta();
     meta.SetModificationType(TEnumOperator<NEvWrite::EModificationType>::SerializeToProto(writeMeta.GetModificationType()));
+    *meta.MutableSchemaSubset() = batch.GetAggregation().GetSchemaSubset().SerializeToProto();
     auto schemeVersion = batch.GetAggregation().GetSchemaVersion();
     auto tableSchema = Self->TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaVerified(schemeVersion);
 
-    NOlap::TInsertedData insertData((ui64)writeId, writeMeta.GetTableId(), writeMeta.GetDedupId(), blobRange, meta, tableSchema->GetVersion(), batch->GetData());
+    NOlap::TInsertedData insertData((ui64)writeId, writeMeta.GetTableId(), writeMeta.GetDedupId(), blobRange, 
+        meta, tableSchema->GetVersion(),
+        batch->GetData());
     bool ok = Self->InsertTable->Insert(dbTable, std::move(insertData));
     if (ok) {
         Self->UpdateInsertTableCounters();

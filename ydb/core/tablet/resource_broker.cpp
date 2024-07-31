@@ -1,6 +1,7 @@
 #include "resource_broker_impl.h"
 
 #include <ydb/core/base/localdb.h>
+#include <ydb/core/tx/columnshard/common/limits.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
@@ -1269,10 +1270,10 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     const ui64 KqpRmQueueCPU = 4;
     const ui64 KqpRmQueueMemory = 10ULL << 30;
 
-    const ui64 CSTTLCompactionMemoryLimit = 1ULL << 30;
-    const ui64 CSInsertCompactionMemoryLimit = 1ULL << 30;
-    const ui64 CSGeneralCompactionMemoryLimit = 3ULL << 30;
-    const ui64 CSScanMemoryLimit = 3ULL << 30;
+    const ui64 CSTTLCompactionMemoryLimit = NOlap::TGlobalLimits::TTLCompactionMemoryLimit;
+    const ui64 CSInsertCompactionMemoryLimit = NOlap::TGlobalLimits::InsertCompactionMemoryLimit;
+    const ui64 CSGeneralCompactionMemoryLimit = NOlap::TGlobalLimits::GeneralCompactionMemoryLimit;
+    const ui64 CSScanMemoryLimit = NOlap::TGlobalLimits::ScanMemoryLimit;
 
     const ui64 TotalCPU = 20;
     const ui64 TotalMemory = 16ULL << 30;

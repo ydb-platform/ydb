@@ -669,6 +669,7 @@ alter_table_action:
   | alter_table_drop_changefeed
   | alter_table_rename_index_to
   | alter_table_alter_index
+  | alter_table_alter_column_drop_not_null
 ;
 
 alter_external_table_stmt: ALTER EXTERNAL TABLE simple_table_ref alter_external_table_action (COMMA alter_external_table_action)*;
@@ -690,6 +691,7 @@ alter_table_store_action:
 alter_table_add_column: ADD COLUMN? column_schema;
 alter_table_drop_column: DROP COLUMN? an_id;
 alter_table_alter_column: ALTER COLUMN an_id SET family_relation;
+alter_table_alter_column_drop_not_null: ALTER COLUMN an_id DROP NOT NULL;
 alter_table_add_column_family: ADD family_entry;
 alter_table_alter_column_family: ALTER FAMILY an_id SET an_id family_setting_value;
 alter_table_set_table_setting_uncompat: SET an_id table_setting_value;
@@ -716,17 +718,26 @@ table_constraint:
 ;
 
 table_index: INDEX an_id table_index_type
-    (WITH LPAREN an_id EQUALS an_id (COMMA an_id EQUALS an_id)* COMMA? RPAREN)?
     ON LPAREN an_id_schema (COMMA an_id_schema)* RPAREN
-    (COVER LPAREN an_id_schema (COMMA an_id_schema)* RPAREN)?;
-
-table_index_type:
-      global_index
-    | local_index
+    (COVER LPAREN an_id_schema (COMMA an_id_schema)* RPAREN)?
+    with_index_settings?
 ;
+
+table_index_type: (global_index | local_index) (USING index_subtype)?;
 
 global_index: GLOBAL UNIQUE? (SYNC | ASYNC)?;
 local_index: LOCAL;
+
+index_subtype: an_id;
+
+with_index_settings: WITH LPAREN index_setting_entry (COMMA index_setting_entry)* COMMA? RPAREN; 
+index_setting_entry: an_id EQUALS index_setting_value;
+index_setting_value:
+      id_or_type
+    | STRING_VALUE      
+    | integer
+    | bool_value
+;
 
 changefeed: CHANGEFEED an_id WITH LPAREN changefeed_settings RPAREN;
 changefeed_settings: changefeed_settings_entry (COMMA changefeed_settings_entry)*;

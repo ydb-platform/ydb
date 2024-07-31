@@ -339,7 +339,6 @@ namespace NKikimr {
         IMPL_REQUEST(ConsoleRequest, TConsoleRequest, TConsoleResponse)
         IMPL_REQUEST(FillNode, TFillNodeRequest, TResponse)
         IMPL_REQUEST(DrainNode, TDrainNodeRequest, TResponse)
-        IMPL_REQUEST(LoginRequest, TLoginRequest, TResponse)
 
         } // NGRpcProxy
 } // NKikimr

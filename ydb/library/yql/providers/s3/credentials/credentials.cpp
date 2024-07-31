@@ -6,6 +6,7 @@
 namespace NYql {
 
 TS3Credentials::TS3Credentials(ISecuredServiceAccountCredentialsFactory::TPtr factory, const TString& structuredTokenJson, bool addBearerToToken)
+    : StructuredTokenJson(structuredTokenJson)
 {
     if (NYql::IsStructuredTokenJson(structuredTokenJson)) {
         NYql::TStructuredTokenParser parser = NYql::CreateStructuredTokenParser(structuredTokenJson);
@@ -24,7 +25,7 @@ TS3Credentials::TS3Credentials(ISecuredServiceAccountCredentialsFactory::TPtr fa
     }
 
     auto providerFactory = CreateCredentialsProviderFactoryForStructuredToken(factory, structuredTokenJson, addBearerToToken);
-    CredentialsProvider = providerFactory->CreateProvider();
+    CredentialsProvider = providerFactory->CreateProvider();  // Heavy operation, BLOCKs thread until TA reply
 }
 
 TS3Credentials::TAuthInfo TS3Credentials::GetAuthInfo() const {
@@ -32,6 +33,17 @@ TS3Credentials::TAuthInfo TS3Credentials::GetAuthInfo() const {
         return TS3Credentials::TAuthInfo{.Token = CredentialsProvider->GetAuthInfo()};
     }
     return AuthInfo;
+}
+
+bool TS3Credentials::operator<(const TS3Credentials& other) const {
+    return StructuredTokenJson < other.StructuredTokenJson;
+}
+
+IOutputStream& operator<<(IOutputStream& stream, const TS3Credentials& credentials) {
+    const auto& authInfo = credentials.AuthInfo;
+    return stream << "TS3Credentials{.ServiceAccountAuth=" << static_cast<bool>(credentials.CredentialsProvider)
+                  << ",.AwsUserPwd=<some token with length" << authInfo.GetAwsUserPwd().length() << ">"
+                  << ",.AwsSigV4=<some sig with length" << authInfo.GetAwsSigV4().length() << ">}";
 }
 
 // string value after AWS prefix should be suitable for passing it to curl as CURLOPT_USERPWD, see details here:

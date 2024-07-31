@@ -2366,6 +2366,13 @@
             "uri": "https://{canondata_backend}/1923547/9db3e11e4addc3a65ee82684bfbe078b6795a57a/resource.tar.gz#test.test_pg-uuid_from_pg-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[pg_duplicated-ambigous_order_by_from_join--Debug]": [],
+    "test.test[pg_duplicated-ambigous_order_by_from_join--Plan]": [],
+    "test.test[pg_duplicated-ambigous_order_by_from_join--Results]": [
+        {
+            "uri": "file://test.test_pg_duplicated-ambigous_order_by_from_join--Results_/extracted"
+        }
+    ],
     "test.test[produce-process_with_assume--Debug]": [
         {
             "checksum": "67b5e3988083d11fa2f044d6e03c0e85",

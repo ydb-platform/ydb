@@ -55,6 +55,9 @@ EXCLUDED_TESTS = [
     'simple_columns/simple_columns_join_coalesce_qualified_all_enable',
     # PRECONDITION_FAILED, Unexpected flow status, YQ-3174
     'produce/reduce_typeinfo',
+    # GENERIC ERROR. Cannot infer schema for table "InputView"
+    # (unsupported standalone view)
+    'view/standalone_view_lambda',
 ]
 
 

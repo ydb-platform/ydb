@@ -34,6 +34,9 @@ struct IMemoryUsageTracker
     virtual TSharedRef Track(
         TSharedRef reference,
         bool keepHolder = false) = 0;
+    virtual TErrorOr<TSharedRef> TryTrack(
+        TSharedRef reference,
+        bool keepHolder) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IMemoryUsageTracker)
@@ -90,7 +93,7 @@ private:
     i64 Granularity_ = 0;
 
     void MoveFrom(TMemoryUsageTrackerGuard&& other);
-    TError SetSizeGeneric(i64 size, auto acquirer);
+    TError SetSizeImpl(i64 size, auto acquirer);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -145,10 +148,16 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TErrorOr<TSharedRef> TryTrackMemory(
+    const IMemoryUsageTrackerPtr& tracker,
+    TSharedRef reference,
+    bool keepExistingTracking = false);
+
 TSharedRef TrackMemory(
     const IMemoryUsageTrackerPtr& tracker,
     TSharedRef reference,
     bool keepExistingTracking = false);
+
 TSharedRefArray TrackMemory(
     const IMemoryUsageTrackerPtr& tracker,
     TSharedRefArray array,

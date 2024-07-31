@@ -71,7 +71,7 @@ TConclusionStatus TStartMergeTask::DoExecuteImpl() {
         TMemoryProfileGuard mGuard("SCAN_PROFILE::MERGE::EXCLUSIVE", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
         auto& container = Sources.begin()->second->GetStageResult().GetBatch();
         if (container && container->num_rows()) {
-            ResultBatch = container->BuildTable();
+            ResultBatch = container->BuildTableVerified();
             LastPK = Sources.begin()->second->GetLastPK();
             ResultBatch = NArrow::TColumnOperator().VerifyIfAbsent().Extract(ResultBatch, Context->GetProgramInputColumns()->GetColumnNamesVector());
             Context->GetCommonContext()->GetCounters().OnNoScanInterval(ResultBatch->num_rows());
@@ -103,7 +103,7 @@ TConclusionStatus TStartMergeTask::DoExecuteImpl() {
             return TConclusionStatus::Success();
         }
     }
-    Merger->PutControlPoint(MergingContext->GetFinish());
+    Merger->PutControlPoint(MergingContext->GetFinish(), false);
     Merger->SkipToLowerBound(MergingContext->GetStart(), MergingContext->GetIncludeStart());
     const ui32 originalSourcesCount = Sources.size();
     Sources.clear();

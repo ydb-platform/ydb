@@ -133,6 +133,7 @@ private:
     TString SerializedGUCSettings;
     std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
     std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
+    TIntrusivePtr<NRm::TTxState> TxInfo;
 
 public:
     static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error

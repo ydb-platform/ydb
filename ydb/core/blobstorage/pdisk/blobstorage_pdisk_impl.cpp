@@ -198,7 +198,7 @@ TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk
     return TCheckDiskFormatResult(false, false);
 }
 
-bool TPDisk::IsFormatMagicValid(ui8 *magicData8, ui32 magicDataSize) {
+bool TPDisk::IsFormatMagicValid(ui8 *magicData8, ui32 magicDataSize, const TMainKey& mainKey) {
     Y_VERIFY_S(magicDataSize % sizeof(ui64) == 0, "Magic data size# "<< magicDataSize
             << " must be a multiple of sizeof(ui64)");
     Y_VERIFY_S(magicDataSize >= FormatSectorSize, "Magic data size# "<< magicDataSize
@@ -212,11 +212,15 @@ bool TPDisk::IsFormatMagicValid(ui8 *magicData8, ui32 magicDataSize) {
             isIncompleteFormatMagicPresent = false;
         }
     }
-    return magicOr == 0ull || isIncompleteFormatMagicPresent;
+    if (magicOr == 0ull || isIncompleteFormatMagicPresent) {
+        return true;
+    }
+    auto format = CheckMetadataFormatSector(magicData8, magicDataSize, mainKey);
+    return format.has_value();
 }
 
 bool TPDisk::CheckGuid(TString *outReason) {
-    const bool ok = Format.Guid == ExpectedDiskGuid;
+    const bool ok = Format.Guid == ExpectedDiskGuid || (Cfg->MetadataOnly && !ExpectedDiskGuid);
     if (!ok && outReason) {
         *outReason = TStringBuilder() << "expected# " << ExpectedDiskGuid << " on-disk# " << Format.Guid;
     }
@@ -241,7 +245,6 @@ void TPDisk::InitFreeChunks() {
         TrimAllUntrimmedChunks();
     }
 }
-
 
 TString TPDisk::StartupOwnerInfo() {
     TStringStream str;
@@ -368,6 +371,9 @@ void TPDisk::Stop() {
     while (InputQueue.GetWaitingSize() > 0) {
         TRequestBase::AbortDelete(InputQueue.Pop(), ActorSystem);
     }
+
+    DropAllMetadataRequests();
+
     if (InitialTailBuffer) {
         InitialTailBuffer->Exec(ActorSystem);
         InitialTailBuffer = nullptr;
@@ -1476,7 +1482,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         TGuard<TMutex> guard(StateMutex);
         const ui64 totalSize = Format.DiskSize;
         const ui64 availableSize = (ui64)Format.ChunkSize * Keeper.GetFreeChunkCount();
-        
+
         if (*Mon.PDiskBriefState != TPDiskMon::TPDisk::Error) {
             *Mon.FreeSpaceBytes = availableSize;
             *Mon.UsedSpaceBytes = totalSize - availableSize;
@@ -1486,7 +1492,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
             *Mon.UsedSpaceBytes = 32_KB;
             *Mon.TotalSpaceBytes = 32_KB;
         }
-        
+
         NKikimrWhiteboard::TPDiskStateInfo& pdiskState = reportResult->PDiskState->Record;
         pdiskState.SetPDiskId(PDiskId);
         pdiskState.SetPath(Cfg->GetDevicePath());
@@ -1498,6 +1504,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         pdiskState.SetSystemSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerSystemLog) + Keeper.GetOwnerHardLimit(OwnerSystemReserve)));
         pdiskState.SetLogUsedSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerCommonStaticLog) - Keeper.GetOwnerFree(OwnerCommonStaticLog)));
         pdiskState.SetLogTotalSize(Format.ChunkSize * Keeper.GetOwnerHardLimit(OwnerCommonStaticLog));
+        pdiskState.SetNumActiveSlots(TotalOwners);
         if (ExpectedSlotCount) {
             pdiskState.SetExpectedSlotCount(ExpectedSlotCount);
         }
@@ -1642,7 +1649,8 @@ void TPDisk::WriteApplyFormatRecord(TDiskFormat format, const TKey &mainKey) {
 
 void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes,
         const ui64 &diskGuid, const TKey &chunkKey, const TKey &logKey, const TKey &sysLogKey, const TKey &mainKey,
-        TString textMessage, const bool isErasureEncodeUserLog, const bool trimEntireDevice) {
+        TString textMessage, const bool isErasureEncodeUserLog, const bool trimEntireDevice,
+        std::optional<TRcBuf> metadata) {
     TGuard<TMutex> guard(StateMutex);
     // Prepare format record
     alignas(16) TDiskFormat format;
@@ -1691,6 +1699,12 @@ void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 user
     format.SetFormatInProgress(true);
     format.SetHash();
     WriteApplyFormatRecord(format, mainKey);
+
+    if (metadata) {
+        // Prepare chunks for metadata, if needed.
+        InitFormattedMetadata();
+        WriteMetadataSync(std::move(*metadata));
+    }
 
     // Prepare initial SysLogRecord
     memset(&SysLogRecord, 0, sizeof(SysLogRecord));
@@ -2489,6 +2503,21 @@ void TPDisk::ProcessFastOperationsQueue() {
             case ERequestType::RequestReleaseChunks:
                 MarkChunksAsReleased(static_cast<TReleaseChunks&>(*req));
                 break;
+            case ERequestType::RequestReadMetadata:
+                ProcessReadMetadata(std::move(req));
+                break;
+            case ERequestType::RequestInitialReadMetadataResult:
+                ProcessInitialReadMetadataResult(static_cast<TInitialReadMetadataResult&>(*req));
+                break;
+            case ERequestType::RequestWriteMetadata:
+                ProcessWriteMetadata(std::move(req));
+                break;
+            case ERequestType::RequestWriteMetadataResult:
+                ProcessWriteMetadataResult(static_cast<TWriteMetadataResult&>(*req));
+                break;
+            case ERequestType::RequestPushUnformattedMetadataSector:
+                ProcessPushUnformattedMetadataSector(static_cast<TPushUnformattedMetadataSector&>(*req));
+                break;
             default:
                 Y_FAIL_S("Unexpected request type# " << (ui64)req->GetType());
                 break;
@@ -3077,30 +3106,28 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             return false;
         }
         case ERequestType::RequestAskForCutLog:
-            break;
         case ERequestType::RequestConfigureScheduler:
-            break;
         case ERequestType::RequestWhiteboartReport:
-            break;
         case ERequestType::RequestHttpInfo:
-            break;
         case ERequestType::RequestUndelivered:
-            break;
         case ERequestType::RequestCommitLogChunks:
-            break;
         case ERequestType::RequestLogCommitDone:
-            break;
         case ERequestType::RequestTryTrimChunk:
-            break;
         case ERequestType::RequestReleaseChunks:
+        case ERequestType::RequestInitialReadMetadataResult:
+        case ERequestType::RequestWriteMetadataResult:
+        case ERequestType::RequestPushUnformattedMetadataSector:
+        case ERequestType::RequestReadMetadata:
+        case ERequestType::RequestWriteMetadata:
             break;
         case ERequestType::RequestStopDevice:
             BlockDevice->Stop();
             delete request;
             return false;
-        default:
+        case ERequestType::RequestChunkReadPiece:
+        case ERequestType::RequestChunkWritePiece:
+        case ERequestType::RequestNop:
             Y_ABORT();
-            break;
     }
     return true;
 }

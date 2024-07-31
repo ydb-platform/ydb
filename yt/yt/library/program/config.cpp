@@ -14,6 +14,12 @@ void THeapSizeLimit::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("hard", &TThis::Hard)
         .Default(false);
+    registrar.Parameter("dump_memory_profile_on_violation", &TThis::DumpMemoryProfileOnViolation)
+        .Default(false);
+    registrar.Parameter("dump_memory_profile_timeout", &TThis::DumpMemoryProfileTimeout)
+        .Default(TDuration::Minutes(10));
+    registrar.Parameter("dump_memory_profile_path", &TThis::DumpMemoryProfilePath)
+        .Default();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

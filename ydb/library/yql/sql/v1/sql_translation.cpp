@@ -627,19 +627,20 @@ bool PureColumnOrNamedListStr(const TRule_pure_column_or_named_list& node, TTran
     return true;
 }
 
-bool CreateTableIndex(const TRule_table_index& node, TTranslation& ctx, TVector<TIndexDescription>& indexes) {
-    indexes.emplace_back(IdEx(node.GetRule_an_id2(), ctx));
+bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TIndexDescription>& indexes) {
+    indexes.emplace_back(IdEx(node.GetRule_an_id2(), *this));
 
-    const auto& indexType = node.GetRule_table_index_type3();
+    const auto& indexType = node.GetRule_table_index_type3().GetBlock1();
     switch (indexType.Alt_case()) {
-        case TRule_table_index_type::kAltTableIndexType1: {
-            auto globalIndex = indexType.GetAlt_table_index_type1().GetRule_global_index1();
+        // "GLOBAL"
+        case TRule_table_index_type_TBlock1::kAlt1: {
+            auto globalIndex = indexType.GetAlt1().GetRule_global_index1();
             bool uniqIndex = false;
             if (globalIndex.HasBlock2()) {
                 uniqIndex = true;
             }
             if (globalIndex.HasBlock3()) {
-                const TString token = to_lower(ctx.Token(globalIndex.GetBlock3().GetToken1()));
+                const TString token = to_lower(Ctx.Token(globalIndex.GetBlock3().GetToken1()));
                 if (token == "sync") {
                     if (uniqIndex) {
                         indexes.back().Type = TIndexDescription::EType::GlobalSyncUnique;
@@ -648,7 +649,7 @@ bool CreateTableIndex(const TRule_table_index& node, TTranslation& ctx, TVector<
                     }
                 } else if (token == "async") {
                     if (uniqIndex) {
-                        ctx.AltNotImplemented("unique", indexType);
+                        AltNotImplemented("unique", indexType);
                         return false;
                     }
                     indexes.back().Type = TIndexDescription::EType::GlobalAsync;
@@ -658,32 +659,177 @@ bool CreateTableIndex(const TRule_table_index& node, TTranslation& ctx, TVector<
             }
         }
         break;
-        case TRule_table_index_type::kAltTableIndexType2:
-            ctx.AltNotImplemented("local", indexType);
+        // "LOCAL"
+        case TRule_table_index_type_TBlock1::kAlt2:
+            AltNotImplemented("local", indexType);
             return false;
-        case TRule_table_index_type::ALT_NOT_SET:
+        case TRule_table_index_type_TBlock1::ALT_NOT_SET:
             Y_ABORT("You should change implementation according to grammar changes");
     }
 
-    if (node.HasBlock4()) {
-        ctx.AltNotImplemented("with", indexType);
-        return false;
+    if (node.GetRule_table_index_type3().HasBlock2()) {
+        const TString subType = to_upper(IdEx(node.GetRule_table_index_type3().GetBlock2().GetRule_index_subtype2().GetRule_an_id1(), *this).Name) ;
+        if (subType == "VECTOR_KMEANS_TREE") {
+            if (indexes.back().Type != TIndexDescription::EType::GlobalSync) {
+                Ctx.Error() << subType << " index can only be GLOBAL [SYNC]";
+                return false;
+            }
+
+            indexes.back().Type = TIndexDescription::EType::GlobalVectorKmeansTree;
+        } else {
+            Ctx.Error() << subType << " index subtype is not supported";
+            return false;
+        }
     }
 
-    indexes.back().IndexColumns.emplace_back(IdEx(node.GetRule_an_id_schema7(), ctx));
-    for (const auto& block : node.GetBlock8()) {
-        indexes.back().IndexColumns.emplace_back(IdEx(block.GetRule_an_id_schema2(), ctx));
-    }
-
+    // WITH
     if (node.HasBlock10()) {
-        const auto& block = node.GetBlock10();
-        indexes.back().DataColumns.emplace_back(IdEx(block.GetRule_an_id_schema3(), ctx));
+        //const auto& with = node.GetBlock4();
+        auto& index = indexes.back();
+        if (index.Type == TIndexDescription::EType::GlobalVectorKmeansTree) {
+            index.IndexSettings = TVectorIndexSettings();
+            if (!CreateIndexSettings(node.GetBlock10().GetRule_with_index_settings1(), index.Type, index.IndexSettings)) {
+                return false;
+            }
+            const auto &vectorSettings = std::get<TVectorIndexSettings>(index.IndexSettings);
+            if (!vectorSettings.Validate(Ctx)) {
+                return false;
+            }
+
+        } else {
+            AltNotImplemented("with", indexType);
+            return false;
+        }
+    }
+
+    indexes.back().IndexColumns.emplace_back(IdEx(node.GetRule_an_id_schema6(), *this));
+    for (const auto& block : node.GetBlock7()) {
+        indexes.back().IndexColumns.emplace_back(IdEx(block.GetRule_an_id_schema2(), *this));
+    }
+
+    if (node.HasBlock9()) {
+        const auto& block = node.GetBlock9();
+        indexes.back().DataColumns.emplace_back(IdEx(block.GetRule_an_id_schema3(), *this));
         for (const auto& inner : block.GetBlock4()) {
-            indexes.back().DataColumns.emplace_back(IdEx(inner.GetRule_an_id_schema2(), ctx));
+            indexes.back().DataColumns.emplace_back(IdEx(inner.GetRule_an_id_schema2(), *this));
         }
     }
 
     return true;
+}
+
+bool TSqlTranslation::CreateIndexSettings(const TRule_with_index_settings& settingsNode,
+        TIndexDescription::EType indexType,
+        TIndexDescription::TIndexSettings& indexSettings) {
+    const auto& firstEntry = settingsNode.GetRule_index_setting_entry3();
+    if (!CreateIndexSettingEntry(IdEx(firstEntry.GetRule_an_id1(), *this), firstEntry.GetRule_index_setting_value3(), indexType, indexSettings)) {
+        return false;
+    }
+    for (auto& block : settingsNode.GetBlock4()) {
+        const auto& entry = block.GetRule_index_setting_entry2();
+        if (!CreateIndexSettingEntry(IdEx(entry.GetRule_an_id1(), *this), entry.GetRule_index_setting_value3(), indexType, indexSettings)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+template<typename T>
+std::tuple<bool, T, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
+    T value;
+    // id_or_type
+    if (node.HasAlt_index_setting_value1()) {
+        const TString stringValue = to_lower(IdEx(node.GetAlt_index_setting_value1().GetRule_id_or_type1(), *this).Name);
+        if (!TryFromString<T>(stringValue, value)) {
+            return {false, value, stringValue};
+        }
+        return {true, value, stringValue};
+    }
+    // STRING_VALUE
+    else if (node.HasAlt_index_setting_value2()) {
+        const TString stringValue = to_lower(Token(node.GetAlt_index_setting_value2().GetToken1()));
+        const auto unescaped = StringContent(Ctx, Ctx.Pos(), stringValue);
+        if (!unescaped) {
+            return {false, value, stringValue};
+        }
+        if (!TryFromString<T>(unescaped->Content, value)) {
+            return {false, value, stringValue};
+        }
+        return {true, value, unescaped->Content};
+    } else {
+        Y_ABORT("You should change implementation according to grammar changes");
+    }
+}
+
+template<>
+std::tuple<bool, ui64, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
+    const auto& intNode = node.GetAlt_index_setting_value3().GetRule_integer1();
+    const TString stringValue = Token(intNode.GetToken1());
+    ui64 value;
+    TString suffix;
+    if (!ParseNumbers(Ctx, stringValue, value, suffix)) {
+        return {false, value, stringValue};
+    }
+    return {true, value, stringValue};
+}
+
+template<>
+std::tuple<bool, bool, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
+    bool value;
+    const TString stringValue = to_lower(Token(node.GetAlt_index_setting_value4().GetRule_bool_value1().GetToken1()));;
+    if (!TryFromString<bool>(stringValue, value)) {
+        return {false, value, stringValue};
+    }
+    return {true, value, stringValue};
+}
+
+bool TSqlTranslation::CreateIndexSettingEntry(const TIdentifier &id, 
+        const TRule_index_setting_value& node, 
+        TIndexDescription::EType indexType,
+        TIndexDescription::TIndexSettings& indexSettings) {
+
+
+    if (indexType == TIndexDescription::EType::GlobalVectorKmeansTree) {
+        TVectorIndexSettings &vectorIndexSettings = std::get<TVectorIndexSettings>(indexSettings);
+
+        if (to_lower(id.Name) == "distance") {
+            const auto [success, value, stringValue] = GetIndexSettingValue<TVectorIndexSettings::EDistance>(node);
+            if (!success) {
+                Ctx.Error() << "Invalid distance: " << stringValue;
+                return false;
+            }
+            vectorIndexSettings.Metric = value;
+        } else if (to_lower(id.Name) == "similarity") {
+            const auto [success, value, stringValue] = GetIndexSettingValue<TVectorIndexSettings::ESimilarity>(node);
+            if (!success) {
+                Ctx.Error() << "Invalid similarity: " << stringValue;
+                return false;
+            }
+            vectorIndexSettings.Metric = value;
+        } else if (to_lower(id.Name) == "vector_type") {
+            const auto [success, value, stringValue] = GetIndexSettingValue<TVectorIndexSettings::EVectorType>(node);
+            if (!success) {
+                Ctx.Error() << "Invalid vector_type: " << stringValue;
+                return false;
+            }
+            vectorIndexSettings.VectorType = value;
+        } else if (to_lower(id.Name) == "vector_dimension") {
+            const auto [success, value, stringValue] = GetIndexSettingValue<ui64>(node);
+            if (!success || value > Max<ui32>()) {
+                Ctx.Error() << "Invalid vector_dimension: " << stringValue;
+                return false;
+            }
+            vectorIndexSettings.VectorDimension = value;
+        } else {
+            Ctx.Error() << "Unknown index setting: " << id.Name;
+            return false;
+        }
+    } else {
+        Ctx.Error() << "Unknown index setting: " << id.Name;
+        return false;
+    }
+    return true;
+
 }
 
 std::pair<TString, TViewDescription> TableKeyImpl(const std::pair<bool, TString>& nameWithAt, TViewDescription view, TTranslation& ctx) {
@@ -1504,7 +1650,7 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
         {
             // table_index
             auto& table_index = node.GetAlt_create_table_entry3().GetRule_table_index1();
-            if (!CreateTableIndex(table_index, *this, params.Indexes)) {
+            if (!CreateTableIndex(table_index, params.Indexes)) {
                 return false;
             }
             break;

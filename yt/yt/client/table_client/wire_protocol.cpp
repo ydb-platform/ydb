@@ -32,6 +32,7 @@ using NYT::ToProto;
 using NYT::FromProto;
 
 using NChunkClient::NProto::TDataStatistics;
+using NCrypto::TMD5Hash;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1242,6 +1243,11 @@ public:
     {
         YT_VERIFY(Closed_);
         return CompressedBlocks_;
+    }
+
+    std::optional<TMD5Hash> GetDigest() const override
+    {
+        return std::nullopt;
     }
 
 private:

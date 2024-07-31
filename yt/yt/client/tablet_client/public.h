@@ -91,6 +91,7 @@ YT_DEFINE_ERROR_ENUM(
     ((CellHasNoAssignedPeers)                 (1737))
     ((TableSchemaIncompatible)                (1738))
     ((BundleIsBanned)                         (1739))
+    ((TabletServantIsNotActive)               (1740))
 );
 
 DEFINE_ENUM(EInMemoryMode,

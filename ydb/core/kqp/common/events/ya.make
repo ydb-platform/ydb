@@ -1,7 +1,6 @@
 LIBRARY()
 
 SRCS(
-    process_response.cpp
     events.cpp
     query.cpp
     script_executions.cpp

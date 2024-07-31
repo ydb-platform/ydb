@@ -22,11 +22,11 @@ ydb-dstool device list --help
 | Option | Description |
 ---|---
 | `-H`, `--human-readable` | Output data in human-readable format. |
-| `--sort-by` | Sort column.<br>Use one of the values: `SerialNumber`, `FQDN`, `Path`, `Type`, `StorageStatus`, or `NodeId:PDiskId`. |
+| `--sort-by` | Sort column.<br/>Use one of the values: `SerialNumber`, `FQDN`, `Path`, `Type`, `StorageStatus`, or `NodeId:PDiskId`. |
 | `--reverse` | Use a reverse sort order. |
-| `--format` | Output format.<br>Use one of the values: `pretty`, `json`, `tsv`, or `csv`. |
+| `--format` | Output format.<br/>Use one of the values: `pretty`, `json`, `tsv`, or `csv`. |
 | `--no-header` | Do not output the row with column names. |
-| `--columns` | List of columns to be output.<br>Use one or more of the values: `SerialNumber`, `FQDN`, `Path`, `Type`, `StorageStatus`, or  `NodeId:PDiskId`. |
+| `--columns` | List of columns to be output.<br/>Use one or more of the values: `SerialNumber`, `FQDN`, `Path`, `Type`, `StorageStatus`, or  `NodeId:PDiskId`. |
 | `-A`, `--all-columns` | Output all columns. |
 
 ## Examples {#examples}

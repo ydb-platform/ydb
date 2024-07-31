@@ -181,6 +181,37 @@ void TNodeDescriptor::Persist(const TStreamPersistenceContext& context)
     }
 }
 
+void SerializeFragment(const TNodeDescriptor& descriptor, NYson::IYsonConsumer* consumer)
+{
+    BuildYsonMapFragmentFluently(consumer)
+        .Item("addresses").Value(descriptor.Addresses_)
+        .Item("default_address").Value(descriptor.DefaultAddress_)
+        .OptionalItem("host", descriptor.Host_)
+        .OptionalItem("rack", descriptor.Rack_)
+        .OptionalItem("data_center", descriptor.DataCenter_)
+        .Item("tags").Value(descriptor.Tags_);
+}
+
+void DeserializeFragment(TNodeDescriptor& descriptor, NYTree::INodePtr node)
+{
+    descriptor = {};
+
+    auto mapNode = node->AsMap();
+
+    Deserialize(descriptor.Addresses_, mapNode->GetChildOrThrow("addresses"));
+    Deserialize(descriptor.DefaultAddress_, mapNode->GetChildOrThrow("default_address"));
+    if (auto child = mapNode->FindChild("host")) {
+        Deserialize(descriptor.Host_, child);
+    }
+    if (auto child = mapNode->FindChild("rack")) {
+        Deserialize(descriptor.Rack_, child);
+    }
+    if (auto child = mapNode->FindChild("data_center")) {
+        Deserialize(descriptor.DataCenter_, child);
+    }
+    Deserialize(descriptor.Tags_, mapNode->GetChildOrThrow("tags"));
+}
+
 void FormatValue(TStringBuilderBase* builder, const TNodeDescriptor& descriptor, TStringBuf /*spec*/)
 {
     if (descriptor.IsNull()) {

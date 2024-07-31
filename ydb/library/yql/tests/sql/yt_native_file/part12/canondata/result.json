@@ -2408,9 +2408,9 @@
     ],
     "test.test[pg-regoids-default.txt-Results]": [
         {
-            "checksum": "20e29a6190d7658116ecafdd4d53b015",
+            "checksum": "bb246f8c24343d5c41a7083b36b47891",
             "size": 5302,
-            "uri": "https://{canondata_backend}/1936842/a75e37463ca09039e8afc74312a00834b6c1a897/resource.tar.gz#test.test_pg-regoids-default.txt-Results_/results.txt"
+            "uri": "https://{canondata_backend}/1881367/cac296ddad7a609e7e71ad12cdda0f2a48675019/resource.tar.gz#test.test_pg-regoids-default.txt-Results_/results.txt"
         }
     ],
     "test.test[pg-select_agg_expr_projection-default.txt-Debug]": [
@@ -2912,9 +2912,9 @@
     ],
     "test.test[pg_catalog-pg_class-default.txt-Results]": [
         {
-            "checksum": "06e2bd54c775c4bae39024bc48e8b3f5",
+            "checksum": "8a2d667bafc17353076dc3e6f28e9057",
             "size": 5432,
-            "uri": "https://{canondata_backend}/1881367/f7c9625b9d66b51a2a5927015bd3050c9cb7f8d2/resource.tar.gz#test.test_pg_catalog-pg_class-default.txt-Results_/results.txt"
+            "uri": "https://{canondata_backend}/1881367/cac296ddad7a609e7e71ad12cdda0f2a48675019/resource.tar.gz#test.test_pg_catalog-pg_class-default.txt-Results_/results.txt"
         }
     ],
     "test.test[pg_catalog-pg_description_pg_syntax-default.txt-Debug]": [
@@ -2933,9 +2933,9 @@
     ],
     "test.test[pg_catalog-pg_description_pg_syntax-default.txt-Results]": [
         {
-            "checksum": "34e2e5aa77c7fa8af7344e4212ac6def",
+            "checksum": "ef973b40e478dfa6be2fef50d12a0076",
             "size": 2768,
-            "uri": "https://{canondata_backend}/1600758/2724aa196878a9cf43610b7a974a4782dfdbd8c3/resource.tar.gz#test.test_pg_catalog-pg_description_pg_syntax-default.txt-Results_/results.txt"
+            "uri": "https://{canondata_backend}/1946324/22a41345f3e8fa8e44c5ac24e1c1025ef337bff8/resource.tar.gz#test.test_pg_catalog-pg_description_pg_syntax-default.txt-Results_/results.txt"
         }
     ],
     "test.test[pg_catalog-pg_timezone_abbrevs-default.txt-Debug]": [

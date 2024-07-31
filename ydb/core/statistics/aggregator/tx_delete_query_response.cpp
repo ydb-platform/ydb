@@ -19,7 +19,7 @@ struct TStatisticsAggregator::TTxDeleteQueryResponse : public TTxBase {
         ReplyToActorIds.swap(Self->ReplyToActorIds);
 
         NIceDb::TNiceDb db(txc.DB);
-        Self->FinishScan(db);
+        Self->FinishTraversal(db);
 
         return true;
     }
@@ -28,7 +28,7 @@ struct TStatisticsAggregator::TTxDeleteQueryResponse : public TTxBase {
         SA_LOG_D("[" << Self->TabletID() << "] TTxDeleteQueryResponse::Complete");
 
         for (auto& id : ReplyToActorIds) {
-            ctx.Send(id, new TEvStatistics::TEvScanTableResponse);
+            ctx.Send(id, new TEvStatistics::TEvAnalyzeResponse);
         }
     }
 };

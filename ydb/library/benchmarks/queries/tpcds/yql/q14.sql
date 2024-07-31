@@ -32,6 +32,7 @@ $bla3 = (select iws.i_brand_id brand_id
 $cross_items = (select i_item_sk ss_item_sk
  from {{item}} as item cross join
  (select bla1.brand_id as brand_id, bla1.class_id as class_id, bla1.category_id as category_id from
+ any
  $bla1 bla1 left semi join $bla2 bla2 on (bla1.brand_id = bla2.brand_id and bla1.class_id = bla2.class_id and bla1.category_id = bla2.category_id)
             left semi join $bla3 bla3 on (bla1.brand_id = bla3.brand_id and bla1.class_id = bla3.class_id and bla1.category_id = bla3.category_id)
  ) x

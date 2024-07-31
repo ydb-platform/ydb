@@ -37,7 +37,7 @@ concept CContainerLike = requires {
 template <class T>
 struct TEqualityComparableHelper
 {
-    constexpr static bool Value = std::equality_comparable<T>;
+    static constexpr bool Value = std::equality_comparable<T>;
 };
 
 template <class T, size_t... I>
@@ -49,13 +49,13 @@ constexpr bool IsSequenceEqualityComparable(std::index_sequence<I...> /*sequence
 template <CTupleLike T>
 struct TEqualityComparableHelper<T>
 {
-    constexpr static bool Value = IsSequenceEqualityComparable<T>(std::make_index_sequence<std::tuple_size<T>::value>());
+    static constexpr bool Value = IsSequenceEqualityComparable<T>(std::make_index_sequence<std::tuple_size<T>::value>());
 };
 
 template <CContainerLike T>
 struct TEqualityComparableHelper<T>
 {
-    constexpr static bool Value = TEqualityComparableHelper<typename T::value_type>::Value;
+    static constexpr bool Value = TEqualityComparableHelper<typename T::value_type>::Value;
 };
 
 } // namespace NDetail

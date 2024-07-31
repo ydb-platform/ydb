@@ -836,6 +836,7 @@ public:
         UpdateConfig(db, "MinStorageScatterToBalance", configUpdates);
         UpdateConfig(db, "MinGroupUsageToBalance", configUpdates);
         UpdateConfig(db, "StorageBalancerInflight", configUpdates);
+        UpdateConfig(db, "LessSystemTabletsMoves", configUpdates);
 
         if (params.contains("BalancerIgnoreTabletTypes")) {
             auto value = params.Get("BalancerIgnoreTabletTypes");
@@ -1182,6 +1183,7 @@ public:
         ShowConfig(out, "MinStorageScatterToBalance");
         ShowConfig(out, "MinGroupUsageToBalance");
         ShowConfig(out, "StorageBalancerInflight");
+        ShowConfig(out, "LessSystemTabletsMoves");
         ShowConfigForBalancerIgnoreTabletTypes(out);
 
         out << "<div class='row' style='margin-top:40px'>";

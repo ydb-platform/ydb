@@ -14,7 +14,7 @@ namespace NViewer {
 
 using namespace NActors;
 
-class TJsonPDiskRestart : public TViewerPipeClient<TJsonPDiskRestart> {
+class TJsonPDiskRestart : public TViewerPipeClient {
     enum EEv {
         EvRetryNodeRequest = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvEnd
@@ -29,7 +29,7 @@ class TJsonPDiskRestart : public TViewerPipeClient<TJsonPDiskRestart> {
 
 protected:
     using TThis = TJsonPDiskRestart;
-    using TBase = TViewerPipeClient<TThis>;
+    using TBase = TViewerPipeClient;
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
     ui32 Timeout = 0;
@@ -44,16 +44,12 @@ protected:
     bool Force = false;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TJsonPDiskRestart(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : Viewer(viewer)
         , Event(ev)
     {}
 
-    void Bootstrap() {
+    void Bootstrap() override {
         const auto& params(Event->Get()->Request.GetParams());
         NodeId = FromStringWithDefault<ui32>(params.Get("node_id"), 0);
         PDiskId = FromStringWithDefault<ui32>(params.Get("pdisk_id"), Max<ui32>());
@@ -139,7 +135,7 @@ public:
         TBase::PassAway();
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         NJson::TJsonValue json;
         if (Response != nullptr) {
             if (Response->Record.GetResponse().GetSuccess()) {

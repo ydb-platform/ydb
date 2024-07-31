@@ -35,6 +35,7 @@ enum class EAutoPartitioningStrategy: ui32 {
     Disabled = 1,
     ScaleUp = 2,
     ScaleUpAndDown = 3,
+    Paused = 4
 };
 
 class TConsumer {

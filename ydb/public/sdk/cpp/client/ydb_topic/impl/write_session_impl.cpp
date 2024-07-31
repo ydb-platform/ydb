@@ -163,7 +163,6 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session is aborting and will not restart");
         return result;
     }
-    LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Got error. " << status.ToDebugString());
     SessionEstablished = false;
 
     // Keep DirectWriteToPartitionId value on temporary errors.
@@ -185,10 +184,11 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
     if (nextDelay) {
         result.StartDelay = *nextDelay;
         result.DoRestart = true;
-        LOG_LAZY(DbDriverState->Log, TLOG_WARNING, LogPrefix() << "Write session will restart in " << result.StartDelay);
+        LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Got error. " << status.ToDebugString());
+        LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Write session will restart in " << result.StartDelay);
         ResetForRetryImpl();
-
     } else {
+        LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Got error. " << status.ToDebugString());
         LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Write session will not restart after a fatal error");
         result.DoStop = true;
         CheckHandleResultImpl(result);
@@ -293,7 +293,15 @@ void TWriteSessionImpl::OnDescribePartition(const TStatus& status, const Ydb::To
 
     if (!status.IsSuccess()) {
         with_lock (Lock) {
-            handleResult = OnErrorImpl({status.GetStatus(), MakeIssueWithSubIssues("Failed to get partition location", status.GetIssues())});
+            if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED) {
+                Settings.DirectWriteToPartition_ = false;
+                handleResult = OnErrorImpl({
+                    EStatus::UNAVAILABLE,
+                    MakeIssueWithSubIssues("The server does not support direct write, fallback to in-direct write", status.GetIssues())
+                });
+            } else {
+                handleResult = OnErrorImpl({status.GetStatus(), MakeIssueWithSubIssues("Failed to get partition location", status.GetIssues())});
+            }
         }
         ProcessHandleResult(handleResult);
         return;

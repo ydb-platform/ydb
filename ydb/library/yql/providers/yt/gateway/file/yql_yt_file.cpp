@@ -653,7 +653,7 @@ public:
             writer.OnBeginMap();
             if (NCommon::HasResOrPullOption(*node, "type")) {
                 writer.OnKeyedItem("Type");
-                NCommon::WriteResOrPullType(writer, node->Child(0)->GetTypeAnn(), columns);
+                NCommon::WriteResOrPullType(writer, node->Child(0)->GetTypeAnn(), TColumnOrder(columns));
             }
 
             bool truncated = false;

@@ -213,6 +213,27 @@ TEST(TReconfigurableThroughputThrottlerTest, Overdraft)
     EXPECT_FALSE(throttler->IsOverdraft());
 }
 
+TEST(TReconfigurableThroughputThrottlerTest, OverdraftSignificantly)
+{
+    auto throttler = CreateReconfigurableThroughputThrottler(
+        TThroughputThrottlerConfig::Create(100));
+
+    const auto N = 3;
+    NProfiling::TWallTimer timer;
+    for (int i = 0; i < N; ++i) {
+        throttler->Throttle(300).Get().ThrowOnError();
+    }
+
+    auto expectedElapsed = (300 * (N - 1) - 100) * 1000 / 100;
+    //                             ^^1^^  ^^2^^
+    // NB(coteeq):
+    // 1. The last throttle overdrafts throttler and does not wait, hence minus one.
+    // 2. The first throttle takes 100 of its 300 from initial throttler's amount.
+    auto elapsed = timer.GetElapsedTime().MilliSeconds();
+    EXPECT_GE(elapsed, expectedElapsed - 100u);
+    EXPECT_LE(elapsed, expectedElapsed + 100u);
+}
+
 #if !defined(_asan_enabled_) && !defined(_msan_enabled_) && !defined(_tsan_enabled_)
 
 TEST(TReconfigurableThroughputThrottlerTest, Stress)
@@ -276,6 +297,35 @@ TEST(TReconfigurableThroughputThrottlerTest, ZeroLimit)
     }
 
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 1000u);
+}
+
+TEST(TReconfigurableThroughputThrottlerTest, ZeroLimitDoesNotLetAnythingThrough)
+{
+    auto throttler = CreateReconfigurableThroughputThrottler(
+        TThroughputThrottlerConfig::Create(0));
+
+    std::vector<TFuture<void>> scheduled;
+    for (int i = 0; i < 4; ++i) {
+        scheduled.push_back(throttler->Throttle(1));
+    }
+
+    Sleep(TDuration::Seconds(2));
+
+    // You shall not pass!
+    for (const auto& future : scheduled) {
+        EXPECT_FALSE(future.IsSet());
+    }
+
+    throttler->SetLimit(std::nullopt);
+    // Now we should pass through in a breeze.
+
+    NProfiling::TWallTimer timer;
+
+    for (const auto& future : scheduled) {
+        future.Get().ThrowOnError();
+    }
+
+    EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 100u);
 }
 
 TEST(TReconfigurableThroughputThrottlerTest, Release)

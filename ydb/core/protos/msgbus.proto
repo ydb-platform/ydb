@@ -241,9 +241,6 @@ message TResponse {
     // TChooseProxyRequest
     optional string ProxyName = 1050;
     optional uint64 ProxyCookie = 1051;
-
-    // Login
-    optional string UserToken = 1102;
 }
 
 message TFakeConfigDummy {
@@ -717,10 +714,3 @@ message TTestShardControlRequest {
 
 message TTestShardControlResponse {
 }
-
-message TLoginRequest {
-    optional string Database = 1;
-    optional string User = 2;
-    optional string Password = 3;
-};
-

@@ -26,7 +26,7 @@ struct TJsonVDiskRequestHelper  {
 
 
 template <typename RequestType, typename ResponseType>
-class TJsonVDiskRequest : public TViewerPipeClient<TJsonVDiskRequest<RequestType, ResponseType>> {
+class TJsonVDiskRequest : public TViewerPipeClient {
     enum EEv {
         EvRetryNodeRequest = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvEnd
@@ -42,7 +42,7 @@ class TJsonVDiskRequest : public TViewerPipeClient<TJsonVDiskRequest<RequestType
 
 protected:
     using TThis = TJsonVDiskRequest<RequestType, ResponseType>;
-    using TBase = TViewerPipeClient<TThis>;
+    using TBase = TViewerPipeClient;
     using THelper = TJsonVDiskRequestHelper<RequestType, ResponseType>;
     IViewer* Viewer;
     TActorId Initiator;
@@ -63,17 +63,13 @@ protected:
     std::optional<TActorId> TcpProxyId;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TJsonVDiskRequest(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : Viewer(viewer)
         , Initiator(ev->Sender)
         , Event(ev)
     {}
 
-    virtual void Bootstrap() {
+    void Bootstrap() override {
         const auto& params(Event->Get()->Request.GetParams());
         NodeId = FromStringWithDefault<ui32>(params.Get("node_id"), 0);
         PDiskId = FromStringWithDefault<ui32>(params.Get("pdisk_id"), Max<ui32>());
@@ -185,7 +181,7 @@ public:
         TBase::PassAway();
     }
 
-    void ReplyAndPassAway(const TString &error = "") {
+    void ReplyAndPassAway(const TString &error) {
         try {
             TStringStream json;
             if (error) {
@@ -198,6 +194,10 @@ public:
             TBase::Send(Initiator, new NMon::TEvHttpInfoRes(TString("HTTP/1.1 400 Bad Request\r\n\r\n") + e.what(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         }
         PassAway();
+    }
+
+    void ReplyAndPassAway() override {
+        ReplyAndPassAway({});
     }
 };
 

@@ -9843,11 +9843,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         TStringBuilder() << "Failed to deduce column order for input - star / qualified star is present in projection"));
                     return IGraphTransformer::TStatus::Error;
                 }
-                childColumnOrder->push_back(ToString(item->Child(1)->Content()));
+                childColumnOrder->AddColumn(ToString(item->Child(1)->Content()));
             }
 
         }
-        YQL_ENSURE(childColumnOrder->size() == numColumns);
+        YQL_ENSURE(childColumnOrder->Size() == numColumns);
 
         output = ctx.Expr.Builder(input->Pos())
             .Callable("AssumeColumnOrder")
@@ -9863,7 +9863,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                                             .Add(0, input->Child(1)->ChildPtr(i))
                                             .Callable(1, "Member")
                                                 .Arg(0, "item")
-                                                .Atom(1, (*childColumnOrder)[i])
+                                                .Atom(1, childColumnOrder->at(i).PhysicalName)
                                             .Seal()
                                         .Seal();
                                 }
@@ -9905,14 +9905,14 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        TVector<TString> topLevelColumns;
+        TColumnOrder topLevelColumns;
         auto type = NCommon::ParseOrderAwareTypeFromYson(input->Head().Content(), topLevelColumns, ctx.Expr, ctx.Expr.GetPosition(input->Pos()));
         if (!type) {
             return IGraphTransformer::TStatus::Error;
         }
 
         TExprNodeList items;
-        for (auto& col : topLevelColumns) {
+        for (auto& [col, gen_col] : topLevelColumns) {
             items.push_back(ctx.Expr.NewAtom(input->Pos(), col));
         }
 

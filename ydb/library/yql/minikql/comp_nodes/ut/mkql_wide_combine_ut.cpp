@@ -1006,8 +1006,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerPerfTest) {
 #if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 29u
 Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
     Y_UNIT_TEST_LLVM_SPILLING(TestLongStringsRefCounting) {
-        // Currently LLVM version doesn't support spilling.
-        if (LLVM && SPILLING) return;
         // callable WideLastCombinerWithSpilling was introduced in 49 version of runtime
         if (MKQL_RUNTIME_VERSION < 49U && SPILLING) return;
 
@@ -1099,8 +1097,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
     }
 
     Y_UNIT_TEST_LLVM_SPILLING(TestLongStringsPasstroughtRefCounting) {
-        // Currently LLVM version doesn't support spilling.
-        if (LLVM && SPILLING) return;
         // callable WideLastCombinerWithSpilling was introduced in 49 version of runtime
         if (MKQL_RUNTIME_VERSION < 49U && SPILLING) return;
         TSetup<LLVM, SPILLING> setup;
@@ -1192,8 +1188,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
         // Test is broken. Remove this if after YQL-18808.
         if (SPILLING) return;
 
-        // Currently LLVM version doesn't support spilling.
-        if (LLVM && SPILLING) return;
         // callable WideLastCombinerWithSpilling was introduced in 49 version of runtime
         if (MKQL_RUNTIME_VERSION < 49U && SPILLING) return;
         TSetup<LLVM, SPILLING> setup;
@@ -1277,8 +1271,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
     }
 
     Y_UNIT_TEST_LLVM_SPILLING(TestDoNotCalculateUnusedOutput) {
-        // Currently LLVM version doesn't support spilling.
-        if (LLVM && SPILLING) return;
         // callable WideLastCombinerWithSpilling was introduced in 49 version of runtime
         if (MKQL_RUNTIME_VERSION < 49U && SPILLING) return;
         TSetup<LLVM, SPILLING> setup;
@@ -1354,8 +1346,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
     }
 
     Y_UNIT_TEST_LLVM_SPILLING(TestThinAllLambdas) {
-        // Currently LLVM version doesn't support spilling.
-        if (LLVM && SPILLING) return;
         // callable WideLastCombinerWithSpilling was introduced in 49 version of runtime
         if (MKQL_RUNTIME_VERSION < 49U && SPILLING) return;
         TSetup<LLVM, SPILLING> setup;

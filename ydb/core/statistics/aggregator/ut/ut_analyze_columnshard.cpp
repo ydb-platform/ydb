@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         std::thread initThread(init);
 
         auto& runtime = *env.GetServer().GetRuntime();
-        runtime.SimulateSleep(TDuration::Seconds(30));
+        runtime.SimulateSleep(TDuration::Seconds(10));
         initThread.join();
 
         auto sender = runtime.AllocateEdgeActor();
@@ -35,6 +35,26 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         AnalyzeTable(runtime, pathId, columnShardId);
 
         Analyze(runtime, {pathId}, saTabletId);
+    }
+
+    Y_UNIT_TEST(AnalyzeTwoColumnTables) {
+        TTestEnv env(1, 1);
+        auto init = [&] () {
+            CreateDatabase(env, "Database");
+            CreateColumnStoreTable(env, "Database", "Table1", 1);
+            CreateColumnStoreTable(env, "Database", "Table2", 1);
+        };
+        std::thread initThread(init);
+
+        auto& runtime = *env.GetServer().GetRuntime();
+        runtime.SimulateSleep(TDuration::Seconds(10));
+        initThread.join();
+
+        ui64 saTabletId = 0;
+        auto pathId1 = ResolvePathId(runtime, "/Root/Database/Table1", nullptr, &saTabletId);
+        auto pathId2 = ResolvePathId(runtime, "/Root/Database/Table2");
+
+        Analyze(runtime, {pathId1, pathId2}, saTabletId);
     }
 }
 

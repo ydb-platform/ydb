@@ -702,6 +702,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
 
     if (AggregatedStats.Cookies.empty()) {
         CheckStat(ctx);
+        Balancer->ProcessPendingStats(ctx);
     }
 }
 
@@ -804,7 +805,6 @@ void TPersQueueReadBalancer::CheckStat(const TActorContext& ctx) {
                              << " UsedReserveSize: " << AggregatedStats.TotalUsedReserveSize);
 
     NTabletPipe::SendData(ctx, GetPipeClient(SchemeShardId, ctx), ev);
-
 
     UpdateCounters(ctx);
 }

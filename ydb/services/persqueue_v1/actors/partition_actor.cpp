@@ -1013,7 +1013,7 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     event->Record.SetDeadline(deadline);
     event->Record.SetClientId(ClientId);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition << " wait data in partition inited, cookie " << WaitDataCookie);
+    LOG_ERROR_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition << " wait data in partition inited, cookie " << WaitDataCookie << " from offset" << ReadOffset);
 
     NTabletPipe::SendData(ctx, PipeClient, event.Release());
 
@@ -1029,7 +1029,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
 
     auto it = WaitDataInfly.find(ev->Get()->Record.GetCookie());
     if (it == WaitDataInfly.end()) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
+        LOG_ERROR_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
                         << " unwaited response for WaitData " << ev->Get()->Record);
         return;
     }
@@ -1045,7 +1045,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
     Y_ABORT_UNLESS(EndOffset <= record.GetEndOffset()); //end offset could not be changed if no data arrived, but signal will be sended anyway after timeout
     Y_ABORT_UNLESS(ReadOffset >= EndOffset); //otherwise no WaitData were needed
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
+    LOG_ERROR_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
                     << " wait for data done: " << " readOffset " << ReadOffset << " EndOffset " << EndOffset << " newEndOffset "
                     << record.GetEndOffset() << " commitOffset " << CommittedOffset << " clientCommitOffset " << ClientCommitOffset
                     << " cookie " << ev->Get()->Record.GetCookie());

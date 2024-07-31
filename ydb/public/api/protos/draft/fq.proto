@@ -502,6 +502,14 @@ message GreenplumCluster {
     IamAuth auth = 6;
 }
 
+message MySQLCluster {
+    string database_id = 1 [(Ydb.length).le = 1024];
+    string database_name = 2 [(Ydb.length).le = 1024];
+    string login = 3 [(Ydb.length).le = 1024, (Ydb.sensitive) = true];
+    string password = 4 [(Ydb.length).le = 1024, (Ydb.sensitive) = true];
+    IamAuth auth = 5;
+}
+
 message ConnectionSetting {
     enum ConnectionType {
         CONNECTION_TYPE_UNSPECIFIED = 0;
@@ -512,6 +520,7 @@ message ConnectionSetting {
         MONITORING = 5;
         POSTGRESQL_CLUSTER = 6;
         GREENPLUM_CLUSTER = 7;
+        MYSQL_CLUSTER = 8;
     }
 
     oneof connection {
@@ -522,6 +531,7 @@ message ConnectionSetting {
         Monitoring monitoring = 5;
         PostgreSQLCluster postgresql_cluster = 6;
         GreenplumCluster greenplum_cluster = 7;
+        MySQLCluster mysql_cluster = 8;
     }
 }
 

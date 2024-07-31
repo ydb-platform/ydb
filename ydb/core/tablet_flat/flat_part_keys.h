@@ -3,79 +3,9 @@
 #include "flat_part_iface.h"
 #include "flat_part_index_iter_iface.h"
 #include "flat_part_slice.h"
-#include "flat_sausage_fetch.h"
-#include "flat_sausagecache.h"
 
 namespace NKikimr {
 namespace NTable {
-
-    class TKeysEnv : public IPages {
-    public:
-        using TCache = NTabletFlatExecutor::TPrivatePageCache::TInfo;
-
-        TKeysEnv(const TPart *part, TIntrusivePtr<TCache> cache)
-            : Part(part)
-            , Cache(std::move(cache))
-        {
-        }
-
-        TResult Locate(const TMemTable*, ui64, ui32) noexcept override
-        {
-            Y_ABORT("IPages::Locate(TMemTable*, ...) shouldn't be used here");
-        }
-
-        TResult Locate(const TPart*, ui64, ELargeObj) noexcept override
-        {
-            Y_ABORT("IPages::Locate(TPart*, ...) shouldn't be used here");
-        }
-
-        const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override
-        {
-            Y_ABORT_UNLESS(part == Part, "Unsupported part");
-            Y_ABORT_UNLESS(groupId.IsMain(), "Unsupported column group");
-
-            if (auto* extra = ExtraPages.FindPtr(pageId)) {
-                return extra;
-            } else if (auto* cached = Cache->Lookup(pageId)) {
-                // Save page in case it's evicted on the next iteration
-                ExtraPages[pageId] = *cached;
-                return cached;
-            } else {
-                NeedPages.insert(pageId);
-                return nullptr;
-            }
-        }
-
-        void Check(bool has) const noexcept
-        {
-            Y_ABORT_UNLESS(bool(NeedPages) == has, "Loader does not have some ne");
-        }
-
-        TAutoPtr<NPageCollection::TFetch> GetFetches()
-        {
-            if (NeedPages) {
-                TVector<TPageId> pages(NeedPages.begin(), NeedPages.end());
-                std::sort(pages.begin(), pages.end());
-                return new NPageCollection::TFetch{ 0, Cache->PageCollection, std::move(pages) };
-            } else {
-                return nullptr;
-            }
-        }
-
-        void Save(ui32 cookie, NSharedCache::TEvResult::TLoaded&& loaded) noexcept
-        {
-            if (cookie == 0 && NeedPages.erase(loaded.PageId)) {
-                ExtraPages[loaded.PageId] = TPinnedPageRef(loaded.Page).GetData();
-                Cache->Fill(std::move(loaded));
-            }
-        }
-
-    private:
-        const TPart* Part;
-        TIntrusivePtr<TCache> Cache;
-        THashMap<TPageId, TSharedData> ExtraPages;
-        THashSet<TPageId> NeedPages;
-    };
 
     class TKeysLoader {
     public:

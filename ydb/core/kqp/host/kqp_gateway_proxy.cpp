@@ -93,6 +93,22 @@ bool ConvertDataSlotToYdbTypedValue(NYql::EDataSlot fromType, const TString& fro
         toType->set_type_id(Ydb::Type::INTERVAL);
         toValue->set_int64_value(FromString<i64>(fromValue));
         break;
+    case NYql::EDataSlot::Date32:
+        toType->set_type_id(Ydb::Type::DATE32);
+        toValue->set_int32_value(FromString<i32>(fromValue));
+        break;
+    case NYql::EDataSlot::Datetime64:
+        toType->set_type_id(Ydb::Type::DATETIME64);
+        toValue->set_int64_value(FromString<i64>(fromValue));
+        break;
+    case NYql::EDataSlot::Timestamp64:
+        toType->set_type_id(Ydb::Type::TIMESTAMP64);
+        toValue->set_int64_value(FromString<i64>(fromValue));
+        break;
+    case NYql::EDataSlot::Interval64:
+        toType->set_type_id(Ydb::Type::INTERVAL64);
+        toValue->set_int64_value(FromString<i64>(fromValue));
+        break;        
     default:
         return false;
     }
@@ -556,24 +572,17 @@ public:
                     for (const auto& index : metadata->Indexes) {
                         auto indexDesc = schemeTx.MutableCreateIndexedTable()->AddIndexDescription();
                         indexDesc->SetName(index.Name);
-                        switch (index.Type) {
-                            case NYql::TIndexDescription::EType::GlobalSync:
-                                indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobal);
-                                break;
-                            case NYql::TIndexDescription::EType::GlobalAsync:
-                                indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync);
-                                break;
-                            case NYql::TIndexDescription::EType::GlobalSyncUnique:
-                                indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique);
-                                break;
-                        }
-
+                        indexDesc->SetType(TIndexDescription::ConvertIndexType(index.Type));
                         indexDesc->SetState(static_cast<::NKikimrSchemeOp::EIndexState>(index.State));
                         for (const auto& col : index.KeyColumns) {
                             indexDesc->AddKeyColumnNames(col);
                         }
                         for (const auto& col : index.DataColumns) {
                             indexDesc->AddDataColumnNames(col);
+                        }
+
+                        if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                            *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription).GetSettings();
                         }
                     }
                     FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata);
@@ -805,7 +814,50 @@ public:
     }
 
     TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster) override {
-        FORWARD_ENSURE_NO_PREPARE(RenameTable, src, dst, cluster);
+        CHECK_PREPARED_DDL(RenameTable);
+
+        auto metadata = SessionCtx->Tables().GetTable(cluster, src).Metadata;
+
+        std::pair<TString, TString> pathPair;
+        TString error;
+        if (!NSchemeHelpers::SplitTablePath(metadata->Name, GetDatabase(), pathPair, error, false)) {
+            return MakeFuture(ResultFromError<TGenericResult>(error));
+        }
+
+        auto temporary = metadata->Temporary;
+        auto renameTablePromise = NewPromise<TGenericResult>();
+
+        NKikimrSchemeOp::TModifyScheme schemeTx;
+        schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpMoveTable);
+        schemeTx.SetWorkingDir(pathPair.first);
+
+        auto* renameTable = schemeTx.MutableMoveTable();
+        renameTable->SetSrcPath(src);
+        renameTable->SetDstPath(dst);
+
+        if (IsPrepare()) {
+            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            auto& phyTx = *phyQuery.AddTransactions();
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
+
+            phyTx.MutableSchemeOperation()->MutableAlterTable()->Swap(&schemeTx);
+            TGenericResult result;
+            result.SetSuccess();
+            renameTablePromise.SetValue(result);
+        } else {
+            if (temporary) {
+                auto code = Ydb::StatusIds::BAD_REQUEST;
+                auto error = TStringBuilder() << "Not allowed to rename temp table";
+                IKqpGateway::TGenericResult errResult;
+                errResult.AddIssue(NYql::TIssue(error));
+                errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+                renameTablePromise.SetValue(errResult);
+            }
+            return Gateway->RenameTable(src, dst, cluster);
+        }
+
+        return renameTablePromise.GetFuture();
     }
 
     TFuture<TGenericResult> DropTable(const TString& cluster, const TDropTableSettings& settings) override {
@@ -1445,6 +1497,15 @@ public:
             if (settings.SequenceSettings.Cycle) {
                 seqDesc->SetCycle(*settings.SequenceSettings.Cycle);
             }
+            if (settings.SequenceSettings.DataType) {
+                if (settings.SequenceSettings.DataType == "int8") {
+                    seqDesc->SetDataType("pgint8");
+                } else if (settings.SequenceSettings.DataType == "int4") {
+                    seqDesc->SetDataType("pgint4");
+                } else if (settings.SequenceSettings.DataType == "int2") {
+                    seqDesc->SetDataType("pgint2");
+                }
+            }
 
             if (IsPrepare()) {
                 auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
@@ -1564,6 +1625,15 @@ public:
             }
             if (settings.SequenceSettings.Cycle) {
                 seqDesc->SetCycle(*settings.SequenceSettings.Cycle);
+            }
+            if (settings.SequenceSettings.DataType) {
+                if (settings.SequenceSettings.DataType == "int8") {
+                    seqDesc->SetDataType("pgint8");
+                } else if (settings.SequenceSettings.DataType == "int4") {
+                    seqDesc->SetDataType("pgint4");
+                } else if (settings.SequenceSettings.DataType == "int2") {
+                    seqDesc->SetDataType("pgint2");
+                }
             }
 
             if (IsPrepare()) {
@@ -1842,6 +1912,7 @@ public:
                 const auto parseResult = NYdb::ParseConnectionString(*connectionString);
                 params.SetEndpoint(parseResult.Endpoint);
                 params.SetDatabase(parseResult.Database);
+                params.SetEnableSsl(parseResult.EnableSsl);
             }
             if (const auto& endpoint = settings.Settings.Endpoint) {
                 params.SetEndpoint(*endpoint);

@@ -52,6 +52,7 @@ namespace NActors::NQueueBench::NTracing {
         DEFAULT_OBSERVER_PROXY_STATIC_METHOD(SuccessSlowPush);
         DEFAULT_OBSERVER_PROXY_STATIC_METHOD(SuccessFastPush);
 
+        DEFAULT_OBSERVER_PROXY_STATIC_METHOD(SuccessOvertakenPop);
         DEFAULT_OBSERVER_PROXY_STATIC_METHOD(SuccessSlowPop);
         DEFAULT_OBSERVER_PROXY_STATIC_METHOD(SuccessFastPop);
         DEFAULT_OBSERVER_PROXY_STATIC_METHOD(SuccessReallyFastPop);

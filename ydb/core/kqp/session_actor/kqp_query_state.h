@@ -67,8 +67,7 @@ public:
         , StartedAt(startedAt)
     {
         RequestEv.reset(ev->Release().Release());
-
-        if (AppData()->FeatureFlags.GetEnableImplicitQueryParameterTypes() && !RequestEv->GetYdbParameters().empty()) {
+        if (tableServiceConfig.GetEnableImplicitQueryParameterTypes() && !RequestEv->GetYdbParameters().empty()) {
             QueryParameterTypes = std::make_shared<std::map<TString, Ydb::Type>>();
             for (const auto& [name, typedValue] : RequestEv->GetYdbParameters()) {
                 QueryParameterTypes->insert({name, typedValue.Gettype()});
@@ -85,6 +84,7 @@ public:
         } else {
             UserRequestContext = MakeIntrusive<TUserRequestContext>(RequestEv->GetTraceId(), Database, sessionId);
         }
+        UserRequestContext->PoolId = RequestEv->GetPoolId();
     }
 
     // the monotonously growing counter, the ordinal number of the query,
@@ -102,6 +102,7 @@ public:
     ui64 ParametersSize = 0;
     TPreparedQueryHolder::TConstPtr PreparedQuery;
     TKqpCompileResult::TConstPtr CompileResult;
+    TVector<NKikimrKqp::TParameterDescription> ResultParams;
     TKqpStatsCompile CompileStats;
     TIntrusivePtr<TKqpTransactionContext> TxCtx;
     TQueryData::TPtr QueryData;
@@ -113,6 +114,7 @@ public:
     bool IsDocumentApiRestricted_ = false;
 
     TInstant StartTime;
+    TInstant ContinueTime;
     NYql::TKikimrQueryDeadlines QueryDeadlines;
     TKqpQueryStats QueryStats;
     bool KeepSession = false;
@@ -136,6 +138,7 @@ public:
     std::shared_ptr<std::map<TString, Ydb::Type>> QueryParameterTypes;
 
     TKqpTempTablesState::TConstPtr TempTablesState;
+    TMaybe<TActorId> PoolHandlerActor;
 
     THolder<NYql::TExprContext> SplittedCtx;
     TVector<NYql::TExprNode::TPtr> SplittedExprs;
@@ -186,6 +189,10 @@ public:
         return QueryParameterTypes;
     }
 
+    TVector<NKikimrKqp::TParameterDescription> GetResultParams() const {
+        return ResultParams;
+    }
+
     void EnsureAction() {
         YQL_ENSURE(RequestEv->HasAction());
     }
@@ -224,6 +231,14 @@ public:
 
     const TString& GetDatabase() const {
         return RequestEv->GetDatabase();
+    }
+
+    bool IsSplitted() const {
+        return !SplittedExprs.empty();
+    }
+
+    bool IsCreateTableAs() const {
+        return IsSplitted();
     }
 
     // todo: gvit
@@ -298,10 +313,6 @@ public:
 
     bool NeedPersistentSnapshot() const {
         auto type = GetType();
-        if (type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY ||
-            type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY) {
-            return ::NKikimr::NKqp::HasOlapTableReadInTx(PreparedQuery->GetPhysicalQuery());
-        }
         return (
             type == NKikimrKqp::QUERY_TYPE_SQL_SCAN ||
             type == NKikimrKqp::QUERY_TYPE_AST_SCAN
@@ -314,7 +325,6 @@ public:
 
     bool ShouldCommitWithCurrentTx(const TKqpPhyTxHolder::TConstPtr& tx) {
         const auto& phyQuery = PreparedQuery->GetPhysicalQuery();
-
         if (!Commit) {
             return false;
         }
@@ -335,8 +345,6 @@ public:
         }
 
         if (TxCtx->HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
-            YQL_ENSURE(TxCtx->EnableImmediateEffects);
-
             if (tx && tx->GetHasEffects()) {
                 YQL_ENSURE(tx->ResultsSize() == 0);
                 // commit can be applied to the last transaction with effects
@@ -350,8 +358,13 @@ public:
         return !TxCtx->TxHasEffects();
     }
 
-    bool ShouldAcquireLocks() {
+    bool ShouldAcquireLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
         if (*TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE) {
+            return false;
+        }
+
+        // Inconsistent writes (CTAS) don't require locks.
+        if (IsSplitted() && !HasTxSinkInTx(tx)) {
             return false;
         }
 
@@ -409,16 +422,35 @@ public:
         return tx;
     }
 
+    bool HasTxSinkInStage(const ::NKqpProto::TKqpPhyStage& stage) const {
+        for (const auto& sink : stage.GetSinks()) {
+            if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                NKikimrKqp::TKqpTableSinkSettings settings;
+                YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+                if (!settings.GetInconsistentTx()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    bool HasTxSink() const {
+        const auto& query = PreparedQuery->GetPhysicalQuery();
+        for (auto& tx : query.GetTransactions()) {
+            for (const auto& stage : tx.GetStages()) {
+                if (HasTxSinkInStage(stage)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     bool HasTxSinkInTx(const TKqpPhyTxHolder::TConstPtr& tx) const {
         for (const auto& stage : tx->GetStages()) {
-            for (const auto& sink : stage.GetSinks()) {
-                if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
-                    NKikimrKqp::TKqpTableSinkSettings settings;
-                    YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
-                    if (!settings.GetInconsistentTx()) {
-                        return true;
-                    }
-                }
+            if (HasTxSinkInStage(stage)) {
+                return true;
             }
         }
         return false;
@@ -454,18 +486,6 @@ public:
         StatementResultIndex += StatementResultSize;
         StatementResultSize = 0;
         PrepareCurrentStatement();
-    }
-
-    void PrepareStatementTransaction(NKqpProto::TKqpPhyTx_EType txType) {
-        if (!HasTxControl()) {
-            switch (txType) {
-                case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
-                    TxCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
-                    break;
-                default:
-                    TxCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
-            }
-        }
     }
 
     // validate the compiled query response and ensure that all table versions are not
@@ -565,6 +585,8 @@ public:
     std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigate();
     bool IsAccessDenied(const NSchemeCache::TSchemeCacheNavigate& response, TString& message);
     bool HasErrors(const NSchemeCache::TSchemeCacheNavigate& response, TString& message);
+
+    bool HasUserToken() const;
 };
 
 

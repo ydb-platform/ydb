@@ -36,6 +36,10 @@ on:
       test_size:
         type: string
         default: "small,medium,large"
+      test_retry_count:
+        type: string
+        default: ""
+        description: "how many times to retry failed tests"
       test_type:
         type: string
         default: ""
@@ -79,6 +83,7 @@ jobs:
         run_tests: ${{ inputs.run_tests }}
         test_size: ${{ inputs.test_size }}
         test_type: ${{ inputs.test_type }}
+        test_retry_count: ${{ inputs.test_retry_count }}
         test_threads: ${{ inputs.test_threads }}
         put_build_results_to_cache: ${{ inputs.put_build_results_to_cache }}
         secs: ${{ format('{{"TESTMO_TOKEN2":"{0}","AWS_KEY_ID":"{1}","AWS_KEY_VALUE":"{2}","REMOTE_CACHE_USERNAME":"{3}","REMOTE_CACHE_PASSWORD":"{4}"}}',

@@ -14,6 +14,7 @@ namespace NObjectOptionsParsing {
 Y_HAS_MEMBER(ExistingOk); // for create
 Y_HAS_MEMBER(MissingOk); // for drop
 Y_HAS_MEMBER(ReplaceIfExists); // for create
+Y_HAS_MEMBER(ResetFeatures); // for alter
 } // namespace NObjectOptionsParsing
 
 class TObjectSettingsImpl {
@@ -21,21 +22,24 @@ public:
     using TFeaturesExtractor = NYql::TFeaturesExtractor;
 private:
     using TFeatures = THashMap<TString, TString>;
+    using TResetFeatures = std::unordered_set<TString>;
     YDB_READONLY_DEF(TString, TypeId);
     YDB_READONLY_DEF(TString, ObjectId);
     YDB_READONLY_DEF(bool, ExistingOk); // for create
     YDB_READONLY_DEF(bool, MissingOk); // for drop
     YDB_READONLY_DEF(bool, ReplaceIfExists); // for create
     TFeatures Features;
+    TResetFeatures ResetFeatures;
     std::shared_ptr<TFeaturesExtractor> FeaturesExtractor;
 public:
     TObjectSettingsImpl() = default;
 
-    TObjectSettingsImpl(const TString& typeId, const TString& objectId, const TFeatures& features)
+    TObjectSettingsImpl(const TString& typeId, const TString& objectId, const TFeatures& features, const TResetFeatures& resetFeatures = {})
         : TypeId(typeId)
         , ObjectId(objectId)
         , Features(features)
-        , FeaturesExtractor(std::make_shared<TFeaturesExtractor>(Features))
+        , ResetFeatures(resetFeatures)
+        , FeaturesExtractor(std::make_shared<TFeaturesExtractor>(Features, ResetFeatures))
         {}
 
     TFeaturesExtractor& GetFeaturesExtractor() const {
@@ -56,6 +60,13 @@ public:
         if constexpr (NObjectOptionsParsing::THasMissingOk<TKiObject>::value) {
             MissingOk = (data.MissingOk().Value() == "1");
         }
+        if constexpr (NObjectOptionsParsing::THasResetFeatures<TKiObject>::value) {
+            for (auto&& i : data.ResetFeatures()) {
+                if (auto maybeAtom = i.template Maybe<NYql::NNodes::TCoAtom>()) {
+                    ResetFeatures.emplace(maybeAtom.Cast().StringValue());
+                }
+            }
+        }
         for (auto&& i : data.Features()) {
             if (auto maybeAtom = i.template Maybe<NYql::NNodes::TCoAtom>()) {
                 Features.emplace(maybeAtom.Cast().StringValue(), "");
@@ -68,7 +79,7 @@ public:
                 }
             }
         }
-        FeaturesExtractor = std::make_shared<TFeaturesExtractor>(Features);
+        FeaturesExtractor = std::make_shared<TFeaturesExtractor>(Features, ResetFeatures);
         return true;
     }
 };

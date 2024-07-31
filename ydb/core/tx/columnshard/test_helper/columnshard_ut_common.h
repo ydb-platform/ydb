@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/tx/columnshard/blob_cache.h>
-#include <ydb/core/tx/columnshard/engines/scheme/statistics/max/operator.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
@@ -15,6 +14,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/tx/long_tx_service/public/types.h>
+#include <ydb/core/tx/data_events/common/modification_type.h>
 
 namespace NKikimr::NOlap {
 struct TIndexInfo;
@@ -167,7 +167,7 @@ struct TTestSchema {
             // PK
             firstKeyItem,
             TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8) ),
-            TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8) ),
+            TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8)).SetAccessorClassName("SPARSED"),
             TTestColumn("uid", TTypeInfo(NTypeIds::Utf8) ).SetStorageId("__MEMORY"),
             TTestColumn("level", TTypeInfo(NTypeIds::Int32) ),
             TTestColumn("message", TTypeInfo(NTypeIds::Utf8) ).SetStorageId("__MEMORY"),
@@ -183,7 +183,7 @@ struct TTestSchema {
         std::vector<TTestColumn> schema = {
             // PK
             TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) ),
-            TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8) ),
+            TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8)).SetAccessorClassName("SPARSED"),
             TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8) ),
             TTestColumn("uid", TTypeInfo(NTypeIds::Utf8) ).SetStorageId("__MEMORY"),
             //
@@ -192,7 +192,7 @@ struct TTestSchema {
             TTestColumn("json_payload", TTypeInfo(NTypeIds::JsonDocument) ),
             TTestColumn("ingested_at", TTypeInfo(NTypeIds::Timestamp) ),
             TTestColumn("saved_at", TTypeInfo(NTypeIds::Timestamp) ),
-            TTestColumn("request_id", TTypeInfo(NTypeIds::Yson) )
+            TTestColumn("request_id", TTypeInfo(NTypeIds::Yson)).SetAccessorClassName("SPARSED")
         };
         return schema;
     };
@@ -201,7 +201,7 @@ struct TTestSchema {
         std::vector<TTestColumn> schema = {
             TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) ),
             TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8) ).SetStorageId("__MEMORY"),
-            TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8) ),
+            TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8)).SetAccessorClassName("SPARSED"),
             TTestColumn("uid", TTypeInfo(NTypeIds::Utf8) ).SetStorageId("__MEMORY")
         };
         return schema;
@@ -243,32 +243,7 @@ struct TTestSchema {
     static void InitSchema(const std::vector<NArrow::NTest::TTestColumn>& columns,
                            const std::vector<NArrow::NTest::TTestColumn>& pk,
                            const TTableSpecials& specials,
-                           NKikimrSchemeOp::TColumnTableSchema* schema)
-    {
-        schema->SetEngine(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
-
-        for (ui32 i = 0; i < columns.size(); ++i) {
-            *schema->MutableColumns()->Add() = columns[i].CreateColumn(i + 1);
-            if (!specials.NeedTestStatistics()) {
-                continue;
-            }
-            if (NOlap::NStatistics::NMax::TOperator::IsAvailableType(columns[i].GetType())) {
-                *schema->AddStatistics() = NOlap::NStatistics::TOperatorContainer("MAX::" + columns[i].GetName(), std::make_shared<NOlap::NStatistics::NMax::TOperator>(i + 1)).SerializeToProto();
-            }
-        }
-
-        Y_ABORT_UNLESS(pk.size() > 0);
-        for (auto& column : ExtractNames(pk)) {
-            schema->AddKeyColumnNames(column);
-        }
-
-        if (specials.HasCodec()) {
-            schema->MutableDefaultCompression()->SetCodec(specials.GetCodecId());
-        }
-        if (specials.CompressionLevel) {
-            schema->MutableDefaultCompression()->SetLevel(*specials.CompressionLevel);
-        }
-    }
+                           NKikimrSchemeOp::TColumnTableSchema* schema);
 
     static void InitTtl(const TTableSpecials& specials, NKikimrSchemeOp::TColumnDataLifeCycle::TTtl* ttl) {
         Y_ABORT_UNLESS(specials.HasTtl());
@@ -431,14 +406,16 @@ void PlanSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot
 void PlanWriteTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap, bool waitResult = true);
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId, const ui64 writeId, const ui64 tableId, const TString& data,
-                              const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>* writeIds);
+    const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>* writeIds,
+    const NEvWrite::EModificationType mType = NEvWrite::EModificationType::Upsert, const std::set<std::string>& notNullColumns = {});
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 writeId, const ui64 tableId, const TString& data,
-                              const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, bool waitResult = true, std::vector<ui64>* writeIds = nullptr);
+    const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, bool waitResult = true, std::vector<ui64>* writeIds = nullptr,
+    const NEvWrite::EModificationType mType = NEvWrite::EModificationType::Upsert, const std::set<std::string>& notNullColumns = {});
 
 std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, const NLongTxService::TLongTxId& longTxId,
                               ui64 tableId, const ui64 writePartId, const TString& data,
-                              const std::vector<NArrow::NTest::TTestColumn>& ydbSchema);
+                              const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, const NEvWrite::EModificationType mType = NEvWrite::EModificationType::Upsert);
 
 ui32 WaitWriteResult(TTestBasicRuntime& runtime, ui64 shardId, std::vector<ui64>* writeIds = nullptr);
 

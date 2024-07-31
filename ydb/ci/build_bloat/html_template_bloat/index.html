@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<!-- Based on https://github.com/martine/webtreemap -->
+<head>
+    <title>Build bloat</title>
+    <link rel="stylesheet" href="webtreemap.css">
+    <link rel="stylesheet" href="bloat.css">
+</head>
+
+<body>
+    <div class="content">
+        <div class="header">
+            <div class="note">Click on a box to zoom in.  Click on the outermost box to zoom out.</div>
+            <legend>
+                <div>Legend:</div>
+                <div class="webtreemap-node webtreemap-type-namespace">Namespace</div>
+                <div class="webtreemap-node webtreemap-type-function">Function</div>
+            </legend>
+        </div>
+        <div id='map'></div>
+    </div>
+
+    <script src="bloat.json"></script>
+    <script type="text/javascript" src='webtreemap.js'></script>
+    <script type="text/javascript">
+        var map = document.getElementById('map');
+        var bloat = null;
+
+        renderTreemap(map, kTree);
+        window.addEventListener("resize", (event) => {
+            renderTreemap(map, kTree);
+        });
+    </script>
+</body>

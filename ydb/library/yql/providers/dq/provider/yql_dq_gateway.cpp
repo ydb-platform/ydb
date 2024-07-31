@@ -4,6 +4,7 @@
 #include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
+#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/providers/dq/config/config.pb.h>
 #include <ydb/library/yql/utils/log/log.h>
@@ -24,6 +25,96 @@
 namespace NYql {
 
 using namespace NThreading;
+
+class TPlanPrinter {
+public:
+    TStringBuilder b;
+
+    void DescribeChannel(const auto& ch, bool spilling) {
+        if (spilling) {
+            b << "Ch" << ch.GetId() << " [shape=diamond, label=\"Ch" << ch.GetId() << "\", color=\"red\"];";
+        } else {
+            b << "Ch" << ch.GetId() << " [shape=diamond, label=\"Ch" << ch.GetId() << "\"];";
+        }
+    }
+
+    void PrintInputChannel(const auto& ch, const auto& type) {
+        b << "Ch" << ch.GetId() << " -> T" << ch.GetDstTaskId() << " [label=" << "\"" << type << "\"];\n";
+    }
+
+    void PrintOutputChannel(const auto& ch, const auto& type) {
+        b << "T" << ch.GetSrcTaskId() << " -> Ch" << ch.GetId() << " [label=" << "\"" << type << "\"];\n";
+    }
+
+    void PrintSource(auto taskId, auto sourceIndex) {
+        b << "S" << taskId << "_" << sourceIndex << " -> T" << taskId << " [label=" << "\"S" << sourceIndex << "\"];\n";
+    }
+
+    void DescribeSource(auto taskId, auto sourceIndex) {
+        b << "S" << taskId << "_" << sourceIndex << " ";
+        b << "[shape=square, label=\"" << taskId << "/" << sourceIndex << "\"];\n";
+    }
+
+    void PrintTask(const auto& task) {
+        int index = 0;
+        for (const auto& input : task.GetInputs()) {
+            TString inputName = "Unknown";
+            bool isSource = false;
+            if (input.HasUnionAll()) { inputName = "UnionAll"; }
+            else if (input.HasMerge()) { inputName = "Merge"; }
+            else if (input.HasSource()) { inputName = "Source"; isSource = true; }
+            if (isSource) {
+                PrintSource(task.GetId(), index);
+            } else {
+                for (const auto& ch : input.GetChannels()) {
+                    PrintInputChannel(ch, inputName);
+                }
+            }
+            index ++;
+        }
+        for (const auto& output : task.GetOutputs()) {
+            TString outputName = "Unknown";
+            if (output.HasMap()) { outputName = "Map"; }
+            else if (output.HasRangePartition()) { outputName = "Range"; }
+            else if (output.HasHashPartition()) { outputName = "Hash"; }
+            else if (output.HasBroadcast()) { outputName = "Broadcast"; }
+            // TODO: effects, sink
+            for (const auto& ch : output.GetChannels()) {
+                PrintOutputChannel(ch, outputName);
+            }
+        }
+    }
+
+    void DescribeTask(const auto& task) {
+        b << "T" << task.GetId() << " [shape=circle, label=\"" << task.GetId() << "/" << task.GetStageId() << "\"];\n";
+        int index = 0;
+        for (const auto& input : task.GetInputs()) {
+            if (input.HasSource()) {
+                DescribeSource(task.GetId(), index);
+            }
+            index ++;
+        }
+        for (const auto& output : task.GetOutputs()) {
+            for (const auto& ch : output.GetChannels()) {
+                DescribeChannel(ch, task.GetEnableSpilling());
+            }
+        }
+    }
+ 
+    TString Print(const NDqs::TPlan& plan) {
+        b.clear();
+        b << "digraph G {\n";
+        for (const auto& task : plan.Tasks) {
+            DescribeTask(task);
+        }
+        b << "\n";
+        for (const auto& task : plan.Tasks) {
+            PrintTask(task);
+        }
+        b << "}\n";
+        return b;
+    }
+};
 
 class TDqTaskScheduler : public TTaskScheduler {
 private:
@@ -267,6 +358,8 @@ public:
         }
         settings->Save(queryPB);
 
+        YQL_CLOG(TRACE, ProviderDq) << TPlanPrinter().Print(plan);
+
         {
             auto& secParams = *queryPB.MutableSecureParams();
             for (const auto&[k, v] : secureParams) {
@@ -353,7 +446,11 @@ public:
             if (maybeStage == labels.end()) {
                 continue;
             }
-            auto& stage = ret[atoi(maybeStage->second.data())];
+            auto stageId = atoi(maybeStage->second.data());
+            if (!stageId) {
+                continue;
+            }
+            auto& stage = ret[stageId];
 
             if (name == "OutputRows") {
                 stage.OutputRows += metric.GetSum();
@@ -568,9 +665,13 @@ public:
                 session = it->second;
             }
         }
+        TFailureInjector::Reach("dq_session_was_closed", [&] { session = nullptr; });
         if (!session) {
             YQL_CLOG(ERROR, ProviderDq) << "Session was closed: " << sessionId;
-            return MakeFuture(NCommon::ResultFromException<TResult>(yexception() << "Session was closed"));
+            auto res = NCommon::ResultFromException<TResult>(yexception() << "Session was closed");
+            res.Fallback = true;
+            res.SetSuccess();
+            return MakeFuture(res);
         }
         return session->ExecutePlan(std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard, executionTimeout)
             .Apply([](const TFuture<TResult>& f) {

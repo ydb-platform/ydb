@@ -263,30 +263,27 @@ using TAnyDateTimeSubIntervalTz = TAnyDateTimeSubIntervalT<TLeft, TRight, TOutpu
 
 template <bool LeftTz, bool RightTz, bool LeftBig, bool RightBig>
 void RegisterDateSub(IBuiltinFunctionRegistry& registry) {
-    static_assert(!(LeftTz && LeftBig), "Expect either Tz or Big date type");
-    static_assert(!(RightTz && RightBig), "Expect either Tz or Big date type");
-
     using TDateLeft1 = std::conditional_t<LeftBig,
-        NUdf::TDataType<NUdf::TDate32>,
+        std::conditional_t<LeftTz, NUdf::TDataType<NUdf::TTzDate32>, NUdf::TDataType<NUdf::TDate32>>,
         std::conditional_t<LeftTz, NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TDate>>>;
     using TDateLeft2 = std::conditional_t<LeftBig,
-          NUdf::TDataType<NUdf::TDatetime64>,
+          std::conditional_t<LeftTz, NUdf::TDataType<NUdf::TTzDatetime64>, NUdf::TDataType<NUdf::TDatetime64>>,
           std::conditional_t<LeftTz, NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TDatetime>>>;
     using TDateLeft3 = std::conditional_t<LeftBig,
-          NUdf::TDataType<NUdf::TTimestamp64>,
+          std::conditional_t<LeftTz, NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TTimestamp64>>,
           std::conditional_t<LeftTz, NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTimestamp>>>;
 
     using TDateRight1 = std::conditional_t<RightBig,
-          NUdf::TDataType<NUdf::TDate32>,
+          std::conditional_t<RightTz, NUdf::TDataType<NUdf::TTzDate32>, NUdf::TDataType<NUdf::TDate32>>,
           std::conditional_t<RightTz, NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TDate>>>;
     using TDateRight2 = std::conditional_t<RightBig,
-          NUdf::TDataType<NUdf::TDatetime64>,
+          std::conditional_t<RightTz, NUdf::TDataType<NUdf::TTzDatetime64>, NUdf::TDataType<NUdf::TDatetime64>>,
           std::conditional_t<RightTz, NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TDatetime>>>;
     using TDateRight3 = std::conditional_t<RightBig,
-          NUdf::TDataType<NUdf::TTimestamp64>,
+          std::conditional_t<RightTz, NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TTimestamp64>>,
           std::conditional_t<RightTz, NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTimestamp>>>;
 
-    using TOutput = std::conditional_t<LeftBig || RightBig, 
+    using TOutput = std::conditional_t<LeftBig || RightBig,
           NUdf::TDataType<NUdf::TInterval64>,
           NUdf::TDataType<NUdf::TInterval>>;
 
@@ -314,30 +311,27 @@ void RegisterDateSub(IBuiltinFunctionRegistry& registry) {
 
 template <bool LeftTz, bool RightTz, bool LeftBig, bool RightBig>
 void RegisterDateSub(TKernelFamilyBase& owner) {
-    static_assert(!(LeftTz && LeftBig), "Expect either Tz or Big date type");
-    static_assert(!(RightTz && RightBig), "Expect either Tz or Big date type");
-
     using TDateLeft1 = std::conditional_t<LeftBig,
-        NUdf::TDataType<NUdf::TDate32>,
+        std::conditional_t<LeftTz, NUdf::TDataType<NUdf::TTzDate32>, NUdf::TDataType<NUdf::TDate32>>,
         std::conditional_t<LeftTz, NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TDate>>>;
     using TDateLeft2 = std::conditional_t<LeftBig,
-          NUdf::TDataType<NUdf::TDatetime64>,
+          std::conditional_t<LeftTz, NUdf::TDataType<NUdf::TTzDatetime64>, NUdf::TDataType<NUdf::TDatetime64>>,
           std::conditional_t<LeftTz, NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TDatetime>>>;
     using TDateLeft3 = std::conditional_t<LeftBig,
-          NUdf::TDataType<NUdf::TTimestamp64>,
+          std::conditional_t<LeftTz, NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TTimestamp64>>,
           std::conditional_t<LeftTz, NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTimestamp>>>;
 
     using TDateRight1 = std::conditional_t<RightBig,
-          NUdf::TDataType<NUdf::TDate32>,
+          std::conditional_t<RightTz, NUdf::TDataType<NUdf::TTzDate32>, NUdf::TDataType<NUdf::TDate32>>,
           std::conditional_t<RightTz, NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TDate>>>;
     using TDateRight2 = std::conditional_t<RightBig,
-          NUdf::TDataType<NUdf::TDatetime64>,
+          std::conditional_t<RightTz, NUdf::TDataType<NUdf::TTzDatetime64>, NUdf::TDataType<NUdf::TDatetime64>>,
           std::conditional_t<RightTz, NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TDatetime>>>;
     using TDateRight3 = std::conditional_t<RightBig,
-          NUdf::TDataType<NUdf::TTimestamp64>,
+          std::conditional_t<RightTz, NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TTimestamp64>>,
           std::conditional_t<RightTz, NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTimestamp>>>;
 
-    using TOutput = std::conditional_t<LeftBig || RightBig, 
+    using TOutput = std::conditional_t<LeftBig || RightBig,
           NUdf::TDataType<NUdf::TInterval64>,
           NUdf::TDataType<NUdf::TInterval>>;
 
@@ -366,11 +360,18 @@ void RegisterSub(IBuiltinFunctionRegistry& registry) {
     // NarrowDate minus BigDate
     RegisterDateSub<false, false, false, true>(registry);
     RegisterDateSub<true,  false, false, true>(registry);
+    RegisterDateSub<false, true, false, true>(registry);
+    RegisterDateSub<true,  true, false, true>(registry);
     // BigDate minus NarrowDate
     RegisterDateSub<false, false, true, false>(registry);
     RegisterDateSub<false, true,  true, false>(registry);
+    RegisterDateSub<true, false, true, false>(registry);
+    RegisterDateSub<true, true,  true, false>(registry);
     // BigDate minus BigDate
     RegisterDateSub<false, false, true, true>(registry);
+    RegisterDateSub<true, false, true, true>(registry);
+    RegisterDateSub<false, true, true, true>(registry);
+    RegisterDateSub<true, true, true, true>(registry);
 
     RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>,
         NUdf::TDataType<NUdf::TInterval>, TIntervalSubInterval, TBinaryArgsOptWithNullableResult>(registry, "Sub");
@@ -422,20 +423,32 @@ void RegisterSub(IBuiltinFunctionRegistry& registry) {
         NUdf::TDataType<NUdf::TDatetime64>, TAnyDateTimeSubInterval, TBinaryArgsOptWithNullableResult>(registry, "Sub");
     RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TInterval>,
         NUdf::TDataType<NUdf::TTimestamp64>, TAnyDateTimeSubInterval, TBinaryArgsOptWithNullableResult>(registry, "Sub");
+
+    RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TTzDate32>, NUdf::TDataType<NUdf::TInterval64>,
+        NUdf::TDataType<NUdf::TTzDate32>, TAnyDateTimeSubIntervalTz, TBinaryArgsOptWithNullableResult>(registry, "Sub");
+    RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TTzDatetime64>, NUdf::TDataType<NUdf::TInterval64>,
+        NUdf::TDataType<NUdf::TTzDatetime64>, TAnyDateTimeSubIntervalTz, TBinaryArgsOptWithNullableResult>(registry, "Sub");
+    RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TInterval64>,
+        NUdf::TDataType<NUdf::TTzTimestamp64>, TAnyDateTimeSubIntervalTz, TBinaryArgsOptWithNullableResult>(registry, "Sub");
+
+    RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TTzDate32>, NUdf::TDataType<NUdf::TInterval>,
+        NUdf::TDataType<NUdf::TTzDate32>, TAnyDateTimeSubIntervalTz, TBinaryArgsOptWithNullableResult>(registry, "Sub");
+    RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TTzDatetime64>, NUdf::TDataType<NUdf::TInterval>,
+        NUdf::TDataType<NUdf::TTzDatetime64>, TAnyDateTimeSubIntervalTz, TBinaryArgsOptWithNullableResult>(registry, "Sub");
+    RegisterFunctionBinPolyOpt<NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TInterval>,
+        NUdf::TDataType<NUdf::TTzTimestamp64>, TAnyDateTimeSubIntervalTz, TBinaryArgsOptWithNullableResult>(registry, "Sub");
 }
 
 template <bool Tz, bool BigDate, bool BigInterval>
 void RegisterDateSubInterval(TKernelFamilyBase& owner) {
-    static_assert(!(Tz && BigDate), "Expect either Tz or Big date type");
-
     using TDateLeft1 = std::conditional_t<BigDate,
-        NUdf::TDataType<NUdf::TDate32>,
+        std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzDate32>, NUdf::TDataType<NUdf::TDate32>>,
         std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TDate>>>;
     using TDateLeft2 = std::conditional_t<BigDate,
-          NUdf::TDataType<NUdf::TDatetime64>,
+          std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzDatetime64>, NUdf::TDataType<NUdf::TDatetime64>>,
           std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TDatetime>>>;
     using TDateLeft3 = std::conditional_t<BigDate,
-          NUdf::TDataType<NUdf::TTimestamp64>,
+          std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TTimestamp64>>,
           std::conditional_t<Tz, NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTimestamp>>>;
 
     using TIntervalRight = std::conditional_t<BigInterval,
@@ -477,19 +490,28 @@ void RegisterSub(TKernelFamilyMap& kernelFamilyMap) {
     // NarrowDate minus BigDate
     RegisterDateSub<false, false, false, true>(*family);
     RegisterDateSub<true,  false, false, true>(*family);
+    RegisterDateSub<false, true, false, true>(*family);
+    RegisterDateSub<true,  true, false, true>(*family);
     // BigDate minus NarrowDate
     RegisterDateSub<false, false, true, false>(*family);
     RegisterDateSub<false, true,  true, false>(*family);
+    RegisterDateSub<true, false, true, false>(*family);
+    RegisterDateSub<true, true,  true, false>(*family);
     // BigDate minus BigDate
     RegisterDateSub<false, false, true, true>(*family);
+    RegisterDateSub<false, true, true, true>(*family);
+    RegisterDateSub<true, false, true, true>(*family);
+    RegisterDateSub<true, true, true, true>(*family);
 
     RegisterDateSubInterval<false, false, false>(*family);
     RegisterDateSubInterval<true, false, false>(*family);
     RegisterDateSubInterval<false, true, false>(*family);
+    RegisterDateSubInterval<true, true, false>(*family);
 
     RegisterDateSubInterval<false, false, true>(*family);
     RegisterDateSubInterval<true, false, true>(*family);
     RegisterDateSubInterval<false, true, true>(*family);
+    RegisterDateSubInterval<true, true, true>(*family);
 
     RegisterIntervalSubInterval<false, false>(*family);
     RegisterIntervalSubInterval<false, true>(*family);

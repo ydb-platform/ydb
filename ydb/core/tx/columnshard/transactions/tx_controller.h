@@ -203,14 +203,17 @@ public:
             return TxInfo;
         }
 
+        virtual void DoOnTabletInit(TColumnShard& /*owner*/) {
+        
+        }
+
         void ResetStatusOnUpdate() {
             Status = {};
         }
 
         virtual TString DoDebugString() const = 0;
-        virtual void DoOnStart(TColumnShard& /*owner*/) {
 
-        }
+        std::optional<bool> StartedAsync;
 
     public:
         using TPtr = std::shared_ptr<ITransactionOperator>;
@@ -218,10 +221,6 @@ public:
 
         bool CheckTxInfoForReply(const TFullTxInfo& originalTxInfo) const {
             return DoCheckTxInfoForReply(originalTxInfo);
-        }
-
-        void OnStart(TColumnShard& owner) {
-            return DoOnStart(owner);
         }
 
         TString DebugString() const {
@@ -318,13 +317,13 @@ public:
         void FinishProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
             AFL_VERIFY(!IsFail());
             SwitchStateVerified(EStatus::ProposeStartedOnComplete, EStatus::ProposeFinishedOnExecute);
-            AFL_VERIFY(IsAsync());
+            AFL_VERIFY(IsAsync() || StartedAsync);
             return DoFinishProposeOnExecute(owner, txc);
         }
         void FinishProposeOnComplete(TColumnShard& owner, const TActorContext& ctx) {
             if (IsFail()) {
                 AFL_VERIFY(Status == EStatus::Failed);
-            } else if (DoIsAsync()) {
+            } else if (IsAsync() || StartedAsync) {
                 SwitchStateVerified(EStatus::ProposeFinishedOnExecute, EStatus::ProposeFinishedOnComplete);
             } else {
                 SwitchStateVerified(EStatus::ProposeStartedOnExecute, EStatus::ProposeFinishedOnComplete);
@@ -332,8 +331,8 @@ public:
             return DoFinishProposeOnComplete(owner, ctx);
         }
 
-        virtual bool ExecuteOnProgress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) = 0;
-        virtual bool CompleteOnProgress(TColumnShard& owner, const TActorContext& ctx) = 0;
+        virtual bool ProgressOnExecute(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) = 0;
+        virtual bool ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) = 0;
 
         virtual bool ExecuteOnAbort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) = 0;
         virtual bool CompleteOnAbort(TColumnShard& owner, const TActorContext& ctx) = 0;
@@ -341,7 +340,11 @@ public:
         virtual void RegisterSubscriber(const TActorId&) {
             AFL_VERIFY(false)("message", "Not implemented");
         };
-        virtual void OnTabletInit(TColumnShard& /*owner*/) {}
+        void OnTabletInit(TColumnShard& owner) {
+            AFL_VERIFY(!StartedAsync);
+            StartedAsync = true;
+            DoOnTabletInit(owner);
+        }
     };
 
 private:
@@ -355,7 +358,7 @@ private:
 
 private:
     ui64 GetAllowedStep() const;
-    bool AbortTx(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
+    bool AbortTx(const TPlanQueueItem planQueueItem, NTabletFlatExecutor::TTransactionContext& txc);
 
     TTxInfo RegisterTx(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc);
     TTxInfo RegisterTxWithDeadline(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc);
@@ -365,13 +368,6 @@ public:
 
     ITransactionOperator::TPtr GetTxOperator(const ui64 txId) const;
     ITransactionOperator::TPtr GetVerifiedTxOperator(const ui64 txId) const;
-    void StartOperators() {
-        AFL_VERIFY(!StartedFlag);
-        StartedFlag = true;
-        for (auto&& i : Operators) {
-            i.second->OnStart(Owner);
-        }
-    }
 
     ui64 GetMemoryUsage() const;
     bool HaveOutdatedTxs() const;

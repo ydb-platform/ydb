@@ -134,6 +134,55 @@ Y_UNIT_TEST(ReturningSerial) {
     }
 }
 
+Y_UNIT_TEST(ReturningColumnsOrder) {
+    auto kikimr = DefaultKikimrRunner();
+
+    auto client = kikimr.GetTableClient();
+    auto session = client.CreateSession().GetValueSync().GetSession();
+    auto db = kikimr.GetQueryClient();
+    
+    const auto queryCreate = Q_(R"(
+        CREATE TABLE test1 (id Int32, v Text, PRIMARY KEY(id));
+        )");
+
+    auto resultCreate = session.ExecuteSchemeQuery(queryCreate).GetValueSync();
+    UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
+
+    {
+        const auto query = Q_(R"(
+            UPSERT INTO test1 (id, v) VALUES (1, '321') RETURNING id, v;
+            REPLACE INTO test1 (id, v) VALUES (1, '111') RETURNING v, id;
+        )");
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+        CompareYson(R"([[[1];["321"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([[["111"];[1]]])", FormatResultSetYson(result.GetResultSet(1)));
+    }
+
+    auto settings = NYdb::NQuery::TExecuteQuerySettings()
+        .Syntax(NYdb::NQuery::ESyntax::YqlV1)
+        .ConcurrentResultSets(false);
+    {
+        auto result = db.ExecuteQuery(R"(
+            UPSERT INTO test1 (id, v) VALUES (1, '321') RETURNING id, v;
+            REPLACE INTO test1 (id, v) VALUES (1, '111') RETURNING v, id;
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[[1];["321"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([[["111"];[1]]])", FormatResultSetYson(result.GetResultSet(1)));
+    }
+    {
+        auto it = db.StreamExecuteQuery(R"(
+            UPSERT INTO test1 (id, v) VALUES (2, '321') RETURNING id, v;
+            REPLACE INTO test1 (id, v) VALUES (2, '111') RETURNING v, id;
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+        Cerr << StreamResultToYson(it);
+    }
+    
+}
+
 Y_UNIT_TEST(ReturningTypes) {
     auto kikimr = DefaultKikimrRunner();
 

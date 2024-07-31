@@ -147,10 +147,7 @@ public:
 
             static_cast<TDerived*>(this)->DoBootstrap();
         } catch (const NKikimr::TMemoryLimitExceededException& e) {
-            InternalError(NYql::NDqProto::StatusIds::OVERLOADED, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
-                << "Mkql memory limit exceeded, limit: " << GetMkqlMemoryLimit()
-                << ", host: " << HostName()
-                << ", canAllocateExtraMemory: " << CanAllocateExtraMemory);
+            OnMemoryLimitExceptionHandler();
         } catch (const std::exception& e) {
             InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssuesIds::UNEXPECTED, e.what());
         }
@@ -225,10 +222,7 @@ protected:
             TComputeActorClass* self = static_cast<TComputeActorClass*>(this);
             (self->*FuncBody)(ev);
         } catch (const NKikimr::TMemoryLimitExceededException& e) {
-            InternalError(NYql::NDqProto::StatusIds::OVERLOADED, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
-                << "Mkql memory limit exceeded, limit: " << GetMkqlMemoryLimit()
-                << ", host: " << HostName()
-                << ", canAllocateExtraMemory: " << CanAllocateExtraMemory);
+            OnMemoryLimitExceptionHandler();
         } catch (const std::exception& e) {
             if (PassExceptions) {
                 throw;
@@ -315,6 +309,20 @@ protected:
     virtual void DoTerminateImpl() {}
 
     virtual bool DoHandleChannelsAfterFinishImpl() = 0;
+
+    void OnMemoryLimitExceptionHandler() {
+        TString memoryConsumptionDetails = MemoryLimits.MemoryQuotaManager->MemoryConsumptionDetails();
+        TStringBuilder failureReason = TStringBuilder()
+            << "Mkql memory limit exceeded, limit: " << GetMkqlMemoryLimit()
+            << ", host: " << HostName()
+            << ", canAllocateExtraMemory: " << CanAllocateExtraMemory;
+
+        if (!memoryConsumptionDetails.empty()) {
+            failureReason << ", memory manager details: " << memoryConsumptionDetails;
+        }
+
+        InternalError(NYql::NDqProto::StatusIds::OVERLOADED, TIssuesIds::KIKIMR_PRECONDITION_FAILED, failureReason);
+    }
 
     void ProcessOutputsImpl(ERunStatus status) {
         ProcessOutputsState.LastRunStatus = status;
@@ -652,7 +660,7 @@ protected:
         OutputTransformsMap.at(outputIndex).FinishIsAcknowledged = true;
         ContinueExecute(EResumeSource::CATransformFinished);
     }
-    
+
 protected: //TDqComputeActorCheckpoints::ICallbacks
     //bool ReadyToCheckpoint() is pure and must be overriden in a derived class
 
@@ -1359,6 +1367,7 @@ protected:
                         .TaskParams = taskParams,
                         .TypeEnv = typeEnv,
                         .HolderFactory = holderFactory,
+                        .Alloc = Alloc,
                         .RandomProvider = randomProvider
                     });
             } catch (const std::exception& ex) {
@@ -1490,7 +1499,7 @@ protected:
             if (inputDesc.HasSource()) {
                 const auto watermarksMode = inputDesc.GetSource().GetWatermarksMode();
                 auto result = SourcesMap.emplace(
-                    i, 
+                    i,
                     static_cast<TDerived*>(this)->CreateInputHelper(LogPrefix, i, watermarksMode)
                 );
                 YQL_ENSURE(result.second);
@@ -1641,6 +1650,7 @@ public:
 
             ui64 ingressBytes = 0;
             ui64 ingressRows = 0;
+            ui64 ingressDecompressedBytes = 0;
             auto startTimeMs = protoTask->GetStartTimeMs();
 
             if (RuntimeSettings.CollectFull()) {
@@ -1655,6 +1665,7 @@ public:
                         ingressBytes += ingressStats.Bytes;
                         // ingress rows are usually not reported, so we count rows in task runner input
                         ingressRows += ingressStats.Rows ? ingressStats.Rows : taskStats->Sources.at(inputIndex)->GetPopStats().Rows;
+                        ingressDecompressedBytes += ingressStats.DecompressedBytes;
                         if (ingressStats.FirstMessageTs) {
                             auto firstMessageMs = ingressStats.FirstMessageTs.MilliSeconds();
                             if (!startTimeMs || startTimeMs > firstMessageMs) {
@@ -1666,10 +1677,14 @@ public:
             } else {
                 // in basic mode enum sources directly
                 for (auto& [inputIndex, sourceInfo] : SourcesMap) {
+                    if (!sourceInfo.AsyncInput)
+                        continue;
+
                     const auto& ingressStats = sourceInfo.AsyncInput->GetIngressStats();
                     ingressBytes += ingressStats.Bytes;
                     // ingress rows are usually not reported, so we count rows in task runner input
                     ingressRows += ingressStats.Rows ? ingressStats.Rows : taskStats->Sources.at(inputIndex)->GetPopStats().Rows;
+                    ingressDecompressedBytes += ingressStats.DecompressedBytes;
                 }
             }
 
@@ -1679,6 +1694,7 @@ public:
             protoTask->SetStartTimeMs(startTimeMs);
             protoTask->SetIngressBytes(ingressBytes);
             protoTask->SetIngressRows(ingressRows);
+            protoTask->SetIngressDecompressedBytes(ingressDecompressedBytes);
 
             ui64 egressBytes = 0;
             ui64 egressRows = 0;
@@ -1686,6 +1702,9 @@ public:
 
             for (auto& [outputIndex, sinkInfo] : SinksMap) {
                 if (auto* sink = GetSink(outputIndex, sinkInfo)) {
+                    if (!sinkInfo.AsyncOutput)
+                        continue;
+
                     const auto& egressStats = sinkInfo.AsyncOutput->GetEgressStats();
                     const auto& pushStats = sink->GetPushStats();
                     if (RuntimeSettings.CollectFull()) {

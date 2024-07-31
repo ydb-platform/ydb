@@ -15,6 +15,7 @@
 
 #include <yt/yt/core/concurrency/thread_pool.h>
 #include <yt/yt/core/concurrency/delayed_executor.h>
+#include <yt/yt/core/concurrency/thread_pool_poller.h>
 
 #include <yt/yt/core/bus/public.h>
 
@@ -41,6 +42,12 @@
 #include <yt/yt/core/rpc/grpc/channel.h>
 #include <yt/yt/core/rpc/grpc/server.h>
 #include <yt/yt/core/rpc/grpc/proto/grpc.pb.h>
+
+#include <yt/yt/core/http/server.h>
+#include <yt/yt/core/https/config.h>
+#include <yt/yt/core/https/server.h>
+#include <yt/yt/core/rpc/http/server.h>
+#include <yt/yt/core/rpc/http/channel.h>
 
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/shutdown.h>
@@ -450,7 +457,78 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <bool EnableSsl>
+class TRpcOverHttpImpl
+{
+public:
+    static constexpr bool AllowTransportErrors = true;
+
+    // NOTE: Some minor functionality is still missing from the HTTPs server.
+    // TODO(melkov): Fill ssl_credentials_ext in server code and enable the Secure flag.
+    static constexpr bool Secure = false;
+
+    static IChannelPtr CreateChannel(
+        const TString& address,
+        const TString& /*serverAddress*/,
+        THashMap<TString, NYTree::INodePtr> /*grpcArguments*/)
+    {
+        static auto poller = NConcurrency::CreateThreadPoolPoller(4, "HttpChannelTest");
+        auto credentials = New<NHttps::TClientCredentialsConfig>();
+        credentials->PrivateKey = New<NCrypto::TPemBlobConfig>();
+        credentials->PrivateKey->Value = ServerKey;
+        credentials->CertChain = New<NCrypto::TPemBlobConfig>();
+        credentials->CertChain->Value = ServerCert;
+        return NHttp::CreateHttpChannel(address, poller, EnableSsl, credentials);
+    }
+
+    static TTestServerHostPtr CreateTestServerHost(
+        NTesting::TPortHolder port,
+        std::vector<IServicePtr> services,
+        TTestNodeMemoryTrackerPtr memoryUsageTracker)
+    {
+        auto config = New<NHttps::TServerConfig>();
+        config->Port = port;
+        config->CancelFiberOnConnectionClose = true;
+        config->ServerName = "HttpServerTest";
+
+        NYT::NHttp::IServerPtr httpServer;
+        if (EnableSsl) {
+            config->Credentials = New<NHttps::TServerCredentialsConfig>();
+            config->Credentials->PrivateKey = New<NCrypto::TPemBlobConfig>();
+            config->Credentials->PrivateKey->Value = ServerKey;
+            config->Credentials->CertChain = New<NCrypto::TPemBlobConfig>();
+            config->Credentials->CertChain->Value = ServerCert;
+            httpServer = NYT::NHttps::CreateServer(config, 4);
+        } else {
+            httpServer = NYT::NHttp::CreateServer(config, 4);
+        }
+
+        auto httpRpcServer = NYT::NRpc::NHttp::CreateServer(httpServer);
+        return New<TTestServerHost>(
+            std::move(port),
+            httpRpcServer,
+            services,
+            memoryUsageTracker);
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 using TAllTransports = ::testing::Types<
+#ifdef _linux_
+    TRpcOverBus<TRpcOverUdsImpl>,
+    TRpcOverBus<TRpcOverBusImpl<true>>,
+#endif
+    TRpcOverBus<TRpcOverBusImpl<false>>,
+    TRpcOverGrpcImpl<false, false>,
+    TRpcOverGrpcImpl<false, true>,
+    TRpcOverGrpcImpl<true, false>,
+    TRpcOverGrpcImpl<true, true>,
+    TRpcOverHttpImpl<false>,
+    TRpcOverHttpImpl<true>
+>;
+
+using TWithAttachments = ::testing::Types<
 #ifdef _linux_
     TRpcOverBus<TRpcOverUdsImpl>,
     TRpcOverBus<TRpcOverBusImpl<true>>,
@@ -468,7 +546,9 @@ using TWithoutUds = ::testing::Types<
 #endif
     TRpcOverBus<TRpcOverBusImpl<false>>,
     TRpcOverGrpcImpl<false, false>,
-    TRpcOverGrpcImpl<true, false>
+    TRpcOverGrpcImpl<true, false>,
+    TRpcOverHttpImpl<false>,
+    TRpcOverHttpImpl<true>
 >;
 
 using TWithoutGrpc = ::testing::Types<

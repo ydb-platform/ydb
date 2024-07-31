@@ -3,6 +3,9 @@
 #include "defs.h"
 
 #include <ydb/library/actors/queues/mpmc_ring_queue.h>
+#include <ydb/library/actors/queues/mpmc_ring_queue_v1.h>
+#include <ydb/library/actors/queues/mpmc_ring_queue_v2.h>
+#include <ydb/library/actors/queues/mpmc_ring_queue_v3.h>
 #include <ydb/library/actors/queues/observer/observer.h>
 
 
@@ -67,9 +70,51 @@ namespace NActors::NQueueBench {
         }
     };
 
+    template <ui32 SizeBits, typename TObserver=void>
+    struct TNotReallyAdaptiveQueue : IQueue {
+        TMPMCRingQueue<SizeBits, TObserver> *Queue;
+        typename TMPMCRingQueue<SizeBits, TObserver>::EPopMode State = TMPMCRingQueue<SizeBits, TObserver>::EPopMode::ReallySlow;
+
+        TNotReallyAdaptiveQueue(TMPMCRingQueue<SizeBits, TObserver> *queue)
+            : Queue(queue)
+        {}
+
+        bool TryPush(ui32 value) final {
+            return Queue->TryPush(value);
+        }
+        std::optional<ui32> TryPop() final {
+            if (State == TMPMCRingQueue<SizeBits, TObserver>::EPopMode::ReallySlow) {
+                State = TMPMCRingQueue<SizeBits, TObserver>::EPopMode::Slow;
+            }
+            if (State == TMPMCRingQueue<SizeBits, TObserver>::EPopMode::ReallyFast) {
+                State = TMPMCRingQueue<SizeBits, TObserver>::EPopMode::Fast;
+            }
+            return Queue->TryPop(State);
+        }
+    };
+
+    template <typename TQueue>
+    struct TIdAdaptor : IQueue {
+        TQueue *Queue;
+
+        TIdAdaptor(TQueue *queue)
+            : Queue(queue)
+        {}
+
+        bool TryPush(ui32 value) final {
+            return Queue->TryPush(value);
+        }
+        std::optional<ui32> TryPop() final {
+            return Queue->TryPop();
+        }
+    };
+
 
     template <ui32 SizeBits>
     using TMPMCRingQueueWithStats = TMPMCRingQueue<SizeBits, TStatsObserver>;
+
+    template <ui32 SizeBits>
+    using TMPMCRingQueueV2WithStats = TMPMCRingQueueV2<SizeBits, TStatsObserver>;
 
     template <template <ui32, typename> typename TAdaptor>
     struct TAdaptorWithStats {

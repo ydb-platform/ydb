@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/local_grpc/local_grpc.h>
 
 #include <ydb/core/base/appdata.h>
 
@@ -122,7 +123,7 @@ public:
         , RequestType(requestType)
         , InternalCall(internalCall)
     {
-        if (token) {
+        if (token && !token->empty()) {
             InternalToken = new NACLib::TUserToken(*token);
         }
     }
@@ -148,7 +149,10 @@ public:
         return EmptySerializedTokenMessage_;
     }
 
-    const TMaybe<TString> GetPeerMetaValues(const TString&) const override {
+    const TMaybe<TString> GetPeerMetaValues(const TString& key) const override {
+        if (key == NYdb::YDB_DATABASE_HEADER) {
+            return GetDatabaseName();
+        }
         return TMaybe<TString>{};
     }
 
@@ -329,6 +333,164 @@ TActorId DoLocalRpcSameMailbox(typename TRpc::TRequest&& proto, std::function<vo
 template<typename TRpc>
 TActorId DoLocalRpcSameMailbox(typename TRpc::TRequest&& proto, std::function<void(typename TRpc::TResponse)>&& cb, const TString& database, const TMaybe<TString>& token, const TActorContext& ctx, bool internalCall = false) {
     return DoLocalRpcSameMailbox<TRpc>(std::move(proto), std::move(cb), database, token, Nothing(), ctx, internalCall);
+}
+
+//// Streaming part
+
+template <typename TResponsePart>
+class TStreamReadProcessor : public NGRpcService::NLocalGrpc::TContextBase {
+    using TBase = NGRpcService::NLocalGrpc::TContextBase;
+    using TOnResponseCallback = std::function<void(TResponsePart&&)>;
+
+public:
+    TStreamReadProcessor(std::shared_ptr<NGRpcService::IRequestCtx> baseRequest)
+        : TBase(std::move(baseRequest))
+    {}
+
+    void Read(TOnResponseCallback callback) {
+        if (!ResponseQueue.empty()) {
+            callback(DoPopResponse());
+            return;
+        }
+
+        Y_ABORT_UNLESS(!Finished, "Try to read from finished stream");
+        Y_ABORT_UNLESS(!OnResponseCallback, "Can not multiply read from stream");
+        OnResponseCallback = callback;
+    }
+
+    void Cancel() {
+        FinishPromise.SetValue(EFinishStatus::CANCEL);
+        Finished = true;
+    }
+
+    bool IsFinished() const {
+        return Finished;
+    }
+
+    bool HasData() const {
+        return !Finished || !ResponseQueue.empty();
+    }
+
+protected:
+    const NProtoBuf::Message* GetRequest() const override {
+        return GetBaseRequest().GetRequest();
+    }
+
+    NProtoBuf::Message* GetRequestMut() override {
+        return GetBaseRequest().GetRequestMut();
+    }
+
+    TAsyncFinishResult GetFinishFuture() override {
+        return FinishPromise.GetFuture();
+    }
+
+    bool IsStreamCall() const override {
+        return true;
+    }
+
+    bool IsClientLost() const override {
+        return FinishPromise.HasValue();
+    }
+
+    void SetNextReplyCallback(TOnNextReply&& callback) override {
+        NextReplyCallback = callback;
+    }
+
+    void FinishStreamingOk() override {
+        ReplyWithYdbStatus(Ydb::StatusIds::SUCCESS);
+    }
+
+    void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
+        TResponsePart response;
+        NGRpcService::TCommonResponseFiller<TResponsePart, false>::Fill(response, GetIssues(), nullptr, status);
+        DoPushResponse(std::move(response), EStreamCtrl::FINISH);
+
+        if (status != Ydb::StatusIds::SUCCESS) {
+            FinishPromise.SetValue(EFinishStatus::ERROR);
+        }
+    }
+
+    void Reply(NProtoBuf::Message* proto, ui32 status = 0) override {
+        Y_UNUSED(proto, status);
+        Y_ABORT("Expected TLocalGrpcContext::Reply only for stream");
+    }
+
+    void Reply(grpc::ByteBuffer* bytes, ui32 status = 0, EStreamCtrl ctrl = EStreamCtrl::CONT) override {
+        Y_UNUSED(status);
+
+        grpc::Slice slice;
+        if (auto status = bytes->TrySingleSlice(&slice); !status.ok()) {
+            ReplyError(status.error_code(), status.error_message(), status.error_details());
+            return;
+        }
+
+        TResponsePart response;
+        if (!response.ParseFromArray(slice.begin(), slice.size())) {
+            RaiseIssue(NYql::TIssue("Response part is corrupted"));
+            ReplyWithYdbStatus(Ydb::StatusIds::INTERNAL_ERROR);
+            return;
+        }
+        DoPushResponse(std::move(response), ctrl);
+    }
+
+private:
+    TResponsePart DoPopResponse() {
+        Y_ABORT_UNLESS(!ResponseQueue.empty(), "Try to pop response from empty queue");
+
+        auto response = std::move(ResponseQueue.front());
+        ResponseQueue.pop();
+        if (NextReplyCallback && !Finished) {
+            NextReplyCallback(ResponseQueue.size());
+        }
+        return response;
+    }
+
+    void DoPushResponse(TResponsePart&& response, EStreamCtrl ctrl) {
+        if (Finished) {
+            return;
+        }
+        Finished = ctrl == EStreamCtrl::FINISH;
+
+        ResponseQueue.emplace(std::move(response));
+        if (OnResponseCallback) {
+            OnResponseCallback(DoPopResponse());
+            OnResponseCallback = nullptr;
+        }
+    }
+
+private:
+    bool Finished = false;
+    std::queue<TResponsePart> ResponseQueue;
+    NThreading::TPromise<EFinishStatus> FinishPromise = NThreading::NewPromise<EFinishStatus>();
+
+    TOnNextReply NextReplyCallback;
+    TOnResponseCallback OnResponseCallback;
+};
+
+template <typename TResponsePart>
+using TStreamReadProcessorPtr = TIntrusivePtr<TStreamReadProcessor<TResponsePart>>;
+
+using TFacilityProviderPtr = std::shared_ptr<NGRpcService::IFacilityProvider>;
+TFacilityProviderPtr CreateFacilityProviderSameMailbox(TActorContext actorContext, ui64 channelBufferSize);
+
+using TRpcActorCreator = std::function<void((std::unique_ptr<NGRpcService::IRequestNoOpCtx> p, const NGRpcService::IFacilityProvider& f))>;
+
+template <typename TRpc>
+TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(typename TRpc::TRequest&& proto, const TString& database, const TMaybe<TString>& token, const TMaybe<TString>& requestType, TFacilityProviderPtr facilityProvider, TRpcActorCreator actorCreator, bool internalCall = false) {
+    using TCbWrapper = std::function<void(const typename TRpc::TResponse&)>;
+    using TLocalRpcStreamCtx = TStreamReadProcessor<typename TRpc::TResponse>;
+
+    auto localRpcCtx = std::make_shared<TLocalRpcCtx<TRpc, TCbWrapper>>(std::move(proto), [](const typename TRpc::TResponse&) {}, database, token, requestType, internalCall);
+    auto localRpcStreamCtx = MakeIntrusive<TLocalRpcStreamCtx>(std::move(localRpcCtx));
+    auto localRpcRequest = std::make_unique<TRpc>(localRpcStreamCtx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
+    actorCreator(std::move(localRpcRequest), *facilityProvider);
+
+    return localRpcStreamCtx;
+}
+
+template <typename TRpc>
+TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(typename TRpc::TRequest&& proto, const TString& database, const TMaybe<TString>& token, TFacilityProviderPtr facilityProvider, TRpcActorCreator actorCreator, bool internalCall = false) {
+    return DoLocalRpcStreamSameMailbox<TRpc>(std::move(proto), database, token, Nothing(), std::move(facilityProvider), std::move(actorCreator), internalCall);
 }
 
 } // namespace NRpcService

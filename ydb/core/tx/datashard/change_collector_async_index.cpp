@@ -105,11 +105,7 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
     const auto tagToPos = MakeTagToPos(tagsToSelect, [](const auto tag) { return tag; });
     const auto updatedTagToPos = MakeTagToPos(updates, [](const TUpdateOp& op) { return op.Tag; });
 
-    for (const auto& [pathId, index] : userTable->Indexes) {
-        if (index.Type != TUserTable::TTableIndex::EIndexType::EIndexTypeGlobalAsync) {
-            continue;
-        }
-
+    userTable->ForEachAsyncIndex([&](const auto& pathId, const TUserTable::TTableIndex& index) {
         if (generateDeletions) {
             bool needDeletion = rop == ERowOp::Erase || rop == ERowOp::Reset;
 
@@ -191,7 +187,7 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
 
             Clear();
         }
-    }
+    });
 
     return true;
 }
@@ -202,14 +198,10 @@ auto TAsyncIndexChangeCollector::CacheTags(const TTableId& tableId) const {
 
     TCachedTagsBuilder builder;
 
-    for (const auto& [_, index] : userTable->Indexes) {
-        if (index.Type != TUserTable::TTableIndex::EIndexType::EIndexTypeGlobalAsync) {
-            continue;
-        }
-
+    userTable->ForEachAsyncIndex([&](const auto&, const TUserTable::TTableIndex& index) {
         builder.AddIndexTags(index.KeyColumnIds);
         builder.AddDataTags(index.DataColumnIds);
-    }
+    });
 
     return CachedTags.emplace(tableId, builder.Build()).first;
 }

@@ -53,7 +53,7 @@ TColumnShardScanIterator::~TColumnShardScanIterator() {
     ReadMetadata->ReadStats->PrintToLog();
 }
 
-void TColumnShardScanIterator::Apply(IDataTasksProcessor::ITask::TPtr task) {
+void TColumnShardScanIterator::Apply(const std::shared_ptr<IApplyAction>& task) {
     if (!IndexedData->IsFinished()) {
         Y_ABORT_UNLESS(task->Apply(*IndexedData));
     }

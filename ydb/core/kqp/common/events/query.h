@@ -330,6 +330,11 @@ public:
         return ProgressStatsPeriod;
     }
 
+    void SetPoolId(const TString& poolId) {
+        PoolId = poolId;
+        Record.MutableRequest()->SetPoolId(PoolId);
+    }
+
     TString GetPoolId() const {
         if (PoolId) {
             return PoolId;

@@ -3,11 +3,13 @@
 #include <ydb/library/yql/ast/yql_expr.h>
 
 #include <util/generic/flags.h>
+#include <util/generic/strbuf.h>
 #include <util/system/types.h>
 #include <util/string/cast.h>
 #include <util/str_stl.h>
 
 #include <utility>
+#include <bitset>
 
 namespace NYql {
 
@@ -44,83 +46,123 @@ struct TSampleParams {
 
 enum class EYtSettingType: ui64 {
     // Table reads
-    Initial                     = 1ull << 0  /* "initial" */,
-    InferScheme                 = 1ull << 1  /* "infer_scheme" "inferscheme" "infer_schema" "inferschema" */,
-    ForceInferScheme            = 1ull << 2  /* "force_infer_schema" "forceinferschema" */,
-    DoNotFailOnInvalidSchema    = 1ull << 3  /* "do_not_fail_on_invalid_schema" */,
-    DirectRead                  = 1ull << 4  /* "direct_read" "directread"*/,
-    View                        = 1ull << 5  /* "view" */,
-    Mode                        = 1ull << 6  /* "mode" */,
-    Scheme                      = 1ull << 7  /* "scheme" */,
-    WeakConcat                  = 1ull << 8  /* "weak_concat" */,
-    Anonymous                   = 1ull << 9  /* "anonymous" */,
-    WithQB                      = 1ull << 10 /* "with_qb" */,
-    Inline                      = 1ull << 11 /* "inline" */,
-    Sample                      = 1ull << 12 /* "sample" */,
-    JoinLabel                   = 1ull << 13 /* "joinLabel" */,
-    IgnoreNonExisting           = 1ull << 14 /* "ignore_non_existing" "ignorenonexisting" */,
-    WarnNonExisting             = 1ull << 15 /* "warn_non_existing" "warnnonexisting" */,
-    XLock                       = 1ull << 16 /* "xlock" */,
-    Unordered                   = 1ull << 17 /* "unordered" */,
-    NonUnique                   = 1ull << 18 /* "nonUnique" */,
-    UserSchema                  = 1ull << 19 /* "userschema" */,
-    UserColumns                 = 1ull << 20 /* "usercolumns" */,
-    StatColumns                 = 1ull << 21 /* "statcolumns" */,
-    SysColumns                  = 1ull << 22 /* "syscolumns" */,
-    IgnoreTypeV3                = 1ull << 23 /* "ignoretypev3" "ignore_type_v3" */,
-    // Table content
-    MemUsage                    = 1ull << 24 /* "memUsage" */,
-    ItemsCount                  = 1ull << 25 /* "itemsCount" */,
-    RowFactor                   = 1ull << 26 /* "rowFactor" */,
-    // Operations
-    Ordered                     = 1ull << 27 /* "ordered" */,                  // hybrid supported
-    KeyFilter                   = 1ull << 28 /* "keyFilter" */,
-    KeyFilter2                  = 1ull << 29 /* "keyFilter2" */,
-    Take                        = 1ull << 30 /* "take" */,
-    Skip                        = 1ull << 31 /* "skip" */,
-    Limit                       = 1ull << 32 /* "limit" */,                    // hybrid supported
-    SortLimitBy                 = 1ull << 33 /* "sortLimitBy" */,              // hybrid supported
-    SortBy                      = 1ull << 34 /* "sortBy" */,                   // hybrid supported
-    ReduceBy                    = 1ull << 35 /* "reduceBy" */,                 // hybrid supported
-    ReduceFilterBy              = 1ull << 36 /* "reduceFilterBy" */,
-    ForceTransform              = 1ull << 37 /* "forceTransform" */,           // hybrid supported
-    WeakFields                  = 1ull << 38 /* "weakFields" */,
-    Sharded                     = 1ull << 39 /* "sharded" */,
-    CombineChunks               = 1ull << 40 /* "combineChunks" */,
-    JobCount                    = 1ull << 41 /* "jobCount" */,                 // hybrid supported
-    JoinReduce                  = 1ull << 42 /* "joinReduce" */,               // hybrid supported
-    FirstAsPrimary              = 1ull << 43 /* "firstAsPrimary" */,           // hybrid supported
-    Flow                        = 1ull << 44 /* "flow" */,                     // hybrid supported
-    KeepSorted                  = 1ull << 45 /* "keepSorted" */,               // hybrid supported
-    KeySwitch                   = 1ull << 46 /* "keySwitch" */,                // hybrid supported
-    // Out tables
-    UniqueBy                    = 1ull << 47 /* "uniqueBy" */,
-    OpHash                      = 1ull << 48 /* "opHash" */,
-    // Operations
-    MapOutputType               = 1ull << 49 /* "mapOutputType" */,            // hybrid supported
-    ReduceInputType             = 1ull << 50 /* "reduceInputType" */,          // hybrid supported
-    NoDq                        = 1ull << 51 /* "noDq" */,
-    // Read
-    Split                       = 1ull << 52 /* "split" */,
-    // Write hints
-    CompressionCodec            = 1ull << 53 /* "compression_codec" "compressioncodec"*/,
-    ErasureCodec                = 1ull << 54 /* "erasure_codec" "erasurecodec" */,
-    Expiration                  = 1ull << 55 /* "expiration" */,
-    ReplicationFactor           = 1ull << 56 /* "replication_factor" "replicationfactor" */,
-    UserAttrs                   = 1ull << 57 /* "user_attrs", "userattrs" */,
-    Media                       = 1ull << 58 /* "media" */,
-    PrimaryMedium               = 1ull << 59 /* "primary_medium", "primarymedium" */,
-    KeepMeta                    = 1ull << 60 /* "keep_meta", "keepmeta" */,
-    MonotonicKeys               = 1ull << 61 /* "monotonic_keys", "monotonickeys" */,
-    MutationId                  = 1ull << 62 /* "mutationid", "mutation_id" */,
-    ColumnGroups                = 1ull << 63 /* "column_groups", "columngroups" */,
+    Initial           /* "initial" */,
+    InferScheme              /* "infer_scheme" "inferscheme" "infer_schema" "inferschema" */,
+    ForceInferScheme         /* "force_infer_schema" "forceinferschema" */,
+    DoNotFailOnInvalidSchema /* "do_not_fail_on_invalid_schema" */,
+    DirectRead               /* "direct_read" "directread"*/,
+    View                     /* "view" */,
+    Mode                     /* "mode" */,
+    Scheme                   /* "scheme" */,
+    WeakConcat               /* "weak_concat" */,
+    Anonymous                /* "anonymous" */,
+    WithQB                   /* "with_qb" */,
+    Inline                   /* "inline" */,
+    Sample                   /* "sample" */,
+    JoinLabel                /* "joinLabel" */,
+    IgnoreNonExisting        /* "ignore_non_existing" "ignorenonexisting" */,
+    WarnNonExisting          /* "warn_non_existing" "warnnonexisting" */,
+    XLock                    /* "xlock" */,
+    Unordered                /* "unordered" */,
+    NonUnique                /* "nonUnique" */,
+    UserSchema               /* "userschema" */,
+    UserColumns              /* "usercolumns" */,
+    StatColumns              /* "statcolumns" */,
+    SysColumns               /* "syscolumns" */,
+    IgnoreTypeV3             /* "ignoretypev3" "ignore_type_v3" */,
+    // Table content         
+    MemUsage                 /* "memUsage" */,
+    ItemsCount               /* "itemsCount" */,
+    RowFactor                /* "rowFactor" */,
+    // Operations            
+    Ordered                  /* "ordered" */,                  // hybrid supported
+    KeyFilter                /* "keyFilter" */,
+    KeyFilter2               /* "keyFilter2" */,
+    Take                     /* "take" */,
+    Skip                     /* "skip" */,
+    Limit                    /* "limit" */,                    // hybrid supported
+    SortLimitBy              /* "sortLimitBy" */,              // hybrid supported
+    SortBy                   /* "sortBy" */,                   // hybrid supported
+    ReduceBy                 /* "reduceBy" */,                 // hybrid supported
+    ReduceFilterBy           /* "reduceFilterBy" */,
+    ForceTransform           /* "forceTransform" */,           // hybrid supported
+    WeakFields               /* "weakFields" */,
+    Sharded                  /* "sharded" */,
+    CombineChunks            /* "combineChunks" */,
+    JobCount                 /* "jobCount" */,                 // hybrid supported
+    JoinReduce               /* "joinReduce" */,               // hybrid supported
+    FirstAsPrimary           /* "firstAsPrimary" */,           // hybrid supported
+    Flow                     /* "flow" */,                     // hybrid supported
+    KeepSorted               /* "keepSorted" */,               // hybrid supported
+    KeySwitch                /* "keySwitch" */,                // hybrid supported
+    // Out tables            
+    UniqueBy                 /* "uniqueBy" */,
+    OpHash                   /* "opHash" */,
+    // Operations            
+    MapOutputType            /* "mapOutputType" */,            // hybrid supported
+    ReduceInputType          /* "reduceInputType" */,          // hybrid supported
+    NoDq                     /* "noDq" */,
+    // Read      
+    Split                    /* "split" */,
+    // Write hints           
+    CompressionCodec         /* "compression_codec" "compressioncodec"*/,
+    ErasureCodec             /* "erasure_codec" "erasurecodec" */,
+    Expiration               /* "expiration" */,
+    ReplicationFactor        /* "replication_factor" "replicationfactor" */,
+    UserAttrs                /* "user_attrs", "userattrs" */,
+    Media                    /* "media" */,
+    PrimaryMedium            /* "primary_medium", "primarymedium" */,
+    KeepMeta                 /* "keep_meta", "keepmeta" */,
+    MonotonicKeys            /* "monotonic_keys", "monotonickeys" */,
+    MutationId               /* "mutationid", "mutation_id" */,
+    ColumnGroups             /* "column_groups", "columngroups" */,
+    SecurityTags             /* "security_tags", "securitytags" */,
+
+    LAST
 };
 
-Y_DECLARE_FLAGS(EYtSettingTypes, EYtSettingType);
-Y_DECLARE_OPERATORS_FOR_FLAGS(EYtSettingTypes);
+constexpr auto YtSettingTypesCount = static_cast<ui64>(EYtSettingType::LAST);
 
-constexpr auto DqReadSupportedSettings = EYtSettingType::SysColumns | EYtSettingType::Sample | EYtSettingType::Unordered | EYtSettingType::NonUnique | EYtSettingType::KeyFilter2;
-constexpr auto DqOpSupportedSettings = EYtSettingType::Ordered | EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::SortBy |
+class EYtSettingTypes : std::bitset<YtSettingTypesCount> {
+using TBase = std::bitset<YtSettingTypesCount>;
+    explicit EYtSettingTypes(const std::bitset<YtSettingTypesCount>& bitset)
+        : TBase(bitset)
+    {}
+
+public:
+    using ::NYql::EYtSettingTypes::bitset::bitset;
+
+    EYtSettingTypes(EYtSettingType type)
+        : TBase(std::bitset<YtSettingTypesCount>(1) << static_cast<ui64>(type)) 
+    {}
+
+    EYtSettingTypes& operator|=(const EYtSettingTypes& other) {
+        TBase::operator|=(other);
+        return *this;
+    }
+
+    friend EYtSettingTypes operator|(EYtSettingTypes, const EYtSettingTypes&);
+
+    EYtSettingTypes& operator&=(const EYtSettingTypes& other) {
+        TBase::operator&=(other);
+        return *this;
+    }
+
+    friend EYtSettingTypes operator&(EYtSettingTypes, const EYtSettingTypes&);
+
+    bool HasFlags(const EYtSettingTypes& other) {
+        return *this & other;
+    }
+
+    operator bool() const {
+        return count() != 0;
+    }
+};
+
+EYtSettingTypes operator|(EYtSettingType left, EYtSettingType right);
+
+const auto DqReadSupportedSettings = EYtSettingType::SysColumns | EYtSettingType::Sample | EYtSettingType::Unordered | EYtSettingType::NonUnique | EYtSettingType::KeyFilter2;
+const auto DqOpSupportedSettings = EYtSettingType::Ordered | EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::SortBy |
                                        EYtSettingType::ReduceBy | EYtSettingType::ForceTransform | EYtSettingType::JobCount | EYtSettingType::JoinReduce |
                                        EYtSettingType::FirstAsPrimary | EYtSettingType::Flow | EYtSettingType::KeepSorted | EYtSettingType::KeySwitch |
                                        EYtSettingType::ReduceInputType | EYtSettingType::MapOutputType | EYtSettingType::Sharded;
@@ -138,6 +180,10 @@ TExprNode::TPtr ToAtomList(const TContainer& columns, TPositionHandle pos, TExpr
 
     return ctx.NewList(pos, std::move(children));
 }
+
+bool ValidateColumnGroups(const TExprNode& setting, const TStructExprType& rowType, TExprContext& ctx);
+TString NormalizeColumnGroupSpec(const TStringBuf spec);
+const TString& GetSingleColumnGroupSpec();
 
 TExprNode::TPtr ToColumnPairList(const TVector<std::pair<TString, bool>>& columns, TPositionHandle pos, TExprContext& ctx);
 

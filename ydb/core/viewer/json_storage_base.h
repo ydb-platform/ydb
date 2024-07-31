@@ -39,9 +39,9 @@ using namespace NNodeWhiteboard;
 
 using ::google::protobuf::FieldDescriptor;
 
-class TJsonStorageBase : public TViewerPipeClient<TJsonStorageBase> {
+class TJsonStorageBase : public TViewerPipeClient {
 protected:
-    using TBase = TViewerPipeClient<TJsonStorageBase>;
+    using TBase = TViewerPipeClient;
     using TThis = TJsonStorageBase;
 
     using TNodeId = ui32;
@@ -146,11 +146,7 @@ protected:
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
-    virtual void Bootstrap() {
+    void Bootstrap() override {
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
 
         if (FilterTenant.empty()) {
@@ -550,7 +546,7 @@ public:
         }
     }
 
-    virtual void ReplyAndPassAway() {}
+    void ReplyAndPassAway() override {}
 
     void HandleTimeout(TEvents::TEvWakeup::TPtr& ev) {
         switch (ev->Get()->Tag) {

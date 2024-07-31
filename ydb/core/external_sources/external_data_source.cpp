@@ -36,6 +36,10 @@ struct TExternalDataSource : public IExternalSource {
         ythrow TExternalSourceException() << "Only external table supports parameters";
     }
 
+    bool IsRDBMSDataSource(const TProtoStringType& sourceType) const {
+        return IsIn({"Greenplum", "PostgreSQL", "MySQL", "MsSQLServer", "ClickHouse", "Oracle"}, sourceType);
+    }
+
     virtual void ValidateExternalDataSource(const TString& externalDataSourceDescription) const override {
         NKikimrSchemeOp::TExternalDataSourceDescription proto;
         if (!proto.ParseFromString(externalDataSourceDescription)) {
@@ -47,6 +51,15 @@ struct TExternalDataSource : public IExternalSource {
                 continue;
             }
             ythrow TExternalSourceException() << "Unsupported property: " << key;
+        }
+
+        if (IsRDBMSDataSource(proto.GetSourceType()) && !proto.GetProperties().GetProperties().contains("database_name")) {
+            ythrow TExternalSourceException() << proto.GetSourceType() << " source must provide database_name";
+        }
+
+        // oracle must have property service_name
+        if (proto.GetSourceType() == "Oracle" && !proto.GetProperties().GetProperties().contains("service_name")) {
+            ythrow TExternalSourceException() << proto.GetSourceType() << " source must provide service_name";
         }
 
         ValidateHostname(HostnamePatterns, proto.GetLocation());

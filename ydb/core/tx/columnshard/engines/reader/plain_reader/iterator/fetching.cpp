@@ -15,20 +15,19 @@ bool TStepAction::DoApply(IDataReader& /*owner*/) const {
     return true;
 }
 
-bool TStepAction::DoExecute() {
+TConclusionStatus TStepAction::DoExecuteImpl() {
     if (Source->IsAborted()) {
-        return true;
+        return TConclusionStatus::Success();
     }
     auto executeResult = Cursor.Execute(Source);
     if (!executeResult) {
-        SetErrorMessage(executeResult.GetErrorMessage());
-        return false;
+        return executeResult;
     }
     if (*executeResult) {
         Source->Finalize();
         FinishedFlag = true;
     }
-    return true;
+    return TConclusionStatus::Success();
 }
 
 TConclusion<bool> TColumnBlobsFetchingStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
@@ -90,30 +89,49 @@ ui64 TFilterProgramStep::DoPredictRawBytes(const std::shared_ptr<IDataSource>& s
 }
 
 TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(source->GetStageData().GetTable()->BuildTable());
+    auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(source->GetStageData().GetTable()->BuildTableVerified());
     source->MutableStageData().AddFilter(filter);
     return true;
 }
 
 TConclusion<bool> TSnapshotFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    auto filter = MakeSnapshotFilter(source->GetStageData().GetTable()->BuildTable(), source->GetContext()->GetReadMetadata()->GetRequestSnapshot());
+    auto filter = MakeSnapshotFilter(
+        source->GetStageData().GetTable()->BuildTableVerified(), source->GetContext()->GetReadMetadata()->GetRequestSnapshot());
+    source->MutableStageData().AddFilter(filter);
+    return true;
+}
+
+TConclusion<bool> TDeletionFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    auto filterTable = source->GetStageData().GetTable()->BuildTableOptional(std::set<std::string>({ TIndexInfo::SPEC_COL_DELETE_FLAG }));
+    if (!filterTable) {
+        return true;
+    }
+    AFL_VERIFY(filterTable->column(0)->type()->id() == arrow::boolean()->id());
+    NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
+    for (auto&& i : filterTable->column(0)->chunks()) {
+        auto filterFlags = static_pointer_cast<arrow::BooleanArray>(i);
+        for (ui32 i = 0; i < filterFlags->length(); ++i) {
+            filter.Add(!filterFlags->GetView(i));
+        }
+    }
     source->MutableStageData().AddFilter(filter);
     return true;
 }
 
 TConclusion<bool> TShardingFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     NYDBTest::TControllers::GetColumnShardController()->OnSelectShardingFilter();
-    auto filter = source->GetContext()->GetReadMetadata()->GetRequestShardingInfo()->GetShardingInfo()->GetFilter(source->GetStageData().GetTable()->BuildTable());
+    auto filter = source->GetContext()->GetReadMetadata()->GetRequestShardingInfo()->GetShardingInfo()->GetFilter(
+        source->GetStageData().GetTable()->BuildTableVerified());
     source->MutableStageData().AddFilter(filter);
     return true;
 }
 
 TConclusion<bool> TBuildFakeSpec::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     std::vector<std::shared_ptr<arrow::Array>> columns;
-    for (auto&& f : TIndexInfo::ArrowSchemaSnapshot()->fields()) {
-        columns.emplace_back(NArrow::TThreadSimpleArraysCache::GetConst(f->type(), std::make_shared<arrow::UInt64Scalar>(0), Count));
+    for (auto&& f : IIndexInfo::ArrowSchemaSnapshot()->fields()) {
+        columns.emplace_back(NArrow::TThreadSimpleArraysCache::GetConst(f->type(), NArrow::DefaultScalar(f->type()), Count));
     }
-    source->MutableStageData().AddBatch(arrow::RecordBatch::Make(TIndexInfo::ArrowSchemaSnapshot(), Count, columns));
+    source->MutableStageData().AddBatch(std::make_shared<NArrow::TGeneralContainer>(arrow::RecordBatch::Make(TIndexInfo::ArrowSchemaSnapshot(), Count, columns)));
     return true;
 }
 

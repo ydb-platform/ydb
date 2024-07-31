@@ -144,7 +144,7 @@ message TPersQueuePartitionRequest {
     optional string OwnerCookie = 3; //mandatory for write
     optional int64 MessageNo = 12; //mandatory for write
     optional int64 CmdWriteOffset = 13; //optional
-    optional int64 WriteId = 23;
+    optional NKikimrPQ.TWriteId WriteId = 23;
     optional bool NeedSupportivePartition = 28;
 
     repeated TCmdWrite CmdWrite = 4;

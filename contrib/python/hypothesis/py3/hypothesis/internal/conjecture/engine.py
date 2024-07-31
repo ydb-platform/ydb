@@ -38,7 +38,7 @@ import attr
 from hypothesis import HealthCheck, Phase, Verbosity, settings as Settings
 from hypothesis._settings import local_settings
 from hypothesis.database import ExampleDatabase
-from hypothesis.errors import InvalidArgument, StopTest
+from hypothesis.errors import Flaky, HypothesisException, InvalidArgument, StopTest
 from hypothesis.internal.cache import LRUReusedCache
 from hypothesis.internal.compat import (
     NotRequired,
@@ -168,6 +168,7 @@ class CallStats(TypedDict):
     status: str
     runtime: float
     drawtime: float
+    gctime: float
     events: List[str]
 
 
@@ -298,7 +299,9 @@ class ConjectureRunner:
         """
         # We ensure that the test has this much stack space remaining, no
         # matter the size of the stack when called, to de-flake RecursionErrors
-        # (#2494, #3671).
+        # (#2494, #3671). Note, this covers the data generation part of the test;
+        # the actual test execution is additionally protected at the call site
+        # in hypothesis.core.execute_once.
         with ensure_free_stackframes():
             try:
                 self._test_function(data)
@@ -378,7 +381,7 @@ class ConjectureRunner:
             self.__data_cache_ir[key] = result
 
     def cached_test_function_ir(
-        self, nodes: List[IRNode]
+        self, nodes: List[IRNode], *, error_on_discard: bool = False
     ) -> Union[ConjectureResult, _Overrun]:
         key = self._cache_key_ir(nodes=nodes)
         try:
@@ -386,8 +389,22 @@ class ConjectureRunner:
         except KeyError:
             pass
 
+        # explicitly use a no-op DataObserver here instead of a TreeRecordingObserver.
+        # The reason is we don't expect simulate_test_function to explore new choices
+        # and write back to the tree, so we don't want the overhead of the
+        # TreeRecordingObserver tracking those calls.
+        trial_observer: Optional[DataObserver] = DataObserver()
+        if error_on_discard:
+
+            class DiscardObserver(DataObserver):
+                @override
+                def kill_branch(self) -> NoReturn:
+                    raise ContainsDiscard
+
+            trial_observer = DiscardObserver()
+
         try:
-            trial_data = self.new_conjecture_data_ir(nodes)
+            trial_data = self.new_conjecture_data_ir(nodes, observer=trial_observer)
             self.tree.simulate_test_function(trial_data)
         except PreviouslyUnseenBehaviour:
             pass
@@ -430,11 +447,30 @@ class ConjectureRunner:
                     "status": data.status.name.lower(),
                     "runtime": data.finish_time - data.start_time,
                     "drawtime": math.fsum(data.draw_times.values()),
+                    "gctime": data.gc_finish_time - data.gc_start_time,
                     "events": sorted(
                         k if v == "" else f"{k}: {v}" for k, v in data.events.items()
                     ),
                 }
                 self.stats_per_test_case.append(call_stats)
+                if self.settings.backend != "hypothesis":
+                    for node in data.examples.ir_tree_nodes:
+                        value = data.provider.post_test_case_hook(node.value)
+                        expected_type = {
+                            "string": str,
+                            "float": float,
+                            "integer": int,
+                            "boolean": bool,
+                            "bytes": bytes,
+                        }[node.ir_type]
+                        if type(value) is not expected_type:
+                            raise HypothesisException(
+                                f"expected {expected_type} from "
+                                f"{data.provider.post_test_case_hook.__qualname__}, "
+                                f"got {type(value)} ({value!r})"
+                            )
+                        node.value = value
+
                 self._cache(data)
                 if data.invalid_at is not None:  # pragma: no branch # coverage bug?
                     self.misaligned_count += 1
@@ -478,18 +514,23 @@ class ConjectureRunner:
 
         if data.status == Status.INTERESTING:
             if self.settings.backend != "hypothesis":
-                for node in data.examples.ir_tree_nodes:
-                    value = data.provider.post_test_case_hook(node.value)
-                    # require providers to return something valid here.
-                    assert (
-                        value is not None
-                    ), "providers must return a non-null value from post_test_case_hook"
-                    node.value = value
-
                 # drive the ir tree through the test function to convert it
                 # to a buffer
+                initial_origin = data.interesting_origin
                 data = ConjectureData.for_ir_tree(data.examples.ir_tree_nodes)
                 self.__stoppable_test_function(data)
+                data.freeze()
+                # we'd like to use expected_failure machinery here from
+                # StateForActualGivenExecution for better diagnostic reports of eg
+                # flaky deadlines, but we're too low down in the engine for that.
+                # for now a worse generic flaky error will have to do.
+                if data.status != Status.INTERESTING:
+                    raise Flaky(
+                        f"Inconsistent results from replaying a failing test case!\n"
+                        f"  last: {Status.INTERESTING.name} from {initial_origin}\n"
+                        f"  this: {data.status.name}"
+                    )
+
                 self._cache(data)
 
             key = data.interesting_origin
@@ -1059,13 +1100,24 @@ class ConjectureRunner:
 
                 group = self.random.choice(groups)
 
-                ex1, ex2 = (
-                    data.examples[i] for i in sorted(self.random.sample(group, 2))
-                )
-                assert ex1.end <= ex2.start
+                (start1, end1), (start2, end2) = self.random.sample(sorted(group), 2)
+                if (start1 <= start2 <= end2 <= end1) or (
+                    start2 <= start1 <= end1 <= end2
+                ):
+                    # one example entirely contains the other. give up.
+                    # TODO use more intelligent mutation for containment, like
+                    # replacing child with parent or vice versa. Would allow for
+                    # recursive / subtree mutation
+                    failed_mutations += 1
+                    continue
 
-                e = self.random.choice([ex1, ex2])
-                replacement = data.buffer[e.start : e.end]
+                if start1 > start2:
+                    (start1, end1), (start2, end2) = (start2, end2), (start1, end1)
+                assert end1 <= start2
+
+                nodes = data.examples.ir_tree_nodes
+                (start, end) = self.random.choice([(start1, end1), (start2, end2)])
+                replacement = nodes[start:end]
 
                 try:
                     # We attempt to replace both the examples with
@@ -1076,17 +1128,16 @@ class ConjectureRunner:
                     # really matter. It may not achieve the desired result,
                     # but it's still a perfectly acceptable choice sequence
                     # to try.
-                    new_data = self.cached_test_function(
-                        data.buffer[: ex1.start]
+                    new_data = self.cached_test_function_ir(
+                        nodes[:start1]
                         + replacement
-                        + data.buffer[ex1.end : ex2.start]
+                        + nodes[end1:start2]
                         + replacement
-                        + data.buffer[ex2.end :],
+                        + nodes[end2:],
                         # We set error_on_discard so that we don't end up
                         # entering parts of the tree we consider redundant
                         # and not worth exploring.
                         error_on_discard=True,
-                        extend=BUFFER_SIZE,
                     )
                 except ContainsDiscard:
                     failed_mutations += 1
@@ -1180,6 +1231,7 @@ class ConjectureRunner:
         ir_tree_prefix: List[IRNode],
         *,
         observer: Optional[DataObserver] = None,
+        max_length: Optional[int] = None,
     ) -> ConjectureData:
         provider = (
             HypothesisProvider if self._switch_to_hypothesis_provider else self.provider
@@ -1189,7 +1241,7 @@ class ConjectureRunner:
             observer = DataObserver()
 
         return ConjectureData.for_ir_tree(
-            ir_tree_prefix, observer=observer, provider=provider
+            ir_tree_prefix, observer=observer, provider=provider, max_length=max_length
         )
 
     def new_conjecture_data(
@@ -1327,7 +1379,6 @@ class ConjectureRunner:
         self,
         buffer: Union[bytes, bytearray],
         *,
-        error_on_discard: bool = False,
         extend: int = 0,
     ) -> Union[ConjectureResult, _Overrun]:
         """Checks the tree to see if we've tested this buffer, and returns the
@@ -1366,18 +1417,7 @@ class ConjectureRunner:
         except KeyError:
             pass
 
-        observer: DataObserver
-        if error_on_discard:
-
-            class DiscardObserver(DataObserver):
-                @override
-                def kill_branch(self) -> NoReturn:
-                    raise ContainsDiscard
-
-            observer = DiscardObserver()
-        else:
-            observer = DataObserver()
-
+        observer = DataObserver()
         dummy_data = self.new_conjecture_data(
             prefix=buffer, max_length=max_length, observer=observer
         )

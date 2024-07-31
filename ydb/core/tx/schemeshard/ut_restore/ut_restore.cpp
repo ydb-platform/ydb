@@ -12,6 +12,12 @@
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/ydb_convert/table_description.h>
+
+#include <ydb/library/binary_json/write.h>
+#include <ydb/library/dynumber/dynumber.h>
+#include <ydb/library/uuid/uuid.h>
+
+
 #include <ydb/public/api/protos/ydb_import.pb.h>
 
 #include <contrib/libs/zstd/include/zstd.h>
@@ -665,6 +671,10 @@ value {
             << "2020-08-12T12:34:56.000000Z," // datetime
             << "2020-08-12T12:34:56.123456Z," // timestamp
             << "-300500," // interval
+            << "-18486," // negative date32
+            << "-1597235696," // negative datetime64
+            << "-1597235696123456," // negative timestamp64
+            << "-300500," // negative interval64
             << "3.321," // decimal
             << ".3321e1," // dynumber
             << "\"" << CGIEscapeRet("lorem ipsum") << "\"," // string
@@ -676,7 +686,9 @@ value {
 
         TString yson = TStringBuilder() << "[[[[["
             << "[%true];" // bool
+            << "[\"" << -18486 << "\"];" // date32
             << "[\"" << TInstant::ParseIso8601("2020-08-12T00:00:00.000000Z").Days() << "\"];" // date
+            << "[\"" << -1597235696 << "\"];" // datetime64
             << "[\"" << TInstant::ParseIso8601("2020-08-12T12:34:56.000000Z").Seconds() << "\"];" // datetime
             << "[\"" << "3.321" << "\"];" // decimal
             << "[\"" << 1.1234 << "\"];" // double
@@ -684,11 +696,13 @@ value {
             << "[\"" << -1.123f << "\"];" // float
             << "[\"" << -100500 << "\"];" // int32
             << "[\"" << -200500 << "\"];" // int64
+            << "[\"" << -300500 << "\"];" // interval64
             << "[\"" << -300500 << "\"];" // interval
             << "[\"" << "{\\\"key\\\": \\\"value\\\"}" << "\"];" // json
             << "[\"" << "{\\\"key\\\":\\\"value\\\"}" << "\"];" // jsondoc
             << "[\"" << 1 << "\"];" // key
             << "[\"" << "lorem ipsum" << "\"];" // string
+            << "[\"" << -1597235696123456 << "\"];" // timestamp64
             << "[\"" << TInstant::ParseIso8601("2020-08-12T12:34:56.123456Z").MicroSeconds() << "\"];" // timestamp
             << "[\"" << 100500 << "\"];" // uint32
             << "[\"" << 200500 << "\"];" // uint64
@@ -714,6 +728,10 @@ value {
             Columns { Name: "datetime_value" Type: "Datetime" }
             Columns { Name: "timestamp_value" Type: "Timestamp" }
             Columns { Name: "interval_value" Type: "Interval" }
+            Columns { Name: "date32_value" Type: "Date32" }
+            Columns { Name: "datetime64_value" Type: "Datetime64" }
+            Columns { Name: "timestamp64_value" Type: "Timestamp64" }
+            Columns { Name: "interval64_value" Type: "Interval64" }
             Columns { Name: "decimal_value" Type: "Decimal" }
             Columns { Name: "dynumber_value" Type: "DyNumber" }
             Columns { Name: "string_value" Type: "String" }
@@ -738,6 +756,10 @@ value {
             "datetime_value",
             "timestamp_value",
             "interval_value",
+            "date32_value",
+            "datetime64_value",
+            "timestamp64_value",
+            "interval64_value",
             "decimal_value",
             "dynumber_value",
             "string_value",
@@ -1106,6 +1128,184 @@ value {
         UNIT_ASSERT_C(CheckDefaultFromSequence(table), "Invalid default value");
     }
 
+    Y_UNIT_TEST(ExportImportOnSupportedDatatypes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions());
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "int32_value" Type: "Int32" }
+            Columns { Name: "uint32_value" Type: "Uint32" }
+            Columns { Name: "int64_value" Type: "Int64" }
+            Columns { Name: "uint64_value" Type: "Uint64" }
+            Columns { Name: "uint8_value" Type: "Uint8" }
+            Columns { Name: "bool_value" Type: "Bool" }
+            Columns { Name: "double_value" Type: "Double" }
+            Columns { Name: "float_value" Type: "Float" }
+            Columns { Name: "date_value" Type: "Date" }
+            Columns { Name: "datetime_value" Type: "Datetime" }
+            Columns { Name: "timestamp_value" Type: "Timestamp" }
+            Columns { Name: "interval_value" Type: "Interval" }
+            Columns { Name: "date32_value" Type: "Date32" }
+            Columns { Name: "datetime64_value" Type: "Datetime64" }
+            Columns { Name: "timestamp64_value" Type: "Timestamp64" }
+            Columns { Name: "interval64_value" Type: "Interval64" }
+            Columns { Name: "decimal_value" Type: "Decimal" }
+            Columns { Name: "dynumber_value" Type: "DyNumber" }
+            Columns { Name: "string_value" Type: "String" }
+            Columns { Name: "utf8_value" Type: "Utf8" }
+            Columns { Name: "json_value" Type: "Json" }
+            Columns { Name: "jsondoc_value" Type: "JsonDocument" }
+            Columns { Name: "uuid_value" Type: "Uuid" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const int partitionIdx = 0;
+
+        const TVector<TCell> keys = {TCell::Make(1ull)};
+
+        const TString string = "test string";
+        const TString json = R"({"key": "value"})";
+        auto binaryJson = NBinaryJson::SerializeToBinaryJson(json);
+        Y_ABORT_UNLESS(binaryJson.Defined());
+
+        const std::pair<ui64, ui64> decimal = NYql::NDecimal::MakePair(NYql::NDecimal::FromString("16.17", NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE));
+        const TString dynumber = *NDyNumber::ParseDyNumberString("18");
+
+        char uuid[16];
+        NUuid::ParseUuidToArray(TString("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), reinterpret_cast<ui16*>(uuid), false);
+
+        const TVector<TCell> values = {
+            TCell::Make<i32>(-1), // Int32
+            TCell::Make<ui32>(2), // Uint32
+            TCell::Make<i64>(-3), // Int64
+            TCell::Make<ui64>(4), // Uint64
+            TCell::Make<ui8>(5), // Uint8
+            TCell::Make<bool>(true), // Bool
+            TCell::Make<double>(6.66), // Double
+            TCell::Make<float>(7.77), // Float
+            TCell::Make<ui16>(8), // Date
+            TCell::Make<ui32>(9), // Datetime
+            TCell::Make<ui64>(10), // Timestamp
+            TCell::Make<i64>(-11), // Interval
+            TCell::Make<i32>(-12), // Date32
+            TCell::Make<i64>(-13), // Datetime64
+            TCell::Make<i64>(-14), // Timestamp64
+            TCell::Make<i64>(-15), // Interval64
+            TCell::Make<std::pair<ui64, ui64>>(decimal), // Decimal
+            TCell(dynumber.data(), dynumber.size()), // Dynumber
+            TCell(string.data(), string.size()), // String
+            TCell(string.data(), string.size()), // Utf8
+            TCell(json.data(), json.size()), // Json
+            TCell(binaryJson->Data(), binaryJson->Size()), // JsonDocument
+            TCell(uuid, sizeof(uuid)), // Uuid
+        };
+
+        const TVector<ui32> keyTags = {1};
+        TVector<ui32> valueTags(values.size());
+        std::iota(valueTags.begin(), valueTags.end(), 2);            
+
+        UploadRow(runtime, "/MyRoot/Table", partitionIdx, keyTags, valueTags, keys, values);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: "Backup1"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "Backup1"
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot");
+
+
+        TString expectedJson = TStringBuilder() << "[[[[["
+            << "[%true];" // bool
+            << "[\"" << -12 << "\"];" // date32
+            << "[\"" << 8 << "\"];" // date
+            << "[\"" << -13 << "\"];" // datetime64
+            << "[\"" << 9 << "\"];" // datetime
+            << "[\"" << "16.17" << "\"];" // decimal
+            << "[\"" << 6.66 << "\"];" // double
+            << "[\"" << ".18e2" << "\"];" // dynumber
+            << "[\"" << 7.77f << "\"];" // float
+            << "[\"" << -1 << "\"];" // int32
+            << "[\"" << -3 << "\"];" // int64
+            << "[\"" << -15 << "\"];" // interval64
+            << "[\"" << -11 << "\"];" // interval
+            << "[\"" << "{\\\"key\\\": \\\"value\\\"}" << "\"];" // json
+            << "[\"" << "{\\\"key\\\":\\\"value\\\"}" << "\"];" // jsondoc
+            << "[\"" << 1 << "\"];" // key
+            << "[\"" << "test string" << "\"];" // string
+            << "[\"" << -14 << "\"];" // timestamp64
+            << "[\"" << 10 << "\"];" // timestamp
+            << "[\"" << 2 << "\"];" // uint32
+            << "[\"" << 4 << "\"];" // uint64
+            << "[\"" << 5 << "\"];" // uint8
+            << "[\"" << "test string" << "\"];" // utf8
+            << "[[\"" << "wR7fZX2pskeuVjwCPabujA==" << "\"]]" // uuid
+        << "]];\%false]]]";
+
+        const TReadKeyDesc readKeyDesc = {"key", "Uint64", "0"};
+
+        const TVector<TString> readColumns = {
+            "key",
+            "int32_value",
+            "uint32_value",
+            "int64_value",
+            "uint64_value",
+            "uint8_value",
+            "bool_value",
+            "double_value",
+            "float_value",
+            "date_value",
+            "datetime_value",
+            "timestamp_value",
+            "interval_value",
+            "date32_value",
+            "datetime64_value",
+            "timestamp64_value",
+            "interval64_value",
+            "decimal_value",
+            "dynumber_value",
+            "string_value",
+            "utf8_value",
+            "json_value",
+            "jsondoc_value",
+            "uuid_value",
+        };
+        
+        auto contentOriginalTable = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", readKeyDesc, readColumns);
+        NKqp::CompareYson(expectedJson, contentOriginalTable);
+
+        auto contentRestoredTable = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 2, "Restored", readKeyDesc, readColumns);
+        NKqp::CompareYson(expectedJson, contentRestoredTable);
+    }
+
     Y_UNIT_TEST(ExportImportPg) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true));
@@ -1119,7 +1319,7 @@ value {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        UploadRows(runtime, "/MyRoot/Table", 0, {1}, {2}, {55555});
+        UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2}, {TCell::Make(55555u)}, {TCell::Make(55555u)});
 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -2503,6 +2703,28 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         });
     }
 
+    Y_UNIT_TEST(ShouldRestoreIncrementalBackupFlag) {
+        ShouldRestoreSettings(R"(
+            attributes {
+              key: "__incremental_backup"
+              value: "{}"
+            }
+        )", {
+            NLs::IncrementalBackup(true),
+        });
+    }
+
+    Y_UNIT_TEST(ShouldRestoreIncrementalBackupFlagNullAsFalse) {
+        ShouldRestoreSettings(R"(
+            attributes {
+              key: "__incremental_backup"
+              value: "null"
+            }
+        )", {
+            NLs::IncrementalBackup(false),
+        });
+    }
+
     // Skip compaction_policy (not supported)
     // Skip uniform_partitions (has no effect)
 
@@ -2587,6 +2809,126 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )", {
             NLs::FollowerGroups({group}),
         });
+    }
+
+    void ShouldRestoreIndexTableSettings(const TString& schemeAdditions, auto&& tableDescriptionChecker) {
+        TTestBasicRuntime runtime;
+
+        const auto empty = TTestData("", EmptyYsonStr);
+        const auto data = TTestDataWithScheme(TStringBuilder() << R"(
+                columns {
+                    name: "key"
+                    type { optional_type { item { type_id: UTF8 } } }
+                }
+                columns {
+                    name: "value"
+                    type { optional_type { item { type_id: UINT32 } } }
+                }
+                primary_key: "key"
+            )" << schemeAdditions,
+            {empty}
+        );
+
+        Run(runtime, ConvertTestData(data), R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_prefix: ""
+                    destination_path: "/MyRoot/User/Table"
+                }
+            }
+        )", Ydb::StatusIds::SUCCESS, "/MyRoot/User");
+
+        ui64 schemeshardId = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/User"), {
+            NLs::PathExist,
+            NLs::ExtractTenantSchemeshard(&schemeshardId)
+        });
+
+        tableDescriptionChecker(
+            DescribePath(runtime, schemeshardId, "/MyRoot/User/Table/ByValue/indexImplTable", true, true, true)
+        );
+    }
+
+    Y_UNIT_TEST(ShouldRestoreIndexTableSplitPoints) {
+        ShouldRestoreIndexTableSettings(R"(
+                indexes {
+                    name: "ByValue"
+                    index_columns: "value"
+                    global_index {
+                        settings {
+                            partition_at_keys {
+                                split_points {
+                                    type { tuple_type { elements { optional_type { item { type_id: UINT32 } } } } }
+                                    value { items { uint32_value: 1 } }
+                                }
+                            }
+                        }
+                    }
+                }
+            )",
+            [](const NKikimrScheme::TEvDescribeSchemeResult& tableDescription) {
+                TestDescribeResult(
+                    tableDescription,
+                    {NLs::CheckBoundaries}
+                );
+            }
+        );
+    }
+
+    Y_UNIT_TEST(ShouldRestoreIndexTableUniformPartitionsCount) {
+        ShouldRestoreIndexTableSettings(R"(
+                indexes {
+                    name: "ByValue"
+                    index_columns: "value"
+                    global_index {
+                        settings {
+                            uniform_partitions: 10
+                        }
+                    }
+                }
+            )",
+            [](const NKikimrScheme::TEvDescribeSchemeResult& tableDescription) {
+                const auto& pathDescription = tableDescription.GetPathDescription();
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    pathDescription.TablePartitionsSize(), 10,
+                    pathDescription.ShortDebugString()
+                );
+            }
+        );
+    }
+
+    Y_UNIT_TEST(ShouldRestoreIndexTablePartitioningSettings) {
+        ShouldRestoreIndexTableSettings(R"(
+                indexes {
+                    name: "ByValue"
+                    index_columns: "value"
+                    global_index {
+                        settings {
+                            partitioning_settings {
+                                partitioning_by_size: ENABLED
+                                partition_size_mb: 1024
+                                partitioning_by_load: ENABLED
+                                min_partitions_count: 2
+                                max_partitions_count: 3
+                            }
+                        }
+                    }
+                }
+            )",
+            [](const NKikimrScheme::TEvDescribeSchemeResult& tableDescription) {
+                TestDescribeResult(
+                    tableDescription,
+                    {
+                        NLs::SizeToSplitEqual(1 << 30),
+                        NLs::PartitioningByLoadStatus(true),
+                        NLs::MinPartitionsCountEqual(2),
+                        NLs::MaxPartitionsCountEqual(3)
+                    }
+                );
+            }
+        );
     }
 
     Y_UNIT_TEST(ShouldFailOnInvalidSchema) {
@@ -3108,6 +3450,48 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT(entry.HasStartTime());
         UNIT_ASSERT(entry.HasEndTime());
         UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
+    }
+
+    Y_UNIT_TEST(UserSID) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )", {{"a", 1}});
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        const TString request = Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", port);
+        const TString userSID = "user@builtin";
+        TestImport(runtime, ++txId, "/MyRoot", request, userSID);
+
+        const auto desc = TestGetImport(runtime, txId, "/MyRoot");
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_PREPARING);
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetUserSID(), userSID);
     }
 }
 

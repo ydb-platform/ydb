@@ -80,38 +80,6 @@ struct TEvStateStorage::TEvUpdateGroupConfig : public TEventLocal<TEvUpdateGroup
     {}
 };
 
-struct TEvStateStorage::TEvReplicaProbeSubscribe : public TEventLocal<TEvReplicaProbeSubscribe, EvReplicaProbeSubscribe> {
-    const TActorId ReplicaId;
-
-    TEvReplicaProbeSubscribe(TActorId replicaId)
-        : ReplicaId(replicaId)
-    {}
-};
-
-struct TEvStateStorage::TEvReplicaProbeUnsubscribe : public TEventLocal<TEvReplicaProbeUnsubscribe, EvReplicaProbeUnsubscribe> {
-    const TActorId ReplicaId;
-
-    TEvReplicaProbeUnsubscribe(TActorId replicaId)
-        : ReplicaId(replicaId)
-    {}
-};
-
-struct TEvStateStorage::TEvReplicaProbeConnected : public TEventLocal<TEvReplicaProbeConnected, EvReplicaProbeConnected> {
-    const TActorId ReplicaId;
-
-    TEvReplicaProbeConnected(TActorId replicaId)
-        : ReplicaId(replicaId)
-    {}
-};
-
-struct TEvStateStorage::TEvReplicaProbeDisconnected : public TEventLocal<TEvReplicaProbeDisconnected, EvReplicaProbeDisconnected> {
-    const TActorId ReplicaId;
-
-    TEvReplicaProbeDisconnected(TActorId replicaId)
-        : ReplicaId(replicaId)
-    {}
-};
-
 struct TEvStateStorage::TEvResolveReplicas : public TEventLocal<TEvResolveReplicas, EvResolveReplicas> {
     const ui64 TabletID;
     const bool Subscribe;
@@ -124,9 +92,11 @@ struct TEvStateStorage::TEvResolveReplicas : public TEventLocal<TEvResolveReplic
 
 struct TEvStateStorage::TEvResolveBoard : public TEventLocal<TEvResolveBoard, EvResolveBoard> {
     const TString Path;
+    const bool Subscribe;
 
-    TEvResolveBoard(const TString &path)
+    TEvResolveBoard(const TString &path, bool subscribe = false)
         : Path(path)
+        , Subscribe(subscribe)
     {}
 };
 
@@ -140,15 +110,18 @@ struct TEvStateStorage::TEvResolveSchemeBoard : public TEventLocal<TEvResolveSch
     const TPathId PathId;
 
     const EKeyType KeyType;
+    const bool Subscribe;
 
-    TEvResolveSchemeBoard(const TString &path)
+    TEvResolveSchemeBoard(const TString &path, bool subscribe = false)
         : Path(path)
         , KeyType(KeyTypePath)
+        , Subscribe(subscribe)
     {}
 
-    TEvResolveSchemeBoard(const TPathId& pathId)
+    TEvResolveSchemeBoard(const TPathId& pathId, bool subscribe = false)
         : PathId(pathId)
         , KeyType(KeyTypePathId)
+        , Subscribe(subscribe)
     {}
 };
 
@@ -352,7 +325,5 @@ struct TEvStateStorage::TEvReplicaBoardInfoUpdate : public TEventPB<TEvStateStor
         Record.SetPath(path);
     }
 };
-
-IActor* CreateStateStorageReplicaProbe(TActorId replica);
 
 }

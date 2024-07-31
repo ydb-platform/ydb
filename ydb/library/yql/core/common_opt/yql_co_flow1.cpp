@@ -1298,91 +1298,6 @@ TExprNode::TPtr OptimizeLookup(const TExprNode::TPtr& node, TExprContext& ctx, T
     return node;
 }
 
-constexpr std::initializer_list<std::string_view> FlowPriority = {
-    "AssumeSorted", "AssumeUnique", "AssumeDistinct",
-    "Map", "OrderedMap", "MapNext",
-    "Filter", "OrderedFilter",
-    "FlatMap", "OrderedFlatMap",
-    "MultiMap", "OrderedMultiMap",
-    "FoldMap", "Fold1Map", "Chain1Map",
-    "Take", "Skip",
-    "TakeWhile", "SkipWhile",
-    "TakeWhileInclusive", "SkipWhileInclusive",
-    "SkipNullMembers", "FilterNullMembers",
-    "SkipNullElements", "FilterNullElements",
-    "Condense", "Condense1",
-    "MapJoinCore", "CommonJoinCore",
-    "CombineCore", "ExtractMembers",
-    "PartitionByKey", "SqueezeToDict"
-};
-
-TExprNode::TPtr OptimizeToFlow(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-    if (!optCtx.IsSingleUsage(node->Head())) {
-        return node;
-    }
-
-    if (node->Head().IsCallable(FlowPriority)) {
-        YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content();
-        return ctx.SwapWithHead(*node);
-    }
-
-    if (node->Head().IsCallable("FromFlow")) {
-        YQL_CLOG(DEBUG, Core) << "Drop " << node->Content() << " with " << node->Head().Content();
-        return node->Head().HeadPtr();
-    }
-
-    if (node->Head().IsCallable("ForwardList")) {
-        YQL_CLOG(DEBUG, Core) << "Drop " << node->Head().Content() << " under " << node->Content();
-        return ctx.ChangeChild(*node, 0U,  node->Head().HeadPtr());
-    }
-
-    if (node->Head().IsCallable("Chopper")) {
-        YQL_CLOG(DEBUG, Core) << "Swap " << node->Head().Content() << " with " << node->Content();
-        auto children = node->Head().ChildrenList();
-        children.front() = ctx.ChangeChildren(*node, {std::move(children.front())});
-        children.back() = ctx.Builder(children.back()->Pos())
-            .Lambda()
-                .Param("key")
-                .Param("flow")
-                .Callable("ToFlow")
-                    .Apply(0, *children.back())
-                        .With(0, "key")
-                        .With(1)
-                            .Callable("FromFlow")
-                                .Arg(0, "flow")
-                            .Seal()
-                        .Done()
-                    .Seal()
-                .Seal()
-            .Seal().Build();
-        return ctx.ChangeChildren(node->Head(), std::move(children));
-    }
-
-    if (node->Head().IsCallable("Switch")) {
-        YQL_CLOG(DEBUG, Core) << "Swap " << node->Head().Content() << " with " << node->Content();
-        auto children = node->Head().ChildrenList();
-        children.front() = ctx.ChangeChildren(*node, {std::move(children.front())});
-        for (auto i = 3U; i < children.size(); ++++i) {
-            children[i] = ctx.Builder(children[i]->Pos())
-                .Lambda()
-                    .Param("flow")
-                    .Callable("ToFlow")
-                        .Apply(0, *children[i])
-                            .With(0)
-                                .Callable("FromFlow")
-                                    .Arg(0, "flow")
-                                .Seal()
-                            .Done()
-                        .Seal()
-                    .Seal()
-                .Seal().Build();
-        }
-        return ctx.ChangeChildren(node->Head(), std::move(children));
-    }
-
-    return node;
-}
-
 template <bool Ordered>
 TExprNode::TPtr OptimizeFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
     const std::conditional_t<Ordered, TCoOrderedFlatMap, TCoFlatMap> self(node);
@@ -1404,12 +1319,14 @@ TExprNode::TPtr OptimizeFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, 
         }
     }
 
-    if (node->Head().IsCallable({"GroupByKey", "CombineByKey"})) {
-        return FuseFlatMapOverByKey<false>(*node, ctx);
-    }
+    if (self.Lambda().Ref().IsComplete()) {
+        if (node->Head().IsCallable({"GroupByKey", "CombineByKey"})) {
+            return FuseFlatMapOverByKey<false>(*node, ctx);
+        }
 
-    if (node->Head().IsCallable({"PartitionByKey", "PartitionsByKeys"})) {
-        return FuseFlatMapOverByKey<true>(*node, ctx);
+        if (node->Head().IsCallable({"PartitionByKey", "PartitionsByKeys", "ShuffleByKeys"})) {
+            return FuseFlatMapOverByKey<true>(*node, ctx);
+        }
     }
 
     if (node->Head().IsCallable("ForwardList")) {
@@ -1475,7 +1392,7 @@ TExprNode::TPtr OptimizeFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, 
     {
         auto canPush = [&](const auto& child) {
             // we push FlatMap over Extend only if it can later be fused with child
-            return child->IsCallable({Ordered ? "OrderedFlatMap" : "FlatMap", "GroupByKey", "CombineByKey", "PartitionByKey", "PartitionsByKeys",
+            return child->IsCallable({Ordered ? "OrderedFlatMap" : "FlatMap", "GroupByKey", "CombineByKey", "PartitionByKey", "PartitionsByKeys", "ShuffleByKeys",
                                       "ListIf", "FlatListIf", "AsList", "ToList"}) && optCtx.IsSingleUsage(*child);
         };
         if (AllOf(node->Head().ChildrenList(), canPush)) {
@@ -1495,8 +1412,6 @@ TExprNode::TPtr OptimizeFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, 
 
 void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
     using namespace std::placeholders;
-
-    map["ToFlow"] = std::bind(&OptimizeToFlow, _1, _2, _3);
 
     map["FlatMap"] = std::bind(&OptimizeFlatMap<false>, _1, _2, _3);
     map["OrderedFlatMap"] = std::bind(&OptimizeFlatMap<true>, _1, _2, _3);

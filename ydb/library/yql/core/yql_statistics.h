@@ -1,5 +1,9 @@
 #pragma once
 
+#include <ydb/library/minsketch/count_min_sketch.h>
+
+#include <library/cpp/json/json_reader.h>
+
 #include <util/generic/vector.h>
 #include <util/generic/hash.h>
 
@@ -24,6 +28,8 @@ struct IProviderStatistics {
 struct TColumnStatistics {
     std::optional<double> NumUniqueVals;
     std::optional<double> HyperLogLog;
+    std::shared_ptr<NKikimr::TCountMinSketch> CountMinSketch;
+    TString Type;
 
     TColumnStatistics() {}
 };
@@ -76,6 +82,6 @@ struct TOptimizerStatistics {
     friend std::ostream& operator<<(std::ostream& os, const TOptimizerStatistics& s);
 };
 
-std::shared_ptr<TOptimizerStatistics> OverrideStatistics(const TOptimizerStatistics& s, const TStringBuf& tablePath, const TString& statHints);
+std::shared_ptr<TOptimizerStatistics> OverrideStatistics(const TOptimizerStatistics& s, const TStringBuf& tablePath, const std::shared_ptr<NJson::TJsonValue>& stats);
 
 }

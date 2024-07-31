@@ -337,22 +337,20 @@ private:
     }
 
     void Handle(TEvHttpBase::TEvSendResult::TPtr& ev) {
-        //Cerr << "EX: Handle(TEvHttpBase::TEvSendResult::TPtr& ev)" << Endl;
         const auto* res = ev->Get();
         const TString& error = res->HttpIncomingResponse->Get()->GetError();
 
-        //Cerr << "EX: Handle(TEvHttpBase::TEvSendResult::TPtr& ev), error: " << error << Endl;
         if (!error.empty() || (res->HttpIncomingResponse->Get()->Response && res->HttpIncomingResponse->Get()->Response->Status != "200")) {
             TStringBuilder errorBuilder;
             errorBuilder << "Error while sending request to monitoring api: " << error;
             const auto& response = res->HttpIncomingResponse->Get()->Response;
             if (response) {
-                errorBuilder << " " << response->GetObfuscatedData();
+                errorBuilder << ", response: " << response->Body.Head(10000);
             }
 
             TIssues issues { TIssue(errorBuilder) };
             SINK_LOG_W("Got " << (res->IsTerminal ? "terminal " : "") << "error response[" << ev->Cookie << "] from solomon: " << issues.ToOneLineString());
-            //Cerr << "Got " << (res->IsTerminal ? "terminal " : "") << "error response[" << ev->Cookie << "] from solomon: " << issues.ToOneLineString();
+            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
             return;
         }
 
@@ -361,12 +359,13 @@ private:
 
     void HandleSuccessSolomonResponse(const NHttp::TEvHttpProxy::TEvHttpIncomingResponse& response, ui64 cookie) {
         Y_UNUSED(cookie);
-        //SINK_LOG_E("Solomon response[" << cookie << "]: " << response.Response->GetObfuscatedData());
-        //Cerr << "EX:" << response.Response->Body << Endl;
         NJson::TJsonValue json;
-        if (!NJson::ReadJsonTree(response.Response->Body, &json, false)) {
-            // todo: improve
-            Y_ABORT_UNLESS(false, "Failed to parse json response");
+        try {
+            NJson::ReadJsonTree(response.Response->Body, &json, /*throwOnError*/ true);
+        } catch (const std::exception& e) {
+            SINK_LOG_E("Invalid JSON reponse from monitoring: " << e.what() << ", body: " << response.Response->Body.Head(10000));
+            TIssues issues { TIssue(TStringBuilder() << "Failed to parse response from monitoring: " << e.what()) };
+            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
             return;
         }
 

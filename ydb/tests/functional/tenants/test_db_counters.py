@@ -9,6 +9,7 @@ import pytest
 
 from hamcrest import assert_that, equal_to, greater_than, not_none
 
+from ydb.core.protos import config_pb2
 from ydb.tests.library.common.msgbus_types import MessageBusStatus
 from ydb.tests.library.common.protobuf_ss import AlterTableRequest
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
@@ -327,29 +328,37 @@ class TestStorageCounters:
             insert_data(session, table)
             check_disk_quota_exceedance(client, database_path, retries=10, sleep_duration=5)
 
+            set_feature_flags = ydb_cluster.config.yaml_config["feature_flags"]
+            default_feature_flags = config_pb2.TAppConfig().FeatureFlags
+            btree_index_feature_flag = (
+                set_feature_flags["enable_local_dbbtree_index"]
+                if "enable_local_dbbtree_index" in set_feature_flags
+                else default_feature_flags.EnableLocalDBBtreeIndex
+            )
             usage = describe(client, table).PathDescription.TableStats.StoragePools.PoolsUsage
             assert len(usage) == 2
             assert json_format.MessageToDict(usage[0], preserving_proto_field_name=True) == {
                 "PoolKind": "hdd",
                 "DataSize": "50",
-                "IndexSize": "0",
+                "IndexSize": "0" if btree_index_feature_flag else "82",
             }
             assert json_format.MessageToDict(usage[1], preserving_proto_field_name=True) == {
                 "PoolKind": "hdd1",
                 "DataSize": "71",
                 "IndexSize": "0",
             }
+            used_bytes_by_tables = 121 if btree_index_feature_flag else 203
 
             # Note: .hdd counter aggregates usage across all storage pool kinds with prefix "hdd", i.e. "hdd" and "hdd1"
             check_counters(
                 slot_mon_port,
                 {
-                    "resources.storage.used_bytes": 121,
+                    "resources.storage.used_bytes": used_bytes_by_tables,
                     "resources.storage.used_bytes.ssd": 0,
-                    "resources.storage.used_bytes.hdd": 121,
-                    "resources.storage.table.used_bytes": 121,
+                    "resources.storage.used_bytes.hdd": used_bytes_by_tables,
+                    "resources.storage.table.used_bytes": used_bytes_by_tables,
                     "resources.storage.table.used_bytes.ssd": 0,
-                    "resources.storage.table.used_bytes.hdd": 121,
+                    "resources.storage.table.used_bytes.hdd": used_bytes_by_tables,
                 },
                 retries=60,
                 sleep_duration=5,

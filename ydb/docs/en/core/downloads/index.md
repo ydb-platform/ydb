@@ -26,7 +26,7 @@
 
 ## {{ ydb-short-name }} Server {#ydb-server}
 
-{{ ydb-short-name }} Server is a build for running a [YDB cluster](../concepts/databases.md#cluster) node.
+{{ ydb-short-name }} Server is a build for running a [YDB cluster](../concepts/glossary.md#cluster) node.
 
 {% list tabs %}
 

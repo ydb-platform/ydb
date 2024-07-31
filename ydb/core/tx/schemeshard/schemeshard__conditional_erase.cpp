@@ -193,7 +193,6 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
             auto& inFlight = tableInfo->GetInFlightCondErase();
             auto it = inFlight.find(shardIdx);
             if (it == inFlight.end()) {
-                Y_DEBUG_ABORT("Unreachable");
                 continue;
             }
 

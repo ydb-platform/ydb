@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/kqp.pb.h>
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
@@ -58,6 +59,15 @@ struct TRunnerOptions {
     ETraceOptType TraceOptType = ETraceOptType::Disabled;
 
     TYdbSetupSettings YdbSettings;
+};
+
+
+struct TRequestOptions {
+    TString Query;
+    NKikimrKqp::EQueryAction Action;
+    TString TraceId;
+    TString PoolId;
+    TString UserSID;
 };
 
 }  // namespace NKqpRun

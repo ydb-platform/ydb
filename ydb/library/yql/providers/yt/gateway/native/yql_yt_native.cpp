@@ -794,7 +794,6 @@ public:
                 mode = FromString<EYtWriteMode>(modeSetting->Child(1)->Content());
             }
             const bool initial = NYql::HasSetting(publish.Settings().Ref(), EYtSettingType::Initial);
-            const bool monotonicKeys = NYql::HasSetting(publish.Settings().Ref(), EYtSettingType::MonotonicKeys);
 
             std::unordered_map<EYtSettingType, TString> strOpts;
             for (const auto& setting : publish.Settings().Ref().Children()) {
@@ -815,9 +814,15 @@ public:
             TVector<TString> src;
             ui64 chunksCount = 0;
             ui64 dataSize = 0;
+            std::unordered_set<TString> columnGroups;
             for (auto out: publish.Input()) {
                 auto outTable = GetOutTable(out).Cast<TYtOutTable>();
                 src.emplace_back(outTable.Name().Value());
+                if (auto columnGroupSetting = NYql::GetSetting(outTable.Settings().Ref(), EYtSettingType::ColumnGroups)) {
+                    columnGroups.emplace(columnGroupSetting->Tail().Content());
+                } else {
+                    columnGroups.emplace();
+                }
                 auto stat = TYtTableStatInfo(outTable.Stat());
                 chunksCount += stat.ChunkCount;
                 dataSize += stat.DataSize;
@@ -828,6 +833,7 @@ public:
             if (src.size() > 10) {
                 YQL_CLOG(INFO, ProviderYt) << "...total input tables=" << src.size();
             }
+            TString srcColumnGroups = columnGroups.size() == 1 ? *columnGroups.cbegin() : TString();
 
             bool combineChunks = false;
             if (auto minChunkSize = options.Config()->MinPublishedAvgChunkSize.Get()) {
@@ -858,9 +864,9 @@ public:
             const ui32 dstEpoch = TEpochInfo::Parse(publish.Publish().Epoch().Ref()).GetOrElse(0);
             auto execCtx = MakeExecCtx(std::move(options), session, cluster, node.Get(), &ctx);
 
-            return session->Queue_->Async([execCtx, src = std::move(src), dst, dstEpoch, isAnonymous, mode, initial, monotonicKeys, combineChunks, strOpts = std::move(strOpts)] () {
+            return session->Queue_->Async([execCtx, src = std::move(src), dst, dstEpoch, isAnonymous, mode, initial, srcColumnGroups, combineChunks, strOpts = std::move(strOpts)] () {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
-                return ExecPublish(execCtx, src, dst, dstEpoch, isAnonymous, mode, initial, monotonicKeys, combineChunks, strOpts);
+                return ExecPublish(execCtx, src, dst, dstEpoch, isAnonymous, mode, initial, srcColumnGroups, combineChunks, strOpts);
             })
             .Apply([nodePos] (const TFuture<void>& f) {
                 try {
@@ -1319,12 +1325,13 @@ private:
     public:
         using TResult = std::pair<TString, bool>;
 
-        TSkiffExprResultFactory(TMaybe<ui64> rowLimit, TMaybe<ui64> byteLimit, bool hasListResult, const NYT::TNode& attrs, const TString& optLLVM)
+        TSkiffExprResultFactory(TMaybe<ui64> rowLimit, TMaybe<ui64> byteLimit, bool hasListResult, const NYT::TNode& attrs, const TString& optLLVM, const TVector<TString>& columns)
             : RowLimit_(rowLimit)
             , ByteLimit_(byteLimit)
             , HasListResult_(hasListResult)
             , Attrs_(attrs)
             , OptLLVM_(optLLVM)
+            , Columns_(columns)
         {
         }
 
@@ -1335,7 +1342,7 @@ private:
         THolder<TSkiffExecuteResOrPull> Create(TCodecContext& codecCtx, const NKikimr::NMiniKQL::THolderFactory& holderFactory) const {
             THolder<TSkiffExecuteResOrPull> res;
 
-            res = MakeHolder<TSkiffExecuteResOrPull>(RowLimit_, ByteLimit_, codecCtx, holderFactory, Attrs_, OptLLVM_);
+            res = MakeHolder<TSkiffExecuteResOrPull>(RowLimit_, ByteLimit_, codecCtx, holderFactory, Attrs_, OptLLVM_, Columns_);
             if (HasListResult_) {
                 res->SetListResult();
             }
@@ -1352,6 +1359,7 @@ private:
         const bool HasListResult_;
         const NYT::TNode Attrs_;
         const TString OptLLVM_;
+        const TVector<TString> Columns_;
     };
 
     static TFinalizeResult ExecFinalize(const TSession::TPtr& session, bool abort, bool detachSnapshotTxs) {
@@ -2008,7 +2016,7 @@ private:
         const bool isAnonymous,
         EYtWriteMode mode,
         const bool initial,
-        const bool monotonicKeys,
+        const TString& srcColumnGroups,
         const bool combineChunks,
         const std::unordered_map<EYtSettingType, TString>& strOpts)
     {
@@ -2060,7 +2068,7 @@ private:
         TYqlRowSpecInfo::TPtr rowSpec = execCtx->Options_.DestinationRowSpec();
 
         bool appendToSorted = false;
-        if (EYtWriteMode::Append == mode && !monotonicKeys) {
+        if (EYtWriteMode::Append == mode && !strOpts.contains(EYtSettingType::MonotonicKeys)) {
             NYT::TNode attrs = entry->Tx->Get(dstPath + "/@", TGetOptions()
                 .AttributeFilter(TAttributeFilter()
                     .AddAttribute(TString("sorted_by"))
@@ -2151,6 +2159,15 @@ private:
             }
         }
 
+        NYT::TNode securityTagsNode;
+        if (strOpts.contains(EYtSettingType::SecurityTags)) {
+            securityTagsNode = NYT::NodeFromYsonString(strOpts.at(EYtSettingType::SecurityTags));
+        }
+
+        if (EYtWriteMode::Append != mode && !securityTagsNode.IsUndefined()) {
+            yqlAttrs[SecurityTagsName] = securityTagsNode;
+        }
+
         const auto userAttrsIt = strOpts.find(EYtSettingType::UserAttrs);
         if (userAttrsIt != strOpts.cend()) {
             const NYT::TNode mapNode = NYT::NodeFromYsonString(userAttrsIt->second);
@@ -2187,6 +2204,14 @@ private:
 
 #undef DEFINE_OPT
 
+        NYT::TNode columnGroupsSpec;
+        if (const auto it = strOpts.find(EYtSettingType::ColumnGroups); it != strOpts.cend() && execCtx->Options_.Config()->OptimizeFor.Get(cluster).GetOrElse(NYT::OF_LOOKUP_ATTR) != NYT::OF_LOOKUP_ATTR) {
+            columnGroupsSpec = NYT::NodeFromYsonString(it->second);
+            if (it->second != srcColumnGroups) {
+                forceMerge = forceTransform = true;
+            }
+        }
+
         TFuture<void> res;
         if (EYtWriteMode::Flush == mode || EYtWriteMode::Append == mode || srcPaths.size() > 1 || forceMerge) {
             TFuture<bool> cacheCheck = MakeFuture<bool>(false);
@@ -2198,7 +2223,8 @@ private:
                                     appendToSorted, initial, entry, dstPath, dstEpoch, yqlAttrs, combineChunks,
                                     dstCompressionCodec, dstErasureCodec, dstReplicationFactor, dstMedia, dstPrimaryMedium,
                                     nativeYtTypeCompatibility, publishTx, cluster,
-                                    commitCheckpoint] (const auto& f) mutable
+                                    commitCheckpoint, columnGroupsSpec = std::move(columnGroupsSpec),
+                                    securityTagsNode] (const auto& f) mutable
             {
                 if (f.GetValue()) {
                     execCtx->QueryCacheItem.Destroy();
@@ -2231,13 +2257,19 @@ private:
                     mergeSpec.AddInput(path);
                 }
 
+                NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc();
+
+                if (EYtWriteMode::Append == mode && !securityTagsNode.IsUndefined()) {
+                    spec["additional_security_tags"] = securityTagsNode;
+                }
+
                 auto ytDst = TRichYPath(dstPath);
                 if (EYtWriteMode::Append == mode && !appendToSorted) {
                     ytDst.Append(true);
                 } else {
                     NYT::TNode fullSpecYson;
                     rowSpec->FillCodecNode(fullSpecYson);
-                    const auto schema = RowSpecToYTSchema(fullSpecYson, nativeYtTypeCompatibility);
+                    const auto schema = RowSpecToYTSchema(fullSpecYson, nativeYtTypeCompatibility, columnGroupsSpec);
                     ytDst.Schema(schema);
 
                     if (EYtWriteMode::Append != mode && EYtWriteMode::RenewKeepMeta != mode) {
@@ -2279,7 +2311,6 @@ private:
                     mergeSpec.Mode(MM_ORDERED);
                 }
 
-                NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc();
                 EYtOpProps flags = EYtOpProp::PublishedAutoMerge;
                 if (combineChunks) {
                     flags |= EYtOpProp::PublishedChunkCombine;
@@ -2744,14 +2775,14 @@ private:
         TString type;
         NYT::TNode rowSpec;
         if (execCtx->Options_.FillSettings().Format == IDataProvider::EResultFormat::Skiff) {
-            auto ytType =  ParseYTType(pull.Input().Ref(), ctx, execCtx, columns);
+            auto ytType = ParseYTType(pull.Input().Ref(), ctx, execCtx, TColumnOrder(columns));
 
             type = ytType.first;
             rowSpec = ytType.second;
         } else if (NCommon::HasResOrPullOption(pull.Ref(), "type")) {
             TStringStream typeYson;
             ::NYson::TYsonWriter typeWriter(&typeYson);
-            NCommon::WriteResOrPullType(typeWriter, pull.Input().Ref().GetTypeAnn(), columns);
+            NCommon::WriteResOrPullType(typeWriter, pull.Input().Ref().GetTypeAnn(), TColumnOrder(columns));
             type = typeYson.Str();
         }
 
@@ -2923,10 +2954,18 @@ private:
                     structColumns.emplace(columns[index], index);
                 }
 
-                auto skiffNode = SingleTableSpecToInputSkiff(rowSpec[YqlIOSpecTables][0], structColumns, false, false, false);
+                auto skiffNode = TablesSpecToOutputSkiff(rowSpec);
 
                 writer.OnKeyedItem("SkiffType");
                 writer.OnRaw(NodeToYsonString(skiffNode), ::NYson::EYsonType::Node);
+
+                writer.OnKeyedItem("Columns");
+                writer.OnBeginList();
+                for (auto& column : columns) {
+                    writer.OnListItem();
+                    writer.OnStringScalar(column);
+                }
+                writer.OnEndList();
 
                 TSkiffExecuteResOrPull pullData(execCtx->Options_.FillSettings().RowsLimitPerWrite,
                     execCtx->Options_.FillSettings().AllResultsBytesLimit,
@@ -2996,7 +3035,7 @@ private:
         } else if (NCommon::HasResOrPullOption(result.Ref(), "type")) {
             TStringStream typeYson;
             ::NYson::TYsonWriter typeWriter(&typeYson);
-            NCommon::WriteResOrPullType(typeWriter, result.Input().Ref().GetTypeAnn(), columns);
+            NCommon::WriteResOrPullType(typeWriter, result.Input().Ref().GetTypeAnn(), TColumnOrder(columns));
             type = typeYson.Str();
         }
 
@@ -3019,7 +3058,8 @@ private:
                             execCtx->Options_.FillSettings().AllResultsBytesLimit,
                             hasListResult,
                             rowSpec,
-                            execCtx->Options_.OptLLVM()),
+                            execCtx->Options_.OptLLVM(),
+                            columns),
                         &columns,
                         execCtx->Options_.FillSettings().Format);
                 default:

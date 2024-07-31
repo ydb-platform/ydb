@@ -126,6 +126,7 @@ PEERDIR(
     ydb/core/util
     ydb/core/ydb_convert
     ydb/core/security
+    ydb/core/security/ldap_auth_provider
     ydb/library/aclib
     ydb/library/binary_json
     ydb/library/dynumber

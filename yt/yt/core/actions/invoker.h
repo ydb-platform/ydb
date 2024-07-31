@@ -1,9 +1,9 @@
 #pragma once
 
 #include "callback.h"
-#include "bind.h"
 
 #include <yt/yt/core/threading/public.h>
+#include <library/cpp/yt/memory/range.h>
 
 #include <type_traits>
 
@@ -99,8 +99,3 @@ DEFINE_REFCOUNTED_TYPE(ISuspendableInvoker)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
-
-#define INVOKER_INL_H_
-#include "invoker-inl.h"
-#undef INVOKER_INL_H_
-

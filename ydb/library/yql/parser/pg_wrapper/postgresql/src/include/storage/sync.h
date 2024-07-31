@@ -3,7 +3,7 @@
  * sync.h
  *	  File synchronization management code.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/storage/sync.h
@@ -13,7 +13,7 @@
 #ifndef SYNC_H
 #define SYNC_H
 
-#include "storage/relfilenode.h"
+#include "storage/relfilelocator.h"
 
 /*
  * Type of sync request.  These are used to manage the set of pending
@@ -51,7 +51,7 @@ typedef struct FileTag
 {
 	int16		handler;		/* SyncRequestHandler value, saving space */
 	int16		forknum;		/* ForkNumber, saving space */
-	RelFileNode rnode;
+	RelFileLocator rlocator;
 	uint32		segno;
 } FileTag;
 
@@ -60,7 +60,6 @@ extern void SyncPreCheckpoint(void);
 extern void SyncPostCheckpoint(void);
 extern void ProcessSyncRequests(void);
 extern void RememberSyncRequest(const FileTag *ftag, SyncRequestType type);
-extern void EnableSyncRequestForwarding(void);
 extern bool RegisterSyncRequest(const FileTag *ftag, SyncRequestType type,
 								bool retryOnError);
 

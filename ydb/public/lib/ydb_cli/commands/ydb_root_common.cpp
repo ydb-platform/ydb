@@ -17,6 +17,9 @@
 #include "ydb_workload.h"
 
 #include <ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/credentials.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/from_file.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/jwt_token_source.h>
 
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
@@ -54,8 +57,8 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TC
 void TClientCommandRootCommon::ValidateSettings() {
     if (!Settings.EnableSsl.Defined()) {
         Cerr << "Missing ssl enabling flag in client settings" << Endl;
-    } else if (!Settings.UseOAuthToken.Defined()) {
-        Cerr << "Missing OAuth token usage flag in client settings" << Endl;
+    } else if (!Settings.UseAccessToken.Defined()) {
+        Cerr << "Missing access token usage flag in client settings" << Endl;
     } else if (!Settings.UseDefaultTokenFile.Defined()) {
         Cerr << "Missing default token file usage flag in client settings" << Endl;
     } else if (!Settings.UseIamAuth.Defined()) {
@@ -66,6 +69,8 @@ void TClientCommandRootCommon::ValidateSettings() {
         Cerr << "Missing static credentials usage flag in client settings" << Endl;
     } else if (!Settings.MentionUserAccount.Defined()) {
         Cerr << "Missing user account mentioning flag in client settings" << Endl;
+    } else if (!Settings.UseOauth2TokenExchange.Defined()) {
+        Cerr << "Missing OAuth 2.0 token exchange credentials usage flag in client settings" << Endl;
     } else if (!Settings.YdbDir) {
         Cerr << "Missing YDB directory in client settings" << Endl;
     } else {
@@ -75,9 +80,10 @@ void TClientCommandRootCommon::ValidateSettings() {
 }
 
 void TClientCommandRootCommon::FillConfig(TConfig& config) {
-    config.UseOAuthToken = Settings.UseOAuthToken.GetRef();
+    config.UseAccessToken = Settings.UseAccessToken.GetRef();
     config.UseIamAuth = Settings.UseIamAuth.GetRef();
     config.UseStaticCredentials = Settings.UseStaticCredentials.GetRef();
+    config.UseOauth2TokenExchange = Settings.UseOauth2TokenExchange.GetRef();
     config.UseExportToYt = Settings.UseExportToYt.GetRef();
     SetCredentialsGetter(config);
 }
@@ -92,6 +98,12 @@ void TClientCommandRootCommon::SetCredentialsGetter(TConfig& config) {
         if (config.UseStaticCredentials) {
             if (config.StaticCredentials.User) {
                 return CreateLoginCredentialsProviderFactory(config.StaticCredentials);
+            }
+        }
+
+        if (config.UseOauth2TokenExchange) {
+            if (config.Oauth2KeyFile) {
+                return CreateOauth2TokenExchangeFileCredentialsProviderFactory(config.Oauth2KeyFile, config.IamEndpoint);
             }
         }
 
@@ -177,9 +189,9 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         opts.AddLongOption("sa-key-file", saKeyHelp).RequiredArgument("PATH").StoreResult(&SaKeyFile);
     }
 
-    if (config.UseOAuthToken) {
+    if (config.UseAccessToken) {
         TStringBuilder tokenHelp;
-        tokenHelp << "OAuth token file" << Endl
+        tokenHelp << "Access token file" << Endl
             << "  Token search order:" << Endl
             << "    1. This option" << Endl
             << "    2. Profile specified with --profile option" << Endl
@@ -211,6 +223,80 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         opts.AddLongOption("password-file", passwordHelp).RequiredArgument("PATH").StoreResult(&PasswordFile);
 
         opts.AddLongOption("no-password", "Do not ask for user password (if empty)").Optional().StoreTrue(&DoNotAskForPassword);
+    }
+
+    if (config.UseOauth2TokenExchange) {
+        TOauth2TokenExchangeParams defaultParams;
+        TJwtTokenSourceParams defaultJwtParams;
+        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+
+#define FIELD(name) "    " << colors.BoldColor() << name << colors.OldColor() << ": "
+#define TYPE(type) "[" << colors.YellowColor() << type << colors.OldColor() << "] "
+#define TYPE2(type1, type2) "[" << colors.YellowColor() << type1 << colors.OldColor() << " | " << colors.YellowColor() << type2 << colors.OldColor() << "] "
+#define DEFAULT(value) " (default: " << colors.CyanColor() << value << colors.OldColor() << ")"
+
+        TStringBuilder oauth2TokenExchangeHelp;
+        oauth2TokenExchangeHelp << "OAuth 2.0 RFC8693 token exchange credentials parameters json file" << Endl;
+        if (config.HelpCommandVerbosiltyLevel <= 1) {
+            oauth2TokenExchangeHelp << "  Use -hh option to see file format description" << Endl;
+        }
+        oauth2TokenExchangeHelp
+            << "  Parameters file search order:" << Endl
+            << "    1. This option" << Endl
+            << "    2. Profile specified with --profile option" << Endl
+            << "    3. \"YDB_OAUTH2_KEY_FILE\" environment variable" << Endl
+            << "    4. Active configuration profile" << Endl << Endl
+            << "  Detailed information about OAuth 2.0 token exchange protocol: https://www.rfc-editor.org/rfc/rfc8693" << Endl
+            << "  Detailed description about file parameters: https://ydb.tech/docs/en/reference/ydb-cli/connect" << Endl
+            << Endl;
+
+        if (config.HelpCommandVerbosiltyLevel >= 2) {
+            TStringBuilder supportedJwtAlgorithms;
+            for (const TString& alg : GetSupportedOauth2TokenExchangeJwtAlgorithms()) {
+                if (supportedJwtAlgorithms) {
+                    supportedJwtAlgorithms << ", ";
+                }
+                supportedJwtAlgorithms << colors.BoldColor() << alg << colors.OldColor();
+            }
+
+            oauth2TokenExchangeHelp
+                << "  Fields of json file:" << Endl
+                << FIELD("grant-type") "          " TYPE("string") "Grant type" DEFAULT(defaultParams.GrantType_) << Endl
+                << FIELD("res") "                 " TYPE("string") "Resource (optional)" << Endl
+                << FIELD("aud") "                 " TYPE2("string", "list of strings") "Audience option for token exchange request (optional)" << Endl
+                << FIELD("scope") "               " TYPE2("string", "list of strings") "Scope (optional)" << Endl
+                << FIELD("requested-token-type") "" TYPE("string") "Requested token type" DEFAULT(defaultParams.RequestedTokenType_) << Endl
+                << FIELD("subject-credentials") " " TYPE("creds_json") "Subject credentials (optional)" << Endl
+                << FIELD("actor-credentials") "   " TYPE("creds_json") "Actor credentials (optional)" << Endl
+                << Endl
+                << "  Fields of " << colors.BoldColor() << "creds_json" << colors.OldColor() << " (JWT):" << Endl
+                << FIELD("type") "                " TYPE("string") "Token source type. Set " << colors.BoldColor() << "JWT" << colors.OldColor() << Endl
+                << FIELD("alg") "                 " TYPE("string") "Algorithm for JWT signature. Supported algorithms: " << supportedJwtAlgorithms << Endl
+                << FIELD("private-key") "         " TYPE("string") "(Private) key in PEM format for JWT signature" << Endl
+                << FIELD("kid") "                 " TYPE("string") "Key id JWT standard claim (optional)" << Endl
+                << FIELD("iss") "                 " TYPE("string") "Issuer JWT standard claim (optional)" << Endl
+                << FIELD("sub") "                 " TYPE("string") "Subject JWT standard claim (optional)" << Endl
+                << FIELD("aud") "                 " TYPE2("string", "list of strings") "Audience JWT standard claim (optional)" << Endl
+                << FIELD("jti") "                 " TYPE("string") "JWT ID JWT standard claim (optional)" << Endl
+                << FIELD("ttl") "                 " TYPE("string") "Token TTL" DEFAULT(defaultJwtParams.TokenTtl_) << Endl
+                << Endl
+                << "  Fields of " << colors.BoldColor() << "creds_json" << colors.OldColor() << " (FIXED):" << Endl
+                << FIELD("type") "                " TYPE("string") "Token source type. Set " << colors.BoldColor() << "FIXED" << colors.OldColor() << Endl
+                << FIELD("token") "               " TYPE("string") "Token value" << Endl
+                << FIELD("token-type") "          " TYPE("string") "Token type value. It will become subject_token_type/actor_token_type parameter in token exchange request (https://www.rfc-editor.org/rfc/rfc8693)" << Endl
+                << Endl;
+        }
+
+        oauth2TokenExchangeHelp
+            << "  Note that additionally you need to set " << colors.BoldColor() << "--iam-endpoint" << colors.OldColor() << " option" << Endl
+            << "    in url format (SCHEMA://HOST:PORT/PATH) to configure endpoint.";
+
+        opts.AddLongOption("oauth2-key-file", oauth2TokenExchangeHelp).RequiredArgument("PATH").StoreResult(&Oauth2KeyFile);
+
+#undef DEFAULT
+#undef TYPE2
+#undef TYPE
+#undef FIELD
     }
 
     if (config.UseIamAuth) {
@@ -274,7 +360,7 @@ namespace {
     }
 }
 
-bool TClientCommandRootCommon::TryGetParamFromProfile(const TString& name, std::shared_ptr<IProfile> profile, bool explicitOption, 
+bool TClientCommandRootCommon::TryGetParamFromProfile(const TString& name, std::shared_ptr<IProfile> profile, bool explicitOption,
                                                       std::function<bool(const TString&, const TString&, bool)> callback) {
     if (profile && profile->Has(name)) {
         return callback(profile->GetValue(name).as<TString>(), GetProfileSource(profile, explicitOption), explicitOption);
@@ -527,7 +613,7 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
     }
     auto authValue = profile->GetValue("authentication");
     if (!authValue["method"]) {
-        MisuseErrors.push_back("Configuration profile has \"authentication\" but does not has \"method\" in it");
+        MisuseErrors.push_back("Configuration profile has \"authentication\" but does not have \"method\" in it");
         return false;
     }
     TString authMethod = authValue["method"].as<TString>();
@@ -560,11 +646,14 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
         return true;
     }
     bool knownMethod = false;
+    if (config.UseOauth2TokenExchange) {
+        knownMethod |= (authMethod == "oauth2-key-file");
+    }
     if (config.UseIamAuth) {
         knownMethod |= (authMethod == "iam-token" || authMethod == "yc-token" || authMethod == "sa-key-file" ||
                         authMethod == "token-file" || authMethod == "yc-token-file");
     }
-    if (config.UseOAuthToken) {
+    if (config.UseAccessToken) {
         knownMethod |= (authMethod == "ydb-token" || authMethod == "token-file");
     }
     if (config.UseStaticCredentials) {
@@ -615,6 +704,22 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
         }
         if (IsVerbose()) {
             config.ConnectionParams["token"].push_back({fileContent, GetProfileSource(profile, explicitOption)});
+        }
+    } else if (authMethod == "oauth2-key-file") {
+        TString filePath = authData.as<TString>();
+        if (filePath.StartsWith("~")) {
+            filePath = HomeDir + filePath.substr(1);
+        }
+        if (!IsAuthSet && (explicitOption || !Profile)) {
+            if (IsVerbose()) {
+                PrintSettingFromProfile("oauth2 key file (oauth2-key-file)", profile, explicitOption);
+            }
+            config.Oauth2KeyFile = filePath;
+            config.ChosenAuthMethod = "oauth2-key-file";
+            IsAuthSet = true;
+        }
+        if (IsVerbose()) {
+            config.ConnectionParams["oauth2-key-file"].push_back({filePath, GetProfileSource(profile, explicitOption)});
         }
     } else if (authMethod == "yc-token") {
         if (!IsAuthSet && (explicitOption || !Profile)) {
@@ -669,7 +774,7 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
     } else if (authMethod == "ydb-token") {
         if (!IsAuthSet && (explicitOption || !Profile)) {
             if (IsVerbose()) {
-                PrintSettingFromProfile("OAuth token (ydb-token)", profile, explicitOption);
+                PrintSettingFromProfile("Access token (ydb-token)", profile, explicitOption);
             }
             config.SecurityToken = authData.as<TString>();
             config.ChosenAuthMethod = "token";
@@ -731,7 +836,8 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
     size_t explicitAuthMethodCount = (size_t)(config.ParseResult->Has("iam-token-file")) + (size_t)(config.ParseResult->Has("token-file"))
         + (size_t)(!YCTokenFile.empty())
         + (size_t)UseMetadataCredentials + (size_t)(!SaKeyFile.empty())
-        + (size_t)(!UserName.empty() || !PasswordFile.empty() || DoNotAskForPassword);
+        + (size_t)(!UserName.empty() || !PasswordFile.empty() || DoNotAskForPassword)
+        + (size_t)(!Oauth2KeyFile.empty());
 
     switch (explicitAuthMethodCount) {
     case 1:
@@ -742,6 +848,13 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
             if (IsVerbose()) {
                 Cerr << "Using token from file provided with explicit option" << Endl;
                 config.ConnectionParams["token"].push_back({config.SecurityToken, "file provided with explicit --token-file option"});
+            }
+        } else if (Oauth2KeyFile) {
+            config.Oauth2KeyFile = Oauth2KeyFile;
+            config.ChosenAuthMethod = "oauth2-key-file";
+            if (IsVerbose()) {
+                Cerr << "Using oauth2 key file provided with --oauth2-key-file option" << Endl;
+                config.ConnectionParams["oauth2-key-file"].push_back({config.Oauth2KeyFile, "explicit --oauth2-key-file option"});
             }
         } else if (config.ParseResult->Has("iam-token-file")) {
             config.SecurityToken = ReadFromFile(TokenFile, "token");
@@ -864,12 +977,12 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
                 config.ConnectionParams["sa-key-file"].push_back({envSaKeyFile, "SA_KEY_FILE enviroment variable"});
             }
         }
-        if (config.UseOAuthToken) {
+        if (config.UseAccessToken) {
             TString envYdbToken = GetEnv("YDB_TOKEN");
             if (!envYdbToken.empty()) {
                 if (!IsAuthSet) {
                     if (IsVerbose()) {
-                        Cerr << "Using OAuth token from YDB_TOKEN env variable" << Endl;
+                        Cerr << "Using access token from YDB_TOKEN env variable" << Endl;
                     }
                     config.ChosenAuthMethod = "token";
                     config.SecurityToken = envYdbToken;
@@ -919,6 +1032,24 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
             }
         }
 
+        if (config.UseOauth2TokenExchange) {
+            TString envOauth2KeyFile = GetEnv("YDB_OAUTH2_KEY_FILE");
+            if (!envOauth2KeyFile.empty()) {
+                if (!IsAuthSet) {
+                    if (IsVerbose()) {
+                        Cerr << "Using oauth2 key file from YDB_OAUTH2_KEY_FILE env variable" << Endl;
+                    }
+                    config.ChosenAuthMethod = "oauth2-key-file";
+                    config.Oauth2KeyFile = envOauth2KeyFile;
+                    IsAuthSet = true;
+                }
+                if (!IsVerbose()) {
+                    break;
+                }
+                config.ConnectionParams["oauth2-key-file"].push_back({envOauth2KeyFile, "YDB_OAUTH2_KEY_FILE enviroment variable"});
+            }
+        }
+
         // Priority 4. No auth methods from environment variables too. Checking active configuration profile.
         // (if --profile option is not set)
         if (GetCredentialsFromProfile(ProfileManager->GetActiveProfile(), config, false) && !IsVerbose()) {
@@ -962,6 +1093,9 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
         }
         if (UseMetadataCredentials) {
             str << " UseMetadataCredentials (true)";
+        }
+        if (Oauth2KeyFile) {
+            str << " OAuth2KeyFile (" << Oauth2KeyFile << ")";
         }
 
         MisuseErrors.push_back(TStringBuilder() << str << ". Choose exactly one of them");

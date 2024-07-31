@@ -113,7 +113,7 @@ private:
         insertedRequest.From = 0;
         insertedRequest.To = 10_MB;
         auto it = InflightRequests_.try_emplace(path, std::move(insertedRequest));
-        Y_ABORT_UNLESS(it.second, "couldn't insert request for path: %s", insertedRequest.RequestId.AsGuidString().c_str());
+        Y_ABORT_UNLESS(it.second, "couldn't insert request for path: %s", path.c_str());
 
         const auto& request = it.first->second;
         auto s3Request = new TEvRequestS3Range(

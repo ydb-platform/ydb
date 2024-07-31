@@ -22,6 +22,7 @@ Y_UNIT_TEST_SUITE(TPQTest) {
 
 Y_UNIT_TEST(TestDirectReadHappyWay) {
     TTestContext tc;
+    tc.EnableDetailedPQLog = true;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
@@ -65,6 +66,7 @@ Y_UNIT_TEST(TestDirectReadHappyWay) {
 
 Y_UNIT_TEST(DirectReadBadSessionOrPipe) {
     TTestContext tc;
+    tc.EnableDetailedPQLog = true;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
@@ -122,6 +124,7 @@ Y_UNIT_TEST(DirectReadBadSessionOrPipe) {
 }
 Y_UNIT_TEST(DirectReadOldPipe) {
     TTestContext tc;
+    tc.EnableDetailedPQLog = true;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {

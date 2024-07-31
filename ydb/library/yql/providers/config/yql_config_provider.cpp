@@ -650,6 +650,21 @@ namespace {
                 }
 
                 Types.FilterPushdownOverJoinOptionalSide = (name == "FilterPushdownOverJoinOptionalSide");
+            } else if (name == "RotateJoinTree") {
+                if (args.size() > 1) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
+                    return false;
+                }
+
+                bool res = true;
+                if (!args.empty()) {
+                    if (!TryFromString(args[0], res)) {
+                        ctx.AddError(TIssue(pos, TStringBuilder() << "Expected bool, but got: " << args[0]));
+                        return false;
+                    }
+                }
+
+                Types.RotateJoinTree = res;
             }
             else if (name == "SQL") {
                 if (args.size() > 1) {

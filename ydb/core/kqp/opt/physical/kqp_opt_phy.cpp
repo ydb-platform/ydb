@@ -88,8 +88,6 @@ public:
         AddHandler(0, &TCoTake::Match, HNDL(PropagatePrecomuteTake<false>));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PropagatePrecomuteFlatmap<false>));
 
-        AddHandler(0, &TDqCnHashShuffle::Match, HNDL(BuildHashShuffleByKeyStage));
-
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(ExpandAggregatePhase));
         AddHandler(0, &TCoAggregateCombineState::Match, HNDL(ExpandAggregatePhase));
         AddHandler(0, &TCoAggregateMergeState::Match, HNDL(ExpandAggregatePhase));
@@ -252,13 +250,6 @@ protected:
         DumpAppliedRule("PushOlapAggregate", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
-    TMaybeNode<TExprBase> BuildHashShuffleByKeyStage(TExprBase node, TExprContext& ctx) {
-        auto output = DqBuildHashShuffleByKeyStage(node, ctx, {});
-        DumpAppliedRule("BuildHashShuffleByKeyStage", node.Ptr(), output.Ptr(), ctx);
-        return TExprBase(output);
-    }
-
 
     TMaybeNode<TExprBase> ExpandAggregatePhase(TExprBase node, TExprContext& ctx) {
         auto output = ExpandAggregatePeepholeImpl(node.Ptr(), ctx, TypesCtx, KqpCtx.Config->HasOptUseFinalizeByKey(), false);
@@ -430,7 +421,7 @@ protected:
         // It is now possible as we don't use datashard transactions for reads in data queries.
         bool pushLeftStage = !KqpCtx.IsDataQuery() && AllowFuseJoinInputs(node);
         TExprBase output = DqBuildJoin(node, ctx, optCtx, *getParents(), IsGlobal,
-            pushLeftStage, KqpCtx.Config->GetHashJoinMode()
+            pushLeftStage, KqpCtx.Config->GetHashJoinMode(), false
         );
         DumpAppliedRule("BuildJoin", node.Ptr(), output.Ptr(), ctx);
         return output;

@@ -30,6 +30,7 @@ public:
     void Configure(const TDispatcherConfigPtr& config)
     {
         HeavyPool_->Configure(config->HeavyPoolSize);
+        HeavyPool_->Configure(config->HeavyPoolPollingPeriod);
         CompressionPool_->Configure(config->CompressionPoolSize);
         FairShareCompressionPool_->Configure(config->CompressionPoolSize);
         AlertOnMissingRequestInfo_.store(config->AlertOnMissingRequestInfo);

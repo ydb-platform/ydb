@@ -271,6 +271,7 @@ struct TOperation
     NYson::TYsonString Result;
 
     NYson::TYsonString SlotIndexPerPoolTree;
+    NYson::TYsonString SchedulingAttributesPerPoolTree;
     NYson::TYsonString Alerts;
     NYson::TYsonString AlertEvents;
 
@@ -333,6 +334,7 @@ struct TJob
     std::optional<TString> Pool;
     std::optional<TString> MonitoringDescriptor;
     std::optional<ui64> JobCookie;
+    NYson::TYsonString ArchiveFeatures;
 
     std::optional<bool> IsStale;
 

@@ -9,8 +9,8 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/testlib
     ydb/core/persqueue
+    ydb/core/testlib
 )
 
 YQL_LAST_ABI_VERSION()

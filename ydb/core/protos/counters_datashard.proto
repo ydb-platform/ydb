@@ -31,6 +31,7 @@ enum ESimpleCounters {
     COUNTER_PROPOSE_QUEUE_SIZE = 21                                [(CounterOpts) = {Name: "ProposeQueueSize"}];
     COUNTER_DELAYED_PROPOSE_QUEUE_SIZE = 22                        [(CounterOpts) = {Name: "DelayedProposeQueueSize"}];
     COUNTER_WAITING_TX_QUEUE_SIZE = 23                             [(CounterOpts) = {Name: "WaitingTxQueueSize"}];
+    COUNTER_CHANGE_QUEUE_RESERVED_CAPACITY = 24                    [(CounterOpts) = {Name: "ChangeQueueReservedCapacity"}];
 }
 
 enum ECumulativeCounters {
@@ -489,4 +490,5 @@ enum ETxTypes {
     TXTYPE_CLEANUP_VOLATILE = 80                          [(TxTypeOpts) = {Name: "TxCleanupVolatile"}];
     TXTYPE_PLAN_PREDICTED_TXS = 81                        [(TxTypeOpts) = {Name: "TxPlanPredictedTxs"}];
     TXTYPE_WRITE = 82                                     [(TxTypeOpts) = {Name: "TxWrite"}];
+    TXTYPE_REMOVE_SCHEMA_SNAPSHOTS = 83                   [(TxTypeOpts) = {Name: "TxRemoveSchemaSnapshots"}];
 }

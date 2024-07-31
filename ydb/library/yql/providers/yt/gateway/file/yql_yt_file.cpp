@@ -653,7 +653,7 @@ public:
             writer.OnBeginMap();
             if (NCommon::HasResOrPullOption(*node, "type")) {
                 writer.OnKeyedItem("Type");
-                NCommon::WriteResOrPullType(writer, node->Child(0)->GetTypeAnn(), columns);
+                NCommon::WriteResOrPullType(writer, node->Child(0)->GetTypeAnn(), TColumnOrder(columns));
             }
 
             bool truncated = false;
@@ -933,8 +933,14 @@ public:
                 const auto nativeYtTypeCompatibility = options.Config()->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
                 const bool rowSpecCompactForm = options.Config()->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
                 dstRowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], nativeYtTypeCompatibility, rowSpecCompactForm);
-                if (!append || !attrs.HasKey("schema")) {
-                    attrs["schema"] = RowSpecToYTSchema(spec[YqlRowSpecAttribute], nativeYtTypeCompatibility).ToNode();
+                NYT::TNode columnGroupsSpec;
+                if (options.Config()->OptimizeFor.Get(cluster).GetOrElse(NYT::OF_LOOKUP_ATTR) != NYT::OF_LOOKUP_ATTR) {
+                    if (auto setting = NYql::GetSetting(publish.Settings().Ref(), EYtSettingType::ColumnGroups)) {
+                        columnGroupsSpec = NYT::NodeFromYsonString(setting->Tail().Content());
+                    }
+                }
+                if (!append || !attrs.HasKey("schema") || !columnGroupsSpec.IsUndefined()) {
+                    attrs["schema"] = RowSpecToYTSchema(spec[YqlRowSpecAttribute], nativeYtTypeCompatibility, columnGroupsSpec).ToNode();
                 }
                 TOFStream ofAttr(destFilePath + ".attr");
                 ofAttr.Write(NYT::NodeToYsonString(attrs, NYson::EYsonFormat::Pretty));

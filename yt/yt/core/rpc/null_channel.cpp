@@ -4,6 +4,7 @@
 
 #include <yt/yt/core/ytree/helpers.h>
 
+#include <yt/yt/core/misc/memory_usage_tracker.h>
 #include <yt/yt/core/misc/singleton.h>
 
 namespace NYT::NRpc {
@@ -46,6 +47,11 @@ public:
     int GetInflightRequestCount() override
     {
         return 0;
+    }
+
+    IMemoryUsageTrackerPtr GetChannelMemoryTracker() override
+    {
+        return GetNullMemoryUsageTracker();
     }
 
 private:

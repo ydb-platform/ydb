@@ -131,7 +131,8 @@ private:
     bool FinishedFlag = false;
 protected:
     virtual bool DoApply(IDataReader& owner) const override;
-    virtual bool DoExecute() override;
+    virtual TConclusionStatus DoExecuteImpl() override;
+
 public:
     virtual TString GetTaskClassIdentifier() const override {
         return "STEP_ACTION";
@@ -288,6 +289,17 @@ public:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     TSnapshotFilter()
         : TBase("SNAPSHOT") {
+    }
+};
+
+class TDeletionFilter: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+
+public:
+    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    TDeletionFilter()
+        : TBase("DELETION") {
     }
 };
 

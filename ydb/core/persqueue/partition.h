@@ -66,7 +66,6 @@ struct TTransaction {
     explicit TTransaction(TSimpleSharedPtr<TEvPQ::TEvProposePartitionConfig> proposeConfig)
         : ProposeConfig(proposeConfig)
     {
-
         Y_ABORT_UNLESS(ProposeConfig);
     }
 
@@ -140,6 +139,9 @@ private:
     struct THasDataReq;
     struct THasDataDeadline;
     using TMessageQueue = std::deque<TMessage>;
+    using TGetWriteInfoResp =
+        std::variant<TAutoPtr<TEvPQ::TEvGetWriteInfoResponse>,
+                     TAutoPtr<TEvPQ::TEvGetWriteInfoError>>;
 
     bool IsActive() const;
     bool CanWrite() const;
@@ -284,6 +286,7 @@ private:
     ui32 NextChannel(bool isHead, ui32 blobSize);
     ui64 GetSizeLag(i64 offset);
     std::pair<TKey, ui32> GetNewWriteKey(bool headCleared);
+    std::pair<TKey, ui32> GetNewWriteKeyImpl(bool headCleared, bool needCompaction, ui32 headSize);
     THashMap<TString, TOwnerInfo>::iterator DropOwner(THashMap<TString, TOwnerInfo>::iterator& it,
                                                       const TActorContext& ctx);
     // will return rcount and rsize also
@@ -328,7 +331,7 @@ private:
 
     void SendWriteInfoRequest(const TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate>& event);
     void WriteInfoResponseHandler(const TActorId& sender,
-                        std::variant<TAutoPtr<TEvPQ::TEvGetWriteInfoResponse>, TAutoPtr<TEvPQ::TEvGetWriteInfoError>>&& ev,
+                        TGetWriteInfoResp&& ev,
                         const TActorContext& ctx);
 
 
@@ -634,10 +637,16 @@ private:
     TPartitionGraph PartitionGraph;
     TPartitionSourceManager SourceManager;
 
+    struct TSourceIdPostPersistInfo {
+        ui64 SeqNo = 0;
+        ui64 Offset = 0;
+    };
+
     THashSet<TString> TxAffectedSourcesIds;
     THashSet<TString> WriteAffectedSourcesIds;
     THashSet<TString> TxAffectedConsumers;
     THashSet<TString> SetOffsetAffectedConsumers;
+    THashMap<TString, TSourceIdPostPersistInfo> TxSourceIdForPostPersist;
 
     ui32 MaxBlobSize;
     const ui32 TotalLevels = 4;
@@ -929,6 +938,16 @@ private:
     void DestroyActor(const TActorContext& ctx);
 
     TActorId OffloadActor;
+
+    void AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
+                     TEvKeyValue::TEvRequest* request,
+                     const TActorContext& ctx);
+    void RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFormedBlobInfo>& formedBlobs,
+                           ProcessParameters& parameters,
+                           ui32 curWrites,
+                           TEvKeyValue::TEvRequest* request,
+                           const TActorContext& ctx);
+    ui32 RenameTmpCmdWrites(TEvKeyValue::TEvRequest* request);
 };
 
 } // namespace NKikimr::NPQ

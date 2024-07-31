@@ -307,6 +307,10 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
         return true;
     }
 
+    bool IsReasonableToUseSpilling() const override {
+        return false;
+    }
+
     void FreeQuota(ui64 memorySize) override {
         Y_ABORT_UNLESS(Quota >= memorySize);
         Quota -= memorySize;
@@ -326,6 +330,10 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
     ui64 GetMaxMemorySize() const override {
         return MaxMemorySize;
     };
+
+    TString MemoryConsumptionDetails() const override {
+        return TString();
+    }
 
     virtual bool AllocateExtraQuota(ui64) {
         return false;

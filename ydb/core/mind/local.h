@@ -46,17 +46,26 @@ struct TRegistrationInfo {
 struct TDrainProgress : public TThrRefBase {
     std::atomic_uint64_t Events = 0;
     std::atomic_uint64_t OnlineTabletsEstimate = 0;
+    std::atomic_bool ValidEstimate = false;
 
     bool CheckCompleted() {
         return Events.load() == 0;
     }
 
-    ui64 GetOnlineTabletsEstimate() {
-        return OnlineTabletsEstimate.load();
+    std::optional<ui64> GetOnlineTabletsEstimate() {
+        if (ValidEstimate.load()) {
+            // A race here is safe as ValidEstimate will not become false after once becoming true
+            return OnlineTabletsEstimate.load();
+        } else {
+            return std::nullopt;
+        }
     }
 
     void UpdateEstimate(i64 diff) {
         OnlineTabletsEstimate += diff;
+        if (diff != 0) {
+            ValidEstimate = true;
+        }
     }
 
     void OnSend() {

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(2.29.0)
+VERSION(2.31.0)
 
 LICENSE(Apache-2.0)
 
@@ -86,12 +86,17 @@ PY_SRCS(
     google/oauth2/service_account.py
     google/oauth2/sts.py
     google/oauth2/utils.py
+    google/oauth2/webauthn_handler.py
+    google/oauth2/webauthn_handler_factory.py
+    google/oauth2/webauthn_types.py
 )
 
 RESOURCE_FILES(
     PREFIX contrib/python/google-auth/py3/
     .dist-info/METADATA
     .dist-info/top_level.txt
+    google/auth/py.typed
+    google/oauth2/py.typed
 )
 
 END()

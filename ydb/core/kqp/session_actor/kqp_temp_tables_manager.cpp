@@ -24,13 +24,20 @@ using namespace NThreading;
 
 namespace {
 
+using TPath = TVector<TString>;
+
 class TKqpTempTablesManager : public TActorBootstrapped<TKqpTempTablesManager> {
     struct TEvPrivate {
         enum EEv {
-            EvResult = EventSpaceBegin(TEvents::ES_PRIVATE),
+            EvDropTableResult = EventSpaceBegin(TEvents::ES_PRIVATE),
+            EvRemoveDirResult
         };
 
-        struct TEvResult : public TEventLocal<TEvResult, EEv::EvResult> {
+        struct TEvDropTableResult : public TEventLocal<TEvDropTableResult, EEv::EvDropTableResult> {
+            IKqpGateway::TGenericResult Result;
+        };
+
+        struct TEvRemoveDirResult : public TEventLocal<TEvRemoveDirResult, EEv::EvRemoveDirResult> {
             IKqpGateway::TGenericResult Result;
         };
     };
@@ -39,30 +46,121 @@ public:
         return NKikimrServices::TActivity::KQP_SESSION_ACTOR;
     }
 
-    TKqpTempTablesManager(TKqpTempTablesState tempTablesState, const TActorId& target,
+    TKqpTempTablesManager(
+            TKqpTempTablesState tempTablesState,
+            TIntrusiveConstPtr<NACLib::TUserToken> userToken,
+            const TActorId& target,
             const TString& database)
         : TempTablesState(std::move(tempTablesState))
+        , UserToken(std::move(userToken))
         , Target(target)
         , Database(database)
     {}
 
     void Bootstrap() {
-        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
+        if (TempTablesState.TempTables.empty()) {
+            Finish();
+            return;
+        }
 
-        for (const auto& [path, info] : TempTablesState.TempTables) {
-            auto ev = MakeHolder<TRequest>();
+        PathsToTraverse.push_back(
+            NKikimr::SplitPath(GetSessionDirPath(Database, TempTablesState.SessionId)));
+        TraverseNext();
+        Become(&TKqpTempTablesManager::PathSearchState);
+    }
+
+
+    STATEFN(PathSearchState) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigate);
+            default:
+                Y_ABORT("Unexpected event 0x%x at TKqpTempTablesManager::PathSearchState", ev->GetTypeRewrite());
+        }
+    }
+
+    STATEFN(DropTablesState) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPrivate::TEvDropTableResult, HandleDropTable);
+            default:
+                Y_ABORT("Unexpected event 0x%x at TKqpTempTablesManager::DropTablesState", ev->GetTypeRewrite());
+        }
+    }
+
+    STATEFN(RmDirsState) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPrivate::TEvRemoveDirResult, HandleRemoveDir);
+            default:
+                Y_ABORT("Unexpected event 0x%x at TKqpTempTablesManager::RmDirsState", ev->GetTypeRewrite());
+        }
+    }
+
+private:
+    void TraverseNext() {
+        auto schemeCacheRequest = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+
+        schemeCacheRequest->UserToken = UserToken;
+        schemeCacheRequest->ResultSet.resize(PathsToTraverse.size());
+
+        for (size_t i = 0; i < PathsToTraverse.size(); ++i) {
+            DirsToDrop.push_back(PathsToTraverse[i]);
+            schemeCacheRequest->ResultSet[i].Path = PathsToTraverse[i];
+            schemeCacheRequest->ResultSet[i].Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
+            schemeCacheRequest->ResultSet[i].SyncVersion = false;
+            schemeCacheRequest->ResultSet[i].ShowPrivatePath = true;
+        }
+
+        PathsToTraverse.clear();
+
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeCacheRequest.Release()));
+    }
+
+    void HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
+        if (navigate->ErrorCount != 0) {
+            Finish();
+        }
+
+        for (const auto& entry : navigate->ResultSet) {
+            if (entry.ListNodeEntry) {
+                for (const auto& child : entry.ListNodeEntry->Children) {
+                    if (child.Kind == NSchemeCache::TSchemeCacheNavigate::KindPath) {
+                        PathsToTraverse.push_back(entry.Path);
+                        PathsToTraverse.back().push_back(child.Name);
+                    } else if (child.Kind == NSchemeCache::TSchemeCacheNavigate::KindTable) {
+                        TablesToDrop.push_back(entry.Path);
+                        TablesToDrop.back().push_back(child.Name);
+                    }
+                }
+            }
+        }
+
+        if (!PathsToTraverse.empty()) {
+            TraverseNext();
+        } else {
+            DropTables();
+        }
+    }
+
+    void DropTables() {
+        if (TablesToDrop.empty()) {
+            RemoveDirs();
+            return;
+        }
+
+        for (const auto& path : TablesToDrop) {
+            auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
             auto& record = ev->Record;
 
             record.SetDatabaseName(Database);
-            if (info.UserToken) {
-                record.SetUserToken(info.UserToken->GetSerializedToken());
+            if (UserToken) {
+                record.SetUserToken(UserToken->GetSerializedToken());
             }
 
             auto* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
-            modifyScheme->SetWorkingDir(info.WorkingDir);
+            modifyScheme->SetWorkingDir(NKikimr::JoinPath(TVector<TString>(std::begin(path), std::prev(std::end(path)))));
             modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
             auto* drop = modifyScheme->MutableDrop();
-            drop->SetName(info.Name + TempTablesState.SessionId);
+            drop->SetName(path.back());
 
             auto promise = NewPromise<IKqpGateway::TGenericResult>();
             IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, true);
@@ -71,52 +169,97 @@ public:
             auto actorSystem = TlsActivationContext->AsActorContext().ExecutorThread.ActorSystem;
             auto selfId = SelfId();
             promise.GetFuture().Subscribe([actorSystem, selfId](const TFuture<IKqpGateway::TGenericResult>& future) {
-                auto ev = MakeHolder<TEvPrivate::TEvResult>();
+                auto ev = MakeHolder<TEvPrivate::TEvDropTableResult>();
                 ev->Result = future.GetValue();
                 actorSystem->Send(selfId, ev.Release());
             });
         }
 
-        if (TempTablesState.TempTables.empty()) {
-            Send(Target, new TEvents::TEvGone());
-            PassAway();
+        Become(&TKqpTempTablesManager::DropTablesState);
+    }
+
+    void HandleDropTable(TEvPrivate::TEvDropTableResult::TPtr&) {
+        if (++DroppedTablesCount == TablesToDrop.size()) {
+            RemoveDirs();
+        }
+    }
+
+    void RemoveDirs() {
+        RemoveNextDir();
+        Become(&TKqpTempTablesManager::RmDirsState);
+    }
+
+    void RemoveNextDir() {
+        if (DirsToDrop.empty()) {
+            Finish();
             return;
         }
 
-        Become(&TKqpTempTablesManager::WaitState);
-    }
+        auto dirToDrop = DirsToDrop.back();
+        DirsToDrop.pop_back();
 
-public:
-    STATEFN(WaitState) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvPrivate::TEvResult, HandleResult);
-            default:
-                Y_ABORT("Unexpected event 0x%x at TKqpTempTablesManager::WaitState", ev->GetTypeRewrite());
+        auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto& record = ev->Record;
+
+        record.SetDatabaseName(Database);
+        if (UserToken) {
+            record.SetUserToken(UserToken->GetSerializedToken());
         }
+
+        auto* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
+        modifyScheme->SetWorkingDir(NKikimr::JoinPath(TVector<TString>(std::begin(dirToDrop), std::prev(std::end(dirToDrop)))));
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpRmDir);
+        auto* drop = modifyScheme->MutableDrop();
+        drop->SetName(dirToDrop.back());
+
+        auto promise = NewPromise<IKqpGateway::TGenericResult>();
+        IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, true);
+        RegisterWithSameMailbox(requestHandler);
+
+        auto actorSystem = TlsActivationContext->AsActorContext().ExecutorThread.ActorSystem;
+        auto selfId = SelfId();
+        promise.GetFuture().Subscribe([actorSystem, selfId](const TFuture<IKqpGateway::TGenericResult>& future) {
+            auto ev = MakeHolder<TEvPrivate::TEvRemoveDirResult>();
+            ev->Result = future.GetValue();
+            actorSystem->Send(selfId, ev.Release());
+        });
     }
 
-    void HandleResult(TEvPrivate::TEvResult::TPtr&) {
-        ResultsCount++;
-
-        if (ResultsCount == TempTablesState.TempTables.size()) {
-            Send(Target, new TEvents::TEvGone());
-            PassAway();
+    void HandleRemoveDir(TEvPrivate::TEvRemoveDirResult::TPtr& result) {
+        if (!result->Get()->Result.Success()) {
+            Finish();
         }
+
+        RemoveNextDir();
     }
 
-private:
+    void Finish() {
+        Send(Target, new TEvents::TEvGone());
+        PassAway();
+    }
+
     TKqpTempTablesState TempTablesState;
+    TVector<TPath> PathsToTraverse;
+
+    TVector<TPath> TablesToDrop;
+    size_t DroppedTablesCount = 0;
+
+    TVector<TPath> DirsToDrop;
+
+    const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TActorId Target;
     const TString Database;
-    ui32 ResultsCount = 0;
 };
 
 } // namespace
 
-IActor* CreateKqpTempTablesManager(TKqpTempTablesState tempTablesState, const TActorId& target,
+IActor* CreateKqpTempTablesManager(
+        TKqpTempTablesState tempTablesState,
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken,
+        const TActorId& target,
         const TString& database)
 {
-    return new TKqpTempTablesManager(tempTablesState, target, database);
+    return new TKqpTempTablesManager(tempTablesState, std::move(userToken), target, database);
 }
 
 } // namespace NKikimr::NKqp

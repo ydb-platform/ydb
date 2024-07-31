@@ -120,6 +120,32 @@ public:
                          .GetExecutionConnection();
     }
 
+    NFq::NConfig::TWorkloadManagerConfig GetWorkloadManagerConfig(const TString& scope) {
+        const auto& controlPlane = ComputeConfig.GetYdb().GetControlPlane();
+        switch (controlPlane.type_case()) {
+            case NConfig::TYdbComputeControlPlane::TYPE_NOT_SET:
+                return {};
+            case NConfig::TYdbComputeControlPlane::kSingle:
+                return controlPlane.GetSingle().GetWorkloadManagerConfig();
+            case NConfig::TYdbComputeControlPlane::kCms:
+                return GetWorkloadManagerConfig(scope, controlPlane.GetCms().GetDatabaseMapping());
+            case NConfig::TYdbComputeControlPlane::kYdbcp:
+                return GetWorkloadManagerConfig(scope, controlPlane.GetYdbcp().GetDatabaseMapping());
+        }
+    }
+
+    NFq::NConfig::TWorkloadManagerConfig GetWorkloadManagerConfig(const TString& scope, const ::NFq::NConfig::TDatabaseMapping& databaseMapping) const {
+        auto it = databaseMapping.GetScopeToComputeDatabase().find(scope);
+        if (it != databaseMapping.GetScopeToComputeDatabase().end()) {
+            return it->second.GetWorkloadManagerConfig();
+        }
+        return databaseMapping.GetCommon().empty()
+                   ? NFq::NConfig::TWorkloadManagerConfig{}
+                   : databaseMapping
+                         .GetCommon(MultiHash(scope) % databaseMapping.GetCommon().size())
+                         .GetWorkloadManagerConfig();
+    }
+
     bool YdbComputeControlPlaneEnabled(const TString& scope) const {
         return ComputeConfig.GetYdb().GetEnable() &&
                ComputeConfig.GetYdb().GetControlPlane().GetEnable() &&
@@ -165,6 +191,7 @@ public:
             case FederatedQuery::ConnectionSetting::kClickhouseCluster:
             case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
             case FederatedQuery::ConnectionSetting::kGreenplumCluster:
+            case FederatedQuery::ConnectionSetting::kMysqlCluster:
             case FederatedQuery::ConnectionSetting::kYdbDatabase:
                 return true;
             case FederatedQuery::ConnectionSetting::kDataStreams:

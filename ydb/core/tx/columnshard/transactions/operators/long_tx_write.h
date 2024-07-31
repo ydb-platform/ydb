@@ -34,19 +34,17 @@ namespace NKikimr::NColumnShard {
         virtual bool DoCheckAllowUpdate(const TFullTxInfo& currentTxInfo) const override {
             return (currentTxInfo.Source == GetTxInfo().Source && currentTxInfo.Cookie == GetTxInfo().Cookie);
         }
-
     public:
         using TBase::TBase;
 
-        void OnTabletInit(TColumnShard& owner) override {
+        virtual void DoOnTabletInit(TColumnShard& owner) override {
             for (auto&& writeId : WriteIds) {
-                Y_ABORT_UNLESS(owner.LongTxWrites.contains(writeId), "TTxInit at %" PRIu64 " : Commit %" PRIu64 " references local write %" PRIu64 " that doesn't exist",
-                    owner.TabletID(), GetTxId(), (ui64)writeId);
+                AFL_VERIFY(owner.LongTxWrites.contains(writeId))("problem", "ltx_not_exists_for_write_id")("txId", GetTxId())("writeId", (ui64)writeId);
                 owner.AddLongTxWrite(writeId, GetTxId());
             }
         }
 
-        bool ExecuteOnProgress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
+        bool ProgressOnExecute(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
             TBlobGroupSelector dsGroupSelector(owner.Info());
             NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
 
@@ -62,13 +60,13 @@ namespace NKikimr::NColumnShard {
 
             NIceDb::TNiceDb db(txc.DB);
             for (TWriteId writeId : WriteIds) {
-                owner.RemoveLongTxWrite(db, writeId, GetTxId());
+                AFL_VERIFY(owner.RemoveLongTxWrite(db, writeId, GetTxId()));
             }
             owner.UpdateInsertTableCounters();
             return true;
         }
 
-        bool CompleteOnProgress(TColumnShard& owner, const TActorContext& ctx) override {
+        bool ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) override {
             auto result = std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(owner.TabletID(), TxInfo.TxKind, GetTxId(), NKikimrTxColumnShard::SUCCESS);
             result->Record.SetStep(TxInfo.PlanStep);
             ctx.Send(TxInfo.Source, result.release(), 0, TxInfo.Cookie);
@@ -78,7 +76,7 @@ namespace NKikimr::NColumnShard {
         virtual bool ExecuteOnAbort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override {
             NIceDb::TNiceDb db(txc.DB);
             for (TWriteId writeId : WriteIds) {
-                owner.RemoveLongTxWrite(db, writeId, GetTxId());
+                AFL_VERIFY(owner.RemoveLongTxWrite(db, writeId, GetTxId()));
             }
             TBlobGroupSelector dsGroupSelector(owner.Info());
             NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);

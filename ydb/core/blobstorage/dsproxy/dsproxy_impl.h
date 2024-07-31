@@ -54,8 +54,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     };
 
     static std::atomic<TMonotonic> ThrottlingTimestamp;
-
-    const ui32 GroupId;
+    const TGroupId GroupId;
     TIntrusivePtr<TBlobStorageGroupInfo> Info;
     std::shared_ptr<TBlobStorageGroupInfo::TTopology> Topology;
     TIntrusivePtr<TDsProxyNodeMon> NodeMon;
@@ -116,7 +115,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     TLogPriorityMuteChecker<NLog::PRI_INFO, NLog::PRI_DEBUG> ErrorStateMuteChecker;
     TLogPriorityMuteChecker<NLog::PRI_CRIT, NLog::PRI_DEBUG> InvalidGroupIdMuteChecker;
 
-    bool HasInvalidGroupId() const { return GroupId == Max<ui32>(); }
+    bool HasInvalidGroupId() const { return GroupId.GetRawId() == Max<ui32>(); }
     void ProcessInitQueue();
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

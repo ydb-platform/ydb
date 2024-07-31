@@ -215,6 +215,11 @@ public:
         FairShareThreadPool_->Configure(threadCount);
     }
 
+    void Reconfigure(TDuration pollingPeriod) override
+    {
+        FairShareThreadPool_->Configure(pollingPeriod);
+    }
+
     bool TryRegister(const IPollablePtr& pollable, TString poolName) override
     {
         // FIXME(lukyan): Enqueueing in register queue may happen after stopping.
@@ -526,6 +531,11 @@ public:
     void Reconfigure(int threadCount) override
     {
         return Poller_->Reconfigure(threadCount);
+    }
+
+    void Reconfigure(TDuration pollingPeriod) override
+    {
+        return Poller_->Reconfigure(pollingPeriod);
     }
 
     void Shutdown() override

@@ -99,7 +99,6 @@ public:
     TBusNetworkStatistics GetBusStatistics() const;
 
     // IPollable implementation.
-    NConcurrency::EPollablePriority GetPriority() const override;
     const TString& GetLoggingTag() const override;
     void OnEvent(NConcurrency::EPollControl control) override;
     void OnShutdown() override;

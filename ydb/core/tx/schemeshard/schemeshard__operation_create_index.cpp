@@ -105,6 +105,7 @@ public:
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
         const auto& tableIndexCreation = Transaction.GetCreateTableIndex();
+        const bool internal = Transaction.HasInternal() && Transaction.GetInternal();
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = tableIndexCreation.GetName();
@@ -138,8 +139,11 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsCommonSensePath()
-                .IsTable()
-                .NotAsyncReplicaTable();
+                .IsTable();
+
+            if (!internal) {
+                checks.NotAsyncReplicaTable();
+            }
 
             if (tableIndexCreation.GetState() == NKikimrSchemeOp::EIndexState::EIndexStateReady) {
                 checks

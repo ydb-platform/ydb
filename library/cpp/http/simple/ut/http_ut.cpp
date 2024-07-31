@@ -540,7 +540,7 @@ Y_UNIT_TEST_SUITE(SimpleHttp) {
                       "Accept-Encoding: gzip, deflate\r\n"
                       "Content-Length: 9\r\n"
                       "Content-Type: application/x-www-form-urlencoded\r\n"
-                      "User-Agent: Python-urllib/2.6\r\n"
+                      "User-Agent: Arcadia-library/cpp/http\r\n"
                       "\r\n"
                       "some body";
 

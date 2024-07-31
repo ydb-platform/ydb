@@ -16,10 +16,10 @@ namespace NViewer {
 using namespace NActors;
 extern bool IsPostContent(const NMon::TEvHttpInfo::TPtr& event);
 
-class TPDiskStatus : public TViewerPipeClient<TPDiskStatus> {
+class TPDiskStatus : public TViewerPipeClient {
 protected:
     using TThis = TPDiskStatus;
-    using TBase = TViewerPipeClient<TThis>;
+    using TBase = TViewerPipeClient;
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
     ui32 Timeout = 0;
@@ -30,16 +30,12 @@ protected:
     bool Force = false;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TPDiskStatus(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : Viewer(viewer)
         , Event(ev)
     {}
 
-    void Bootstrap() {
+    void Bootstrap() override {
         if (Event->Get()->Request.GetMethod() != HTTP_METHOD_POST) {
             TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(
                 Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Only POST method is allowed"),
@@ -132,7 +128,7 @@ public:
         TBase::PassAway();
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         NJson::TJsonValue json;
         if (Response != nullptr) {
             if (Response->Record.GetResponse().GetSuccess()) {

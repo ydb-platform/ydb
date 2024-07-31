@@ -100,9 +100,6 @@ struct TEvBusProxy {
         EvFlatTxRequest,
         EvFlatDescribeRequest,
         EvPersQueue,
-        EvDbSchema,
-        EvDbOperation,
-        EvDbBatch,
         EvInitRoot,
         EvChooseProxy,
 
@@ -127,9 +124,6 @@ struct TEvBusProxy {
     typedef TEvMsgBusRequest<EvFlatDescribeRequest> TEvFlatDescribeRequest;
     typedef TEvMsgBusRequest<EvPersQueue> TEvPersQueue;
     typedef TEvMsgBusRequest<EvChooseProxy> TEvChooseProxy;
-    typedef TEvMsgBusRequest<EvDbSchema> TEvDbSchema;
-    typedef TEvMsgBusRequest<EvDbOperation> TEvDbOperation;
-    typedef TEvMsgBusRequest<EvDbBatch> TEvDbBatch;
     typedef TEvMsgBusRequest<EvInitRoot> TEvInitRoot;
 };
 
@@ -300,11 +294,9 @@ IActor* CreateMessageBusResolveNode(TBusMessageContext &msg);
 IActor* CreateMessageBusRegisterNode(TBusMessageContext &msg);
 IActor* CreateMessageBusCmsRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusSqsRequest(TBusMessageContext &msg);
-IActor* CreateMessageBusWhoAmI(TBusMessageContext &msg);
 IActor* CreateMessageBusInterconnectDebug(TBusMessageContext& msg);
 IActor* CreateMessageBusConsoleRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusTestShardControl(TBusMessageContext &msg);
-IActor* CreateMessageBusLoginRequest(TBusMessageContext &msg);
 
 TBusResponse* ProposeTransactionStatusToResponse(EResponseStatus status, const NKikimrTxUserProxy::TEvProposeTransactionStatus &result);
 

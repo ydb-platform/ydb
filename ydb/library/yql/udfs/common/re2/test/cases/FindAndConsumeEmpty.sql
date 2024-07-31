@@ -1,4 +1,6 @@
 /* syntax version 1 */
-$regexp = Re2::FindAndConsume("(a*)");
+$regexp1 = Re2::FindAndConsume("(a*)");
+$regexp2 = Re2::FindAndConsume("a(b*)");
 
-SELECT $regexp("abaa");
+SELECT $regexp1("abaa");
+SELECT $regexp2("a");

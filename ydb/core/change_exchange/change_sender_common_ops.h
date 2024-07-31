@@ -2,6 +2,7 @@
 
 #include "change_exchange.h"
 #include "change_sender_resolver.h"
+#include "change_sender_partitioner.h"
 
 #include <ydb/core/change_exchange/change_sender_monitoring.h>
 
@@ -217,7 +218,7 @@ class TBaseChangeSender {
             }
 
             if (!it->second->IsBroadcast()) {
-                const ui64 partitionId = it->second->ResolvePartitionId(Resolver);
+                const ui64 partitionId = Partitioner->ResolvePartitionId(it->second);
                 if (!Senders.contains(partitionId)) {
                     needToResolve = true;
                     ++it;
@@ -336,7 +337,7 @@ class TBaseChangeSender {
         Y_ABORT_UNLESS(it != Broadcasting.end());
 
         auto& broadcast = it->second;
-        if (broadcast.Partitions.contains(partitionId)) {
+        if (broadcast.CompletedPartitions.contains(partitionId)) {
             return false;
         }
 
@@ -758,6 +759,10 @@ protected:
         ActorOps->Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(html.Str()));
     }
 
+    void SetPartitioner(IChangeSenderPartitioner<TChangeRecord>* partitioner) {
+        Partitioner.Reset(partitioner);
+    }
+
 private:
     IActorOps* const ActorOps;
     IChangeSenderResolver* const Resolver;
@@ -777,6 +782,8 @@ private:
     THashMap<ui64, TBroadcast> Broadcasting; // ui64 is order
 
     TVector<ui64> GonePartitions;
+
+    THolder<IChangeSenderPartitioner<TChangeRecord>> Partitioner;
 }; // TBaseChangeSender
 
 }

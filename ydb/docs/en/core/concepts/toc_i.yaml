@@ -1,10 +1,10 @@
 items:
-- { name: Overview,                                  href: index.md }
-- { name: Terms and definitions,                  href: databases.md }
+- { name: Glossary,                  href: glossary.md }
 - { name: Connecting to a database,       href: connect.md }
 - name: Authentication
   href: auth.md
 - name: Data model and schema
+  href: datamodel/index.md
   include: { path: datamodel/toc_p.yaml, mode: link }
 - { name: Transactions,                             href: transactions.md }
 - { name: Secondary indexes,                      href: secondary_indexes.md }
@@ -14,9 +14,8 @@ items:
 - { name: Database limits,                href: limits-ydb.md }
 - { name: Multi-Version Concurrency Control (MVCC), href: mvcc.md }
 - name: YDB cluster
+  href: cluster/index.md
   items:
-  - name: Overview
-    href: cluster/index.md
   - name: Topology
     href: topology.md
   - name: General YDB schema

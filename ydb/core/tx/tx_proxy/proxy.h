@@ -170,7 +170,7 @@ struct TEvTxUserProxy {
         }
     };
 
-    struct TEvInvalidateTableResult : public TEventSimple<TEvInvalidateTableResult, EvInvalidateTableResult> {};
+    struct TEvInvalidateTableResult : public TEventPB<TEvInvalidateTableResult, NKikimrTxUserProxy::TEvInvalidateTableResult, EvInvalidateTableResult> {};
 
     struct TEvProposeKqpTransaction : public TEventLocal<TEvProposeKqpTransaction, EvProposeKqpTransaction> {
         TActorId ExecuterId;

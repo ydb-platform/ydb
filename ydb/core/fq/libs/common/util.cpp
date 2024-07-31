@@ -129,6 +129,9 @@ TString ExtractServiceAccountId(const FederatedQuery::ConnectionSetting& setting
     case FederatedQuery::ConnectionSetting::kGreenplumCluster: {
         return GetServiceAccountId(setting.greenplum_cluster().auth());
     }
+    case FederatedQuery::ConnectionSetting::kMysqlCluster: {
+        return GetServiceAccountId(setting.mysql_cluster().auth());
+    }
     // Do not replace with default. Adding a new connection should cause a compilation error
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
     break;
@@ -162,6 +165,8 @@ TMaybe<TString> GetLogin(const FederatedQuery::ConnectionSetting& setting) {
             return setting.postgresql_cluster().login();
         case FederatedQuery::ConnectionSetting::kGreenplumCluster:
             return setting.greenplum_cluster().login();
+        case FederatedQuery::ConnectionSetting::kMysqlCluster:
+            return setting.mysql_cluster().login();
     }
 }
 
@@ -183,6 +188,8 @@ TMaybe<TString> GetPassword(const FederatedQuery::ConnectionSetting& setting) {
             return setting.postgresql_cluster().password();
         case FederatedQuery::ConnectionSetting::kGreenplumCluster:
             return setting.greenplum_cluster().password();
+        case FederatedQuery::ConnectionSetting::kMysqlCluster:
+            return setting.mysql_cluster().password();
     }
 }
 
@@ -204,6 +211,8 @@ EYdbComputeAuth GetYdbComputeAuthMethod(const FederatedQuery::ConnectionSetting&
             return GetBasicAuthMethod(setting.postgresql_cluster().auth());
         case FederatedQuery::ConnectionSetting::kGreenplumCluster:
             return GetBasicAuthMethod(setting.greenplum_cluster().auth());
+        case FederatedQuery::ConnectionSetting::kMysqlCluster:
+            return GetBasicAuthMethod(setting.mysql_cluster().auth());
     }
 }
 
@@ -223,6 +232,8 @@ FederatedQuery::IamAuth GetAuth(const FederatedQuery::Connection& connection) {
         return connection.content().setting().postgresql_cluster().auth();
     case FederatedQuery::ConnectionSetting::kGreenplumCluster:
         return connection.content().setting().greenplum_cluster().auth();
+    case FederatedQuery::ConnectionSetting::kMysqlCluster:
+        return connection.content().setting().mysql_cluster().auth();
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
         return FederatedQuery::IamAuth{};
     }

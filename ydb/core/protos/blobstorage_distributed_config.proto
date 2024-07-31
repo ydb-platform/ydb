@@ -107,6 +107,8 @@ message TEvNodeConfigGather {
         repeated TNode Nodes = 1;
         repeated TPersistentConfig CommittedConfigs = 2;
         repeated TPersistentConfig ProposedConfigs = 3;
+        repeated TDiskIdentifier NoMetadata = 4;
+        repeated TDiskIdentifier Errors = 5;
     }
 
     message TProposeStorageConfig {
@@ -179,6 +181,9 @@ message TEvNodeConfigInvokeOnRoot {
         bool SchemeBoard = 5;
     }
 
+    message TAdvanceGeneration
+    {}
+
     oneof Request {
         TUpdateConfig UpdateConfig = 1;
         TQueryConfig QueryConfig = 2;
@@ -186,6 +191,7 @@ message TEvNodeConfigInvokeOnRoot {
         TStaticVDiskSlain StaticVDiskSlain = 4;
         TDropDonor DropDonor = 5;
         TReassignStateStorageNode ReassignStateStorageNode = 6;
+        TAdvanceGeneration AdvanceGeneration = 7;
     }
 }
 
@@ -203,40 +209,23 @@ message TEvNodeConfigInvokeOnRootResult {
         uint32 NodeId = 2;
     }
 
-    message TUpdateConfig {
-    }
-
     message TQueryConfig {
         TStorageConfig Config = 1;
         TStorageConfig CurrentProposedStorageConfig = 2;
-    }
-
-    message TReassignGroupDisk {
-    }
-
-    message TStaticVDiskSlain {
-    }
-
-    message TDropDonor {
-    }
-
-    message TReassignStateStorageNode {
     }
 
     EStatus Status = 1;
     optional string ErrorReason = 2;
     TScepter Scepter = 3;
 
+    reserved 4, 6, 7, 8, 9;
+
     oneof Response {
-        TUpdateConfig UpdateConfig = 4;
         TQueryConfig QueryConfig = 5;
-        TReassignGroupDisk ReassignGroupDisk = 6;
-        TStaticVDiskSlain StaticVDiskSlain = 7;
-        TDropDonor DropDonor = 8;
-        TReassignStateStorageNode ReassignStateStorageNode = 9;
     }
 }
 
 message TEvNodeWardenDynamicConfigPush {
     TStorageConfig Config = 1;
+    bool NoQuorum = 2;
 }

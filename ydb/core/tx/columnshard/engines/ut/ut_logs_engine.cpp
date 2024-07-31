@@ -1,23 +1,24 @@
 #include "helper.h"
-#include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
-#include <ydb/core/tx/columnshard/engines/predicate/predicate.h>
+
+#include <ydb/core/tx/columnshard/background_controller.h>
+#include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
+#include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
+#include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
+#include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/engines/changes/indexation.h>
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
-
-#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
-#include <ydb/core/tx/columnshard/engines/changes/compaction.h>
-#include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
-#include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>
-#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
-#include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
-#include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
-#include <ydb/core/tx/columnshard/background_controller.h>
-#include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
-#include <ydb/core/tx/columnshard/test_helper/helper.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/insert_table/insert_table.h>
-#include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
+#include <ydb/core/tx/columnshard/engines/predicate/predicate.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
+#include <ydb/core/tx/columnshard/test_helper/helper.h>
+
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
 
@@ -274,19 +275,27 @@ TString MakeTestBlob(i64 start = 0, i64 end = 100, ui32 step = 1) {
     return NArrow::SerializeBatchNoCompression(batch);
 }
 
-void AddIdsToBlobs(std::vector<TWritePortionInfoWithBlobs>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs, ui32& step) {
+void AddIdsToBlobs(std::vector<TWritePortionInfoWithBlobsResult>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs, ui32& step) {
     for (auto& portion : portions) {
-        for (auto& rec : portion.GetPortionConstructor().MutableRecords()) {
-            rec.BlobRange.BlobIdx = portion.GetPortionConstructor().RegisterBlobId(MakeUnifiedBlobId(++step, portion.GetBlobFullSizeVerified(rec.ColumnId, rec.Chunk)));
-            TString data = portion.GetBlobByRangeVerified(rec.ColumnId, rec.Chunk);
-            blobs.Add(IStoragesManager::DefaultStorageId, portion.GetPortionConstructor().RestoreBlobRange(rec.BlobRange), std::move(data));
+        THashMap<TUnifiedBlobId, TString> blobsData;
+        for (auto& b : portion.GetBlobs()) {
+            const auto blobId = MakeUnifiedBlobId(++step, b.GetSize());
+            b.RegisterBlobId(portion, blobId);
+            blobsData.emplace(blobId, b.GetResultBlob());
+        }
+        for (auto&& rec : portion.GetPortionConstructor().GetRecords()) {
+            auto range = portion.GetPortionConstructor().RestoreBlobRange(rec.BlobRange);
+            auto it = blobsData.find(range.BlobId);
+            AFL_VERIFY(it != blobsData.end());
+            const TString& data = it->second;
+            AFL_VERIFY(range.Offset + range.Size <= data.size());
+            blobs.Add(IStoragesManager::DefaultStorageId, range, data.substr(range.Offset, range.Size));
         }
     }
 }
 
-bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
-            std::vector<TInsertedData>&& dataToIndex, NBlobOperations::NRead::TCompositeReadBlobs& blobs, ui32& step) {
-
+bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, std::vector<TInsertedData>&& dataToIndex,
+    NBlobOperations::NRead::TCompositeReadBlobs& blobs, ui32& step) {
     for (ui32 i = 0; i < dataToIndex.size(); ++i) {
         // Commited data always has nonzero planstep (for WriteLoadRead tests)
         dataToIndex[i].PlanStep = i + 1;
@@ -491,7 +500,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             ui64 txId = 1;
             auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false));
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK[0]->NumChunks(), columnIds.size() + TIndexInfo::GetSpecialColumnNames().size());
+            UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK[0]->NumChunks(), columnIds.size() + TIndexInfo::GetSnapshotColumnIdsSet().size());
         }
 
         { // select another pathId

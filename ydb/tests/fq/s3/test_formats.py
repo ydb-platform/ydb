@@ -61,13 +61,16 @@ class TestS3Formats:
 
     @yq_all
     @pytest.mark.parametrize("kikimr_settings", [{"stats_mode": YQ_STATS_FULL}], indirect=True)
-    @pytest.mark.parametrize("filename, type_format", [
-        ("test.csv", "csv_with_names"),
-        ("test.tsv", "tsv_with_names"),
-        ("test.json", "json_each_row"),
-        ("test.json", "json_list"),
-        ("test.parquet", "parquet"),
-    ])
+    @pytest.mark.parametrize(
+        "filename, type_format",
+        [
+            ("test.csv", "csv_with_names"),
+            ("test.tsv", "tsv_with_names"),
+            ("test.json", "json_each_row"),
+            ("test.json", "json_list"),
+            ("test.parquet", "parquet"),
+        ],
+    )
     def test_format(self, kikimr, s3, client, filename, type_format, yq_version, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
         storage_connection_name = unique_prefix + "fruitbucket"
@@ -142,20 +145,14 @@ class TestS3Formats:
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_invalid_format(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("fbucket")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         fruits = '''Fruit,Price,Weight
@@ -183,26 +180,23 @@ Pear,15,33'''
         describe_result = client.describe_query(query_id).result
         logging.debug("Describe result: {}".format(describe_result))
         describe_string = "{}".format(describe_result)
-        assert "Unknown format: invalid_type_format. Use one of: csv_with_names, tsv_with_names, json_list, json, raw, json_as_string, json_each_row, parquet" in describe_string
+        assert (
+            "Unknown format: invalid_type_format. Use one of: csv_with_names, tsv_with_names, json_list, json, raw, json_as_string, json_each_row, parquet"
+            in describe_string
+        )
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_invalid_input_compression(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("ibucket")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         s3_client.put_object(Body="blahblahblah", Bucket='ibucket', Key='fruits', ContentType='text/plain')
@@ -230,20 +224,14 @@ Pear,15,33'''
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_invalid_output_compression(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("obucket")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         s3_client.put_object(Body="blahblahblah", Bucket='obucket', Key='fruits', ContentType='text/plain')
@@ -272,20 +260,14 @@ Pear,15,33'''
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_custom_csv_delimiter_format(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("fbucket")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         fruits = '''Fruit;Price;Weight
@@ -340,7 +322,9 @@ Pear,15,33'''
         describe_result = client.describe_query(query_id).result
         logging.debug("Describe result: {}".format(describe_result))
         describe_string = "{}".format(describe_result)
-        assert "Column `AMOGUS` is marked as not null, but was not found in the csv file" in describe_string, describe_string
+        assert (
+            "Column `AMOGUS` is marked as not null, but was not found in the csv file" in describe_string
+        ), describe_string
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
@@ -396,8 +380,12 @@ Pear,15,33'''
             describe_result = client.describe_query(query_id).result
             logging.debug("Describe result: {}".format(describe_result))
             describe_string = "{}".format(describe_result)
-            assert "failed to parse data in column `{}\\' from row 0, probably data type differs from specified in schema".format(
-                corrupted_col_name) in describe_string, describe_string
+            assert (
+                "failed to parse data in column `{}\\' from row 0, probably data type differs from specified in schema".format(
+                    corrupted_col_name
+                )
+                in describe_string
+            ), describe_string
 
         query1_id = client.create_query("simple", sql1, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         query2_id = client.create_query("simple", sql2, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
@@ -504,7 +492,9 @@ Pear,15,33'''
             WITH (format=raw, SCHEMA ());
             '''
 
-        query_id = client.create_query("test_raw_empty_schema", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        query_id = client.create_query(
+            "test_raw_empty_schema", sql, type=fq.QueryContent.QueryType.ANALYTICS
+        ).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
         describe_result = client.describe_query(query_id).result
         describe_string = "{}".format(describe_result)

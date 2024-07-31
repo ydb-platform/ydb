@@ -3,16 +3,14 @@ ydb/core/blobstorage/dsproxy/ut_fat TBlobStorageProxyTest.TestBatchedPutRequestD
 ydb/core/client/ut TClientTest.PromoteFollower
 ydb/core/client/ut TClientTest.ReadFromFollower
 ydb/core/client/ut TFlatTest.AutoSplitMergeQueue
-ydb/core/cms/ut_sentinel TSentinelTests.BSControllerCantChangeStatus
+ydb/core/cms/ut_sentinel_unstable *
 ydb/core/external_sources *
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
+ydb/core/keyvalue/ut_trace TKeyValueTracingTest.*
 ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDataSourceMetadata
-ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesActualization
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.*
-ydb/core/kqp/ut/olap KqpOlap.ScanQueryOltpAndOlap
 ydb/core/kqp/ut/olap KqpOlapStatistics.StatsUsageWithTTL
-ydb/core/kqp/ut/olap KqpOlap.YqlScriptOltpAndOlap
-ydb/core/kqp/ut/service KqpQueryService.TableSink_ReplaceFromSelectLargeOlap
+ydb/core/kqp/ut/olap KqpOlapAggregations.Aggregation_ResultCountAll_FilterL
 ydb/core/kqp/ut/pg KqpPg.CreateIndex
 ydb/core/kqp/ut/query KqpLimits.QueryReplySize
 ydb/core/kqp/ut/query KqpQuery.QueryTimeout
@@ -21,23 +19,26 @@ ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpOlap.OlapRead_GenericQuerys
 ydb/core/kqp/ut/scheme KqpOlap.OlapRead_StreamGenericQuery
 ydb/core/kqp/ut/scheme KqpOlap.OlapRead_UsesGenericQueryOnJoinWithDataShardTable
-ydb/core/kqp/ut/scheme KqpQueryService.TableSink_ReplaceFromSelectLargeOlap
 ydb/core/kqp/ut/scheme KqpScheme.AlterAsyncReplication
 ydb/core/kqp/ut/scheme KqpScheme.QueryWithAlter
-ydb/core/kqp/ut/scheme [14/50]*
-ydb/core/kqp/ut/scheme [15/50]*
-ydb/core/kqp/ut/scheme [44/50]*
+ydb/core/kqp/ut/scheme [*/*]*
 ydb/core/kqp/ut/service KqpQueryService.ExecuteQueryPgTableSelect
 ydb/core/kqp/ut/service KqpQueryService.QueryOnClosedSession
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
-ydb/core/kqp/ut/service [38/50]*
-ydb/core/persqueue/ut [37/40] chunk chunk
-ydb/core/persqueue/ut [38/40] chunk chunk
+ydb/core/kqp/ut/service [*/*]*
+ydb/core/persqueue/ut [*/*]*
 ydb/core/persqueue/ut TPQTest.*DirectRead*
-ydb/core/persqueue/ut TopicAutoscaling.PartitionSplit_AutosplitByLoad
-ydb/core/persqueue/ut TopicAutoscaling.PartitionSplit_ManySession_NewSDK
-ydb/core/persqueue/ut TopicAutoscaling.PartitionSplit_ReadNotEmptyPartitions_AutoscaleAwareSDK
-ydb/core/persqueue/ut TopicAutoscaling.ReadingAfterSplitTest_PreferedPartition_AutoscaleAwareSDK
+ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionMerge_PreferedPartition_BeforeAutoscaleAwareSDK
+ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_ManySession_AutoscaleAwareSDK
+ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_ManySession_BeforeAutoscaleAwareSDK
+ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_ManySession_existed_AutoscaleAwareSDK
+ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_PreferedPartition_AutoscaleAwareSDK
+ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_ReadNotEmptyPartitions_AutoscaleAwareSDK
+ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_ReadNotEmptyPartitions_BeforeAutoscaleAwareSDK
+ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.ReadingAfterSplitTest_AutoscaleAwareSDK_AutoCommit
+ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.ReadingAfterSplitTest_PreferedPartition_AutoscaleAwareSDK
+ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.ReadingAfterSplitTest_PreferedPartition_BeforeAutoscaleAwareSDK
+ydb/core/persqueue/ut/ut_with_sdk [*/*]*
 ydb/core/tx/coordinator/ut Coordinator.RestoreTenantConfiguration
 ydb/core/tx/datashard/ut_change_exchange Cdc.InitialScanDebezium
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
@@ -50,16 +51,18 @@ ydb/core/viewer/ut Viewer.TabletMergingPacked
 ydb/library/actors/http/ut HttpProxy.TooLongHeader
 ydb/library/actors/http/ut sole*
 ydb/library/yql/providers/generic/connector/tests/datasource/ydb* *
-ydb/public/lib/ydb_cli/topic/ut TTopicReaderTests.TestRun_ReadOneMessage
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut RetryPolicy.TWriteSession_TestBrokenPolicy
-ydb/public/sdk/cpp/client/ydb_persqueue_core/ut [9/10] chunk chunk
+ydb/public/sdk/cpp/client/ydb_persqueue_core/ut [*/*]
 ydb/public/sdk/cpp/client/ydb_persqueue_public/ut RetryPolicy.TWriteSession_TestBrokenPolicy
+ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/with_offset_ranges_mode_ut RetryPolicy.TWriteSession_TestBrokenPolicy
+ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/with_offset_ranges_mode_ut [*/*]*
 ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.ConflictingWrites
+ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.ReadSessionCorrectClose
 ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.WriteRead
 ydb/public/sdk/cpp/client/ydb_topic/ut TSettingsValidation.TestDifferentDedupParams
-ydb/public/sdk/cpp/client/ydb_topic/ut [0/10]*
-ydb/public/sdk/cpp/client/ydb_topic/ut [6/10]*
+ydb/public/sdk/cpp/client/ydb_topic/ut [*/*]*
 ydb/services/datastreams/ut DataStreams.TestGetRecordsStreamWithSingleShard
+ydb/services/datastreams/ut DataStreams.TestPutRecordsOfAnauthorizedUser
 ydb/services/datastreams/ut DataStreams.TestPutRecordsWithRead
 ydb/services/datastreams/ut DataStreams.TestReservedConsumersMetering
 ydb/services/datastreams/ut DataStreams.TestReservedStorageMetering
@@ -67,15 +70,14 @@ ydb/services/fq/ut_integration Yq_1.*
 ydb/services/keyvalue/ut KeyValueGRPCService.*
 ydb/services/keyvalue/ut sole*
 ydb/services/persqueue_v1/ut TPersQueueTest.CheckACLForGrpcWrite
-ydb/services/persqueue_v1/ut TPersQueueTest.SetupLockSession
 ydb/services/persqueue_v1/ut TPQCompatTest.BadTopics
 ydb/services/persqueue_v1/ut TPersQueueTest.DirectRead*Cache*
-ydb/services/persqueue_v1/ut [3/10]*
+ydb/services/persqueue_v1/ut [*/*]*
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync*
 ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestActiveSessionCountAfterBadSession
-ydb/services/ydb/sdk_sessions_ut [6/10]*
+ydb/services/ydb/sdk_sessions_ut [*/*]*
 ydb/services/ydb/table_split_ut YdbTableSplit.SplitByLoadWithReadsMultipleSplitsWithData
-ydb/services/ydb/table_split_ut [5/7]*
+ydb/services/ydb/table_split_ut [*/*]*
 ydb/services/ydb/ut YdbOlapStore.LogPagingAfter-NotNull
 ydb/services/ydb/ut YdbQueryService.TestCreateAndAttachSession
 ydb/services/ydb/ut YdbScripting.BasicV0
@@ -96,4 +98,5 @@ ydb/tests/functional/tenants test_storage_config.py.TestStorageConfig.*
 ydb/tests/functional/tenants test_tenants.py.*
 ydb/tests/functional/ydb_cli test_ydb_impex.py.TestImpex.test_big_dataset*
 ydb/tests/tools/pq_read/test test_timeout.py.TestTimeout.test_timeout
-ydb/tests/functional/rename [test_rename.py */10] chunk chunk
+ydb/tests/functional/rename [test_rename.py */*] chunk chunk
+ydb/tests/fq/yt/kqp_yt_file/part18 test.py.test[pg-join_brackets2-default.txt]

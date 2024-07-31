@@ -133,6 +133,37 @@ bool IsConstantExpr(const TExprNode::TPtr& input) {
     return false;
 }
 
+bool IsConstantExprWithParams(const TExprNode::TPtr& input) {
+    if (input->IsCallable("Parameter")) {
+        return true;
+    }
+
+    if (input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
+        return IsConstantExprPg(input);
+    }
+
+    if (!IsDataOrOptionalOfData(input->GetTypeAnn())) {
+        return false;
+    }
+
+    if (!NeedCalc(TExprBase(input))) {
+        return true;
+    }
+
+    else if (input->IsCallable(constantFoldingWhiteList)) {
+        for (size_t i = 0; i < input->ChildrenSize(); i++) {
+            auto callableInput = input->Child(i);
+            if (callableInput->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Type && !IsConstantExprWithParams(callableInput)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    return false;
+}
+
+
 /**
  * Compute statistics for map join
  * FIX: Currently we treat all join the same from the cost perspective, need to refine cost function
@@ -161,8 +192,19 @@ void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationCont
         rightJoinKeys.push_back(RemoveAliases(join.RightKeysColumnNames().Item(i).StringValue()));
     }
 
-    typeCtx->SetStats(join.Raw(), std::make_shared<TOptimizerStatistics>(           
-         ctx.ComputeJoinStats(*leftStats, *rightStats, leftJoinKeys, rightJoinKeys, EJoinAlgoType::MapJoin)));
+    typeCtx->SetStats(
+        join.Raw(), 
+        std::make_shared<TOptimizerStatistics>(           
+            ctx.ComputeJoinStats(
+                *leftStats, 
+                *rightStats, 
+                leftJoinKeys, 
+                rightJoinKeys, 
+                EJoinAlgoType::MapJoin, 
+                ConvertToJoinKind(join.JoinKind().StringValue())
+            )
+        )
+    );
 }
 
 /**
@@ -193,8 +235,19 @@ void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationCo
         rightJoinKeys.push_back(RemoveAliases(join.RightKeysColumnNames().Item(i).StringValue()));
     }
 
-    typeCtx->SetStats(join.Raw(), std::make_shared<TOptimizerStatistics>(
-                                      ctx.ComputeJoinStats(*leftStats, *rightStats, leftJoinKeys, rightJoinKeys, EJoinAlgoType::GraceJoin)));
+    typeCtx->SetStats(
+        join.Raw(), 
+        std::make_shared<TOptimizerStatistics>(
+                ctx.ComputeJoinStats(
+                    *leftStats,
+                    *rightStats,
+                    leftJoinKeys,
+                    rightJoinKeys, 
+                    EJoinAlgoType::GraceJoin,
+                    ConvertToJoinKind(join.JoinKind().StringValue())
+                )
+            )
+    );
 }
 
 /**
@@ -367,6 +420,22 @@ void InferStatisticsForAsList(const TExprNode::TPtr& input, TTypeAnnotationConte
     }
     typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(
         EStatisticsType::BaseTable, nRows, nAttrs, nRows*nAttrs, 0.0));
+}
+
+/***
+ * Infer statistics for a list of structs
+ */
+void InferStatisticsForListParam(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    auto param = TCoParameter(input);
+    if (auto maybeListType = param.Type().Maybe<TCoListType>()) {
+        auto itemType = maybeListType.Cast().ItemType();
+        if (auto maybeStructType = itemType.Maybe<TCoStructType>()) {
+            int nRows = 100;
+            int nAttrs = maybeStructType.Cast().Ptr()->ChildrenSize();
+            typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(
+                EStatisticsType::BaseTable, nRows, nAttrs, nRows*nAttrs, 0.0));
+        }
+    }
 }
 
 /***

@@ -35,6 +35,11 @@ message TDefineHostConfig {
     // host-wide default configuration for every PDisk
     NKikimrBlobStorage.TPDiskConfig DefaultHostPDiskConfig = 4;
 
+    // some syntactic sugar -- one drive type per path
+    repeated string Rot = 5;
+    repeated string Ssd = 6;
+    repeated string Nvme = 7;
+
     // item's generation to prevent concurrent modification
     uint64 ItemConfigGeneration = 100;
 }

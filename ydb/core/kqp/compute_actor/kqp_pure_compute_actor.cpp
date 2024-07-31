@@ -133,10 +133,7 @@ STFUNC(TKqpComputeActor::StateFunc) {
                 BaseStateFuncBody(ev);
         }
     } catch (const TMemoryLimitExceededException& e) {
-        InternalError(TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
-            << "Mkql memory limit exceeded, limit: " << GetMkqlMemoryLimit()
-            << ", host: " << HostName()
-            << ", canAllocateExtraMemory: " << CanAllocateExtraMemory);
+        TBase::OnMemoryLimitExceptionHandler();
     } catch (const NMiniKQL::TKqpEnsureFail& e) {
         InternalError((TIssuesIds::EIssueCode) e.GetCode(), e.GetMessage());
     } catch (const yexception& e) {

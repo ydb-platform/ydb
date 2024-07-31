@@ -67,6 +67,9 @@ public:
     template <class T>
     std::optional<T> Remove();
 
+    void RecordLocation(TSourceLocation loc);
+    void PrintModificationLocationsToStderr();
+
     DECLARE_SIGNAL(void(), OnAfterInstall);
     DECLARE_SIGNAL(void(), OnBeforeUninstall);
 
@@ -104,7 +107,7 @@ class TPropagatingStorageGuard
 {
 public:
     explicit TPropagatingStorageGuard(
-        TPropagatingStorage storage, TSourceLocation loc = FROM_HERE);
+        TPropagatingStorage storage, TSourceLocation loc = YT_CURRENT_SOURCE_LOCATION);
     ~TPropagatingStorageGuard();
 
     TPropagatingStorageGuard(const TPropagatingStorageGuard& other) = delete;
@@ -125,7 +128,7 @@ class TNullPropagatingStorageGuard
     : public TPropagatingStorageGuard
 {
 public:
-    TNullPropagatingStorageGuard(TSourceLocation loc = FROM_HERE);
+    TNullPropagatingStorageGuard(TSourceLocation loc = YT_CURRENT_SOURCE_LOCATION);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -149,7 +152,6 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 TSourceLocation SwitchPropagatingStorageLocation(TSourceLocation loc);
-TSourceLocation SwitchPropagatingStorageModifyLocation(TSourceLocation loc);
 
 void PrintLocationToStderr();
 

@@ -14,8 +14,9 @@ namespace NViewer {
 
 using namespace NActors;
 
-class TJsonHiveStats : public TViewerPipeClient<TJsonHiveStats> {
-    using TBase = TViewerPipeClient<TJsonHiveStats>;
+class TJsonHiveStats : public TViewerPipeClient {
+    using TThis = TJsonHiveStats;
+    using TBase = TViewerPipeClient;
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
     TAutoPtr<TEvHive::TEvResponseHiveDomainStats> HiveStats;
@@ -23,16 +24,12 @@ class TJsonHiveStats : public TViewerPipeClient<TJsonHiveStats> {
     ui32 Timeout = 0;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TJsonHiveStats(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
         : Viewer(viewer)
         , Event(ev)
     {}
 
-    void Bootstrap() {
+    void Bootstrap() override {
         const auto& params(Event->Get()->Request.GetParams());
         ui64 hiveId = FromStringWithDefault<ui64>(params.Get("hive_id"), 0);
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
@@ -62,7 +59,7 @@ public:
         RequestDone();
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         TStringStream json;
         if (HiveStats != nullptr) {
             TProtoToJson::ProtoToJson(json, HiveStats->Record, JsonSettings);

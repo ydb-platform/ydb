@@ -433,7 +433,7 @@ namespace NYql::NDqs {
 
             bool enableSpilling = false;
             if (task.Outputs.size() > 1) {
-                enableSpilling = Settings->IsSpillingEnabled();
+                enableSpilling = Settings->IsSpillingInChannelsEnabled();
             }
             for (auto& output : task.Outputs) {
                 FillOutputDesc(*taskDesc.AddOutputs(), output, enableSpilling);
@@ -448,7 +448,7 @@ namespace NYql::NDqs {
             taskMeta.SetStageId(publicId);
             taskDesc.MutableMeta()->PackFrom(taskMeta);
             taskDesc.SetStageId(stageId);
-            taskDesc.SetEnableSpilling(Settings->IsSpillingEnabled());
+            taskDesc.SetEnableSpilling(Settings->GetEnabledSpillingNodes());
 
             if (Settings->DisableLLVMForBlockStages.Get().GetOrElse(true)) {
                 auto& stage = TasksGraph.GetStageInfo(task.StageId).Meta.Stage;
@@ -676,10 +676,11 @@ namespace NYql::NDqs {
                 Y_ABORT_UNLESS(false);
             }
 */
+            TSpillingSettings spillingSettings{Settings->GetEnabledSpillingNodes()};
             StagePrograms[stageInfo.first] = std::make_tuple(
                 NDq::BuildProgram(
                     stage.Program(), *paramsType, compiler, typeEnv, *FunctionRegistry,
-                    ExprContext, fakeReads),
+                    ExprContext, fakeReads, spillingSettings),
                 stageId, publicId);
         }
     }

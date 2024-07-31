@@ -285,7 +285,7 @@ std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(st
         if (changes->PathToGranule.contains(pathId)) {
             continue;
         }
-        changes->PathToGranule[pathId] = GetGranulePtrVerified(pathId)->GetBucketPositions();
+        AFL_VERIFY(changes->PathToGranule.emplace(pathId, GetGranulePtrVerified(pathId)->GetBucketPositions()).second);
     }
 
     return changes;
@@ -368,8 +368,9 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
 
     const TInstant snapshotInstant = snapshot.GetPlanInstant();
     for (auto it = CleanupPortions.begin(); !limitExceeded && it != CleanupPortions.end();) {
-        if (it->first >= snapshotInstant) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanupStop")("snapshot", snapshot.DebugString())("current_snapshot_ts", it->first);
+        if (it->first > snapshotInstant) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanupStop")("snapshot", snapshot.DebugString())(
+                "current_snapshot_ts", it->first.MilliSeconds());
             break;
         }
         for (ui32 i = 0; i < it->second.size();) {
@@ -509,8 +510,8 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
         return out;
     }
 
-    for (const auto& [indexKey, keyPortions] : spg->GroupOrderedPortionsByPK()) {
-        for (auto&& [_, portionInfo] : keyPortions) {
+    for (const auto& [indexKey, keyPortions] : spg->GetPortionsIndex().GetPoints()) {
+        for (auto&& [_, portionInfo] : keyPortions.GetStart()) {
             if (!portionInfo->IsVisible(snapshot)) {
                 continue;
             }

@@ -1,4 +1,3 @@
-import "ydb/core/tx/columnshard/engines/scheme/statistics/protos/data.proto";
 import "ydb/core/formats/arrow/protos/ssa.proto";
 
 package NKikimrTxColumnShard;
@@ -19,7 +18,7 @@ message TIndexPortionMeta {
     optional bytes PrimaryKeyBorders = 6; // arrow::RecordBatch with first and last ReplaceKey rows
     optional TSnapshot RecordSnapshotMin = 7;
     optional TSnapshot RecordSnapshotMax = 8;
-    optional NKikimrColumnShardStatisticsProto.TPortionStorage StatisticsStorage = 9;
+    optional uint32 DeletionsCount = 10;
 }
 
 message TIndexColumnMeta {

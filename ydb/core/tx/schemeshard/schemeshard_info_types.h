@@ -14,6 +14,9 @@
 #include <ydb/core/control/immediate_control_board_impl.h>
 
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/utils.h>
+#include <ydb/services/lib/sharding/sharding.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/tablet_flat/flat_table_column.h>
@@ -23,6 +26,7 @@
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/util/counted_leaky_bucket.h>
+#include <ydb/core/util/pb.h>
 
 #include <ydb/library/login/protos/login.pb.h>
 
@@ -30,9 +34,9 @@
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/protos/filestore_config.pb.h>
 #include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
-#include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
@@ -432,21 +436,25 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     TMap<TTxId, TBackupRestoreResult> BackupHistory;
     TMap<TTxId, TBackupRestoreResult> RestoreHistory;
 
-    TString PreSerializedPathDescription;
-    TString PreSerializedPathDescriptionWithoutRangeKey;
+    // Preserialized TDescribeSchemeResult with PathDescription.TablePartitions field filled
+    TString PreserializedTablePartitions;
+    TString PreserializedTablePartitionsNoKeys;
+    // Preserialized TDescribeSchemeResult with PathDescription.Table.SplitBoundary field filled
+    TString PreserializedTableSplitBoundaries;
 
     THashMap<TShardIdx, NKikimrSchemeOp::TPartitionConfig> PerShardPartitionConfig;
 
     const NKikimrSchemeOp::TPartitionConfig& PartitionConfig() const { return TableDescription.GetPartitionConfig(); }
     NKikimrSchemeOp::TPartitionConfig& MutablePartitionConfig() { return *TableDescription.MutablePartitionConfig(); }
 
-    bool HasReplicationConfig() { return TableDescription.HasReplicationConfig(); }
-    const NKikimrSchemeOp::TTableReplicationConfig& ReplicationConfig() { return TableDescription.GetReplicationConfig(); }
+    bool HasReplicationConfig() const { return TableDescription.HasReplicationConfig(); }
+    const NKikimrSchemeOp::TTableReplicationConfig& ReplicationConfig() const { return TableDescription.GetReplicationConfig(); }
     NKikimrSchemeOp::TTableReplicationConfig& MutableReplicationConfig() { return *TableDescription.MutableReplicationConfig(); }
 
     bool IsAsyncReplica() const {
         switch (TableDescription.GetReplicationConfig().GetMode()) {
-            case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE:
+            case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE: [[fallthrough]];
+            case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_RESTORE_INCREMENTAL_BACKUP:
                 return false;
             default:
                 return true;
@@ -550,7 +558,7 @@ public:
         const NScheme::TTypeRegistry& typeRegistry,
         const TSchemeLimits& limits, const TSubDomainInfo& subDomain,
         bool pgTypesEnabled,
-        bool datetime64TypesEnabled,        
+        bool datetime64TypesEnabled,
         TString& errStr, const THashSet<TString>& localSequences = {});
 
     static ui32 ShardsToCreate(const NKikimrSchemeOp::TTableDescription& descr) {
@@ -1183,6 +1191,32 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
         return Shards.size();
     }
 
+    TVector<std::pair<TShardIdx, TTopicTabletInfo::TTopicPartitionInfo*>> GetPartitions() {
+        TVector<std::pair<TShardIdx, TTopicTabletInfo::TTopicPartitionInfo*>> partitions;
+        partitions.reserve(TotalPartitionCount);
+
+        for (auto& [shardIdx, tabletInfo] : Shards) {
+            for (const auto& partitionInfo : tabletInfo->Partitions) {
+                partitions.push_back({shardIdx, partitionInfo.Get()});
+            }
+        }
+
+        std::sort(partitions.begin(), partitions.end(), [](const auto& lhs, const auto& rhs) {
+            return lhs.second->PqId < rhs.second->PqId;
+        });
+
+        return partitions;
+    }
+
+    NKikimrPQ::TPQTabletConfig GetTabletConfig() const {
+        NKikimrPQ::TPQTabletConfig tabletConfig;
+        if (!TabletConfig.empty()) {
+            bool parseOk = ParseFromStringNoSizeLimit(tabletConfig, TabletConfig);
+            Y_ABORT_UNLESS(parseOk, "Previously serialized pq tablet config cannot be parsed");
+        }
+        return tabletConfig;
+    }
+
     void PrepareAlter(TTopicInfo::TPtr alterData) {
         Y_ABORT_UNLESS(alterData, "No alter data at Alter prepare");
         alterData->AlterVersion = AlterVersion + 1;
@@ -1203,7 +1237,7 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
         TotalPartitionCount = AlterData->TotalPartitionCount;
         MaxPartsPerTablet = AlterData->MaxPartsPerTablet;
         if (!AlterData->TabletConfig.empty())
-            TabletConfig = AlterData->TabletConfig;
+            TabletConfig = std::move(AlterData->TabletConfig);
         ++AlterVersion;
         Y_ABORT_UNLESS(BalancerTabletID == AlterData->BalancerTabletID || !HasBalancer());
         Y_ABORT_UNLESS(AlterData->HasBalancer());
@@ -2335,7 +2369,12 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
         alterData->IndexKeys.assign(config.GetKeyColumnNames().begin(), config.GetKeyColumnNames().end());
         Y_ABORT_UNLESS(alterData->IndexKeys.size());
         alterData->IndexDataColumns.assign(config.GetDataColumnNames().begin(), config.GetDataColumnNames().end());
+
         alterData->State = config.HasState() ? config.GetState() : EState::EIndexStateReady;
+
+        if (config.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+            alterData->SpecializedIndexDescription = config.GetVectorIndexKmeansTreeDescription();
+        }
 
         return result;
     }
@@ -2348,6 +2387,8 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
     TVector<TString> IndexDataColumns;
 
     TTableIndexInfo::TPtr AlterData = nullptr;
+
+    std::variant<std::monostate, NKikimrSchemeOp::TVectorIndexKmeansTreeDescription> SpecializedIndexDescription;
 };
 
 struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
@@ -2364,8 +2405,6 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
             : Status(status)
         {}
     };
-
-    static constexpr ui32 MaxInProgressShards = 10;
 
     TCdcStreamInfo(ui64 version, EMode mode, EFormat format, bool vt, const TDuration& rt, const TString& awsRegion, EState state)
         : AlterVersion(version)
@@ -2887,6 +2926,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     TString ImplTablePath;
     NTableIndex::TTableColumns ImplTableColumns;
+    TVector<NKikimrSchemeOp::TTableDescription> ImplTableDescriptions;
+
+    std::variant<std::monostate, NKikimrSchemeOp::TVectorIndexKmeansTreeDescription> SpecializedIndexDescription;
 
     EState State = EState::Invalid;
     TString Issue;
@@ -3026,6 +3068,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         indexInfo->IndexName = row.template GetValue<Schema::IndexBuild::IndexName>();
         indexInfo->IndexType = row.template GetValue<Schema::IndexBuild::IndexType>();
+
+        // TODO load indexInfo->ImplTableDescriptions
 
         indexInfo->State = TIndexBuildInfo::EState(
             row.template GetValue<Schema::IndexBuild::State>());
@@ -3218,11 +3262,22 @@ struct TViewInfo : TSimpleRefCount<TViewInfo> {
     TString QueryText;
 };
 
+struct TResourcePoolInfo : TSimpleRefCount<TResourcePoolInfo> {
+    using TPtr = TIntrusivePtr<TResourcePoolInfo>;
+
+    ui64 AlterVersion = 0;
+    NKikimrSchemeOp::TResourcePoolProperties Properties;
+};
+
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
     const THashMap<ui32, TTableInfo::TColumn>& sourceColumns,
     const THashMap<ui32, TTableInfo::TColumn>& alterColumns,
     const THashMap<TString, ui32>& colName2Id,
     const TSubDomainInfo& subDomain, TString& errStr);
+
+std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceName, const TString& dataType, 
+    const NKikimr::NScheme::TTypeRegistry& typeRegistry, bool pgTypesEnabled, TString& errStr);
+
 }
 
 }

@@ -208,7 +208,8 @@ private:
                     .IsResolved()
                     .NotDeleted()
                     .NotUnderDeleting()
-                    .IsTable();
+                    .IsTable()
+                    .FailOnRestrictedCreateInTempZone();
 
                 if (!checks) {
                     explain = checks.GetError();

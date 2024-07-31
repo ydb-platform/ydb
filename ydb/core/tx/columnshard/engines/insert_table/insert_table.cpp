@@ -22,7 +22,10 @@ TInsertionSummary::TCounters TInsertTable::Commit(IDbWrapper& dbTable, ui64 plan
     TInsertionSummary::TCounters counters;
     for (auto writeId : writeIds) {
         std::optional<TInsertedData> data = Summary.ExtractInserted(writeId);
-        Y_ABORT_UNLESS(data, "Commit %" PRIu64 ":%" PRIu64 " : writeId %" PRIu64 " not found", planStep, txId, (ui64)writeId);
+        if (!data) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("ps", planStep)("tx", txId)("write_id", (ui64)writeId)("event", "hasn't data for commit");
+            continue;
+        }
 
         counters.Rows += data->GetMeta().GetNumRows();
         counters.RawBytes += data->GetMeta().GetRawBytes();
@@ -133,7 +136,9 @@ std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const TSnapshot& sna
     std::vector<TCommittedBlob> result;
     result.reserve(ret.size());
     for (auto&& i : ret) {
-        result.emplace_back(TCommittedBlob(i->GetBlobRange(), i->GetSnapshot(), i->GetSchemaVersion(), i->GetMeta().GetNumRows(), i->GetMeta().GetFirstPK(pkSchema), i->GetMeta().GetLastPK(pkSchema)));
+        result.emplace_back(TCommittedBlob(
+            i->GetBlobRange(), i->GetSnapshot(), i->GetSchemaVersion(), i->GetMeta().GetNumRows(), i->GetMeta().GetFirstPK(pkSchema), i->GetMeta().GetLastPK(pkSchema)
+        , i->GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete, i->GetMeta().GetSchemaSubset()));
     }
 
     return result;

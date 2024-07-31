@@ -1,4 +1,5 @@
 USE plato;
+pragma yt.DisableOptimizers="OutHorizontalJoin,HorizontalJoin,MultiHorizontalJoin,FuseMultiOutsWithOuterMaps";
 
 SELECT
     ni + Date("2000-01-01") ,
@@ -18,7 +19,13 @@ SELECT
     ni + Datetime64("1900-01-01T03:04:05Z"),
     wi + Datetime64("1900-01-01T03:04:05Z"),
     ni + Timestamp64("1900-01-01T03:04:05.678912Z"),
-    wi + Timestamp64("1900-01-01T03:04:05.678912Z")
+    wi + Timestamp64("1900-01-01T03:04:05.678912Z"),
+    ni + TzDate32("1900-01-01,Europe/Moscow"),
+    wi + TzDate32("1900-01-01,Europe/Moscow"),
+    ni + TzDatetime64("1900-01-01T03:04:05,Europe/Moscow"),
+    wi + TzDatetime64("1900-01-01T03:04:05,Europe/Moscow"),
+    ni + TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow"),
+    wi + TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow"),
 FROM Dates;
 
 SELECT
@@ -39,6 +46,12 @@ SELECT
     Interval("P1D") + wd,
     Interval64("P1D") + wd,
     Interval("P1D") + wt,
-    Interval64("P1D") + wt
+    Interval64("P1D") + wt,
+    Interval("P1D") + waz,
+    Interval64("P1D") + waz,
+    Interval("P1D") + wdz,
+    Interval64("P1D") + wdz,
+    Interval("P1D") + wtz,
+    Interval64("P1D") + wtz
 FROM Dates;
 

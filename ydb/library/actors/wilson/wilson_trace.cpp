@@ -85,6 +85,25 @@ namespace NWilson {
         return TTraceId(traceId, spanId, verbosity, Max<ui32>());
     }
 
+    TString TTraceId::ToTraceresponseHeader() const {
+        if (!*this) {
+            return {};
+        }
+
+        TString result;
+        result.reserve(55); // 2 + 1 + 32 + 1 + 16 + 1 + 2 = 55
+
+        result += "00-";
+        result += GetHexTraceId();
+        result += "-";
+        result += HexEncode(GetSpanIdPtr(), GetSpanIdSize());
+        result += "-00";
+
+        std::for_each(result.begin(), result.vend(), [](char& c) { c = std::tolower(c); });
+
+        return result;
+    }
+
     TString TTraceId::GetHexTraceId() const {
         return HexEncode(GetTraceIdPtr(), GetTraceIdSize());
     }

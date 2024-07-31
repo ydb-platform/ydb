@@ -2,7 +2,7 @@
 #include "blobs_action/transaction/tx_write.h"
 #include "blobs_action/transaction/tx_draft.h"
 #include "counters/columnshard.h"
-#include "operations/slice_builder.h"
+#include "operations/batch_builder/builder.h"
 #include "operations/write_data.h"
 
 #include <ydb/core/tx/conveyor/usage/service.h>
@@ -42,9 +42,8 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
             Y_ABORT("invalid function usage");
     }
 
-    LOG_S_INFO("Write (overload) " << writeData.GetSize() << " bytes into pathId " << writeData.GetWriteMeta().GetTableId()
-        << " overload reason: [" << overloadReason << "]"
-        << " at tablet " << TabletID());
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "write_overload")("size", writeData.GetSize())
+        ("path_id", writeData.GetWriteMeta().GetTableId())("reason", overloadReason);
 
     ctx.Send(writeData.GetWriteMeta().GetSource(), event.release(), 0, cookie);
 }
@@ -93,7 +92,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
     auto wg = WritesMonitor.FinishWrite(wBuffer.GetSumSize(), wBuffer.GetAggregations().size());
 
     for (auto&& aggr : baseAggregations) {
-        const auto& writeMeta = aggr->GetWriteData()->GetWriteMeta();
+        const auto& writeMeta = aggr->GetWriteMeta();
 
         if (!TablesManager.IsReadyForWrite(writeMeta.GetTableId())) {
             ACFL_ERROR("event", "absent_pathId")("path_id", writeMeta.GetTableId())("has_index", TablesManager.HasPrimaryIndex());
@@ -125,7 +124,8 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
             } else {
                 auto operation = OperationsManager->GetOperation((TWriteId)writeMeta.GetWriteId());
                 Y_ABORT_UNLESS(operation);
-                auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), operation->GetLockId(), NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, "put data fails");
+                auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), operation->GetLockId(), NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, 
+                    ev->Get()->GetErrorMessage() ? ev->Get()->GetErrorMessage() : "put data fails");
                 ctx.Send(writeMeta.GetSource(), result.release(), 0, operation->GetCookie());
             }
             CSCounters.OnFailedWriteResponse(EWriteFailReason::PutBlob);
@@ -168,6 +168,9 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     }
 
     NEvWrite::TWriteMeta writeMeta(writeId, tableId, source, granuleShardingVersion);
+    if (record.HasModificationType()) {
+        writeMeta.SetModificationType(TEnumOperator<NEvWrite::EModificationType>::DeserializeFromProto(record.GetModificationType()));
+    }
     writeMeta.SetDedupId(dedupId);
     Y_ABORT_UNLESS(record.HasLongTxId());
     writeMeta.SetLongTxId(NLongTxService::TLongTxId::FromProto(record.GetLongTxId()));
@@ -232,7 +235,8 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
             << WritesMonitor.DebugString()
             << " at tablet " << TabletID());
         writeData.MutableWriteMeta().SetWriteMiddle1StartInstant(TMonotonic::Now());
-        std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(TabletID(), SelfId(), BufferizationWriteActorId, std::move(writeData));
+        std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildBatchesTask>(TabletID(), SelfId(), BufferizationWriteActorId, std::move(writeData),
+            snapshotSchema, GetLastTxSnapshot());
         NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
     }
 }
@@ -327,9 +331,11 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     }
 
     const auto& operation = record.GetOperations()[0];
-    if (operation.GetType() != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE) {
+    const std::optional<NEvWrite::EModificationType> mType = TEnumOperator<NEvWrite::EModificationType>::DeserializeFromProto(operation.GetType());
+    if (!mType) {
         IncCounter(COUNTER_WRITE_FAIL);
-        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "only REPLACE operation is supported");
+        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, 
+            "operation " + NKikimrDataEvents::TEvWrite::TOperation::EOperationType_Name(operation.GetType()) + " is not supported");
         ctx.Send(source, result.release(), 0, cookie);
         return;
     }
@@ -380,10 +386,10 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         granuleShardingVersionId = record.GetGranuleShardingVersionId();
     }
 
-    auto writeOperation = OperationsManager->RegisterOperation(lockId, cookie, granuleShardingVersionId);
+    auto writeOperation = OperationsManager->RegisterOperation(lockId, cookie, granuleShardingVersionId, *mType);
     Y_ABORT_UNLESS(writeOperation);
     writeOperation->SetBehaviour(behaviour);
-    writeOperation->Start(*this, tableId, arrowData, source, ctx);
+    writeOperation->Start(*this, tableId, arrowData, source, schema, ctx);
 }
 
 }

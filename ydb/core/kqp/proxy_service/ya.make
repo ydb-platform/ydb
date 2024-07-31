@@ -19,6 +19,7 @@ PEERDIR(
     ydb/core/kqp/counters
     ydb/core/kqp/proxy_service/proto
     ydb/core/kqp/run_script_actor
+    ydb/core/kqp/workload_service
     ydb/core/mind
     ydb/core/protos
     ydb/core/tx/tx_proxy

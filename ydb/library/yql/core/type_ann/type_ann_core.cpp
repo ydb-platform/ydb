@@ -117,28 +117,51 @@ namespace NTypeAnnImpl {
         bool isValid;
         if (atomNode.Flags() & TNodeFlags::BinaryContent) {
             // just deserialize
-            switch (sizeof(T)) {
-            case sizeof(ui16): {
+            switch (slot) {
+            case NKikimr::NUdf::EDataSlot::Date: {
                 ui16 value;
                 ui16 tzId;
                 isValid = NKikimr::NMiniKQL::DeserializeTzDate(atomNode.Content(), value, tzId);
                 plainValue = SerializeTzComponents(isValid, value, tzId);
                 break;
             }
-            case sizeof(ui32): {
+            case NKikimr::NUdf::EDataSlot::Datetime: {
                 ui32 value;
                 ui16 tzId;
                 isValid = NKikimr::NMiniKQL::DeserializeTzDatetime(atomNode.Content(), value, tzId);
                 plainValue = SerializeTzComponents(isValid, value, tzId);
                 break;
             }
-            case sizeof(ui64): {
+            case NKikimr::NUdf::EDataSlot::Timestamp: {
                 ui64 value;
                 ui16 tzId;
                 isValid = NKikimr::NMiniKQL::DeserializeTzTimestamp(atomNode.Content(), value, tzId);
                 plainValue = SerializeTzComponents(isValid, value, tzId);
                 break;
             }
+            case NKikimr::NUdf::EDataSlot::Date32: {
+                i32 value;
+                ui16 tzId;
+                isValid = NKikimr::NMiniKQL::DeserializeTzDate32(atomNode.Content(), value, tzId);
+                plainValue = SerializeTzComponents(isValid, value, tzId);
+                break;
+            }
+            case NKikimr::NUdf::EDataSlot::Datetime64: {
+                i64 value;
+                ui16 tzId;
+                isValid = NKikimr::NMiniKQL::DeserializeTzDatetime64(atomNode.Content(), value, tzId);
+                plainValue = SerializeTzComponents(isValid, value, tzId);
+                break;
+            }
+            case NKikimr::NUdf::EDataSlot::Timestamp64: {
+                i64 value;
+                ui16 tzId;
+                isValid = NKikimr::NMiniKQL::DeserializeTzTimestamp64(atomNode.Content(), value, tzId);
+                plainValue = SerializeTzComponents(isValid, value, tzId);
+                break;
+            }
+            default:
+                Y_ENSURE(false, "Unknown data slot:" << slot);
             }
         } else {
             TStringBuf atom = atomNode.Content();
@@ -740,6 +763,18 @@ namespace NTypeAnnImpl {
                 }
             } else if (input->Content() == "Interval64") {
                 if (!IsValidSmallData<i64>(input->Head(), input->Content(), ctx.Expr, NKikimr::NUdf::EDataSlot::Interval64, textValue)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            } else if (input->Content() == "TzDate32") {
+                if (!IsValidTzData<i32>(input->Head(), input->Content(), ctx.Expr, NKikimr::NUdf::EDataSlot::Date32, textValue)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            } else if (input->Content() == "TzDatetime64") {
+                if (!IsValidTzData<i64>(input->Head(), input->Content(), ctx.Expr, NKikimr::NUdf::EDataSlot::Datetime64, textValue)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            } else if (input->Content() == "TzTimestamp64") {
+                if (!IsValidTzData<i64>(input->Head(), input->Content(), ctx.Expr, NKikimr::NUdf::EDataSlot::Timestamp64, textValue)) {
                     return IGraphTransformer::TStatus::Error;
                 }
             } else if (input->Content() == "Uuid") {
@@ -2714,7 +2749,9 @@ namespace NTypeAnnImpl {
                 if (!(*dataTypeOne == *dataTypeTwo)) {
                     ctx.Expr.AddError(TIssue(
                         ctx.Expr.GetPosition(input->Pos()),
-                        TStringBuilder() << "Cannot calculate with different decimals."
+                        TStringBuilder() << "Cannot calculate with different decimals: " 
+                            << static_cast<const TTypeAnnotationNode&>(*dataType[0]) << " != " 
+                            << static_cast<const TTypeAnnotationNode&>(*dataType[1])
                     ));
 
                     return IGraphTransformer::TStatus::Error;
@@ -7546,7 +7583,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
 
             auto udfInfo = ctx.Types.UdfModules.FindPtr(moduleName);
-            TStringBuf fileAlias = udfInfo ? udfInfo->FileAlias : "";
+            TStringBuf fileAlias = udfInfo ? udfInfo->FileAlias : ""_sb;
             auto ret = ctx.Expr.Builder(input->Pos())
                 .Callable("Udf")
                     .Add(0, input->HeadPtr())
@@ -9806,11 +9843,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         TStringBuilder() << "Failed to deduce column order for input - star / qualified star is present in projection"));
                     return IGraphTransformer::TStatus::Error;
                 }
-                childColumnOrder->push_back(ToString(item->Child(1)->Content()));
+                childColumnOrder->AddColumn(ToString(item->Child(1)->Content()));
             }
 
         }
-        YQL_ENSURE(childColumnOrder->size() == numColumns);
+        YQL_ENSURE(childColumnOrder->Size() == numColumns);
 
         output = ctx.Expr.Builder(input->Pos())
             .Callable("AssumeColumnOrder")
@@ -9826,7 +9863,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                                             .Add(0, input->Child(1)->ChildPtr(i))
                                             .Callable(1, "Member")
                                                 .Arg(0, "item")
-                                                .Atom(1, (*childColumnOrder)[i])
+                                                .Atom(1, childColumnOrder->at(i).PhysicalName)
                                             .Seal()
                                         .Seal();
                                 }
@@ -9868,14 +9905,14 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        TVector<TString> topLevelColumns;
+        TColumnOrder topLevelColumns;
         auto type = NCommon::ParseOrderAwareTypeFromYson(input->Head().Content(), topLevelColumns, ctx.Expr, ctx.Expr.GetPosition(input->Pos()));
         if (!type) {
             return IGraphTransformer::TStatus::Error;
         }
 
         TExprNodeList items;
-        for (auto& col : topLevelColumns) {
+        for (auto& [col, gen_col] : topLevelColumns) {
             items.push_back(ctx.Expr.NewAtom(input->Pos(), col));
         }
 
@@ -11063,7 +11100,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
             const auto handlerSlot = dataType->GetSlot();
             const auto castResult = GetCastResult(handlerSlot, resultSlot);
-            if (!castResult.Defined() || *castResult == NUdf::ECastOptions::Impossible) {
+            if (*castResult & NUdf::ECastOptions::Impossible) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node.Pos()),
                     TStringBuilder() << "Cannot cast type of case handler " << handlerSlot << " to the returning type of JSON_VALUE " << resultSlot));
                 return false;
@@ -11858,7 +11895,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         auto resultType = ctx.Expr.MakeType<TOptionalExprType>(dstType);
 
         const auto cast = NUdf::GetCastResult(sSlot, tSlot);
-        if (!cast) {
+        if (*cast & NUdf::ECastOptions::Impossible) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                 TStringBuilder() << "Unsupported types in rounding: " << *srcType << " " << input->Content() << " to " << *dstType));
             return IGraphTransformer::TStatus::Error;

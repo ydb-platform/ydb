@@ -18,6 +18,8 @@ public:
 
     void CreateTopic(const TString& path = TEST_TOPIC, const TString& consumer = TEST_CONSUMER, size_t partitionCount = 1,
                      std::optional<size_t> maxPartitionCount = std::nullopt);
+    void CreateTopicWithAutoscale(const TString& path = TEST_TOPIC, const TString& consumer = TEST_CONSUMER, size_t partitionCount = 1,
+                     size_t maxPartitionCount = 100);
 
     TString GetEndpoint() const;
     TString GetTopicPath(const TString& name = TEST_TOPIC) const;

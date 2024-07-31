@@ -1,6 +1,8 @@
-## VIEW (INDEX) {#secondary_index}
+# VIEW (INDEX)
 
-To make a `SELECT` by secondary index statement, use the following:
+{% include [olap_warning_note](../../../../../_includes/not_allow_for_olap_note.md) %}
+
+To make a `SELECT` by secondary index of row-oriented table statement, use the following:
 
 ```yql
 SELECT *
@@ -10,7 +12,7 @@ SELECT *
 
 **Examples**
 
-* Select all the fields from the `series` table using the `views_index` index with the `views >=someValue` criteria:
+* Select all the fields from the `series` row-oriented table using the `views_index` index with the `views >=someValue` criteria:
 
   ```yql
   SELECT series_id, title, info, release_date, views, uploaded_user_id
@@ -18,7 +20,7 @@ SELECT *
       WHERE views >= someValue
   ```
 
-* [`JOIN`](../../join.md) the `series` and `users` tables on the `userName` field using the `users_index` and `name_index` indexes, respectively:
+* [`JOIN`](../../join.md) the `series` and `users` row-oriented tables on the `userName` field using the `users_index` and `name_index` indexes, respectively:
 
   ```yql
   SELECT t1.series_id, t1.title

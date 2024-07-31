@@ -82,6 +82,7 @@ namespace NActors::NQueueBench::NTracing {
         PRINT_STAT(SuccessReallyFastPop, "  ", consumerThreads);
         PRINT_STAT(SuccessFastPop, "  ", consumerThreads);
         PRINT_STAT(SuccessSlowPop, "  ", consumerThreads);
+        PRINT_STAT(SuccessOvertakenPop, "  ", consumerThreads);
 #undef PRINT_STAT
 
 #define PRINT_LONG(STAT_PREFIX, THREAD_COUNT) \

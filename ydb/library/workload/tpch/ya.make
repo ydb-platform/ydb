@@ -40,7 +40,7 @@ PEERDIR(
     ydb/library/accessor
     library/cpp/resource
     ydb/library/benchmarks/gen/tpch-dbgen
-    ydb/library/workload/benchmark_base
+    ydb/library/workload/tpc_base
 )
 
 END()

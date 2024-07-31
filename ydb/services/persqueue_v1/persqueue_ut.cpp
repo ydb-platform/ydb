@@ -979,7 +979,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     }
 
     Y_UNIT_TEST(DirectReadPreCached) {
-        TPersQueueV1TestServer server{{.CheckACL=true}};
+TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         SET_LOCALS;
         TDirectReadTestSetup setup{server};
         setup.DoWrite(pqClient->GetDriver(), "acc/topic1", 1_MB, 30);
@@ -1012,7 +1012,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     }
 
     Y_UNIT_TEST(DirectReadNotCached) {
-        TPersQueueV1TestServer server{{.CheckACL=true}};
+        TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         SET_LOCALS;
         TDirectReadTestSetup setup{server};
 
@@ -1043,7 +1043,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     }
 
     Y_UNIT_TEST(DirectReadBadCases) {
-        TPersQueueV1TestServer server{{.CheckACL=true}};
+        TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         SET_LOCALS;
         TDirectReadTestSetup setup{server};
         setup.InitControlSession("acc/topic1");
@@ -3374,6 +3374,54 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightTotal->Val(), 0);
 
         DumpCounters("End");
+    }
+
+    Y_UNIT_TEST(NoDecompressionMemoryLeaks) {
+
+        NPersQueue::TTestServer server;
+        server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::PQ_READ_PROXY});
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
+
+        auto driver = server.AnnoyingClient->GetDriver();
+        auto decompressor = CreateThreadPoolExecutorWrapper(2);
+
+        NYdb::NPersQueue::TReadSessionSettings settings;
+        settings.ConsumerName("shared/user").AppendTopics(SHORT_TOPIC_NAME).ReadOriginal({"dc1"});
+        settings.DecompressionExecutor(decompressor);
+        settings.MaxMemoryUsageBytes(5_MB);
+        settings.Decompress(true);
+
+        auto reader = CreateReader(*driver, settings);
+
+        //
+        // there should be 1 TCreatePartitionStreamEvent events in the queue
+        //
+        {
+            auto msg = reader->GetEvent(true, 1);
+            UNIT_ASSERT(msg);
+
+            Cerr << ">>>> message: " << NYdb::NPersQueue::DebugString(*msg) << Endl;
+
+            auto ev = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*msg);
+            UNIT_ASSERT(ev);
+
+            ev->Confirm();
+        }
+
+        for (ui32 i = 0; i < 10; ++i) {
+            auto writer = CreateSimpleWriter(*driver, SHORT_TOPIC_NAME, TStringBuilder() << "source" << i);
+
+            std::string message(1_MB - 1_KB, 'x');
+
+            bool res = writer->Write(message, 1);
+            UNIT_ASSERT(res);
+
+            res = writer->Close(TDuration::Seconds(10));
+            UNIT_ASSERT(res);
+        }
+
+        decompressor->StartFuncs({0, 1, 2});
+        Sleep(TDuration::Seconds(1));
     }
 
     enum WhenTheTopicIsDeletedMode {
@@ -7273,7 +7321,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                 auto ev = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*msg);
                 if (!ev)
                     continue;
-                TString data("a", dataSize);
+                TString data(dataSize, 'a');
                 NYdb::NTopic::TWriteMessage writeMsg{data};
                 writeMsg.CreateTimestamp(TInstant::Now() - writeLag);
                 writeMsg.Codec = NYdb::NTopic::ECodec::RAW;

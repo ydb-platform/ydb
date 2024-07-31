@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:9:20: Error: At function: YtWriteTable!
+    	with column_groups="{g1=[c;d];def=#}"
+	                   ^
+        <tmp_path>/program.sql:<main>:9:20: Error: All appends within the same commit should have the equal "column_groups" value
+        	with column_groups="{g1=[c;d];def=#}"
+	                   ^

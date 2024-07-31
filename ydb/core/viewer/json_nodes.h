@@ -20,9 +20,9 @@ using namespace NActors;
 using namespace NNodeWhiteboard;
 using ::google::protobuf::FieldDescriptor;
 
-class TJsonNodes : public TViewerPipeClient<TJsonNodes> {
+class TJsonNodes : public TViewerPipeClient {
     using TThis = TJsonNodes;
-    using TBase = TViewerPipeClient<TJsonNodes>;
+    using TBase = TViewerPipeClient;
     using TNodeId = ui32;
     using TPDiskId = std::pair<TNodeId, ui32>;
     IViewer* Viewer;
@@ -96,10 +96,6 @@ class TJsonNodes : public TViewerPipeClient<TJsonNodes> {
     std::optional<ui64> MaximumDisksPerNode;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TString GetLogPrefix() {
         static TString prefix = "json/nodes ";
         return prefix;
@@ -178,7 +174,7 @@ public:
         }
     }
 
-    void Bootstrap() {
+    void Bootstrap() override {
         BLOG_TRACE("Bootstrap()");
         if (Type != EType::Any) {
             TIntrusivePtr<TDynamicNameserviceConfig> dynamicNameserviceConfig = AppData()->DynamicNameserviceConfig;
@@ -283,6 +279,19 @@ public:
                 if (std::to_string(nodeId).contains(Filter)) {
                     return true;
                 }
+                return false;
+            }
+        } else {
+            if (Storage && With == EWith::SpaceProblems) {
+                return false;
+            }
+            if (UptimeSeconds > 0) {
+                return false;
+            }
+            if (ProblemNodesOnly) {
+                return false;
+            }
+            if (Filter) {
                 return false;
             }
         }
@@ -694,8 +703,8 @@ public:
     }
 
     static double GetLoadAverage(const NKikimrWhiteboard::TSystemStateInfo& sysInfo) {
-        if (sysInfo.LoadAverageSize() > 0) {
-            return sysInfo.GetLoadAverage(0);
+        if (sysInfo.LoadAverageSize() > 0 && sysInfo.GetNumberOfCpus() > 0) {
+            return sysInfo.GetLoadAverage(0) * 100 / sysInfo.GetNumberOfCpus();
         }
         return 0;
     }
@@ -710,7 +719,7 @@ public:
         return missing;
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         NKikimrViewer::TNodesInfo result;
 
         if (Storage && BaseConfig) {
@@ -748,6 +757,9 @@ public:
                 }
             }
         }
+
+        bool noDC = true;
+        bool noRack = true;
 
         for (TNodeId nodeId : NodeIds) {
             if (!CheckNodeFilters(nodeId)) {
@@ -798,6 +810,19 @@ public:
                         tabletInfo = std::move(viewerTabletInfo);
                     }
                 }
+            }
+
+            if (!nodeInfo.GetSystemState().GetLocation().GetDataCenter().empty()) {
+                noDC = false;
+            }
+            if (nodeInfo.GetSystemState().GetSystemLocation().GetDataCenter() != 0) {
+                noDC = false;
+            }
+            if (!nodeInfo.GetSystemState().GetLocation().GetRack().empty()) {
+                noRack = false;
+            }
+            if (nodeInfo.GetSystemState().GetSystemLocation().GetRack() != 0) {
+                noRack = false;
             }
         }
 
@@ -882,6 +907,12 @@ public:
 
         if (MaximumDisksPerNode.has_value()) {
             result.SetMaximumDisksPerNode(MaximumDisksPerNode.value());
+        }
+        if (noDC) {
+            result.SetNoDC(true);
+        }
+        if (noRack) {
+            result.SetNoRack(true);
         }
 
         TStringStream json;

@@ -84,6 +84,14 @@ void EnsureScriptSpecificTypes(
         case EScriptType::CustomPython:
         case EScriptType::CustomPython2:
         case EScriptType::CustomPython3:
+        case EScriptType::SystemPython2:
+        case EScriptType::SystemPython3:
+        case EScriptType::SystemPython3_8:
+        case EScriptType::SystemPython3_9:
+        case EScriptType::SystemPython3_10:
+        case EScriptType::SystemPython3_11:
+        case EScriptType::SystemPython3_12:
+        case EScriptType::SystemPython3_13:
             return TPythonTypeChecker().Walk(funcType, env);
         case EScriptType::Javascript:
             return TJavascriptTypeChecker().Walk(funcType, env);
@@ -301,6 +309,12 @@ bool IsCustomPython(EScriptType type) {
 bool IsSystemPython(EScriptType type) {
     return type == EScriptType::SystemPython2
         || type == EScriptType::SystemPython3
+        || type == EScriptType::SystemPython3_8
+        || type == EScriptType::SystemPython3_9
+        || type == EScriptType::SystemPython3_10
+        || type == EScriptType::SystemPython3_11
+        || type == EScriptType::SystemPython3_12
+        || type == EScriptType::SystemPython3_13
         || type == EScriptType::Python
         || type == EScriptType::Python2;
 }
@@ -2104,12 +2118,14 @@ TRuntimeNode TProgramBuilder::JoinDict(TRuntimeNode dict1, bool isMulti1, TRunti
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::GraceJoin(TRuntimeNode flowLeft, TRuntimeNode flowRight, EJoinKind joinKind,
+TRuntimeNode TProgramBuilder::GraceJoinCommon(const TStringBuf& funcName, TRuntimeNode flowLeft, TRuntimeNode flowRight, EJoinKind joinKind,
         const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& rightKeyColumns,
         const TArrayRef<const ui32>& leftRenames, const TArrayRef<const ui32>& rightRenames, TType* returnType, EAnyJoinSettings anyJoinSettings ) {
 
     MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
-    MKQL_ENSURE(!rightKeyColumns.empty(), "At least one key column must be specified");
+    if (flowRight) {
+        MKQL_ENSURE(!rightKeyColumns.empty(), "At least one key column must be specified");
+    }
 
     TRuntimeNode::TList leftKeyColumnsNodes, rightKeyColumnsNodes, leftRenamesNodes, rightRenamesNodes;
 
@@ -2126,9 +2142,11 @@ TRuntimeNode TProgramBuilder::GraceJoin(TRuntimeNode flowLeft, TRuntimeNode flow
     std::transform(rightRenames.cbegin(), rightRenames.cend(), std::back_inserter(rightRenamesNodes), [this](const ui32 idx) { return NewDataLiteral(idx); });
 
 
-    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    TCallableBuilder callableBuilder(Env, funcName, returnType);
     callableBuilder.Add(flowLeft);
-    callableBuilder.Add(flowRight);
+    if (flowRight) {
+        callableBuilder.Add(flowRight);
+    }
     callableBuilder.Add(NewDataLiteral((ui32)joinKind));
     callableBuilder.Add(NewTuple(leftKeyColumnsNodes));
     callableBuilder.Add(NewTuple(rightKeyColumnsNodes));
@@ -2136,9 +2154,14 @@ TRuntimeNode TProgramBuilder::GraceJoin(TRuntimeNode flowLeft, TRuntimeNode flow
     callableBuilder.Add(NewTuple(rightRenamesNodes));
     callableBuilder.Add(NewDataLiteral((ui32)anyJoinSettings));
 
-
     return TRuntimeNode(callableBuilder.Build(), false);
+}
 
+TRuntimeNode TProgramBuilder::GraceJoin(TRuntimeNode flowLeft, TRuntimeNode flowRight, EJoinKind joinKind,
+        const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& rightKeyColumns,
+        const TArrayRef<const ui32>& leftRenames, const TArrayRef<const ui32>& rightRenames, TType* returnType, EAnyJoinSettings anyJoinSettings ) {
+
+    return GraceJoinCommon(__func__, flowLeft, flowRight, joinKind, leftKeyColumns, rightKeyColumns, leftRenames, rightRenames, returnType, anyJoinSettings);
 }
 
 TRuntimeNode TProgramBuilder::GraceSelfJoin(TRuntimeNode flowLeft,  EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& rightKeyColumns,
@@ -2148,37 +2171,8 @@ TRuntimeNode TProgramBuilder::GraceSelfJoin(TRuntimeNode flowLeft,  EJoinKind jo
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
 
-    MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
-
-
-    TRuntimeNode::TList leftKeyColumnsNodes,  rightKeyColumnsNodes, leftRenamesNodes, rightRenamesNodes;
-
-    leftKeyColumnsNodes.reserve(leftKeyColumns.size());
-    std::transform(leftKeyColumns.cbegin(), leftKeyColumns.cend(), std::back_inserter(leftKeyColumnsNodes), [this](const ui32 idx) { return NewDataLiteral(idx); });
-
-    rightKeyColumnsNodes.reserve(rightKeyColumns.size());
-    std::transform(rightKeyColumns.cbegin(), rightKeyColumns.cend(), std::back_inserter(rightKeyColumnsNodes), [this](const ui32 idx) { return NewDataLiteral(idx); });
-
-    leftRenamesNodes.reserve(leftRenames.size());
-    std::transform(leftRenames.cbegin(), leftRenames.cend(), std::back_inserter(leftRenamesNodes), [this](const ui32 idx) { return NewDataLiteral(idx); });
-
-    rightRenamesNodes.reserve(rightRenames.size());
-    std::transform(rightRenames.cbegin(), rightRenames.cend(), std::back_inserter(rightRenamesNodes), [this](const ui32 idx) { return NewDataLiteral(idx); });
-
-
-    TCallableBuilder callableBuilder(Env, __func__, returnType);
-    callableBuilder.Add(flowLeft);
-    callableBuilder.Add(NewDataLiteral((ui32)joinKind));
-    callableBuilder.Add(NewTuple(leftKeyColumnsNodes));
-    callableBuilder.Add(NewTuple(rightKeyColumnsNodes));
-    callableBuilder.Add(NewTuple(leftRenamesNodes));
-    callableBuilder.Add(NewTuple(rightRenamesNodes));
-    callableBuilder.Add(NewDataLiteral((ui32)anyJoinSettings));
-
-    return TRuntimeNode(callableBuilder.Build(), false);
-
+    return GraceJoinCommon(__func__, flowLeft, {}, joinKind, leftKeyColumns, rightKeyColumns, leftRenames, rightRenames, returnType, anyJoinSettings);
 }
-
 
 TRuntimeNode TProgramBuilder::ToSortedDict(TRuntimeNode list, bool all, const TUnaryLambda& keySelector,
     const TUnaryLambda& payloadSelector, bool isCompact, ui64 itemsCountHint) {
@@ -3297,8 +3291,11 @@ TRuntimeNode TProgramBuilder::AddTimezone(TRuntimeNode utc, TRuntimeNode id) {
     case NUdf::EDataSlot::Date: tzType = NUdf::EDataSlot::TzDate; break;
     case NUdf::EDataSlot::Datetime: tzType = NUdf::EDataSlot::TzDatetime; break;
     case NUdf::EDataSlot::Timestamp: tzType = NUdf::EDataSlot::TzTimestamp; break;
+    case NUdf::EDataSlot::Date32: tzType = NUdf::EDataSlot::TzDate32; break;
+    case NUdf::EDataSlot::Datetime64: tzType = NUdf::EDataSlot::TzDatetime64; break;
+    case NUdf::EDataSlot::Timestamp64: tzType = NUdf::EDataSlot::TzTimestamp64; break;
     default:
-        ythrow yexception() << "Unknown date type: " << (ui32)*dataType1->GetDataSlot();
+        ythrow yexception() << "Unknown date type: " << *dataType1->GetDataSlot();
     }
 
     auto resultType = NewOptionalType(NewDataType(tzType));
@@ -3318,8 +3315,11 @@ TRuntimeNode TProgramBuilder::RemoveTimezone(TRuntimeNode local) {
     case NUdf::EDataSlot::TzDate: type = NUdf::EDataSlot::Date; break;
     case NUdf::EDataSlot::TzDatetime: type = NUdf::EDataSlot::Datetime; break;
     case NUdf::EDataSlot::TzTimestamp: type = NUdf::EDataSlot::Timestamp; break;
+    case NUdf::EDataSlot::TzDate32: type = NUdf::EDataSlot::Date32; break;
+    case NUdf::EDataSlot::TzDatetime64: type = NUdf::EDataSlot::Datetime64; break;
+    case NUdf::EDataSlot::TzTimestamp64: type = NUdf::EDataSlot::Timestamp64; break;
     default:
-        ythrow yexception() << "Unknown date with timezone type: " << (ui32)*dataType1->GetDataSlot();
+        ythrow yexception() << "Unknown date with timezone type: " << *dataType1->GetDataSlot();
     }
 
     return Convert(local, NewDataType(type, isOptional1));
@@ -5269,10 +5269,12 @@ TRuntimeNode TProgramBuilder::Cast(TRuntimeNode arg, TType* type) {
     }
 
     const auto options = NKikimr::NUdf::GetCastResult(*sourceType->GetDataSlot(), *targetType->GetDataSlot());
-    MKQL_ENSURE(!(options && (*options & NKikimr::NUdf::ECastOptions::Impossible)),
+    MKQL_ENSURE((*options & NKikimr::NUdf::ECastOptions::Undefined) ||
+        !(*options & NKikimr::NUdf::ECastOptions::Impossible),
         "Impossible to cast " <<  *static_cast<TType*>(sourceType) << " into " << *static_cast<TType*>(targetType));
 
-    const bool useToIntegral = !options || NKikimr::NUdf::ECastOptions::MayFail & *options;
+    const bool useToIntegral = (*options & NKikimr::NUdf::ECastOptions::Undefined) ||
+        (*options & NKikimr::NUdf::ECastOptions::MayFail);
     return useToIntegral ? ToIntegral(arg, type) : Convert(arg, type);
 }
 
@@ -5417,7 +5419,7 @@ TRuntimeNode TProgramBuilder::Round(const std::string_view& callableName, TRunti
     const auto ts = *static_cast<TDataType*>(targetType)->GetDataSlot();
 
     const auto options = NKikimr::NUdf::GetCastResult(ss, ts);
-    MKQL_ENSURE(options && !(*options & NKikimr::NUdf::ECastOptions::Impossible),
+    MKQL_ENSURE(!(*options & NKikimr::NUdf::ECastOptions::Impossible),
         "Impossible to cast " <<  *sourceType << " into " << *targetType);
 
     MKQL_ENSURE(*options & (NKikimr::NUdf::ECastOptions::MayFail |

@@ -404,6 +404,89 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
+
+    Y_UNIT_TEST(PgTables) {
+        bool experimentalPg = false;
+        if (auto* p = std::getenv("YDB_EXPERIMENTAL_PG")) {
+            experimentalPg = true;
+        }
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        auto db = kikimr.GetQueryClient();
+        auto settings = NYdb::NQuery::TExecuteQuerySettings().Syntax(NYdb::NQuery::ESyntax::Pg);
+        {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE table1 (
+                    id int4 primary key
+                );
+                CREATE TABLE table2 (
+                    id varchar primary key
+                );
+            )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT * FROM pg_tables WHERE schemaname = 'public' AND hasindexes = true ORDER BY tablename;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "no result sets");
+            CompareYson(R"([
+                ["t";"f";"f";"f";"public";"table1";"root@builtin";#];
+                ["t";"f";"f";"f";"public";"table2";"root@builtin";#]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                --!syntax_pg
+                select
+                min(schemaname) min_s,
+                min(tablename) min_t,
+                max(schemaname) max_s,
+                max(tablename) max_t
+                from pg_catalog.pg_tables;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "no result sets");
+            CompareYson(R"([
+                ["information_schema";"_pg_foreign_data_wrappers";"public";"views"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                select count(*)
+                from pg_catalog.pg_tables;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "no result sets");
+            CompareYson(
+                Sprintf("[[\"%u\"]]", experimentalPg ? 214 : 211),
+                FormatResultSetYson(result.GetResultSet(0)));
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT rel.oid, rel.relname AS name
+                FROM pg_catalog.pg_class rel
+                    WHERE rel.relkind IN ('r','s','t','p') AND rel.relnamespace = 2200::oid
+                    AND NOT rel.relispartition
+                        ORDER BY rel.relname;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "no result sets");
+            CompareYson(R"([
+                [#;"table1"];[#;"table2"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+        { //SuperSet
+            auto result = db.ExecuteQuery(R"(
+                SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind in ('r', 'p');
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "no result sets");
+            CompareYson(R"([
+                ["table1"];["table2"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
 }
 
 } // namespace NKqp

@@ -3,7 +3,7 @@
  * parse_expr.c
  *	  handle expressions in parser
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -15,6 +15,8 @@
 
 #include "postgres.h"
 
+#include "catalog/pg_aggregate.h"
+#include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "commands/dbcommands.h"
 #include "miscadmin.h"
@@ -34,6 +36,7 @@
 #include "parser/parse_type.h"
 #include "utils/builtins.h"
 #include "utils/date.h"
+#include "utils/fmgroids.h"
 #include "utils/lsyscache.h"
 #include "utils/timestamp.h"
 #include "utils/xml.h"
@@ -74,6 +77,15 @@ static Node *transformWholeRowRef(ParseState *pstate,
 static Node *transformIndirection(ParseState *pstate, A_Indirection *ind);
 static Node *transformTypeCast(ParseState *pstate, TypeCast *tc);
 static Node *transformCollateClause(ParseState *pstate, CollateClause *c);
+static Node *transformJsonObjectConstructor(ParseState *pstate,
+											JsonObjectConstructor *ctor);
+static Node *transformJsonArrayConstructor(ParseState *pstate,
+										   JsonArrayConstructor *ctor);
+static Node *transformJsonArrayQueryConstructor(ParseState *pstate,
+												JsonArrayQueryConstructor *ctor);
+static Node *transformJsonObjectAgg(ParseState *pstate, JsonObjectAgg *agg);
+static Node *transformJsonArrayAgg(ParseState *pstate, JsonArrayAgg *agg);
+static Node *transformJsonIsPredicate(ParseState *pstate, JsonIsPredicate *pred);
 static Node *make_row_comparison_op(ParseState *pstate, List *opname,
 									List *largs, List *rargs, int location);
 static Node *make_row_distinct_op(ParseState *pstate, List *opname,
@@ -130,13 +142,8 @@ transformExprRecurse(ParseState *pstate, Node *expr)
 			break;
 
 		case T_A_Const:
-			{
-				A_Const    *con = (A_Const *) expr;
-				Value	   *val = &con->val;
-
-				result = (Node *) make_const(pstate, val, con->location);
-				break;
-			}
+			result = (Node *) make_const(pstate, (A_Const *) expr);
+			break;
 
 		case T_A_Indirection:
 			result = transformIndirection(pstate, (A_Indirection *) expr);
@@ -305,6 +312,30 @@ transformExprRecurse(ParseState *pstate, Node *expr)
 				result = (Node *) expr;
 				break;
 			}
+
+		case T_JsonObjectConstructor:
+			result = transformJsonObjectConstructor(pstate, (JsonObjectConstructor *) expr);
+			break;
+
+		case T_JsonArrayConstructor:
+			result = transformJsonArrayConstructor(pstate, (JsonArrayConstructor *) expr);
+			break;
+
+		case T_JsonArrayQueryConstructor:
+			result = transformJsonArrayQueryConstructor(pstate, (JsonArrayQueryConstructor *) expr);
+			break;
+
+		case T_JsonObjectAgg:
+			result = transformJsonObjectAgg(pstate, (JsonObjectAgg *) expr);
+			break;
+
+		case T_JsonArrayAgg:
+			result = transformJsonArrayAgg(pstate, (JsonArrayAgg *) expr);
+			break;
+
+		case T_JsonIsPredicate:
+			result = transformJsonIsPredicate(pstate, (JsonIsPredicate *) expr);
+			break;
 
 		default:
 			/* should not reach here */
@@ -487,6 +518,7 @@ transformColumnRef(ParseState *pstate, ColumnRef *cref)
 		case EXPR_KIND_INSERT_TARGET:
 		case EXPR_KIND_UPDATE_SOURCE:
 		case EXPR_KIND_UPDATE_TARGET:
+		case EXPR_KIND_MERGE_WHEN:
 		case EXPR_KIND_GROUP_BY:
 		case EXPR_KIND_ORDER_BY:
 		case EXPR_KIND_DISTINCT_ON:
@@ -573,7 +605,6 @@ transformColumnRef(ParseState *pstate, ColumnRef *cref)
 			{
 				Node	   *field1 = (Node *) linitial(cref->fields);
 
-				Assert(IsA(field1, String));
 				colname = strVal(field1);
 
 				/* Try to identify as an unqualified column */
@@ -606,7 +637,6 @@ transformColumnRef(ParseState *pstate, ColumnRef *cref)
 				Node	   *field1 = (Node *) linitial(cref->fields);
 				Node	   *field2 = (Node *) lsecond(cref->fields);
 
-				Assert(IsA(field1, String));
 				relname = strVal(field1);
 
 				/* Locate the referenced nsitem */
@@ -627,7 +657,6 @@ transformColumnRef(ParseState *pstate, ColumnRef *cref)
 					break;
 				}
 
-				Assert(IsA(field2, String));
 				colname = strVal(field2);
 
 				/* Try to identify as a column of the nsitem */
@@ -654,9 +683,7 @@ transformColumnRef(ParseState *pstate, ColumnRef *cref)
 				Node	   *field2 = (Node *) lsecond(cref->fields);
 				Node	   *field3 = (Node *) lthird(cref->fields);
 
-				Assert(IsA(field1, String));
 				nspname = strVal(field1);
-				Assert(IsA(field2, String));
 				relname = strVal(field2);
 
 				/* Locate the referenced nsitem */
@@ -677,7 +704,6 @@ transformColumnRef(ParseState *pstate, ColumnRef *cref)
 					break;
 				}
 
-				Assert(IsA(field3, String));
 				colname = strVal(field3);
 
 				/* Try to identify as a column of the nsitem */
@@ -706,11 +732,8 @@ transformColumnRef(ParseState *pstate, ColumnRef *cref)
 				Node	   *field4 = (Node *) lfourth(cref->fields);
 				char	   *catname;
 
-				Assert(IsA(field1, String));
 				catname = strVal(field1);
-				Assert(IsA(field2, String));
 				nspname = strVal(field2);
-				Assert(IsA(field3, String));
 				relname = strVal(field3);
 
 				/*
@@ -740,7 +763,6 @@ transformColumnRef(ParseState *pstate, ColumnRef *cref)
 					break;
 				}
 
-				Assert(IsA(field4, String));
 				colname = strVal(field4);
 
 				/* Try to identify as a column of the nsitem */
@@ -855,7 +877,7 @@ exprIsNullConstant(Node *arg)
 	{
 		A_Const    *con = (A_Const *) arg;
 
-		if (con->val.type == T_Null)
+		if (con->isnull)
 			return true;
 	}
 	return false;
@@ -1631,7 +1653,7 @@ transformCaseExpr(ParseState *pstate, CaseExpr *c)
 	{
 		A_Const    *n = makeNode(A_Const);
 
-		n->val.type = T_Null;
+		n->isnull = true;
 		n->location = -1;
 		defresult = (Node *) n;
 	}
@@ -1693,8 +1715,8 @@ transformSubLink(ParseState *pstate, SubLink *sublink)
 
 	/*
 	 * Check to see if the sublink is in an invalid place within the query. We
-	 * allow sublinks everywhere in SELECT/INSERT/UPDATE/DELETE, but generally
-	 * not in utility statements.
+	 * allow sublinks everywhere in SELECT/INSERT/UPDATE/DELETE/MERGE, but
+	 * generally not in utility statements.
 	 */
 	err = NULL;
 	switch (pstate->p_expr_kind)
@@ -1722,6 +1744,7 @@ transformSubLink(ParseState *pstate, SubLink *sublink)
 		case EXPR_KIND_INSERT_TARGET:
 		case EXPR_KIND_UPDATE_SOURCE:
 		case EXPR_KIND_UPDATE_TARGET:
+		case EXPR_KIND_MERGE_WHEN:
 		case EXPR_KIND_GROUP_BY:
 		case EXPR_KIND_ORDER_BY:
 		case EXPR_KIND_DISTINCT_ON:
@@ -2091,6 +2114,14 @@ transformRowExpr(ParseState *pstate, RowExpr *r, bool allowDefault)
 	newr->args = transformExpressionList(pstate, r->args,
 										 pstate->p_expr_kind, allowDefault);
 
+	/* Disallow more columns than will fit in a tuple */
+	if (list_length(newr->args) > MaxTupleAttributeNumber)
+		ereport(ERROR,
+				(errcode(ERRCODE_TOO_MANY_COLUMNS),
+				 errmsg("ROW expressions can have at most %d entries",
+						MaxTupleAttributeNumber),
+				 parser_errposition(pstate, r->location)));
+
 	/* Barring later casting, we consider the type RECORD */
 	newr->row_typeid = RECORDOID;
 	newr->row_format = COERCE_IMPLICIT_CAST;
@@ -2396,6 +2427,7 @@ transformXmlSerialize(ParseState *pstate, XmlSerialize *xs)
 	typenameTypeIdAndMod(pstate, xs->typeName, &targetType, &targetTypmod);
 
 	xexpr->xmloption = xs->xmloption;
+	xexpr->indent = xs->indent;
 	xexpr->location = xs->location;
 	/* We actually only need these to be able to parse back the expression. */
 	xexpr->type = targetType;
@@ -2543,6 +2575,9 @@ transformWholeRowRef(ParseState *pstate, ParseNamespaceItem *nsitem,
 		/* location is not filled in by makeWholeRowVar */
 		result->location = location;
 
+		/* mark Var if it's nulled by any outer joins */
+		markNullableIfNeeded(pstate, result);
+
 		/* mark relation as requiring whole-row SELECT access */
 		markVarForSelectPriv(pstate, result);
 
@@ -2569,6 +2604,8 @@ transformWholeRowRef(ParseState *pstate, ParseNamespaceItem *nsitem,
 		rowexpr->row_format = COERCE_IMPLICIT_CAST;
 		rowexpr->colnames = copyObject(nsitem->p_names->colnames);
 		rowexpr->location = location;
+
+		/* XXX we ought to mark the row as possibly nullable */
 
 		return (Node *) rowexpr;
 	}
@@ -2819,7 +2856,7 @@ make_row_comparison_op(ParseState *pstate, List *opname,
 	 * them ... this coding arbitrarily picks the lowest btree strategy
 	 * number.
 	 */
-	i = bms_first_member(strats);
+	i = bms_next_member(strats, -1);
 	if (i < 0)
 	{
 		/* No common interpretation, so fail */
@@ -3049,6 +3086,8 @@ ParseExprKindName(ParseExprKind exprKind)
 		case EXPR_KIND_UPDATE_SOURCE:
 		case EXPR_KIND_UPDATE_TARGET:
 			return "UPDATE";
+		case EXPR_KIND_MERGE_WHEN:
+			return "MERGE WHEN";
 		case EXPR_KIND_GROUP_BY:
 			return "GROUP BY";
 		case EXPR_KIND_ORDER_BY:
@@ -3103,4 +3142,819 @@ ParseExprKindName(ParseExprKind exprKind)
 			 */
 	}
 	return "unrecognized expression kind";
+}
+
+/*
+ * Make string Const node from JSON encoding name.
+ *
+ * UTF8 is default encoding.
+ */
+static Const *
+getJsonEncodingConst(JsonFormat *format)
+{
+	JsonEncoding encoding;
+	const char *enc;
+	Name		encname = palloc(sizeof(NameData));
+
+	if (!format ||
+		format->format_type == JS_FORMAT_DEFAULT ||
+		format->encoding == JS_ENC_DEFAULT)
+		encoding = JS_ENC_UTF8;
+	else
+		encoding = format->encoding;
+
+	switch (encoding)
+	{
+		case JS_ENC_UTF16:
+			enc = "UTF16";
+			break;
+		case JS_ENC_UTF32:
+			enc = "UTF32";
+			break;
+		case JS_ENC_UTF8:
+			enc = "UTF8";
+			break;
+		default:
+			elog(ERROR, "invalid JSON encoding: %d", encoding);
+			break;
+	}
+
+	namestrcpy(encname, enc);
+
+	return makeConst(NAMEOID, -1, InvalidOid, NAMEDATALEN,
+					 NameGetDatum(encname), false, false);
+}
+
+/*
+ * Make bytea => text conversion using specified JSON format encoding.
+ */
+static Node *
+makeJsonByteaToTextConversion(Node *expr, JsonFormat *format, int location)
+{
+	Const	   *encoding = getJsonEncodingConst(format);
+	FuncExpr   *fexpr = makeFuncExpr(F_CONVERT_FROM, TEXTOID,
+									 list_make2(expr, encoding),
+									 InvalidOid, InvalidOid,
+									 COERCE_EXPLICIT_CALL);
+
+	fexpr->location = location;
+
+	return (Node *) fexpr;
+}
+
+/*
+ * Transform JSON value expression using specified input JSON format or
+ * default format otherwise.
+ *
+ * Returned expression is either ve->raw_expr coerced to text (if needed) or
+ * a JsonValueExpr with formatted_expr set to the coerced copy of raw_expr
+ * if the specified format requires it.
+ */
+static Node *
+transformJsonValueExpr(ParseState *pstate, const char *constructName,
+					   JsonValueExpr *ve, JsonFormatType default_format)
+{
+	Node	   *expr = transformExprRecurse(pstate, (Node *) ve->raw_expr);
+	Node	   *rawexpr;
+	JsonFormatType format;
+	Oid			exprtype;
+	int			location;
+	char		typcategory;
+	bool		typispreferred;
+
+	if (exprType(expr) == UNKNOWNOID)
+		expr = coerce_to_specific_type(pstate, expr, TEXTOID, constructName);
+
+	rawexpr = expr;
+	exprtype = exprType(expr);
+	location = exprLocation(expr);
+
+	get_type_category_preferred(exprtype, &typcategory, &typispreferred);
+
+	if (ve->format->format_type != JS_FORMAT_DEFAULT)
+	{
+		if (ve->format->encoding != JS_ENC_DEFAULT && exprtype != BYTEAOID)
+			ereport(ERROR,
+					errcode(ERRCODE_DATATYPE_MISMATCH),
+					errmsg("JSON ENCODING clause is only allowed for bytea input type"),
+					parser_errposition(pstate, ve->format->location));
+
+		if (exprtype == JSONOID || exprtype == JSONBOID)
+			format = JS_FORMAT_DEFAULT; /* do not format json[b] types */
+		else
+			format = ve->format->format_type;
+	}
+	else if (exprtype == JSONOID || exprtype == JSONBOID)
+		format = JS_FORMAT_DEFAULT; /* do not format json[b] types */
+	else
+		format = default_format;
+
+	if (format != JS_FORMAT_DEFAULT)
+	{
+		Oid			targettype = format == JS_FORMAT_JSONB ? JSONBOID : JSONOID;
+		Node	   *coerced;
+
+		if (exprtype != BYTEAOID && typcategory != TYPCATEGORY_STRING)
+			ereport(ERROR,
+					errcode(ERRCODE_DATATYPE_MISMATCH),
+					ve->format->format_type == JS_FORMAT_DEFAULT ?
+					errmsg("cannot use non-string types with implicit FORMAT JSON clause") :
+					errmsg("cannot use non-string types with explicit FORMAT JSON clause"),
+					parser_errposition(pstate, ve->format->location >= 0 ?
+									   ve->format->location : location));
+
+		/* Convert encoded JSON text from bytea. */
+		if (format == JS_FORMAT_JSON && exprtype == BYTEAOID)
+		{
+			expr = makeJsonByteaToTextConversion(expr, ve->format, location);
+			exprtype = TEXTOID;
+		}
+
+		/* Try to coerce to the target type. */
+		coerced = coerce_to_target_type(pstate, expr, exprtype,
+										targettype, -1,
+										COERCION_EXPLICIT,
+										COERCE_EXPLICIT_CAST,
+										location);
+
+		if (!coerced)
+		{
+			/* If coercion failed, use to_json()/to_jsonb() functions. */
+			Oid			fnoid = targettype == JSONOID ? F_TO_JSON : F_TO_JSONB;
+			FuncExpr   *fexpr = makeFuncExpr(fnoid, targettype,
+											 list_make1(expr),
+											 InvalidOid, InvalidOid,
+											 COERCE_EXPLICIT_CALL);
+
+			fexpr->location = location;
+
+			coerced = (Node *) fexpr;
+		}
+
+		if (coerced == expr)
+			expr = rawexpr;
+		else
+		{
+			ve = copyObject(ve);
+			ve->raw_expr = (Expr *) rawexpr;
+			ve->formatted_expr = (Expr *) coerced;
+
+			expr = (Node *) ve;
+		}
+	}
+
+	/* If returning a JsonValueExpr, formatted_expr must have been set. */
+	Assert(!IsA(expr, JsonValueExpr) ||
+		   ((JsonValueExpr *) expr)->formatted_expr != NULL);
+
+	return expr;
+}
+
+/*
+ * Checks specified output format for its applicability to the target type.
+ */
+static void
+checkJsonOutputFormat(ParseState *pstate, const JsonFormat *format,
+					  Oid targettype, bool allow_format_for_non_strings)
+{
+	if (!allow_format_for_non_strings &&
+		format->format_type != JS_FORMAT_DEFAULT &&
+		(targettype != BYTEAOID &&
+		 targettype != JSONOID &&
+		 targettype != JSONBOID))
+	{
+		char		typcategory;
+		bool		typispreferred;
+
+		get_type_category_preferred(targettype, &typcategory, &typispreferred);
+
+		if (typcategory != TYPCATEGORY_STRING)
+			ereport(ERROR,
+					errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					parser_errposition(pstate, format->location),
+					errmsg("cannot use JSON format with non-string output types"));
+	}
+
+	if (format->format_type == JS_FORMAT_JSON)
+	{
+		JsonEncoding enc = format->encoding != JS_ENC_DEFAULT ?
+			format->encoding : JS_ENC_UTF8;
+
+		if (targettype != BYTEAOID &&
+			format->encoding != JS_ENC_DEFAULT)
+			ereport(ERROR,
+					errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					parser_errposition(pstate, format->location),
+					errmsg("cannot set JSON encoding for non-bytea output types"));
+
+		if (enc != JS_ENC_UTF8)
+			ereport(ERROR,
+					errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					errmsg("unsupported JSON encoding"),
+					errhint("Only UTF8 JSON encoding is supported."),
+					parser_errposition(pstate, format->location));
+	}
+}
+
+/*
+ * Transform JSON output clause.
+ *
+ * Assigns target type oid and modifier.
+ * Assigns default format or checks specified format for its applicability to
+ * the target type.
+ */
+static JsonReturning *
+transformJsonOutput(ParseState *pstate, const JsonOutput *output,
+					bool allow_format)
+{
+	JsonReturning *ret;
+
+	/* if output clause is not specified, make default clause value */
+	if (!output)
+	{
+		ret = makeNode(JsonReturning);
+
+		ret->format = makeJsonFormat(JS_FORMAT_DEFAULT, JS_ENC_DEFAULT, -1);
+		ret->typid = InvalidOid;
+		ret->typmod = -1;
+
+		return ret;
+	}
+
+	ret = copyObject(output->returning);
+
+	typenameTypeIdAndMod(pstate, output->typeName, &ret->typid, &ret->typmod);
+
+	if (output->typeName->setof)
+		ereport(ERROR,
+				errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				errmsg("returning SETOF types is not supported in SQL/JSON functions"));
+
+	if (ret->format->format_type == JS_FORMAT_DEFAULT)
+		/* assign JSONB format when returning jsonb, or JSON format otherwise */
+		ret->format->format_type =
+			ret->typid == JSONBOID ? JS_FORMAT_JSONB : JS_FORMAT_JSON;
+	else
+		checkJsonOutputFormat(pstate, ret->format, ret->typid, allow_format);
+
+	return ret;
+}
+
+/*
+ * Transform JSON output clause of JSON constructor functions.
+ *
+ * Derive RETURNING type, if not specified, from argument types.
+ */
+static JsonReturning *
+transformJsonConstructorOutput(ParseState *pstate, JsonOutput *output,
+							   List *args)
+{
+	JsonReturning *returning = transformJsonOutput(pstate, output, true);
+
+	if (!OidIsValid(returning->typid))
+	{
+		ListCell   *lc;
+		bool		have_jsonb = false;
+
+		foreach(lc, args)
+		{
+			Node	   *expr = lfirst(lc);
+			Oid			typid = exprType(expr);
+
+			have_jsonb |= typid == JSONBOID;
+
+			if (have_jsonb)
+				break;
+		}
+
+		if (have_jsonb)
+		{
+			returning->typid = JSONBOID;
+			returning->format->format_type = JS_FORMAT_JSONB;
+		}
+		else
+		{
+			/* XXX TEXT is default by the standard, but we return JSON */
+			returning->typid = JSONOID;
+			returning->format->format_type = JS_FORMAT_JSON;
+		}
+
+		returning->typmod = -1;
+	}
+
+	return returning;
+}
+
+/*
+ * Coerce json[b]-valued function expression to the output type.
+ */
+static Node *
+coerceJsonFuncExpr(ParseState *pstate, Node *expr,
+				   const JsonReturning *returning, bool report_error)
+{
+	Node	   *res;
+	int			location;
+	Oid			exprtype = exprType(expr);
+
+	/* if output type is not specified or equals to function type, return */
+	if (!OidIsValid(returning->typid) || returning->typid == exprtype)
+		return expr;
+
+	location = exprLocation(expr);
+
+	if (location < 0)
+		location = returning->format->location;
+
+	/* special case for RETURNING bytea FORMAT json */
+	if (returning->format->format_type == JS_FORMAT_JSON &&
+		returning->typid == BYTEAOID)
+	{
+		/* encode json text into bytea using pg_convert_to() */
+		Node	   *texpr = coerce_to_specific_type(pstate, expr, TEXTOID,
+													"JSON_FUNCTION");
+		Const	   *enc = getJsonEncodingConst(returning->format);
+		FuncExpr   *fexpr = makeFuncExpr(F_CONVERT_TO, BYTEAOID,
+										 list_make2(texpr, enc),
+										 InvalidOid, InvalidOid,
+										 COERCE_EXPLICIT_CALL);
+
+		fexpr->location = location;
+
+		return (Node *) fexpr;
+	}
+
+	/* try to coerce expression to the output type */
+	res = coerce_to_target_type(pstate, expr, exprtype,
+								returning->typid, returning->typmod,
+	/* XXX throwing errors when casting to char(N) */
+								COERCION_EXPLICIT,
+								COERCE_EXPLICIT_CAST,
+								location);
+
+	if (!res && report_error)
+		ereport(ERROR,
+				errcode(ERRCODE_CANNOT_COERCE),
+				errmsg("cannot cast type %s to %s",
+					   format_type_be(exprtype),
+					   format_type_be(returning->typid)),
+				parser_coercion_errposition(pstate, location, expr));
+
+	return res;
+}
+
+/*
+ * Make a JsonConstructorExpr node.
+ */
+static Node *
+makeJsonConstructorExpr(ParseState *pstate, JsonConstructorType type,
+						List *args, Expr *fexpr, JsonReturning *returning,
+						bool unique, bool absent_on_null, int location)
+{
+	JsonConstructorExpr *jsctor = makeNode(JsonConstructorExpr);
+	Node	   *placeholder;
+	Node	   *coercion;
+
+	jsctor->args = args;
+	jsctor->func = fexpr;
+	jsctor->type = type;
+	jsctor->returning = returning;
+	jsctor->unique = unique;
+	jsctor->absent_on_null = absent_on_null;
+	jsctor->location = location;
+
+	/*
+	 * Coerce to the RETURNING type and format, if needed.  We abuse
+	 * CaseTestExpr here as placeholder to pass the result of either
+	 * evaluating 'fexpr' or whatever is produced by ExecEvalJsonConstructor()
+	 * that is of type JSON or JSONB to the coercion function.
+	 */
+	if (fexpr)
+	{
+		CaseTestExpr *cte = makeNode(CaseTestExpr);
+
+		cte->typeId = exprType((Node *) fexpr);
+		cte->typeMod = exprTypmod((Node *) fexpr);
+		cte->collation = exprCollation((Node *) fexpr);
+
+		placeholder = (Node *) cte;
+	}
+	else
+	{
+		CaseTestExpr *cte = makeNode(CaseTestExpr);
+
+		cte->typeId = returning->format->format_type == JS_FORMAT_JSONB ?
+			JSONBOID : JSONOID;
+		cte->typeMod = -1;
+		cte->collation = InvalidOid;
+
+		placeholder = (Node *) cte;
+	}
+
+	coercion = coerceJsonFuncExpr(pstate, placeholder, returning, true);
+
+	if (coercion != placeholder)
+		jsctor->coercion = (Expr *) coercion;
+
+	return (Node *) jsctor;
+}
+
+/*
+ * Transform JSON_OBJECT() constructor.
+ *
+ * JSON_OBJECT() is transformed into json[b]_build_object[_ext]() call
+ * depending on the output JSON format. The first two arguments of
+ * json[b]_build_object_ext() are absent_on_null and check_unique.
+ *
+ * Then function call result is coerced to the target type.
+ */
+static Node *
+transformJsonObjectConstructor(ParseState *pstate, JsonObjectConstructor *ctor)
+{
+	JsonReturning *returning;
+	List	   *args = NIL;
+
+	/* transform key-value pairs, if any */
+	if (ctor->exprs)
+	{
+		ListCell   *lc;
+
+		/* transform and append key-value arguments */
+		foreach(lc, ctor->exprs)
+		{
+			JsonKeyValue *kv = castNode(JsonKeyValue, lfirst(lc));
+			Node	   *key = transformExprRecurse(pstate, (Node *) kv->key);
+			Node	   *val = transformJsonValueExpr(pstate, "JSON_OBJECT()",
+													 kv->value,
+													 JS_FORMAT_DEFAULT);
+
+			args = lappend(args, key);
+			args = lappend(args, val);
+		}
+	}
+
+	returning = transformJsonConstructorOutput(pstate, ctor->output, args);
+
+	return makeJsonConstructorExpr(pstate, JSCTOR_JSON_OBJECT, args, NULL,
+								   returning, ctor->unique,
+								   ctor->absent_on_null, ctor->location);
+}
+
+/*
+ * Transform JSON_ARRAY(query [FORMAT] [RETURNING] [ON NULL]) into
+ *  (SELECT  JSON_ARRAYAGG(a  [FORMAT] [RETURNING] [ON NULL]) FROM (query) q(a))
+ */
+static Node *
+transformJsonArrayQueryConstructor(ParseState *pstate,
+								   JsonArrayQueryConstructor *ctor)
+{
+	SubLink    *sublink = makeNode(SubLink);
+	SelectStmt *select = makeNode(SelectStmt);
+	RangeSubselect *range = makeNode(RangeSubselect);
+	Alias	   *alias = makeNode(Alias);
+	ResTarget  *target = makeNode(ResTarget);
+	JsonArrayAgg *agg = makeNode(JsonArrayAgg);
+	ColumnRef  *colref = makeNode(ColumnRef);
+	Query	   *query;
+	ParseState *qpstate;
+
+	/* Transform query only for counting target list entries. */
+	qpstate = make_parsestate(pstate);
+
+	query = transformStmt(qpstate, ctor->query);
+
+	if (count_nonjunk_tlist_entries(query->targetList) != 1)
+		ereport(ERROR,
+				errcode(ERRCODE_SYNTAX_ERROR),
+				errmsg("subquery must return only one column"),
+				parser_errposition(pstate, ctor->location));
+
+	free_parsestate(qpstate);
+
+	colref->fields = list_make2(makeString(pstrdup("q")),
+								makeString(pstrdup("a")));
+	colref->location = ctor->location;
+
+	/*
+	 * No formatting necessary, so set formatted_expr to be the same as
+	 * raw_expr.
+	 */
+	agg->arg = makeJsonValueExpr((Expr *) colref, (Expr *) colref,
+								 ctor->format);
+	agg->absent_on_null = ctor->absent_on_null;
+	agg->constructor = makeNode(JsonAggConstructor);
+	agg->constructor->agg_order = NIL;
+	agg->constructor->output = ctor->output;
+	agg->constructor->location = ctor->location;
+
+	target->name = NULL;
+	target->indirection = NIL;
+	target->val = (Node *) agg;
+	target->location = ctor->location;
+
+	alias->aliasname = pstrdup("q");
+	alias->colnames = list_make1(makeString(pstrdup("a")));
+
+	range->lateral = false;
+	range->subquery = ctor->query;
+	range->alias = alias;
+
+	select->targetList = list_make1(target);
+	select->fromClause = list_make1(range);
+
+	sublink->subLinkType = EXPR_SUBLINK;
+	sublink->subLinkId = 0;
+	sublink->testexpr = NULL;
+	sublink->operName = NIL;
+	sublink->subselect = (Node *) select;
+	sublink->location = ctor->location;
+
+	return transformExprRecurse(pstate, (Node *) sublink);
+}
+
+/*
+ * Common code for JSON_OBJECTAGG and JSON_ARRAYAGG transformation.
+ */
+static Node *
+transformJsonAggConstructor(ParseState *pstate, JsonAggConstructor *agg_ctor,
+							JsonReturning *returning, List *args,
+							Oid aggfnoid, Oid aggtype,
+							JsonConstructorType ctor_type,
+							bool unique, bool absent_on_null)
+{
+	Node	   *node;
+	Expr	   *aggfilter;
+
+	aggfilter = agg_ctor->agg_filter ? (Expr *)
+		transformWhereClause(pstate, agg_ctor->agg_filter,
+							 EXPR_KIND_FILTER, "FILTER") : NULL;
+
+	if (agg_ctor->over)
+	{
+		/* window function */
+		WindowFunc *wfunc = makeNode(WindowFunc);
+
+		wfunc->winfnoid = aggfnoid;
+		wfunc->wintype = aggtype;
+		/* wincollid and inputcollid will be set by parse_collate.c */
+		wfunc->args = args;
+		wfunc->aggfilter = aggfilter;
+		/* winref will be set by transformWindowFuncCall */
+		wfunc->winstar = false;
+		wfunc->winagg = true;
+		wfunc->location = agg_ctor->location;
+
+		/*
+		 * ordered aggs not allowed in windows yet
+		 */
+		if (agg_ctor->agg_order != NIL)
+			ereport(ERROR,
+					errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					errmsg("aggregate ORDER BY is not implemented for window functions"),
+					parser_errposition(pstate, agg_ctor->location));
+
+		/* parse_agg.c does additional window-func-specific processing */
+		transformWindowFuncCall(pstate, wfunc, agg_ctor->over);
+
+		node = (Node *) wfunc;
+	}
+	else
+	{
+		Aggref	   *aggref = makeNode(Aggref);
+
+		aggref->aggfnoid = aggfnoid;
+		aggref->aggtype = aggtype;
+
+		/* aggcollid and inputcollid will be set by parse_collate.c */
+		/* aggtranstype will be set by planner */
+		/* aggargtypes will be set by transformAggregateCall */
+		/* aggdirectargs and args will be set by transformAggregateCall */
+		/* aggorder and aggdistinct will be set by transformAggregateCall */
+		aggref->aggfilter = aggfilter;
+		aggref->aggstar = false;
+		aggref->aggvariadic = false;
+		aggref->aggkind = AGGKIND_NORMAL;
+		aggref->aggpresorted = false;
+		/* agglevelsup will be set by transformAggregateCall */
+		aggref->aggsplit = AGGSPLIT_SIMPLE; /* planner might change this */
+		aggref->aggno = -1;		/* planner will set aggno and aggtransno */
+		aggref->aggtransno = -1;
+		aggref->location = agg_ctor->location;
+
+		transformAggregateCall(pstate, aggref, args, agg_ctor->agg_order, false);
+
+		node = (Node *) aggref;
+	}
+
+	return makeJsonConstructorExpr(pstate, ctor_type, NIL, (Expr *) node,
+								   returning, unique, absent_on_null,
+								   agg_ctor->location);
+}
+
+/*
+ * Transform JSON_OBJECTAGG() aggregate function.
+ *
+ * JSON_OBJECTAGG() is transformed into
+ * json[b]_objectagg[_unique][_strict](key, value) call depending on
+ * the output JSON format.  Then the function call result is coerced to the
+ * target output type.
+ */
+static Node *
+transformJsonObjectAgg(ParseState *pstate, JsonObjectAgg *agg)
+{
+	JsonReturning *returning;
+	Node	   *key;
+	Node	   *val;
+	List	   *args;
+	Oid			aggfnoid;
+	Oid			aggtype;
+
+	key = transformExprRecurse(pstate, (Node *) agg->arg->key);
+	val = transformJsonValueExpr(pstate, "JSON_OBJECTAGG()",
+								 agg->arg->value,
+								 JS_FORMAT_DEFAULT);
+	args = list_make2(key, val);
+
+	returning = transformJsonConstructorOutput(pstate, agg->constructor->output,
+											   args);
+
+	if (returning->format->format_type == JS_FORMAT_JSONB)
+	{
+		if (agg->absent_on_null)
+			if (agg->unique)
+				aggfnoid = F_JSONB_OBJECT_AGG_UNIQUE_STRICT;
+			else
+				aggfnoid = F_JSONB_OBJECT_AGG_STRICT;
+		else if (agg->unique)
+			aggfnoid = F_JSONB_OBJECT_AGG_UNIQUE;
+		else
+			aggfnoid = F_JSONB_OBJECT_AGG;
+
+		aggtype = JSONBOID;
+	}
+	else
+	{
+		if (agg->absent_on_null)
+			if (agg->unique)
+				aggfnoid = F_JSON_OBJECT_AGG_UNIQUE_STRICT;
+			else
+				aggfnoid = F_JSON_OBJECT_AGG_STRICT;
+		else if (agg->unique)
+			aggfnoid = F_JSON_OBJECT_AGG_UNIQUE;
+		else
+			aggfnoid = F_JSON_OBJECT_AGG;
+
+		aggtype = JSONOID;
+	}
+
+	return transformJsonAggConstructor(pstate, agg->constructor, returning,
+									   args, aggfnoid, aggtype,
+									   JSCTOR_JSON_OBJECTAGG,
+									   agg->unique, agg->absent_on_null);
+}
+
+/*
+ * Transform JSON_ARRAYAGG() aggregate function.
+ *
+ * JSON_ARRAYAGG() is transformed into json[b]_agg[_strict]() call depending
+ * on the output JSON format and absent_on_null.  Then the function call result
+ * is coerced to the target output type.
+ */
+static Node *
+transformJsonArrayAgg(ParseState *pstate, JsonArrayAgg *agg)
+{
+	JsonReturning *returning;
+	Node	   *arg;
+	Oid			aggfnoid;
+	Oid			aggtype;
+
+	arg = transformJsonValueExpr(pstate, "JSON_ARRAYAGG()",
+								 agg->arg,
+								 JS_FORMAT_DEFAULT);
+
+	returning = transformJsonConstructorOutput(pstate, agg->constructor->output,
+											   list_make1(arg));
+
+	if (returning->format->format_type == JS_FORMAT_JSONB)
+	{
+		aggfnoid = agg->absent_on_null ? F_JSONB_AGG_STRICT : F_JSONB_AGG;
+		aggtype = JSONBOID;
+	}
+	else
+	{
+		aggfnoid = agg->absent_on_null ? F_JSON_AGG_STRICT : F_JSON_AGG;
+		aggtype = JSONOID;
+	}
+
+	return transformJsonAggConstructor(pstate, agg->constructor, returning,
+									   list_make1(arg), aggfnoid, aggtype,
+									   JSCTOR_JSON_ARRAYAGG,
+									   false, agg->absent_on_null);
+}
+
+/*
+ * Transform JSON_ARRAY() constructor.
+ *
+ * JSON_ARRAY() is transformed into json[b]_build_array[_ext]() call
+ * depending on the output JSON format. The first argument of
+ * json[b]_build_array_ext() is absent_on_null.
+ *
+ * Then function call result is coerced to the target type.
+ */
+static Node *
+transformJsonArrayConstructor(ParseState *pstate, JsonArrayConstructor *ctor)
+{
+	JsonReturning *returning;
+	List	   *args = NIL;
+
+	/* transform element expressions, if any */
+	if (ctor->exprs)
+	{
+		ListCell   *lc;
+
+		/* transform and append element arguments */
+		foreach(lc, ctor->exprs)
+		{
+			JsonValueExpr *jsval = castNode(JsonValueExpr, lfirst(lc));
+			Node	   *val = transformJsonValueExpr(pstate, "JSON_ARRAY()",
+													 jsval,
+													 JS_FORMAT_DEFAULT);
+
+			args = lappend(args, val);
+		}
+	}
+
+	returning = transformJsonConstructorOutput(pstate, ctor->output, args);
+
+	return makeJsonConstructorExpr(pstate, JSCTOR_JSON_ARRAY, args, NULL,
+								   returning, false, ctor->absent_on_null,
+								   ctor->location);
+}
+
+static Node *
+transformJsonParseArg(ParseState *pstate, Node *jsexpr, JsonFormat *format,
+					  Oid *exprtype)
+{
+	Node	   *raw_expr = transformExprRecurse(pstate, jsexpr);
+	Node	   *expr = raw_expr;
+
+	*exprtype = exprType(expr);
+
+	/* prepare input document */
+	if (*exprtype == BYTEAOID)
+	{
+		JsonValueExpr *jve;
+
+		expr = raw_expr;
+		expr = makeJsonByteaToTextConversion(expr, format, exprLocation(expr));
+		*exprtype = TEXTOID;
+
+		jve = makeJsonValueExpr((Expr *) raw_expr, (Expr *) expr, format);
+		expr = (Node *) jve;
+	}
+	else
+	{
+		char		typcategory;
+		bool		typispreferred;
+
+		get_type_category_preferred(*exprtype, &typcategory, &typispreferred);
+
+		if (*exprtype == UNKNOWNOID || typcategory == TYPCATEGORY_STRING)
+		{
+			expr = coerce_to_target_type(pstate, (Node *) expr, *exprtype,
+										 TEXTOID, -1,
+										 COERCION_IMPLICIT,
+										 COERCE_IMPLICIT_CAST, -1);
+			*exprtype = TEXTOID;
+		}
+
+		if (format->encoding != JS_ENC_DEFAULT)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 parser_errposition(pstate, format->location),
+					 errmsg("cannot use JSON FORMAT ENCODING clause for non-bytea input types")));
+	}
+
+	return expr;
+}
+
+/*
+ * Transform IS JSON predicate.
+ */
+static Node *
+transformJsonIsPredicate(ParseState *pstate, JsonIsPredicate *pred)
+{
+	Oid			exprtype;
+	Node	   *expr = transformJsonParseArg(pstate, pred->expr, pred->format,
+											 &exprtype);
+
+	/* make resulting expression */
+	if (exprtype != TEXTOID && exprtype != JSONOID && exprtype != JSONBOID)
+		ereport(ERROR,
+				(errcode(ERRCODE_DATATYPE_MISMATCH),
+				 errmsg("cannot use type %s in IS JSON predicate",
+						format_type_be(exprtype))));
+
+	/* This intentionally(?) drops the format clause. */
+	return makeJsonIsPredicate(expr, NULL, pred->item_type,
+							   pred->unique_keys, pred->location);
 }

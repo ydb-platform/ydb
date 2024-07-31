@@ -9,6 +9,7 @@
 #include <ydb/core/fq/libs/ydb/ydb.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/client/ydb_query/query.h>
 
 namespace NFq {
 
@@ -29,7 +30,7 @@ inline std::shared_ptr<NYdb::NTable::TTableClient> CreateNewTableClient(const TS
                                                         tableSettings);
 }
 
-TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage = nullptr);
+TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage = nullptr, TString* timeline = nullptr);
 TString GetV1StatFromV2PlanV2(const TString& plan);
 TString GetPrettyStatistics(const TString& statistics);
 THashMap<TString, i64> AggregateStats(TStringBuf plan);
@@ -53,10 +54,10 @@ TPublicStat GetPublicStat(const TString& statistics);
 
 struct IPlanStatProcessor {
     virtual ~IPlanStatProcessor() = default;
-    virtual Ydb::Query::StatsMode GetStatsMode() = 0;
+    virtual NYdb::NQuery::EStatsMode GetStatsMode() = 0;
     virtual TString ConvertPlan(const TString& plan) = 0;
     virtual TString GetPlanVisualization(const TString& plan) = 0;
-    virtual TString GetQueryStat(const TString& plan, double& cpuUsage) = 0;
+    virtual TString GetQueryStat(const TString& plan, double& cpuUsage, TString* timeline) = 0;
     virtual TPublicStat GetPublicStat(const TString& stat) = 0;
     virtual THashMap<TString, i64> GetFlatStat(TStringBuf plan) = 0;
 };
@@ -67,12 +68,12 @@ class PingTaskRequestBuilder {
 public:
     PingTaskRequestBuilder(const NConfig::TCommonConfig& commonConfig, std::unique_ptr<IPlanStatProcessor>&& processor);
     Fq::Private::PingTaskRequest Build(
-        const Ydb::TableStats::QueryStats& queryStats, 
+        const NYdb::NQuery::TExecStats& queryStats, 
         const NYql::TIssues& issues, 
         std::optional<FederatedQuery::QueryMeta::ComputeStatus> computeStatus = std::nullopt,
         std::optional<NYql::NDqProto::StatusIds::StatusCode> pendingStatusCode = std::nullopt
     );
-    Fq::Private::PingTaskRequest Build(const Ydb::TableStats::QueryStats& queryStats);
+    Fq::Private::PingTaskRequest Build(const NYdb::NQuery::TExecStats& queryStats);
     Fq::Private::PingTaskRequest Build(const TString& queryPlan, const TString& queryAst, int64_t compilationTimeUs, int64_t computeTimeUs);
     NYql::TIssues Issues;
     double CpuUsage = 0.0;
@@ -80,6 +81,7 @@ public:
 private:
     const TCompressor Compressor;
     std::unique_ptr<IPlanStatProcessor> Processor;
+    bool ShowQueryTimeline = false;
 };
 
 TString GetStatViewName(const ::NFq::TRunActorParams& params);

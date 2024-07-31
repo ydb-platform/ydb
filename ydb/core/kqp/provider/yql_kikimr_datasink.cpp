@@ -772,10 +772,15 @@ public:
             return nullptr;
         }
 
+        auto valueType = settings.ValueType.IsValid()
+            ? settings.ValueType.Cast()
+            : Build<TCoAtom>(ctx, node->Pos()).Value("Null").Done();
+
         return Build<TKiAlterSequence>(ctx, node->Pos())
             .World(node->Child(0))
             .DataSink(node->Child(1))
             .Sequence().Build(key.GetPGObjectId())
+            .ValueType(valueType)
             .SequenceSettings(settings.SequenceSettings.Cast())
             .Settings(settings.Other)
             .MissingOk<TCoAtom>()
@@ -864,7 +869,7 @@ public:
             return false;
         }
 
-        if (tableDesc.Metadata->Kind == EKikimrTableKind::Olap && mode != "replace" && mode != "drop" && mode != "drop_if_exists") {
+        if (tableDesc.Metadata->Kind == EKikimrTableKind::Olap && mode != "replace" && mode != "drop" && mode != "drop_if_exists" && mode != "insert_abort" && mode != "update" && mode != "upsert" && mode != "delete" && mode != "update_on" && mode != "delete_on") {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Write mode '" << static_cast<TStringBuf>(mode) << "' is not supported for olap tables."));
             return true;
         }

@@ -16,7 +16,7 @@ where
     p_partkey = ps_partkey
     and p_brand <> 'Brand#33'
     and p_type not like 'PROMO POLISHED%'
-    and p_size::int4 in (20, 27, 11, 45, 40, 41, 34, 36)
+    and p_size in (20, 27, 11, 45, 40, 41, 34, 36)
     and ps_suppkey not in (
         select
             s_suppkey

@@ -12,7 +12,9 @@
 
 namespace NKikimr::NAddressClassifier {
 
-TString ExtractAddress(const TString& grpcPeer);
+TString ExtractAddress(const TString& peer);
+
+TString ParseAddress(const TString& address, TString& hostname, ui32& port);
 
 class TAddressClassifier {
 public:

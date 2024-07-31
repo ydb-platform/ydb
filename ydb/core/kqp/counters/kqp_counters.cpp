@@ -726,13 +726,14 @@ void TKqpCounters::UpdateTxCounters(const TKqpTransactionInfo& txInfo,
 }
 
 TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, const TActorContext* ctx)
-    : NYql::NDq::TSpillingCounters(counters)
+    : NYql::NDq::TSpillingCounters(GetServiceCounters(counters, "kqp"))
     , AllocCounters(counters, "kqp")
 {
     Counters = counters;
     KqpGroup = GetServiceCounters(counters, "kqp");
     YdbGroup = GetServiceCounters(counters, "ydb");
     QueryReplayGroup = KqpGroup->GetSubgroup("subsystem", "unified_agent_query_replay");
+    WorkloadManagerGroup = KqpGroup->GetSubgroup("subsystem", "workload_manager");
 
     Init();
 
@@ -775,7 +776,10 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     RmExternalMemory = KqpGroup->GetCounter("RM/ExternalMemory", false);
     RmNotEnoughMemory = KqpGroup->GetCounter("RM/NotEnoughMemory", true);
     RmNotEnoughComputeActors = KqpGroup->GetCounter("RM/NotEnoughComputeActors", true);
+    RmOnStartAllocs = KqpGroup->GetCounter("Rm/OnStartAllocs", true);
     RmExtraMemAllocs = KqpGroup->GetCounter("RM/ExtraMemAllocs", true);
+    RmExtraMemFree = KqpGroup->GetCounter("RM/ExtraMemFree", true);
+    RmOnCompleteFree = KqpGroup->GetCounter("RM/OnCompleteFree", true);
     RmInternalError = KqpGroup->GetCounter("RM/InternalError", true);
     RmSnapshotLatency = KqpGroup->GetHistogram(
         "RM/SnapshotLatency", NMonitoring::ExponentialHistogram(20, 2, 1));
@@ -833,6 +837,10 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
 
 ::NMonitoring::TDynamicCounterPtr TKqpCounters::GetQueryReplayCounters() const {
     return QueryReplayGroup;
+}
+
+::NMonitoring::TDynamicCounterPtr TKqpCounters::GetWorkloadManagerCounters() const {
+    return WorkloadManagerGroup;
 }
 
 

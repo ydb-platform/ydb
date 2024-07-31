@@ -46,6 +46,9 @@ constexpr TStringBuf TopPartitions1MinuteName = "top_partitions_one_minute";
 constexpr TStringBuf TopPartitions1HourName = "top_partitions_one_hour";
 
 constexpr TStringBuf PgTablesName = "pg_tables";
+constexpr TStringBuf InformationSchemaTablesName = "tables";
+constexpr TStringBuf PgClassName = "pg_class";
+
 
 struct Schema : NIceDb::Schema {
     struct PartitionStats : Table<1> {
@@ -595,16 +598,15 @@ struct Schema : NIceDb::Schema {
         NIceDb::TColumnId _ColumnId;
         NScheme::TTypeInfo _ColumnTypeInfo;
         TString _ColumnName;
-        PgColumn(NIceDb::TColumnId columnId, TStringBuf columnTypeName, TStringBuf columnName) 
-            : _ColumnId(columnId), _ColumnTypeInfo(NScheme::TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeName(columnTypeName))), _ColumnName(columnName) {} 
-        
-        TString GetColumnName() const {
-            return _ColumnName;
-        }
+        PgColumn(NIceDb::TColumnId columnId, TStringBuf columnTypeName, TStringBuf columnName);
     };
 
-    struct PgTables {
-        static TVector<PgColumn> Columns;
+    class PgTablesSchemaProvider {
+    public:
+        PgTablesSchemaProvider();
+        const TVector<PgColumn>& GetColumns(TStringBuf tableName) const;
+    private:
+        std::unordered_map<TString, TVector<PgColumn>> columnsStorage;
     };
 };
 
@@ -625,7 +627,7 @@ public:
     struct TSystemViewPath {
         TVector<TString> Parent;
         TString ViewName;
-    };
+        };
 
     struct TSchema {
         THashMap<NTable::TTag, TSysTables::TTableColumnInfo> Columns;

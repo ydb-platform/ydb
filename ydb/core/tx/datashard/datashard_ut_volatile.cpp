@@ -386,7 +386,6 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
     Y_UNIT_TEST(DistributedWriteLaterSnapshotBlockedThenCommit) {
         TPortManager pm;
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -476,7 +475,6 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
     Y_UNIT_TEST(DistributedWriteLaterSnapshotBlockedThenAbort) {
         TPortManager pm;
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -1694,7 +1692,6 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         NKikimrConfig::TAppConfig appCfg;
-        appCfg.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetDomainPlanResolution(1000)
@@ -2147,7 +2144,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 putResponses.emplace_back(new IEventHandle(
                     ev->Sender,
                     ev->GetRecipientRewrite(),
-                    msg->MakeErrorResponse(NKikimrProto::BLOCKED, "Fake blocked response", 0).release(),
+                    msg->MakeErrorResponse(NKikimrProto::BLOCKED, "Fake blocked response", TGroupId::Zero()).release(),
                     0,
                     ev->Cookie));
                 Cerr << "... dropping put " << msg->Id << Endl;
@@ -2354,7 +2351,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         for (auto& ev : blockedPuts) {
             auto proxy = ev->Recipient;
             ui32 groupId = GroupIDFromBlobStorageProxyID(proxy);
-            auto res = ev->Get()->MakeErrorResponse(NKikimrProto::ERROR, "Something went wrong", groupId);
+            auto res = ev->Get()->MakeErrorResponse(NKikimrProto::ERROR, "Something went wrong", TGroupId::FromValue(groupId));
             runtime.Send(new IEventHandle(ev->Sender, proxy, res.release()), 0, true);
         }
 

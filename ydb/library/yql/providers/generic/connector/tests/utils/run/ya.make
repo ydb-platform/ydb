@@ -1,6 +1,10 @@
 PY3_LIBRARY()
 
-STYLE_PYTHON()
+IF (AUTOCHECK)
+    # YQ-3351: enabling python style checks only for opensource
+    NO_LINT()
+ENDIF()
+
 
 PY_SRCS(
     dqrun.py

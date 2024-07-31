@@ -133,6 +133,7 @@ SRCS(
     table_client/schemaless_row_reorderer.cpp
     table_client/unordered_schemaful_reader.cpp
     table_client/validate_logical_type.cpp
+    table_client/versioned_io_options.cpp
     table_client/composite_compare.cpp
     table_client/columnar.cpp
     table_client/record_codegen_cpp.cpp

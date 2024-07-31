@@ -1,6 +1,7 @@
 /* Muscle table manager for Bison,
 
-   Copyright (C) 2001-2003, 2006-2013 Free Software Foundation, Inc.
+   Copyright (C) 2001-2003, 2006-2015, 2018-2019 Free Software
+   Foundation, Inc.
 
    This file is part of Bison, the GNU Compiler Compiler.
 
@@ -157,7 +158,7 @@ char *muscle_percent_define_get (char const *variable);
 /* Mimic muscle_percent_define_get_loc in ../data/bison.m4 exactly.  That is,
    if the %define variable VARIABLE is undefined, complain fatally since that's
    a Bison error.  Otherwise, return its definition location in a form
-   approriate for the first argument of warn_at, complain_at, or fatal_at.
+   appropriate for the first argument of warn_at, complain_at, or fatal_at.
    Don't record this as a Bison usage of VARIABLE as there's no reason to
    suspect that the user-supplied value has yet influenced the output.  */
 location muscle_percent_define_get_loc (char const *variable);

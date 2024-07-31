@@ -12,6 +12,8 @@
 
 Вы сможете узнать о внутреннем устройстве системы обработки федеративных запросов в разделе об [архитектуре](./architecture.md). Подробная информация про работу с различными источниками данных приведена в соответствующих разделах:
 - [ClickHouse](clickhouse.md)
+- [Greenplum](greenplum.md)
+- [MySQL](mysql.md)
 - [PostgreSQL](postgresql.md)
-- [{{ ydb-short-name }}](ydb.md)
 - [S3](s3/external_table.md)
+- [{{ ydb-short-name }}](ydb.md)

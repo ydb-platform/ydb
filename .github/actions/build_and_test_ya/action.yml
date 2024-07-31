@@ -14,16 +14,13 @@ inputs:
     type: boolean
     default: true
     description: "run tests"
-  run_tests_if_build_fails:
-    default: "true"
-    description: "run tests if build fails"
   test_threads:
     type: string
     default: 28
     description: "Test threads count"
   link_threads:
     type: string
-    default: 8
+    default: 12
     description: "link threads count"
   test_size:
     type: string
@@ -94,8 +91,8 @@ runs:
       if: inputs.increment == 'true'
       uses: ./.github/actions/graph_compare
  
-    - name: Change target in case of incremental (tests)
-      id: test_run_choice
+    - name: Change target in case of incremental
+      id: target_choice
       shell: bash
       run: |
         if [ "${{ inputs.increment }}" == "true" ]; then
@@ -104,47 +101,25 @@ runs:
           echo "target=${{ inputs.build_target }}" >> $GITHUB_OUTPUT
         fi
 
-    - name: Build
-      uses: ./.github/actions/build_ya
+    - name: Run build and tests
       id: build
-      if: ${{ inputs.run_build == 'true' }}
-      with:
-        build_target: ${{ inputs.build_target }}
-        build_preset: ${{ inputs.build_preset }}
-        bazel_remote_uri: ${{  fromJSON( inputs.vars ).REMOTE_CACHE_URL || '' }}
-        bazel_remote_username: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_USERNAME || '' }}
-        bazel_remote_password: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}
-        put_build_results_to_cache: ${{ inputs.put_build_results_to_cache }}
-        link_threads: ${{ inputs.link_threads }}
-        additional_ya_make_args: ${{ inputs.additional_ya_make_args }}
-
-    - name: Run tests
       uses: ./.github/actions/test_ya
-      if: ${{ inputs.run_tests == 'true' &&  (steps.build.outputs.success == 'true' || inputs.run_tests_if_build_fails == 'true') }}
       with:
-        build_target: ${{ steps.test_run_choice.outputs.target }}
+        build_target: ${{ steps.target_choice.outputs.target }}
         build_preset: ${{ inputs.build_preset }}
         test_size: ${{ inputs.test_size }}
         test_type: ${{ inputs.test_type }}
+        run_tests: ${{ inputs.run_tests }}
         testman_token: ${{ fromJSON( inputs.secs ).TESTMO_TOKEN2 }}
         testman_url: ${{  fromJSON( inputs.vars ).TESTMO_URL }}
         testman_project_id: ${{  fromJSON( inputs.vars ).TESTMO_PROJECT_ID }}
         link_threads: ${{ inputs.link_threads }}
         additional_ya_make_args: ${{ inputs.additional_ya_make_args }}
         test_threads: ${{ inputs.test_threads }}
-
-    
-    - name: Notify about failed build
-      if: ${{ steps.build.outputs.success != 'true' && inputs.run_tests == 'true' && inputs.run_tests_if_build_fails == 'false' }}
-      shell: bash
-      run: |
-        echo 'Build failed. See the [build log](${{ steps.build.outputs.log_url }}).' >> $GITHUB_STEP_SUMMARY
-        
-        if [[ "$GITHUB_EVENT_NAME" =~ ^pull_request ]]; then
-          echo "Tests run skipped." | .github/scripts/tests/comment-pr.py --fail
-        fi
-        
-        exit 1
+        bazel_remote_uri: ${{  fromJSON( inputs.vars ).REMOTE_CACHE_URL || '' }}
+        bazel_remote_username: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_USERNAME || '' }}
+        bazel_remote_password: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}
+        put_build_results_to_cache: ${{ inputs.put_build_results_to_cache }}
         
     - name: build_stats
       shell: bash

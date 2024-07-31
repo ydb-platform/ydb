@@ -40,7 +40,7 @@ echo Append into ya.make RECURSE_FOR_TESTS to all required tests...
 cat $workdir/ts2 | (echo 'RECURSE_FOR_TESTS(';cat;echo ')') >> ya.make
 
 echo Generate list of module names from the head graph based on the list of uids...
-cat $workdir/graph_head | jq -r --slurpfile uids $workdir/uids_new 'select( ."target_properties"."module_type" != null) | select( any( .uid; .==$uids[] )) | .target_properties.module_dir' | sort | uniq > $workdir/modules
+cat $workdir/graph_head | jq -r --slurpfile uids $workdir/uids_new 'select( ."target_properties"."module_type" != null) | select( ( ."target_properties"."module_tag" // "-" | strings | contains("proto") ) | not ) | select( any( .uid; .==$uids[] )) | .target_properties.module_dir' | sort | uniq > $workdir/modules
 
 echo Number of modules:
 cat $workdir/modules | wc -l

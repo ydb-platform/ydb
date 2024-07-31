@@ -270,9 +270,6 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
         }
 
         if (!sinks.empty()) {
-            for (auto sink : sinks) {
-                sink->SetTypeAnn(resultType);
-            }
             stageResultTypes.assign(programResultTypesTuple.begin(), programResultTypesTuple.end());
         } else {
             for (auto transform : transforms) {
@@ -793,12 +790,13 @@ TStatus AnnotateDqReplicate(const TExprNode::TPtr& input, TExprContext& ctx) {
         }
 
         auto inputTupleType = inputItemType->Cast<TTupleExprType>();
-        if (!EnsureStructType(replicateInput->Pos(), *inputTupleType->GetItems()[0], ctx)) {
+        bool isOptional = false;
+        const TStructExprType* structType = nullptr;
+
+        if (!EnsureStructOrOptionalStructType(replicateInput->Pos(), *inputTupleType->GetItems()[0], isOptional, structType, ctx)) {
             return TStatus::Error;
         }
 
-        bool isOptional = false;
-        const TStructExprType* structType = nullptr;
         if (!EnsureStructOrOptionalStructType(replicateInput->Pos(), *inputTupleType->GetItems()[1], isOptional, structType, ctx)) {
             return TStatus::Error;
         }

@@ -358,7 +358,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -444,7 +443,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -495,8 +493,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
-
         InitRoot(server, sender);
 
         CreateShardedTable(server, sender, "/Root", "table-1", 2);
@@ -537,7 +533,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -608,7 +603,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -671,7 +665,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -1984,7 +1977,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -3328,7 +3320,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -3614,7 +3605,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
     Y_UNIT_TEST(ReadIteratorLocalSnapshotThenRestart) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -3730,7 +3720,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
     Y_UNIT_TEST(ReadIteratorLocalSnapshotThenWrite) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -3815,7 +3804,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
     Y_UNIT_TEST(UncommittedWriteRestartDuringCommit) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));

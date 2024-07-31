@@ -329,8 +329,8 @@ struct TEvDataShard {
         EvOverloadReady,
         EvOverloadUnsubscribe,
 
-        EvStatisticsScanRequest,
-        EvStatisticsScanResponse,
+        EvSampleKRequest,
+        EvSampleKResponse,
 
         EvEnd
     };
@@ -647,7 +647,7 @@ struct TEvDataShard {
                 TString result;
                 TStringOutput out(result);
                 for (ui32 i = 0; i < Record.ErrorSize(); ++i) {
-                    out << Record.GetError(i).GetKind() << " (" 
+                    out << Record.GetError(i).GetKind() << " ("
                         << (Record.GetError(i).HasReason() ? Record.GetError(i).GetReason() : "no reason")
                         << ") |";
                 }
@@ -1442,6 +1442,18 @@ struct TEvDataShard {
     {
     };
 
+    struct TEvSampleKRequest
+        : public TEventPB<TEvSampleKRequest,
+                          NKikimrTxDataShard::TEvSampleKRequest,
+                          TEvDataShard::EvSampleKRequest> {
+    };
+
+    struct TEvSampleKResponse
+        : public TEventPB<TEvSampleKResponse,
+                          NKikimrTxDataShard::TEvSampleKResponse,
+                          TEvDataShard::EvSampleKResponse> {
+    };
+
     struct TEvKqpScan
         : public TEventPB<TEvKqpScan,
                           NKikimrTxDataShard::TEvKqpScan,
@@ -1703,20 +1715,6 @@ struct TEvDataShard {
             Record.SetStatus(status);
             Record.SetErrorDescription(error);
         }
-    };
-
-    struct TEvStatisticsScanRequest
-        : public TEventPB<TEvStatisticsScanRequest,
-                          NKikimrTxDataShard::TEvStatisticsScanRequest,
-                          EvStatisticsScanRequest>
-    {
-    };
-
-    struct TEvStatisticsScanResponse
-        : public TEventPB<TEvStatisticsScanResponse,
-                          NKikimrTxDataShard::TEvStatisticsScanResponse,
-                          EvStatisticsScanResponse>
-    {
     };
 };
 

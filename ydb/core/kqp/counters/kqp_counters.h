@@ -336,6 +336,7 @@ public:
     const ::NMonitoring::TDynamicCounters::TCounterPtr RecompileRequestGet() const;
     ::NMonitoring::TDynamicCounterPtr GetKqpCounters() const;
     ::NMonitoring::TDynamicCounterPtr GetQueryReplayCounters() const;
+    ::NMonitoring::TDynamicCounterPtr GetWorkloadManagerCounters() const;
     const ::NMonitoring::TDynamicCounters::TCounterPtr GetActiveSessionActors() const;
     const ::NMonitoring::TDynamicCounters::TCounterPtr GetTxReplySizeExceededError() const;
     const ::NMonitoring::TDynamicCounters::TCounterPtr GetDataShardTxReplySizeExceededError() const;
@@ -346,8 +347,10 @@ public:
     void RemoveDbCounters(const TString& database);
 
 public:
+    ::NMonitoring::TDynamicCounterPtr WorkloadManagerGroup;
+
     ::NMonitoring::TDynamicCounters::TCounterPtr FullScansExecuted;
-    
+
     // Lease updates counters
     ::NMonitoring::THistogramPtr LeaseUpdateLatency;
     ::NMonitoring::THistogramPtr RunActorLeaseUpdateBacklog;
@@ -374,6 +377,9 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr RmNotEnoughMemory;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmNotEnoughComputeActors;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmExtraMemAllocs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmOnStartAllocs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmExtraMemFree;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmOnCompleteFree;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmInternalError;
     NMonitoring::THistogramPtr RmSnapshotLatency;
     NMonitoring::THistogramPtr NodeServiceStartEventDelivery;

@@ -90,7 +90,7 @@ public:
 
         const TVSlotId VSlotId;
         TIndirectReferable<TPDiskInfo>::TPtr PDisk; // PDisk this slot resides on
-        TGroupId GroupId = 0;
+        TGroupId GroupId = TGroupId::Zero();
         Table::GroupGeneration::Type GroupPrevGeneration = 0;
         Table::GroupGeneration::Type GroupGeneration = 0;
         Table::Category::Type Kind = NKikimrBlobStorage::TVDiskKind::Default;
@@ -1476,8 +1476,8 @@ private:
     THashMap<TGroupId, TGroupInfo*> GroupLookup;
     TMap<TGroupSpecies, TVector<TGroupId>> IndexGroupSpeciesToGroup;
     TMap<TNodeId, TNodeInfo> Nodes;
-    Schema::Group::ID::Type NextGroupID = 0;
-    Schema::Group::ID::Type NextVirtualGroupId = 0;
+    Schema::Group::ID::Type NextGroupID = Schema::Group::ID::Type::Zero();
+    Schema::Group::ID::Type NextVirtualGroupId = Schema::Group::ID::Type::Zero();
     Schema::State::NextStoragePoolId::Type NextStoragePoolId = 0;
     ui32 DefaultMaxSlots = 0;
     ui32 PDiskSpaceMarginPromille = 0;
@@ -2205,7 +2205,7 @@ public:
     void CommitVirtualGroupUpdates(TConfigState& state);
 
     void StartVirtualGroupSetupMachine(TGroupInfo *group);
-    void StartVirtualGroupDeleteMachine(ui32 groupId, TBlobDepotDeleteQueueInfo& info);
+    void StartVirtualGroupDeleteMachine(TGroupId groupId, TBlobDepotDeleteQueueInfo& info);
 
     void Handle(TEvBlobStorage::TEvControllerGroupDecommittedNotify::TPtr ev);
 

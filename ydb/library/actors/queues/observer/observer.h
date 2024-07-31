@@ -18,6 +18,7 @@ namespace NActors {
             ui64 ChangeReallySlowPopToSlowPop = 0;
 
             ui64 SuccessPop = 0;
+            ui64 SuccessOvertakenPop = 0;
             ui64 SuccessSingleConsumerPop = 0;
             ui64 SuccessSlowPop = 0;
             ui64 SuccessFastPop = 0;
@@ -76,6 +77,7 @@ namespace NActors {
                 FailedSlowPushAttempt += other.FailedSlowPushAttempt;
 
                 SuccessPop += other.SuccessPop;
+                SuccessOvertakenPop += other.SuccessOvertakenPop;
                 SuccessSingleConsumerPop += other.SuccessSingleConsumerPop;
                 SuccessSlowPop += other.SuccessSlowPop;
                 SuccessFastPop += other.SuccessFastPop;
@@ -192,6 +194,8 @@ namespace NActors {
         DEFINE_INCREMENT_STATS_1(LongSlowPop1000It)
         DEFINE_INCREMENT_STATS_1(LongFastPop1000It)
         DEFINE_INCREMENT_STATS_1(LongReallyFastPop1000It)
+
+        DEFINE_INCREMENT_STATS_2(SuccessOvertakenPop, SuccessPop)
     #undef DEFINE_INCREMENT_STATS_1
     #undef DEFINE_INCREMENT_STATS_2
 

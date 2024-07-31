@@ -134,21 +134,51 @@ void TestDropTableCommon(TIntrusivePtr<IKikimrGateway> gateway) {
     UNIT_ASSERT(!loadResponse.Metadata->DoesExist);
 }
 
+THolder<NKikimr::NSchemeCache::TSchemeCacheNavigate> DoGatewayOperation(TTestActorRuntime& runtime, const TString& path, std::function<NThreading::TFuture<IKikimrGateway::TGenericResult>()> gatewayOperation, bool fail = false) {
+    const auto& responseFuture = gatewayOperation();
+    responseFuture.Wait();
+    const auto& response = responseFuture.GetValue();
+    response.Issues().PrintTo(Cerr);
+
+    if (fail) {
+        UNIT_ASSERT_C(!response.Success(), response.Issues().ToString());
+        return nullptr;
+    }
+
+    UNIT_ASSERT_C(response.Success(), response.Issues().ToString());
+    return Navigate(runtime, runtime.AllocateEdgeActor(), path, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+}
+
+NSchemeCache::TSchemeCacheNavigate::TEntry TestCreateObjectCommon(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TCreateObjectSettings& settings, const TString& path) {
+    return DoGatewayOperation(runtime, path, [gateway, settings]() {
+        return gateway->CreateObject(TestCluster, settings);
+    })->ResultSet.at(0);
+}
+
+NSchemeCache::TSchemeCacheNavigate::TEntry TestAlterObjectCommon(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TAlterObjectSettings& settings, const TString& path) {
+    return DoGatewayOperation(runtime, path, [gateway, settings]() {
+        return gateway->AlterObject(TestCluster, settings);
+    })->ResultSet.at(0);
+}
+
+void TestDropObjectCommon(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TDropObjectSettings& settings, const TString& path) {
+    const auto objectDescription = DoGatewayOperation(runtime, path, [gateway, settings]() {
+        return gateway->DropObject(TestCluster, settings);
+    });
+    const auto& object = objectDescription->ResultSet.at(0);
+
+    UNIT_ASSERT_VALUES_EQUAL(objectDescription->ErrorCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(object.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown);
+}
+
 void TestCreateExternalDataSource(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& path) {
     TCreateObjectSettings settings("EXTERNAL_DATA_SOURCE", path, {
         {"source_type", "ObjectStorage"},
         {"auth_method", "NONE"},
         {"installation", "cloud"}
     });
-    auto responseFuture = gateway->CreateObject(TestCluster, settings);
-    responseFuture.Wait();
-    auto response = responseFuture.GetValue();
-    response.Issues().PrintTo(Cerr);
+    const auto& externalDataSource = TestCreateObjectCommon(runtime, gateway, settings, path);
 
-    UNIT_ASSERT_C(response.Success(), response.Issues().ToString());
-
-    auto externalDataSourceDesc = Navigate(runtime, runtime.AllocateEdgeActor(), path, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
-    const auto& externalDataSource = externalDataSourceDesc->ResultSet.at(0);
     UNIT_ASSERT_EQUAL(externalDataSource.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource);
     UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo);
     UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetSourceType(), "ObjectStorage");
@@ -170,50 +200,79 @@ void TestCreateExternalTable(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGa
     settings.Columns.insert(std::make_pair("Column2", TKikimrColumnMetadata{"Column2", 0, "String", false}));
     settings.ColumnOrder.push_back("Column2");
 
-    auto responseFuture = gateway->CreateExternalTable(TestCluster, settings, true, false, false);
-    responseFuture.Wait();
-    auto response = responseFuture.GetValue();
-    response.Issues().PrintTo(Cerr);
+    auto externalTableDesc = DoGatewayOperation(runtime, path, [gateway, settings]() {
+        return gateway->CreateExternalTable(TestCluster, settings, true, false, false);
+    }, fail);
 
-    if (fail) {
-        UNIT_ASSERT_C(!response.Success(), response.Issues().ToString());
-        return;
+    if (!fail) {
+        const auto& externalTable = externalTableDesc->ResultSet.at(0);
+        UNIT_ASSERT_EQUAL(externalTable.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalTable);
+        UNIT_ASSERT(externalTable.ExternalTableInfo);
+        UNIT_ASSERT_EQUAL(externalTable.ExternalTableInfo->Description.ColumnsSize(), 2);
     }
-
-    UNIT_ASSERT_C(response.Success(), response.Issues().ToString());
-
-    auto externalTableDesc = Navigate(runtime, runtime.AllocateEdgeActor(), path, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
-    const auto& externalTable = externalTableDesc->ResultSet.at(0);
-    UNIT_ASSERT_EQUAL(externalTable.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalTable);
-    UNIT_ASSERT(externalTable.ExternalTableInfo);
-    UNIT_ASSERT_EQUAL(externalTable.ExternalTableInfo->Description.ColumnsSize(), 2);
 }
 
 void TestDropExternalTable(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& path) {
-    auto responseFuture = gateway->DropExternalTable(TestCluster, TDropExternalTableSettings{.ExternalTable=path}, false);
-    responseFuture.Wait();
-    auto response = responseFuture.GetValue();
-    response.Issues().PrintTo(Cerr);
-    UNIT_ASSERT(response.Success());
-
-    auto externalTableDesc = Navigate(runtime, runtime.AllocateEdgeActor(), path, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+    auto externalTableDesc = DoGatewayOperation(runtime, path, [gateway, path]() {
+        return gateway->DropExternalTable(TestCluster, TDropExternalTableSettings{.ExternalTable=path}, false);
+    });
     const auto& externalTable = externalTableDesc->ResultSet.at(0);
+
     UNIT_ASSERT_EQUAL(externalTableDesc->ErrorCount, 1);
     UNIT_ASSERT_EQUAL(externalTable.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown);
 }
 
 void TestDropExternalDataSource(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& path) {
     TDropObjectSettings settings("EXTERNAL_DATA_SOURCE", path, {});
-    auto responseFuture = gateway->DropObject(TestCluster, settings);
-    responseFuture.Wait();
-    auto response = responseFuture.GetValue();
-    response.Issues().PrintTo(Cerr);
-    UNIT_ASSERT(response.Success());
+    TestDropObjectCommon(runtime, gateway, settings, path);
+}
 
-    auto externalDataSourceDesc = Navigate(runtime, runtime.AllocateEdgeActor(), path, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
-    const auto& externalDataSource = externalDataSourceDesc->ResultSet.at(0);
-    UNIT_ASSERT_EQUAL(externalDataSourceDesc->ErrorCount, 1);
-    UNIT_ASSERT_EQUAL(externalDataSource.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown);
+void TestCreateResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& poolId) {
+    TCreateObjectSettings settings("RESOURCE_POOL", poolId, {
+        {"concurrent_query_limit", "10"},
+        {"queue_size", "100"}
+    });
+    const auto& resourcePool = TestCreateObjectCommon(runtime, gateway, settings, TStringBuilder() << "/Root/.resource_pools/" << poolId);
+
+    UNIT_ASSERT_VALUES_EQUAL(resourcePool.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindResourcePool);
+    UNIT_ASSERT(resourcePool.ResourcePoolInfo);
+    const auto& properties = resourcePool.ResourcePoolInfo->Description.GetProperties().GetProperties();
+    UNIT_ASSERT_VALUES_EQUAL(properties.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "10");
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("queue_size"), "100");
+}
+
+void TestAlterResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& poolId) {
+    TCreateObjectSettings settings("RESOURCE_POOL", poolId, {
+        {"concurrent_query_limit", "20"},
+        {"query_memory_limit_percent_per_node", "80.5"}
+    }, {
+        "queue_size"
+    });
+    const auto& resourcePool = TestAlterObjectCommon(runtime, gateway, settings, TStringBuilder() << "/Root/.resource_pools/" << poolId);
+
+    UNIT_ASSERT_VALUES_EQUAL(resourcePool.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindResourcePool);
+    UNIT_ASSERT(resourcePool.ResourcePoolInfo);
+    const auto& properties = resourcePool.ResourcePoolInfo->Description.GetProperties().GetProperties();
+    UNIT_ASSERT_VALUES_EQUAL(properties.size(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "20");
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("queue_size"), "-1");
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("query_memory_limit_percent_per_node"), "80.5");
+}
+
+void TestDropResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& poolId) {
+    TDropObjectSettings settings("RESOURCE_POOL", poolId, {});
+    TestDropObjectCommon(runtime, gateway, settings, TStringBuilder() << "/Root/.resource_pools/" << poolId);
+}
+
+TKikimrRunner GetKikimrRunnerWithResourcePools() {
+    NKikimrConfig::TAppConfig config;
+    config.MutableFeatureFlags()->SetEnableResourcePools(true);
+
+    return TKikimrRunner(NKqp::TKikimrSettings()
+        .SetAppConfig(config)
+        .SetEnableResourcePools(true)
+        .SetWithSampleTables(false));
 }
 
 } // namespace
@@ -363,6 +422,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
                 LOCATION="my-bucket",
                 AUTH_METHOD="BASIC",
                 LOGIN="mylogin",
+                DATABASE_NAME="postgres",
                 PASSWORD_SECRET_NAME=")" << secretId << R"("
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -399,6 +459,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
                 SERVICE_ACCOUNT_ID="mysa",
                 SERVICE_ACCOUNT_SECRET_NAME=")" << secretSaId << R"(",
                 LOGIN="mylogin",
+                DATABASE_NAME="postgres",
                 PASSWORD_SECRET_NAME=")" << secretPasswordId << R"("
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -546,6 +607,23 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::BAD_REQUEST, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), TStringBuilder() << "secret with name '" << secretId << "' not found");
+    }
+
+    Y_UNIT_TEST(TestCreateResourcePool) {
+        TKikimrRunner kikimr = GetKikimrRunnerWithResourcePools();
+        TestCreateResourcePool(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "MyResourcePool");
+    }
+
+    Y_UNIT_TEST(TestALterResourcePool) {
+        TKikimrRunner kikimr = GetKikimrRunnerWithResourcePools();
+        TestCreateResourcePool(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "MyResourcePool");
+        TestAlterResourcePool(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "MyResourcePool");
+    }
+
+    Y_UNIT_TEST(TestDropResourcePool) {
+        TKikimrRunner kikimr = GetKikimrRunnerWithResourcePools();
+        TestCreateResourcePool(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "MyResourcePool");
+        TestDropResourcePool(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "MyResourcePool");
     }
 }
 

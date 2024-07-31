@@ -144,6 +144,9 @@ namespace NKikimr::NStorage {
                 case TQuery::kReassignStateStorageNode:
                     return ReassignStateStorageNode(record.GetReassignStateStorageNode());
 
+                case TQuery::kAdvanceGeneration:
+                    return AdvanceGeneration();
+
                 case TQuery::REQUEST_NOT_SET:
                     return FinishWithError(TResult::ERROR, "Request field not set");
             }
@@ -181,7 +184,7 @@ namespace NKikimr::NStorage {
             bool found = false;
             const TVDiskID vdiskId = VDiskIDFromVDiskID(cmd.GetVDiskId());
             for (const auto& group : Self->StorageConfig->GetBlobStorageConfig().GetServiceSet().GetGroups()) {
-                if (group.GetGroupID() == vdiskId.GroupID) {
+                if (group.GetGroupID() == vdiskId.GroupID.GetRawId()) {
                     if (group.GetGroupGeneration() != vdiskId.GroupGeneration) {
                         return FinishWithError(TResult::ERROR, TStringBuilder() << "group generation mismatch"
                             << " GroupId# " << group.GetGroupID()
@@ -313,11 +316,11 @@ namespace NKikimr::NStorage {
                 // scan failed disks according to BS_CONTROLLER's data
                 TBlobStorageGroupInfo::TGroupVDisks failedVDisks(&GroupInfo->GetTopology());
                 for (const auto& vslot : BaseConfig->GetVSlot()) {
-                    if (vslot.GetGroupId() != vdiskId.GroupID || vslot.GetGroupGeneration() != vdiskId.GroupGeneration) {
+                    if (vslot.GetGroupId() != vdiskId.GroupID.GetRawId() || vslot.GetGroupGeneration() != vdiskId.GroupGeneration) {
                         continue;
                     }
                     if (!vslot.GetReady()) {
-                        const TVDiskID vdiskId(vslot.GetGroupId(), vslot.GetGroupGeneration(), vslot.GetFailRealmIdx(),
+                        const TVDiskID vdiskId(TGroupId::FromProto(&vslot, &NKikimrBlobStorage::TBaseConfig::TVSlot::GetGroupId), vslot.GetGroupGeneration(), vslot.GetFailRealmIdx(),
                             vslot.GetFailDomainIdx(), vslot.GetVDiskIdx());
                         failedVDisks |= {&GroupInfo->GetTopology(), vdiskId};
                     }
@@ -374,11 +377,13 @@ namespace NKikimr::NStorage {
             }
 
             for (const auto& group : ss.GetGroups()) {
-                if (group.GetGroupID() == vdiskId.GroupID) {
+                if (group.GetGroupID() == vdiskId.GroupID.GetRawId()) {
                     try {
-                        Self->AllocateStaticGroup(&config, vdiskId.GroupID, vdiskId.GroupGeneration + 1,
+                        Self->AllocateStaticGroup(&config, vdiskId.GroupID.GetRawId(), vdiskId.GroupGeneration + 1,
                             TBlobStorageGroupType((TBlobStorageGroupType::EErasureSpecies)group.GetErasureSpecies()),
-                            settings.GetGeometry(), settings.GetPDiskFilter(), replacedDisks, forbid, maxSlotSize,
+                            settings.GetGeometry(), settings.GetPDiskFilter(),
+                            settings.HasPDiskType() ? std::make_optional(settings.GetPDiskType()) : std::nullopt,
+                            replacedDisks, forbid, maxSlotSize,
                             &BaseConfig.value(), cmd.GetConvertToDonor(), cmd.GetIgnoreVSlotQuotaCheck(),
                             cmd.GetIsSelfHealReasonDecommit());
                     } catch (const TExConfigError& ex) {
@@ -430,7 +435,7 @@ namespace NKikimr::NStorage {
 
             ui32 actualGroupGeneration = 0;
             for (const auto& group : ss->GetGroups()) {
-                if (group.GetGroupID() == vdiskId.GroupID) {
+                if (group.GetGroupID() == vdiskId.GroupID.GetRawId()) {
                     actualGroupGeneration = group.GetGroupGeneration();
                     break;
                 }
@@ -595,6 +600,14 @@ namespace NKikimr::NStorage {
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Configuration proposition
+
+        void AdvanceGeneration() {
+            if (RunCommonChecks()) {
+                NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+                config.SetGeneration(config.GetGeneration() + 1);
+                StartProposition(&config);
+            }
+        }
 
         void StartProposition(NKikimrBlobStorage::TStorageConfig *config) {
             config->MutablePrevConfig()->CopyFrom(*Self->StorageConfig);

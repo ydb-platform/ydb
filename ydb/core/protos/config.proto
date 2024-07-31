@@ -21,6 +21,7 @@ import "ydb/core/protos/http_config.proto";
 import "ydb/core/protos/key.proto";
 import "ydb/core/protos/kqp.proto";
 import "ydb/core/protos/local.proto";
+import "ydb/core/protos/memory_controller_config.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/core/protos/node_broker.proto";
 import "ydb/core/protos/pqconfig.proto";
@@ -69,7 +70,7 @@ message TActorSystemConfig {
         optional uint32 Threads = 2;
         optional uint64 SpinThreshold = 3;
         optional TAffinity Affinity = 4;
-        optional uint32 InjectMadSquirrels = 5;
+        optional uint32 InjectMadSquirrels = 5; // Obsolete, no more mad squirrels anymore
         optional string Name = 6;
         optional uint32 TimePerMailboxMicroSecs = 7;
         optional uint32 EventsPerMailbox = 8;
@@ -279,6 +280,7 @@ message TBlobStorageConfig {
         optional string ErasureSpecies = 1;
         optional NKikimrBlobStorage.TGroupGeometry Geometry = 2;
         repeated NKikimrBlobStorage.TPDiskFilter PDiskFilter = 3;
+        optional NKikimrBlobStorage.EPDiskType PDiskType = 7;
 
         // some extra settings
         optional bool AutomaticBoxManagement = 4; // invoke BSC DefineHostConfig/DefineBox automatically
@@ -432,6 +434,8 @@ message TInterconnectConfig {
     optional double ErrorSleepRetryMultiplier = 48;
 
     optional uint32 OutgoingHandshakeInflightLimit = 43;
+
+    optional uint64 EventDelayMicrosec = 49;
 }
 
 message TChannelProfileConfig {
@@ -1011,6 +1015,7 @@ message TQueryServiceConfig {
     optional NYql.TGenericGatewayConfig Generic = 11;
     optional TFinalizeScriptServiceConfig FinalizeScriptServiceConfig = 12;
     optional uint64 ProgressStatsPeriodMs = 14 [default = 0]; // 0 = disabled
+    optional uint32 QueryTimeoutDefaultSeconds = 19 [default = 1800];
 }
 
 // Config describes immediate controls and allows
@@ -1466,6 +1471,9 @@ message THiveConfig {
     optional double MinGroupUsageToBalance = 72 [default = 0.1];
     optional uint64 StorageBalancerInflight = 73 [default = 1];
     optional bool EnableDestroyOperations = 74 [default = false];
+    optional double NodeUsageRangeToKick = 75 [default = 0.2];
+    optional bool LessSystemTabletsMoves = 77 [default = true];
+    optional uint64 MaxPingsInFlight = 78 [default = 1000];
 }
 
 message TBlobCacheConfig {
@@ -1492,7 +1500,6 @@ message TColumnShardConfig {
     optional bool TTLEnabled = 6 [default = true];
     optional bool WritingEnabled = 7 [default = true];
     optional uint32 WritingBufferDurationMs = 8 [default = 0];
-    optional bool UseChunkedMergeOnCompaction = 9 [default = true];
     optional uint64 CompactionMemoryLimit = 10 [default = 536870912];
     optional uint64 TieringsMemoryLimit = 11 [default = 536870912];
     message TIndexMetadataMemoryLimit {
@@ -1511,6 +1518,10 @@ message TColumnShardConfig {
         optional string Description = 2;
     }
     repeated TRepairInfo Repairs = 15;
+
+    optional uint32 MaxInFlightIntervalsOnRequest = 16;
+    optional uint32 MaxInFlightMemoryOnRequest = 17;
+    optional uint32 MaxReadStaleness_ms = 18 [default = 300000];
 }
 
 message TSchemeShardConfig {
@@ -1531,6 +1542,9 @@ message TSchemeShardConfig {
     optional uint32 StatsMaxExecuteMs = 3 [default = 10];
 
     repeated TInFlightCounterConfig InFlightCounterConfig = 4;
+
+    // number of shards per table
+    optional uint32 MaxCdcInitialScanShardsInFlight = 5 [default = 10];
 }
 
 message TCompactionConfig {
@@ -1662,6 +1676,7 @@ message TTracingConfig {
         message TOpentelemetryBackend {
             optional string CollectorUrl = 1;
             optional string ServiceName = 2;
+            map<string, string> Headers = 3;
         }
 
 
@@ -1885,6 +1900,7 @@ message TAppConfig {
     optional TBlobCacheConfig BlobCacheConfig = 78;
     optional TLimiterConfig CompDiskLimiterConfig = 79;
     optional TMetadataCacheConfig MetadataCacheConfig = 80;
+    optional TMemoryControllerConfig MemoryControllerConfig = 81;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

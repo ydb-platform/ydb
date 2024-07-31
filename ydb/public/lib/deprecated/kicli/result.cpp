@@ -147,6 +147,12 @@ template <> TString TReadTableResult::ValueToString<TFormatCSV>(const YdbOld::Va
                 return TDuration::MicroSeconds(static_cast<ui64>(val)).ToString();
             return TString("-") + TDuration::MicroSeconds(static_cast<ui64>(-val)).ToString();
         }
+    case NScheme::NTypeIds::Date32:
+        return ToString(value.int32_value());
+    case NScheme::NTypeIds::Datetime64:
+    case NScheme::NTypeIds::Timestamp64:
+    case NScheme::NTypeIds::Interval64:
+        return ToString(value.int64_value());
     case NScheme::NTypeIds::Decimal:
         {
             NYql::NDecimal::TInt128 val;

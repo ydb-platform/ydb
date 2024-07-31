@@ -502,6 +502,7 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     SetupLogLevelFromTestParam(NKikimrServices::KQP_TASKS_RUNNER);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_EXECUTER);
     SetupLogLevelFromTestParam(NKikimrServices::TX_PROXY_SCHEME_CACHE);
+    SetupLogLevelFromTestParam(NKikimrServices::TX_PROXY);
     SetupLogLevelFromTestParam(NKikimrServices::SCHEME_BOARD_REPLICA);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_WORKER);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_SESSION);
@@ -516,6 +517,7 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     SetupLogLevelFromTestParam(NKikimrServices::KQP_RESOURCE_MANAGER);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_NODE);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_BLOBS_STORAGE);
+    SetupLogLevelFromTestParam(NKikimrServices::KQP_WORKLOAD_SERVICE);
     SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD);
     SetupLogLevelFromTestParam(NKikimrServices::LOCAL_PGWIRE);
 
@@ -1287,7 +1289,6 @@ THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime,
 {
     auto &runtime = *server->GetRuntime();
     TAutoPtr<IEventHandle> handle;
-    TVector<ui64> shards;
 
     auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
     request->Record.MutableDescribePath()->SetPath(path);
@@ -1398,6 +1399,34 @@ bool JoinOrderAndAlgosMatch(const TString& optimized, const TString& reference){
     NJson::ReadJsonTree(reference, &refRoot, true);
 
     return JoinOrderAndAlgosMatch(optRoot, refRoot);
+}
+
+/* Temporary solution to canonize tests */
+NJson::TJsonValue CanonizeJoinOrderImpl(const NJson::TJsonValue& opt) {
+    NJson::TJsonValue res;
+
+    auto op = opt.GetMapSafe().at("Operators").GetArraySafe()[0];
+    res["op_name"] = op.GetMapSafe().at("Name").GetStringSafe();
+
+
+    if (!opt.GetMapSafe().contains("Plans")) {
+        res["table"] = op.GetMapSafe().at("Table").GetStringSafe();
+        return res;
+    }
+    
+    auto subplans = opt.GetMapSafe().at("Plans").GetArraySafe();
+    for (size_t i = 0; i< subplans.size(); ++i) {
+        res["args"].AppendValue(CanonizeJoinOrderImpl(subplans[i]));
+    }
+    return res;
+}
+
+/* Temporary solution to canonize tests */
+NJson::TJsonValue CanonizeJoinOrder(const TString& deserializedPlan) {
+    NJson::TJsonValue optRoot;
+    NJson::ReadJsonTree(deserializedPlan, &optRoot, true);
+    optRoot = SimplifyPlan(optRoot.GetMapSafe().at("SimplifiedPlan"));
+    return CanonizeJoinOrderImpl(SimplifyPlan(optRoot));
 }
 
 } // namspace NKqp

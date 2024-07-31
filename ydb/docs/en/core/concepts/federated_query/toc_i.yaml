@@ -2,6 +2,8 @@ items:
 - { name: Overview,                               href: index.md }
 - { name: Architecture,                           href: architecture.md }
 - { name: Working with ClickHouse databases,      href: clickhouse.md }
+- { name: Working with Greenplum databases,       href: greenplum.md }
+- { name: Working with MySQL databases,           href: mysql.md }
 - { name: Working with PostgreSQL databases,      href: postgresql.md }
 - { name: Working with YDB databases,             href: ydb.md }
 - name: Working with S3 buckets

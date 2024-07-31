@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:6:20: Error: At function: YtWriteTable!, Setting column_groups
+    	with column_groups="{def1=#;def2=#}"
+	                   ^
+        <tmp_path>/program.sql:<main>:6:20: Error: Not more than one group should have # value: "def2"
+        	with column_groups="{def1=#;def2=#}"
+	                   ^

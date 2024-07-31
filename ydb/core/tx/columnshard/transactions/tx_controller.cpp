@@ -1,4 +1,5 @@
 #include "tx_controller.h"
+#include "transactions/tx_finish_async.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 
@@ -127,19 +128,17 @@ TTxController::TTxInfo TTxController::RegisterTxWithDeadline(const std::shared_p
     return txInfo;
 }
 
-bool TTxController::AbortTx(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
-    auto opIt = Operators.find(txId);
+bool TTxController::AbortTx(const TPlanQueueItem planQueueItem, NTabletFlatExecutor::TTransactionContext& txc) {
+    auto opIt = Operators.find(planQueueItem.TxId);
     Y_ABORT_UNLESS(opIt != Operators.end());
     Y_ABORT_UNLESS(opIt->second->GetTxInfo().PlanStep == 0);
     opIt->second->ExecuteOnAbort(Owner, txc);
     opIt->second->CompleteOnAbort(Owner, NActors::TActivationContext::AsActorContext());
 
-    if (opIt->second->GetTxInfo().MaxStep != Max<ui64>()) {
-        DeadlineQueue.erase(TPlanQueueItem(opIt->second->GetTxInfo().MaxStep, txId));
-    }
-    Operators.erase(txId);
+    AFL_VERIFY(Operators.erase(planQueueItem.TxId));
+    AFL_VERIFY(DeadlineQueue.erase(planQueueItem));
     NIceDb::TNiceDb db(txc.DB);
-    Schema::EraseTxInfo(db, txId);
+    Schema::EraseTxInfo(db, planQueueItem.TxId);
     return true;
 }
 
@@ -231,7 +230,7 @@ size_t TTxController::CleanExpiredTxs(NTabletFlatExecutor::TTransactionContext& 
     size_t removedCount = 0;
     if (HaveOutdatedTxs()) {
         ui64 outdatedStep = Owner.GetOutdatedStep();
-        while (!DeadlineQueue.empty()) {
+        while (DeadlineQueue.size()) {
             auto it = DeadlineQueue.begin();
             if (outdatedStep < it->Step) {
                 // This transaction has a chance to be planned
@@ -239,7 +238,7 @@ size_t TTxController::CleanExpiredTxs(NTabletFlatExecutor::TTransactionContext& 
             }
             ui64 txId = it->TxId;
             LOG_S_DEBUG(TStringBuilder() << "Removing outdated txId " << txId << " max step " << it->Step << " outdated step ");
-            AbortTx(txId, txc);
+            AbortTx(*it, txc);
             ++removedCount;
         }
     }
@@ -279,6 +278,8 @@ TTxController::EPlanResult TTxController::PlanTx(const ui64 planStep, const ui64
 }
 
 void TTxController::OnTabletInit() {
+    AFL_VERIFY(!StartedFlag);
+    StartedFlag = true;
     for (auto&& txOperator : Operators) {
         txOperator.second->OnTabletInit(Owner);
     }

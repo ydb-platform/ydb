@@ -179,22 +179,6 @@ bool TTxScan::Execute(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/
     return true;
 }
 
-template <typename T>
-struct TContainerPrinter {
-    const T& Ref;
-
-    TContainerPrinter(const T& ref)
-        : Ref(ref) {
-    }
-
-    friend IOutputStream& operator << (IOutputStream& out, const TContainerPrinter& cont) {
-        for (auto& ptr : cont.Ref) {
-            out << *ptr << " ";
-        }
-        return out;
-    }
-};
-
 void TTxScan::Complete(const TActorContext& ctx) {
     TMemoryProfileGuard mpg("TTxScan::Complete");
     auto& request = Ev->Get()->Record;
@@ -213,7 +197,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
         ("tx_id", txId)("scan_id", scanId)("gen", scanGen)("table", table)("snapshot", snapshot)("tablet", Self->TabletID())("timeout", timeout);
 
     if (!ReadMetadataRange) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan failed")("reason", "no metadata");
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan failed")("reason", "no metadata")("error", ErrorDescription);
 
         auto ev = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>(scanGen, Self->TabletID());
         ev->Record.SetStatus(Ydb::StatusIds::BAD_REQUEST);

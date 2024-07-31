@@ -103,11 +103,31 @@ struct IKqpNodeComputeActorFactory {
     virtual ~IKqpNodeComputeActorFactory() = default;
 
 public:
-    virtual NActors::TActorId CreateKqpComputeActor(const NActors::TActorId& executerId, ui64 txId, NYql::NDqProto::TDqTask* task,
-        const NYql::NDq::TComputeRuntimeSettings& settings,
-        NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena, const TString& serializedGUCSettings,
-        TComputeStagesWithScan& computeStages, ui64 outputChunkMaxSize, std::shared_ptr<IKqpNodeState> state,
-        NKikimr::NKqp::NRm::EKqpMemoryPool memoryPool, ui32 numberOfTasks) = 0;
+    struct TCreateArgs {
+        const NActors::TActorId& ExecuterId;
+        const ui64 TxId;
+        NYql::NDqProto::TDqTask* Task;
+        TIntrusivePtr<NRm::TTxState> TxInfo;
+        const NYql::NDq::TComputeRuntimeSettings& RuntimeSettings;
+        NWilson::TTraceId TraceId;
+        TIntrusivePtr<NActors::TProtoArenaHolder> Arena;
+        const TString& SerializedGUCSettings;
+        const ui32 NumberOfTasks;
+        const ui64 OutputChunkMaxSize;
+        const NKikimr::NKqp::NRm::EKqpMemoryPool MemoryPool;
+        const bool WithSpilling;
+        const NYql::NDqProto::EDqStatsMode StatsMode;
+        const TInstant& Deadline;
+        const bool ShareMailbox;
+        const TMaybe<NYql::NDqProto::TRlPath>& RlPath;
+        TComputeStagesWithScan* ComputesByStages = nullptr;
+        std::shared_ptr<IKqpNodeState> State = nullptr;
+    };
+
+    typedef std::variant<TActorId, NKikimr::NKqp::NRm::TKqpRMAllocateResult> TActorStartResult;
+    virtual TActorStartResult CreateKqpComputeActor(TCreateArgs&& args) = 0;
+
+    virtual void ApplyConfig(const NKikimrConfig::TTableServiceConfig::TResourceManager& config) = 0;
 };
 
 std::shared_ptr<IKqpNodeComputeActorFactory> MakeKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,

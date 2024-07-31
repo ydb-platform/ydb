@@ -532,6 +532,7 @@ def _form_response(
     body: Union[BufferedReader, BytesIO],
     headers: Optional[Mapping[str, str]],
     status: int,
+    request_method: Optional[str],
 ) -> HTTPResponse:
     """
     Function to generate `urllib3.response.HTTPResponse` object.
@@ -566,6 +567,7 @@ def _form_response(
         headers=headers,
         original_response=orig_response,  # type: ignore[arg-type]  # See comment above
         preload_content=False,
+        request_method=request_method,
     )
 
 
@@ -632,7 +634,7 @@ class Response(BaseResponse):
             content_length = len(body.getvalue())
             headers["Content-Length"] = str(content_length)
 
-        return _form_response(body, headers, status)
+        return _form_response(body, headers, status, request.method)
 
     def __repr__(self) -> str:
         return (
@@ -695,7 +697,7 @@ class CallbackResponse(BaseResponse):
         body = _handle_body(body)
         headers.extend(r_headers)
 
-        return _form_response(body, headers, status)
+        return _form_response(body, headers, status, request.method)
 
 
 class PassthroughResponse(BaseResponse):
@@ -812,7 +814,11 @@ class RequestsMock:
 
         if adding_headers is not None:
             kwargs.setdefault("headers", adding_headers)
-        if "content_type" in kwargs and "headers" in kwargs:
+        if (
+            "content_type" in kwargs
+            and "headers" in kwargs
+            and kwargs["headers"] is not None
+        ):
             header_keys = [header.lower() for header in kwargs["headers"]]
             if "content-type" in header_keys:
                 raise RuntimeError(
@@ -850,6 +856,7 @@ class RequestsMock:
                 url=rsp["url"],
                 body=rsp["body"],
                 status=rsp["status"],
+                headers=rsp["headers"] if "headers" in rsp else None,
                 content_type=rsp["content_type"],
                 auto_calculate_content_length=rsp["auto_calculate_content_length"],
             )
@@ -1104,7 +1111,7 @@ class RequestsMock:
             response = self._real_send(adapter, request, **kwargs)  # type: ignore
         else:
             try:
-                response = adapter.build_response(  # type: ignore[no-untyped-call]
+                response = adapter.build_response(  # type: ignore[assignment]
                     request, match.get_response(request)
                 )
             except BaseException as response:

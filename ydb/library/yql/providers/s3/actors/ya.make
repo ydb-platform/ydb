@@ -9,6 +9,7 @@ ADDINCL(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    yql_arrow_push_down.cpp
     yql_s3_actors_factory_impl.cpp
     yql_s3_actors_util.cpp
     yql_s3_applicator_actor.cpp
@@ -34,6 +35,7 @@ PEERDIR(
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/common/schema/mkql
     ydb/library/yql/providers/common/token_accessor/client
+    ydb/library/yql/providers/generic/pushdown
     ydb/library/yql/providers/s3/actors_factory
     ydb/library/yql/providers/s3/common
     ydb/library/yql/providers/s3/compressors
@@ -51,6 +53,7 @@ IF (CLANG AND NOT WITH_VALGRIND)
 
     SRCS(
         yql_arrow_column_converters.cpp
+        yql_s3_decompressor_actor.cpp
         yql_s3_read_actor.cpp
         yql_s3_source_queue.cpp
     )
@@ -67,3 +70,7 @@ IF (CLANG AND NOT WITH_VALGRIND)
 ENDIF()
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

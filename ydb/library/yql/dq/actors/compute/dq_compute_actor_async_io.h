@@ -67,6 +67,8 @@ struct IMemoryQuotaManager {
     virtual void FreeQuota(ui64 memorySize) = 0;
     virtual ui64 GetCurrentQuota() const = 0;
     virtual ui64 GetMaxMemorySize() const = 0;
+    virtual bool IsReasonableToUseSpilling() const = 0;
+    virtual TString MemoryConsumptionDetails() const = 0;
 };
 
 // Source/transform.
@@ -298,6 +300,7 @@ public:
         const THashMap<TString, TString>& TaskParams;
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
         IRandomProvider *const RandomProvider;
     };
 

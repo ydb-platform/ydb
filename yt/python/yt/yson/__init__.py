@@ -22,7 +22,7 @@ Examples:
 >>> yson.dumps(True)
 '"true"'
 
->>> number = yson.YsonInteger(10)
+>>> number = yson.YsonInt64(10)
 >>> number.attributes["my_attr"] = "hello"
 >>> yson.dumps(number)
 '<"attr"="hello">10'

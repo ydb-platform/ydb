@@ -3,7 +3,7 @@
  * tsquery_util.c
  *	  Utilities for tsquery datatype
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -16,6 +16,7 @@
 
 #include "miscadmin.h"
 #include "tsearch/ts_utils.h"
+#include "varatt.h"
 
 /*
  * Build QTNode tree for a tsquery given in QueryItem array format.
@@ -172,7 +173,7 @@ QTNSort(QTNode *in)
 	for (i = 0; i < in->nchild; i++)
 		QTNSort(in->child[i]);
 	if (in->nchild > 1 && in->valnode->qoperator.oper != OP_PHRASE)
-		qsort((void *) in->child, in->nchild, sizeof(QTNode *), cmpQTN);
+		qsort(in->child, in->nchild, sizeof(QTNode *), cmpQTN);
 }
 
 /*
@@ -186,7 +187,7 @@ QTNEq(QTNode *a, QTNode *b)
 	if (!(sign == a->sign && sign == b->sign))
 		return false;
 
-	return (QTNodeCompare(a, b) == 0) ? true : false;
+	return (QTNodeCompare(a, b) == 0);
 }
 
 /*

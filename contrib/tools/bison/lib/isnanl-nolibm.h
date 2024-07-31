@@ -1,5 +1,5 @@
 /* Test for NaN that does not need libm.
-   Copyright (C) 2007-2013 Free Software Foundation, Inc.
+   Copyright (C) 2007-2019 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,12 +12,12 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #if HAVE_ISNANL_IN_LIBC
 /* Get declaration of isnan macro or (older) isnanl function.  */
 # include <math.h>
-# if __GNUC__ >= 4 && !__clang__
+# if __GNUC__ >= 4
    /* GCC 4.0 and newer provides three built-ins for isnan.  */
 #  undef isnanl
 #  define isnanl(x) __builtin_isnanl ((long double)(x))

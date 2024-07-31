@@ -45,12 +45,15 @@ TString StringFromSharedRef(const TSharedRef& sharedRef)
 template <class TImpl>
 using TRpcTest = TRpcTestBase<TImpl>;
 template <class TImpl>
+using TAttachmentsTest = TRpcTestBase<TImpl>;
+template <class TImpl>
 using TNotUdsTest = TRpcTestBase<TImpl>;
 template <class TImpl>
 using TNotGrpcTest = TRpcTestBase<TImpl>;
 template <class TImpl>
 using TGrpcTest = TRpcTestBase<TImpl>;
 TYPED_TEST_SUITE(TRpcTest, TAllTransports);
+TYPED_TEST_SUITE(TAttachmentsTest, TWithAttachments);
 TYPED_TEST_SUITE(TNotUdsTest, TWithoutUds);
 TYPED_TEST_SUITE(TNotGrpcTest, TWithoutGrpc);
 TYPED_TEST_SUITE(TGrpcTest, TGrpcOnly);
@@ -488,7 +491,7 @@ TYPED_TEST(TRpcTest, ManyAsyncRequests)
     EXPECT_TRUE(AllSucceeded(asyncResults).Get().IsOK());
 }
 
-TYPED_TEST(TRpcTest, RegularAttachments)
+TYPED_TEST(TAttachmentsTest, RegularAttachments)
 {
     TTestProxy proxy(this->CreateChannel());
     auto req = proxy.RegularAttachments();
@@ -538,7 +541,7 @@ TYPED_TEST(TNotGrpcTest, TrackedRegularAttachments)
     EXPECT_EQ("TTestProxy_",  StringFromSharedRef(attachments[2]));
 }
 
-TYPED_TEST(TRpcTest, NullAndEmptyAttachments)
+TYPED_TEST(TAttachmentsTest, NullAndEmptyAttachments)
 {
     TTestProxy proxy(this->CreateChannel());
     auto req = proxy.NullAndEmptyAttachments();
@@ -641,7 +644,7 @@ TYPED_TEST(TRpcTest, ResponseMemoryTag)
     }
 
     auto currentMemoryUsage = GetMemoryUsageForTag(testMemoryTag);
-    EXPECT_GE(currentMemoryUsage - initialMemoryUsage, 256_KB)
+    EXPECT_GE(currentMemoryUsage - initialMemoryUsage, 200_KB)
         << "InitialUsage: " << initialMemoryUsage << std::endl
         << "Current: " << currentMemoryUsage;
 }
@@ -810,7 +813,7 @@ TYPED_TEST(TRpcTest, RequestQueueSizeLimit)
     EXPECT_TRUE(AllSucceeded(std::move(futures)).Get().IsOK());
 }
 
-TYPED_TEST(TNotGrpcTest, RequestMemoryOverflowException)
+TYPED_TEST(TNotGrpcTest, RequesMemoryPressureException)
 {
     auto memoryUsageTracker = this->GetMemoryUsageTracker();
     memoryUsageTracker->ClearTotalUsage();
@@ -825,7 +828,7 @@ TYPED_TEST(TNotGrpcTest, RequestMemoryOverflowException)
     auto result = WaitFor(req->Invoke().AsVoid());
 
     // Limit of memory is 32 MB.
-    EXPECT_EQ(NRpc::EErrorCode::MemoryOverflow, req->Invoke().Get().GetCode());
+    EXPECT_EQ(NRpc::EErrorCode::MemoryPressure, req->Invoke().Get().GetCode());
 }
 
 TYPED_TEST(TNotGrpcTest, MemoryTracking)

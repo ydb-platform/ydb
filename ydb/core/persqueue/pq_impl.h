@@ -204,7 +204,7 @@ private:
         bool Deleting = false;
     };
 
-    THashMap<ui64, TTxWriteInfo> TxWrites;
+    THashMap<TWriteId, TTxWriteInfo> TxWrites;
     bool TxWritesChanged = false;
     ui32 NextSupportivePartitionId = 100'000;
 
@@ -272,8 +272,10 @@ private:
     //
     THashMap<ui64, TDistributedTransaction> Txs;
     TQueue<std::pair<ui64, ui64>> TxQueue;
-    ui64 LastStep = 0;
-    ui64 LastTxId = 0;
+    ui64 PlanStep = 0;
+    ui64 PlanTxId = 0;
+    ui64 ExecStep = 0;
+    ui64 ExecTxId = 0;
 
     TDeque<std::unique_ptr<TEvPersQueue::TEvProposeTransaction>> EvProposeTransactionQueue;
     TDeque<std::pair<TActorId, std::unique_ptr<TEvTxProcessing::TEvPlanStep>>> EvPlanStepQueue;
@@ -344,6 +346,8 @@ private:
 
     void SendProposeTransactionAbort(const TActorId& target,
                                      ui64 txId,
+                                     NKikimrPQ::TError::EKind kind,
+                                     const TString& reason,
                                      const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvProposePartitionConfigResult::TPtr& ev, const TActorContext& ctx);
@@ -484,8 +488,8 @@ private:
     void CreateSupportivePartitionActors(const TActorContext& ctx);
     void CreateSupportivePartitionActor(const TPartitionId& shadowPartitionId, const TActorContext& ctx);
     NKikimrPQ::TPQTabletConfig MakeSupportivePartitionConfig() const;
-    void SubscribeWriteId(ui64 writeId, const TActorContext& ctx);
-    void UnsubscribeWriteId(ui64 writeId, const TActorContext& ctx);
+    void SubscribeWriteId(const TWriteId& writeId, const TActorContext& ctx);
+    void UnsubscribeWriteId(const TWriteId& writeId, const TActorContext& ctx);
 
     bool AllOriginalPartitionsInited() const;
 
@@ -497,8 +501,10 @@ private:
     void BeginDeletePartitions(TTxWriteInfo& writeInfo);
 
     bool CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& operation,
-                               ui64 writeId) const;
+                               const TWriteId& writeId) const;
     bool CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBody) const;
+
+    void MoveTopTxToCalculating(TDistributedTransaction& tx, const TActorContext& ctx);
 };
 
 

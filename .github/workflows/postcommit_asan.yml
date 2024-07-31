@@ -8,12 +8,11 @@ on:
       - 'stream-nb-*'
     paths-ignore:
       - 'ydb/docs/**'
-      - '.github/**'
       - '*'
 jobs:
   build_and_test:
     if: ${{vars.CHECKS_SWITCH != '' && fromJSON(vars.CHECKS_SWITCH).postcommit_asan == true}}
-    runs-on: [ self-hosted, auto-provisioned, build-preset-release-asan ]
+    runs-on: [ self-hosted, auto-provisioned, build-preset-release-asan, postcommit ]
     name: Build and test release-asan
     steps:
     - name: Checkout

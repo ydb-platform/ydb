@@ -335,6 +335,13 @@ bool TTabletInfo::HasAllowedMetric(EResourceToBalance resource) const {
     return HasAllowedMetric(GetTabletAllowedMetricIds(), resource);
 }
 
+bool TTabletInfo::HasMetric(EResourceToBalance resource) const {
+    if (!HasAllowedMetric(resource)) {
+        return false;
+    }
+    return ExtractResourceUsage(GetResourceCurrentValues(), resource) > 0;
+}
+
 void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics) {
     TInstant now = TActivationContext::Now();
     const TVector<i64>& allowedMetricIds(GetTabletAllowedMetricIds());

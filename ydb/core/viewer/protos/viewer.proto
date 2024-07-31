@@ -41,6 +41,7 @@ enum EObjectType {
     ExternalTable = 24;
     ExternalDataSource = 25;
     View = 26;
+    ResourcePool = 27;
 }
 
 message TBrowseInfo {
@@ -72,6 +73,7 @@ message TMetaCommonInfo {
         string Subject = 3;
         repeated string InheritanceType = 4;
         string AccessRule = 5;
+        repeated string AccessRules = 6;
     }
 
     EObjectType Type = 1;
@@ -91,6 +93,7 @@ message TMetaCommonInfo {
     repeated uint32 Nodes = 15;
     repeated uint32 Disks = 16;
     repeated TACE ACL = 17;
+
     TBackupInfo Backup = 18;
     TResources Resources = 19;
 
@@ -115,6 +118,7 @@ message TMetaCommonInfo {
     uint64 RowReads = 36;
     uint64 RangeReads = 37;
     uint64 RangeReadRows = 38;
+    repeated TACE EffectiveACL = 39;
 }
 
 message TMetaColumnInfo {
@@ -389,8 +393,54 @@ message TTenantInfo {
     repeated string Errors = 2;
 }
 
+message TStoragePDisk {
+    string PDiskId = 1;
+    string Path = 2;
+    string Type = 3;
+    string Guid = 4;
+    uint64 Category = 5;
+    uint64 TotalSize = 6;
+    uint64 AvailableSize = 7;
+    string Status = 8;
+    EFlag DiskSpace = 9;
+    string DecommitStatus = 10;
+    uint64 SlotSize = 11;
+    NKikimrWhiteboard.TPDiskStateInfo Whiteboard = 50;
+}
+
+message TStorageVDisk {
+    string VDiskId = 1;
+    uint32 NodeId = 2;
+    uint64 AllocatedSize = 3;
+    uint64 AvailableSize = 4;
+    string Kind = 5;
+    string Status = 6;
+    EFlag DiskSpace = 7;
+    repeated TStorageVDisk Donors = 8;
+    TStoragePDisk PDisk = 20;
+    NKikimrWhiteboard.TVDiskStateInfo Whiteboard = 50;
+}
+
 message TStorageGroupInfo {
     string GroupId = 1;
+    uint64 GroupGeneration = 2;
+    string PoolName = 3;
+    bool Encryption = 4;
+    EFlag Overall = 5;
+    EFlag DiskSpace = 6;
+    string Kind = 7;
+    string MediaType = 8;
+    string ErasureSpecies = 9;
+    uint64 AllocationUnits = 10;
+    string State = 11;
+    uint64 MissingDisks = 12; // Degraded
+    uint64 Used = 13;
+    uint64 Limit = 14;
+    uint64 Available = 15;
+    double Usage = 16;
+    uint64 Read = 17;
+    uint64 Write = 18;
+    repeated TStorageVDisk VDisks = 20;
 }
 
 message TStoragePoolInfo {
@@ -416,6 +466,18 @@ message TStorageInfo {
     repeated TStorageGroupInfo StorageGroups = 5;
 }
 
+message TStorageGroupsInfo {
+    uint64 Version = 1;
+    optional uint64 TotalGroups = 2;
+    optional uint64 FoundGroups = 3;
+    optional uint64 FieldsAvailable = 4;
+    optional uint64 FieldsRequired = 5;
+    optional bool NeedFilter = 6;
+    optional bool NeedSort = 7;
+    optional bool NeedLimit = 8;
+    repeated TStorageGroupInfo StorageGroups = 10;
+}
+
 message TStorageUsageStats {
     uint32 Pace = 1;
     repeated uint32 Buckets = 2;
@@ -435,6 +497,8 @@ message TNodesInfo {
     optional uint64 TotalNodes = 3;
     optional uint64 FoundNodes = 4;
     optional uint64 MaximumDisksPerNode = 5;
+    optional bool NoDC = 6;
+    optional bool NoRack = 7;
 }
 
 enum ENodeType {
@@ -630,7 +694,17 @@ message TQueryAutocomplete {
     repeated string Error = 3;
 }
 
+message TPDiskInfoWhiteboard {
+    NKikimrWhiteboard.TPDiskStateInfo PDisk = 1;
+    repeated NKikimrWhiteboard.TVDiskStateInfo VDisks = 2;
+}
+
+message TPDiskInfoBSC {
+    NKikimrSysView.TPDiskInfo PDisk = 1;
+    repeated NKikimrSysView.TVSlotEntry VDisks = 2;
+}
+
 message TPDiskInfo {
-    NKikimrWhiteboard.TPDiskStateInfo Whiteboard = 1;
-    NKikimrSysView.TPDiskInfo BSC = 2;
+    TPDiskInfoWhiteboard Whiteboard = 1;
+    TPDiskInfoBSC BSC = 2;
 }

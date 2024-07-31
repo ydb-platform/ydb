@@ -1,20 +1,41 @@
 #include "schema.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
 namespace NKikimr {
 namespace NSysView {
 
-TVector<Schema::PgColumn> Schema::PgTables::Columns = { //lexicographical order
-    Schema::PgColumn(5, "pgbool", "hasindexes"),
-    Schema::PgColumn(6, "pgbool", "hasrules"),
-    Schema::PgColumn(7, "pgbool", "hastriggers"),
-    Schema::PgColumn(8, "pgbool", "rowsecurity"),
-    Schema::PgColumn(1, "pgname", "schemaname"),
-    Schema::PgColumn(2, "pgname", "tablename"),
-    Schema::PgColumn(3, "pgname", "tableowner"),
-    Schema::PgColumn(4, "pgname", "tablespace")
-};
+namespace {
+TVector<Schema::PgColumn> GetPgStaticTableColumns(const TString& schema, const TString& tableName) {
+    TVector<Schema::PgColumn> res;
+    auto columns = NYql::NPg::GetStaticColumns().FindPtr(NYql::NPg::TTableInfoKey{schema, tableName});
+    res.reserve(columns->size());
+    for (size_t i = 0; i < columns->size(); i++) {
+        const auto& column = columns->at(i);
+        res.emplace_back(i, column.UdtType, column.Name);
+    }
+    return res;
+}
+}
+
+Schema::PgColumn::PgColumn(NIceDb::TColumnId columnId, TStringBuf columnTypeName, TStringBuf columnName)
+    : _ColumnId(columnId)
+    , _ColumnTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(NYql::NPg::LookupType(TString(columnTypeName)).TypeId))
+    , _ColumnName(columnName)
+{}
+
+const TVector<Schema::PgColumn>& Schema::PgTablesSchemaProvider::GetColumns(TStringBuf tableName) const {
+    TString key(tableName);
+    Y_ENSURE(columnsStorage.contains(key));
+    return columnsStorage.at(key);
+}
+
+Schema::PgTablesSchemaProvider::PgTablesSchemaProvider() {
+    columnsStorage[TString(PgTablesName)] = GetPgStaticTableColumns("pg_catalog", "pg_tables");
+    columnsStorage[TString(InformationSchemaTablesName)] = GetPgStaticTableColumns("information_schema", "tables");
+    columnsStorage[TString(PgClassName)] = GetPgStaticTableColumns("pg_catalog", "pg_class");
+}
 
 bool MaybeSystemViewPath(const TVector<TString>& path) {
     auto length = path.size();
@@ -179,27 +200,31 @@ private:
         }
     };
 
-    void RegisterPgTablesSystemView() {
-        auto& dsv  = DomainSystemViews[PgTablesName];
-        auto& sdsv = SubDomainSystemViews[PgTablesName];
-        auto PgTablesSchema = Schema::PgTables();
-        for (const auto& column : PgTablesSchema.Columns) {
-            dsv.Columns[column._ColumnId - 1] = TSysTables::TTableColumnInfo(
-                column.GetColumnName(), column._ColumnId, column._ColumnTypeInfo, "", -1
-            );
-            sdsv.Columns[column._ColumnId - 1] = TSysTables::TTableColumnInfo(
-                column.GetColumnName(), column._ColumnId, column._ColumnTypeInfo, "", -1
-            );
-        }
-        auto fillKey = [&](TSchema& schema, i32 index) -> void {
-            auto& column = schema.Columns[index];
-            column.KeyOrder = index;
-            schema.KeyColumnTypes.push_back(column.PType);
+    void RegisterPgTablesSystemViews() {
+        auto registerView = [&](TStringBuf tableName, const TVector<Schema::PgColumn>& columns) {
+            auto& dsv  = DomainSystemViews[tableName];
+            auto& sdsv = SubDomainSystemViews[tableName];
+            for (const auto& column : columns) {
+                dsv.Columns[column._ColumnId + 1] = TSysTables::TTableColumnInfo(
+                    column._ColumnName, column._ColumnId + 1, column._ColumnTypeInfo, "", -1
+                );
+                sdsv.Columns[column._ColumnId + 1] = TSysTables::TTableColumnInfo(
+                    column._ColumnName, column._ColumnId + 1, column._ColumnTypeInfo, "", -1
+                );
+            }
         };
-        for (size_t i = 0; i < 2; i++) {
-            fillKey(dsv, i);
-            fillKey(sdsv, i);
-        }
+        registerView(
+            PgTablesName,
+            Singleton<Schema::PgTablesSchemaProvider>()->GetColumns(PgTablesName)
+        );
+        registerView(
+            InformationSchemaTablesName,
+            Singleton<Schema::PgTablesSchemaProvider>()->GetColumns(InformationSchemaTablesName)
+        );
+        registerView(
+            PgClassName,
+            Singleton<Schema::PgTablesSchemaProvider>()->GetColumns(PgClassName)
+        );
     }
 
     template <typename Table>
@@ -260,7 +285,7 @@ private:
         RegisterSystemView<Schema::TopPartitions>(TopPartitions1MinuteName);
         RegisterSystemView<Schema::TopPartitions>(TopPartitions1HourName);
 
-        RegisterPgTablesSystemView();
+        RegisterPgTablesSystemViews();
     }
 
 private:

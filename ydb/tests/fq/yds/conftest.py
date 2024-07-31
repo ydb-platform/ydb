@@ -26,11 +26,13 @@ def mvp_external_ydb_endpoint(request) -> str:
 
 @pytest.fixture
 def kikimr(request: pytest.FixtureRequest, yq_version: str, stats_mode: str, mvp_external_ydb_endpoint):
-    kikimr_extensions = [DefaultConfigExtension(""),
-                         YQv2Extension(yq_version),
-                         ComputeExtension(),
-                         YdbMvpExtension(mvp_external_ydb_endpoint),
-                         StatsModeExtension(stats_mode)]
+    kikimr_extensions = [
+        DefaultConfigExtension(""),
+        YQv2Extension(yq_version),
+        ComputeExtension(),
+        YdbMvpExtension(mvp_external_ydb_endpoint),
+        StatsModeExtension(stats_mode),
+    ]
     with start_kikimr(request, kikimr_extensions) as kikimr:
         yield kikimr
 
@@ -44,29 +46,27 @@ class ManyRetriesConfigExtension(ExtensionPoint):
 
     def apply_to_kikimr(self, request, kikimr):
         kikimr.compute_plane.fq_config['control_plane_storage']['retry_policy_mapping'] = [
-            {
-                'status_code': [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
-                'policy': {
-                    'retry_count': 10000
-                }
-            }
+            {'status_code': [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'policy': {'retry_count': 10000}}
         ]
 
 
 @pytest.fixture
 def kikimr_many_retries(request: pytest.FixtureRequest, yq_version: str, mvp_external_ydb_endpoint):
-    kikimr_extensions = [DefaultConfigExtension(""),
-                         ManyRetriesConfigExtension(),
-                         YQv2Extension(yq_version),
-                         YdbMvpExtension(mvp_external_ydb_endpoint),
-                         ComputeExtension()]
+    kikimr_extensions = [
+        DefaultConfigExtension(""),
+        ManyRetriesConfigExtension(),
+        YQv2Extension(yq_version),
+        YdbMvpExtension(mvp_external_ydb_endpoint),
+        ComputeExtension(),
+    ]
     with start_kikimr(request, kikimr_extensions) as kikimr:
         yield kikimr
 
 
 def create_client(kikimr, request):
-    return FederatedQueryClient(request.param["folder_id"] if request is not None else "my_folder",
-                                streaming_over_kikimr=kikimr)
+    return FederatedQueryClient(
+        request.param["folder_id"] if request is not None else "my_folder", streaming_over_kikimr=kikimr
+    )
 
 
 @pytest.fixture

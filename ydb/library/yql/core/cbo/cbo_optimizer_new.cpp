@@ -131,13 +131,15 @@ bool TBaseProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizer
     const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
     const TVector<TString>& leftJoinKeys,
     const TVector<TString>& rightJoinKeys,
-    EJoinAlgoType joinAlgo) {
+    EJoinAlgoType joinAlgo,
+    EJoinKind joinKind) {
 
     Y_UNUSED(left);
     Y_UNUSED(right);
     Y_UNUSED(joinConditions);
     Y_UNUSED(leftJoinKeys);
     Y_UNUSED(rightJoinKeys);
+    Y_UNUSED(joinKind);
 
     return joinAlgo == EJoinAlgoType::MapJoin;
 }
@@ -159,7 +161,8 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     const TOptimizerStatistics& leftStats,
     const TOptimizerStatistics& rightStats,
     const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
-    EJoinAlgoType joinAlgo) const
+    EJoinAlgoType joinAlgo,
+    EJoinKind joinKind) const
 {
     TVector<TString> leftJoinKeys;
     TVector<TString> rightJoinKeys;
@@ -169,7 +172,7 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         rightJoinKeys.emplace_back(c.second.AttributeName);
     }
 
-    return ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo);
+    return ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind);
 }
 
 TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
@@ -177,17 +180,25 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     const TOptimizerStatistics& rightStats,
     const TVector<TString>& leftJoinKeys,
     const TVector<TString>& rightJoinKeys,
-    EJoinAlgoType joinAlgo) const
+    EJoinAlgoType joinAlgo,
+    EJoinKind joinKind) const
 {
-    double newCard;
+    double newCard{};
     EStatisticsType outputType;
     bool leftKeyColumns = false;
     bool rightKeyColumns = false;
     double selectivity = 1.0;
 
-
     if (IsPKJoin(rightStats,rightJoinKeys)) {
-        newCard = leftStats.Nrows * rightStats.Selectivity;
+        switch (joinKind) {
+            case EJoinKind::LeftJoin:
+            case EJoinKind::LeftOnly:
+                newCard = leftStats.Nrows; break;
+            default: {
+                newCard = leftStats.Nrows * rightStats.Selectivity;
+            }
+        }
+
         selectivity = leftStats.Selectivity * rightStats.Selectivity;
         leftKeyColumns = true;
         if (leftStats.Type == EStatisticsType::BaseTable){
@@ -195,21 +206,37 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         } else {
             outputType = leftStats.Type;
         }
-    }
-    else if (IsPKJoin(leftStats,leftJoinKeys)) {
-        newCard = rightStats.Nrows;
-        newCard = rightStats.Nrows * leftStats.Selectivity;
+    } else if (IsPKJoin(leftStats,leftJoinKeys)) {
+        switch (joinKind) {
+            default: {
+                newCard = leftStats.Selectivity * rightStats.Nrows;
+            }
+        }
+        
         selectivity = leftStats.Selectivity * rightStats.Selectivity;
-
         rightKeyColumns = true;
         if (rightStats.Type == EStatisticsType::BaseTable){
             outputType = EStatisticsType::FilteredFactTable;
         } else {
             outputType = rightStats.Type;
         }
-    }
-    else {
-        newCard = 0.2 * leftStats.Nrows * rightStats.Nrows;
+    } else {
+        std::optional<double> lhsUniqueVals;
+        std::optional<double> rhsUniqueVals;
+        if (leftStats.ColumnStatistics && rightStats.ColumnStatistics && !leftJoinKeys.empty() && !rightJoinKeys.empty()) {
+            auto lhs = leftJoinKeys[0];
+            lhsUniqueVals = leftStats.ColumnStatistics->Data[lhs].NumUniqueVals;
+            auto rhs = rightJoinKeys[0];
+            rightStats.ColumnStatistics->Data[rhs];
+            rhsUniqueVals = leftStats.ColumnStatistics->Data[lhs].NumUniqueVals;
+        }
+
+        if (lhsUniqueVals.has_value() && rhsUniqueVals.has_value()) {
+            newCard = leftStats.Nrows * rightStats.Nrows / std::max(*lhsUniqueVals, *rhsUniqueVals);
+        } else {
+            newCard = 0.2 * leftStats.Nrows * rightStats.Nrows;
+        }
+
         outputType = EStatisticsType::ManyManyJoin;
     }
 

@@ -59,6 +59,12 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
             return false;
         }
 
+        const TInstant now = TInstant::Now();
+        if (enabled.GetExpireAfterSeconds() > now.Seconds()) {
+            errStr = Sprintf("TTL should be less than %" PRIu64 " seconds (%" PRIu64 " days, %" PRIu64 " years). The ttl behaviour is undefined before 1970.", now.Seconds(), now.Days(), now.Days() / 365);
+            return false;            
+        }
+
         if (enabled.HasSysSettings()) {
             const auto& sys = enabled.GetSysSettings();
             if (TDuration::FromValue(sys.GetRunInterval()) < subDomain.GetTtlMinRunInterval()) {

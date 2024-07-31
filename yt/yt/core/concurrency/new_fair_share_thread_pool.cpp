@@ -618,19 +618,24 @@ public:
         ThreadCount_.store(threadCount);
     }
 
+    void Configure(TDuration pollingPeriod)
+    {
+        TNotifyManager::Reconfigure(pollingPeriod);
+    }
+
     // (arkady-e1ppa): Explanation of memory orders and fences around Stopped_:
     /*
         We have two concurrent actions: Invoke and Shutdown.
         For our logic Invoke method does 2 things:
         1) It pushes callback to the queue (we assume it be release RMW operation)
         In reality right now it is seq_cst, but it this can and should be changed in the future.
-        2) Now, the second (and third) action is seq_cst fence and then seq_cst read of Stopping_.
+        2) Now, the second (and third) action is seq_cst fence and then seq_cst read of Stopped_.
         Shutdown also does two thigns:
-        1) It does a seq_cst rmw in Stopping_ (effectively, just write)
+        1) It does a seq_cst rmw in Stopped_ (effectively, just write)
         2) It drains the queue.
         In order to prevent losing callbacks in queue
         We need to make sure that either Invoke observes |true| in the read
-        or Shutdown observes places callback from said Invoke.
+        or Shutdown observes placed callback from said Invoke.
         We care about this, because if callback is stuck in queue it will
         remain there until process is killed. If said callback MUST be
         either executed or discarded (e.g. IPollable or Fiber) in order
@@ -770,9 +775,11 @@ public:
             }
         }
 
+        InvokeQueue_.DequeueAll();
+
+        guard.Release();
         actions.clear();
 
-        InvokeQueue_.DequeueAll();
     }
 
     void RegisterWaitTimeObserver(TWaitTimeObserver waitTimeObserver)
@@ -1319,6 +1326,11 @@ public:
     void Configure(int threadCount) override
     {
         TThreadPoolBase::Configure(threadCount);
+    }
+
+    void Configure(TDuration pollingPeriod) override
+    {
+        Queue_->Configure(pollingPeriod);
     }
 
     IInvokerPtr GetInvoker(

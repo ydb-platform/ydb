@@ -89,7 +89,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                        TPathElement::EPathType,
                        TStepId, TTxId, TStepId, TTxId,
                        TString, TTxId,
-                       ui64, ui64, ui64> TPathRec;
+                       ui64, ui64, ui64,
+                       TString> TPathRec;
     typedef TDeque<TPathRec> TPathRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -106,7 +107,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::LastTxId>(InvalidTxId),
             rowSet.template GetValueOrDefault<typename SchemaTable::DirAlterVersion>(1),
             rowSet.template GetValueOrDefault<typename SchemaTable::UserAttrsAlterVersion>(1),
-            rowSet.template GetValueOrDefault<typename SchemaTable::ACLVersion>(0)
+            rowSet.template GetValueOrDefault<typename SchemaTable::ACLVersion>(0),
+            rowSet.template GetValueOrDefault<typename SchemaTable::TempDirOwnerActorId>()
         );
     }
 
@@ -132,6 +134,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         TPathElement::TPtr path = new TPathElement(pathId, parentPathId, domainId, name, owner);
 
+        TString tempDirOwnerActorId;
         std::tie(
             std::ignore, //pathId
             std::ignore, //parentPathId
@@ -146,13 +149,15 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             path->LastTxId,
             path->DirAlterVersion,
             path->UserAttrs->AlterVersion,
-            path->ACLVersion
-            ) = rec;
+            path->ACLVersion,
+            tempDirOwnerActorId) = rec;
 
         path->PathState = TPathElement::EPathState::EPathStateNoChanges;
         if (path->StepDropped) {
             path->PathState = TPathElement::EPathState::EPathStateNotExist;
         }
+
+        path->TempDirOwnerActorId.Parse(tempDirOwnerActorId.c_str(), tempDirOwnerActorId.size());
 
         return path;
     }
@@ -1388,6 +1393,33 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 parent->DbRefCount++;
                 parent->AllChildrenCount++;
 
+                if (path->TempDirOwnerActorId) {
+                    const TActorId& tempDirOwnerActorId = path->TempDirOwnerActorId;
+
+                    auto& TempDirsByOwner = Self->TempDirsState.TempDirsByOwner;
+                    auto& nodeStates = Self->TempDirsState.NodeStates;
+
+                    auto it = TempDirsByOwner.find(tempDirOwnerActorId);
+                    const auto nodeId = tempDirOwnerActorId.NodeId();
+
+                    auto itNodeStates = nodeStates.find(nodeId);
+                    if (itNodeStates == nodeStates.end()) {
+                        auto& nodeState = nodeStates[nodeId];
+                        nodeState.Owners.insert(tempDirOwnerActorId);
+                        nodeState.RetryState.CurrentDelay =
+                            TDuration::MilliSeconds(Self->BackgroundCleaningRetrySettings.GetStartDelayMs());
+                    } else {
+                        itNodeStates->second.Owners.insert(tempDirOwnerActorId);
+                    }
+
+                    if (it == TempDirsByOwner.end()) {
+                        auto& currentTempTables = TempDirsByOwner[tempDirOwnerActorId];
+                        currentTempTables.insert(path->PathId);
+                    } else {
+                        it->second.insert(path->PathId);
+                    }
+                }
+
                 Self->AttachChild(path);
                 Self->PathsById[path->PathId] = path;
             }
@@ -1798,39 +1830,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
 
                 tableInfo->IsBackup = std::get<8>(rec);
-                tableInfo->IsTemporary = std::get<10>(rec);
-
-                auto ownerActorIdStr = std::get<11>(rec);
-                tableInfo->OwnerActorId.Parse(ownerActorIdStr.c_str(), ownerActorIdStr.size());
-
-                if (tableInfo->IsTemporary) {
-                    Y_VERIFY_S(tableInfo->OwnerActorId,  "Empty OwnerActorId for temp table");
-
-                    TActorId ownerActorId = tableInfo->OwnerActorId;
-
-                    auto& tempTablesByOwner = Self->TempTablesState.TempTablesByOwner;
-                    auto& nodeStates = Self->TempTablesState.NodeStates;
-
-                    auto it = tempTablesByOwner.find(ownerActorId);
-                    auto nodeId = ownerActorId.NodeId();
-
-                    auto itNodeStates = nodeStates.find(nodeId);
-                    if (itNodeStates == nodeStates.end()) {
-                        auto& nodeState = nodeStates[nodeId];
-                        nodeState.Owners.insert(ownerActorId);
-                        nodeState.RetryState.CurrentDelay =
-                            TDuration::MilliSeconds(Self->BackgroundCleaningRetrySettings.GetStartDelayMs());
-                    } else {
-                        itNodeStates->second.Owners.insert(ownerActorId);
-                    }
-
-                    if (it == tempTablesByOwner.end()) {
-                        auto& currentTempTables = tempTablesByOwner[ownerActorId];
-                        currentTempTables.insert(pathId);
-                    } else {
-                        it->second.insert(pathId);
-                    }
-                }
 
                 Self->Tables[pathId] = tableInfo;
                 Self->IncrementPathDbRefCount(pathId);
@@ -1906,6 +1905,29 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto& view = Self->Views[pathId] = new TViewInfo();
                 view->AlterVersion = rowset.GetValue<Schema::View::AlterVersion>();
                 view->QueryText = rowset.GetValue<Schema::View::QueryText>();
+                Self->IncrementPathDbRefCount(pathId);
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
+        // Resorce Pool
+        {
+            auto rowset = db.Table<Schema::ResourcePool>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                TOwnerId ownerPathId = rowset.GetValue<Schema::ResourcePool::OwnerPathId>();
+                TLocalPathId localPathId = rowset.GetValue<Schema::ResourcePool::LocalPathId>();
+                TPathId pathId(ownerPathId, localPathId);
+
+                auto& resourcePool = Self->ResourcePools[pathId] = new TResourcePoolInfo();
+                resourcePool->AlterVersion = rowset.GetValue<Schema::ResourcePool::AlterVersion>();
+                Y_PROTOBUF_SUPPRESS_NODISCARD resourcePool->Properties.ParseFromString(rowset.GetValue<Schema::ResourcePool::Properties>());
                 Self->IncrementPathDbRefCount(pathId);
 
                 if (!rowset.Next()) {

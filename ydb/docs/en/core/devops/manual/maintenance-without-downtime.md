@@ -1,7 +1,7 @@
 # Maintenance without downtime
 
 A {{ ydb-short-name }} cluster periodically needs maintenance, such as upgrading its version or replacing broken disks. Maintenance can cause a cluster or its databases to become unavailable due to:
-- Going beyond the expectations of the affected [storage groups](../../concepts/databases.md#storage-groups) failure model.
+- Going beyond the expectations of the affected [storage groups](../../concepts/glossary.md#storage-groups) failure model.
 - Going beyond the expectations of the [State Storage](../../deploy/configuration/config.md#domains-state) failure model.
 - Lack of computational resources due to stopping too many [dynamic nodes](../../concepts/cluster/common_scheme_ydb.md#nodes).
 

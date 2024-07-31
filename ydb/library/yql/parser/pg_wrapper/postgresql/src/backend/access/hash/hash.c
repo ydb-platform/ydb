@@ -3,7 +3,7 @@
  * hash.c
  *	  Implementation of Margo Seltzer's Hashing package for postgres.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -22,6 +22,7 @@
 #include "access/hash_xlog.h"
 #include "access/relscan.h"
 #include "access/tableam.h"
+#include "access/xloginsert.h"
 #include "catalog/index.h"
 #include "commands/progress.h"
 #include "commands/vacuum.h"
@@ -74,6 +75,7 @@ hashhandler(PG_FUNCTION_ARGS)
 	amroutine->amcanparallel = false;
 	amroutine->amcaninclude = false;
 	amroutine->amusemaintenanceworkmem = false;
+	amroutine->amsummarizing = false;
 	amroutine->amparallelvacuumoptions =
 		VACUUM_OPTION_PARALLEL_BULKDEL;
 	amroutine->amkeytype = INT4OID;
@@ -230,7 +232,7 @@ hashbuildCallback(Relation index,
 		itup = index_form_tuple(RelationGetDescr(index),
 								index_values, index_isnull);
 		itup->t_tid = *tid;
-		_hash_doinsert(index, itup, buildstate->heapRel);
+		_hash_doinsert(index, itup, buildstate->heapRel, false);
 		pfree(itup);
 	}
 
@@ -264,7 +266,7 @@ hashinsert(Relation rel, Datum *values, bool *isnull,
 	itup = index_form_tuple(RelationGetDescr(rel), index_values, index_isnull);
 	itup->t_tid = *ht_ctid;
 
-	_hash_doinsert(rel, itup, heapRel);
+	_hash_doinsert(rel, itup, heapRel, false);
 
 	pfree(itup);
 
@@ -513,7 +515,7 @@ loop_top:
 		_hash_checkpage(rel, buf, LH_BUCKET_PAGE);
 
 		page = BufferGetPage(buf);
-		bucket_opaque = (HashPageOpaque) PageGetSpecialPointer(page);
+		bucket_opaque = HashPageGetOpaque(page);
 
 		/*
 		 * If the bucket contains tuples that are moved by split, then we need
@@ -715,7 +717,7 @@ hashbucketcleanup(Relation rel, Bucket cur_bucket, Buffer bucket_buf,
 		vacuum_delay_point();
 
 		page = BufferGetPage(buf);
-		opaque = (HashPageOpaque) PageGetSpecialPointer(page);
+		opaque = HashPageGetOpaque(page);
 
 		/* Scan each tuple in page */
 		maxoffno = PageGetMaxOffsetNumber(page);
@@ -816,7 +818,7 @@ hashbucketcleanup(Relation rel, Bucket cur_bucket, Buffer bucket_buf,
 				XLogRecPtr	recptr;
 
 				xlrec.clear_dead_marking = clear_dead_marking;
-				xlrec.is_primary_bucket_page = (buf == bucket_buf) ? true : false;
+				xlrec.is_primary_bucket_page = (buf == bucket_buf);
 
 				XLogBeginInsert();
 				XLogRegisterData((char *) &xlrec, SizeOfHashDelete);
@@ -882,7 +884,7 @@ hashbucketcleanup(Relation rel, Bucket cur_bucket, Buffer bucket_buf,
 		Page		page;
 
 		page = BufferGetPage(bucket_buf);
-		bucket_opaque = (HashPageOpaque) PageGetSpecialPointer(page);
+		bucket_opaque = HashPageGetOpaque(page);
 
 		/* No ereport(ERROR) until changes are logged */
 		START_CRIT_SECTION();

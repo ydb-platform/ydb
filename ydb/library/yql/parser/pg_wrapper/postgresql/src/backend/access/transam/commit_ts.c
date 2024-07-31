@@ -7,15 +7,12 @@
  * for each transaction.
  *
  * XLOG interactions: this module generates an XLOG record whenever a new
- * CommitTs page is initialized to zeroes.  Also, one XLOG record is
- * generated for setting of values when the caller requests it; this allows
- * us to support values coming from places other than transaction commit.
- * Other writes of CommitTS come from recording of transaction commit in
- * xact.c, which generates its own XLOG records for these events and will
- * re-perform the status update on redo; so we need make no additional XLOG
- * entry here.
+ * CommitTs page is initialized to zeroes.  Other writes of CommitTS come
+ * from recording of transaction commit in xact.c, which generates its own
+ * XLOG records for these events and will re-perform the status update on
+ * redo; so we need make no additional XLOG entry here.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/backend/access/transam/commit_ts.c
@@ -28,6 +25,8 @@
 #include "access/htup_details.h"
 #include "access/slru.h"
 #include "access/transam.h"
+#include "access/xloginsert.h"
+#include "access/xlogutils.h"
 #include "catalog/pg_type.h"
 #include "funcapi.h"
 #include "miscadmin.h"
@@ -96,7 +95,7 @@ typedef struct CommitTimestampShared
 	bool		commitTsActive;
 } CommitTimestampShared;
 
-__thread CommitTimestampShared *commitTsShared;
+static __thread CommitTimestampShared *commitTsShared;
 
 
 /* GUC variable */
@@ -423,18 +422,8 @@ pg_last_committed_xact(PG_FUNCTION_ARGS)
 	/* and construct a tuple with our data */
 	xid = GetLatestCommitTsData(&ts, &nodeid);
 
-	/*
-	 * Construct a tuple descriptor for the result row.  This must match this
-	 * function's pg_proc entry!
-	 */
-	tupdesc = CreateTemplateTupleDesc(3);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 1, "xid",
-					   XIDOID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 2, "timestamp",
-					   TIMESTAMPTZOID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 3, "roident",
-					   OIDOID, -1, 0);
-	tupdesc = BlessTupleDesc(tupdesc);
+	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+		elog(ERROR, "return type must be a row type");
 
 	if (!TransactionIdIsNormal(xid))
 	{
@@ -477,16 +466,8 @@ pg_xact_commit_timestamp_origin(PG_FUNCTION_ARGS)
 
 	found = TransactionIdGetCommitTsData(xid, &ts, &nodeid);
 
-	/*
-	 * Construct a tuple descriptor for the result row.  This must match this
-	 * function's pg_proc entry!
-	 */
-	tupdesc = CreateTemplateTupleDesc(2);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 1, "timestamp",
-					   TIMESTAMPTZOID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 2, "roident",
-					   OIDOID, -1, 0);
-	tupdesc = BlessTupleDesc(tupdesc);
+	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+		elog(ERROR, "return type must be a row type");
 
 	if (!found)
 	{
@@ -509,13 +490,14 @@ pg_xact_commit_timestamp_origin(PG_FUNCTION_ARGS)
 /*
  * Number of shared CommitTS buffers.
  *
- * We use a very similar logic as for the number of CLOG buffers; see comments
- * in CLOGShmemBuffers.
+ * We use a very similar logic as for the number of CLOG buffers (except we
+ * scale up twice as fast with shared buffers, and the maximum is twice as
+ * high); see comments in CLOGShmemBuffers.
  */
 Size
 CommitTsShmemBuffers(void)
 {
-	return Min(16, Max(4, NBuffers / 1024));
+	return Min(256, Max(4, NBuffers / 256));
 }
 
 /*

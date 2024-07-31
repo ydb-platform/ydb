@@ -14,6 +14,12 @@ void THeapSizeLimit::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("hard", &TThis::Hard)
         .Default(false);
+    registrar.Parameter("dump_memory_profile_on_violation", &TThis::DumpMemoryProfileOnViolation)
+        .Default(false);
+    registrar.Parameter("dump_memory_profile_timeout", &TThis::DumpMemoryProfileTimeout)
+        .Default(TDuration::Minutes(10));
+    registrar.Parameter("dump_memory_profile_path", &TThis::DumpMemoryProfilePath)
+        .Default();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -77,6 +83,8 @@ void TSingletonsConfig::Register(TRegistrar registrar)
         .DefaultNew();
     registrar.Parameter("tcp_dispatcher", &TThis::TcpDispatcher)
         .DefaultNew();
+    registrar.Parameter("io_dispatcher", &TThis::IODispatcher)
+        .DefaultNew();
     registrar.Parameter("rpc_dispatcher", &TThis::RpcDispatcher)
         .DefaultNew();
     registrar.Parameter("grpc_dispatcher", &TThis::GrpcDispatcher)
@@ -125,6 +133,8 @@ void TSingletonsDynamicConfig::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("tcp_dispatcher", &TThis::TcpDispatcher)
         .DefaultNew();
+    registrar.Parameter("io_dispatcher", &TThis::IODispatcher)
+        .Optional();
     registrar.Parameter("rpc_dispatcher", &TThis::RpcDispatcher)
         .DefaultNew();
     registrar.Parameter("logging", &TThis::Logging)
@@ -132,7 +142,7 @@ void TSingletonsDynamicConfig::Register(TRegistrar registrar)
     registrar.Parameter("jaeger", &TThis::Jaeger)
         .DefaultNew();
     registrar.Parameter("tracing_transport", &TThis::TracingTransport)
-        .DefaultNew();
+        .Optional();
     registrar.Parameter("tcmalloc", &TThis::TCMalloc)
         .Optional();
     registrar.Parameter("protobuf_interop", &TThis::ProtobufInterop)

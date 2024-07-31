@@ -605,6 +605,11 @@ message TQueryStatistics
     repeated TQueryStatistics inner_statistics = 14;
 }
 
+message TVersionedReadOptions
+{
+    optional int32 read_mode = 1; // EVersionedIOMode
+}
+
 message TReqSelectRows
 {
     required string query = 1;
@@ -632,8 +637,11 @@ message TReqSelectRows
     optional bool merge_versioned_rows = 21;
     optional int32 syntax_version = 22 [default = 1];
     optional int32 execution_backend = 23; // EExecutionBackend
+    optional TVersionedReadOptions versioned_read_options = 25;
 
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
+
+    reserved 24;
 }
 
 message TRspSelectRows
@@ -2984,6 +2992,7 @@ message TOperation
     optional bytes events = 18; // YSON
     optional bytes result = 19; // YSON
 
+    optional bytes scheduling_attributes_per_pool_tree = 28; // YSON
     optional bytes slot_index_per_pool_tree = 20; // YSON
 
     optional bytes task_names = 21; // YSON
@@ -3093,6 +3102,8 @@ message TJob
     optional NYT.NProto.TGuid probing_job_competition_id = 25;
     optional bool has_probing_competitors = 26;
     optional uint64 job_cookie = 27;
+    optional bytes archive_features = 29; // YSON
+    optional string monitoring_descriptor = 30;
 }
 
 message TListJobsStatistics
@@ -3193,7 +3204,7 @@ message TReqStartQuery
     optional bool draft = 5;
     optional bytes annotations = 6; // YSON
     repeated TQueryFile files = 7;
-    optional string access_control_object = 8; // deprecated
+    optional string access_control_object = 8; // COMPAT
     optional TAccessControlObjects access_control_objects = 9;
 }
 
@@ -3268,7 +3279,7 @@ message TQuery
     optional uint64 finish_time = 6; // TInstant
     optional bytes settings = 7; // YSON
     optional string user = 8;
-    optional string access_control_object = 9; // deprecated
+    optional string access_control_object = 9; // COMPAT
     optional EQueryState state = 10;
     optional int64 result_count = 11;
     optional bytes progress = 12; // YSON
@@ -3329,7 +3340,7 @@ message TReqAlterQuery
     required string query_tracker_stage = 1;
     required NYT.NProto.TGuid query_id = 2;
     optional bytes annotations = 3; // YSON
-    optional string access_control_object = 4; // deprecated
+    optional string access_control_object = 4; // COMPAT
     optional TAccessControlObjects access_control_objects = 5;
 }
 

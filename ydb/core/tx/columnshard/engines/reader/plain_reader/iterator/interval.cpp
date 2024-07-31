@@ -18,19 +18,6 @@ void TFetchingInterval::ConstructResult() {
     }
 }
 
-void TFetchingInterval::OnInitResourcesGuard(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard) {
-    IntervalStateGuard.SetStatus(NColumnShard::TScanCounters::EIntervalStatus::WaitSources);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "allocated")("interval_idx", IntervalIdx);
-    AFL_VERIFY(guard);
-    AFL_VERIFY(!ResourcesGuard);
-    ResourcesGuard = guard;
-    for (auto&& i : Sources) {
-        i.second->OnInitResourcesGuard(i.second);
-    }
-    AFL_VERIFY(ReadyGuards.Inc() <= 1);
-    ConstructResult();
-}
-
 void TFetchingInterval::OnSourceFetchStageReady(const ui32 /*sourceIdx*/) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "fetched")("interval_idx", IntervalIdx);
     AFL_VERIFY(ReadySourcesCount.Inc() <= WaitSourcesCount);
@@ -45,6 +32,7 @@ TFetchingInterval::TFetchingInterval(const NArrow::NMerger::TSortableBatchPositi
     , Context(context)
     , TaskGuard(Context->GetCommonContext()->GetCounters().GetResourcesAllocationTasksGuard())
     , Sources(sources)
+    , ResourcesGuard(Context->GetCommonContext()->GetCounters().BuildRequestedResourcesGuard(GetMemoryAllocation()))
     , IntervalIdx(intervalIdx)
     , IntervalStateGuard(Context->GetCommonContext()->GetCounters().CreateIntervalStateGuard())
 {
@@ -62,7 +50,13 @@ void TFetchingInterval::DoOnAllocationSuccess(const std::shared_ptr<NResourceBro
     AFL_VERIFY(guard);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("interval_idx", IntervalIdx)("event", "resources_allocated")
         ("resources", guard->DebugString())("start", MergingContext->GetIncludeStart())("finish", MergingContext->GetIncludeFinish())("sources", Sources.size());
-    OnInitResourcesGuard(guard);
+    IntervalStateGuard.SetStatus(NColumnShard::TScanCounters::EIntervalStatus::WaitSources);
+    ResourcesGuard->InitResources(guard);
+    for (auto&& i : Sources) {
+        i.second->OnInitResourcesGuard(i.second);
+    }
+    AFL_VERIFY(ReadyGuards.Inc() <= 1);
+    ConstructResult();
 }
 
 void TFetchingInterval::SetMerger(std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger) {

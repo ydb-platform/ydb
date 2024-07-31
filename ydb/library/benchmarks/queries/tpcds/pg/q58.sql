@@ -44,21 +44,21 @@ with ss_items as
  group by i_item_id)
   select  ss_items.item_id
        ,ss_item_rev
-       ,ss_item_rev/((ss_item_rev+cs_item_rev+ws_item_rev)/3::numeric) * 100::numeric ss_dev
+       ,ss_item_rev/((ss_item_rev+cs_item_rev+ws_item_rev)/3) * 100 ss_dev
        ,cs_item_rev
-       ,cs_item_rev/((ss_item_rev+cs_item_rev+ws_item_rev)/3::numeric) * 100::numeric cs_dev
+       ,cs_item_rev/((ss_item_rev+cs_item_rev+ws_item_rev)/3) * 100 cs_dev
        ,ws_item_rev
-       ,ws_item_rev/((ss_item_rev+cs_item_rev+ws_item_rev)/3::numeric) * 100::numeric ws_dev
-       ,(ss_item_rev+cs_item_rev+ws_item_rev)/3::numeric average
+       ,ws_item_rev/((ss_item_rev+cs_item_rev+ws_item_rev)/3) * 100 ws_dev
+       ,(ss_item_rev+cs_item_rev+ws_item_rev)/3 average
  from ss_items,cs_items,ws_items
  where ss_items.item_id=cs_items.item_id
    and ss_items.item_id=ws_items.item_id
-   and ss_item_rev between 0.9::numeric * cs_item_rev and 1.1::numeric * cs_item_rev
-   and ss_item_rev between 0.9::numeric * ws_item_rev and 1.1::numeric * ws_item_rev
-   and cs_item_rev between 0.9::numeric * ss_item_rev and 1.1::numeric * ss_item_rev
-   and cs_item_rev between 0.9::numeric * ws_item_rev and 1.1::numeric * ws_item_rev
-   and ws_item_rev between 0.9::numeric * ss_item_rev and 1.1::numeric * ss_item_rev
-   and ws_item_rev between 0.9::numeric * cs_item_rev and 1.1::numeric * cs_item_rev
+   and ss_item_rev between 0.9 * cs_item_rev and 1.1 * cs_item_rev
+   and ss_item_rev between 0.9 * ws_item_rev and 1.1 * ws_item_rev
+   and cs_item_rev between 0.9 * ss_item_rev and 1.1 * ss_item_rev
+   and cs_item_rev between 0.9 * ws_item_rev and 1.1 * ws_item_rev
+   and ws_item_rev between 0.9 * ss_item_rev and 1.1 * ss_item_rev
+   and ws_item_rev between 0.9 * cs_item_rev and 1.1 * cs_item_rev
  order by item_id
          ,ss_item_rev
  limit 100;

@@ -57,6 +57,7 @@ public:
     constexpr bool operator == (E rhs) const;
 
     constexpr bool operator == (TErrorCode rhs) const;
+
 private:
     int Value_;
 };
@@ -166,6 +167,7 @@ public:
     TInstant GetDatetime() const;
 
     bool HasTracingAttributes() const;
+    void SetTracingAttributes(NTracing::TTracingAttributes tracingAttributes);
     NTracing::TTraceId GetTraceId() const;
     NTracing::TSpanId GetSpanId() const;
 
@@ -231,9 +233,13 @@ public:
 
     template <CErrorNestable TValue>
     TError&& operator << (TValue&& operand) &&;
-
     template <CErrorNestable TValue>
     TError operator << (TValue&& operand) const &;
+
+    template <CErrorNestable TValue>
+    TError&& operator << (const std::optional<TValue>& operand) &&;
+    template <CErrorNestable TValue>
+    TError operator << (const std::optional<TValue>& operand) const &;
 
 private:
     class TImpl;

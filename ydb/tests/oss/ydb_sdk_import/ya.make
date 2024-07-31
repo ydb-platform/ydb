@@ -11,7 +11,6 @@ ENDIF()
 PEERDIR(
     contrib/python/PyJWT
     ydb/tests/oss/canonical
-    ydb/public/api/client/yc_public/iam
     ydb/public/sdk/python
 )
 

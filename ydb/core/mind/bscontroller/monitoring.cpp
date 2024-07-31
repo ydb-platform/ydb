@@ -323,7 +323,7 @@ class TBlobStorageController::TTxMonEvent_HealthEvents
 
     static NJson::TJsonValue ToJson(const TVDiskID& vdiskId) {
         NJson::TJsonValue j(NJson::JSON_MAP);
-        j["GroupId"] = vdiskId.GroupID;
+        j["GroupId"] = vdiskId.GroupID.GetRawId();
         j["GroupGeneration"] = vdiskId.GroupGeneration;
         j["FailRealmIdx"] = vdiskId.FailRealm;
         j["FailDomainIdx"] = vdiskId.FailDomain;
@@ -421,7 +421,7 @@ public:
                         case NKikimrBlobStorage::TConfigRequest::TCommand::kReassignGroupDisk: {
                             const auto& cmd = q.GetReassignGroupDisk();
 
-                            const TVDiskID vdiskId(cmd.GetGroupId(), cmd.GetGroupGeneration(),
+                            const TVDiskID vdiskId(TGroupId::FromProto(&cmd, &NKikimrBlobStorage::TReassignGroupDisk::GetGroupId), cmd.GetGroupGeneration(),
                                 cmd.GetFailRealmIdx(), cmd.GetFailDomainIdx(), cmd.GetVDiskIdx());
 
                             std::optional<TPDiskId> pdiskId;
@@ -646,22 +646,23 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         TGroupInfo* group = Self->FindGroup(GroupId);
         if (group == nullptr) {
-            Response = "{\"Error\":\"Group " + ToString(GroupId) + " not found\"}";
+            Response = "{\"Error\":\"Group " + ToString(GroupId.GetRawId()) + " not found\"}";
             return true;
         }
         group->Down = Down;
         if (Persist) {
             NIceDb::TNiceDb db(txc.DB);
-            db.Table<Schema::Group>().Key(GroupId).Update<Schema::Group::Down>(Down);
+            typename TGroupId::Type groupId = GroupId.GetRawId();
+            db.Table<Schema::Group>().Key(groupId).Update<Schema::Group::Down>(Down);
             group->PersistedDown = Down;
         }
-        Response = "{\"GroupId\":" + ToString(GroupId) + ',' + "\"Down\":" + (Down ? "true" : "false") + "}";
+        Response = "{\"GroupId\":" + ToString(GroupId.GetRawId()) + ',' + "\"Down\":" + (Down ? "true" : "false") + "}";
         return true;
     }
 
     void Complete(const TActorContext&) override {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXMO01, "TBlobStorageController::TTxMonEvent_SetDown",
-            (GroupId, GroupId), (Down, Down), (Persist, Persist), (Response, Response));
+            (GroupId.GetRawId(), GroupId.GetRawId()), (Down, Down), (Persist, Persist), (Response, Response));
         TActivationContext::Send(new IEventHandle(Source, Self->SelfId(), new NMon::TEvRemoteJsonInfoRes(Response)));
     }
 };
@@ -685,17 +686,17 @@ public:
 
         auto reportGroup = [](const TGroupInfo& group) {
             NJson::TJsonValue item;
-            item["GroupId"] = group.ID;
+            item["GroupId"] = group.ID.GetRawId();
             item["Down"] = group.Down;
             item["PersistedDown"] = group.PersistedDown;
             return item;
         };
 
-        if (GroupId) {
+        if (GroupId.GetRawId()) {
             if (TGroupInfo* group = Self->FindGroup(GroupId)) {
                 json = reportGroup(*group);
             } else {
-                json["Error"] = Sprintf("GroupId# %" PRIu32 " not found", GroupId);
+                json["Error"] = Sprintf("GroupId# %" PRIu32 " not found", GroupId.GetRawId());
             }
         } else {
             for (const auto& kv : Self->GroupMap) {
@@ -711,7 +712,7 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXMO02, "TBlobStorageController::TTxMonEvent_GetDown", (GroupId, GroupId),
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXMO02, "TBlobStorageController::TTxMonEvent_GetDown", (GroupId.GetRawId(), GroupId.GetRawId()),
             (Response, Response));
         TActivationContext::Send(new IEventHandle(Source, Self->SelfId(), new NMon::TEvRemoteJsonInfoRes(Response)));
     }
@@ -875,13 +876,13 @@ bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
     } else {
         const TString& page = cgi.Get("page");
         if (page == "SetDown") {
-            TGroupId groupId = FromStringWithDefault<TGroupId>(cgi.Get("group"), 0);
+            ui32 groupId = FromStringWithDefault<ui32>(cgi.Get("group"), 0);
             const bool down = FromStringWithDefault<i32>(cgi.Get("down"), 0);
             const bool persist = FromStringWithDefault<i32>(cgi.Get("persist"), 0);
-            tx.Reset(new TTxMonEvent_SetDown(ev->Sender, groupId, down, persist, this));
+            tx.Reset(new TTxMonEvent_SetDown(ev->Sender, TGroupId::FromValue(groupId), down, persist, this));
         } else if (page == "GetDown") {
-            TGroupId groupId = FromStringWithDefault<TGroupId>(cgi.Get("group"), 0);
-            tx.Reset(new TTxMonEvent_GetDown(ev->Sender, groupId, this));
+            ui32 groupId = FromStringWithDefault<ui32>(cgi.Get("group"), 0);
+            tx.Reset(new TTxMonEvent_GetDown(ev->Sender, TGroupId::FromValue(groupId), this));
         } else if (page == "OperationLog") {
             tx.Reset(new TTxMonEvent_OperationLog(ev->Sender, cgi, this));
         } else if (page == "OperationLogEntry") {
@@ -904,8 +905,8 @@ bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
             const ui64 storagePoolId = FromStringWithDefault<ui64>(cgi.Get("StoragePoolId"), -1);
             RenderGroupsInStoragePool(str, TBoxStoragePoolId(boxId, storagePoolId));
         } else if (page == "GroupDetail") {
-            const TGroupId groupId = FromStringWithDefault<TGroupId>(cgi.Get("GroupId"), -1);
-            RenderGroupDetail(str, groupId);
+            const ui32 groupId = FromStringWithDefault<ui32>(cgi.Get("GroupId"), -1);
+            RenderGroupDetail(str, TGroupId::FromValue(groupId));
         } else if (page == "Scrub") {
             ScrubState.Render(str);
         } else if (page == "InternalTables") {

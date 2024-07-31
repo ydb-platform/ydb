@@ -63,6 +63,37 @@ namespace NKikimr::NDataStreams::V1 {
             }
             return true;
         }
+
+        TString ValidatePartitioningSettings(const ::Ydb::DataStreams::V1::PartitioningSettings& s) {
+            if (s.auto_partitioning_settings().strategy() == ::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP
+                || s.auto_partitioning_settings().strategy() == ::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN
+                || s.auto_partitioning_settings().strategy() == ::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_PAUSED) {
+
+                if (s.min_active_partitions() < 0) {
+                    return "min_active_partitions must be great than 0";
+                }
+
+                if (s.max_active_partitions() < 0) {
+                    return "max_active_partitions must be great than 0";
+                }
+
+                if (s.min_active_partitions() > s.max_active_partitions()) {
+                    return TStringBuilder() << "max_active_partitions must be great or equals than min_active_partitions but "
+                        << s.max_active_partitions() << " less then  " << s.min_active_partitions();
+                }
+
+                auto& ws = s.auto_partitioning_settings().partition_write_speed();
+
+                if (ws.up_utilization_percent() && (ws.up_utilization_percent() < 0 || ws.up_utilization_percent() > 100)) {
+                    return "up_utilization_percent must be between 0 and 100";
+                }
+                if (ws.down_utilization_percent() && (ws.down_utilization_percent() < 0 || ws.down_utilization_percent() > 100)) {
+                    return "down_utilization_percent must be between 0 and 100";
+                }
+            }
+
+            return {};
+        }
     }
 
 
@@ -147,6 +178,29 @@ namespace NKikimr::NDataStreams::V1 {
                 return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT),
                               "streams can't be created with metering mode", ctx);
             }
+        }
+
+        if (GetProtoRequest()->has_partitioning_settings()) {
+            auto r = ValidatePartitioningSettings(GetProtoRequest()->partitioning_settings());
+            if (!r.empty()) {
+                return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT), r, ctx);
+            }
+
+            auto& s = GetProtoRequest()->partitioning_settings();
+            auto* t = topicRequest.mutable_partitioning_settings();
+            t->set_min_active_partitions(s.min_active_partitions());
+            t->set_max_active_partitions(s.max_active_partitions());
+
+            auto& as = s.auto_partitioning_settings();
+            auto* at = t->mutable_auto_partitioning_settings();
+            at->set_strategy(static_cast<::Ydb::Topic::AutoPartitioningStrategy>(as.strategy()));
+
+            auto& ws = as.partition_write_speed();
+            auto* wt = at->mutable_partition_write_speed();
+
+            wt->mutable_stabilization_window()->CopyFrom(ws.stabilization_window());
+            wt->set_up_utilization_percent(ws.up_utilization_percent());
+            wt->set_down_utilization_percent(ws.down_utilization_percent());
         }
 
         auto pqDescr = modifyScheme.MutableCreatePersQueueGroup();
@@ -373,12 +427,14 @@ namespace NKikimr::NDataStreams::V1 {
         Y_UNUSED(selfInfo);
 
         TString error;
-        if (!ValidateShardsCount(*GetProtoRequest(), pqGroupDescription, error))
-        {
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::BAD_REQUEST), error, ctx);
-        }
+        if (!GetProtoRequest()->has_partitioning_settings()) {
+            if (!ValidateShardsCount(*GetProtoRequest(), pqGroupDescription, error))
+            {
+                return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::BAD_REQUEST), error, ctx);
+            }
 
-        groupConfig.SetTotalGroupCount(GetProtoRequest()->target_shard_count());
+            groupConfig.SetTotalGroupCount(GetProtoRequest()->target_shard_count());
+        }
         switch (GetProtoRequest()->retention_case()) {
             case Ydb::DataStreams::V1::UpdateStreamRequest::RetentionCase::kRetentionPeriodHours:
                 groupConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetLifetimeSeconds(
@@ -417,6 +473,46 @@ namespace NKikimr::NDataStreams::V1 {
                     return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT),
                                   "streams can't be created with unknown metering mode", ctx);
             }
+        }
+
+        if (GetProtoRequest()->has_partitioning_settings()) {
+            auto r = ValidatePartitioningSettings(GetProtoRequest()->partitioning_settings());
+            if (!r.empty()) {
+                return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT), r, ctx);
+            }
+
+            auto& s = GetProtoRequest()->partitioning_settings();
+            auto* t = groupConfig.MutablePQTabletConfig()->MutablePartitionStrategy();
+
+            t->SetMinPartitionCount(s.min_active_partitions() ? s.min_active_partitions() : 1);
+            t->SetMaxPartitionCount(s.max_active_partitions() ? s.max_active_partitions() : 1);
+
+            auto& as = s.auto_partitioning_settings();
+            switch(as.strategy()) {
+                case Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_UNSPECIFIED:
+                case Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED:
+                case Ydb::DataStreams::V1::AutoPartitioningStrategy::AutoPartitioningStrategy_INT_MAX_SENTINEL_DO_NOT_USE_:
+                case Ydb::DataStreams::V1::AutoPartitioningStrategy::AutoPartitioningStrategy_INT_MIN_SENTINEL_DO_NOT_USE_:
+                    t->SetPartitionStrategyType(NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
+                    break;
+
+                case  Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP:
+                    t->SetPartitionStrategyType(NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
+                    break;
+
+                case  Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN:
+                    t->SetPartitionStrategyType(NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
+                    break;
+
+                case  Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_PAUSED:
+                    t->SetPartitionStrategyType(NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_PAUSED);
+                    break;
+            }
+
+            auto& ws = as.partition_write_speed();
+            t->SetScaleThresholdSeconds(ws.stabilization_window().seconds() ? ws.stabilization_window().seconds() : 300);
+            t->SetScaleUpPartitionWriteSpeedThresholdPercent(ws.up_utilization_percent() ? ws.up_utilization_percent() : 90);
+            t->SetScaleDownPartitionWriteSpeedThresholdPercent(ws.down_utilization_percent() ? ws.down_utilization_percent() : 30);
         }
 
         auto serviceTypes = GetSupportedClientServiceTypes(ctx);
@@ -640,7 +736,7 @@ namespace NKikimr::NDataStreams::V1 {
             tabletIds.insert(partition.GetTabletId());
         }
         if (tabletIds.size() == 0) {
-            ReplyAndDie(ActorContext());
+            return ReplyAndDie(ActorContext());
         }
 
         RequestsInfly = tabletIds.size();
@@ -689,6 +785,32 @@ namespace NKikimr::NDataStreams::V1 {
                 );
         }
 
+        auto& ps = pqConfig.GetPartitionStrategy();
+        auto* pt = description.mutable_partitioning_settings();
+        if (ps.GetPartitionStrategyType() != NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED) {
+            pt->set_min_active_partitions(ps.GetMinPartitionCount());
+            pt->set_max_active_partitions(ps.GetMaxPartitionCount());
+
+            if (ps.GetPartitionStrategyType() == NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT) {
+                pt->mutable_auto_partitioning_settings()->set_strategy(::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
+            } else if (ps.GetPartitionStrategyType() == NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE) {
+                pt->mutable_auto_partitioning_settings()->set_strategy(::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN);
+            } else {
+                pt->mutable_auto_partitioning_settings()->set_strategy(::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_PAUSED);
+            }
+
+            pt->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->mutable_stabilization_window()->set_seconds(ps.GetScaleThresholdSeconds());
+            pt->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_up_utilization_percent(ps.GetScaleUpPartitionWriteSpeedThresholdPercent());
+            pt->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_down_utilization_percent(ps.GetScaleDownPartitionWriteSpeedThresholdPercent());
+        } else {
+            pt->set_min_active_partitions(PQGroup.GetPartitions().size());
+            pt->set_max_active_partitions(PQGroup.GetPartitions().size());
+            pt->mutable_auto_partitioning_settings()->set_strategy(::Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED);
+            pt->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->mutable_stabilization_window()->set_seconds(300);
+            pt->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_up_utilization_percent(90);
+            pt->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_down_utilization_percent(30);
+        }
+
         bool startShardFound = GetProtoRequest()->exclusive_start_shard_id().empty();
         description.set_has_more_shards(false);
 
@@ -698,7 +820,8 @@ namespace NKikimr::NDataStreams::V1 {
         int limit = GetProtoRequest()->limit() == 0 ? 100 : GetProtoRequest()->limit();
 
         for (uint32_t i = 0; i < (uint32_t)PQGroup.GetPartitions().size(); ++i) {
-            ui32 partitionId = PQGroup.GetPartitions(i).GetPartitionId();
+            auto partition = PQGroup.GetPartitions(i);
+            ui32 partitionId = partition.GetPartitionId();
             TString shardName = GetShardName(partitionId);
             if (shardName == GetProtoRequest()->exclusive_start_shard_id()) {
                 startShardFound = true;
@@ -709,10 +832,26 @@ namespace NKikimr::NDataStreams::V1 {
                 } else {
                     auto* shard = description.add_shards();
                     shard->set_shard_id(shardName);
+
+                    const auto& parents = partition.GetParentPartitionIds();
+                    if (parents.size() > 0) {
+                        shard->set_parent_shard_id(GetShardName(parents[0]));
+                    }
+                    if (parents.size() > 1) {
+                        shard->set_adjacent_parent_shard_id(GetShardName(parents[1]));
+                    }
+
                     auto* rangeProto = shard->mutable_hash_key_range();
-                    auto range = RangeFromShardNumber(partitionId, PQGroup.GetPartitions().size());
-                    rangeProto->set_starting_hash_key(Uint128ToDecimalString(range.Start));
-                    rangeProto->set_ending_hash_key(Uint128ToDecimalString(range.End));
+                    if (NPQ::SplitMergeEnabled(pqConfig)) {
+                        NYql::NDecimal::TUint128 from = partition.HasKeyRange() && partition.GetKeyRange().HasFromBound() ? NPQ::AsInt<NYql::NDecimal::TUint128>(partition.GetKeyRange().GetFromBound()) + 1: 0;
+                        NYql::NDecimal::TUint128 to = partition.HasKeyRange() && partition.GetKeyRange().HasToBound() ? NPQ::AsInt<NYql::NDecimal::TUint128>(partition.GetKeyRange().GetToBound()): -1;
+                        rangeProto->set_starting_hash_key(Uint128ToDecimalString(from));
+                        rangeProto->set_ending_hash_key(Uint128ToDecimalString(to));
+                    } else {
+                        auto range = RangeFromShardNumber(partitionId, PQGroup.GetPartitions().size());
+                        rangeProto->set_starting_hash_key(Uint128ToDecimalString(range.Start));
+                        rangeProto->set_ending_hash_key(Uint128ToDecimalString(range.End));
+                    }
                     auto it = StartEndOffsetsPerPartition.find(partitionId);
                     if (it != StartEndOffsetsPerPartition.end()) {
                         auto* rangeProto = shard->mutable_sequence_number_range();

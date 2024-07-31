@@ -276,13 +276,6 @@ DELEGATE_METHOD(void, ModifyRows, (
     (path, nameTable, modifications, options))
 
 DELEGATE_METHOD(void, AdvanceConsumer, (
-    const NYPath::TYPath& path,
-    int partitionIndex,
-    std::optional<i64> oldOffset,
-    i64 newOffset),
-    (path, partitionIndex, oldOffset, newOffset))
-
-DELEGATE_METHOD(void, AdvanceConsumer, (
     const NYPath::TRichYPath& consumerPath,
     const NYPath::TRichYPath& queuePath,
     int partitionIndex,
@@ -302,8 +295,8 @@ DELEGATE_METHOD(TFuture<void>, AdvanceQueueConsumer, (
 DELEGATE_METHOD(TFuture<TPushQueueProducerResult>, PushQueueProducer, (
     const NYPath::TRichYPath& producerPath,
     const NYPath::TRichYPath& queuePath,
-    const TString& sessionId,
-    i64 epoch,
+    const NQueueClient::TQueueProducerSessionId& sessionId,
+    NQueueClient::TQueueProducerEpoch epoch,
     NTableClient::TNameTablePtr nameTable,
     TSharedRange<NTableClient::TUnversionedRow> rows,
     const TPushQueueProducerOptions& options),

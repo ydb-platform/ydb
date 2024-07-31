@@ -4,7 +4,7 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-TPrivatePageCache::TPage::TPage(size_t size, ui32 pageId, TInfo* info)
+TPrivatePageCache::TPage::TPage(size_t size, TPageId pageId, TInfo* info)
     : LoadState(LoadStateNo)
     , Sticky(false)
     , SharedPending(false)
@@ -155,7 +155,7 @@ TPrivatePageCache::TInfo* TPrivatePageCache::Info(TLogoBlobID id) {
         return nullptr;
 }
 
-void TPrivatePageCache::MarkSticky(ui32 pageId, TInfo *collectionInfo) {
+void TPrivatePageCache::MarkSticky(TPageId pageId, TInfo *collectionInfo) {
     TPage *page = collectionInfo->EnsurePage(pageId);
     if (Y_LIKELY(!page->Sticky)) {
         // N.B. the call site that marks pages as sticky starts to load them
@@ -284,7 +284,7 @@ void TPrivatePageCache::TPrivatePageCache::TryEraseIfUnnecessary(TPage *page) {
             Stats.TotalExclusive -= page->Size;
             page->PinnedBody = { };
         }
-        const ui32 pageId = page->Id;
+        const TPageId pageId = page->Id;
         auto* info = page->Info;
         Y_DEBUG_ABORT_UNLESS(info->PageMap[pageId].Get() == page);
         Y_ABORT_UNLESS(info->PageMap.erase(pageId));
@@ -304,9 +304,7 @@ void TPrivatePageCache::TPrivatePageCache::TryShareBody(TPage *page) {
     }
 }
 
-const TSharedData* TPrivatePageCache::Lookup(ui32 pageId, TInfo *info) {
-    using EPage = NTable::NPage::EPage;
-
+const TSharedData* TPrivatePageCache::Lookup(TPageId pageId, TInfo *info) {
     TPage *page = info->EnsurePage(pageId);
     
     TryLoad(page);
@@ -326,7 +324,7 @@ const TSharedData* TPrivatePageCache::Lookup(ui32 pageId, TInfo *info) {
         ToLoad.PushBack(page);
 
         // Note: we mark flat index pages sticky before we load them
-        if (!page->Sticky && EPage(info->PageCollection->Page(page->Id).Type) == EPage::FlatIndex) {
+        if (!page->Sticky && info->GetPageType(page->Id) == EPage::FlatIndex) {
             MarkSticky(page->Id, info);
         }
 
@@ -335,7 +333,7 @@ const TSharedData* TPrivatePageCache::Lookup(ui32 pageId, TInfo *info) {
     return nullptr;
 }
 
-TSharedPageRef TPrivatePageCache::LookupShared(ui32 pageId, TInfo *info) {
+TSharedPageRef TPrivatePageCache::LookupShared(TPageId pageId, TInfo *info) {
     TPage *page = info->GetPage(pageId);
     if (!page)
         return { };
@@ -461,7 +459,7 @@ void TPrivatePageCache::UnpinPages(TPinned &pinned, size_t &unpinnedPages) {
     for (auto &xinfoid : pinned) {
         if (TPrivatePageCache::TInfo *info = Info(xinfoid.first)) {
             for (auto &x : xinfoid.second) {
-                ui32 pageId = x.first;
+                TPageId pageId = x.first;
                 TPrivatePageCachePinPad *pad = x.second.Get();
                 x.second.Reset();
                 TPage *page = info->GetPage(pageId);
@@ -504,7 +502,7 @@ void TPrivatePageCache::ResetTouchesAndToLoad(bool verifyEmpty) {
     Stats.CurrentCacheMisses = 0;
 }
 
-void TPrivatePageCache::UpdateSharedBody(TInfo *info, ui32 pageId, TSharedPageRef shared) {
+void TPrivatePageCache::UpdateSharedBody(TInfo *info, TPageId pageId, TSharedPageRef shared) {
     TPage *page = info->GetPage(pageId);
     if (!page)
         return;
@@ -529,7 +527,7 @@ void TPrivatePageCache::UpdateSharedBody(TInfo *info, ui32 pageId, TSharedPageRe
     TryUnload(page);
 }
 
-void TPrivatePageCache::DropSharedBody(TInfo *info, ui32 pageId) {
+void TPrivatePageCache::DropSharedBody(TInfo *info, TPageId pageId) {
     TPage *page = info->GetPage(pageId);
     if (!page)
         return;
@@ -605,7 +603,7 @@ THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TInfo>> TPrivatePageCache
     return ret;
 }
 
-THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> TPrivatePageCache::GetPrepareSharedTouched() {
+THashMap<TLogoBlobID, THashMap<TPrivatePageCache::TPageId, TSharedData>> TPrivatePageCache::GetPrepareSharedTouched() {
     return std::move(ToTouchShared);
 }
 

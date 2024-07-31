@@ -518,12 +518,26 @@ private:
     TWaitingSchemeOpsOrder WaitingSchemeOpsOrder;
     TWaitingSchemeOps WaitingSchemeOps;
 
-    TMultiMap<TRowVersion, TAutoPtr<IEventHandle>> WaitingDataTxOps;
+    struct TWaitingDataTxOp {
+        TAutoPtr<IEventHandle> Event;
+        NWilson::TSpan Span;
+
+        TWaitingDataTxOp(TAutoPtr<IEventHandle>&& ev);
+    };
+
+    TMultiMap<TRowVersion, TWaitingDataTxOp> WaitingDataTxOps;
     TCommittingDataTxOps CommittingOps;
 
     THashMap<ui64, TOperation::TPtr> CompletingOps;
 
-    TMultiMap<TRowVersion, TEvDataShard::TEvRead::TPtr> WaitingDataReadIterators;
+    struct TWaitingReadIterator {
+        TEvDataShard::TEvRead::TPtr Event;
+        NWilson::TSpan Span;
+
+        TWaitingReadIterator(TEvDataShard::TEvRead::TPtr&& ev);
+    };
+
+    TMultiMap<TRowVersion, TWaitingReadIterator> WaitingDataReadIterators;
     THashMap<TReadIteratorId, TEvDataShard::TEvRead*, TReadIteratorId::THash> WaitingReadIteratorsById;
 
     bool GetPlannedTx(NIceDb::TNiceDb& db, ui64& step, ui64& txId);

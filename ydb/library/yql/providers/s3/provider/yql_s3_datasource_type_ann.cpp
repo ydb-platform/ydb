@@ -22,12 +22,6 @@ bool ValidateS3PackedPaths(TPositionHandle pos, TStringBuf blob, bool isTextEnco
     try {
         TPathList paths;
         UnpackPathsList(blob, isTextEncoded, paths);
-        for (size_t i = 0; i < paths.size(); ++i) {
-            if (paths[i].Path.empty()) {
-                ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Expected non-empty path (index " << i << ")"));
-                return false;
-            }
-        }
     } catch (const std::exception& ex) {
         ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Failed to parse packed paths: " << ex.what()));
         return false;
@@ -341,7 +335,7 @@ public:
     }
 
     TStatus HandleS3ParseSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 6U, 7U, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 7U, 8U, ctx)) {
             return TStatus::Error;
         }
 
@@ -410,12 +404,47 @@ public:
             itemType = ctx.MakeType<TTupleExprType>(
                 TTypeAnnotationNode::TListType{ itemType, ctx.MakeType<TDataExprType>(EDataSlot::Uint64) });
         }
+
+        // Filter
+        const TStatus filterAnnotationStatus = AnnotateFilterPredicate(input, TS3ParseSettings::idx_FilterPredicate, rowType->Cast<TStructExprType>(), ctx);
+        if (filterAnnotationStatus != TStatus::Ok) {
+            return filterAnnotationStatus;
+        }
+    
         input->SetTypeAnn(ctx.MakeType<TStreamExprType>(itemType));
         return TStatus::Ok;
     }
 
+    TStatus AnnotateFilterPredicate(const TExprNode::TPtr& input, size_t childIndex, const TStructExprType* itemType, TExprContext& ctx) {
+        if (childIndex >= input->ChildrenSize()) {
+            return TStatus::Error;
+        }
+
+        auto& filterLambda = input->ChildRef(childIndex);
+        if (!EnsureLambda(*filterLambda, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!UpdateLambdaAllArgumentsTypes(filterLambda, {itemType}, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (const auto* filterLambdaType = filterLambda->GetTypeAnn()) {
+            if (filterLambdaType->GetKind() != ETypeAnnotationKind::Data) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            const TDataExprType* dataExprType = static_cast<const TDataExprType*>(filterLambdaType);
+            if (dataExprType->GetSlot() != EDataSlot::Bool) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        } else {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+        return TStatus::Ok;
+    }
+
     TStatus HandleRead(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 5U, 6U, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 6U, 7U, ctx)) {
             return TStatus::Error;
         }
 
@@ -490,6 +519,12 @@ public:
                 ctx)) {
                 return TStatus::Error;
             }
+
+            // Filter
+            const TStatus filterAnnotationStatus = AnnotateFilterPredicate(input, TS3ReadObject::idx_FilterPredicate, structRowType, ctx);
+            if (filterAnnotationStatus != TStatus::Ok) {
+                return filterAnnotationStatus;
+            }
         }
 
         if (!ValidateProjectionTypes(
@@ -538,7 +573,7 @@ public:
                 }
                 columnOrder.push_back(ToString(col));
             }
-            return State_->Types->SetColumnOrder(*input, columnOrder, ctx);
+            return State_->Types->SetColumnOrder(*input, TColumnOrder(columnOrder), ctx);
         }
 
         return TStatus::Ok;

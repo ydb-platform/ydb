@@ -672,6 +672,9 @@ public:
         TThreadPoolBase::Configure(threadCount);
     }
 
+    void Configure(TDuration /*pollingPeriod*/) override
+    { }
+
     int GetThreadCount() override
     {
         return TThreadPoolBase::GetThreadCount();

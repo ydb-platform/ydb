@@ -131,7 +131,7 @@ bool IsReplicaDisabled(NTabletClient::ETableReplicaState state);
 bool IsReplicaReallySync(
     NTabletClient::ETableReplicaMode mode,
     NTabletClient::ETableReplicaState state,
-    const TReplicaHistoryItem& lastReplicaHistoryItem);
+    const std::vector<TReplicaHistoryItem>& replicaHistory);
 NTabletClient::ETableReplicaMode GetTargetReplicaMode(NTabletClient::ETableReplicaMode mode);
 NTabletClient::ETableReplicaState GetTargetReplicaState(NTabletClient::ETableReplicaState state);
 

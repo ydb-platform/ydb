@@ -13,15 +13,12 @@ void TBloomFilterChecker::DoSerializeToProtoImpl(NKikimrSSA::TProgram::TOlapInde
 }
 
 bool TBloomFilterChecker::DoCheckImpl(const std::vector<TString>& blobs) const {
+    AFL_VERIFY(blobs.size() == 1);
     for (auto&& blob : blobs) {
-        auto rb = NArrow::TStatusValidator::GetValid(NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer()->Deserialize(blob));
-        AFL_VERIFY(rb);
-        AFL_VERIFY(rb->schema()->num_fields() == 1);
-        AFL_VERIFY(rb->schema()->field(0)->type()->id() == arrow::Type::BOOL);
-        auto& bArray = static_cast<const arrow::BooleanArray&>(*rb->column(0));
+        TFixStringBitsStorage bits(blob);
         bool found = true;
         for (auto&& i : HashValues) {
-            if (!bArray.Value(i % bArray.length())) {
+            if (!bits.Get(i % bits.GetSizeBits())) {
                 found = false;
                 break;
             }

@@ -1,6 +1,5 @@
 #include "gateway_spec.h"
 
-#include <filesystem>
 #include <ydb/library/yql/tools/yqlrun/http/yql_server.h>
 
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
@@ -26,8 +25,10 @@
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/mkql_utils.h>
 #include <ydb/library/yql/protos/yql_mount.pb.h>
+#include <ydb/library/yql/protos/pg_ext.pb.h>
 #include <ydb/library/yql/core/yql_library_compiler.h>
 #include <ydb/library/yql/core/facade/yql_facade.h>
+#include <ydb/library/yql/core/pg_ext/yql_pg_ext.h>
 #include <ydb/library/yql/core/file_storage/file_storage.h>
 #include <ydb/library/yql/core/file_storage/http_download/http_download.h>
 #include <ydb/library/yql/core/file_storage/proto/file_storage.pb.h>
@@ -38,6 +39,7 @@
 #include <ydb/library/yql/utils/log/tls_backend.h>
 #include <ydb/library/yql/public/udf/udf_validate.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
 
 #include <ydb/core/util/pb.h>
 
@@ -410,6 +412,7 @@ int Main(int argc, const char *argv[])
     ui64 memLimit;
     TString gatewaysCfgFile;
     TString fsCfgFile;
+    TString pgExtConfig;
 
     opts.AddHelpOption();
     opts.AddLongOption('p', "program", "program file").StoreResult<TString>(&programFile);
@@ -470,6 +473,7 @@ int Main(int argc, const char *argv[])
     opts.AddLongOption("fs-cfg", "fs configuration file").Optional().RequiredArgument("FILE").StoreResult(&fsCfgFile);
     opts.AddLongOption("test-format", "compare formatted query's AST with the original query's AST (only syntaxVersion=1 is supported)").NoArgument();
     opts.AddLongOption("show-kernels", "show all Arrow kernel families").NoArgument();
+    opts.AddLongOption("pg-ext", "pg extensions config file").StoreResult(&pgExtConfig);
 
     opts.SetFreeArgsMax(0);
     TOptsParseResult res(&opts, argc, argv);
@@ -486,6 +490,16 @@ int Main(int argc, const char *argv[])
 
         Cout << "Total kernel families: " << families.size() << ", kernels: " << totalKernels << "\n";
         return 0;
+    }
+
+    if (!pgExtConfig.empty()) {
+        NProto::TPgExtensions config;
+        Y_ABORT_UNLESS(NKikimr::ParsePBFromFile(pgExtConfig, &config));
+        TVector<NPg::TExtensionDesc> extensions;
+        PgExtensionsFromProto(config, extensions);
+        NPg::RegisterExtensions(extensions, false,
+            *NSQLTranslationPG::CreateExtensionDDLParser(),
+            NKikimr::NMiniKQL::CreateExtensionLoader().get());
     }
 
     const bool parseOnly = res.Has("parse-only");
@@ -514,11 +528,11 @@ int Main(int argc, const char *argv[])
             return 1;
         }
         tablesDirMapping[clusterName] = dirPath;
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(std::string(dirPath))) {
-            if (entry.is_regular_file() && entry.path().has_extension() && entry.path().extension() == ".txt") {
-                auto tableName = TString(clusterName) + '.' + std::filesystem::relative(entry.path(), std::string(dirPath));
+        for (const auto& entry : TDirIterator(TFsPath(dirPath))) {
+            if (auto entryPath = TFsPath(entry.fts_path); entryPath.IsFile() && entryPath.GetExtension() == "txt") {
+                auto tableName = TString(clusterName).append('.').append(entryPath.RelativeTo(TFsPath(dirPath)).GetPath());
                 tableName = tableName.substr(0, tableName.Size() - 4); // remove .txt extension
-                tablesMapping[tableName] = entry.path().string();
+                tablesMapping[tableName] = entryPath.GetPath();
             }
         }
     }
@@ -871,6 +885,7 @@ int RunUI(int argc, const char* argv[])
     bool udfResolverFilterSyscalls = false;
     TString gatewaysCfgFile;
     TString fsCfgFile;
+    TString pgExtConfig;
 
     THashMap<TString, TString> clusterMapping;
     clusterMapping["plato"] = YtProviderName;
@@ -889,6 +904,7 @@ int RunUI(int argc, const char* argv[])
     opts.AddLongOption('C', "cluster", "set cluster to service mapping").RequiredArgument("name@service").Handler(new TStoreMappingFunctor(&clusterMapping));
     opts.AddLongOption("gateways-cfg", "gateways configuration file").Optional().RequiredArgument("FILE").StoreResult(&gatewaysCfgFile);
     opts.AddLongOption("fs-cfg", "fs configuration file").Optional().RequiredArgument("FILE").StoreResult(&fsCfgFile);
+    opts.AddLongOption("pg-ext", "pg extensions config file").StoreResult(&pgExtConfig);
 
     TServerConfig config;
     config.SetAssetsPath("http/www");
@@ -911,6 +927,16 @@ int RunUI(int argc, const char* argv[])
     }
 
     NMiniKQL::FindUdfsInDir(udfsDir, &udfsPaths);
+
+    if (!pgExtConfig.empty()) {
+        NProto::TPgExtensions config;
+        Y_ABORT_UNLESS(NKikimr::ParsePBFromFile(pgExtConfig, &config));
+        TVector<NPg::TExtensionDesc> extensions;
+        PgExtensionsFromProto(config, extensions);
+        NPg::RegisterExtensions(extensions, false, 
+            *NSQLTranslationPG::CreateExtensionDDLParser(),
+            NKikimr::NMiniKQL::CreateExtensionLoader().get());
+    }
 
     THolder<TGatewaysConfig> gatewaysConfig;
     if (!gatewaysCfgFile.empty()) {

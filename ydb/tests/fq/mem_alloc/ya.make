@@ -7,7 +7,9 @@ PEERDIR(
     ydb/tests/tools/fq_runner
 )
 
-DEPENDS(ydb/tests/tools/pq_read)
+DEPENDS(
+    ydb/tests/tools/pq_read
+)
 
 TEST_SRCS(
     test_alloc_default.py

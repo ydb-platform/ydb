@@ -39,7 +39,7 @@ using namespace NLogging;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const static auto& Logger = SolomonLogger;
+static constexpr auto& Logger = SolomonLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -69,6 +69,10 @@ void TSolomonExporterConfig::Register(TRegistrar registrar)
         .Default(1);
     registrar.Parameter("encoding_thread_pool_size", &TThis::EncodingThreadPoolSize)
         .Default(1);
+    registrar.Parameter("thread_pool_polling_period", &TThis::ThreadPoolPollingPeriod)
+        .Default(TDuration::MilliSeconds(10));
+    registrar.Parameter("encoding_thread_pool_polling_period", &TThis::EncodingThreadPoolPollingPeriod)
+        .Default(TDuration::MilliSeconds(10));
 
     registrar.Parameter("convert_counters_to_rate_for_solomon", &TThis::ConvertCountersToRateForSolomon)
         .Alias("convert_counters_to_rate")
@@ -195,8 +199,14 @@ TSolomonExporter::TSolomonExporter(
     : Config_(std::move(config))
     , Registry_(registry ? registry : TSolomonRegistry::Get())
     , ControlQueue_(New<TActionQueue>("ProfControl"))
-    , OffloadThreadPool_(CreateThreadPool(Config_->ThreadPoolSize, "ProfOffload"))
-    , EncodingOffloadThreadPool_(CreateThreadPool(Config_->EncodingThreadPoolSize, "ProfEncode"))
+    , OffloadThreadPool_(CreateThreadPool(
+        Config_->ThreadPoolSize,
+        "ProfOffload",
+        {.PollingPeriod = Config_->ThreadPoolPollingPeriod}))
+    , EncodingOffloadThreadPool_(CreateThreadPool(
+        Config_->EncodingThreadPoolSize,
+        "ProfEncode",
+        {.PollingPeriod = Config_->EncodingThreadPoolPollingPeriod}))
 {
     if (Config_->EnableSelfProfiling) {
         Registry_->Profile(TProfiler{Registry_, ""});

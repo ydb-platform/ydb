@@ -1,11 +1,10 @@
 import "ydb/library/actors/protos/actors.proto";
-import "ydb/core/tx/columnshard/engines/scheme/statistics/protos/data.proto";
-import "ydb/core/tx/columnshard/engines/protos/portion_info.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/long_tx_service.proto";
+import "ydb/core/protos/statistics.proto";
 import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/tx.proto";
-import "ydb/core/formats/arrow/protos/ssa.proto";
+import "ydb/core/formats/arrow/protos/fields.proto";
 
 package NKikimrTxColumnShard;
 option java_package = "ru.yandex.kikimr.proto";
@@ -51,13 +50,6 @@ message TReadStats {
     optional uint64 CommittedPortionsBytes = 17;
 }
 
-message TLogicalMetadata {
-    optional uint32 NumRows = 1;
-    optional uint64 RawBytes = 4;
-    optional uint64 DirtyWriteTimeSeconds = 5;
-    optional string SpecialKeysRawData = 6;
-}
-
 message TMetadata {
     optional uint32 Format = 1; // EResultFormat
     optional bytes Schema = 2;
@@ -80,6 +72,24 @@ message TEvWrite {
     optional NKikimrLongTxService.TLongTxId LongTxId = 8;
     optional uint32 WritePartId = 9 [default = 0];
     optional uint32 GranuleShardingVersion = 10;
+    enum EModificationType {
+        OPERATION_UPSERT = 1;
+        OPERATION_INSERT = 2;
+        OPERATION_UPDATE = 3;
+        OPERATION_REPLACE = 4;
+        OPERATION_DELETE = 5;
+    }
+    optional EModificationType ModificationType = 11;
+
+}
+
+message TLogicalMetadata {
+    optional uint32 NumRows = 1;
+    optional uint64 RawBytes = 4;
+    optional uint64 DirtyWriteTimeSeconds = 5;
+    optional string SpecialKeysRawData = 6;
+    optional TEvWrite.EModificationType ModificationType = 7;
+    optional NKikimrArrowSchema.TSchemaSubset SchemaSubset = 8;
 }
 
 message TEvWriteResult {
@@ -316,4 +326,5 @@ message TEvReadBlobRangesResult {
 
 message TInternalOperationData {
     repeated uint64 InternalWriteIds = 1;
+    optional uint32 ModificationType = 2;
 }

@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "mpmc_ring_queue.h"
+#include "mpmc_ring_queue_v2.h"
 #include "mpmc_ring_queue_blocking.h"
 #include <atomic>
 

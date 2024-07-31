@@ -15,7 +15,7 @@ namespace NViewer {
 
 using namespace NActors;
 
-class TPDiskInfo : public TViewerPipeClient<TPDiskInfo> {
+class TPDiskInfo : public TViewerPipeClient {
     enum EEv {
         EvRetryNodeRequest = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvEnd
@@ -30,46 +30,35 @@ class TPDiskInfo : public TViewerPipeClient<TPDiskInfo> {
 
 protected:
     using TThis = TPDiskInfo;
-    using TBase = TViewerPipeClient<TThis>;
-    IViewer* Viewer;
-    NMon::TEvHttpInfo::TPtr Event;
+    using TBase = TViewerPipeClient;
     ui32 Timeout = 0;
     ui32 ActualRetries = 0;
     ui32 Retries = 0;
     TDuration RetryPeriod = TDuration::MilliSeconds(500);
 
-    std::unique_ptr<NSysView::TEvSysView::TEvGetPDisksResponse> BSCResponse;
-    std::unique_ptr<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateResponse> WhiteboardResponse;
+    TRequestResponse<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateResponse> WhiteboardPDisk;
+    TRequestResponse<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse> WhiteboardVDisk;
+    TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse> SysViewPDisks;
+    TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> SysViewVSlots;
 
     ui32 NodeId = 0;
     ui32 PDiskId = 0;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TPDiskInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : Viewer(viewer)
-        , Event(ev)
+        : TBase(viewer, ev)
     {}
 
-    void Bootstrap() {
+    void Bootstrap() override {
         const auto& params(Event->Get()->Request.GetParams());
         NodeId = FromStringWithDefault<ui32>(params.Get("node_id"), 0);
         PDiskId = FromStringWithDefault<ui32>(params.Get("pdisk_id"), Max<ui32>());
 
         if (PDiskId == Max<ui32>()) {
-            TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(
-                Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'pdisk_id' is required"),
-                0, NMon::IEvHttpInfoRes::EContentType::Custom));
-            return PassAway();
+            return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "field 'pdisk_id' is required"), "BadRequest");
         }
         if (Event->Get()->Request.GetMethod() != HTTP_METHOD_GET) {
-            TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(
-                Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Only GET method is allowed"),
-                0, NMon::IEvHttpInfoRes::EContentType::Custom));
-            return PassAway();
+            return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Only GET method is allowed"), "BadRequest");
         }
 
         if (!NodeId) {
@@ -90,22 +79,34 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateResponse, Handle);
+            hFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetPDisksResponse, Handle);
+            hFunc(NSysView::TEvSysView::TEvGetVSlotsResponse, Handle);
             cFunc(TEvRetryNodeRequest::EventType, HandleRetry);
-            cFunc(TEvents::TEvUndelivered::EventType, Undelivered);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
+            hFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
     void SendWhiteboardRequest() {
         TActorId whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(NodeId);
-        auto request = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateRequest>();
-        TBase::SendRequest(whiteboardServiceId, request.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, NodeId);
+        WhiteboardPDisk = TBase::MakeRequest<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateResponse>(
+            whiteboardServiceId,
+            new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateRequest,
+            IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, // we only need it once because we are sending to the same node
+            NodeId);
+        WhiteboardVDisk = TBase::MakeRequest<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse>(
+            whiteboardServiceId,
+            new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateRequest,
+            0,
+            NodeId);
     }
 
     void SendBSCRequest() {
-        RequestBSControllerPDiskInfo(NodeId, PDiskId);
+        SysViewPDisks = RequestBSControllerPDiskInfo(NodeId, PDiskId);
+        SysViewVSlots = RequestBSControllerVDiskInfo(NodeId, PDiskId);
     }
 
     bool RetryRequest() {
@@ -118,25 +119,45 @@ public:
         return false;
     }
 
-    void Undelivered() {
+    void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr&) {
+        WhiteboardPDisk.Error("NodeDisconnected");
+        WhiteboardVDisk.Error("NodeDisconnected");
         if (!RetryRequest()) {
-            TBase::RequestDone();
+            TBase::RequestDone(2);
         }
     }
 
-    void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr&) {
-        if (!RetryRequest()) {
-            TBase::RequestDone();
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            SysViewPDisks.Error("ClientNotConnected");
+            SysViewVSlots.Error("ClientNotConnected");
+            TBase::RequestDone(2);
         }
+    }
+
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
+        SysViewPDisks.Error("ClientDestroyed");
+        SysViewVSlots.Error("ClientDestroyed");
+        TBase::RequestDone(2);
     }
 
     void Handle(NSysView::TEvSysView::TEvGetPDisksResponse::TPtr& ev) {
-        BSCResponse.reset(ev->Release().Release());
+        SysViewPDisks.Set(std::move(ev));
+        TBase::RequestDone();
+    }
+
+    void Handle(NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr& ev) {
+        SysViewVSlots.Set(std::move(ev));
         TBase::RequestDone();
     }
 
     void Handle(NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateResponse::TPtr& ev) {
-        WhiteboardResponse.reset(ev->Release().Release());
+        WhiteboardPDisk.Set(std::move(ev));
+        TBase::RequestDone();
+    }
+
+    void Handle(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev) {
+        WhiteboardVDisk.Set(std::move(ev));
         TBase::RequestDone();
     }
 
@@ -145,10 +166,7 @@ public:
     }
 
     void HandleTimeout() {
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(
-            Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get(), "text/plain", "Timeout receiving response"),
-            0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        PassAway();
+        TBase::ReplyAndPassAway(GetHTTPGATEWAYTIMEOUT("text/plain", "Timeout receiving response"), "Timeout");
     }
 
     void PassAway() override {
@@ -156,25 +174,62 @@ public:
         TBase::PassAway();
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         NKikimrViewer::TPDiskInfo proto;
-        TStringStream json;
-        if (WhiteboardResponse != nullptr && WhiteboardResponse->Record.PDiskStateInfoSize() > 0) {
-            for (const auto& pdisk : WhiteboardResponse->Record.GetPDiskStateInfo()) {
+        bool hasPDisk = false;
+        bool hasVDisk = false;
+        if (WhiteboardPDisk && WhiteboardPDisk->Record.PDiskStateInfoSize() > 0) {
+            for (const auto& pdisk : WhiteboardPDisk->Record.GetPDiskStateInfo()) {
                 if (pdisk.GetPDiskId() == PDiskId) {
-                    proto.MutableWhiteboard()->CopyFrom(pdisk);
+                    proto.MutableWhiteboard()->MutablePDisk()->CopyFrom(pdisk);
+                    hasPDisk = true;
                     break;
                 }
             }
         }
-        if (BSCResponse != nullptr && BSCResponse->Record.EntriesSize() > 0) {
-            proto.MutableBSC()->CopyFrom(BSCResponse->Record.GetEntries(0).GetInfo());
+        if (WhiteboardVDisk && WhiteboardVDisk->Record.VDiskStateInfoSize() > 0) {
+            for (const auto& vdisk : WhiteboardVDisk->Record.GetVDiskStateInfo()) {
+                if (vdisk.GetPDiskId() == PDiskId) {
+                    proto.MutableWhiteboard()->AddVDisks()->CopyFrom(vdisk);
+                    hasVDisk = true;
+                }
+            }
         }
+        if (SysViewPDisks && SysViewPDisks->Record.EntriesSize() > 0) {
+            const auto& bscInfo(SysViewPDisks->Record.GetEntries(0).GetInfo());
+            proto.MutableBSC()->MutablePDisk()->CopyFrom(bscInfo);
+            if (!hasPDisk) {
+                auto& pdiskInfo(*proto.MutableWhiteboard()->MutablePDisk());
+                pdiskInfo.SetPDiskId(PDiskId);
+                pdiskInfo.SetPath(bscInfo.GetPath());
+                pdiskInfo.SetGuid(bscInfo.GetGuid());
+                pdiskInfo.SetCategory(bscInfo.GetCategory());
+                pdiskInfo.SetAvailableSize(bscInfo.GetAvailableSize());
+                pdiskInfo.SetTotalSize(bscInfo.GetTotalSize());
+            }
+        }
+        if (SysViewVSlots && SysViewVSlots->Record.EntriesSize() > 0) {
+            for (const auto& vdisk : SysViewVSlots->Record.GetEntries()) {
+                proto.MutableBSC()->AddVDisks()->CopyFrom(vdisk);
+                if (!hasVDisk) {
+                    const auto& bscInfo(vdisk.GetInfo());
+                    auto& vdiskInfo(*proto.MutableWhiteboard()->AddVDisks());
+                    vdiskInfo.SetPDiskId(PDiskId);
+                    vdiskInfo.MutableVDiskId()->SetGroupID(bscInfo.GetGroupId());
+                    vdiskInfo.MutableVDiskId()->SetGroupGeneration(bscInfo.GetGroupGeneration());
+                    vdiskInfo.MutableVDiskId()->SetRing(bscInfo.GetFailRealm());
+                    vdiskInfo.MutableVDiskId()->SetDomain(bscInfo.GetFailDomain());
+                    vdiskInfo.MutableVDiskId()->SetVDisk(bscInfo.GetVDisk());
+                    vdiskInfo.SetAllocatedSize(bscInfo.GetAllocatedSize());
+                    vdiskInfo.SetAvailableSize(bscInfo.GetAvailableSize());
+                }
+            }
+        }
+        TStringStream json;
         TProtoToJson::ProtoToJson(json, proto, {
             .EnumAsNumbers = false,
         });
-        TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), json.Str()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        PassAway();
+        TBase::ReplyAndPassAway(GetHTTPOKJSON(json.Str()));
     }
 };
 
@@ -217,9 +272,10 @@ YAML::Node TJsonRequestSwagger<TPDiskInfo>::GetSwagger() {
 
     node["get"]["responses"]["200"]["content"]["application/json"]["schema"] = TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TPDiskInfo>();
     YAML::Node properties(node["get"]["responses"]["200"]["content"]["application/json"]["schema"]["properties"]["BSC"]["properties"]);
-    TProtoToYaml::FillEnum(properties["StatusV2"], NProtoBuf::GetEnumDescriptor<NKikimrBlobStorage::EDriveStatus>());
-    TProtoToYaml::FillEnum(properties["DecommitStatus"], NProtoBuf::GetEnumDescriptor<NKikimrBlobStorage::EDecommitStatus>());
-    TProtoToYaml::FillEnum(properties["Type"], NProtoBuf::GetEnumDescriptor<NKikimrBlobStorage::EPDiskType>());
+    TProtoToYaml::FillEnum(properties["PDisk"]["properties"]["StatusV2"], NProtoBuf::GetEnumDescriptor<NKikimrBlobStorage::EDriveStatus>());
+    TProtoToYaml::FillEnum(properties["PDisk"]["properties"]["DecommitStatus"], NProtoBuf::GetEnumDescriptor<NKikimrBlobStorage::EDecommitStatus>());
+    TProtoToYaml::FillEnum(properties["PDisk"]["properties"]["Type"], NProtoBuf::GetEnumDescriptor<NKikimrBlobStorage::EPDiskType>());
+    TProtoToYaml::FillEnum(properties["VDisks"]["items"]["properties"]["StatusV2"], NProtoBuf::GetEnumDescriptor<NKikimrBlobStorage::EVDiskStatus>());
     return node;
 }
 

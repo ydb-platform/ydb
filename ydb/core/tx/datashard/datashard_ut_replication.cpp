@@ -244,6 +244,9 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
         ExecSQL(server, sender, "SELECT * FROM `/Root/table-1`");
         ExecSQL(server, sender, "INSERT INTO `/Root/table-1` (key, value) VALUES (1, 10);", true,
             Ydb::StatusIds::GENERIC_ERROR);
+
+        WaitTxNotification(server, sender, AsyncAlterDropReplicationConfig(server, "/Root", "table-1"));
+        ExecSQL(server, sender, "INSERT INTO `/Root/table-1` (key, value) VALUES (1, 10);");
     }
 
     Y_UNIT_TEST(ApplyChangesToReplicatedTable) {

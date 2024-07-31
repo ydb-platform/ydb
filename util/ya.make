@@ -90,6 +90,7 @@ JOIN_SRCS(
     generic/buffer.cpp
     generic/cast.cpp
     generic/deque.cpp
+    generic/enum_range.cpp
     generic/explicit_type.cpp
     generic/fastqueue.cpp
     generic/flags.cpp

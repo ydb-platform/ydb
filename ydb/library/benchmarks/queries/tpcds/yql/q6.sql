@@ -25,7 +25,7 @@ select  a.ca_state state, count(*) cnt
  	and s.ss_item_sk = i.i_item_sk
  	and d.d_month_seq = $sub1
 
- 	and i.i_current_price > 1.2 * j.i_current_price
+ 	and i.i_current_price > $z1_2 * j.i_current_price
  group by a.ca_state
  having count(*) >= 10
  order by cnt, state

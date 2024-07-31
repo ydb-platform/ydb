@@ -832,14 +832,19 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .MessageGroupId("src_id");
 
         int acks = 0;
-        writeSettings.EventHandlers_.AcksHandler([&acks](NTopic::TWriteSessionEvent::TAcksEvent& ev) {
+        int messageCount = 100;
+
+        auto gotAllAcks = NThreading::NewPromise();
+        writeSettings.EventHandlers_.AcksHandler([&](NTopic::TWriteSessionEvent::TAcksEvent& ev) {
             acks += ev.Acks.size();
+            if (acks == messageCount) {
+                gotAllAcks.SetValue();
+            }
         });
 
         auto WriteSession = topicClient.CreateWriteSession(writeSettings);
         Cerr << "Session was created" << Endl;
 
-        int messageCount = 100;
         for (int i = 0; i < messageCount; ++i) {
             auto event = WriteSession->GetEvent(true);
             auto* readyToAcceptEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event);
@@ -851,6 +856,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         // Close method should wait until all messages have been acked.
         WriteSession->Close();
+        gotAllAcks.GetFuture().Wait();
         UNIT_ASSERT_VALUES_EQUAL(acks, messageCount);
     }
 
@@ -1042,6 +1048,116 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         }
 
         WriteSession->Close();
+    }
+
+    NTopic::TContinuationToken GetToken(std::shared_ptr<NTopic::IWriteSession> writer) {
+        auto e = writer->GetEvent(true);
+        UNIT_ASSERT(e.Defined());
+        Cerr << ">>> Got event: " << DebugString(*e) << Endl;
+        auto* readyToAcceptEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*e);
+        UNIT_ASSERT(readyToAcceptEvent);
+        return std::move(readyToAcceptEvent->ContinuationToken);
+    }
+
+    Y_UNIT_TEST(WriteSessionSwitchDatabases) {
+        // Test that the federated write session doesn't deadlock when reconnecting to another database,
+        // if the updated state of the federation is different from the previous one.
+
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(
+            TEST_CASE_NAME, false, ::NPersQueue::TTestServer::LOGGED_SERVICES, NActors::NLog::PRI_DEBUG, 2);
+
+        setup->Start(true);
+
+        TFederationDiscoveryServiceMock fdsMock;
+        fdsMock.Port = setup->GetGrpcPort();
+        ui16 newServicePort = setup->GetPortManager()->GetPort(4285);
+        auto grpcServer = setup->StartGrpcService(newServicePort, &fdsMock);
+
+        auto driverConfig = NYdb::TDriverConfig()
+            .SetEndpoint(TStringBuilder() << "localhost:" << newServicePort)
+            .SetDatabase("/Root")
+            .SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        auto driver = NYdb::TDriver(driverConfig);
+        auto topicClient = NYdb::NFederatedTopic::TFederatedTopicClient(driver);
+
+        auto writeSettings = NTopic::TFederatedWriteSessionSettings()
+            .PreferredDatabase("dc1")
+            .AllowFallback(true)
+            .DirectWriteToPartition(false)
+            .RetryPolicy(NPersQueue::IRetryPolicy::GetNoRetryPolicy())
+            .Path(setup->GetTestTopic())
+            .MessageGroupId("src_id");
+
+        size_t successfulSessionClosedEvents = 0;
+        size_t otherSessionClosedEvents = 0;
+
+        writeSettings
+            .EventHandlers_.SessionClosedHandler([&](const NTopic::TSessionClosedEvent &ev) {
+                ++(ev.IsSuccess() ? successfulSessionClosedEvents : otherSessionClosedEvents);
+            });
+
+        writeSettings.EventHandlers_.HandlersExecutor(NTopic::CreateSyncExecutor());
+
+        auto WriteSession = topicClient.CreateWriteSession(writeSettings);
+
+        TMaybe<NTopic::TContinuationToken> token;
+
+        auto fdsRequest = fdsMock.WaitNextPendingRequest();
+        fdsRequest.Result.SetValue(fdsMock.ComposeOkResultAvailableDatabases());
+
+        {
+            WriteSession->Write(GetToken(WriteSession), NTopic::TWriteMessage("hello 1"));
+            token = GetToken(WriteSession);
+
+            auto e = WriteSession->GetEvent(true);
+            auto* acksEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TAcksEvent>(&*e);
+            UNIT_ASSERT(acksEvent);
+        }
+
+        // Wait for two requests to the federation discovery service.
+        // This way we ensure the federated write session has had enough time to request
+        // the updated state of the federation from its federation observer.
+
+        fdsRequest = fdsMock.WaitNextPendingRequest();
+        fdsRequest.Result.SetValue(fdsMock.ComposeOkResultWithUnavailableDatabase(1));
+
+        fdsRequest = fdsMock.WaitNextPendingRequest();
+        fdsRequest.Result.SetValue(fdsMock.ComposeOkResultWithUnavailableDatabase(1));
+
+        {
+            UNIT_ASSERT(token.Defined());
+            WriteSession->Write(std::move(*token), NTopic::TWriteMessage("hello 2"));
+
+            token = GetToken(WriteSession);
+
+            auto e = WriteSession->GetEvent(true);
+            auto* acksEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TAcksEvent>(&*e);
+            UNIT_ASSERT(acksEvent);
+        }
+
+        fdsRequest = fdsMock.WaitNextPendingRequest();
+        fdsRequest.Result.SetValue(fdsMock.ComposeOkResultAvailableDatabases());
+
+        fdsRequest = fdsMock.WaitNextPendingRequest();
+        fdsRequest.Result.SetValue(fdsMock.ComposeOkResultAvailableDatabases());
+
+        {
+            UNIT_ASSERT(token.Defined());
+            WriteSession->Write(std::move(*token), NTopic::TWriteMessage("hello 3"));
+
+            token = GetToken(WriteSession);
+
+            auto e = WriteSession->GetEvent(true);
+            auto* acksEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TAcksEvent>(&*e);
+            UNIT_ASSERT(acksEvent);
+        }
+
+        setup->ShutdownGRpc();
+
+        WriteSession->Close(TDuration::Seconds(5));
+
+        UNIT_ASSERT_VALUES_EQUAL(otherSessionClosedEvents, 1);
+        UNIT_ASSERT_VALUES_EQUAL(successfulSessionClosedEvents, 0);
     }
 
     Y_UNIT_TEST(WriteSessionWriteInHandlers) {

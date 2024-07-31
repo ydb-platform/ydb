@@ -50,7 +50,7 @@
 #include <ydb/core/cms/console/jaeger_tracing_configurator.h>
 #include <ydb/core/formats/clickhouse_block.h>
 #include <ydb/core/security/ticket_parser.h>
-#include <ydb/core/security/ldap_auth_provider.h>
+#include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
 #include <ydb/core/security/ticket_parser_settings.h>
 #include <ydb/core/base/user_registry.h>
 #include <ydb/core/health_check/health_check.h>
@@ -159,11 +159,15 @@ namespace Tests {
         : Settings(settings)
         , UseStoragePools(!Settings->StoragePoolTypes.empty())
     {
-        if (Settings->SupportsRedirect && IsServerRedirected())
+        if (Settings->SupportsRedirect && IsServerRedirected()) {
             return;
+        }
 
-        if (init)
+        Runtime = MakeHolder<TTestBasicRuntime>(StaticNodes() + DynamicNodes(), Settings->UseRealThreads);
+
+        if (init) {
             Initialize();
+        }
     }
 
     TServer::TServer(const TServerSettings &settings, bool init)
@@ -189,8 +193,6 @@ namespace Tests {
         if (Settings->AppConfig->HasResourceBrokerConfig()) {
             app.ResourceBrokerConfig = Settings->AppConfig->GetResourceBrokerConfig();
         }
-
-        Runtime = MakeHolder<TTestBasicRuntime>(StaticNodes() + DynamicNodes(), Settings->UseRealThreads);
 
         if (!Settings->UseRealThreads)
             Runtime->SetRegistrationObserverFunc([](TTestActorRuntimeBase& runtime, const TActorId&, const TActorId& actorId) {
@@ -225,7 +227,10 @@ namespace Tests {
 
         NKikimr::SetupChannelProfiles(app);
 
-        Runtime->SetupMonitoring(Settings->MonitoringPortOffset);
+        if (Settings->NeedStatsCollectors) {
+            Runtime->SetupStatsCollectors();
+        }
+        Runtime->SetupMonitoring(Settings->MonitoringPortOffset, Settings->MonitoringTypeAsync);
         Runtime->SetLogBackend(Settings->LogBackend);
 
         Runtime->AddAppDataInit([this](ui32 nodeIdx, NKikimr::TAppData& appData) {
@@ -831,7 +836,7 @@ namespace Tests {
             auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
 
             IActor* kqpRmService = NKqp::CreateKqpResourceManagerActor(
-                Settings->AppConfig->GetTableServiceConfig().GetResourceManager(), nullptr, {}, kqpProxySharedResources);
+                Settings->AppConfig->GetTableServiceConfig().GetResourceManager(), nullptr, {}, kqpProxySharedResources, Runtime->GetNodeId(nodeIdx));
             TActorId kqpRmServiceId = Runtime->Register(kqpRmService, nodeIdx);
             Runtime->RegisterService(NKqp::MakeKqpRmServiceID(Runtime->GetNodeId(nodeIdx)), kqpRmServiceId, nodeIdx);
 
@@ -893,7 +898,6 @@ namespace Tests {
             IActor* kqpProxyService = NKqp::CreateKqpProxyService(Settings->AppConfig->GetLogConfig(),
                                                                   Settings->AppConfig->GetTableServiceConfig(),
                                                                   Settings->AppConfig->GetQueryServiceConfig(),
-                                                                  Settings->AppConfig->GetMetadataProviderConfig(),
                                                                   TVector<NKikimrKqp::TKqpSetting>(Settings->KqpSettings),
                                                                   nullptr, std::move(kqpProxySharedResources),
                                                                   federatedQuerySetupFactory, Settings->S3ActorsFactory);
@@ -901,7 +905,7 @@ namespace Tests {
             Runtime->RegisterService(NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx)), kqpProxyServiceId, nodeIdx);
 
             IActor* scriptFinalizeService = NKqp::CreateKqpFinalizeScriptService(
-                Settings->AppConfig->GetQueryServiceConfig(), Settings->AppConfig->GetMetadataProviderConfig(), federatedQuerySetupFactory, Settings->S3ActorsFactory
+                Settings->AppConfig->GetQueryServiceConfig(), federatedQuerySetupFactory, Settings->S3ActorsFactory
             );
             TActorId scriptFinalizeServiceId = Runtime->Register(scriptFinalizeService, nodeIdx);
             Runtime->RegisterService(NKqp::MakeKqpFinalizeScriptServiceId(Runtime->GetNodeId(nodeIdx)), scriptFinalizeServiceId, nodeIdx);
@@ -1673,7 +1677,7 @@ namespace Tests {
             }
 
             indexDesc->SetType(type);
-            indexDesc->MutableIndexImplTableDescription()->SetUniformPartitionsCount(16);
+            indexDesc->AddIndexImplTableDescriptions()->SetUniformPartitionsCount(16);
         }
 
         TAutoPtr<NBus::TBusMessage> reply;
@@ -2584,7 +2588,8 @@ namespace Tests {
             return TServerSetup("localhost", 0);
         }
 
-        TStringBuf str(GetEnv(ServerRedirectEnvVar));
+        const auto& envValue = GetEnv(ServerRedirectEnvVar);
+        TStringBuf str(envValue);
         TStringBuf address;
         TStringBuf port;
         str.Split('/', address, port);

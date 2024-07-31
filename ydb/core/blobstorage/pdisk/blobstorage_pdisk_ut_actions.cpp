@@ -1326,7 +1326,7 @@ void TTestWhiteboard::TestFSM(const TActorContext &ctx) {
         TActorId nodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
         ctx.ExecutorThread.ActorSystem->RegisterLocalService(nodeWardenId, SelfId());
         for (int owner = 0; owner < ExpectedOwnerCount; ++owner) {
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, TVDiskID(0, 0, 0, 0, owner), *PDiskGuid, TActorId(), SelfId()));
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, TVDiskID(TGroupId::Zero(), 0, 0, 0, owner), *PDiskGuid, TActorId(), SelfId()));
         }
         TestStep += 10;
         break;

@@ -17,6 +17,7 @@ RECURSE(
     logger
     login
     mkql_proto
+    minsketch
     naming_conventions
     ncloud
     pdisk_io

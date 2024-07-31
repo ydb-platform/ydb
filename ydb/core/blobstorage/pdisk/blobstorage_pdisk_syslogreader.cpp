@@ -159,7 +159,7 @@ void TSysLogReader::RestoreSectorSets() {
         const bool isErasureEncode = format.IsErasureEncodeSysLog();
         TSectorRestorator restorator(true, LogErasureDataParts, isErasureEncode, format,
             PDisk->ActorSystem, PDisk->PDiskActor, PDisk->PDiskId, &PDisk->Mon, PDisk->BufferPool.Get());
-        restorator.Restore(sectorSetData, sectorIdx * format.SectorSize, magic, 0, PDisk->Cfg->UseT1ha0HashInFooter, 0);
+        restorator.Restore(sectorSetData, sectorIdx * format.SectorSize, magic, 0, 0);
 
         if (!restorator.GoodSectorFlags) {
             continue;

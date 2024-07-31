@@ -117,7 +117,7 @@ std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySet> TKqpQueryState::BuildN
 
     auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
     navigate->DatabaseName = Database;
-    if (UserToken && !UserToken->GetSerializedToken().empty()) {
+    if (HasUserToken()) {
         navigate->UserToken = UserToken;
     }
 
@@ -158,6 +158,12 @@ bool TKqpQueryState::SaveAndCheckCompileResult(TEvKqp::TEvCompileResponse* ev) {
     }
     if (!CommandTagName) {
         CommandTagName = CompileResult->CommandTagName;
+    }
+    for (const auto& param : PreparedQuery->GetParameters()) {
+        const auto& ast = CompileResult->Ast;
+        if (!ast || !ast->PgAutoParamValues || !ast->PgAutoParamValues->contains(param.GetName())) {
+            ResultParams.push_back(param);
+        }
     }
     return true;
 }
@@ -406,12 +412,23 @@ std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> TKqpQueryState::BuildSchemeC
         consumer = operations.GetConsumer();
 
     TopicOperations.FillSchemeCacheNavigate(*navigate, std::move(consumer));
-    navigate->UserToken = UserToken;
+    if (HasUserToken()) {
+        navigate->UserToken = UserToken;
+    }
     navigate->Cookie = QueryId;
     return navigate;
 }
 
+bool TKqpQueryState::HasUserToken() const
+{
+    return UserToken && !UserToken->GetSerializedToken().empty();
+}
+
 bool TKqpQueryState::IsAccessDenied(const NSchemeCache::TSchemeCacheNavigate& response, TString& message) {
+    if (!HasUserToken()) {
+        return false;
+    }
+
     auto checkAccessDenied = [&] (const NSchemeCache::TSchemeCacheNavigate::TEntry& result) {
         static const auto selectRowRights = NACLib::EAccessRights::SelectRow;
         static const auto accessAttributesRights = NACLib::EAccessRights::ReadAttributes | NACLib::EAccessRights::WriteAttributes;

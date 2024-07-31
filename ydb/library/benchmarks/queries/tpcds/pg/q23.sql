@@ -12,7 +12,7 @@ with frequent_ss_items as
   having count(*) >4),
  max_store_sales as
  (select max(csales) tpcds_cmax
-  from (select c_customer_sk,sum(ss_quantity::numeric*ss_sales_price) csales
+  from (select c_customer_sk,sum(ss_quantity*ss_sales_price) csales
         from {{store_sales}}
             ,{{customer}}
             ,{{date_dim}}
@@ -21,17 +21,17 @@ with frequent_ss_items as
          and d_year in (2000,2000+1,2000+2,2000+3)
         group by c_customer_sk) a),
  best_ss_customer as
- (select c_customer_sk,sum(ss_quantity::numeric*ss_sales_price) ssales
+ (select c_customer_sk,sum(ss_quantity*ss_sales_price) ssales
   from {{store_sales}}
       ,{{customer}}
   where ss_customer_sk = c_customer_sk
   group by c_customer_sk
-  having sum(ss_quantity::numeric*ss_sales_price) > (95.0/100.0)::numeric * (select
+  having sum(ss_quantity*ss_sales_price) > (95.0/100.0) * (select
   *
 from
- max_store_sales)::numeric)
+ max_store_sales))
   select  sum(sales)
- from (select cs_quantity::numeric*cs_list_price sales
+ from (select cs_quantity*cs_list_price sales
        from {{catalog_sales}}
            ,{{date_dim}}
        where d_year = 2000
@@ -40,7 +40,7 @@ from
          and cs_item_sk in (select item_sk from frequent_ss_items)
          and cs_bill_customer_sk in (select c_customer_sk from best_ss_customer)
       union all
-      select ws_quantity::numeric*ws_list_price sales
+      select ws_quantity*ws_list_price sales
        from {{web_sales}}
            ,{{date_dim}}
        where d_year = 2000
@@ -61,7 +61,7 @@ with frequent_ss_items as
   having count(*) >4),
  max_store_sales as
  (select max(csales) tpcds_cmax
-  from (select c_customer_sk,sum(ss_quantity::numeric*ss_sales_price) csales
+  from (select c_customer_sk,sum(ss_quantity*ss_sales_price) csales
         from {{store_sales}}
             ,{{customer}}
             ,{{date_dim}}
@@ -70,16 +70,16 @@ with frequent_ss_items as
          and d_year in (2000,2000+1,2000+2,2000+3)
         group by c_customer_sk) a),
  best_ss_customer as
- (select c_customer_sk,sum(ss_quantity::numeric*ss_sales_price) ssales
+ (select c_customer_sk,sum(ss_quantity*ss_sales_price) ssales
   from {{store_sales}}
       ,{{customer}}
   where ss_customer_sk = c_customer_sk
   group by c_customer_sk
-  having sum(ss_quantity::numeric*ss_sales_price) > (95.0/100.0)::numeric * (select
+  having sum(ss_quantity*ss_sales_price) > (95.0/100.0) * (select
   *
- from max_store_sales)::numeric)
+ from max_store_sales))
   select  c_last_name,c_first_name,sales
- from (select c_last_name,c_first_name,sum(cs_quantity::numeric*cs_list_price) sales
+ from (select c_last_name,c_first_name,sum(cs_quantity*cs_list_price) sales
         from {{catalog_sales}}
             ,{{customer}}
             ,{{date_dim}}
@@ -91,7 +91,7 @@ with frequent_ss_items as
          and cs_bill_customer_sk = c_customer_sk
        group by c_last_name,c_first_name
       union all
-      select c_last_name,c_first_name,sum(ws_quantity::numeric*ws_list_price) sales
+      select c_last_name,c_first_name,sum(ws_quantity*ws_list_price) sales
        from {{web_sales}}
            ,{{customer}}
            ,{{date_dim}}

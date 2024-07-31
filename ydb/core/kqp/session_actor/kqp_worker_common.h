@@ -149,7 +149,6 @@ IActor* CreateKqpWorkerActor(const TActorId& owner, const TString& sessionId,
     TIntrusivePtr<TModuleResolverState> moduleResolverState,
     TIntrusivePtr<TKqpCounters> counters,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
     const TGUCSettings::TPtr& gUCSettings
     );
 

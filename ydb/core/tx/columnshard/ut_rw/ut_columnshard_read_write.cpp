@@ -603,7 +603,7 @@ void TestWriteReadLongTxDup() {
         UNIT_ASSERT(reader.IsCorrectlyFinished());
         UNIT_ASSERT(rb);
         UNIT_ASSERT(rb->num_rows());
-        NArrow::ExtractColumnsValidate(rb, TTestSchema::ExtractNames(ydbSchema));
+        Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, TTestSchema::ExtractNames(ydbSchema)));
         UNIT_ASSERT((ui32)rb->num_columns() == TTestSchema::ExtractNames(ydbSchema).size());
         UNIT_ASSERT(CheckOrdered(rb));
         UNIT_ASSERT(DataHas({rb}, portion, true));
@@ -712,7 +712,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
         reader.SetReplyColumns(TTestSchema::ExtractNames(ydbSchema));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
-        NArrow::ExtractColumnsValidate(rb, TTestSchema::ExtractNames(ydbSchema));
+        Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, TTestSchema::ExtractNames(ydbSchema)));
         UNIT_ASSERT((ui32)rb->num_columns() == TTestSchema::ExtractNames(ydbSchema).size());
         UNIT_ASSERT(rb->num_rows());
         UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -727,7 +727,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
         reader.SetReplyColumnIds({1});
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
-        NArrow::ExtractColumnsValidate(rb, {"timestamp"});
+        Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, std::vector<TString>({ "timestamp" })));
         UNIT_ASSERT((ui32)rb->num_columns() == 1);
         UNIT_ASSERT(rb->num_rows());
         UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -742,7 +742,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
         reader.SetReplyColumns({"timestamp", "message"});
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
-        NArrow::ExtractColumnsValidate(rb, {"timestamp", "message"});
+        Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, std::vector<TString>({ "timestamp", "message" })));
         UNIT_ASSERT((ui32)rb->num_columns() == 2);
         UNIT_ASSERT(rb->num_rows());
         UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -791,7 +791,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
         UNIT_ASSERT(reader.IsCorrectlyFinished());
-        NArrow::ExtractColumnsValidate(rb, TTestSchema::ExtractNames(ydbSchema));
+        Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, TTestSchema::ExtractNames(ydbSchema)));
         UNIT_ASSERT((ui32)rb->num_columns() == TTestSchema::ExtractNames(ydbSchema).size());
         UNIT_ASSERT(rb->num_rows());
         UNIT_ASSERT(CheckOrdered(rb));
@@ -808,7 +808,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
         UNIT_ASSERT(reader.IsCorrectlyFinished());
-        NArrow::ExtractColumnsValidate(rb, TTestSchema::ExtractNames(ydbSchema));
+        Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, TTestSchema::ExtractNames(ydbSchema)));
         UNIT_ASSERT((ui32)rb->num_columns() == TTestSchema::ExtractNames(ydbSchema).size());
         UNIT_ASSERT(rb->num_rows());
         UNIT_ASSERT(CheckOrdered(rb));
@@ -838,7 +838,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
         UNIT_ASSERT(reader.IsCorrectlyFinished());
-        NArrow::ExtractColumnsValidate(rb, TTestSchema::ExtractNames(ydbSchema));
+        Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, TTestSchema::ExtractNames(ydbSchema)));
         UNIT_ASSERT((ui32)rb->num_columns() == TTestSchema::ExtractNames(ydbSchema).size());
         UNIT_ASSERT(rb->num_rows());
         UNIT_ASSERT(CheckOrdered(rb));
@@ -863,7 +863,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
         UNIT_ASSERT(reader.IsCorrectlyFinished());
-        NArrow::ExtractColumnsValidate(rb, TTestSchema::ExtractNames(ydbSchema));
+        Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, TTestSchema::ExtractNames(ydbSchema)));
         UNIT_ASSERT((ui32)rb->num_columns() == TTestSchema::ExtractNames(ydbSchema).size());
         UNIT_ASSERT(rb->num_rows());
         UNIT_ASSERT(CheckOrdered(rb));
@@ -878,8 +878,8 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
         const ui64 committedBytes = reader.GetReadStat("committed_bytes");
         Cerr << codec << "/" << compactedBytes << "/" << insertedBytes << "/" << committedBytes << Endl;
         if (insertedBytes) {
-            UNIT_ASSERT_GE(insertedBytes / 100000, 40);
-            UNIT_ASSERT_LE(insertedBytes / 100000, 50);
+            UNIT_ASSERT_GE(insertedBytes / 100000, 50);
+            UNIT_ASSERT_LE(insertedBytes / 100000, 60);
         }
         if (committedBytes) {
             UNIT_ASSERT_LE(committedBytes / 100000, 1);
@@ -910,7 +910,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
         UNIT_ASSERT(reader.IsCorrectlyFinished());
-        NArrow::ExtractColumnsValidate(rb, TTestSchema::ExtractNames(ydbSchema));
+        Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, TTestSchema::ExtractNames(ydbSchema)));
         UNIT_ASSERT((ui32)rb->num_columns() == TTestSchema::ExtractNames(ydbSchema).size());
         UNIT_ASSERT(rb->num_rows());
         UNIT_ASSERT(CheckOrdered(rb));
@@ -927,7 +927,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
         UNIT_ASSERT(reader.IsCorrectlyFinished());
-        NArrow::ExtractColumnsValidate(rb, TTestSchema::ExtractNames(ydbSchema));
+        Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, TTestSchema::ExtractNames(ydbSchema)));
         UNIT_ASSERT((ui32)rb->num_columns() == TTestSchema::ExtractNames(ydbSchema).size());
         UNIT_ASSERT(rb->num_rows());
         UNIT_ASSERT(CheckOrdered(rb));
@@ -1292,7 +1292,7 @@ void TestReadWithProgram(const TestTableDescription& table = {})
                 case 1:
                     UNIT_ASSERT(rb);
                     UNIT_ASSERT(rb->num_rows());
-                    NArrow::ExtractColumnsValidate(rb, {"level", "timestamp"});
+                    Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, std::vector<TString>({ "level", "timestamp" })));
                     UNIT_ASSERT(rb->num_columns() == 2);
                     UNIT_ASSERT(DataHas({rb}, {0, 100}, true));
                     break;
@@ -1852,6 +1852,119 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     Y_UNIT_TEST(WriteReadDuplicate) {
         TestWriteReadDup();
         TestWriteReadLongTxDup();
+    }
+
+    Y_UNIT_TEST(WriteReadModifications) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+
+        const TestTableDescription table = {};
+        //
+
+        ui64 writeId = 0;
+        ui64 tableId = 1;
+
+        auto ydbSchema = table.Schema;
+        SetupSchema(runtime, sender, tableId);
+
+        constexpr ui32 numRows = 10;
+        std::pair<ui64, ui64> portion = { 10, 10 + numRows };
+        auto testData = MakeTestBlob(portion, ydbSchema);
+        TAutoPtr<IEventHandle> handle;
+
+        ui64 txId = 0;
+        ui64 planStep = 100;
+        {
+            TSet<ui64> txIds;
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Update));
+            ProposeCommit(runtime, sender, ++txId, writeIds);
+            txIds.insert(txId);
+            PlanCommit(runtime, sender, planStep, txIds);
+
+            NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+            reader.SetReplyColumns({ "timestamp" });
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(reader.IsCorrectlyFinished());
+            UNIT_ASSERT(!rb || rb->num_rows() == 0);
+            ++planStep;
+        }
+        {
+            TSet<ui64> txIds;
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Insert));
+            ProposeCommit(runtime, sender, ++txId, writeIds);
+            txIds.insert(txId);
+            PlanCommit(runtime, sender, planStep, txIds);
+
+            NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+            reader.SetReplyColumns({ "timestamp" });
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(reader.IsCorrectlyFinished());
+            UNIT_ASSERT(CheckOrdered(rb));
+            UNIT_ASSERT(DataHas({ rb }, portion, true));
+            ++planStep;
+        }
+        {
+            TSet<ui64> txIds;
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Upsert));
+            ProposeCommit(runtime, sender, ++txId, writeIds);
+            txIds.insert(txId);
+            PlanCommit(runtime, sender, planStep, txIds);
+
+            NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+            reader.SetReplyColumns({ "timestamp" });
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(reader.IsCorrectlyFinished());
+            UNIT_ASSERT(CheckOrdered(rb));
+            UNIT_ASSERT(DataHas({ rb }, portion, true));
+            ++planStep;
+        }
+        {
+            TSet<ui64> txIds;
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Update));
+            ProposeCommit(runtime, sender, ++txId, writeIds);
+            txIds.insert(txId);
+            PlanCommit(runtime, sender, planStep, txIds);
+
+            NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+            reader.SetReplyColumns({ "timestamp" });
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(reader.IsCorrectlyFinished());
+            UNIT_ASSERT(CheckOrdered(rb));
+            UNIT_ASSERT(DataHas({ rb }, portion, true));
+            ++planStep;
+        }
+        {
+            TSet<ui64> txIds;
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(!WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Insert));
+        }
+        {
+            TSet<ui64> txIds;
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Delete));
+            ProposeCommit(runtime, sender, ++txId, writeIds);
+            txIds.insert(txId);
+            PlanCommit(runtime, sender, planStep, txIds);
+
+            NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+            reader.SetReplyColumns({ "timestamp" });
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(reader.IsCorrectlyFinished());
+            AFL_VERIFY(!rb || rb->num_rows() == 0)("count", rb->num_rows());
+            ++planStep;
+        }
     }
 
     Y_UNIT_TEST(WriteRead) {
@@ -2512,7 +2625,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
         auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvReadFinished>(ev)) {
-                Cerr <<  "EvReadFinished " << msg->RequestCookie << Endl;
+                Cerr << (TStringBuilder() << "EvReadFinished " << msg->RequestCookie << Endl);
                 inFlightReads.insert(msg->RequestCookie);
                 if (blockReadFinished) {
                     return true;
@@ -2522,74 +2635,70 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
                 if (auto append = dynamic_pointer_cast<NOlap::TChangesWithAppend>(msg->IndexChanges)) {
                     Y_ABORT_UNLESS(append->AppendedPortions.size());
-                    Cerr << "Added portions:";
+                    TStringBuilder sb;
+                    sb << "Added portions:";
                     for (const auto& portion : append->AppendedPortions) {
                         Y_UNUSED(portion);
                         ++addedPortions;
-                        Cerr << " " << addedPortions;
+                        sb << " " << addedPortions;
                     }
-                    Cerr << Endl;
+                    sb << Endl;
+                    Cerr << sb;
                 }
                 if (auto compact = dynamic_pointer_cast<NOlap::TCompactColumnEngineChanges>(msg->IndexChanges)) {
                     Y_ABORT_UNLESS(compact->SwitchedPortions.size());
                     ++compactionsHappened;
-                    Cerr << "Compaction old portions:";
+                    TStringBuilder sb;
+                    sb << "Compaction old portions:";
                     ui64 srcPathId{0};
                     for (const auto& portionInfo : compact->SwitchedPortions) {
                         const ui64 pathId = portionInfo.GetPathId();
                         UNIT_ASSERT(!srcPathId || srcPathId == pathId);
                         srcPathId = pathId;
                         oldPortions.insert(portionInfo.GetPortion());
+                        sb << portionInfo.GetPortion() << ",";
                     }
-                    Cerr << Endl;
+                    sb << Endl;
+                    Cerr << sb;
                 }
                 if (auto cleanup = dynamic_pointer_cast<NOlap::TCleanupPortionsColumnEngineChanges>(msg->IndexChanges)) {
                     Y_ABORT_UNLESS(cleanup->PortionsToDrop.size());
                     ++cleanupsHappened;
-                    Cerr << "Cleanup old portions:";
+                    TStringBuilder sb;
+                    sb << "Cleanup old portions:";
                     for (const auto& portion : cleanup->PortionsToDrop) {
-                        Cerr << " " << portion.GetPortion();
+                        sb << " " << portion.GetPortion();
                         deletedPortions.insert(portion.GetPortion());
                     }
-                    Cerr << Endl;
+                    sb << Endl;
+                    Cerr << sb;
                 }
             } else if (auto* msg = TryGetPrivateEvent<NActors::NLog::TEvLog>(ev)) {
-                bool matchedEvent = false;
                 {
-                    TString prefixes[2] = {"Delay Delete Blob ", "Delay Delete Small Blob "};
+                    const std::vector<TString> prefixes = {"Delay Delete Blob "};
                     for (TString prefix : prefixes) {
                         size_t pos = msg->Line.find(prefix);
                         if (pos != TString::npos) {
                             TString blobId = msg->Line.substr(pos + prefix.size());
-                            Cerr << "Delayed delete: " << blobId << Endl;
+                            Cerr << (TStringBuilder() << "Delayed delete: " << blobId << Endl);
                             delayedBlobs.insert(blobId);
-                            matchedEvent = true;
                             break;
                         }
                     }
                 }
-                if (!matchedEvent){
-                    TString prefix = "Delete Small Blob ";
-                    size_t pos = msg->Line.find(prefix);
-                    if (pos != TString::npos) {
-                        TString blobId = msg->Line.substr(pos + prefix.size());
-                        Cerr << "Delete small blob: " << blobId << Endl;
-                        deletedBlobs.insert(blobId);
-                        delayedBlobs.erase(blobId);
-                        matchedEvent = true;
-                    }
-                }
             } else if (auto* msg = TryGetPrivateEvent<NKikimr::TEvBlobStorage::TEvCollectGarbage>(ev)) {
                 // Extract and save all DoNotKeep blobIds
-                Cerr << "GC for channel " << msg->Channel;
+                TStringBuilder sb;
+                sb << "GC for channel " << msg->Channel;
                 if (msg->DoNotKeep) {
-                    Cerr << " deletes blobs: " << JoinStrings(msg->DoNotKeep->begin(), msg->DoNotKeep->end(), " ");
+                    sb << " deletes blobs: " << JoinStrings(msg->DoNotKeep->begin(), msg->DoNotKeep->end(), " ");
                     for (const auto& blobId : *msg->DoNotKeep) {
                         deletedBlobs.insert(blobId.ToString());
                         delayedBlobs.erase(NOlap::TUnifiedBlobId(0, blobId).ToStringNew());
                     }
                 }
-                Cerr << Endl;
+                sb << Endl;
+                Cerr << sb;
             }
             return false;
         };

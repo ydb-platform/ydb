@@ -65,10 +65,13 @@ arrow::Result<std::shared_ptr<arrow::DataType>> GetCSVArrowType(NScheme::TTypeIn
     std::shared_ptr<arrow::DataType> result;
     switch (typeId.GetTypeId()) {
         case NScheme::NTypeIds::Datetime:
+        case NScheme::NTypeIds::Datetime64:
             return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::SECOND);
         case NScheme::NTypeIds::Timestamp:
+        case NScheme::NTypeIds::Timestamp64:
             return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::MICRO);
         case NScheme::NTypeIds::Date:
+        case NScheme::NTypeIds::Date32:
             return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::SECOND);
         default:
             return GetArrowType(typeId);
@@ -150,150 +153,6 @@ std::shared_ptr<arrow::RecordBatch> MakeEmptyBatch(const std::shared_ptr<arrow::
         Y_ABORT_UNLESS(result);
     }
     return arrow::RecordBatch::Make(schema, rowsCount, columns);
-}
-
-namespace {
-
-template <class TStringType, class TDataContainer>
-std::shared_ptr<TDataContainer> ExtractColumnsImpl(const std::shared_ptr<TDataContainer>& srcBatch,
-    const std::vector<TStringType>& columnNames) {
-    std::vector<std::shared_ptr<arrow::Field>> fields;
-    fields.reserve(columnNames.size());
-    std::vector<std::shared_ptr<typename NAdapter::TDataBuilderPolicy<TDataContainer>::TColumn>> columns;
-    columns.reserve(columnNames.size());
-
-    auto srcSchema = srcBatch->schema();
-    for (auto& name : columnNames) {
-        int pos = srcSchema->GetFieldIndex(name);
-        if (pos < 0) {
-            return {};
-        }
-        fields.push_back(srcSchema->field(pos));
-        columns.push_back(srcBatch->column(pos));
-    }
-
-    return NAdapter::TDataBuilderPolicy<TDataContainer>::Build(std::move(fields), std::move(columns), srcBatch->num_rows());
-}
-}
-
-std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-                                                   const std::vector<TString>& columnNames) {
-    return ExtractColumnsImpl(srcBatch, columnNames);
-}
-
-std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-                                                   const std::vector<std::string>& columnNames) {
-    return ExtractColumnsImpl(srcBatch, columnNames);
-}
-
-std::shared_ptr<arrow::Table> ExtractColumns(const std::shared_ptr<arrow::Table>& srcBatch,
-    const std::vector<TString>& columnNames) {
-    return ExtractColumnsImpl(srcBatch, columnNames);
-}
-
-std::shared_ptr<arrow::Table> ExtractColumns(const std::shared_ptr<arrow::Table>& srcBatch,
-    const std::vector<std::string>& columnNames) {
-    return ExtractColumnsImpl(srcBatch, columnNames);
-}
-
-namespace {
-template <class TDataContainer>
-std::shared_ptr<TDataContainer> ExtractColumnsValidateImpl(const std::shared_ptr<TDataContainer>& srcBatch,
-    const std::vector<TString>& columnNames) {
-    if (!srcBatch) {
-        return srcBatch;
-    }
-    if (columnNames.empty()) {
-        return nullptr;
-    }
-    std::vector<std::shared_ptr<arrow::Field>> fields;
-    fields.reserve(columnNames.size());
-    std::vector<std::shared_ptr<typename NAdapter::TDataBuilderPolicy<TDataContainer>::TColumn>> columns;
-    columns.reserve(columnNames.size());
-
-    auto srcSchema = srcBatch->schema();
-    for (auto& name : columnNames) {
-        const int pos = srcSchema->GetFieldIndex(name);
-        AFL_VERIFY(pos >= 0)("field_name", name)("names", JoinSeq(",", columnNames))("fields", JoinSeq(",", srcBatch->schema()->field_names()));
-        fields.push_back(srcSchema->field(pos));
-        columns.push_back(srcBatch->column(pos));
-    }
-
-    return NAdapter::TDataBuilderPolicy<TDataContainer>::Build(std::move(fields), std::move(columns), srcBatch->num_rows());
-}
-}
-
-std::shared_ptr<arrow::RecordBatch> ExtractColumnsValidate(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-    const std::vector<TString>& columnNames) {
-    return ExtractColumnsValidateImpl(srcBatch, columnNames);
-}
-
-std::shared_ptr<arrow::Table> ExtractColumnsValidate(const std::shared_ptr<arrow::Table>& srcBatch,
-    const std::vector<TString>& columnNames) {
-    return ExtractColumnsValidateImpl(srcBatch, columnNames);
-}
-
-std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-                                                   const std::shared_ptr<arrow::Schema>& dstSchema,
-                                                   bool addNotExisted) {
-    Y_ABORT_UNLESS(srcBatch);
-    Y_ABORT_UNLESS(dstSchema);
-    std::vector<std::shared_ptr<arrow::Array>> columns;
-    columns.reserve(dstSchema->num_fields());
-
-    for (auto& field : dstSchema->fields()) {
-        columns.push_back(srcBatch->GetColumnByName(field->name()));
-        if (!columns.back()) {
-            if (addNotExisted) {
-                auto result = arrow::MakeArrayOfNull(field->type(), srcBatch->num_rows());
-                if (!result.ok()) {
-                    return nullptr;
-                }
-                columns.back() = *result;
-            } else {
-                AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "not_found_column")("column", field->name())
-                    ("column_type", field->type()->ToString())("columns", JoinSeq(",", srcBatch->schema()->field_names()));
-                return nullptr;
-            }
-        } else {
-            auto srcField = srcBatch->schema()->GetFieldByName(field->name());
-            Y_ABORT_UNLESS(srcField);
-            if (!field->Equals(srcField)) {
-                AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_use_incoming_batch")("reason", "invalid_column_type")("column", field->name())
-                                ("column_type", field->ToString(true))("incoming_type", srcField->ToString(true));
-                return nullptr;
-            }
-        }
-
-        Y_ABORT_UNLESS(columns.back());
-        if (!columns.back()->type()->Equals(field->type())) {
-            AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_use_incoming_batch")("reason", "invalid_column_type")("column", field->name())
-                                ("column_type", field->type()->ToString())("incoming_type", columns.back()->type()->ToString());
-            return nullptr;
-        }
-    }
-
-    return arrow::RecordBatch::Make(dstSchema, srcBatch->num_rows(), columns);
-}
-
-std::shared_ptr<arrow::RecordBatch> ExtractExistedColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-                                                          const arrow::FieldVector& fieldsToExtract) {
-    std::vector<std::shared_ptr<arrow::Field>> fields;
-    fields.reserve(fieldsToExtract.size());
-    std::vector<std::shared_ptr<arrow::Array>> columns;
-    columns.reserve(fieldsToExtract.size());
-
-    auto srcSchema = srcBatch->schema();
-    for (auto& fldToExtract : fieldsToExtract) {
-        auto& name = fldToExtract->name();
-        auto field = srcSchema->GetFieldByName(name);
-        if (field && field->type()->Equals(fldToExtract->type())) {
-            fields.push_back(field);
-            columns.push_back(srcBatch->GetColumnByName(name));
-        }
-    }
-
-    return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(std::move(fields)), srcBatch->num_rows(), std::move(columns));
 }
 
 std::shared_ptr<arrow::RecordBatch> CombineBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches) {
@@ -436,7 +295,7 @@ void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
 
     Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(batch, sortingKey));
 
-    auto keyBatch = ExtractColumns(batch, sortingKey);
+    auto keyBatch = TColumnOperator().Adapt(batch, sortingKey).DetachResult();
     auto& keyColumns = keyBatch->columns();
 
     bool same = false;
@@ -496,7 +355,7 @@ static bool IsSelfSorted(const std::shared_ptr<arrow::RecordBatch>& batch) {
 
 bool IsSorted(const std::shared_ptr<arrow::RecordBatch>& batch,
               const std::shared_ptr<arrow::Schema>& sortingKey, bool desc) {
-    auto keyBatch = ExtractColumns(batch, sortingKey);
+    auto keyBatch = TColumnOperator().Adapt(batch, sortingKey).DetachResult();
     if (desc) {
         return IsSelfSorted<true, false>(keyBatch);
     } else {
@@ -506,7 +365,7 @@ bool IsSorted(const std::shared_ptr<arrow::RecordBatch>& batch,
 
 bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch,
                        const std::shared_ptr<arrow::Schema>& sortingKey, bool desc) {
-    auto keyBatch = ExtractColumns(batch, sortingKey);
+    auto keyBatch = TColumnOperator().Adapt(batch, sortingKey).DetachResult();
     if (desc) {
         return IsSelfSorted<true, true>(keyBatch);
     } else {
@@ -645,6 +504,54 @@ std::shared_ptr<arrow::Scalar> MinScalar(const std::shared_ptr<arrow::DataType>&
     return out;
 }
 
+namespace {
+
+template <class T>
+class TDefaultScalarValue {
+public:
+    static constexpr T Value = 0;
+};
+
+template <>
+class TDefaultScalarValue<bool> {
+public:
+    static constexpr bool Value = false;
+};
+
+}
+
+std::shared_ptr<arrow::Scalar> DefaultScalar(const std::shared_ptr<arrow::DataType>& type) {
+    std::shared_ptr<arrow::Scalar> out;
+    SwitchType(type->id(), [&](const auto& t) {
+        using TWrap = std::decay_t<decltype(t)>;
+        using T = typename TWrap::T;
+        using TScalar = typename arrow::TypeTraits<T>::ScalarType;
+
+        if constexpr (std::is_same_v<T, arrow::StringType> ||
+            std::is_same_v<T, arrow::BinaryType> ||
+            std::is_same_v<T, arrow::LargeStringType> ||
+            std::is_same_v<T, arrow::LargeBinaryType>) {
+            out = std::make_shared<TScalar>(arrow::Buffer::FromString(""), type);
+        } else if constexpr (std::is_same_v<T, arrow::FixedSizeBinaryType>) {
+            std::string s(static_cast<arrow::FixedSizeBinaryType&>(*type).byte_width(), '\0');
+            out = std::make_shared<TScalar>(arrow::Buffer::FromString(s), type);
+        } else if constexpr (std::is_same_v<T, arrow::HalfFloatType>) {
+            return false;
+        } else if constexpr (arrow::is_temporal_type<T>::value) {
+            using TCType = typename arrow::TypeTraits<T>::CType;
+            out = std::make_shared<TScalar>(TDefaultScalarValue<TCType>::Value, type);
+        } else if constexpr (arrow::has_c_type<T>::value) {
+            using TCType = typename arrow::TypeTraits<T>::CType;
+            out = std::make_shared<TScalar>(TDefaultScalarValue<TCType>::Value);
+        } else {
+            return false;
+        }
+        return true;
+    });
+    AFL_VERIFY(out)("type", type->ToString());
+    return out;
+}
+
 std::shared_ptr<arrow::Scalar> GetScalar(const std::shared_ptr<arrow::Array>& array, int position) {
     auto res = array->GetScalar(position);
     Y_ABORT_UNLESS(res.ok());
@@ -724,6 +631,19 @@ int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y) {
 int ScalarCompare(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
     Y_ABORT_UNLESS(x);
     Y_ABORT_UNLESS(y);
+    return ScalarCompare(*x, *y);
+}
+
+int ScalarCompareNullable(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
+    if (!x && !!y) {
+        return -1;
+    }
+    if (!!x && !y) {
+        return 1;
+    }
+    if (!x && !y) {
+        return 0;
+    }
     return ScalarCompare(*x, *y);
 }
 
@@ -985,24 +905,33 @@ std::shared_ptr<arrow::RecordBatch> MergeColumns(const std::vector<std::shared_p
 }
 
 std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std::shared_ptr<arrow::Table>& t) {
-    std::set<ui32> splitPositions;
-    const ui32 numRows = t->num_rows();
-    for (auto&& i : t->columns()) {
-        ui32 pos = 0;
-        for (auto&& arr : i->chunks()) {
-            splitPositions.emplace(pos);
-            pos += arr->length();
-        }
-        AFL_VERIFY(pos == t->num_rows());
+    if (!t->num_rows()) {
+        return {};
     }
+    std::vector<ui32> positions;
+    {
+        for (auto&& i : t->columns()) {
+            ui32 pos = 0;
+            for (auto&& arr : i->chunks()) {
+                positions.emplace_back(pos);
+                pos += arr->length();
+            }
+            AFL_VERIFY(pos == t->num_rows());
+        }
+        positions.emplace_back(t->num_rows());
+    }
+    std::sort(positions.begin(), positions.end());
+    positions.erase(std::unique(positions.begin(), positions.end()), positions.end());
+
     std::vector<std::vector<std::shared_ptr<arrow::Array>>> slicedData;
-    slicedData.resize(splitPositions.size());
-    std::vector<ui32> positions(splitPositions.begin(), splitPositions.end());
-    for (auto&& i : t->columns()) {
-        for (ui32 idx = 0; idx < positions.size(); ++idx) {
-            auto slice = i->Slice(positions[idx], ((idx + 1 == positions.size()) ? numRows : positions[idx + 1]) - positions[idx]);
-            AFL_VERIFY(slice->num_chunks() == 1);
-            slicedData[idx].emplace_back(slice->chunks().front());
+    slicedData.resize(positions.size() - 1);
+    {
+        for (auto&& i : t->columns()) {
+            for (ui32 idx = 0; idx + 1 < positions.size(); ++idx) {
+                auto slice = i->Slice(positions[idx], positions[idx + 1] - positions[idx]);
+                AFL_VERIFY(slice->num_chunks() == 1);
+                slicedData[idx].emplace_back(slice->chunks().front());
+            }
         }
     }
     std::vector<std::shared_ptr<arrow::RecordBatch>> result;
@@ -1020,6 +949,27 @@ std::shared_ptr<arrow::Table> ToTable(const std::shared_ptr<arrow::RecordBatch>&
         return nullptr;
     }
     return TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batch->schema(), {batch}));
+}
+
+bool HasNulls(const std::shared_ptr<arrow::Array>& column) {
+    AFL_VERIFY(column);
+    return column->null_bitmap_data();
+}
+
+std::vector<TString> ConvertStrings(const std::vector<std::string>& input) {
+    std::vector<TString> result;
+    for (auto&& i : input) {
+        result.emplace_back(i);
+    }
+    return result;
+}
+
+std::vector<std::string> ConvertStrings(const std::vector<TString>& input) {
+    std::vector<std::string> result;
+    for (auto&& i : input) {
+        result.emplace_back(i);
+    }
+    return result;
 }
 
 }

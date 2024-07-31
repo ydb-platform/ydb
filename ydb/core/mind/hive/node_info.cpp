@@ -30,7 +30,6 @@ void TNodeInfo::ChangeVolatileState(EVolatileState state) {
         case EVolatileState::Disconnected:
         case EVolatileState::Connecting:
             RegisterInDomains();
-            Hive.UpdateCounterNodesConnected(+1);
             break;
 
         default:
@@ -43,7 +42,6 @@ void TNodeInfo::ChangeVolatileState(EVolatileState state) {
         case EVolatileState::Connected:
         case EVolatileState::Disconnecting:
             DeregisterInDomains();
-            Hive.UpdateCounterNodesConnected(-1);
             break;
 
         default:
@@ -358,7 +356,7 @@ void TNodeInfo::DeregisterInDomains() {
 void TNodeInfo::Ping() {
     Y_ABORT_UNLESS((bool)Local);
     BLOG_D("Node(" << Id << ") Ping(" << Local << ")");
-    Hive.SendPing(Local, Id);
+    Hive.QueuePing(Local);
 }
 
 void TNodeInfo::SendReconnect(const TActorId& local) {

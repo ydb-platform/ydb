@@ -14,3 +14,5 @@ pragma dq.OptLLVM="off";
 PRAGMA s3.UseBlocksSource="true";
 pragma OrderedColumns="true";
 
+pragma FilterPushdownOverJoinOptionalSide;
+pragma RotateJoinTree="false";

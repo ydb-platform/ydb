@@ -21,6 +21,8 @@
 #include <yt/yt/core/misc/finally.h>
 #include <yt/yt/core/misc/atomic_object.h>
 
+#include <yt/yt/core/tracing/public.h>
+
 #include <yt/yt_proto/yt/core/rpc/proto/rpc.pb.h>
 
 #include <library/cpp/yt/threading/rw_spin_lock.h>
@@ -33,10 +35,11 @@
 namespace NYT::NRpc::NBus {
 
 using namespace NYT::NBus;
+using namespace NConcurrency;
+using namespace NTracing;
 using namespace NYPath;
 using namespace NYTree;
 using namespace NYson;
-using namespace NConcurrency;
 
 using NYT::FromProto;
 using NYT::ToProto;
@@ -145,6 +148,11 @@ public:
         }
 
         return requestCount;
+    }
+
+    IMemoryUsageTrackerPtr GetChannelMemoryTracker() override
+    {
+        return MemoryUsageTracker_;
     }
 
 private:
@@ -915,7 +923,7 @@ private:
                     message = TrackMemory(MemoryUsageTracker_, std::move(message));
                     if (MemoryUsageTracker_->IsExceeded()) {
                         auto error = TError(
-                            NRpc::EErrorCode::MemoryOverflow,
+                            NRpc::EErrorCode::MemoryPressure,
                             "Response is dropped due to high memory pressure");
                         requestControl->ProfileError(error);
                         NotifyError(
@@ -947,7 +955,7 @@ private:
         void OnStreamingPayloadMessage(TSharedRefArray message)
         {
             NProto::TStreamingPayloadHeader header;
-            if (!ParseStreamingPayloadHeader(message, &header)) {
+            if (!TryParseStreamingPayloadHeader(message, &header)) {
                 YT_LOG_ERROR("Error parsing streaming payload header");
                 return;
             }
@@ -1002,7 +1010,7 @@ private:
         void OnStreamingFeedbackMessage(TSharedRefArray message)
         {
             NProto::TStreamingFeedbackHeader header;
-            if (!ParseStreamingFeedbackHeader(message, &header)) {
+            if (!TryParseStreamingFeedbackHeader(message, &header)) {
                 YT_LOG_ERROR("Error parsing streaming feedback header");
                 return;
             }
@@ -1092,6 +1100,12 @@ private:
             if (requestControl->GetTimeout()) {
                 detailedError = detailedError
                     << TErrorAttribute("timeout", *requestControl->GetTimeout());
+            }
+
+            if (!detailedError.HasTracingAttributes()) {
+                if (auto tracingAttributes = requestControl->GetTracingAttributes()) {
+                    detailedError.SetTracingAttributes(*tracingAttributes);
+                }
             }
 
             YT_LOG_DEBUG(detailedError, "%v (RequestId: %v)",
@@ -1187,6 +1201,11 @@ private:
         NTracing::TCurrentTraceContextGuard GetTraceContextGuard() const
         {
             return TraceContext_.MakeTraceContextGuard();
+        }
+
+        std::optional<TTracingAttributes> GetTracingAttributes() const
+        {
+            return TraceContext_.GetTracingAttributes();
         }
 
         template <typename TLock>

@@ -19,6 +19,7 @@ message TOAuthToken {
 message TConnectionParams {
     optional string Endpoint = 1;
     optional string Database = 2;
+    optional bool EnableSsl = 5;
     // credentials
     oneof Credentials {
         TStaticCredentials StaticCredentials = 3;
@@ -33,10 +34,14 @@ message TReplicationConfig {
 
     message TTargetSpecific {
         message TTarget {
+            // in/out
             optional string SrcPath = 1;
             optional string DstPath = 2;
             optional string SrcStreamName = 3;
+            // out
             optional uint64 Id = 4;
+            optional uint32 LagMilliSeconds = 5;
+            optional float InitialScanProgress = 6; // pencentage
         }
 
         repeated TTarget Targets = 1;
@@ -59,6 +64,7 @@ message TReplicationConfig {
 message TReplicationState {
     message TStandBy {
         optional uint32 LagMilliSeconds = 1;
+        optional float InitialScanProgress = 2; // pencentage
     }
 
     message TPaused {
@@ -147,6 +153,7 @@ message TEvDropReplicationResult {
 
 message TEvDescribeReplication {
     optional NKikimrProto.TPathID PathId = 1;
+    optional bool IncludeStats = 2;
 }
 
 message TEvDescribeReplicationResult {

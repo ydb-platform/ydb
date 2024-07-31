@@ -63,7 +63,7 @@ async def write(request):
     logging.debug("write: {}".format(await request.read()))
     handle_auth(request)
 
-    folder_id = request.rel_url.query['folder_id']
+    folder_id = request.rel_url.query['folderId']
     service = request.rel_url.query['service']
 
     shard = _data_from_request(request).get_or_create(folder_id, folder_id, service)
@@ -126,6 +126,12 @@ def _dict_to_labels(body):
 @routes.post("/api/v2/projects/{project}/sensors/data")
 async def sensors_data(request):
     project = request.match_info["project"]
+    if project == "invalid":
+        return web.HTTPNotFound(text=f"Project {project} does not exist")
+
+    if project == "broken_json":
+        return web.Response(text="{ broken json", content_type="application/json")
+
     labels = _dict_to_labels(await request.json())
     labels["project"] = project
     return web.json_response({"vector": [
@@ -143,7 +149,7 @@ async def sensors_data(request):
 
 @routes.get("/metrics")
 async def metrics(request):
-    cluster = request.rel_url.query.get('cluster', None) or request.rel_url.query['folder_id']
+    cluster = request.rel_url.query.get('cluster', None) or request.rel_url.query['folderId']
     project = request.rel_url.query.get('project', cluster)
     service = request.rel_url.query['service']
 
@@ -157,7 +163,7 @@ async def metrics(request):
 
 @routes.post("/cleanup")
 async def cleanup(request):
-    cluster = request.rel_url.query.get('cluster', None) or request.rel_url.query.get('folder_id', None)
+    cluster = request.rel_url.query.get('cluster', None) or request.rel_url.query.get('folderId', None)
     project = request.rel_url.query.get('project', cluster)
     service = request.rel_url.query.get('service')
     request.app["features"] = {"response_code": 200}

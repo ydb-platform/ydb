@@ -3,7 +3,7 @@
  * nbtinsert.c
  *	  Item insertion in Lehman and Yao btrees for Postgres.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -19,6 +19,7 @@
 #include "access/nbtxlog.h"
 #include "access/transam.h"
 #include "access/xloginsert.h"
+#include "common/pg_prng.h"
 #include "lib/qunique.h"
 #include "miscadmin.h"
 #include "storage/lmgr.h"
@@ -29,7 +30,8 @@
 #define BTREE_FASTPATH_MIN_LEVEL	2
 
 
-static BTStack _bt_search_insert(Relation rel, BTInsertState insertstate);
+static BTStack _bt_search_insert(Relation rel, Relation heaprel,
+								 BTInsertState insertstate);
 static TransactionId _bt_check_unique(Relation rel, BTInsertState insertstate,
 									  Relation heapRel,
 									  IndexUniqueCheck checkUnique, bool *is_unique,
@@ -40,8 +42,9 @@ static OffsetNumber _bt_findinsertloc(Relation rel,
 									  bool indexUnchanged,
 									  BTStack stack,
 									  Relation heapRel);
-static void _bt_stepright(Relation rel, BTInsertState insertstate, BTStack stack);
-static void _bt_insertonpg(Relation rel, BTScanInsert itup_key,
+static void _bt_stepright(Relation rel, Relation heaprel,
+						  BTInsertState insertstate, BTStack stack);
+static void _bt_insertonpg(Relation rel, Relation heaprel, BTScanInsert itup_key,
 						   Buffer buf,
 						   Buffer cbuf,
 						   BTStack stack,
@@ -50,13 +53,13 @@ static void _bt_insertonpg(Relation rel, BTScanInsert itup_key,
 						   OffsetNumber newitemoff,
 						   int postingoff,
 						   bool split_only_page);
-static Buffer _bt_split(Relation rel, BTScanInsert itup_key, Buffer buf,
-						Buffer cbuf, OffsetNumber newitemoff, Size newitemsz,
-						IndexTuple newitem, IndexTuple orignewitem,
+static Buffer _bt_split(Relation rel, Relation heaprel, BTScanInsert itup_key,
+						Buffer buf, Buffer cbuf, OffsetNumber newitemoff,
+						Size newitemsz, IndexTuple newitem, IndexTuple orignewitem,
 						IndexTuple nposting, uint16 postingoff);
-static void _bt_insert_parent(Relation rel, Buffer buf, Buffer rbuf,
-							  BTStack stack, bool isroot, bool isonly);
-static Buffer _bt_newroot(Relation rel, Buffer lbuf, Buffer rbuf);
+static void _bt_insert_parent(Relation rel, Relation heaprel, Buffer buf,
+							  Buffer rbuf, BTStack stack, bool isroot, bool isonly);
+static Buffer _bt_newlevel(Relation rel, Relation heaprel, Buffer lbuf, Buffer rbuf);
 static inline bool _bt_pgaddtup(Page page, Size itemsize, IndexTuple itup,
 								OffsetNumber itup_off, bool newfirstdataitem);
 static void _bt_delete_or_dedup_one_page(Relation rel, Relation heapRel,
@@ -161,7 +164,7 @@ search:
 	 * searching from the root page.  insertstate.buf will hold a buffer that
 	 * is locked in exclusive mode afterwards.
 	 */
-	stack = _bt_search_insert(rel, &insertstate);
+	stack = _bt_search_insert(rel, heapRel, &insertstate);
 
 	/*
 	 * checkingunique inserts are not allowed to go ahead when two tuples with
@@ -254,8 +257,8 @@ search:
 		 */
 		newitemoff = _bt_findinsertloc(rel, &insertstate, checkingunique,
 									   indexUnchanged, stack, heapRel);
-		_bt_insertonpg(rel, itup_key, insertstate.buf, InvalidBuffer, stack,
-					   itup, insertstate.itemsz, newitemoff,
+		_bt_insertonpg(rel, heapRel, itup_key, insertstate.buf, InvalidBuffer,
+					   stack, itup, insertstate.itemsz, newitemoff,
 					   insertstate.postingoff, false);
 	}
 	else
@@ -311,7 +314,7 @@ search:
  * since each per-backend cache won't stay valid for long.
  */
 static BTStack
-_bt_search_insert(Relation rel, BTInsertState insertstate)
+_bt_search_insert(Relation rel, Relation heaprel, BTInsertState insertstate)
 {
 	Assert(insertstate->buf == InvalidBuffer);
 	Assert(!insertstate->bounds_valid);
@@ -328,7 +331,7 @@ _bt_search_insert(Relation rel, BTInsertState insertstate)
 
 			_bt_checkpage(rel, insertstate->buf);
 			page = BufferGetPage(insertstate->buf);
-			opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+			opaque = BTPageGetOpaque(page);
 
 			/*
 			 * Check if the page is still the rightmost leaf page and has
@@ -374,8 +377,8 @@ _bt_search_insert(Relation rel, BTInsertState insertstate)
 	}
 
 	/* Cannot use optimization -- descend tree, return proper descent stack */
-	return _bt_search(rel, insertstate->itup_key, &insertstate->buf, BT_WRITE,
-					  NULL);
+	return _bt_search(rel, heaprel, insertstate->itup_key, &insertstate->buf,
+					  BT_WRITE, NULL);
 }
 
 /*
@@ -397,9 +400,9 @@ _bt_search_insert(Relation rel, BTInsertState insertstate)
  * _bt_findinsertloc() to reuse most of the binary search work we do
  * here.
  *
- * Do not call here when there are NULL values in scan key.  NULL should be
- * considered unequal to NULL when checking for duplicates, but we are not
- * prepared to handle that correctly.
+ * This code treats NULLs as equal, unlike the default semantics for unique
+ * indexes.  So do not call here when there are NULL values in scan key and
+ * the index uses the default NULLS DISTINCT mode.
  */
 static TransactionId
 _bt_check_unique(Relation rel, BTInsertState insertstate, Relation heapRel,
@@ -427,7 +430,7 @@ _bt_check_unique(Relation rel, BTInsertState insertstate, Relation heapRel,
 	InitDirtySnapshot(SnapshotDirty);
 
 	page = BufferGetPage(insertstate->buf);
-	opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+	opaque = BTPageGetOpaque(page);
 	maxoff = PageGetMaxOffsetNumber(page);
 
 	/*
@@ -732,7 +735,7 @@ _bt_check_unique(Relation rel, BTInsertState insertstate, Relation heapRel,
 
 				nbuf = _bt_relandgetbuf(rel, nbuf, nblkno, BT_READ);
 				page = BufferGetPage(nbuf);
-				opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+				opaque = BTPageGetOpaque(page);
 				if (!P_IGNORE(opaque))
 					break;
 				if (P_RIGHTMOST(opaque))
@@ -807,9 +810,6 @@ _bt_check_unique(Relation rel, BTInsertState insertstate, Relation heapRel,
  *		If insertstate contains cached binary search bounds, we will take
  *		advantage of them.  This avoids repeating comparisons that we made in
  *		_bt_check_unique() already.
- *
- *		If there is not enough room on the page for the new tuple, we try to
- *		make room by removing any LP_DEAD tuples.
  */
 static OffsetNumber
 _bt_findinsertloc(Relation rel,
@@ -824,7 +824,7 @@ _bt_findinsertloc(Relation rel,
 	BTPageOpaque opaque;
 	OffsetNumber newitemoff;
 
-	opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+	opaque = BTPageGetOpaque(page);
 
 	/* Check 1/3 of a page restriction */
 	if (unlikely(insertstate->itemsz > BTMaxItemSize(page)))
@@ -887,10 +887,10 @@ _bt_findinsertloc(Relation rel,
 					_bt_compare(rel, itup_key, page, P_HIKEY) <= 0)
 					break;
 
-				_bt_stepright(rel, insertstate, stack);
+				_bt_stepright(rel, heapRel, insertstate, stack);
 				/* Update local state after stepping right */
 				page = BufferGetPage(insertstate->buf);
-				opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+				opaque = BTPageGetOpaque(page);
 				/* Assume duplicates (if checkingunique) */
 				uniquedup = true;
 			}
@@ -968,13 +968,13 @@ _bt_findinsertloc(Relation rel,
 
 			if (P_RIGHTMOST(opaque) ||
 				_bt_compare(rel, itup_key, page, P_HIKEY) != 0 ||
-				random() <= (MAX_RANDOM_VALUE / 100))
+				pg_prng_uint32(&pg_global_prng_state) <= (PG_UINT32_MAX / 100))
 				break;
 
-			_bt_stepright(rel, insertstate, stack);
+			_bt_stepright(rel, heapRel, insertstate, stack);
 			/* Update local state after stepping right */
 			page = BufferGetPage(insertstate->buf);
-			opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+			opaque = BTPageGetOpaque(page);
 		}
 	}
 
@@ -1024,15 +1024,17 @@ _bt_findinsertloc(Relation rel,
  * indexes.
  */
 static void
-_bt_stepright(Relation rel, BTInsertState insertstate, BTStack stack)
+_bt_stepright(Relation rel, Relation heaprel, BTInsertState insertstate,
+			  BTStack stack)
 {
 	Page		page;
 	BTPageOpaque opaque;
 	Buffer		rbuf;
 	BlockNumber rblkno;
 
+	Assert(heaprel != NULL);
 	page = BufferGetPage(insertstate->buf);
-	opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+	opaque = BTPageGetOpaque(page);
 
 	rbuf = InvalidBuffer;
 	rblkno = opaque->btpo_next;
@@ -1040,7 +1042,7 @@ _bt_stepright(Relation rel, BTInsertState insertstate, BTStack stack)
 	{
 		rbuf = _bt_relandgetbuf(rel, rbuf, rblkno, BT_WRITE);
 		page = BufferGetPage(rbuf);
-		opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+		opaque = BTPageGetOpaque(page);
 
 		/*
 		 * If this page was incompletely split, finish the split now.  We do
@@ -1050,7 +1052,7 @@ _bt_stepright(Relation rel, BTInsertState insertstate, BTStack stack)
 		 */
 		if (P_INCOMPLETE_SPLIT(opaque))
 		{
-			_bt_finish_split(rel, rbuf, stack);
+			_bt_finish_split(rel, heaprel, rbuf, stack);
 			rbuf = InvalidBuffer;
 			continue;
 		}
@@ -1101,6 +1103,7 @@ _bt_stepright(Relation rel, BTInsertState insertstate, BTStack stack)
  */
 static void
 _bt_insertonpg(Relation rel,
+			   Relation heaprel,
 			   BTScanInsert itup_key,
 			   Buffer buf,
 			   Buffer cbuf,
@@ -1122,7 +1125,7 @@ _bt_insertonpg(Relation rel,
 	IndexTuple	nposting = NULL;
 
 	page = BufferGetPage(buf);
-	opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+	opaque = BTPageGetOpaque(page);
 	isleaf = P_ISLEAF(opaque);
 	isroot = P_ISROOT(opaque);
 	isrightmost = P_RIGHTMOST(opaque);
@@ -1144,7 +1147,7 @@ _bt_insertonpg(Relation rel,
 
 	/*
 	 * Every internal page should have exactly one negative infinity item at
-	 * all times.  Only _bt_split() and _bt_newroot() should add items that
+	 * all times.  Only _bt_split() and _bt_newlevel() should add items that
 	 * become negative infinity items through truncation, since they're the
 	 * only routines that allocate new internal pages.
 	 */
@@ -1211,8 +1214,8 @@ _bt_insertonpg(Relation rel,
 		Assert(!split_only_page);
 
 		/* split the buffer into left and right halves */
-		rbuf = _bt_split(rel, itup_key, buf, cbuf, newitemoff, itemsz, itup,
-						 origitup, nposting, postingoff);
+		rbuf = _bt_split(rel, heaprel, itup_key, buf, cbuf, newitemoff, itemsz,
+						 itup, origitup, nposting, postingoff);
 		PredicateLockPageSplit(rel,
 							   BufferGetBlockNumber(buf),
 							   BufferGetBlockNumber(rbuf));
@@ -1235,7 +1238,7 @@ _bt_insertonpg(Relation rel,
 		 * page.
 		 *----------
 		 */
-		_bt_insert_parent(rel, buf, rbuf, stack, isroot, isonly);
+		_bt_insert_parent(rel, heaprel, buf, rbuf, stack, isroot, isonly);
 	}
 	else
 	{
@@ -1249,7 +1252,7 @@ _bt_insertonpg(Relation rel,
 		 * only one on its tree level, but was not the root, it may have been
 		 * the "fast root".  We need to ensure that the fast root link points
 		 * at or above the current page.  We can safely acquire a lock on the
-		 * metapage here --- see comments for _bt_newroot().
+		 * metapage here --- see comments for _bt_newlevel().
 		 */
 		if (unlikely(split_only_page))
 		{
@@ -1298,7 +1301,7 @@ _bt_insertonpg(Relation rel,
 		if (!isleaf)
 		{
 			Page		cpage = BufferGetPage(cbuf);
-			BTPageOpaque cpageop = (BTPageOpaque) PageGetSpecialPointer(cpage);
+			BTPageOpaque cpageop = BTPageGetOpaque(cpage);
 
 			Assert(P_INCOMPLETE_SPLIT(cpageop));
 			cpageop->btpo_flags &= ~BTP_INCOMPLETE_SPLIT;
@@ -1461,8 +1464,8 @@ _bt_insertonpg(Relation rel,
  *		The pin and lock on buf are maintained.
  */
 static Buffer
-_bt_split(Relation rel, BTScanInsert itup_key, Buffer buf, Buffer cbuf,
-		  OffsetNumber newitemoff, Size newitemsz, IndexTuple newitem,
+_bt_split(Relation rel, Relation heaprel, BTScanInsert itup_key, Buffer buf,
+		  Buffer cbuf, OffsetNumber newitemoff, Size newitemsz, IndexTuple newitem,
 		  IndexTuple orignewitem, IndexTuple nposting, uint16 postingoff)
 {
 	Buffer		rbuf;
@@ -1506,7 +1509,7 @@ _bt_split(Relation rel, BTScanInsert itup_key, Buffer buf, Buffer cbuf,
 	 * only workspace.
 	 */
 	origpage = BufferGetPage(buf);
-	oopaque = (BTPageOpaque) PageGetSpecialPointer(origpage);
+	oopaque = BTPageGetOpaque(origpage);
 	isleaf = P_ISLEAF(oopaque);
 	isrightmost = P_RIGHTMOST(oopaque);
 	maxoff = PageGetMaxOffsetNumber(origpage);
@@ -1542,7 +1545,7 @@ _bt_split(Relation rel, BTScanInsert itup_key, Buffer buf, Buffer cbuf,
 	/* Allocate temp buffer for leftpage */
 	leftpage = PageGetTempPage(origpage);
 	_bt_pageinit(leftpage, BufferGetPageSize(buf));
-	lopaque = (BTPageOpaque) PageGetSpecialPointer(leftpage);
+	lopaque = BTPageGetOpaque(leftpage);
 
 	/*
 	 * leftpage won't be the root when we're done.  Also, clear the SPLIT_END
@@ -1714,11 +1717,11 @@ _bt_split(Relation rel, BTScanInsert itup_key, Buffer buf, Buffer cbuf,
 	 * way because it avoids an unnecessary PANIC when either origpage or its
 	 * existing sibling page are corrupt.
 	 */
-	rbuf = _bt_getbuf(rel, P_NEW, BT_WRITE);
+	rbuf = _bt_allocbuf(rel, heaprel);
 	rightpage = BufferGetPage(rbuf);
 	rightpagenumber = BufferGetBlockNumber(rbuf);
 	/* rightpage was initialized by _bt_getbuf */
-	ropaque = (BTPageOpaque) PageGetSpecialPointer(rightpage);
+	ropaque = BTPageGetOpaque(rightpage);
 
 	/*
 	 * Finish off remaining leftpage special area fields.  They cannot be set
@@ -1889,7 +1892,7 @@ _bt_split(Relation rel, BTScanInsert itup_key, Buffer buf, Buffer cbuf,
 	{
 		sbuf = _bt_getbuf(rel, oopaque->btpo_next, BT_WRITE);
 		spage = BufferGetPage(sbuf);
-		sopaque = (BTPageOpaque) PageGetSpecialPointer(spage);
+		sopaque = BTPageGetOpaque(spage);
 		if (sopaque->btpo_prev != origpagenumber)
 		{
 			memset(rightpage, 0, BufferGetPageSize(rbuf));
@@ -1954,7 +1957,7 @@ _bt_split(Relation rel, BTScanInsert itup_key, Buffer buf, Buffer cbuf,
 	if (!isleaf)
 	{
 		Page		cpage = BufferGetPage(cbuf);
-		BTPageOpaque cpageop = (BTPageOpaque) PageGetSpecialPointer(cpage);
+		BTPageOpaque cpageop = BTPageGetOpaque(cpage);
 
 		cpageop->btpo_flags &= ~BTP_INCOMPLETE_SPLIT;
 		MarkBufferDirty(cbuf);
@@ -2094,12 +2097,15 @@ _bt_split(Relation rel, BTScanInsert itup_key, Buffer buf, Buffer cbuf,
  */
 static void
 _bt_insert_parent(Relation rel,
+				  Relation heaprel,
 				  Buffer buf,
 				  Buffer rbuf,
 				  BTStack stack,
 				  bool isroot,
 				  bool isonly)
 {
+	Assert(heaprel != NULL);
+
 	/*
 	 * Here we have to do something Lehman and Yao don't talk about: deal with
 	 * a root split and construction of a new root.  If our stack is empty
@@ -2119,8 +2125,8 @@ _bt_insert_parent(Relation rel,
 
 		Assert(stack == NULL);
 		Assert(isonly);
-		/* create a new root node and update the metapage */
-		rootbuf = _bt_newroot(rel, buf, rbuf);
+		/* create a new root node one level up and update the metapage */
+		rootbuf = _bt_newlevel(rel, heaprel, buf, rbuf);
 		/* release the split buffers */
 		_bt_relbuf(rel, rootbuf);
 		_bt_relbuf(rel, rbuf);
@@ -2141,7 +2147,7 @@ _bt_insert_parent(Relation rel,
 			BTPageOpaque opaque;
 
 			elog(DEBUG2, "concurrent ROOT page split");
-			opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+			opaque = BTPageGetOpaque(page);
 
 			/*
 			 * We should never reach here when a leaf page split takes place
@@ -2185,7 +2191,7 @@ _bt_insert_parent(Relation rel,
 		 * new downlink will be inserted at the correct offset. Even buf's
 		 * parent may have changed.
 		 */
-		pbuf = _bt_getstackbuf(rel, stack, bknum);
+		pbuf = _bt_getstackbuf(rel, heaprel, stack, bknum);
 
 		/*
 		 * Unlock the right child.  The left child will be unlocked in
@@ -2209,7 +2215,7 @@ _bt_insert_parent(Relation rel,
 									 RelationGetRelationName(rel), bknum, rbknum)));
 
 		/* Recursively insert into the parent */
-		_bt_insertonpg(rel, NULL, pbuf, buf, stack->bts_parent,
+		_bt_insertonpg(rel, heaprel, NULL, pbuf, buf, stack->bts_parent,
 					   new_item, MAXALIGN(IndexTupleSize(new_item)),
 					   stack->bts_offset + 1, 0, isonly);
 
@@ -2227,12 +2233,15 @@ _bt_insert_parent(Relation rel,
  *
  * On entry, 'lbuf' must be locked in write-mode.  On exit, it is unlocked
  * and unpinned.
+ *
+ * Caller must provide a valid heaprel, since finishing a page split requires
+ * allocating a new page if and when the parent page splits in turn.
  */
 void
-_bt_finish_split(Relation rel, Buffer lbuf, BTStack stack)
+_bt_finish_split(Relation rel, Relation heaprel, Buffer lbuf, BTStack stack)
 {
 	Page		lpage = BufferGetPage(lbuf);
-	BTPageOpaque lpageop = (BTPageOpaque) PageGetSpecialPointer(lpage);
+	BTPageOpaque lpageop = BTPageGetOpaque(lpage);
 	Buffer		rbuf;
 	Page		rpage;
 	BTPageOpaque rpageop;
@@ -2240,11 +2249,12 @@ _bt_finish_split(Relation rel, Buffer lbuf, BTStack stack)
 	bool		wasonly;
 
 	Assert(P_INCOMPLETE_SPLIT(lpageop));
+	Assert(heaprel != NULL);
 
 	/* Lock right sibling, the one missing the downlink */
 	rbuf = _bt_getbuf(rel, lpageop->btpo_next, BT_WRITE);
 	rpage = BufferGetPage(rbuf);
-	rpageop = (BTPageOpaque) PageGetSpecialPointer(rpage);
+	rpageop = BTPageGetOpaque(rpage);
 
 	/* Could this be a root split? */
 	if (!stack)
@@ -2271,7 +2281,7 @@ _bt_finish_split(Relation rel, Buffer lbuf, BTStack stack)
 	elog(DEBUG1, "finishing incomplete split of %u/%u",
 		 BufferGetBlockNumber(lbuf), BufferGetBlockNumber(rbuf));
 
-	_bt_insert_parent(rel, lbuf, rbuf, stack, wasroot, wasonly);
+	_bt_insert_parent(rel, heaprel, lbuf, rbuf, stack, wasroot, wasonly);
 }
 
 /*
@@ -2306,7 +2316,7 @@ _bt_finish_split(Relation rel, Buffer lbuf, BTStack stack)
  *		offset number bts_offset + 1.
  */
 Buffer
-_bt_getstackbuf(Relation rel, BTStack stack, BlockNumber child)
+_bt_getstackbuf(Relation rel, Relation heaprel, BTStack stack, BlockNumber child)
 {
 	BlockNumber blkno;
 	OffsetNumber start;
@@ -2322,11 +2332,12 @@ _bt_getstackbuf(Relation rel, BTStack stack, BlockNumber child)
 
 		buf = _bt_getbuf(rel, blkno, BT_WRITE);
 		page = BufferGetPage(buf);
-		opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+		opaque = BTPageGetOpaque(page);
 
+		Assert(heaprel != NULL);
 		if (P_INCOMPLETE_SPLIT(opaque))
 		{
-			_bt_finish_split(rel, buf, stack->bts_parent);
+			_bt_finish_split(rel, heaprel, buf, stack->bts_parent);
 			continue;
 		}
 
@@ -2412,7 +2423,7 @@ _bt_getstackbuf(Relation rel, BTStack stack, BlockNumber child)
 }
 
 /*
- *	_bt_newroot() -- Create a new root page for the index.
+ *	_bt_newlevel() -- Create a new level above root page.
  *
  *		We've just split the old root page and need to create a new one.
  *		In order to do this, we add a new root page to the file, then lock
@@ -2430,7 +2441,7 @@ _bt_getstackbuf(Relation rel, BTStack stack, BlockNumber child)
  *		lbuf, rbuf & rootbuf.
  */
 static Buffer
-_bt_newroot(Relation rel, Buffer lbuf, Buffer rbuf)
+_bt_newlevel(Relation rel, Relation heaprel, Buffer lbuf, Buffer rbuf)
 {
 	Buffer		rootbuf;
 	Page		lpage,
@@ -2453,10 +2464,10 @@ _bt_newroot(Relation rel, Buffer lbuf, Buffer rbuf)
 	lbkno = BufferGetBlockNumber(lbuf);
 	rbkno = BufferGetBlockNumber(rbuf);
 	lpage = BufferGetPage(lbuf);
-	lopaque = (BTPageOpaque) PageGetSpecialPointer(lpage);
+	lopaque = BTPageGetOpaque(lpage);
 
 	/* get a new root page */
-	rootbuf = _bt_getbuf(rel, P_NEW, BT_WRITE);
+	rootbuf = _bt_allocbuf(rel, heaprel);
 	rootpage = BufferGetPage(rootbuf);
 	rootblknum = BufferGetBlockNumber(rootbuf);
 
@@ -2494,11 +2505,11 @@ _bt_newroot(Relation rel, Buffer lbuf, Buffer rbuf)
 		_bt_upgrademetapage(metapg);
 
 	/* set btree special data */
-	rootopaque = (BTPageOpaque) PageGetSpecialPointer(rootpage);
+	rootopaque = BTPageGetOpaque(rootpage);
 	rootopaque->btpo_prev = rootopaque->btpo_next = P_NONE;
 	rootopaque->btpo_flags = BTP_ROOT;
 	rootopaque->btpo_level =
-		((BTPageOpaque) PageGetSpecialPointer(lpage))->btpo_level + 1;
+		(BTPageGetOpaque(lpage))->btpo_level + 1;
 	rootopaque->btpo_cycleid = 0;
 
 	/* update metapage data */
@@ -2682,7 +2693,7 @@ _bt_delete_or_dedup_one_page(Relation rel, Relation heapRel,
 	Buffer		buffer = insertstate->buf;
 	BTScanInsert itup_key = insertstate->itup_key;
 	Page		page = BufferGetPage(buffer);
-	BTPageOpaque opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+	BTPageOpaque opaque = BTPageGetOpaque(page);
 
 	Assert(P_ISLEAF(opaque));
 	Assert(simpleonly || itup_key->heapkeyspace);
@@ -2766,8 +2777,8 @@ _bt_delete_or_dedup_one_page(Relation rel, Relation heapRel,
 
 	/* Perform deduplication pass (when enabled and index-is-allequalimage) */
 	if (BTGetDeduplicateItems(rel) && itup_key->allequalimage)
-		_bt_dedup_pass(rel, buffer, heapRel, insertstate->itup,
-					   insertstate->itemsz, (indexUnchanged || uniquedup));
+		_bt_dedup_pass(rel, buffer, insertstate->itup, insertstate->itemsz,
+					   (indexUnchanged || uniquedup));
 }
 
 /*
@@ -2813,6 +2824,8 @@ _bt_simpledel_pass(Relation rel, Buffer buffer, Relation heapRel,
 								&ndeadblocks);
 
 	/* Initialize tableam state that describes index deletion operation */
+	delstate.irel = rel;
+	delstate.iblknum = BufferGetBlockNumber(buffer);
 	delstate.bottomup = false;
 	delstate.bottomupfreespace = 0;
 	delstate.ndeltids = 0;

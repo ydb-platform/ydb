@@ -36,7 +36,7 @@
  * the probability of unintended failure) than to fix the total time
  * spent.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -50,8 +50,10 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "common/pg_prng.h"
 #include "port/atomics.h"
 #include "storage/s_lock.h"
+#include "utils/wait_event.h"
 
 #define MIN_SPINS_PER_DELAY 10
 #define MAX_SPINS_PER_DELAY 1000
@@ -135,7 +137,17 @@ perform_spin_delay(SpinDelayStatus *status)
 		if (status->cur_delay == 0) /* first time to delay? */
 			status->cur_delay = MIN_DELAY_USEC;
 
+		/*
+		 * Once we start sleeping, the overhead of reporting a wait event is
+		 * justified. Actively spinning easily stands out in profilers, but
+		 * sleeping with an exponential backoff is harder to spot...
+		 *
+		 * We might want to report something more granular at some point, but
+		 * this is better than nothing.
+		 */
+		pgstat_report_wait_start(WAIT_EVENT_SPIN_DELAY);
 		pg_usleep(status->cur_delay);
+		pgstat_report_wait_end();
 
 #if defined(S_LOCK_TEST)
 		fprintf(stdout, "*");
@@ -144,7 +156,7 @@ perform_spin_delay(SpinDelayStatus *status)
 
 		/* increase delay by a random fraction between 1X and 2X */
 		status->cur_delay += (int) (status->cur_delay *
-									((double) random() / (double) MAX_RANDOM_VALUE) + 0.5);
+									pg_prng_double(&pg_global_prng_state) + 0.5);
 		/* wrap back to minimum delay when max is exceeded */
 		if (status->cur_delay > MAX_DELAY_USEC)
 			status->cur_delay = MIN_DELAY_USEC;
@@ -219,71 +231,6 @@ update_spins_per_delay(int shared_spins_per_delay)
 }
 
 
-/*
- * Various TAS implementations that cannot live in s_lock.h as no inline
- * definition exists (yet).
- * In the future, get rid of tas.[cso] and fold it into this file.
- *
- * If you change something here, you will likely need to modify s_lock.h too,
- * because the definitions for these are split between this file and s_lock.h.
- */
-
-
-#ifdef HAVE_SPINLOCKS			/* skip spinlocks if requested */
-
-
-#if defined(__GNUC__)
-
-/*
- * All the gcc flavors that are not inlined
- */
-
-
-/*
- * Note: all the if-tests here probably ought to be testing gcc version
- * rather than platform, but I don't have adequate info to know what to
- * write.  Ideally we'd flush all this in favor of the inline version.
- */
-#if defined(__m68k__) && !defined(__linux__)
-/* really means: extern int tas(slock_t* **lock); */
-static void
-tas_dummy()
-{
-	__asm__ __volatile__(
-#if (defined(__NetBSD__) || defined(__OpenBSD__)) && defined(__ELF__)
-/* no underscore for label and % for registers */
-						 "\
-.global		tas 				\n\
-tas:							\n\
-			movel	%sp@(0x4),%a0	\n\
-			tas 	%a0@		\n\
-			beq 	_success	\n\
-			moveq	#-128,%d0	\n\
-			rts 				\n\
-_success:						\n\
-			moveq	#0,%d0		\n\
-			rts 				\n"
-#else
-						 "\
-.global		_tas				\n\
-_tas:							\n\
-			movel	sp@(0x4),a0	\n\
-			tas 	a0@			\n\
-			beq 	_success	\n\
-			moveq 	#-128,d0	\n\
-			rts					\n\
-_success:						\n\
-			moveq 	#0,d0		\n\
-			rts					\n"
-#endif							/* (__NetBSD__ || __OpenBSD__) && __ELF__ */
-		);
-}
-#endif							/* __m68k__ && !__linux__ */
-#endif							/* not __GNUC__ */
-#endif							/* HAVE_SPINLOCKS */
-
-
-
 /*****************************************************************************/
 #if defined(S_LOCK_TEST)
 
@@ -303,7 +250,7 @@ volatile struct test_lock_struct test_lock;
 int
 main()
 {
-	srandom((unsigned int) time(NULL));
+	pg_prng_seed(&pg_global_prng_state, (uint64) time(NULL));
 
 	test_lock.pad1 = test_lock.pad2 = 0x44;
 
@@ -368,7 +315,7 @@ main()
 	printf("             if S_LOCK() and TAS() are working.\n");
 	fflush(stdout);
 
-	s_lock(&test_lock.lock, __FILE__, __LINE__);
+	s_lock(&test_lock.lock, __FILE__, __LINE__, __func__);
 
 	printf("S_LOCK_TEST: failed, lock not locked\n");
 	return 1;

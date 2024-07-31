@@ -39,49 +39,78 @@ namespace NKikimr::NStorage {
         StaticNodeSessionId = sessionId;
     }
 
-    void TDistributedConfigKeeper::OnStaticNodeDisconnected(ui32 nodeId, TActorId /*sessionId*/) {
-        Y_ABORT_UNLESS(nodeId == ConnectedToStaticNode);
+    void TDistributedConfigKeeper::OnStaticNodeDisconnected(ui32 nodeId, TActorId sessionId) {
+        if (nodeId != ConnectedToStaticNode || (StaticNodeSessionId && StaticNodeSessionId != sessionId)) {
+            return; // possible race with unsubscription
+        }
         ConnectedToStaticNode = 0;
         StaticNodeSessionId = {};
         ConnectToStaticNode();
     }
 
     void TDistributedConfigKeeper::Handle(TEvNodeWardenDynamicConfigPush::TPtr ev) {
+        if (ev->Sender.NodeId() != ConnectedToStaticNode || !StaticNodeSessionId || ev->InterconnectSession != StaticNodeSessionId) {
+            return; // this may be a race with unsubscription
+        }
         auto& record = ev->Get()->Record;
-        ApplyStorageConfig(record.GetConfig());
+        if (record.HasConfig()) {
+            ApplyStorageConfig(record.GetConfig());
+        }
+        if (record.GetNoQuorum()) {
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, StaticNodeSessionId, SelfId(),
+                nullptr, 0));
+            ConnectedToStaticNode = 0;
+            StaticNodeSessionId = {};
+            ConnectToStaticNode();
+        }
     }
 
-    void TDistributedConfigKeeper::ApplyConfigUpdateToDynamicNodes() {
+    void TDistributedConfigKeeper::ApplyConfigUpdateToDynamicNodes(bool drop) {
         for (const auto& [sessionId, actorId] : DynamicConfigSubscribers) {
             PushConfigToDynamicNode(actorId, sessionId);
+        }
+        if (drop) {
+            Y_ABORT_UNLESS(!PartOfNodeQuorum());
+            DynamicConfigSubscribers.clear();
+            UnsubscribeQueue.insert(ConnectedDynamicNodes.begin(), ConnectedDynamicNodes.end());
+            ConnectedDynamicNodes.clear();
         }
     }
 
     void TDistributedConfigKeeper::OnDynamicNodeDisconnected(ui32 nodeId, TActorId sessionId) {
         ConnectedDynamicNodes.erase(nodeId);
         DynamicConfigSubscribers.erase(sessionId);
+        UnsubscribeQueue.insert(nodeId);
     }
 
     void TDistributedConfigKeeper::HandleDynamicConfigSubscribe(STATEFN_SIG) {
         const TActorId sessionId = ev->InterconnectSession;
         Y_ABORT_UNLESS(sessionId);
-        const ui32 peerNodeId = ev->Sender.NodeId();
-        if (const auto [it, inserted] = SubscribedSessions.try_emplace(peerNodeId); inserted) {
-            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Subscribe, IEventHandle::FlagTrackDelivery,
-                sessionId, SelfId(), nullptr, 0));
+
+        const bool partOfNodeQuorum = PartOfNodeQuorum();
+        if (!partOfNodeQuorum || StorageConfig) {
+            PushConfigToDynamicNode(ev->Sender, sessionId);
         }
+        if (!partOfNodeQuorum) {
+            return;
+        }
+
+        const ui32 peerNodeId = ev->Sender.NodeId();
+        SubscribeToPeerNode(peerNodeId, sessionId);
         ConnectedDynamicNodes.insert(peerNodeId);
         const auto [_, inserted] = DynamicConfigSubscribers.try_emplace(sessionId, ev->Sender);
         Y_ABORT_UNLESS(inserted);
-
-        if (StorageConfig) {
-            PushConfigToDynamicNode(ev->Sender, sessionId);
-        }
     }
 
     void TDistributedConfigKeeper::PushConfigToDynamicNode(TActorId actorId, TActorId sessionId) {
         auto ev = std::make_unique<TEvNodeWardenDynamicConfigPush>();
-        ev->Record.MutableConfig()->CopyFrom(*StorageConfig);
+        auto& record = ev->Record;
+        if (StorageConfig) {
+            record.MutableConfig()->CopyFrom(*StorageConfig);
+        }
+        if (!PartOfNodeQuorum()) {
+            ev->Record.SetNoQuorum(true);
+        }
         auto handle = std::make_unique<IEventHandle>(actorId, SelfId(), ev.release());
         handle->Rewrite(TEvInterconnect::EvForward, sessionId);
         TActivationContext::Send(handle.release());

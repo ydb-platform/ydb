@@ -1,12 +1,18 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include "replication.h"
+
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/tx/replication/common/worker_id.h>
+
+#include <util/generic/hash.h>
+
+#include <optional>
 
 namespace NKikimr::NReplication::NController {
 
@@ -25,6 +31,7 @@ struct TEvPrivate {
         EvResolveSecretResult,
         EvAlterDstResult,
         EvRemoveWorker,
+        EvDescribeTargetsResult,
 
         EvEnd,
     };
@@ -32,8 +39,20 @@ struct TEvPrivate {
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
 
     struct TEvDiscoveryTargetsResult: public TEventLocal<TEvDiscoveryTargetsResult, EvDiscoveryTargetsResult> {
-        using TAddEntry = std::pair<NYdb::NScheme::TSchemeEntry, TString>; // src, dst
-        using TFailedEntry = std::pair<TString, NYdb::TStatus>; // src, error
+        struct TAddEntry {
+            TString SrcPath;
+            TString DstPath;
+            TReplication::ETargetKind Kind;
+
+            explicit TAddEntry(const TString& srcPath, const TString& dstPath, TReplication::ETargetKind kind);
+        };
+
+        struct TFailedEntry {
+            TString SrcPath;
+            NYdb::TStatus Error;
+
+            explicit TFailedEntry(const TString& srcPath, const NYdb::TStatus& error);
+        };
 
         const ui64 ReplicationId;
         TVector<TAddEntry> ToAdd;
@@ -188,6 +207,17 @@ struct TEvPrivate {
         const TWorkerId Id;
 
         explicit TEvRemoveWorker(ui64 rid, ui64 tid, ui64 wid);
+        TString ToString() const override;
+    };
+
+    struct TEvDescribeTargetsResult: public TEventLocal<TEvDescribeTargetsResult, EvDescribeTargetsResult> {
+        using TResult = THashMap<ui64, std::optional<NYdb::NTable::TDescribeTableResult>>;
+
+        const TActorId Sender;
+        const ui64 ReplicationId;
+        TResult Result;
+
+        explicit TEvDescribeTargetsResult(const TActorId& sender, ui64 rid, TResult&& result);
         TString ToString() const override;
     };
 

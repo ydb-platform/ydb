@@ -3,10 +3,10 @@
 При помощи команды ```ALTER TABLE``` можно изменить состав колонок и дополнительные параметры таблицы. В одной команде можно указать несколько действий. В общем случае команда ```ALTER TABLE``` выглядит так:
 
 ```sql
-ALTER TABLE table_name action1, action2, ..., actionN;
+ALTER TABLE <table_name> <action1>, <action2>, ..., <actionN>;
 ```
 
-```action``` — это любое действие по изменению таблицы, из описанных ниже.
+```<action>``` — это любое действие по изменению таблицы, из описанных ниже.
 
 ## Изменение состава колонок {#columns}
 
@@ -26,7 +26,9 @@ ALTER TABLE episodes DROP column is_deleted;
 
 {% if feature_secondary_index %}
 
-## Добавление или удаление вторичного индекса {#secondary-index}
+## Вторичные индексы {#secondary-index}
+
+### Добавление индекса {#add-index}
 
 ```ADD INDEX``` — добавляет индекс с указанным именем и типом для заданного набора колонок. Приведенный ниже код добавит глобальный индекс с именем ```title_index``` для колонки ```title```.
 
@@ -34,9 +36,61 @@ ALTER TABLE episodes DROP column is_deleted;
 ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 ```
 
-Могут быть указаны все параметры индекса, описанные в команде [`CREATE TABLE`](../create_table#secondary_index)
+Могут быть указаны все параметры индекса, описанные в команде [`CREATE TABLE`](../create_table.md#secondary_index)
 
-Удаление индекса:
+{% if backend_name == "YDB" %}
+
+Также добавить вторичный индекс можно с помощью команды {% if oss == "true" %}[table index](../../../../reference/ydb-cli/commands/secondary_index.md#add){% else %}table index{% endif %} {{ ydb-short-name }} CLI.
+
+{% endif %}
+
+### Изменение параметров индекса {#alter-index}
+
+Индексы имеют параметры, зависящие от типа, которые можно настраивать. Глобальные индексы, [синхронные]({{ concept_secondary_index }}#sync) или [асинхронные]({{ concept_secondary_index }}#async), реализованы в виде скрытых таблиц, и их параметры автоматического партиционирования можно регулировать так же, как и [настройки обычных таблиц](#additional-alter).
+
+{% note info %}
+
+В настоящее время задание настроек партиционирования вторичных индексов при создании индекса не поддерживается ни в операторе [`ALTER TABLE ADD INDEX`](#add-index), ни в операторе [`CREATE TABLE INDEX`](../create_table.md#secondary_index).
+
+{% endnote %}
+
+```sql
+ALTER TABLE <table_name> ALTER INDEX <index_name> SET <partitioning_setting_name> <value>;
+ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<partitioning_setting_name_1> = <value_1>, ...);
+```
+
+* `<table_name>` - имя таблицы, индекс которой нужно изменить. 
+
+* `<index_name>` - имя индекса, который нужно изменить.
+
+* `<partitioning_setting_name>` - имя изменяемого параметра, который должен быть одним из следующих:
+  * [AUTO_PARTITIONING_BY_SIZE]({{ concept_table }}#auto_partitioning_by_size)
+  * [AUTO_PARTITIONING_BY_LOAD]({{ concept_table }}#auto_partitioning_by_load)
+  * [AUTO_PARTITIONING_PARTITION_SIZE_MB]({{ concept_table }}#auto_partitioning_partition_size_mb)
+  * [AUTO_PARTITIONING_MIN_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_min_partitions_count)
+  * [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_max_partitions_count)
+
+{% note info %}
+
+Эти настройки нельзя [вернуть к исходным](#additional-reset).
+
+{% endnote %}
+
+* `<value>` - новое значение параметра. Возможные значения включают:
+    * `ENABLED` или `DISABLED` для параметров `AUTO_PARTITIONING_BY_SIZE` и `AUTO_PARTITIONING_BY_LOAD`
+    * для остальных параметров — целое число типа `Uint64`
+
+#### Пример
+
+Код из следующего примера включает автоматическое партиционирование по нагрузке для индекса с именем `title_index` в таблице `series` и устанавливает ему минимальное количество партиций равным 5:
+```sql
+ALTER TABLE `series` ALTER INDEX `title_index` SET (
+    AUTO_PARTITIONING_BY_LOAD = ENABLED,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 5
+);
+```
+
+### Удаление индекса {#drop-index}
 
 ```DROP INDEX``` — удаляет индекс с указанным именем. Приведенный ниже код удалит индекс с именем ```title_index```.
 
@@ -44,17 +98,21 @@ ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 ALTER TABLE `series` DROP INDEX `title_index`;
 ```
 
-Также добавить или удалить вторичный индекс можно с помощью команды [table index](https://ydb.tech/ru/docs/reference/ydb-cli/commands/secondary_index) {{ ydb-short-name }} CLI.
+{% if backend_name == "YDB" %}
 
-## Переименование вторичного индекса {#rename-secondary-index}
+Также удалить вторичный индекс можно с помощью команды {% if oss == "true" %}[table index](../../../../reference/ydb-cli/commands/secondary_index.md#drop){% else %}table index{% endif %} {{ ydb-short-name }} CLI.
+
+{% endif %}
+
+### Переименование индекса {#rename-index}
 
 `RENAME INDEX` — переименовывает индекс с указанным именем.
 
 Если индекс с новым именем существует, будет возвращена ошибка.
 
-{% if backend_name == YDB %}
+{% if backend_name == "YDB" %}
 
-Возможность атомарной замены индекса под нагрузкой поддерживается командой [{{ ydb-cli }} table index rename](../../../../reference/ydb-cli/commands/secondary_index.md#rename) {{ ydb-short-name }} CLI и специализированными методами {{ ydb-short-name }} SDK.
+Возможность атомарной замены индекса под нагрузкой поддерживается командой {% if oss == "true" %}[{{ ydb-cli }} table index rename](../../../../reference/ydb-cli/commands/secondary_index.md#rename){% else %}{{ ydb-cli }} table index rename{% endif %} {{ ydb-short-name }} CLI и специализированными методами {{ ydb-short-name }} SDK.
 
 {% endif %}
 
@@ -70,7 +128,7 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
 
 ## Добавление или удаление потока изменений {#changefeed}
 
-`ADD CHANGEFEED <name> WITH (option = value[, ...])` — добавляет [поток изменений (changefeed)](../../../../concepts/cdc) с указанным именем и параметрами.
+`ADD CHANGEFEED <name> WITH (<option> = <value>[, ...])` — добавляет {% if oss == "true" %}[поток изменений (changefeed)](../../../../concepts/cdc){% else %}поток изменений (changefeed){% endif %} с указанным именем и параметрами.
 
 ### Параметры потока изменений {#changefeed-options}
 
@@ -81,15 +139,15 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
   * `OLD_IMAGE` — будут записаны значения всех столбцов, предшествующие изменению.
   * `NEW_AND_OLD_IMAGES` - комбинация режимов `NEW_IMAGE` и `OLD_IMAGE`. Будут записаны значения всех столбцов _до_ и _в результате_ изменения.
 * `FORMAT` — формат данных, в котором будут записаны данные.
-  * `JSON` — записывать данные в формате [JSON](../../../../concepts/cdc#json-record-structure).
+  * `JSON` — записывать данные в формате {% if oss == "true" %}[JSON](../../../../concepts/cdc.md#json-record-structure){% else %}JSON{% endif %}.
+  * `DEBEZIUM_JSON` — записывать данные в {% if oss == "true" %}[JSON-формате, аналогичном Debezium формату](../../../../concepts/cdc.md#debezium-json-record-structure){% else %}JSON-формате, аналогичном Debezium формату{% endif %}.
 {% if audience == "tech" %}
-  * `DYNAMODB_STREAMS_JSON` — записывать данные в [JSON-формате, совместимом с Amazon DynamoDB Streams](../../../../concepts/cdc#dynamodb-streams-json-record-structure).
-  * `DEBEZIUM_JSON` — записывать данные в [JSON-формате, аналогичном Debezium формату](../../../../concepts/cdc#debezium-json-record-structure).
+  * `DYNAMODB_STREAMS_JSON` — записывать данные в {% if oss == "true" %}[JSON-формате, совместимом с Amazon DynamoDB Streams](../../../../concepts/cdc#dynamodb-streams-json-record-structure){% else %}JSON-формате, совместимом с Amazon DynamoDB Streams{% endif %}.
 {% endif %}
-* `VIRTUAL_TIMESTAMPS` — включение-выключение [виртуальных меток времени](../../../../concepts/cdc#virtual-timestamps). По умолчанию выключено.
-* `RETENTION_PERIOD` — [время хранения записей](../../../../concepts/cdc#retention-period). Тип значения — `Interval`, значение по умолчанию — 24 часа (`Interval('PT24H')`).
-* `TOPIC_MIN_ACTIVE_PARTITIONS` — [количество партиций топика](../../../../concepts/cdc#topic-partitions). По умолчанию количество партиций топика равно количеству партиций таблицы.
-* `INITIAL_SCAN` — включение-выключение [первоначального сканирования](../../../../concepts/cdc#initial-scan) таблицы. По умолчанию выключено.
+* `VIRTUAL_TIMESTAMPS` — включение-выключение {% if oss == "true" %}[виртуальных меток времени](../../../../concepts/cdc.md#virtual-timestamps){% else %}виртуальных меток времени{% endif %}. По умолчанию выключено.
+* `RETENTION_PERIOD` — {% if oss == "true" %}[время хранения записей](../../../../concepts/cdc.md#retention-period){% else %}время хранения записей{% endif %}. Тип значения — `Interval`, значение по умолчанию — 24 часа (`Interval('PT24H')`).
+* `TOPIC_MIN_ACTIVE_PARTITIONS` — {% if oss == "true" %}[количество партиций топика](../../../../concepts/cdc.md#topic-partitions){% else %}количество партиций топика{% endif %}. По умолчанию количество партиций топика равно количеству партиций таблицы.
+* `INITIAL_SCAN` — включение-выключение {% if oss == "true" %}[первоначального сканирования](../../../../concepts/cdc.md#initial-scan){% else %}первоначального сканирования{% endif %} таблицы. По умолчанию выключено.
 {% if audience == "tech" %}
 * `AWS_REGION` — значение, которое будет записано в поле `awsRegion`. Применимо только совместно с форматом `DYNAMODB_STREAMS_JSON`.
 {% endif %}
@@ -146,7 +204,7 @@ ALTER TABLE `series` DROP CHANGEFEED `updates_feed`;
 ## Переименование таблицы {#rename}
 
 ```sql
-ALTER TABLE old_table_name RENAME TO new_table_name;
+ALTER TABLE <old_table_name> RENAME TO <new_table_name>;
 ```
 
 Если таблица с новым именем существует, будет возвращена ошибка. Возможность транзакционной подмены таблицы под нагрузкой поддерживается специализированными методами в CLI и SDK.
@@ -199,7 +257,7 @@ ALTER TABLE series_with_families ALTER FAMILY default SET DATA "hdd";
 
 {% endnote %}
 
-Могут быть указаны все параметры группы колонок, описанные в команде [`CREATE TABLE`](create_table#column-family)
+Могут быть указаны все параметры группы колонок, описанные в команде [`CREATE TABLE`](create_table.md#column-family)
 
 
 ## Изменение дополнительных параметров таблицы {#additional-alter}
@@ -209,10 +267,10 @@ ALTER TABLE series_with_families ALTER FAMILY default SET DATA "hdd";
 В общем случае команда для изменения любого параметра таблицы выглядит следующим образом:
 
 ```sql
-ALTER TABLE table_name SET (key = value);
+ALTER TABLE <table_name> SET (<key> = <value>);
 ```
 
-```key``` — имя параметра, ```value``` — его новое значение.
+```<key>``` — имя параметра, ```<value>``` — его новое значение.
 
 Например, такая команда выключит автоматическое партиционирование таблицы:
 
@@ -227,10 +285,10 @@ ALTER TABLE series SET (AUTO_PARTITIONING_BY_SIZE = DISABLED);
 Команда для сброса параметра таблицы выглядит следующим образом:
 
 ```sql
-ALTER TABLE table_name RESET (key);
+ALTER TABLE <table_name> RESET (<key>);
 ```
 
-```key``` — имя параметра.
+```<key>``` — имя параметра.
 
 Например, такая команда сбросит (удалит) настройки TTL для таблицы:
 

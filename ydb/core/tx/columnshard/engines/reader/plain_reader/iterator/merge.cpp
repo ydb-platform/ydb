@@ -30,8 +30,7 @@ void TBaseMergeTask::PrepareResultBatch() {
         return;
     }
     {
-        ResultBatch = NArrow::ExtractColumns(ResultBatch, Context->GetProgramInputColumns()->GetColumnNamesVector());
-        AFL_VERIFY(ResultBatch);
+        ResultBatch = NArrow::TColumnOperator().VerifyIfAbsent().Extract(ResultBatch, Context->GetProgramInputColumns()->GetColumnNamesVector());
         AFL_VERIFY((ui32)ResultBatch->num_columns() == Context->GetProgramInputColumns()->GetColumnNamesVector().size());
         NArrow::TStatusValidator::Validate(Context->GetReadMetadata()->GetProgram().ApplyProgram(ResultBatch));
     }
@@ -56,10 +55,10 @@ bool TBaseMergeTask::DoApply(IDataReader& indexedDataRead) const {
     return true;
 }
 
-bool TStartMergeTask::DoExecute() {
+TConclusionStatus TStartMergeTask::DoExecuteImpl() {
     if (OnlyEmptySources) {
         ResultBatch = nullptr;
-        return true;
+        return TConclusionStatus::Success();
     }
     bool sourcesInMemory = true;
     for (auto&& i : Sources) {
@@ -72,10 +71,9 @@ bool TStartMergeTask::DoExecute() {
         TMemoryProfileGuard mGuard("SCAN_PROFILE::MERGE::EXCLUSIVE", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
         auto& container = Sources.begin()->second->GetStageResult().GetBatch();
         if (container && container->num_rows()) {
-            ResultBatch = container->BuildTable();
+            ResultBatch = container->BuildTableVerified();
             LastPK = Sources.begin()->second->GetLastPK();
-            ResultBatch = NArrow::ExtractColumnsValidate(ResultBatch, Context->GetProgramInputColumns()->GetColumnNamesVector());
-            AFL_VERIFY(ResultBatch)("info", Context->GetProgramInputColumns()->GetSchema()->ToString());
+            ResultBatch = NArrow::TColumnOperator().VerifyIfAbsent().Extract(ResultBatch, Context->GetProgramInputColumns()->GetColumnNamesVector());
             Context->GetCommonContext()->GetCounters().OnNoScanInterval(ResultBatch->num_rows());
             if (Context->GetCommonContext()->IsReverse()) {
                 ResultBatch = NArrow::ReverseRecords(ResultBatch);
@@ -84,22 +82,28 @@ bool TStartMergeTask::DoExecute() {
         }
         Sources.clear();
         AFL_VERIFY(!!LastPK == (!!ResultBatch && ResultBatch->num_rows()));
-        return true;
+        return TConclusionStatus::Success();
     }
     TMemoryProfileGuard mGuard("SCAN_PROFILE::MERGE::COMMON", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
     AFL_VERIFY(!Merger);
     Merger = Context->BuildMerger();
-    for (auto&& [_, i] : Sources) {
-        if (auto rb = i->GetStageResult().GetBatch()) {
-            Merger->AddSource(rb, i->GetStageResult().GetNotAppliedFilter());
+    {
+        bool isEmpty = true;
+        for (auto&& [_, i] : Sources) {
+            if (auto rb = i->GetStageResult().GetBatch()) {
+                if (!i->GetStageResult().IsEmpty()) {
+                    isEmpty = false;
+                }
+                Merger->AddSource(rb, i->GetStageResult().GetNotAppliedFilter());
+            }
+        }
+        AFL_VERIFY(Merger->GetSourcesCount() <= Sources.size());
+        if (Merger->GetSourcesCount() == 0 || isEmpty) {
+            ResultBatch = nullptr;
+            return TConclusionStatus::Success();
         }
     }
-    AFL_VERIFY(Merger->GetSourcesCount() <= Sources.size());
-    if (Merger->GetSourcesCount() == 0) {
-        ResultBatch = nullptr;
-        return true;
-    }
-    Merger->PutControlPoint(MergingContext->GetFinish());
+    Merger->PutControlPoint(MergingContext->GetFinish(), false);
     Merger->SkipToLowerBound(MergingContext->GetStart(), MergingContext->GetIncludeStart());
     const ui32 originalSourcesCount = Sources.size();
     Sources.clear();
@@ -126,7 +130,7 @@ bool TStartMergeTask::DoExecute() {
     }
     AFL_VERIFY(!!LastPK == (!!ResultBatch && ResultBatch->num_rows()));
     PrepareResultBatch();
-    return true;
+    return TConclusionStatus::Success();
 }
 
 TStartMergeTask::TStartMergeTask(const std::shared_ptr<TMergingContext>& mergingContext, const std::shared_ptr<TSpecialReadContext>& readContext, THashMap<ui32, std::shared_ptr<IDataSource>>&& sources)
@@ -143,7 +147,7 @@ TStartMergeTask::TStartMergeTask(const std::shared_ptr<TMergingContext>& merging
     }
 }
 
-bool TContinueMergeTask::DoExecute() {
+TConclusionStatus TContinueMergeTask::DoExecuteImpl() {
     TMemoryProfileGuard mGuard("SCAN_PROFILE::MERGE::CONTINUE", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
     std::optional<NArrow::NMerger::TCursor> lastResultPosition = DrainMergerLinearScan(Context->ReadSequentiallyBufferSize);
     if (lastResultPosition) {
@@ -151,7 +155,7 @@ bool TContinueMergeTask::DoExecute() {
     }
     AFL_VERIFY(!!LastPK == (!!ResultBatch && ResultBatch->num_rows()));
     PrepareResultBatch();
-    return true;
+    return TConclusionStatus::Success();
 }
 
 }

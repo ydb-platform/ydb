@@ -402,7 +402,8 @@ public:
             checks
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
-                .IsResolved();
+                .IsResolved()
+                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
 
             if (dstParentPath.IsUnderOperation()) {
                 checks

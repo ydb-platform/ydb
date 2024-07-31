@@ -28,15 +28,15 @@
 {%-     endif -%}
 {%- endif -%}
 {%- if (current_target.allocators is defined) and (current_target.allocators|length) -%}
-{%-     if (macro == "add_executable") or (macro == "add_library" and ("SHARED" in macro_args)) -%}
+{%-     if (current_target.macro == "add_executable") or (current_target.macro == "add_library" and ("SHARED" in current_target.macro_args)) -%}
 {#-         support allocators -#}
-{%-         set allocators = allocators + current_target.allocators|sum -%}
+{%-         set allocators = allocators + current_target.allocators -%}
 {%-     else -%}
 {#-         not supported allocators -#}
 {%-         if current_target.is_fake_module -%}
-{%-             set interfaces = interfaces + current_target.allocators|sum -%}
+{%-             set interfaces = interfaces + current_target.allocators -%}
 {%-         else  -%}
-{%-             set publics = publics + current_target.allocators|sum -%}
+{%-             set publics = publics + current_target.allocators -%}
 {%-         endif -%}
 {%-     endif -%}
 {%- endif -%}

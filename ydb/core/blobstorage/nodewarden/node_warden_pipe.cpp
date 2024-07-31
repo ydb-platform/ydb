@@ -18,29 +18,6 @@ void TNodeWarden::EstablishPipe() {
     STLOG(PRI_DEBUG, BS_NODE, NW21, "EstablishPipe", (AvailDomainId, AvailDomainId),
         (PipeClientId, PipeClientId), (ControllerId, controllerId));
 
-    SendRegisterNode();
-    SendInitialGroupRequests();
-    SendScrubRequests();
-}
-
-void TNodeWarden::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
-    TEvTabletPipe::TEvClientConnected *msg = ev->Get();
-    if (msg->Status != NKikimrProto::OK) {
-        STLOG(PRI_ERROR, BS_NODE, NW71, "TEvTabletPipe::TEvClientConnected", (Status, msg->Status),
-            (ClientId, msg->ClientId), (ServerId, msg->ServerId), (TabletId, msg->TabletId),
-            (PipeClientId, PipeClientId));
-        OnPipeError();
-    }
-}
-
-void TNodeWarden::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
-    TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
-    STLOG(PRI_ERROR, BS_NODE, NW42, "Handle(TEvTabletPipe::TEvClientDestroyed)", (ClientId, msg->ClientId),
-        (ServerId, msg->ServerId), (TabletId, msg->TabletId), (PipeClientId, PipeClientId));
-    OnPipeError();
-}
-
-void TNodeWarden::OnPipeError() {
     for (auto& [key, pdisk] : LocalPDisks) {
         if (pdisk.PDiskMetrics) {
             PDisksWithUnreportedMetrics.PushBack(&pdisk);
@@ -52,6 +29,34 @@ void TNodeWarden::OnPipeError() {
             VDisksWithUnreportedMetrics.PushBack(&vdisk);
         }
     }
+
+    SendRegisterNode();
+    SendInitialGroupRequests();
+    SendScrubRequests();
+    SendDiskMetrics(true);
+}
+
+void TNodeWarden::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
+    TEvTabletPipe::TEvClientConnected *msg = ev->Get();
+    if (msg->Status != NKikimrProto::OK) {
+        STLOG(PRI_ERROR, BS_NODE, NW71, "TEvTabletPipe::TEvClientConnected", (Status, msg->Status),
+            (ClientId, msg->ClientId), (ServerId, msg->ServerId), (TabletId, msg->TabletId),
+            (PipeClientId, PipeClientId));
+        OnPipeError();
+    } else {
+        STLOG(PRI_DEBUG, BS_NODE, NW05, "TEvTabletPipe::TEvClientConnected OK", (ClientId, msg->ClientId),
+            (ServerId, msg->ServerId), (TabletId, msg->TabletId), (PipeClientId, PipeClientId));
+    }
+}
+
+void TNodeWarden::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
+    TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
+    STLOG(PRI_ERROR, BS_NODE, NW42, "Handle(TEvTabletPipe::TEvClientDestroyed)", (ClientId, msg->ClientId),
+        (ServerId, msg->ServerId), (TabletId, msg->TabletId), (PipeClientId, PipeClientId));
+    OnPipeError();
+}
+
+void TNodeWarden::OnPipeError() {
     for (const auto& [cookie, callback] : ConfigInFlight) {
         callback(nullptr);
     }

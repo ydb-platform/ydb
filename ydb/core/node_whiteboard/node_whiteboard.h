@@ -302,7 +302,7 @@ struct TEvWhiteboard{
         TEvBSGroupStateUpdate() = default;
 
         TEvBSGroupStateUpdate(const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo) {
-            Record.SetGroupID(groupInfo->GroupID);
+            Record.SetGroupID(groupInfo->GroupID.GetRawId());
             Record.SetGroupGeneration(groupInfo->GroupGeneration);
             Record.SetErasureSpecies(groupInfo->Type.ErasureSpeciesName(groupInfo->Type.GetErasure()));
             if (ui32 numVDisks = groupInfo->GetTotalVDisksNum()) {
@@ -361,12 +361,13 @@ struct TEvWhiteboard{
             }
         }
 
-        TEvSystemStateUpdate(const TVector<std::tuple<TString, double, ui32>>& poolStats) {
+        TEvSystemStateUpdate(const TVector<std::tuple<TString, double, ui32, ui32>>& poolStats) {
             for (const auto& row : poolStats) {
                 auto& pb = *Record.AddPoolStats();
                 pb.SetName(std::get<0>(row));
                 pb.SetUsage(std::get<1>(row));
                 pb.SetThreads(std::get<2>(row));
+                pb.SetLimit(std::get<3>(row));
             }
         }
 
@@ -385,11 +386,11 @@ struct TEvWhiteboard{
         }
     };
 
-    static TEvSystemStateUpdate *CreateSharedCacheStatsUpdateRequest(ui64 memUsedBytes, ui64 memLimitBytes) {
+    static TEvSystemStateUpdate *CreateCachesConsumptionUpdateRequest(ui64 consumptionBytes, ui64 limitBytes) {
         TEvSystemStateUpdate *request = new TEvSystemStateUpdate();
         auto *pb = request->Record.MutableSharedCacheStats();
-        pb->SetUsedBytes(memUsedBytes);
-        pb->SetLimitBytes(memLimitBytes);
+        pb->SetUsedBytes(consumptionBytes);
+        pb->SetLimitBytes(limitBytes);
         return request;
     }
 

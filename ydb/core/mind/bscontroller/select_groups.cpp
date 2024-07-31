@@ -52,7 +52,7 @@ public:
                     if (!group->Down && (group->SeenOperational || !record.GetOnlySeenOperational())) {
                         auto *reportedGroup = pb->AddGroups();
                         reportedGroup->SetErasureSpecies(group->ErasureSpecies);
-                        reportedGroup->SetGroupID(group->ID);
+                        reportedGroup->SetGroupID(group->ID.GetRawId());
                         reportedGroup->SetStoragePoolName(Self->StoragePools.at(group->StoragePoolId).Name);
                         reportedGroup->SetPhysicalGroup(group->IsPhysicalGroup());
                         reportedGroup->SetDecommitted(group->IsDecommitted());
@@ -116,7 +116,7 @@ void TBlobStorageController::ProcessSelectGroupsQueueItem(TList<TSelectGroupsQue
 
             };
 
-            if (TGroupInfo *group = FindGroup(g.GetGroupID()); group && !hasResources()) {
+            if (TGroupInfo *group = FindGroup(TGroupId::FromProto(&g, &NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters::GetGroupID)); group && !hasResources()) {
                 group->FillInGroupParameters(&g);
                 if (!hasResources()) {
                     // any of PDisks will do

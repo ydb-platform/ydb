@@ -18,8 +18,7 @@ class TestConsumer(TestYdsBase):
         sql = R'''
             PRAGMA pq.Consumer="InvalidConsumerName";
             SELECT * FROM yds.`{input_topic}` LIMIT 1;
-            ''' \
-            .format(
+            '''.format(
             input_topic=self.input_topic,
         )
 

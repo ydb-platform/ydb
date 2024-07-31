@@ -17,7 +17,7 @@ DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
 DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
 
-def get_build_size():
+def get_build_size(time_of_current_commit):
     if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
         print(
             "Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping"
@@ -36,7 +36,8 @@ def get_build_size():
     where 
     github_workflow like "Postcommit%" and 
     github_ref_name="{branch}" and 
-    build_preset="{build_preset}"
+    build_preset="{build_preset}" and
+    git_commit_time <= DateTime::FromSeconds({time_of_current_commit})
     order by git_commit_time desc
     limit 1;    
     """
@@ -63,7 +64,7 @@ def get_build_size():
                         )
             else:
                 print(
-                    f"Error: Cant get binary size in db with params: github_workflow like 'Postcommit%', github_ref_name='{branch}', build_preset='{build_preset}'"
+                    f"Error: Cant get binary size in db with params: github_workflow like 'Postcommit%', github_ref_name='{branch}', build_preset='{build_preset}, git_commit_time <= DateTime::FromSeconds({time_of_current_commit})'"
                 )
                 return 0
 

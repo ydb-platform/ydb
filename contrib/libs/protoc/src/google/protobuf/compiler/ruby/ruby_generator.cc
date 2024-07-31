@@ -158,7 +158,7 @@ TProtoStringType DefaultValueForField(const FieldDescriptor* field) {
         for (int i = 0; i < default_str.length(); ++i) {
           // Write the hex form of each byte.
           os << "\\x" << std::hex << std::setw(2)
-             << ((uint16)((unsigned char)default_str.at(i)));
+             << ((uint16_t)((unsigned char)default_str.at(i)));
         }
         os << "\".force_encoding(\"ASCII-8BIT\")";
       }
@@ -421,7 +421,7 @@ int GeneratePackageModules(const FileDescriptor* file, io::Printer* printer) {
     //    -> A.B.C
     if (package_name.find("::") != TProtoStringType::npos) {
       need_change_to_module = false;
-    } else {
+    } else if (package_name.find(".") != TProtoStringType::npos) {
       GOOGLE_LOG(WARNING) << "ruby_package option should be in the form of:"
                           << " 'A::B::C' and not 'A.B.C'";
     }

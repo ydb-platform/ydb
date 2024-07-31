@@ -18,6 +18,8 @@ namespace NProfiling {
 
     const char* GetTag(ui32 tag);
     size_t GetTagsCount();
+    ui32 GetDefaultTag();
+    ui32 GetOverlimitCountersTag();
 
     using TSetThreadAllocTag = ui32(ui32 tag);
     extern TSetThreadAllocTag* SetThreadAllocTag;
@@ -48,8 +50,8 @@ namespace NProfiling {
             return *this;
         }
 
-        static void Reset(ui32 tag) {
-            SetThreadAllocTag(tag);
+        static ui32 Reset(ui32 tag) {
+            return SetThreadAllocTag(tag);
         }
 
         void Release() {
@@ -77,6 +79,7 @@ namespace NProfiling {
 class TMemoryProfileGuard: TNonCopyable {
 private:
     const TString Id;
+    ui32 PredTag = 0;
 public:
     TMemoryProfileGuard(const TString& id, const bool enabled = true);
     ~TMemoryProfileGuard();

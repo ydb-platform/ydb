@@ -46,7 +46,6 @@ ELSEIF (PY3)
         build_dll_and_java.py
         build_info_gen.py
         build_java_codenav_index.py
-        build_java_with_error_prone.py
         build_java_with_error_prone2.py
         cat.py
         cgo1_wrapper.py

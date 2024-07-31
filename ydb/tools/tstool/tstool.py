@@ -16,6 +16,7 @@ grpc_port = None
 domain_uid = None
 default_tsserver_port = 35000
 hive_domain_key = None
+hive_id = None
 
 
 def invoke_grpc(func, *params):
@@ -26,6 +27,8 @@ def invoke_grpc(func, *params):
 
 def create_tablet(owner_idx, channels, count):
     request = THiveCreateTablet(DomainUid=domain_uid)
+    if hive_id is not None:
+        request.HiveId = hive_id
     for i in range(count):
         cmd = request.CmdCreateTablet.add(OwnerId=0, OwnerIdx=owner_idx + i, TabletType=TTabletTypes.TestShard, ChannelsProfile=0)
         for channel in channels:
@@ -74,14 +77,16 @@ def main():
     p.add_argument('--proto-file', type=FileType(), required=True, help='path to protobuf containing TCmdInitialize')
     p.add_argument('--tsserver', type=str, help='FQDN:port pair for tsserver')
     p.add_argument('--subdomain', type=str, help='subdomain to create tablets in')
+    p.add_argument('--hive-id', type=int, help='hive tablet id')
 
     args = parser.parse_args()
 
-    global grpc_host, grpc_port, domain_uid, hive_domain_key
+    global grpc_host, grpc_port, domain_uid, hive_domain_key, hive_id
     grpc_host = args.grpc_host
     grpc_port = args.grpc_port
     domain_uid = args.domain_uid
     hive_domain_key = tuple(map(int, args.subdomain.split(':'))) if args.subdomain is not None else None
+    hive_id = args.hive_id
 
     tablet_ids = create_tablet(args.owner_idx, args.channels, args.count)
     print('TabletIds# %s' % ', '.join(map(str, tablet_ids)))

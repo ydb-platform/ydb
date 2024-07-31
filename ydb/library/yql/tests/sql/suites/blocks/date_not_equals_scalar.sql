@@ -1,4 +1,5 @@
 USE plato;
+pragma yt.DisableOptimizers="OutHorizontalJoin,HorizontalJoin,MultiHorizontalJoin,FuseMultiOutsWithOuterMaps";
 
 SELECT
     Date("2000-01-01") != na,
@@ -10,7 +11,10 @@ SELECT
     Date("2000-01-01") != wa,
     Date("2000-01-01") != wd,
     Date("2000-01-01") != wt,
-    
+    Date("2000-01-01") != waz,
+    Date("2000-01-01") != wdz,
+    Date("2000-01-01") != wtz,
+
     TzDate("2000-01-01,Europe/Moscow") != na,
     TzDate("2000-01-01,Europe/Moscow") != naz,
     TzDate("2000-01-01,Europe/Moscow") != nd,
@@ -20,6 +24,9 @@ SELECT
     TzDate("2000-01-01,Europe/Moscow") != wa,
     TzDate("2000-01-01,Europe/Moscow") != wd,
     TzDate("2000-01-01,Europe/Moscow") != wt,
+    TzDate("2000-01-01,Europe/Moscow") != waz,
+    TzDate("2000-01-01,Europe/Moscow") != wdz,
+    TzDate("2000-01-01,Europe/Moscow") != wtz,
 
     Datetime("2000-01-01T03:04:05Z") != na,
     Datetime("2000-01-01T03:04:05Z") != naz,
@@ -30,6 +37,9 @@ SELECT
     Datetime("2000-01-01T03:04:05Z") != wa,
     Datetime("2000-01-01T03:04:05Z") != wd,
     Datetime("2000-01-01T03:04:05Z") != wt,
+    Datetime("2000-01-01T03:04:05Z") != waz,
+    Datetime("2000-01-01T03:04:05Z") != wdz,
+    Datetime("2000-01-01T03:04:05Z") != wtz,
 
     TzDatetime("2000-01-01T03:04:05,Europe/Moscow") != na,
     TzDatetime("2000-01-01T03:04:05,Europe/Moscow") != naz,
@@ -40,6 +50,9 @@ SELECT
     TzDatetime("2000-01-01T03:04:05,Europe/Moscow") != wa,
     TzDatetime("2000-01-01T03:04:05,Europe/Moscow") != wd,
     TzDatetime("2000-01-01T03:04:05,Europe/Moscow") != wt,
+    TzDatetime("2000-01-01T03:04:05,Europe/Moscow") != waz,
+    TzDatetime("2000-01-01T03:04:05,Europe/Moscow") != wdz,
+    TzDatetime("2000-01-01T03:04:05,Europe/Moscow") != wtz,
 
     Timestamp("2000-01-01T03:04:05.678912Z") != na,
     Timestamp("2000-01-01T03:04:05.678912Z") != naz,
@@ -50,6 +63,9 @@ SELECT
     Timestamp("2000-01-01T03:04:05.678912Z") != wa,
     Timestamp("2000-01-01T03:04:05.678912Z") != wd,
     Timestamp("2000-01-01T03:04:05.678912Z") != wt,
+    Timestamp("2000-01-01T03:04:05.678912Z") != waz,
+    Timestamp("2000-01-01T03:04:05.678912Z") != wdz,
+    Timestamp("2000-01-01T03:04:05.678912Z") != wtz,
 
     TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow") != na,
     TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow") != naz,
@@ -60,7 +76,12 @@ SELECT
     TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow") != wa,
     TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow") != wd,
     TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow") != wt,
-    
+    TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow") != waz,
+    TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow") != wdz,
+    TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow") != wtz
+FROM Dates;
+
+SELECT
     Date32("1900-01-01") != na,
     Date32("1900-01-01") != naz,
     Date32("1900-01-01") != nd,
@@ -70,6 +91,9 @@ SELECT
     Date32("1900-01-01") != wa,
     Date32("1900-01-01") != wd,
     Date32("1900-01-01") != wt,
+    Date32("1900-01-01") != waz,
+    Date32("1900-01-01") != wdz,
+    Date32("1900-01-01") != wtz,
 
     Datetime64("1900-01-01T03:04:05Z") != na,
     Datetime64("1900-01-01T03:04:05Z") != naz,
@@ -80,7 +104,10 @@ SELECT
     Datetime64("1900-01-01T03:04:05Z") != wa,
     Datetime64("1900-01-01T03:04:05Z") != wd,
     Datetime64("1900-01-01T03:04:05Z") != wt,
-    
+    Datetime64("1900-01-01T03:04:05Z") != waz,
+    Datetime64("1900-01-01T03:04:05Z") != wdz,
+    Datetime64("1900-01-01T03:04:05Z") != wtz,
+
     Timestamp64("1900-01-01T03:04:05.678912Z") != na,
     Timestamp64("1900-01-01T03:04:05.678912Z") != naz,
     Timestamp64("1900-01-01T03:04:05.678912Z") != nd,
@@ -90,12 +117,53 @@ SELECT
     Timestamp64("1900-01-01T03:04:05.678912Z") != wa,
     Timestamp64("1900-01-01T03:04:05.678912Z") != wd,
     Timestamp64("1900-01-01T03:04:05.678912Z") != wt,
+    Timestamp64("1900-01-01T03:04:05.678912Z") != waz,
+    Timestamp64("1900-01-01T03:04:05.678912Z") != wdz,
+    Timestamp64("1900-01-01T03:04:05.678912Z") != wtz,
+
+    TzDate32("1900-01-01,Europe/Moscow") != na,
+    TzDate32("1900-01-01,Europe/Moscow") != naz,
+    TzDate32("1900-01-01,Europe/Moscow") != nd,
+    TzDate32("1900-01-01,Europe/Moscow") != ndz,
+    TzDate32("1900-01-01,Europe/Moscow") != nt,
+    TzDate32("1900-01-01,Europe/Moscow") != ntz,
+    TzDate32("1900-01-01,Europe/Moscow") != wa,
+    TzDate32("1900-01-01,Europe/Moscow") != wd,
+    TzDate32("1900-01-01,Europe/Moscow") != wt,
+    TzDate32("1900-01-01,Europe/Moscow") != waz,
+    TzDate32("1900-01-01,Europe/Moscow") != wdz,
+    TzDate32("1900-01-01,Europe/Moscow") != wtz,
+
+    TzDatetime64("1900-01-01T03:04:05,Europe/Moscow") != na,
+    TzDatetime64("1900-01-01T03:04:05,Europe/Moscow") != naz,
+    TzDatetime64("1900-01-01T03:04:05,Europe/Moscow") != nd,
+    TzDatetime64("1900-01-01T03:04:05,Europe/Moscow") != ndz,
+    TzDatetime64("1900-01-01T03:04:05,Europe/Moscow") != nt,
+    TzDatetime64("1900-01-01T03:04:05,Europe/Moscow") != ntz,
+    TzDatetime64("1900-01-01T03:04:05,Europe/Moscow") != wa,
+    TzDatetime64("1900-01-01T03:04:05,Europe/Moscow") != wd,
+    TzDatetime64("1900-01-01T03:04:05,Europe/Moscow") != wt,
+    TzDatetime64("1900-01-01T03:04:05,Europe/Moscow") != waz,
+    TzDatetime64("1900-01-01T03:04:05,Europe/Moscow") != wdz,
+    TzDatetime64("1900-01-01T03:04:05,Europe/Moscow") != wtz,
+
+    TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow") != na,
+    TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow") != naz,
+    TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow") != nd,
+    TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow") != ndz,
+    TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow") != nt,
+    TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow") != ntz,
+    TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow") != wa,
+    TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow") != wd,
+    TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow") != wt,
+    TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow") != waz,
+    TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow") != wdz,
+    TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow") != wtz,
 
     Interval("P1D") != ni,
     Interval("P1D") != wi,
     Interval64("P1D") != ni,
     Interval64("P1D") != wi,
-    
 FROM Dates;
 
 SELECT
@@ -108,7 +176,10 @@ SELECT
     wa != Date("2000-01-01"),
     wd != Date("2000-01-01"),
     wt != Date("2000-01-01"),
-    
+    waz != Date("2000-01-01"),
+    wdz != Date("2000-01-01"),
+    wtz != Date("2000-01-01"),
+
     na != TzDate("2000-01-01,Europe/Moscow"),
     naz != TzDate("2000-01-01,Europe/Moscow"),
     nd != TzDate("2000-01-01,Europe/Moscow"),
@@ -118,6 +189,9 @@ SELECT
     wa != TzDate("2000-01-01,Europe/Moscow"),
     wd != TzDate("2000-01-01,Europe/Moscow"),
     wt != TzDate("2000-01-01,Europe/Moscow"),
+    waz != TzDate("2000-01-01,Europe/Moscow"),
+    wdz != TzDate("2000-01-01,Europe/Moscow"),
+    wtz != TzDate("2000-01-01,Europe/Moscow"),
 
     na != Datetime("2000-01-01T03:04:05Z"),
     naz != Datetime("2000-01-01T03:04:05Z"),
@@ -128,6 +202,9 @@ SELECT
     wa != Datetime("2000-01-01T03:04:05Z"),
     wd != Datetime("2000-01-01T03:04:05Z"),
     wt != Datetime("2000-01-01T03:04:05Z"),
+    waz != Datetime("2000-01-01T03:04:05Z"),
+    wdz != Datetime("2000-01-01T03:04:05Z"),
+    wtz != Datetime("2000-01-01T03:04:05Z"),
 
     na != TzDatetime("2000-01-01T03:04:05,Europe/Moscow"),
     naz != TzDatetime("2000-01-01T03:04:05,Europe/Moscow"),
@@ -138,6 +215,9 @@ SELECT
     wa != TzDatetime("2000-01-01T03:04:05,Europe/Moscow"),
     wd != TzDatetime("2000-01-01T03:04:05,Europe/Moscow"),
     wt != TzDatetime("2000-01-01T03:04:05,Europe/Moscow"),
+    waz != TzDatetime("2000-01-01T03:04:05,Europe/Moscow"),
+    wdz != TzDatetime("2000-01-01T03:04:05,Europe/Moscow"),
+    wtz != TzDatetime("2000-01-01T03:04:05,Europe/Moscow"),
 
     na != Timestamp("2000-01-01T03:04:05.678912Z"),
     naz != Timestamp("2000-01-01T03:04:05.678912Z"),
@@ -148,6 +228,9 @@ SELECT
     wa != Timestamp("2000-01-01T03:04:05.678912Z"),
     wd != Timestamp("2000-01-01T03:04:05.678912Z"),
     wt != Timestamp("2000-01-01T03:04:05.678912Z"),
+    waz != Timestamp("2000-01-01T03:04:05.678912Z"),
+    wdz != Timestamp("2000-01-01T03:04:05.678912Z"),
+    wtz != Timestamp("2000-01-01T03:04:05.678912Z"),
 
     na != TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow"),
     naz != TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow"),
@@ -158,7 +241,12 @@ SELECT
     wa != TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow"),
     wd != TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow"),
     wt != TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow"),
-    
+    waz != TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow"),
+    wdz != TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow"),
+    wtz != TzTimestamp("2000-01-01T03:04:05.678912,Europe/Moscow")
+FROM Dates;
+
+SELECT
     na != Date32("1900-01-01"),
     naz != Date32("1900-01-01"),
     nd != Date32("1900-01-01"),
@@ -168,6 +256,9 @@ SELECT
     wa != Date32("1900-01-01"),
     wd != Date32("1900-01-01"),
     wt != Date32("1900-01-01"),
+    waz != Date32("1900-01-01"),
+    wdz != Date32("1900-01-01"),
+    wtz != Date32("1900-01-01"),
 
     na != Datetime64("1900-01-01T03:04:05Z"),
     naz != Datetime64("1900-01-01T03:04:05Z"),
@@ -178,7 +269,10 @@ SELECT
     wa != Datetime64("1900-01-01T03:04:05Z"),
     wd != Datetime64("1900-01-01T03:04:05Z"),
     wt != Datetime64("1900-01-01T03:04:05Z"),
-    
+    waz != Datetime64("1900-01-01T03:04:05Z"),
+    wdz != Datetime64("1900-01-01T03:04:05Z"),
+    wtz != Datetime64("1900-01-01T03:04:05Z"),
+
     na != Timestamp64("1900-01-01T03:04:05.678912Z"),
     naz != Timestamp64("1900-01-01T03:04:05.678912Z"),
     nd != Timestamp64("1900-01-01T03:04:05.678912Z"),
@@ -188,12 +282,51 @@ SELECT
     wa != Timestamp64("1900-01-01T03:04:05.678912Z"),
     wd != Timestamp64("1900-01-01T03:04:05.678912Z"),
     wt != Timestamp64("1900-01-01T03:04:05.678912Z"),
+    waz != Timestamp64("1900-01-01T03:04:05.678912Z"),
+    wdz != Timestamp64("1900-01-01T03:04:05.678912Z"),
+    wtz != Timestamp64("1900-01-01T03:04:05.678912Z"),
+
+    na != TzDate32("1900-01-01,Europe/Moscow"),
+    naz != TzDate32("1900-01-01,Europe/Moscow"),
+    nd != TzDate32("1900-01-01,Europe/Moscow"),
+    ndz != TzDate32("1900-01-01,Europe/Moscow"),
+    nt != TzDate32("1900-01-01,Europe/Moscow"),
+    ntz != TzDate32("1900-01-01,Europe/Moscow"),
+    wa != TzDate32("1900-01-01,Europe/Moscow"),
+    wd != TzDate32("1900-01-01,Europe/Moscow"),
+    wt != TzDate32("1900-01-01,Europe/Moscow"),
+    waz != TzDate32("1900-01-01,Europe/Moscow"),
+    wdz != TzDate32("1900-01-01,Europe/Moscow"),
+    wtz != TzDate32("1900-01-01,Europe/Moscow"),
+
+    na != TzDatetime64("1900-01-01T03:04:05,Europe/Moscow"),
+    naz != TzDatetime64("1900-01-01T03:04:05,Europe/Moscow"),
+    nd != TzDatetime64("1900-01-01T03:04:05,Europe/Moscow"),
+    ndz != TzDatetime64("1900-01-01T03:04:05,Europe/Moscow"),
+    nt != TzDatetime64("1900-01-01T03:04:05,Europe/Moscow"),
+    ntz != TzDatetime64("1900-01-01T03:04:05,Europe/Moscow"),
+    wa != TzDatetime64("1900-01-01T03:04:05,Europe/Moscow"),
+    wd != TzDatetime64("1900-01-01T03:04:05,Europe/Moscow"),
+    wt != TzDatetime64("1900-01-01T03:04:05,Europe/Moscow"),
+    waz != TzDatetime64("1900-01-01T03:04:05,Europe/Moscow"),
+    wdz != TzDatetime64("1900-01-01T03:04:05,Europe/Moscow"),
+    wtz != TzDatetime64("1900-01-01T03:04:05,Europe/Moscow"),
+
+    na != TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow"),
+    naz != TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow"),
+    nd != TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow"),
+    ndz != TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow"),
+    nt != TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow"),
+    ntz != TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow"),
+    wa != TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow"),
+    wd != TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow"),
+    wt != TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow"),
+    waz != TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow"),
+    wdz != TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow"),
+    wtz != TzTimestamp64("1900-01-01T03:04:05.678912,Europe/Moscow"),
 
     ni != Interval("P1D"),
     wi != Interval("P1D"),
     ni != Interval64("P1D"),
-    wi != Interval64("P1D")
-    
+    wi != Interval64("P1D"),
 FROM Dates;
-
-

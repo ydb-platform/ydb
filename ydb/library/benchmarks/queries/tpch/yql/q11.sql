@@ -32,7 +32,7 @@ on
 
 $threshold = (
 select
-    sum(ps_supplycost * ps_availqty) * 0.0001000000 as threshold
+    sum(ps_supplycost * ps_availqty) * $z0_0001_35 as threshold
 from
     $j2
 );

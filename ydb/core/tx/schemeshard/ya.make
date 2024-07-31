@@ -92,6 +92,7 @@ SRCS(
     schemeshard__operation_alter_login.cpp
     schemeshard__operation_alter_pq.cpp
     schemeshard__operation_alter_replication.cpp
+    schemeshard__operation_alter_resource_pool.cpp
     schemeshard__operation_alter_sequence.cpp
     schemeshard__operation_alter_solomon.cpp
     schemeshard__operation_alter_subdomain.cpp
@@ -103,6 +104,7 @@ SRCS(
     schemeshard__operation_common.h
     schemeshard__operation_common_external_data_source.cpp
     schemeshard__operation_common_external_table.cpp
+    schemeshard__operation_common_resource_pool.cpp
     schemeshard__operation_common_subdomain.h
     schemeshard__operation_consistent_copy_tables.cpp
     schemeshard__operation_copy_sequence.cpp
@@ -119,7 +121,9 @@ SRCS(
     schemeshard__operation_create_lock.cpp
     schemeshard__operation_create_pq.cpp
     schemeshard__operation_create_replication.cpp
+    schemeshard__operation_create_resource_pool.cpp
     schemeshard__operation_create_restore.cpp
+    schemeshard__operation_create_restore_incremental_backup.cpp
     schemeshard__operation_create_rtmr.cpp
     schemeshard__operation_create_sequence.cpp
     schemeshard__operation_create_solomon.cpp
@@ -136,6 +140,7 @@ SRCS(
     schemeshard__operation_drop_lock.cpp
     schemeshard__operation_drop_pq.cpp
     schemeshard__operation_drop_replication.cpp
+    schemeshard__operation_drop_resource_pool.cpp
     schemeshard__operation_drop_sequence.cpp
     schemeshard__operation_drop_solomon.cpp
     schemeshard__operation_drop_subdomain.cpp
@@ -166,8 +171,6 @@ SRCS(
     schemeshard__operation_create_continuous_backup.cpp
     schemeshard__operation_alter_continuous_backup.cpp
     schemeshard__operation_drop_continuous_backup.cpp
-    schemeshard__operation_allocate_pq.cpp
-    schemeshard__operation_deallocate_pq.cpp
     schemeshard__pq_stats.cpp
     schemeshard__publish_to_scheme_board.cpp
     schemeshard__state_changed_reply.cpp

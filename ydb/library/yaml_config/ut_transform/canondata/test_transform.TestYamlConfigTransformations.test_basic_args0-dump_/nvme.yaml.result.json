@@ -182,10 +182,6 @@
               [
                 1
               ],
-            "HiveUid":
-              [
-                1
-              ],
             "PlanResolution":10,
             "Name":"Root",
             "StoragePoolTypes":
@@ -256,7 +252,6 @@
       "HiveConfig":
         [
           {
-            "HiveUid":1,
             "Hive":72057594037968897
           }
         ]

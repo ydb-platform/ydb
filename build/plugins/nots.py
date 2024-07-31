@@ -1,8 +1,10 @@
+import base64
+import six
 import os
-
 import ymake
 import ytest
-from _common import resolve_common_const, get_norm_unit_path, rootrel_arc_src, to_yesno
+
+from _common import resolve_common_const, get_norm_unit_path, rootrel_arc_src, strip_roots, to_yesno
 
 
 # 1 is 60 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
@@ -55,6 +57,30 @@ class PluginLogger(object):
 logger = PluginLogger()
 
 
+def get_values_list(unit, key):
+    res = map(str.strip, (unit.get(key) or '').replace('$' + key, '').strip().split())
+    return [r for r in res if r and r not in ['""', "''"]]
+
+
+def format_recipes(data: str | None) -> str:
+    if not data:
+        return ""
+
+    data = data.replace('"USE_RECIPE_DELIM"', "\n")
+    data = data.replace("$TEST_RECIPES_VALUE", "")
+    return data
+
+
+def prepare_recipes(data: str | None) -> bytes:
+    formatted = format_recipes(data)
+    return base64.b64encode(six.ensure_binary(formatted))
+
+
+def serialize_list(lst):
+    lst = list(filter(None, lst))
+    return '\"' + ';'.join(lst) + '\"' if lst else ''
+
+
 def _with_report_configure_error(fn):
     def _wrapper(*args, **kwargs):
         last_state = logger.get_state()
@@ -92,16 +118,28 @@ def _build_cmd_input_paths(paths, hide=False, disable_include_processor=False):
     return _build_directives("input", [hide_part, disable_ip_part], paths)
 
 
+def _get_pm_type(unit) -> str:
+    resolved = unit.get("PM_TYPE")
+    if not resolved:
+        raise Exception("PM_TYPE is not set yet. Macro _SET_PACKAGE_MANAGER() should be called before.")
+
+    return resolved
+
+
+def _get_source_path(unit):
+    sources_path = unit.get("TS_TEST_FOR_DIR") if unit.get("TS_TEST_FOR") else unit.path()
+    return sources_path
+
+
 def _create_pm(unit):
-    from lib.nots.package_manager import manager
+    from lib.nots.package_manager import get_package_manager_type
 
-    sources_path = unit.path()
-    module_path = unit.get("MODDIR")
-    if unit.get("TS_TEST_FOR"):
-        sources_path = unit.get("TS_TEST_FOR_DIR")
-        module_path = unit.get("TS_TEST_FOR_PATH")
+    sources_path = _get_source_path(unit)
+    module_path = unit.get("TS_TEST_FOR_PATH") if unit.get("TS_TEST_FOR") else unit.get("MODDIR")
 
-    return manager(
+    PackageManager = get_package_manager_type(_get_pm_type(unit))
+
+    return PackageManager(
         sources_path=unit.resolve(sources_path),
         build_root="$B",
         build_path=unit.path().replace("$S", "$B", 1),
@@ -122,6 +160,25 @@ def _create_erm_json(unit):
 
 
 @_with_report_configure_error
+def on_set_package_manager(unit):
+    pm_type = "pnpm"  # projects without any lockfile are processed by pnpm
+
+    source_path = _get_source_path(unit)
+
+    for pm_key, lockfile_name in [("pnpm", "pnpm-lock.yaml"), ("npm", "package-lock.json")]:
+        lf_path = os.path.join(source_path, lockfile_name)
+        lf_path_resolved = unit.resolve_arc_path(strip_roots(lf_path))
+
+        if lf_path_resolved:
+            pm_type = pm_key
+            break
+
+    unit.on_peerdir_ts_resource(pm_type)
+    unit.set(["PM_TYPE", pm_type])
+    unit.set(["PM_SCRIPT", f"${pm_type.upper()}_SCRIPT"])
+
+
+@_with_report_configure_error
 def on_set_append_with_directive(unit, var_name, dir, *values):
     wrapped = ['${{{dir}:"{v}"}}'.format(dir=dir, v=v) for v in values]
     __set_append(unit, var_name, " ".join(wrapped))
@@ -131,6 +188,9 @@ def on_set_append_with_directive(unit, var_name, dir, *values):
 def on_from_npm_lockfiles(unit, *args):
     from lib.nots.package_manager.base import PackageManagerError
 
+    # This is contrib with pnpm-lock.yaml files only
+    # Force set to pnpm
+    unit.set(["PM_TYPE", "pnpm"])
     pm = _create_pm(unit)
     lf_paths = []
 
@@ -166,8 +226,9 @@ def _check_nodejs_version(unit, major):
 
 @_with_report_configure_error
 def on_peerdir_ts_resource(unit, *resources):
-    pm = _create_pm(unit)
-    pj = pm.load_package_json_from_dir(pm.sources_path)
+    from lib.nots.package_manager import BasePackageManager
+
+    pj = BasePackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)))
     erm_json = _create_erm_json(unit)
     dirs = []
 
@@ -254,6 +315,9 @@ def on_ts_configure(unit):
     _setup_eslint(unit)
     _setup_tsc_typecheck(unit, tsconfig_paths)
 
+    if unit.get("TS_YNDEXING") == "yes":
+        unit.on_do_ts_yndexing()
+
 
 @_with_report_configure_error
 def on_setup_build_env(unit):  # type: (Unit) -> None
@@ -311,12 +375,7 @@ def _filter_inputs_by_rules_from_tsconfig(unit, tsconfig):
 
 def _get_ts_test_data_dirs(unit):
     return sorted(
-        set(
-            [
-                os.path.dirname(rootrel_arc_src(p, unit))
-                for p in (ytest.get_values_list(unit, "_TS_TEST_DATA_VALUE") or [])
-            ]
-        )
+        set([os.path.dirname(rootrel_arc_src(p, unit)) for p in (get_values_list(unit, "_TS_TEST_DATA_VALUE") or [])])
     )
 
 
@@ -357,14 +416,14 @@ def _add_jest_ts_test(unit, test_runner, test_files, deps, test_record):
 
 
 def _add_hermione_ts_test(unit, test_runner, test_files, deps, test_record):
-    test_tags = sorted(set(["ya:fat", "ya:external", "ya:noretries"] + ytest.get_values_list(unit, "TEST_TAGS_VALUE")))
-    test_requirements = sorted(set(["network:full"] + ytest.get_values_list(unit, "TEST_REQUIREMENTS_VALUE")))
+    test_tags = sorted(set(["ya:fat", "ya:external", "ya:noretries"] + get_values_list(unit, "TEST_TAGS_VALUE")))
+    test_requirements = sorted(set(["network:full"] + get_values_list(unit, "TEST_REQUIREMENTS_VALUE")))
 
     test_record.update(
         {
             "SIZE": "LARGE",
-            "TAG": ytest.serialize_list(test_tags),
-            "REQUIREMENTS": ytest.serialize_list(test_requirements),
+            "TAG": serialize_list(test_tags),
+            "REQUIREMENTS": serialize_list(test_requirements),
             "CONFIG-PATH": _resolve_config_path(unit, test_runner, rel_to="TS_TEST_FOR_PATH"),
         }
     )
@@ -388,7 +447,7 @@ def _setup_eslint(unit):
     if unit.get("_NO_LINT_VALUE") == "none":
         return
 
-    lint_files = ytest.get_values_list(unit, "_TS_LINT_SRCS_VALUE")
+    lint_files = get_values_list(unit, "_TS_LINT_SRCS_VALUE")
     if not lint_files:
         return
 
@@ -416,7 +475,7 @@ def _setup_tsc_typecheck(unit, tsconfig_paths: list[str]):
     if unit.get("_TS_TYPECHECK_VALUE") == "none":
         return
 
-    typecheck_files = ytest.get_values_list(unit, "TS_INPUT_FILES")
+    typecheck_files = get_values_list(unit, "TS_INPUT_FILES")
     if not typecheck_files:
         return
 
@@ -466,7 +525,7 @@ def _add_test(unit, test_type, test_files, deps=None, test_record=None, test_cwd
     def sort_uniq(text):
         return sorted(set(text))
 
-    recipes_lines = ytest.format_recipes(unit.get("TEST_RECIPES_VALUE")).strip().splitlines()
+    recipes_lines = format_recipes(unit.get("TEST_RECIPES_VALUE")).strip().splitlines()
     if recipes_lines:
         deps = deps or []
         deps.extend([os.path.dirname(r.strip().split(" ")[0]) for r in recipes_lines])
@@ -485,21 +544,21 @@ def _add_test(unit, test_type, test_files, deps=None, test_record=None, test_cwd
         "TEST-TIMEOUT": unit.get("TEST_TIMEOUT") or "",
         "TEST-ENV": ytest.prepare_env(unit.get("TEST_ENV_VALUE")),
         "TESTED-PROJECT-NAME": os.path.splitext(unit.filename())[0],
-        "TEST-RECIPES": ytest.prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
+        "TEST-RECIPES": prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
         "SOURCE-FOLDER-PATH": test_dir,
         "BUILD-FOLDER-PATH": test_dir,
         "BINARY-PATH": os.path.join(test_dir, unit.filename()),
         "SPLIT-FACTOR": unit.get("TEST_SPLIT_FACTOR") or "",
         "FORK-MODE": unit.get("TEST_FORK_MODE") or "",
         "SIZE": unit.get("TEST_SIZE_NAME") or "",
-        "TEST-DATA": ytest.serialize_list(ytest.get_values_list(unit, "TEST_DATA_VALUE")),
-        "TEST-FILES": ytest.serialize_list(test_files),
+        "TEST-DATA": serialize_list(get_values_list(unit, "TEST_DATA_VALUE")),
+        "TEST-FILES": serialize_list(test_files),
         "TEST-CWD": test_cwd or "",
-        "TAG": ytest.serialize_list(ytest.get_values_list(unit, "TEST_TAGS_VALUE")),
-        "REQUIREMENTS": ytest.serialize_list(ytest.get_values_list(unit, "TEST_REQUIREMENTS_VALUE")),
+        "TAG": serialize_list(get_values_list(unit, "TEST_TAGS_VALUE")),
+        "REQUIREMENTS": serialize_list(get_values_list(unit, "TEST_REQUIREMENTS_VALUE")),
         "NODEJS-ROOT-VAR-NAME": unit.get("NODEJS-ROOT-VAR-NAME"),
         "NODE-MODULES-BUNDLE-FILENAME": constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME,
-        "CUSTOM-DEPENDENCIES": " ".join(sort_uniq((deps or []) + ytest.get_values_list(unit, "TEST_DEPENDS_VALUE"))),
+        "CUSTOM-DEPENDENCIES": " ".join(sort_uniq((deps or []) + get_values_list(unit, "TEST_DEPENDS_VALUE"))),
     }
 
     if test_record:
@@ -681,12 +740,12 @@ def on_ts_test_for_configure(unit, test_runner, default_config, node_modules_fil
         unit,
         {
             "TS-TEST-FOR-PATH": for_mod_path,
-            "TS-TEST-DATA-DIRS": ytest.serialize_list(_get_ts_test_data_dirs(unit)),
+            "TS-TEST-DATA-DIRS": serialize_list(_get_ts_test_data_dirs(unit)),
             "TS-TEST-DATA-DIRS-RENAME": unit.get("_TS_TEST_DATA_DIRS_RENAME_VALUE"),
         },
     )
 
-    test_files = ytest.get_values_list(unit, "_TS_TEST_SRCS_VALUE")
+    test_files = get_values_list(unit, "_TS_TEST_SRCS_VALUE")
     test_files = _resolve_module_files(unit, unit.get("MODDIR"), test_files)
     if not test_files:
         ymake.report_configure_error("No tests found")

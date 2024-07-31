@@ -3,7 +3,7 @@
  * pg_depend_d.h
  *    Macro definitions for pg_depend
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -19,6 +19,8 @@
 #define PG_DEPEND_D_H
 
 #define DependRelationId 2608
+#define DependDependerIndexId 2673
+#define DependReferenceIndexId 2674
 
 #define Anum_pg_depend_classid 1
 #define Anum_pg_depend_objid 2

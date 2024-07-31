@@ -73,7 +73,7 @@ public:
     }
     void FinishStreamingOk() override {}
     TAsyncFinishResult GetFinishFuture() override { return {}; }
-    TString GetPeer() const override { return {}; }
+    TString GetPeer() const override { return "localhost"; }
     bool SslServer() const override { return false; }
     bool IsClientLost() const override { return false; }
     bool IsStreamCall() const override { return false; }
@@ -88,7 +88,10 @@ protected:
         return *BaseRequest_;
     }
 
-private:
+    IRequestCtx& GetBaseRequest() noexcept {
+        return *BaseRequest_;
+    }
+
     void RaiseIssue(const NYql::TIssue& issue) {
         IssueManager_.RaiseIssue(issue);
     }

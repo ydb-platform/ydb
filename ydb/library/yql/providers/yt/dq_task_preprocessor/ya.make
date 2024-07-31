@@ -15,6 +15,7 @@ PEERDIR(
     ydb/library/yql/providers/common/codec
     ydb/library/yql/providers/dq/interface
     ydb/library/yql/providers/yt/codec
+    ydb/library/yql/providers/yt/provider
     ydb/library/yql/providers/yt/gateway/lib
     ydb/library/yql/providers/yt/lib/yson_helpers
 )

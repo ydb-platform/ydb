@@ -60,6 +60,25 @@ bool TPKRangeFilter::IsPortionInUsage(const TPortionInfo& info) const {
 }
 
 TPKRangeFilter::EUsageClass TPKRangeFilter::IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const {
+    {
+        std::partial_ordering equalityStartWithFrom = std::partial_ordering::greater;
+        if (const auto& from = PredicateFrom.GetReplaceKey()) {
+            equalityStartWithFrom = start.ComparePartNotNull(*from, from->Size());
+        }
+        std::partial_ordering equalityEndWithTo = std::partial_ordering::less;
+        if (const auto& to = PredicateTo.GetReplaceKey()) {
+            equalityEndWithTo = end.ComparePartNotNull(*to, to->Size());
+        }
+        const bool startInternal = (equalityStartWithFrom == std::partial_ordering::equivalent && PredicateFrom.IsInclude()) ||
+                                   (equalityStartWithFrom == std::partial_ordering::greater);
+        const bool endInternal = (equalityEndWithTo == std::partial_ordering::equivalent && PredicateTo.IsInclude()) ||
+                                 (equalityEndWithTo == std::partial_ordering::less);
+        if (startInternal && endInternal) {
+            return EUsageClass::FullUsage;
+        }
+    }
+    
+
     if (const auto& from = PredicateFrom.GetReplaceKey()) {
         const std::partial_ordering equalityEndWithFrom = end.ComparePartNotNull(*from, from->Size());
         if (equalityEndWithFrom == std::partial_ordering::less) {
@@ -70,11 +89,6 @@ TPKRangeFilter::EUsageClass TPKRangeFilter::IsPortionInPartialUsage(const NArrow
             } else {
                 return EUsageClass::DontUsage;
             }
-        }
-        const std::partial_ordering equalityStartWithFrom = start.ComparePartNotNull(*from, from->Size());
-        if ((equalityStartWithFrom == std::partial_ordering::equivalent && !PredicateFrom.IsInclude()) ||
-            equalityStartWithFrom == std::partial_ordering::less) {
-            return EUsageClass::PartialUsage;
         }
     }
 
@@ -89,17 +103,12 @@ TPKRangeFilter::EUsageClass TPKRangeFilter::IsPortionInPartialUsage(const NArrow
                 return EUsageClass::DontUsage;
             }
         }
-        const std::partial_ordering equalityEndWithTo = end.ComparePartNotNull(*to, to->Size());
-        if ((equalityEndWithTo == std::partial_ordering::equivalent && !PredicateTo.IsInclude()) ||
-            equalityEndWithTo == std::partial_ordering::greater) {
-            return EUsageClass::PartialUsage;
-        }
     }
 
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("start", start.DebugString())("end", end.DebugString())("from", PredicateFrom.DebugString())(
-        "to", PredicateTo.DebugString());
+//    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("start", start.DebugString())("end", end.DebugString())("from", PredicateFrom.DebugString())(
+//        "to", PredicateTo.DebugString());
 
-    return EUsageClass::FullUsage;
+    return EUsageClass::PartialUsage;
 }
 
 std::optional<NKikimr::NOlap::TPKRangeFilter> TPKRangeFilter::Build(TPredicateContainer&& from, TPredicateContainer&& to) {

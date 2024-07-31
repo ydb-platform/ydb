@@ -58,9 +58,6 @@ bool TPKRangeFilter::IsPortionInUsage(const TPortionInfo& info) const {
 //    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("start", info.IndexKeyStart().DebugString())("end", info.IndexKeyEnd().DebugString())(
 //        "from", PredicateFrom.DebugString())("to", PredicateTo.DebugString());
 
-//    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("start", info.IndexKeyStart().DebugString())("end", info.IndexKeyEnd().DebugString())(
-//        "from", PredicateFrom.DebugString())("to", PredicateTo.DebugString());
-
     return true;
 }
 
@@ -110,14 +107,10 @@ TPKRangeFilter::EUsageClass TPKRangeFilter::IsPortionInPartialUsage(const NArrow
         }
     }
 
-<<<<<<< HEAD
 //    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("start", start.DebugString())("end", end.DebugString())("from", PredicateFrom.DebugString())(
 //        "to", PredicateTo.DebugString());
 
     return EUsageClass::PartialUsage;
-=======
-    return endUsage || startUsage;
->>>>>>> 2d47e5f2f8 (fix build)
 }
 
 std::optional<NKikimr::NOlap::TPKRangeFilter> TPKRangeFilter::Build(TPredicateContainer&& from, TPredicateContainer&& to) {

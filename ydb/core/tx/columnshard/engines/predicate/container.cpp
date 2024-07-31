@@ -139,7 +139,7 @@ std::optional<NKikimr::NOlap::TPredicateContainer> TPredicateContainer::BuildPre
             }
             Y_ABORT_UNLESS(countSortingFields == object->Batch->num_columns());
         }
-        return TPredicateContainer(object, ExtractKey(*object, indexInfo->GetReplaceKey()));
+        return TPredicateContainer(object, indexInfo ? ExtractKey(*object, indexInfo->GetReplaceKey()) : nullptr);
     }
 }
 
@@ -167,7 +167,7 @@ std::optional<NKikimr::NOlap::TPredicateContainer> TPredicateContainer::BuildPre
             }
             Y_ABORT_UNLESS(countSortingFields == object->Batch->num_columns());
         }
-        return TPredicateContainer(object, TPredicateContainer::ExtractKey(*object, indexInfo->GetReplaceKey()));
+        return TPredicateContainer(object, indexInfo ? TPredicateContainer::ExtractKey(*object, indexInfo->GetReplaceKey()) : nullptr);
     }
 }
 

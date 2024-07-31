@@ -21,7 +21,6 @@ private:
         : Object(object)
         , CompareType(Object->GetCompareType())
         , ReplaceKey(replaceKey) {
-        AFL_VERIFY(!!ReplaceKey);
     }
 
     TPredicateContainer(const NArrow::ECompareType compareType)

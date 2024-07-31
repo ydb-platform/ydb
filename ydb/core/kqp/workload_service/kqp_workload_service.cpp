@@ -538,6 +538,10 @@ private:
 
 }  // anonymous namespace
 
+bool IsWorkloadServiceRequired(const NResourcePool::TPoolSettings& config) {
+    return config.ConcurrentQueryLimit != -1 || config.DatabaseLoadCpuThreshold >= 0.0 || config.QueryCancelAfter;
+}
+
 }  // namespace NWorkload
 
 IActor* CreateKqpWorkloadService(NMonitoring::TDynamicCounterPtr counters) {

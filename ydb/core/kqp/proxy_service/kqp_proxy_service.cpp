@@ -1590,7 +1590,7 @@ private:
         }
 
         const auto& poolConfig = poolInfo->Config;
-        if (poolConfig.ConcurrentQueryLimit == -1 && poolConfig.DatabaseLoadCpuThreshold < 0.0 && !poolConfig.QueryCancelAfter) {
+        if (!NWorkload::IsWorkloadServiceRequired(poolConfig)) {
             ev->Get()->SetPoolConfig(poolConfig);
         }
 

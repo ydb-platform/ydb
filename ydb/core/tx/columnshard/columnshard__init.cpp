@@ -20,7 +20,7 @@ using namespace NTabletFlatExecutor;
 
 class TTxInit : public TTransactionBase<TColumnShard> {
 private:
-    const TMonotonic Start = TMonotonic::Now();
+    const TMonotonic StartInstant = TMonotonic::Now();
 
 public:
     TTxInit(TColumnShard* self)
@@ -261,7 +261,7 @@ void TTxInit::Complete(const TActorContext& ctx) {
 
 class TTxUpdateSchema : public TTransactionBase<TColumnShard> {
     std::vector<NOlap::INormalizerTask::TPtr> NormalizerTasks;
-    const TMonotonic Start = TMonotonic::Now();
+    const TMonotonic StartInstant = TMonotonic::Now();
 
 public:
     TTxUpdateSchema(TColumnShard* self)
@@ -301,7 +301,7 @@ bool TTxUpdateSchema::Execute(TTransactionContext& txc, const TActorContext&) {
 
 void TTxUpdateSchema::Complete(const TActorContext& ctx) {
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxUpdateSchema.Complete");
-    Self->CSCounters.Initializer.OnTxUpdateSchemaFinished(TMonotonic::Now() - StartInstant);
+    Self->CSCounters.Initialization.OnTxUpdateSchemaFinished(TMonotonic::Now() - StartInstant);
     if (NormalizerTasks.empty()) {
         AFL_VERIFY(Self->NormalizerController.IsNormalizationFinished())("details", Self->NormalizerController.DebugString());
         Self->Execute(new TTxInit(Self), ctx);

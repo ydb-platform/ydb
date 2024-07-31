@@ -34,18 +34,18 @@ public:
         HistogramTxInitDurationMs->Collect(d.MilliSeconds());
     }
 
-    void OnTxUpdateSchemaFinished(const TDuration d) {
+    void OnTxUpdateSchemaFinished(const TDuration d) const {
         HistogramTxUpdateSchemaDurationMs->Collect(d.MilliSeconds());
     }
 
-    void OnTxInitSchemaFinished(const TDuration d) {
+    void OnTxInitSchemaFinished(const TDuration d) const {
         HistogramTxInitSchemaDurationMs->Collect(d.MilliSeconds());
     }
 
-    void OnActivateExecutor(const TDuration fromCreate) {
+    void OnActivateExecutor(const TDuration fromCreate) const {
         HistogramActivateExecutorFromActivationDurationMs->Collect(fromCreate.MilliSeconds());
     }
-    void OnSwitchToWork(const TDuration fromStart, const TDuration fromCreate) {
+    void OnSwitchToWork(const TDuration fromStart, const TDuration fromCreate) const {
         HistogramSwitchToWorkFromActivationDurationMs->Collect(fromStart.MilliSeconds());
         HistogramSwitchToWorkFromCreateDurationMs->Collect(fromCreate.MilliSeconds());
     }

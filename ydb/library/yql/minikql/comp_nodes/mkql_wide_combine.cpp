@@ -134,17 +134,19 @@ struct TCombinerNodes {
 
     void ConsumeRawData(TComputationContext& ctx, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue** from, NUdf::TUnboxedValue* to) const {
         std::fill_n(keys, KeyResultNodes.size(), NUdf::TUnboxedValuePod());
+        ui32 j = 0U;
         for (ui32 i = 0U; i < ItemNodes.size(); ++i) {
             if (from[i] && IsInputItemNodeUsed(i)) {
-                to[i] = std::move(*(from[i]));
+                to[j++] = std::move(*(from[i]));
             }
         }
     }
 
     void ExtractRawData(TComputationContext& ctx, NUdf::TUnboxedValue* from, NUdf::TUnboxedValue* keys) const {
+        ui32 j = 0U;
         for (ui32 i = 0U; i != ItemNodes.size(); ++i) {
             if (IsInputItemNodeUsed(i)) {
-                ItemNodes[i]->SetValue(ctx, std::move(from[i]));
+                ItemNodes[i]->SetValue(ctx, std::move(from[j++]));
             }
         }
         for (ui32 i = 0U; i < KeyNodes.size(); ++i) {
@@ -379,7 +381,7 @@ public:
     };
     TSpillingSupportState(
         TMemoryUsageInfo* memInfo,
-        const TMultiType* usedInputItemType, const TMultiType* keyAndStateType, ui32 keyWidth, size_t itemNodesSize,
+        const TMultiType* usedInputItemType, const TMultiType* keyAndStateType, ui32 keyWidth,
         const THashFunc& hash, const TEqualsFunc& equal, bool allowSpilling, TComputationContext& ctx
     )
         : TBase(memInfo)
@@ -387,7 +389,6 @@ public:
         , UsedInputItemType(usedInputItemType)
         , KeyAndStateType(keyAndStateType)
         , KeyWidth(keyWidth)
-        , ItemNodesSize(itemNodesSize)
         , Hasher(hash)
         , Mode(EOperatingMode::InMemory)
         , ViewForKeyAndState(keyAndStateType->GetElementsCount())
@@ -462,7 +463,7 @@ public:
         
         // Prepare space for raw data 
         MKQL_ENSURE(BufferForUsedInputItems.size() == 0, "Internal logic error");
-        BufferForUsedInputItems.resize(ItemNodesSize);
+        BufferForUsedInputItems.resize(UsedInputItemType->GetElementsCount());
         BufferForUsedInputItemsBucketId = bucketId;
 
         Throat = BufferForUsedInputItems.data();
@@ -725,7 +726,6 @@ private:
     const TMultiType* const UsedInputItemType;
     const TMultiType* const KeyAndStateType;
     const size_t KeyWidth;
-    const size_t ItemNodesSize;
     THashFunc const Hasher;
     EOperatingMode Mode;
     bool RecoverState; //sub mode for ProcessSpilledData
@@ -1577,7 +1577,6 @@ private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
         state = ctx.HolderFactory.Create<TSpillingSupportState>(UsedInputItemType, KeyAndStateType,
             Nodes.KeyNodes.size(),
-            Nodes.ItemNodes.size(),
 #ifdef MKQL_DISABLE_CODEGEN
             TMyValueHasher(KeyTypes),
             TMyValueEqual(KeyTypes),
@@ -1711,8 +1710,15 @@ IComputationNode* WrapWideCombinerT(TCallable& callable, const TComputationNodeF
     if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
         if constexpr (Last) {
             const auto inputItemTypes = GetWideComponents(inputType);
+            std::vector<TType *> usedInputItemTypes;
+            usedInputItemTypes.reserve(inputItemTypes.size());
+            for (size_t i = 0; i != inputItemTypes.size(); ++i) {
+                if (nodes.IsInputItemNodeUsed(i)) {
+                    usedInputItemTypes.push_back(inputItemTypes[i]);
+                }
+            }
             return new TWideLastCombinerWrapper(ctx.Mutables, wide, std::move(nodes),
-                TMultiType::Create(inputItemTypes.size(), inputItemTypes.data(), ctx.Env),
+                TMultiType::Create(usedInputItemTypes.size(), usedInputItemTypes.data(), ctx.Env),
                 std::move(keyTypes),
                 TMultiType::Create(keyAndStateItemTypes.size(),keyAndStateItemTypes.data(), ctx.Env),
                 allowSpilling

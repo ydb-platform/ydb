@@ -128,7 +128,7 @@ public:
 
     void Handle(TEvPrivate::TEvAsyncQueryFinished::TPtr& ev) {
         const ui64 requestId = ev->Get()->RequestId;
-        RequestsLatency += TInstant::Now() - RunningRequests_[requestId].StartTime;
+        RequestsLatency_ += TInstant::Now() - RunningRequests_[requestId].StartTime;
         RunningRequests_.erase(requestId);
 
         const auto& response = ev->Get()->Result.Response->Get()->Record.GetRef();
@@ -146,9 +146,9 @@ public:
             Cout << CoutColors_.Red() << TInstant::Now().ToIsoStringLocal() << " Request #" << requestId << " failed " << status << ". " << CoutColors_.Yellow() << GetInfoString() << "\n" << CoutColors_.Red() << "Issues:\n" << issues.ToString() << CoutColors_.Default();
         }
 
-        if (Settings_.Verbose == TAsyncQueriesSettings::EVerbose::Final && TInstant::Now() - LastReportTime > TDuration::Seconds(1)) {
+        if (Settings_.Verbose == TAsyncQueriesSettings::EVerbose::Final && TInstant::Now() - LastReportTime_ > TDuration::Seconds(1)) {
             Cout << CoutColors_.Green() << TInstant::Now().ToIsoStringLocal() << " Finished " << Failed_ + Completed_ << " requests. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << Endl;
-            LastReportTime = TInstant::Now();
+            LastReportTime_ = TInstant::Now();
         }
 
         StartDelayedRequests();
@@ -204,7 +204,7 @@ private:
     TString GetInfoString() const {
         TStringBuilder result = TStringBuilder() << "completed: " << Completed_ << ", failed: " << Failed_ << ", in flight: " << RunningRequests_.size() << ", max in flight: " << MaxInFlight_ << ", spend time: " << TInstant::Now() - StartTime_;
         if (const auto amountRequests = Completed_ + Failed_) {
-            result << ", average latency: " << RequestsLatency / amountRequests;
+            result << ", average latency: " << RequestsLatency_ / amountRequests;
         }
         return result;
     }
@@ -217,13 +217,13 @@ private:
     std::optional<NThreading::TPromise<void>> FinalizePromise_;
     std::queue<TEvPrivate::TEvStartAsyncQuery::TPtr> DelayedRequests_;
     std::unordered_map<ui64, TRequestInfo> RunningRequests_;
-    TInstant LastReportTime = TInstant::Now();
+    TInstant LastReportTime_ = TInstant::Now();
 
     ui64 RequestId_ = 1;
     ui64 MaxInFlight_ = 0;
     ui64 Completed_ = 0;
     ui64 Failed_ = 0;
-    TDuration RequestsLatency;
+    TDuration RequestsLatency_;
 };
 
 class TResourcesWaiterActor : public NActors::TActorBootstrapped<TResourcesWaiterActor> {

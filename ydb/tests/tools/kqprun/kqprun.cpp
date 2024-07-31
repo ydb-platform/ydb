@@ -452,7 +452,7 @@ protected:
             });
         options.AddLongOption("inflight-limit", "In flight limit for async queries (use 0 for unlimited)")
             .RequiredArgument("uint")
-            .DefaultValue(RunnerOptions.YdbSettings.AsyncQueriesSettings.InFlightLimit)
+            .DefaultValue(0)
             .StoreResult(&RunnerOptions.YdbSettings.AsyncQueriesSettings.InFlightLimit);
         TChoices<NKqpRun::TAsyncQueriesSettings::EVerbose> verbose({
             {"each-query", NKqpRun::TAsyncQueriesSettings::EVerbose::EachQuery},
@@ -510,7 +510,7 @@ protected:
                 return nodeCount;
             });
 
-        options.AddLongOption('M', "monitoring", "Embedded UI port (use 0 to start on random free port), if used kqprun will be runs as daemon")
+        options.AddLongOption('M', "monitoring", "Embedded UI port (use 0 to start on random free port), if used kqprun will be run as daemon")
             .RequiredArgument("uint")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 if (const TString& port = option->CurVal()) {
@@ -519,7 +519,7 @@ protected:
                 }
             });
 
-        options.AddLongOption('G', "grpc", "gRPC port (use 0 to start on random free port), if used kqprun will be runs as daemon")
+        options.AddLongOption('G', "grpc", "gRPC port (use 0 to start on random free port), if used kqprun will be run as daemon")
             .RequiredArgument("uint")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 if (const TString& port = option->CurVal()) {

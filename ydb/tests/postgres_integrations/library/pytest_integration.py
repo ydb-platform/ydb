@@ -11,6 +11,8 @@ import pytest
 
 import yatest
 
+import logging
+
 
 class TestState(Enum):
     PASSED = 1
@@ -53,26 +55,41 @@ class IntegrationTests:
     def pytest_deselected(self, items: List[pytest.Item]):
         for item in items:
             test_name = item.callspec.id
-            print("rekby-test: removed", test_name)
+            print(f"rekby-test removed: '{test_name}")
             self._selected_test.remove(test_name)
 
     def execute_test(self, testname: str):
         if not self._docker_executed:
-            self._run_tests_in_docker(testname)
+            if len(self._selected_test) == 1:
+                execute_test_filter=testname
+            else:
+                execute_test_filter=""
+
+            print("rekby-selected-tests: ", self._selected_test)
+            print(f"rekby-test-name: '{execute_test_filter}'")
+
+            self._run_tests_in_docker(execute_test_filter)
             test_results_file=path.join(self._test_result_folder, "raw", "result.xml")
             self._test_results = _read_tests_result(test_results_file)
+            print(f"rekby result parsed tests:\n\n{self._test_results}")
 
         self._check_test_results(testname)
 
     def _check_test_results(self, testname: str):
-        print(self._test_results)
-        test = self._test_results[testname]
+        try:
+            test = self._test_results[testname]
+        except KeyError:
+            pytest.fail("test result not found, may be the test was not run")
+
         if test.state == TestState.PASSED:
+            logging.getLogger().log(logging.INFO, test.log)
             return
         if test.state == TestState.SKIPPED:
-            pytest.skip(test.log)
+            logging.getLogger().log(logging.INFO, test.log)
+            pytest.skip()
         if test.state == TestState.FAILED:
-            pytest.fail(reason=test.log)
+            logging.getLogger().log(logging.ERROR, test.log)
+            pytest.fail()
 
         raise Exception(f"Unexpected test state: '{test.state}'")
 
@@ -114,12 +131,12 @@ class IntegrationTests:
             environment = [
                 "PGUSER=root",
                 "PGPASSWORD=1234",
-                "PGHOST=ydb",
+                "PGHOST=localhost",
                 "PGPORT=5432",
                 "PGDATABASE=local",
                 "PQGOSSLTESTS=0",
                 "PQSSLCERTTEST_PATH=certs",
-                # f"YDB_PG_TESTNAME={test_name}",
+                f"YDB_PG_TESTNAME={test_name}",
             ],
             mounts = [
                 docker.types.Mount(
@@ -167,15 +184,23 @@ def _read_tests_result(filepath: str) -> Dict[str, TestCase]:
 
     res: Dict[str, TestCase] = dict()
 
+    def get_text(test_case, field_name: str)->str:
+        field_val = test_case[field_name]
+        if type(field_val) == str:
+            return field_val
+        elif type(field_val) == dict:
+            return field_val.get("#text", "")
+        raise Exception(f"Unknown field val for field '{field_name}':\n{field_val}")
+
     for test_case in test_cases:
         name = test_case["@classname"] + "/" + test_case["@name"]
-        test_state = TestState.PASSED
+        print("rekby-debug", test_case)
         if "failure" in test_case:
             test_state = TestState.FAILED
-            log = test_case["failure"].get("#text", "")
-        if "skipped" in test_case:
+            log = get_text(test_case, "failure")
+        elif "skipped" in test_case:
             test_state = TestState.SKIPPED
-            log = test_case["skipped"].get("#text", "")
+            log = get_text(test_case, "skipped")
         else:
             test_state = TestState.PASSED
             log = ""

@@ -3,16 +3,16 @@
     <testsuite name="" tests="221" failures="112" errors="0" id="0" hostname="localhost" skipped="6" time="0.330" timestamp="2024-07-16T15:06:53Z">
         <testcase name="OK" classname="o" time="0.000"></testcase>
         <testcase name="failed1" classname="f" time="0.000">
-            <failure message="Failed">fail mess</failure>
+            <failure>fail mess</failure>
         </testcase>
         <testcase name="failed2" classname="f" time="0.000">
             <failure message="Failed"><![CDATA[escaped error]]></failure>
         </testcase>
-        <testcase name="s1" classname="s" time="0.000">
-            <failure message="Failed">skip message</failure>
+        <testcase name="skipped1" classname="s" time="0.000">
+            <skipped message="Skipped">skip message</skipped>
         </testcase>
-        <testcase name="s2" classname="s" time="0.000">
-            <failure message="Failed"><![CDATA[escaped skip message]]></failure>
+        <testcase name="skipped2" classname="s" time="0.000">
+            <skipped><![CDATA[escaped skip message]]></skipped>
         </testcase>
     </testsuite>
 </testsuites>

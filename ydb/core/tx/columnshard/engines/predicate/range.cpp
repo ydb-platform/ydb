@@ -61,14 +61,14 @@ bool TPKRangeFilter::IsPortionInUsage(const TPortionInfo& info) const {
 
 bool TPKRangeFilter::IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const {
     bool fromInternal = false;
-    if (auto from = PredicateFrom.GetReplaceKey()) {
+    if (const auto& from = PredicateFrom.GetReplaceKey()) {
         bool cmpStart = std::is_lteq(start.ComparePartNotNull(*from, from->Size()));
         bool cmpEnd = std::is_gteq(end.ComparePartNotNull(*from, from->Size()));
         fromInternal = cmpStart && cmpEnd;
     }
 
     bool toInternal = false;
-    if (auto to = PredicateTo.GetReplaceKey()) {
+    if (const auto& to = PredicateTo.GetReplaceKey()) {
         bool cmpStart = std::is_lteq(start.ComparePartNotNull(*to, to->Size()));
         bool cmpEnd = std::is_gteq(end.ComparePartNotNull(*to, to->Size()));
         toInternal = cmpStart && cmpEnd;

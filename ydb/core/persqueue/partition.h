@@ -458,7 +458,9 @@ public:
     }
 
     // The size of the data realy was persisted in the storage by the partition
-    ui64 MeteringDataSize() const;
+    ui64 UserDataSize() const;
+    // The size of the data was metered to user
+    ui64 MeteringDataSize(TInstant now) const;
     // The size of the storage that was reserved by the partition
     ui64 ReserveSize() const;
     // The size of the storage that usud by the partition. That included combination of the reserver and realy persisted data.
@@ -952,4 +954,3 @@ private:
 };
 
 } // namespace NKikimr::NPQ
-

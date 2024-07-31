@@ -1140,7 +1140,6 @@ void TPersQueue::InitializeMeteringSink(const TActorContext& ctx) {
         return result;
     };
 
-
     MeteringSink.Create(ctx.Now(), {
             .FlushInterval  = TDuration::Seconds(pqConfig.GetBillingMeteringConfig().GetFlushIntervalSec()),
             .TabletId       = ToString(TabletID()),
@@ -1149,7 +1148,7 @@ void TPersQueue::InitializeMeteringSink(const TActorContext& ctx) {
             .YdbDatabaseId  = Config.GetYdbDatabaseId(),
             .StreamName     = streamName,
             .ResourceId     = streamPath,
-            .PartitionsSize = Config.PartitionsSize(),
+            .PartitionsSize = CountActivePartitions(Config.GetPartitions()),
             .WriteQuota     = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(),
             .ReservedSpace  = storageLimitBytes,
             .ConsumersCount = countReadRulesWithPricing(ctx, Config),

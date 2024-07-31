@@ -1125,6 +1125,7 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
     TTabletId BalancerTabletID = InvalidTabletId;
     TShardIdx BalancerShardIdx = InvalidShardIdx;
     THashMap<ui32, TTopicTabletInfo::TTopicPartitionInfo*> Partitions;
+    size_t ActivePartitionCount = 0;
 
     TString PreSerializedPathDescription; // Cached path description
     TString PreSerializedPartitionsDescription; // Cached partition description
@@ -1221,6 +1222,7 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
         alterData->AlterVersion = AlterVersion + 1;
         Y_ABORT_UNLESS(alterData->TotalGroupCount);
         Y_ABORT_UNLESS(alterData->TotalPartitionCount);
+        Y_ABORT_UNLESS(0 < alterData->ActivePartitionCount && alterData->ActivePartitionCount <= alterData->TotalPartitionCount);
         Y_ABORT_UNLESS(alterData->NextPartitionId);
         Y_ABORT_UNLESS(alterData->MaxPartsPerTablet);
         alterData->KeySchema = KeySchema;
@@ -1234,6 +1236,7 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
         TotalGroupCount = AlterData->TotalGroupCount;
         NextPartitionId = AlterData->NextPartitionId;
         TotalPartitionCount = AlterData->TotalPartitionCount;
+        ActivePartitionCount = AlterData->ActivePartitionCount;
         MaxPartsPerTablet = AlterData->MaxPartsPerTablet;
         if (!AlterData->TabletConfig.empty())
             TabletConfig = std::move(AlterData->TabletConfig);

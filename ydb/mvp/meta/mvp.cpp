@@ -65,7 +65,7 @@ int TMVP::Init() {
     ActorSystem.Register(AppData.Tokenator = TMvpTokenator::CreateTokenator(TokensConfig, HttpProxyId));
 
     if (Http) {
-        auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(HttpPort, FQDNHostName());
+        auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(HttpPort, TStringBuilder() << FQDNHostName() << ':' << HttpPort);
         ev->CompressContentTypes = {
             "text/plain",
             "text/html",
@@ -76,7 +76,7 @@ int TMVP::Init() {
         ActorSystem.Send(HttpProxyId, ev);
     }
     if (Https) {
-        auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(HttpsPort, FQDNHostName());
+        auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(HttpsPort, TStringBuilder() << FQDNHostName() << ':' << HttpsPort);
         ev->Secure = true;
         ev->SslCertificatePem = TYdbLocation::SslCertificate;
         ev->CompressContentTypes = {

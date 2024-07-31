@@ -77,7 +77,9 @@ void TBalancer::RenderApp(TStringStream& str) const {
                             TABLER() {
                                 TABLED() { DIV_CLASS_ID(style, partitionAnchor(partitionId)) {
                                     str << partitionId << " ";
-                                    HREF(TStringBuilder() << "?TabletID=" << partitionInfo->TabletId) { str << "#"; }
+                                    if (partitionInfo) {
+                                        HREF(TStringBuilder() << "?TabletID=" << partitionInfo->TabletId) { str << "#"; }
+                                    }
                                 } }
                                 TABLED() {
                                     if (family) {

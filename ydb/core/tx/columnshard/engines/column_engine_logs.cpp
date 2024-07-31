@@ -516,7 +516,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
                 continue;
             }
             Y_ABORT_UNLESS(portionInfo->Produced());
-            const bool skipPortion = !pkRangesFilter.IsPortionInUsage(*portionInfo, VersionedIndex.GetLastSchema()->GetIndexInfo());
+            const bool skipPortion = !pkRangesFilter.IsPortionInUsage(*portionInfo);
             AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", skipPortion ? "portion_skipped" : "portion_selected")
                 ("pathId", pathId)("portion", portionInfo->DebugString());
             if (skipPortion) {

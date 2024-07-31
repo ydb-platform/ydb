@@ -222,6 +222,13 @@
     }
 
     document.addEventListener("DOMContentLoaded", function() {
+
+        document.addEventListener('keydown', function(event) {
+            if ((event.ctrlKey && event.keyCode == 70) || (event.metaKey && event.keyCode == 70)) { 
+                toggleAllTables('expand');
+            }    
+        });
+
         document.addEventListener('click', function(event) {
             if (!event.target.closest('.svg-icon') && !event.target.classList.contains('copy')) {
                 hideTooltips();
@@ -250,19 +257,23 @@
             });
         });
 
-        document.getElementById('expand-all').addEventListener('click', () => toggleAllTables('expand'));
-        document.getElementById('collapse-all').addEventListener('click', () => toggleAllTables('collapse'));
+        document.getElementById('expand-all').addEventListener('click', function(event) {
+             toggleAllTables('expand');
+        });
+        document.getElementById('collapse-all').addEventListener('click',  function(event) {
+            toggleAllTables('collapse');
+        });
     });
 </script>
 </head>
 <body>
     <div class="toggle-visibility-buttons">
-        <button id="expand-all">Expand All for Search</button>
+        <button id="expand-all">Expand All</button>
         <button id="collapse-all">Collapse All</button>
     </div>
 {% for status in status_order %}
 <h1 id="{{ status.name}}" class="collapsible-header">{{ status.name }} ({{ tests[status] | length }})</h1>
-<table class="collapsible-content{% if status.name == 'FAIL' %} active{% endif %}" border="1">
+<table class="collapsible-content active" border="1">
     <thead>
     <tr>
         <th>test name</th>

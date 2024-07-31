@@ -9,6 +9,7 @@ DEPENDS(
 
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(YDB_FEATURE_FLAGS="enable_topic_service_tx")
+ENV(YDB_ADDITIONAL_LOG_CONFIGS="MEMORY_CONTROLLER:DEBUG")
 
 SRCS(
     workload-topic.cpp

@@ -40,7 +40,7 @@ static const TString defaultTableSchema = R"(
 )";
 
 static const TVector<NArrow::NTest::TTestColumn> defaultYdbSchema = {
-    NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) ),
+    NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)).SetNullable(false),
     NArrow::NTest::TTestColumn("data", TTypeInfo(NTypeIds::Utf8) )
 };
 
@@ -713,7 +713,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             TSet<ui64> txIds;
             for (ui32 i = 0; i < 10; ++i) {
                 std::vector<ui64> writeIds;
-                NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, { "timestamp" });
+                NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert);
                 NTxUT::ProposeCommit(runtime, sender, shardId, ++txId, writeIds);
                 txIds.insert(txId);
             }
@@ -725,7 +725,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
             // trigger periodic stats at shard (after timeout)
             std::vector<ui64> writeIds;
-            NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, { "timestamp" });
+            NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert);
             NTxUT::ProposeCommit(runtime, sender, shardId, ++txId, writeIds);
             NTxUT::PlanCommit(runtime, sender, shardId, ++planStep, {txId});
         }

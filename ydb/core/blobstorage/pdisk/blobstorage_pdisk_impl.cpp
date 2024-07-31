@@ -1677,6 +1677,14 @@ void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 user
             "Incorrect disk parameters! Total chunks# " << diskSizeChunks
             << ", System chunks needed# " << format.SystemChunkCount << ", cant run with < 3 free chunks!"
             << " Debug format# " << format.ToString());
+
+        ChunkState = TVector<TChunkState>(diskSizeChunks);
+        for (ui32 i = 0; i < format.SystemChunkCount; ++i) {
+            ChunkState[i].OwnerId = OwnerSystem;
+        }
+        for (ui32 i = format.SystemChunkCount; i < diskSizeChunks; ++i) {
+            ChunkState[i].OwnerId = OwnerUnallocated;
+        }
     }
     // Trim the entire device
     if (trimEntireDevice && DriveModel.IsTrimSupported()) {
@@ -1703,7 +1711,7 @@ void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 user
     if (metadata) {
         // Prepare chunks for metadata, if needed.
         InitFormattedMetadata();
-        WriteMetadataSync(std::move(*metadata));
+        WriteMetadataSync(std::move(*metadata), format);
     }
 
     // Prepare initial SysLogRecord

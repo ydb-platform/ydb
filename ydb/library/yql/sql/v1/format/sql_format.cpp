@@ -1536,7 +1536,19 @@ private:
     void VisitAlterBackupCollection(const TRule_alter_backup_collection_stmt& msg) {
         PosFromToken(msg.GetToken1());
         NewLine();
-        VisitAllFields(TRule_alter_backup_collection_stmt::GetDescriptor(), msg);
+        VisitToken(msg.GetToken1());
+        Visit(msg.GetRule_backup_collection2());
+
+        NewLine();
+        PushCurrentIndent();
+        Visit(msg.GetRule_alter_backup_collection_actions3().GetRule_alter_backup_collection_action1());
+        for (const auto& action : msg.GetRule_alter_backup_collection_actions3().GetBlock2()) {
+            Visit(action.GetToken1()); // comma
+            NewLine();
+            Visit(action.GetRule_alter_backup_collection_action2());
+        }
+
+        PopCurrentIndent();
     }
 
     void VisitDropBackupCollection(const TRule_drop_backup_collection_stmt& msg) {

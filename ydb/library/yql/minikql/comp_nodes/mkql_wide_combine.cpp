@@ -464,7 +464,7 @@ public:
         BufferForUsedInputItemsBucketId = bucketId;
 
         Throat = BufferForUsedInputItems.data();
-    
+
         return ETasteResult::ConsumeRawData;
     }
 
@@ -1337,7 +1337,11 @@ public:
 
             std::vector<PHINode*> phis(Nodes.ItemNodes.size(), nullptr);
             auto j = 0U;
-            std::generate(phis.begin(), phis.end(), [&](){ return PHINode::Create(valueType, 2U, (TString("item_") += ToString(j++)).c_str(), test); });
+            std::generate(phis.begin(), phis.end(), [&]() {
+                const auto i = j++;
+                return Nodes.ItemNodes[i]->GetDependencesCount() > 0U || Nodes.PasstroughtItems[i] ?
+                    PHINode::Create(valueType, 2U, (TString("item_") += ToString(i)).c_str(), test) : nullptr;
+            });
 
             block = more;
 
@@ -1363,13 +1367,16 @@ public:
             std::vector<Value*> items(phis.size(), nullptr);
             for (ui32 i = 0U; i < items.size(); ++i) {
                 const auto ptr = GetElementPtrInst::CreateInBounds(valueType, extractor, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("load_ptr_") += ToString(i)).c_str(), block);
-                items[i] = new LoadInst(valueType, ptr, (TString("load_") += ToString(i)).c_str(), block);
-                if (Nodes.ItemNodes[i]->GetDependencesCount() > 0U)
+                if (phis[i])
+                    items[i] = new LoadInst(valueType, ptr, (TString("load_") += ToString(i)).c_str(), block);
+                if (i < Nodes.ItemNodes.size() && Nodes.ItemNodes[i]->GetDependencesCount() > 0U)
                     EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.ItemNodes[i])->CreateSetValue(ctx, block, items[i]);
             }
 
             for (ui32 i = 0U; i < phis.size(); ++i) {
-                phis[i]->addIncoming(items[i], block);
+                if (const auto phi = phis[i]) {
+                    phi->addIncoming(items[i], block);
+                }
             }
 
             BranchInst::Create(test, block);
@@ -1392,13 +1399,16 @@ public:
             block = good;
 
             for (ui32 i = 0U; i < items.size(); ++i) {
-                items[i] = getres.second[i](ctx, block);
+                if (phis[i])
+                    items[i] = getres.second[i](ctx, block);
                 if (Nodes.ItemNodes[i]->GetDependencesCount() > 0U)
                     EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.ItemNodes[i])->CreateSetValue(ctx, block, items[i]);
             }
 
             for (ui32 i = 0U; i < phis.size(); ++i) {
-                phis[i]->addIncoming(items[i], block);
+                if (const auto phi = phis[i]) {
+                    phi->addIncoming(items[i], block);
+                }
             }
 
             BranchInst::Create(test, block);
@@ -1513,14 +1523,11 @@ public:
 
             block = save;
 
-            for (ui32 i = 0U; i < Nodes.KeyResultNodes.size(); ++i) {
-                new StoreInst(ConstantInt::get(valueType, 0), keyPointers[i], block);
-            }
-
             for (ui32 i = 0U; i < phis.size(); ++i) {
-                const auto item = phis[i];
-                new StoreInst(item, pointers[i], block);
-                ValueAddRef(Nodes.ItemNodes[i]->GetRepresentation(), item, ctx, block);
+                if (const auto item = phis[i]) {
+                    new StoreInst(item, pointers[i], block);
+                    ValueAddRef(Nodes.ItemNodes[i]->GetRepresentation(), item, ctx, block);
+                }
             }
 
             BranchInst::Create(more, block);

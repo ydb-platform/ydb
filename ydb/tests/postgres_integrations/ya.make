@@ -1,4 +1,4 @@
 RECURSE(
-    psycopg2
+    go-libpq
     library
 )

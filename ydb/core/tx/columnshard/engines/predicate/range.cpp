@@ -40,7 +40,7 @@ NKikimr::NArrow::TColumnFilter TPKRangeFilter::BuildFilter(const arrow::Datum& d
 }
 
 bool TPKRangeFilter::IsPortionInUsage(const TPortionInfo& info) const {
-    if (auto from = PredicateFrom.GetReplaceKey()) {
+    if (const auto& from = PredicateFrom.GetReplaceKey()) {
         const auto& portionEnd = info.IndexKeyEnd();
         const int commonSize = std::min(from->Size(), portionEnd.Size());
         if (std::is_gt(from->ComparePartNotNull(portionEnd, commonSize))) {
@@ -48,7 +48,7 @@ bool TPKRangeFilter::IsPortionInUsage(const TPortionInfo& info) const {
         }
     }
 
-    if (auto to = PredicateTo.GetReplaceKey()) {
+    if (const auto& to = PredicateTo.GetReplaceKey()) {
         const auto& portionStart = info.IndexKeyStart();
         const int commonSize = std::min(to->Size(), portionStart.Size());
         if (std::is_lt(to->ComparePartNotNull(portionStart, commonSize))) {

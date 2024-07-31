@@ -47,8 +47,8 @@ private:
 
 public:
 
-    const NArrow::TReplaceKey& GetReplaceKey() const {
-        return *ReplaceKey;
+    const std::shared_ptr<NArrow::TReplaceKey>& GetReplaceKey() const {
+        return ReplaceKey;
     }
 
     bool IsEmpty() const {

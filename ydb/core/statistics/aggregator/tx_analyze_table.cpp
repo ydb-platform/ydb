@@ -7,7 +7,6 @@ namespace NKikimr::NStat {
 struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
     TPathId PathId;
     TActorId ReplyToActorId;
-    ui64 OperationId = 0;
 
     TTxAnalyzeTable(TSelf* self, const TPathId& pathId, TActorId replyToActorId)
         : TTxBase(self)
@@ -27,7 +26,6 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
         auto itOp = Self->ForceTraversalsByPathId.find(PathId);
         if (itOp != Self->ForceTraversalsByPathId.end()) {
             itOp->second.ReplyToActorIds.insert(ReplyToActorId);
-            OperationId = itOp->second.OperationId;
             return true;
         }
 
@@ -44,8 +42,6 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
         db.Table<Schema::ForceTraversals>().Key(operation.OperationId).Update(
             NIceDb::TUpdate<Schema::ForceTraversals::OwnerId>(PathId.OwnerId),
             NIceDb::TUpdate<Schema::ForceTraversals::LocalPathId>(PathId.LocalPathId));
-
-        OperationId = operation.OperationId;
 
         return true;
     }

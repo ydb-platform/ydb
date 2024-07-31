@@ -217,23 +217,17 @@ TConclusionStatus TScanHead::DetectSourcesFeatureInContextIntervalScan(const THa
     }
     const ui64 startMemory = optimizer.GetMemorySum();
     if (!optimizer.Optimize(Context->ReduceMemoryIntervalLimit) && Context->RejectMemoryIntervalLimit < optimizer.GetMemorySum()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "next_internal_broken")
-            ("reason", "a lot of memory need")("start", startMemory)
-            ("reduce_limit", Context->ReduceMemoryIntervalLimit)
-            ("reject_limit", Context->RejectMemoryIntervalLimit)
-            ("need", optimizer.GetMemorySum())
-            ("path_ids", JoinSeq(",", optimizer.GetPathIds()))
-            ("details", IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_DEBUG, NKikimrServices::TX_COLUMNSHARD_SCAN) ? optimizer.DebugString() : "NEED_DEBUG_LEVEL");
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "next_internal_broken")("reason", "a lot of memory need")("start", startMemory)(
+            "reduce_limit", Context->ReduceMemoryIntervalLimit)("reject_limit", Context->RejectMemoryIntervalLimit)(
+            "need", optimizer.GetMemorySum())("path_ids", JoinSeq(",", optimizer.GetPathIds()))(
+            "details", IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_DEBUG, NKikimrServices::TX_COLUMNSHARD_SCAN) ? optimizer.DebugString() : "NEED_DEBUG_LEVEL");
         Context->GetCommonContext()->GetCounters().OnOptimizedIntervalMemoryFailed(optimizer.GetMemorySum());
         return TConclusionStatus::Fail("We need a lot of memory in time for interval scanner: " +
             ::ToString(optimizer.GetMemorySum()) + " path_ids: " + JoinSeq(",", optimizer.GetPathIds()) + ". We need wait compaction processing. Sorry.");
     } else if (optimizer.GetMemorySum() < startMemory) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "memory_reduce_active")
-            ("reason", "need reduce memory")("start", startMemory)
-            ("reduce_limit", Context->ReduceMemoryIntervalLimit)
-            ("reject_limit", Context->RejectMemoryIntervalLimit)
-            ("need", optimizer.GetMemorySum())
-            ("path_ids", JoinSeq(",", optimizer.GetPathIds()));
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "memory_reduce_active")("reason", "need reduce memory")("start", startMemory)(
+            "reduce_limit", Context->ReduceMemoryIntervalLimit)("reject_limit", Context->RejectMemoryIntervalLimit)(
+            "need", optimizer.GetMemorySum())("path_ids", JoinSeq(",", optimizer.GetPathIds()));
         Context->GetCommonContext()->GetCounters().OnOptimizedIntervalMemoryReduced(startMemory - optimizer.GetMemorySum());
     }
     Context->GetCommonContext()->GetCounters().OnOptimizedIntervalMemoryRequired(optimizer.GetMemorySum());

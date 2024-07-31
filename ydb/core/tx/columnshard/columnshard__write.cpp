@@ -16,27 +16,21 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
     Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
     switch (overloadReason) {
         case EOverloadStatus::Disk:
-            Counters.GetTabletCounters()->IncCounter(COUNTER_OUT_OF_SPACE);
+            Counters.GetCSCounters().OnWriteOverloadDisk(writeData.GetSize());
             break;
         case EOverloadStatus::InsertTable:
-            // TODO: Move all IncCounter's below under OnWriteOverload*
-            Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_OVERLOAD);
             Counters.GetCSCounters().OnWriteOverloadInsertTable(writeData.GetSize());
             break;
         case EOverloadStatus::OverloadMetadata:
-            Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_OVERLOAD);
             Counters.GetCSCounters().OnWriteOverloadMetadata(writeData.GetSize());
             break;
         case EOverloadStatus::ShardTxInFly:
-            Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_OVERLOAD);
             Counters.GetCSCounters().OnWriteOverloadShardTx(writeData.GetSize());
             break;
         case EOverloadStatus::ShardWritesInFly:
-            Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_OVERLOAD);
             Counters.GetCSCounters().OnWriteOverloadShardWrites(writeData.GetSize());
             break;
         case EOverloadStatus::ShardWritesSizeInFly:
-            Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_OVERLOAD);
             Counters.GetCSCounters().OnWriteOverloadShardWritesSize(writeData.GetSize());
             break;
         case EOverloadStatus::None:

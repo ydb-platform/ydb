@@ -8,7 +8,7 @@ namespace NKikimr::NColumnShard {
 
 TCSCounters::TCSCounters()
     : TBase("CS")
-{
+    , Initialization(*this) {
     StartBackgroundCount = TBase::GetDeriviative("StartBackground/Count");
     TooEarlyBackgroundCount = TBase::GetDeriviative("TooEarlyBackground/Count");
     SetupCompactionCount = TBase::GetDeriviative("SetupCompaction/Count");

@@ -151,7 +151,7 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
             INSERT INTO `/Root/NewTable` (dt, value) VALUES 
                 (1, 'value1'), (2, 'value2'), (3, 'value3'), (4, 'value4');
             COMMIT;
-            
+
             SELECT * FROM (SELECT dt, value FROM `/Root/NewTable`)
                 MATCH_RECOGNIZE(
                     ORDER BY CAST(dt as Timestamp)

@@ -29,7 +29,7 @@ NKqpProto::TKqpPhyTx BuildTxPlan(const TString& sql, TIntrusivePtr<IKqpGateway> 
     IModuleResolver::TPtr moduleResolver;
     UNIT_ASSERT(GetYqlDefaultModuleResolver(moduleCtx, moduleResolver));
 
-    auto qp = CreateKqpHost(gateway, cluster, "/Root", config, moduleResolver, NYql::IHTTPGateway::Make(), nullptr, nullptr, Nothing(), nullptr, nullptr, false, false, nullptr, actorSystem, nullptr, NKikimrConfig::TQueryServiceConfig());
+    auto qp = CreateKqpHost(gateway, cluster, "/Root", config, moduleResolver, NYql::IHTTPGateway::Make(), nullptr, nullptr, NKikimrConfig::TQueryServiceConfig(), Nothing(), nullptr, nullptr, false, false, nullptr, actorSystem, nullptr);
     auto result = qp->SyncPrepareDataQuery(sql, IKqpHost::TPrepareSettings());
     result.Issues().PrintTo(Cerr);
     UNIT_ASSERT(result.Success());

@@ -1837,6 +1837,9 @@ void TBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorCo
 }
 
 void TBalancer::ProcessPendingStats(const TActorContext& ctx) {
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+            GetPrefix() << "ProcessPendingStats. PendingUpdates size " << PendingUpdates.size());
+
     GetPartitionGraph().Travers([&](ui32 id) {
         for (auto& d : PendingUpdates[id]) {
             if (d.Commited) {
@@ -1845,6 +1848,7 @@ void TBalancer::ProcessPendingStats(const TActorContext& ctx) {
         }
         return true;
     });
+
     PendingUpdates.clear();
 }
 

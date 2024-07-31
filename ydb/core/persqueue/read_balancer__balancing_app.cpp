@@ -72,9 +72,13 @@ void TBalancer::RenderApp(TStringStream& str) const {
                             const auto* family = consumer->FindFamily(partitionId);
                             const auto* node = consumer->GetPartitionGraph().GetPartition(partitionId);
                             TString style = node && node->Children.empty() ? "text-success" : "text-muted";
+                            auto* partitionInfo = GetPartitionInfo(partitionId);
 
                             TABLER() {
-                                TABLED() { DIV_CLASS_ID(style, partitionAnchor(partitionId)) { str << partitionId; } }
+                                TABLED() { DIV_CLASS_ID(style, partitionAnchor(partitionId)) {
+                                    str << partitionId << " ";
+                                    HREF(TStringBuilder() << "?TabletID=" << partitionInfo->TabletId) { str << "#"; }
+                                } }
                                 TABLED() {
                                     if (family) {
                                         HREF("#" + familyAnchor(family->Id)) { str << family->Id; }

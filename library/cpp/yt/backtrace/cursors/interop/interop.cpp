@@ -6,13 +6,13 @@ namespace NYT::NBacktrace {
 
 TFramePointerCursorContext FramePointerCursorContextFromUcontext(const ucontext_t& ucontext)
 {
-#if defined(_linux_)
+#if defined(_linux_) && defined(_x86_64_)
     return {
         .Rip = static_cast<ui64>(ucontext.uc_mcontext.gregs[REG_RIP]),
         .Rsp = static_cast<ui64>(ucontext.uc_mcontext.gregs[REG_RSP]),
         .Rbp = static_cast<ui64>(ucontext.uc_mcontext.gregs[REG_RBP]),
     };
-#elif defined(_darwin_)
+#elif defined(_darwin_) && defined(_x86_64_)
     return {
         .Rip = static_cast<ui64>(ucontext.uc_mcontext->__ss.__rip),
         .Rsp = static_cast<ui64>(ucontext.uc_mcontext->__ss.__rsp),

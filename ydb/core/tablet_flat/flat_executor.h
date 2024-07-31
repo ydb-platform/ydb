@@ -441,6 +441,7 @@ class TExecutor
     TAutoPtr<TCommitManager> CommitManager;
     TAutoPtr<TScans> Scans;
     TAutoPtr<TMemory> Memory;
+    TAutoPtr<NTable::IMemTableMemoryConsumersCollection> MemTableMemoryConsumersCollection;
     TAutoPtr<TLogicSnap> LogicSnap;
     TAutoPtr<TLogicRedo> LogicRedo;
     TAutoPtr<TLogicAlter> LogicAlter;
@@ -656,8 +657,8 @@ public:
     ui64 CompactTable(ui32 tableId) override;
     bool CompactTables() override;
 
-    void Handle(NSharedCache::TEvMemTableRegistered::TPtr &ev);
-    void Handle(NSharedCache::TEvMemTableCompact::TPtr &ev);
+    void Handle(NMemory::TEvMemTableRegistered::TPtr &ev);
+    void Handle(NMemory::TEvMemTableCompact::TPtr &ev);
 
     void AllowBorrowedGarbageCompaction(ui32 tableId) override;
 

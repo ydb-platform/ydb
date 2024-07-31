@@ -14,7 +14,7 @@ void PrepareScheme(NKikimrSchemeOp::TTableDescription* schema, const TString& na
     const NScheme::TTypeRegistry* typeRegistry = AppData(context.Ctx)->TypeRegistry;
 
     NKikimrSchemeOp::TTableDescription completedSchema;
-    context.SS->DescribeTable(srcTableInfo, typeRegistry, true, &completedSchema);
+    context.SS->DescribeTable(*srcTableInfo, typeRegistry, true, &completedSchema);
     completedSchema.SetName(name);
 
     //inherit all from Src except PartitionConfig, PartitionConfig could be altered

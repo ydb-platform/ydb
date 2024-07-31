@@ -9,6 +9,10 @@ message TFeatureFlags {
         VALUE_FALSE = 2;
     }
 
+    // leave removed fields below
+    reserved "SomeRemovedFeatureFlagExample";
+    reserved "AnotherRemovedFeatureFlagExample";
+
     optional bool EnableSeparateSolomonShardForPDisk = 1 [default = true];
     optional bool UseForsetiSchedulerByDefaultForPDisk = 2 [default = true];
     optional bool EnableSeparateTrimThreadForPDisk = 3 [default = true];
@@ -141,7 +145,10 @@ message TFeatureFlags {
     optional bool EnableExternalSourceSchemaInference = 126 [default = false];
     optional bool EnableDbMetadataCache = 127 [default = false];
     optional bool EnableTableDatetime64 = 128 [default = true];
-    optional bool EnableResourcePools  = 129 [default = false];
+    optional bool EnableResourcePools = 129 [default = false];
     optional bool EnableColumnStatistics = 130 [default = false];
     optional bool EnableSingleCompositeActionGroup = 131 [default = false];
+    optional bool EnableResourcePoolsOnServerless = 132 [default = false];
+    optional bool EnableVectorIndex = 133 [default = false];
+    optional bool EnableChangefeedsOnIndexTables = 134 [default = false];
 }

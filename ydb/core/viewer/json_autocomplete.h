@@ -15,8 +15,9 @@ namespace NViewer {
 using namespace NActors;
 using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
-class TJsonAutocomplete : public TViewerPipeClient<TJsonAutocomplete> {
-    using TBase = TViewerPipeClient<TJsonAutocomplete>;
+class TJsonAutocomplete : public TViewerPipeClient {
+    using TThis = TJsonAutocomplete;
+    using TBase = TViewerPipeClient;
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
     TEvViewer::TEvViewerRequest::TPtr ViewerRequest;
@@ -51,10 +52,6 @@ class TJsonAutocomplete : public TViewerPipeClient<TJsonAutocomplete> {
     std::vector<TNodeId> TenantDynamicNodes;
     bool Direct = false;
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
     TJsonAutocomplete(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
         : Viewer(viewer)
         , Event(ev)
@@ -165,7 +162,7 @@ public:
         return request;
     }
 
-    void Bootstrap() {
+    void Bootstrap() override {
         if (ViewerRequest) {
             // handle proxied request
             SendSchemeCacheRequest();
@@ -394,7 +391,7 @@ public:
         }
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         if (ProxyResult) {
             ParseProxyResult();
         } else if (Database) {

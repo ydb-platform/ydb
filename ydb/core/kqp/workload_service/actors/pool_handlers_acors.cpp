@@ -54,6 +54,12 @@ class TPoolHandlerActorBase : public TActor<TDerived> {
             UpdateConfigCounters(poolConfig);
         }
 
+        void CollectRequestLatency(TInstant continueTime) {
+            if (continueTime) {
+                RequestsLatencyMs->Collect((TInstant::Now() - continueTime).MilliSeconds());
+            }
+        }
+
         void UpdateConfigCounters(const NResourcePool::TPoolSettings& poolConfig) {
             InFlightLimit->Set(std::max(poolConfig.ConcurrentQueryLimit, 0));
             QueueSizeLimit->Set(std::max(poolConfig.QueueSize, 0));
@@ -106,6 +112,7 @@ protected:
         const TActorId WorkerActorId;
         const TString SessionId;
         const TInstant StartTime = TInstant::Now();
+        TInstant ContinueTime;
 
         EState State = EState::Pending;
         bool Started = false;  // after TEvContinueRequest success
@@ -267,6 +274,7 @@ public:
         if (status == Ydb::StatusIds::SUCCESS) {
             LocalInFlight++;
             request->Started = true;
+            request->ContinueTime = TInstant::Now();
             Counters.LocalInFly->Inc();
             Counters.ContinueOk->Inc();
             Counters.DelayedTimeMs->Collect((TInstant::Now() - request->StartTime).MilliSeconds());
@@ -387,7 +395,7 @@ private:
 
         if (status == Ydb::StatusIds::SUCCESS) {
             Counters.CleanupOk->Inc();
-            Counters.RequestsLatencyMs->Collect((TInstant::Now() - request->StartTime).MilliSeconds());
+            Counters.CollectRequestLatency(request->ContinueTime);
             LOG_D("Reply cleanup success to " << request->WorkerActorId << ", session id: " << request->SessionId << ", local in flight: " << LocalInFlight);
         } else {
             Counters.CleanupError->Inc();
@@ -401,7 +409,7 @@ private:
         this->Send(MakeKqpProxyID(this->SelfId().NodeId()), ev.release());
 
         Counters.Cancelled->Inc();
-        Counters.RequestsLatencyMs->Collect((TInstant::Now() - request->StartTime).MilliSeconds());
+        Counters.CollectRequestLatency(request->ContinueTime);
         LOG_I("Cancel request for worker " << request->WorkerActorId << ", session id: " << request->SessionId << ", local in flight: " << LocalInFlight);
     }
 
@@ -577,7 +585,7 @@ protected:
     }
 
     void OnScheduleRequest(TRequest* request) override {
-        if (PendingRequests.size() >= MAX_PENDING_REQUESTS || GetLocalSessionsCount() - GetLocalInFlight() > QueueSizeLimit + 1) {
+        if (PendingRequests.size() >= MAX_PENDING_REQUESTS || SaturationSub(GetLocalSessionsCount() - GetLocalInFlight(), InFlightLimit) > QueueSizeLimit) {
             ReplyContinue(request, Ydb::StatusIds::OVERLOADED, TStringBuilder() << "Too many pending requests for pool " << PoolId);
             return;
         }
@@ -695,8 +703,8 @@ private:
         size_t delayedRequestsCount = DelayedRequests.size();
         DoStartPendingRequest(GetLoadCpuThreshold());
 
-        if (GlobalState.DelayedRequests + PendingRequests.size() > QueueSizeLimit) {
-            RemoveBackRequests(PendingRequests, std::min(GlobalState.DelayedRequests + PendingRequests.size() - QueueSizeLimit, PendingRequests.size()), [this](TRequest* request) {
+        if (const ui64 delayedRequests = SaturationSub(GlobalState.AmountRequests() + PendingRequests.size(), InFlightLimit); delayedRequests > QueueSizeLimit) {
+            RemoveBackRequests(PendingRequests, std::min(delayedRequests - QueueSizeLimit, PendingRequests.size()), [this](TRequest* request) {
                 ReplyContinue(request, Ydb::StatusIds::OVERLOADED, TStringBuilder() << "Too many pending requests for pool " << PoolId);
             });
             FifoCounters.PendingRequestsCount->Set(PendingRequests.size());
@@ -847,7 +855,7 @@ private:
         }
 
         bool canStartRequest = QueueSizeLimit == 0 && GlobalState.RunningRequests < InFlightLimit;
-        canStartRequest |= !GetLoadCpuThreshold() && NodeCount && GlobalState.RunningRequests + NodeCount < InFlightLimit;
+        canStartRequest |= !GetLoadCpuThreshold() && DelayedRequests.size() + GlobalState.DelayedRequests == 0 && NodeCount && GlobalState.RunningRequests + NodeCount < InFlightLimit;
         if (!PendingRequests.empty() && canStartRequest) {
             RunningOperation = true;
             const TString& sessionId = PopPendingRequest();

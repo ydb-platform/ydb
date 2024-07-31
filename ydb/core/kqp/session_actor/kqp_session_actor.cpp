@@ -475,6 +475,7 @@ public:
 
     void Handle(NWorkload::TEvContinueRequest::TPtr& ev) {
         YQL_ENSURE(QueryState);
+        QueryState->ContinueTime = TInstant::Now();
 
         if (ev->Get()->Status == Ydb::StatusIds::UNSUPPORTED) {
             LOG_T("Failed to place request in resource pool, feature flag is disabled");
@@ -837,9 +838,10 @@ public:
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
         HasOlapTable |= ::NKikimr::NKqp::HasOlapTableReadInTx(phyQuery) || ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery);
         HasOltpTable |= ::NKikimr::NKqp::HasOltpTableReadInTx(phyQuery) || ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery);
-        if (HasOlapTable && HasOltpTable) {
+        HasTableWrite |= ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery) || ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery);
+        if (HasOlapTable && HasOltpTable && HasTableWrite) {
             ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
-                            "Transactions between column and row tables are disabled at current time.");
+                            "Write transactions between column and row tables are disabled at current time.");
             return false;
         }
         QueryState->TxCtx->SetTempTables(QueryState->TempTablesState);
@@ -1096,11 +1098,10 @@ public:
 
     bool ExecutePhyTx(const TKqpPhyTxHolder::TConstPtr& tx, bool commit) {
         if (tx) {
-            QueryState->PrepareStatementTransaction(tx->GetType());
             switch (tx->GetType()) {
                 case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
                     YQL_ENSURE(tx->StagesSize() == 0);
-                    if (QueryState->HasTxControl() && QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED) {
+                    if (QueryState->HasTxControl() && !QueryState->HasImplicitTx() && QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED) {
                         ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                             "Scheme operations cannot be executed inside transaction");
                         return true;
@@ -1551,6 +1552,9 @@ public:
 
         stats->DurationUs = ((TInstant::Now() - QueryState->StartTime).MicroSeconds());
         stats->WorkerCpuTimeUs = (QueryState->GetCpuTime().MicroSeconds());
+        if (const auto continueTime = QueryState->ContinueTime) {
+            stats->QueuedTimeUs = (continueTime - QueryState->StartTime).MicroSeconds();
+        }
         if (QueryState->CompileResult) {
             stats->Compilation.emplace();
             stats->Compilation->FromCache = (QueryState->CompileStats.FromCache);
@@ -2536,6 +2540,7 @@ private:
 
     bool HasOlapTable = false;
     bool HasOltpTable = false;
+    bool HasTableWrite = false;
 
     TGUCSettings::TPtr GUCSettings;
 };

@@ -62,6 +62,11 @@ int TChannelWrapper::GetInflightRequestCount()
     return UnderlyingChannel_->GetInflightRequestCount();
 }
 
+IMemoryUsageTrackerPtr TChannelWrapper::GetChannelMemoryTracker()
+{
+    return UnderlyingChannel_->GetChannelMemoryTracker();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TClientRequestControlThunk::SetUnderlying(IClientRequestControlPtr underlying)

@@ -24,7 +24,7 @@ Three command modes are supported:
 | Name | Description |
 ---|---
 | `<topic-path>` | Topic path |
-| `-c VAL`, `--consumer VAL` | Topic consumer name.<br>Message consumption starts from the current offset for this consumer (if the `--timestamp` parameter is not specified).<br>The current offset is shifted as messages are consumed and output (if `--commit=false` is not set). |
+| `-c VAL`, `--consumer VAL` | Topic consumer name.<br/>Message consumption starts from the current offset for this consumer (if the `--timestamp` parameter is not specified).<br/>The current offset is shifted as messages are consumed and output (if `--commit=false` is not set). |
 
 ### Basic optional parameters
 
@@ -33,9 +33,9 @@ Three command modes are supported:
 - Specifies how to format messages at the output. Some formats don't support streaming mode.
 - List of supported formats:
 
-   | Name | Description | Is<br>streaming mode supported? |
+   | Name | Description | Is<br/>streaming mode supported? |
    ---|---|---
-   | `single-message`<br>(default) | The contents of no more than one message are output without formatting. | - |
+   | `single-message`<br/>(default) | The contents of no more than one message are output without formatting. | - |
    | `pretty` | Output to a pseudo-graphic table with columns containing message metadata. The message itself is output to the `body` column. | No |
    | `newline-delimited` | Messages are output with a delimiter (`0x0A` newline character) added after each message. | Yes |
    | `concatenated` | Messages are output one after another with no delimiter added. | Yes |
@@ -49,7 +49,7 @@ Three command modes are supported:
 
 - The default and acceptable values depend on the selected output format:
 
-   | Does the format<br>support streaming selection mode? | Default limit value | Acceptable values |
+   | Does the format<br/>support streaming selection mode? | Default limit value | Acceptable values |
    ---|---|---
    | No | 10 | 1-500 |
    | Yes | 0 (no limit) | 0-500 |
@@ -72,10 +72,10 @@ Three command modes are supported:
 
 | Name | Description |
 ---|---
-| `--idle-timeout VAL` | Timeout for deciding if a topic is empty, meaning that it contains no messages for processing. <br>The time is counted from the point when a connection is established once the command is run or when the last message is received. If no new messages arrive from the server during the specified timeout, the topic is considered to be empty.<br>Defaults to `1s` (1 second). |
-| `--timestamp VAL` | Message consumption starts from the point in time specified in [UNIX timestamp](https://en.wikipedia.org/wiki/Unix_time) format.<br>If not set, messages are consumed starting from the consumer's current offset in the topic.<br>If set, consumption starts from the first [message](../../concepts/topic.md#message) received after the specified time. |
-| `--with-metadata-fields VAL` | List of [message attributes](../../concepts/topic.md#message) whose values should be output in columns with metadata in `pretty` format. If not set, columns with all attributes are output. <br>Possible values:<ul><li>`write_time`: The time a message is written to the server in [UNIX timestamp](https://en.wikipedia.org/wiki/Unix_time) format.</li><li>`meta`: Message metadata.</li><li>`create_time`: The time a message is created by the source in [UNIX timestamp](https://en.wikipedia.org/wiki/Unix_time) format.</li><li>`seq_no`: Message [sequence number](../../concepts/topic.md#seqno).</li><li>`offset`: [Message sequence number within a partition](../../concepts/topic.md#offset).</li><li>`message_group_id`: [Message group ID](../../concepts/topic.md#producer-id).</li><li>`body`: Message body.</li></ul> |
-| `--partition-ids VAL` | Comma-separated list of [partition](../../concepts/topic.md#partitioning) identifiers to read from.<br>If not specified, messages are read from all partitions. |
+| `--idle-timeout VAL` | Timeout for deciding if a topic is empty, meaning that it contains no messages for processing. <br/>The time is counted from the point when a connection is established once the command is run or when the last message is received. If no new messages arrive from the server during the specified timeout, the topic is considered to be empty.<br/>Defaults to `1s` (1 second). |
+| `--timestamp VAL` | Message consumption starts from the point in time specified in [UNIX timestamp](https://en.wikipedia.org/wiki/Unix_time) format.<br/>If not set, messages are consumed starting from the consumer's current offset in the topic.<br/>If set, consumption starts from the first [message](../../concepts/topic.md#message) received after the specified time. |
+| `--with-metadata-fields VAL` | List of [message attributes](../../concepts/topic.md#message) whose values should be output in columns with metadata in `pretty` format. If not set, columns with all attributes are output. <br/>Possible values:<ul><li>`write_time`: The time a message is written to the server in [UNIX timestamp](https://en.wikipedia.org/wiki/Unix_time) format.</li><li>`meta`: Message metadata.</li><li>`create_time`: The time a message is created by the source in [UNIX timestamp](https://en.wikipedia.org/wiki/Unix_time) format.</li><li>`seq_no`: Message [sequence number](../../concepts/topic.md#seqno).</li><li>`offset`: [Message sequence number within a partition](../../concepts/topic.md#offset).</li><li>`message_group_id`: [Message group ID](../../concepts/topic.md#producer-id).</li><li>`body`: Message body.</li></ul> |
+| `--partition-ids VAL` | Comma-separated list of [partition](../../concepts/topic.md#partitioning) identifiers to read from.<br/>If not specified, messages are read from all partitions. |
 
 ## Examples {#examples}
 

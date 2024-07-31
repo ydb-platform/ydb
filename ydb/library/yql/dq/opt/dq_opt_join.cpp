@@ -624,6 +624,19 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
         return join;
     }
 
+    TExprNode::TListType flags;
+    if (const auto maybeFlags = join.Flags()) {
+        flags = maybeFlags.Cast().Ref().ChildrenList();
+    }
+
+    for (auto& flag : flags) {
+        if (flag->IsAtom("LeftAny") || flag->IsAtom("RightAny")) {
+            ctx.AddError(TIssue(ctx.GetPosition(join.Ptr()->Pos()), "ANY join kind is not currently supported"));
+            return join;
+        }
+    }
+
+
     YQL_ENSURE(join.LeftInput().Maybe<TDqCnUnionAll>());
     TDqCnUnionAll leftCn = join.LeftInput().Cast<TDqCnUnionAll>();
 

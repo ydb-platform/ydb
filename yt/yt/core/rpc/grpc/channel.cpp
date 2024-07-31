@@ -216,6 +216,11 @@ public:
         YT_UNIMPLEMENTED();
     }
 
+    IMemoryUsageTrackerPtr GetChannelMemoryTracker() override
+    {
+        return GetNullMemoryUsageTracker();
+    }
+
 private:
     const TChannelConfigPtr Config_;
     const TString EndpointAddress_;

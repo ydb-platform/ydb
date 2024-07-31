@@ -398,6 +398,10 @@ message TS3GatewayConfig {
     optional uint64 RegexpCacheSize = 14;
     optional uint64 GeneratorPathsLimit = 15;
     optional uint64 MaxListingResultSizePerPartition = 16;
+    optional uint64 RowsInBatch = 17; // Default = 1000
+    optional uint64 MaxInflight = 18; // Default = 20
+    optional uint64 DataInflight = 19; // Default = 200 MB
+    optional bool AllowLocalFiles = 20;
 
     repeated TAttr DefaultSettings = 100;
 }

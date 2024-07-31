@@ -9,7 +9,7 @@ void TScanHead::OnIntervalResult(const std::optional<NArrow::TShardedRecordBatch
     std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger, const ui32 intervalIdx, TPlainReadData& reader) {
     if (Context->GetReadMetadata()->Limit && (!newBatch || newBatch->GetRecordsCount() == 0) && InFlightLimit < 1000) {
         if (++ZeroCount == std::max<ui64>(16, InFlightLimit)) {
-            InFlightLimit = std::max<ui32>(MaxInFlight, InFlightLimit * 2);
+            InFlightLimit = std::min<ui32>(MaxInFlight, InFlightLimit * 2);
             ZeroCount = 0;
         }
     } else {

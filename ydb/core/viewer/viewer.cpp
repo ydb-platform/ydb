@@ -45,6 +45,7 @@ extern void InitPDiskJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitVDiskJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitOperationJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitSchemeJsonHandlers(TJsonHandlers& jsonHandlers);
+extern void InitStorageJsonHandlers(TJsonHandlers& jsonHandlers);
 
 void SetupPQVirtualHandlers(IViewer* viewer) {
     viewer->RegisterVirtualHandler(
@@ -169,6 +170,13 @@ public:
                 .UseAuth = true,
                 .AllowedSIDs = viewerAllowedSIDs,
             });
+            mon->RegisterActorPage({
+                .RelPath = "storage",
+                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorId = ctx.SelfID,
+                .UseAuth = true,
+                .AllowedSIDs = viewerAllowedSIDs,
+            });
             auto whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId());
             ctx.Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint(
                 "http-mon", Sprintf(":%d", KikimrRunConfig.AppConfig.GetMonitoringConfig().GetMonitoringPort())));
@@ -178,6 +186,7 @@ public:
             InitViewerJsonHandlers(JsonHandlers);
             InitPDiskJsonHandlers(JsonHandlers);
             InitVDiskJsonHandlers(JsonHandlers);
+            InitStorageJsonHandlers(JsonHandlers);
             InitOperationJsonHandlers(JsonHandlers);
             InitSchemeJsonHandlers(JsonHandlers);
 
@@ -188,15 +197,15 @@ public:
                 JsonHandlers.JsonHandlersIndex[oldPath] = JsonHandlers.JsonHandlersIndex[newPath];
             }
 
-            // TODO: redirect old paths
-            Redirect307["/viewer/v2/json/config"] = "/viewer/config";
-            Redirect307["/viewer/v2/json/sysinfo"] = "/viewer/sysinfo";
-            Redirect307["/viewer/v2/json/pdiskinfo"] = "/viewer/pdiskinfo";
-            Redirect307["/viewer/v2/json/vdiskinfo"] = "/viewer/vdiskinfo";
-            Redirect307["/viewer/v2/json/storage"] = "/viewer/storage";
-            Redirect307["/viewer/v2/json/nodelist"] = "/viewer/nodelist";
-            Redirect307["/viewer/v2/json/tabletinfo"] = "/viewer/tabletinfo";
-            Redirect307["/viewer/v2/json/nodeinfo"] = "/viewer/nodeinfo";
+            // TODO: redirect of very old paths
+            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/config"] = JsonHandlers.JsonHandlersIndex["/viewer/config"];
+            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/sysinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/sysinfo"];
+            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/pdiskinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/pdiskinfo"];
+            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/vdiskinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/vdiskinfo"];
+            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/storage"] = JsonHandlers.JsonHandlersIndex["/viewer/storage"];
+            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/nodelist"] = JsonHandlers.JsonHandlersIndex["/viewer/nodelist"];
+            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/tabletinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/tabletinfo"];
+            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/nodeinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/nodeinfo"];
 
             TWhiteboardInfo<NKikimrWhiteboard::TEvNodeStateResponse>::InitMerger();
             TWhiteboardInfo<NKikimrWhiteboard::TEvBSGroupStateResponse>::InitMerger();
@@ -346,6 +355,15 @@ public:
         return {};
     }
 
+    NJson::TJsonValue GetCapabilities() override {
+        std::lock_guard guard(JsonHandlersMutex);
+        NJson::TJsonValue capabilities(NJson::JSON_MAP);
+        for (const auto& [name, version] : JsonHandlers.Capabilities) {
+            capabilities[name] = version;
+        }
+        return capabilities;
+    }
+
     void RegisterVirtualHandler(
             NKikimrViewer::EObjectType parentObjectType,
             TVirtualHandlerType handler) override {
@@ -376,6 +394,7 @@ public:
 
 private:
     TJsonHandlers JsonHandlers;
+    std::mutex JsonHandlersMutex;
     std::unordered_map<TString, TString> Redirect307;
     const TKikimrRunConfig KikimrRunConfig;
     std::unordered_multimap<NKikimrViewer::EObjectType, TVirtualHandler> VirtualHandlersByParentType;
@@ -522,7 +541,7 @@ private:
                     "HTTP/1.1 204 No Content\r\n"
                     "Access-Control-Allow-Origin: " + AllowOrigin + "\r\n"
                     "Access-Control-Allow-Credentials: true\r\n"
-                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
+                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace\r\n"
                     "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n"
                     "Allow: OPTIONS, GET, POST\r\n"
                     "Content-Type: " + type + "\r\n"
@@ -534,7 +553,7 @@ private:
                         "HTTP/1.1 204 No Content\r\n"
                         "Access-Control-Allow-Origin: " + origin + "\r\n"
                         "Access-Control-Allow-Credentials: true\r\n"
-                        "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
+                        "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace\r\n"
                         "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n"
                         "Allow: OPTIONS, GET, POST\r\n"
                         "Content-Type: " + type + "\r\n"
@@ -560,12 +579,13 @@ private:
         }
         auto handler = JsonHandlers.FindHandler(path);
         if (handler) {
+            auto sender(ev->Sender);
             try {
                 ctx.ExecutorThread.RegisterActor(handler->CreateRequestActor(this, ev));
                 return;
             }
             catch (const std::exception& e) {
-                ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(TString("HTTP/1.1 400 Bad Request\r\n\r\n") + e.what(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+                Send(sender, new NMon::TEvHttpInfoRes(TString("HTTP/1.1 400 Bad Request\r\n\r\n") + e.what(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
                 return;
             }
         }
@@ -652,7 +672,7 @@ void TViewer::FillCORS(TStringBuilder& stream, const TRequestState& request) {
     if (origin) {
         stream << "Access-Control-Allow-Origin: " << origin << "\r\n"
                << "Access-Control-Allow-Credentials: true\r\n"
-               << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
+               << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace\r\n"
                << "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n";
     }
 }

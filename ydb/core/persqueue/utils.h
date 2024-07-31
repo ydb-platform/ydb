@@ -11,6 +11,8 @@ ui64 TopicPartitionReserveThroughput(const NKikimrPQ::TPQTabletConfig& config);
 
 bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config);
 
+size_t CountActivePartitions(const ::google::protobuf::RepeatedPtrField< ::NKikimrPQ::TPQTabletConfig_TPartition >& partitions);
+
 ui64 PutUnitsSize(const ui64 size);
 
 TString SourceIdHash(const TString& sourceId);
@@ -55,7 +57,9 @@ public:
 
     const Node* GetPartition(ui32 id) const;
     std::set<ui32> GetActiveChildren(ui32 id) const;
-    void Travers(ui32 id, std::function<bool (ui32 id)> func, bool includeSelf = false) const;
+
+    void Travers(const std::function<bool (ui32 id)>& func) const;
+    void Travers(ui32 id, const std::function<bool (ui32 id)>& func, bool includeSelf = false) const;
 
 private:
     std::unordered_map<ui32, Node> Partitions;

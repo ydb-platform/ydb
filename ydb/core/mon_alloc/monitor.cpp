@@ -288,11 +288,8 @@ namespace NKikimr {
             struct TDumpLogConfig {
                 static constexpr double RssUsageHard = 0.9;
                 static constexpr double RssUsageSoft = 0.85;
-                static constexpr double RssUsageSoftLimit = 0.75;
-                static constexpr double RssUsageNotifySlowLimit = 0.5;
                 static constexpr TDuration RepeatInterval = TDuration::Seconds(10);
                 static constexpr TDuration DumpInterval = TDuration::Minutes(10);
-                static constexpr TDuration NotifySlowInterval = TDuration::Seconds(10);
             };
 
             enum {
@@ -302,13 +299,11 @@ namespace NKikimr {
 
             struct TEvDumpLogStats : public TEventLocal<TEvDumpLogStats, EvDumpLogStats> {};
 
-            const TIntrusivePtr<TMemObserver> MemObserver;
             const TDuration Interval;
             const std::unique_ptr<IAllocMonitor> AllocMonitor;
             const TString FilePathPrefix;
 
             TInstant LogMemoryStatsTime = TInstant::Now() - TDumpLogConfig::DumpInterval;
-            TInstant NotifyMemoryStatsTime = TInstant::Now() - TDumpLogConfig::NotifySlowInterval;
 
             bool IsDangerous = false;
 
@@ -317,9 +312,8 @@ namespace NKikimr {
                 return EActivityType::ACTORLIB_STATS;
             }
 
-            TMemProfMonitor(TIntrusivePtr<TMemObserver> memObserver, TDuration interval, std::unique_ptr<IAllocMonitor> allocMonitor, const TString& filePathPrefix)
-                : MemObserver(std::move(memObserver))
-                , Interval(interval)
+            TMemProfMonitor(TDuration interval, std::unique_ptr<IAllocMonitor> allocMonitor, const TString& filePathPrefix)
+                : Interval(interval)
                 , AllocMonitor(std::move(allocMonitor))
                 , FilePathPrefix(filePathPrefix)
             {}
@@ -401,21 +395,6 @@ namespace NKikimr {
                 std::optional<TMemoryUsage> memoryUsage = TAllocState::TryGetMemoryUsage();
                 if (memoryUsage) {
                     LogMemoryStatsIfNeeded(ctx, memoryUsage.value());
-
-                    TMemObserver::TMemStat stat{
-                        // Note: we use allocated memory because AnonRss has lag
-                        TAllocState::GetAllocatedMemoryEstimate(), 
-                        memoryUsage->CGroupLimit, 
-                        static_cast<ui64>(memoryUsage->CGroupLimit * TDumpLogConfig::RssUsageSoftLimit)};
-
-                    if (memoryUsage->AnonRss > TDumpLogConfig::RssUsageNotifySlowLimit ||
-                            TInstant::Now() - NotifyMemoryStatsTime > TDumpLogConfig::NotifySlowInterval) {
-                        NotifyMemoryStatsTime = TInstant::Now();
-                        MemObserver->NotifyStat(stat);
-                    } else {
-                        // fast path: don't call callback, but update current stat
-                        MemObserver->SetStat(stat);
-                    }
                 }
                 
                 ctx.Schedule(Interval, new TEvents::TEvWakeup());
@@ -447,10 +426,9 @@ namespace NKikimr {
         };
     }
 
-    IActor* CreateMemProfMonitor(TIntrusivePtr<TMemObserver> memObserver, ui32 intervalSec, TDynamicCountersPtr counters, const TString& filePathPrefix) {
+    IActor* CreateMemProfMonitor(TDuration interval, TDynamicCountersPtr counters, const TString& filePathPrefix) {
         return new TMemProfMonitor(
-            memObserver,
-            TDuration::Seconds(intervalSec),
+            interval,
             CreateAllocMonitor(GetServiceCounters(counters, "utils")),
             filePathPrefix);
     }

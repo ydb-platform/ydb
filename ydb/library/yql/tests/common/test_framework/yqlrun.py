@@ -118,7 +118,14 @@ class YQLRun(object):
                 cmd.append('--ansi-lexer')
             env = {'YQL_DETERMINISTIC_MODE': '1'}
             env.update(extra_env)
-            for var in ['LLVM_PROFILE_FILE', 'GO_COVERAGE_PREFIX', 'PYTHON_COVERAGE_PREFIX', 'NLG_COVERAGE_FILENAME']:
+            for var in [
+                'LLVM_PROFILE_FILE',
+                'GO_COVERAGE_PREFIX',
+                'PYTHON_COVERAGE_PREFIX',
+                'NLG_COVERAGE_FILENAME',
+                'YQL_EXPORT_PG_FUNCTIONS_DIR',
+                'YQL_ALLOW_ALL_PG_FUNCTIONS',
+                    ]:
                 if var in os.environ:
                     env[var] = os.environ[var]
             yatest.common.process.execute(cmd, cwd=res_dir, env=env)
@@ -254,7 +261,14 @@ class YQLRun(object):
 
         env = {'YQL_DETERMINISTIC_MODE': '1'}
         env.update(extra_env)
-        for var in ['LLVM_PROFILE_FILE', 'GO_COVERAGE_PREFIX', 'PYTHON_COVERAGE_PREFIX', 'NLG_COVERAGE_FILENAME']:
+        for var in [
+            'LLVM_PROFILE_FILE',
+            'GO_COVERAGE_PREFIX',
+            'PYTHON_COVERAGE_PREFIX',
+            'NLG_COVERAGE_FILENAME',
+            'YQL_EXPORT_PG_FUNCTIONS_DIR',
+            'YQL_ALLOW_ALL_PG_FUNCTIONS',
+                ]:
             if var in os.environ:
                 env[var] = os.environ[var]
         if yql_utils.get_param('STDERR'):

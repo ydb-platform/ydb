@@ -395,11 +395,15 @@ TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(
         }
     }
 
+    auto strategy = join.JoinType().Value() == "LeftSemi"
+        ? TKqpStreamLookupSemiJoinStrategyName
+        : TKqpStreamLookupJoinStrategyName;
+
     TExprBase lookupJoin = Build<TKqlStreamLookupTable>(ctx, join.Pos())
         .Table(rightLookup.MainTable)
         .LookupKeys(leftInput)
         .Columns(lookupColumns.Cast())
-        .LookupStrategy().Build(TKqpStreamLookupJoinStrategyName)
+        .LookupStrategy().Build(strategy)
         .Done();
 
     // Stream lookup join output: stream<tuple<left_row_struct, optional<right_row_struct>>>
@@ -914,14 +918,24 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
 
 TExprBase KqpJoinToIndexLookup(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, bool useCBO)
 {
-    if ((!useCBO && kqpCtx.IsScanQuery() && !kqpCtx.Config->EnableKqpScanQueryStreamIdxLookupJoin) || !node.Maybe<TDqJoin>()) {
+    if (!node.Maybe<TDqJoin>()) {
         return node;
     }
+
     auto join = node.Cast<TDqJoin>();
+    auto algo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
+
+    if (algo == EJoinAlgoType::Undefined) {
+        useCBO = false;
+    }
+
+    if (!useCBO && kqpCtx.IsScanQuery() && !kqpCtx.Config->EnableKqpScanQueryStreamIdxLookupJoin) {
+        return node;
+    }
 
     if (useCBO){
-         auto algo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
-         if (algo != EJoinAlgoType::LookupJoin && algo != EJoinAlgoType::LookupJoinReverse && algo != EJoinAlgoType::Undefined) {
+         
+         if (algo != EJoinAlgoType::LookupJoin && algo != EJoinAlgoType::LookupJoinReverse) {
             return node;
          }
     }

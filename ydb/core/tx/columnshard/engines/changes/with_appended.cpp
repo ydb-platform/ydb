@@ -102,53 +102,6 @@ void TChangesWithAppend::DoOnAfterCompile() {
     }
 }
 
-std::vector<TWritePortionInfoWithBlobsConstructor> TChangesWithAppend::MakeAppendedPortions(const std::shared_ptr<arrow::RecordBatch> batch,
-    const ui64 pathId, const TSnapshot& snapshot, const TGranuleMeta* granuleMeta, TConstructionContext& context, const std::optional<NArrow::NSerialization::TSerializerContainer>& overrideSaver) const {
-    Y_ABORT_UNLESS(batch->num_rows());
-
-    auto resultSchema = context.SchemaVersions.GetSchema(snapshot);
-
-    std::shared_ptr<NOlap::TSerializationStats> stats = std::make_shared<NOlap::TSerializationStats>();
-    if (granuleMeta) {
-        stats = granuleMeta->BuildSerializationStats(resultSchema);
-    }
-    auto schema = std::make_shared<TDefaultSchemaDetails>(resultSchema, stats);
-    if (overrideSaver) {
-        schema->SetOverrideSerializer(*overrideSaver);
-    }
-    std::vector<TWritePortionInfoWithBlobsConstructor> out;
-    {
-        std::vector<TBatchSerializedSlice> pages = TBatchSerializedSlice::BuildSimpleSlices(batch, NSplitter::TSplitSettings(), context.Counters.SplitterCounters, schema);
-        std::vector<TGeneralSerializedSlice> generalPages;
-        for (auto&& i : pages) {
-            generalPages.emplace_back(i.GetPortionChunksToHash(), schema, context.Counters.SplitterCounters);
-        }
-
-        const NSplitter::TEntityGroups groups = resultSchema->GetIndexInfo().GetEntityGroupsByStorageId(IStoragesManager::DefaultStorageId, *SaverContext.GetStoragesManager());
-        TSimilarPacker slicer(NSplitter::TSplitSettings().GetExpectedPortionSize());
-        auto packs = slicer.Split(generalPages);
-
-        ui32 recordIdx = 0;
-        for (auto&& i : packs) {
-            TGeneralSerializedSlice slicePrimary(std::move(i));
-            auto dataWithSecondary =
-                resultSchema->GetIndexInfo().AppendIndexes(slicePrimary.GetPortionChunksToHash(), SaverContext.GetStoragesManager()).DetachResult();
-            TGeneralSerializedSlice slice(dataWithSecondary.GetExternalData(), schema, context.Counters.SplitterCounters);
-
-            auto b = batch->Slice(recordIdx, slice.GetRecordsCount());
-            auto constructor = TWritePortionInfoWithBlobsConstructor::BuildByBlobs(slice.GroupChunksByBlobs(groups),
-                dataWithSecondary.GetSecondaryInplaceData(), pathId, resultSchema->GetVersion(), snapshot, SaverContext.GetStoragesManager());
-
-            constructor.GetPortionConstructor().AddMetadata(*resultSchema, b);
-            constructor.GetPortionConstructor().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);
-            out.emplace_back(std::move(constructor));
-            recordIdx += slice.GetRecordsCount();
-        }
-    }
-
-    return out;
-}
-
 void TChangesWithAppend::DoStart(NColumnShard::TColumnShard& /*self*/) {
 }
 

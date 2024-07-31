@@ -87,7 +87,10 @@
 
 /* in globals.c */
 /* these are marked volatile because they are set by signal handlers: */
-extern __thread PGDLLIMPORT volatile sig_atomic_t InterruptPending;
+DECLARE_THREAD_VAR(volatile sig_atomic_t, InterruptPending);
+#ifdef BUILD_PG_EXTENSION
+#define InterruptPending (*PtrInterruptPending())
+#endif
 extern __thread PGDLLIMPORT volatile sig_atomic_t QueryCancelPending;
 extern __thread PGDLLIMPORT volatile sig_atomic_t ProcDiePending;
 extern __thread PGDLLIMPORT volatile sig_atomic_t IdleInTransactionSessionTimeoutPending;

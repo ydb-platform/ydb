@@ -278,7 +278,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMergeBeforePublis
 
             if (dstRowSpec->GetColumnOrder().Defined() && AnyOf(mergeSection.Paths(), [colOrder = *dstRowSpec->GetColumnOrder()](auto path) {
                 auto rowSpec = TYtTableBaseInfo::GetRowSpec(path.Table());
-                return rowSpec->GetColumnOrder().Defined() && rowSpec->GetColumnOrder() != colOrder;
+                return rowSpec->GetColumnOrder().Defined() && *rowSpec->GetColumnOrder() != colOrder;
             })) {
                 continue;
             }

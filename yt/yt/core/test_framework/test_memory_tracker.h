@@ -34,6 +34,9 @@ public:
     TSharedRef Track(
         TSharedRef reference,
         bool keepHolder = false) override;
+    TErrorOr<TSharedRef> TryTrack(
+        TSharedRef reference,
+        bool keepHolder = false) override;
 private:
 
     class TTestTrackedReferenceHolder

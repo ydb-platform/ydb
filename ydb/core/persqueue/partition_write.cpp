@@ -1764,7 +1764,7 @@ bool TPartition::WaitingForSubDomainQuota(const TActorContext& /*ctx*/, const ui
         return withSize > 0 || Size() > 0;
     }
 
-    return MeteringDataSize() + withSize > ReserveSize();
+    return UserDataSize() + withSize > ReserveSize();
 }
 
 void TPartition::RequestBlobQuota(size_t quotaSize)

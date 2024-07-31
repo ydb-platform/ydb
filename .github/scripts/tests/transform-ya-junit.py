@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+
+# Tool used to transform junit report. Performs the following:
+# - adds classname with relative path to test in 'testcase' node
+# - add 'url:logsdir' and other links with in 'testcase' node
+# - mutes tests
+
 import argparse
 import re
 import json
@@ -165,7 +171,7 @@ def save_zip(suite_name, out_dir, url_prefix, logs_dir: Set[str]):
     return f"{url_prefix}{quoted_fpath}"
 
 
-def transform(fp, mute_check: YaMuteCheck, ya_out_dir, save_inplace, log_url_prefix, log_out_dir, log_trunc_size,
+def transform(fp, mute_check: YaMuteCheck, ya_out_dir, save_inplace, log_url_prefix, log_out_dir, log_truncate_size,
               test_stuff_out, test_stuff_prefix):
     tree = ET.parse(fp)
     root = tree.getroot()
@@ -195,7 +201,7 @@ def transform(fp, mute_check: YaMuteCheck, ya_out_dir, save_inplace, log_url_pre
                 if logs:
                     log_print(f"add {list(logs.keys())!r} properties for {test_cls}.{test_method}")
                     for name, fn in logs.items():
-                        url = save_log(ya_out_dir, fn, log_out_dir, log_url_prefix, log_trunc_size)
+                        url = save_log(ya_out_dir, fn, log_out_dir, log_url_prefix, log_truncate_size)
                         add_junit_link_property(case, name, url)
 
         if has_fail_tests:
@@ -221,18 +227,18 @@ def main():
         "-i", action="store_true", dest="save_inplace", default=False, help="modify input file in-place"
     )
     parser.add_argument("-m", help="muted test list")
-    parser.add_argument("--log-url-prefix", default="./", help="url prefix for logs")
-    parser.add_argument("--log-out-dir", help="symlink logs to specific directory")
+    parser.add_argument('--public_dir', help='root directory for publication')
+    parser.add_argument("--public_dir_url", help="url prefix for root directory")
+
+    parser.add_argument("--log_out_dir", help="out dir to store logs (symlinked), relative to public_dir")
     parser.add_argument(
-        "--log-truncate-size",
-        dest="log_trunc_size",
+        "--log_truncate_size",
         type=int,
         default=134217728,
         help="truncate log after specific size, 0 disables truncation",
     )
-    parser.add_argument("--ya-out", help="ya make output dir (for searching logs and artifacts)")
-    parser.add_argument('--test-stuff-out', help='output folder for archive testing_out_stuff')
-    parser.add_argument('--test-stuff-prefix', help='url prefix for testing_out_stuff')
+    parser.add_argument("--ya_out", help="ya make output dir (for searching logs and artifacts)")
+    parser.add_argument('--test_stuff_out', help='output dir for archive testing_out_stuff, relative to public_dir"')
     parser.add_argument("in_file", type=argparse.FileType("r"))
 
     args = parser.parse_args()
@@ -242,16 +248,24 @@ def main():
     if args.m:
         mute_check.load(args.m)
 
+    log_out_dir =  os.path.join(args.public_dir, args.log_out_dir)
+    os.makedirs(log_out_dir, exist_ok=True)
+    log_url_prefix = os.path.join(args.public_dir_url, args.log_out_dir)
+
+    test_stuff_out = os.path.join(args.public_dir, args.test_stuff_out)
+    os.makedirs(test_stuff_out, exist_ok=True)
+    test_stuff_prefix = os.path.join(args.public_dir_url, args.test_stuff_out)
+
     transform(
         args.in_file,
         mute_check,
         args.ya_out,
         args.save_inplace,
-        args.log_url_prefix,
-        args.log_out_dir,
-        args.log_trunc_size,
-        args.test_stuff_out,
-        args.test_stuff_prefix,
+        log_url_prefix,
+        log_out_dir,
+        args.log_truncate_size,
+        test_stuff_out,
+        test_stuff_prefix,
     )
 
 

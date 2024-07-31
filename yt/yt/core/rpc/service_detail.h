@@ -426,7 +426,7 @@ protected:
             return ::NYT::NRpc::TServiceBase::TLiteHandler(); \
         } \
         return \
-            BIND_NO_PROPAGATE([=, this] ( \
+            BIND([=, this] ( \
                 const ::NYT::NRpc::IServiceContextPtr&, \
                 const ::NYT::NRpc::THandlerInvocationOptions&) \
             { \
@@ -649,29 +649,25 @@ protected:
         TMethodDescriptor SetHandleMethodError(bool value) const;
     };
 
-    struct TErrorCodesCounter
+    struct TErrorCodeCounter
     {
-        TErrorCodesCounter(const NProfiling::TProfiler& profiler)
-            : Profiler_(profiler)
-        { }
+        explicit TErrorCodeCounter(NProfiling::TProfiler profiler);
 
-        void RegisterCode(TErrorCode code)
-        {
-            ErrorCodes_.FindOrInsert(code, [&] () {
-                return Profiler_.WithTag("code", ToString(code)).Counter("/code_count");
-            }).first->Increment();
-        }
+        void Increment(TErrorCode code);
 
     private:
-        NYT::NConcurrency::TSyncMap<TErrorCode, NProfiling::TCounter> ErrorCodes_;
-        NProfiling::TProfiler Profiler_;
+        const NProfiling::TProfiler Profiler_;
+
+        NConcurrency::TSyncMap<TErrorCode, NProfiling::TCounter> CodeToCounter_;
     };
 
     //! Per-user and per-method profiling counters.
     struct TMethodPerformanceCounters
         : public TRefCounted
     {
-        TMethodPerformanceCounters(const NProfiling::TProfiler& profiler, const THistogramConfigPtr& histogramConfig);
+        TMethodPerformanceCounters(
+            const NProfiling::TProfiler& profiler,
+            const TTimeHistogramConfigPtr& timeHistogramConfig);
 
         //! Counts the number of method calls.
         NProfiling::TCounter RequestCounter;
@@ -712,7 +708,8 @@ protected:
         //! Counts the number of bytes in response message attachment.
         NProfiling::TCounter ResponseMessageAttachmentSizeCounter;
 
-        TErrorCodesCounter ErrorCodes;
+        //! Counts the number of errors, per error code.
+        TErrorCodeCounter ErrorCodeCounter;
     };
 
     using TMethodPerformanceCountersPtr = TIntrusivePtr<TMethodPerformanceCounters>;
@@ -975,10 +972,9 @@ private:
 
     std::atomic<bool> EnablePerUserProfiling_ = false;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, HistogramConfigLock_);
-    THistogramConfigPtr HistogramTimerProfiling{};
+    TAtomicIntrusivePtr<TTimeHistogramConfig> TimeHistogramConfig_;
 
-    std::atomic<bool> EnableErrorCodeCounting = false;
+    std::atomic<bool> EnableErrorCodeCounter_ = false;
 
     const NConcurrency::TPeriodicExecutorPtr ServiceLivenessChecker_;
 

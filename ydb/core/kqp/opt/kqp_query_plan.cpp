@@ -592,9 +592,7 @@ private:
                 }
 
                 if (auto literal = key.Maybe<TCoUuid>()) {
-                    TStringStream out;
-                    NUuid::UuidBytesToString(literal.Cast().Literal().Value().Data(), out);
-                    return out.Str();
+                    return NUuid::UuidBytesToString(literal.Cast().Literal().StringValue());
                 }
 
                 if (auto literal = key.Maybe<TCoDataCtor>()) {
@@ -2245,7 +2243,7 @@ TString AddSimplifiedPlan(const TString& planText, TIntrusivePtr<NOpt::TKqpOptim
     return planJson.GetStringRobust();
 }
 
-TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx, const TString commonPlanInfo = "") {
+TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx, const TString commonPlanInfo = "", const TString& queryStats = "") {
     NJsonWriter::TBuf writer;
     writer.SetIndentSpaces(2);
 
@@ -2268,6 +2266,15 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NO
     writer.BeginObject();
     writer.WriteKey("Node Type").WriteString("Query");
     writer.WriteKey("PlanNodeType").WriteString("Query");
+
+    if (queryStats) {
+        NJson::TJsonValue queryStatsJson;
+        NJson::ReadJsonTree(queryStats, &queryStatsJson, true);
+
+        writer.WriteKey("Stats");
+        writer.WriteJsonValue(&queryStatsJson);
+    }
+
     writer.WriteKey("Plans");
     writer.BeginList();
 
@@ -2373,6 +2380,13 @@ void FillAggrStat(NJson::TJsonValue& node, const NYql::NDqProto::TDqStatsAggr& a
         aggrStat["Max"] = max;
         aggrStat["Sum"] = sum;
         aggrStat["Count"] = aggr.GetCnt();
+        if (aggr.GetHistory().size()) {
+            auto& aggrHistory = aggrStat.InsertValue("History", NJson::JSON_ARRAY);
+            for (auto& h : aggr.GetHistory()) {
+                aggrHistory.AppendValue(h.GetTimeMs());
+                aggrHistory.AppendValue(h.GetValue());
+            }
+        }
     }
 }
 
@@ -2546,9 +2560,14 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                     stats["UseLlvm"] = "undefined";
                 }
 
+                stats["PhysicalStageId"] = (*stat)->GetStageId();
                 stats["Tasks"] = (*stat)->GetTotalTasksCount();
 
                 stats["StageDurationUs"] = (*stat)->GetStageDurationUs();
+
+                if ((*stat)->GetBaseTimeMs()) {
+                    stats["BaseTimeMs"] = (*stat)->GetBaseTimeMs();
+                }
 
                 if ((*stat)->HasDurationUs()) {
                     FillAggrStat(stats, (*stat)->GetDurationUs(), "DurationUs");
@@ -2707,7 +2726,27 @@ TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats) {
             txPlans.push_back(txPlan);
         }
     }
-    return SerializeTxPlans(txPlans, TIntrusivePtr<NOpt::TKqpOptimizeContext>());
+
+    NJsonWriter::TBuf writer;
+    writer.BeginObject();
+
+    if (queryStats.HasCompilation()) {
+        const auto& compilation = queryStats.GetCompilation();
+
+        writer.WriteKey("Compilation");
+        writer.BeginObject();
+        writer.WriteKey("FromCache").WriteBool(compilation.GetFromCache());
+        writer.WriteKey("DurationUs").WriteLongLong(compilation.GetDurationUs());
+        writer.WriteKey("CpuTimeUs").WriteLongLong(compilation.GetCpuTimeUs());
+        writer.EndObject();
+    }
+
+    writer.WriteKey("ProcessCpuTimeUs").WriteLongLong(queryStats.GetWorkerCpuTimeUs());
+    writer.WriteKey("TotalDurationUs").WriteLongLong(queryStats.GetDurationUs());
+    writer.WriteKey("QueuedTimeUs").WriteLongLong(queryStats.GetQueuedTimeUs());
+    writer.EndObject();
+
+    return SerializeTxPlans(txPlans, TIntrusivePtr<NOpt::TKqpOptimizeContext>(), "", writer.Str());
 }
 
 TString SerializeScriptPlan(const TVector<const TString>& queryPlans) {

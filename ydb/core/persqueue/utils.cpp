@@ -36,6 +36,12 @@ bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config) {
     return config.has_partitionstrategy() && config.partitionstrategy().has_partitionstrategytype() && config.partitionstrategy().partitionstrategytype() != ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED;
 }
 
+size_t CountActivePartitions(const ::google::protobuf::RepeatedPtrField< ::NKikimrPQ::TPQTabletConfig_TPartition >& partitions) {
+    return std::count_if(partitions.begin(), partitions.end(), [](const auto& p) {
+        return p.GetStatus() == ::NKikimrPQ::ETopicPartitionStatus::Active;
+    });
+}
+
 static constexpr ui64 PUT_UNIT_SIZE = 40960u; // 40Kb
 
 ui64 PutUnitsSize(const ui64 size) {
@@ -159,7 +165,36 @@ std::set<ui32> TPartitionGraph::GetActiveChildren(ui32 id) const {
     return result;
 }
 
-void TPartitionGraph::Travers(ui32 id, std::function<bool (ui32 id)> func, bool includeSelf) const {
+void Travers0(std::deque<const TPartitionGraph::Node*>& queue, const std::function<bool (ui32 id)>& func) {
+    while(!queue.empty()) {
+        auto* node = queue.front();
+        queue.pop_front();
+
+        if (func(node->Id)) {
+            queue.insert(queue.end(), node->Children.begin(), node->Children.end());
+        }
+    }
+}
+
+void TPartitionGraph::Travers(const std::function<bool (ui32 id)>& func) const {
+    std::deque<const Node*> queue;
+
+    for (auto& [id, n] : Partitions) {
+        if (!n.IsRoot()) {
+            continue;
+        }
+
+        if (!func(id)) {
+            continue;
+        }
+
+        queue.insert(queue.end(), n.Children.begin(), n.Children.end());
+    }
+
+    Travers0(queue, func);
+}
+
+void TPartitionGraph::Travers(ui32 id, const std::function<bool (ui32 id)>& func, bool includeSelf) const {
     auto* n = GetPartition(id);
     if (!n) {
         return;
@@ -172,16 +207,8 @@ void TPartitionGraph::Travers(ui32 id, std::function<bool (ui32 id)> func, bool 
     std::deque<const Node*> queue;
     queue.insert(queue.end(), n->Children.begin(), n->Children.end());
 
-    while(!queue.empty()) {
-        auto* node = queue.front();
-        queue.pop_front();
-
-        if (func(node->Id)) {
-            queue.insert(queue.end(), node->Children.begin(), node->Children.end());
-        }
-    }
+    Travers0(queue, func);
 }
-
 
 template<typename TPartition>
 inline int GetPartitionId(TPartition p) {

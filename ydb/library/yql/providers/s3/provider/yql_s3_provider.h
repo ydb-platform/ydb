@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/core/yql_data_provider.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 
 #include "yql_s3_settings.h"
@@ -28,6 +29,7 @@ struct TS3State : public TThrRefBase
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     IHTTPGateway::TPtr Gateway;
+    IHTTPGateway::TRetryPolicy::TPtr GatewayRetryPolicy = GetHTTPDefaultRetryPolicy();
     ui32 ExecutorPoolId = 0;
     std::list<TVector<TString>> PrimaryKeys;
 };

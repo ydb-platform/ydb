@@ -74,7 +74,7 @@ int TMVP::Init() {
     ActorSystem.Register(NActors::CreateProcStatCollector(TDuration::Seconds(5), AppData.MetricRegistry = std::make_shared<NMonitoring::TMetricRegistry>()));
 
     BaseHttpProxyId = ActorSystem.Register(NHttp::CreateHttpProxy(AppData.MetricRegistry));
-    ActorSystem.Register(AppData.Tokenator = TMvpTokenator::CreateTokenator(TokensConfig, BaseHttpProxyId));
+    ActorSystem.Register(AppData.Tokenator = TMvpTokenator::CreateTokenator(TokensConfig, BaseHttpProxyId, OpenIdConnectSettings.AuthProfile));
 
     HttpProxyId = ActorSystem.Register(NHttp::CreateHttpCache(BaseHttpProxyId, GetCachePolicy));
 
@@ -225,9 +225,13 @@ void TMVP::TryGetOidcOptionsFromConfig(const YAML::Node& config) {
     }
 
     SecretName = oidc["secret_name"].as<std::string>("");
+    OpenIdConnectSettings.ClientId = oidc["client_id"].as<std::string>(OpenIdConnectSettings.DEFAULT_CLIENT_ID);
     OpenIdConnectSettings.SessionServiceEndpoint = oidc["session_service_endpoint"].as<std::string>("");
     OpenIdConnectSettings.SessionServiceTokenName = oidc["session_service_token_name"].as<std::string>("");
     OpenIdConnectSettings.AuthorizationServerAddress = oidc["authorization_server_address"].as<std::string>("");
+    OpenIdConnectSettings.AuthEndpoint = oidc["auth_endpoint"].as<std::string>(OpenIdConnectSettings.DEFAULT_AUTH_ENDPOINT);
+    OpenIdConnectSettings.TokenEndpoint = oidc["token_endpoint"].as<std::string>(OpenIdConnectSettings.DEFAULT_TOKEN_ENDPOINT);
+    OpenIdConnectSettings.ExchangeEndpoint = oidc["exchange_endpoint"].as<std::string>(OpenIdConnectSettings.DEFAULT_EXCHANGE_ENDPOINT);
     Cout << "Started processing allowed_proxy_hosts..." << Endl;
     for (const std::string& host : oidc["allowed_proxy_hosts"].as<std::vector<std::string>>()) {
         Cout << host << " added to allowed_proxy_hosts" << Endl;
@@ -283,6 +287,17 @@ void TMVP::TryGetGenericOptionsFromConfig(
             HttpsPort = server["https_port"].as<ui16>(0);
         }
     }
+
+    if (generic["auth_profile"]) {
+        auto name = generic["auth_profile"].as<std::string>("yandex");
+        auto it = AuthProfileByName.find(name);
+        if (it != AuthProfileByName.end()) {
+            OpenIdConnectSettings.AuthProfile = it->second;
+        } else {
+            ythrow yexception() << "Unknown auth profile: " << name;
+        }
+    }
+
 }
 
 THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char** argv) {

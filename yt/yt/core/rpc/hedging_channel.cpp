@@ -392,6 +392,11 @@ public:
         YT_UNIMPLEMENTED();
     }
 
+    IMemoryUsageTrackerPtr GetChannelMemoryTracker() override
+    {
+        return PrimaryChannel_->GetChannelMemoryTracker();
+    }
+
 private:
     const IChannelPtr PrimaryChannel_;
     const IChannelPtr BackupChannel_;

@@ -11,6 +11,7 @@ namespace NYT::NTableClient {
 
 using namespace NApi;
 using namespace NConcurrency;
+using namespace NCrypto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -90,6 +91,11 @@ public:
     const NTableClient::TTableSchemaPtr& GetSchema() const override
     {
         return UnderlyingWriter_->GetSchema();
+    }
+
+    std::optional<TMD5Hash> GetDigest() const override
+    {
+        return std::nullopt;
     }
 
 private:

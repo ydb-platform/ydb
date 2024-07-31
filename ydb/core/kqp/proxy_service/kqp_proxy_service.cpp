@@ -45,6 +45,7 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/resource/resource.h>
 
+#include <util/folder/dirut.h>
 
 namespace NKikimr::NKqp {
 
@@ -234,9 +235,15 @@ public:
         WhiteBoardService = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
 
         if (auto& cfg = TableServiceConfig.GetSpillingServiceConfig().GetLocalFileConfig(); cfg.GetEnable()) {
+            TString spillingRoot = cfg.GetRoot();
+            if (spillingRoot.empty()) {
+                spillingRoot = NYql::NDq::GetTmpSpillingRootForCurrentUser();
+                MakeDirIfNotExist(spillingRoot);
+            }
+
             SpillingService = TlsActivationContext->ExecutorThread.RegisterActor(NYql::NDq::CreateDqLocalFileSpillingService(
                 NYql::NDq::TFileSpillingServiceConfig{
-                    .Root = cfg.GetRoot(),
+                    .Root = spillingRoot,
                     .MaxTotalSize = cfg.GetMaxTotalSize(),
                     .MaxFileSize = cfg.GetMaxFileSize(),
                     .MaxFilePartSize = cfg.GetMaxFilePartSize(),
@@ -1326,7 +1333,6 @@ public:
             hFunc(TEvKqp::TEvCloseSessionRequest, Handle);
             hFunc(TEvKqp::TEvQueryResponse, ForwardEvent);
             hFunc(TEvKqpExecuter::TEvExecuterProgress, ForwardProgress);
-            hFunc(TEvKqp::TEvProcessResponse, Handle);
             hFunc(TEvKqp::TEvCreateSessionRequest, Handle);
             hFunc(TEvKqp::TEvPingSessionRequest, Handle);
             hFunc(TEvKqp::TEvCancelQueryRequest, Handle);
@@ -1355,16 +1361,6 @@ public:
     }
 
 private:
-    void LogResponse(const TKqpRequestInfo& requestInfo,
-        const NKikimrKqp::TEvProcessResponse& event, TKqpDbCountersPtr dbCounters)
-    {
-        auto status = event.GetYdbStatus();
-        if (status != Ydb::StatusIds::SUCCESS) {
-            KQP_PROXY_LOG_W(requestInfo << event.GetError());
-        }
-
-        Counters->ReportResponseStatus(dbCounters, event.ByteSize(), status);
-    }
 
     void LogResponse(const TKqpRequestInfo&,
         const NKikimrKqp::TEvCreateSessionResponse& event, TKqpDbCountersPtr dbCounters)
@@ -1377,11 +1373,6 @@ private:
         const NKikimrKqp::TEvPingSessionResponse& event, TKqpDbCountersPtr dbCounters)
     {
         Counters->ReportResponseStatus(dbCounters, event.ByteSize(), event.GetStatus());
-    }
-
-
-    void Handle(TEvKqp::TEvProcessResponse::TPtr&ev) {
-        ReplyProcessError(ev->Get()->Record.GetYdbStatus(), ev->Get()->Record.GetError(), ev->Cookie);
     }
 
     bool ReplyProcessError(Ydb::StatusIds::StatusCode ydbStatus, const TString& message, ui64 requestId)

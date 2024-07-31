@@ -524,27 +524,6 @@ class ScenarioTestHelper:
             result_set = self.execute_scan_query(f'SELECT count(*) FROM `{self.get_full_path(tablename)}`')
             return result_set.result_set.rows[0][0]
 
-    @classmethod
-    def _list_directory_impl(cls, root_path: str, rel_path: str) -> List[ydb.SchemeEntry]:
-        result = []
-        for child in (
-            YdbCluster.get_ydb_driver().scheme_client.list_directory(os.path.join(root_path, rel_path)).children
-        ):
-            if child.name == '.sys':
-                continue
-            child.name = os.path.join(rel_path, child.name)
-            if child.is_directory() or child.is_column_store():
-                result += cls._list_directory_impl(root_path, child.name)
-            result.append(child)
-        return result
-
-    @classmethod
-    def _describe_path_impl(cls, path: str) -> ydb.SchemeEntry:
-        return cls._run_with_expected_status(
-            lambda: YdbCluster.get_ydb_driver().scheme_client.describe_path(path),
-            {ydb.StatusCode.SUCCESS, ydb.StatusCode.SCHEME_ERROR},
-        )
-
     @allure.step('List path {path}')
     def list_path(self, path: str) -> List[ydb.SchemeEntry]:
         """Recursively describe the path in the database under test.
@@ -561,11 +540,11 @@ class ScenarioTestHelper:
 
         root_path = self.get_full_path('')
         result = []
-        self_descr = self._describe_path_impl(os.path.join(root_path, path))
+        self_descr = YdbCluster._describe_path_impl(os.path.join(root_path, path))
         if self_descr is not None:
             self_descr.name = path
             if self_descr.is_directory():
-                result = self._list_directory_impl(root_path, path)
+                result = YdbCluster._list_directory_impl(root_path, path)
             result.append(self_descr)
         allure.attach('\n'.join([f'{e.name}: {repr(e.type)}' for e in result]), 'result', allure.attachment_type.TEXT)
         return result

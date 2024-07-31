@@ -159,11 +159,15 @@ namespace Tests {
         : Settings(settings)
         , UseStoragePools(!Settings->StoragePoolTypes.empty())
     {
-        if (Settings->SupportsRedirect && IsServerRedirected())
+        if (Settings->SupportsRedirect && IsServerRedirected()) {
             return;
+        }
 
-        if (init)
+        Runtime = MakeHolder<TTestBasicRuntime>(StaticNodes() + DynamicNodes(), Settings->UseRealThreads);
+
+        if (init) {
             Initialize();
+        }
     }
 
     TServer::TServer(const TServerSettings &settings, bool init)
@@ -189,8 +193,6 @@ namespace Tests {
         if (Settings->AppConfig->HasResourceBrokerConfig()) {
             app.ResourceBrokerConfig = Settings->AppConfig->GetResourceBrokerConfig();
         }
-
-        Runtime = MakeHolder<TTestBasicRuntime>(StaticNodes() + DynamicNodes(), Settings->UseRealThreads);
 
         if (!Settings->UseRealThreads)
             Runtime->SetRegistrationObserverFunc([](TTestActorRuntimeBase& runtime, const TActorId&, const TActorId& actorId) {

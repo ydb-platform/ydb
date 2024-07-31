@@ -723,7 +723,7 @@ namespace NSQLTranslationV1 {
         void Merge(const TColumns& columns);
         void SetPrefix(const TString& prefix);
         void SetAll();
-        bool IsColumnPossible(TContext& ctx, const TString& column);
+        bool IsColumnPossible(TContext& ctx, const TString& column) const;
     };
 
     class TSortSpecification: public TSimpleRefCount<TSortSpecification> {
@@ -838,6 +838,7 @@ namespace NSQLTranslationV1 {
         void SetAsNotReliable();
         bool IsReliable() const;
         bool IsUseSourceAsColumn() const;
+        bool IsUseSource() const;
         bool CanBeType() const;
 
     private:

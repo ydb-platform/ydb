@@ -18,6 +18,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     struct TDefragCtx {
         const TIntrusivePtr<TVDiskContext> VCtx;
+        const TIntrusivePtr<TVDiskConfig> VCfg;
         const std::shared_ptr<THugeBlobCtx> HugeBlobCtx;
         const TPDiskCtxPtr PDiskCtx;
         const TActorId SkeletonId;
@@ -30,6 +31,7 @@ namespace NKikimr {
 
         TDefragCtx(
                 const TIntrusivePtr<TVDiskContext> &vctx,
+                const TIntrusivePtr<TVDiskConfig> &vconfig,
                 const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx,
                 const TPDiskCtxPtr &pdiskCtx,
                 const TActorId &skeletonId,
@@ -45,7 +47,8 @@ namespace NKikimr {
     bool HugeHeapDefragmentationRequired(
             const TOutOfSpaceState& oos,
             ui32 hugeCanBeFreedChunks,
-            ui32 hugeTotalChunks);
+            ui32 hugeTotalChunks,
+            double defaultPercent);
 
     ////////////////////////////////////////////////////////////////////////////
     // VDISK DEFRAG ACTOR CREATOR

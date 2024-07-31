@@ -126,6 +126,24 @@ TRuntimeNode WideLastCombiner(TProgramBuilder& pb, TRuntimeNode flow, const TPro
         pb.WideLastCombiner(flow, extractor, init, update, finish);
 }
 
+void CheckIfStreamHasExpectedStringValues(const NUdf::TUnboxedValue& streamValue, std::unordered_set<TString>& expected) {
+        NUdf::TUnboxedValue item;
+        NUdf::EFetchStatus fetchStatus;
+        while (!expected.empty()) {
+            fetchStatus = streamValue.Fetch(item);
+            UNIT_ASSERT_UNEQUAL(fetchStatus, NUdf::EFetchStatus::Finish);
+            if (fetchStatus == NYql::NUdf::EFetchStatus::Yield) continue;
+
+            const auto actual = TString(item.AsStringRef());
+
+            auto it = expected.find(actual);
+            UNIT_ASSERT(it != expected.end());
+            expected.erase(it);
+        }
+        fetchStatus = streamValue.Fetch(item);
+        UNIT_ASSERT_EQUAL(fetchStatus, NUdf::EFetchStatus::Finish);
+}
+
 } // unnamed
 
 #if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 18u
@@ -1049,7 +1067,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
 
         const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
 
-        const auto pgmReturn = pb.Collect(pb.NarrowMap(WideLastCombiner<SPILLING>(pb, pb.ExpandMap(pb.ToFlow(list),
+        const auto pgmReturn = pb.FromFlow(pb.NarrowMap(WideLastCombiner<SPILLING>(pb, pb.ExpandMap(pb.ToFlow(list),
             [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
             [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
             [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) -> TRuntimeNode::TList {
@@ -1076,8 +1094,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
         if (SPILLING) {
             graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
         }
-        const auto iterator = graph->GetValue().GetListIterator();
 
+        const auto streamVal = graph->GetValue();
         std::unordered_set<TString> expected {
             "key one",
             "very long value 2 / key two",
@@ -1085,17 +1103,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
             "very long value 8 / very long value 7 / very long value 6"
         };
 
-        NUdf::TUnboxedValue item;
-        while (!expected.empty()) {
-            UNIT_ASSERT(iterator.Next(item));
-            const auto actual = TString(item.AsStringRef());
-
-            auto it = expected.find(actual);
-            UNIT_ASSERT(it != expected.end());
-            expected.erase(it);
-        }
-        UNIT_ASSERT(!iterator.Next(item));
-        UNIT_ASSERT(!iterator.Next(item));
+        CheckIfStreamHasExpectedStringValues(streamVal, expected);
     }
 
     Y_UNIT_TEST_LLVM_SPILLING(TestLongStringsPasstroughtRefCounting) {
@@ -1140,7 +1148,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
 
         const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
 
-        const auto pgmReturn = pb.Collect(pb.NarrowMap(WideLastCombiner<SPILLING>(pb, pb.ExpandMap(pb.ToFlow(list),
+        const auto pgmReturn = pb.FromFlow(pb.NarrowMap(WideLastCombiner<SPILLING>(pb, pb.ExpandMap(pb.ToFlow(list),
             [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
             [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
             [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) -> TRuntimeNode::TList {
@@ -1166,8 +1174,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
         if (SPILLING) {
             graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
         }
-        const auto iterator = graph->GetValue().GetListIterator();
 
+        const auto streamVal = graph->GetValue();
         std::unordered_set<TString> expected {
             "very long value 1 / key one / very long value 1 / key one",
             "very long value 3 / key two / very long value 2 / key two",
@@ -1175,17 +1183,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
             "very long value 9 / very long key two / very long value 5 / very long key two"
         };
 
-        NUdf::TUnboxedValue item;
-        while (!expected.empty()) {
-            UNIT_ASSERT(iterator.Next(item));
-            const auto actual = TString(item.AsStringRef());
-
-            auto it = expected.find(actual);
-            UNIT_ASSERT(it != expected.end());
-            expected.erase(it);
-        }
-        UNIT_ASSERT(!iterator.Next(item));
-        UNIT_ASSERT(!iterator.Next(item));
+        CheckIfStreamHasExpectedStringValues(streamVal, expected);
     }
 
     Y_UNIT_TEST_LLVM_SPILLING(TestDoNotCalculateUnusedInput) {
@@ -1230,7 +1228,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
 
         const auto landmine = pb.NewDataLiteral<NUdf::EDataSlot::String>("ACHTUNG MINEN!");
 
-        const auto pgmReturn = pb.Collect(pb.NarrowMap(WideLastCombiner<SPILLING>(pb, pb.ExpandMap(pb.ToFlow(list),
+        const auto pgmReturn = pb.FromFlow(pb.NarrowMap(WideLastCombiner<SPILLING>(pb, pb.ExpandMap(pb.ToFlow(list),
             [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Unwrap(pb.Nth(item, 1U), landmine, __FILE__, __LINE__, 0), pb.Nth(item, 2U)}; }),
             [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
             [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) -> TRuntimeNode::TList {
@@ -1257,23 +1255,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
         if (SPILLING) {
             graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
         }
+
+        const auto streamVal = graph->GetValue();
         std::unordered_set<TString> expected {
             "key one / value 2 / value 1 / value 5 / value 4",
             "key two / value 4 / value 3 / value 3 / value 2"
         };
 
-        const auto iterator = graph->GetValue().GetListIterator();
-        NUdf::TUnboxedValue item;
-        while (!expected.empty()) {
-            UNIT_ASSERT(iterator.Next(item));
-            const auto actual = TString(item.AsStringRef());
-
-            auto it = expected.find(actual);
-            UNIT_ASSERT(it != expected.end());
-            expected.erase(it);
-        }
-        UNIT_ASSERT(!iterator.Next(item));
-        UNIT_ASSERT(!iterator.Next(item));
+        CheckIfStreamHasExpectedStringValues(streamVal, expected);
     }
 
     Y_UNIT_TEST_LLVM_SPILLING(TestDoNotCalculateUnusedOutput) {
@@ -1315,7 +1304,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
 
         const auto landmine = pb.NewDataLiteral<NUdf::EDataSlot::String>("ACHTUNG MINEN!");
 
-        const auto pgmReturn = pb.Collect(pb.NarrowMap(WideLastCombiner<SPILLING>(pb, pb.ExpandMap(pb.ToFlow(list),
+        const auto pgmReturn = pb.FromFlow(pb.NarrowMap(WideLastCombiner<SPILLING>(pb, pb.ExpandMap(pb.ToFlow(list),
             [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
             [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
             [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList {
@@ -1334,23 +1323,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
         if (SPILLING) {
             graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
         }
+
+        const auto streamVal = graph->GetValue();
         std::unordered_set<TString> expected {
             "key one: value 1, value 4, value 5, value 1, value 2",
             "key two: value 2, value 3, value 3, value 4"
         };
 
-        const auto iterator = graph->GetValue().GetListIterator();
-        NUdf::TUnboxedValue item;
-        while (!expected.empty()) {
-            UNIT_ASSERT(iterator.Next(item));
-            const auto actual = TString(item.AsStringRef());
-
-            auto it = expected.find(actual);
-            UNIT_ASSERT(it != expected.end());
-            expected.erase(it);
-        }
-        UNIT_ASSERT(!iterator.Next(item));
-        UNIT_ASSERT(!iterator.Next(item));
+        CheckIfStreamHasExpectedStringValues(streamVal, expected);
     }
 
     Y_UNIT_TEST_LLVM_SPILLING(TestThinAllLambdas) {
@@ -1366,7 +1346,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
 
         const auto list = pb.NewList(tupleType, {data, data, data, data});
 
-        const auto pgmReturn = pb.Collect(pb.NarrowMap(WideLastCombiner<SPILLING>(pb, pb.ExpandMap(pb.ToFlow(list),
+        const auto pgmReturn = pb.FromFlow(pb.NarrowMap(WideLastCombiner<SPILLING>(pb, pb.ExpandMap(pb.ToFlow(list),
             [](TRuntimeNode) -> TRuntimeNode::TList { return {}; }),
             [](TRuntimeNode::TList items) { return items; },
             [](TRuntimeNode::TList, TRuntimeNode::TList items) { return items; },
@@ -1376,10 +1356,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
         ));
 
         const auto graph = setup.BuildGraph(pgmReturn);
-        const auto iterator = graph->GetValue().GetListIterator();
+        const auto streamVal = graph->GetValue();
         NUdf::TUnboxedValue item;
-        UNIT_ASSERT(!iterator.Next(item));
-        UNIT_ASSERT(!iterator.Next(item));
+        const auto fetchStatus = streamVal.Fetch(item);
+        UNIT_ASSERT_EQUAL(fetchStatus, NUdf::EFetchStatus::Finish);
     }
 }
 

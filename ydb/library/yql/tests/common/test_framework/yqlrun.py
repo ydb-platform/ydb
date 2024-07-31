@@ -124,6 +124,7 @@ class YQLRun(object):
                 'PYTHON_COVERAGE_PREFIX',
                 'NLG_COVERAGE_FILENAME',
                 'YQL_EXPORT_PG_FUNCTIONS_DIR',
+                'YQL_ALLOW_ALL_PG_FUNCTIONS',
                     ]:
                 if var in os.environ:
                     env[var] = os.environ[var]
@@ -266,6 +267,7 @@ class YQLRun(object):
             'PYTHON_COVERAGE_PREFIX',
             'NLG_COVERAGE_FILENAME',
             'YQL_EXPORT_PG_FUNCTIONS_DIR',
+            'YQL_ALLOW_ALL_PG_FUNCTIONS',
                 ]:
             if var in os.environ:
                 env[var] = os.environ[var]

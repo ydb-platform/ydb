@@ -1594,6 +1594,7 @@ const TColumnInfoRaw AllStaticColumnsRaw[] = {
 const char* AllowedProcsRaw[] = {
 #include "safe_procs.h"
 #include "used_procs.h"
+#include "postgis_procs.h"
 };
 
 struct TCatalog : public IExtensionDDLBuilder {

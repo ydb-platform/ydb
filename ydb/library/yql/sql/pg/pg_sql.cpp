@@ -5420,10 +5420,17 @@ public:
         }
 
         bool hasArgNames = false;
+        ui32 defArgsCount = 0;
         for (int i = 0; i < ListLength(value->parameters); ++i) {
             auto node = LIST_CAST_NTH(FunctionParameter, value->parameters, i);
             hasArgNames = hasArgNames || (node->name != nullptr);
             if (node->mode == FUNC_PARAM_IN || node->mode == FUNC_PARAM_DEFAULT) {
+                if (node->defexpr) {
+                    ++defArgsCount;
+                } else {
+                    Y_ENSURE(!defArgsCount);
+                }
+
                 desc.InputArgNames.push_back(node->name ? node->name : "");
             } else if (node->mode == FUNC_PARAM_OUT) {
                 desc.OutputArgNames.push_back(node->name ? node->name : "");
@@ -5460,6 +5467,17 @@ public:
         }
 
         Builder.CreateProc(desc);
+        if (defArgsCount) {
+            Y_ENSURE(!desc.VariadicType);
+            for (ui32 i = 0; i < defArgsCount; ++i) {
+                desc.ArgTypes.pop_back();
+                if (!desc.InputArgNames.empty()) {
+                    desc.InputArgNames.pop_back();
+                }
+
+                Builder.CreateProc(desc);
+            }
+        }
         return true;
     }
 

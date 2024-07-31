@@ -114,6 +114,7 @@ public:
     bool IsDocumentApiRestricted_ = false;
 
     TInstant StartTime;
+    TInstant ContinueTime;
     NYql::TKikimrQueryDeadlines QueryDeadlines;
     TKqpQueryStats QueryStats;
     bool KeepSession = false;
@@ -485,18 +486,6 @@ public:
         StatementResultIndex += StatementResultSize;
         StatementResultSize = 0;
         PrepareCurrentStatement();
-    }
-
-    void PrepareStatementTransaction(NKqpProto::TKqpPhyTx_EType txType) {
-        if (!HasTxControl()) {
-            switch (txType) {
-                case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
-                    TxCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
-                    break;
-                default:
-                    TxCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
-            }
-        }
     }
 
     // validate the compiled query response and ensure that all table versions are not

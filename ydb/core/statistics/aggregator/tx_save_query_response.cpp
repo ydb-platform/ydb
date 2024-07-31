@@ -19,7 +19,7 @@ struct TStatisticsAggregator::TTxSaveQueryResponse : public TTxBase {
         ReplyToActorIds.swap(Self->ReplyToActorIds);
 
         NIceDb::TNiceDb db(txc.DB);
-        Self->FinishScan(db);
+        Self->FinishTraversal(db);
 
         return true;
     }

@@ -82,6 +82,7 @@ PEERDIR(
     ydb/core/load_test
     ydb/core/local_pgwire
     ydb/core/log_backend
+    ydb/core/memory_controller
     ydb/core/metering
     ydb/core/mind
     ydb/core/mind/address_classification

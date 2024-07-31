@@ -141,7 +141,7 @@ struct TEvPrivate {
     };
 
     struct TEvReadFinished : public TEventLocal<TEvReadFinished, EvReadFinished> {
-        explicit TEvReadFinished(ui64 requestCookie, ui64 txId)
+        explicit TEvReadFinished(ui64 requestCookie, ui64 txId = 0)
             : RequestCookie(requestCookie)
             , TxId(txId) {
         }

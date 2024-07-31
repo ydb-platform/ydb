@@ -137,7 +137,7 @@ void TSchemeEntry::Out(IOutputStream& out) const {
 void TSchemeEntry::SerializeTo(::Ydb::Scheme::ModifyPermissionsRequest& request) const {
     request.mutable_actions()->Add()->set_change_owner(Owner);
     for (const auto& permission : Permissions) {
-        permission.SerializeTo(*request.mutable_actions()->Add()->mutable_set());
+        permission.SerializeTo(*request.mutable_actions()->Add()->mutable_grant());
     }
 }
 
@@ -148,13 +148,13 @@ TModifyPermissionsSettings::TModifyPermissionsSettings(const ::Ydb::Scheme::Modi
                 AddGrantPermissions(action.grant());
                 break;
             case Ydb::Scheme::PermissionsAction::kRevoke:
-                AddGrantPermissions(action.revoke());
+                AddRevokePermissions(action.revoke());
                 break;
             case Ydb::Scheme::PermissionsAction::kSet:
-                AddGrantPermissions(action.set());
+                AddSetPermissions(action.set());
                 break;
             case Ydb::Scheme::PermissionsAction::kChangeOwner:
-                AddGrantPermissions(action.change_owner());
+                AddChangeOwner(action.change_owner());
                 break;
             case Ydb::Scheme::PermissionsAction::ACTION_NOT_SET:
                 break;

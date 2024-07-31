@@ -219,7 +219,11 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
     }
 
     if (IsFileExists(fsPath.Child(EMPTY_FILE_NAME))) {
-        return MakeDirectory(SchemeClient, Join('/', dbPath, fsPath.GetName()));
+        auto result = MakeDirectory(SchemeClient, Join('/', dbPath, fsPath.GetName()));
+        if (!result.IsSuccess()) {
+            return result;
+        }
+        return RestorePermissions(fsPath, Join('/', dbPath, fsPath.GetName()), settings, oldEntries);
     }
 
     TMaybe<TRestoreResult> result;
@@ -231,27 +235,20 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
             result = RestoreTable(child, Join('/', dbPath, child.GetName()), settings, oldEntries);
         } else if (IsFileExists(child.Child(EMPTY_FILE_NAME))) {
             result = MakeDirectory(SchemeClient, Join('/', dbPath, child.GetName()));
+            if (result.Defined() && !result->IsSuccess()) {
+                return *result;
+            }
+            result = RestorePermissions(fsPath, Join('/', dbPath, child.GetName()), settings, oldEntries);
         } else if (child.IsDirectory()) {
             result = RestoreFolder(child, Join('/', dbPath, child.GetName()), settings, oldEntries);
         }
 
-        if (!result->IsSuccess()) {
+        if (result.Defined() && !result->IsSuccess()) {
             return *result;
         }
     }
-
-    if (IsFileExists(fsPath.Child(PERMISSIONS_FILE_NAME))) {
-        auto result = RestorePermissions(fsPath, Join('/', dbPath, fsPath.GetName()), settings, oldEntries);
-        if (!result.IsSuccess()) {
-            return result;
-        }
-    }
-
-    if (!result) {
-        return Result<TRestoreResult>();
-    }
-
-    return *result;
+   
+    return RestorePermissions(fsPath, dbPath, settings, oldEntries);
 }
 
 TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString& dbPath,
@@ -286,14 +283,7 @@ TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString
         }
     }
 
-    if (!oldEntries.contains(dbPath)) {
-        auto result = RestorePermissions(fsPath, dbPath, settings, oldEntries);
-        if (!result.IsSuccess()) {
-            return result;
-        }
-    }
-
-    return Result<TRestoreResult>();
+    return RestorePermissions(fsPath, dbPath, settings, oldEntries);
 }
 
 TRestoreResult TRestoreClient::CheckSchema(const TString& dbPath, const TTableDescription& desc) {
@@ -353,9 +343,7 @@ struct TWriterWaiter {
     }
 };
 
-TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString& dbPath,
-    const TRestoreSettings& settings, const TTableDescription& desc)
-{
+TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const TTableDescription& desc) {
     if (desc.GetAttributes().contains(DOC_API_TABLE_VERSION_ATTR) && settings.SkipDocumentTables_) {
         return Result<TRestoreResult>();
     }
@@ -475,19 +463,15 @@ TRestoreResult TRestoreClient::RestorePermissions(const TFsPath& fsPath, const T
     const TRestoreSettings& settings, const THashSet<TString>& oldEntries)
 {   
     if (oldEntries.contains(dbPath)) {
-        return Result<TRestoreResult>(); // no action
+        return Result<TRestoreResult>();
     }
 
-    if (fsPath.Child(PERMISSIONS_FILE_NAME).Exists()) {
-        return Result<TRestoreResult>(EStatus::BAD_REQUEST,
-            TStringBuilder() << "There are no permissions (ACL, Owner) in folder: " << fsPath.GetPath());
+    if (!fsPath.Child(PERMISSIONS_FILE_NAME).Exists()) {
+        return Result<TRestoreResult>();
     }
 
     auto permissions = ReadPermissions(fsPath.Child(PERMISSIONS_FILE_NAME));
-    
-    ModifyPermissions(SchemeClient, dbPath, TModifyPermissionsSettings(permissions));
-
-    return Result<TRestoreResult>();
+    return ModifyPermissions(SchemeClient, dbPath, TModifyPermissionsSettings(permissions));
 }
 
 } // NDump

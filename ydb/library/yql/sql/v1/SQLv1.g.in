@@ -70,6 +70,9 @@ sql_stmt_core:
   | alter_backup_collection_stmt
   | drop_backup_collection_stmt
   | analyze_stmt
+  | create_resource_pool_classifier_stmt
+  | alter_resource_pool_classifier_stmt
+  | drop_resource_pool_classifier_stmt
 ;
 
 expr:
@@ -844,6 +847,21 @@ alter_resource_pool_action:
 
 drop_resource_pool_stmt: DROP RESOURCE POOL object_ref;
 
+create_resource_pool_classifier_stmt: CREATE RESOURCE POOL CLASSIFIER object_ref
+  with_table_settings
+;
+
+alter_resource_pool_classifier_stmt: ALTER RESOURCE POOL CLASSIFIER object_ref
+  alter_resource_pool_classifier_action (COMMA alter_resource_pool_classifier_action)*
+;
+alter_resource_pool_classifier_action:
+    alter_table_set_table_setting_uncompat
+  | alter_table_set_table_setting_compat
+  | alter_table_reset_table_setting
+;
+
+drop_resource_pool_classifier_stmt: DROP RESOURCE POOL CLASSIFIER object_ref;
+
 create_replication_stmt: CREATE ASYNC REPLICATION object_ref
     FOR replication_target (COMMA replication_target)*
     WITH LPAREN replication_settings RPAREN
@@ -1233,6 +1251,7 @@ keyword_as_compat:
   | CASCADE
   | CHANGEFEED
   | CHECK
+  | CLASSIFIER
   // | COLLATE
   | COLLECTION
   | COMMIT
@@ -1447,6 +1466,7 @@ keyword_compat: (
   | CASCADE
   | CHANGEFEED
   | CHECK
+  | CLASSIFIER
   | COLLATE
   | COLLECTION
   | COMMIT
@@ -1766,6 +1786,7 @@ CASE: C A S E;
 CAST: C A S T;
 CHANGEFEED: C H A N G E F E E D;
 CHECK: C H E C K;
+CLASSIFIER: C L A S S I F I E R;
 COLLATE: C O L L A T E;
 COLUMN: C O L U M N;
 COLUMNS: C O L U M N S;

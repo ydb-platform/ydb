@@ -28,14 +28,6 @@ public:
         return PredicateTo;
     }
 
-    std::optional<NArrow::TReplaceKey> KeyFrom(const std::shared_ptr<arrow::Schema>& key) const {
-        return PredicateFrom.ExtractKey(key);
-    }
-
-    std::optional<NArrow::TReplaceKey> KeyTo(const std::shared_ptr<arrow::Schema>& key) const {
-        return PredicateTo.ExtractKey(key);
-    }
-
     static std::optional<TPKRangeFilter> Build(TPredicateContainer&& from, TPredicateContainer&& to);
 
     NArrow::TColumnFilter BuildFilter(const arrow::Datum& data) const;

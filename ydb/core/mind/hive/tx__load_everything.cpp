@@ -317,6 +317,7 @@ public:
                 node.ServicedDomains = nodeRowset.GetValueOrDefault<Schema::Node::ServicedDomains>();
                 node.Statistics = nodeRowset.GetValueOrDefault<Schema::Node::Statistics>();
                 node.Name = nodeRowset.GetValueOrDefault<Schema::Node::Name>();
+                node.MaximumCPUUsage.InitializeFrom(nodeRowset.GetValueOrDefault<Schema::Node::MaximumCPUUsage>());
                 node.BecomeUpOnRestart = nodeRowset.GetValueOrDefault<Schema::Node::BecomeUpOnRestart>(false);
                 if (node.BecomeUpOnRestart) {
                     // If a node must become up on restart, it must have been down
@@ -644,9 +645,9 @@ public:
                     TFollowerId followerId = metricsRowset.GetValue<Schema::Metrics::FollowerID>();
                     auto* leaderOrFollower = tablet->FindTablet(followerId);
                     if (leaderOrFollower) {
-                        leaderOrFollower->MutableResourceMetricsAggregates().MaximumCPU.InitiaizeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumCPU>());
-                        leaderOrFollower->MutableResourceMetricsAggregates().MaximumMemory.InitiaizeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumMemory>());
-                        leaderOrFollower->MutableResourceMetricsAggregates().MaximumNetwork.InitiaizeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumNetwork>());
+                        leaderOrFollower->MutableResourceMetricsAggregates().MaximumCPU.InitializeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumCPU>());
+                        leaderOrFollower->MutableResourceMetricsAggregates().MaximumMemory.InitializeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumMemory>());
+                        leaderOrFollower->MutableResourceMetricsAggregates().MaximumNetwork.InitializeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumNetwork>());
                         // do not reorder
                         leaderOrFollower->UpdateResourceUsage(metricsRowset.GetValueOrDefault<Schema::Metrics::ProtoMetrics>());
                     }

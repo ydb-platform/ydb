@@ -483,8 +483,18 @@ bool TNodeInfo::CanBeDeleted() const {
 
 void TNodeInfo::UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& metrics) {
     if (metrics.HasTotalResourceUsage()) {
-        AveragedResourceTotalValues.Push(ResourceRawValuesFromMetrics(metrics.GetTotalResourceUsage()));
+        const auto& totalResourceUsage = metrics.GetTotalResourceUsage();
+        AveragedResourceTotalValues.Push(ResourceRawValuesFromMetrics(totalResourceUsage));
         ResourceTotalValues = AveragedResourceTotalValues.GetValue();
+
+        TInstant now = TActivationContext::Now();
+        if (totalResourceUsage.HasCPU()) {
+            auto maxCPU = std::get<NMetrics::EResource::CPU>(ResourceMaximumValues);
+            double cpuUsage = maxCPU > 0 ? totalResourceUsage.GetCPU() / static_cast<double>(maxCPU) : 0;
+            MaximumCPUUsage.SetValue(cpuUsage, now);
+        } else {
+            MaximumCPUUsage.AdvanceTime(now);
+        }
     }
     if (metrics.HasTotalNodeUsage()) {
         AveragedNodeTotalUsage.Push(metrics.GetTotalNodeUsage());

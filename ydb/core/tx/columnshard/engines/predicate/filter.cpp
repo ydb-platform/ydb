@@ -75,18 +75,18 @@ std::set<ui32> TPKRangesFilter::GetColumnIds(const TIndexInfo& indexInfo) const 
     return result;
 }
 
-bool TPKRangesFilter::IsPortionInUsage(const TPortionInfo& info, const TIndexInfo& indexInfo) const {
+bool TPKRangesFilter::IsPortionInUsage(const TPortionInfo& info) const {
     for (auto&& i : SortedRanges) {
-        if (i.IsPortionInUsage(info, indexInfo)) {
+        if (i.IsPortionInUsage(info)) {
             return true;
         }
     }
     return SortedRanges.empty();
 }
 
-bool TPKRangesFilter::IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end, const TIndexInfo& indexInfo) const {
+bool TPKRangesFilter::IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const {
     for (auto&& i : SortedRanges) {
-        if (i.IsPortionInPartialUsage(start, end, indexInfo)) {
+        if (i.IsPortionInPartialUsage(start, end)) {
             return true;
         }
     }

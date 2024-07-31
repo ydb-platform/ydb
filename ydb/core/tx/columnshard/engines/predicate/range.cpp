@@ -39,8 +39,8 @@ NKikimr::NArrow::TColumnFilter TPKRangeFilter::BuildFilter(const arrow::Datum& d
     return result.And(PredicateFrom.BuildFilter(data));
 }
 
-bool TPKRangeFilter::IsPortionInUsage(const TPortionInfo& info, const TIndexInfo& indexInfo) const {
-    if (auto from = PredicateFrom.ExtractKey(indexInfo.GetPrimaryKey())) {
+bool TPKRangeFilter::IsPortionInUsage(const TPortionInfo& info) const {
+    if (auto from = PredicateFrom.GetReplaceKey()) {
         const auto& portionEnd = info.IndexKeyEnd();
         const int commonSize = std::min(from->Size(), portionEnd.Size());
         if (std::is_gt(from->ComparePartNotNull(portionEnd, commonSize))) {
@@ -48,7 +48,7 @@ bool TPKRangeFilter::IsPortionInUsage(const TPortionInfo& info, const TIndexInfo
         }
     }
 
-    if (auto to = PredicateTo.ExtractKey(indexInfo.GetPrimaryKey())) {
+    if (auto to = PredicateTo.GetReplaceKey()) {
         const auto& portionStart = info.IndexKeyStart();
         const int commonSize = std::min(to->Size(), portionStart.Size());
         if (std::is_lt(to->ComparePartNotNull(portionStart, commonSize))) {
@@ -59,16 +59,16 @@ bool TPKRangeFilter::IsPortionInUsage(const TPortionInfo& info, const TIndexInfo
     return true;
 }
 
-bool TPKRangeFilter::IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end, const TIndexInfo& indexInfo) const {
+bool TPKRangeFilter::IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const {
     bool fromInternal = false;
-    if (auto from = PredicateFrom.ExtractKey(indexInfo.GetPrimaryKey())) {
+    if (auto from = PredicateFrom.GetReplaceKey()) {
         bool cmpStart = std::is_lteq(start.ComparePartNotNull(*from, from->Size()));
         bool cmpEnd = std::is_gteq(end.ComparePartNotNull(*from, from->Size()));
         fromInternal = cmpStart && cmpEnd;
     }
 
     bool toInternal = false;
-    if (auto to = PredicateTo.ExtractKey(indexInfo.GetPrimaryKey())) {
+    if (auto to = PredicateTo.GetReplaceKey()) {
         bool cmpStart = std::is_lteq(start.ComparePartNotNull(*to, to->Size()));
         bool cmpEnd = std::is_gteq(end.ComparePartNotNull(*to, to->Size()));
         toInternal = cmpStart && cmpEnd;

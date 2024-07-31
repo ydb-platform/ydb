@@ -44,6 +44,8 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::T
         self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_PORTIONS_ERASED, PortionsToDrop.size());
         for (auto&& p : PortionsToDrop) {
             self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_RAW_BYTES_ERASED, p.GetTotalRawBytes());
+            self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_BYTES_ERASED, p.GetTotalBlobBytes());
+            self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_ROWS_ERASED, p.NumRows());
         }
     }
 }

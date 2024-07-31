@@ -107,8 +107,8 @@ public:
     }
 
     void FillStats(::NKikimrTableStats::TTableStats& output) const {
-        output.SetRowUpdates(GetValue(COUNTER_WRITE_SUCCESS));
-        output.SetRowDeletes(0); // manual deletes are not supported
+        output.SetRowUpdates(GetValue(COUNTER_WRITE_SUCCESS));   // TODO: report number or rows written
+        output.SetRowDeletes(GetValue(COUNTER_ROWS_ERASED));
         output.SetRowReads(0);   // all reads are range reads
         output.SetRangeReadRows(GetValue(COUNTER_READ_INDEX_ROWS));
 

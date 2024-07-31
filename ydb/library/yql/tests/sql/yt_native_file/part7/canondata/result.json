@@ -1652,6 +1652,13 @@
             "uri": "https://{canondata_backend}/1871102/ae8b5d002551349280cb6bef50e922859b127b33/resource.tar.gz#test.test_match_recognize-simple_paritioning-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[match_recognize-without_order_by--Debug]": [],
+    "test.test[match_recognize-without_order_by--Plan]": [],
+    "test.test[match_recognize-without_order_by--Results]": [
+        {
+            "uri": "file://test.test_match_recognize-without_order_by--Results_/extracted"
+        }
+    ],
     "test.test[optimizers-combinebykey_fields_subset--Debug]": [
         {
             "checksum": "e8cd290066659edac4fcfe7b4d401c58",

@@ -60,24 +60,22 @@ bool TPKRangeFilter::IsPortionInUsage(const TPortionInfo& info) const {
 }
 
 bool TPKRangeFilter::IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const {
-    bool fromInternal = false;
     if (const auto& from = PredicateFrom.GetReplaceKey()) {
-        const bool cmpStart = std::is_lteq(start.ComparePartNotNull(*from, from->Size()));
-        const bool cmpEnd = std::is_gteq(end.ComparePartNotNull(*from, from->Size()));
-        fromInternal = cmpStart && cmpEnd;
+        if (std::is_lt(end.ComparePartNotNull(*from, from->Size()))) {
+            return false;
+        }
     }
 
-    bool toInternal = false;
     if (const auto& to = PredicateTo.GetReplaceKey()) {
-        const bool cmpStart = std::is_lteq(start.ComparePartNotNull(*to, to->Size()));
-        const bool cmpEnd = std::is_gteq(end.ComparePartNotNull(*to, to->Size()));
-        toInternal = cmpStart && cmpEnd;
+        if (std::is_gt(start.ComparePartNotNull(*to, to->Size()))) {
+            return false;
+        }
     }
 
-//    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("start", start.DebugString())("end", end.DebugString())("from", PredicateFrom.DebugString())("to", PredicateTo.DebugString())
-//        ("toInternal", toInternal)("fromInternal", fromInternal);
+//    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("start", start.DebugString())("end", end.DebugString())("from", PredicateFrom.DebugString())(
+//        "to", PredicateTo.DebugString());
 
-    return toInternal || fromInternal;
+    return true;
 }
 
 std::optional<NKikimr::NOlap::TPKRangeFilter> TPKRangeFilter::Build(TPredicateContainer&& from, TPredicateContainer&& to) {

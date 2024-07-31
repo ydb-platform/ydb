@@ -370,7 +370,7 @@ private:
     struct TData {
         ui32 Generation;
         ui64 Cookie;
-        const TString& Consumer;
+        const TString Consumer;
         bool Commited;
     };
     std::unordered_map<ui32, std::vector<TData>> PendingUpdates;

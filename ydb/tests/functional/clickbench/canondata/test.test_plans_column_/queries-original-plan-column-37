@@ -59,17 +59,8 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "Filter-TableRangeScan",
+                                                                "Node Type": "TableRangeScan",
                                                                 "Operators": [
-                                                                    {
-                                                                        "Inputs": [
-                                                                            {
-                                                                                "InternalOperatorId": 1
-                                                                            }
-                                                                        ],
-                                                                        "Name": "Filter",
-                                                                        "Predicate": "DontCountHits == 0 And IsRefresh == 0 And Title != "
-                                                                    },
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableRangeScan",
@@ -228,10 +219,32 @@
                                                                                     }
                                                                                 },
                                                                                 {
+                                                                                    "GroupBy": {
+                                                                                        "Aggregates": [
+                                                                                            {
+                                                                                                "Column": {
+                                                                                                    "Id": 114
+                                                                                                },
+                                                                                                "Function": {
+                                                                                                    "Id": 2
+                                                                                                }
+                                                                                            }
+                                                                                        ],
+                                                                                        "KeyColumns": [
+                                                                                            {
+                                                                                                "Id": 3
+                                                                                            }
+                                                                                        ]
+                                                                                    }
+                                                                                },
+                                                                                {
                                                                                     "Projection": {
                                                                                         "Columns": [
                                                                                             {
                                                                                                 "Id": 3
+                                                                                            },
+                                                                                            {
+                                                                                                "Id": 114
                                                                                             }
                                                                                         ]
                                                                                     }

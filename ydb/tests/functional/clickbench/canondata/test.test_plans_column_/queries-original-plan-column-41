@@ -89,17 +89,8 @@
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
                                                                             {
-                                                                                "Node Type": "Filter-TableRangeScan",
+                                                                                "Node Type": "TableRangeScan",
                                                                                 "Operators": [
-                                                                                    {
-                                                                                        "Inputs": [
-                                                                                            {
-                                                                                                "InternalOperatorId": 1
-                                                                                            }
-                                                                                        ],
-                                                                                        "Name": "Filter",
-                                                                                        "Predicate": "IsRefresh == 0 And DontCountHits == 0 And URLHash == 2868770270353813622"
-                                                                                    },
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableRangeScan",
@@ -260,6 +251,28 @@
                                                                                                     }
                                                                                                 },
                                                                                                 {
+                                                                                                    "GroupBy": {
+                                                                                                        "Aggregates": [
+                                                                                                            {
+                                                                                                                "Column": {
+                                                                                                                    "Id": 114
+                                                                                                                },
+                                                                                                                "Function": {
+                                                                                                                    "Id": 2
+                                                                                                                }
+                                                                                                            }
+                                                                                                        ],
+                                                                                                        "KeyColumns": [
+                                                                                                            {
+                                                                                                                "Id": 44
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "Id": 43
+                                                                                                            }
+                                                                                                        ]
+                                                                                                    }
+                                                                                                },
+                                                                                                {
                                                                                                     "Projection": {
                                                                                                         "Columns": [
                                                                                                             {
@@ -267,6 +280,9 @@
                                                                                                             },
                                                                                                             {
                                                                                                                 "Id": 43
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "Id": 114
                                                                                                             }
                                                                                                         ]
                                                                                                     }

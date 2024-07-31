@@ -121,7 +121,7 @@ TConclusion<bool> TDeletionFilter::DoExecuteInplace(const std::shared_ptr<IDataS
 TConclusion<bool> TShardingFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     NYDBTest::TControllers::GetColumnShardController()->OnSelectShardingFilter();
     const auto& shardingInfo = source->GetContext()->GetReadMetadata()->GetRequestShardingInfo()->GetShardingInfo();
-    auto filter = shardingInfo->GetFilter(source->GetStageData().GetTable()->BuildTableVerified(shardingInfo->GetColumnNames()));
+    auto filter = shardingInfo->GetFilter(source->GetStageData().GetTable()->BuildTableVerified());
     source->MutableStageData().AddFilter(filter);
     return true;
 }

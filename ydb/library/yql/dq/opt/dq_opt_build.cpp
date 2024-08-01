@@ -406,7 +406,8 @@ bool CanRebuildForWideChannelOutput(const TDqPhyStage& stage) {
 }
 
 bool IsSupportedForWide(const TDqConnection& conn) {
-    if (conn.Maybe<TDqCnResult>() || conn.Maybe<TDqCnValue>() || conn.Maybe<TDqCnUnionAll>() || conn.Maybe<TKqpCnStreamLookup>()) {
+    if (conn.Maybe<TDqCnResult>() || conn.Maybe<TDqCnValue>() || conn.Maybe<TDqCnUnionAll>()
+        || conn.Maybe<TKqpCnStreamLookup>() || conn.Maybe<TKqpCnSequencer>()) {
         return false;
     }
 

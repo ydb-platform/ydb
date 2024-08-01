@@ -461,7 +461,7 @@ actor_system_config:
 Several components utilize memory, including but not limited to:
 
 - Shared Cache that stores last recently used data pages read from Blob Storage to reduce disk I/O and accelerate data retrieval;
-- MemTables that stores data that haven't been flushed to SST;
+- MemTables that stores data that haven't been yet flushed to SST;
 - KQP that executes queries and stores their intermediate results;
 - Allocator caches that keep memory blocks which have been released but not yet returned to the operating system.
 
@@ -469,11 +469,11 @@ Memory limits can be configured to control the overall memory usage and ensure t
 
 ### Hard memory limit
 
-Hard memory limit denotes the total amount of the available memory.
+Hard memory limit specifies total amount of the available memory.
 
-By default, hard memory limit is equal to the database process CGroup memory limit. 
+By default, hard memory limit is equal to the process CGroup memory limit. 
 
-In environments without CGroup memory limit, the default hard memory limit is equal to the total available memory of the host. This ensures the database can utilize all available resources in non-restricted environments but may lead to resource contention with other processes running on the same host.
+In environments without CGroup memory limit, default hard memory limit is equal to the total available memory of the host. This ensures the database can utilize all available resources in non-restricted environments but may lead to resource contention with other processes running on the same host.
 
 Additionally, hard memory limit can be specified in the configuration. However, a database process may exceed it. Therefore, it is highly recommended to use CGroup memory limits in production environments to enforce strict memory control.
 
@@ -484,13 +484,13 @@ memory_controller_config:
   hard_limit_bytes: 16106127360
 ```
 
-Most of other memory limits can be configured either in absolute bytes or as a percentage relative to the hard memory limit. Configuring memory limits as percentages advantages for managing database clusters with nodes of varying capacities. If both absolute bytes and percentage are specified for a limit, they combines.
-
-### Components memory limits
+### Per components memory limits
 
 Some components have their own separate memory limits. 
 
-Most of such a components support dynamic limit reconfiguration, so both minimum and maximum thresholds should be configured.
+Most of memory limits have both minimum and maximum thresholds, so that the final limit value is dynamically calculated based on current process consumption.
+
+Most of memory limits can be configured either in absolute bytes or as a percentage relative to the hard memory limit. Configuring memory limits as percentages advantages for managing database clusters with nodes of varying capacities. If both absolute bytes and percentage limits are specified, they combines.
 
 Example of the `memory_controller_config` section with specified Shared Cache limits:
 
@@ -503,12 +503,12 @@ memory_controller_config:
 Parameters | Description | Default
 --- | --- | ---
 `hard_limit_bytes` | A hard memory usage limit for the database. | CGroup memory limit
-`soft_limit_percent` or `soft_limit_bytes` | A soft memory usage limit for the database. When that threshold is exceeded, the database starts to reduce Shared Cache size up to zero. | 75%
-`target_utilization_percent` or `target_utilization_bytes` | An ideal target for memory usage. Optimal cache sizes are calculated to stay around this threshold. | 50%
-`shared_cache_min_percent` or `shared_cache_min_bytes` | A minimum threshold for Shared Cache memory limit | 20%
-`shared_cache_max_percent` or `shared_cache_max_bytes` | A maximum threshold for Shared Cache memory limit | 50%
-`mem_table_min_percent` or `mem_table_min_bytes` | A minimum threshold for MemTables memory limit | 1%
-`mem_table_max_percent` or `mem_table_max_bytes` | A maximum threshold for MemTables memory limit | 3%
+`soft_limit_percent` / `soft_limit_bytes` | A soft memory usage limit for the database. When that threshold is exceeded, the database starts to reduce Shared Cache size up to zero. | 75%
+`target_utilization_percent` / `target_utilization_bytes` | An ideal target for memory usage. Optimal cache sizes are calculated to keep process consumption around this value. | 50%
+`shared_cache_min_percent` / `shared_cache_min_bytes` | A minimum threshold for Shared Cache memory limit | 20%
+`shared_cache_max_percent` / `shared_cache_max_bytes` | A maximum threshold for Shared Cache memory limit | 50%
+`mem_table_min_percent` / `mem_table_min_bytes` | A minimum threshold for MemTables memory limit | 1%
+`mem_table_max_percent` / `mem_table_max_bytes` | A maximum threshold for MemTables memory limit | 3%
 
 ## blob_storage_config: Static cluster group {#blob-storage-config}
 

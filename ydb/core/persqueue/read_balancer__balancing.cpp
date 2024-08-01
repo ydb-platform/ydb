@@ -1827,7 +1827,7 @@ void TBalancer::Handle(TEvPQ::TEvBalanceConsumer::TPtr& ev, const TActorContext&
     }
 }
 
-void TBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) {
+void TBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext&) {
     const auto& record = ev->Get()->Record;
     for (const auto& partResult : record.GetPartResult()) {
         for (const auto& consumerResult : partResult.GetConsumerResult()) {

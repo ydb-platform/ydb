@@ -2,7 +2,6 @@ syntax = "proto3";
 
 import "ydb/core/graph/protos/graph.proto";
 import "ydb/core/protos/tablet_counters.proto";
-import "ydb/core/protos/memory_stats.proto";
 import "ydb/core/protos/node_whiteboard.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/tablet.proto";
@@ -383,7 +382,6 @@ message TTenant {
     uint64 StorageAllocatedLimit = 41;
     Ydb.Cms.DatabaseQuotas DatabaseQuotas = 42;
     repeated TStorageUsage StorageUsage = 43;
-    optional NKikimrMemory.TMemoryStats MemoryStats = 44;
 }
 
 message TTenants {

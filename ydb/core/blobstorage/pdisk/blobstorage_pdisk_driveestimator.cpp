@@ -109,7 +109,7 @@ void TDriveEstimator::EstimateSpeed(const bool isAtDriveBegin, ui64 outSpeed[TDr
     CondVar.WaitI(Mtx);
 
     double elapsed = HPSecondsFloat(HPNow() - start);
-    outSpeed[TDriveModel::OP_TYPE_WRITE] = (double)operationSize * Repeats / elapsed;
+    outSpeed[TDriveModel::OP_TYPE_WRITE] = elapsed ? (double)operationSize * Repeats / elapsed : 0;
 
     Counter = 0;
     start = HPNow();
@@ -129,7 +129,7 @@ void TDriveEstimator::EstimateSpeed(const bool isAtDriveBegin, ui64 outSpeed[TDr
     CondVar.WaitI(Mtx);
 
     elapsed = HPSecondsFloat(HPNow() - start);
-    outSpeed[TDriveModel::OP_TYPE_READ] = (double)operationSize * Repeats / elapsed;
+    outSpeed[TDriveModel::OP_TYPE_READ] = elapsed ? (double)operationSize * Repeats / elapsed : 0;
     outSpeed[TDriveModel::OP_TYPE_AVG] = (outSpeed[TDriveModel::OP_TYPE_READ] + outSpeed[TDriveModel::OP_TYPE_WRITE]) / 2;
 }
 

@@ -642,6 +642,7 @@ private:
                 break;
             }
             case EOperatingMode::Spilling: {
+                Cerr << "Grace join: Spilling mode turned on\n";
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
                 auto spiller = ctx.SpillerFactory->CreateSpiller();
                 RightPacker->TablePtr->InitializeBucketSpillers(spiller);
@@ -767,7 +768,9 @@ private:
                 const auto used = TlsAllocState->GetUsed();
                 const auto limit = TlsAllocState->GetLimit();
 
-                YQL_LOG(INFO) << "yellow zone reached " << (used*100/limit) << "%=" << used << "/" << limit;
+                if (limit) {
+                    YQL_LOG(INFO) << "yellow zone reached " << (used*100/limit) << "%=" << used << "/" << limit;
+                }
                 YQL_LOG(INFO) << "switching Memory mode to Spilling";
 
                 SwitchMode(EOperatingMode::Spilling, ctx);

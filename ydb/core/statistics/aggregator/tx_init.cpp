@@ -70,6 +70,11 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal start time: " << us);
                         break;
                     }
+                    case Schema::SysParam_TraversalOperationId: {
+                        Self->TraversalOperationId = FromString<ui64>(value);
+                        SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal operation id: " << value);
+                        break;
+                    }  
                     case Schema::SysParam_TraversalCookie: {
                         Self->TraversalCookie = FromString<ui64>(value);
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal cookie: " << value);
@@ -85,6 +90,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded global traversal round: " << value);
                         break;
                     }
+                 
                     default:
                         SA_LOG_CRIT("[" << Self->TabletID() << "] Unexpected SysParam id: " << id);
                 }
@@ -193,6 +199,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             }
 
             while (!rowset.EndOfSet()) {
+                ui64 operationId = rowset.GetValue<Schema::ForceTraversals::OperationId>();
                 ui64 cookie = rowset.GetValue<Schema::ForceTraversals::Cookie>();
                 ui64 ownerId = rowset.GetValue<Schema::ForceTraversals::OwnerId>();
                 ui64 localPathId = rowset.GetValue<Schema::ForceTraversals::LocalPathId>();
@@ -200,6 +207,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 auto pathId = TPathId(ownerId, localPathId);
 
                 TForceTraversal operation {
+                    .OperationId = operationId,
                     .Cookie = cookie,
                     .PathId = pathId,
                     .ReplyToActorId = {}

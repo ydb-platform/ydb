@@ -47,12 +47,14 @@ struct TAggregatorSchema : NIceDb::Schema {
     };
 
     struct ForceTraversals : Table<5> {
-        struct Cookie         : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct OwnerId        : Column<2, NScheme::NTypeIds::Uint64> {};
-        struct LocalPathId    : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct OperationId    : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct Cookie         : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct OwnerId        : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct LocalPathId    : Column<4, NScheme::NTypeIds::Uint64> {};
 
-        using TKey = TableKey<Cookie, OwnerId, LocalPathId>;
+        using TKey = TableKey<OperationId, Cookie, OwnerId, LocalPathId>;
         using TColumns = TableColumns<
+            OperationId,
             Cookie,
             OwnerId,
             LocalPathId
@@ -74,12 +76,13 @@ struct TAggregatorSchema : NIceDb::Schema {
 
     static constexpr ui64 SysParam_Database = 1;
     static constexpr ui64 SysParam_TraversalStartKey = 2;
-    static constexpr ui64 SysParam_TraversalTableOwnerId = 3;
-    static constexpr ui64 SysParam_TraversalTableLocalPathId = 4;
-    static constexpr ui64 SysParam_TraversalStartTime = 5;
-    static constexpr ui64 SysParam_TraversalCookie = 6;
-    static constexpr ui64 SysParam_TraversalIsColumnTable = 7;
-    static constexpr ui64 SysParam_GlobalTraversalRound = 8;
+    static constexpr ui64 SysParam_TraversalOperationId = 3;
+    static constexpr ui64 SysParam_TraversalCookie = 4;
+    static constexpr ui64 SysParam_TraversalTableOwnerId = 5;
+    static constexpr ui64 SysParam_TraversalTableLocalPathId = 6;
+    static constexpr ui64 SysParam_TraversalStartTime = 7;
+    static constexpr ui64 SysParam_TraversalIsColumnTable = 8;
+    static constexpr ui64 SysParam_GlobalTraversalRound = 9;
 };
 
 } // NKikimr::NStat

@@ -5,14 +5,12 @@
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
-    ui64 Cookie;
-    TPathId PathId;
-    TActorId ReplyToActorId;
+    const NKikimrStat::TEvAnalyze& Record;
+    TActorId ReplyToActorId;    
 
-    TTxAnalyzeTable(TSelf* self, ui64 cookie, const TPathId& pathId, TActorId replyToActorId)
+    TTxAnalyzeTable(TSelf* self, const NKikimrStat::TEvAnalyze& record, TActorId replyToActorId)
         : TTxBase(self)
-        , Cookie(cookie)
-        , PathId(pathId)
+        , Record(record)
         , ReplyToActorId(replyToActorId)
     {}
 
@@ -25,27 +23,41 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
             return true;
         }
 
-        // drop request with the same cookie and path
-        auto it = std::find_if(Self->ForceTraversals.begin(), Self->ForceTraversals.end(), 
-            [this](const TForceTraversal& elem) { return elem.PathId == PathId && elem.Cookie == Cookie;});
-        if (it != Self->ForceTraversals.end()) {
-            return true;
-        }
-        
-        // create new force trasersal
-        TForceTraversal operation {
-            .Cookie = Cookie,
-            .PathId = PathId,
-            .ReplyToActorId = ReplyToActorId
-        };
-        Self->ForceTraversals.emplace_back(operation);
-
         NIceDb::TNiceDb db(txc.DB);
-        db.Table<Schema::ForceTraversals>().Key(Cookie, PathId.OwnerId, PathId.LocalPathId).Update(
-            NIceDb::TUpdate<Schema::ForceTraversals::OwnerId>(Cookie),
-            NIceDb::TUpdate<Schema::ForceTraversals::OwnerId>(PathId.OwnerId),
-            NIceDb::TUpdate<Schema::ForceTraversals::LocalPathId>(PathId.LocalPathId));
+        Self->PersistTraversalOperationIdAndCookie(db);
 
+        const ui64 cookie = Record.GetCookie();
+        
+        for (const auto& table : Record.GetTables()) {
+            const TPathId pathId = PathIdFromPathId(table.GetPathId());
+
+            // drop request with the same cookie and path from this sender
+            auto it = std::find_if(Self->ForceTraversals.begin(), Self->ForceTraversals.end(), 
+                [this, &pathId, &cookie](const TForceTraversal& elem) { 
+                    return elem.PathId == pathId 
+                        && elem.Cookie == cookie
+                        && elem.ReplyToActorId == ReplyToActorId
+                    ;});
+            if (it != Self->ForceTraversals.end()) {
+                return true;
+            }
+
+            // create new force trasersal
+            TForceTraversal operation {
+                .OperationId = Self->TraversalOperationId,
+                .Cookie = cookie,
+                .PathId = pathId,
+                .ReplyToActorId = ReplyToActorId
+            };
+            Self->ForceTraversals.emplace_back(operation);
+
+
+            db.Table<Schema::ForceTraversals>().Key(Self->TraversalOperationId, cookie, pathId.OwnerId, pathId.LocalPathId).Update(
+                NIceDb::TUpdate<Schema::ForceTraversals::OperationId>(Self->TraversalOperationId),
+                NIceDb::TUpdate<Schema::ForceTraversals::Cookie>(cookie),
+                NIceDb::TUpdate<Schema::ForceTraversals::OwnerId>(pathId.OwnerId),
+                NIceDb::TUpdate<Schema::ForceTraversals::LocalPathId>(pathId.LocalPathId));
+        }
         return true;
     }
 
@@ -55,13 +67,9 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
 };
 
 void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyze::TPtr& ev) {
-    const auto& record = ev->Get()->Record;
+    ++TraversalOperationId;
 
-    // TODO: replace by queue
-    for (const auto& table : record.GetTables()) {
-        Execute(new TTxAnalyzeTable(this, record.GetCookie(), PathIdFromPathId(table.GetPathId()), ev->Sender), TActivationContext::AsActorContext());
-    }
-
+    Execute(new TTxAnalyzeTable(this, ev->Get()->Record, ev->Sender), TActivationContext::AsActorContext());
 }
 
 } // NKikimr::NStat

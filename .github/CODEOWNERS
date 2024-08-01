@@ -25,3 +25,6 @@
 /ydb/services/persqueue_v1 @ydb-platform/Topics
 
 /ydb/core/config/ut @ydb-platform/core
+
+/ydb/core/viewer @ydb-platform/ui-backend
+/ydb/core/protos/node_whiteboard.proto @ydb-platform/ui-backend

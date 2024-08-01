@@ -41,11 +41,16 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
         auto columnId = GetIndexInfo().GetColumnId(resultField->name());
         auto oldField = dataSchema.GetFieldByColumnIdOptional(columnId);
         if (oldField) {
-            auto conclusion = result->AddField(resultField, batch->GetAccessorByNameVerified(oldField->name()));
-            if (conclusion.IsFail()) {
-                return conclusion;
+            auto fAccessor = batch->GetAccessorByNameOptional(oldField->name());
+            if (fAccessor) {
+                auto conclusion = result->AddField(resultField, fAccessor);
+                if (conclusion.IsFail()) {
+                    return conclusion;
+                }
+                continue;
             }
-        } else if (restoreColumnIds.contains(columnId)) {
+        }
+        if (restoreColumnIds.contains(columnId)) {
             result->AddField(resultField,
                     NArrow::TThreadSimpleArraysCache::Get(resultField->type(), GetExternalDefaultValueVerified(columnId), batch->num_rows()))
                 .Validate();

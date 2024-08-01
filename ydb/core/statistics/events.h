@@ -63,7 +63,7 @@ struct TEvStatistics {
         EvPropagateStatisticsResponse,
 
         EvStatTableCreationResponse,
-        EvSaveStatisticsQueryResponse,
+        EvFinishTraversal,
         EvLoadStatisticsQueryResponse,
 
         EvAnalyze,
@@ -73,8 +73,6 @@ struct TEvStatistics {
 
         EvAnalyzeTable,
         EvAnalyzeTableResponse,
-
-        EvDeleteStatisticsQueryResponse,
 
         EvStatisticsRequest,
         EvStatisticsResponse,
@@ -182,12 +180,10 @@ struct TEvStatistics {
         bool Success = true;
     };
 
-    struct TEvSaveStatisticsQueryResponse : public TEventLocal<
-        TEvSaveStatisticsQueryResponse,
-        EvSaveStatisticsQueryResponse>
-    {
-        bool Success = true;
-    };
+    struct TEvFinishTraversal : public TEventLocal<
+        TEvFinishTraversal,
+        EvFinishTraversal>
+    {};
 
     struct TEvLoadStatisticsQueryResponse : public TEventLocal<
         TEvLoadStatisticsQueryResponse,
@@ -196,13 +192,6 @@ struct TEvStatistics {
         bool Success = true;
         ui64 Cookie = 0;
         std::optional<TString> Data;
-    };
-
-    struct TEvDeleteStatisticsQueryResponse : public TEventLocal<
-        TEvDeleteStatisticsQueryResponse,
-        EvDeleteStatisticsQueryResponse>
-    {
-        bool Success = true;
     };
 
     struct TEvAnalyze : public TEventPB<

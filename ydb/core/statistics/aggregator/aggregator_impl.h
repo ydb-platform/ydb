@@ -49,9 +49,8 @@ private:
     struct TTxNavigate;
     struct TTxResolve;
     struct TTxDatashardScanResponse;
-    struct TTxSaveQueryResponse;
+    struct TTxFinishTraversal;
     struct TTxScheduleTrasersal;
-    struct TTxDeleteQueryResponse;
     struct TTxAggregateStatisticsResponse;
     struct TTxResponseTabletDistribution;
     struct TTxAckTimeout;
@@ -126,8 +125,7 @@ private:
     void Handle(NStat::TEvStatistics::TEvStatisticsResponse::TPtr& ev);
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev);
     void Handle(TEvStatistics::TEvStatTableCreationResponse::TPtr& ev);
-    void Handle(TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr& ev);
-    void Handle(TEvStatistics::TEvDeleteStatisticsQueryResponse::TPtr& ev);
+    void Handle(TEvStatistics::TEvFinishTraversal::TPtr& ev);
     void Handle(TEvPrivate::TEvScheduleTraversal::TPtr& ev);
     void Handle(TEvStatistics::TEvAnalyzeStatus::TPtr& ev);
     void Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev);
@@ -147,7 +145,6 @@ private:
     void PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const TString& value);
     void PersistTraversal(NIceDb::TNiceDb& db);
     void PersistStartKey(NIceDb::TNiceDb& db);
-    void PersistLastForceTraversalOperationId(NIceDb::TNiceDb& db);
     void PersistGlobalTraversalRound(NIceDb::TNiceDb& db);
 
     void ResetTraversalState(NIceDb::TNiceDb& db);
@@ -182,8 +179,7 @@ private:
             hFunc(NStat::TEvStatistics::TEvStatisticsResponse, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(TEvStatistics::TEvStatTableCreationResponse, Handle);
-            hFunc(TEvStatistics::TEvSaveStatisticsQueryResponse, Handle);
-            hFunc(TEvStatistics::TEvDeleteStatisticsQueryResponse, Handle);
+            hFunc(TEvStatistics::TEvFinishTraversal, Handle);
             hFunc(TEvPrivate::TEvScheduleTraversal, Handle);
             hFunc(TEvStatistics::TEvAnalyzeStatus, Handle);
             hFunc(TEvHive::TEvResponseTabletDistribution, Handle);
@@ -304,11 +300,11 @@ private:
 
 private: // stored in local db
     
+    ui64 TraversalCookie = 0;
     TTableId TraversalTableId; 
     bool TraversalIsColumnTable = false;
     TSerializedCellVec TraversalStartKey;
     TInstant TraversalStartTime;
-    ui64 LastForceTraversalOperationId = 0;  
 
     size_t GlobalTraversalRound = 1; 
 
@@ -320,13 +316,12 @@ private: // stored in local db
         TTraversalsByTime;
     TTraversalsByTime ScheduleTraversalsByTime;
 
-    struct TForceTraversal : public TIntrusiveListItem<TForceTraversal> {
-        ui64 OperationId = 0;
+    struct TForceTraversal {
+        ui64 Cookie = 0;
         TPathId PathId;
         std::unordered_set<TActorId> ReplyToActorIds;
     };
-    TIntrusiveList<TForceTraversal> ForceTraversals;
-    std::unordered_map<TPathId, TForceTraversal> ForceTraversalsByPathId;  
+    std::list<TForceTraversal> ForceTraversals;
 };
 
 } // NKikimr::NStat

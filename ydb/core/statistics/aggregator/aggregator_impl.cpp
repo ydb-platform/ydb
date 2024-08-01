@@ -442,8 +442,8 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeStatus::TPtr& ev) {
     if (TraversalTableId.PathId == pathId) {
         outRecord.SetStatus(NKikimrStat::TEvAnalyzeStatusResponse::STATUS_IN_PROGRESS);
     } else {
-        auto it = ForceTraversalsByPathId.find(pathId);
-        if (it != ForceTraversalsByPathId.end()) {
+        if (std::any_of(ForceTraversals.begin(), ForceTraversals.end(), 
+            [&pathId](const TForceTraversal& elem) { return elem.PathId == pathId;})) {
             outRecord.SetStatus(NKikimrStat::TEvAnalyzeStatusResponse::STATUS_ENQUEUED);
         } else {
             outRecord.SetStatus(NKikimrStat::TEvAnalyzeStatusResponse::STATUS_NO_OPERATION);
@@ -579,14 +579,15 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
 
     TPathId pathId;
 
-    if (!ForceTraversals.Empty() && !LastTraversalWasForce) {
-        auto* operation = ForceTraversals.Front();
-        ReplyToActorIds.swap(operation->ReplyToActorIds);
-        pathId = operation->PathId;
+    if (!ForceTraversals.empty() && !LastTraversalWasForce) {
+        TForceTraversal& operation = ForceTraversals.front();
+        ReplyToActorIds.swap(operation.ReplyToActorIds);
+        pathId = operation.PathId;
 
-        db.Table<Schema::ForceTraversals>().Key(operation->OperationId).Delete();
-        ForceTraversals.PopFront();
-        ForceTraversalsByPathId.erase(pathId);
+        TraversalCookie = operation.Cookie;
+
+        db.Table<Schema::ForceTraversals>().Key(operation.Cookie, operation.PathId.OwnerId, operation.PathId.LocalPathId).Delete();
+        ForceTraversals.pop_front();
 
         LastTraversalWasForce = true;
     } else if (!ScheduleTraversalsByTime.Empty()){
@@ -655,6 +656,7 @@ void TStatisticsAggregator::PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const 
 }
 
 void TStatisticsAggregator::PersistTraversal(NIceDb::TNiceDb& db) {
+    PersistSysParam(db, Schema::SysParam_TraversalCookie, ToString(TraversalCookie));
     PersistSysParam(db, Schema::SysParam_TraversalTableOwnerId, ToString(TraversalTableId.PathId.OwnerId));
     PersistSysParam(db, Schema::SysParam_TraversalTableLocalPathId, ToString(TraversalTableId.PathId.LocalPathId));
     PersistSysParam(db, Schema::SysParam_TraversalStartTime, ToString(TraversalStartTime.MicroSeconds()));
@@ -665,15 +667,13 @@ void TStatisticsAggregator::PersistStartKey(NIceDb::TNiceDb& db) {
     PersistSysParam(db, Schema::SysParam_TraversalStartKey, TraversalStartKey.GetBuffer());
 }
 
-void TStatisticsAggregator::PersistLastForceTraversalOperationId(NIceDb::TNiceDb& db) {
-    PersistSysParam(db, Schema::SysParam_LastForceTraversalOperationId, ToString(LastForceTraversalOperationId));
-}
 
 void TStatisticsAggregator::PersistGlobalTraversalRound(NIceDb::TNiceDb& db) {
     PersistSysParam(db, Schema::SysParam_GlobalTraversalRound, ToString(GlobalTraversalRound));
 }
 
 void TStatisticsAggregator::ResetTraversalState(NIceDb::TNiceDb& db) {
+    TraversalCookie = 0;
     TraversalTableId.PathId = TPathId();
     TraversalStartTime = TInstant::MicroSeconds(0);
     PersistTraversal(db);

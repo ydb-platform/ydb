@@ -141,8 +141,7 @@ public:
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
         Y_UNUSED(issues);
-        auto response = std::make_unique<TEvStatistics::TEvSaveStatisticsQueryResponse>();
-        response->Success = (status == Ydb::StatusIds::SUCCESS);
+        auto response = std::make_unique<TEvStatistics::TEvFinishTraversal>();
         Send(Owner, response.release());
     }
 };
@@ -281,8 +280,7 @@ public:
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
         Y_UNUSED(issues);
-        auto response = std::make_unique<TEvStatistics::TEvDeleteStatisticsQueryResponse>();
-        response->Success = (status == Ydb::StatusIds::SUCCESS);
+        auto response = std::make_unique<TEvStatistics::TEvFinishTraversal>();
         Send(Owner, response.release());
     }
 };

@@ -7,54 +7,56 @@
 namespace NKikimr {
 namespace NStat {
 
-namespace {
+struct TTableInfo {
+    std::vector<ui64> ShardIds;
+    ui64 SaTabletId; 
+    TPathId DomainKey;
+    TPathId PathId;
+};
 
+std::vector<TTableInfo> CreateDatabaseTables(TTestEnv& env, ui8 tableCount, ui8 shardCount) {
+    auto init = [&] () {
+        CreateDatabase(env, "Database");
+        for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
+            CreateColumnStoreTable(env, "Database", Sprintf("Table%u", tableId), shardCount);
+        }
+    };
+    std::thread initThread(init);
 
-} // namespace
+    auto& runtime = *env.GetServer().GetRuntime();
+    auto sender = runtime.AllocateEdgeActor();
+
+    runtime.SimulateSleep(TDuration::Seconds(10));
+    initThread.join();
+
+    std::vector<TTableInfo> ret;
+    for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
+        TTableInfo tableInfo;
+        const TString path = Sprintf("/Root/Database/Table%u", tableId);
+        tableInfo.ShardIds = GetColumnTableShards(runtime, sender, path);
+        tableInfo.PathId = ResolvePathId(runtime, path, &tableInfo.DomainKey, &tableInfo.SaTabletId);
+        ret.emplace_back(tableInfo);
+    }
+    return ret;
+}    
 
 Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
-
     Y_UNIT_TEST(AnalyzeOneColumnTable) {
         TTestEnv env(1, 1);
-        auto init = [&] () {
-            CreateDatabase(env, "Database");
-            CreateColumnStoreTable(env, "Database", "Table", 1);
-        };
-        std::thread initThread(init);
-
         auto& runtime = *env.GetServer().GetRuntime();
-        runtime.SimulateSleep(TDuration::Seconds(10));
-        initThread.join();
+        auto tableInfo = CreateDatabaseTables(env, 1, 1)[0];
 
-        auto sender = runtime.AllocateEdgeActor();
-        ui64 columnShardId = GetColumnTableShards(runtime, sender, "/Root/Database/Table").at(0);
+        AnalyzeTable(runtime, tableInfo.PathId, tableInfo.ShardIds[0]);
 
-        ui64 saTabletId = 0;
-        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
-
-        AnalyzeTable(runtime, pathId, columnShardId);
-
-        Analyze(runtime, {pathId}, saTabletId);
+        Analyze(runtime, {tableInfo.PathId}, tableInfo.SaTabletId);
     }
 
     Y_UNIT_TEST(AnalyzeTwoColumnTables) {
         TTestEnv env(1, 1);
-        auto init = [&] () {
-            CreateDatabase(env, "Database");
-            CreateColumnStoreTable(env, "Database", "Table1", 1);
-            CreateColumnStoreTable(env, "Database", "Table2", 1);
-        };
-        std::thread initThread(init);
-
         auto& runtime = *env.GetServer().GetRuntime();
-        runtime.SimulateSleep(TDuration::Seconds(10));
-        initThread.join();
+        auto tableInfos = CreateDatabaseTables(env, 2, 1);
 
-        ui64 saTabletId = 0;
-        auto pathId1 = ResolvePathId(runtime, "/Root/Database/Table1", nullptr, &saTabletId);
-        auto pathId2 = ResolvePathId(runtime, "/Root/Database/Table2");
-
-        Analyze(runtime, {pathId1, pathId2}, saTabletId);
+        Analyze(runtime, {tableInfos[0].PathId, tableInfos[1].PathId}, tableInfos[0].SaTabletId);
     }
 }
 

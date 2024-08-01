@@ -13,7 +13,10 @@ namespace NMiniKQL {
 namespace GraceJoin {
 
 
-void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * stringsSizes, NYql::NUdf::TUnboxedValue * iColumns ) {
+TTable::EAddTupleResult TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * stringsSizes, NYql::NUdf::TUnboxedValue * iColumns, const TTable &other) {
+
+    if ((intColumns[0] & 1))
+        return EAddTupleResult::Unmatched;
 
     TotalPacked++;
 
@@ -83,6 +86,16 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
 
     ui64 bucket = hash & BucketsMask;
 
+    if (other.TableBucketsStats[bucket].BloomFilter.IsFinalized())  {
+        auto bucket2 = &other.TableBucketsStats[bucket];
+        auto &bloomFilter = bucket2->BloomFilter;
+        ++BloomLookups_;
+        if (bloomFilter.IsMissing(hash)) {
+            ++BloomHits_;
+            return EAddTupleResult::Unmatched;
+        }
+    }
+
     std::vector<ui64, TMKQLAllocator<ui64>> & keyIntVals = TableBuckets[bucket].KeyIntVals;
     std::vector<ui32, TMKQLAllocator<ui32>> & stringsOffsets = TableBuckets[bucket].StringsOffsets;
     std::vector<ui64, TMKQLAllocator<ui64>> & dataIntVals = TableBuckets[bucket].DataIntVals;
@@ -98,7 +111,8 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
     if (IsAny_) {
         if ( !AddKeysToHashTable(kh, keyIntVals.begin() + offset, iColumns) ) {
             keyIntVals.resize(offset);
-            return;
+            ++AnyFiltered_;
+            return EAddTupleResult::AnyMatch;
         }
     }
 
@@ -146,6 +160,7 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
 
     TableBucketsStats[bucket].KeyIntValsTotalSize += keyIntVals.size() - offset;
     TableBucketsStats[bucket].StringValuesTotalSize += stringVals.size() - initialStringsSize;
+    return EAddTupleResult::Added;
 }
 
 void TTable::ResetIterator() {
@@ -348,6 +363,8 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         joinResults.clear();
         TTableBucket * bucket1 = &JoinTable1->TableBuckets[bucket];
         TTableBucket * bucket2 = &JoinTable2->TableBuckets[bucket];
+        TTableBucketStats * bucketStats1 = &JoinTable1->TableBucketsStats[bucket];
+        TTableBucketStats * bucketStats2 = &JoinTable2->TableBucketsStats[bucket];
 
         ui64 tuplesNum1 = JoinTable1->TableBucketsStats[bucket].TuplesNum;
         ui64 tuplesNum2 = JoinTable2->TableBucketsStats[bucket].TuplesNum;
@@ -367,6 +384,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
 
         if (swapTables) {
             std::swap(bucket1, bucket2);
+            std::swap(bucketStats1, bucketStats2);
             std::swap(headerSize1, headerSize2);
             std::swap(nullsSize1, nullsSize2);
             std::swap(keyIntOffset1, keyIntOffset2);
@@ -388,12 +406,15 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
 
         ui64 &nSlots = bucket2->NSlots;
         auto &joinSlots = bucket2->JoinSlots;
+        auto &bloomFilter = bucketStats2->BloomFilter;
         bool initHashTable = false;
 
         if (!nSlots) {
             nSlots = (3 * tuplesNum2 + 1) | 1;
             joinSlots.resize(nSlots*slotSize, 0);
+            bloomFilter.Resize(tuplesNum2);
             initHashTable = true;
+            ++InitHashTableCount_;
         }
 
         auto firstSlot = [begin = joinSlots.begin(), slotSize, nSlots](auto hash) {
@@ -421,11 +442,16 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
                 if (HasBitSet(nullsPtr, 1))
                     continue;
 
+                bloomFilter.Add(hash);
+
                 auto slotIt = firstSlot(hash);
 
+                ++HashLookups_;
                 for (; *slotIt != 0; slotIt = nextSlot(slotIt))
                 {
+                    ++HashO1Iterations_;
                 }
+                ++HashSlotIterations_;
 
                 if (keysValSize <= slotSize - 1)
                 {
@@ -439,8 +465,11 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
                 }
                 slotIt[slotSize - 1] = tuple2Idx;
             }
+            bloomFilter.Finalize();
+            if (swapTables) JoinTable1Total_ += tuplesNum2; else JoinTable2Total_ += tuplesNum2;
         }
 
+        if (swapTables) JoinTable2Total_ += tuplesNum1; else JoinTable1Total_ += tuplesNum1;
 
         ui32 tuple1Idx = 0;
         auto it1 = bucket1->KeyIntVals.begin();
@@ -451,6 +480,8 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         // strSize only present if HasKeyStrCol || HasKeyICol
         // strPos is only present if (HasKeyStrCol || HasKeyICol) && strSize + headerSize >= slotSize
         // slotSize, slotIdx and strPos is only for hashtable (table2)
+        ui64 bloomHits = 0;
+        ui64 bloomLookups = 0;
         
         for (ui64 keysValSize = headerSize1; it1 != bucket1->KeyIntVals.end(); it1 += keysValSize, ++tuple1Idx ) {
 
@@ -465,14 +496,27 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
                 continue;
             }
 
+            if (initHashTable) {
+                bloomLookups++;
+                if (bloomFilter.IsMissing(hash)) {
+                    bloomHits++;
+                    continue;
+                }
+            }
+
+            ++HashLookups_;
+
+            auto saveTuplesFound = tuplesFound;
             auto slotIt = firstSlot(hash);
             for (; *slotIt != 0; slotIt = nextSlot(slotIt) )
             {
+                ++HashO1Iterations_;
                 if (*slotIt != hash)
                     continue;
 
                 auto tuple2Idx = slotIt[slotSize - 1];
 
+                ++HashSlotIterations_;
                 if (table1HasKeyIColumns || !(keysValSize - nullsSize1 <= slotSize - 1 - nullsSize2)) {
                     // 2nd condition cannot be true unless HasKeyStringColumns or HasKeyIColumns, hence size at the end of header is present
 
@@ -518,13 +562,22 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
                 joinIds.id2 = swapTables ? tuple1Idx : tuple2Idx;
                 joinResults.emplace_back(joinIds);
             }
+            BloomFalsePositives_ += saveTuplesFound == tuplesFound;
         }
 
         if (!hasMoreLeftTuples && !hasMoreRightTuples) {
             joinSlots.clear();
             joinSlots.shrink_to_fit();
             nSlots = 0;
+            bloomFilter.Shrink();
         }
+
+        if (bloomHits < bloomLookups/8) {
+            // Bloomfilter was inefficient, drop it
+            bloomFilter.Shrink();
+        }
+        BloomHits_ += bloomHits;
+        BloomLookups_ += bloomLookups;
 
         std::sort(joinResults.begin(), joinResults.end(), [](JoinTuplesIds a, JoinTuplesIds b)
         {
@@ -571,6 +624,21 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
             }
 
         }
+        YQL_LOG(GRACEJOIN_TRACE)
+            << (const void *)this << '#'
+            << bucket
+            << " Table1 " << JoinTable1->TableBucketsStats[bucket].TuplesNum
+            << " Table2 " << JoinTable2->TableBucketsStats[bucket].TuplesNum
+            << " LeftTableBatch " << LeftTableBatch_
+            << " leftMatchedIds " << leftMatchedIds.size()
+            << " RightTableBatch " << RightTableBatch_
+            << " rightMatchedIds " << rightMatchedIds.size()
+            << " rightIds " << rightIds.size()
+            << " joinIds " << joinIds.size()
+            << " joinKind " << (int)JoinKind
+            << " swapTables " << swapTables
+            << " initHashTable " << initHashTable
+            ;
     }
 
     HasMoreLeftTuples_ = hasMoreLeftTuples;
@@ -700,7 +768,7 @@ inline bool TTable::AddKeysToHashTable(KeysHashTable& t, ui64* keys, NYql::NUdf:
     }
 
     if ( HasBitSet(keys + HashSize, 1)) // Keys with null value
-        return false;
+        return true;
 
     ui64 hash = *keys;
     ui64 slot = hash % t.NSlots;
@@ -1291,6 +1359,16 @@ TTable::TTable( ui64 numberOfKeyIntColumns, ui64 numberOfKeyStringColumns,
 }
 
 TTable::~TTable() {
+    YQL_LOG_IF(GRACEJOIN_DEBUG, InitHashTableCount_)
+        << (const void *)this << '#' << "InitHashTableCount " << InitHashTableCount_
+        << " BloomLookups " << BloomLookups_ << " BloomHits " << BloomHits_ << " BloomFalsePositives " << BloomFalsePositives_
+        << " HashLookups " << HashLookups_ << " HashChainTraversal " << HashO1Iterations_/(double)HashLookups_ << " HashSlotOperations " << HashSlotIterations_/(double)HashLookups_
+        << " Table1 " << JoinTable1Total_ << " Table2 " << JoinTable2Total_ << " TuplesFound " << TuplesFound_
+        ;
+    YQL_LOG_IF(GRACEJOIN_DEBUG, JoinTable1 && JoinTable1->AnyFiltered_) << (const void *)this << '#' << "L AnyFiltered " <<  JoinTable1->AnyFiltered_;
+    YQL_LOG_IF(GRACEJOIN_DEBUG, JoinTable1 && JoinTable1->BloomLookups_) << (const void *)this << '#' << "L BloomLookups " <<  JoinTable1->BloomLookups_ << " BloomHits " <<  JoinTable1->BloomHits_;
+    YQL_LOG_IF(GRACEJOIN_DEBUG, JoinTable2 && JoinTable2->AnyFiltered_) << (const void *)this << '#' << "R AnyFiltered " <<  JoinTable2->AnyFiltered_;
+    YQL_LOG_IF(GRACEJOIN_DEBUG, JoinTable2 && JoinTable2->BloomLookups_) << (const void *)this << '#' << "R BloomLookups " <<  JoinTable2->BloomLookups_ << " BloomHits " <<  JoinTable2->BloomHits_;
 };
 
 TTableBucketSpiller::TTableBucketSpiller(ISpiller::TPtr spiller, size_t sizeLimit)

@@ -11,6 +11,8 @@ namespace NMiniKQL {
 namespace GraceJoin {
 
 class TTableBucketSpiller;
+#define GRACEJOIN_DEBUG DEBUG
+#define GRACEJOIN_TRACE TRACE
         
 const ui64 BitsForNumberOfBuckets = 5; // 2^5 = 32
 const ui64 BucketsMask = (0x00000001 << BitsForNumberOfBuckets)  - 1;
@@ -20,6 +22,89 @@ const ui64 DefaultTupleBytes = 64; // Default size of all columns in table row f
 const ui64 HashSize = 1; // Using ui64 hash size
 const ui64 SpillingSizeLimit = 1_MB; // Don't try to spill if net effect is lower than this size
 const ui32 SpillingRowLimit = 1024; // Don't try to invoke spilling more often than 1 in this number of rows
+
+constexpr ui64 CachelineBits = 9;
+constexpr ui64 CachelineSize = ui64(1)<<CachelineBits;
+
+template <typename Alloc>
+class TBloomfilter {
+    std::vector<ui64, Alloc> Storage_;
+    ui64 *Ptr_;
+    ui64 Bits_;
+    bool Finalized_ = false;
+
+    public:
+
+    static constexpr ui64 BlockSize = CachelineSize;
+    static constexpr ui64 BlockBits = CachelineBits;
+
+    TBloomfilter() {}
+    TBloomfilter(ui64 size) {
+        Resize(size);
+    }
+
+    void Resize(ui64 size) {
+        size = std::max(size, CachelineSize);
+        Bits_ = 6;
+
+        for (; (ui64(1)<<Bits_) < size; ++Bits_)
+            ;
+
+        Bits_ += 3; // -> multiply by 8
+        size = 1u<<(Bits_ - 6);
+
+        Storage_.clear();
+        Storage_.resize(size + CachelineSize/sizeof(ui64) - 1);
+
+        // align Ptr_ up to BlockSize
+        Ptr_ = (ui64 *)((uintptr_t(Storage_.data()) + BlockSize - 1) & ~(BlockSize - 1));
+        Finalized_ = false;
+    }
+
+    void Add(ui64 hash) {
+        Y_DEBUG_ABORT_UNLESS(!Finalized_);
+
+        auto bit = (hash >> (64 - Bits_));
+        Ptr_[bit/64] |= (ui64(1)<<(bit % 64));
+        // replace low BlockBits with next part of hash
+        auto low = hash >> (64 - Bits_ - BlockBits);
+        bit &= ~(BlockSize - 1);
+        bit ^= low & (BlockSize - 1);
+        Ptr_[bit/64] |= (ui64(1) << (bit % 64));
+    }
+
+    bool IsMissing(ui64 hash) const {
+        Y_DEBUG_ABORT_UNLESS(Finalized_);
+
+        auto bit = (hash >> (64 - Bits_));
+        if (!(Ptr_[bit/64] & (ui64(1)<<(bit % 64))))
+            return true;
+        // replace low BlockBits with next part of hash
+        auto low = hash >> (64 - Bits_ - BlockBits);
+        bit &= ~(BlockSize - 1);
+        bit ^= low & (BlockSize - 1);
+        if (!(Ptr_[bit/64] & (ui64(1)<<(bit % 64))))
+            return true;
+        return false;
+    }
+
+    constexpr bool IsFinalized() const {
+        return Finalized_;
+    }
+
+    void Finalize() {
+        Finalized_ = true;
+    }
+
+    void Shrink() {
+        Finalized_ = false;
+        Bits_ = 1;
+        Storage_.clear();
+        Storage_.resize(1, ~ui64(0));
+        Storage_.shrink_to_fit();
+        Ptr_ = Storage_.data();
+    }
+};
 
 /*
 Table data stored in buckets. Table columns are interpreted either as integers, strings or some interface-based type,
@@ -73,9 +158,11 @@ struct TTableBucket {
 
     std::vector<ui64, TMKQLAllocator<ui64>> JoinSlots;  // Hashtable
     ui64 NSlots = 0;  // Hashtable
+
  };
 
  struct TTableBucketStats {
+    TBloomfilter<TMKQLAllocator<ui64>> BloomFilter;
     KeysHashTable AnyHashTable;      // Hash table to process join only for unique keys (any join attribute)
     ui64 TuplesNum = 0;             // Total number of tuples in bucket
     ui64 StringValuesTotalSize = 0; // Total size of StringsValues. Used to correctly calculate StringsOffsets.
@@ -262,10 +349,6 @@ class TTable {
 
 public:
 
-    // Adds new tuple to the table.  intColumns, stringColumns - data of columns, 
-    // stringsSizes - sizes of strings columns.  Indexes of null-value columns
-    // in the form of bit array should be first values of intColumns.
-    void AddTuple(ui64* intColumns, char** stringColumns, ui32* stringsSizes, NYql::NUdf::TUnboxedValue * iColumns = nullptr);
 
     // Resets iterators. In case of join results table it also resets iterators for joined tables
     void ResetIterator();
@@ -335,9 +418,28 @@ public:
             ui64 numberOfDataIntColumns = 0, ui64 numberOfDataStringColumns = 0,
             ui64 numberOfKeyIColumns = 0, ui64 numberOfDataIColumns = 0, 
             ui64 nullsBitmapSize = 1, TColTypeInterface * colInterfaces = nullptr, bool isAny = false);
+
+    enum class EAddTupleResult { Added, Unmatched, AnyMatch };
+    // Adds new tuple to the table.  intColumns, stringColumns - data of columns,
+    // stringsSizes - sizes of strings columns.  Indexes of null-value columns
+    // in the form of bit array should be first values of intColumns.
+    EAddTupleResult AddTuple(ui64* intColumns, char** stringColumns, ui32* stringsSizes, NYql::NUdf::TUnboxedValue * iColumns = nullptr, const TTable &other = {});
     
     ~TTable();
 
+    ui64 InitHashTableCount_ = 0;
+
+    ui64 HashLookups_ = 0; // hash lookups
+    ui64 HashO1Iterations_ = 0; // hash chain
+    ui64 HashSlotIterations_ = 0; // O(SlotSize) operations
+
+    ui64 JoinTable1Total_ = 0;
+    ui64 JoinTable2Total_ = 0;
+    ui64 AnyFiltered_ = 0;
+
+    ui64 BloomLookups_ = 0;
+    ui64 BloomHits_ = 0;
+    ui64 BloomFalsePositives_ = 0;
 };
 
 

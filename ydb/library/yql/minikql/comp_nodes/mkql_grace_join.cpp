@@ -642,7 +642,6 @@ private:
                 break;
             }
             case EOperatingMode::Spilling: {
-                Cerr << "Grace join: Spilling mode turned on\n";
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
                 auto spiller = ctx.SpillerFactory->CreateSpiller();
                 RightPacker->TablePtr->InitializeBucketSpillers(spiller);
@@ -728,6 +727,19 @@ private:
         }
     }
 
+    void LogMemoryUsage() const {
+        const auto used = TlsAllocState->GetUsed();
+        const auto limit = TlsAllocState->GetLimit();
+        TStringBuilder logmsg;
+        logmsg << "Memory usage: ";
+        if (limit) {
+            logmsg << (used*100/limit) << "%=";
+        }
+        logmsg << (used/1_MB) << "MB/" << (limit/1_MB) << "MB";
+
+        YQL_LOG(INFO) << logmsg;
+    }
+
     EFetchResult DoCalculateInMemory(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
         // Collecting data for join and perform join (batch or full)
         while (!*JoinCompleted ) {
@@ -765,12 +777,7 @@ private:
 
             bool isYield = FetchAndPackData(ctx);
             if (IsSpillingAllowed && ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
-                const auto used = TlsAllocState->GetUsed();
-                const auto limit = TlsAllocState->GetLimit();
-
-                if (limit) {
-                    YQL_LOG(INFO) << "yellow zone reached " << (used*100/limit) << "%=" << used << "/" << limit;
-                }
+                LogMemoryUsage();
                 YQL_LOG(INFO) << "switching Memory mode to Spilling";
 
                 SwitchMode(EOperatingMode::Spilling, ctx);

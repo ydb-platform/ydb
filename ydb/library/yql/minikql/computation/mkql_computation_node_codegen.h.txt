@@ -1220,7 +1220,7 @@ class DIScopeAnnotator;
 
 class DISubprogramAnnotator final {
 public:
-    explicit DISubprogramAnnotator(const TCodegenContext& ctx, Function* subprogramFunc, const std::source_location& location = std::source_location::current());
+    explicit DISubprogramAnnotator(TCodegenContext& ctx, Function* subprogramFunc, const std::source_location& location = std::source_location::current());
 
     DIFile* MakeDIFile(const std::source_location& location);
 
@@ -1231,7 +1231,7 @@ private:
 
     friend DIScopeAnnotator;
 
-    const TCodegenContext& Ctx;
+    TCodegenContext& Ctx;
     std::unique_ptr<DIBuilder> DebugBuilder;
     DISubprogram* Subprogram;
     Function* Func;

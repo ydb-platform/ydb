@@ -2591,16 +2591,18 @@ Y_NO_INLINE Function* TCodegeneratorRootNodeBase::GenerateGetValueImpl(
     return ctx.Func;
 }
 
-DISubprogramAnnotator::DISubprogramAnnotator(const TCodegenContext& ctx, Function* subprogramFunc, const std::source_location& location)
+DISubprogramAnnotator::DISubprogramAnnotator(TCodegenContext& ctx, Function* subprogramFunc, const std::source_location& location)
     : Ctx(ctx)
     , DebugBuilder(std::make_unique<DIBuilder>(ctx.Codegen.GetModule()))
     , Subprogram(MakeDISubprogram(subprogramFunc->getName(), location))
     , Func(subprogramFunc)
 {
     subprogramFunc->setSubprogram(Subprogram);
+    Ctx.Annotator = this;
 }
 
 DISubprogramAnnotator::~DISubprogramAnnotator() {
+    Ctx.Annotator = nullptr;
     { // necessary stub annotation of "CallInst"s
         DIScopeAnnotator stubAnnotate(*this);
         for (BasicBlock& block : *Func) {

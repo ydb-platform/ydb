@@ -946,6 +946,7 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
 
     ui64 GetMaxPingsInFlight() const {
         return CurrentConfig.GetMaxPingsInFlight();
+    }
 
     bool GetLessSystemTabletsMoves() const {
         return CurrentConfig.GetLessSystemTabletsMoves();

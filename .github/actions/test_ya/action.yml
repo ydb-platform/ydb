@@ -192,8 +192,6 @@ runs:
           params+=(-A)
         fi
 
-        params+=(-k)
-
         params+=(
           --stat -DCONSISTENT_DEBUG --no-dir-outputs
           --test-failure-code 0 --build-all 

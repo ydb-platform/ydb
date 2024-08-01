@@ -502,7 +502,7 @@ memory_controller_config:
 
 Parameters | Description | Default
 --- | --- | ---
-`hard_limit_bytes` | A hard memory usage limit for the database. | CGroup memory limit
+`hard_limit_bytes` | A hard memory usage limit for the database. | CGroup memory limit / Host memory
 `soft_limit_percent` / `soft_limit_bytes` | A soft memory usage limit for the database. When this threshold is exceeded, the database starts to reduce the Shared Cache size to zero. | 75%
 `target_utilization_percent` / `target_utilization_bytes` | An ideal target for memory usage. Optimal cache sizes are calculated to keep process consumption around this value. | 50%
 `shared_cache_min_percent` / `shared_cache_min_bytes` | A minimum threshold for the Shared Cache memory limit. | 20%

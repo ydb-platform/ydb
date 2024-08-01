@@ -2655,7 +2655,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 1000);
 
         csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
         csController->WaitIndexation(TDuration::Seconds(5));

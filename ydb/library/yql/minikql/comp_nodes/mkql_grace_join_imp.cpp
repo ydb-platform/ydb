@@ -86,16 +86,6 @@ TTable::EAddTupleResult TTable::AddTuple(  ui64 * intColumns, char ** stringColu
 
     ui64 bucket = hash & BucketsMask;
 
-    if (other.TableBucketsStats[bucket].BloomFilter.IsFinalized())  {
-        auto bucket2 = &other.TableBucketsStats[bucket];
-        auto &bloomFilter = bucket2->BloomFilter;
-        ++BloomLookups_;
-        if (bloomFilter.IsMissing(hash)) {
-            ++BloomHits_;
-            return EAddTupleResult::Unmatched;
-        }
-    }
-
     std::vector<ui64, TMKQLAllocator<ui64>> & keyIntVals = TableBuckets[bucket].KeyIntVals;
     std::vector<ui32, TMKQLAllocator<ui32>> & stringsOffsets = TableBuckets[bucket].StringsOffsets;
     std::vector<ui64, TMKQLAllocator<ui64>> & dataIntVals = TableBuckets[bucket].DataIntVals;
@@ -113,6 +103,17 @@ TTable::EAddTupleResult TTable::AddTuple(  ui64 * intColumns, char ** stringColu
             keyIntVals.resize(offset);
             ++AnyFiltered_;
             return EAddTupleResult::AnyMatch;
+        }
+    }
+
+    if (other.TableBucketsStats[bucket].BloomFilter.IsFinalized())  {
+        auto bucket2 = &other.TableBucketsStats[bucket];
+        auto &bloomFilter = bucket2->BloomFilter;
+        ++BloomLookups_;
+        if (bloomFilter.IsMissing(hash)) {
+            keyIntVals.resize(offset);
+            ++BloomHits_;
+            return EAddTupleResult::Unmatched;
         }
     }
 

@@ -427,25 +427,17 @@ Technically, DS Proxy is implemented as an [actor service](#actor-service) launc
 
 #### Fail realm {#fail-realm}
 
-A **fail realm** is a set of [fail domains](#fail-domain) that may fail concurrently.
+A **fail realm** is a set of [fail domains](#fail-domain) that are likely to fail simultaneously. The correlated failure of two [VDisks](#vdisk) within the same fail realm is more probable than that of two VDisks from different fail realms.
 
-An example of a fail realm is hardware located in the same data center that may fail as a result of a natural disaster.
-
-A [storage group](#storage-group) is a set of [VDisks](#vdisk) combined into one or more **Fail realms**. So technically a Fail realm contains one or more [Fail domains](#fail-domain). The correlated failure of two VDisks within the same Fail realm is more likely than that of two VDisks from different Fail realms.
-
-A Fail realm usually corresponds to the physical concept of a data center or Availability Zone (AZ).
+An example of a fail realm is a set of hardware located in the same [data center or availability zone](#regions-az) that can all fail together due to a natural disaster, major power outage, or similar event.
 
 #### Fail domain {#fail-domain}
 
-A **fail domain** is a set of hardware that may fail concurrently.
+A **fail domain** is a set of hardware that may fail simultaneously. The correlated failure of two [VDisks](#vdisk) within the same fail domain is more probable than the failure of two VDisks from different fail domains. In the case of different fail domains, this probability is also affected by whether these domains belong to the same [fail realm](#fail-realm) or not.
 
-For example, a fail domain includes disks of the same server (as all server disks may be unavailable if the server PSU or network controller is down). A fail domain also typically includes servers located in the same server rack (as the entire hardware in the rack may be unavailable if there is a power outage or some issue with the network hardware in the same rack).
+For example, a fail domain includes disks on the same server, as all server disks may become unavailable if the server's PSU or network controller fails. A fail domain also typically includes servers located in the same server rack, as all the hardware in the rack may become unavailable if there is a power outage or an issue with the network hardware in the same rack. Thus, the typical fail domain corresponds to a server rack if the [cluster](#cluster) is configured to be rack-aware, or to a server otherwise.
 
-Any domain failure is handled automatically, without shutting down the system.
-
-A [Fail realm](#fail-realm) contains one or more **Fail domains**. The correlated failure of two [VDisks](#vdisk) within the same Fail domain is more likely than that of two VDisks from different Fail domains.
-
-A Fail domain usually corresponds to a [server rack](#rack) or a physical server concept.
+Domain failures are handled automatically by {{ ydb-short-name }} without shutting down the cluster.
 
 #### Distributed storage channel {#channel}
 

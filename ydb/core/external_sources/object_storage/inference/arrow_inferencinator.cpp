@@ -17,7 +17,7 @@ namespace {
 bool ArrowToYdbType(Ydb::Type& resType, const arrow::DataType& type) {
     switch (type.id()) {
     case arrow::Type::NA:
-        resType.set_null_type(google::protobuf::NullValue::NULL_VALUE);
+        resType.set_type_id(Ydb::Type::UTF8);
         return true;
     case arrow::Type::BOOL:
         resType.set_type_id(Ydb::Type::BOOL);
@@ -177,14 +177,7 @@ std::variant<ArrowFields, TString> InferCsvTypes(std::shared_ptr<arrow::io::Rand
         return TStringBuilder{} << "couldn't read table from data: " << readerStatus.ToString();
     }
 
-    ArrowFields fields = table->fields();
-    for (auto &field : fields) {
-        if (field->type()->id() == arrow::Type::NA) {
-            field = field->WithType(arrow::utf8());
-        }
-    }
-
-    return fields;
+    return table->fields();
 }
 
 std::variant<ArrowFields, TString> InferType(EFileFormat format, std::shared_ptr<arrow::io::RandomAccessFile> file, const FormatConfig& config) {

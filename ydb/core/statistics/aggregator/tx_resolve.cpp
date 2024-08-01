@@ -8,6 +8,7 @@ namespace NKikimr::NStat {
 struct TStatisticsAggregator::TTxResolve : public TTxBase {
     std::unique_ptr<NSchemeCache::TSchemeCacheRequest> Request;
     bool Cancelled = false;
+    bool DoSend = true;
 
     TTxResolve(TSelf* self, NSchemeCache::TSchemeCacheRequest* request)
         : TTxBase(self)
@@ -39,6 +40,7 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
 
         if (Self->TraversalIsColumnTable) {
             Self->TabletsForReqDistribution.clear();
+            Self->CountMinSketches.clear();
         } else {
             Self->DatashardRanges.clear();
         }
@@ -57,6 +59,11 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
             }
         }
 
+        if (Self->TraversalIsColumnTable && Self->TabletsForReqDistribution.empty()) {
+            Self->FinishTraversal(db);
+            DoSend = false;
+        }
+
         return true;
     }
 
@@ -68,7 +75,9 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
         }
 
         if (Self->TraversalIsColumnTable) {
-            ctx.Send(Self->SelfId(), new TEvPrivate::TEvRequestDistribution);
+            if (DoSend) {
+                ctx.Send(Self->SelfId(), new TEvPrivate::TEvRequestDistribution);
+            }
         } else {
             Self->ScanNextDatashardRange();
         }

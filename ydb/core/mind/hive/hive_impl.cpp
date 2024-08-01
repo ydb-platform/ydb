@@ -2350,6 +2350,17 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
         nodeUsageHistogram.IncrementFor(record.Usage * 100);
     }
 
+    if (stats.Values.empty()) {
+        return;
+    }
+
+    auto& maxUsageNode = GetNode(stats.MaxUsageNodeId);
+    auto& minUsageNode = GetNode(stats.MinUsageNodeId);
+    if (maxUsageNode.ServicedDomains != minUsageNode.ServicedDomains) {
+        BLOG_D("ProcessTabletBalancer skip - no point in balancing across different domains");
+        return;
+    }
+
     double minUsageToKick = GetMaxNodeUsageToKick() - GetNodeUsageRangeToKick();
     if (stats.MaxUsage >= GetMaxNodeUsageToKick() && stats.MinUsage < minUsageToKick) {
         std::vector<TNodeId> overloadedNodes;

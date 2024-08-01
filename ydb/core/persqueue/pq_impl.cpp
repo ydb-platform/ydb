@@ -1329,7 +1329,9 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorConte
                  ", Value " << ex.Value <<
                  ", baseLine.Value " << ex.BaseLineValue);
         Y_ABORT_UNLESS(false,
-                       "Value=%" PRIu64 ", baseLine.Value=%" PRIu64,
+                       "PQ: %" PRIu64
+                       ", Value: %" PRIu64 ", baseLine.Value: %" PRIu64,
+                       TabletID(),
                        ex.Value, ex.BaseLineValue);
     }
 }
@@ -4164,9 +4166,6 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         PQ_LOG_D("TxId " << tx.TxId <<
                  ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
 
-        [[fallthrough]];
-
-    case NKikimrPQ::TTransaction::WAIT_RS:
         //
         // the number of TEvReadSetAck sent should not be greater than the number of senders
         // from TEvProposeTransaction
@@ -4178,6 +4177,9 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
         SendEvReadSetToReceivers(ctx, tx);
 
+        [[fallthrough]];
+
+    case NKikimrPQ::TTransaction::WAIT_RS:
         PQ_LOG_D("HaveParticipantsDecision " << tx.HaveParticipantsDecision());
 
         if (tx.HaveParticipantsDecision()) {

@@ -93,6 +93,8 @@ struct TDistributedTransaction {
     template<class E>
     void OnPartitionResult(const E& event, EDecision decision);
 
+    TString LogPrefix() const;
+
     struct TSerializedMessage {
         ui32 Type;
         TIntrusivePtr<TEventSerializedData> Data;

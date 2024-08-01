@@ -10,8 +10,6 @@ SRCS(
     build_data_tx_out_rs_unit.cpp
     build_distributed_erase_tx_out_rs_unit.cpp
     build_index.cpp
-    build_index.h
-    build_index_handle.cpp
     build_kqp_data_tx_out_rs_unit.cpp
     build_write_out_rs_unit.cpp    
     build_scheme_tx_out_rs_unit.cpp

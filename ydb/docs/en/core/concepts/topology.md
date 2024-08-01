@@ -1,8 +1,5 @@
 # {{ ydb-short-name }} cluster topology
 
-
-
-
 A {{ ydb-short-name }} cluster consists of [storage](./glossary.md#storage-node) and [database](./glossary.md#database-node) nodes. As the data stored in {{ ydb-short-name }} is available only via queries and API calls, both types of nodes are essential for [database availability](#database-availability). However, [distributed storage](glossary.md#distributed-storage) consisting of storage nodes has the most impact on the cluster's fault tolerance and ability to persist data reliably. During the initial cluster deployment, an appropriate distributed storage [operating mode](#cluster-config) needs to be chosen according to the expected workload and [fault tolerance](#fault-tolerance) requirements.
 
 ## Cluster operating modes {#cluster-config}
@@ -39,7 +36,7 @@ The storage volume multiplier specified above only applies to the fault toleranc
 
 {% endnote %}
 
-When creating a [storage group](glossary.md#storage-groups), which is a basic allocation unit for storage management, {{ ydb-short-name }} selects [VDisks](./glossary.md#vdisk) that are located on [PDisks](./glossary.md#pdisk) from different fail domains. For `block-4-2` mode, a storage group should be distributed across at least 8 fail domains, while for `mirror-3-dc` mode, it should be distributed across 3 fail realms, with at least 3 fail domains in each realm.
+When creating a [storage group](glossary.md#storage-group), which is a basic allocation unit for storage management, {{ ydb-short-name }} selects [VDisks](./glossary.md#vdisk) that are located on [PDisks](./glossary.md#pdisk) from different fail domains. For `block-4-2` mode, a storage group should be distributed across at least 8 fail domains, while for `mirror-3-dc` mode, it should be distributed across 3 fail realms, with at least 3 fail domains in each realm.
 
 For information about how to set the {{ ydb-short-name }} cluster topology, see [{#T}](../deploy/configuration/config.md#domains-blob).
 

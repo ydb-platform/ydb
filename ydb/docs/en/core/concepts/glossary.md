@@ -68,6 +68,10 @@ A static group might require special attention during major maintenance, such as
 
 Regular storage groups that are not [static](#static-group) are called **dynamic groups**. They are called dynamic because they can be created and decommissioned on the fly during [cluster](#cluster) operation.
 
+### Storage pool {#storage-pool}
+
+**Storage pool** is a collection of data storage devices with similar characteristics. Each storage pool is assigned a unique name within a {{ ydb-short-name }} cluster. Technically each storage pool consisis of multiple [PDisks](#pdisk). Each [storage group](#storage-group) is created in the particular storage pool, which determines the performance characteristics of the storage group through the selection of the appropriate storage devices. It is typical to have separate storage pools for NVMe, SSD and HDD devices, or for the models of those devices having different capacity and speed.
+
 ### Actor {#actor}
 
 The [actor model](https://en.wikipedia.org/wiki/Actor_model) is one of the main approaches for concurrent programming, which is employed by {{ ydb-short-name }}. In this model, **actors** are lightweight user-space processes that may have and modify their private state but can only affect each other indirectly through message passing. {{ ydb-short-name }} has its own implementation of this model, which is covered [below](#actor-implementation).
@@ -394,7 +398,7 @@ A **LogoBlobID** is the [LogoBlob](#logoblob) identifier in the [Distributed sto
 **PDisk** or **Physical disk** is a component that controls a physical disk drive (block device). In other words, PDisk is a subsystem that implements an abstraction similar to a specialized file system on top of block devices (or files simulating a block device for testing purposes). PDisk provides data integrity controls (including [erasure encoding](#erasure-coding) of sector groups for data recovery on single bad sectors, integrity control with checksums), transparent data-at-rest encryption of all disk data, and transactional guarantees of disk operations (write confirmation strictly after `fsync`).
 
 PDisk contains a scheduler that provides device bandwidth sharing between several clients ([VDisks](#vdisk)). PDisk divides a block device into chunks called [slots](#slot) (about 128 megabytes in size; smaller chunks are allowed). No more than 1 VDisk can own each slot at a time. PDisk also supports a recovery log shared between PDisk service records and all VDisks.
-  
+
 #### VDisk {#vdisk}
 
 **VDisk** or **Virtual disk** is a component that implements the persistence of [distributed storage](#distributed-storage) [LogoBlobs](#logoblob) on [PDisks](#pdisk). VDisk stores all its data on PDisks. One VDisk corresponds to one PDisk, but usually, several VDisks are linked to one PDisk. Unlike PDisk, which hides chunks and logs behind it, VDisk provides an interface at the LogoBlob and [LogoBlobID](#logoblobid) level, like writing LogoBlob, reading LogoBlobID data, and deleting a set of LogoBlob using a special command. VDisk is a member of a [storage group](#storage-group). VDisk itself is local, but many VDisks in a given group provide reliable data storage. The VDisks in a group synchronize the data with each other and replicate the data in case of loss. A set of VDisks in a storage group forms a distributed RAID.

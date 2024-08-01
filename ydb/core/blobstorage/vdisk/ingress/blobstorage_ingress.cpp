@@ -87,6 +87,7 @@ namespace NKikimr {
     TIngress::EMode TIngress::IngressMode(TBlobStorageGroupType gtype) {
         switch (gtype.GetErasure()) {
             case TBlobStorageGroupType::ErasureMirror3of4:
+            case TBlobStorageGroupType::ErasureMirror3of4Robust:
                 return EMode::MIRROR3OF4;
             default:
                 return EMode::GENERIC;

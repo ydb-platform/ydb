@@ -395,6 +395,10 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
         ScrubTest(TBlobStorageGroupType::ErasureMirror3of4);
     }
 
+    Y_UNIT_TEST(mirror3of4robust) {
+        ScrubTest(TBlobStorageGroupType::ErasureMirror3of4Robust);
+    }
+
     Y_UNIT_TEST(mirror3dc) {
         ScrubTest(TBlobStorageGroupType::ErasureMirror3dc);
     }

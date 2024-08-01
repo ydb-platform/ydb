@@ -56,6 +56,7 @@ static const std::array<TBlobStorageErasureParameters, TErasureType::ErasureSpec
     ,{2} // 16 = ErasureSpicies::Erasure2Plus2Block
     ,{2} // 17 = ErasureSpicies::Erasure2Plus2Stripe
     ,{5} // 18 = ErasureSpicies::ErasureMirror3of4
+    ,{5} // 18 = ErasureSpicies::ErasureMirror3of4Robust
 }};
 
 
@@ -187,7 +188,7 @@ bool TBlobStorageGroupType::CorrectLayout(const TPartLayout &layout, TPartPlacem
 
 ui64 TBlobStorageGroupType::PartSize(const TLogoBlobID &id) const {
     // Y_ABORT_UNLESS(id.PartId()); // TODO(alexvru): uncomment when dsproxy is ready for KIKIMR-9881
-    if (GetErasure() == TBlobStorageGroupType::ErasureMirror3of4 && id.PartId() == 3) {
+    if (IsMirror3of4() && id.PartId() == 3) {
         return 0;
     } else {
         return TErasureType::PartSize((TErasureType::ECrcMode)id.CrcMode(), id.BlobSize());
@@ -209,6 +210,7 @@ bool TBlobStorageGroupType::PartFits(ui32 partId, ui32 idxInSubgroup) const {
             return idxInSubgroup % 3 == partId - 1;
 
         case TBlobStorageGroupType::ErasureMirror3of4:
+        case TBlobStorageGroupType::ErasureMirror3of4Robust:
             return idxInSubgroup >= 4 || partId == 3 || idxInSubgroup % 2 == partId - 1;
 
         default:

@@ -66,7 +66,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         TLogoBlobID id(1, 1, 1, 0, 100, 0);
 
         for (ui32 species = 0; species < TBlobStorageGroupType::ErasureSpeciesCount; ++species) {
-            if (species == TBlobStorageGroupType::ErasureMirror3dc || species == TBlobStorageGroupType::ErasureMirror3of4) {
+            if (species == TBlobStorageGroupType::ErasureMirror3dc || species == TBlobStorageGroupType::ErasureMirror3of4 ||
+                    species == TBlobStorageGroupType::ErasureMirror3of4Robust) {
                 continue;
             }
 
@@ -131,7 +132,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
     Y_UNIT_TEST(GroupQuorumCheckerOrdinary) {
         for (ui32 i = 0; i < TBlobStorageGroupType::ErasureSpeciesCount; ++i) {
             auto erasure = static_cast<TBlobStorageGroupType::EErasureSpecies>(i);
-            if (erasure == TBlobStorageGroupType::ErasureMirror3dc || erasure == TBlobStorageGroupType::ErasureMirror3of4) {
+            if (erasure == TBlobStorageGroupType::ErasureMirror3dc || erasure == TBlobStorageGroupType::ErasureMirror3of4 ||
+                    erasure == TBlobStorageGroupType::ErasureMirror3of4Robust) {
                 // separate test for mirror-3-dc
                 continue;
             }

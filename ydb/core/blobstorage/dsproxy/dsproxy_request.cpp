@@ -197,7 +197,7 @@ namespace NKikimr {
         EnableWilsonTracing(ev, Mon->DiscoverSamplePPM);
         auto&& callback = Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
             ? CreateBlobStorageGroupMirror3dcDiscoverRequest
-            : Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3of4
+            : Info->Type.IsMirror3of4()
             ? CreateBlobStorageGroupMirror3of4DiscoverRequest
             : CreateBlobStorageGroupDiscoverRequest;
         PushRequest(callback(Info, Sessions->GroupQueues, ev->Sender, Mon, ev->Get(), ev->Cookie, std::move(ev->TraceId),

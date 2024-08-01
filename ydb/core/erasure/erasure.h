@@ -273,8 +273,9 @@ struct TErasureType {
         Erasure2Plus2Stripe = 17,
 
         ErasureMirror3of4 = 18,
+        ErasureMirror3of4Robust = 19,
 
-        ErasureSpeciesCount = 19
+        ErasureSpeciesCount
     };
 
     static const char *ErasureSpeciesToStr(EErasureSpecies es);
@@ -336,6 +337,9 @@ struct TErasureType {
     ui64 PartSize(ECrcMode crcMode, ui64 dataSize) const;
     ui64 SuggestDataSize(ECrcMode crcMode, ui64 partSize, bool roundDown) const;
     ui32 Prime() const;
+
+    bool IsMirror3of4() const { return ErasureSpecies == ErasureMirror3of4 || ErasureSpecies == ErasureMirror3of4Robust; }
+    bool IsRobust() const { return ErasureSpecies == ErasureMirror3of4Robust; }
 
     void SplitData(ECrcMode crcMode, TRope& buffer, TDataPartSet& outPartSet) const;
     void SplitData(ECrcMode crcMode, const TString& buffer, TDataPartSet& outPartSet) const {

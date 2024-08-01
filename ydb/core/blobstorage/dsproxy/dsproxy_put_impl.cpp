@@ -23,9 +23,10 @@ void TPutImpl::RunStrategies(TLogContext &logCtx, TPutResultVec &outPutResults,
                 ? RunStrategy(logCtx, TAcceleratePut3dcStrategy(Tactic, EnableRequestMod3x3ForMinLatecy), outPutResults, expired)
                 : RunStrategy(logCtx, TPut3dcStrategy(Tactic, EnableRequestMod3x3ForMinLatecy), outPutResults, expired);
         case TBlobStorageGroupType::ErasureMirror3of4:
+        case TBlobStorageGroupType::ErasureMirror3of4Robust:
             return accelerate
-                ? RunStrategy(logCtx, TPut3of4Strategy(Tactic, true), outPutResults, expired)
-                : RunStrategy(logCtx, TPut3of4Strategy(Tactic), outPutResults, expired);
+                ? RunStrategy(logCtx, TPut3of4Strategy(Tactic, true, Info->Type.IsRobust()), outPutResults, expired)
+                : RunStrategy(logCtx, TPut3of4Strategy(Tactic, false, Info->Type.IsRobust()), outPutResults, expired);
         default:
             return accelerate
                 ? RunStrategy(logCtx, TAcceleratePutStrategy(), outPutResults, expired)

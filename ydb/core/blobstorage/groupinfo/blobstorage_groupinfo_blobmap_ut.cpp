@@ -148,10 +148,13 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
     }
 
     Y_UNIT_TEST(BelongsToSubgroupBenchmark) {
-        auto erasures = {TBlobStorageGroupType::ErasureNone,
+        auto erasures = {
+                TBlobStorageGroupType::ErasureNone,
                 TBlobStorageGroupType::ErasureMirror3,
                 TBlobStorageGroupType::Erasure4Plus2Block,
-                TBlobStorageGroupType::ErasureMirror3of4};
+                TBlobStorageGroupType::ErasureMirror3of4,
+                TBlobStorageGroupType::ErasureMirror3of4Robust,
+        };
         for (auto erasure : erasures) {
             TBlobStorageGroupType type(erasure);
             for (ui32 domains : {type.BlobSubgroupSize(), 9u}) {

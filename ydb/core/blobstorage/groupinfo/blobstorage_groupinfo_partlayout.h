@@ -111,6 +111,7 @@ namespace NKikimr {
                         break;
 
                     case TBlobStorageGroupType::ErasureMirror3of4:
+                    case TBlobStorageGroupType::ErasureMirror3of4Robust:
                         partMasks.push_back(1 << (idxInSubgroup & 1)); // data part only
                         partMasks.push_back(1 << (idxInSubgroup & 1) | 1 << 2); // data part + metadata part
                         partMasks.push_back(1 << 2); // metadata part only

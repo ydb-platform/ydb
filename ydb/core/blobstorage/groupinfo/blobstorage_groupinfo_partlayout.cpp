@@ -23,6 +23,7 @@ namespace NKikimr {
         switch (gtype.GetErasure()) {
             case TBlobStorageGroupType::ErasureMirror3dc:
             case TBlobStorageGroupType::ErasureMirror3of4:
+            case TBlobStorageGroupType::ErasureMirror3of4Robust:
                 Y_ABORT("inapplicable operation for erasure %s", TBlobStorageGroupType::ErasureSpeciesName(gtype.GetErasure()).data());
             default: {
                 /*******************************************************************************************************

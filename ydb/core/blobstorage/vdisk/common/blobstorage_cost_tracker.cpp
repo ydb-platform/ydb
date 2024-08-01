@@ -61,6 +61,7 @@ TBsCostTracker::TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::E
         CostModel = std::make_unique<TBsCostModel4Plus2Block>(diskType);
         break;
     case TBlobStorageGroupType::ErasureMirror3of4:
+    case TBlobStorageGroupType::ErasureMirror3of4Robust:
         CostModel = std::make_unique<TBsCostModelMirror3of4>(diskType);
         break;
     default:

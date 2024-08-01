@@ -8,10 +8,12 @@ namespace NKikimr {
 class TPut3of4Strategy : public TMirror3of4StrategyBase {
     // TODO(alexvru): use Accelerate property somehow
     const TEvBlobStorage::TEvPut::ETactic Tactic;
+    const bool Robust;
 
 public:
-    TPut3of4Strategy(TEvBlobStorage::TEvPut::ETactic tactic, bool /*accelerate*/ = false)
+    TPut3of4Strategy(TEvBlobStorage::TEvPut::ETactic tactic, bool /*accelerate*/, bool robust)
         : Tactic(tactic)
+        , Robust(robust)
     {}
 
     EStrategyOutcome Process(TLogContext& /*logCtx*/, TBlobState& state, const TBlobStorageGroupInfo& info,
@@ -91,22 +93,29 @@ protected:
                 }
             }
         }
-        if (dataPresent.GetNumSetItems() >= 3 && anyPresent.GetNumSetItems() >= 5) {
+
+        const ui32 minDataParts = Robust ? 4 : 3;
+        const ui32 minAnyParts = 5;
+
+        const bool enoughData = dataPresent.GetNumSetItems() >= minDataParts;
+        const bool enoughAny = anyPresent.GetNumSetItems() >= minAnyParts;
+
+        if (enoughData && enoughAny) {
             state.WholeSituation = TBlobState::ESituation::Present;
             return EStrategyOutcome::DONE;
         }
 
         TGroups groups;
-        const ui32 requiredNumDataParts = minLatency ? 4 : 3;
-        const ui32 requiredNumMetadataParts = minLatency ? 4 : 2;
-        const ui32 requiredNumParts = requiredNumDataParts + requiredNumMetadataParts;
+        const ui32 requiredNumDataParts = Robust ? 8 : minLatency ? 4 : 3;
+        const ui32 requiredNumMetadataParts = Robust ? 0 : minLatency ? 4 : 2;
+        const ui32 requiredNumAnyParts = requiredNumDataParts + requiredNumMetadataParts;
 
         for (bool ignoreSlowDisks : {true, false}) {
             for (bool considerLost : {true, false}) {
                 // fix the data part of the subgroup
                 for (auto& group : groups.Groups) {
                     for (ui8 diskIdx : group.DiskIdx) {
-                        if (data.GetNumSetItems() >= requiredNumDataParts || dataPresent.GetNumSetItems() >= 3) {
+                        if (enoughData || data.GetNumSetItems() >= requiredNumDataParts) {
                             break; // we already have required set of data replicas
                         }
                         auto& disk = state.Disks[diskIdx];
@@ -149,8 +158,8 @@ protected:
                 }
 
                 // then we restore required amount of metadata parts
-                for (i8 diskIdx = info.Type.BlobSubgroupSize() - 1; diskIdx >= 0 &&
-                        any.GetNumSetItems() < requiredNumParts && anyPresent.GetNumSetItems() < 5; --diskIdx) {
+                for (i8 diskIdx = info.Type.BlobSubgroupSize() - 1; !enoughAny && diskIdx >= 0 &&
+                        any.GetNumSetItems() < requiredNumAnyParts; --diskIdx) {
                     if (any[diskIdx] || error[diskIdx]) {
                         continue; // we do not put metadata parts on disk already containing data or metadata parts
                     }

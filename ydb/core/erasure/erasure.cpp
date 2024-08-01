@@ -78,6 +78,7 @@ const char *TErasureType::ErasureSpeciesToStr(TErasureType::EErasureSpecies es) 
         case Erasure2Plus2Block:    return "2Plus2Block";
         case Erasure2Plus2Stripe:   return "2Plus2Stripe";
         case ErasureMirror3of4:     return "ErasureMirror3of4";
+        case ErasureMirror3of4Robust: return "ErasureMirror3of4Robust";
         default:                    return "UNKNOWN";
     }
 }
@@ -109,6 +110,7 @@ static const std::array<TErasureParameters, TErasureType::ErasureSpeciesCount> E
     ,{TErasureType::ErasureParityBlock,  2, 2, 3} // 16 = ErasureSpicies::Erasure2Plus2Block
     ,{TErasureType::ErasureParityStripe, 2, 2, 3} // 17 = ErasureSpicies::Erasure2Plus2Stripe
     ,{TErasureType::ErasureMirror,       1, 2, 1} // 18 = ErasureSpicies::ErasureMirror3of4
+    ,{TErasureType::ErasureMirror,       1, 2, 1} // 18 = ErasureSpicies::ErasureMirror3of4Robust
 }};
 
 void PadAndCrcAtTheEnd(char *data, ui64 dataSize, ui64 bufferSize) {
@@ -1986,6 +1988,7 @@ const std::array<TString, TErasureType::ErasureSpeciesCount> TErasureType::Erasu
     "block-2-2",
     "stripe-2-2",
     "mirror-3of4",
+    "mirror-3of4-robust",
 }};
 
 TErasureType::EErasureFamily TErasureType::ErasureFamily() const {

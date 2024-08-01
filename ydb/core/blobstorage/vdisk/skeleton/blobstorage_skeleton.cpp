@@ -2551,7 +2551,7 @@ namespace NKikimr {
         }
 
         void RunBalancing(const TActorContext &ctx) {
-            if (!Config->FeatureFlags.GetUseVDisksBalancing() || VCtx->Top->GType.GetErasure() == TErasureType::ErasureMirror3of4) {
+            if (!Config->FeatureFlags.GetUseVDisksBalancing() || VCtx->Top->GType.IsMirror3of4()) {
                 return;
             }
             if (BalancingId) {

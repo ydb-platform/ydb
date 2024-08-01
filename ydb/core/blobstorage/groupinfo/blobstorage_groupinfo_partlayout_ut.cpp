@@ -98,7 +98,8 @@ public:
 
 void TestErasureSet(ui32 firstIdx, ui32 step) {
     for (ui32 erasure = firstIdx; erasure < TBlobStorageGroupType::ErasureSpeciesCount; erasure += step) {
-        if (erasure == TBlobStorageGroupType::ErasureMirror3dc || erasure == TBlobStorageGroupType::ErasureMirror3of4) {
+        if (erasure == TBlobStorageGroupType::ErasureMirror3dc || erasure == TBlobStorageGroupType::ErasureMirror3of4 ||
+                erasure == TBlobStorageGroupType::ErasureMirror3of4Robust) {
             continue;
         }
         TBlobStorageGroupType gtype(static_cast<TBlobStorageGroupType::EErasureSpecies>(erasure));

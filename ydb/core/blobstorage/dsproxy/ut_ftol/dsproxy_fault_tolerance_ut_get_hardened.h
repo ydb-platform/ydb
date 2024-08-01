@@ -112,6 +112,7 @@ public:
                             break;
 
                         case TBlobStorageGroupType::ErasureMirror3of4:
+                        case TBlobStorageGroupType::ErasureMirror3of4Robust:
                             if (layout.GetDisksWithPart(0) || layout.GetDisksWithPart(1)) {
                                 restorable = true;
                             }
@@ -256,6 +257,7 @@ public:
                                 break;
 
                             case TBlobStorageGroupType::ErasureMirror3of4:
+                            case TBlobStorageGroupType::ErasureMirror3of4Robust:
                                 match = partIdx == (idxInSubgroup & 1) || partIdx == 2;
                                 break;
 

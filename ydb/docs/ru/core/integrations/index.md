@@ -26,10 +26,10 @@
 |  Среда | Инструкция | Уровень поддержки |
 | --- | --- | --- |
 | Embedded UI | [Инструкция](../reference/embedded-ui/index.md) | |
-| [DBeaver](https://dbeaver.com)  |  [Инструкция](connect-from-ide.md) | C помощью [JDBC-драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
-| JetBrains Database viewer |  [Инструкция](connect-from-ide.md)  | C помощью [JDBC-драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
-| [JetBrains DataGrip](https://www.jetbrains.com/ru-ru/datagrip/) |  [Инструкция](connect-from-ide.md) | C помощью [JDBC-драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
-| Другие JDBC-совместимые клиенты | [Инструкция](connect-from-ide.md) | C помощью [JDBC-драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
+| [DBeaver](https://dbeaver.com)  |  [Инструкция](ide/dbeaver.md) | C помощью [JDBC-драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
+| JetBrains Database viewer |  [Инструкция](ide/dbeaver.md)  | C помощью [JDBC-драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
+| [JetBrains DataGrip](https://www.jetbrains.com/ru-ru/datagrip/) |  [Инструкция](ide/dbeaver.md) | C помощью [JDBC-драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
+| Другие JDBC-совместимые клиенты | [Инструкция](ide/dbeaver.md) | C помощью [JDBC-драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
 
 
 ## Визуализация данных {#bi}

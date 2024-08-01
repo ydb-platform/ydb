@@ -55,8 +55,8 @@
     ```
 
     Где:
-    - `ydb_endpoint` — [эндпойнт](../concepts/connect.md#endpoint) кластера {{ydb-name}}, к которому будут выполняться подключение.
-    - `ydb_database` — путь к [базе данных](../concepts/glossary.md#database) в кластере {{ydb-name}}, к которой будут выполняться запросы.
+    - `ydb_endpoint` — [эндпойнт](../../concepts/connect.md#endpoint) кластера {{ydb-name}}, к которому будут выполняться подключение.
+    - `ydb_database` — путь к [базе данных](../../concepts/glossary.md#database) в кластере {{ydb-name}}, к которой будут выполняться запросы.
 
     ![](./_assets/dbeaver-ydb-connection.png)
 

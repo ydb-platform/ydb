@@ -18,5 +18,5 @@ items:
 - name: Импорт из источников JDBC
   href: import-jdbc.md
 - name: Подключение из IDE
-  href: connect-from-ide.md
+  href: ide/dbeaver.md
 

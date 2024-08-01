@@ -2,10 +2,11 @@
 import argparse
 import dataclasses
 import datetime
+import json
 import os
 import re
-import json
 import sys
+import traceback
 from github import Github, Auth as GithubAuth
 from github.PullRequest import PullRequest
 from enum import Enum
@@ -248,27 +249,32 @@ def render_testlist_html(rows, fn, build_preset):
 
     # get failed tests
     failed_tests_array = []
+    muted_tests_array = []
     history={}
     for test in status_test.get(TestStatus.FAIL, []):
         failed_tests_array.append(test.full_name)
 
-    if failed_tests_array:
+    # get history mute
+    for test in status_test.get(TestStatus.MUTE, []):
+        muted_tests_array.append(test.full_name)
+
+    if failed_tests_array or muted_tests_array:
         try:
-            history = get_test_history(failed_tests_array, last_n_runs, build_preset)
-        except Exception as e:
-            print(f'Error:{e}')
+            history = get_test_history(failed_tests_array + muted_tests_array, last_n_runs, build_preset)
+        except Exception:
+            print(traceback.format_exc())
         
     # sorting, at first show tests with passed resuts in history
+    for test in status_test.get(TestStatus.FAIL, []) + status_test.get(TestStatus.MUTE, []):
+        if test.full_name in history:
+            test.count_of_passed = history[test.full_name][
+                next(iter(history[test.full_name]))
+            ]["count_of_passed"]
+        else:
+            test.count_of_passed = 0
 
-    if TestStatus.FAIL in status_test:
-        for test in status_test.get(TestStatus.FAIL, []):
-            if test.full_name in history:
-                test.count_of_passed = history[test.full_name][
-                    next(iter(history[test.full_name]))
-                ]["count_of_passed"]
-            else:
-                test.count_of_passed = 0
-        status_test[TestStatus.FAIL].sort(key=lambda val: (val.count_of_passed, val.full_name), reverse=True)
+    for test_list in (status_test.get(TestStatus.FAIL, []) ,status_test.get(TestStatus.MUTE, [])):
+        test_list.sort(key=lambda val: (val.count_of_passed, val.full_name), reverse=True)
 
     content = env.get_template("summary.html").render(
         status_order=status_order,

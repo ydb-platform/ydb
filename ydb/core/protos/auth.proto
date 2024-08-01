@@ -48,7 +48,7 @@ message TAuthConfig {
     optional TTokenAccessorConfig TokenAccessorConfig = 73;
     optional TLdapAuthentication LdapAuthentication = 74;
     optional string LdapAuthenticationDomain = 75 [default = "ldap"];
-    optional bool UseAccessServiceApiKey = 76 [default = false]; // Use IAM ApiKey
+    optional bool UseAccessServiceApiKey = 76 [default = true]; // Use IAM ApiKey
     optional string AsSignatureExpireTime = 77 [default = "1m"];
     optional bool UseBuiltinDomain = 78 [default = true];
     optional string AccessServiceType = 79 [default = "Yandex_v2"]; // For now the following values are supported: "Yandex_v2", "Nebius_v1"

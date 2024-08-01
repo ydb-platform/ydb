@@ -60,8 +60,11 @@ void TUpdateOffsetsInTransactionActor::Proceed(const NActors::TActorContext& ctx
 
     ev->Record.MutableRequest()->MutableTxControl()->set_tx_id(req->tx().id());
 
-    ev->Record.MutableRequest()->MutableTopicOperations()->SetConsumer(req->consumer());
-    *ev->Record.MutableRequest()->MutableTopicOperations()->MutableTopics() = req->topics();
+    auto* topicOperations = ev->Record.MutableRequest()->MutableTopicOperations();
+    if (!req->consumer().empty()) {
+        topicOperations->SetConsumer(req->consumer());
+    }
+    *topicOperations->MutableTopics() = req->topics();
 
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
 }

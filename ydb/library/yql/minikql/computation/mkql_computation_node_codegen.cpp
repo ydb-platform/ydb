@@ -2619,17 +2619,8 @@ DISubprogramAnnotator::~DISubprogramAnnotator() {
     DebugBuilder->finalizeSubprogram(Subprogram);
 }
 
-static const char *BUILD_PATH_LLVM_PART = "/llvm14/";
-static const char *BUILD_PATH_ANCHOR = "/ydb/library/yql/minikql/";
-
 DIFile* DISubprogramAnnotator::MakeDIFile(const std::source_location& location) {
-    TString pathStr = location.file_name();
-    auto llvmPartPos = pathStr.find(BUILD_PATH_LLVM_PART);
-    if (llvmPartPos != TString::npos) {
-        pathStr = pathStr.substr(0, llvmPartPos + 1) + pathStr.substr(llvmPartPos + TString(BUILD_PATH_LLVM_PART).length());
-        pathStr = "/-S" + pathStr.substr(pathStr.find(BUILD_PATH_ANCHOR));
-    }
-    TFsPath path = pathStr;
+    TFsPath path = TString(location.file_name());
     return DebugBuilder->createFile(path.GetName().c_str(), path.Parent().GetPath().c_str());
 }
 

@@ -57,14 +57,16 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> , public NYql::
         TActorId TopicSessionId;
     };
 
-    struct TopicSessionInfo {
-        TSet<TActorId> Sessions;
+    struct SessionInfo {
+        TMap<TActorId, TAtomicSharedPtr<ConsumerInfo>> Consumers;     // key - ReadActorId
     };
 
-    TMap<ConsumerSessionKey, ConsumerInfo> Consumers;
-    TMap<TopicSessionKey, TopicSessionInfo> TopicSessions;
-    //TMap<SessionKey, TSharedPtr<NFq::Consumer>> ;
+    struct TopicSessionInfo {
+        TMap<TActorId, SessionInfo> Sessions;                   // key - TopicSessionId
+    };
 
+    TMap<ConsumerSessionKey, TAtomicSharedPtr<ConsumerInfo>> Consumers;
+    TMap<TopicSessionKey, TopicSessionInfo> TopicSessions;
 
 public:
     explicit TRowDispatcher(
@@ -90,7 +92,6 @@ public:
     void Handle(NFq::TEvRowDispatcher::TEvAddConsumer::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr &ev);
-    void Handle(NFq::TEvRowDispatcher::TEvSessionConsumerDeleted::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr &ev);
@@ -101,6 +102,7 @@ public:
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvPing::TPtr&);
 
     void DeleteConsumer(const ConsumerSessionKey& key);
+    void PrintInternalState(const TString&);
 
     STRICT_STFUNC(
         StateFunc, {
@@ -116,7 +118,6 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvMessageBatch, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvAddConsumer, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStopSession, Handle);
-        hFunc(NFq::TEvRowDispatcher::TEvSessionConsumerDeleted, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvSessionError, Handle);
 
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
@@ -176,14 +177,14 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& 
 void TRowDispatcher::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
     LOG_ROW_DISPATCHER_DEBUG("EvNodeConnected " << ev->Get()->NodeId);
     for (auto& [actorId, info] : Consumers) {
-        info.Consumer->EventsQueue.HandleNodeConnected(ev->Get()->NodeId);
+        info->Consumer->EventsQueue.HandleNodeConnected(ev->Get()->NodeId);
     }
 }
 
 void TRowDispatcher::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvNodeDisconnected " << ev->Get()->NodeId);
     for (auto& [actorId, info] : Consumers) {
-        info.Consumer->EventsQueue.HandleNodeDisconnected(ev->Get()->NodeId);
+        info->Consumer->EventsQueue.HandleNodeDisconnected(ev->Get()->NodeId);
     }
 }
 
@@ -194,7 +195,7 @@ void TRowDispatcher::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
     Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup());
 
     for (auto& [actorId, info] : Consumers) {
-        info.Consumer->EventsQueue.HandleUndelivered(ev);
+        info->Consumer->EventsQueue.HandleUndelivered(ev);
     }
 }
 
@@ -219,18 +220,39 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvRowDispatcherRequest::TPtr
     CoordinatorChangedSubscribers.insert(ev->Sender);
 }
 
+void TRowDispatcher::PrintInternalState(const TString& prefix) {
+    TStringStream str;
+    str << "Consumers:\n";
+
+    for (auto& [key, consumerInfo] : Consumers) {
+        str << "    read actor id: " << key.first << ",  partId: " << key.second;
+    }
+
+    str << "\nSessions:\n";
+    for (auto& [key, sessionInfo1] : TopicSessions) {
+        str << "  topic: " << key.first << ",  partId: " << key.second << "\n";
+        for (auto& [actorId, sessionInfo2] : sessionInfo1.Sessions) {
+            str << "    session actor id: " << actorId << ",  partId: " << key.second << "\n";
+            for (auto& [actorId2, consumer] : sessionInfo2.Consumers) {
+                str << "      read actor id: " << actorId2;
+            }
+        }
+    }
+    LOG_ROW_DISPATCHER_DEBUG(prefix << ":\n" << str.Str());
+}
+
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvAddConsumer::TPtr &ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvAddConsumer, topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
         " partitionId " << ev->Get()->Record.GetPartitionId());
 
+    PrintInternalState("Before AddConsumer:");
     TMaybe<ui64> readOffset;
     if (ev->Get()->Record.HasOffset()) {
         readOffset = ev->Get()->Record.GetOffset();
     }
-   // Send(ev->Sender, );
 
     ConsumerSessionKey key{ev->Sender, ev->Get()->Record.GetPartitionId()};
-    LOG_ROW_DISPATCHER_DEBUG("Sessions count " << Consumers.size());
+    
     auto it = Consumers.find(key);
     if (it != Consumers.end()) {
         LOG_ROW_DISPATCHER_DEBUG("Wrong"); // TODO
@@ -241,12 +263,15 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvAddConsumer::TPtr &ev) {
 
     TopicSessionKey key2{ev->Get()->Record.GetSource().GetTopicPath(), ev->Get()->Record.GetPartitionId()};
     TopicSessionInfo& topicSessionInfo = TopicSessions[key2];
-    LOG_ROW_DISPATCHER_DEBUG("Topic session count " << topicSessionInfo.Sessions.size() );
+    LOG_ROW_DISPATCHER_DEBUG("Topic session count " << topicSessionInfo.Sessions.size());
 
     auto consumer = MakeHolder<NFq::Consumer>(ev->Sender, SelfId(), NextEventQueueId++, ev->Get()->Record, this);
+    auto consumerInfo = MakeAtomicShared<ConsumerInfo>(std::move(consumer), TActorId());
+    Consumers[key] = consumerInfo;
+
     if (topicSessionInfo.Sessions.empty() || readOffset) {
         LOG_ROW_DISPATCHER_DEBUG("Create new session " << readOffset);
-        auto actorId = Register(NewTopicSession(
+        sessionActorId = Register(NewTopicSession(
             SelfId(),
             ev->Get()->Record.GetSource(),
             ev->Get()->Record.GetPartitionId(),
@@ -255,22 +280,22 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvAddConsumer::TPtr &ev) {
                 CredentialsFactory,
                 ev->Get()->Record.GetToken(),
                 ev->Get()->Record.GetAddBearerToToken())).release());
-        topicSessionInfo.Sessions.insert(actorId);
-        sessionActorId = actorId;
+        SessionInfo& sessionInfo = topicSessionInfo.Sessions[sessionActorId];
+        sessionInfo.Consumers[ev->Sender] = consumerInfo;
     } else {
-        //TopicSessionInfo& info = *sessions.begin()
-        sessionActorId = *topicSessionInfo.Sessions.begin();
+        // TODO
+        // use any
+        auto sessionIt = topicSessionInfo.Sessions.begin();
+        SessionInfo& sessionInfo = sessionIt->second;
+        sessionInfo.Consumers[ev->Sender] = consumerInfo;
+        sessionActorId = sessionIt->first;
     }
-
-    consumer->EventsQueue.Send(new NFq::TEvRowDispatcher::TEvAck(consumer->Proto));
-    Consumers.emplace(
-        std::piecewise_construct,
-        std::forward_as_tuple(key),
-        std::forward_as_tuple(std::move(consumer), sessionActorId));
+    consumerInfo->TopicSessionId = sessionActorId;
+    consumerInfo->Consumer->EventsQueue.Send(new NFq::TEvRowDispatcher::TEvAck(consumerInfo->Consumer->Proto));
 
     Forward(ev, sessionActorId);
+    PrintInternalState("After AddConsumer:");
 }
-
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr &ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvGetNextBatch ");
@@ -281,24 +306,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr &ev) {
         LOG_ROW_DISPATCHER_DEBUG("Wrong"); // TODO
         return;
     }
-    Forward(ev, it->second.TopicSessionId);
-}
-
-void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionConsumerDeleted::TPtr &/*ev*/) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvSessionConsumerDeleted");
-    // const auto& consumer = ev->Get()->Consumer;
-    // SessionKey key{consumer->SourceParams.GetTopicPath(), consumer->PartitionId};
-    // auto sessionInfo = Sessions[key];
-    // sessionInfo.TopicSessions.erase(consumer->ReadActorId);
-
-    // LOG_ROW_DISPATCHER_DEBUG("TEvSessionConsumerDeleted TopicSessions size " << sessionInfo.TopicSessions.size());
-
-    // if (sessionInfo.TopicSessions.empty()) {
-    //     LOG_ROW_DISPATCHER_DEBUG("Delete session info");
-    //     Sessions.erase(key);
-    // }
-
-    // LOG_ROW_DISPATCHER_DEBUG("TEvSessionConsumerDeleted Sessions size " << Sessions.size());
+    Forward(ev, it->second->TopicSessionId);
 }
 
 void TRowDispatcher::Handle(NActors::TEvents::TEvPing::TPtr &/*ev*/) {
@@ -310,64 +318,44 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev) {
         " partitionId " << ev->Get()->Record.GetPartitionId());
     ConsumerSessionKey key{ev->Sender, ev->Get()->Record.GetPartitionId()};
 
-    DeleteConsumer(key);
-    // todo update TopicSessionInfo
     
-
-    // SessionKey key{ev->Get()->Record.GetSource().GetTopicPath(), ev->Get()->Record.GetPartitionId()};
-    // LOG_ROW_DISPATCHER_DEBUG("Sessions count " << Sessions.size());
-    // auto& sessionsMap = Sessions[key].TopicSessions;
-    // LOG_ROW_DISPATCHER_DEBUG("Sessions count by key " << Sessions.size());
-    // if (sessionsMap.empty()) {
-    //     return;
-    // }
-
-    // for (auto& [topicSessionActorId, info]: sessionsMap) {
-    //     for (auto consumerActorId: info.Consumers) {
-    //         if (consumerActorId != ev->Sender) {
-    //             continue;
-    //         }
-
-    //         // auto event = std::make_unique<TEvRowDispatcher::TEvSessionDeleteConsumer>();
-    //         // event->ReadActorId = ev->Sender;
-    //         // Send(topicSessionActorId, event.release());
-
-    //         info.Consumers.erase(ev->Sender);
-    //         if (info.Consumers.empty()) {
-    //             /Send(topicSessionActorId, new NActors::TEvents::TEvPoisonPill());
-    //             sessionsMap.erase(topicSessionActorId);
-    //             if (sessionsMap.empty()) {
-    //                 Sessions.erase(key);
-    //             }
-    //         }
-    //         return;
-    //     }
-    // }
+    DeleteConsumer(key);
+    
 }
 
 void TRowDispatcher::DeleteConsumer(const ConsumerSessionKey& key) {
+    PrintInternalState("Before DeleteConsumer:");
     LOG_ROW_DISPATCHER_DEBUG("DeleteConsumer, readActorId " << key.first <<
         " partitionId " << key.second);
 
-    auto it = Consumers.find(key);
-    if (it == Consumers.end()) {
+    auto consumerIt = Consumers.find(key);
+    if (consumerIt == Consumers.end()) {
         LOG_ROW_DISPATCHER_DEBUG("Wrong consumer"); // TODO
         return;
     }
-    const auto& consumer = it->second.Consumer;
-
+    const auto& consumer = consumerIt->second->Consumer;
     auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
     event->Record.MutableSource()->CopyFrom(consumer->SourceParams);
     event->Record.SetPartitionId(consumer->PartitionId);
-    //Send(, event.release());
-    Send(new IEventHandle(it->second.TopicSessionId, consumer->ReadActorId, event.release(), 0));
-    Consumers.erase(it);
+    Send(new IEventHandle(consumerIt->second->TopicSessionId, consumer->ReadActorId, event.release(), 0));
+
+    TopicSessionKey topicKey{consumer->SourceParams.GetTopicPath(), consumer->PartitionId};
+    TopicSessionInfo& topicSessionInfo = TopicSessions[topicKey];
+    SessionInfo& sessionInfo = topicSessionInfo.Sessions[consumerIt->second->TopicSessionId];
+    Y_ENSURE(sessionInfo.Consumers.count(consumer->ReadActorId));
+    sessionInfo.Consumers.erase(consumer->ReadActorId);
+    if (sessionInfo.Consumers.empty()) {
+        LOG_ROW_DISPATCHER_DEBUG("Session is not used, sent TEvPoisonPill");
+        Send(consumerIt->second->TopicSessionId, new NActors::TEvents::TEvPoisonPill());
+    }
+    Consumers.erase(consumerIt);
+    PrintInternalState("After DeleteConsumer:");
 }
 
 void TRowDispatcher::SessionClosed(ui64 eventQueueId) {
     LOG_ROW_DISPATCHER_DEBUG("SessionClosed " << eventQueueId);
     for (auto& [consumerKey, consumerInfo] : Consumers) {
-        if (consumerInfo.Consumer->EventQueueId != eventQueueId) {
+        if (consumerInfo->Consumer->EventQueueId != eventQueueId) {
             continue;
         }
         DeleteConsumer(consumerKey);
@@ -378,7 +366,7 @@ void TRowDispatcher::SessionClosed(ui64 eventQueueId) {
 void TRowDispatcher::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& /*ev*/) {
     LOG_ROW_DISPATCHER_DEBUG("TEvRetry");
     for (auto& [actorId, info] : Consumers) {
-        info.Consumer->EventsQueue.Retry(); // TODO: find EventsQueue
+        info->Consumer->EventsQueue.Retry(); // TODO: find EventsQueue
     }
 }
 
@@ -386,7 +374,7 @@ void TRowDispatcher::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvPing::TPtr
     LOG_ROW_DISPATCHER_DEBUG("TEvRetryQueuePrivate::TEvPing");
     
     for (auto& [actorId, info] : Consumers) {
-        info.Consumer->EventsQueue.Ping(); // TODO: find EventsQueue
+        info->Consumer->EventsQueue.Ping(); // TODO: find EventsQueue
     }
 }
 
@@ -399,7 +387,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev) 
         LOG_ROW_DISPATCHER_DEBUG("Wrong consumer"); // TODO
         return;
     }
-    it->second.Consumer->EventsQueue.Send(ev.Release()->Release().Release());
+    it->second->Consumer->EventsQueue.Send(ev.Release()->Release().Release());
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev) {
@@ -411,7 +399,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev) {
         LOG_ROW_DISPATCHER_DEBUG("Wrong consumer"); // TODO
         return;
     }
-    it->second.Consumer->EventsQueue.Send(ev.Release()->Release().Release());
+    it->second->Consumer->EventsQueue.Send(ev.Release()->Release().Release());
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr &ev) {
@@ -423,7 +411,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr &ev) {
         LOG_ROW_DISPATCHER_DEBUG("Wrong consumer"); // TODO
         return;
     }
-    it->second.Consumer->EventsQueue.Send(ev.Release()->Release().Release());
+    it->second->Consumer->EventsQueue.Send(ev.Release()->Release().Release());
 }
 
 } // namespace

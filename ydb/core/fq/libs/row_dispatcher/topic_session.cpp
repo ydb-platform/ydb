@@ -132,6 +132,7 @@ public:
     void InitParser();
     void FatalError(const TString& message, const std::unique_ptr<TJsonFilter>* filter = nullptr);
     void SendDataArrived();
+    void StopReadSession();
 
     TString GetSessionId() const;
     void HandleNewEvents();
@@ -212,7 +213,8 @@ void TTopicSession::Bootstrap() {
 
 void TTopicSession::PassAway() {
     LOG_ROW_DISPATCHER_DEBUG("PassAway");
-    //NActors::TActorBootstrapped<TTopicSession>::PassAway();
+    StopReadSession();
+    NActors::TActorBootstrapped<TTopicSession>::PassAway();
 }
 
 void TTopicSession::SubscribeOnNextEvent() {
@@ -484,7 +486,6 @@ void TTopicSession::ParseData() {
     ReadyBuffer.pop();
 }
 
-
 void TTopicSession::DataParsed(ui64 offset, TList<TString>&& value) {
     LOG_ROW_DISPATCHER_DEBUG("DataParsed, offset " << offset);
     
@@ -521,7 +522,6 @@ void TTopicSession::SendData(ConsumersInfo& info) {
     LOG_ROW_DISPATCHER_DEBUG("SendData to ");
     Send(RowDispatcherActorId, event.release());
 }
-
 
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvAddConsumer::TPtr &ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvSessionAddConsumer");
@@ -590,12 +590,11 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev) {
         return;
     }
 
-    // Send(RowDispatcherActorId, new TEvRowDispatcher::TEvSessionConsumerDeleted(std::move(it->second.Consumer)));
     Consumers.erase(it);
 
     if (Consumers.empty()) {
-        LOG_ROW_DISPATCHER_DEBUG("No consumer, delete this session");
-        TActorBootstrapped<TTopicSession>::PassAway();
+        // LOG_ROW_DISPATCHER_DEBUG("No consumer, delete this session");
+        // TActorBootstrapped<TTopicSession>::PassAway();
     }
 }
 
@@ -629,9 +628,12 @@ void TTopicSession::FatalError(const TString& message, const std::unique_ptr<TJs
         event->ReadActorId = readActorId;
         Send(RowDispatcherActorId, event.release());
     }
+    StopReadSession();
+}
 
-    LOG_ROW_DISPATCHER_DEBUG("Close read session");
+void TTopicSession::StopReadSession() {
     if (ReadSession) {
+        LOG_ROW_DISPATCHER_DEBUG("Close read session");
         ReadSession->Close(TDuration::Zero());
         ReadSession.reset();
     }
@@ -651,26 +653,6 @@ void TTopicSession::SendDataArrived() {
         Send(RowDispatcherActorId, event.release());
     }
 }
-
-// void TTopicSession::SessionClosed(ui64 eventQueueId) {
-//     LOG_ROW_DISPATCHER_DEBUG("SessionClosed ");
-//     for (auto& [readActorId, info] : Consumers) {
-//         if (info.EventQueueId != eventQueueId) {
-//             continue;
-//         }
-
-//         LOG_ROW_DISPATCHER_DEBUG("Found session ");
-        
-//         // Send(RowDispatcherActorId, new TEvRowDispatcher::TEvSessionConsumerDeleted(std::move(info.Consumer)));
-//         // Consumers.erase(readActorId);
-
-//         // if (Consumers.empty()) {
-//         //     LOG_ROW_DISPATCHER_DEBUG("No consumer, delete this session");
-//         //     TActorBootstrapped<TTopicSession>::PassAway();
-//         // }
-//      }
-// }
-
 
 } // namespace
 

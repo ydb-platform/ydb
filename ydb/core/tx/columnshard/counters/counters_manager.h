@@ -42,6 +42,18 @@ public:
         , ColumnTablesCounters(std::make_shared<TColumnTablesCounters>())
         , SubscribeCounters(std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>()) {
     }
+
+    void FillTableStats(ui64 pathId, ::NKikimrTableStats::TTableStats& tableStats) {
+        ColumnTablesCounters->GetPathIdCounter(pathId)->FillStats(tableStats);
+        BackgroundControllerCounters->FillStats(pathId, tableStats);
+    }
+
+    void FillTotalTableStats(::NKikimrTableStats::TTableStats& tableStats) {
+        ColumnTablesCounters->FillStats(tableStats);
+        TabletCounters->FillStats(tableStats);
+        BackgroundControllerCounters->FillTotalStats(tableStats);
+        ScanCounters.FillStats(tableStats);
+    }
 };
 
 } // namespace NKikimr::NColumnShard

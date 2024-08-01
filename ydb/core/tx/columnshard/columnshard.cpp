@@ -327,14 +327,9 @@ void TColumnShard::FillOlapStats(
         resourceMetrics->Fill(*ev->Record.MutableTabletMetrics());
     }
 
-    TTableStatsBuilder statsBuilder(*ev->Record.MutableTableStats());
-    statsBuilder.FillColumnTableStats(*Counters.GetColumnTablesCounters());
-    statsBuilder.FillTabletStats(*Counters.GetTabletCounters());
-    statsBuilder.FillBackgroundControllerStats(*Counters.GetBackgroundControllerCounters());
-    statsBuilder.FillScanCountersStats(Counters.GetScanCounters());
-    statsBuilder.FillExecutorStats(*Executor());
     if (TablesManager.HasPrimaryIndex()) {
-        statsBuilder.FillColumnEngineStats(TablesManager.MutablePrimaryIndex().GetTotalStats());
+        TTableStatsBuilder statsBuilder(Counters, Executor(), TablesManager.MutablePrimaryIndex());
+        statsBuilder.FillTotalTableStats(*ev->Record.MutableTableStats());
     }
 }
 
@@ -343,6 +338,7 @@ void TColumnShard::FillColumnTableStats(
     std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev
 ) {
     auto tables = TablesManager.GetTables();
+    TTableStatsBuilder tableStatsBuilder(Counters, Executor(), TablesManager.MutablePrimaryIndex());
 
     LOG_S_DEBUG("There are stats for " << tables.size() << " tables");
     for (const auto& [pathId, _] : tables) {
@@ -360,18 +356,7 @@ void TColumnShard::FillColumnTableStats(
             resourceMetrics->Fill(*periodicTableStats->MutableTabletMetrics());
         }
 
-        TTableStatsBuilder statsBuilder(*periodicTableStats->MutableTableStats());
-        statsBuilder.FillColumnTableStats(*Counters.GetColumnTablesCounters()->GetPathIdCounter(pathId));
-        statsBuilder.FillTabletStats(*Counters.GetTabletCounters());
-        statsBuilder.FillBackgroundControllerStats(*Counters.GetBackgroundControllerCounters(), pathId);
-        statsBuilder.FillScanCountersStats(Counters.GetScanCounters());
-        statsBuilder.FillExecutorStats(*Executor());
-        if (TablesManager.HasPrimaryIndex()) {
-            auto columnEngineStats = TablesManager.GetPrimaryIndexSafe().GetStats().FindPtr(pathId);
-            if (columnEngineStats && *columnEngineStats) {
-                statsBuilder.FillColumnEngineStats(**columnEngineStats);
-            }
-        }
+        tableStatsBuilder.FillTableStats(pathId, *(periodicTableStats->MutableTableStats()));
 
         LOG_S_TRACE("Add stats for table, tableLocalID=" << pathId);
     }

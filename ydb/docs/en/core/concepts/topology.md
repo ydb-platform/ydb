@@ -92,12 +92,15 @@ The time required to restore redundancy depends on the amount of data and hardwa
 
 ## Database availability {#database-availability}
 
-A [database](./glossary.md#database) within a {{ ydb-short-name }} cluster is available if both its storage and compute is operational:
+A [database](./glossary.md#database) within a {{ ydb-short-name }} cluster is available if both its storage and compute resources are operational:
 
-* all [storage groups](./glossary.md#storage-group) allocated for the database should be operational, e.g. stay within the allowed level of failures;
-* the compute resources of the currently available [database nodes](./glossary.md#database-node) (primarily, the amount of main memory) should be sufficient to start all the user objects (tables, topics) within the database, and to handle the user sessions.
+- All [storage groups](./glossary.md#storage-group) allocated for the database must be operational, i.e., stay within the allowed level of failures.
+- The compute resources of the currently available [database nodes](./glossary.md#database-node) (primarily the amount of main memory) must be sufficient to start all the [tablets](glossary.md#tablet) managing objects like [tables](glossary.md#table) or [topics](glossary.md#topic) within the database and to handle user sessions.
 
-To survive a data center failure at the database level, assuming a cluster configured for `mirror-3-dc` operating mode, the database nodes have to be running in all 3 data centers, and include sufficient resources to handle the full workload when running in just 2 of 3 data centers. This means having at least `35%` extra resources in terms of CPU and main memory when running on top of 3 fully available data centers.
+To survive an entire data center outage at the database level, assuming a cluster configured with the `mirror-3-dc` operating mode:
+
+- The [storage nodes](./glossary.md#storage-node) need to have at least double the I/O bandwidth and disk capacity compared to what is required for normal operation. In the worst case, the load on the remaining nodes during the maximum allowed outage might triple, but that's only temporary until self-heal restores failed disks in operating data centers.
+- The [database nodes](./glossary.md#database-node) must be evenly distributed between all 3 data centers and include sufficient resources to handle the entire workload when running in just 2 of the 3 data centers. To achieve this, database nodes in each datacenter need at least 35% extra spare CPU and RAM resources when running normally without ongoing failures. If database nodes are typically utilized above this threshold, consider adding more of them or moving them to servers with more resources.
 
 ## See also
 

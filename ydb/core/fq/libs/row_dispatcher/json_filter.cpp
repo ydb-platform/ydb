@@ -240,14 +240,15 @@ public:
         const TVector<TString>& types,
         const TString& whereFilter,
         TCallback callback)
-        : LogPrefix("JsonFilter: ") {
+        : LogPrefix("JsonFilter: ")
+        , Sql(GenerateSql(columns, types, whereFilter)) {
         auto factory = NYql::NPureCalc::MakeProgramFactory(NYql::NPureCalc::TProgramFactoryOptions());
 
         LOG_ROW_DISPATCHER_DEBUG("Creating program...");
         Program = factory->MakePushStreamProgram(
             TFilterInputSpec(MakeInputSchema(columns)),
             TFilterOutputSpec(MakeOutputSchema()),
-            GenerateSql(columns, types, whereFilter),
+            Sql,
             NYql::NPureCalc::ETranslationMode::SQL
         );
         LOG_ROW_DISPATCHER_DEBUG("Program created");
@@ -258,6 +259,10 @@ public:
     void Push(ui64 offset, const TList<TString>& value) {
         LOG_ROW_DISPATCHER_DEBUG("Push ");
         InputConsumer->OnObject(std::make_pair(offset, value));
+    }
+
+    TString GetSql() {
+        return Sql;
     }
 
 private:
@@ -278,12 +283,12 @@ private:
         std::cerr << "sql " << str.Str() << std::endl;
         return str.Str();
     }
-         //   str << "CAST(" << columnNames[i] << " as " << columnTypes[i] << ") as " << columnNames[i] << ((i != columnNames.size() - 1) ? "," : "");
 
 private:
     THolder<NYql::NPureCalc::TPushStreamProgram<TFilterInputSpec, TFilterOutputSpec>> Program;
     THolder<NYql::NPureCalc::IConsumer<std::pair<ui64, TList<TString>>>> InputConsumer;
     const TString LogPrefix;
+    const TString Sql;
 };
 
 TJsonFilter::TJsonFilter(
@@ -299,6 +304,10 @@ TJsonFilter::~TJsonFilter() {
     
 void TJsonFilter::Push(ui64 offset, const TList<TString>& value) {
      Impl->Push(offset, value);
+}
+
+TString TJsonFilter::GetSql() {
+    return Impl->GetSql();
 }
 
 std::unique_ptr<TJsonFilter> NewJsonFilter(

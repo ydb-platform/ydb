@@ -126,6 +126,7 @@ struct TEvRowDispatcher {
     struct TEvSessionError : public NActors::TEventPB<TEvSessionError,
         NFq::NRowDispatcherProto::TEvSessionError, EEv::EvSessionError> {
         TEvSessionError() = default;
+        NActors::TActorId ReadActorId;
     };
 
 

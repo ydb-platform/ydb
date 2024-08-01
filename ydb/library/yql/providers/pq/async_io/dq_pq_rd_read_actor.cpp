@@ -163,6 +163,8 @@ public:
     void Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvAck::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev);
+    void Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr &ev);
+
     void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev);
     void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev);
     void Handle(NActors::TEvents::TEvUndelivered::TPtr &ev);
@@ -179,6 +181,8 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvNewDataArrived, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvMessageBatch, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvAck, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvSessionError, Handle);
+
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
         hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
@@ -466,6 +470,11 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvAck::TPtr &ev) {
     //sessionInfo.EventsQueue.Send(new NFq::TEvRowDispatcher::TEvGetNextBatch());
 }
 
+void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr &ev) {
+    SRC_LOG_D("TEvSessionError " << ev->Sender);
+    Stop(ev->Get()->Record.GetMessage());
+}
+
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev) {
     SRC_LOG_D("TEvNewDataArrived");
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
@@ -518,7 +527,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr
 void TDqPqRdReadActor::Stop(const TString& message) {
     NYql::TIssues issues;
     issues.AddIssue(NYql::TIssue{message});
-    Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::UNAVAILABLE));
+    Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::BAD_REQUEST));
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr &ev) {

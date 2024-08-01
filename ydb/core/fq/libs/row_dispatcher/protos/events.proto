@@ -65,6 +65,7 @@ message TEvMessageBatch {
 
 message TEvSessionError {
     string Message = 1;
+    uint32 PartitionId = 2;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 

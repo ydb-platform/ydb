@@ -245,7 +245,8 @@ public:
         const TString& udfDir,
         const TVector<TString>& columns,
         TCallback callback)
-        : LogPrefix("JsonParser: ") {
+        : LogPrefix("JsonParser: ")
+        , Sql(GenerateSql(columns)) {
         auto options = NYql::NPureCalc::TProgramFactoryOptions();
         if (!udfDir.empty()) {
             options.SetUDFsDir(udfDir);
@@ -257,7 +258,7 @@ public:
             Program = factory->MakePushStreamProgram(
                 TParserInputSpec(),
                 TParserOutputSpec(MakeOutputSchema(columns)),
-                GenerateSql(columns),
+                Sql,
                 NYql::NPureCalc::ETranslationMode::SQL
             );
             LOG_ROW_DISPATCHER_DEBUG("Program created");
@@ -273,6 +274,10 @@ public:
     void Push( ui64 offset, const TString& value) {
         LOG_ROW_DISPATCHER_DEBUG("Push " << value);
         InputConsumer->OnObject(std::make_pair(offset, value));
+    }
+
+    TString GetSql() {
+        return Sql;
     }
 
 private:
@@ -293,6 +298,7 @@ private:
     THolder<NYql::NPureCalc::TPushStreamProgram<TParserInputSpec, TParserOutputSpec>> Program;
     THolder<NYql::NPureCalc::IConsumer<TInputConsumerArg>> InputConsumer;
     const TString LogPrefix;
+    const TString Sql;
 };
 
 TJsonParser::TJsonParser(
@@ -307,6 +313,10 @@ TJsonParser::~TJsonParser() {
     
 void TJsonParser::Push(ui64 offset, const TString& value) {
      Impl->Push(offset, value);
+}
+
+TString TJsonParser::GetSql() {
+    return Impl->GetSql();
 }
 
 std::unique_ptr<TJsonParser> NewJsonParser(

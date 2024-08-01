@@ -93,6 +93,7 @@ public:
     void Handle(NFq::TEvRowDispatcher::TEvSessionConsumerDeleted::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev);
+    void Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr &ev);
 
     void Handle(NActors::TEvents::TEvPing::TPtr &ev);
     void SessionClosed(ui64 eventQueueId) override;
@@ -109,13 +110,14 @@ public:
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
         hFunc(NActors::TEvents::TEvWakeup, Handle)
         hFunc(NActors::TEvents::TEvPong, Handle);
+
         hFunc(NFq::TEvRowDispatcher::TEvRowDispatcherRequest, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvGetNextBatch, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvMessageBatch, Handle);
-
         hFunc(NFq::TEvRowDispatcher::TEvAddConsumer, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStopSession, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvSessionConsumerDeleted, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvSessionError, Handle);
 
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvPing, Handle);
@@ -239,6 +241,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvAddConsumer::TPtr &ev) {
 
     TopicSessionKey key2{ev->Get()->Record.GetSource().GetTopicPath(), ev->Get()->Record.GetPartitionId()};
     TopicSessionInfo& topicSessionInfo = TopicSessions[key2];
+    LOG_ROW_DISPATCHER_DEBUG("Topic session count " << topicSessionInfo.Sessions.size() );
 
     auto consumer = MakeHolder<NFq::Consumer>(ev->Sender, SelfId(), NextEventQueueId++, ev->Get()->Record, this);
     if (topicSessionInfo.Sessions.empty() || readOffset) {
@@ -401,6 +404,18 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev) 
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvNewDataArrived");
+
+    ConsumerSessionKey key{ev->Get()->ReadActorId, ev->Get()->Record.GetPartitionId()};
+    auto it = Consumers.find(key);
+    if (it == Consumers.end()) {
+        LOG_ROW_DISPATCHER_DEBUG("Wrong consumer"); // TODO
+        return;
+    }
+    it->second.Consumer->EventsQueue.Send(ev.Release()->Release().Release());
+}
+
+void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr &ev) {
+    LOG_ROW_DISPATCHER_DEBUG("TEvSessionError");
 
     ConsumerSessionKey key{ev->Get()->ReadActorId, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(key);

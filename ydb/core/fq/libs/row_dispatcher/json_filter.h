@@ -18,6 +18,7 @@ public:
         TCallback callback);
     ~TJsonFilter();
     void Push(ui64 offset, const TList<TString>& value);
+    TString GetSql();
 
 private:
     class TImpl;

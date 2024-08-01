@@ -150,7 +150,6 @@ class TestPqRowDispatcher(TestYdsBase):
         wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 0)
 
     @yq_v1
-    @pytest.mark.skip(reason="Is not implemented / How to get error from purecalc?")
     def test_scheme_error(self, kikimr, client):
         client.create_yds_connection(YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), use_row_dispatcher=True)
         self.init_topics(Rf"test_simple")
@@ -164,18 +163,13 @@ class TestPqRowDispatcher(TestYdsBase):
         wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 1)
 
         data = ['{"this": "is", not json}']
-
         self.write_stream(data)
 
-        expected = ['101', '102']
-        assert self.read_stream(len(expected), topic_path = self.output_topic) == expected
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        issues = str(client.describe_query(query_id).result.query.issue)
+        assert "Failed to unwrap empty optional" in issues, "Incorrect Issues: " + issues
 
-        wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
-
-        stop_yds_query(client, query_id)
-        # Assert that all read rules were removed after query stops
-        read_rules = list_read_rules(self.input_topic)
-        assert len(read_rules) == 0, read_rules
+        wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 0)
         wait_actor_count(kikimr, "YQ_ROW_DISPATCHER_SESSION", 0)
 
     @yq_v1

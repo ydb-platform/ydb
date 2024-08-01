@@ -95,7 +95,7 @@ private:
     ui32 BatchCapacity;
     std::vector<std::tuple<TString, NYql::NDq::TPqMetaExtractor::TPqMetaExtractorLambda>> MetadataFields;
     //TInstant StartingMessageTimestamp;
-   // NKikimr::NMiniKQL::TScopedAlloc Alloc; // TODO ?
+    bool IsStopped = false;
 
     struct ConsumersInfo {
         NFq::NRowDispatcherProto::TEvAddConsumer Consumer;
@@ -130,14 +130,12 @@ public:
     void SendData(ConsumersInfo& info);
     void CloseSession();
     void InitParser();
-    void FatalError(const TString& message);
+    void FatalError(const TString& message, const std::unique_ptr<TJsonFilter>* filter = nullptr);
     void SendDataArrived();
 
     TString GetSessionId() const;
     void HandleNewEvents();
     void PassAway() override;
-
-
 
     std::optional<NYql::TIssues> ProcessDataReceivedEvent(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event);
     std::optional<NYql::TIssues> ProcessSessionClosedEvent(NYdb::NTopic::TSessionClosedEvent& ev);
@@ -477,12 +475,10 @@ void TTopicSession::ParseData() {
     }
     auto& readyBatch = ReadyBuffer.front();
     for (const auto& [offset, value] : readyBatch.Data) {
-        //CurrentOffset = offset;
         try {
             Parser->Push(offset, value);
-        } catch (...) {
-            auto message = CurrentExceptionMessage();
-            LOG_ROW_DISPATCHER_DEBUG("Parsing error: " << message);
+        } catch (const yexception& e) {
+            FatalError(e.what());
         } 
     }
     ReadyBuffer.pop();
@@ -496,12 +492,12 @@ void TTopicSession::DataParsed(ui64 offset, TList<TString>&& value) {
         LOG_ROW_DISPATCHER_DEBUG("v " << v);
     }
 
-    try {
-        for (auto& [actorId, info] : Consumers) {
+    for (auto& [actorId, info] : Consumers) {
+        try {
             info.Filter->Push(offset, value);
+        } catch (const yexception& e) {
+            FatalError(e.what(), &info.Filter);
         }
-    } catch (const yexception& e) {
-        FatalError(e.what());
     }
 }
 
@@ -529,7 +525,11 @@ void TTopicSession::SendData(ConsumersInfo& info) {
 
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvAddConsumer::TPtr &ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvSessionAddConsumer");
-    //THolder<NFq::Consumer>& consumer = ev->Get()->Consumer;
+    if (IsStopped) {
+        // TODO
+        LOG_ROW_DISPATCHER_DEBUG("Session is stopped, event ignored");
+        return;
+    }
 
     auto it = Consumers.find(ev->Sender);// TODO : mv to try
     if (it != Consumers.end()) {
@@ -612,9 +612,31 @@ void TTopicSession::InitParser() {
     }
 }
 
-void TTopicSession::FatalError(const TString& message) {
-    LOG_ROW_DISPATCHER_DEBUG("FatalError: " << message);
-    // TODO
+void TTopicSession::FatalError(const TString& message, const std::unique_ptr<TJsonFilter>* filter) {
+
+    TStringStream str;
+    str << message << ", parser sql: " << Parser->GetSql();
+    if (filter) {
+        str << ", filter sql:" << (*filter)->GetSql();
+    }
+    LOG_ROW_DISPATCHER_DEBUG("FatalError: " << str.Str());
+
+    for (auto& [readActorId, info] : Consumers) {
+        LOG_ROW_DISPATCHER_DEBUG("Send TEvSessionError to " << readActorId);
+        auto event = std::make_unique<TEvRowDispatcher::TEvSessionError>();
+        event->Record.SetMessage(str.Str());
+        event->Record.SetPartitionId(PartitionId);
+        event->ReadActorId = readActorId;
+        Send(RowDispatcherActorId, event.release());
+    }
+
+    LOG_ROW_DISPATCHER_DEBUG("Close read session");
+    if (ReadSession) {
+        ReadSession->Close(TDuration::Zero());
+        ReadSession.reset();
+    }
+    TopicClient.reset();
+    IsStopped = true;
 }
 
 void TTopicSession::SendDataArrived() {

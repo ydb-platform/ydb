@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
 import configparser
+import datetime
 import os
 import ydb
-import datetime
+
 
 dir = os.path.dirname(__file__)
 config = configparser.ConfigParser()
@@ -77,12 +78,10 @@ def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type):
                     "$build_type": build_type,
                 }
 
-
                 result_set = session.transaction(ydb.SerializableReadWrite()).execute(
                     prepared_query, parameters=query_params, commit_tx=True
                 )
-
-                
+        
                 for row in result_set[0].rows:
                     if not row["full_name"].decode("utf-8") in results:
                         results[row["full_name"].decode("utf-8")] = {}

@@ -1,6 +1,8 @@
 LIBRARY()
 
 SRCS(
+    background_controller.cpp
+    column_tables.cpp
     indexation.cpp
     scan.cpp
     engine_logs.cpp
@@ -13,6 +15,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/monlib/dynamic_counters
+    ydb/core/tx/columnshard/counters/aggregation
     ydb/core/tx/columnshard/counters/common
     ydb/core/base
 )

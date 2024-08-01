@@ -719,8 +719,30 @@ Y_UNIT_TEST_SUITE(TOlap) {
             NTxUT::PlanCommit(runtime, sender, shardId, ++planStep, {txId});
         }
 
-        auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/OlapStore", true, true);
-        auto& tabletStats = description.GetPathDescription().GetTableStats();
+        {
+            auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/OlapStore", true, true);
+            auto& tabletStats = description.GetPathDescription().GetTableStats();
+
+            UNIT_ASSERT_GT(tabletStats.GetRowCount(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetDataSize(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetPartCount(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetRowUpdates(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetImmediateTxCompleted(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetPlannedTxCompleted(), 0);
+        }
+
+        {
+            auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/OlapStore/ColumnTable", true, true);
+            Cerr << description.DebugString() << Endl;
+            auto& tabletStats = description.GetPathDescription().GetTableStats();
+
+            UNIT_ASSERT_GT(tabletStats.GetRowCount(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetDataSize(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetPartCount(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetRowUpdates(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetImmediateTxCompleted(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetPlannedTxCompleted(), 0);
+        }
 
         UNIT_ASSERT_GT(tabletStats.GetRowCount(), 0);
         UNIT_ASSERT_GT(tabletStats.GetDataSize(), 0);

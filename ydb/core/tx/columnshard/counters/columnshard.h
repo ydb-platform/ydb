@@ -4,6 +4,7 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/hash_set.h>
+#include <ydb/core/tx/columnshard/counters/tablet_counters.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -68,6 +69,8 @@ public:
 class TCSCounters: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
+
+    std::shared_ptr<const TTabletCountersHandle> TabletCounters;
 
     NMonitoring::TDynamicCounters::TCounterPtr StartBackgroundCount;
     NMonitoring::TDynamicCounters::TCounterPtr TooEarlyBackgroundCount;
@@ -183,27 +186,36 @@ public:
         SplitCompactionGranulePortionsCount->SetValue(portionsCount);
     }
 
-    void OnOverloadInsertTable(const ui64 size) const {
+    void OnWriteOverloadDisk() const {
+        TabletCounters->IncCounter(COUNTER_OUT_OF_SPACE);
+    }
+
+    void OnWriteOverloadInsertTable(const ui64 size) const {
+        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
         OverloadInsertTableBytes->Add(size);
         OverloadInsertTableCount->Add(1);
     }
 
-    void OnOverloadMetadata(const ui64 size) const {
+    void OnWriteOverloadMetadata(const ui64 size) const {
+        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
         OverloadMetadataBytes->Add(size);
         OverloadMetadataCount->Add(1);
     }
 
-    void OnOverloadShardTx(const ui64 size) const {
+    void OnWriteOverloadShardTx(const ui64 size) const {
+        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
         OverloadShardTxBytes->Add(size);
         OverloadShardTxCount->Add(1);
     }
 
-    void OnOverloadShardWrites(const ui64 size) const {
+    void OnWriteOverloadShardWrites(const ui64 size) const {
+        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
         OverloadShardWritesBytes->Add(size);
         OverloadShardWritesCount->Add(1);
     }
 
-    void OnOverloadShardWritesSize(const ui64 size) const {
+    void OnWriteOverloadShardWritesSize(const ui64 size) const {
+        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
         OverloadShardWritesSizeBytes->Add(size);
         OverloadShardWritesSizeCount->Add(1);
     }
@@ -254,7 +266,7 @@ public:
         SetupCleanupCount->Add(1);
     }
 
-    TCSCounters();
+    TCSCounters(std::shared_ptr<const TTabletCountersHandle> tabletCounters);
 };
 
 }

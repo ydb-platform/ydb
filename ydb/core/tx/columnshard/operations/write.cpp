@@ -49,12 +49,9 @@ namespace NKikimr::NColumnShard {
                 return owner.TablesManager.HasTable(pathId);
             };
 
-            auto counters = owner.InsertTable->Commit(dbTable, snapshot.GetPlanStep(), snapshot.GetTxId(), { gWriteId },
+            const auto counters = owner.InsertTable->Commit(dbTable, snapshot.GetPlanStep(), snapshot.GetTxId(), { gWriteId },
                                                       pathExists);
-
-            owner.IncCounter(COUNTER_BLOBS_COMMITTED, counters.Rows);
-            owner.IncCounter(COUNTER_BYTES_COMMITTED, counters.Bytes);
-            owner.IncCounter(COUNTER_RAW_BYTES_COMMITTED, counters.RawBytes);
+            owner.Counters.GetTabletCounters()->OnWriteCommitted(counters);
         }
         owner.UpdateInsertTableCounters();
     }

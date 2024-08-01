@@ -75,11 +75,6 @@ TTable::EAddTupleResult TTable::AddTuple(  ui64 * intColumns, char ** stringColu
         }
     }
 
-    TempTuple[0] &= ui64(0x1); // Setting only nulls in key bit, all other bits are ignored for key hash
-    for (ui32 i = 1; i < NullsBitmapSize_; i ++) {
-        TempTuple[i] = 0;
-    }
-
     XXH64_hash_t hash = XXH64(TempTuple.data() + NullsBitmapSize_, (TempTuple.size() - NullsBitmapSize_) * sizeof(ui64), 0);
 
     if (!hash) hash = 1;
@@ -105,8 +100,7 @@ TTable::EAddTupleResult TTable::AddTuple(  ui64 * intColumns, char ** stringColu
     ui32 offset = keyIntVals.size();  // Offset of tuple inside the keyIntVals vector
 
     keyIntVals.push_back(hash);
-    keyIntVals.insert(keyIntVals.end(), intColumns, intColumns + NullsBitmapSize_);
-    keyIntVals.insert(keyIntVals.end(), TempTuple.begin() + NullsBitmapSize_, TempTuple.end());
+    keyIntVals.insert(keyIntVals.end(), TempTuple.begin(), TempTuple.end());
 
     if (IsAny_) {
         if ( !AddKeysToHashTable(kh, keyIntVals.begin() + offset, iColumns) ) {

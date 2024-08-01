@@ -1,9 +1,13 @@
 items:
-- name: Подключение через PostgreSQL-протокол
-  href: docker-connect.md
-- name: Синтаксис PostgreSQL 
+- name: Описание
+  href: ../postgresql/intro.md
+- name: Выполнение запросов
+  href: connect.md
+- name: Интероперабельность PostgreSQL и {{ydb-name}}
+  href: interoperability.md
+- name: Синтаксис PostgreSQL
   include: { mode: link, path: ./statements/toc_m.yaml }
-- name: Механизмы PostgreSQL 
+- name: Механизмы PostgreSQL
   include: { mode: link, path: ./mechanisms/toc_m.yaml }
 - name: Функции PostgreSQL
   href: functions.md

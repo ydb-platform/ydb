@@ -57,7 +57,6 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
         NActors::TLogContextGuard logGuard(
             NActors::TLogContextBuilder::Build()("field_name", resultFiltered->GetIndexInfo().GetColumnName(columnId)));
         auto columnInfo = stats->GetColumnInfo(columnId);
-        auto resultField = resultFiltered->GetIndexInfo().GetColumnFieldVerified(columnId);
 
         TColumnMergeContext commonContext(
             columnId, resultFiltered, NSplitter::TSplitSettings().GetExpectedUnpackColumnChunkRawSize(), columnInfo);
@@ -72,7 +71,6 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             IColumnMerger::TFactory::MakeHolder(commonContext.GetLoader()->GetAccessorConstructor().GetClassName(), commonContext);
         AFL_VERIFY(!!merger)("problem", "cannot create merger")(
             "class_name", commonContext.GetLoader()->GetAccessorConstructor().GetClassName());
-        //        resultFiltered->BuildColumnMergerVerified(columnId);
 
         {
             std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> parts;

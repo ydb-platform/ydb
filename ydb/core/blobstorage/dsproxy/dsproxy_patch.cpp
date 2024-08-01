@@ -135,10 +135,6 @@ public:
         ScheduleWakeUp(StageStart, tag);
     }
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::BS_PROXY_PATCH_ACTOR;
-    }
-
     static constexpr ERequestType RequestType() {
         return ERequestType::Patch;
     }

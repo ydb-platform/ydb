@@ -74,7 +74,6 @@ private:
     const ui64 StatType;
     const std::vector<ui32> ColumnTags;
     const std::vector<TString> Data;
-
 public:
     TSaveStatisticsQuery(const TPathId& pathId, ui64 statType,
         std::vector<ui32>&& columnTags, std::vector<TString>&& data)
@@ -141,7 +140,8 @@ public:
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
         Y_UNUSED(issues);
-        auto response = std::make_unique<TEvStatistics::TEvFinishTraversal>();
+        auto response = std::make_unique<TEvStatistics::TEvSaveStatisticsQueryResponse>();
+        response->Success = (status == Ydb::StatusIds::SUCCESS);
         Send(Owner, response.release());
     }
 };
@@ -280,7 +280,8 @@ public:
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
         Y_UNUSED(issues);
-        auto response = std::make_unique<TEvStatistics::TEvFinishTraversal>();
+        auto response = std::make_unique<TEvStatistics::TEvDeleteStatisticsQueryResponse>();
+        response->Success = (status == Ydb::StatusIds::SUCCESS);
         Send(Owner, response.release());
     }
 };

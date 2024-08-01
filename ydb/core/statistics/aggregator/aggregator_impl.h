@@ -125,7 +125,8 @@ private:
     void Handle(NStat::TEvStatistics::TEvStatisticsResponse::TPtr& ev);
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev);
     void Handle(TEvStatistics::TEvStatTableCreationResponse::TPtr& ev);
-    void Handle(TEvStatistics::TEvFinishTraversal::TPtr& ev);
+    void Handle(TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr& ev);
+    void Handle(TEvStatistics::TEvDeleteStatisticsQueryResponse::TPtr& ev);
     void Handle(TEvPrivate::TEvScheduleTraversal::TPtr& ev);
     void Handle(TEvStatistics::TEvAnalyzeStatus::TPtr& ev);
     void Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev);
@@ -179,7 +180,8 @@ private:
             hFunc(NStat::TEvStatistics::TEvStatisticsResponse, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(TEvStatistics::TEvStatTableCreationResponse, Handle);
-            hFunc(TEvStatistics::TEvFinishTraversal, Handle);
+            hFunc(TEvStatistics::TEvSaveStatisticsQueryResponse, Handle);
+            hFunc(TEvStatistics::TEvDeleteStatisticsQueryResponse, Handle);
             hFunc(TEvPrivate::TEvScheduleTraversal, Handle);
             hFunc(TEvStatistics::TEvAnalyzeStatus, Handle);
             hFunc(TEvHive::TEvResponseTabletDistribution, Handle);

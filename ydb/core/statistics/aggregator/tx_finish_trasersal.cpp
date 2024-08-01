@@ -36,7 +36,10 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
         }
     }
 };
-void TStatisticsAggregator::Handle(TEvStatistics::TEvFinishTraversal::TPtr&) {
+void TStatisticsAggregator::Handle(TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr&) {
+    Execute(new TTxFinishTraversal(this), TActivationContext::AsActorContext());
+}
+void TStatisticsAggregator::Handle(TEvStatistics::TEvDeleteStatisticsQueryResponse::TPtr&) {
     Execute(new TTxFinishTraversal(this), TActivationContext::AsActorContext());
 }
 

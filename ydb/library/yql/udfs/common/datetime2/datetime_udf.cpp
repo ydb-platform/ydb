@@ -608,6 +608,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
 
             builder.UserType(userType);
             builder.SupportsBlocks();
+            builder.IsStrict();
 
             TBlockTypeInspector block(*typeInfoHelper, argType);
             if (block) {

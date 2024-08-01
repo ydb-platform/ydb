@@ -349,7 +349,9 @@ public:
     void Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvBalanceConsumer::TPtr& ev, const TActorContext& ctx);
+
     void Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx);
+    void ProcessPendingStats(const TActorContext& ctx);
 
     void RenderApp(TStringStream& str) const;
 
@@ -364,6 +366,14 @@ private:
     std::unordered_map<TString, std::unique_ptr<TConsumer>> Consumers;
 
     ui32 Step;
+
+    struct TData {
+        ui32 Generation;
+        ui64 Cookie;
+        const TString Consumer;
+        bool Commited;
+    };
+    std::unordered_map<ui32, std::vector<TData>> PendingUpdates;
 };
 
 }

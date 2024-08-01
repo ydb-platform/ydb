@@ -907,7 +907,7 @@ void TPersQueue::CreateOriginalPartition(const NKikimrPQ::TPQTabletConfig& confi
     ++OriginalPartitionsCount;
 }
 
-void TPersQueue:MoveTopTxToCalculating(TDistributedTransaction& tx,
+void TPersQueue::MoveTopTxToCalculating(TDistributedTransaction& tx,
                                         const TActorContext& ctx)
 {
     std::tie(ExecStep, ExecTxId) = TxQueue.front();

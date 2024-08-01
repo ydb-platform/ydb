@@ -55,8 +55,8 @@ auto GetStepAndTxId(const E& event)
     return GetStepAndTxId(event.Step, event.TxId);
 }
 
-bool TPartition::LastOffsetHasBeenCommited(const TUserInfo& userInfo) const {
-    return !IsActive() && static_cast<ui64>(std::max<i64>(userInfo.Offset, 0)) == EndOffset;
+bool TPartition::LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const {
+    return !IsActive() && (static_cast<ui64>(std::max<i64>(userInfo.Offset, 0)) == EndOffset || StartOffset == EndOffset);
 }
 
 struct TMirrorerInfo {
@@ -2896,6 +2896,10 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         );
 
         userInfo.Offset = offset;
+
+        if (LastOffsetHasBeenCommited(userInfo)) {
+            SendReadingFinished(user);
+        }
 
         auto counter = setSession ? COUNTER_PQ_CREATE_SESSION_OK : (dropSession ? COUNTER_PQ_DELETE_SESSION_OK : COUNTER_PQ_SET_CLIENT_OFFSET_OK);
         TabletCounters.Cumulative()[counter].Increment(1);

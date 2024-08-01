@@ -65,6 +65,7 @@ bool TPartition::Reset() {
     bool result = IsInactive();
 
     ScaleAwareSDK = false;
+    StartedReadingFromEndOffset = false;
     ReadingFinished = false;
     Commited = false;
     ++Cookie;
@@ -1631,6 +1632,12 @@ void TBalancer::Handle(TEvPQ::TEvWakeupReleasePartition::TPtr &ev, const TActorC
         return;
     }
 
+    if (partition->Commited) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                GetPrefix() << "skip releasing partition " << msg->PartitionId << " of consumer \"" << msg->Consumer << "\" by reading finished timeout because offset is commited");
+        return;
+    }
+
     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
             GetPrefix() << "releasing partition " << msg->PartitionId << " of consumer \"" << msg->Consumer << "\" by reading finished timeout");
 
@@ -1821,29 +1828,28 @@ void TBalancer::Handle(TEvPQ::TEvBalanceConsumer::TPtr& ev, const TActorContext&
 }
 
 void TBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) {
-    struct TData {
-        ui32 Generation;
-        ui64 Cookie;
-        const TString& Consumer;
-    };
-
-    std::unordered_map<ui32, std::vector<TData>> index;
-
     const auto& record = ev->Get()->Record;
     for (const auto& partResult : record.GetPartResult()) {
         for (const auto& consumerResult : partResult.GetConsumerResult()) {
-            if (consumerResult.GetReadingFinished()) {
-                index[partResult.GetPartition()].push_back(TData{partResult.GetGeneration(), partResult.GetCookie(), consumerResult.GetConsumer()});
-            }
+            PendingUpdates[partResult.GetPartition()].push_back(TData{partResult.GetGeneration(), partResult.GetCookie(), consumerResult.GetConsumer(), consumerResult.GetReadingFinished()});
         }
     }
+}
+
+void TBalancer::ProcessPendingStats(const TActorContext& ctx) {
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+            GetPrefix() << "ProcessPendingStats. PendingUpdates size " << PendingUpdates.size());
 
     GetPartitionGraph().Travers([&](ui32 id) {
-        for (auto& d : index[id]) {
-            SetCommittedState(d.Consumer, id, d.Generation, d.Cookie, ctx);
+        for (auto& d : PendingUpdates[id]) {
+            if (d.Commited) {
+                SetCommittedState(d.Consumer, id, d.Generation, d.Cookie, ctx);
+            }
         }
         return true;
     });
+
+    PendingUpdates.clear();
 }
 
 TString TBalancer::GetPrefix() const {

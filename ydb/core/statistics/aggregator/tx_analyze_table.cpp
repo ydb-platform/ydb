@@ -50,7 +50,7 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& /*ctx*/) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTable::Complete");
     }
 };

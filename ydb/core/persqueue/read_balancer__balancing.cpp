@@ -1820,7 +1820,7 @@ void TBalancer::Handle(TEvPQ::TEvBalanceConsumer::TPtr& ev, const TActorContext&
     }
 }
 
-void TBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) {
+void TBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& /*ctx*/) {
     struct TData {
         ui32 Generation;
         ui64 Cookie;

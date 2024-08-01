@@ -228,7 +228,7 @@ private:
         Send(schemeCache, ev);
     }
 
-    void Navigate(const TTableId& pathId, const TActorContext& ctx) {
+    void Navigate(const TTableId& pathId, const TActorContext& /*ctx*/) {
         DatabaseName = Request_->GetDatabaseName()
             .GetOrElse(DatabaseFromDomain(AppData()));
 

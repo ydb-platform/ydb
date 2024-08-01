@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         auto sender = runtime.AllocateEdgeActor();
         bool observerFirstExec = true;
         auto observer = runtime.AddObserver<TEvHive::TEvRequestTabletDistribution>(
-            [&](TEvHive::TEvRequestTabletDistribution::TPtr& ev)
+            [&](TEvHive::TEvRequestTabletDistribution::TPtr& /*ev*/)
         {
             if (observerFirstExec) {
                 observerFirstExec = false;

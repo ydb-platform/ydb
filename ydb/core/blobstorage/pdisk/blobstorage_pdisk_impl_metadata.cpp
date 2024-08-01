@@ -70,7 +70,7 @@ namespace NKikimr::NPDisk {
                 Release(actorSystem);
             }
 
-            void Release(TActorSystem *actorSystem) override {
+            void Release(TActorSystem * /*actorSystem*/) override {
                 delete this;
             }
         };

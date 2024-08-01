@@ -369,7 +369,7 @@ TErrorOr<TSharedRef> TryTrackMemory(
     if (!tracker || !reference) {
         return reference;
     }
-    return tracker->TryTrack(reference, keepExistingTracking);
+    return tracker->TryTrack(std::move(reference), keepExistingTracking);
 }
 
 TSharedRef TrackMemory(
@@ -380,7 +380,7 @@ TSharedRef TrackMemory(
     if (!tracker || !reference) {
         return reference;
     }
-    return tracker->Track(reference, keepExistingTracking);
+    return tracker->Track(std::move(reference), keepExistingTracking);
 }
 
 TSharedRefArray TrackMemory(

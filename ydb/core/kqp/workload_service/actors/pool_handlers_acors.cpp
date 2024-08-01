@@ -148,7 +148,7 @@ public:
 
         // Schemeboard events
         hFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
-        IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted);
+        hFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
         IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable);
     )
 
@@ -156,6 +156,8 @@ public:
         if (WatchPathId) {
             this->Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchRemove(0));
         }
+
+        SendPoolInfoUpdate(std::nullopt, std::nullopt);
 
         Counters.OnCleanup();
 
@@ -261,6 +263,24 @@ private:
         NResourcePool::TPoolSettings poolConfig;
         ParsePoolSettings(result->GetPathDescription().GetResourcePoolDescription(), poolConfig);
         UpdatePoolConfig(poolConfig);
+
+        const auto& pathDescription = result->GetPathDescription().GetSelf();
+        NACLib::TSecurityObject object(pathDescription.GetOwner(), false);
+        if (object.MutableACL()->ParseFromString(pathDescription.GetEffectiveACL())) {
+            SendPoolInfoUpdate(poolConfig, object);
+        } else {
+            SendPoolInfoUpdate(poolConfig, std::nullopt);
+        }
+    }
+
+    void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev) {
+        if (ev->Get()->Key != WatchKey) {
+            // Skip old paths watch notifications
+            return;
+        }
+
+        LOG_D("Got delete notification");
+        SendPoolInfoUpdate(std::nullopt, std::nullopt);
     }
 
 public:
@@ -324,6 +344,10 @@ public:
         }
 
         RemoveRequest(request);
+    }
+
+    void SendPoolInfoUpdate(const std::optional<NResourcePool::TPoolSettings>& config, const std::optional<NACLib::TSecurityObject>& securityObject) const {
+        this->Send(MakeKqpProxyID(this->SelfId().NodeId()), new TEvUpdatePoolInfo(Database, PoolId, config, securityObject));
     }
 
 protected:

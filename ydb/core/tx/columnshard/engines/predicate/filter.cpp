@@ -75,22 +75,27 @@ std::set<ui32> TPKRangesFilter::GetColumnIds(const TIndexInfo& indexInfo) const 
     return result;
 }
 
-bool TPKRangesFilter::IsPortionInUsage(const TPortionInfo& info, const TIndexInfo& indexInfo) const {
+bool TPKRangesFilter::IsPortionInUsage(const TPortionInfo& info) const {
     for (auto&& i : SortedRanges) {
-        if (i.IsPortionInUsage(info, indexInfo)) {
+        if (i.IsPortionInUsage(info)) {
             return true;
         }
     }
     return SortedRanges.empty();
 }
 
-bool TPKRangesFilter::IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end, const TIndexInfo& indexInfo) const {
+TPKRangeFilter::EUsageClass TPKRangesFilter::IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const {
     for (auto&& i : SortedRanges) {
-        if (i.IsPortionInPartialUsage(start, end, indexInfo)) {
-            return true;
+        switch (i.IsPortionInPartialUsage(start, end)) {
+            case TPKRangeFilter::EUsageClass::FullUsage:
+                return TPKRangeFilter::EUsageClass::FullUsage;
+            case TPKRangeFilter::EUsageClass::PartialUsage:
+                return TPKRangeFilter::EUsageClass::PartialUsage;
+            case TPKRangeFilter::EUsageClass::DontUsage:
+                break;
         }
     }
-    return false;
+    return TPKRangeFilter::EUsageClass::DontUsage;
 }
 
 TPKRangesFilter::TPKRangesFilter(const bool reverse)

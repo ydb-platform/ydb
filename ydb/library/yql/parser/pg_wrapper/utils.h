@@ -166,4 +166,6 @@ private:
     std::unique_ptr<TImpl> Impl_;
 };
 
+void RebuildSysCache();
+
 }

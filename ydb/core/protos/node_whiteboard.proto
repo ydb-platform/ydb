@@ -2,6 +2,7 @@ import "ydb/library/actors/protos/interconnect.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
+import "ydb/core/protos/memory_stats.proto";
 import "google/protobuf/descriptor.proto";
 import "ydb/core/protos/tracing.proto";
 
@@ -293,6 +294,7 @@ message TSystemStateInfo {
         optional uint32 Body = 4;
     }
 
+    // TODO: use memory stats
     message TNodeSharedCache {
         optional uint64 UsedBytes = 1;
         optional uint64 LimitBytes = 2;
@@ -320,18 +322,19 @@ message TSystemStateInfo {
     repeated string Roles = 23;
     repeated string Tenants = 24;
     optional string ClusterName = 25;
-    optional uint64 MemoryUsed = 26;
-    optional uint64 MemoryLimit = 27;
+    optional uint64 MemoryUsed = 26; // TODO: use memory stats
+    optional uint64 MemoryLimit = 27; // TODO: use memory stats
     optional EConfigState ConfigState = 28 [default = Consistent];
-    optional uint64 MemoryUsedInAlloc = 29;
+    optional uint64 MemoryUsedInAlloc = 29; // TODO: use memory stats
     optional double MaxDiskUsage = 30;
     optional NActorsInterconnect.TNodeLocation Location = 31;
     optional int64 MaxClockSkewWithPeerUs = 32; // a positive value means the peer is ahead in time; a negative value means it's behind
     optional uint32 MaxClockSkewPeerId = 33;
     optional uint64 DisconnectTime = 34;
-    optional TNodeSharedCache SharedCacheStats = 35;
+    optional TNodeSharedCache SharedCacheStats = 35; // TODO: use memory stats
     optional uint32 TotalSessions = 36;
     optional string NodeName = 37;
+    optional NKikimrMemory.TMemoryStats MemoryStats = 38;
 }
 
 message TEvSystemStateRequest {

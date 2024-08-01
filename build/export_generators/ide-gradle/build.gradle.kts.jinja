@@ -258,23 +258,41 @@ tasks.named<Test>("test") {
 
 {% endif -%}
 
-{% set runs = targets|selectattr("runs") -%}
+{# run_java_program #}
+{# {% set runs = targets|selectattr("runs") -%} #}
+{% set runs = target.runs -%}
 {% if runs -%}
 {%     for run in runs -%}
-tasks.build.dependsOn(
-    task<JavaExec>("runJavaProgram") {
-        group = "build"
-        description = "Code generation by rub java program"
 
-        mainClass.set(mainClass)
+val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
+        group = "build"
+        description = "Code generation by run java program"
+
+        mainClass.set("{{ run.args[0] }}")
 {%         if run.classpath -%}
-        classpath = "{{ run.classpath }}"
+{%             for classpath in run.classpath -%}
+{%                 set real_classpath = classpath|replace('@', '') -%}
+{%                 set real_classpath = real_classpath|replace('.run.cp', '') -%}
+{%                 set real_classpath = real_classpath|replace('.cplst', '') -%}
+{%                 set real_classpath = real_classpath|replace(export_root, '') -%}
+{%                 set real_gradle_classpath = real_classpath|replace('/', ':') %}
+        val classPath = "{{ real_gradle_classpath }}"
+        val classPathParts = classPath.split(":")
+        classPathParts[classPathParts.size - 2]
+        classpath = files("$project_root{{ real_classpath }}") + project(classPath.replace(":${classPathParts[classPathParts.size - 2]}.jar", "")).configurations.runtimeClasspath.get()
+{%             endfor -%}
 {%         else -%}
         classpath = sourceSets.main.get().runtimeClasspath
 {%         endif -%}
-{%         if run.args -%}
-{#             for arg in run.args #}
-        args = "{{ run.args }}"
+{%         set args = run.args -%}
+{%         if args -%}
+        val argsList = mutableListOf(
+{%             for arg in args -%}
+            "{{ arg }}",
+{%             endfor -%}
+        )
+        argsList.removeAt(0)
+        args = argsList
 {%         endif -%}
 {%         if run.in_dir -%}
 {%             for dir in run.in_dir -%}
@@ -300,7 +318,11 @@ tasks.build.dependsOn(
 #}
 {%         endif -%}
     }
-)
+tasks {
+    build {
+        dependsOn(runJav{{ loop.index }})
+    }
+}
 {%     endfor -%}
 {% endif -%}
 

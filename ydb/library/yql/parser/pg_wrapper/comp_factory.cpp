@@ -4992,6 +4992,7 @@ void PgReleaseThreadContext(void* ctx) {
 class TExtensionLoader : public NYql::NPg::IExtensionLoader {
 public:
     void Load(ui32 extensionIndex, const TString& name, const TString& path) final {
+        RebuildSysCache();
         TExtensionsRegistry::Instance().Load(extensionIndex, name, path);
     }
 };

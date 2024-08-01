@@ -7,6 +7,7 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
+#include <ydb/core/protos/memory_stats.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
 #include <ydb/library/actors/interconnect/events_local.h>
 #include <ydb/library/actors/core/interconnect.h>
@@ -386,11 +387,30 @@ struct TEvWhiteboard{
         }
     };
 
-    static TEvSystemStateUpdate *CreateCachesConsumptionUpdateRequest(ui64 consumptionBytes, ui64 limitBytes) {
+    static TEvSystemStateUpdate *CreateMemoryStatsUpdateRequest(NKikimrMemory::TMemoryStats memoryStats) {
         TEvSystemStateUpdate *request = new TEvSystemStateUpdate();
-        auto *pb = request->Record.MutableSharedCacheStats();
-        pb->SetUsedBytes(consumptionBytes);
-        pb->SetLimitBytes(limitBytes);
+
+        // Note: copy new stats to old fields to keep backward compatibility
+        if (memoryStats.HasAnonRss()) {
+            request->Record.SetMemoryUsed(memoryStats.GetAnonRss());
+        }
+        if (memoryStats.HasHardLimit()) {
+            request->Record.SetMemoryLimit(memoryStats.GetHardLimit());
+        }
+        if (memoryStats.HasAllocatedMemory()) {
+            request->Record.SetMemoryUsedInAlloc(memoryStats.GetAllocatedMemory());
+        }
+
+        // Note: is rendered in UI as 'Caches', so let's pass aggregated caches stats (not only Shared Cache stats)
+        auto *sharedCacheStats = request->Record.MutableSharedCacheStats();
+        if (memoryStats.HasConsumersConsumption()) {
+            sharedCacheStats->SetUsedBytes(memoryStats.GetConsumersConsumption());
+        }
+        if (memoryStats.HasConsumersLimit()) {
+            sharedCacheStats->SetLimitBytes(memoryStats.GetConsumersLimit());
+        }
+
+        request->Record.MutableMemoryStats()->Swap(&memoryStats);
         return request;
     }
 

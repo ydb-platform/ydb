@@ -502,13 +502,13 @@ memory_controller_config:
 
 Parameters | Description | Default
 --- | --- | ---
-`hard_limit_bytes` | A hard memory usage limit for the database. | CGroup memory limit / Host memory
-`soft_limit_percent` / `soft_limit_bytes` | A soft memory usage limit for the database. When this threshold is exceeded, the database starts to reduce the Shared Cache size to zero. | 75%
-`target_utilization_percent` / `target_utilization_bytes` | An ideal target for memory usage. Optimal cache sizes are calculated to keep process consumption around this value. | 50%
-`shared_cache_min_percent` / `shared_cache_min_bytes` | A minimum threshold for the Shared Cache memory limit. | 20%
-`shared_cache_max_percent` / `shared_cache_max_bytes` | A maximum threshold for the Shared Cache memory limit. | 50%
-`mem_table_min_percent` / `mem_table_min_bytes` | A minimum threshold for the MemTable memory limit. | 1%
-`mem_table_max_percent` / `mem_table_max_bytes` | A maximum threshold for the MemTable memory limit. | 3%
+`hard_limit_bytes` | A hard memory usage limit for the database. | CGroup<nbsp>memory<nbsp>limit<nbsp>/<br/>Host memory
+`soft_limit_percent`<nbsp>/<br/>`soft_limit_bytes` | A soft memory usage limit for the database. When this threshold is exceeded, the database starts to reduce the Shared Cache size to zero. | 75%
+`target_utilization_percent`<nbsp>/<br/>`target_utilization_bytes` | An ideal target for memory usage. Optimal cache sizes are calculated to keep process consumption around this value. | 50%
+`shared_cache_min_percent`<nbsp>/<br/>`shared_cache_min_bytes` | A minimum threshold for the Shared Cache memory limit. | 20%
+`shared_cache_max_percent`<nbsp>/<br/>`shared_cache_max_bytes` | A maximum threshold for the Shared Cache memory limit. | 50%
+`mem_table_min_percent`<nbsp>/<br/>`mem_table_min_bytes` | A minimum threshold for the MemTable memory limit. | 1%
+`mem_table_max_percent`<nbsp>/<br/>`mem_table_max_bytes` | A maximum threshold for the MemTable memory limit. | 3%
 
 ## blob_storage_config: Static cluster group {#blob-storage-config}
 

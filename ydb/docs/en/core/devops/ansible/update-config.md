@@ -16,14 +16,14 @@ The playbook deploys the new version of the config files and then performs a [ro
 
 Tasks in the `ydb_platform.ydb.update_config` playbook are tagged with node types, so you can use Ansible's tags functionality to filter nodes by their kind. 
 
-These two commands are equivalent and will change the configuration of all storage nodes:
+These two commands are equivalent and will change the configuration of all [storage nodes](../../concepts/glossary.md#storage-node):
 
 ```bash
 ansible-playbook ydb_platform.ydb.update_config --tags storage
 ansible-playbook ydb_platform.ydb.update_config --tags static
 ```
 
-These two commands are equivalent and will change the configuration of all database nodes:
+These two commands are equivalent and will change the configuration of all [database nodes](../../concepts/glossary.md#database-node):
 ```bash
 ansible-playbook ydb_platform.ydb.update_config --tags database
 ansible-playbook ydb_platform.ydb.update_config --tags dynamic

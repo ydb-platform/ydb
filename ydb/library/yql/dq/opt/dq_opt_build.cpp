@@ -2,6 +2,8 @@
 #include "dq_opt.h"
 #include "dq_opt_phy_finalizing.h"
 
+#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
+
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
@@ -403,18 +405,8 @@ bool CanRebuildForWideChannelOutput(const TDqPhyStage& stage) {
     return true;
 }
 
-bool CanRebuildForWideChannelOutput(const TDqOutput& output) {
-    ui32 index = FromString<ui32>(output.Index().Value());
-    if (index != 0) {
-        // stage has multiple outputs
-        return false;
-    }
-
-    return CanRebuildForWideChannelOutput(output.Stage().Cast<TDqPhyStage>());
-}
-
 bool IsSupportedForWide(const TDqConnection& conn) {
-    if (conn.Maybe<TDqCnResult>() || conn.Maybe<TDqCnValue>()) {
+    if (conn.Maybe<TDqCnResult>() || conn.Maybe<TDqCnValue>() || conn.Maybe<TDqCnUnionAll>() || conn.Maybe<TKqpCnStreamLookup>()) {
         return false;
     }
 
@@ -468,7 +460,7 @@ TDqPhyStage RebuildStageInputsAsWide(const TDqPhyStage& stage, TExprContext& ctx
 
         auto maybeConn = stage.Inputs().Item(i).Maybe<TDqConnection>();
 
-        if (maybeConn && CanRebuildForWideChannelOutput(maybeConn.Cast().Output())) {
+        if (maybeConn && CanRebuildForWideChannelOutput(maybeConn.Cast())) {
             needRebuild = true;
             auto itemType = arg.Ref().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TStructExprType>();
             TExprNode::TPtr newArgNode = newArg.Ptr();

@@ -7,19 +7,26 @@
 
 #include <util/string/builder.h>
 
+#include "position.h"
+
 namespace NKikimr::NArrow::NMerger {
 
 void TRecordBatchBuilder::ValidateDataSchema(const std::shared_ptr<arrow::Schema>& schema) {
     AFL_VERIFY(IsSameFieldsSequence(schema->fields(), Fields));
 }
 
-void TRecordBatchBuilder::AddRecord(const TSortableBatchPosition& position) {
+void TRecordBatchBuilder::AddRecord(const TCursor& position) {
+//    AFL_VERIFY_DEBUG(IsSameFieldsSequence(position.GetData().GetFields(), Fields));
+//    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "record_add_on_read")("record", position.DebugJson());
+    position.AppendPositionTo(Builders, MemoryBufferLimit ? &CurrentBytesUsed : nullptr);
+    ++RecordsCount;
+}
+
+void TRecordBatchBuilder::AddRecord(const TRWSortableBatchPosition& position) {
     AFL_VERIFY_DEBUG(position.GetData().GetColumns().size() == Builders.size());
     AFL_VERIFY_DEBUG(IsSameFieldsSequence(position.GetData().GetFields(), Fields));
-//    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "record_add_on_read")("record", position.DebugJson());
-    for (ui32 i = 0; i < position.GetData().GetColumns().size(); ++i) {
-        position.GetData().GetColumns()[i].AppendPositionTo(*Builders[i], position.GetPosition(), MemoryBufferLimit ? &CurrentBytesUsed : nullptr);
-    }
+    //    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "record_add_on_read")("record", position.DebugJson());
+    position.GetData().AppendPositionTo(Builders, position.GetPosition(), MemoryBufferLimit ? &CurrentBytesUsed : nullptr);
     ++RecordsCount;
 }
 
@@ -57,7 +64,11 @@ std::shared_ptr<arrow::RecordBatch> TRecordBatchBuilder::Finalize() {
     for (auto&& i : Builders) {
         columns.emplace_back(NArrow::TStatusValidator::GetValid(i->Finish()));
     }
-    return arrow::RecordBatch::Make(schema, columns.front()->length(), columns);
+    auto result = arrow::RecordBatch::Make(schema, columns.front()->length(), columns);
+#ifndef NDEBUG
+    NArrow::TStatusValidator::Validate(result->ValidateFull());
+#endif
+    return result;
 }
 
 TString TRecordBatchBuilder::GetColumnNames() const {

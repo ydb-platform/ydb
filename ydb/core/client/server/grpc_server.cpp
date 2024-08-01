@@ -478,7 +478,7 @@ void TGRpcService::SetupIncomingRequests() {
     // dynamic node registration
     ADD_REQUEST(RegisterNode, TNodeRegistrationRequest, TNodeRegistrationResponse, {
         NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_NODE_REGISTRATION_REQUEST));
-        RegisterRequestActor(CreateMessageBusRegisterNode(msg, DynamicNodeAuthorizationParams));
+        RegisterRequestActor(CreateMessageBusRegisterNode(msg));
     })
 
     // CMS request

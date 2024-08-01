@@ -60,9 +60,7 @@ bool TNodesCounterBase::IsNodeLocked(ui32 nodeId) const {
 }   
 
 void TNodesCounterBase::LockNode(ui32 nodeId) {
-    if (IsNodeLocked(nodeId)) {
-        return;
-    }
+    Y_ABORT_UNLESS(!IsNodeLocked(nodeId));
 
     ++LockedNodesCount;
     if (NodeToState[nodeId] == NODE_STATE_DOWN) {
@@ -74,10 +72,8 @@ void TNodesCounterBase::LockNode(ui32 nodeId) {
 }
 
 void TNodesCounterBase::UnlockNode(ui32 nodeId) {
-    if (!IsNodeLocked(nodeId)) {
-        return;
-    }
-
+    Y_ABORT_UNLESS(IsNodeLocked(nodeId));
+   
     --LockedNodesCount;
     if (NodeToState[nodeId] == NODE_STATE_RESTART) {
         NodeToState[nodeId] = NODE_STATE_DOWN;

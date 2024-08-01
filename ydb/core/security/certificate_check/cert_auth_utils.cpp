@@ -1,5 +1,3 @@
-#include "cert_gen.h"
-
 #include <openssl/bio.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
@@ -15,9 +13,46 @@
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include "cert_auth_utils.h"
 
+namespace NKikimr {
 
-using namespace NTest;
+std::vector<TCertificateAuthorizationParams> GetCertificateAuthorizationParams(const NKikimrConfig::TClientCertificateAuthorization &clientCertificateAuth) {
+    std::vector<TCertificateAuthorizationParams> certAuthParams;
+    certAuthParams.reserve(clientCertificateAuth.ClientCertificateDefinitionsSize());
+
+    for (const auto& clientCertificateDefinition : clientCertificateAuth.GetClientCertificateDefinitions()) {
+        TCertificateAuthorizationParams::TDN dn;
+        for (const auto& term: clientCertificateDefinition.GetSubjectTerms()) {
+            auto rdn = TCertificateAuthorizationParams::TRDN(term.GetShortName());
+            for (const auto& value: term.GetValues()) {
+                rdn.AddValue(value);
+            }
+            for (const auto& suffix: term.GetSuffixes()) {
+                rdn.AddSuffix(suffix);
+            }
+            dn.AddRDN(std::move(rdn));
+        }
+        if (dn) {
+            std::vector<TString> groups(clientCertificateDefinition.GetMemberGroups().cbegin(), clientCertificateDefinition.GetMemberGroups().cend());
+            certAuthParams.emplace_back(std::move(dn), clientCertificateDefinition.GetRequireSameIssuer(), std::move(groups));
+        }
+    }
+
+    return certAuthParams;
+}
+
+NKikimrConfig::TClientCertificateAuthorization::TSubjectTerm MakeSubjectTerm(const TString& name, const TVector<TString>& values, const TVector<TString>& suffixes) {
+    NKikimrConfig::TClientCertificateAuthorization::TSubjectTerm term;
+    term.SetShortName(name);
+    for (const auto& val: values) {
+        *term.MutableValues()->Add() = val;
+    }
+    for (const auto& suf: suffixes) {
+        *term.MutableSuffixes()->Add() = suf;
+    }
+    return term;
+}
 
 namespace {
 
@@ -403,8 +438,6 @@ X509Ptr SingRequest(X509REQPtr& request, X509Ptr& rootCert, PKeyPtr& rootKey, co
 
 }
 
-namespace NTest {
-
 TCertAndKey GenerateCA(const TProps& props) {
     auto keys = GenerateKeys();
     auto cert = GenerateSelfSignedCertificate(keys, props);
@@ -496,4 +529,14 @@ TProps TProps::AsClientServer() {
 
 TProps& TProps::WithValid(TDuration duration) { SecondsValid = duration.Seconds(); return *this; }
 
+std::string GetCertificateFingerprint(const std::string& certificate) {
+    const static std::string defaultFingerprint = "certificate";
+    X509CertificateReader::X509Ptr x509Cert = X509CertificateReader::ReadCertAsPEM(certificate);
+    if (!x509Cert) {
+        return defaultFingerprint;
+    }
+    std::string fingerprint = X509CertificateReader::GetFingerprint(x509Cert);
+    return (fingerprint.empty() ? defaultFingerprint : fingerprint);
 }
+
+}  //namespace NKikimr

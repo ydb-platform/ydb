@@ -391,6 +391,12 @@ private:
     IGlobalObjectStorage& GlobalObjects;
 };
 
+class TCompDiskLimiterInitializer: public IKikimrServicesInitializer {
+public:
+    TCompDiskLimiterInitializer(const TKikimrRunConfig& runConfig);
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 class TCompConveyorInitializer: public IKikimrServicesInitializer {
 public:
     TCompConveyorInitializer(const TKikimrRunConfig& runConfig);

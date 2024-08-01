@@ -93,6 +93,10 @@ public:
                     SideEffects.Send(actor, new TEvPrivate::TEvRestartComplete({TabletId, FollowerId}, "OK"));
                 }
                 tablet->ActorsToNotifyOnRestart.clear();
+                for (const TActorId& actor : Self->ActorsWaitingToMoveTablets) {
+                    SideEffects.Send(actor, new TEvPrivate::TEvCanMoveTablets());
+                }
+                Self->ActorsWaitingToMoveTablets.clear();
                 if (tablet->GetLeader().IsDeleting()) {
                     tablet->SendStopTablet(SideEffects);
                     return true;

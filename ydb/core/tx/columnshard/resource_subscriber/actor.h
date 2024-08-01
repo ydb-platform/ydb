@@ -36,13 +36,14 @@ public:
     }
 
     STFUNC(StateWait) {
-        TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent", Parent));
+        TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent", Parent)("ev_type", ev->GetTypeName()));
         switch (ev->GetTypeRewrite()) {
             cFunc(NActors::TEvents::TEvPoison::EventType, StartStopping);
             hFunc(TEvStartTask, Handle);
             hFunc(NKikimr::NResourceBroker::TEvResourceBroker::TEvResourceAllocated, Handle);
             default:
-                AFL_VERIFY(false);
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("problem", "unexpected event");
+                AFL_VERIFY_DEBUG(false);
         }
     }
 };

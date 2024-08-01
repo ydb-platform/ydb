@@ -90,6 +90,8 @@ message MaintenanceTaskOptions {
     // Availability mode.
     AvailabilityMode availability_mode = 3;
     bool dry_run = 4;
+    // Priority of the task. Lower value indicates higher priority.
+    int32 priority = 5 [(value) = "[-100; 100]"];
 }
 
 // Used to describe the scope of a single action.

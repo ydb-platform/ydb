@@ -18,14 +18,13 @@ SRCS(
     ydb_index_table_ut.cpp
     ydb_import_ut.cpp
     ydb_ut.cpp
-    ydb_client_certs_ut.cpp
+    ydb_register_node_ut.cpp
     ydb_scripting_ut.cpp
     ydb_table_ut.cpp
     ydb_stats_ut.cpp
     ydb_logstore_ut.cpp
     ydb_olapstore_ut.cpp
     ydb_monitoring_ut.cpp
-    cert_gen.cpp
     ydb_query_ut.cpp
     ydb_ldap_login_ut.cpp
     ydb_object_storage_ut.cpp
@@ -41,6 +40,7 @@ PEERDIR(
     ydb/core/testlib/default
     ydb/core/grpc_services/base
     ydb/core/testlib
+    ydb/core/security
     ydb/library/yql/minikql/dom
     ydb/library/yql/minikql/jsonpath
     ydb/library/testlib/service_mocks/ldap_mock

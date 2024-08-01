@@ -485,6 +485,7 @@ static void SetupServices(TTestActorRuntime &runtime, const TTestEnvOpts &option
 
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableBootstrapConfig()->CopyFrom(TFakeNodeWhiteboardService::BootstrapConfig);
+    appConfig.MutableFeatureFlags()->SetEnableCMSRequestPriorities(options.EnableCMSRequestPriorities);
     runtime.AddLocalService(MakeConfigsDispatcherID(runtime.GetNodeId(0)),
                             TActorSetupCmd(CreateConfigsDispatcher(
                                 NKikimr::NConsole::TConfigsDispatcherInitInfo {

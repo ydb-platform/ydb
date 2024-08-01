@@ -1816,6 +1816,40 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT(!service->IsUnsafeToShutdown());
         }
     }
+            
+    Y_UNIT_TEST(ReplaceIntoWithDefaultValue) {
+        NKikimrConfig::TAppConfig appConfig;
+	appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
+	auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        // auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto createTable = client.ExecuteQuery(R"sql(
+                CREATE TABLE `/Root/test/tb` (
+                    id UInt32,
+                    val UInt32 NOT NULL DEFAULT(100),
+                    PRIMARY KEY(id)
+                );
+            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(createTable.IsSuccess(), createTable.GetIssues().ToString());
+        }
+
+        {
+            auto replaceValues = client.ExecuteQuery(R"sql(
+                REPLACE INTO `/Root/test/tb` (id) VALUES
+                    ( 1 )
+                ;
+            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(replaceValues.IsSuccess(), replaceValues.GetIssues().ToString());
+        }
+    }
 }
 
 } // namespace NKqp

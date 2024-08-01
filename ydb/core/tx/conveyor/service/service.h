@@ -75,7 +75,8 @@ private:
     const TConfig Config;
     const TString ConveyorName = "common";
     TDequePriorityFIFO Waiting;
-    std::vector<TActorId> Workers;
+    std::deque<TActorId> Workers;
+    std::optional<NActors::TActorId> SlowWorkerId;
     TCounters Counters;
     THashMap<TString, std::shared_ptr<TTaskSignals>> Signals;
 

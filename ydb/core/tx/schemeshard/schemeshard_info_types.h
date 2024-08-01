@@ -2547,8 +2547,6 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
         {}
     };
 
-    static constexpr ui32 MaxInProgressShards = 10;
-
     TCdcStreamInfo(ui64 version, EMode mode, EFormat format, bool vt, const TDuration& rt, const TString& awsRegion, EState state)
         : AlterVersion(version)
         , Mode(mode)

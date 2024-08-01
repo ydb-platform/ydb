@@ -68,3 +68,22 @@ class TestHive(object):
             )
 
             node.start()
+
+    def test_drain_on_stop(self):
+        all_tablet_ids = create_tablets_and_wait_for_start(self.cluster.client, TabletsCount, batch_size=TabletsCount)
+        for node_id, node in self.cluster.nodes.items():
+            if node_id == 1:
+                continue
+
+            logger.info(f"Stopping node {node_id}")
+
+            node.stop()
+
+            if not node.killed:
+                wait_tablets_are_active(
+                    self.cluster.client,
+                    all_tablet_ids,
+                    0,  # Tablets should already be active, as drain must be finished at this point
+                )
+
+            node.start()

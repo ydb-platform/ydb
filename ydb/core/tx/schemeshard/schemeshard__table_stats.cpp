@@ -336,8 +336,6 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
         if (lag) {
             Self->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds());
-        } else {
-            Y_DEBUG_ABORT_UNLESS(false);
         }
 
         const auto now = ctx.Now();

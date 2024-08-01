@@ -2659,6 +2659,49 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
+    Y_UNIT_TEST(InitialScanRacyCompleteAndRequest) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        std::unique_ptr<IEventHandle> doneResponse;
+        auto blockDone = runtime.AddObserver<TEvDataShard::TEvCdcStreamScanResponse>(
+            [&](TEvDataShard::TEvCdcStreamScanResponse::TPtr& ev) {
+                if (ev->Get()->Record.GetStatus() == NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE) {
+                    doneResponse.reset(ev.Release());
+                }
+            }
+        );
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithInitialScan(Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+        WaitFor(runtime, [&]{ return bool(doneResponse); }, "doneResponse");
+        blockDone.Remove();
+
+        bool done = false;
+        auto waitDone = runtime.AddObserver<TEvDataShard::TEvCdcStreamScanResponse>(
+            [&](TEvDataShard::TEvCdcStreamScanResponse::TPtr& ev) {
+                if (ev->Get()->Record.GetStatus() == NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE) {
+                    done = true;
+                }
+            }
+        );
+
+        const auto& record = doneResponse->Get<TEvDataShard::TEvCdcStreamScanResponse>()->Record;
+        RebootTablet(runtime, record.GetTablePathId().GetOwnerId(), edgeActor);
+        WaitFor(runtime, [&]{ return done; }, "done");
+    }
+
     Y_UNIT_TEST(InitialScanUpdatedRows) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())

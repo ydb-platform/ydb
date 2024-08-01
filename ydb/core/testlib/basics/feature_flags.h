@@ -58,6 +58,7 @@ public:
     FEATURE_FLAG_SETTER(EnableAccessServiceBulkAuthorization)
     FEATURE_FLAG_SETTER(EnableAddColumsWithDefaults)
     FEATURE_FLAG_SETTER(EnableReplaceIfExistsForExternalEntities)
+    FEATURE_FLAG_SETTER(EnableCMSRequestPriorities)
 
     #undef FEATURE_FLAG_SETTER
 };

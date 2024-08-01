@@ -949,6 +949,7 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
 
     IncCounter(COUNTER_CHANGE_RECORDS_REMOVED);
     SetCounter(COUNTER_CHANGE_QUEUE_SIZE, ChangesQueue.size());
+    SetCounter(COUNTER_CHANGE_QUEUE_RESERVED_CAPACITY, ChangeQueueReservedCapacity);
 
     CheckChangesQueueNoOverflow();
 }
@@ -992,10 +993,16 @@ void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange
             }
         }
     }
+ 
+    if (auto it = ChangeQueueReservations.find(cookie); it != ChangeQueueReservations.end()) {
+        ChangeQueueReservedCapacity -= it->second;
+        ChangeQueueReservedCapacity += records.size();
+    }
 
     UpdateChangeExchangeLag(now);
     IncCounter(COUNTER_CHANGE_RECORDS_ENQUEUED, forward.size());
     SetCounter(COUNTER_CHANGE_QUEUE_SIZE, ChangesQueue.size());
+    SetCounter(COUNTER_CHANGE_QUEUE_RESERVED_CAPACITY, ChangeQueueReservedCapacity);
 
     Y_ABORT_UNLESS(OutChangeSender);
     Send(OutChangeSender, new NChangeExchange::TEvChangeExchange::TEvEnqueueRecords(std::move(forward)));
@@ -1030,6 +1037,8 @@ ui64 TDataShard::ReserveChangeQueueCapacity(ui32 capacity) {
     const auto cookie = NextChangeQueueReservationCookie++;
     ChangeQueueReservations.emplace(cookie, capacity);
     ChangeQueueReservedCapacity += capacity;
+    SetCounter(COUNTER_CHANGE_QUEUE_RESERVED_CAPACITY, ChangeQueueReservedCapacity);
+
     return cookie;
 }
 

@@ -27,6 +27,7 @@ enum ESimpleCounters {
     COUNTER_CHANGE_RECORDS_REQUESTED = 17                          [(CounterOpts) = {Name: "ChangeRecordsRequested"}];
     COUNTER_CHANGE_DELIVERY_LAG = 18                               [(CounterOpts) = {Name: "ChangeDeliveryLag"}];
     COUNTER_CHANGE_DATA_LAG = 19                                   [(CounterOpts) = {Name: "ChangeDataLag"}];
+    COUNTER_CHANGE_QUEUE_RESERVED_CAPACITY = 20                    [(CounterOpts) = {Name: "ChangeQueueReservedCapacity"}];
 }
 
 enum ECumulativeCounters {

@@ -78,7 +78,7 @@ public:
 #undef PRINT_DISK_SPACE_COLOR
     }
 
-    // Called only from the main trhead
+    // Called only from the main thread
     // Returns number of chunks released (negative for chunks acquired)
     i64 ForceHardLimit(i64 hardLimit, const TColorLimits &limits) {
         i64 oldHardLimit = AtomicGet(HardLimit);

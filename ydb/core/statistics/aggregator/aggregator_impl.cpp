@@ -581,10 +581,8 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
 
     if (!ForceTraversals.empty() && !LastTraversalWasForce) {
         TForceTraversal& operation = ForceTraversals.front();
-        ReplyToActorIds.swap(operation.ReplyToActorIds);
+        AnalyzeResponseToActors.swap(operation.AnalyzeResponseToActors);
         pathId = operation.PathId;
-
-        TraversalCookie = operation.Cookie;
 
         db.Table<Schema::ForceTraversals>().Key(operation.Cookie, operation.PathId.OwnerId, operation.PathId.LocalPathId).Delete();
         ForceTraversals.pop_front();
@@ -656,7 +654,6 @@ void TStatisticsAggregator::PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const 
 }
 
 void TStatisticsAggregator::PersistTraversal(NIceDb::TNiceDb& db) {
-    PersistSysParam(db, Schema::SysParam_TraversalCookie, ToString(TraversalCookie));
     PersistSysParam(db, Schema::SysParam_TraversalTableOwnerId, ToString(TraversalTableId.PathId.OwnerId));
     PersistSysParam(db, Schema::SysParam_TraversalTableLocalPathId, ToString(TraversalTableId.PathId.LocalPathId));
     PersistSysParam(db, Schema::SysParam_TraversalStartTime, ToString(TraversalStartTime.MicroSeconds()));
@@ -673,7 +670,6 @@ void TStatisticsAggregator::PersistGlobalTraversalRound(NIceDb::TNiceDb& db) {
 }
 
 void TStatisticsAggregator::ResetTraversalState(NIceDb::TNiceDb& db) {
-    TraversalCookie = 0;
     TraversalTableId.PathId = TPathId();
     TraversalStartTime = TInstant::MicroSeconds(0);
     PersistTraversal(db);
@@ -681,7 +677,7 @@ void TStatisticsAggregator::ResetTraversalState(NIceDb::TNiceDb& db) {
     TraversalStartKey = TSerializedCellVec();
     PersistStartKey(db);
 
-    ReplyToActorIds.clear();
+    AnalyzeResponseToActors.clear();
 
     for (auto& [tag, _] : CountMinSketches) {
         db.Table<Schema::ColumnStatistics>().Key(tag).Delete();

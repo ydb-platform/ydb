@@ -1,6 +1,6 @@
 # {{ ydb-short-name }} cluster topology
 
-A {{ ydb-short-name }} cluster consists of [storage](./glossary.md#storage-node) and [database](./glossary.md#database-node) nodes. As the data stored in {{ ydb-short-name }} is available only via queries and API calls, both types of nodes are essential for [database availability](#database-availability). However, [distributed storage](glossary.md#distributed-storage) consisting of storage nodes has the most impact on the cluster's fault tolerance and ability to persist data reliably. During the initial cluster deployment, an appropriate distributed storage [operating mode](#cluster-config) needs to be chosen according to the expected workload and [fault tolerance](#fault-tolerance) requirements.
+A {{ ydb-short-name }} cluster consists of [storage](./glossary.md#storage-node) and [database](./glossary.md#database-node) nodes. As the data stored in {{ ydb-short-name }} is available only via queries and API calls, both types of nodes are essential for [database availability](#database-availability). However, [distributed storage](glossary.md#distributed-storage) consisting of storage nodes has the most impact on the cluster's fault tolerance and ability to persist data reliably. During the initial cluster deployment, an appropriate distributed storage [operating mode](#cluster-config) needs to be chosen according to the expected workload and [database availability](#database-availability) requirements.
 
 ## Cluster operating modes {#cluster-config}
 
@@ -46,19 +46,27 @@ If it is impossible to use the [recommended amount](#cluster-config) of hardware
 
 The minimal fault-tolerant configuration of a {{ ydb-short-name }} cluster uses the `mirror-3-dc-3-nodes` operating mode, which requires only three servers. In this configuration, each server acts as both a fail domain and a fail realm, and the cluster can withstand the failure of only a single server.
 
-## Fault tolerance {#fault-tolerance}
+## Redundancy recovery {#rebuild}
 
-If a disk fails, {{ ydb-short-name }} can automatically reconfigure a storage group. Whether the disk failure is caused by the whole server failure or not is irrelevant in this context. Such reconfiguration replaces the VDisk located on the failed hardware with a new VDisk, and the system tries to place it on operational hardware. The same rules apply as when creating a group:
+If a disk fails, {{ ydb-short-name }} can automatically reconfigure a storage group. Whether the disk failure is caused by the whole server failure or not is irrelevant in this context. Auto reconfiguration of storage groups reduces the risk of data loss in the event of a sequence of failures, provided these failures occur with sufficient time intervals to recover redundancy. By default, reconfiguration begins one hour after {{ ydb-short-name }} detects a failure.
+
+Disk group reconfiguration replaces the VDisk located on the failed hardware with a new VDisk, and the system tries to place it on operational hardware. The same rules apply as when creating a storage group:
 
 * The new VDisk is created in a fail domain different from any other VDisks in the group.
 * In the `mirror-3-dc` mode, it is created within the same fail realm as the failed VDisk.
 
-This process can cause issues when a cluster's hardware is distributed across the minimum required number of fail domains:
+To ensure reconfiguration is possible, a cluster should have free slots available for creating VDisks in different fail domains. When determining the number of slots to keep free, consider the risk of hardware failure, the time required to replicate data, and the time needed to replace the failed hardware.
+
+Disk group reconfiguration process increases the load on other VDisks in the group as well as on the network. The total data replication speed is limited on both the source and target VDisks to minimize the impact of redundancy recovery on system performance.
+
+The time required to restore redundancy depends on the amount of data and hardware performance. For example, replication on fast NVMe SSDs may take an hour, while it could take more than 24 hours on large HDDs.
+
+Disk group reconfiguration is limited or totally impossible when a cluster's hardware is distributed across the minimum required number of fail domains:
 
 * If an entire fail domain is down, reconfiguration becomes impractical, as a new VDisk can only be placed in the fail domain that is down.
-* Reconfiguration is possible only if part of a fail domain is down. However, the load previously handled by the failed hardware will be redistributed across the hardware, remaining in the same fail domain.
+* Reconfiguration only happens when part of a fail domain is down. However, the load previously handled by the failed hardware will be redistributed across the surviving hardware, remaining in the same fail domain.
 
-The load can be redistributed across all the hardware that is still running if the number of fail domains in a cluster exceeds the minimum amount required for creating storage groups by at least one. This means having 9 domains for `block-4-2` and 4 domains in each fail realm for `mirror-3-dc`, which is recommended.
+The load can be redistributed across all the hardware that is still running if the number of fail domains in a cluster exceeds the minimum amount required for creating storage groups by at least one. This means having 9 fail domains for `block-4-2` and 4 fail domains in each fail realm for `mirror-3-dc`, which is recommended.
 
 ## Capacity and performance considerations
 
@@ -78,14 +86,6 @@ Therefore, the optimal initial hardware configurations for production {{ ydb-sho
 
 * **A cluster hosted in one availability zone**: This setup uses the `block-4-2` mode and consists of nine or more racks, each with an identical number of servers.
 * **A cluster hosted in three availability zones**: This setup uses the `mirror-3-dc` mode and is distributed across three data centers, with four or more racks in each, all containing an identical number of servers.
-
-## Redundancy recovery {#rebuild}
-
-Auto reconfiguration of storage groups reduces the risk of data loss in the event of a sequence of failures, provided these failures occur with sufficient time intervals to recover redundancy. By default, reconfiguration begins one hour after {{ ydb-short-name }} detects a failure.
-
-Once a group is reconfigured, a new VDisk is automatically populated with data to restore the required storage redundancy. This process increases the load on other VDisks in the group as well as on the network. The total data replication speed is limited on both the source and target VDisks to minimize the impact of redundancy recovery on system performance.
-
-The time required to restore redundancy depends on the amount of data and hardware performance. For example, replication on fast NVMe SSDs may take an hour, while it could take more than 24 hours on large HDDs. To ensure reconfiguration is possible, a cluster should have free slots available for creating VDisks in different fail domains. When determining the number of slots to keep free, consider the risk of hardware failure, the time required to replicate data, and the time needed to replace failed hardware.
 
 ## Database availability {#database-availability}
 

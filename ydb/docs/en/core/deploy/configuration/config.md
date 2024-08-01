@@ -456,6 +456,60 @@ actor_system_config:
 | `progress_threshold` | The actor system supports requesting message sending scheduled for a later point in time. The system might fail to send all scheduled messages at some point. In this case, it starts sending them in "virtual time" by handling message sending in each loop over a period that doesn't exceed the `progress_threshold` value in microseconds and shifting the virtual time by the `progress_threshold` value until it reaches real time. |
 | `resolution` | When making a schedule for sending messages, discrete time slots are used. The slot duration is set by the `resolution` parameter in microseconds. |
 
+## Memory {#memory}
+
+Several components utilize memory, including but not limited to:
+
+- Shared Cache that stores last recently used data pages read from Blob Storage to reduce disk I/O and accelerate data retrieval;
+- MemTables that stores data that haven't been flushed to SST;
+- KQP that executes queries and stores their intermediate results;
+- Allocator caches that keep memory blocks which have been released but not yet returned to the operating system.
+
+Memory limits can be configured to control the overall memory usage and ensure the database operates efficiently within the available resources.
+
+### Hard memory limit
+
+Hard memory limit denotes the total amount of the available memory.
+
+By default, hard memory limit is equal to the database process CGroup memory limit. 
+
+In environments without CGroup memory limit, the default hard memory limit is equal to the total available memory of the host. This ensures the database can utilize all available resources in non-restricted environments but may lead to resource contention with other processes running on the same host.
+
+Additionally, hard memory limit can be specified in the configuration. However, a database process may exceed it. Therefore, it is highly recommended to use CGroup memory limits in production environments to enforce strict memory control.
+
+Example of the `memory_controller_config` section with specified hard memory limit:
+
+```yaml
+memory_controller_config:
+  hard_limit_bytes: 16106127360
+```
+
+Most of other memory limits can be configured either in absolute bytes or as a percentage relative to the hard memory limit. Configuring memory limits as percentages advantages for managing database clusters with nodes of varying capacities. If both absolute bytes and percentage are specified for a limit, they combines.
+
+### Components memory limits
+
+Some components have their own separate memory limits. 
+
+Most of such a components support dynamic limit reconfiguration, so both minimum and maximum thresholds should be configured.
+
+Example of the `memory_controller_config` section with specified Shared Cache limits:
+
+```yaml
+memory_controller_config:
+  shared_cache_min_percent: 10
+  shared_cache_max_percent: 30
+```
+
+Parameters | Description | Default
+--- | --- | ---
+`hard_limit_bytes` | A hard memory usage limit for the database. | CGroup memory limit
+`soft_limit_percent` or `soft_limit_bytes` | A soft memory usage limit for the database. When that threshold is exceeded, the database starts to reduce Shared Cache size up to zero. | 75%
+`target_utilization_percent` or `target_utilization_bytes` | An ideal target for memory usage. Optimal cache sizes are calculated to stay around this threshold. | 50%
+`shared_cache_min_percent` or `shared_cache_min_bytes` | A minimum threshold for Shared Cache memory limit | 20%
+`shared_cache_max_percent` or `shared_cache_max_bytes` | A maximum threshold for Shared Cache memory limit | 50%
+`mem_table_min_percent` or `mem_table_min_bytes` | A minimum threshold for MemTables memory limit | 1%
+`mem_table_max_percent` or `mem_table_max_bytes` | A maximum threshold for MemTables memory limit | 3%
+
 ## blob_storage_config: Static cluster group {#blob-storage-config}
 
 Specify a static cluster group's configuration. A static group is necessary for the operation of the basic cluster tablets, including `Hive`, `SchemeShard`, and `BlobstorageContoller`.

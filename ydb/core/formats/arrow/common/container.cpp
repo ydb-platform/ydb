@@ -99,10 +99,10 @@ TGeneralContainer::TGeneralContainer(
     Initialize();
 }
 
-TGeneralContainer::TGeneralContainer(const std::shared_ptr<arrow::Table>& table) {
+TGeneralContainer::TGeneralContainer(const std::shared_ptr<arrow::Table>& table)
+    : RecordsCount(TValidator::CheckNotNull(table)->num_rows())
+    , Schema(std::make_shared<NModifier::TSchema>(TValidator::CheckNotNull(table)->schema())) {
     AFL_VERIFY(table);
-    Schema = std::make_shared<NModifier::TSchema>(table->schema());
-    RecordsCount = table->num_rows();
     for (auto&& i : table->columns()) {
         if (i->num_chunks() == 1) {
             Columns.emplace_back(std::make_shared<NAccessor::TTrivialArray>(i->chunk(0)));
@@ -113,10 +113,10 @@ TGeneralContainer::TGeneralContainer(const std::shared_ptr<arrow::Table>& table)
     Initialize();
 }
 
-TGeneralContainer::TGeneralContainer(const std::shared_ptr<arrow::RecordBatch>& table) {
+TGeneralContainer::TGeneralContainer(const std::shared_ptr<arrow::RecordBatch>& table)
+    : RecordsCount(TValidator::CheckNotNull(table)->num_rows())
+    , Schema(std::make_shared<NModifier::TSchema>(TValidator::CheckNotNull(table)->schema())) {
     AFL_VERIFY(table);
-    Schema = std::make_shared<NModifier::TSchema>(table->schema());
-    RecordsCount = table->num_rows();
     for (auto&& i : table->columns()) {
         Columns.emplace_back(std::make_shared<NAccessor::TTrivialArray>(i));
     }

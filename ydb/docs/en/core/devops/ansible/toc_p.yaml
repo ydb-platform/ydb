@@ -7,6 +7,8 @@ items:
   href: restart.md
 - name: Update config
   href: update-config.md
+- name: Update executable
+  href: update-executable.md
 - name: Observability
   href: observability/index.md
   include:

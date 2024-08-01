@@ -9,7 +9,10 @@ void PgExtensionsFromProto(const NYql::NProto::TPgExtensions& proto,
         NPg::TExtensionDesc desc;
         desc.Name = e.GetName();
         desc.InstallName = e.GetInstallName();
-        desc.DDLPath = e.GetDDLPath();
+        for (const auto& p : e.GetSqlPath()) {
+            desc.SqlPaths.push_back(p);
+        }
+        
         desc.LibraryPath = e.GetLibraryPath();
         desc.TypesOnly = e.GetTypesOnly();
         extensions.emplace_back(desc);

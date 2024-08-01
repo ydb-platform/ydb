@@ -13,6 +13,6 @@ namespace NSQLTranslationPG {
 
 NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TStmtParseInfo* stmtParseInfo = nullptr);
 TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TVector<NYql::TStmtParseInfo>* stmtParseInfo = nullptr);
-std::unique_ptr<NYql::NPg::IExtensionDDLParser> CreateExtensionDDLParser();
+std::unique_ptr<NYql::NPg::IExtensionSqlParser> CreateExtensionSqlParser();
 
 } // NSQLTranslationPG

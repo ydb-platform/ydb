@@ -152,7 +152,7 @@ private:
 
     void ResetTraversalState(NIceDb::TNiceDb& db);
     void ScheduleNextTraversal(NIceDb::TNiceDb& db);
-    void StartTraversal(NIceDb::TNiceDb& db, TPathId pathId, bool isColumnTable);
+    void StartTraversal(NIceDb::TNiceDb& db);
     void FinishTraversal(NIceDb::TNiceDb& db);
 
     STFUNC(StateInit) {
@@ -241,6 +241,7 @@ private:
 
     std::unordered_set<TActorId> ReplyToActorIds;
 
+    bool IsSchemeshardSeen = false;
     bool IsStatisticsTableCreated = false;
     bool PendingSaveStatistics = false;
     bool PendingDeleteStatistics = false;
@@ -295,9 +296,11 @@ private:
     size_t TraversalRound = 0;
     static constexpr size_t MaxTraversalRoundCount = 5;
 
-
     size_t KeepAliveSeqNo = 0;
     static constexpr TDuration KeepAliveTimeout = TDuration::Seconds(3);
+
+    // alternate between forced and scheduled traversals
+    bool LastTraversalWasForce = false;
 
 private: // stored in local db
     

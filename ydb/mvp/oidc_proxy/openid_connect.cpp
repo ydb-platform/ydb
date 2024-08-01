@@ -24,12 +24,12 @@ struct TRedirectUrlParameters {
     TStringBuf State;
     TStringBuf Scheme;
     TStringBuf Host;
-    NMVP::EAuthProfile AuthProfile;
+    NMvp::EAccessServiceType AccessServiceType;
     TStringBuf AuthEndpoint;
 };
 
 bool TryAppendAuthEndpointFromDetailsYandexProfile(const TRedirectUrlParameters& parameters, TStringBuilder& locationHeaderValue) {
-    if (parameters.AuthProfile != NMVP::EAuthProfile::Yandex) {
+    if (parameters.AccessServiceType != NMvp::yandex_v2) {
         return false;
     }
     const auto& eventDetails = parameters.SessionServerCheckDetails;
@@ -124,7 +124,7 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(TStringBuf eventDetai
                                                     .State = state,
                                                     .Scheme = (request->Endpoint->Secure ? "https://" : "http://"),
                                                     .Host = request->Host,
-                                                    .AuthProfile = settings.AuthProfile,
+                                                    .AccessServiceType = settings.AccessServiceType,
                                                     .AuthEndpoint = settings.AuthEndpoint});
     const size_t cookieMaxAgeSec = 420;
     TStringBuilder setCookieBuilder;

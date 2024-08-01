@@ -147,7 +147,7 @@ private:
     bool CanWrite() const;
     bool CanEnqueue() const;
 
-    bool LastOffsetHasBeenCommited(const TUserInfo& userInfo) const;
+    bool LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const;
 
     void ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error);
     void ReplyPropose(const TActorContext& ctx, const NKikimrPQ::TEvProposeTransaction& event, NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,

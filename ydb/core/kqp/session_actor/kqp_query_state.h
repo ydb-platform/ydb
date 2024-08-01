@@ -85,6 +85,7 @@ public:
             UserRequestContext = MakeIntrusive<TUserRequestContext>(RequestEv->GetTraceId(), Database, sessionId);
         }
         UserRequestContext->PoolId = RequestEv->GetPoolId();
+        UserRequestContext->PoolConfig = RequestEv->GetPoolConfig();
     }
 
     // the monotonously growing counter, the ordinal number of the query,

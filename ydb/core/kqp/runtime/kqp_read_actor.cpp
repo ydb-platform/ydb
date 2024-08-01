@@ -75,6 +75,7 @@ public:
 
         TMaybe<ui32> NodeId = {};
         bool IsFirst = false;
+        bool IsFake = false;
 
 
         TShardState(ui64 tabletId)
@@ -439,6 +440,7 @@ public:
         CA_LOG_D("Shards State: " << state.ToString(KeyColumnTypes));
 
         if (!Settings->HasShardIdHint()) {
+            state.IsFake = true;
             InFlightShards.PushBack(&state);
             ResolveShard(&state);
         } else {
@@ -679,7 +681,9 @@ public:
         }
 
         YQL_ENSURE(!newShards.empty());
-        Counters->IteratorsReadSplits->Add(newShards.size() - 1);
+        if (!state->IsFake) {
+            Counters->IteratorsReadSplits->Add(newShards.size() - 1);
+        }
         if (Settings->GetReverse()) {
             for (size_t i = 0; i < newShards.size(); ++i) {
                 PendingShards.PushBack(newShards[i].Release());

@@ -61,9 +61,13 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
     BackgroundSessionsManager->Start();
     ctx.Send(SelfId(), new TEvPrivate::TEvPeriodicWakeup());
     NYDBTest::TControllers::GetColumnShardController()->OnSwitchToWork(TabletID());
+    AFL_VERIFY(!!StartInstant);
+    CSCounters.Initialization.OnSwitchToWork(TMonotonic::Now() - *StartInstant, TMonotonic::Now() - CreateInstant);
 }
 
 void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
+    StartInstant = TMonotonic::Now();
+    CSCounters.Initialization.OnActivateExecutor(TMonotonic::Now() - CreateInstant);
     const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId());
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "OnActivateExecutor");
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr.release());

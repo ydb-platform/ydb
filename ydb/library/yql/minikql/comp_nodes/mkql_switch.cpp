@@ -292,7 +292,7 @@ private:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        ctx.Annotator = &annotator;
+        
 
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         ctx.Ctx = &*ctx.Func->arg_begin();
@@ -826,7 +826,7 @@ private:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        ctx.Annotator = &annotator;
+        
 
         auto args = ctx.Func->arg_begin();
 

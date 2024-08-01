@@ -139,7 +139,7 @@ Function* GenerateCompareFunction(NYql::NCodegen::ICodegen& codegen, const TStri
     ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
     DISubprogramAnnotator annotator(ctx, ctx.Func);
-    ctx.Annotator = &annotator;
+    
 
     auto args = ctx.Func->arg_begin();
 
@@ -602,7 +602,7 @@ Function* GenerateEqualsFunction(NYql::NCodegen::ICodegen& codegen, const TStrin
     ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
     DISubprogramAnnotator annotator(ctx, ctx.Func);
-    ctx.Annotator = &annotator;
+    
 
     auto args = ctx.Func->arg_begin();
 
@@ -734,7 +734,7 @@ Function* GenerateHashFunction(NYql::NCodegen::ICodegen& codegen, const TString&
     ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
     DISubprogramAnnotator annotator(ctx, ctx.Func);
-    ctx.Annotator = &annotator;
+    
 
     const auto main = BasicBlock::Create(context, "main", ctx.Func);
     auto block = main;
@@ -825,7 +825,7 @@ Function* GenerateEqualsFunction(NYql::NCodegen::ICodegen& codegen, const TStrin
     ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
     DISubprogramAnnotator annotator(ctx, ctx.Func);
-    ctx.Annotator = &annotator;
+    
 
     auto args = ctx.Func->arg_begin();
 
@@ -887,7 +887,7 @@ Function* GenerateHashFunction(NYql::NCodegen::ICodegen& codegen, const TString&
     ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
     DISubprogramAnnotator annotator(ctx, ctx.Func);
-    ctx.Annotator = &annotator;
+    
 
     const auto main = BasicBlock::Create(context, "main", ctx.Func);
     auto block = main;
@@ -941,7 +941,7 @@ Function* GenerateCompareFunction(NYql::NCodegen::ICodegen& codegen, const TStri
     ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
     DISubprogramAnnotator annotator(ctx, ctx.Func);
-    ctx.Annotator = &annotator;
+    
 
     auto args = ctx.Func->arg_begin();
 
@@ -1074,7 +1074,7 @@ Function* TExternalCodegeneratorRootNode::GenerateGetValue(NYql::NCodegen::ICode
     ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
     DISubprogramAnnotator annotator(ctx, ctx.Func);
-    ctx.Annotator = &annotator;
+    
 
     auto args = ctx.Func->arg_begin();
     if (codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows) {
@@ -1116,7 +1116,7 @@ Function* TExternalCodegeneratorRootNode::GenerateSetValue(NYql::NCodegen::ICode
     ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
     DISubprogramAnnotator annotator(ctx, ctx.Func);
-    ctx.Annotator = &annotator;
+    
 
     auto args = ctx.Func->arg_begin();
 
@@ -2405,7 +2405,7 @@ Function* TMutableCodegeneratorNodeBase::GenerateInternalGetValue(const TString&
     ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
     DISubprogramAnnotator annotator(ctx, ctx.Func);
-    ctx.Annotator = &annotator;
+    
 
     auto main = BasicBlock::Create(context, "main", ctx.Func);
     ctx.Ctx = &*ctx.Func->arg_begin();
@@ -2513,7 +2513,7 @@ Function* TMutableCodegeneratorPtrNodeBase::GenerateInternalGetValue(const TStri
     ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
     DISubprogramAnnotator annotator(ctx, ctx.Func);
-    ctx.Annotator = &annotator;
+    
 
     auto main = BasicBlock::Create(context, "main", ctx.Func);
     ctx.Ctx = &*ctx.Func->arg_begin();
@@ -2566,7 +2566,7 @@ Y_NO_INLINE Function* TCodegeneratorRootNodeBase::GenerateGetValueImpl(
     ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
     DISubprogramAnnotator annotator(ctx, ctx.Func);
-    ctx.Annotator = &annotator;
+    
 
     auto args = ctx.Func->arg_begin();
     if (codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows) {

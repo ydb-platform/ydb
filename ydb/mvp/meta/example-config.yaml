@@ -11,7 +11,7 @@ generic:
     ssl_cert_file: path/to/ssl.crt
 
   auth:
-    token_file: path/to/ydb_token
+    token_file: path/to/tokenator_config
 
 meta:
   meta_api_endpoint: grpc://lb.ydb-ui.ydb.nemax.nebiuscloud.net:2135

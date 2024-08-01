@@ -104,27 +104,6 @@ std::unique_ptr<NYdb::NTopic::TTopicClient> TYdbLocation::GetTopicClientPtr(TStr
     return std::make_unique<NYdb::NTopic::TTopicClient>(GetDriver(endpoint, scheme), settings);
 }
 
-NYdb::NTable::TTableClient TYdbLocation::GetTableClient(const TRequest& request, const NYdb::NTable::TClientSettings& defaultClientSettings, const TString& tokenName) const {
-    NYdb::NTable::TClientSettings clientSettings(defaultClientSettings);
-
-    TString authToken;
-    if (tokenName.empty()) {
-        authToken = request.GetAuthToken();
-    } else {
-        NMVP::TMvpTokenator* tokenator = MVPAppData()->Tokenator;
-        if (tokenator) {
-            authToken = tokenator->GetToken(tokenName);
-        }
-    }
-    if (authToken) {
-        clientSettings.AuthToken(authToken);
-    }
-    if (TString database = TYdbLocation::GetDatabaseName(request)) {
-        clientSettings.Database(database);
-    }
-    return GetTableClient(clientSettings);
-}
-
 NYdb::NTable::TTableClient TYdbLocation::GetTableClient(const NYdb::NTable::TClientSettings& clientSettings) const {
     return NYdb::NTable::TTableClient(GetDriver(), clientSettings);
 }

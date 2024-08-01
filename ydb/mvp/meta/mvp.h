@@ -48,6 +48,9 @@ public:
     TIntrusivePtr<NActors::NLog::TSettings> BuildLoggerSettings();
     void InitMeta();
 
+    TString static GetMetaDatabaseAuthToken(const TRequest& request);
+    NYdb::NTable::TClientSettings static GetMetaDatabaseClientSettings(const TRequest& request, const TYdbLocation& location);
+
     void TryGetMetaOptionsFromConfig(const YAML::Node& config);
     void TryGetGenericOptionsFromConfig(
         const YAML::Node& config,

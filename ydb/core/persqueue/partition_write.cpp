@@ -239,13 +239,14 @@ void TPartition::HandleOnIdle(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ct
 
 void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
     PQ_LOG_T("TPartition::AnswerCurrentWrites. Responses.size()=" << Responses.size());
+    const auto now = ctx.Now();
 
     ui64 offset = EndOffset;
     while (!Responses.empty()) {
         const auto& response = Responses.front();
 
         const TDuration queueTime = response.QueueTime;
-        const TDuration writeTime = ctx.Now() - response.WriteTimeBaseline;
+        const TDuration writeTime = now - response.WriteTimeBaseline;
 
         if (response.IsWrite()) {
             const auto& writeResponse = response.GetWrite();
@@ -254,6 +255,8 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             const ui16& partNo = writeResponse.Msg.PartNo;
             const ui16& totalParts = writeResponse.Msg.TotalParts;
             const TMaybe<ui64>& wrOffset = writeResponse.Offset;
+
+            SourceIdCounter.Use(s, now);
 
             bool already = false;
 
@@ -570,6 +573,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
 
 NKikimrPQ::EScaleStatus TPartition::CheckScaleStatus(const TActorContext& ctx) {
     auto const writeSpeedUsagePercent = SplitMergeAvgWriteBytes->GetValue() * 100.0 / Config.GetPartitionStrategy().GetScaleThresholdSeconds() / TotalPartitionWriteSpeed;
+    auto const sourceIdCount = SourceIdCounter.Count(ctx.Now() - TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()));
     LOG_DEBUG_S(
         ctx, NKikimrServices::PERSQUEUE,
         "TPartition::CheckScaleStatus"
@@ -577,6 +581,7 @@ NKikimrPQ::EScaleStatus TPartition::CheckScaleStatus(const TActorContext& ctx) {
             << " writeSpeedUsagePercent# " << writeSpeedUsagePercent
             << " scaleThresholdSeconds# " << Config.GetPartitionStrategy().GetScaleThresholdSeconds()
             << " totalPartitionWriteSpeed# " << TotalPartitionWriteSpeed
+            << " sourceIdCount=" << sourceIdCount
             << " Topic: \"" << TopicName() << "\"." <<
         " Partition: " << Partition
     );
@@ -585,7 +590,7 @@ NKikimrPQ::EScaleStatus TPartition::CheckScaleStatus(const TActorContext& ctx) {
 
     auto mergeEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
 
-    if (splitEnabled && writeSpeedUsagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent()) {
+    if (splitEnabled && writeSpeedUsagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent() && sourceIdCount > 1) {
         LOG_DEBUG_S(
             ctx, NKikimrServices::PERSQUEUE,
             "TPartition::CheckScaleStatus NEED_SPLIT" << " Topic: \"" << TopicName() << "\"." <<

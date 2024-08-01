@@ -298,4 +298,30 @@ TPartitionGraph MakePartitionGraph(const NKikimrSchemeOp::TPersQueueGroupDescrip
     return TPartitionGraph(BuildGraph<NKikimrSchemeOp::TPersQueueGroupDescription::TPartition>(config.GetPartitions()));
 }
 
+void TLastCounter::Use(const TString& value, const TInstant& now) {
+    if (Values.size() > 0 && Values[0].Value == value) {
+        if (1 == Values.size() || Values[1].LastUseTime == now) {
+            Values[0].LastUseTime = now;
+        } else {
+            auto& tmp = Values[0];
+            tmp.LastUseTime = now;
+            Values.push_back(std::move(tmp));
+            Values.pop_front();
+        }
+    } else if (Values.size() > 1 && Values[1].Value == value) {
+        Values[1].LastUseTime = now;
+    } else {
+        if (MaxValueCount == Values.size()) {
+            Values.pop_front();
+        }
+        Values.push_back(Data{now, value});
+    }
+}
+
+size_t TLastCounter::Count(const TInstant& expirationTime) {
+    return std::count_if(Values.begin(), Values.end(), [&](const auto& i) {
+        return i.LastUseTime >= expirationTime;
+    });
+}
+
 } // NKikimr::NPQ

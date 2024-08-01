@@ -237,11 +237,7 @@ private:
     std::queue<TEvStatistics::TEvRequestStats::TPtr> PendingRequests;
     bool ProcessUrgentInFlight = false;
 
-    struct TAnalyzeResponseToActor {
-        ui64 Cookie;
-        TActorId ActorId;
-    };
-    std::vector<TAnalyzeResponseToActor> AnalyzeResponseToActors;
+    TActorId TraversalReplyToActorId = {};
 
     bool IsSchemeshardSeen = false;
     bool IsStatisticsTableCreated = false;
@@ -306,6 +302,7 @@ private:
 
 private: // stored in local db
     
+    ui64 TraversalCookie = 0;
     TTableId TraversalTableId; 
     bool TraversalIsColumnTable = false;
     TSerializedCellVec TraversalStartKey;
@@ -324,7 +321,7 @@ private: // stored in local db
     struct TForceTraversal {
         ui64 Cookie = 0;
         TPathId PathId;
-        std::vector<TAnalyzeResponseToActor> AnalyzeResponseToActors;
+        TActorId ReplyToActorId;
     };
     std::list<TForceTraversal> ForceTraversals;
 };

@@ -77,8 +77,9 @@ struct TAggregatorSchema : NIceDb::Schema {
     static constexpr ui64 SysParam_TraversalTableOwnerId = 3;
     static constexpr ui64 SysParam_TraversalTableLocalPathId = 4;
     static constexpr ui64 SysParam_TraversalStartTime = 5;
-    static constexpr ui64 SysParam_TraversalIsColumnTable = 6;
-    static constexpr ui64 SysParam_GlobalTraversalRound = 7;
+    static constexpr ui64 SysParam_TraversalCookie = 6;
+    static constexpr ui64 SysParam_TraversalIsColumnTable = 7;
+    static constexpr ui64 SysParam_GlobalTraversalRound = 8;
 };
 
 } // NKikimr::NStat

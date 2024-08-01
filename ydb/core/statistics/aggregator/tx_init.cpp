@@ -70,6 +70,11 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal start time: " << us);
                         break;
                     }
+                    case Schema::SysParam_TraversalCookie: {
+                        Self->TraversalCookie = FromString<ui64>(value);
+                        SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal cookie: " << value);
+                        break;
+                    }
                     case Schema::SysParam_TraversalIsColumnTable: {
                         Self->TraversalIsColumnTable = FromString<bool>(value);
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal IsColumnTable: " << value);
@@ -197,8 +202,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 TForceTraversal operation {
                     .Cookie = cookie,
                     .PathId = pathId,
-                    // TODO persist AnalyzeResponseToActors
-                    .AnalyzeResponseToActors = {}
+                    .ReplyToActorId = {}
                 };
                 Self->ForceTraversals.emplace_back(operation);
 

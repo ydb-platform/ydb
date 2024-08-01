@@ -31,25 +31,12 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
         if (it != Self->ForceTraversals.end()) {
             return true;
         }
-
-        TAnalyzeResponseToActor analyzeResponse {
-            .Cookie = Cookie,
-            .ActorId = ReplyToActorId
-        };
         
-        // subscribe to request with the same path
-        it = std::find_if(Self->ForceTraversals.begin(), Self->ForceTraversals.end(), 
-            [this](const TForceTraversal& elem) { return elem.PathId == PathId;});
-        if (it != Self->ForceTraversals.end()) {
-            it->AnalyzeResponseToActors.emplace_back(analyzeResponse);
-            return true;
-        }
-
         // create new force trasersal
         TForceTraversal operation {
             .Cookie = Cookie,
             .PathId = PathId,
-            .AnalyzeResponseToActors = {analyzeResponse}
+            .ReplyToActorId = ReplyToActorId
         };
         Self->ForceTraversals.emplace_back(operation);
 

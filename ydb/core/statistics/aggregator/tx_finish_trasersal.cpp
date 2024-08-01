@@ -5,13 +5,14 @@
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
-    std::vector<TAnalyzeResponseToActor> AnalyzeResponseToActors;
+    ui64 Cookie;
+    TActorId ReplyToActorId;
 
     TTxFinishTraversal(TSelf* self)
         : TTxBase(self)
-    {
-        AnalyzeResponseToActors.swap(self->AnalyzeResponseToActors);
-    }
+        , Cookie(self->TraversalCookie)
+        , ReplyToActorId(self->TraversalReplyToActorId)
+    {}
 
     TTxType GetTxType() const override { return TXTYPE_FINISH_TRAVERSAL; }
 
@@ -27,12 +28,12 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
     void Complete(const TActorContext& ctx) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Complete");
         
-        for (const TAnalyzeResponseToActor& response : AnalyzeResponseToActors) {
+        if (ReplyToActorId) {
             SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Complete " <<
-                "Send TEvAnalyzeResponse, Cookie=" << response.Cookie << ", ActorId=" << response.ActorId);
-            auto ev = std::make_unique<TEvStatistics::TEvAnalyzeResponse>();
-            ev->Record.SetCookie(response.Cookie);
-            ctx.Send(response.ActorId, ev.release());
+                "Send TEvAnalyzeResponse, Cookie=" << Cookie << ", ActorId=" << ReplyToActorId);
+            auto response = std::make_unique<TEvStatistics::TEvAnalyzeResponse>();
+            response->Record.SetCookie(Cookie);
+            ctx.Send(ReplyToActorId, response.release());
         }
     }
 };

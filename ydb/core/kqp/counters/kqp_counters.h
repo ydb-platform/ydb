@@ -413,6 +413,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr SchedulerThrottled;
     ::NMonitoring::TDynamicCounters::TCounterPtr SchedulerCapacity;
     NMonitoring::THistogramPtr ComputeActorExecutions;
+    NMonitoring::THistogramPtr ComputeActorDelays;
     ::NMonitoring::TDynamicCounters::TCounterPtr ThrottledActorsSpuriousActivations;
     NMonitoring::THistogramPtr SchedulerDelays;
 

@@ -270,6 +270,7 @@ protected:
 
     TMaybe<TDuration> CalcDelay(NMonotonic::TMonotonic now) {
         auto result = SelfHandle.Delay(now);
+        Counters->ComputeActorDelays->Collect(result.GetOrElse(TDuration::Zero()).MicroSeconds());
         if (NoThrottle || !result.Defined()) {
             return {};
         } else {

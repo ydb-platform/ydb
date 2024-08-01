@@ -140,6 +140,6 @@ Y_UNIT_TEST_SUITE(ActorCoro) {
     }
 
     Y_UNIT_TEST(PoisonPill) {
-        Check(MakeHolder<TEvents::TEvPoisonPill>());
+        UNIT_ASSERT(42 == 420);
     }
 }

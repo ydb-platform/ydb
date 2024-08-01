@@ -460,37 +460,37 @@ actor_system_config:
 
 Several components utilize memory, including but not limited to:
 
-- Shared Cache that stores last recently used data pages read from Blob Storage to reduce disk I/O and accelerate data retrieval;
-- MemTables that stores data that haven't been yet flushed to SST;
-- KQP that executes queries and stores their intermediate results;
-- Allocator caches that keep memory blocks which have been released but not yet returned to the operating system.
+- Shared Cache: Stores recently accessed data pages read from Blob Storage to reduce disk I/O and accelerate data retrieval;
+- MemTables: Holds data that has not yet been flushed to SST;
+- KQP: Executes queries and stores their intermediate results;
+- Allocator Caches: Keeps memory blocks which have been released but not yet returned to the operating system.
 
-Memory limits can be configured to control the overall memory usage and ensure the database operates efficiently within the available resources.
+Memory limits can be configured to control the overall memory usage, ensuring the database operates efficiently within the available resources.
 
 ### Hard memory limit
 
-Hard memory limit specifies total amount of the available memory.
+The hard memory limit specifies the total amount of available memory.
 
-By default, hard memory limit is equal to the process CGroup memory limit. 
+By default, the hard memory limit is set to the process's CGroup memory limit. 
 
-In environments without CGroup memory limit, default hard memory limit is equal to the total available memory of the host. This ensures the database can utilize all available resources in non-restricted environments but may lead to resource contention with other processes running on the same host.
+In environments without a CGroup memory limit, the default hard memory limit is equal to the total available memory of the host. This allows the database to utilize all available resources in unrestricted environments, though it may lead to resource contention with other processes running on the same host.
 
-Additionally, hard memory limit can be specified in the configuration. However, a database process may exceed it. Therefore, it is highly recommended to use CGroup memory limits in production environments to enforce strict memory control.
+Additionally, the hard memory limit can be specified in the configuration. Note that the database process may still exceed this limit, so it is highly recommended to use CGroup memory limits in production environments to enforce strict memory control.
 
-Example of the `memory_controller_config` section with specified hard memory limit:
+Example of the `memory_controller_config` section with a specified hard memory limit:
 
 ```yaml
 memory_controller_config:
   hard_limit_bytes: 16106127360
 ```
 
-### Per components memory limits
+### Per component memory limits
 
-Some components have their own separate memory limits. 
+Certain components have their own memory limits.
 
-Most of memory limits have both minimum and maximum thresholds, so that the final limit value is dynamically calculated based on current process consumption.
+Most memory limits have both minimum and maximum thresholds, allowing for dynamic adjustment based on current process consumption.
 
-Most of memory limits can be configured either in absolute bytes or as a percentage relative to the hard memory limit. Configuring memory limits as percentages advantages for managing database clusters with nodes of varying capacities. If both absolute bytes and percentage limits are specified, they combines.
+Memory limits can be configured either in absolute bytes or as a percentage relative to the hard memory limit. Using percentages is advantageous for managing database clusters with nodes of varying capacities. If both absolute byte limits and percentage limits are specified, the system uses a combination of both.
 
 Example of the `memory_controller_config` section with specified Shared Cache limits:
 
@@ -503,12 +503,12 @@ memory_controller_config:
 Parameters | Description | Default
 --- | --- | ---
 `hard_limit_bytes` | A hard memory usage limit for the database. | CGroup memory limit
-`soft_limit_percent` / `soft_limit_bytes` | A soft memory usage limit for the database. When that threshold is exceeded, the database starts to reduce Shared Cache size up to zero. | 75%
+`soft_limit_percent` / `soft_limit_bytes` | A soft memory usage limit for the database. When this threshold is exceeded, the database starts to reduce the Shared Cache size to zero. | 75%
 `target_utilization_percent` / `target_utilization_bytes` | An ideal target for memory usage. Optimal cache sizes are calculated to keep process consumption around this value. | 50%
-`shared_cache_min_percent` / `shared_cache_min_bytes` | A minimum threshold for Shared Cache memory limit | 20%
-`shared_cache_max_percent` / `shared_cache_max_bytes` | A maximum threshold for Shared Cache memory limit | 50%
-`mem_table_min_percent` / `mem_table_min_bytes` | A minimum threshold for MemTables memory limit | 1%
-`mem_table_max_percent` / `mem_table_max_bytes` | A maximum threshold for MemTables memory limit | 3%
+`shared_cache_min_percent` / `shared_cache_min_bytes` | A minimum threshold for the Shared Cache memory limit. | 20%
+`shared_cache_max_percent` / `shared_cache_max_bytes` | A maximum threshold for the Shared Cache memory limit. | 50%
+`mem_table_min_percent` / `mem_table_min_bytes` | A minimum threshold for the MemTables memory limit. | 1%
+`mem_table_max_percent` / `mem_table_max_bytes` | A maximum threshold for the MemTables memory limit. | 3%
 
 ## blob_storage_config: Static cluster group {#blob-storage-config}
 

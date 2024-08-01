@@ -461,7 +461,7 @@ actor_system_config:
 Several components utilize memory, including but not limited to:
 
 - Shared Cache: Stores recently accessed data pages read from Blob Storage to reduce disk I/O and accelerate data retrieval;
-- MemTables: Holds data that has not yet been flushed to SST;
+- MemTable: Holds data that has not yet been flushed to SST;
 - KQP: Executes queries and stores their intermediate results;
 - Allocator Caches: Keeps memory blocks which have been released but not yet returned to the operating system.
 
@@ -486,7 +486,7 @@ memory_controller_config:
 
 ### Per component memory limits
 
-Certain components have their own memory limits.
+Certain components have their own memory limits. Currently, these components are Shared Cache and MemTable.
 
 Most memory limits have both minimum and maximum thresholds, allowing for dynamic adjustment based on current process consumption.
 
@@ -507,8 +507,8 @@ Parameters | Description | Default
 `target_utilization_percent` / `target_utilization_bytes` | An ideal target for memory usage. Optimal cache sizes are calculated to keep process consumption around this value. | 50%
 `shared_cache_min_percent` / `shared_cache_min_bytes` | A minimum threshold for the Shared Cache memory limit. | 20%
 `shared_cache_max_percent` / `shared_cache_max_bytes` | A maximum threshold for the Shared Cache memory limit. | 50%
-`mem_table_min_percent` / `mem_table_min_bytes` | A minimum threshold for the MemTables memory limit. | 1%
-`mem_table_max_percent` / `mem_table_max_bytes` | A maximum threshold for the MemTables memory limit. | 3%
+`mem_table_min_percent` / `mem_table_min_bytes` | A minimum threshold for the MemTable memory limit. | 1%
+`mem_table_max_percent` / `mem_table_max_bytes` | A maximum threshold for the MemTable memory limit. | 3%
 
 ## blob_storage_config: Static cluster group {#blob-storage-config}
 

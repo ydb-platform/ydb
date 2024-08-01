@@ -256,10 +256,9 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             const ui16& totalParts = writeResponse.Msg.TotalParts;
             const TMaybe<ui64>& wrOffset = writeResponse.Offset;
 
-            SourceIdCounter.Use(s, now);
-
             bool already = false;
 
+            SourceIdCounter.Use(s, now);
             auto it = SourceIdStorage.GetInMemorySourceIds().find(s);
 
             ui64 maxSeqNo = 0;
@@ -488,13 +487,15 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     }
     HaveWriteMsg = false;
 
+    const auto now = ctx.Now();
+
     for (auto& [sourceId, info] : TxSourceIdForPostPersist) {
         auto it = SourceIdStorage.GetInMemorySourceIds().find(sourceId);
         if (it.IsEnd()) {
-            SourceIdStorage.RegisterSourceId(sourceId, info.SeqNo, info.Offset, ctx.Now());
+            SourceIdStorage.RegisterSourceId(sourceId, info.SeqNo, info.Offset, now);
         } else {
             ui64 seqNo = std::max(info.SeqNo, it->second.SeqNo);
-            SourceIdStorage.RegisterSourceId(sourceId, it->second.Updated(seqNo, info.Offset, ctx.Now()));
+            SourceIdStorage.RegisterSourceId(sourceId, it->second.Updated(seqNo, info.Offset, now));
         }
     }
     TxSourceIdForPostPersist.clear();
@@ -508,8 +509,8 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     }
     ui64 prevEndOffset = EndOffset;
 
-    ui32 totalLatencyMs = (ctx.Now() - WriteCycleStartTime).MilliSeconds();
-    ui32 writeLatencyMs = (ctx.Now() - WriteStartTime).MilliSeconds();
+    ui32 totalLatencyMs = (now - WriteCycleStartTime).MilliSeconds();
+    ui32 writeLatencyMs = (now - WriteStartTime).MilliSeconds();
 
     WriteLatency.IncFor(writeLatencyMs, 1);
     if (writeLatencyMs >= AppData(ctx)->PQConfig.GetWriteLatencyBigMs()) {
@@ -525,7 +526,6 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     UpdateAfterWriteCounters(true);
 
     //All ok
-    auto now = ctx.Now();
     for (auto& avg : AvgWriteBytes) {
         avg.Update(WriteNewSize, now);
     }
@@ -541,11 +541,9 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     if (SupportivePartitionTimeLag) {
         SupportivePartitionTimeLag->UpdateTimestamp(now.MilliSeconds());
     }
-    if (SplitMergeEnabled(Config)) {
-        SplitMergeAvgWriteBytes->Update(WriteNewSizeFull, now);
-        auto needScaling = CheckScaleStatus(ctx);
-        ChangeScaleStatusIfNeeded(needScaling);
-    }
+
+    auto writeNewSizeFull = WriteNewSizeFull;
+
     WriteCycleSize = 0;
     WriteNewSize = 0;
     WriteNewSizeFull = 0;
@@ -558,6 +556,12 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
 
     AnswerCurrentWrites(ctx);
     SyncMemoryStateWithKVState(ctx);
+
+    if (SplitMergeEnabled(Config)) {
+        SplitMergeAvgWriteBytes->Update(writeNewSizeFull, now);
+        auto needScaling = CheckScaleStatus(ctx);
+        ChangeScaleStatusIfNeeded(needScaling);
+    }
 
     //if EndOffset changed there could be subscriptions witch could be completed
     TVector<std::pair<TReadInfo, ui64>> reads = Subscriber.GetReads(EndOffset);
@@ -601,7 +605,8 @@ NKikimrPQ::EScaleStatus TPartition::CheckScaleStatus(const TActorContext& ctx) {
         LOG_DEBUG_S(
             ctx, NKikimrServices::PERSQUEUE,
             "TPartition::CheckScaleStatus NEED_MERGE" << " Topic: \"" << TopicName() << "\"." <<
-            " Partition: " << Partition
+            " Partition: " << Partition << " writeSpeedUsagePercent: " << writeSpeedUsagePercent <<
+            " Threshold: " << Config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent()
         );
         return NKikimrPQ::EScaleStatus::NEED_MERGE;
     }

@@ -21,26 +21,26 @@ namespace NKikimr::NColumnShard {
 
 class TCountersManager {
 private:
-    YDB_READONLY(TCSCounters, CSCounters, TCSCounters());
+    YDB_READONLY_DEF(std::shared_ptr<const TTabletCountersHandle>, TabletCounters);
+    YDB_READONLY_DEF(std::shared_ptr<TWritesMonitor>, WritesMonitor);
+
+    YDB_READONLY_DEF(std::shared_ptr<TBackgroundControllerCounters>, BackgroundControllerCounters);
+    YDB_READONLY_DEF(std::shared_ptr<TColumnTablesCounters>, ColumnTablesCounters);
+
+    YDB_READONLY(TCSCounters, CSCounters, TCSCounters(TabletCounters));
     YDB_READONLY(TIndexationCounters, EvictionCounters, TIndexationCounters("Eviction"));
     YDB_READONLY(TIndexationCounters, IndexationCounters, TIndexationCounters("Indexation"));
     YDB_READONLY(TIndexationCounters, CompactionCounters, TIndexationCounters("GeneralCompaction"));
     YDB_READONLY(TScanCounters, ScanCounters, TScanCounters("Scan"));
     YDB_READONLY_DEF(std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>, SubscribeCounters);
 
-    YDB_READONLY_DEF(std::shared_ptr<TBackgroundControllerCounters>, BackgroundControllerCounters);
-    YDB_READONLY_DEF(std::shared_ptr<TColumnTablesCounters>, ColumnTablesCounters);
-
-    YDB_READONLY_DEF(std::shared_ptr<const TTabletCountersHandle>, TabletCounters);
-    YDB_READONLY_DEF(std::shared_ptr<TWritesMonitor>, WritesMonitor);
-
 public:
     TCountersManager(TTabletCountersBase& tabletCounters)
-        : SubscribeCounters(std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>())
+        : TabletCounters(std::make_shared<const TTabletCountersHandle>(tabletCounters))
+        , WritesMonitor(std::make_shared<TWritesMonitor>(tabletCounters))
         , BackgroundControllerCounters(std::make_shared<TBackgroundControllerCounters>())
         , ColumnTablesCounters(std::make_shared<TColumnTablesCounters>())
-        , TabletCounters(std::make_shared<const TTabletCountersHandle>(tabletCounters))
-        , WritesMonitor(std::make_shared<TWritesMonitor>(tabletCounters)) {
+        , SubscribeCounters(std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>()) {
     }
 };
 

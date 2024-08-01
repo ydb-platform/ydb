@@ -16,7 +16,7 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
     Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
     switch (overloadReason) {
         case EOverloadStatus::Disk:
-            Counters.GetCSCounters().OnWriteOverloadDisk(writeData.GetSize());
+            Counters.GetCSCounters().OnWriteOverloadDisk();
             break;
         case EOverloadStatus::InsertTable:
             Counters.GetCSCounters().OnWriteOverloadInsertTable(writeData.GetSize());

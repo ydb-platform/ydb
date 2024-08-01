@@ -70,7 +70,7 @@ class TCSCounters: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
 
-    std::shared_ptr<TTabletCountersHandle> TabletCounters;
+    std::shared_ptr<const TTabletCountersHandle> TabletCounters;
 
     NMonitoring::TDynamicCounters::TCounterPtr StartBackgroundCount;
     NMonitoring::TDynamicCounters::TCounterPtr TooEarlyBackgroundCount;
@@ -186,7 +186,7 @@ public:
         SplitCompactionGranulePortionsCount->SetValue(portionsCount);
     }
 
-    void OnWriteOverloadDisk(const ui64 /*size*/) const {
+    void OnWriteOverloadDisk() const {
         TabletCounters->IncCounter(COUNTER_OUT_OF_SPACE);
     }
 
@@ -266,7 +266,7 @@ public:
         SetupCleanupCount->Add(1);
     }
 
-    TCSCounters();
+    TCSCounters(std::shared_ptr<const TTabletCountersHandle> tabletCounters);
 };
 
 }

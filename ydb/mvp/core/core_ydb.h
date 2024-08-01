@@ -305,7 +305,7 @@ struct TYdbLocation {
 
     std::unique_ptr<NYdb::NDataStreams::V1::TDataStreamsClient> GetDataStreamsClientPtr(TStringBuf endpoint, TStringBuf scheme, const NYdb::TCommonClientSettings& settings = NYdb::TCommonClientSettings()) const;
 
-    NYdb::NTable::TTableClient GetTableClient(const TRequest& request, const NYdb::NTable::TClientSettings& defaultClientSettings, const TString& metaDatabaseTokenName = "") const;
+    NYdb::NTable::TTableClient GetTableClient(const TRequest& request, const NYdb::NTable::TClientSettings& defaultClientSettings, const TString& tokenName = "") const;
     NYdb::NTable::TTableClient GetTableClient(const NYdb::NTable::TClientSettings& clientSettings = {}) const;
 
     NYdb::NScripting::TScriptingClient GetScriptingClient(const TRequest& request) const;

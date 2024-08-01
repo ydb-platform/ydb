@@ -268,9 +268,6 @@ void TMVP::TryGetGenericOptionsFromConfig(
 
     if (generic["auth"]) {
         auto auth = generic["auth"];
-        if (TYdbLocation::UserToken.empty()) {
-            TYdbLocation::UserToken = auth["token"].as<std::string>("");
-        }
         ydbTokenFile = auth["token_file"].as<std::string>("");
     }
 

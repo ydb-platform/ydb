@@ -175,7 +175,7 @@ void TMVP::TryGetMetaOptionsFromConfig(const YAML::Node& config) {
     MetaApiEndpoint = meta["meta_api_endpoint"].as<std::string>("");
     MetaDatabase = meta["meta_database"].as<std::string>("");
     MetaCache = meta["meta_cache"].as<bool>(false);
-    TMVP::MetaDatabaseTokenName = meta["meta_database_token_name"].as<std::string>("");
+    MetaDatabaseTokenName = meta["meta_database_token_name"].as<std::string>("");
 }
 
 void TMVP::TryGetGenericOptionsFromConfig(
@@ -207,17 +207,7 @@ void TMVP::TryGetGenericOptionsFromConfig(
 
     if (generic["auth"]) {
         auto auth = generic["auth"];
-        if (TYdbLocation::UserToken.empty()) {
-            TYdbLocation::UserToken = auth["token"].as<std::string>("");
-        }
         ydbTokenFile = auth["token_file"].as<std::string>("");
-
-        if (auth["access_service_type"]) {
-            auto accessServiceTypeStr = TString(auth["access_service_type"].as<std::string>(""));
-            if (!NMvp::EAccessServiceType_Parse(to_lower(accessServiceTypeStr), &accessServiceType)) {
-                ythrow yexception() << "Unknown access_service_type value: " << accessServiceTypeStr;
-            }
-        }
     }
 
     if (generic["server"]) {
@@ -316,9 +306,6 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
                 TYdbLocation::UserToken = tokens.GetStaffApiUserTokenInfo().GetToken();
             } else if (tokens.HasStaffApiUserToken()) {
                 TYdbLocation::UserToken = tokens.GetStaffApiUserToken();
-            }
-            if (!tokens.HasAccessServiceType()) {
-                tokens.SetAccessServiceType(accessServiceType);
             }
             TokensConfig = tokens;
         } else {

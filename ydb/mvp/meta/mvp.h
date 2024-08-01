@@ -66,7 +66,6 @@ public:
     NActors::TActorId HttpProxyId;
     NActors::TActorId HandlerId;
 
-    TString YdbUserToken;
     static NMvp::TTokensConfig TokensConfig;
 };
 

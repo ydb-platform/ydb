@@ -11,7 +11,6 @@ generic:
     ssl_cert_file: path/to/ssl.crt
 
   auth:
-    token: your_ydb_token
     token_file: path/to/ydb_token
 
 oidc:

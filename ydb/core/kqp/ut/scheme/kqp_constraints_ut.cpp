@@ -1352,7 +1352,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         bool enabledCapture = true;
         TVector<TAutoPtr<IEventHandle>> delayedCheckingColumns;
         auto grab = [&delayedCheckingColumns, &enabledCapture](TAutoPtr<IEventHandle>& ev) -> auto {
-            if (enabledCapture && ev->GetTypeRewrite() == TEvDataShard::TEvBuildIndexCreateRequest::EventType) {
+            if (enabledCapture && ev->GetTypeRewrite() == TEvDataShard::TEvCheckConstraintCreateRequest::EventType) {
                 delayedCheckingColumns.emplace_back(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
             }

@@ -3,6 +3,17 @@
 
 namespace NKikimr::NDataShard {
 
+TColumnsTypes GetAllTypes(const TUserTable& tableInfo) {
+    TColumnsTypes result;
+    result.reserve(tableInfo.Columns.size());
+
+    for (const auto& it : tableInfo.Columns) {
+        result[it.second.Name] = it.second.Type;
+    }
+
+    return result;
+}
+
 TColumnsTags GetAllTags(const TUserTable& tableInfo) {
     TColumnsTags result;
 

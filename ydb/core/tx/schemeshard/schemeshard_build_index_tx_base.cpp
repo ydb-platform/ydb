@@ -189,7 +189,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         const TShardIdx& shardIdx = item.first;
         const TIndexBuildInfo::TShardStatus& status = item.second;
 
-        if (status.Status != NKikimrTxDataShard::TEvBuildIndexProgressResponse::INPROGRESS) {
+        if (status.Status != NKikimrTxDataShard::EBuildIndexStatus::INPROGRESS) {
             if (status.UploadStatus != Ydb::StatusIds::SUCCESS) {
                 if (status.DebugMessage) {
                     AddIssue(index.MutableIssues(), status.ToString(shardIdx));

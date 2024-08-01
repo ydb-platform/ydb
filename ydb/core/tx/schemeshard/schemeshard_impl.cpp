@@ -4730,6 +4730,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvIndexBuilder::TEvForgetRequest, Handle);
         HFuncTraced(TEvIndexBuilder::TEvListRequest, Handle);
         HFuncTraced(TEvDataShard::TEvBuildIndexProgressResponse, Handle);
+        HFuncTraced(TEvDataShard::TEvCheckConstraintProgressResponse, Handle);
         HFuncTraced(TEvPrivate::TEvIndexBuildingMakeABill, Handle);
         // } // NIndexBuilder
 

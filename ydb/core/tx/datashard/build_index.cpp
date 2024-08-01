@@ -27,21 +27,7 @@ namespace NKikimr::NDataShard {
 #define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 
-using TColumnsTypes = THashMap<TString, NScheme::TTypeInfo>;
 using TTypes = TVector<std::pair<TString, Ydb::Type>>;
-using TRows = TVector<std::pair<TSerializedCellVec, TString>>;
-using TColumnsTags = THashMap<TString, NTable::TTag>;
-
-static TColumnsTypes GetAllTypes(const TUserTable& tableInfo) {
-    TColumnsTypes result;
-    result.reserve(tableInfo.Columns.size());
-
-    for (const auto& it : tableInfo.Columns) {
-        result[it.second.Name] = it.second.Type;
-    }
-
-    return result;
-}
 
 static void ProtoYdbTypeFromTypeInfo(Ydb::Type* type, const NScheme::TTypeInfo typeInfo) {
     if (typeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
@@ -91,39 +77,6 @@ static std::shared_ptr<TTypes> BuildTypes(const TUserTable& tableInfo, TProtoCol
         result->emplace_back(colName, type);
     }
     return result;
-}
-
-static std::shared_ptr<TTypes> BuildTypes(const TUserTable& tableInfo, const NKikimrIndexBuilder::TCheckingNotNullSettings& checkingNotNullSettings) {
-    auto types = GetAllTypes(tableInfo);
-
-    auto result = std::make_shared<TTypes>();
-    result->reserve(checkingNotNullSettings.columnSize() + tableInfo.KeyColumnIds.size());
-
-    for (const auto& keyColId : tableInfo.KeyColumnIds) {
-        auto it = tableInfo.Columns.at(keyColId);
-        Ydb::Type type;
-        ProtoYdbTypeFromTypeInfo(&type, it.Type);
-        result->emplace_back(it.Name, type);
-    }
-
-    for (size_t i = 0; i < checkingNotNullSettings.columnSize(); i++) {
-        const auto& colName = checkingNotNullSettings.column(i).GetColumnName();
-        Ydb::Type type;
-        ProtoYdbTypeFromTypeInfo(&type, types.at(colName));
-        result->emplace_back(colName, type);
-    }
-
-    return result;
-}
-
-bool CheckNotNullConstraint(const TConstArrayRef<TCell>& cells) {
-    for (const auto& cell : cells) {
-        if (cell.IsNull()) {
-            return false;
-        }
-    }
-
-    return true;
 }
 
 bool BuildExtraColumns(TVector<TCell>& cells, const NKikimrIndexBuilder::TColumnBuildSettings& buildSettings, TString& err, TMemoryPool& valueDataPool) {
@@ -291,12 +244,6 @@ protected:
     TUploadMonStats Stats = TUploadMonStats("tablets", "build_index_upload");
     TStatus UploadStatus;
 
-    enum class ECheckingNotNullStatus {
-        None,
-        Ok,
-        NullFound
-    } CheckingNotNullStatus = ECheckingNotNullStatus::None;
-
     TBuildScanUpload(ui64 buildIndexId,
                      const TString& target,
                      const TScanRecord::TSeqNo& seqNo,
@@ -324,10 +271,6 @@ protected:
         LOG_T("Feed key " << DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry) << " " << Debug());
 
         addRow();
-
-        if (CheckingNotNullStatus == ECheckingNotNullStatus::NullFound) {
-            return EScan::Final;
-        }
 
         if (!ReadBuf.IsReachLimits(Limits)) {
             return EScan::Feed;
@@ -418,18 +361,6 @@ public:
             UploadStatus.Issues.AddIssue(NYql::TIssue("Aborted by scan host env"));
 
             LOG_W(Debug());
-        } else if (CheckingNotNullStatus != ECheckingNotNullStatus::None) {
-            switch (CheckingNotNullStatus) {
-                case ECheckingNotNullStatus::NullFound:
-                    progress->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::CHECKING_NOT_NULL_ERROR);
-                    UploadStatus.Issues.AddIssue(NYql::TIssue("Column contains null value, so not-null constraint was not set."));
-                    break;
-                case ECheckingNotNullStatus::Ok:
-                    progress->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::DONE);
-                    break;
-                default:
-                    Y_UNREACHABLE();
-            }
         } else if (!UploadStatus.IsSuccess()) {
             progress->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::BUILD_ERROR);
         } else {
@@ -659,44 +590,6 @@ public:
     }
 };
 
-class TCheckColumnScan final: public TBuildScanUpload {
-public:
-    TCheckColumnScan(ui64 buildIndexId,
-                     const TString& target,
-                     const TScanRecord::TSeqNo& seqNo,
-                     ui64 dataShardId,
-                     const TActorId& progressActorId,
-                     const TSerializedTableRange& range,
-                     const TUserTable& tableInfo,
-                     TUploadLimits limits,
-                     const NKikimrIndexBuilder::TCheckingNotNullSettings& checkingNotNullSettings
-    ) : TBuildScanUpload(buildIndexId, target, seqNo, dataShardId, progressActorId, range, tableInfo, limits)
-    {
-        Y_ABORT_UNLESS(checkingNotNullSettings.columnSize() > 0);
-
-        TVector<TString> columnNames;
-        for (auto& col : checkingNotNullSettings.Getcolumn()) {
-            columnNames.push_back(col.GetColumnName());
-        }
-
-        ScanTags = BuildTags(tableInfo, std::move(columnNames));
-        UploadColumnsTypes = BuildTypes(tableInfo, checkingNotNullSettings);
-        UploadMode = NTxProxy::EUploadRowsMode::Normal;
-    }
-
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final {
-        return FeedImpl(key, row, [&] {
-            const TConstArrayRef<TCell> rowCells = *row;
-
-            if (!CheckNotNullConstraint(rowCells)) {
-                CheckingNotNullStatus = ECheckingNotNullStatus::NullFound;
-            } else {
-                CheckingNotNullStatus = ECheckingNotNullStatus::Ok;
-            }
-        });
-    }
-};
-
 TAutoPtr<NTable::IScan> CreateBuildIndexScan(
     ui64 buildIndexId,
     TString target,
@@ -707,19 +600,12 @@ TAutoPtr<NTable::IScan> CreateBuildIndexScan(
     TProtoColumnsCRef targetIndexColumns,
     TProtoColumnsCRef targetDataColumns,
     const NKikimrIndexBuilder::TColumnBuildSettings& columnsToBuild,
-    const NKikimrIndexBuilder::TCheckingNotNullSettings& checkingNotNullSettings,
     const TUserTable& tableInfo,
     TUploadLimits limits)
 {
     if (columnsToBuild.columnSize() > 0) {
         return new TBuildColumnsScan(
             buildIndexId, target, seqNo, dataShardId, progressActorId, range, tableInfo, limits, columnsToBuild
-        );
-    }
-
-    if (checkingNotNullSettings.columnSize() > 0) {
-        return new TCheckColumnScan(
-            buildIndexId, target, seqNo, dataShardId, progressActorId, range, tableInfo, limits, checkingNotNullSettings
         );
     }
 
@@ -867,7 +753,6 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
                                                        record.GetIndexColumns(),
                                                        record.GetDataColumns(),
                                                        record.GetColumnBuildSettings(),
-                                                       record.GetCheckingNotNullSettings(),
                                                        userTable,
                                                        limits),
                                   ev->Cookie,

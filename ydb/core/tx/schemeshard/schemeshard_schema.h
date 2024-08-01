@@ -1416,7 +1416,7 @@ struct Schema : NIceDb::Schema {
         struct Range : Column<4, NScheme::NTypeIds::String> { using Type = NKikimrTx::TKeyRange; };
         struct LastKeyAck : Column<5, NScheme::NTypeIds::String> { using Type = TString; };
 
-        struct Status : Column<6, NScheme::NTypeIds::Uint32> { using Type = NKikimrTxDataShard::TEvBuildIndexProgressResponse::EStatus; };
+        struct Status : Column<6, NScheme::NTypeIds::Uint32> { using Type = NKikimrTxDataShard::EBuildIndexStatus; };
         struct Message : Column<7, NScheme::NTypeIds::Utf8> {};
         struct UploadStatus : Column<8, NScheme::NTypeIds::Uint32> { using Type = Ydb::StatusIds::StatusCode; };
 

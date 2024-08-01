@@ -287,6 +287,9 @@ struct TEvDataShard {
         EvBuildIndexCreateRequest,
         EvBuildIndexProgressResponse,
 
+        EvCheckConstraintCreateRequest,
+        EvCheckConstraintProgressResponse,
+
         EvGetS3DownloadInfo,
         EvStoreS3DownloadInfo,
         EvS3DownloadInfo,
@@ -1425,6 +1428,20 @@ struct TEvDataShard {
         : public TEventPB<TEvConditionalEraseRowsResponse,
                           NKikimrTxDataShard::TEvConditionalEraseRowsResponse,
                           TEvDataShard::EvConditionalEraseRowsResponse>
+    {
+    };
+
+    struct TEvCheckConstraintCreateRequest
+        : public TEventPB<TEvCheckConstraintCreateRequest,
+                          NKikimrTxDataShard::TEvCheckConstraintCreateRequest,
+                          TEvDataShard::EvCheckConstraintCreateRequest>
+    {
+    };
+
+    struct TEvCheckConstraintProgressResponse
+        : public TEventPB<TEvCheckConstraintProgressResponse,
+                          NKikimrTxDataShard::TEvCheckConstraintProgressResponse,
+                          TEvDataShard::EvCheckConstraintProgressResponse>
     {
     };
 

@@ -11,12 +11,6 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
-namespace {
-    bool IsRetryable(const EStatus& status) {
-        return status == EStatus::OVERLOADED;
-    }
-}
-
 Y_UNIT_TEST_SUITE(KqpLimits) {
     Y_UNIT_TEST(QSReplySizeEnsureMemoryLimits) {
         TKikimrRunner kikimr;
@@ -274,17 +268,21 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             rowsBuilder.EndList();
 
             auto result = client.BulkUpsert("/Root/LargeTable", rowsBuilder.Build()).ExtractValueSync();
-            if (IsRetryable(result.GetStatus())) {
-                continue;
-            }
             if (result.GetStatus() != EStatus::SUCCESS) {
                 result.GetIssues().PrintTo(Cerr);
+
+                if (result.GetStatus() == EStatus::OVERLOADED) {
+                    continue;
+                }
+
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAVAILABLE, result.GetIssues().ToString());
                 failedToInsert = true;
                 break;
             }
+
             ++batchIdx;
         }
+
         if (!failedToInsert) {
             UNIT_FAIL("Successfully inserted " << rowsPerBatch << " x " << batchCount << " lines, each of size " << dataTextSize << "bytes");
         }
@@ -313,7 +311,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         auto session = client.CreateSession().GetValueSync().GetSession();
 
-        bool getOutOfSpace = false;
+        bool gotOutOfSpace = false;
         ui32 batchIdx = 0;
         ui32 cnt = 0;
 
@@ -341,23 +339,27 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
                 UPSERT INTO `/Root/LargeTable`
                 SELECT * FROM AS_TABLE($rows);
             )"), TTxControl::BeginTx().CommitTx(), paramsBuilder.Build()).ExtractValueSync();
-            if (IsRetryable(result.GetStatus())) {
-                continue;
-            }
+
             if (result.GetStatus() != EStatus::SUCCESS) {
                 result.GetIssues().PrintTo(Cerr);
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAVAILABLE, result.GetIssues().ToString());
-                if (result.GetIssues().ToString().Contains("OUT_OF_SPACE")) {
-                    getOutOfSpace = true;
-                } else if (result.GetIssues().ToString().Contains("WRONG_SHARD_STATE")) {
-                    // shards are allowed to split
+
+                if (result.GetStatus() == EStatus::OVERLOADED || result.GetStatus() == EStatus::UNAVAILABLE) {
                     continue;
                 }
+
+                if (result.GetStatus() == EStatus::PRECONDITION_FAILED) {
+                    if (HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_DISK_SPACE_EXHAUSTED)) {
+                        UNIT_ASSERT(result.GetIssues().ToString().Contains("OUT_OF_SPACE"));
+                        gotOutOfSpace = true;
+                    }
+                }
+
                 break;
             }
+
             ++batchIdx;
         }
-        UNIT_ASSERT_C(getOutOfSpace, "Successfully inserted " << rowsPerBatch << " x " << batchCount << " lines, each of size " << dataTextSize << "bytes");
+        UNIT_ASSERT_C(gotOutOfSpace, "Successfully inserted " << rowsPerBatch << " x " << batchCount << " lines, each of size " << dataTextSize << "bytes");
     }
 
     Y_UNIT_TEST(TooBigQuery) {

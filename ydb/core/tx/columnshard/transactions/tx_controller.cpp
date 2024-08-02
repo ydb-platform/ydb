@@ -137,12 +137,12 @@ bool TTxController::AbortTx(const TPlanQueueItem planQueueItem, NTabletFlatExecu
     Y_ABORT_UNLESS(opIt->second->GetTxInfo().PlanStep == 0);
     opIt->second->ExecuteOnAbort(Owner, txc);
     opIt->second->CompleteOnAbort(Owner, NActors::TActivationContext::AsActorContext());
+    Counters.OnAbortTx(opIt->second->GetOpType());
 
     AFL_VERIFY(Operators.erase(planQueueItem.TxId));
     AFL_VERIFY(DeadlineQueue.erase(planQueueItem));
     NIceDb::TNiceDb db(txc.DB);
     Schema::EraseTxInfo(db, planQueueItem.TxId);
-    Counters.OnAbortTx(opIt->second->GetOpType());
     return true;
 }
 

@@ -54,6 +54,16 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                         Self->TraversalStartKey = TSerializedCellVec(value);
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal start key");
                         break;
+                    case Schema::SysParam_ForceTraversalOperationId: {
+                        Self->ForceTraversalOperationId = FromString<ui64>(value);
+                        SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal operation id: " << value);
+                        break;
+                    }  
+                    case Schema::SysParam_ForceTraversalCookie: {
+                        Self->ForceTraversalCookie = FromString<ui64>(value);
+                        SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal cookie: " << value);
+                        break;
+                    }
                     case Schema::SysParam_TraversalTableOwnerId:
                         Self->TraversalTableId.PathId.OwnerId = FromString<ui64>(value);
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal table owner id: "
@@ -70,16 +80,11 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal start time: " << us);
                         break;
                     }
-                    case Schema::SysParam_TraversalOperationId: {
-                        Self->TraversalOperationId = FromString<ui64>(value);
-                        SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal operation id: " << value);
+                    case Schema::SysParam_NextForceTraversalOperationId: {
+                        Self->NextForceTraversalOperationId = FromString<ui64>(value);
+                        SA_LOG_D("[" << Self->TabletID() << "] Loaded next traversal operation id: " << value);
                         break;
-                    }  
-                    case Schema::SysParam_TraversalCookie: {
-                        Self->TraversalCookie = FromString<ui64>(value);
-                        SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal cookie: " << value);
-                        break;
-                    }
+                    }                    
                     case Schema::SysParam_TraversalIsColumnTable: {
                         Self->TraversalIsColumnTable = FromString<bool>(value);
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal IsColumnTable: " << value);

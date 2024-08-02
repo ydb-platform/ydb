@@ -44,7 +44,7 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
 
             // create new force trasersal
             TForceTraversal operation {
-                .OperationId = Self->TraversalOperationId,
+                .OperationId = Self->NextForceTraversalOperationId,
                 .Cookie = cookie,
                 .PathId = pathId,
                 .ReplyToActorId = ReplyToActorId
@@ -52,12 +52,15 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
             Self->ForceTraversals.emplace_back(operation);
 
 
-            db.Table<Schema::ForceTraversals>().Key(Self->TraversalOperationId, pathId.OwnerId, pathId.LocalPathId).Update(
-                NIceDb::TUpdate<Schema::ForceTraversals::OperationId>(Self->TraversalOperationId),
+            db.Table<Schema::ForceTraversals>().Key(Self->NextForceTraversalOperationId, pathId.OwnerId, pathId.LocalPathId).Update(
+                NIceDb::TUpdate<Schema::ForceTraversals::OperationId>(Self->NextForceTraversalOperationId),
                 NIceDb::TUpdate<Schema::ForceTraversals::OwnerId>(pathId.OwnerId),
                 NIceDb::TUpdate<Schema::ForceTraversals::LocalPathId>(pathId.LocalPathId),
                 NIceDb::TUpdate<Schema::ForceTraversals::Cookie>(cookie));
         }
+
+        Self->PersistNextForceTraversalOperationId(db);
+
         return true;
     }
 
@@ -67,7 +70,7 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
 };
 
 void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyze::TPtr& ev) {
-    ++TraversalOperationId;
+    ++NextForceTraversalOperationId;
 
     Execute(new TTxAnalyzeTable(this, ev->Get()->Record, ev->Sender), TActivationContext::AsActorContext());
 }

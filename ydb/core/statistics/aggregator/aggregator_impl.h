@@ -147,6 +147,7 @@ private:
     void PersistTraversal(NIceDb::TNiceDb& db);
     void PersistTraversalOperationIdAndCookie(NIceDb::TNiceDb& db);
     void PersistStartKey(NIceDb::TNiceDb& db);
+    void PersistNextForceTraversalOperationId(NIceDb::TNiceDb& db);    
     void PersistGlobalTraversalRound(NIceDb::TNiceDb& db);
 
     void ResetTraversalState(NIceDb::TNiceDb& db);
@@ -303,12 +304,13 @@ private:
 
 private: // stored in local db
     
-    ui64 TraversalCookie = 0;
+    ui64 ForceTraversalOperationId = 0;    
+    ui64 ForceTraversalCookie = 0;
     TTableId TraversalTableId; 
     bool TraversalIsColumnTable = false;
     TSerializedCellVec TraversalStartKey;
     TInstant TraversalStartTime;
-    ui64 TraversalOperationId = 0;
+    ui64 NextForceTraversalOperationId = 0;
 
     size_t GlobalTraversalRound = 1; 
 

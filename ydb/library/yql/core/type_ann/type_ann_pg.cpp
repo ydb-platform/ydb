@@ -378,6 +378,9 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
                         children[i+3] = WrapWithPgCast(std::move(children[i+3]), targetType, ctx.Expr);
                     }
                 }
+
+                YQL_ENSURE(fargTypes.size() >= argTypes.size());
+                YQL_ENSURE(fargTypes.size() - argTypes.size() <= (*procPtr)->DefaultArgs.size());
                 for (size_t i = argTypes.size(); i < fargTypes.size(); ++i) {
                     const auto& value = (*procPtr)->DefaultArgs[i + (*procPtr)->DefaultArgs.size() - fargTypes.size()];
                     TExprNode::TPtr defNode;

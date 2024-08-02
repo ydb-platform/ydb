@@ -2521,12 +2521,12 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(AlterTableAddIndexWithIsNotSupported) {
         ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx GLOBAL ON (col) WITH (a=b)",
-            "<main>:1:40: Error: with: alternative is not implemented yet: 743:20: global_index\n");
+            "<main>:1:40: Error: with: alternative is not implemented yet: 742:20: global_index\n");
     }
 
     Y_UNIT_TEST(AlterTableAddIndexLocalIsNotSupported) {
         ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx LOCAL ON (col)",
-            "<main>:1:40: Error: local: alternative is not implemented yet: 743:35: local_index\n");
+            "<main>:1:40: Error: local: alternative is not implemented yet: 742:35: local_index\n");
     }
 
     Y_UNIT_TEST(CreateTableAddIndexVector) {
@@ -7082,7 +7082,7 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
                 USE plato;
                 ALTER BACKUP COLLECTION TestCollection
                     SET (STORAGE="remote"), -- also just for test
-                    SET TAG1 "123",
+                    SET (TAG1 = "123"),
                     RESET (TAG2, TAG3);
             )sql");
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());

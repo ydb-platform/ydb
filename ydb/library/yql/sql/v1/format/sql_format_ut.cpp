@@ -1610,8 +1610,8 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
         TCases cases = {
             {"creAte  BackuP colLection `-naMe` wIth (a = \"b\")",
              "CREATE BACKUP COLLECTION `-naMe` WITH (a = \"b\");\n"},
-             {"alTer bACKuP coLLECTION naMe sEt a tRue, resEt (b, c), seT (x=y, z=false)",
-             "ALTER BACKUP COLLECTION naMe\n\tSET a TRUE,\n\tRESET (b, c),\n\tSET (x = y, z = FALSE);\n"},
+             {"alTer bACKuP coLLECTION naMe resEt (b, c), seT (x=y, z=false)",
+             "ALTER BACKUP COLLECTION naMe\n\tRESET (b, c),\n\tSET (x = y, z = FALSE);\n"},
             {"DROP backup collectiOn       `/some/path`",
              "DROP BACKUP COLLECTION `/some/path`;\n"},
         };

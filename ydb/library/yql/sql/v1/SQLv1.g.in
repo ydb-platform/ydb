@@ -653,8 +653,7 @@ drop_backup_collection_stmt: DROP backup_collection;
 
 alter_backup_collection_actions: alter_backup_collection_action (COMMA alter_backup_collection_action)*;
 alter_backup_collection_action:
-    alter_table_set_table_setting_uncompat
-  | alter_table_set_table_setting_compat
+    alter_table_set_table_setting_compat
   | alter_table_reset_table_setting
 ;
 backup_collection: BACKUP COLLECTION object_ref;

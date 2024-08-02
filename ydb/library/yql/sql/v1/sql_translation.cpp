@@ -3877,14 +3877,7 @@ bool TSqlTranslation::ParseBackupCollectionSettings(std::map<TString, TDeferredA
     auto parseAction = [&](auto& actionVariant) {
         switch (actionVariant.Alt_case()) {
             case TRule_alter_backup_collection_action::kAltAlterBackupCollectionAction1: {
-                const auto& action = actionVariant.GetAlt_alter_backup_collection_action1().GetRule_alter_table_set_table_setting_uncompat1();
-                if (!StoreStringSettingsEntry(IdEx(action.GetRule_an_id2(), *this), &action.GetRule_table_setting_value3(), result)) {
-                    return false;
-                }
-                return true;
-            }
-            case TRule_alter_backup_collection_action::kAltAlterBackupCollectionAction2: {
-                const auto& action = actionVariant.GetAlt_alter_backup_collection_action2().GetRule_alter_table_set_table_setting_compat1();
+                const auto& action = actionVariant.GetAlt_alter_backup_collection_action1().GetRule_alter_table_set_table_setting_compat1();
                 if (!StoreStringSettingsEntry(action.GetRule_alter_table_setting_entry3(), result)) {
                     return false;
                 }
@@ -3895,8 +3888,8 @@ bool TSqlTranslation::ParseBackupCollectionSettings(std::map<TString, TDeferredA
                 }
                 return true;
             }
-            case TRule_alter_backup_collection_action::kAltAlterBackupCollectionAction3: {
-                const auto& action = actionVariant.GetAlt_alter_backup_collection_action3().GetRule_alter_table_reset_table_setting1();
+            case TRule_alter_backup_collection_action::kAltAlterBackupCollectionAction2: {
+                const auto& action = actionVariant.GetAlt_alter_backup_collection_action2().GetRule_alter_table_reset_table_setting1();
                 const TString firstKey = to_lower(IdEx(action.GetRule_an_id3(), *this).Name);
                 toReset.insert(firstKey);
                 for (const auto& key : action.GetBlock4()) {

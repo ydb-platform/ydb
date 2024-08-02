@@ -61,6 +61,7 @@ struct TEvWhiteboard{
         EvVDiskStateGenerationChange,
         EvVDiskDropDonors,
         EvClockSkewUpdate,
+        EvMemoryStatsUpdate,
         EvEnd
     };
 
@@ -387,32 +388,7 @@ struct TEvWhiteboard{
         }
     };
 
-    static TEvSystemStateUpdate *CreateMemoryStatsUpdateRequest(NKikimrMemory::TMemoryStats memoryStats) {
-        TEvSystemStateUpdate *request = new TEvSystemStateUpdate();
-
-        // Note: copy new stats to old fields to keep backward compatibility
-        if (memoryStats.HasAnonRss()) {
-            request->Record.SetMemoryUsed(memoryStats.GetAnonRss());
-        }
-        if (memoryStats.HasHardLimit()) {
-            request->Record.SetMemoryLimit(memoryStats.GetHardLimit());
-        }
-        if (memoryStats.HasAllocatedMemory()) {
-            request->Record.SetMemoryUsedInAlloc(memoryStats.GetAllocatedMemory());
-        }
-
-        // Note: is rendered in UI as 'Caches', so let's pass aggregated caches stats (not only Shared Cache stats)
-        auto *sharedCacheStats = request->Record.MutableSharedCacheStats();
-        if (memoryStats.HasConsumersConsumption()) {
-            sharedCacheStats->SetUsedBytes(memoryStats.GetConsumersConsumption());
-        }
-        if (memoryStats.HasConsumersLimit()) {
-            sharedCacheStats->SetLimitBytes(memoryStats.GetConsumersLimit());
-        }
-
-        request->Record.MutableMemoryStats()->Swap(&memoryStats);
-        return request;
-    }
+    struct TEvMemoryStatsUpdate : TEventPB<TEvMemoryStatsUpdate, NKikimrMemory::TMemoryStats, EvMemoryStatsUpdate> {};
 
     static TEvSystemStateUpdate *CreateTotalSessionsUpdateRequest(ui32 totalSessions) {
         TEvSystemStateUpdate *request = new TEvSystemStateUpdate();

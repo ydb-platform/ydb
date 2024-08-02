@@ -505,6 +505,7 @@ private:
     bool CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBody) const;
 
     void MoveTopTxToCalculating(TDistributedTransaction& tx, const TActorContext& ctx);
+    void DeletePartition(const TPartitionId& partitionId, const TActorContext& ctx);
 };
 
 

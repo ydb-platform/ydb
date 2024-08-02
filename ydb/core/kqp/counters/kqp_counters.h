@@ -409,6 +409,14 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr DataShardIteratorMessages;
     ::NMonitoring::TDynamicCounters::TCounterPtr IteratorDeliveryProblems;
 
+    // Scheduler signals
+    ::NMonitoring::TDynamicCounters::TCounterPtr SchedulerThrottled;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SchedulerCapacity;
+    NMonitoring::THistogramPtr ComputeActorExecutions;
+    NMonitoring::THistogramPtr ComputeActorDelays;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ThrottledActorsSpuriousActivations;
+    NMonitoring::THistogramPtr SchedulerDelays;
+
     // Sequences counters
     ::NMonitoring::TDynamicCounters::TCounterPtr SequencerActorsCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr SequencerErrors;

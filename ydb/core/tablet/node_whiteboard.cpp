@@ -77,6 +77,7 @@ protected:
     i64 MaxClockSkewWithPeerUs;
     ui32 MaxClockSkewPeerId;
     NKikimrWhiteboard::TSystemStateInfo SystemStateInfo;
+    NKikimrMemory::TMemoryStats MemoryStats;
     THolder<NTracing::ITraceCollection> TabletIntrospectionData;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewWithPeerUsCounter;
@@ -414,6 +415,7 @@ protected:
         HFunc(TEvWhiteboard::TEvBSGroupStateDelete, Handle);
         HFunc(TEvWhiteboard::TEvBSGroupStateRequest, Handle);
         HFunc(TEvWhiteboard::TEvSystemStateUpdate, Handle);
+        HFunc(TEvWhiteboard::TEvMemoryStatsUpdate, Handle);
         HFunc(TEvWhiteboard::TEvSystemStateAddEndpoint, Handle);
         HFunc(TEvWhiteboard::TEvSystemStateAddRole, Handle);
         HFunc(TEvWhiteboard::TEvSystemStateSetTenant, Handle);
@@ -554,6 +556,34 @@ protected:
 
     void Handle(TEvWhiteboard::TEvSystemStateUpdate::TPtr &ev, const TActorContext &ctx) {
         if (CheckedMerge(SystemStateInfo, ev->Get()->Record)) {
+            SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+        }
+    }
+
+    void Handle(TEvWhiteboard::TEvMemoryStatsUpdate::TPtr &ev, const TActorContext &ctx) {
+        MemoryStats.Swap(&ev->Get()->Record);
+
+        // Note: copy stats to sys info fields for backward compatibility
+        NKikimrWhiteboard::TSystemStateInfo systemStateUpdate;
+        if (MemoryStats.HasAnonRss()) {
+            systemStateUpdate.SetMemoryUsed(MemoryStats.GetAnonRss());
+        }
+        if (MemoryStats.HasHardLimit()) {
+            systemStateUpdate.SetMemoryLimit(MemoryStats.GetHardLimit());
+        }
+        if (MemoryStats.HasAllocatedMemory()) {
+            systemStateUpdate.SetMemoryUsedInAlloc(MemoryStats.GetAllocatedMemory());
+        }
+
+        // Note: is rendered in UI as 'Caches', so let's pass aggregated caches stats (not only Shared Cache stats)
+        if (MemoryStats.HasConsumersConsumption()) {
+            systemStateUpdate.MutableSharedCacheStats()->SetUsedBytes(MemoryStats.GetConsumersConsumption());
+        }
+        if (MemoryStats.HasConsumersLimit()) {
+            systemStateUpdate.MutableSharedCacheStats()->SetLimitBytes(MemoryStats.GetConsumersLimit());
+        }
+
+        if (CheckedMerge(SystemStateInfo, systemStateUpdate)) {
             SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
         }
     }

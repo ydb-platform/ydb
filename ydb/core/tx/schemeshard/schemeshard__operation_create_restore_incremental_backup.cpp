@@ -16,7 +16,7 @@ const char* IB_RESTORE_CDC_STREAM_NAME = "__ib_restore_stream";
 
 namespace NKikimr::NSchemeShard {
 
-void DoCreateLock(const TOperationId opId, const TPath& workingDirPath, const TPath& tablePath, bool allowIndexImplLock,
+void DoCreateLock(const TOperationId opId, const TPath& workingDirPath, const TPath& tablePath, bool /*allowIndexImplLock*/,
     TVector<ISubOperation::TPtr>& result)
 {
     auto outTx = TransactionTemplate(workingDirPath.PathString(),

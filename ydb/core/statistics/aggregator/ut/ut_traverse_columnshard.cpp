@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         auto sender = runtime.AllocateEdgeActor();
         int observerCount = 0;
         auto observer = runtime.AddObserver<TEvTxProxySchemeCache::TEvResolveKeySetResult>(
-            [&](TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev)
+            [&](TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& /*ev*/)
         {
             if (observerCount++ == 2) {
                 RebootTablet(runtime, saTabletId, sender);
@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         auto sender = runtime.AllocateEdgeActor();
         bool observerFirstExec = true;
         auto observer = runtime.AddObserver<TEvHive::TEvRequestTabletDistribution>(
-            [&](TEvHive::TEvRequestTabletDistribution::TPtr& ev)
+            [&](TEvHive::TEvRequestTabletDistribution::TPtr& /*ev*/)
         {
             if (observerFirstExec) {
                 observerFirstExec = false;
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         auto sender = runtime.AllocateEdgeActor();
         bool observerFirstExec = true;
         auto observer = runtime.AddObserver<TEvStatistics::TEvAggregateStatistics>(
-            [&](TEvStatistics::TEvAggregateStatistics::TPtr& ev)
+            [&](TEvStatistics::TEvAggregateStatistics::TPtr& /*ev*/)
         {
             if (observerFirstExec) {
                 observerFirstExec = false;
@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         auto sender = runtime.AllocateEdgeActor();
         bool observerFirstExec = true;
         auto observer = runtime.AddObserver<TEvStatistics::TEvAggregateStatisticsResponse>(
-            [&](TEvStatistics::TEvAggregateStatisticsResponse::TPtr& ev)
+            [&](TEvStatistics::TEvAggregateStatisticsResponse::TPtr& /*ev*/)
         {
             if (observerFirstExec) {
                 observerFirstExec = false;
@@ -194,7 +194,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         auto sender = runtime.AllocateEdgeActor();
         int observerCount = 0;
         auto observer = runtime.AddObserver<TEvStatistics::TEvStatisticsRequest>(
-            [&](TEvStatistics::TEvStatisticsRequest::TPtr& ev)
+            [&](TEvStatistics::TEvStatisticsRequest::TPtr& /*ev*/)
         {
             if (observerCount++ == 5) {
                 RebootTablet(runtime, saTabletId, sender);

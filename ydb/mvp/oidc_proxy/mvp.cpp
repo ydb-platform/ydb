@@ -74,7 +74,7 @@ int TMVP::Init() {
     ActorSystem.Register(NActors::CreateProcStatCollector(TDuration::Seconds(5), AppData.MetricRegistry = std::make_shared<NMonitoring::TMetricRegistry>()));
 
     BaseHttpProxyId = ActorSystem.Register(NHttp::CreateHttpProxy(AppData.MetricRegistry));
-    ActorSystem.Register(AppData.Tokenator = TMvpTokenator::CreateTokenator(TokensConfig, BaseHttpProxyId, OpenIdConnectSettings.AuthProfile));
+    ActorSystem.Register(AppData.Tokenator = TMvpTokenator::CreateTokenator(TokensConfig, BaseHttpProxyId));
 
     HttpProxyId = ActorSystem.Register(NHttp::CreateHttpCache(BaseHttpProxyId, GetCachePolicy));
 
@@ -268,9 +268,6 @@ void TMVP::TryGetGenericOptionsFromConfig(
 
     if (generic["auth"]) {
         auto auth = generic["auth"];
-        if (TYdbLocation::UserToken.empty()) {
-            TYdbLocation::UserToken = auth["token"].as<std::string>("");
-        }
         ydbTokenFile = auth["token_file"].as<std::string>("");
     }
 
@@ -288,16 +285,12 @@ void TMVP::TryGetGenericOptionsFromConfig(
         }
     }
 
-    if (generic["auth_profile"]) {
-        auto name = generic["auth_profile"].as<std::string>("yandex");
-        auto it = AuthProfileByName.find(name);
-        if (it != AuthProfileByName.end()) {
-            OpenIdConnectSettings.AuthProfile = it->second;
-        } else {
-            ythrow yexception() << "Unknown auth profile: " << name;
+    if (generic["access_service_type"]) {
+        auto accessServiceTypeStr = TString(generic["access_service_type"].as<std::string>(""));
+        if (!NMvp::EAccessServiceType_Parse(to_lower(accessServiceTypeStr), &OpenIdConnectSettings.AccessServiceType)) {
+            ythrow yexception() << "Unknown access_service_type value: " << accessServiceTypeStr;
         }
     }
-
 }
 
 THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char** argv) {
@@ -364,6 +357,9 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
                 TYdbLocation::UserToken = tokens.GetStaffApiUserTokenInfo().GetToken();
             } else if (tokens.HasStaffApiUserToken()) {
                 TYdbLocation::UserToken = tokens.GetStaffApiUserToken();
+            }
+            if (!tokens.HasAccessServiceType()) {
+                tokens.SetAccessServiceType(OpenIdConnectSettings.AccessServiceType);
             }
             TokensConfig = tokens;
         } else {

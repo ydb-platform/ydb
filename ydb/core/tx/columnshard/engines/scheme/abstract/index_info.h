@@ -165,7 +165,7 @@ public:
                fieldId == (ui32)ESpecialColumn::DELETE_FLAG;
     }
 
-    static bool IsNullableVerified(const ui32 fieldId) {
+    static bool IsNullableVerified(const ui32 /*fieldId*/) {
         return false;
     }
 

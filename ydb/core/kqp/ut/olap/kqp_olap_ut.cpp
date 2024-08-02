@@ -2688,6 +2688,43 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     }
 
+    Y_UNIT_TEST(NormalizeAbsentColumn) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        TLocalHelper testHelper(kikimr);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
+        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
+
+        testHelper.CreateTestOlapTable();
+        auto tableClient = kikimr.GetTableClient();
+
+        Tests::NCommon::TLoggerInit(kikimr).SetComponents({ NKikimrServices::TX_COLUMNSHARD, NKikimrServices::TX_COLUMNSHARD_SCAN }, "CS").SetPriority(NActors::NLog::PRI_DEBUG).Initialize();
+
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLESTORE `/Root/olapStore` ADD COLUMN new_column1 Uint64;";
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 1000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 1000);
+
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLESTORE `/Root/olapStore` ADD COLUMN new_column2 Uint64;";
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
+        csController->WaitIndexation(TDuration::Seconds(5));
+
+    }
+
     Y_UNIT_TEST(MultiInsertWithSinks) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);

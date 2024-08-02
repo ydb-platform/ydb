@@ -498,7 +498,7 @@ int Main(int argc, const char *argv[])
         TVector<NPg::TExtensionDesc> extensions;
         PgExtensionsFromProto(config, extensions);
         NPg::RegisterExtensions(extensions, false,
-            *NSQLTranslationPG::CreateExtensionDDLParser(),
+            *NSQLTranslationPG::CreateExtensionSqlParser(),
             NKikimr::NMiniKQL::CreateExtensionLoader().get());
     }
 
@@ -934,7 +934,7 @@ int RunUI(int argc, const char* argv[])
         TVector<NPg::TExtensionDesc> extensions;
         PgExtensionsFromProto(config, extensions);
         NPg::RegisterExtensions(extensions, false, 
-            *NSQLTranslationPG::CreateExtensionDDLParser(),
+            *NSQLTranslationPG::CreateExtensionSqlParser(),
             NKikimr::NMiniKQL::CreateExtensionLoader().get());
     }
 

@@ -572,48 +572,57 @@ void TStatisticsAggregator::DeleteStatisticsFromTable() {
 }
 
 void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
-    if (!ForceTraversals.Empty()) {
+    if (!IsSchemeshardSeen) {
+        SA_LOG_T("[" << TabletID() << "] No info from schemeshard");
+        return;
+    }
+
+    TPathId pathId;
+
+    if (!ForceTraversals.Empty() && !LastTraversalWasForce) {
         auto* operation = ForceTraversals.Front();
         ReplyToActorIds.swap(operation->ReplyToActorIds);
+        pathId = operation->PathId;
 
-        bool doStartAnalyze = true;
-        bool isColumnTable = false;
-        auto pathId = operation->PathId;
-        auto itPath = ScheduleTraversals.find(pathId);
-        if (itPath != ScheduleTraversals.end()) {
-            isColumnTable = itPath->second.IsColumnTable;
-        } else {
-            doStartAnalyze = false;
-        }
-        if (doStartAnalyze) {
-            StartTraversal(db, pathId, isColumnTable);
-        }
         db.Table<Schema::ForceTraversals>().Key(operation->OperationId).Delete();
         ForceTraversals.PopFront();
         ForceTraversalsByPathId.erase(pathId);
-    } else { // ForceTraversals is empty, then go to ScheduleTraversals
-        if (ScheduleTraversalsByTime.Empty()) {
-            return;
-        }
+
+        LastTraversalWasForce = true;
+    } else if (!ScheduleTraversalsByTime.Empty()){
         auto* oldestTable = ScheduleTraversalsByTime.Top();
         if (TInstant::Now() < oldestTable->LastUpdateTime + ScheduleTraversalPeriod) {
+            SA_LOG_T("[" << TabletID() << "] A schedule traversal is skiped. " 
+                << "The oldest table " << oldestTable->PathId << " update time " << oldestTable->LastUpdateTime << " is too fresh.");
             return;
         }
-        bool isColumnTable = false;
-        auto itPath = ScheduleTraversals.find(oldestTable->PathId);
-        if (itPath != ScheduleTraversals.end()) {
-            isColumnTable = itPath->second.IsColumnTable;
-        } else {
-            return;
-        }
-        StartTraversal(db, oldestTable->PathId, isColumnTable);
+
+        pathId = oldestTable->PathId;
+        LastTraversalWasForce = false;
+    } else {
+        SA_LOG_E("[" << TabletID() << "] No schedule traversal from schemeshard.");
+        return;       
     }
+
+    auto itPath = ScheduleTraversals.find(pathId);
+    if (itPath != ScheduleTraversals.end()) {
+        TraversalIsColumnTable = itPath->second.IsColumnTable;
+    } else {
+        SA_LOG_E("[" << TabletID() << "] traversal path " << pathId << " is not known to schemeshard");
+        return;
+    }
+
+    TraversalTableId.PathId = pathId;
+
+    SA_LOG_D("[" << TabletID() << "] Start " 
+        << ( LastTraversalWasForce ? "force" : "schedule" )
+        << " traversal for path " << pathId);
+
+    StartTraversal(db);
 }
 
-void TStatisticsAggregator::StartTraversal(NIceDb::TNiceDb& db, TPathId pathId, bool isColumnTable) {
-    TraversalTableId.PathId = pathId;
+void TStatisticsAggregator::StartTraversal(NIceDb::TNiceDb& db) {
     TraversalStartTime = TInstant::Now();
-    TraversalIsColumnTable = isColumnTable;
     PersistTraversal(db);
 
     TraversalStartKey = TSerializedCellVec();

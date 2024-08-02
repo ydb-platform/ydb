@@ -21,8 +21,8 @@ TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQ
     return {};
 }
 
-std::unique_ptr<NYql::NPg::IExtensionDDLParser> CreateExtensionDDLParser() {
-    throw yexception() << "CreateExtensionDDLParser: PG types are not supported";
+std::unique_ptr<NYql::NPg::IExtensionSqlParser> CreateExtensionSqlParser() {
+    throw yexception() << "CreateExtensionSqlParser: PG types are not supported";
 }
 
 } // NSQLTranslationPG

@@ -26,14 +26,23 @@ namespace {
 static const TString UdfName("UDF");
 
 class TPgTypeIndex {
-    static constexpr ui32 MaxOid = 15000;
-    using TUdfTypes = std::array<NYql::NUdf::TPgTypeDescription, MaxOid>;
+    using TUdfTypes = TVector<NYql::NUdf::TPgTypeDescription>;
     TUdfTypes Types;
 
 public:
     TPgTypeIndex() {
+        Rebuild();
+    }
+
+    void Rebuild() {
+        Types.clear();
+        ui32 maxTypeId = 0;
+        NYql::NPg::EnumTypes([&](ui32 typeId, const NYql::NPg::TTypeDesc&) {
+            maxTypeId = Max(maxTypeId, typeId);
+        });
+
+        Types.resize(maxTypeId + 1);
         NYql::NPg::EnumTypes([&](ui32 typeId, const NYql::NPg::TTypeDesc& t) {
-            Y_ABORT_UNLESS(typeId < Types.size());
             auto& e = Types[typeId];
             e.Name = t.Name;
             e.TypeId = t.TypeId;
@@ -2678,6 +2687,10 @@ TType* TTypeBuilder::NewResourceType(const std::string_view& tag) const {
 
 TType* TTypeBuilder::NewVariantType(TType* underlyingType) const {
     return TVariantType::Create(underlyingType, Env);
+}
+
+void RebuildTypeIndex() {
+    HugeSingleton<TPgTypeIndex>()->Rebuild();
 }
 
 } // namespace NMiniKQL

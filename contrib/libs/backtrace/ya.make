@@ -8,7 +8,7 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 VERSION(2024-07-18)
 
-ORIGINAL_SOURCE(https://github.com/ianlancetaylor/libbacktrace/archive/8e32931a4fe98b9bc955cb97b4702123b204f139.tar.gz)
+ORIGINAL_SOURCE(https://github.com/ianlancetaylor/libbacktrace/archive/7e2b7da3d6568d2e4e78658f22e701746a48d7e1.tar.gz)
 
 ADDINCL(
     contrib/libs/backtrace

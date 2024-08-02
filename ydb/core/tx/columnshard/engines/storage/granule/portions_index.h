@@ -11,7 +11,7 @@ class TPortionsPKPoint {
 private:
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Start;
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Finish;
-    THashSet<ui64> PortionIds;
+    THashMap<ui64, ui64> PortionIds;
     YDB_READONLY(ui64, MinMemoryRead, 0);
 
 public:
@@ -20,16 +20,16 @@ public:
     }
 
     void ProvidePortions(const TPortionsPKPoint& source) {
-        for (auto&& i : source.PortionIds) {
+        MinMemoryRead = 0;
+        for (auto&& [i, mem] : source.PortionIds) {
             if (source.Finish.contains(i)) {
                 continue;
             }
-            AFL_VERIFY(PortionIds.emplace(i).second);
+            AddContained(i, mem);
         }
-        MinMemoryRead = source.MinMemoryRead;
     }
 
-    const THashSet<ui64>& GetPortionIds() const {
+    const THashMap<ui64, ui64>& GetPortionIds() const {
         return PortionIds;
     }
 
@@ -45,7 +45,7 @@ public:
 
     void AddContained(const ui32 portionId, const ui64 minMemoryRead) {
         MinMemoryRead += minMemoryRead;
-        AFL_VERIFY(PortionIds.emplace(portionId).second);
+        AFL_VERIFY(PortionIds.emplace(portionId, minMemoryRead).second);
     }
 
     void RemoveContained(const ui32 portionId, const ui64 minMemoryRead) {
@@ -95,7 +95,7 @@ private:
 
     void RemoveFromMemoryUsageControl(const ui64 mem) {
         auto it = CountMemoryUsages.find(mem);
-        AFL_VERIFY(it != CountMemoryUsages.end());
+        AFL_VERIFY(it != CountMemoryUsages.end())("mem", mem);
         if (!--it->second) {
             CountMemoryUsages.erase(it);
         }

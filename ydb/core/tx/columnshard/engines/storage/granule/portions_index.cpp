@@ -11,7 +11,7 @@ TPortionsIndex::TPortionIntervals TPortionsIndex::GetIntervalFeatures(const TPor
     TPortionIntervals portionExcludeIntervals;
     while (true) {
         std::optional<NArrow::TReplaceKey> nextKey;
-        for (auto&& p : itFrom->second.GetPortionIds()) {
+        for (auto&& [p, _] : itFrom->second.GetPortionIds()) {
             if (skipPortions.contains(p)) {
                 continue;
             }
@@ -60,6 +60,7 @@ void TPortionsIndex::RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
         while (true) {
             RemoveFromMemoryUsageControl(it->second.GetMinMemoryRead());
             it->second.RemoveContained(p->GetPortionId(), minMemoryRead);
+            ++CountMemoryUsages[it->second.GetMinMemoryRead()];
             if (it == itTo) {
                 break;
             }

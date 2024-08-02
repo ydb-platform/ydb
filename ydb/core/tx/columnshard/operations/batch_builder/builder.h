@@ -15,7 +15,6 @@ private:
     const std::shared_ptr<ISnapshotSchema> ActualSchema;
     const TSnapshot ActualSnapshot;
     void ReplyError(const TString& message);
-    // const SomethingCounter Counter;  // Not implemented
 protected:
     virtual TConclusionStatus DoExecute(const std::shared_ptr<ITask>& taskPtr) override;
 
@@ -35,8 +34,5 @@ public:
         , ActualSnapshot(actualSnapshot)
     {
     }
-
-private:
-    void AsyncBuildSlices(const std::shared_ptr<arrow::RecordBatch>& batch);
 };
 }

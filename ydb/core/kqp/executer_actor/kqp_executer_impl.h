@@ -1136,7 +1136,7 @@ protected:
             if (CheckDuplicateRows) {
                 for (auto& colName : tableInfo->KeyColumns) {
                     const auto& tableColumn = tableInfo->Columns.at(colName);
-                    auto* protoColumn = settings->AddDeduplicateColumns();
+                    auto* protoColumn = settings->AddDuplicateColumns();
                     protoColumn->SetId(tableColumn.Id);
                     auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(tableColumn.Type, tableColumn.TypeMod);
                     protoColumn->SetType(columnType.TypeId);

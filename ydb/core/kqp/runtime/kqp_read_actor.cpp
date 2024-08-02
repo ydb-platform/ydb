@@ -384,7 +384,7 @@ public:
         }
 
         if (Settings->DeduplicateColumnsSize() > 0) {
-            CollectDeduplicateStats = true;
+            CollectDuplicateStats = true;
         }
     }
 
@@ -801,7 +801,7 @@ public:
             }
         }
 
-        if (CollectDeduplicateStats) {
+        if (CollectDuplicateStats) {
             for (const auto& column : Settings->GetDeduplicateColumns()) {
                 if (!IsSystemColumn(column.GetId())) {
                     record.AddColumns(column.GetId());
@@ -1175,15 +1175,15 @@ public:
                 }
             }
 
-            if (CollectDeduplicateStats) {
+            if (CollectDuplicateStats) {
                 TVector<TCell> cells;
-                cells.resize(DeduplicateColumns.size());
+                cells.resize(DuplicateColumns.size());
                 for (size_t deduplicateColumn = 0; deduplicateColumn < Settings->DeduplicateColumnsSize(); ++deduplicateColumn) {
                     cells[deduplicateColumn] = row[columnIndex];
                     columnIndex += 1;
                 }
                 TString result = TSerializedCellVec::Serialize(cells); 
-                if (auto ptr = DeduplicateStats.FindPtr(result)) {
+                if (auto ptr = DuplicateStats.FindPtr(result)) {
                     TVector<NScheme::TTypeInfo> types;
                     for (auto& column : Settings->GetDeduplicateColumns()) {
                         types.push_back(NScheme::TTypeInfo((NScheme::TTypeId)column.GetType()));
@@ -1443,8 +1443,8 @@ private:
             column.NotNull = srcColumn.GetNotNull();
             ResultColumns.push_back(column);
         }
-        if (CollectDeduplicateStats) {
-            DeduplicateColumns.reserve(Settings->ColumnsSize());
+        if (CollectDuplicateStats) {
+            DuplicateColumns.reserve(Settings->ColumnsSize());
             for (size_t deduplicateColumn = 0; deduplicateColumn < Settings->DeduplicateColumnsSize(); ++deduplicateColumn) {
                 const auto& srcColumn = Settings->GetDeduplicateColumns(deduplicateColumn);
                 TResultColumn column;
@@ -1452,7 +1452,7 @@ private:
                 column.TypeInfo = MakeTypeInfo(srcColumn);
                 column.IsSystem = IsSystemColumn(column.Tag);
                 column.NotNull = false;
-                DeduplicateColumns.push_back(column);
+                DuplicateColumns.push_back(column);
             }
         }
     }
@@ -1517,9 +1517,9 @@ private:
     NWilson::TSpan ReadActorSpan;
     NWilson::TSpan ReadActorStateSpan;
 
-    bool CollectDeduplicateStats = false;
-    THashMap<TString, ui64> DeduplicateStats;
-    TVector<TResultColumn> DeduplicateColumns;
+    bool CollectDuplicateStats = false;
+    THashMap<TString, ui64> DuplicateStats;
+    TVector<TResultColumn> DuplicateColumns;
 };
 
 

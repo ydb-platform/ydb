@@ -645,11 +645,11 @@ public:
             Y_ENSURE(datum.is_scalar());
             if constexpr (IsNullable) {
                 if (datum.scalar()->is_valid) {
-                    typedState->Value = Cast(datum.scalar_as<TInScalar>().value);
+                    typedState->Value = TIn(Cast(datum.scalar_as<TInScalar>().value));
                     typedState->IsValid = 1;
                 }
             } else {
-                typedState->Value = Cast(datum.scalar_as<TInScalar>().value);
+                typedState->Value = TIn(Cast(datum.scalar_as<TInScalar>().value));
             }
         } else {
             const auto& array = datum.array();
@@ -735,11 +735,11 @@ static void PushValueToState(TState<IsNullable, TIn, IsMin>* typedState, const a
         Y_ENSURE(datum.is_scalar());
         if constexpr (IsNullable) {
             if (datum.scalar()->is_valid) {
-                typedState->Value = Cast(datum.scalar_as<TInScalar>().value);
+                typedState->Value = TIn(Cast(datum.scalar_as<TInScalar>().value));
                 typedState->IsValid = 1;
             }
         } else {
-            typedState->Value = Cast(datum.scalar_as<TInScalar>().value);
+            typedState->Value = TIn(Cast(datum.scalar_as<TInScalar>().value));
         }
     } else {
         const auto &array = datum.array();

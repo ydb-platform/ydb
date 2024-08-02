@@ -209,7 +209,8 @@ private:
         Counters->GetCounter("Stats/ResultingConsumersConsumption")->Set(resultingConsumersConsumption);
         Counters->GetCounter("Stats/Coefficient")->Set(coefficient * 1e9);
 
-        NKikimrMemory::TMemoryStats memoryStats;
+        auto *memoryStatsUpdate = new NNodeWhiteboard::TEvWhiteboard::TEvMemoryStatsUpdate();
+        auto& memoryStats = memoryStatsUpdate->Record;
         if (processMemoryInfo.AnonRss.has_value()) memoryStats.SetAnonRss(processMemoryInfo.AnonRss.value());
         if (processMemoryInfo.CGroupLimit.has_value()) memoryStats.SetCGroupLimit(processMemoryInfo.CGroupLimit.value());
         if (processMemoryInfo.MemTotal.has_value()) memoryStats.SetMemTotal(processMemoryInfo.MemTotal.value());
@@ -248,8 +249,7 @@ private:
         Counters->GetCounter("Stats/ConsumersLimit")->Set(consumersLimitBytes);
         memoryStats.SetConsumersLimit(consumersLimitBytes);
 
-        Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), 
-            NNodeWhiteboard::TEvWhiteboard::CreateMemoryStatsUpdateRequest(memoryStats));
+        Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), memoryStatsUpdate);
 
         ctx.Schedule(Interval, new TEvents::TEvWakeup());
     }

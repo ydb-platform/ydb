@@ -119,6 +119,12 @@ public:
         }
     }
 
+    void OnDropPortionEvent(const ui64 rawBytes, const ui64 blobBytes, const ui64 rows) const {
+        IncCounter(NColumnShard::COUNTER_RAW_BYTES_ERASED, rawBytes);
+        IncCounter(NColumnShard::COUNTER_BYTES_ERASED, blobBytes);
+        IncCounter(NColumnShard::COUNTER_ROWS_ERASED, rows);
+    }
+
     void FillStats(::NKikimrTableStats::TTableStats& output) const {
         output.SetRowUpdates(GetValue(COUNTER_UPSERT_ROWS_WRITTEN));
         output.SetRowDeletes(GetValue(COUNTER_ROWS_ERASED));

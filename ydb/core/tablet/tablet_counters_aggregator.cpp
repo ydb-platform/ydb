@@ -815,7 +815,6 @@ private:
 
         TCounterPtr ColumnShardScannedBytes_;
         TCounterPtr ColumnShardScannedRows_;
-        TCounterPtr ColumnShardUpsertBlobsWritten_;
         TCounterPtr ColumnShardUpsertRowsWritten_;
         TCounterPtr ColumnShardUpsertBytesWritten_;
         TCounterPtr ColumnShardErasedBytes_;
@@ -874,10 +873,10 @@ private:
                 "table.columnshard.read.rows", true);
             ColumnShardReadBytes_ = ydbGroup->GetNamedCounter("name",
                 "table.columnshard.read.bytes", true);
-            ColumnShardScanBytes_ = ydbGroup->GetNamedCounter("name",
-                "table.columnshard.scan.bytes", true);
             ColumnShardScanRows_ = ydbGroup->GetNamedCounter("name",
                 "table.columnshard.scan.rows", true);
+            ColumnShardScanBytes_ = ydbGroup->GetNamedCounter("name",
+                "table.columnshard.scan.bytes", true);
             ColumnShardWriteRows_ = ydbGroup->GetNamedCounter("name",
                 "table.columnshard.write.rows", true);
             ColumnShardWriteBytes_ = ydbGroup->GetNamedCounter("name",
@@ -1024,7 +1023,7 @@ private:
                 ColumnShardScanBytes_->Set(ColumnShardScannedBytes_->Val());
                 ColumnShardWriteRows_->Set(0);
                 ColumnShardWriteBytes_->Set(0);
-                ColumnShardBulkUpsertRows_->Set(ColumnShardUpsertRowsWritten_->Val());  // TODO: register upsert ROWS
+                ColumnShardBulkUpsertRows_->Set(ColumnShardUpsertRowsWritten_->Val());
                 ColumnShardBulkUpsertBytes_->Set(ColumnShardUpsertBytesWritten_->Val());
                 ColumnShardEraseRows_->Set(ColumnShardErasedRows_->Val());
                 ColumnShardEraseBytes_->Set(ColumnShardErasedBytes_->Val());

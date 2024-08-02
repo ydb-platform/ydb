@@ -94,12 +94,10 @@ private:
     std::queue<TReadyBatch> ReadyBuffer;
     ui32 BatchCapacity;
     std::vector<std::tuple<TString, NYql::NDq::TPqMetaExtractor::TPqMetaExtractorLambda>> MetadataFields;
-    //TInstant StartingMessageTimestamp;
     bool IsStopped = false;
 
     struct ConsumersInfo {
         NFq::NRowDispatcherProto::TEvAddConsumer Consumer;
-
         NActors::TActorId ReadActorId;
         ui64 LastSendedMessage = 0;
         std::unique_ptr<TJsonFilter> Filter;
@@ -138,6 +136,8 @@ public:
     void HandleNewEvents();
     void PassAway() override;
 
+    TInstant GetMinStartingMessageTimestamp() const;
+
     std::optional<NYql::TIssues> ProcessDataReceivedEvent(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event);
     std::optional<NYql::TIssues> ProcessSessionClosedEvent(NYdb::NTopic::TSessionClosedEvent& ev);
     std::optional<NYql::TIssues> ProcessStartPartitionSessionEvent(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event);
@@ -151,6 +151,7 @@ public:
     void Handle(TEvRowDispatcher::TEvSessionDeleteConsumer::TPtr&);
     void Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvAddConsumer::TPtr &ev);
+    
 
     static constexpr char ActorName[] = "YQ_ROW_DISPATCHER_SESSION";
 
@@ -161,9 +162,7 @@ private:
         hFunc(TEvRowDispatcher::TEvGetNextBatch, Handle);
         //hFunc(TEvRowDispatcher::TEvSessionAddConsumer, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvAddConsumer, Handle);
-
         hFunc(TEvRowDispatcher::TEvSessionDeleteConsumer, Handle);
-        
         cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
         hFunc(NFq::TEvRowDispatcher::TEvStopSession, Handle);
     )
@@ -191,9 +190,7 @@ TTopicSession::TTopicSession(
     , CredentialsProviderFactory(credentialsProviderFactory)
     , BufferSize(16_MB)
     , LogPrefix("TopicSession")
-   // , StartingMessageTimestamp(TInstant::MilliSeconds(TInstant::Now().MilliSeconds())) // this field is serialized as milliseconds, so drop microseconds part to be consistent with storage
 {
-   // Alloc.DisableStrictAllocationCheck();
     LOG_ROW_DISPATCHER_DEBUG("MetadataFieldsSize " << SourceParams.MetadataFieldsSize());
 
     MetadataFields.reserve(SourceParams.MetadataFieldsSize());
@@ -247,16 +244,28 @@ NYdb::NTopic::TTopicClient& TTopicSession::GetTopicClient() {
     return *TopicClient;
 }
 
+TInstant TTopicSession::GetMinStartingMessageTimestamp() const {
+    auto result = TInstant::Max();
+    Y_ENSURE(!Consumers.empty());
+    for (const auto& [actorId, info] : Consumers) {
+       ui64 time = info.Consumer.GetStartingMessageTimestampMs();
+       result = std::min(result, TInstant::MilliSeconds(time));
+    }
+    return result;
+}
+
 NYdb::NTopic::TReadSessionSettings TTopicSession::GetReadSessionSettings() const {
     NYdb::NTopic::TTopicReadSettings topicReadSettings;
     topicReadSettings.Path(SourceParams.GetTopicPath());
     topicReadSettings.AppendPartitionIds(PartitionId);
 
+    TInstant minTime = GetMinStartingMessageTimestamp();
+    LOG_ROW_DISPATCHER_DEBUG("StartingMessageTimestamp " << minTime);
     return NYdb::NTopic::TReadSessionSettings()
         .AppendTopics(topicReadSettings)
         .WithoutConsumer()
-        .MaxMemoryUsageBytes(BufferSize);
-       // .ReadFromTimestamp(StartingMessageTimestamp); // TODO
+        .MaxMemoryUsageBytes(BufferSize)
+        .ReadFromTimestamp(minTime);
 }
 
 NYdb::NTopic::IReadSession& TTopicSession::GetReadSession() {
@@ -348,7 +357,7 @@ std::optional<NYql::TIssues> TTopicSession::ProcessDataReceivedEvent(NYdb::NTopi
         // if (message.GetWriteTime() < StartingMessageTimestamp) {
         //     LOG_ROW_DISPATCHER_DEBUG("Skip data. StartingMessageTimestamp: " << StartingMessageTimestamp << ". Write time: " << message.GetWriteTime());
         //     continue;
-        // } // TODO
+        // } // TODOt
 
         const TString& item = message.GetData();
         

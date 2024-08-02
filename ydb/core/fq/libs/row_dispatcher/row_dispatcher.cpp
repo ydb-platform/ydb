@@ -318,9 +318,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev) {
         " partitionId " << ev->Get()->Record.GetPartitionId());
     ConsumerSessionKey key{ev->Sender, ev->Get()->Record.GetPartitionId()};
 
-    
     DeleteConsumer(key);
-    
 }
 
 void TRowDispatcher::DeleteConsumer(const ConsumerSessionKey& key) {
@@ -346,6 +344,7 @@ void TRowDispatcher::DeleteConsumer(const ConsumerSessionKey& key) {
     sessionInfo.Consumers.erase(consumer->ReadActorId);
     if (sessionInfo.Consumers.empty()) {
         LOG_ROW_DISPATCHER_DEBUG("Session is not used, sent TEvPoisonPill");
+        topicSessionInfo.Sessions.erase(consumerIt->second->TopicSessionId);
         Send(consumerIt->second->TopicSessionId, new NActors::TEvents::TEvPoisonPill());
     }
     Consumers.erase(consumerIt);

@@ -579,7 +579,6 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev) 
     auto it = Sessions.find(partitionId);
     if (it == Sessions.end()) {
         Stop("Wrong session data");
-        
         return;
     }
     auto& sessionInfo = it->second;

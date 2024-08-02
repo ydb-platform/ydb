@@ -23,9 +23,12 @@ public:
         Runtime.Initialize(app->Unwrap());
         Runtime.SetLogPriority(NKikimrServices::YQ_ROW_DISPATCHER, NLog::PRI_DEBUG);
         NConfig::TRowDispatcherConfig config;
+        config.SetEnabled(true);
         NConfig::TCommonConfig commonConfig;
         NKikimr::TYdbCredentialsProviderFactory credentialsProviderFactory;
-        TYqSharedResources::TPtr yqSharedResources;
+        auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
+        auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
+   
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
 
         RowDispatcher = Runtime.Register(NewRowDispatcher(
@@ -38,7 +41,8 @@ public:
             ).release());
 
         EdgeActor = Runtime.AllocateEdgeActor();
-        ReadActor = Runtime.AllocateEdgeActor();
+        ReadActor1 = Runtime.AllocateEdgeActor();
+        ReadActor2 = Runtime.AllocateEdgeActor();
         Runtime.EnableScheduleForActor(RowDispatcher);
 
         TDispatchOptions options;
@@ -68,12 +72,25 @@ public:
         return settings;
     }
 
+    void AddSession(const TString& topic, ui64 partitionId, TActorId readActorId) {
+        auto event = new NFq::TEvRowDispatcher::TEvAddConsumer(
+            BuildPqTopicSourceSettings(topic),
+            partitionId,          // partitionId
+            "Token",
+            true,       // AddBearerToToken
+            Nothing(),  // readOffset,
+            0);         // StartingMessageTimestamp;
+
+        Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event));
+    }
+
 
     TActorSystemStub actorSystemStub;
     NActors::TTestActorRuntime Runtime;
     NActors::TActorId RowDispatcher;
     NActors::TActorId EdgeActor;
-    NActors::TActorId ReadActor;
+    NActors::TActorId ReadActor1;
+    NActors::TActorId ReadActor2;
 };
 
 Y_UNIT_TEST_SUITE(RowDispatcherTests) {
@@ -82,16 +99,9 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         auto ev = std::make_unique<NFq::TEvRowDispatcher::TEvCoordinatorChanged>(EdgeActor);
         Runtime.Send(new IEventHandle(RowDispatcher, EdgeActor, ev.release()));
 
-
-         auto event = new NFq::TEvRowDispatcher::TEvAddConsumer(
-                BuildPqTopicSourceSettings("topic"),
-                0,          // partitionId
-                "Token",
-                true,       // AddBearerToToken
-                Nothing(),  // readOffset,
-                0);         // StartingMessageTimestamp;
-
-        Runtime.Send(new IEventHandle(RowDispatcher, ReadActor, event));
+        AddSession("topic", 0, ReadActorId1);
+        AddSession("topic", 0, ReadActorId2);
+       
     }
 
 }

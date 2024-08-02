@@ -2535,6 +2535,7 @@ ui64 CalcProcScore(const TVector<ui32>& procArgTypes, ui32 procVariadicType, ui3
         ++result;
     }
 
+    Y_ENSURE(procArgTypes.size() >= procDefArgs);
     if (argTypeIds.size() < procArgTypes.size() - procDefArgs) {
         return ArgTypeMismatch;
     }

@@ -96,6 +96,12 @@ constexpr TIn InitialStateValue() {
         } else {
             return -std::numeric_limits<TIn>::infinity();
         }
+    } else if constexpr (std::is_same_v<TIn, NYql::NDecimal::TInt128>) {
+        if constexpr (IsMin) {
+            return NYql::NDecimal::Nan(); 
+        } else {
+            return -NYql::NDecimal::Inf();
+        }
     } else {
         if constexpr (IsMin) {
             return std::numeric_limits<TIn>::max();

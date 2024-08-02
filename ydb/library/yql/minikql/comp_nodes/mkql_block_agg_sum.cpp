@@ -24,19 +24,18 @@ struct TSumState;
 
 template<typename TSum>
 struct TSumState<true, TSum> {
-    TSum Sum_ = 0;
+    typename TPrimitiveDataType<TSum>::TArithmetic Sum_ = 0;
     ui8 IsValid_ = 0;
 };
 
 template<typename TSum>
 struct TSumState<false, TSum> {
-    TSum Sum_ = 0;
+    typename TPrimitiveDataType<TSum>::TArithmetic Sum_ = 0;
 };
 
 template<typename TOut>
 struct TAvgState {
-    using TAccType = TOut;
-    TAccType Sum_ = 0;
+    typename TPrimitiveDataType<TOut>::TArithmetic Sum_ = 0;
     ui64 Count_ = 0;
 };
 
@@ -52,14 +51,14 @@ public:
     }
 
     void Add(const void* state) final {
-        auto typedState = static_cast<const TStateType*>(state);
+        auto typedState = MakeStateWrapper<TStateType>(state);
         if constexpr (IsNullable) {
             if (!typedState->IsValid_) {
                 Builder_.Add(TBlockItem());
                 return;
             }
         }
-        Builder_.Add(TBlockItem(typedState->Sum_));
+        Builder_.Add(TBlockItem(TSum(typedState->Sum_)));
     }
 
     NUdf::TUnboxedValue Build() final {
@@ -81,10 +80,10 @@ public:
     }
 
     void Add(const void* state) final {
-        auto typedState = static_cast<const TAvgState<TOut>*>(state);
+        auto typedState = MakeStateWrapper<TAvgState<TOut>>(state);
         auto tupleBuilder = static_cast<NUdf::TTupleArrayBuilder<true>*>(Builder_.get());
         if (typedState->Count_) {
-            TBlockItem tupleItems[] = { TBlockItem(typedState->Sum_), TBlockItem(typedState->Count_)} ;
+            TBlockItem tupleItems[] = { TBlockItem(TOut(typedState->Sum_)), TBlockItem(typedState->Count_)} ;
             tupleBuilder->Add(TBlockItem(tupleItems));
         } else {
             tupleBuilder->Add(TBlockItem());
@@ -110,9 +109,9 @@ public:
     }
 
     void Add(const void* state) final {
-        auto typedState = static_cast<const TAvgState<TOut>*>(state);
+        auto typedState = MakeStateWrapper<TAvgState<TOut>>(state);
         if (typedState->Count_) {
-            Builder_.Add(TBlockItem(typedState->Sum_ / typedState->Count_));
+            Builder_.Add(TBlockItem(TOut(typedState->Sum_ / typedState->Count_)));
         } else {
             Builder_.Add(TBlockItem());
         }
@@ -184,7 +183,7 @@ public:
                 if constexpr (IsNullable) {
                     typedState->IsValid_ = 1;
                 }
-                TSum sum = typedState->Sum_;
+                auto sum = typedState->Sum_;
                 if (IsNullable && nullCount != 0) {
                     auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
                     for (int64_t i = 0; i < len; ++i) {
@@ -204,7 +203,7 @@ public:
                 const auto& filterArray = filterDatum.array();
                 MKQL_ENSURE(filterArray->GetNullCount() == 0, "Expected non-nullable bool column");
                 const ui8* filterBitmap = filterArray->template GetValues<uint8_t>(1);
-                TSum sum = typedState->Sum_;
+                auto sum = typedState->Sum_;
                 if (IsNullable && nullCount != 0) {
                     ui64 count = 0;
                     auto nullBitmapPtr = array->template GetValues<uint8_t>(0, 0);
@@ -239,7 +238,7 @@ public:
                 return NUdf::TUnboxedValuePod();
             }
         }
-        return NUdf::TUnboxedValuePod(typedState->Sum_);
+        return NUdf::TUnboxedValuePod(TSum(typedState->Sum_));
     }
 
 private:
@@ -455,7 +454,7 @@ public:
 
         NUdf::TUnboxedValue* items;
         auto arr = Ctx_.HolderFactory.CreateDirectArrayHolder(2, items);
-        items[0] = NUdf::TUnboxedValuePod(typedState->Sum_);
+        items[0] = NUdf::TUnboxedValuePod(TOut(typedState->Sum_));
         items[1] = NUdf::TUnboxedValuePod(typedState->Count_);
         return arr;
     }

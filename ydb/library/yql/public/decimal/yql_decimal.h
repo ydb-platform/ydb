@@ -155,5 +155,59 @@ TInt128 MulAndDivNormalDivider(TInt128 a, TInt128 b, TInt128 c);
 // a*b/c Only for non zero normal positive multiplier.
 TInt128 MulAndDivNormalMultiplier(TInt128 a, TInt128 b, TInt128 c);
 
+struct TDecimal {
+    TInt128 Value = 0;
+
+    TDecimal() = default;
+
+    template<typename T>
+    TDecimal(T t): Value(t) { }
+
+    explicit operator TInt128() const {
+        return Value;
+    }
+
+    TDecimal& operator+=(TDecimal right) {
+        const auto l = Value;
+        const auto r = right.Value;
+        const auto a = l + r;
+        if (IsNormal(l) && IsNormal(r) && IsNormal(a)) {
+            Value = a;
+        } else if (IsNan(l) || IsNan(r) || !a) {
+            Value = Nan();
+        } else {
+            Value = a > 0
+                ? +Inf()
+                : -Inf();
+        }
+        return *this;
+    }
+
+    TDecimal& operator*=(TDecimal right) {
+        Value = Mul(Value, right.Value);
+        return *this;
+    }
+
+    TDecimal& operator/=(TDecimal right) {
+        Value = Div(Value, right.Value);
+        return *this;
+    }
+
+    friend TDecimal operator+(TDecimal left, TDecimal right) {
+        left += right;
+        return left;
+    }
+
+    friend TDecimal operator*(TDecimal left, TDecimal right) {
+        left *= right;
+        return left;
+    }
+
+    friend TDecimal operator/(TDecimal left, TDecimal right) {
+        left /= right;
+        return left;
+    }
+};
+
 }
 }

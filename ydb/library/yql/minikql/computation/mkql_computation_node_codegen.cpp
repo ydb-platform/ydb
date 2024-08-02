@@ -2591,7 +2591,25 @@ Y_NO_INLINE Function* TCodegeneratorRootNodeBase::GenerateGetValueImpl(
     return ctx.Func;
 }
 
-DISubprogramAnnotator::DISubprogramAnnotator(TCodegenContext& ctx, Function* subprogramFunc, const std::source_location& location)
+#if __clang__ && (__clang_major__ < 16)
+TSrcLocation TSrcLocation::current() {
+    return {};
+}
+
+const char* TSrcLocation::file_name() const {
+    return __FILE__;
+}
+
+size_t TSrcLocation::line() const {
+    return __LINE__;
+}
+
+size_t TSrcLocation::column() const {
+    return 0;
+}
+#endif
+
+DISubprogramAnnotator::DISubprogramAnnotator(TCodegenContext& ctx, Function* subprogramFunc, const TSrcLocation& location)
     : Ctx(ctx)
     , DebugBuilder(std::make_unique<DIBuilder>(ctx.Codegen.GetModule()))
     , Subprogram(MakeDISubprogram(subprogramFunc->getName(), location))
@@ -2619,12 +2637,12 @@ DISubprogramAnnotator::~DISubprogramAnnotator() {
     DebugBuilder->finalizeSubprogram(Subprogram);
 }
 
-DIFile* DISubprogramAnnotator::MakeDIFile(const std::source_location& location) {
+DIFile* DISubprogramAnnotator::MakeDIFile(const TSrcLocation& location) {
     TFsPath path = TString(location.file_name());
     return DebugBuilder->createFile(path.GetName().c_str(), path.Parent().GetPath().c_str());
 }
 
-DISubprogram* DISubprogramAnnotator::MakeDISubprogram(const StringRef& name, const std::source_location& location) {
+DISubprogram* DISubprogramAnnotator::MakeDISubprogram(const StringRef& name, const TSrcLocation& location) {
     const auto file = MakeDIFile(location);
     const auto unit = DebugBuilder->createCompileUnit(llvm::dwarf::DW_LANG_C_plus_plus, file, "MKQL", false, "", 0);
     const auto subroutineType = DebugBuilder->createSubroutineType(DebugBuilder->getOrCreateTypeArray({}));
@@ -2637,12 +2655,12 @@ DISubprogram* DISubprogramAnnotator::MakeDISubprogram(const StringRef& name, con
     );
 }
 
-DIScopeAnnotator::DIScopeAnnotator(DISubprogramAnnotator& subprogramAnnotator, const std::source_location& location)
+DIScopeAnnotator::DIScopeAnnotator(DISubprogramAnnotator& subprogramAnnotator, const TSrcLocation& location)
     : SubprogramAnnotator(subprogramAnnotator)
     , Scope(SubprogramAnnotator.DebugBuilder->createLexicalBlock(SubprogramAnnotator.Subprogram, SubprogramAnnotator.MakeDIFile(location), location.line(), location.column()))
 {}
 
-Instruction* DIScopeAnnotator::operator()(Instruction* inst, const std::source_location& location) const {
+Instruction* DIScopeAnnotator::operator()(Instruction* inst, const TSrcLocation& location) const {
     inst->setDebugLoc(DILocation::get(SubprogramAnnotator.Ctx.Codegen.GetContext(), location.line(), location.column(), Scope));
     return inst;
 }

@@ -1216,18 +1216,31 @@ Value* GetMemoryUsed(ui64 limit, const TCodegenContext& ctx, BasicBlock* block);
 template <bool TrackRss>
 Value* CheckAdjustedMemLimit(ui64 limit, Value* init, const TCodegenContext& ctx, BasicBlock*& block);
 
+#if __clang__ && (__clang_major__ < 16)
+class TSrcLocation {
+public:
+    const char* file_name() const;
+    size_t line() const;
+    size_t column() const;
+
+    static TSrcLocation current();
+};
+#else
+using TSrcLocation = std::source_location;
+#endif
+
 class DIScopeAnnotator;
 
 class DISubprogramAnnotator final {
 public:
-    explicit DISubprogramAnnotator(TCodegenContext& ctx, Function* subprogramFunc, const std::source_location& location = std::source_location::current());
+    explicit DISubprogramAnnotator(TCodegenContext& ctx, Function* subprogramFunc, const TSrcLocation& location = TSrcLocation::current());
 
-    DIFile* MakeDIFile(const std::source_location& location);
+    DIFile* MakeDIFile(const TSrcLocation& location);
 
     ~DISubprogramAnnotator();
 
 private:
-    DISubprogram* MakeDISubprogram(const StringRef& name, const std::source_location& location = std::source_location::current());
+    DISubprogram* MakeDISubprogram(const StringRef& name, const TSrcLocation& location = TSrcLocation::current());
 
     friend DIScopeAnnotator;
 
@@ -1239,9 +1252,9 @@ private:
 
 class DIScopeAnnotator final {
 public:
-    explicit DIScopeAnnotator(DISubprogramAnnotator& subprogramAnnotator, const std::source_location& location = std::source_location::current());
+    explicit DIScopeAnnotator(DISubprogramAnnotator& subprogramAnnotator, const TSrcLocation& location = TSrcLocation::current());
 
-    Instruction* operator()(Instruction* inst, const std::source_location& location = std::source_location::current()) const;
+    Instruction* operator()(Instruction* inst, const TSrcLocation& location = TSrcLocation::current()) const;
 
 private:
     DISubprogramAnnotator& SubprogramAnnotator;

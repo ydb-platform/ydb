@@ -1179,7 +1179,7 @@ public:
             if (CollectDuplicateStats) {
                 TVector<TCell> cells;
                 cells.resize(DuplicateCheckColumns.size());
-                for (size_t deduplicateColumn = 0; deduplicateColumn < Settings->DuplicateColumnsSize(); ++deduplicateColumn) {
+                for (size_t deduplicateColumn = 0; deduplicateColumn < Settings->DuplicateCheckColumnsSize(); ++deduplicateColumn) {
                     cells[deduplicateColumn] = row[columnIndex];
                     columnIndex += 1;
                 }

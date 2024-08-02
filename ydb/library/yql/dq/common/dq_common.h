@@ -90,6 +90,7 @@ enum class EHashJoinMode {
 };
 
 enum class EEnabledSpillingNodes : ui64 {
+    None        = 0ULL      /* None */,
     GraceJoin   = 1ULL      /* "GraceJoin" */,
     Aggregation = 2ULL      /* "Aggregation" */,
     All         = ~0ULL     /* "All" */,

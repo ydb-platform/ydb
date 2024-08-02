@@ -1177,15 +1177,15 @@ public:
 
             if (CollectDuplicateStats) {
                 TVector<TCell> cells;
-                cells.resize(DuplicateColumns.size());
+                cells.resize(DuplicateCheckColumns.size());
                 for (size_t deduplicateColumn = 0; deduplicateColumn < Settings->DeduplicateColumnsSize(); ++deduplicateColumn) {
                     cells[deduplicateColumn] = row[columnIndex];
                     columnIndex += 1;
                 }
                 TString result = TSerializedCellVec::Serialize(cells); 
-                if (auto ptr = DuplicateStats.FindPtr(result)) {
+                if (auto ptr = DuplicateCheckStats.FindPtr(result)) {
                     TVector<NScheme::TTypeInfo> types;
-                    for (auto& column : Settings->GetDeduplicateColumns()) {
+                    for (auto& column : Settings->GetDuplicateCheckColumns()) {
                         types.push_back(NScheme::TTypeInfo((NScheme::TTypeId)column.GetType()));
                     }
                     TString rowRepr = DebugPrintPoint(types, cells, *AppData()->TypeRegistry); 
@@ -1444,7 +1444,7 @@ private:
             ResultColumns.push_back(column);
         }
         if (CollectDuplicateStats) {
-            DuplicateColumns.reserve(Settings->ColumnsSize());
+            DuplicateCheckColumns.reserve(Settings->ColumnsSize());
             for (size_t deduplicateColumn = 0; deduplicateColumn < Settings->DeduplicateColumnsSize(); ++deduplicateColumn) {
                 const auto& srcColumn = Settings->GetDeduplicateColumns(deduplicateColumn);
                 TResultColumn column;
@@ -1452,7 +1452,7 @@ private:
                 column.TypeInfo = MakeTypeInfo(srcColumn);
                 column.IsSystem = IsSystemColumn(column.Tag);
                 column.NotNull = false;
-                DuplicateColumns.push_back(column);
+                DuplicateCheckColumns.push_back(column);
             }
         }
     }
@@ -1518,8 +1518,8 @@ private:
     NWilson::TSpan ReadActorStateSpan;
 
     bool CollectDuplicateStats = false;
-    THashMap<TString, ui64> DuplicateStats;
-    TVector<TResultColumn> DuplicateColumns;
+    THashMap<TString, ui64> DuplicateCheckStats;
+    TVector<TResultColumn> DuplicateCheckColumns;
 };
 
 

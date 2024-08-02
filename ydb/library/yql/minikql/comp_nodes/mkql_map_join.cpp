@@ -1918,7 +1918,7 @@ IComputationNode* WrapMapJoinCore(TCallable& callable, const TComputationNodeFac
         const auto rightDataType = UnpackOptionalData(rightType, isRightOptional);
         if (leftDataType->GetSchemeType() != rightDataType->GetSchemeType()) {
             // find a converter
-            const std::array<TArgType, 2U> argsTypes = {{{rightDataType->GetSchemeType(), isLeftOptional}, {leftDataType->GetSchemeType(), isLeftOptional}}};
+            const std::array<TArgType, 2U> argsTypes = {{{rightDataType->GetSchemeType(), isRightOptional}, {leftDataType->GetSchemeType(), isLeftOptional}}};
             leftKeyConverters[i] = ctx.FunctionRegistry.GetBuiltins()->GetBuiltin("Convert", argsTypes.data(), 2U);
         }
     }

@@ -61,6 +61,7 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
     EnqueueBackgroundActivities();
     BackgroundSessionsManager->Start();
     ctx.Send(SelfId(), new TEvPrivate::TEvPeriodicWakeup());
+    ctx.Send(SelfId(), new TEvPrivate::TEvPingSnapshotsUsage());
     NYDBTest::TControllers::GetColumnShardController()->OnSwitchToWork(TabletID());
     AFL_VERIFY(!!StartInstant);
     Counters.GetCSCounters().Initialization.OnSwitchToWork(TMonotonic::Now() - *StartInstant, TMonotonic::Now() - CreateInstant);
@@ -173,6 +174,14 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
     }
 }
 
+void TColumnShard::Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& ev, const TActorContext& ctx) {
+    if (auto writeTx =
+            InFlightReadsTracker.Ping(this, NYDBTest::TControllers::GetColumnShardController()->GetReadTimeoutClean(MaxReadStaleness))) {
+        Execute(writeTx.release(), ctx);
+    }
+    ctx.Schedule(0.3 * MaxReadStaleness, new TEvPrivate::TEvPingSnapshotsUsage());
+}
+
 void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx) {
     if (ev->Get()->Manual) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TEvPrivate::TEvPeriodicWakeup::MANUAL")("tablet_id", TabletID());
@@ -182,6 +191,10 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
         SendWaitPlanStep(GetOutdatedStep());
 
         SendPeriodicStats();
+        if (auto writeTx =
+                InFlightReadsTracker.Ping(this, NYDBTest::TControllers::GetColumnShardController()->GetReadTimeoutClean(MaxReadStaleness))) {
+            Execute(writeTx.release(), ctx);
+        }
         ctx.Schedule(PeriodicWakeupActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
     }
 }

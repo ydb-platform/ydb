@@ -108,7 +108,8 @@ struct Schema : NIceDb::Schema {
         TableVersionInfo = 11,
         SmallBlobs = 12,
         OneToOneEvictedBlobs = 13,
-        BlobsToDeleteWT = 14
+        BlobsToDeleteWT = 14,
+        InFlightSnapshots = 15
     };
 
     // Tablet tables
@@ -248,6 +249,14 @@ struct Schema : NIceDb::Schema {
 
         using TKey = TableKey<BlobId, TabletId>;
         using TColumns = TableColumns<BlobId, TabletId>;
+    };
+
+    struct InFlightSnapshots: Table<(ui32)ECommonTables::InFlightSnapshots> {
+        struct PlanStep: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TxId: Column<2, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<PlanStep, TxId>;
+        using TColumns = TableColumns<PlanStep, TxId>;
     };
 
     // Index tables

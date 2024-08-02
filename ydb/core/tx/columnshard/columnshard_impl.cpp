@@ -85,7 +85,8 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , BackgroundController(Counters.GetBackgroundControllerCounters())
     , NormalizerController(StoragesManager, Counters.GetSubscribeCounters())
     , SysLocks(this)
-    , MaxReadStaleness(TDuration::MilliSeconds(AppDataVerified().ColumnShardConfig.GetMaxReadStaleness_ms())) {
+    , MaxReadStaleness(NYDBTest::TControllers::GetColumnShardController()->GetReadTimeoutClean(
+          TDuration::MilliSeconds(AppDataVerified().ColumnShardConfig.GetMaxReadStaleness_ms()))) {
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {
@@ -187,8 +188,7 @@ ui64 TColumnShard::GetOutdatedStep() const {
 }
 
 ui64 TColumnShard::GetMinReadStep() const {
-    const TDuration maxReadStaleness = NYDBTest::TControllers::GetColumnShardController()->GetReadTimeoutClean(MaxReadStaleness);
-    ui64 delayMillisec = maxReadStaleness.MilliSeconds();
+    ui64 delayMillisec = MaxReadStaleness.MilliSeconds();
     ui64 passedStep = GetOutdatedStep();
     ui64 minReadStep = (passedStep > delayMillisec ? passedStep - delayMillisec : 0);
     return minReadStep;
@@ -785,7 +785,7 @@ void TColumnShard::SetupCleanupPortions() {
         return;
     }
 
-    NOlap::TSnapshot cleanupSnapshot{GetMinReadStep(), 0};
+    const auto cleanupSnapshot = InFlightReadsTracker.GetSnapshotToClean().value_or(NOlap::TSnapshot(GetMinReadStep(), 0));
 
     auto changes = TablesManager.MutablePrimaryIndex().StartCleanupPortions(cleanupSnapshot, TablesManager.GetPathsToDrop(), DataLocksManager);
     if (!changes) {

@@ -419,7 +419,7 @@ IGraphTransformer::TStatus WideCombinerWrapper(const TExprNode::TPtr& input, TEx
 }
 
 IGraphTransformer::TStatus WideCombinerWithSpillingWrapper(const TExprNode::TPtr& input, TExprNode::TPtr&, TContext& ctx) {
-    if (!EnsureArgsCount(*input, 7U, ctx.Expr)) {
+    if (!EnsureArgsCount(*input, 8U, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -446,7 +446,8 @@ IGraphTransformer::TStatus WideCombinerWithSpillingWrapper(const TExprNode::TPtr
     auto& initHandler = input->ChildRef(3U);
     auto& updateHandler = input->ChildRef(4U);
     auto& finishHandler = input->ChildRef(5U);
-    auto& serdeHandler = input->ChildRef(6U);
+    auto& serializeHandler = input->ChildRef(6U);
+    auto& deserializeHandler = input->ChildRef(7U);
 
     if (const auto status = ConvertToLambda(keyExtractor, ctx.Expr, multiType->GetSize()); status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
@@ -521,7 +522,7 @@ IGraphTransformer::TStatus WideCombinerWithSpillingWrapper(const TExprNode::TPtr
         }
     }
 
-    argTypes.erase(argTypes.cbegin() + keyTypes.size(), argTypes.cbegin() + keyTypes.size() + multiType->GetSize());
+    argTypes.erase(argTypes.cbegin(), argTypes.cbegin() + multiType->GetSize());
 
     if (const auto status = ConvertToLambda(finishHandler, ctx.Expr, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
@@ -535,21 +536,45 @@ IGraphTransformer::TStatus WideCombinerWithSpillingWrapper(const TExprNode::TPtr
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    if (const auto status = ConvertToLambda(serdeHandler, ctx.Expr, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
+    if (const auto status = ConvertToLambda(serializeHandler, ctx.Expr, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
     }
 
-    if (!UpdateLambdaAllArgumentsTypes(serdeHandler, argTypes, ctx.Expr)) {
+    if (!UpdateLambdaAllArgumentsTypes(serializeHandler, argTypes, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!serdeHandler->GetTypeAnn()) {
+    if (!serializeHandler->GetTypeAnn()) {
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    auto serializeRetType = GetWideLambdaOutputType(*serializeHandler, ctx.Expr);
+    TTypeAnnotationNode::TListType actualRetType;
+    for (auto type : serializeRetType->GetItems()) {
+        if (type->GetKind() == ETypeAnnotationKind::Optional) {
+            type = type->Cast<TOptionalExprType>()->GetItemType();
+        }
+        actualRetType.push_back(type);
+    }
+    serializeRetType = ctx.Expr.MakeType<TMultiExprType>(actualRetType);
+
+    argTypes.erase(argTypes.cbegin() + keyTypes.size(), argTypes.cend());
+    argTypes.insert(argTypes.cbegin() + keyTypes.size(), serializeRetType->GetItems().begin(), serializeRetType->GetItems().end());
+    if (const auto status = ConvertToLambda(deserializeHandler, ctx.Expr, argTypes.size()); status.Level != IGraphTransformer::TStatus::Ok) {
+        return status;
+    }
+
+    if (!UpdateLambdaAllArgumentsTypes(deserializeHandler, argTypes, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!deserializeHandler->GetTypeAnn()) {
         return IGraphTransformer::TStatus::Repeat;
     }
 
     auto retType = GetWideLambdaOutputType(*finishHandler, ctx.Expr);
-
     input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(retType));
+
     return IGraphTransformer::TStatus::Ok;
 }
 

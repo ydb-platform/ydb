@@ -782,8 +782,13 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             keys.insert(keys.cend(), state.cbegin(), state.cend());
             return MkqlBuildWideLambda(*node.Child(5U), ctx, keys);
         };
-        const auto load = [&](TRuntimeNode::TList items) {
-            return MkqlBuildWideLambda(*node.Child(6U), ctx, items);
+        const auto serialize = [&](TRuntimeNode::TList keys, TRuntimeNode::TList state) {
+            keys.insert(keys.cend(), state.cbegin(), state.cend());
+            return MkqlBuildWideLambda(*node.Child(6U), ctx, keys);
+        };
+        const auto deserialize = [&](TRuntimeNode::TList keys, TRuntimeNode::TList state) {
+            keys.insert(keys.cend(), state.cbegin(), state.cend());
+            return MkqlBuildWideLambda(*node.Child(7U), ctx, keys);
         };
 
         if (withLimit) {
@@ -791,7 +796,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         }
 
         if (RuntimeVersion >= 51U) {
-            return ctx.ProgramBuilder.WideLastCombinerWithSpilling(flow, keyExtractor, init, update, finish, load);
+            return ctx.ProgramBuilder.WideLastCombinerWithSpilling(flow, keyExtractor, init, update, finish, serialize, deserialize);
         }
         return ctx.ProgramBuilder.WideLastCombiner(flow, keyExtractor, init, update, finish);
     });

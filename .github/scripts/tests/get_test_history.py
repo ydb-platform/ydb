@@ -67,10 +67,8 @@ def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type):
 
             results = {}
             batch_size = 100
-            total_test_names = len(test_names_array)
-            for start in range(0, total_test_names, batch_size):
-                end = min(start + batch_size, total_test_names)
-                test_names_batch = test_names_array[start:end]
+            for start in range(0, len(test_names_array), batch_size):
+                test_names_batch = test_names_array[start:start + batch_size]
 
                 query_params = {
                     "$test_names": test_names_batch,

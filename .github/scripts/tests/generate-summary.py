@@ -247,25 +247,25 @@ def render_testlist_html(rows, fn, build_preset):
     # remove status group without tests
     status_order = [s for s in status_order if s in status_test]
 
-    # get failed tests
-    failed_tests_array = []
-    muted_tests_array = []
+    # statuses for history
+    status_for_history = [TestStatus.FAIL, TestStatus.MUTE]
+    status_for_history = [s for s in status_for_history if s in status_test]
+    
+    tests_names_for_history = []
     history={}
-    for test in status_test.get(TestStatus.FAIL, []):
-        failed_tests_array.append(test.full_name)
+    tests_in_statuses = [test for status in status_for_history for test in status_test.get(status)]
+    
+    # get tests for history
+    for test in tests_in_statuses:
+        tests_names_for_history.append(test.full_name)
 
-    # get history mute
-    for test in status_test.get(TestStatus.MUTE, []):
-        muted_tests_array.append(test.full_name)
-
-    if failed_tests_array or muted_tests_array:
-        try:
-            history = get_test_history(failed_tests_array + muted_tests_array, last_n_runs, build_preset)
-        except Exception:
-            print(traceback.format_exc())
-        
+    try:
+        history = get_test_history(tests_names_for_history, last_n_runs, build_preset)
+    except Exception:
+        print(traceback.format_exc())
+   
     # sorting, at first show tests with passed resuts in history
-    for test in status_test.get(TestStatus.FAIL, []) + status_test.get(TestStatus.MUTE, []):
+    for test in tests_in_statuses:
         if test.full_name in history:
             test.count_of_passed = history[test.full_name][
                 next(iter(history[test.full_name]))
@@ -273,8 +273,8 @@ def render_testlist_html(rows, fn, build_preset):
         else:
             test.count_of_passed = 0
 
-    for test_list in (status_test.get(TestStatus.FAIL, []) ,status_test.get(TestStatus.MUTE, [])):
-        test_list.sort(key=lambda val: (val.count_of_passed, val.full_name), reverse=True)
+    for test_list in status_for_history:
+        status_test.get(test_list,[]).sort(key=lambda val: (val.count_of_passed, val.full_name), reverse=True)
 
     content = env.get_template("summary.html").render(
         status_order=status_order,

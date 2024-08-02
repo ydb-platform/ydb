@@ -13,7 +13,7 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
         : TTxBase(self)
         , OperationId(self->ForceTraversalOperationId)
         , Cookie(self->ForceTraversalCookie)
-        , ReplyToActorId(self->TraversalReplyToActorId)
+        , ReplyToActorId(self->ForceTraversalReplyToActorId)
     {}
 
     TTxType GetTxType() const override { return TXTYPE_FINISH_TRAVERSAL; }
@@ -39,8 +39,8 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
             [this](const TForceTraversal& elem) { return elem.OperationId == OperationId;});        
         
         if (operationsRemain) {
-            SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Complete. Don't send TEvAnalyzeResponse." <<
-                "There are pending operations with cookie " << Cookie << " , ActorId=" << ReplyToActorId);
+            SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Complete. Don't send TEvAnalyzeResponse. " <<
+                "There are pending operations, Cookie " << Cookie << " , ActorId=" << ReplyToActorId);
         } else {
             SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Complete. " <<
                 "Send TEvAnalyzeResponse, Cookie=" << Cookie << ", ActorId=" << ReplyToActorId);

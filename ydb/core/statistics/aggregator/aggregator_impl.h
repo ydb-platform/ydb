@@ -239,7 +239,7 @@ private:
     std::queue<TEvStatistics::TEvRequestStats::TPtr> PendingRequests;
     bool ProcessUrgentInFlight = false;
 
-    TActorId TraversalReplyToActorId = {};
+    TActorId ForceTraversalReplyToActorId = {};
 
     bool IsSchemeshardSeen = false;
     bool IsStatisticsTableCreated = false;

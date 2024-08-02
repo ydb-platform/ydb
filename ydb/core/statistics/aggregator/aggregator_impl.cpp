@@ -585,7 +585,7 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
 
         ForceTraversalOperationId = operation.OperationId;
         ForceTraversalCookie = operation.Cookie;
-        TraversalReplyToActorId = operation.ReplyToActorId;
+        ForceTraversalReplyToActorId = operation.ReplyToActorId;
 
         db.Table<Schema::ForceTraversals>().Key(operation.OperationId, operation.PathId.OwnerId, operation.PathId.LocalPathId).Delete();
         ForceTraversals.pop_front();
@@ -690,7 +690,7 @@ void TStatisticsAggregator::ResetTraversalState(NIceDb::TNiceDb& db) {
     TraversalStartKey = TSerializedCellVec();
     PersistStartKey(db);
 
-    TraversalReplyToActorId = {};
+    ForceTraversalReplyToActorId = {};
 
     for (auto& [tag, _] : CountMinSketches) {
         db.Table<Schema::ColumnStatistics>().Key(tag).Delete();

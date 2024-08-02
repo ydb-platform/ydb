@@ -151,6 +151,8 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
         auto step = Script->GetStep(CurrentStepIdx);
         TMemoryProfileGuard mGuard("SCAN_PROFILE::FETCHING::" + step->GetName() + "::" + Script->GetBranchName(), IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("scan_step", step->DebugString())("scan_step_idx", CurrentStepIdx);
+        AFL_VERIFY(!CurrentStartInstant);
+        CurrentStartInstant = TMonotonic::Now();
         const TConclusion<bool> resultStep = step->ExecuteInplace(source, *this);
         if (!resultStep) {
             return resultStep;
@@ -158,6 +160,7 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
         if (!*resultStep) {
             return false;
         }
+        FlushDuration();
         ++CurrentStepIdx;
     }
     return true;

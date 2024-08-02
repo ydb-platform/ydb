@@ -18,6 +18,12 @@ void TBuildBatchesTask::ReplyError(const TString& message) {
     TActorContext::AsActorContext().Send(ParentActorId, result.release());
 }
 
+void TBuildBatchesTask::AsyncBuildSlices(const std::shared_ptr<arrow::RecordBatch>& batch) {
+    std::shared_ptr<NConveyor::ITask> task =
+        std::make_shared<NOlap::TBuildSlicesTask>(TabletId, ParentActorId, BufferActorId, std::move(WriteData), batch, ActualSchema);
+    NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
+}
+
 TConclusionStatus TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
     TConclusion<std::shared_ptr<arrow::RecordBatch>> batchConclusion = WriteData.GetData()->ExtractBatch();
     if (batchConclusion.IsFail()) {
@@ -36,10 +42,9 @@ TConclusionStatus TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*t
     std::shared_ptr<IMerger> merger;
     switch (WriteData.GetWriteMeta().GetModificationType()) {
         case NEvWrite::EModificationType::Upsert: {
+            // Counter.OnRowsUpserted();
             if (defaultFields.empty()) {
-                std::shared_ptr<NConveyor::ITask> task =
-                    std::make_shared<NOlap::TBuildSlicesTask>(TabletId, ParentActorId, BufferActorId, std::move(WriteData), batch, ActualSchema);
-                NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
+                AsyncBuildSlices(batch);
                 return TConclusionStatus::Success();
             } else {
                 auto insertionConclusion = ActualSchema->CheckColumnsDefault(defaultFields);
@@ -54,18 +59,22 @@ TConclusionStatus TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*t
             }
         }
         case NEvWrite::EModificationType::Insert: {
+            // Counter.OnRowsInserted();
             merger = std::make_shared<TInsertMerger>(batch, ActualSchema);
             break;
         }
         case NEvWrite::EModificationType::Update: {
+            // Counter.OnRowsUpdated();
             merger = std::make_shared<TUpdateMerger>(batch, ActualSchema, "");
             break;
         }
         case NEvWrite::EModificationType::Replace:
+            // Counter.OnRowsReplaced();
+            AsyncBuildSlices(batch);
+            return TConclusionStatus::Success();
         case NEvWrite::EModificationType::Delete: {
-            std::shared_ptr<NConveyor::ITask> task =
-                std::make_shared<NOlap::TBuildSlicesTask>(TabletId, ParentActorId, BufferActorId, std::move(WriteData), batch, ActualSchema);
-            NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
+            // Counter.OnRowsDeleted();
+            AsyncBuildSlices(batch);
             return TConclusionStatus::Success();
         }
     }

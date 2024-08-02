@@ -48,16 +48,16 @@ struct TAggregatorSchema : NIceDb::Schema {
 
     struct ForceTraversals : Table<5> {
         struct OperationId    : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct Cookie         : Column<2, NScheme::NTypeIds::Uint64> {};
-        struct OwnerId        : Column<3, NScheme::NTypeIds::Uint64> {};
-        struct LocalPathId    : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct OwnerId        : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct LocalPathId    : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct Cookie         : Column<4, NScheme::NTypeIds::Uint64> {};
 
-        using TKey = TableKey<OperationId, Cookie, OwnerId, LocalPathId>;
+        using TKey = TableKey<OperationId, OwnerId, LocalPathId>;
         using TColumns = TableColumns<
             OperationId,
-            Cookie,
             OwnerId,
-            LocalPathId
+            LocalPathId,
+            Cookie
         >;
     };
 

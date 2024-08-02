@@ -52,11 +52,11 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
             Self->ForceTraversals.emplace_back(operation);
 
 
-            db.Table<Schema::ForceTraversals>().Key(Self->TraversalOperationId, cookie, pathId.OwnerId, pathId.LocalPathId).Update(
+            db.Table<Schema::ForceTraversals>().Key(Self->TraversalOperationId, pathId.OwnerId, pathId.LocalPathId).Update(
                 NIceDb::TUpdate<Schema::ForceTraversals::OperationId>(Self->TraversalOperationId),
-                NIceDb::TUpdate<Schema::ForceTraversals::Cookie>(cookie),
                 NIceDb::TUpdate<Schema::ForceTraversals::OwnerId>(pathId.OwnerId),
-                NIceDb::TUpdate<Schema::ForceTraversals::LocalPathId>(pathId.LocalPathId));
+                NIceDb::TUpdate<Schema::ForceTraversals::LocalPathId>(pathId.LocalPathId),
+                NIceDb::TUpdate<Schema::ForceTraversals::Cookie>(cookie));
         }
         return true;
     }

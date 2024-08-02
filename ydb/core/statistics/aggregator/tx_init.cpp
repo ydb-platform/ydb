@@ -200,9 +200,9 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
 
             while (!rowset.EndOfSet()) {
                 ui64 operationId = rowset.GetValue<Schema::ForceTraversals::OperationId>();
-                ui64 cookie = rowset.GetValue<Schema::ForceTraversals::Cookie>();
                 ui64 ownerId = rowset.GetValue<Schema::ForceTraversals::OwnerId>();
                 ui64 localPathId = rowset.GetValue<Schema::ForceTraversals::LocalPathId>();
+                ui64 cookie = rowset.GetValue<Schema::ForceTraversals::Cookie>();
 
                 auto pathId = TPathId(ownerId, localPathId);
 

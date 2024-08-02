@@ -586,7 +586,7 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
         TraversalCookie = operation.Cookie;
         TraversalReplyToActorId = operation.ReplyToActorId;
 
-        db.Table<Schema::ForceTraversals>().Key(operation.OperationId, operation.Cookie, operation.PathId.OwnerId, operation.PathId.LocalPathId).Delete();
+        db.Table<Schema::ForceTraversals>().Key(operation.OperationId, operation.PathId.OwnerId, operation.PathId.LocalPathId).Delete();
         ForceTraversals.pop_front();
 
         LastTraversalWasForce = true;

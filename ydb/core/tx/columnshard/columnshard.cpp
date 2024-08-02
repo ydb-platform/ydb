@@ -338,7 +338,9 @@ void TColumnShard::FillColumnTableStats(
     std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev
 ) {
     auto tables = TablesManager.GetTables();
-    TTableStatsBuilder tableStatsBuilder(Counters, Executor(), TablesManager.MutablePrimaryIndex());
+    std::optional<TTableStatsBuilder> tableStatsBuilder =
+        TablesManager.HasPrimaryIndex() ? std::make_optional<TTableStatsBuilder>(Counters, Executor(), TablesManager.MutablePrimaryIndex())
+                                        : std::nullopt;
 
     LOG_S_DEBUG("There are stats for " << tables.size() << " tables");
     for (const auto& [pathId, _] : tables) {
@@ -356,7 +358,9 @@ void TColumnShard::FillColumnTableStats(
             resourceMetrics->Fill(*periodicTableStats->MutableTabletMetrics());
         }
 
-        tableStatsBuilder.FillTableStats(pathId, *(periodicTableStats->MutableTableStats()));
+        if (tableStatsBuilder) {
+            tableStatsBuilder->FillTableStats(pathId, *(periodicTableStats->MutableTableStats()));
+        }
 
         LOG_S_TRACE("Add stats for table, tableLocalID=" << pathId);
     }

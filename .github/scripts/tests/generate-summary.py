@@ -273,8 +273,8 @@ def render_testlist_html(rows, fn, build_preset):
         else:
             test.count_of_passed = 0
 
-    for test_list in status_for_history:
-        status_test.get(test_list,[]).sort(key=lambda val: (val.count_of_passed, val.full_name), reverse=True)
+    for current_status in status_for_history:
+        status_test.get(current_status,[]).sort(key=lambda val: (val.count_of_passed, val.full_name), reverse=True)
 
     content = env.get_template("summary.html").render(
         status_order=status_order,

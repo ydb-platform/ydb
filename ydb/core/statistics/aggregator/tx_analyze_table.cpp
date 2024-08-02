@@ -32,13 +32,12 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
             const TPathId pathId = PathIdFromPathId(table.GetPathId());
 
             // drop request with the same cookie and path from this sender
-            auto it = std::find_if(Self->ForceTraversals.begin(), Self->ForceTraversals.end(), 
+            if (std::any_of(Self->ForceTraversals.begin(), Self->ForceTraversals.end(), 
                 [this, &pathId, &cookie](const TForceTraversal& elem) { 
                     return elem.PathId == pathId 
                         && elem.Cookie == cookie
                         && elem.ReplyToActorId == ReplyToActorId
-                    ;});
-            if (it != Self->ForceTraversals.end()) {
+                    ;})) {
                 return true;
             }
 

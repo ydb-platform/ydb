@@ -73,13 +73,6 @@ private:
     THashMap<EWriteFailReason, NMonitoring::TDynamicCounters::TCounterPtr> FailedWriteRequests;
     NMonitoring::TDynamicCounters::TCounterPtr SuccessWriteRequests;
 
-    // TODO: Consider removing
-    NMonitoring::TDynamicCounters::TCounterPtr WriteUpsertRows;
-    NMonitoring::TDynamicCounters::TCounterPtr WriteInsertRows;
-    NMonitoring::TDynamicCounters::TCounterPtr WriteUpdateRows;
-    NMonitoring::TDynamicCounters::TCounterPtr WriteReplaceRows;
-    NMonitoring::TDynamicCounters::TCounterPtr WriteDeleteRows;
-
 public:
     const TCSInitialization Initialization;
     TTxProgressCounters TxProgress;
@@ -95,7 +88,10 @@ public:
         SuccessWriteRequests->Add(1);
     }
 
-    void OnWritePutBlobsSuccess(const TDuration d, const ui64 rows, const NKikimr::NEvWrite::EModificationType modificationType) const;
+    void OnWritePutBlobsSuccess(const TDuration d) const {
+        HistogramSuccessWritePutBlobsDurationMs->Collect(d.MilliSeconds());
+        WritePutBlobsCount->Sub(1);
+    }
 
     void OnWriteMiddle1PutBlobsSuccess(const TDuration d) const {
         HistogramSuccessWriteMiddle1PutBlobsDurationMs->Collect(d.MilliSeconds());

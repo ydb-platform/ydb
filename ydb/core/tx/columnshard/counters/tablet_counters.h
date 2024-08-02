@@ -106,12 +106,6 @@ public:
         IncCounter(NColumnShard::COUNTER_INDEXING_TIME, duration.MilliSeconds());
     }
 
-    void OnInsertionWriteIndexCompleted(const ui64 blobsWritten, const ui64 bytesWritten, const TDuration duration) const {
-        IncCounter(NColumnShard::COUNTER_INDEXING_BLOBS_WRITTEN, blobsWritten);
-        IncCounter(NColumnShard::COUNTER_INDEXING_BYTES_WRITTEN, bytesWritten);
-        IncCounter(NColumnShard::COUNTER_INDEXING_TIME, duration.MilliSeconds());
-    }
-
     void OnWritePutBlobsSuccess(const ui64 rows, const NKikimr::NEvWrite::EModificationType modificationType) const {
         switch (modificationType) {
             case NKikimr::NEvWrite::EModificationType::Upsert:

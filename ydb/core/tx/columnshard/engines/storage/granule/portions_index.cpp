@@ -57,7 +57,8 @@ void TPortionsIndex::RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
     {
         auto it = itFrom;
         while (true) {
-            it->second.RemoveContained(p->GetPortionId());
+            RemoveFromMemoryUsageControl(it->second.GetMinMemoryRead());
+            it->second.RemoveContained(p);
             if (it == itTo) {
                 break;
             }
@@ -67,17 +68,20 @@ void TPortionsIndex::RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
     if (itFrom != itTo) {
         itFrom->second.RemoveStart(p);
         if (itFrom->second.IsEmpty()) {
-            Points.erase(itFrom);
+            AFL_VERIFY(Points.erase(itFrom));
+            RemoveFromMemoryUsageControl(0);
         }
         itTo->second.RemoveFinish(p);
         if (itTo->second.IsEmpty()) {
-            Points.erase(itTo);
+            AFL_VERIFY(Points.erase(itTo));
+            RemoveFromMemoryUsageControl(0);
         }
     } else {
         itTo->second.RemoveStart(p);
         itTo->second.RemoveFinish(p);
         if (itTo->second.IsEmpty()) {
-            Points.erase(itTo);
+            AFL_VERIFY(Points.erase(itTo));
+            RemoveFromMemoryUsageControl(0);
         }
     }
 }
@@ -90,7 +94,9 @@ void TPortionsIndex::AddPortion(const std::shared_ptr<TPortionInfo>& p) {
 
     auto it = itFrom;
     while (true) {
-        it->second.AddContained(p->GetPortionId());
+        RemoveFromMemoryUsageControl(it->second.GetMinMemoryRead());
+        it->second.AddContained(p);
+        ++CountMemoryUsages[it->second.GetMinMemoryRead()];
         if (it == itTo) {
             break;
         }

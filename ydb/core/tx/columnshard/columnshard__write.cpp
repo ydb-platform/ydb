@@ -193,6 +193,15 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
         return returnFail(COUNTER_WRITE_FAIL);
     }
 
+    if (TGlobalLimits::DefaultRejectMemoryIntervalLimit <
+        TablesManager.GetPrimaryIndexAsVerified<TColumnEngineForLogs>().GetGranuleVerified().GetPortionsIndex().GetMinMemoryRead()) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "overlimit")("reason", "read_memory")("current",
+            TablesManager.GetPrimaryIndexAsVerified<TColumnEngineForLogs>().GetGranuleVerified().GetPortionsIndex().GetMinMemoryRead())(
+            "limit", TGlobalLimits::DefaultRejectMemoryIntervalLimit)("table_id", writeMeta.GetTableId());
+        Counters.GetCSCounters().OnFailedWriteResponse(EWriteFailReason::OverlimitReadMemory);
+        return returnFail(COUNTER_WRITE_FAIL);
+    }
+
     const auto& snapshotSchema = TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema();
     auto arrowData = std::make_shared<TProtoArrowData>(snapshotSchema);
     if (!arrowData->ParseFromProto(record)) {

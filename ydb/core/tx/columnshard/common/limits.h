@@ -9,5 +9,9 @@ public:
     static constexpr inline ui64 InsertCompactionMemoryLimit = 1ULL << 30;
     static constexpr inline ui64 GeneralCompactionMemoryLimit = 3ULL << 30;
     static constexpr inline ui64 ScanMemoryLimit = 3ULL << 30;
+
+    static constexpr inline ui64 DefaultRejectMemoryIntervalLimit = ScanMemoryLimit;
+    static constexpr inline ui64 DefaultReduceMemoryIntervalLimit = DefaultRejectMemoryIntervalLimit;
+    static constexpr inline ui64 DefaultReadSequentiallyBufferSize = ((ui64)8) << 20;
 };
 }

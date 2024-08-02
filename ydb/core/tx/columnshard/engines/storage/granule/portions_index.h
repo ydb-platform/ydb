@@ -12,6 +12,8 @@ private:
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Start;
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Finish;
     THashSet<ui64> PortionIds;
+    YDB_READONLY(ui64, MinMemoryRead, 0);
+
 public:
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetStart() const {
         return Start;
@@ -24,6 +26,7 @@ public:
             }
             AFL_VERIFY(PortionIds.emplace(i).second);
         }
+        MinMemoryRead = source.MinMemoryRead;
     }
 
     const THashSet<ui64>& GetPortionIds() const {
@@ -31,14 +34,23 @@ public:
     }
 
     bool IsEmpty() const {
-        return Start.empty() && Finish.empty();
+        if (Start.empty() && Finish.empty()) {
+            AFL_VERIFY(!MinMemoryRead);
+            return true;
+        } else {
+            AFL_VERIFY(MinMemoryRead);
+            return false;
+        }
     }
 
-    void AddContained(const ui64 portionId) {
+    void AddContained(const std::shared_ptr<TPortionInfo>& p) {
+        MinMemoryRead += p->GetMinMemoryForReadColumns();
         AFL_VERIFY(PortionIds.emplace(portionId).second);
     }
 
-    void RemoveContained(const ui64 portionId) {
+    void RemoveContained(const std::shared_ptr<TPortionInfo>& p) {
+        AFL_VERIFY(p->GetMinMemoryForReadColumns() <= MinMemoryRead);
+        MinMemoryRead -= p->GetMinMemoryForReadColumns();
         AFL_VERIFY(PortionIds.erase(portionId));
     }
 
@@ -64,6 +76,7 @@ public:
 class TPortionsIndex {
 private:
     std::map<NArrow::TReplaceKey, TPortionsPKPoint> Points;
+    std::map<ui64, i32> CountMemoryUsages;
     const TGranuleMeta& Owner;
 
     std::map<NArrow::TReplaceKey, TPortionsPKPoint>::iterator InsertPoint(const NArrow::TReplaceKey& key) {
@@ -75,8 +88,17 @@ private:
                 --itPred;
                 it->second.ProvidePortions(itPred->second);
             }
+            ++CountMemoryUsages[it->second.GetMinMemoryRead()];
         }
         return it;
+    }
+
+    void RemoveFromMemoryUsageControl(const ui64 mem) {
+        auto it = CountMemoryUsages.find(mem);
+        AFL_VERIFY(it != CountMemoryUsages.end());
+        if (!--it->second) {
+            CountMemoryUsages.erase(it);
+        }
     }
 
 public:

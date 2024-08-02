@@ -137,7 +137,7 @@ private:
     }
 
 private:
-    TVector<TQueryAst> GetAstStatements(const TActorContext &ctx) {
+    TVector<TQueryAst> GetAstStatements(const TActorContext &ctx, NYql::TIssues& issues) {
         TString cluster = QueryId.Cluster;
         ui16 kqpYqlSyntaxVersion = Config->_KqpYqlSyntaxVersion.Get().GetRef();
 
@@ -148,7 +148,7 @@ private:
             .SetApplicationName(ApplicationName)
             .SetQueryParameters(QueryId.QueryParameterTypes);
 
-        return ParseStatements(QueryId.Text, QueryId.Settings.Syntax, QueryId.IsSql(), settingsBuilder, PerStatementResult);
+        return ParseStatements(QueryId.Text, QueryId.Settings.Syntax, QueryId.IsSql(), settingsBuilder, PerStatementResult, issues);
     }
 
     void ReplySplitResult(const TActorContext &ctx, IKqpHost::TSplitResult&& result) {
@@ -183,7 +183,8 @@ private:
 
     void StartParsing(const TActorContext &ctx) {
         Become(&TKqpCompileActor::CompileState);
-        ReplyParseResult(ctx, GetAstStatements(ctx));
+        NYql::TIssues issues;
+        ReplyParseResult(ctx, GetAstStatements(ctx, issues), std::move(issues));
     }
 
     void StartCompilation(const TActorContext &ctx) {
@@ -406,12 +407,22 @@ private:
             << ", at state:" << state);
     }
 
-    void ReplyParseResult(const TActorContext &ctx, TVector<TQueryAst>&& astStatements) {
+    void ReplyParseResult(const TActorContext &ctx, TVector<TQueryAst>&& astStatements, NYql::TIssues&& issues) {
         Y_UNUSED(ctx);
 
         if (astStatements.empty()) {
+            ALOG_ERROR(NKikimrServices::KQP_COMPILE_ACTOR, "Parsing result of query is empty"
+                << ", self: " << SelfId()
+                << ", owner: " << Owner);
+
+            auto status = GetYdbStatus(issues);
+
             NYql::TIssue issue(NYql::TPosition(), "Parsing result of query is empty");
-            ReplyError(Ydb::StatusIds::INTERNAL_ERROR, {issue});
+            for (const auto& i : issues) {
+                issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
+            }
+
+            ReplyError(status, {issue});
             return;
         }
 

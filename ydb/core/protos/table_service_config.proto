@@ -269,14 +269,14 @@ message TTableServiceConfig {
 
     optional bool EnableColumnsWithDefault = 51 [default = true];
 
-    optional bool EnableAstCache = 52 [default = false];
+    optional bool EnableAstCache = 52 [default = true];
     optional bool EnablePgConstsToParams = 53 [default = false];
 
     optional uint64 ExtractPredicateRangesLimit = 54 [default = 10000];
 
     optional bool EnableOlapSink = 55 [default = false];
 
-    optional bool EnablePerStatementQueryExecution = 56 [default = false];
+    optional bool EnablePerStatementQueryExecution = 56 [default = true];
     optional bool EnableCreateTableAs = 57 [default = true];
 
     optional uint64 IdxLookupJoinPointsLimit = 58 [default = 3];

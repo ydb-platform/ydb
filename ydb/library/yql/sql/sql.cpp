@@ -159,11 +159,9 @@ namespace NSQLTranslation {
         }
     }
 
-    TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const TTranslationSettings& settings,
+    TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const TTranslationSettings& settings, NYql::TIssues& issues,
         NYql::TWarningRules* warningRules, ui16* actualSyntaxVersion, TVector<NYql::TStmtParseInfo>* stmtParseInfo)
     {
-        TVector<NYql::TAstParseResult> result;
-        NYql::TIssues issues;
         TTranslationSettings parsedSettings(settings);
         google::protobuf::Arena arena;
         if (!parsedSettings.Arena) {
@@ -171,6 +169,8 @@ namespace NSQLTranslation {
         }
 
         if (!ParseTranslationSettings(query, parsedSettings, issues)) {
+            issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
+                        "Can't parse settings fot parsing"));
             return {};
         }
 
@@ -180,7 +180,7 @@ namespace NSQLTranslation {
 
         if (!parsedSettings.DeclaredNamedExprs.empty() && !parsedSettings.PgParser && parsedSettings.SyntaxVersion != 1) {
             issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
-                "Externally declared named expressions not supported in V0 syntax"));
+                        "Externally declared named expressions not supported in V0 syntax"));
             return {};
         }
 
@@ -191,13 +191,13 @@ namespace NSQLTranslation {
         switch (parsedSettings.SyntaxVersion) {
             case 0:
                 issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
-                    "V0 syntax is disabled"));
+                            "V0 syntax is disabled"));
                 return {};
             case 1:
-                return NSQLTranslationV1::SqlToAstStatements(query, parsedSettings, warningRules, stmtParseInfo);
+                return NSQLTranslationV1::SqlToAstStatements(query, parsedSettings, issues, warningRules, stmtParseInfo);
             default:
                 issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
-                    TStringBuilder() << "Unknown SQL syntax version: " << parsedSettings.SyntaxVersion));
+                            TStringBuilder() << "Unknown SQL syntax version: " << parsedSettings.SyntaxVersion));
                 return {};
         }
     }

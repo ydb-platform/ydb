@@ -2115,6 +2115,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     Y_UNIT_TEST(DdlMixedDml) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(false);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)

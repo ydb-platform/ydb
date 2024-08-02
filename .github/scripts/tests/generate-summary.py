@@ -252,7 +252,7 @@ def render_testlist_html(rows, fn, build_preset):
     status_for_history = [s for s in status_for_history if s in status_test]
     
     tests_names_for_history = []
-    history={}
+    history= {}
     tests_in_statuses = [test for status in status_for_history for test in status_test.get(status)]
     
     # get tests for history
@@ -264,17 +264,21 @@ def render_testlist_html(rows, fn, build_preset):
     except Exception:
         print(traceback.format_exc())
    
-    # sorting, at first show tests with passed resuts in history
+    #geting count of passed tests in history for sorting
     for test in tests_in_statuses:
         if test.full_name in history:
-            test.count_of_passed = history[test.full_name][
-                next(iter(history[test.full_name]))
-            ]["count_of_passed"]
-        else:
-            test.count_of_passed = 0
-
+            test.count_of_passed = len(
+                [
+                    history[test.full_name][x]
+                    for x in history[test.full_name]
+                    if history[test.full_name][x]["status"] == "passed"
+                ]
+            )
+    # sorting, 
+    # at first - show tests with passed resuts in history
+    # at second - sorted by test name
     for current_status in status_for_history:
-        status_test.get(current_status,[]).sort(key=lambda val: (val.count_of_passed, val.full_name), reverse=True)
+        status_test.get(current_status,[]).sort(key=lambda val: (-val.count_of_passed, val.full_name))
 
     content = env.get_template("summary.html").render(
         status_order=status_order,

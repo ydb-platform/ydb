@@ -45,8 +45,7 @@ def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type):
             and status != 'skipped'
         );
 
-        select full_name,test_name,build_type, commit, branch, run_timestamp, status, status_description,rn, 
-        COUNT_IF(status = 'passed') over (PARTITION BY test_name) as count_of_passed
+        select full_name,test_name,build_type, commit, branch, run_timestamp, status, status_description,rn
         from  $tests
         WHERE rn <= $rn_max
         ORDER BY test_name, run_timestamp;  
@@ -88,7 +87,6 @@ def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type):
                         "status": row["status"],
                         "commit": row["commit"],
                         "datetime": datetime.datetime.fromtimestamp(int(row["run_timestamp"] / 1000000)).strftime("%H:%m %B %d %Y"),
-                        "count_of_passed": row["count_of_passed"],
                         "status_description": row["status_description"],
                     }
             return results

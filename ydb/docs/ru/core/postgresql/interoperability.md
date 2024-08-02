@@ -38,47 +38,90 @@
 
 ## Соответствие типов данных {#supported_types}
 
-Система типов данных {{ydb-name}} и PostgreSQL похожи, но при этом не совпадают, различаясь на уровне представления данных и их обработки. Это означает, что даже простые типы данных из PostgreSQL, например, `int4` (32-битное знаковое целое число) отличаются от типа `int32` {{ydb-name}} (32-битное знаковое целое число), поэтому типы PostgreSQL в {{ydb-name}} имеют собственные названия, начинающиеся с `pg`. Например, тип `int4` PostgreSQL будет называться `pgint4` в {{ydb-name}}.
+Система типов данных {{ydb-name}} и PostgreSQL похожи, но при этом не совпадают.
+
+### Использование данных таблиц, созданных в YQL синтаксисе, в синтаксисе PostgreSQL {#topg}
+Типы данных из {{ydb-name}} автоматически преобразовываются в соответствующие им типы PostgreSQL.
+
+Пример:
+1. Создадим таблицу {{ydb-name}} с помощью YQL-синтаксиса
+    ```sql
+    CREATE TABLE `test_table`(col INT, PRIMARY KEY(col));
+    ```
+1. Добавим туда тестовые данные
+    ```sql
+    INSERT INTO test_table(col) VALUES(1)
+    ```
+1. Прочитаем эти данные с помощью PostgreSQL-синтаксиса. YQL-тип данных `INT` был автоматически переведен в тип `pgint4`, над которым была выполнена операция инкремента.
+    ```
+    psql -c "SELECT col+1 AS col FROM test_table"
+    col
+    ---
+    2
+    (1 row)
+    ```
+
+ Таблица соответствия типов данных {{ydb-name}}, при их использовании в PostgreSQL запросах:
+
+| {{ydb-name}} | PostgreSQL | Название PostgreSQL-типа в YDB|
+|---|---|---|
+| `Bool` | `bool` |`pgbool` |
+| `Int8` | `int2` |`pgint2` |
+| `Uint8` | `int2` |`pgint2` |
+| `Int16` | `int2` |`pgint2` |
+| `Uint16` | `int4` |`pgint4` |
+| `Int32` | `int4` |`pgint4` |
+| `Uint32` | `int8` |`pgint8` |
+| `Int64` | `int8` |`pgint8` |
+| `Uint64` | `numeric` |`pgnumeric` |
+| `Float` | `float4` |`pgfloat4` |
+| `Double` | `float8` |`pgfloat8` |
+| `String` | `bytea` |`pgbytea` |
+| `Utf8` | `text` |`pgtext` |
+| `Yson` | `bytea` |`pgbytea` |
+| `Json` | `json` |`pgjson` |
+| `Uuid` | `uuid` |`pguuid` |
+| `JsonDocument` | `jsonb` |`pgjsonb` |
+| `Date` | `date` |`pgdate` |
+| `Datetime` | `timestamp` |`pgtimestamp` |
+| `Timestamp` | `timestamp` |`pgtimestamp` |
+| `Interval` | `interval` | `pginterval` |
+| `TzDate` | `text` |`pgtext` |
+| `TzDatetime` | `text` |`pgtext` |
+| `TzTimestamp` | `text` |`pgtext` |
+| `Date32` | `date` | `pgdate`|
+| `Datetime64` | `timestamp` |`pgtimestamp` |
+| `Timestamp64` | `timestamp` |`pgtimestamp` |
+| `Interval64`| `interval` |`pginterval` |
+| `TzDate32` | `text` |  |`pgtext` |
+| `TzDatetime64` | `text` |  |`pgtext` |
+| `TzTimestamp64` | `text` |  |`pgtext` |
+| `Decimal` | `numeric` |`pgnumeric` |
+| `DyNumber` | `numeric` |`pgnumeric` |
 
 
-Таблица соответствия типов данных {{ydb-name}}, при их использовании в PostgreSQL запросах:
 
-| {{ydb-name}} | PostgreSQL |
-|---|---|
-| `Bool` | `bool` |
-| `Int8` | `int2` |
-| `Uint8` | `int2` |
-| `Int16` | `int2` |
-| `Uint16` | `int4` |
-| `Int32` | `int4` |
-| `Uint32` | `int8` |
-| `Int64` | `int8` |
-| `Uint64` | `numeric` |
-| `Float` | `float4` |
-| `Double` | `float8` |
-| `String` | `bytea` |
-| `Utf8` | `text` |
-| `Yson` | `bytea` |
-| `Json` | `json` |
-| `Uuid` | `uuid` |
-| `JsonDocument` | `jsonb` |
-| `Date` | `date` |
-| `Datetime` | `timestamp` |
-| `Timestamp` | `timestamp` |
-| `Interval` | `interval` |
-| `TzDate` | `text` |
-| `TzDatetime` | `text` |
-| `TzTimestamp` | `text` |
-| `Date32` | `date` |
-| `Datetime64` | `timestamp` |
-| `Timestamp64` | `timestamp` |
-| `Interval64`| `interval` |
-| `TzDate32` | `text` |  |
-| `TzDatetime64` | `text` |  |
-| `TzTimestamp64` | `text` |  |
-| `Decimal` | `numeric` |
-| `DyNumber` | `numeric` |
+### Использование данных таблиц, созданных в PostgreSQL синтаксисе, в синтаксисе YQL {#frompg}
 
+Для использования данных таблиц, созданных в PostgreSQL синтаксисе, необходимо явное преобразование типов с помощью функции [`FromPg`](./advanced.md#frompgtopg).
+
+Пример:
+1. Создадим таблицу {{ydb-name}} с помощью PostgreSQL-синтаксиса
+    ```sql
+    CREATE TABLE test_table_pg(col INT, PRIMARY KEY(col));
+    ```
+1. Добавим туда тестовые данные
+    ```sql
+    INSERT INTO test_table_pg(col) VALUES(10)
+    ```
+1. Прочитаем эти данные с помощью YQL-синтаксиса. Для чтения данных, созданных с помощью PostgreSQL синтаксиса, необходимо явное преобразование c помощью функции [`FromPg`](./advanced.md#frompgtopg).
+    ```
+    ydb sql -s "SELECT FromPg(col)+1 AS col FROM test_table_pg"
+    col
+    ---
+    11
+    (1 row)
+    ```
 
 Таблица соответствия типов данных PostgreSQL, при их использовании в {{ydb-name}} запросах:
 
@@ -98,4 +141,11 @@
 | `date` | `Date32` |
 | `timestamp` | `Timestamp64` |
 
-Преобразования типов, не указанные в вышепреведенных таблицах, не поддерживаются.
+Поддерживаются только преобразования типов приведенное выше.
+
+Если необходимо выполнить преобразование типов данных, не указанных в таблице выше, то можно использовать промежуточное преобразование через тип `text`.
+
+Например, выполним преобразование типа данных PostgreSQL - `money`:
+```sql
+SELECT FromPg(PgCast(PgConst("{1234}", _PgMoney), pgtext))
+```

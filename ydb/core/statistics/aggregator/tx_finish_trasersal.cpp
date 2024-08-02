@@ -7,12 +7,14 @@ namespace NKikimr::NStat {
 struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
     ui64 OperationId;
     ui64 Cookie;
+    TPathId PathId;
     TActorId ReplyToActorId;
 
     TTxFinishTraversal(TSelf* self)
         : TTxBase(self)
         , OperationId(self->ForceTraversalOperationId)
         , Cookie(self->ForceTraversalCookie)
+        , PathId(self->TraversalTableId.PathId)
         , ReplyToActorId(self->ForceTraversalReplyToActorId)
     {}
 
@@ -28,7 +30,8 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Complete");
+        SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Complete " <<
+            Self->LastTraversalWasForceString() << " traversal for path " << PathId);
 
         if (!ReplyToActorId) {
             SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Complete. No ActorId to send reply.");            

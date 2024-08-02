@@ -155,6 +155,8 @@ private:
     void StartTraversal(NIceDb::TNiceDb& db);
     void FinishTraversal(NIceDb::TNiceDb& db);
 
+    TString LastTraversalWasForceString() const;
+
     STFUNC(StateInit) {
         StateInitImpl(ev, SelfId());
     }

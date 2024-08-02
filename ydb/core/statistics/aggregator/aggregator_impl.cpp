@@ -580,6 +580,8 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
     TPathId pathId;
 
     if (!ForceTraversals.empty() && !LastTraversalWasForce) {
+        LastTraversalWasForce = true;
+
         TForceTraversal& operation = ForceTraversals.front();
         pathId = operation.PathId;
 
@@ -589,9 +591,9 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
 
         db.Table<Schema::ForceTraversals>().Key(operation.OperationId, operation.PathId.OwnerId, operation.PathId.LocalPathId).Delete();
         ForceTraversals.pop_front();
-
-        LastTraversalWasForce = true;
     } else if (!ScheduleTraversalsByTime.Empty()){
+        LastTraversalWasForce = false;
+
         auto* oldestTable = ScheduleTraversalsByTime.Top();
         if (TInstant::Now() < oldestTable->LastUpdateTime + ScheduleTraversalPeriod) {
             SA_LOG_T("[" << TabletID() << "] A schedule traversal is skiped. " 
@@ -600,7 +602,6 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
         }
 
         pathId = oldestTable->PathId;
-        LastTraversalWasForce = false;
     } else {
         SA_LOG_E("[" << TabletID() << "] No schedule traversal from schemeshard.");
         return;       
@@ -617,7 +618,7 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
     TraversalTableId.PathId = pathId;
 
     SA_LOG_D("[" << TabletID() << "] Start " 
-        << ( LastTraversalWasForce ? "force" : "schedule" )
+        << LastTraversalWasForceString()
         << " traversal for path " << pathId);
 
     StartTraversal(db);
@@ -649,6 +650,10 @@ void TStatisticsAggregator::FinishTraversal(NIceDb::TNiceDb& db) {
     }
 
     ResetTraversalState(db);
+}
+
+TString TStatisticsAggregator::LastTraversalWasForceString() const {
+    return LastTraversalWasForce ? "force" : "schedule";
 }
 
 void TStatisticsAggregator::PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const TString& value) {

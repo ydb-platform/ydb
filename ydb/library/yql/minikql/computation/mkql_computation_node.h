@@ -46,17 +46,18 @@ struct TComputationOpts {
 
 struct TComputationOptsFull: public TComputationOpts {
     TComputationOptsFull(IStatsRegistry* stats, TAllocState& allocState, IRandomProvider& randomProvider,
-            ITimeProvider& timeProvider, NUdf::EValidatePolicy validatePolicy, const NUdf::ISecureParamsProvider* secureParamsProvider)
+            ITimeProvider& timeProvider, NUdf::EValidatePolicy validatePolicy, const NUdf::ISecureParamsProvider* secureParamsProvider, NUdf::ICountersProvider* countersProvider)
         : TComputationOpts(stats)
         , AllocState(allocState)
         , RandomProvider(randomProvider)
         , TimeProvider(timeProvider)
         , ValidatePolicy(validatePolicy)
         , SecureParamsProvider(secureParamsProvider)
+        , CountersProvider(countersProvider)
     {}
 
     TComputationOptsFull(IStatsRegistry* stats, TTypeEnvironment* typeEnv, IRandomProvider& randomProvider,
-            ITimeProvider& timeProvider, NUdf::EValidatePolicy validatePolicy, const NUdf::ISecureParamsProvider* secureParamsProvider)
+            ITimeProvider& timeProvider, NUdf::EValidatePolicy validatePolicy, const NUdf::ISecureParamsProvider* secureParamsProvider, NUdf::ICountersProvider* countersProvider)
         : TComputationOpts(stats)
         , AllocState(typeEnv->GetAllocator().Ref())
         , TypeEnv(typeEnv)
@@ -64,6 +65,7 @@ struct TComputationOptsFull: public TComputationOpts {
         , TimeProvider(timeProvider)
         , ValidatePolicy(validatePolicy)
         , SecureParamsProvider(secureParamsProvider)
+        , CountersProvider(countersProvider)
     {}
 
     TAllocState& AllocState;
@@ -71,7 +73,8 @@ struct TComputationOptsFull: public TComputationOpts {
     IRandomProvider& RandomProvider;
     ITimeProvider& TimeProvider;
     NUdf::EValidatePolicy ValidatePolicy;
-    const NUdf::ISecureParamsProvider* SecureParamsProvider;
+    const NUdf::ISecureParamsProvider *const SecureParamsProvider;
+    NUdf::ICountersProvider *const CountersProvider;
 };
 
 struct TWideFieldsInitInfo {
@@ -122,6 +125,9 @@ struct TComputationContext : public TComputationContextLLVM {
     TTypeEnvironment* TypeEnv = nullptr;
     const TComputationMutables Mutables;
     std::shared_ptr<ISpillerFactory> SpillerFactory;
+    const NUdf::ITypeInfoHelper::TPtr TypeInfoHelper;
+    NUdf::ICountersProvider *const CountersProvider;
+    const NUdf::ISecureParamsProvider *const SecureParamsProvider;
 
     TComputationContext(const THolderFactory& holderFactory,
         const NUdf::IValueBuilder* builder,
@@ -393,11 +399,11 @@ struct TComputationPatternOpts {
 
     /// \todo split and exclude
     TComputationOptsFull ToComputationOptions(IRandomProvider& randomProvider, ITimeProvider& timeProvider, TAllocState* allocStatePtr = nullptr) const {
-        return TComputationOptsFull(Stats, allocStatePtr ? *allocStatePtr : AllocState, randomProvider, timeProvider, ValidatePolicy, SecureParamsProvider);
+        return TComputationOptsFull(Stats, allocStatePtr ? *allocStatePtr : AllocState, randomProvider, timeProvider, ValidatePolicy, SecureParamsProvider, CountersProvider);
     }
 
     TComputationOptsFull ToComputationOptions(IRandomProvider& randomProvider, ITimeProvider& timeProvider, TTypeEnvironment* typeEnv) const {
-        return TComputationOptsFull(Stats, typeEnv, randomProvider, timeProvider, ValidatePolicy, SecureParamsProvider);
+        return TComputationOptsFull(Stats, typeEnv, randomProvider, timeProvider, ValidatePolicy, SecureParamsProvider, CountersProvider);
     }
 };
 

@@ -43,14 +43,14 @@ public:
         }
     }
 
-    void AddContained(const std::shared_ptr<TPortionInfo>& p) {
-        MinMemoryRead += p->GetMinMemoryForReadColumns();
+    void AddContained(const ui32 portionId, const ui64 minMemoryRead) {
+        MinMemoryRead += minMemoryRead;
         AFL_VERIFY(PortionIds.emplace(portionId).second);
     }
 
-    void RemoveContained(const std::shared_ptr<TPortionInfo>& p) {
-        AFL_VERIFY(p->GetMinMemoryForReadColumns() <= MinMemoryRead);
-        MinMemoryRead -= p->GetMinMemoryForReadColumns();
+    void RemoveContained(const ui32 portionId, const ui64 minMemoryRead) {
+        AFL_VERIFY(minMemoryRead <= MinMemoryRead);
+        MinMemoryRead -= minMemoryRead;
         AFL_VERIFY(PortionIds.erase(portionId));
     }
 
@@ -106,6 +106,14 @@ public:
         : Owner(owner)
     {
 
+    }
+
+    ui64 GetMinMemoryRead() const {
+        if (CountMemoryUsages.empty()) {
+            return 0;
+        } else {
+            return CountMemoryUsages.rbegin()->second;
+        }
     }
 
     const std::map<NArrow::TReplaceKey, TPortionsPKPoint>& GetPoints() const {

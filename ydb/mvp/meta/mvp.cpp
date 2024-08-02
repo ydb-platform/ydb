@@ -177,7 +177,7 @@ void TMVP::TryGetMetaOptionsFromConfig(const YAML::Node& config) {
     MetaCache = meta["meta_cache"].as<bool>(false);
     MetaDatabaseTokenName = meta["meta_database_token_name"].as<std::string>("");
 }
-
+ 
 void TMVP::TryGetGenericOptionsFromConfig(
     const YAML::Node& config,
     const NLastGetopt::TOptsParseResult& opts,

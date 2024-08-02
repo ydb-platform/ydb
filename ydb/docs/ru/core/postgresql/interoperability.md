@@ -30,35 +30,72 @@
     (1 row)
     ```
 
+    Где:
+    - `ydb_address` - адрес кластера ydb, к которому выполняется подключение.
+    - `database_name` - название базы данных в кластере. Может быть сложным именем, например, `mycluster/tenant1/database/`.
+    - `user_name` - логин пользователя.
+
+
 ## Соответствие типов данных {#supported_types}
 
-Система типов данных {{ydb-name}} и PostgreSQL похожи, но при этом не совпадают, различаясь на уровне представления данных и их обработки. Это означает, что даже простые типы данных из PostgreSQL, например, `int4` (32-битное знаковое целое число) отличаются от типа `int32` {{ydb-name}} (32-битное знаковое целое число), поэтому типы PostgreSQL в {{ydb-name}} имеют собственные названия. Например, тип `int4` PostgreSQL будет называться `pgint4` в {{ydb-name}}.
+Система типов данных {{ydb-name}} и PostgreSQL похожи, но при этом не совпадают, различаясь на уровне представления данных и их обработки. Это означает, что даже простые типы данных из PostgreSQL, например, `int4` (32-битное знаковое целое число) отличаются от типа `int32` {{ydb-name}} (32-битное знаковое целое число), поэтому типы PostgreSQL в {{ydb-name}} имеют собственные названия, начинающиеся с `pg`. Например, тип `int4` PostgreSQL будет называться `pgint4` в {{ydb-name}}.
 
 
-Таблица соответствия типов данных PostgreSQL и {{ydb-name}} приведена ниже:
+Таблица соответствия типов данных {{ydb-name}}, при их использовании в PostgreSQL запросах:
 
-| Тип данных PostgreSQL | Тип данных {{ ydb-name }} | Тип данных PostgreSQL в {{ ydb-name }} | Примечания |
-| :---: | :---: | :---: | :--- |
-| `boolean` | `Bool` | `pgbool` ||
-| `smallint` | `Int16` | `pgint16` ||
-| `int2` | `Int16` | `pgint16` ||
-| `integer` | `Int32` | `pgint4` ||
-| `int` | `Int32` | `pgint4` ||
-| `int4` | `Int32` | `pgint4` ||
-| `serial` | `Int32` | `pgint4` ||
-| `serial4` | `Int32` | `pgint4` ||
-| `bigint` | `Int64` | `pgint8` ||
-| `int8` | `Int64` | `pgint8` ||
-| `bigserial` | `Int64` | `pgint8` ||
-| `serial8` | `Int64` | `pgint8` ||
-| `real` | `Float` | `pgfloat` ||
-| `float4` | `Float` | `pgfloat` ||
-| `double precision` | `Double` | `pgdouble` ||
-| `float8` | `Double` | `pgdouble` ||
-| `date` | `Date` | `pgdate` ||
-| `timestamp` | `Timestamp` | `pgtimestamp` ||
-| `bytea` | `String` | `pgbyte` ||
-| `character` | `Utf8` | `pgchar`| [Правила сортировки](https://www.postgresql.org/docs/current/collation.html) по умолчанию, строка дополняется пробелами до требуемой длины. |
-| `character varying` | `Utf8` | `pgchar`|[Правила сортировки](https://www.postgresql.org/docs/current/collation.html) по умолчанию. |
-| `text` | `Utf8` | `pgchar`|[Правила сортировки](https://www.postgresql.org/docs/current/collation.html) по умолчанию. |
-| `json` | `Json` | `pgjson`||
+| {{ydb-name}} | PostgreSQL |
+|---|---|
+| `Bool` | `bool` |
+| `Int8` | `int2` |
+| `Uint8` | `int2` |
+| `Int16` | `int2` |
+| `Uint16` | `int4` |
+| `Int32` | `int4` |
+| `Uint32` | `int8` |
+| `Int64` | `int8` |
+| `Uint64` | `numeric` |
+| `Float` | `float4` |
+| `Double` | `float8` |
+| `String` | `bytea` |
+| `Utf8` | `text` |
+| `Yson` | `bytea` |
+| `Json` | `json` |
+| `Uuid` | `uuid` |
+| `JsonDocument` | `jsonb` |
+| `Date` | `date` |
+| `Datetime` | `timestamp` |
+| `Timestamp` | `timestamp` |
+| `Interval` | `interval` |
+| `TzDate` | `text` |
+| `TzDatetime` | `text` |
+| `TzTimestamp` | `text` |
+| `Date32` | `date` |
+| `Datetime64` | `timestamp` |
+| `Timestamp64` | `timestamp` |
+| `Interval64`| `interval` |
+| `TzDate32` | `text` |  |
+| `TzDatetime64` | `text` |  |
+| `TzTimestamp64` | `text` |  |
+| `Decimal` | `numeric` |
+| `DyNumber` | `numeric` |
+
+
+Таблица соответствия типов данных PostgreSQL, при их использовании в {{ydb-name}} запросах:
+
+| PostgreSQL | {{ydb-name}} |
+|---|---|
+| `bool` | `bool` |
+| `int2` | `Int16` |
+| `int4` | `Int32` |
+| `int8` | `Int64` |
+| `float4` | `Float` |
+| `float8` | `Double` |
+| `bytea` | `String` |
+| `varchar` | `Utf8` |
+| `text` | `Utf8` |
+| `cstring` | `Utf8` |
+| `uuid` | `Uuid` |
+| `date` | `Date32` |
+| `timestamp` | `Timestamp64` |
+
+Преобразования типов, не указанные в вышепреведенных таблицах, не поддерживаются.

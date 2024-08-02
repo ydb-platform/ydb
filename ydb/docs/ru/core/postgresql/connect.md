@@ -21,9 +21,9 @@ psql -h <ydb_address> -U <user_name> <database_name>
 ```
 
 Где:
-- <ydb_address> - адрес кластера ydb, к которому выполняется подключение.
-- <database_name> - название базы данных в кластере. Может быть сложным именем, например, `mycluster/tenant1/database/`.
-- <user_name> - логин пользователя.
+- `ydb_address` - адрес кластера ydb, к которому выполняется подключение.
+- `database_name` - название базы данных в кластере. Может быть сложным именем, например, `mycluster/tenant1/database/`.
+- `user_name` - логин пользователя.
 
 
 ## Использование стандартных инструментов {{ydb-name}} {#syntaxpg}

@@ -85,7 +85,7 @@ Y_NO_INLINE TStackTrace GetStackTrace(TStackTraceBuffer* buffer)
 #endif
     return NBacktrace::GetBacktrace(
         &cursor,
-        MakeMutableRange(*buffer),
+        TMutableRange(*buffer),
         /*framesToSkip*/ 2);
 }
 
@@ -518,7 +518,7 @@ void CrashSignalHandler(int /*signal*/, siginfo_t* si, void* uc)
     {
         std::array<const void*, 1> frames{NDetail::GetPC(uc)};
         NBacktrace::SymbolizeBacktrace(
-            MakeRange(frames),
+            TRange(frames),
             [] (TStringBuf info) {
                 info.SkipPrefix(" 1. ");
                 WriteToStderr(info);

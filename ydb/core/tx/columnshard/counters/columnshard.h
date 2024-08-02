@@ -84,7 +84,7 @@ private:
         NMonitoring::TDynamicCounters::TCounterPtr FinishPlannedTx;
         NMonitoring::TDynamicCounters::TCounterPtr AbortTx;
 
-        TProgressCounters(TBase& owner)
+        TProgressCounters(const TBase& owner)
             : TBase(owner)
             , RegisterTx(owner.GetDeriviative("RegisterTx"))
             , RegisterTxWithDeadline(owner.GetDeriviative("RegisterTxWithDeadline"))
@@ -138,7 +138,12 @@ public:
 
 private:
     TProgressCounters& GetSubGroup(const TOpType& opType) {
-        return SubGroups.try_emplace(opType, *this).first->second;
+        auto findSubGroup = SubGroups.FindPtr(opType);
+        if (findSubGroup) {
+            return *findSubGroup;
+        }
+
+        return SubGroups.emplace(opType, TBase::CreateSubGroup("operation", opType)).first->second;
     }
 };
 

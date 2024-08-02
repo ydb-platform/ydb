@@ -3798,7 +3798,7 @@ TExprNode::TPtr ExpandFinalizeByKeyWithSpilling(const TExprNode::TPtr& node, TEx
                 .Lambda(3)
                     .Param("key")
                     .Params("items", inputWidth)
-                    .ApplyPartial(combine.InitHandlerLambda().Args().Ptr(), std::move(init))
+                    .ApplyPartial(combine.InitHandlerLambda().Args().Ptr(), init)
                         .With(0, "key")
                         .With(1)
                             .Callable("AsStruct")
@@ -3884,6 +3884,18 @@ TExprNode::TPtr ExpandFinalizeByKeyWithSpilling(const TExprNode::TPtr& node, TEx
                                 }
                                 return parent;
                             })
+                        .Done()
+                    .Seal()
+                .Seal()
+                .Lambda(7)
+                    .Param("key")
+                    .Params("items", inputWidth)
+                    .ApplyPartial(combine.InitHandlerLambda().Args().Ptr(), std::move(init))
+                        .With(0, "key")
+                        .With(1)
+                            .Callable("AsStruct")
+                                .Do(uniteToStructure)
+                            .Seal()
                         .Done()
                     .Seal()
                 .Seal()
@@ -4812,15 +4824,6 @@ TExprNode::TPtr OptimizeCombineCoreWithSpilling(const TExprNode::TPtr& node, TEx
             finish.emplace_back(node->Child(4U)->Tail().HeadPtr());
         }
 
-        load.clear();
-        for (auto outputField : outputFields) {
-            if (output.IsCallable("AsStruct")) {
-                load.emplace_back(outputField);
-            } else if (structType) {
-                load.emplace_back(ctx.NewCallable(output.Pos(), "Member", {node->Child(5U)->Tail().HeadPtr(), outputField}));
-            }
-        }
-
         auto limit = node->ChildrenSize() > TCoCombineCoreWithSpilling::idx_MemLimit ? node->TailPtr() : ctx.NewAtom(node->Pos(), "");
         return ctx.Builder(node->Pos())
             .Callable("NarrowMap")
@@ -4882,7 +4885,7 @@ TExprNode::TPtr OptimizeCombineCoreWithSpilling(const TExprNode::TPtr& node, TEx
                     .Lambda(5)
                         .Param("key")
                         .Params("state", stateWidth)
-                        .ApplyPartial(node->Child(4U)->HeadPtr(), std::move(finish))
+                        .ApplyPartial(node->Child(4U)->HeadPtr(), finish)
                             .With(0, "key")
                             .With(1)
                                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
@@ -4904,9 +4907,35 @@ TExprNode::TPtr OptimizeCombineCoreWithSpilling(const TExprNode::TPtr& node, TEx
                         .Seal()
                     .Seal()
                     .Lambda(6)
+                        .Param("key")
+                        .Params("state", stateWidth)
+                        .ApplyPartial(node->Child(4U)->HeadPtr(), std::move(finish))
+                            .With(0, "key")
+                            .With(1)
+                                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                    if (stateFields.empty())
+                                        parent.Arg("state", 0);
+                                    else {
+                                        auto str = parent.Callable("AsStruct");
+                                        for (ui32 i = 0U; i < stateWidth; ++i) {
+                                            str.List(i)
+                                                .Add(0, stateFields[i])
+                                                .Arg(1, "state", i)
+                                            .Seal();
+                                        }
+                                        str.Seal();
+                                    }
+                                    return parent;
+                                })
+                            .Done()
+                        .Seal()
+                    .Seal()
+                    .Lambda(7)
+                        .Param("key")
                         .Params("items", outputWidth)
                         .ApplyPartial(node->Child(5U)->HeadPtr(), std::move(load))
-                            .With(0)
+                            .With(0, "key")
+                            .With(1)
                                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                                     if (outputFields.empty())
                                         parent.Arg("items", 0);

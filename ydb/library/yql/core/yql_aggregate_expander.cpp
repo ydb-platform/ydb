@@ -36,6 +36,8 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregateWithFullOutput()
 
     HaveDistinct = AnyOf(AggregatedColumns->ChildrenList(),
         [](const auto& child) { return child->ChildrenSize() == 3; });
+    AllowSpilling = AllowSpilling && UseFinalizeByKeys && !HaveDistinct && !UseBlocks;
+
     EffectiveCompact = (HaveDistinct && CompactForDistinct && !UseBlocks) || ForceCompact || HasSetting(*settings, "compact");
     for (const auto& trait : Traits) {
         auto mergeLambda = trait->Child(5);
@@ -947,6 +949,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePartialAggregateForNonDistinct(const
     ui32 index = 0U;
     auto combineLoad = Ctx.Builder(Node->Pos())
         .Lambda()
+            .Param("key")
             .Param("item")
             .Callable("AsStruct")
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
@@ -1601,7 +1604,7 @@ TExprNode::TPtr TAggregateExpander::BuildFinalizeByKeyLambda(const TExprNode::TP
             .Lambda()
                 .Param("key")
                 .Param("state")
-                    .Apply(GeneratePostAggregateSavePhase())
+                    .Apply(GeneratePostAggregateSerializePhase())
                         .With(0, "key")
                         .With(1, "state")
                     .Seal()
@@ -1635,96 +1638,6 @@ TExprNode::TPtr TAggregateExpander::BuildFinalizeByKeyLambda(const TExprNode::TP
                 .Seal()
             .Seal().Build();
     }
-
-    // if (AllowSpilling) {
-    //     return Ctx.Builder(Node->Pos())
-    //     .Lambda()
-    //         .Param("stream")
-    //         .Callable("FinalizeByKeyWithSpilling")
-    //             .Arg(0, "stream")
-    //             .Lambda(1)
-    //                 .Param("item")
-    //                 .Callable("Just")
-    //                     .Apply(0, preprocessLambda)
-    //                         .With(0, "item")
-    //                     .Seal()
-    //                 .Seal()
-    //             .Seal()
-    //             .Add(2, keyExtractor)
-    //             .Lambda(3)
-    //                 .Param("key")
-    //                 .Param("item")
-    //                 .Apply(GeneratePostAggregateInitPhase())
-    //                     .With(0, "item")
-    //                 .Seal()
-    //             .Seal()
-    //             .Lambda(4)
-    //                 .Param("key")
-    //                 .Param("item")
-    //                 .Param("state")
-    //                 .Apply(GeneratePostAggregateMergePhase())
-    //                     .With(0, "item")
-    //                     .With(1, "state")
-    //                 .Seal()
-    //             .Seal()
-    //             .Lambda(5)
-    //                 .Param("key")
-    //                 .Param("state")
-    //                 .Apply(GeneratePostAggregateFinishPhase())
-    //                     .With(0, "state")
-    //                 .Seal()
-    //             .Seal()
-    //             .Lambda(6)
-    //                 .Param("key")
-    //                 .Param("state")
-    //                 .Apply(GeneratePostAggregateSavePhase())
-    //                     .With(0, "key")
-    //                     .With(1, "state")
-    //                 .Seal()
-    //             .Seal()
-    //         .Seal()
-    //     .Seal().Build();
-    // } else {
-    //     return Ctx.Builder(Node->Pos())
-    //     .Lambda()
-    //         .Param("stream")
-    //         .Callable("FinalizeByKey")
-    //             .Arg(0, "stream")
-    //             .Lambda(1)
-    //                 .Param("item")
-    //                 .Callable("Just")
-    //                     .Apply(0, preprocessLambda)
-    //                         .With(0, "item")
-    //                     .Seal()
-    //                 .Seal()
-    //             .Seal()
-    //             .Add(2, keyExtractor)
-    //             .Lambda(3)
-    //                 .Param("key")
-    //                 .Param("item")
-    //                 .Apply(GeneratePostAggregateInitPhase())
-    //                     .With(0, "item")
-    //                 .Seal()
-    //             .Seal()
-    //             .Lambda(4)
-    //                 .Param("key")
-    //                 .Param("item")
-    //                 .Param("state")
-    //                 .Apply(GeneratePostAggregateMergePhase())
-    //                     .With(0, "item")
-    //                     .With(1, "state")
-    //                 .Seal()
-    //             .Seal()
-    //             .Lambda(5)
-    //                 .Param("key")
-    //                 .Param("state")
-    //                 .Apply(GeneratePostAggregateFinishPhase())
-    //                     .With(0, "state")
-    //                 .Seal()
-    //             .Seal()
-    //         .Seal()
-    //     .Seal().Build();
-    // }
 }
 
 
@@ -2707,7 +2620,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePostAggregateMergePhase()
         .Build();
 }
 
-TExprNode::TPtr TAggregateExpander::GeneratePostAggregateSavePhase() {
+TExprNode::TPtr TAggregateExpander::GeneratePostAggregateSerializePhase() {
     auto keyItemTypes = GetKeyItemTypes();
     TExprNode::TPtr pickleTypeNode = nullptr;
     if (IsNeedPickle(keyItemTypes)) {

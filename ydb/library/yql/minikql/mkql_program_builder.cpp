@@ -4824,7 +4824,7 @@ TRuntimeNode TProgramBuilder::WideLastCombiner(TRuntimeNode flow, const TWideLam
     return WideLastCombinerCommon(__func__, flow, extractor, init, update, finish);
 }
 
-TRuntimeNode TProgramBuilder::WideLastCombinerCommonWithSpilling(const TStringBuf& funcName, TRuntimeNode flow, const TWideLambda& extractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish, const TWideLambda& load) {
+TRuntimeNode TProgramBuilder::WideLastCombinerCommonWithSpilling(const TStringBuf& funcName, TRuntimeNode flow, const TWideLambda& extractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish, const TBinaryWideLambda& serialize, const TBinaryWideLambda& deserialize) {
     const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
 
     TRuntimeNode::TList itemArgs;
@@ -4858,15 +4858,37 @@ TRuntimeNode TProgramBuilder::WideLastCombinerCommonWithSpilling(const TStringBu
 
     const auto output = finish(finishKeyArgs, finishStateArgs);
 
+    TRuntimeNode::TList serializeKeyArgs;
+    serializeKeyArgs.reserve(keys.size());
+    std::transform(keys.cbegin(), keys.cend(), std::back_inserter(serializeKeyArgs), [&](TRuntimeNode key){ return Arg(key.GetStaticType()); }  );
+
+    TRuntimeNode::TList serializeStateArgs;
+    serializeStateArgs.reserve(next.size());
+    std::transform(next.cbegin(), next.cend(), std::back_inserter(serializeStateArgs), [&](TRuntimeNode state){ return Arg(state.GetStaticType()); }  );
+
+    const auto serializeOutput = serialize(serializeKeyArgs, serializeStateArgs);
+
+    TRuntimeNode::TList deserializeKeyArgs;
+    deserializeKeyArgs.reserve(keys.size());
+    std::transform(keys.cbegin(), keys.cend(), std::back_inserter(deserializeKeyArgs), [&](TRuntimeNode key){ return Arg(key.GetStaticType()); }  );
+
+    TRuntimeNode::TList deserializeStateArgs;
+    deserializeStateArgs.reserve(serializeOutput.size());
+    std::transform(serializeOutput.cbegin(), serializeOutput.cend(), std::back_inserter(deserializeStateArgs),
+        [&](TRuntimeNode arg){
+            TType* actualType = arg.GetStaticType();
+            if (actualType->IsOptional()) {
+                actualType = AS_TYPE(TOptionalType, actualType)->GetItemType();
+            }
+            return Arg(actualType);
+        }
+    );
+
+    const auto deserializeOutput = deserialize(deserializeKeyArgs, deserializeStateArgs);
+
     std::vector<TType*> tupleItems;
     tupleItems.reserve(output.size());
     std::transform(output.cbegin(), output.cend(), std::back_inserter(tupleItems), std::bind(&TRuntimeNode::GetStaticType, std::placeholders::_1));
-
-    TRuntimeNode::TList loadStateArgs;
-    loadStateArgs.reserve(tupleItems.size());
-    std::transform(tupleItems.cbegin(), tupleItems.cend(), std::back_inserter(loadStateArgs), [&](TType* t){ return Arg(t); }  );
-
-    const auto loadOutput = load(loadStateArgs);
 
     TCallableBuilder callableBuilder(Env, funcName, NewFlowType(NewMultiType(tupleItems)));
     callableBuilder.Add(flow);
@@ -4881,17 +4903,21 @@ TRuntimeNode TProgramBuilder::WideLastCombinerCommonWithSpilling(const TStringBu
     std::for_each(finishKeyArgs.cbegin(), finishKeyArgs.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
     std::for_each(finishStateArgs.cbegin(), finishStateArgs.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
     std::for_each(output.cbegin(), output.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
-    std::for_each(loadStateArgs.cbegin(), loadStateArgs.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
-    std::for_each(loadOutput.cbegin(), loadOutput.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
+    std::for_each(serializeKeyArgs.cbegin(), serializeKeyArgs.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
+    std::for_each(serializeStateArgs.cbegin(), serializeStateArgs.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
+    std::for_each(serializeOutput.cbegin(), serializeOutput.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
+    std::for_each(deserializeKeyArgs.cbegin(), deserializeKeyArgs.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
+    std::for_each(deserializeStateArgs.cbegin(), deserializeStateArgs.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
+    std::for_each(deserializeOutput.cbegin(), deserializeOutput.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::WideLastCombinerWithSpilling(TRuntimeNode flow, const TWideLambda& extractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish, const TWideLambda& load) {
+TRuntimeNode TProgramBuilder::WideLastCombinerWithSpilling(TRuntimeNode flow, const TWideLambda& extractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish, const TBinaryWideLambda& serialize, const TBinaryWideLambda& deserialize) {
     if constexpr (RuntimeVersion < 51U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
 
-    return WideLastCombinerCommonWithSpilling(__func__, flow, extractor, init, update, finish, load);
+    return WideLastCombinerCommonWithSpilling(__func__, flow, extractor, init, update, finish, serialize, deserialize);
 }
 
 TRuntimeNode TProgramBuilder::WideCondense1(TRuntimeNode flow, const TWideLambda& init, const TWideSwitchLambda& switcher, const TBinaryWideLambda& update, bool useCtx) {

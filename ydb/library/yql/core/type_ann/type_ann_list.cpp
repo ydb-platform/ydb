@@ -4192,7 +4192,7 @@ namespace {
         status = status.Combine(ConvertToLambda(input->ChildRef(4), ctx.Expr, 3));
         status = status.Combine(ConvertToLambda(input->ChildRef(5), ctx.Expr, 2));
         if (isWithSpilling) {
-            status = status.Combine(ConvertToLambda(input->ChildRef(6), ctx.Expr, isFinalize ? 2 : 1));
+            status = status.Combine(ConvertToLambda(input->ChildRef(6), ctx.Expr, 2));
         }
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
@@ -4289,7 +4289,7 @@ namespace {
                     return IGraphTransformer::TStatus::Error;
                 }
             } else {
-                if (!UpdateLambdaAllArgumentsTypes(lambdaSerDeHandler, {retItemType}, ctx.Expr)) {
+                if (!UpdateLambdaAllArgumentsTypes(lambdaSerDeHandler, {lambdaKeySelector->GetTypeAnn(), retItemType}, ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;
                 }
             }
@@ -7075,7 +7075,7 @@ namespace {
         status = status.Combine(ConvertToLambda(initHandler, ctx.Expr, 2));
         status = status.Combine(ConvertToLambda(updateHandler, ctx.Expr, 3));
         status = status.Combine(ConvertToLambda(finishHandler, ctx.Expr, 2));
-        status = status.Combine(ConvertToLambda(loadHandler, ctx.Expr, 1));
+        status = status.Combine(ConvertToLambda(loadHandler, ctx.Expr, 2));
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -7142,7 +7142,7 @@ namespace {
         }
 
         // loadHandler
-        if (!UpdateLambdaAllArgumentsTypes(loadHandler, {retItemType}, ctx.Expr)) {
+        if (!UpdateLambdaAllArgumentsTypes(loadHandler, {keyType, retItemType}, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
         if (!loadHandler->GetTypeAnn()) {

@@ -74,7 +74,7 @@ private:
     TExprNode::TPtr GeneratePostAggregateInitPhase();
     TExprNode::TPtr GeneratePostAggregateFinishPhase();
     TExprNode::TPtr GeneratePostAggregateMergePhase();
-    TExprNode::TPtr GeneratePostAggregateSavePhase();
+    TExprNode::TPtr GeneratePostAggregateSerializePhase();
 
     std::function<TExprNodeBuilder& (TExprNodeBuilder&)> GetPartialAggArgExtractor(ui32 i, bool deserialize);
     TExprNode::TPtr GetFinalAggStateExtractor(ui32 i);

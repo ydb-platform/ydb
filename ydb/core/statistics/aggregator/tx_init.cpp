@@ -84,7 +84,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                         Self->NextForceTraversalOperationId = FromString<ui64>(value);
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded next traversal operation id: " << value);
                         break;
-                    }                    
+                    }
                     case Schema::SysParam_TraversalIsColumnTable: {
                         Self->TraversalIsColumnTable = FromString<bool>(value);
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal IsColumnTable: " << value);
@@ -95,7 +95,6 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded global traversal round: " << value);
                         break;
                     }
-                 
                     default:
                         SA_LOG_CRIT("[" << Self->TabletID() << "] Unexpected SysParam id: " << id);
                 }

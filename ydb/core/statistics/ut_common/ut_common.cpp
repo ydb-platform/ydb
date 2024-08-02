@@ -323,13 +323,29 @@ void ValidateCountMinAbsense(TTestActorRuntime& runtime, TPathId pathId) {
     UNIT_ASSERT(!rsp.Success);
 }
 
-void Analyze(TTestActorRuntime& runtime, const std::vector<TPathId>& pathIds, ui64 saTabletId) {
+TAnalyzedTable::TAnalyzedTable(const TPathId& pathId)
+    : PathId(pathId)
+{}
+
+TAnalyzedTable::TAnalyzedTable(const TPathId& pathId, const std::vector<ui32>& columnTags)
+    : PathId(pathId)
+    , ColumnTags(columnTags)
+{}
+
+void TAnalyzedTable::ToProto(NKikimrStat::TTable& tableProto) const {
+    PathIdFromPathId(PathId, tableProto.MutablePathId());
+    tableProto.MutableColumnTags()->Add(ColumnTags.begin(), ColumnTags.end());
+}
+
+
+void Analyze(TTestActorRuntime& runtime, const std::vector<TAnalyzedTable>& tables, ui64 saTabletId) {
     const ui64 cookie = 555;
     auto ev = std::make_unique<TEvStatistics::TEvAnalyze>();
-    auto& record = ev->Record;
+    NKikimrStat::TEvAnalyze& record = ev->Record;
     record.SetCookie(cookie);
-    for (const TPathId& pathId : pathIds)
-        PathIdFromPathId(pathId, record.AddTables()->MutablePathId());
+    record.AddTypes(NKikimrStat::EColumnStatisticType::TYPE_COUNT_MIN_SKETCH);
+    for (const TAnalyzedTable& table : tables)
+        table.ToProto(*record.AddTables());
 
     auto sender = runtime.AllocateEdgeActor();
     runtime.SendToPipe(saTabletId, sender, ev.release());
@@ -338,10 +354,10 @@ void Analyze(TTestActorRuntime& runtime, const std::vector<TPathId>& pathIds, ui
     UNIT_ASSERT_VALUES_EQUAL(evResponse->Get()->Record.GetCookie(), cookie);
 }
 
-void AnalyzeTable(TTestActorRuntime& runtime, const TPathId& pathId, ui64 shardTabletId) {
+void AnalyzeTable(TTestActorRuntime& runtime, const TAnalyzedTable& table, ui64 shardTabletId) {
     auto ev = std::make_unique<TEvStatistics::TEvAnalyzeTable>();
     auto& record = ev->Record;
-    PathIdFromPathId(pathId, record.MutableTable()->MutablePathId());
+    table.ToProto(*record.MutableTable());
     record.AddTypes(NKikimrStat::EColumnStatisticType::TYPE_COUNT_MIN_SKETCH);
 
     auto sender = runtime.AllocateEdgeActor();

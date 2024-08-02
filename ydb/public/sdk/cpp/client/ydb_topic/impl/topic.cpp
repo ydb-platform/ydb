@@ -3,6 +3,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
 
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/retry/retry_async.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/scheme_helpers/helpers.h>
 
 #include <util/random/random.h>
@@ -519,6 +520,14 @@ std::shared_ptr<IWriteSession> TTopicClient::CreateWriteSession(const TWriteSess
 TAsyncStatus TTopicClient::CommitOffset(const TString& path, ui64 partitionId, const TString& consumerName, ui64 offset,
     const TCommitOffsetSettings& settings) {
     return Impl_->CommitOffset(path, partitionId, consumerName, offset, settings);
+}
+
+TAsyncStatus TTopicClient::RetryOperation(TOperationWithoutSessionFunc&& operation,
+        const TRetryOperationSettings& settings)
+{
+    using TRetryContextAsync = NYdb::NRetry::Async::TRetryWithoutSession<TTopicClient, TOperationWithoutSessionFunc>; 
+    auto context = MakeIntrusive<TRetryContextAsync>(*this, std::move(operation), settings);
+    return context->Execute();
 }
 
 }  // namespace NYdb::NTopic

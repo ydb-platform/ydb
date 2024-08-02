@@ -478,7 +478,8 @@ private:
             progress->Record.SetRequestSeqNoGeneration(SeqNo.Generation);
             progress->Record.SetRequestSeqNoRound(SeqNo.Round);
 
-            progress->Record.SetLastKeyAck(TSerializedCellVec::Serialize(LastUploadedKey.GetCells()));
+            // TODO(mbkkt) ReleaseBuffer isn't possible, we use LastUploadedKey for logging
+            progress->Record.SetLastKeyAck(LastUploadedKey.GetBuffer());
             progress->Record.SetRowsDelta(WriteBuf.GetRows());
             progress->Record.SetBytesDelta(WriteBuf.GetBytes());
             WriteBuf.Clear();
@@ -663,16 +664,16 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
         return;
     }
 
-    auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
-    response->Record.SetBuildIndexId(record.GetBuildIndexId());
-    response->Record.SetTabletId(TabletID());
-    response->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::ACCEPTED);
 
     TScanRecord::TSeqNo seqNo = {record.GetSeqNoGeneration(), record.GetSeqNoRound()};
-    response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
-    response->Record.SetRequestSeqNoRound(seqNo.Round);
-
     auto badRequest = [&](const TString& error) {
+        auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
+        response->Record.SetBuildIndexId(record.GetBuildIndexId());
+        response->Record.SetTabletId(TabletID());
+        response->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::ACCEPTED);
+
+        response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
+        response->Record.SetRequestSeqNoRound(seqNo.Round);
         response->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::BAD_REQUEST);
         auto issue = response->Record.AddIssues();
         issue->set_severity(NYql::TSeverityIds::S_ERROR);
@@ -699,7 +700,6 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
     if (const auto* recCard = ScanManager.Get(buildIndexId)) {
         if (recCard->SeqNo == seqNo) {
             // do no start one more scan
-            ctx.Send(ev->Sender, std::move(response));
             return;
         }
 
@@ -774,8 +774,6 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
     TScanRecord recCard = {scanId, seqNo};
 
     ScanManager.Set(buildIndexId, recCard);
-
-    ctx.Send(ev->Sender, std::move(response));
 }
 
 }

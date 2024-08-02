@@ -242,6 +242,12 @@ public:
     }
 
     void PassRequestToResourcePool() {
+        if (QueryState->UserRequestContext->PoolConfig) {
+            LOG_D("request placed into pool from cache: " << QueryState->UserRequestContext->PoolId);
+            CompileQuery();
+            return;
+        }
+
         Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvPlaceRequestIntoPool(
             QueryState->Database,
             SessionId,
@@ -475,6 +481,7 @@ public:
 
     void Handle(NWorkload::TEvContinueRequest::TPtr& ev) {
         YQL_ENSURE(QueryState);
+        QueryState->ContinueTime = TInstant::Now();
 
         if (ev->Get()->Status == Ydb::StatusIds::UNSUPPORTED) {
             LOG_T("Failed to place request in resource pool, feature flag is disabled");
@@ -1552,6 +1559,9 @@ public:
 
         stats->DurationUs = ((TInstant::Now() - QueryState->StartTime).MicroSeconds());
         stats->WorkerCpuTimeUs = (QueryState->GetCpuTime().MicroSeconds());
+        if (const auto continueTime = QueryState->ContinueTime) {
+            stats->QueuedTimeUs = (continueTime - QueryState->StartTime).MicroSeconds();
+        }
         if (QueryState->CompileResult) {
             stats->Compilation.emplace();
             stats->Compilation->FromCache = (QueryState->CompileStats.FromCache);

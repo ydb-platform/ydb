@@ -85,6 +85,7 @@ public:
             UserRequestContext = MakeIntrusive<TUserRequestContext>(RequestEv->GetTraceId(), Database, sessionId);
         }
         UserRequestContext->PoolId = RequestEv->GetPoolId();
+        UserRequestContext->PoolConfig = RequestEv->GetPoolConfig();
     }
 
     // the monotonously growing counter, the ordinal number of the query,
@@ -114,6 +115,7 @@ public:
     bool IsDocumentApiRestricted_ = false;
 
     TInstant StartTime;
+    TInstant ContinueTime;
     NYql::TKikimrQueryDeadlines QueryDeadlines;
     TKqpQueryStats QueryStats;
     bool KeepSession = false;

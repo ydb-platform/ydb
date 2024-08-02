@@ -1,5 +1,7 @@
 #pragma once
 #include "common/owner.h"
+#include "initialization.h"
+#include "tx_progress.h"
 
 #include <ydb/core/tx/columnshard/counters/tablet_counters.h>
 
@@ -15,137 +17,6 @@ enum class EWriteFailReason {
     NoTable /* "no_table" */,
     IncorrectSchema /* "incorrect_schema" */,
     Overload /* "overload" */
-};
-
-class TCSInitialization: public TCommonCountersOwner {
-private:
-    using TBase = TCommonCountersOwner;
-
-    const NMonitoring::THistogramPtr HistogramTabletInitializationMs;
-    const NMonitoring::THistogramPtr HistogramTxInitDurationMs;
-    const NMonitoring::THistogramPtr HistogramTxUpdateSchemaDurationMs;
-    const NMonitoring::THistogramPtr HistogramTxInitSchemaDurationMs;
-    const NMonitoring::THistogramPtr HistogramActivateExecutorFromActivationDurationMs;
-    const NMonitoring::THistogramPtr HistogramSwitchToWorkFromActivationDurationMs;
-    const NMonitoring::THistogramPtr HistogramSwitchToWorkFromCreateDurationMs;
-
-public:
-    void OnTxInitFinished(const TDuration d) const {
-        HistogramTxInitDurationMs->Collect(d.MilliSeconds());
-    }
-
-    void OnTxUpdateSchemaFinished(const TDuration d) const {
-        HistogramTxUpdateSchemaDurationMs->Collect(d.MilliSeconds());
-    }
-
-    void OnTxInitSchemaFinished(const TDuration d) const {
-        HistogramTxInitSchemaDurationMs->Collect(d.MilliSeconds());
-    }
-
-    void OnActivateExecutor(const TDuration fromCreate) const {
-        HistogramActivateExecutorFromActivationDurationMs->Collect(fromCreate.MilliSeconds());
-    }
-    void OnSwitchToWork(const TDuration fromStart, const TDuration fromCreate) const {
-        HistogramSwitchToWorkFromActivationDurationMs->Collect(fromStart.MilliSeconds());
-        HistogramSwitchToWorkFromCreateDurationMs->Collect(fromCreate.MilliSeconds());
-    }
-
-    TCSInitialization(TCommonCountersOwner& owner)
-        : TBase(owner, "stage", "initialization")
-        , HistogramTabletInitializationMs(TBase::GetHistogram("TabletInitializationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
-        , HistogramTxInitDurationMs(TBase::GetHistogram("TxInitDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
-        , HistogramTxUpdateSchemaDurationMs(TBase::GetHistogram("TxInitDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
-        , HistogramTxInitSchemaDurationMs(TBase::GetHistogram("TxInitSchemaDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
-        , HistogramActivateExecutorFromActivationDurationMs(
-              TBase::GetHistogram("ActivateExecutorFromActivationDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
-        , HistogramSwitchToWorkFromActivationDurationMs(
-              TBase::GetHistogram("SwitchToWorkFromActivationDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
-        , HistogramSwitchToWorkFromCreateDurationMs(
-              TBase::GetHistogram("SwitchToWorkFromCreateDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32))) {
-    }
-};
-
-class TTxProgressCounters: public TCommonCountersOwner {
-private:
-    using TBase = TCommonCountersOwner;
-    using TOpType = TString;
-
-    class TProgressCounters: public TCommonCountersOwner {
-    private:
-        using TBase = TCommonCountersOwner;
-
-    public:
-        NMonitoring::TDynamicCounters::TCounterPtr RegisterTx;
-        NMonitoring::TDynamicCounters::TCounterPtr RegisterTxWithDeadline;
-        NMonitoring::TDynamicCounters::TCounterPtr StartProposeOnExecute;
-        NMonitoring::TDynamicCounters::TCounterPtr StartProposeOnComplete;
-        NMonitoring::TDynamicCounters::TCounterPtr FinishProposeOnExecute;
-        NMonitoring::TDynamicCounters::TCounterPtr FinishProposeOnComplete;
-        NMonitoring::TDynamicCounters::TCounterPtr FinishPlannedTx;
-        NMonitoring::TDynamicCounters::TCounterPtr AbortTx;
-
-        TProgressCounters(const TCommonCountersOwner& owner)
-            : TBase(owner)
-            , RegisterTx(TBase::GetDeriviative("RegisterTx"))
-            , RegisterTxWithDeadline(TBase::GetDeriviative("RegisterTxWithDeadline"))
-            , StartProposeOnExecute(TBase::GetDeriviative("StartProposeOnExecute"))
-            , StartProposeOnComplete(TBase::GetDeriviative("StartProposeOnComplete"))
-            , FinishProposeOnExecute(TBase::GetDeriviative("FinishProposeOnExecute"))
-            , FinishProposeOnComplete(TBase::GetDeriviative("FinishProposeOnComplete"))
-            , FinishPlannedTx(TBase::GetDeriviative("FinishPlannedTx"))
-            , AbortTx(TBase::GetDeriviative("AbortTx")) {
-        }
-    };
-
-    THashMap<TOpType, TProgressCounters> CountersByOpType;
-
-public:
-    void OnRegisterTx(const TOpType& opType) {
-        GetSubGroup(opType).RegisterTx->Add(1);
-    }
-
-    void OnRegisterTxWithDeadline(const TOpType& opType) {
-        GetSubGroup(opType).RegisterTxWithDeadline->Add(1);
-    }
-
-    void OnStartProposeOnExecute(const TOpType& opType) {
-        GetSubGroup(opType).StartProposeOnExecute->Add(1);
-    }
-
-    void OnStartProposeOnComplete(const TOpType& opType) {
-        GetSubGroup(opType).StartProposeOnComplete->Add(1);
-    }
-
-    void OnFinishProposeOnExecute(const TOpType& opType) {
-        GetSubGroup(opType).FinishProposeOnExecute->Add(1);
-    }
-
-    void OnFinishProposeOnComplete(const TOpType& opType) {
-        GetSubGroup(opType).FinishProposeOnComplete->Add(1);
-    }
-
-    void OnFinishPlannedTx(const TOpType& opType) {
-        GetSubGroup(opType).FinishPlannedTx->Add(1);
-    }
-
-    void OnAbortTx(const TOpType& opType) {
-        GetSubGroup(opType).AbortTx->Add(1);
-    }
-
-    TTxProgressCounters(TCommonCountersOwner& owner)
-        : TBase(owner, "TxProgress") {
-    }
-
-private:
-    TProgressCounters& GetSubGroup(const TOpType& opType) {
-        auto findSubGroup = CountersByOpType.FindPtr(opType);
-        if (findSubGroup) {
-            return *findSubGroup;
-        }
-
-        auto subGroup = TBase::CreateSubGroup("operation", opType);
-        return CountersByOpType.emplace(opType, subGroup).first->second;
-    }
 };
 
 class TCSCounters: public TCommonCountersOwner {

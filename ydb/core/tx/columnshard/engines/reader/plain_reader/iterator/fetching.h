@@ -12,12 +12,17 @@ class TFetchingScriptCursor;
 class IFetchingStep {
 private:
     YDB_READONLY_DEF(TString, Name);
+    YDB_READONLY(TDuration, SumDuration, TDuration::Zero());
+
 protected:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const = 0;
     virtual TString DoDebugString() const {
         return "";
     }
 public:
+    void AddDuration(const TDuration d) {
+        SumDuration += d;
+    }
     virtual ui64 DoPredictRawBytes(const std::shared_ptr<IDataSource>& /*source*/) const {
         return 0;
     }
@@ -39,7 +44,7 @@ public:
 
     TString DebugString() const {
         TStringBuilder sb;
-        sb << "name=" << Name << ";details={" << DoDebugString() << "};";
+        sb << "name=" << Name << ";duration=" << SumDuration << ";details={" << DoDebugString() << "};";
         return sb;
     }
 };
@@ -51,13 +56,23 @@ private:
 public:
     TFetchingScript() = default;
 
+    void AddStepDuration(const ui32 index, const TDuration d) {
+        GetStep(index)->AddDuration(d);
+    }
+
     TString DebugString() const {
         TStringBuilder sb;
-        sb << "[";
+        TStringBuilder sbBranch;
         for (auto&& i : Steps) {
-            sb << "{" << i->DebugString() << "};";
+            if (i->GetSumDuration() > TDuration::MilliSeconds(10)) {
+                sbBranch << "{" << i->DebugString() << "};";
+            }
         }
-        sb << "]";
+        if (!sbBranch) {
+            return "";
+        }
+        sb << "{branch:" << BranchName << ";";
+        sb << "steps_10Ms:[" << sbBranch << "]}";
         return sb;
     }
 
@@ -98,8 +113,15 @@ public:
 
 class TFetchingScriptCursor {
 private:
+    std::optional<TMonotonic> CurrentStartInstant;
     ui32 CurrentStepIdx = 0;
     std::shared_ptr<TFetchingScript> Script;
+    void FlushDuration() {
+        AFL_VERIFY(CurrentStartInstant);
+        Script->AddStepDuration(CurrentStepIdx, TMonotonic::Now() - *CurrentStartInstant);
+        CurrentStartInstant.reset();
+    }
+
 public:
     TFetchingScriptCursor(const std::shared_ptr<TFetchingScript>& script, const ui32 index)
         : CurrentStepIdx(index)
@@ -117,6 +139,7 @@ public:
     }
 
     bool Next() {
+        FlushDuration();
         return !Script->IsFinished(++CurrentStepIdx);
     }
 

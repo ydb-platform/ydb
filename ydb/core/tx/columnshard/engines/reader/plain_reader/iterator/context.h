@@ -47,15 +47,15 @@ public:
         return ReadMetadata;
     }
 
+    ~TSpecialReadContext() {
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("profile", ProfileDebugString());
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("fetching", DebugString());
+    }
+
     std::unique_ptr<NArrow::NMerger::TMergePartialStream> BuildMerger() const;
 
-    TString DebugString() const {
-        return TStringBuilder() << "ef=" << EFColumns->DebugString() << ";"
-                                << "sharding=" << ShardingColumns->DebugString() << ";"
-                                << "pk=" << PKColumns->DebugString() << ";"
-                                << "ff=" << FFColumns->DebugString() << ";"
-                                << "program_input=" << ProgramInputColumns->DebugString();
-    }
+    TString DebugString() const;
+    TString ProfileDebugString() const;
 
     TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext);
 

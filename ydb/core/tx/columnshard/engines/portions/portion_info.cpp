@@ -596,7 +596,7 @@ TPortionInfo::TPreparedBatchData PrepareForAssembleImpl(const TPortionInfo& port
     columns.reserve(arrowResultSchema->num_fields());
     const ui32 rowsCount = portion.GetRecordsCount();
     for (auto&& i : arrowResultSchema->fields()) {
-        columns.emplace_back(rowsCount, dataSchema.GetColumnLoaderOptional(i->name()), resultSchema.GetColumnLoaderOptional(i->name()));
+        columns.emplace_back(rowsCount, dataSchema.GetColumnLoaderOptional(i->name()), resultSchema.GetColumnLoaderVerified(i->name()));
     }
     {
         int skipColumnId = -1;

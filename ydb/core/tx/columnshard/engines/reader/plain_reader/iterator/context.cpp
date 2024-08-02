@@ -313,10 +313,32 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
     };
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("columns_context_info", DebugString());
-    for (ui32 i = 0; i < (1 << 7); ++i) {
+    for (ui32 i = 0; i < (1 << 6); ++i) {
         CacheFetchingScripts[GetBit(i, 0)][GetBit(i, 1)][GetBit(i, 2)][GetBit(i, 3)][GetBit(i, 4)][GetBit(i, 5)]
             = BuildColumnsFetchingPlan(GetBit(i, 0), GetBit(i, 1), GetBit(i, 2), GetBit(i, 3), GetBit(i, 4), GetBit(i, 5));
     }
+}
+
+TString TSpecialReadContext::DebugString() const {
+    TStringBuilder sb;
+    sb << "ef=" << EFColumns->DebugString() << ";"
+       << "sharding=" << ShardingColumns->DebugString() << ";"
+       << "pk=" << PKColumns->DebugString() << ";"
+       << "ff=" << FFColumns->DebugString() << ";"
+       << "program_input=" << ProgramInputColumns->DebugString() << ";";
+    return sb;
+}
+
+TString TSpecialReadContext::ProfileDebugString() const {
+    TStringBuilder sb;
+    const auto GetBit = [](const ui32 val, const ui32 pos) -> ui32 {
+        return (val & (1 << pos)) ? 1 : 0;
+    };
+
+    for (ui32 i = 0; i < (1 << 6); ++i) {
+        sb << CacheFetchingScripts[GetBit(i, 0)][GetBit(i, 1)][GetBit(i, 2)][GetBit(i, 3)][GetBit(i, 4)][GetBit(i, 5)]->DebugString() << ";";
+    }
+    return sb;
 }
 
 }   // namespace NKikimr::NOlap::NReader::NPlain

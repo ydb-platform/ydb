@@ -638,18 +638,17 @@ message TEvDescribeSchemeInfo {
         Cache = 2;
     }
 
-    optional string Status = 1;
-    optional string Reason = 2;
-    optional string Path = 3;
-    optional NKikimrSchemeOp.TPathDescription PathDescription = 4;
-    optional fixed64 DEPRECATED_PathOwner = 5;  // replaced by PathOwnerId
-    optional fixed64 PathId = 6;
-
-    optional string LastExistedPrefixPath = 7;
-    optional fixed64 LastExistedPrefixPathId = 8;
-    optional NKikimrSchemeOp.TPathDescription LastExistedPrefixDescription = 9;
-    optional fixed64 PathOwnerId = 10;
-    optional ESource Source = 11;
+    string Status = 1;
+    string Reason = 2;
+    string Path = 3;
+    NKikimrSchemeOp.TPathDescription PathDescription = 4;
+    fixed64 DEPRECATED_PathOwner = 5;  // replaced by PathOwnerId
+    fixed64 PathId = 6;
+    string LastExistedPrefixPath = 7;
+    fixed64 LastExistedPrefixPathId = 8;
+    NKikimrSchemeOp.TPathDescription LastExistedPrefixDescription = 9;
+    fixed64 PathOwnerId = 10;
+    ESource Source = 11;
 }
 
 enum EAutocompleteType {

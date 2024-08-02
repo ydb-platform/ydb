@@ -1,17 +1,8 @@
 #pragma once
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/mon.h>
-#include <library/cpp/protobuf/json/json2proto.h>
-#include <library/cpp/json/json_writer.h>
-#include <ydb/core/base/tablet_pipe.h>
-#include <ydb/library/services/services.pb.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
-#include "viewer.h"
 #include "json_pipe_req.h"
-
+#include "viewer.h"
+#include <library/cpp/json/json_writer.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 
 namespace NKikimr {
 namespace NViewer {

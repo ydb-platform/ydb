@@ -1,17 +1,11 @@
 #pragma once
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/interconnect.h>
-#include <ydb/library/actors/core/mon.h>
-#include <ydb/library/services/services.pb.h>
-#include <ydb/core/viewer/json/json.h>
-#include "viewer.h"
 #include "json_pipe_req.h"
+#include "viewer.h"
+#include <ydb/core/viewer/yaml/yaml.h>
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 using namespace NActors;
-
 
 template <typename RequestType, typename ResponseType>
 struct TJsonVDiskRequestHelper  {
@@ -23,7 +17,6 @@ struct TJsonVDiskRequestHelper  {
         return "";
     }
 };
-
 
 template <typename RequestType, typename ResponseType>
 class TJsonVDiskRequest : public TViewerPipeClient {
@@ -199,10 +192,11 @@ public:
     void ReplyAndPassAway() override {
         ReplyAndPassAway({});
     }
-};
 
-template <typename RequestType, typename ResponseType>
-struct TJsonRequestParameters<TJsonVDiskRequest<RequestType, ResponseType>> {
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<typename ResponseType::ProtoRecordType>();
+    }
+
     static YAML::Node GetParameters() {
         return YAML::Load(R"___(
             - name: node_id
@@ -251,12 +245,4 @@ struct TJsonRequestParameters<TJsonVDiskRequest<RequestType, ResponseType>> {
     }
 };
 
-template <typename RequestType, typename ResponseType>
-struct TJsonRequestSchema<TJsonVDiskRequest<RequestType, ResponseType>> {
-    static YAML::Node GetSchema() {
-        return TProtoToYaml::ProtoToYamlSchema<typename ResponseType::ProtoRecordType>();
-    }
-};
-
-}
 }

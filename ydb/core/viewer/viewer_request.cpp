@@ -1,16 +1,12 @@
-#include <ydb/core/blobstorage/base/blobstorage_events.h>
-
 #include "viewer_request.h"
+#include "viewer_autocomplete.h"
+#include "viewer_query_old.h"
+#include "viewer_render.h"
+#include "viewer_sysinfo.h"
+#include "viewer_tabletinfo.h"
 #include "wb_req.h"
 
-#include "json_tabletinfo.h"
-#include "json_sysinfo.h"
-#include "json_query_old.h"
-#include "json_render.h"
-#include "json_autocomplete.h"
-
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 using namespace NActors;
 using namespace NNodeWhiteboard;
@@ -106,5 +102,4 @@ bool IsPostContent(const NMon::TEvHttpInfo::TPtr& event) {
     return false;
 }
 
-}
 }

@@ -1,4 +1,5 @@
 #include "json_pipe_req.h"
+#include <library/cpp/json/json_writer.h>
 
 namespace NKikimr::NViewer {
 
@@ -410,6 +411,10 @@ TString TViewerPipeClient::GetHTTPOKJSON(TString response, TInstant lastModified
     return Viewer->GetHTTPOKJSON(GetRequest(), std::move(response), lastModified);
 }
 
+TString TViewerPipeClient::GetHTTPOKJSON(const NJson::TJsonValue& response, TInstant lastModified) {
+    return GetHTTPOKJSON(NJson::WriteJson(response, false), lastModified);
+}
+
 TString TViewerPipeClient::GetHTTPGATEWAYTIMEOUT(TString contentType, TString response) {
     return Viewer->GetHTTPGATEWAYTIMEOUT(GetRequest(), std::move(contentType), std::move(response));
 }
@@ -420,6 +425,10 @@ TString TViewerPipeClient::GetHTTPBADREQUEST(TString contentType, TString respon
 
 TString TViewerPipeClient::GetHTTPINTERNALERROR(TString contentType, TString response) {
     return Viewer->GetHTTPINTERNALERROR(GetRequest(), std::move(contentType), std::move(response));
+}
+
+TString TViewerPipeClient::GetHTTPFORBIDDEN(TString contentType, TString response) {
+    return Viewer->GetHTTPFORBIDDEN(GetRequest(), std::move(contentType), std::move(response));
 }
 
 TString TViewerPipeClient::MakeForward(const std::vector<ui32>& nodes) {
@@ -441,6 +450,10 @@ void TViewerPipeClient::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         ui32 requests = FailPipeConnect(ev->Get()->TabletId);
         RequestDone(requests);
     }
+}
+
+void TViewerPipeClient::HandleTimeout() {
+    ReplyAndPassAway(GetHTTPGATEWAYTIMEOUT());
 }
 
 void TViewerPipeClient::PassAway() {

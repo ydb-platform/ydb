@@ -6,7 +6,8 @@
 namespace NKikimr::NColumnShard {
 
 TTxController::TTxController(TColumnShard& owner)
-    : Owner(owner), Counters(owner.Counters.GetCSCounters().TxProgress) {
+    : Owner(owner)
+    , Counters(owner.Counters.GetCSCounters().TxProgress) {
 }
 
 bool TTxController::HaveOutdatedTxs() const {

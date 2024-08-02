@@ -557,10 +557,12 @@ IActor* MakeCreateConnectionActor(
          computeConfig](const TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& req)
         -> std::vector<TSchemaQueryTask> {
         auto& connectionContent = req->Get()->Request.content();
+        const auto& scope = req->Get()->Scope;
 
         auto createSecretStatement = CreateSecretObjectQuery(connectionContent.setting(),
                                                              connectionContent.name(),
-                                                             signer);
+                                                             signer,
+                                                             scope);
 
         std::vector<TSchemaQueryTask> statements;
         if (createSecretStatement) {
@@ -659,13 +661,15 @@ IActor* MakeModifyConnectionActor(
         auto& oldConnectionContent = (*request->Get()->OldConnectionContent);
         auto& oldBindings          = request->Get()->OldBindingContents;
         auto& newConnectionContent = request->Get()->Request.content();
+        const auto& scope = request->Get()->Scope;
 
         auto dropOldSecret =
-            DropSecretObjectQuery(oldConnectionContent.name());
+            DropSecretObjectQuery(oldConnectionContent.name(), scope);
         auto createNewSecret =
             CreateSecretObjectQuery(newConnectionContent.setting(),
                                     newConnectionContent.name(),
-                                    signer);
+                                    signer,
+                                    scope);
 
         bool replaceSupported = computeConfig.IsReplaceIfExistsSyntaxSupported();
         if (replaceSupported &&
@@ -673,7 +677,7 @@ IActor* MakeModifyConnectionActor(
             // CREATE OR REPLACE
             auto createSecretStatement =
                 CreateSecretObjectQuery(newConnectionContent.setting(),
-                                        newConnectionContent.name(), signer);
+                                        newConnectionContent.name(), signer, scope);
 
             std::vector<TSchemaQueryTask> statements;
             if (createSecretStatement) {
@@ -720,13 +724,13 @@ IActor* MakeModifyConnectionActor(
                 .SQL         = *dropOldSecret,
                 .RollbackSQL = CreateSecretObjectQuery(oldConnectionContent.setting(),
                                                        oldConnectionContent.name(),
-                                                       signer),
+                                                       signer, scope),
                 .ShouldSkipStepOnError = IsPathDoesNotExistIssue});
         }
         if (createNewSecret) {
             statements.push_back(TSchemaQueryTask{.SQL         = *createNewSecret,
                                                   .RollbackSQL = DropSecretObjectQuery(
-                                                      newConnectionContent.name())});
+                                                      newConnectionContent.name(), scope)});
         }
 
         statements.push_back(
@@ -787,9 +791,10 @@ IActor* MakeDeleteConnectionActor(
             const TEvControlPlaneProxy::TEvDeleteConnectionRequest::TPtr& request)
         -> std::vector<TSchemaQueryTask> {
         auto& connectionContent = *request->Get()->ConnectionContent;
+        const auto& scope = request->Get()->Scope;
 
         auto dropSecret =
-            DropSecretObjectQuery(connectionContent.name());
+            DropSecretObjectQuery(connectionContent.name(), scope);
 
         std::vector statements = {
             TSchemaQueryTask{.SQL = TString{MakeDeleteExternalDataSourceQuery(
@@ -803,7 +808,7 @@ IActor* MakeDeleteConnectionActor(
                                  .RollbackSQL =
                                      CreateSecretObjectQuery(connectionContent.setting(),
                                                              connectionContent.name(),
-                                                             signer),
+                                                             signer, scope),
                                  .ShouldSkipStepOnError = IsPathDoesNotExistIssue});
         }
         return statements;

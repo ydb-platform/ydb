@@ -7,6 +7,7 @@
 #include <ydb/core/fq/libs/result_formatter/result_formatter.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
+#include <ydb/public/lib/fq/scope.h>
 
 namespace NFq {
 namespace NPrivate {
@@ -94,7 +95,9 @@ TString SignAccountId(const TString& id, const TSigner::TPtr& signer) {
 
 TMaybe<TString> CreateSecretObjectQuery(const FederatedQuery::ConnectionSetting& setting,
                                 const TString& name,
-                                const TSigner::TPtr& signer) {
+                                const TSigner::TPtr& signer,
+                                const TString& scope) {
+    const TString folderId = NYdb::NFq::TScope{scope}.ParseFolder();
     using namespace fmt::literals;
     TString secretObjects;
     auto serviceAccountId = ExtractServiceAccountId(setting);
@@ -103,7 +106,7 @@ TMaybe<TString> CreateSecretObjectQuery(const FederatedQuery::ConnectionSetting&
             R"(
                     UPSERT OBJECT {sa_secret_name} (TYPE SECRET) WITH value={signature};
                 )",
-            "sa_secret_name"_a = EncloseAndEscapeString("k1" + name, '`'),
+            "sa_secret_name"_a = EncloseAndEscapeString(TStringBuilder{} << "f1_" << folderId << name, '`'),
             "signature"_a       = EncloseSecret(EncloseAndEscapeString(SignAccountId(serviceAccountId, signer), '"'))) : std::string{};
     }
 
@@ -113,7 +116,7 @@ TMaybe<TString> CreateSecretObjectQuery(const FederatedQuery::ConnectionSetting&
                 R"(
                     UPSERT OBJECT {password_secret_name} (TYPE SECRET) WITH value={password};
                 )",
-            "password_secret_name"_a = EncloseAndEscapeString("k2" + name, '`'),
+            "password_secret_name"_a = EncloseAndEscapeString(TStringBuilder{} << "f2_" << folderId << name, '`'),
             "password"_a = EncloseSecret(EncloseAndEscapeString(*password, '"')));
     }
 
@@ -281,17 +284,22 @@ TString MakeCreateExternalDataSourceQuery(
                                   signer));
 }
 
-TMaybe<TString> DropSecretObjectQuery(const TString& name) {
+TMaybe<TString> DropSecretObjectQuery(const TString& name, const TString& scope) {
+    const TString folderId = NYdb::NFq::TScope{scope}.ParseFolder();
     using namespace fmt::literals;
     return fmt::format(
             R"(
                 DROP OBJECT {secret_name1} (TYPE SECRET);
                 DROP OBJECT {secret_name2} (TYPE SECRET);
                 DROP OBJECT {secret_name3} (TYPE SECRET); -- for backward compatibility
+                DROP OBJECT {secret_name4} (TYPE SECRET); -- for backward compatibility
+                DROP OBJECT {secret_name5} (TYPE SECRET); -- for backward compatibility
             )",
-        "secret_name1"_a = EncloseAndEscapeString("k1" + name, '`'),
-        "secret_name2"_a = EncloseAndEscapeString("k2" + name, '`'),
-        "secret_name3"_a = EncloseAndEscapeString(name, '`'));
+        "secret_name1"_a = EncloseAndEscapeString(TStringBuilder{} << "f1_" << folderId << name, '`'),
+        "secret_name2"_a = EncloseAndEscapeString(TStringBuilder{} << "f2_" << folderId << name, '`'),
+        "secret_name3"_a = EncloseAndEscapeString(TStringBuilder{} << "k1" << name, '`'),
+        "secret_name4"_a = EncloseAndEscapeString(TStringBuilder{} << "k2" << name, '`'),
+        "secret_name5"_a = EncloseAndEscapeString(name, '`'));
 }
 
 TString MakeDeleteExternalDataTableQuery(const TString& tableName) {

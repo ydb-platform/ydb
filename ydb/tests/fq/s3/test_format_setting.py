@@ -2074,3 +2074,103 @@ Pear;15;33'''
         with_predicate_ingress_bytes = int(stat[graph_name]["IngressBytes"]["sum"])
 
         assert without_predicate_ingress_bytes > with_predicate_ingress_bytes, stat
+
+    @yq_all
+    def test_parquet_list_type(self, kikimr, s3, client, unique_prefix):
+        data = [['apple', 'bananna'], [[1, 2, 3], [7, 8]], [["aba", "ca"], ["d"]], [[[1, 2], [3]], [[4, 5], []]]]
+        schema = pa.schema([
+            ('fruit', pa.string()),
+            ('list', pa.list_(pa.int32())),
+            ('list_str', pa.list_(pa.string())),
+            ('list_list', pa.list_(pa.list_(pa.int32())))
+            ])
+
+        table = pa.Table.from_arrays(data, schema=schema)
+        filename = 'test_parquet_list_type.parquet'
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
+
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "hcpp"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT
+                `fruit`, `list`, `list_str`, `list_list`
+            FROM
+                `{storage_connection_name}`.`/{filename}`
+            WITH (FORMAT="parquet",
+                SCHEMA=(
+                `fruit` Utf8 NOT NULL,
+                `list` List<Int32>,
+                `list_str` List<String>,
+                `list_list` List<List<Int32>>
+                ));
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        rows = data.result.result_set.rows
+        assert len(rows) == 2, "invalid count rows"
+        assert rows[0].items[0].text_value == "apple", str(rows)
+        assert rows[0].items[1].items[0].int32_value == 1, str(rows)
+        assert rows[0].items[1].items[1].int32_value == 2, str(rows)
+        assert rows[0].items[1].items[2].int32_value == 3, str(rows)
+        assert rows[0].items[2].items[0].bytes_value == b"aba", str(rows)
+        assert rows[0].items[2].items[1].bytes_value == b"ca", str(rows)
+        assert rows[0].items[3].items[0].items[0].int32_value == 1, str(rows)
+        assert rows[0].items[3].items[0].items[1].int32_value == 2, str(rows)
+        assert rows[0].items[3].items[1].items[0].int32_value == 3, str(rows)
+
+        assert rows[1].items[0].text_value == "bananna", str(rows)
+        assert rows[1].items[1].items[0].int32_value == 7, str(rows)
+        assert rows[1].items[1].items[1].int32_value == 8, str(rows)
+        assert rows[1].items[2].items[0].bytes_value == b"d", str(rows)
+
+        assert rows[1].items[3].items[0].items[0].int32_value == 4, str(rows)
+        assert rows[1].items[3].items[0].items[1].int32_value == 5, str(rows)
+        assert len(rows[1].items[3].items[1].items) == 0, str(rows)
+
+    @yq_all
+    def test_parquet_struct_type(self, kikimr, s3, client, unique_prefix):
+        data = [['apple', 'bananna'], [{"a": 1}, {"a": 3}]]
+        fields = [
+            ('a', pa.int32())
+        ]
+        schema = pa.schema([
+            ('fruit', pa.string()),
+            ('struct', pa.struct(fields))
+        ])
+
+        table = pa.Table.from_arrays(data, schema=schema)
+        filename = 'test_parquet_struct_type.parquet'
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
+
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "hcpp"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT
+                `fruit`, `struct`
+            FROM
+                `{storage_connection_name}`.`/{filename}`
+            WITH (FORMAT="parquet",
+                SCHEMA=(
+                `fruit` Utf8 NOT NULL,
+                `struct` Struct<a:Int32?>
+                ));
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        rows = data.result.result_set.rows
+        assert len(rows) == 2, "invalid count rows"
+        assert rows[0].items[0].text_value == "apple", str(rows)
+        assert rows[0].items[1].items[0].int32_value == 1, str(rows)
+
+        assert rows[1].items[0].text_value == "bananna", str(rows)
+        assert rows[1].items[1].items[0].int32_value == 3, str(rows)

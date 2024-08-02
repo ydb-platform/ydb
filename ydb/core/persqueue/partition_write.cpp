@@ -576,8 +576,10 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
 }
 
 NKikimrPQ::EScaleStatus TPartition::CheckScaleStatus(const TActorContext& ctx) {
-    auto const writeSpeedUsagePercent = SplitMergeAvgWriteBytes->GetValue() * 100.0 / Config.GetPartitionStrategy().GetScaleThresholdSeconds() / TotalPartitionWriteSpeed;
-    auto const sourceIdCount = SourceIdCounter.Count(ctx.Now() - TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()));
+    const auto writeSpeedUsagePercent = SplitMergeAvgWriteBytes->GetValue() * 100.0 / Config.GetPartitionStrategy().GetScaleThresholdSeconds() / TotalPartitionWriteSpeed;
+    const auto sourceIdWindow = TDuration::Seconds(std::min<ui32>(5, Config.GetPartitionStrategy().GetScaleThresholdSeconds()));
+    const auto sourceIdCount = SourceIdCounter.Count(ctx.Now() - sourceIdWindow);
+
     LOG_DEBUG_S(
         ctx, NKikimrServices::PERSQUEUE,
         "TPartition::CheckScaleStatus"
@@ -589,6 +591,7 @@ NKikimrPQ::EScaleStatus TPartition::CheckScaleStatus(const TActorContext& ctx) {
             << " Topic: \"" << TopicName() << "\"." <<
         " Partition: " << Partition
     );
+
     auto splitEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT
         || Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
 

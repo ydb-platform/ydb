@@ -299,19 +299,20 @@ TPartitionGraph MakePartitionGraph(const NKikimrSchemeOp::TPersQueueGroupDescrip
 }
 
 void TLastCounter::Use(const TString& value, const TInstant& now) {
-    if (Values.size() > 0 && Values[0].Value == value) {
-        if (1 == Values.size() || Values[1].LastUseTime == now) {
-            Values[0].LastUseTime = now;
-        } else {
-            auto& tmp = Values[0];
-            tmp.LastUseTime = now;
-            Values.push_back(std::move(tmp));
-            Values.pop_front();
+    const auto full = MaxValueCount == Values.size();
+    if (!Values.empty() && Values[0].Value == value) {
+        auto& v0 = Values[0];
+        if (v0.LastUseTime < now) {
+            v0.LastUseTime = now;
+            if (full && Values[1].LastUseTime != now) {
+                Values.push_back(std::move(v0));
+                Values.pop_front();
+            }
         }
-    } else if (Values.size() > 1 && Values[1].Value == value) {
+    } else if (full && Values[1].Value == value) {
         Values[1].LastUseTime = now;
-    } else {
-        if (MaxValueCount == Values.size()) {
+    } else if (!full || Values[0].LastUseTime < now) {
+        if (full) {
             Values.pop_front();
         }
         Values.push_back(Data{now, value});

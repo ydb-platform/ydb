@@ -190,10 +190,7 @@ public:
         virtual void DoStartProposeOnComplete(TColumnShard& owner, const TActorContext& ctx) = 0;
         virtual void DoFinishProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) = 0;
         virtual void DoFinishProposeOnComplete(TColumnShard& owner, const TActorContext& ctx) = 0;
-        virtual TString DoGetOpType() const {
-            // TODO: Correct if needed
-            return DebugString();
-        }
+        virtual TString DoGetOpType() const = 0;
         virtual bool DoIsAsync() const = 0;
         virtual void DoSendReply(TColumnShard& owner, const TActorContext& ctx) = 0;
         virtual bool DoCheckAllowUpdate(const TFullTxInfo& currentTxInfo) const = 0;
@@ -361,10 +358,9 @@ private:
     std::set<TPlanQueueItem> DeadlineQueue;
     std::set<TPlanQueueItem> PlanQueue;
     std::set<TPlanQueueItem> RunningQueue;
+    TTxProgressCounters Counters;
 
     THashMap<ui64, ITransactionOperator::TPtr> Operators;
-
-    TTxProgressCounters Counters;
 
 private:
     ui64 GetAllowedStep() const;

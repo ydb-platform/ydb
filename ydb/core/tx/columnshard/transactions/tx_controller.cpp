@@ -305,7 +305,7 @@ std::shared_ptr<TTxController::ITransactionOperator> TTxController::StartPropose
         return txOperator;
     }
     Counters.OnStartProposeOnExecute(txOperator->GetOpType());
-        
+
     auto txInfoPtr = GetTxInfo(txInfo.TxId);
     if (!!txInfoPtr) {
         if (!txOperator->CheckAllowUpdate(*txInfoPtr)) {

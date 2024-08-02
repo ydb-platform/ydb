@@ -43,6 +43,9 @@ private:
     }
     virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
     }
+    virtual TString DoGetOpType() const override {
+        return "Scheme";
+    }
     virtual bool DoIsAsync() const override {
         return WaitPathIdsToErase.size();
     }

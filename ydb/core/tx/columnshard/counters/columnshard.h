@@ -133,7 +133,7 @@ public:
     }
 
     TTxProgressCounters(TCommonCountersOwner& owner)
-        : TBase(owner, "txProgress") {  // TODO: fix parameter name?
+        : TBase(owner, "TxProgress") {
     }
 
 private:

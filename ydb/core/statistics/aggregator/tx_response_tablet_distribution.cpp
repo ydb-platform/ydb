@@ -35,13 +35,12 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
 
         PathIdFromPathId(Self->TraversalTableId.PathId, outRecord.MutablePathId());
 
-        bool hasTablets = false;
+        auto distribution = Self->TabletsForReqDistribution;
         for (auto& inNode : Record.GetNodes()) {
             if (inNode.GetNodeId() == 0) {
                 // these tablets are probably in Hive boot queue
                 if (Self->HiveRequestRound < Self->MaxHiveRequestRoundCount) {
                     Action = EAction::ScheduleReqDistribution;
-                    return true;
                 }
                 continue;
             }
@@ -50,19 +49,17 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
             outNode.MutableTabletIds()->Reserve(inNode.TabletIdsSize());
             for (auto tabletId : inNode.GetTabletIds()) {
                 outNode.AddTabletIds(tabletId);
-                Self->TabletsForReqDistribution.erase(tabletId);
+                distribution.erase(tabletId);
             }
-            hasTablets = true;
         }
 
-        if (!Self->TabletsForReqDistribution.empty() && Self->ResolveRound < Self->MaxResolveRoundCount) {
-            // these tablets do not exist in Hive anymore
-            Action = EAction::ScheduleResolve;
+        if (Action == EAction::ScheduleReqDistribution) {
             return true;
         }
 
-        if (!hasTablets) {
-            Self->FinishTraversal(db);
+        if (!distribution.empty() && Self->ResolveRound < Self->MaxResolveRoundCount) {
+            // these tablets do not exist in Hive anymore
+            Action = EAction::ScheduleResolve;
             return true;
         }
 

@@ -54,6 +54,16 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                         Self->TraversalStartKey = TSerializedCellVec(value);
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal start key");
                         break;
+                    case Schema::SysParam_ForceTraversalOperationId: {
+                        Self->ForceTraversalOperationId = FromString<ui64>(value);
+                        SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal operation id: " << value);
+                        break;
+                    }  
+                    case Schema::SysParam_ForceTraversalCookie: {
+                        Self->ForceTraversalCookie = FromString<ui64>(value);
+                        SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal cookie: " << value);
+                        break;
+                    }
                     case Schema::SysParam_TraversalTableOwnerId:
                         Self->TraversalTableId.PathId.OwnerId = FromString<ui64>(value);
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal table owner id: "
@@ -70,9 +80,9 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal start time: " << us);
                         break;
                     }
-                    case Schema::SysParam_LastForceTraversalOperationId: {
-                        Self->LastForceTraversalOperationId = FromString<ui64>(value);
-                        SA_LOG_D("[" << Self->TabletID() << "] Loaded last traversal operation id: " << value);
+                    case Schema::SysParam_NextForceTraversalOperationId: {
+                        Self->NextForceTraversalOperationId = FromString<ui64>(value);
+                        SA_LOG_D("[" << Self->TabletID() << "] Loaded next traversal operation id: " << value);
                         break;
                     }
                     case Schema::SysParam_TraversalIsColumnTable: {
@@ -185,8 +195,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
 
         // ForceTraversals
         {
-            Self->ForceTraversals.Clear();
-            Self->ForceTraversalsByPathId.clear();
+            Self->ForceTraversals.clear();
 
             auto rowset = db.Table<Schema::ForceTraversals>().Range().Select();
             if (!rowset.IsReady()) {
@@ -197,13 +206,17 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 ui64 operationId = rowset.GetValue<Schema::ForceTraversals::OperationId>();
                 ui64 ownerId = rowset.GetValue<Schema::ForceTraversals::OwnerId>();
                 ui64 localPathId = rowset.GetValue<Schema::ForceTraversals::LocalPathId>();
+                ui64 cookie = rowset.GetValue<Schema::ForceTraversals::Cookie>();
 
                 auto pathId = TPathId(ownerId, localPathId);
 
-                TForceTraversal& operation = Self->ForceTraversalsByPathId[pathId];
-                operation.PathId = pathId;
-                operation.OperationId = operationId;
-                Self->ForceTraversals.PushBack(&operation);
+                TForceTraversal operation {
+                    .OperationId = operationId,
+                    .Cookie = cookie,
+                    .PathId = pathId,
+                    .ReplyToActorId = {}
+                };
+                Self->ForceTraversals.emplace_back(operation);
 
                 if (!rowset.Next()) {
                     return false;
@@ -211,7 +224,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             }
 
             SA_LOG_D("[" << Self->TabletID() << "] Loaded ForceTraversals: "
-                << "table count# " << Self->ForceTraversalsByPathId.size());
+                << "table count# " << Self->ForceTraversals.size());
         }
 
         return true;

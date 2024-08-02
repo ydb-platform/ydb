@@ -12,13 +12,12 @@ SRCS(
     tx_analyze_table.cpp
     tx_configure.cpp
     tx_datashard_scan_response.cpp
-    tx_delete_query_response.cpp
+    tx_finish_trasersal.cpp
     tx_init.cpp
     tx_init_schema.cpp
     tx_navigate.cpp
     tx_resolve.cpp
     tx_response_tablet_distribution.cpp
-    tx_save_query_response.cpp
     tx_schedule_traversal.cpp
     tx_schemeshard_stats.cpp
 )

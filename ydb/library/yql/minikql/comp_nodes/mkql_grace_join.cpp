@@ -808,6 +808,8 @@ private:
             }
 
             auto isYield = FetchAndPackData(ctx, output);
+            if (isYield == EFetchResult::One)
+                return isYield;
             if (IsSpillingAllowed && ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
                 const auto used = TlsAllocState->GetUsed();
                 const auto limit = TlsAllocState->GetLimit();

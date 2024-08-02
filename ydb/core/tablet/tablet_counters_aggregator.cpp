@@ -818,6 +818,7 @@ private:
         TCounterPtr ColumnShardUpsertBytesWritten_;
         TCounterPtr ColumnShardErasedBytes_;
         TCounterPtr ColumnShardErasedRows_;
+        THistogramPtr ColumnShardConsumedCpuHistogram;
 
         TCounterPtr DiskSpaceTablesTotalBytes;
         TCounterPtr DiskSpaceTablesTotalBytesOnSsd;
@@ -868,9 +869,9 @@ private:
                 "table.datashard.cache_miss.bytes", true);
 
             ColumnShardReadRows_ = ydbGroup->GetNamedCounter("name",
-                "table.columnshard.read.rows", true);
+                "table.columnshard.read.rows", true);   // TODO: set to 0
             ColumnShardReadBytes_ = ydbGroup->GetNamedCounter("name",
-                "table.columnshard.read.bytes", true);
+                "table.columnshard.read.bytes", true);  // TODO: set to 0
             ColumnShardScanBytes_ = ydbGroup->GetNamedCounter("name",
                 "table.columnshard.scan.bytes", true);
             ColumnShardScanRows_ = ydbGroup->GetNamedCounter("name",
@@ -967,6 +968,7 @@ private:
                 ColumnShardUpsertBytesWritten_ = appGroup->GetCounter("ColumnShard/UpsertBytesWritten");
                 ColumnShardErasedBytes_ = appGroup->GetCounter("ColumnShard/BytesErased");
                 ColumnShardErasedRows_ = appGroup->GetCounter("ColumnShard/RowsErased");
+                ColumnShardConsumedCpuHistogram = appGroup->FindHistogram("HIST(ConsumedCPU)");
             }
 
             if (hasSchemeshard && !DiskSpaceTablesTotalBytes) {
@@ -1022,8 +1024,8 @@ private:
                 ColumnShardEraseRows_->Set(ColumnShardErasedRows_->Val());
                 ColumnShardEraseBytes_->Set(ColumnShardErasedBytes_->Val());
 
-                if (ConsumedCpuHistogram) {
-                    TransferBuckets(ColumnShardCpuUtilization, ConsumedCpuHistogram);
+                if (ColumnShardConsumedCpuHistogram) {
+                    TransferBuckets(ColumnShardCpuUtilization, ColumnShardConsumedCpuHistogram);
                 }
             }
 

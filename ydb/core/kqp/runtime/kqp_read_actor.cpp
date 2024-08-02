@@ -365,6 +365,10 @@ public:
             UseFollowers = true;
         }
 
+        if (Settings->DuplicateCheckColumnsSize() > 0) {
+            CollectDuplicateStats = true;
+        }
+
         InitResultColumns();
 
         KeyColumnTypes.reserve(Settings->GetKeyColumnTypes().size());
@@ -382,10 +386,6 @@ public:
 
         if (Settings->HasMaxInFlightShards()) {
             MaxInFlight = Settings->GetMaxInFlightShards();
-        }
-
-        if (Settings->DuplicateCheckColumnsSize() > 0) {
-            CollectDuplicateStats = true;
         }
     }
 
@@ -1198,6 +1198,7 @@ public:
                     RuntimeError(rowMessage, NYql::NDqProto::StatusIds::INTERNAL_ERROR, {});
                     return stats;
                 }
+                DuplicateCheckStats[result] = handle.ShardId;
             }
 
             stats.DataBytes += rowSize;

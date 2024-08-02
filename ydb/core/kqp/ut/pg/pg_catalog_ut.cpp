@@ -459,8 +459,32 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_C(!result.GetResultSets().empty(), "no result sets");
             CompareYson(
-                Sprintf("[[\"%u\"]]", experimentalPg ? 208 : 205), 
+                Sprintf("[[\"%u\"]]", experimentalPg ? 214 : 211),
                 FormatResultSetYson(result.GetResultSet(0)));
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT rel.oid, rel.relname AS name
+                FROM pg_catalog.pg_class rel
+                    WHERE rel.relkind IN ('r','s','t','p') AND rel.relnamespace = 2200::oid
+                    AND NOT rel.relispartition
+                        ORDER BY rel.relname;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "no result sets");
+            CompareYson(R"([
+                [#;"table1"];[#;"table2"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+        { //SuperSet
+            auto result = db.ExecuteQuery(R"(
+                SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind in ('r', 'p');
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "no result sets");
+            CompareYson(R"([
+                ["table1"];["table2"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 }

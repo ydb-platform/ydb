@@ -8,7 +8,7 @@
  * stepping on each others' toes.  Formerly we used table-level locks
  * on pg_database, but that's too coarse-grained.
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -64,6 +64,7 @@
 #include "utils/acl.h"
 #include "utils/builtins.h"
 #include "utils/fmgroids.h"
+#include "utils/guc.h"
 #include "utils/pg_locale.h"
 #include "utils/relmapper.h"
 #include "utils/snapmgr.h"
@@ -103,7 +104,7 @@ typedef struct
  */
 typedef struct CreateDBRelInfo
 {
-	RelFileNode rnode;			/* physical relation identifier */
+	RelFileLocator rlocator;	/* physical relation identifier */
 	Oid			reloid;			/* relation oid */
 	bool		permanent;		/* relation is permanent or unlogged */
 } CreateDBRelInfo;
@@ -118,25 +119,25 @@ static bool get_db_info(const char *name, LOCKMODE lockmode,
 						int *encodingP, bool *dbIsTemplateP, bool *dbAllowConnP,
 						TransactionId *dbFrozenXidP, MultiXactId *dbMinMultiP,
 						Oid *dbTablespace, char **dbCollate, char **dbCtype, char **dbIculocale,
+						char **dbIcurules,
 						char *dbLocProvider,
 						char **dbCollversion);
-static bool have_createdb_privilege(void);
 static void remove_dbtablespaces(Oid db_id);
 static bool check_db_file_conflict(Oid db_id);
 static int	errdetail_busy_db(int notherbackends, int npreparedxacts);
-static void CreateDatabaseUsingWalLog(Oid src_dboid, Oid dboid, Oid src_tsid,
+static void CreateDatabaseUsingWalLog(Oid src_dboid, Oid dst_dboid, Oid src_tsid,
 									  Oid dst_tsid);
-static List *ScanSourceDatabasePgClass(Oid srctbid, Oid srcdbid, char *srcpath);
+static List *ScanSourceDatabasePgClass(Oid tbid, Oid dbid, char *srcpath);
 static List *ScanSourceDatabasePgClassPage(Page page, Buffer buf, Oid tbid,
 										   Oid dbid, char *srcpath,
-										   List *rnodelist, Snapshot snapshot);
+										   List *rlocatorlist, Snapshot snapshot);
 static CreateDBRelInfo *ScanSourceDatabasePgClassTuple(HeapTupleData *tuple,
 													   Oid tbid, Oid dbid,
 													   char *srcpath);
 static void CreateDirAndVersionFile(char *dbpath, Oid dbid, Oid tsid,
 									bool isRedo);
-static void CreateDatabaseUsingFileCopy(Oid src_dboid, Oid dboid, Oid src_tsid,
-										Oid dst_tsid);
+static void CreateDatabaseUsingFileCopy(Oid src_dboid, Oid dst_dboid,
+										Oid src_tsid, Oid dst_tsid);
 static void recovery_create_dbdir(char *path, bool only_tblspc);
 
 /*
@@ -150,12 +151,12 @@ CreateDatabaseUsingWalLog(Oid src_dboid, Oid dst_dboid,
 {
 	char	   *srcpath;
 	char	   *dstpath;
-	List	   *rnodelist = NULL;
+	List	   *rlocatorlist = NULL;
 	ListCell   *cell;
 	LockRelId	srcrelid;
 	LockRelId	dstrelid;
-	RelFileNode srcrnode;
-	RelFileNode dstrnode;
+	RelFileLocator srcrlocator;
+	RelFileLocator dstrlocator;
 	CreateDBRelInfo *relinfo;
 
 	/* Get source and destination database paths. */
@@ -168,9 +169,9 @@ CreateDatabaseUsingWalLog(Oid src_dboid, Oid dst_dboid,
 	/* Copy relmap file from source database to the destination database. */
 	RelationMapCopy(dst_dboid, dst_tsid, srcpath, dstpath);
 
-	/* Get list of relfilenodes to copy from the source database. */
-	rnodelist = ScanSourceDatabasePgClass(src_tsid, src_dboid, srcpath);
-	Assert(rnodelist != NIL);
+	/* Get list of relfilelocators to copy from the source database. */
+	rlocatorlist = ScanSourceDatabasePgClass(src_tsid, src_dboid, srcpath);
+	Assert(rlocatorlist != NIL);
 
 	/*
 	 * Database IDs will be the same for all relations so set them before
@@ -179,25 +180,25 @@ CreateDatabaseUsingWalLog(Oid src_dboid, Oid dst_dboid,
 	srcrelid.dbId = src_dboid;
 	dstrelid.dbId = dst_dboid;
 
-	/* Loop over our list of relfilenodes and copy each one. */
-	foreach(cell, rnodelist)
+	/* Loop over our list of relfilelocators and copy each one. */
+	foreach(cell, rlocatorlist)
 	{
 		relinfo = lfirst(cell);
-		srcrnode = relinfo->rnode;
+		srcrlocator = relinfo->rlocator;
 
 		/*
 		 * If the relation is from the source db's default tablespace then we
-		 * need to create it in the destinations db's default tablespace.
+		 * need to create it in the destination db's default tablespace.
 		 * Otherwise, we need to create in the same tablespace as it is in the
 		 * source database.
 		 */
-		if (srcrnode.spcNode == src_tsid)
-			dstrnode.spcNode = dst_tsid;
+		if (srcrlocator.spcOid == src_tsid)
+			dstrlocator.spcOid = dst_tsid;
 		else
-			dstrnode.spcNode = srcrnode.spcNode;
+			dstrlocator.spcOid = srcrlocator.spcOid;
 
-		dstrnode.dbNode = dst_dboid;
-		dstrnode.relNode = srcrnode.relNode;
+		dstrlocator.dbOid = dst_dboid;
+		dstrlocator.relNumber = srcrlocator.relNumber;
 
 		/*
 		 * Acquire locks on source and target relations before copying.
@@ -213,7 +214,7 @@ CreateDatabaseUsingWalLog(Oid src_dboid, Oid dst_dboid,
 		LockRelationId(&dstrelid, AccessShareLock);
 
 		/* Copy relation storage from source to the destination. */
-		CreateAndCopyRelationData(srcrnode, dstrnode, relinfo->permanent);
+		CreateAndCopyRelationData(srcrlocator, dstrlocator, relinfo->permanent);
 
 		/* Release the relation locks. */
 		UnlockRelationId(&srcrelid, AccessShareLock);
@@ -222,7 +223,7 @@ CreateDatabaseUsingWalLog(Oid src_dboid, Oid dst_dboid,
 
 	pfree(srcpath);
 	pfree(dstpath);
-	list_free_deep(rnodelist);
+	list_free_deep(rlocatorlist);
 }
 
 /*
@@ -249,33 +250,33 @@ CreateDatabaseUsingWalLog(Oid src_dboid, Oid dst_dboid,
 static List *
 ScanSourceDatabasePgClass(Oid tbid, Oid dbid, char *srcpath)
 {
-	RelFileNode rnode;
+	RelFileLocator rlocator;
 	BlockNumber nblocks;
 	BlockNumber blkno;
 	Buffer		buf;
-	Oid			relfilenode;
+	RelFileNumber relfilenumber;
 	Page		page;
-	List	   *rnodelist = NIL;
+	List	   *rlocatorlist = NIL;
 	LockRelId	relid;
 	Snapshot	snapshot;
-	SMgrRelation	smgr;
+	SMgrRelation smgr;
 	BufferAccessStrategy bstrategy;
 
-	/* Get pg_class relfilenode. */
-	relfilenode = RelationMapOidToFilenodeForDatabase(srcpath,
-													  RelationRelationId);
+	/* Get pg_class relfilenumber. */
+	relfilenumber = RelationMapOidToFilenumberForDatabase(srcpath,
+														  RelationRelationId);
 
 	/* Don't read data into shared_buffers without holding a relation lock. */
 	relid.dbId = dbid;
 	relid.relId = RelationRelationId;
 	LockRelationId(&relid, AccessShareLock);
 
-	/* Prepare a RelFileNode for the pg_class relation. */
-	rnode.spcNode = tbid;
-	rnode.dbNode = dbid;
-	rnode.relNode = relfilenode;
+	/* Prepare a RelFileLocator for the pg_class relation. */
+	rlocator.spcOid = tbid;
+	rlocator.dbOid = dbid;
+	rlocator.relNumber = relfilenumber;
 
-	smgr = smgropen(rnode, InvalidBackendId);
+	smgr = smgropen(rlocator, InvalidBackendId);
 	nblocks = smgrnblocks(smgr, MAIN_FORKNUM);
 	smgrclose(smgr);
 
@@ -295,7 +296,7 @@ ScanSourceDatabasePgClass(Oid tbid, Oid dbid, char *srcpath)
 	{
 		CHECK_FOR_INTERRUPTS();
 
-		buf = ReadBufferWithoutRelcache(rnode, MAIN_FORKNUM, blkno,
+		buf = ReadBufferWithoutRelcache(rlocator, MAIN_FORKNUM, blkno,
 										RBM_NORMAL, bstrategy, true);
 
 		LockBuffer(buf, BUFFER_LOCK_SHARE);
@@ -306,10 +307,10 @@ ScanSourceDatabasePgClass(Oid tbid, Oid dbid, char *srcpath)
 			continue;
 		}
 
-		/* Append relevant pg_class tuples for current page to rnodelist. */
-		rnodelist = ScanSourceDatabasePgClassPage(page, buf, tbid, dbid,
-												  srcpath, rnodelist,
-												  snapshot);
+		/* Append relevant pg_class tuples for current page to rlocatorlist. */
+		rlocatorlist = ScanSourceDatabasePgClassPage(page, buf, tbid, dbid,
+													 srcpath, rlocatorlist,
+													 snapshot);
 
 		UnlockReleaseBuffer(buf);
 	}
@@ -317,16 +318,16 @@ ScanSourceDatabasePgClass(Oid tbid, Oid dbid, char *srcpath)
 	/* Release relation lock. */
 	UnlockRelationId(&relid, AccessShareLock);
 
-	return rnodelist;
+	return rlocatorlist;
 }
 
 /*
  * Scan one page of the source database's pg_class relation and add relevant
- * entries to rnodelist. The return value is the updated list.
+ * entries to rlocatorlist. The return value is the updated list.
  */
 static List *
 ScanSourceDatabasePgClassPage(Page page, Buffer buf, Oid tbid, Oid dbid,
-							  char *srcpath, List *rnodelist,
+							  char *srcpath, List *rlocatorlist,
 							  Snapshot snapshot)
 {
 	BlockNumber blkno = BufferGetBlockNumber(buf);
@@ -372,11 +373,11 @@ ScanSourceDatabasePgClassPage(Page page, Buffer buf, Oid tbid, Oid dbid,
 			relinfo = ScanSourceDatabasePgClassTuple(&tuple, tbid, dbid,
 													 srcpath);
 			if (relinfo != NULL)
-				rnodelist = lappend(rnodelist, relinfo);
+				rlocatorlist = lappend(rlocatorlist, relinfo);
 		}
 	}
 
-	return rnodelist;
+	return rlocatorlist;
 }
 
 /*
@@ -393,7 +394,7 @@ ScanSourceDatabasePgClassTuple(HeapTupleData *tuple, Oid tbid, Oid dbid,
 {
 	CreateDBRelInfo *relinfo;
 	Form_pg_class classForm;
-	Oid			relfilenode = InvalidOid;
+	RelFileNumber relfilenumber = InvalidRelFileNumber;
 
 	classForm = (Form_pg_class) GETSTRUCT(tuple);
 
@@ -414,29 +415,29 @@ ScanSourceDatabasePgClassTuple(HeapTupleData *tuple, Oid tbid, Oid dbid,
 		return NULL;
 
 	/*
-	 * If relfilenode is valid then directly use it.  Otherwise, consult the
+	 * If relfilenumber is valid then directly use it.  Otherwise, consult the
 	 * relmap.
 	 */
-	if (OidIsValid(classForm->relfilenode))
-		relfilenode = classForm->relfilenode;
+	if (RelFileNumberIsValid(classForm->relfilenode))
+		relfilenumber = classForm->relfilenode;
 	else
-		relfilenode = RelationMapOidToFilenodeForDatabase(srcpath,
-														  classForm->oid);
+		relfilenumber = RelationMapOidToFilenumberForDatabase(srcpath,
+															  classForm->oid);
 
-	/* We must have a valid relfilenode oid. */
-	if (!OidIsValid(relfilenode))
-		elog(ERROR, "relation with OID %u does not have a valid relfilenode",
+	/* We must have a valid relfilenumber. */
+	if (!RelFileNumberIsValid(relfilenumber))
+		elog(ERROR, "relation with OID %u does not have a valid relfilenumber",
 			 classForm->oid);
 
 	/* Prepare a rel info element and add it to the list. */
 	relinfo = (CreateDBRelInfo *) palloc(sizeof(CreateDBRelInfo));
 	if (OidIsValid(classForm->reltablespace))
-		relinfo->rnode.spcNode = classForm->reltablespace;
+		relinfo->rlocator.spcOid = classForm->reltablespace;
 	else
-		relinfo->rnode.spcNode = tbid;
+		relinfo->rlocator.spcOid = tbid;
 
-	relinfo->rnode.dbNode = dbid;
-	relinfo->rnode.relNode = relfilenode;
+	relinfo->rlocator.dbOid = dbid;
+	relinfo->rlocator.relNumber = relfilenumber;
 	relinfo->reloid = classForm->oid;
 
 	/* Temporary relations were rejected above. */
@@ -675,6 +676,7 @@ createdb(ParseState *pstate, const CreatedbStmt *stmt)
 	char	   *src_collate = NULL;
 	char	   *src_ctype = NULL;
 	char	   *src_iculocale = NULL;
+	char	   *src_icurules = NULL;
 	char		src_locprovider = '\0';
 	char	   *src_collversion = NULL;
 	bool		src_istemplate;
@@ -685,8 +687,8 @@ createdb(ParseState *pstate, const CreatedbStmt *stmt)
 	volatile Oid dst_deftablespace;
 	Relation	pg_database_rel;
 	HeapTuple	tuple;
-	Datum		new_record[Natts_pg_database];
-	bool		new_record_nulls[Natts_pg_database];
+	Datum		new_record[Natts_pg_database] = {0};
+	bool		new_record_nulls[Natts_pg_database] = {0};
 	Oid			dboid = InvalidOid;
 	Oid			datdba;
 	ListCell   *option;
@@ -698,6 +700,7 @@ createdb(ParseState *pstate, const CreatedbStmt *stmt)
 	DefElem    *dcollate = NULL;
 	DefElem    *dctype = NULL;
 	DefElem    *diculocale = NULL;
+	DefElem    *dicurules = NULL;
 	DefElem    *dlocprovider = NULL;
 	DefElem    *distemplate = NULL;
 	DefElem    *dallowconnections = NULL;
@@ -710,6 +713,7 @@ createdb(ParseState *pstate, const CreatedbStmt *stmt)
 	char	   *dbcollate = NULL;
 	char	   *dbctype = NULL;
 	char	   *dbiculocale = NULL;
+	char	   *dbicurules = NULL;
 	char		dblocprovider = '\0';
 	char	   *canonname;
 	int			encoding = -1;
@@ -774,6 +778,12 @@ createdb(ParseState *pstate, const CreatedbStmt *stmt)
 			if (diculocale)
 				errorConflictingDefElem(defel, pstate);
 			diculocale = defel;
+		}
+		else if (strcmp(defel->defname, "icu_rules") == 0)
+		{
+			if (dicurules)
+				errorConflictingDefElem(defel, pstate);
+			dicurules = defel;
 		}
 		else if (strcmp(defel->defname, "locale_provider") == 0)
 		{
@@ -893,6 +903,8 @@ createdb(ParseState *pstate, const CreatedbStmt *stmt)
 		dbctype = defGetString(dctype);
 	if (diculocale && diculocale->arg)
 		dbiculocale = defGetString(diculocale);
+	if (dicurules && dicurules->arg)
+		dbicurules = defGetString(dicurules);
 	if (dlocprovider && dlocprovider->arg)
 	{
 		char	   *locproviderstr = defGetString(dlocprovider);
@@ -940,7 +952,7 @@ createdb(ParseState *pstate, const CreatedbStmt *stmt)
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 				 errmsg("permission denied to create database")));
 
-	check_is_member_of_role(GetUserId(), datdba);
+	check_can_set_role(GetUserId(), datdba);
 
 	/*
 	 * Lookup database (template) to be cloned, and obtain share lock on it.
@@ -958,7 +970,7 @@ createdb(ParseState *pstate, const CreatedbStmt *stmt)
 					 &src_dboid, &src_owner, &src_encoding,
 					 &src_istemplate, &src_allowconn,
 					 &src_frozenxid, &src_minmxid, &src_deftablespace,
-					 &src_collate, &src_ctype, &src_iculocale, &src_locprovider,
+					 &src_collate, &src_ctype, &src_iculocale, &src_icurules, &src_locprovider,
 					 &src_collversion))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_DATABASE),
@@ -981,7 +993,7 @@ createdb(ParseState *pstate, const CreatedbStmt *stmt)
 	 */
 	if (!src_istemplate)
 	{
-		if (!pg_database_ownercheck(src_dboid, GetUserId()))
+		if (!object_ownercheck(DatabaseRelationId, src_dboid, GetUserId()))
 			ereport(ERROR,
 					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 					 errmsg("permission denied to copy database \"%s\"",
@@ -1015,7 +1027,14 @@ createdb(ParseState *pstate, const CreatedbStmt *stmt)
 	if (dblocprovider == '\0')
 		dblocprovider = src_locprovider;
 	if (dbiculocale == NULL && dblocprovider == COLLPROVIDER_ICU)
-		dbiculocale = src_iculocale;
+	{
+		if (dlocale && dlocale->arg)
+			dbiculocale = defGetString(dlocale);
+		else
+			dbiculocale = src_iculocale;
+	}
+	if (dbicurules == NULL && dblocprovider == COLLPROVIDER_ICU)
+		dbicurules = src_icurules;
 
 	/* Some encodings are client only */
 	if (!PG_VALID_BE_ENCODING(encoding))
@@ -1027,12 +1046,14 @@ createdb(ParseState *pstate, const CreatedbStmt *stmt)
 	if (!check_locale(LC_COLLATE, dbcollate, &canonname))
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-				 errmsg("invalid locale name: \"%s\"", dbcollate)));
+				 errmsg("invalid LC_COLLATE locale name: \"%s\"", dbcollate),
+				 errhint("If the locale name is specific to ICU, use ICU_LOCALE.")));
 	dbcollate = canonname;
 	if (!check_locale(LC_CTYPE, dbctype, &canonname))
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-				 errmsg("invalid locale name: \"%s\"", dbctype)));
+				 errmsg("invalid LC_CTYPE locale name: \"%s\"", dbctype),
+				 errhint("If the locale name is specific to ICU, use ICU_LOCALE.")));
 	dbctype = canonname;
 
 	check_encoding_locale_matches(encoding, dbcollate, dbctype);
@@ -1052,9 +1073,29 @@ createdb(ParseState *pstate, const CreatedbStmt *stmt)
 		if (!dbiculocale)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("ICU locale must be specified")));
+					 errmsg("LOCALE or ICU_LOCALE must be specified")));
 
-		check_icu_locale(dbiculocale);
+		/*
+		 * During binary upgrade, or when the locale came from the template
+		 * database, preserve locale string. Otherwise, canonicalize to a
+		 * language tag.
+		 */
+		if (!IsBinaryUpgrade && dbiculocale != src_iculocale)
+		{
+			char	   *langtag = icu_language_tag(dbiculocale,
+												   icu_validation_level);
+
+			if (langtag && strcmp(dbiculocale, langtag) != 0)
+			{
+				ereport(NOTICE,
+						(errmsg("using standard form \"%s\" for ICU locale \"%s\"",
+								langtag, dbiculocale)));
+
+				dbiculocale = langtag;
+			}
+		}
+
+		icu_validate_locale(dbiculocale);
 	}
 	else
 	{
@@ -1062,6 +1103,11 @@ createdb(ParseState *pstate, const CreatedbStmt *stmt)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
 					 errmsg("ICU locale cannot be specified unless locale provider is ICU")));
+
+		if (dbicurules)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
+					 errmsg("ICU rules cannot be specified unless locale provider is ICU")));
 	}
 
 	/*
@@ -1107,6 +1153,9 @@ createdb(ParseState *pstate, const CreatedbStmt *stmt)
 
 		if (dblocprovider == COLLPROVIDER_ICU)
 		{
+			char	   *val1;
+			char	   *val2;
+
 			Assert(dbiculocale);
 			Assert(src_iculocale);
 			if (strcmp(dbiculocale, src_iculocale) != 0)
@@ -1115,6 +1164,19 @@ createdb(ParseState *pstate, const CreatedbStmt *stmt)
 						 errmsg("new ICU locale (%s) is incompatible with the ICU locale of the template database (%s)",
 								dbiculocale, src_iculocale),
 						 errhint("Use the same ICU locale as in the template database, or use template0 as template.")));
+
+			val1 = dbicurules;
+			if (!val1)
+				val1 = "";
+			val2 = src_icurules;
+			if (!val2)
+				val2 = "";
+			if (strcmp(val1, val2) != 0)
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("new ICU collation rules (%s) are incompatible with the ICU collation rules of the template database (%s)",
+								val1, val2),
+						 errhint("Use the same ICU collation rules as in the template database, or use template0 as template.")));
 		}
 	}
 
@@ -1173,8 +1235,8 @@ createdb(ParseState *pstate, const CreatedbStmt *stmt)
 		tablespacename = defGetString(dtablespacename);
 		dst_deftablespace = get_tablespace_oid(tablespacename, false);
 		/* check permissions */
-		aclresult = pg_tablespace_aclcheck(dst_deftablespace, GetUserId(),
-										   ACL_CREATE);
+		aclresult = object_aclcheck(TableSpaceRelationId, dst_deftablespace, GetUserId(),
+									ACL_CREATE);
 		if (aclresult != ACLCHECK_OK)
 			aclcheck_error(aclresult, OBJECT_TABLESPACE,
 						   tablespacename);
@@ -1305,9 +1367,6 @@ createdb(ParseState *pstate, const CreatedbStmt *stmt)
 		   (dblocprovider != COLLPROVIDER_ICU && !dbiculocale));
 
 	/* Form tuple */
-	MemSet(new_record, 0, sizeof(new_record));
-	MemSet(new_record_nulls, false, sizeof(new_record_nulls));
-
 	new_record[Anum_pg_database_oid - 1] = ObjectIdGetDatum(dboid);
 	new_record[Anum_pg_database_datname - 1] =
 		DirectFunctionCall1(namein, CStringGetDatum(dbname));
@@ -1326,6 +1385,10 @@ createdb(ParseState *pstate, const CreatedbStmt *stmt)
 		new_record[Anum_pg_database_daticulocale - 1] = CStringGetTextDatum(dbiculocale);
 	else
 		new_record_nulls[Anum_pg_database_daticulocale - 1] = true;
+	if (dbicurules)
+		new_record[Anum_pg_database_daticurules - 1] = CStringGetTextDatum(dbicurules);
+	else
+		new_record_nulls[Anum_pg_database_daticurules - 1] = true;
 	if (dbcollversion)
 		new_record[Anum_pg_database_datcollversion - 1] = CStringGetTextDatum(dbcollversion);
 	else
@@ -1359,9 +1422,9 @@ createdb(ParseState *pstate, const CreatedbStmt *stmt)
 	/*
 	 * If we're going to be reading data for the to-be-created database into
 	 * shared_buffers, take a lock on it. Nobody should know that this
-	 * database exists yet, but it's good to maintain the invariant that a
-	 * lock an AccessExclusiveLock on the database is sufficient to drop all
-	 * of its buffers without worrying about more being read later.
+	 * database exists yet, but it's good to maintain the invariant that an
+	 * AccessExclusiveLock on the database is sufficient to drop all of its
+	 * buffers without worrying about more being read later.
 	 *
 	 * Note that we need to do this before entering the
 	 * PG_ENSURE_ERROR_CLEANUP block below, because createdb_failure_callback
@@ -1540,7 +1603,7 @@ dropdb(const char *dbname, bool missing_ok, bool force)
 	pgdbrel = table_open(DatabaseRelationId, RowExclusiveLock);
 
 	if (!get_db_info(dbname, AccessExclusiveLock, &db_id, NULL, NULL,
-					 &db_istemplate, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL))
+					 &db_istemplate, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL))
 	{
 		if (!missing_ok)
 		{
@@ -1562,7 +1625,7 @@ dropdb(const char *dbname, bool missing_ok, bool force)
 	/*
 	 * Permission checks
 	 */
-	if (!pg_database_ownercheck(db_id, GetUserId()))
+	if (!object_ownercheck(DatabaseRelationId, db_id, GetUserId()))
 		aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_DATABASE,
 					   dbname);
 
@@ -1755,13 +1818,13 @@ RenameDatabase(const char *oldname, const char *newname)
 	rel = table_open(DatabaseRelationId, RowExclusiveLock);
 
 	if (!get_db_info(oldname, AccessExclusiveLock, &db_id, NULL, NULL,
-					 NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL))
+					 NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_DATABASE),
 				 errmsg("database \"%s\" does not exist", oldname)));
 
 	/* must be owner */
-	if (!pg_database_ownercheck(db_id, GetUserId()))
+	if (!object_ownercheck(DatabaseRelationId, db_id, GetUserId()))
 		aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_DATABASE,
 					   oldname);
 
@@ -1847,9 +1910,6 @@ movedb(const char *dbname, const char *tblspcname)
 				newtuple;
 	Oid			src_tblspcoid,
 				dst_tblspcoid;
-	Datum		new_record[Natts_pg_database];
-	bool		new_record_nulls[Natts_pg_database];
-	bool		new_record_repl[Natts_pg_database];
 	ScanKeyData scankey;
 	SysScanDesc sysscan;
 	AclResult	aclresult;
@@ -1868,7 +1928,7 @@ movedb(const char *dbname, const char *tblspcname)
 	pgdbrel = table_open(DatabaseRelationId, RowExclusiveLock);
 
 	if (!get_db_info(dbname, AccessExclusiveLock, &db_id, NULL, NULL,
-					 NULL, NULL, NULL, NULL, &src_tblspcoid, NULL, NULL, NULL, NULL, NULL))
+					 NULL, NULL, NULL, NULL, &src_tblspcoid, NULL, NULL, NULL, NULL, NULL, NULL))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_DATABASE),
 				 errmsg("database \"%s\" does not exist", dbname)));
@@ -1885,7 +1945,7 @@ movedb(const char *dbname, const char *tblspcname)
 	/*
 	 * Permission checks
 	 */
-	if (!pg_database_ownercheck(db_id, GetUserId()))
+	if (!object_ownercheck(DatabaseRelationId, db_id, GetUserId()))
 		aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_DATABASE,
 					   dbname);
 
@@ -1905,8 +1965,8 @@ movedb(const char *dbname, const char *tblspcname)
 	/*
 	 * Permission checks
 	 */
-	aclresult = pg_tablespace_aclcheck(dst_tblspcoid, GetUserId(),
-									   ACL_CREATE);
+	aclresult = object_aclcheck(TableSpaceRelationId, dst_tblspcoid, GetUserId(),
+								ACL_CREATE);
 	if (aclresult != ACLCHECK_OK)
 		aclcheck_error(aclresult, OBJECT_TABLESPACE,
 					   tblspcname);
@@ -2028,6 +2088,10 @@ movedb(const char *dbname, const char *tblspcname)
 	PG_ENSURE_ERROR_CLEANUP(movedb_failure_callback,
 							PointerGetDatum(&fparms));
 	{
+		Datum		new_record[Natts_pg_database] = {0};
+		bool		new_record_nulls[Natts_pg_database] = {0};
+		bool		new_record_repl[Natts_pg_database] = {0};
+
 		/*
 		 * Copy files from the old tablespace to the new one
 		 */
@@ -2066,10 +2130,6 @@ movedb(const char *dbname, const char *tblspcname)
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_DATABASE),
 					 errmsg("database \"%s\" does not exist", dbname)));
-
-		MemSet(new_record, 0, sizeof(new_record));
-		MemSet(new_record_nulls, false, sizeof(new_record_nulls));
-		MemSet(new_record_repl, false, sizeof(new_record_repl));
 
 		new_record[Anum_pg_database_dattablespace - 1] = ObjectIdGetDatum(dst_tblspcoid);
 		new_record_repl[Anum_pg_database_dattablespace - 1] = true;
@@ -2219,9 +2279,9 @@ AlterDatabase(ParseState *pstate, AlterDatabaseStmt *stmt, bool isTopLevel)
 	DefElem    *dallowconnections = NULL;
 	DefElem    *dconnlimit = NULL;
 	DefElem    *dtablespace = NULL;
-	Datum		new_record[Natts_pg_database];
-	bool		new_record_nulls[Natts_pg_database];
-	bool		new_record_repl[Natts_pg_database];
+	Datum		new_record[Natts_pg_database] = {0};
+	bool		new_record_nulls[Natts_pg_database] = {0};
+	bool		new_record_repl[Natts_pg_database] = {0};
 
 	/* Extract options from the statement node tree */
 	foreach(option, stmt->options)
@@ -2320,7 +2380,7 @@ AlterDatabase(ParseState *pstate, AlterDatabaseStmt *stmt, bool isTopLevel)
 				errhint("Use DROP DATABASE to drop invalid databases."));
 	}
 
-	if (!pg_database_ownercheck(dboid, GetUserId()))
+	if (!object_ownercheck(DatabaseRelationId, dboid, GetUserId()))
 		aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_DATABASE,
 					   stmt->dbname);
 
@@ -2338,10 +2398,6 @@ AlterDatabase(ParseState *pstate, AlterDatabaseStmt *stmt, bool isTopLevel)
 	/*
 	 * Build an updated tuple, perusing the information just obtained
 	 */
-	MemSet(new_record, 0, sizeof(new_record));
-	MemSet(new_record_nulls, false, sizeof(new_record_nulls));
-	MemSet(new_record_repl, false, sizeof(new_record_repl));
-
 	if (distemplate)
 	{
 		new_record[Anum_pg_database_datistemplate - 1] = BoolGetDatum(dbistemplate);
@@ -2407,7 +2463,7 @@ AlterDatabaseRefreshColl(AlterDatabaseRefreshCollStmt *stmt)
 	datForm = (Form_pg_database) GETSTRUCT(tuple);
 	db_id = datForm->oid;
 
-	if (!pg_database_ownercheck(db_id, GetUserId()))
+	if (!object_ownercheck(DatabaseRelationId, db_id, GetUserId()))
 		aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_DATABASE,
 					   stmt->dbname);
 
@@ -2470,7 +2526,7 @@ AlterDatabaseSet(AlterDatabaseSetStmt *stmt)
 	 */
 	shdepLockAndCheckObject(DatabaseRelationId, datid);
 
-	if (!pg_database_ownercheck(datid, GetUserId()))
+	if (!object_ownercheck(DatabaseRelationId, datid, GetUserId()))
 		aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_DATABASE,
 					   stmt->dbname);
 
@@ -2525,20 +2581,20 @@ AlterDatabaseOwner(const char *dbname, Oid newOwnerId)
 	if (datForm->datdba != newOwnerId)
 	{
 		Datum		repl_val[Natts_pg_database];
-		bool		repl_null[Natts_pg_database];
-		bool		repl_repl[Natts_pg_database];
+		bool		repl_null[Natts_pg_database] = {0};
+		bool		repl_repl[Natts_pg_database] = {0};
 		Acl		   *newAcl;
 		Datum		aclDatum;
 		bool		isNull;
 		HeapTuple	newtuple;
 
 		/* Otherwise, must be owner of the existing object */
-		if (!pg_database_ownercheck(db_id, GetUserId()))
+		if (!object_ownercheck(DatabaseRelationId, db_id, GetUserId()))
 			aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_DATABASE,
 						   dbname);
 
 		/* Must be able to become new owner */
-		check_is_member_of_role(GetUserId(), newOwnerId);
+		check_can_set_role(GetUserId(), newOwnerId);
 
 		/*
 		 * must have createdb rights
@@ -2553,9 +2609,6 @@ AlterDatabaseOwner(const char *dbname, Oid newOwnerId)
 			ereport(ERROR,
 					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 					 errmsg("permission denied to change owner of database")));
-
-		memset(repl_null, false, sizeof(repl_null));
-		memset(repl_repl, false, sizeof(repl_repl));
 
 		repl_repl[Anum_pg_database_datdba - 1] = true;
 		repl_val[Anum_pg_database_datdba - 1] = ObjectIdGetDatum(newOwnerId);
@@ -2605,7 +2658,6 @@ pg_database_collation_actual_version(PG_FUNCTION_ARGS)
 	HeapTuple	tp;
 	char		datlocprovider;
 	Datum		datum;
-	bool		isnull;
 	char	   *version;
 
 	tp = SearchSysCache1(DATABASEOID, ObjectIdGetDatum(dbid));
@@ -2616,9 +2668,7 @@ pg_database_collation_actual_version(PG_FUNCTION_ARGS)
 
 	datlocprovider = ((Form_pg_database) GETSTRUCT(tp))->datlocprovider;
 
-	datum = SysCacheGetAttr(DATABASEOID, tp, datlocprovider == COLLPROVIDER_ICU ? Anum_pg_database_daticulocale : Anum_pg_database_datcollate, &isnull);
-	if (isnull)
-		elog(ERROR, "unexpected null in pg_database");
+	datum = SysCacheGetAttrNotNull(DATABASEOID, tp, datlocprovider == COLLPROVIDER_ICU ? Anum_pg_database_daticulocale : Anum_pg_database_datcollate);
 	version = get_collation_actual_version(datlocprovider, TextDatumGetCString(datum));
 
 	ReleaseSysCache(tp);
@@ -2646,13 +2696,14 @@ get_db_info(const char *name, LOCKMODE lockmode,
 			int *encodingP, bool *dbIsTemplateP, bool *dbAllowConnP,
 			TransactionId *dbFrozenXidP, MultiXactId *dbMinMultiP,
 			Oid *dbTablespace, char **dbCollate, char **dbCtype, char **dbIculocale,
+			char **dbIcurules,
 			char *dbLocProvider,
 			char **dbCollversion)
 {
 	bool		result = false;
 	Relation	relation;
 
-	AssertArg(name);
+	Assert(name);
 
 	/* Caller may wish to grab a better lock on pg_database beforehand... */
 	relation = table_open(DatabaseRelationId, AccessShareLock);
@@ -2744,14 +2795,12 @@ get_db_info(const char *name, LOCKMODE lockmode,
 					*dbLocProvider = dbform->datlocprovider;
 				if (dbCollate)
 				{
-					datum = SysCacheGetAttr(DATABASEOID, tuple, Anum_pg_database_datcollate, &isnull);
-					Assert(!isnull);
+					datum = SysCacheGetAttrNotNull(DATABASEOID, tuple, Anum_pg_database_datcollate);
 					*dbCollate = TextDatumGetCString(datum);
 				}
 				if (dbCtype)
 				{
-					datum = SysCacheGetAttr(DATABASEOID, tuple, Anum_pg_database_datctype, &isnull);
-					Assert(!isnull);
+					datum = SysCacheGetAttrNotNull(DATABASEOID, tuple, Anum_pg_database_datctype);
 					*dbCtype = TextDatumGetCString(datum);
 				}
 				if (dbIculocale)
@@ -2761,6 +2810,14 @@ get_db_info(const char *name, LOCKMODE lockmode,
 						*dbIculocale = NULL;
 					else
 						*dbIculocale = TextDatumGetCString(datum);
+				}
+				if (dbIcurules)
+				{
+					datum = SysCacheGetAttr(DATABASEOID, tuple, Anum_pg_database_daticurules, &isnull);
+					if (isnull)
+						*dbIcurules = NULL;
+					else
+						*dbIcurules = TextDatumGetCString(datum);
 				}
 				if (dbCollversion)
 				{
@@ -2788,7 +2845,7 @@ get_db_info(const char *name, LOCKMODE lockmode,
 }
 
 /* Check if current user has createdb privileges */
-static bool
+bool
 have_createdb_privilege(void)
 {
 	bool		result = false;
@@ -2900,8 +2957,8 @@ remove_dbtablespaces(Oid db_id)
  * try to remove that already-existing subdirectory during the cleanup in
  * remove_dbtablespaces.  Nuking existing files seems like a bad idea, so
  * instead we make this extra check before settling on the OID of the new
- * database.  This exactly parallels what GetNewRelFileNode() does for table
- * relfilenode values.
+ * database.  This exactly parallels what GetNewRelFileNumber() does for table
+ * relfilenumber values.
  */
 static bool
 check_db_file_conflict(Oid db_id)
@@ -3130,7 +3187,7 @@ dbase_redo(XLogReaderState *record)
 	if (info == XLOG_DBASE_CREATE_FILE_COPY)
 	{
 		xl_dbase_create_file_copy_rec *xlrec =
-		(xl_dbase_create_file_copy_rec *) XLogRecGetData(record);
+			(xl_dbase_create_file_copy_rec *) XLogRecGetData(record);
 		char	   *src_path;
 		char	   *dst_path;
 		char	   *parent_path;
@@ -3155,9 +3212,7 @@ dbase_redo(XLogReaderState *record)
 
 		/*
 		 * If the parent of the target path doesn't exist, create it now. This
-		 * enables us to create the target underneath later.  Note that if
-		 * the database dir is not in a tablespace, the parent will always
-		 * exist, so this never runs in that case.
+		 * enables us to create the target underneath later.
 		 */
 		parent_path = pstrdup(dst_path);
 		get_parent_directory(parent_path);
@@ -3168,13 +3223,14 @@ dbase_redo(XLogReaderState *record)
 						errmsg("could not stat directory \"%s\": %m",
 							   dst_path));
 
+			/* create the parent directory if needed and valid */
 			recovery_create_dbdir(parent_path, true);
 		}
 		pfree(parent_path);
 
 		/*
 		 * There's a case where the copy source directory is missing for the
-		 * same reason above.  Create the emtpy source directory so that
+		 * same reason above.  Create the empty source directory so that
 		 * copydir below doesn't fail.  The directory will be dropped soon by
 		 * recovery.
 		 */
@@ -3203,7 +3259,7 @@ dbase_redo(XLogReaderState *record)
 	else if (info == XLOG_DBASE_CREATE_WAL_LOG)
 	{
 		xl_dbase_create_wal_log_rec *xlrec =
-		(xl_dbase_create_wal_log_rec *) XLogRecGetData(record);
+			(xl_dbase_create_wal_log_rec *) XLogRecGetData(record);
 		char	   *dbpath;
 		char	   *parent_path;
 

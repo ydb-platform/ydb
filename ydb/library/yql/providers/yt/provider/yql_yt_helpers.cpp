@@ -83,7 +83,7 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
         return true;
     }
 
-    if (auto maybeContent = TMaybeNode<TDqReadWideWrap>(&lambdaBody)) {
+    if (auto maybeContent = TMaybeNode<TDqReadWrapBase>(&lambdaBody)) {
         if (!supportsDq) {
             return false;
         }

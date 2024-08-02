@@ -8,7 +8,7 @@
  * storage implementation and the details about individual types of
  * statistics.
  *
- * Copyright (c) 2001-2022, PostgreSQL Global Development Group
+ * Copyright (c) 2001-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/utils/activity/pgstat_wal.c
@@ -21,10 +21,10 @@
 #include "executor/instrument.h"
 
 
-__thread PgStat_WalStats PendingWalStats = {0};
+__thread PgStat_PendingWalStats PendingWalStats = {0};
 
 /*
- * WAL usage counters saved from pgWALUsage at the previous call to
+ * WAL usage counters saved from pgWalUsage at the previous call to
  * pgstat_report_wal(). This is used to calculate how much WAL usage
  * happens between pgstat_report_wal() calls, by subtracting
  * the previous counters from the current ones.
@@ -34,7 +34,7 @@ static __thread WalUsage prevWalUsage;
 
 /*
  * Calculate how much WAL usage counters have increased and update
- * shared statistics.
+ * shared WAL and IO statistics.
  *
  * Must be called by processes that generate WAL, that do not call
  * pgstat_report_stat(), like walwriter.
@@ -54,6 +54,9 @@ pgstat_report_wal(bool force)
 
 	/* flush wal stats */
 	pgstat_flush_wal(nowait);
+
+	/* flush IO stats */
+	pgstat_flush_io(nowait);
 }
 
 /*
@@ -79,7 +82,7 @@ bool
 pgstat_flush_wal(bool nowait)
 {
 	PgStatShared_Wal *stats_shmem = &pgStatLocal.shmem->wal;
-	WalUsage	diff = {0};
+	WalUsage	wal_usage_diff = {0};
 
 	Assert(IsUnderPostmaster || !IsPostmasterEnvironment);
 	Assert(pgStatLocal.shmem != NULL &&
@@ -97,25 +100,26 @@ pgstat_flush_wal(bool nowait)
 	 * Calculate how much WAL usage counters were increased by subtracting the
 	 * previous counters from the current ones.
 	 */
-	WalUsageAccumDiff(&diff, &pgWalUsage, &prevWalUsage);
-	PendingWalStats.wal_records = diff.wal_records;
-	PendingWalStats.wal_fpi = diff.wal_fpi;
-	PendingWalStats.wal_bytes = diff.wal_bytes;
+	WalUsageAccumDiff(&wal_usage_diff, &pgWalUsage, &prevWalUsage);
 
 	if (!nowait)
 		LWLockAcquire(&stats_shmem->lock, LW_EXCLUSIVE);
 	else if (!LWLockConditionalAcquire(&stats_shmem->lock, LW_EXCLUSIVE))
 		return true;
 
-#define WALSTAT_ACC(fld) stats_shmem->stats.fld += PendingWalStats.fld
-	WALSTAT_ACC(wal_records);
-	WALSTAT_ACC(wal_fpi);
-	WALSTAT_ACC(wal_bytes);
-	WALSTAT_ACC(wal_buffers_full);
-	WALSTAT_ACC(wal_write);
-	WALSTAT_ACC(wal_sync);
-	WALSTAT_ACC(wal_write_time);
-	WALSTAT_ACC(wal_sync_time);
+#define WALSTAT_ACC(fld, var_to_add) \
+	(stats_shmem->stats.fld += var_to_add.fld)
+#define WALSTAT_ACC_INSTR_TIME(fld) \
+	(stats_shmem->stats.fld += INSTR_TIME_GET_MICROSEC(PendingWalStats.fld))
+	WALSTAT_ACC(wal_records, wal_usage_diff);
+	WALSTAT_ACC(wal_fpi, wal_usage_diff);
+	WALSTAT_ACC(wal_bytes, wal_usage_diff);
+	WALSTAT_ACC(wal_buffers_full, PendingWalStats);
+	WALSTAT_ACC(wal_write, PendingWalStats);
+	WALSTAT_ACC(wal_sync, PendingWalStats);
+	WALSTAT_ACC_INSTR_TIME(wal_write_time);
+	WALSTAT_ACC_INSTR_TIME(wal_sync_time);
+#undef WALSTAT_ACC_INSTR_TIME
 #undef WALSTAT_ACC
 
 	LWLockRelease(&stats_shmem->lock);

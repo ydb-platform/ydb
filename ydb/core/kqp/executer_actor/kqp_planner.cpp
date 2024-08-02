@@ -37,6 +37,11 @@ std::unique_ptr<TEvKqp::TEvAbortExecution> CheckTaskSize(ui64 TxId, const TIntru
     return nullptr;
 }
 
+std::unique_ptr<IEventHandle> MakeActorStartFailureError(const TActorId& executerId, const TString& reason) {
+    auto ev = std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::OVERLOADED, reason);
+    return std::make_unique<IEventHandle>(executerId, executerId, ev.release());
+}
+
 void BuildInitialTaskResources(const TKqpTasksGraph& graph, ui64 taskId, TTaskResourceEstimation& ret) {
     const auto& task = graph.GetTask(taskId);
     const auto& stageInfo = graph.GetStageInfo(task.StageId);
@@ -189,6 +194,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     request.SetStartAllOrFail(true);
     if (UseDataQueryPool) {
         request.MutableRuntimeSettings()->SetExecType(NYql::NDqProto::TComputeRuntimeSettings::DATA);
+        request.MutableRuntimeSettings()->SetUseSpilling(WithSpilling);
     } else {
         request.MutableRuntimeSettings()->SetExecType(NYql::NDqProto::TComputeRuntimeSettings::SCAN);
         request.MutableRuntimeSettings()->SetUseSpilling(WithSpilling);
@@ -215,6 +221,8 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     if (SerializedGUCSettings) {
         request.SetSerializedGUCSettings(SerializedGUCSettings);
     }
+
+    request.SetSchedulerGroup(UserRequestContext->PoolId);
 
     return result;
 }
@@ -337,15 +345,20 @@ const IKqpGateway::TKqpSnapshot& TKqpPlanner::GetSnapshot() const {
 
 // optimizeProtoForLocalExecution - if we want to execute compute actor locally and don't want to serialize & then deserialize proto message
 // instead we just give ptr to proto message and after that we swap/copy it
-void TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) {
+TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) {
     auto& task = TasksGraph.GetTask(taskId);
     NYql::NDqProto::TDqTask* taskDesc = ArenaSerializeTaskToProto(TasksGraph, task, true);
     NYql::NDq::TComputeRuntimeSettings settings;
+    if (!TxInfo) {
+        TxInfo = MakeIntrusive<NRm::TTxState>(
+            TxId, TInstant::Now(), ResourceManager_->GetCounters());
+    }
 
-    task.ComputeActorId = CaFactory_->CreateKqpComputeActor({
+    auto startResult = CaFactory_->CreateKqpComputeActor({
         .ExecuterId = ExecuterId,
         .TxId = TxId,
         .Task = taskDesc,
+        .TxInfo = TxInfo,
         .RuntimeSettings = settings,
         .TraceId = NWilson::TTraceId(ExecuterSpan.GetTraceId()),
         .Arena = TasksGraph.GetMeta().GetArenaIntrusivePtr(),
@@ -360,10 +373,19 @@ void TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) {
         .RlPath = Nothing()
     });
 
+    if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&startResult)) {
+        return rmResult->GetFailReason();
+    }
+
+    TActorId* actorId = std::get_if<TActorId>(&startResult);
+    Y_ABORT_UNLESS(actorId);
+    task.ComputeActorId = *actorId;
+
     LOG_D("Executing task: " << taskId << " on compute actor: " << task.ComputeActorId);
 
     auto result = PendingComputeActors.emplace(task.ComputeActorId, TProgressStat());
     YQL_ENSURE(result.second);
+    return TString();
 }
 
 ui32 TKqpPlanner::GetnScanTasks() {
@@ -401,7 +423,10 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
     // on datashard tx.
     if (LocalComputeTasks) {
         for (ui64 taskId : ComputeTasks) {
-            ExecuteDataComputeTask(taskId, ComputeTasks.size());
+            auto result = ExecuteDataComputeTask(taskId, ComputeTasks.size());
+            if (!result.empty()) {
+                return MakeActorStartFailureError(ExecuterId, result);
+            }
         }
         ComputeTasks.clear();
     }
@@ -411,7 +436,10 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
         // to execute this task locally so we can avoid useless overhead for remote task launching.
         for (auto& [shardId, tasks]: TasksPerNode) {
             for (ui64 taskId: tasks) {
-                ExecuteDataComputeTask(taskId, tasks.size());
+                auto result = ExecuteDataComputeTask(taskId, tasks.size());
+                if (!result.empty()) {
+                    return MakeActorStartFailureError(ExecuterId, result);
+                }
             }
         }
 
@@ -437,7 +465,11 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
             if (tasksOnNodeIt != TasksPerNode.end()) {
                 auto& tasks = tasksOnNodeIt->second;
                 for (ui64 taskId: tasks) {
-                    ExecuteDataComputeTask(taskId, tasks.size());
+                    auto result = ExecuteDataComputeTask(taskId, tasks.size());
+                    if (!result.empty()) {
+                        return MakeActorStartFailureError(ExecuterId, result);
+                    }
+
                     PendingComputeTasks.erase(taskId);
                 }
             }

@@ -3,6 +3,7 @@
 #include "defs.h"
 #include "hullds_idxsnap.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullrecmerger.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_heap_it.h>
 
 namespace NKikimr {
 
@@ -53,116 +54,114 @@ namespace NKikimr {
     };
 
     ////////////////////////////////////////////////////////////////////////////
-    // TLevelIndexSnapshot::TIndexForwardIterator
+    // TLevelIndexSnapshot::TIndexBaseIterator
     ////////////////////////////////////////////////////////////////////////////
-    template <class TKey, class TMemRec>
-    class TLevelIndexSnapshot<TKey, TMemRec>::TIndexForwardIterator {
-    private:
-        using TForwardIterator = typename TLevelIndexSnapshot<TKey, TMemRec>::TForwardIterator;
+    template <typename TKey, typename TMemRec, bool IsForward>
+    class TIndexBaseIterator {
+    protected:
         using TIndexRecordMerger = ::NKikimr::TIndexRecordMerger<TKey, TMemRec>;
 
-        TIndexRecordMerger Merger;
-        TForwardIterator It;
+        using TIterator = std::conditional_t<IsForward,
+                            typename TLevelIndexSnapshot<TKey, TMemRec>::TForwardIterator,
+                            typename TLevelIndexSnapshot<TKey, TMemRec>::TBackwardIterator>;
 
-        void Merge() {
+        TIndexRecordMerger Merger;
+        TIterator It;
+        THeapIterator<TKey, TMemRec, IsForward> HeapIt;
+        std::optional<TKey> CurrentKey;
+
+        void MergeAndAdvance() {
             Merger.Clear();
-            if (It.Valid()) {
-                It.PutToMerger(&Merger);
+            if (HeapIt.Valid()) {
+                CurrentKey.emplace(HeapIt.GetCurKey());
+                HeapIt.PutToMergerAndAdvance(&Merger);
                 Merger.Finish();
+            } else {
+                CurrentKey.reset();
             }
         }
 
     public:
-        TIndexForwardIterator(const THullCtxPtr &hullCtx, const TLevelIndexSnapshot *levelSnap)
+        TIndexBaseIterator(const THullCtxPtr &hullCtx, const TLevelIndexSnapshot<TKey, TMemRec> *levelSnap)
             : Merger(hullCtx->VCtx->Top->GType)
             , It(hullCtx, levelSnap)
+            , HeapIt(&It)
         {}
 
         bool Valid() const {
-            return It.Valid();
+            return CurrentKey.has_value();
         }
 
         void SeekToFirst() {
-            It.SeekToFirst();
-            Merge();
+            HeapIt.SeekToFirst();
+            MergeAndAdvance();
         }
 
         void Seek(const TKey& key) {
-            It.Seek(key);
-            Merge();
-        }
-
-        void Next() {
-            It.Next();
-            Merge();
+            HeapIt.Seek(key);
+            MergeAndAdvance();
         }
 
         TKey GetCurKey() const {
-            return It.GetCurKey();
+            return *CurrentKey;
         }
 
         const TMemRec &GetMemRec() const {
             return Merger.GetMemRec();
         }
+    };
+    ////////////////////////////////////////////////////////////////////////////
+    // TLevelIndexSnapshot::TIndexForwardIterator
+    ////////////////////////////////////////////////////////////////////////////
+    template <class TKey, class TMemRec>
+    class TLevelIndexSnapshot<TKey, TMemRec>::TIndexForwardIterator :
+        public TIndexBaseIterator<TKey, TMemRec, true> {
 
-        template <typename THeap>
-        void PutToHeap(THeap& heap) {
-            heap.Add(this);
+    public:
+        using TBase = TIndexBaseIterator<TKey, TMemRec, true>;
+
+        TIndexForwardIterator(const THullCtxPtr &hullCtx, const TLevelIndexSnapshot *levelSnap)
+            : TBase(hullCtx, levelSnap)
+        {}
+
+        using TBase::Valid;
+        using TBase::SeekToFirst;
+        using TBase::Seek;
+        using TBase::GetCurKey;
+        using TBase::GetMemRec;
+
+        void Next() {
+            MergeAndAdvance();
         }
+
+    private:
+        using TBase::MergeAndAdvance;
     };
 
     ////////////////////////////////////////////////////////////////////////////
     // TLevelIndexSnapshot::TIndexBackwardIterator
     ////////////////////////////////////////////////////////////////////////////
     template <class TKey, class TMemRec>
-    class TLevelIndexSnapshot<TKey, TMemRec>::TIndexBackwardIterator {
-    private:
-        using TBackwardIterator = typename TLevelIndexSnapshot<TKey, TMemRec>::TBackwardIterator;
-        using TIndexRecordMerger = ::NKikimr::TIndexRecordMerger<TKey, TMemRec>;
-
-        TIndexRecordMerger Merger;
-        TBackwardIterator It;
-
-        void Merge() {
-            Merger.Clear();
-            if (It.Valid()) {
-                It.PutToMerger(&Merger);
-                Merger.Finish();
-            }
-        }
+    class TLevelIndexSnapshot<TKey, TMemRec>::TIndexBackwardIterator :
+        public TIndexBaseIterator<TKey, TMemRec, false> {
 
     public:
+        using TBase = TIndexBaseIterator<TKey, TMemRec, false>;
+
         TIndexBackwardIterator(const THullCtxPtr &hullCtx, const TLevelIndexSnapshot *levelSnap)
-            : Merger(hullCtx->VCtx->Top->GType)
-            , It(hullCtx, levelSnap)
+            : TBase(hullCtx, levelSnap)
         {}
 
-        bool Valid() const {
-            return It.Valid();
-        }
-
-        void Seek(const TKey& key) {
-            It.Seek(key);
-            Merge();
-        }
+        using TBase::Valid;
+        using TBase::Seek;
+        using TBase::GetCurKey;
+        using TBase::GetMemRec;
 
         void Prev() {
-            It.Prev();
-            Merge();
+            MergeAndAdvance();
         }
 
-        TKey GetCurKey() const {
-            return It.GetCurKey();
-        }
-
-        const TMemRec &GetMemRec() const {
-            return Merger.GetMemRec();
-        }
-
-        template <typename THeap>
-        void PutToHeap(THeap& heap) {
-            heap.Add(this);
-        }
+    private:
+        using TBase::MergeAndAdvance;
     };
 } // NKikimr
-

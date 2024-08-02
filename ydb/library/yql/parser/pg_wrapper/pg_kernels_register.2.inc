@@ -82,4 +82,6 @@ RegisterExec(4026, arrow_spg_kd_inner_consistent());
 RegisterExec(4032, arrow_pg_sequence_last_value());
 RegisterExec(5003, arrow_tsquery_phrase());
 RegisterExec(5004, arrow_tsquery_phrase_distance());
+RegisterExec(6213, arrow_pg_split_walfile_name());
 RegisterExec(6249, arrow_pg_database_collation_actual_version());
+RegisterExec(6305, arrow_pg_log_standby_snapshot());

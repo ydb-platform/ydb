@@ -1,7 +1,9 @@
 #pragma once
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/core/formats/arrow/save_load/saver.h>
 
 namespace NKikimr::NOlap {
+using TColumnSaver = NArrow::NAccessor::TColumnSaver;
 
 class TChunkAddress {
 private:

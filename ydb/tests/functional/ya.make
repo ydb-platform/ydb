@@ -2,6 +2,7 @@ RECURSE(
     api
     audit
     autoconfig
+    backup
     blobstorage
     canonical
     clickbench

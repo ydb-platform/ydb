@@ -4,6 +4,7 @@
 
 #include <yt/yt/core/ytree/helpers.h>
 
+#include <yt/yt/core/misc/memory_usage_tracker.h>
 #include <yt/yt/core/misc/singleton.h>
 
 namespace NYT::NRpc {
@@ -48,8 +49,14 @@ public:
         return 0;
     }
 
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
+    {
+        return MemoryUsageTracker_;
+    }
+
 private:
     const TString Address_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
 };
 
 IChannelPtr CreateNullChannel(TString address)

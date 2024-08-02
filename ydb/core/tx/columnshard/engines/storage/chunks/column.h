@@ -22,6 +22,9 @@ protected:
     virtual ui32 DoGetRecordsCountImpl() const override {
         return Record.GetMeta().GetNumRows();
     }
+    virtual ui64 DoGetRawBytesImpl() const override {
+        return Record.GetMeta().GetRawBytes();
+    }
     virtual TString DoDebugString() const override {
         return "";
     }
@@ -53,14 +56,14 @@ public:
         AFL_VERIFY(Data.size() == Record.BlobRange.Size || Record.BlobRange.Size == 0)("data", Data.size())("record", Record.BlobRange.Size);
     }
 
-    TChunkPreparation(const TString& data, const std::shared_ptr<arrow::Array>& column, const TChunkAddress& address, const TSimpleColumnInfo& columnInfo)
+    TChunkPreparation(const TString& data, const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column, const TChunkAddress& address, const TSimpleColumnInfo& columnInfo)
         : TBase(address.GetColumnId())
         , Data(data)
         , Record(address, column, columnInfo)
         , ColumnInfo(columnInfo) {
-        Y_ABORT_UNLESS(column->length());
-        First = NArrow::TStatusValidator::GetValid(column->GetScalar(0));
-        Last = NArrow::TStatusValidator::GetValid(column->GetScalar(column->length() - 1));
+        Y_ABORT_UNLESS(column->GetRecordsCount());
+        First = column->GetScalar(0);
+        Last = column->GetScalar(column->GetRecordsCount() - 1);
         Record.BlobRange.Size = data.size();
     }
 };

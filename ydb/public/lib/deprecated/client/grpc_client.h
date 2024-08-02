@@ -111,8 +111,6 @@ namespace NKikimr {
 
             void FillNode(const NKikimrClient::TFillNodeRequest& request, TResponseCallback callback);
             void DrainNode(const NKikimrClient::TDrainNodeRequest& request, TResponseCallback callback);
-
-            void LoginRequest(const NKikimrClient::TLoginRequest& request, TResponseCallback callback);
         };
 
     } // NGRpcProxy

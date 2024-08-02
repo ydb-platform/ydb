@@ -1,25 +1,21 @@
-#include <ydb/core/blobstorage/base/blobstorage_events.h>
-
 #include "viewer_request.h"
+#include "viewer_autocomplete.h"
+#include "viewer_query_old.h"
+#include "viewer_render.h"
+#include "viewer_sysinfo.h"
+#include "viewer_tabletinfo.h"
 #include "wb_req.h"
 
-#include "json_tabletinfo.h"
-#include "json_sysinfo.h"
-#include "json_query_old.h"
-#include "json_render.h"
-#include "json_autocomplete.h"
-
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 using namespace NActors;
 using namespace NNodeWhiteboard;
 
 template<typename TRequestEventType, typename TResponseEventType>
-class TViewerWhiteboardRequest : public TWhiteboardRequest<TViewerWhiteboardRequest<TRequestEventType, TResponseEventType>, TRequestEventType, TResponseEventType> {
+class TViewerWhiteboardRequest : public TWhiteboardRequest<TRequestEventType, TResponseEventType> {
 protected:
     using TThis = TViewerWhiteboardRequest<TRequestEventType, TResponseEventType>;
-    using TBase = TWhiteboardRequest<TThis, TRequestEventType, TResponseEventType>;
+    using TBase = TWhiteboardRequest<TRequestEventType, TResponseEventType>;
     using TResponseType = typename TResponseEventType::ProtoRecordType;
     IViewer* Viewer;
     TEvViewer::TEvViewerRequest::TPtr Event;
@@ -54,7 +50,7 @@ public:
         NKikimr::NViewer::MergeWhiteboardResponses(*(response->Record.MutableSystemResponse()), perNodeStateInfo, fields);
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         auto response = MakeHolder<TEvViewer::TEvViewerResponse>();
         auto& locationResponded = (*response->Record.MutableLocationResponded());
         for (const auto& [nodeId, nodeResponse] : TBase::PerNodeStateInfo) {
@@ -106,5 +102,4 @@ bool IsPostContent(const NMon::TEvHttpInfo::TPtr& event) {
     return false;
 }
 
-}
 }

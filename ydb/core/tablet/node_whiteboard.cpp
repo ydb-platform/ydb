@@ -3,11 +3,9 @@
 #include <util/system/info.h>
 #include <util/system/hostname.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/mon_alloc/stats.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/process_stats.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/counters.h>
@@ -58,10 +56,6 @@ public:
         }
 
         SystemStateInfo.SetStartTime(ctx.Now().MilliSeconds());
-        ProcessStats.Fill(getpid());
-        if (ProcessStats.CGroupMemLim != 0) {
-            SystemStateInfo.SetMemoryLimit(ProcessStats.CGroupMemLim);
-        }
         ctx.Send(ctx.SelfID, new TEvPrivate::TEvUpdateRuntimeStats());
 
         auto group = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils")
@@ -83,8 +77,8 @@ protected:
     i64 MaxClockSkewWithPeerUs;
     ui32 MaxClockSkewPeerId;
     NKikimrWhiteboard::TSystemStateInfo SystemStateInfo;
+    NKikimrMemory::TMemoryStats MemoryStats;
     THolder<NTracing::ITraceCollection> TabletIntrospectionData;
-    TProcStat ProcessStats;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewWithPeerUsCounter;
     ::NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewPeerIdCounter;
@@ -421,6 +415,7 @@ protected:
         HFunc(TEvWhiteboard::TEvBSGroupStateDelete, Handle);
         HFunc(TEvWhiteboard::TEvBSGroupStateRequest, Handle);
         HFunc(TEvWhiteboard::TEvSystemStateUpdate, Handle);
+        HFunc(TEvWhiteboard::TEvMemoryStatsUpdate, Handle);
         HFunc(TEvWhiteboard::TEvSystemStateAddEndpoint, Handle);
         HFunc(TEvWhiteboard::TEvSystemStateAddRole, Handle);
         HFunc(TEvWhiteboard::TEvSystemStateSetTenant, Handle);
@@ -561,6 +556,34 @@ protected:
 
     void Handle(TEvWhiteboard::TEvSystemStateUpdate::TPtr &ev, const TActorContext &ctx) {
         if (CheckedMerge(SystemStateInfo, ev->Get()->Record)) {
+            SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+        }
+    }
+
+    void Handle(TEvWhiteboard::TEvMemoryStatsUpdate::TPtr &ev, const TActorContext &ctx) {
+        MemoryStats.Swap(&ev->Get()->Record);
+
+        // Note: copy stats to sys info fields for backward compatibility
+        NKikimrWhiteboard::TSystemStateInfo systemStateUpdate;
+        if (MemoryStats.HasAnonRss()) {
+            systemStateUpdate.SetMemoryUsed(MemoryStats.GetAnonRss());
+        }
+        if (MemoryStats.HasHardLimit()) {
+            systemStateUpdate.SetMemoryLimit(MemoryStats.GetHardLimit());
+        }
+        if (MemoryStats.HasAllocatedMemory()) {
+            systemStateUpdate.SetMemoryUsedInAlloc(MemoryStats.GetAllocatedMemory());
+        }
+
+        // Note: is rendered in UI as 'Caches', so let's pass aggregated caches stats (not only Shared Cache stats)
+        if (MemoryStats.HasConsumersConsumption()) {
+            systemStateUpdate.MutableSharedCacheStats()->SetUsedBytes(MemoryStats.GetConsumersConsumption());
+        }
+        if (MemoryStats.HasConsumersLimit()) {
+            systemStateUpdate.MutableSharedCacheStats()->SetLimitBytes(MemoryStats.GetConsumersLimit());
+        }
+
+        if (CheckedMerge(SystemStateInfo, systemStateUpdate)) {
             SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
         }
     }
@@ -943,14 +966,6 @@ protected:
         for (double d : loadAverage) {
             systemStatsUpdate->Record.AddLoadAverage(d);
         }
-        ProcessStats.Fill(getpid());
-        if (ProcessStats.AnonRss != 0) {
-            systemStatsUpdate->Record.SetMemoryUsed(ProcessStats.AnonRss);
-        }
-        if (ProcessStats.CGroupMemLim != 0) {
-            systemStatsUpdate->Record.SetMemoryLimit(ProcessStats.CGroupMemLim);
-        }
-        systemStatsUpdate->Record.SetMemoryUsedInAlloc(TAllocState::GetAllocatedMemoryEstimate());
         if (CheckedMerge(SystemStateInfo, systemStatsUpdate->Record)) {
             SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
         }

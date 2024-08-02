@@ -84,20 +84,14 @@ namespace NKikimr {
         void TBarriersDs::BuildMemView() {
             TBase::TLevelIndexSnapshot snap = TBase::GetIndexSnapshot();
             TBase::TLevelIndexSnapshot::TForwardIterator it(Settings.HullCtx, &snap);
-            it.SeekToFirst();
-
+            THeapIterator<TKeyBarrier, TMemRecBarrier, true> heapIt(&it);
             TIndexRecordMerger<TKeyBarrier, TMemRecBarrier> merger(Settings.HullCtx->VCtx->Top->GType);
-            while (it.Valid()) {
-                it.PutToMerger(&merger);
-                merger.Finish();
-
-                const TKeyBarrier& key = it.GetCurKey();
-                const TMemRecBarrier& memRec = merger.GetMemRec();
+            auto callback = [&] (TKeyBarrier key, auto* merger) -> bool {
+                const TMemRecBarrier& memRec = merger->GetMemRec();
                 MemView->Update(key, memRec);
-
-                it.Next();
-                merger.Clear();
-            }
+                return true;
+            };
+            heapIt.Walk(TKeyBarrier::First(), &merger, callback);
         }
 
     } // NBarriers

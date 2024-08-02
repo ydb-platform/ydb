@@ -1,21 +1,14 @@
 #pragma once
-
-#include <ydb/core/viewer/json/json.h>
-#include <ydb/core/viewer/yaml/yaml.h>
-
-#include <ydb/core/tablet/defs.h>
-#include <ydb/library/actors/core/defs.h>
-#include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/core/event.h>
-#include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/core/driver_lib/run/config.h>
+#include <ydb/core/tablet/defs.h>
+#include <ydb/core/viewer/json/json.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
-#include <ydb/public/api/protos/ydb_monitoring.pb.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/defs.h>
+#include <ydb/library/actors/core/event.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
-#include <util/system/hostname.h>
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 inline TActorId MakeViewerID(ui32 node) {
     char x[12] = {'v','i','e','w','e','r'};
@@ -206,37 +199,13 @@ public:
     virtual void AddRunningQuery(const TString& queryId, const TActorId& actorId) = 0;
     virtual void EndRunningQuery(const TString& queryId, const TActorId& actorId) = 0;
     virtual TActorId FindRunningQuery(const TString& queryId) = 0;
+
+    virtual NJson::TJsonValue GetCapabilities() = 0;
 };
 
 void SetupPQVirtualHandlers(IViewer* viewer);
 void SetupDBVirtualHandlers(IViewer* viewer);
 void SetupKqpContentHandler(IViewer* viewer);
-
-template <typename RequestType>
-struct TJsonRequestSchema {
-    static YAML::Node GetSchema() { return {}; }
-};
-
-template <typename RequestType>
-struct TJsonRequestSummary {
-    static TString GetSummary() { return {}; }
-};
-
-template <typename RequestType>
-struct TJsonRequestDescription {
-    static TString GetDescription() { return {}; }
-};
-
-template <typename RequestType>
-struct TJsonRequestParameters {
-    static YAML::Node GetParameters() { return {}; }
-};
-
-template <typename RequestType>
-struct TJsonRequestSwagger {
-    static YAML::Node GetSwagger() { return {}; }
-};
-
 
 template <typename ValueType, typename OutputIteratorType>
 void GenericSplitIds(TStringBuf source, char delim, OutputIteratorType it) {
@@ -298,8 +267,5 @@ NKikimrViewer::EFlag GetFlagFromUsage(double usage);
 
 NKikimrWhiteboard::EFlag GetWhiteboardFlag(NKikimrViewer::EFlag flag);
 NKikimrViewer::EFlag GetViewerFlag(NKikimrWhiteboard::EFlag flag);
-NKikimrViewer::EFlag GetViewerFlag(Ydb::Monitoring::StatusFlag::Status flag);
 
-
-} // NViewer
-} // NKikimr
+}

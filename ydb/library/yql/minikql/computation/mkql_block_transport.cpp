@@ -10,6 +10,11 @@ namespace NKikimr::NMiniKQL {
 
 namespace {
 
+TRope MakeReadOnlyRopeAndUntrack(const std::shared_ptr<const arrow::Buffer>& owner, const char* data, size_t size) {
+    MKQLArrowUntrack(owner->data());
+    return NYql::MakeReadOnlyRope(owner, data, size);
+}
+
 class TOwnedArrowBuffer : public arrow::Buffer {
 public:
     TOwnedArrowBuffer(TContiguousSpan span, const std::shared_ptr<const void>& owner)
@@ -76,7 +81,7 @@ void StoreNulls(const arrow::ArrayData& data, TRope& dst) {
     YQL_ENSURE(desiredOffset <= (size_t)data.offset);
     YQL_ENSURE((data.offset - desiredOffset) % 8 == 0);
     const char* nulls = data.GetValues<char>(0, 0) + (data.offset - desiredOffset) / 8;
-    dst.Insert(dst.End(), NYql::MakeReadOnlyRope(data.buffers[0], nulls, nullBytes));
+    dst.Insert(dst.End(), MakeReadOnlyRopeAndUntrack(data.buffers[0], nulls, nullBytes));
 }
 
 void LoadBufferSize(const IBlockDeserializer::TMetadataSource& metaSource, TMaybe<ui64>& result) {
@@ -205,7 +210,7 @@ public:
         const ui64 desiredOffset = data.offset % 8;
         const char* buf = reinterpret_cast<const char*>(data.buffers[1]->data()) + (data.offset - desiredOffset) * ObjectSize;
         size_t dataBytes = ((size_t)data.length + desiredOffset) * ObjectSize;
-        dst.Insert(dst.End(), NYql::MakeReadOnlyRope(data.buffers[1], buf, dataBytes));
+        dst.Insert(dst.End(), MakeReadOnlyRopeAndUntrack(data.buffers[1], buf, dataBytes));
     }
 };
 
@@ -277,11 +282,11 @@ private:
         const ui64 desiredOffset = data.offset % 8;
         const char* offsets = reinterpret_cast<const char*>(data.GetValues<TOffset>(1) - desiredOffset);
         size_t offsetsSize = ((size_t)data.length + 1 + desiredOffset) * sizeof(TOffset);
-        dst.Insert(dst.End(), NYql::MakeReadOnlyRope(data.buffers[1], offsets, offsetsSize));
+        dst.Insert(dst.End(), MakeReadOnlyRopeAndUntrack(data.buffers[1], offsets, offsetsSize));
 
         const char* mainData = reinterpret_cast<const char*>(data.buffers[2]->data());
         size_t mainSize = data.buffers[2]->size();
-        dst.Insert(dst.End(), NYql::MakeReadOnlyRope(data.buffers[2], mainData, mainSize));
+        dst.Insert(dst.End(), MakeReadOnlyRopeAndUntrack(data.buffers[2], mainData, mainSize));
     }
 };
 

@@ -1,5 +1,4 @@
 items:
-- { name: Обзор,                                  href: index.md }
 - { name: Директории,                             href: dir.md }
 - { name: Таблицы,                                href: table.md }
 - { name: Представления (VIEW),                   href: view.md, when: feature_view }

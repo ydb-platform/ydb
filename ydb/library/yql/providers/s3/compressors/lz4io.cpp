@@ -22,7 +22,7 @@ constexpr ui32 LegacyMagicNumber = 0x184C2102U;
 constexpr size_t LegacyBlockSize = 8_MB;
 constexpr size_t FrameMaxBlockSize = 4_MB;
 
-void WriteLE32 (void* p, ui32 value32)
+void WriteLE32(void* p, ui32 value32)
 {
     const auto dstPtr = static_cast<unsigned char*>(p);
     dstPtr[0] = (unsigned char)value32;
@@ -31,7 +31,7 @@ void WriteLE32 (void* p, ui32 value32)
     dstPtr[3] = (unsigned char)(value32 >> 24U);
 }
 
-ui32 ReadLE32 (const void* s) {
+ui32 ReadLE32(const void* s) {
     const auto srcPtr = static_cast<const unsigned char*>(s);
     ui32 value32 = srcPtr[0];
     value32 += (ui32)srcPtr[1] <<  8U;
@@ -112,29 +112,35 @@ bool TReadBuffer::nextImpl() {
 }
 
 size_t TReadBuffer::DecompressFrame() {
-    if (NextToLoad > InBuffer.size()) {
-        InBuffer.resize(NextToLoad);
-    }
-
-    if (Pos >= Remaining) {
-        for (auto toRead = NextToLoad; toRead > 0U;) {
-            const auto sizeCheck = Source.read(InBuffer.data() + NextToLoad - toRead, toRead);
-            YQL_ENSURE(sizeCheck > 0U && sizeCheck <= toRead, "Cannot access compressed block.");
-            toRead -= sizeCheck;
+    while (NextToLoad) {
+        if (NextToLoad > InBuffer.size()) {
+            InBuffer.resize(NextToLoad);
         }
 
-        Pos = 0ULL;
-        Remaining = NextToLoad;
-    }
+        if (Pos >= Remaining) {
+            for (auto toRead = NextToLoad; toRead > 0U;) {
+                const auto sizeCheck = Source.read(InBuffer.data() + NextToLoad - toRead, toRead);
+                YQL_ENSURE(sizeCheck > 0U && sizeCheck <= toRead, "Cannot access compressed block.");
+                toRead -= sizeCheck;
+            }
 
-    if (Pos < Remaining) {
+            Pos = 0ULL;
+            Remaining = NextToLoad;
+        }
+
         auto decodedBytes = OutBuffer.size();
-        NextToLoad = LZ4F_decompress_usingDict(Ctx, OutBuffer.data(), &decodedBytes, InBuffer.data() + Pos, &Remaining, nullptr, 0ULL, nullptr);
-        YQL_ENSURE(!LZ4F_isError(NextToLoad), "Decompression error: " << LZ4F_getErrorName(NextToLoad));
-        Pos += Remaining;
+        while (Pos < Remaining || (decodedBytes == OutBuffer.size())) {
+            decodedBytes = OutBuffer.size();
+            NextToLoad = LZ4F_decompress_usingDict(Ctx, OutBuffer.data(), &decodedBytes, InBuffer.data() + Pos, &Remaining, nullptr, 0ULL, nullptr);
+            YQL_ENSURE(!LZ4F_isError(NextToLoad), "Decompression error: " << LZ4F_getErrorName(NextToLoad));
+            Pos += Remaining;
 
-        if (decodedBytes)
-            return decodedBytes;
+            if (decodedBytes)
+                return decodedBytes;
+
+            if (!NextToLoad)
+                return decodedBytes;
+        }
     }
 
     return 0ULL;

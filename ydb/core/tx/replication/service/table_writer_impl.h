@@ -178,12 +178,16 @@ public:
         return NKikimrServices::TActivity::REPLICATION_TABLE_PARTITION_WRITER;
     }
 
-    explicit TTablePartitionWriter(const TActorId& parent, ui64 tabletId, const TTableId& tableId)
+    explicit TTablePartitionWriter(
+            const TActorId& parent,
+            ui64 tabletId,
+            const TTableId& tableId,
+            TChangeRecordBuilderContextTrait<TChangeRecord> builderContext)
         : Parent(parent)
         , TabletId(tabletId)
         , TableId(tableId)
-    {
-    }
+        , BuilderContext(builderContext)
+    {}
 
     void Bootstrap() {
         GetProxyServices();
@@ -378,6 +382,8 @@ class TLocalTableWriter
             TVector<TKeyDesc::TColumnOp>()
         );
 
+        TBaseSender::SetPartitioner(NChangeExchange::CreateSchemaBoundaryPartitioner<TChangeRecord>(*KeyDesc.Get()));
+
         ResolveKeys();
     }
 
@@ -430,12 +436,12 @@ class TLocalTableWriter
     }
 
     IActor* CreateSender(ui64 partitionId) const override {
-        return new TTablePartitionWriter<TChangeRecord>(this->SelfId(), partitionId, TTableId(this->PathId, Schema->Version));
+        return new TTablePartitionWriter<TChangeRecord>(
+            this->SelfId(),
+            partitionId,
+            TTableId(this->PathId, Schema->Version),
+            BuilderContext);
     }
-
-    const TVector<TKeyDesc::TPartitionInfo>& GetPartitions() const override { return KeyDesc->GetPartitions(); }
-    const TVector<NScheme::TTypeInfo>& GetSchema() const override { return KeyDesc->KeyColumnTypes; }
-    NKikimrSchemeOp::ECdcStreamFormat GetStreamFormat() const override { return TChangeRecord::StreamType; }
 
     void Handle(TEvWorker::TEvData::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
@@ -521,9 +527,11 @@ public:
         return NKikimrServices::TActivity::REPLICATION_LOCAL_TABLE_WRITER;
     }
 
-    explicit TLocalTableWriter(const TPathId& tablePathId)
+    template <class... TArgs>
+    explicit TLocalTableWriter(const TPathId& tablePathId, TArgs&&... args)
         : TBase(&TThis::StateWork)
         , TBaseSender(this, this, this, TActorId(), tablePathId)
+        , BuilderContext(std::forward<TArgs>(args)...)
     {
     }
 
@@ -544,6 +552,7 @@ public:
 
 private:
     mutable TMaybe<TString> LogPrefix;
+    TChangeRecordBuilderContextTrait<TChangeRecord> BuilderContext;
 
     TActorId Worker;
     ui64 TableVersion = 0;

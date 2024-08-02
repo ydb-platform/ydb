@@ -138,13 +138,11 @@ class BuildContext:
         # The printer will discard duplicates which return different representations.
         self.known_object_printers = defaultdict(list)
 
-    def record_call(self, obj, func, args, kwargs, arg_slices=None):
+    def record_call(self, obj, func, args, kwargs):
         name = get_pretty_function_description(func)
         self.known_object_printers[IDKey(obj)].append(
-            lambda obj, p, cycle: (
-                p.text("<...>")
-                if cycle
-                else p.repr_call(name, args, kwargs, arg_slices=arg_slices)
+            lambda obj, p, cycle: p.maybe_repr_known_object_as_call(
+                obj, cycle, name, args, kwargs
             )
         )
 
@@ -299,6 +297,11 @@ def target(observation: Union[int, float], *, label: str = "") -> Union[int, flo
             "Calling target() outside of a test is invalid.  "
             "Consider guarding this call with `if currently_in_test_context(): ...`"
         )
+    elif context.data.provider.avoid_realization:
+        # We could in principle realize this in the engine, but it seems more
+        # efficient to have our alternative backend optimize it for us.
+        # See e.g. https://github.com/pschanely/hypothesis-crosshair/issues/3
+        return observation  # pragma: no cover
     verbose_report(f"Saw target({observation!r}, {label=})")
 
     if label in context.data.target_observations:

@@ -10,10 +10,9 @@
 #include <util/string/join.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include "json_handlers.h"
-#include "json_tabletinfo.h"
-#include "json_vdiskinfo.h"
-#include "json_pdiskinfo.h"
+#include "viewer_tabletinfo.h"
+#include "viewer_vdiskinfo.h"
+#include "viewer_pdiskinfo.h"
 #include "query_autocomplete_helper.h"
 
 #include <library/cpp/testing/unittest/registar.h>

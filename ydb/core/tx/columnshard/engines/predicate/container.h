@@ -15,10 +15,12 @@ private:
     std::shared_ptr<NOlap::TPredicate> Object;
     NArrow::ECompareType CompareType;
     mutable std::optional<std::vector<TString>> ColumnNames;
+    std::shared_ptr<NArrow::TReplaceKey> ReplaceKey;
 
-    TPredicateContainer(std::shared_ptr<NOlap::TPredicate> object)
+    TPredicateContainer(std::shared_ptr<NOlap::TPredicate> object, const std::shared_ptr<NArrow::TReplaceKey>& replaceKey)
         : Object(object)
-        , CompareType(Object->GetCompareType()) {
+        , CompareType(Object->GetCompareType())
+        , ReplaceKey(replaceKey) {
     }
 
     TPredicateContainer(const NArrow::ECompareType compareType)
@@ -27,7 +29,26 @@ private:
 
     static std::partial_ordering ComparePredicatesSamePrefix(const NOlap::TPredicate& l, const NOlap::TPredicate& r);
 
+    static std::shared_ptr<NArrow::TReplaceKey> ExtractKey(const NOlap::TPredicate& predicate, const std::shared_ptr<arrow::Schema>& key) {
+        AFL_VERIFY(predicate.Batch);
+        const auto& batchFields = predicate.Batch->schema()->fields();
+        const auto& keyFields = key->fields();
+        size_t minSize = std::min(batchFields.size(), keyFields.size());
+        for (size_t i = 0; i < minSize; ++i) {
+            Y_DEBUG_ABORT_UNLESS(batchFields[i]->type()->Equals(*keyFields[i]->type()));
+        }
+        if (batchFields.size() <= keyFields.size()) {
+            return std::make_shared<NArrow::TReplaceKey>(NArrow::TReplaceKey::FromBatch(predicate.Batch, predicate.Batch->schema(), 0));
+        } else {
+            return std::make_shared<NArrow::TReplaceKey>(NArrow::TReplaceKey::FromBatch(predicate.Batch, key, 0));
+        }
+    }
+
 public:
+
+    const std::shared_ptr<NArrow::TReplaceKey>& GetReplaceKey() const {
+        return ReplaceKey;
+    }
 
     bool IsEmpty() const {
         return !Object;
@@ -72,23 +93,6 @@ public:
             return NArrow::TColumnFilter::BuildAllowFilter();
         }
         return NArrow::TColumnFilter::MakePredicateFilter(data, Object->Batch, CompareType);
-    }
-
-    std::optional<NArrow::TReplaceKey> ExtractKey(const std::shared_ptr<arrow::Schema>& key) const {
-        if (Object) {
-            const auto& batchFields = Object->Batch->schema()->fields();
-            const auto& keyFields = key->fields();
-            size_t minSize = std::min(batchFields.size(), keyFields.size());
-            for (size_t i = 0; i < minSize; ++i) {
-                Y_DEBUG_ABORT_UNLESS(batchFields[i]->type()->Equals(*keyFields[i]->type()));
-            }
-            if (batchFields.size() <= keyFields.size()) {
-                return NArrow::TReplaceKey::FromBatch(Object->Batch, Object->Batch->schema(), 0);
-            } else {
-                return NArrow::TReplaceKey::FromBatch(Object->Batch, key, 0);
-            }
-        }
-        return {};
     }
 };
 

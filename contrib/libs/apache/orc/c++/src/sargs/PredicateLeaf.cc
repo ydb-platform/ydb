@@ -26,6 +26,8 @@
 #include <sstream>
 #include <type_traits>
 
+#include <util/generic/string.h>
+
 namespace orc {
 
   PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, const std::string& colName,
@@ -495,11 +497,11 @@ namespace orc {
     return result;
   }
 
-  static std::vector<TString> literal2String(const std::vector<Literal>& values) {
-    std::vector<TString> result;
+  static std::vector<TProtoStringType> literal2String(const std::vector<Literal>& values) {
+    std::vector<TProtoStringType> result;
     std::for_each(values.cbegin(), values.cend(), [&](const Literal& val) {
       if (!val.isNull()) {
-        result.emplace_back(TString(val.getString()));
+        result.emplace_back(TProtoStringType(val.getString()));
       }
     });
     return result;

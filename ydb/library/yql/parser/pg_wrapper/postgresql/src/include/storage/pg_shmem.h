@@ -14,7 +14,7 @@
  * only one ID number.
  *
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/storage/pg_shmem.h
@@ -63,12 +63,12 @@ typedef enum
 }			PGShmemType;
 
 #ifndef WIN32
-extern PGDLLIMPORT unsigned long UsedShmemSegID;
+extern __thread PGDLLIMPORT unsigned long UsedShmemSegID;
 #else
-extern PGDLLIMPORT HANDLE UsedShmemSegID;
-extern PGDLLIMPORT void *ShmemProtectiveRegion;
+extern __thread PGDLLIMPORT HANDLE UsedShmemSegID;
+extern __thread PGDLLIMPORT void *ShmemProtectiveRegion;
 #endif
-extern PGDLLIMPORT void *UsedShmemSegAddr;
+extern __thread PGDLLIMPORT void *UsedShmemSegAddr;
 
 #if !defined(WIN32) && !defined(EXEC_BACKEND)
 #define DEFAULT_SHARED_MEMORY_TYPE SHMEM_TYPE_MMAP

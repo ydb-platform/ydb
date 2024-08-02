@@ -1,4 +1,5 @@
 #include "cache_block.h"
+#include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_heap_it.h>
 #include <util/stream/output.h>
 
 template<>
@@ -75,19 +76,14 @@ namespace NKikimr {
         // because there should be no data in fresh segment at this point of time
         TBlocksSnapshot snapshot(hullDs->Blocks->GetIndexSnapshot());
         TBlocksSnapshot::TForwardIterator it(hullDs->HullCtx, &snapshot);
-        it.SeekToFirst();
-        while (it.Valid()) {
-            merger.Clear();
-            it.PutToMerger(&merger);
-            merger.Finish();
-
-            TTabletId tabletId = it.GetCurKey().TabletId;
-            ui32 blockedGen = merger.GetMemRec().BlockedGeneration;
-            bool inserted = PersistentBlocks.emplace(tabletId, TBlockedGen(blockedGen, 0)).second;
+        THeapIterator<TKeyBlock, TMemRecBlock, true> heapIt(&it);
+        auto callback = [&] (TKeyBlock key, auto* merger) -> bool {
+            ui32 blockedGen = merger->GetMemRec().BlockedGeneration;
+            bool inserted = PersistentBlocks.emplace(key.TabletId, TBlockedGen(blockedGen, 0)).second;
             Y_ABORT_UNLESS(inserted);
-
-            it.Next();
-        }
+            return true;
+        };
+        heapIt.Walk(TKeyBlock::First(), &merger, callback);
     }
 
     TBlocksCache::TBlockRes TBlocksCache::IsBlockedByInFlight(ui64 tabletId, TBlockedGen gen, ui32 *actualGen) const {

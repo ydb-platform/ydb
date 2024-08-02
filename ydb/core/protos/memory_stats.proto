@@ -1,0 +1,27 @@
+package NKikimrMemory;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TMemoryStats {
+    optional uint64 AnonRss = 1;
+    optional uint64 CGroupLimit = 2;
+    optional uint64 MemTotal = 3;
+    optional uint64 MemAvailable = 4;
+
+    optional uint64 AllocatedMemory = 5;
+    optional uint64 AllocatorCachesMemory = 6;
+
+    optional uint64 HardLimit = 7;
+    optional uint64 SoftLimit = 8;
+    optional uint64 TargetUtilization = 9;
+
+    optional uint64 ConsumersConsumption = 10;
+    optional uint64 ConsumersLimit = 11;
+    optional uint64 OtherConsumption = 12;
+    optional uint64 ExternalConsumption = 13;
+
+    optional uint64 SharedCacheConsumption = 14;
+    optional uint64 SharedCacheLimit = 15;
+
+    optional uint64 MemTableConsumption = 16;
+    optional uint64 MemTableLimit = 17;
+}

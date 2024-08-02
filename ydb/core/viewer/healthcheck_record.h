@@ -1,9 +1,8 @@
 #pragma once
+#include <util/digest/numeric.h>
+#include <util/generic/string.h>
 
 namespace NKikimr::NViewer {
-    
-using namespace NActors;
-using namespace NMonitoring;
 
 struct TMetricRecord {
     TString Database;

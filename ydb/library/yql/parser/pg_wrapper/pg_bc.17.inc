@@ -118,7 +118,10 @@ LLVM_BC(
     arrow_pg_try_advisory_xact_lock_shared_int8
     arrow_replace_text
     arrow_split_part
+    arrow_string_agg_combine
+    arrow_string_agg_deserialize
     arrow_string_agg_finalfn
+    arrow_string_agg_serialize
     arrow_string_agg_transfn
     arrow_text_concat
     arrow_text_concat_ws

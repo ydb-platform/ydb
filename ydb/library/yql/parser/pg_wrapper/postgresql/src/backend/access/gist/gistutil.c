@@ -4,7 +4,7 @@
  *	  utilities routines for the postgres GiST index access method.
  *
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -113,7 +113,7 @@ gistextractpage(Page page, int *len /* out */ )
 IndexTuple *
 gistjoinvector(IndexTuple *itvec, int *len, IndexTuple *additvec, int addlen)
 {
-	itvec = (IndexTuple *) repalloc((void *) itvec, sizeof(IndexTuple) * ((*len) + addlen));
+	itvec = (IndexTuple *) repalloc(itvec, sizeof(IndexTuple) * ((*len) + addlen));
 	memmove(&itvec[*len], additvec, sizeof(IndexTuple) * addlen);
 	*len += addlen;
 	return itvec;
@@ -280,7 +280,7 @@ gistMakeUnionKey(GISTSTATE *giststate, int attno,
 bool
 gistKeyIsEQ(GISTSTATE *giststate, int attno, Datum a, Datum b)
 {
-	bool		result;
+	bool		result = false; /* silence compiler warning */
 
 	FunctionCall3Coll(&giststate->equalFn[attno],
 					  giststate->supportCollation[attno],
@@ -821,10 +821,9 @@ gistcheckpage(Relation rel, Buffer buf)
  * Caller is responsible for initializing the page by calling GISTInitBuffer
  */
 Buffer
-gistNewBuffer(Relation r)
+gistNewBuffer(Relation r, Relation heaprel)
 {
 	Buffer		buffer;
-	bool		needLock;
 
 	/* First, try to get a page from FSM */
 	for (;;)
@@ -865,7 +864,7 @@ gistNewBuffer(Relation r)
 				 * page's deleteXid.
 				 */
 				if (XLogStandbyInfoActive() && RelationNeedsWAL(r))
-					gistXLogPageReuse(r, blkno, GistPageGetDeleteXid(page));
+					gistXLogPageReuse(r, heaprel, blkno, GistPageGetDeleteXid(page));
 
 				return buffer;
 			}
@@ -878,16 +877,8 @@ gistNewBuffer(Relation r)
 	}
 
 	/* Must extend the file */
-	needLock = !RELATION_IS_LOCAL(r);
-
-	if (needLock)
-		LockRelationForExtension(r, ExclusiveLock);
-
-	buffer = ReadBuffer(r, P_NEW);
-	LockBuffer(buffer, GIST_EXCLUSIVE);
-
-	if (needLock)
-		UnlockRelationForExtension(r, ExclusiveLock);
+	buffer = ExtendBufferedRel(BMR_REL(r), MAIN_FORKNUM, NULL,
+							   EB_LOCK_FIRST);
 
 	return buffer;
 }

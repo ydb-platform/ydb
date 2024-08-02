@@ -43,7 +43,6 @@ public:
     TDuration DatabaseRequestRetryDelta = TDuration::MilliSeconds(50);
     TString ControlPlaneName;
     TString MvpTokenName;
-    bool Light = false;
 
     THandlerActorMetaCpDatabasesGET(
             const NActors::TActorId& httpProxyId,
@@ -60,7 +59,7 @@ public:
         NActors::TActorId actorId = ctx.SelfID;
 
         {
-            Location.GetTableClient(Request, NYdb::NTable::TClientSettings().Database(Location.RootDomain)).CreateSession().Subscribe([actorId, actorSystem](const NYdb::NTable::TAsyncCreateSessionResult& result) {
+            Location.GetTableClient(TMVP::GetMetaDatabaseClientSettings(Request, Location)).CreateSession().Subscribe([actorId, actorSystem](const NYdb::NTable::TAsyncCreateSessionResult& result) {
                 NYdb::NTable::TAsyncCreateSessionResult res(result);
                 actorSystem->Send(actorId, new TEvPrivate::TEvCreateSessionResult(res.ExtractValue()));
             });
@@ -146,11 +145,20 @@ public:
                 }
                 if (balancer) {
                     TString balancerEndpoint;
-                    if (Request.Parameters["light"] == "1") {
-                        balancerEndpoint = GetApiUrl(balancer, "/tenantinfo?tablets=0&offload_merge=1&storage=1&nodes=0&users=0&timeout=55000");
+                    TStringBuilder balancerEndpointBuilder;
+                    balancerEndpointBuilder << "/tenantinfo";
+                    if (Request.Parameters["light"] == "0") {
+                        balancerEndpointBuilder << "?tablets=1";
                     } else {
-                        balancerEndpoint = GetApiUrl(balancer, "/tenantinfo?tablets=1&offload_merge=1&storage=1&nodes=1&users=1&timeout=55000");
+                        balancerEndpointBuilder << "?tablets=0"; // default
                     }
+                    if (Request.Parameters["offload"] == "1") {
+                        balancerEndpointBuilder << "&offload_merge=1";
+                    } else {
+                        balancerEndpointBuilder << "&offload_merge=0"; // default
+                    }
+                    balancerEndpointBuilder << "&storage=1&nodes=0&users=0&timeout=55000";
+                    balancerEndpoint = GetApiUrl(balancer, balancerEndpointBuilder);
                     NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(balancerEndpoint);
                     TString authHeaderValue = GetAuthHeaderValue(apiUserTokenName);
                     if (balancerEndpoint.StartsWith("https") && !authHeaderValue.empty()) {

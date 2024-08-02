@@ -12,6 +12,7 @@ PY_SRCS(
 PEERDIR(
     build/plugins/lib/nots/package_manager/base
     build/plugins/lib/nots/package_manager/pnpm
+    build/plugins/lib/nots/package_manager/npm
 )
 
 END()
@@ -19,4 +20,5 @@ END()
 RECURSE(
     base
     pnpm
+    npm
 )

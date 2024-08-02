@@ -6,7 +6,7 @@
  *	   logical replication slots via SQL.
  *
  *
- * Copyright (c) 2012-2022, PostgreSQL Global Development Group
+ * Copyright (c) 2012-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/replication/logical/logicalfuncs.c
@@ -172,8 +172,7 @@ pg_logical_slot_get_changes_guts(FunctionCallInfo fcinfo, bool confirm, bool bin
 
 		Assert(ARR_ELEMTYPE(arr) == TEXTOID);
 
-		deconstruct_array(arr, TEXTOID, -1, false, TYPALIGN_INT,
-						  &datum_opts, NULL, &nelems);
+		deconstruct_array_builtin(arr, TEXTOID, &datum_opts, NULL, &nelems);
 
 		if (nelems % 2 != 0)
 			ereport(ERROR,
@@ -214,19 +213,6 @@ pg_logical_slot_get_changes_guts(FunctionCallInfo fcinfo, bool confirm, bool bin
 											   .segment_close = wal_segment_close),
 									LogicalOutputPrepareWrite,
 									LogicalOutputWrite, NULL);
-
-		/*
-		 * After the sanity checks in CreateDecodingContext, make sure the
-		 * restart_lsn is valid.  Avoid "cannot get changes" wording in this
-		 * errmsg because that'd be confusingly ambiguous about no changes
-		 * being available.
-		 */
-		if (XLogRecPtrIsInvalid(MyReplicationSlot->data.restart_lsn))
-			ereport(ERROR,
-					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-					 errmsg("can no longer get changes from replication slot \"%s\"",
-							NameStr(*name)),
-					 errdetail("This slot has never previously reserved WAL, or it has been invalidated.")));
 
 		MemoryContextSwitchTo(oldcontext);
 

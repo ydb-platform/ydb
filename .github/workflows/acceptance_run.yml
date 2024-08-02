@@ -50,6 +50,7 @@ jobs:
         build_target: "ydb/tests/acceptance"
         increment: false
         run_tests: true
+        test_retry_count: 1
         test_size: small,medium,large
         test_type: unittest,py3test,py2test,pytest
         test_threads: 1

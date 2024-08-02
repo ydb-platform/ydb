@@ -62,8 +62,6 @@ NNodes::TExprBase DqBuildFinalizeByKeyStage(NNodes::TExprBase node, TExprContext
 NNodes::TExprBase DqBuildFinalizeByKeyWithSpillingStage(NNodes::TExprBase node, TExprContext& ctx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
 
-NNodes::TExprBase DqBuildHashShuffleByKeyStage(NNodes::TExprBase node, TExprContext& ctx, const TParentsMap& parentsMap);
-
 NNodes::TExprBase DqBuildAggregationResultStage(NNodes::TExprBase node, TExprContext& ctx,
     IOptimizationContext& optCtx);
 

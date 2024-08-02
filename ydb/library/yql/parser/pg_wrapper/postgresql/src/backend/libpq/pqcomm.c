@@ -17,7 +17,7 @@
  * the backend's "backend/libpq" is quite separate from "interfaces/libpq".
  * All that remains is similarities of names to trap the unwary...
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *	src/backend/libpq/pqcomm.c
@@ -71,7 +71,7 @@
 #include <netinet/tcp.h>
 #endif
 #include <utime.h>
-#ifdef _MSC_VER					/* mstcpip.h is missing on mingw */
+#ifdef WIN32
 #include <mstcpip.h>
 #endif
 
@@ -80,7 +80,7 @@
 #include "miscadmin.h"
 #include "port/pg_bswap.h"
 #include "storage/ipc.h"
-#include "utils/guc.h"
+#include "utils/guc_hooks.h"
 #include "utils/memutils.h"
 
 /*
@@ -149,10 +149,8 @@ static void socket_putmessage_noblock(char msgtype, const char *s, size_t len);
 static int	internal_putbytes(const char *s, size_t len);
 static int	internal_flush(void);
 
-#ifdef HAVE_UNIX_SOCKETS
 static int	Lock_AF_UNIX(const char *unixSocketDir, const char *unixSocketPath);
 static int	Setup_AF_UNIX(const char *sock_path);
-#endif							/* HAVE_UNIX_SOCKETS */
 
 static const PQcommMethods PqCommSocketMethods = {
 	socket_comm_reset,
@@ -198,6 +196,13 @@ pq_init(void)
 	if (!pg_set_noblock(MyProcPort->sock))
 		ereport(FATAL,
 				(errmsg("could not set socket to nonblocking mode: %m")));
+#endif
+
+#ifndef WIN32
+
+	/* Don't give the socket to any subprograms we execute. */
+	if (fcntl(MyProcPort->sock, F_SETFD, FD_CLOEXEC) < 0)
+		elog(FATAL, "fcntl(F_SETFD) failed on socket: %m");
 #endif
 
 	FeBeWaitSet = CreateWaitEventSet(TopMemoryContext, FeBeWaitSetNEvents);
@@ -330,10 +335,7 @@ StreamServerPort(int family, const char *hostName, unsigned short portNumber,
 	struct addrinfo hint;
 	int			listen_index = 0;
 	int			added = 0;
-
-#ifdef HAVE_UNIX_SOCKETS
 	char		unixSocketPath[MAXPGPATH];
-#endif
 #if !defined(WIN32) || defined(IPV6_V6ONLY)
 	int			one = 1;
 #endif
@@ -365,7 +367,7 @@ StreamServerPort(int family, const char *hostName, unsigned short portNumber,
 		service = unixSocketPath;
 	}
 	else
-#endif							/* HAVE_UNIX_SOCKETS */
+#endif
 	{
 		snprintf(portNumberStr, sizeof(portNumberStr), "%d", portNumber);
 		service = portNumberStr;
@@ -418,16 +420,12 @@ StreamServerPort(int family, const char *hostName, unsigned short portNumber,
 			case AF_INET:
 				familyDesc = _("IPv4");
 				break;
-#ifdef HAVE_IPV6
 			case AF_INET6:
 				familyDesc = _("IPv6");
 				break;
-#endif
-#ifdef HAVE_UNIX_SOCKETS
 			case AF_UNIX:
 				familyDesc = _("Unix");
 				break;
-#endif
 			default:
 				snprintf(familyDescBuf, sizeof(familyDescBuf),
 						 _("unrecognized address family %d"),
@@ -437,11 +435,9 @@ StreamServerPort(int family, const char *hostName, unsigned short portNumber,
 		}
 
 		/* set up text form of address for log messages */
-#ifdef HAVE_UNIX_SOCKETS
 		if (addr->ai_family == AF_UNIX)
 			addrDesc = unixSocketPath;
 		else
-#endif
 		{
 			pg_getnameinfo_all((const struct sockaddr_storage *) addr->ai_addr,
 							   addr->ai_addrlen,
@@ -536,7 +532,6 @@ StreamServerPort(int family, const char *hostName, unsigned short portNumber,
 			continue;
 		}
 
-#ifdef HAVE_UNIX_SOCKETS
 		if (addr->ai_family == AF_UNIX)
 		{
 			if (Setup_AF_UNIX(service) != STATUS_OK)
@@ -545,16 +540,13 @@ StreamServerPort(int family, const char *hostName, unsigned short portNumber,
 				break;
 			}
 		}
-#endif
 
 		/*
-		 * Select appropriate accept-queue length limit.  PG_SOMAXCONN is only
-		 * intended to provide a clamp on the request on platforms where an
-		 * overly large request provokes a kernel error (are there any?).
+		 * Select appropriate accept-queue length limit.  It seems reasonable
+		 * to use a value similar to the maximum number of child processes
+		 * that the postmaster will permit.
 		 */
-		maxconn = MaxBackends * 2;
-		if (maxconn > PG_SOMAXCONN)
-			maxconn = PG_SOMAXCONN;
+		maxconn = MaxConnections * 2;
 
 		err = listen(fd, maxconn);
 		if (err < 0)
@@ -568,13 +560,11 @@ StreamServerPort(int family, const char *hostName, unsigned short portNumber,
 			continue;
 		}
 
-#ifdef HAVE_UNIX_SOCKETS
 		if (addr->ai_family == AF_UNIX)
 			ereport(LOG,
 					(errmsg("listening on Unix socket \"%s\"",
 							addrDesc)));
 		else
-#endif
 			ereport(LOG,
 			/* translator: first %s is IPv4 or IPv6 */
 					(errmsg("listening on %s address \"%s\", port %d",
@@ -592,8 +582,6 @@ StreamServerPort(int family, const char *hostName, unsigned short portNumber,
 	return STATUS_OK;
 }
 
-
-#ifdef HAVE_UNIX_SOCKETS
 
 /*
  * Lock_AF_UNIX -- configure unix socket file path
@@ -695,7 +683,6 @@ Setup_AF_UNIX(const char *sock_path)
 	}
 	return STATUS_OK;
 }
-#endif							/* HAVE_UNIX_SOCKETS */
 
 
 /*
@@ -703,8 +690,7 @@ Setup_AF_UNIX(const char *sock_path)
  *		server port.  Set port->sock to the FD of the new connection.
  *
  * ASSUME: that this doesn't need to be non-blocking because
- *		the Postmaster uses select() to tell when the socket is ready for
- *		accept().
+ *		the Postmaster waits for the socket to be ready to accept().
  *
  * RETURNS: STATUS_OK or STATUS_ERROR
  */
@@ -1942,6 +1928,108 @@ pq_settcpusertimeout(int timeout, Port *port)
 #endif
 
 	return STATUS_OK;
+}
+
+/*
+ * GUC assign_hook for tcp_keepalives_idle
+ */
+void
+assign_tcp_keepalives_idle(int newval, void *extra)
+{
+	/*
+	 * The kernel API provides no way to test a value without setting it; and
+	 * once we set it we might fail to unset it.  So there seems little point
+	 * in fully implementing the check-then-assign GUC API for these
+	 * variables.  Instead we just do the assignment on demand.
+	 * pq_setkeepalivesidle reports any problems via ereport(LOG).
+	 *
+	 * This approach means that the GUC value might have little to do with the
+	 * actual kernel value, so we use a show_hook that retrieves the kernel
+	 * value rather than trusting GUC's copy.
+	 */
+	(void) pq_setkeepalivesidle(newval, MyProcPort);
+}
+
+/*
+ * GUC show_hook for tcp_keepalives_idle
+ */
+const char *
+show_tcp_keepalives_idle(void)
+{
+	/* See comments in assign_tcp_keepalives_idle */
+	static __thread char nbuf[16];
+
+	snprintf(nbuf, sizeof(nbuf), "%d", pq_getkeepalivesidle(MyProcPort));
+	return nbuf;
+}
+
+/*
+ * GUC assign_hook for tcp_keepalives_interval
+ */
+void
+assign_tcp_keepalives_interval(int newval, void *extra)
+{
+	/* See comments in assign_tcp_keepalives_idle */
+	(void) pq_setkeepalivesinterval(newval, MyProcPort);
+}
+
+/*
+ * GUC show_hook for tcp_keepalives_interval
+ */
+const char *
+show_tcp_keepalives_interval(void)
+{
+	/* See comments in assign_tcp_keepalives_idle */
+	static __thread char nbuf[16];
+
+	snprintf(nbuf, sizeof(nbuf), "%d", pq_getkeepalivesinterval(MyProcPort));
+	return nbuf;
+}
+
+/*
+ * GUC assign_hook for tcp_keepalives_count
+ */
+void
+assign_tcp_keepalives_count(int newval, void *extra)
+{
+	/* See comments in assign_tcp_keepalives_idle */
+	(void) pq_setkeepalivescount(newval, MyProcPort);
+}
+
+/*
+ * GUC show_hook for tcp_keepalives_count
+ */
+const char *
+show_tcp_keepalives_count(void)
+{
+	/* See comments in assign_tcp_keepalives_idle */
+	static __thread char nbuf[16];
+
+	snprintf(nbuf, sizeof(nbuf), "%d", pq_getkeepalivescount(MyProcPort));
+	return nbuf;
+}
+
+/*
+ * GUC assign_hook for tcp_user_timeout
+ */
+void
+assign_tcp_user_timeout(int newval, void *extra)
+{
+	/* See comments in assign_tcp_keepalives_idle */
+	(void) pq_settcpusertimeout(newval, MyProcPort);
+}
+
+/*
+ * GUC show_hook for tcp_user_timeout
+ */
+const char *
+show_tcp_user_timeout(void)
+{
+	/* See comments in assign_tcp_keepalives_idle */
+	static __thread char nbuf[16];
+
+	snprintf(nbuf, sizeof(nbuf), "%d", pq_gettcpusertimeout(MyProcPort));
+	return nbuf;
 }
 
 /*

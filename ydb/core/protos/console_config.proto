@@ -139,6 +139,7 @@ message TConfigItem {
         S3ProxyResolverConfigItem = 76;
         BackgroundCleaningConfigItem = 77;
         MetadataCacheConfigItem = 80;
+        MemoryControllerConfigItem = 81;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;

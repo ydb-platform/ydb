@@ -16,7 +16,7 @@ Below are examples of the code for authentication using environment variables in
     "os"
 
     "github.com/ydb-platform/ydb-go-sdk/v3"
-    yc "github.com/ydb-platform/ydb-go-yc"
+    yc "github.com/ydb-platform/ydb-go-yc-metadata"
   )
 
   func main() {
@@ -24,7 +24,7 @@ Below are examples of the code for authentication using environment variables in
     defer cancel()
     db, err := ydb.Open(ctx,
       os.Getenv("YDB_CONNECTION_STRING"),
-      yc.WithMetadataCredentials(ctx),
+      yc.WithCredentials(),
       yc.WithInternalCA(), // append Yandex Cloud certificates
     )
     if err != nil {
@@ -46,7 +46,7 @@ Below are examples of the code for authentication using environment variables in
     "os"
 
     "github.com/ydb-platform/ydb-go-sdk/v3"
-    yc "github.com/ydb-platform/ydb-go-yc"
+    yc "github.com/ydb-platform/ydb-go-yc-metadata"
   )
 
   func main() {
@@ -54,7 +54,7 @@ Below are examples of the code for authentication using environment variables in
     defer cancel()
     nativeDriver, err := ydb.Open(ctx,
       os.Getenv("YDB_CONNECTION_STRING"),
-      yc.WithMetadataCredentials(ctx),
+      yc.WithCredentials(),
       yc.WithInternalCA(), // append Yandex Cloud certificates
     )
     if err != nil {

@@ -392,7 +392,9 @@ THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(cons
     auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
     auto databasePath = SplitPath(database);
     request->DatabaseName = CanonizePath(databasePath);
-    request->UserToken = userToken;
+    if (userToken && !userToken->GetSerializedToken().empty()) {
+        request->UserToken = userToken;
+    }
 
     for (const auto& pathComponents : pathsComponents) {
         auto& entry = request->ResultSet.emplace_back();

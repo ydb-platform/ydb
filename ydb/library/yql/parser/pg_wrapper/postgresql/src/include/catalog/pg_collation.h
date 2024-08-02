@@ -4,7 +4,7 @@
  *	  definition of the "collation" system catalog (pg_collation)
  *
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_collation.h
@@ -43,6 +43,7 @@ CATALOG(pg_collation,3456,CollationRelationId)
 	text		collcollate BKI_DEFAULT(_null_);	/* LC_COLLATE setting */
 	text		collctype BKI_DEFAULT(_null_);	/* LC_CTYPE setting */
 	text		colliculocale BKI_DEFAULT(_null_);	/* ICU locale ID */
+	text		collicurules BKI_DEFAULT(_null_);	/* ICU collation rules */
 	text		collversion BKI_DEFAULT(_null_);	/* provider-dependent
 													 * version of collation
 													 * data */
@@ -91,6 +92,7 @@ extern Oid	CollationCreate(const char *collname, Oid collnamespace,
 							int32 collencoding,
 							const char *collcollate, const char *collctype,
 							const char *colliculocale,
+							const char *collicurules,
 							const char *collversion,
 							bool if_not_exists,
 							bool quiet);

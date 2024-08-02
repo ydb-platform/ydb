@@ -3,7 +3,7 @@
  * spi.h
  *				Server Programming Interface public declarations
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/executor/spi.h
@@ -107,8 +107,16 @@ typedef struct _SPI_plan *SPIPlanPtr;
 #define SPI_pop_conditional(pushed) ((void) 0)
 #define SPI_restore_connection()	((void) 0)
 
-extern __thread PGDLLIMPORT uint64 SPI_processed;
-extern __thread PGDLLIMPORT SPITupleTable *SPI_tuptable;
+DECLARE_THREAD_VAR(uint64, SPI_processed);
+#ifdef BUILD_PG_EXTENSION
+#define SPI_processed (*PtrSPI_processed())
+#endif
+
+DECLARE_THREAD_VAR(SPITupleTable*, SPI_tuptable);
+#ifdef BUILD_PG_EXTENSION
+#define SPI_tuptable (*PtrSPI_tuptable())
+#endif
+
 extern __thread PGDLLIMPORT int SPI_result;
 
 extern int	SPI_connect(void);
@@ -174,7 +182,7 @@ extern void *SPI_palloc(Size size);
 extern void *SPI_repalloc(void *pointer, Size size);
 extern void SPI_pfree(void *pointer);
 extern Datum SPI_datumTransfer(Datum value, bool typByVal, int typLen);
-extern void SPI_freetuple(HeapTuple pointer);
+extern void SPI_freetuple(HeapTuple tuple);
 extern void SPI_freetuptable(SPITupleTable *tuptable);
 
 extern Portal SPI_cursor_open(const char *name, SPIPlanPtr plan,

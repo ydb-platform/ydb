@@ -3,7 +3,7 @@
  * pg_database_d.h
  *    Macro definitions for pg_database
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -41,10 +41,11 @@
 #define Anum_pg_database_datcollate 12
 #define Anum_pg_database_datctype 13
 #define Anum_pg_database_daticulocale 14
-#define Anum_pg_database_datcollversion 15
-#define Anum_pg_database_datacl 16
+#define Anum_pg_database_daticurules 15
+#define Anum_pg_database_datcollversion 16
+#define Anum_pg_database_datacl 17
 
-#define Natts_pg_database 16
+#define Natts_pg_database 17
 
 #define Template1DbOid 1
 

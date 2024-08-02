@@ -39,19 +39,19 @@
             "formula": {
                 "by_platform": {
                     "darwin-arm64": {
-                        "uri": "sbr:5599877541"
+                        "uri": "sbr:6635026071"
                     },
                     "darwin-x86_64": {
-                        "uri": "sbr:5599878022"
+                        "uri": "sbr:6635026187"
                     },
                     "linux-aarch64": {
-                        "uri": "sbr:5599877008"
+                        "uri": "sbr:6635025898"
                     },
                     "linux-x86_64": {
-                        "uri": "sbr:5599878769"
+                        "uri": "sbr:6635026422"
                     },
                     "win32-x86_64": {
-                        "uri": "sbr:5599878473"
+                        "uri": "sbr:6635026287"
                     }
                 }
             }

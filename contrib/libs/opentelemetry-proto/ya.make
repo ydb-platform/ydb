@@ -6,9 +6,9 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.3.1)
+VERSION(1.3.2)
 
-ORIGINAL_SOURCE(https://github.com/open-telemetry/opentelemetry-proto/archive/v1.3.1.tar.gz)
+ORIGINAL_SOURCE(https://github.com/open-telemetry/opentelemetry-proto/archive/v1.3.2.tar.gz)
 
 PY_NAMESPACE(.)
 

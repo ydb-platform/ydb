@@ -372,9 +372,10 @@ struct Schema : NIceDb::Schema {
         struct Size: Column<7, NScheme::NTypeIds::Uint32> {};
         struct RecordsCount: Column<8, NScheme::NTypeIds::Uint32> {};
         struct RawBytes: Column<9, NScheme::NTypeIds::Uint64> {};
+        struct BlobData: Column<10, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<PathId, PortionId, IndexId, ChunkIdx>;
-        using TColumns = TableColumns<PathId, PortionId, IndexId, ChunkIdx, Blob, Offset, Size, RecordsCount, RawBytes>;
+        using TColumns = TableColumns<PathId, PortionId, IndexId, ChunkIdx, Blob, Offset, Size, RecordsCount, RawBytes, BlobData>;
     };
 
     struct SharedBlobIds: NIceDb::Schema::Table<SharedBlobIdsTableId> {
@@ -876,13 +877,20 @@ public:
 
 class TIndexChunkLoadContext {
 private:
-    YDB_READONLY_DEF(TBlobRange, BlobRange);
+    YDB_READONLY_DEF(std::optional<TBlobRange>, BlobRange);
+    YDB_READONLY_DEF(std::optional<TString>, BlobData);
     TChunkAddress Address;
     const ui32 RecordsCount;
     const ui32 RawBytes;
 public:
     TIndexChunk BuildIndexChunk(const TBlobRangeLink16::TLinkId blobLinkId) const {
-        return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, RawBytes, BlobRange.BuildLink(blobLinkId));
+        AFL_VERIFY(BlobRange);
+        return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, RawBytes, BlobRange->BuildLink(blobLinkId));
+    }
+
+    TIndexChunk BuildIndexChunk() const {
+        AFL_VERIFY(BlobData);
+        return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, RawBytes, *BlobData);
     }
 
     template <class TSource>
@@ -892,13 +900,20 @@ public:
         , RawBytes(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::RawBytes>())
     {
         AFL_VERIFY(Address.GetColumnId())("event", "incorrect address")("address", Address.DebugString());
-        TString strBlobId = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::Blob>();
-        Y_ABORT_UNLESS(strBlobId.size() == sizeof(TLogoBlobID), "Size %" PRISZT "  doesn't match TLogoBlobID", strBlobId.size());
-        TLogoBlobID logoBlobId((const ui64*)strBlobId.data());
-        BlobRange.BlobId = NOlap::TUnifiedBlobId(dsGroupSelector->GetGroup(logoBlobId), logoBlobId);
-        BlobRange.Offset = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::Offset>();
-        BlobRange.Size = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::Size>();
-        AFL_VERIFY(BlobRange.BlobId.IsValid() && BlobRange.Size)("event", "incorrect blob")("blob", BlobRange.ToString());
+        if (rowset.template HaveValue<NColumnShard::Schema::IndexIndexes::Blob>()) {
+            TBlobRange& bRange = BlobRange.emplace();
+            TString strBlobId = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::Blob>();
+            Y_ABORT_UNLESS(strBlobId.size() == sizeof(TLogoBlobID), "Size %" PRISZT "  doesn't match TLogoBlobID", strBlobId.size());
+            TLogoBlobID logoBlobId((const ui64*)strBlobId.data());
+            bRange.BlobId = NOlap::TUnifiedBlobId(dsGroupSelector->GetGroup(logoBlobId), logoBlobId);
+            bRange.Offset = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::Offset>();
+            bRange.Size = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::Size>();
+            AFL_VERIFY(bRange.BlobId.IsValid() && bRange.Size)("event", "incorrect blob")("blob", bRange.ToString());
+        } else if (rowset.template HaveValue<NColumnShard::Schema::IndexIndexes::BlobData>()) {
+            BlobData = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::BlobData>();
+        } else {
+            AFL_VERIFY(false);
+        }
     }
 };
 

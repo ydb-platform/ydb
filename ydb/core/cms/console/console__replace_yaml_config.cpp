@@ -76,6 +76,11 @@ public:
                     .Cluster = Cluster,
                 });
 
+            bool hasForbiddenUnknown = false;
+
+            TMap<TString, std::pair<TString, TString>> deprecatedFields;
+            TMap<TString, std::pair<TString, TString>> unknownFields;
+
             if (UpdatedConfig != Self->YamlConfig || Self->YamlDropped) {
                 Modify = true;
 
@@ -90,19 +95,29 @@ public:
                     ythrow yexception() << "Version mismatch";
                 }
 
-                if (AllowUnknownFields) {
-                    UnknownFieldsCollector = new NYamlConfig::TBasicUnknownFieldsCollector;
-                }
+                UnknownFieldsCollector = new NYamlConfig::TBasicUnknownFieldsCollector;
 
                 for (auto& [_, config] : resolved.Configs) {
                     auto cfg = NYamlConfig::YamlToProto(
                         config.second,
-                        AllowUnknownFields,
+                        true,
                         true,
                         UnknownFieldsCollector);
                 }
 
-                if (!DryRun) {
+                const auto& deprecatedPaths = NKikimrConfig::TAppConfig::GetReservedChildrenPaths();
+
+                for (const auto& [path, info] : UnknownFieldsCollector->GetUnknownKeys()) {
+                    if (deprecatedPaths.contains(path)) {
+                        deprecatedFields[path] = info;
+                    } else {
+                        unknownFields[path] = info;
+                    }
+                }
+
+                hasForbiddenUnknown = !unknownFields.empty() && !AllowUnknownFields;
+
+                if (!DryRun && !hasForbiddenUnknown) {
                     DoAudit(txc, ctx);
 
                     db.Table<Schema::YamlConfig>().Key(Version + 1)
@@ -118,25 +133,34 @@ public:
                 }
             }
 
-            auto fillResponse = [&](auto& ev){
-                if (UnknownFieldsCollector) {
-                    for (auto& [path, info] : UnknownFieldsCollector->GetUnknownKeys()) {
-                        auto *issue = ev->Record.AddIssues();
-                            issue->set_severity(NYql::TSeverityIds::S_WARNING);
-                            issue->set_message(TStringBuilder{} << "Unknown key# " << info.first << " in proto# " << info.second << " found in path# " << path);
-                    }
+            auto fillResponse = [&](auto& ev, auto errorLevel){
+                for (auto& [path, info] : unknownFields) {
+                    auto *issue = ev->Record.AddIssues();
+                        issue->set_severity(errorLevel);
+                        issue->set_message(TStringBuilder{} << "Unknown key# " << info.first << " in proto# " << info.second << " found in path# " << path);
+                }
+
+                for (auto& [path, info] : deprecatedFields) {
+                    auto *issue = ev->Record.AddIssues();
+                        issue->set_severity(NYql::TSeverityIds::S_WARNING);
+                        issue->set_message(TStringBuilder{} << "Deprecated key# " << info.first << " in proto# " << info.second << " found in path# " << path);
                 }
 
                 Response = MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
             };
 
 
-            if (!Force) {
+            if (hasForbiddenUnknown) {
+                Error = true;
+                auto ev = MakeHolder<TEvConsole::TEvGenericError>();
+                ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+                fillResponse(ev, NYql::TSeverityIds::S_ERROR);
+            } else if (!Force) {
                 auto ev = MakeHolder<TEvConsole::TEvReplaceYamlConfigResponse>();
-                fillResponse(ev);
+                fillResponse(ev, NYql::TSeverityIds::S_WARNING);
             } else {
                 auto ev = MakeHolder<TEvConsole::TEvSetYamlConfigResponse>();
-                fillResponse(ev);
+                fillResponse(ev, NYql::TSeverityIds::S_WARNING);
             }
         } catch (const yexception& ex) {
             Error = true;

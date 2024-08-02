@@ -30,7 +30,7 @@ def join(
                     test_name=test_name,
                     client=clickhouse_client,
                     database=data_source.database,
-                    table_name=data_source.database.sql_table_name(data_source.table.name),
+                    table_name=data_source.table.name,
                     data_in=data_source.table.data_in,
                     schema=data_source.table.schema,
                 )
@@ -39,7 +39,7 @@ def join(
                     test_name=test_name,
                     client=postgresql_client,
                     database=data_source.database,
-                    table_name=data_source.database.sql_table_name(data_source.table.name),
+                    table_name=data_source.table.name,
                     data_in=data_source.table.data_in,
                     schema=data_source.table.schema,
                 )

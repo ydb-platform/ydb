@@ -21,9 +21,10 @@ class TColumnChunkLoadContext;
 class TDataClassSummary: public NColumnShard::TBaseGranuleDataClassSummary {
 private:
     friend class TGranuleMeta;
-    THashMap<ui32, TSimpleSerializationStat> ColumnStats;
+    THashMap<ui32, NArrow::NSplitter::TSimpleSerializationStat> ColumnStats;
+
 public:
-    const THashMap<ui32, TSimpleSerializationStat>& GetColumnStats() const {
+    const THashMap<ui32, NArrow::NSplitter::TSimpleSerializationStat>& GetColumnStats() const {
         return ColumnStats;
     }
 
@@ -196,7 +197,7 @@ public:
         return OptimizerPlanner->SerializeToJsonVisual();
     }
 
-    std::vector<NArrow::NMerger::TSortableBatchPosition> GetBucketPositions() const {
+    NArrow::NMerger::TIntervalPositions GetBucketPositions() const {
         return OptimizerPlanner->GetBucketPositions();
     }
 
@@ -231,11 +232,11 @@ public:
         }
     }
 
-    std::shared_ptr<NOlap::TSerializationStats> BuildSerializationStats(ISnapshotSchema::TPtr schema) const {
-        auto result = std::make_shared<NOlap::TSerializationStats>();
+    std::shared_ptr<NArrow::NSplitter::TSerializationStats> BuildSerializationStats(ISnapshotSchema::TPtr schema) const {
+        auto result = std::make_shared<NArrow::NSplitter::TSerializationStats>();
         for (auto&& i : GetAdditiveSummary().GetCompacted().GetColumnStats()) {
             auto field = schema->GetFieldByColumnIdVerified(i.first);
-            NOlap::TColumnSerializationStat columnInfo(i.first, field->name());
+            NArrow::NSplitter::TColumnSerializationStat columnInfo(i.first, field->name());
             columnInfo.Merge(i.second);
             result->AddStat(columnInfo);
         }

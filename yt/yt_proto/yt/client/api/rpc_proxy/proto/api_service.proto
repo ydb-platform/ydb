@@ -2992,6 +2992,7 @@ message TOperation
     optional bytes events = 18; // YSON
     optional bytes result = 19; // YSON
 
+    optional bytes scheduling_attributes_per_pool_tree = 28; // YSON
     optional bytes slot_index_per_pool_tree = 20; // YSON
 
     optional bytes task_names = 21; // YSON
@@ -3102,6 +3103,7 @@ message TJob
     optional bool has_probing_competitors = 26;
     optional uint64 job_cookie = 27;
     optional bytes archive_features = 29; // YSON
+    optional string monitoring_descriptor = 30;
 }
 
 message TListJobsStatistics
@@ -3202,7 +3204,7 @@ message TReqStartQuery
     optional bool draft = 5;
     optional bytes annotations = 6; // YSON
     repeated TQueryFile files = 7;
-    optional string access_control_object = 8; // deprecated
+    optional string access_control_object = 8; // COMPAT
     optional TAccessControlObjects access_control_objects = 9;
 }
 
@@ -3277,7 +3279,7 @@ message TQuery
     optional uint64 finish_time = 6; // TInstant
     optional bytes settings = 7; // YSON
     optional string user = 8;
-    optional string access_control_object = 9; // deprecated
+    optional string access_control_object = 9; // COMPAT
     optional EQueryState state = 10;
     optional int64 result_count = 11;
     optional bytes progress = 12; // YSON
@@ -3338,7 +3340,7 @@ message TReqAlterQuery
     required string query_tracker_stage = 1;
     required NYT.NProto.TGuid query_id = 2;
     optional bytes annotations = 3; // YSON
-    optional string access_control_object = 4; // deprecated
+    optional string access_control_object = 4; // COMPAT
     optional TAccessControlObjects access_control_objects = 5;
 }
 

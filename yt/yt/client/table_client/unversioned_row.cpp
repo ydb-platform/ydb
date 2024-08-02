@@ -395,23 +395,7 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
         }
 
         case EValueType::Double: {
-            double lhsValue = lhs.Data.Double;
-            double rhsValue = rhs.Data.Double;
-            if (lhsValue < rhsValue) {
-                return -1;
-            } else if (lhsValue > rhsValue) {
-                return +1;
-            } else if (std::isnan(lhsValue)) {
-                if (std::isnan(rhsValue)) {
-                    return 0;
-                } else {
-                    return 1;
-                }
-            } else if (std::isnan(rhsValue)) {
-                return -1;
-            } else {
-                return 0;
-            }
+            return CompareDoubleValues(lhs.Data.Double, rhs.Data.Double);
         }
 
         case EValueType::Boolean: {

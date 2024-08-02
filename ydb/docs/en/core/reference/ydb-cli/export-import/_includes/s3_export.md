@@ -29,9 +29,9 @@ To run the command to export data to S3 storage, specify the [S3 connection para
 | Parameter | Description |
 --- | ---
 | `--description STRING` | Operation text description saved to the history of operations. |
-| `--retries NUM` | Number of export retries to be made by the server.</br>Defaults to `10`. |
-| `--compression STRING` | Compress exported data.</br>If the default compression level is used for the [Zstandard](https://en.wikipedia.org/wiki/Zstandard) algorithm, data can be compressed by 5-10 times. Compressing data uses the CPU and may affect the speed of performing other DB operations.</br>Possible values:</br><ul><li>`zstd`: Compression using the Zstandard algorithm with the default compression level (`3`).</li><li>`zstd-N`: Compression using the Zstandard algorithm, where `N` stands for the compression level (`1` — `22`).</li></ul> |
-| `--format STRING` | Result format.</br>Possible values:</br><ul><li>`pretty`: Human-readable format (default).</li><li>`proto-json-base64`: [Protocol Buffers](https://en.wikipedia.org/wiki/Protocol_Buffers) in [JSON](https://en.wikipedia.org/wiki/JSON) format, binary strings are [Base64](https://en.wikipedia.org/wiki/Base64)-encoded.</li></ul> |
+| `--retries NUM` | Number of export retries to be made by the server.<br/>Defaults to `10`. |
+| `--compression STRING` | Compress exported data.<br/>If the default compression level is used for the [Zstandard](https://en.wikipedia.org/wiki/Zstandard) algorithm, data can be compressed by 5-10 times. Compressing data uses the CPU and may affect the speed of performing other DB operations.<br/>Possible values:<br/><ul><li>`zstd`: Compression using the Zstandard algorithm with the default compression level (`3`).</li><li>`zstd-N`: Compression using the Zstandard algorithm, where `N` stands for the compression level (`1` — `22`).</li></ul> |
+| `--format STRING` | Result format.<br/>Possible values:<br/><ul><li>`pretty`: Human-readable format (default).</li><li>`proto-json-base64`: [Protocol Buffers](https://en.wikipedia.org/wiki/Protocol_Buffers) in [JSON](https://en.wikipedia.org/wiki/JSON) format, binary strings are [Base64](https://en.wikipedia.org/wiki/Base64)-encoded.</li></ul> |
 
 ## Running the export command {#exec}
 
@@ -47,9 +47,9 @@ If successful, the `export s3` command prints summary information about the enqu
    ├───────────────────────────────────────────┼───────┼─────...
    | ydb://export/6?id=281474976788395&kind=s3 | true  | SUCC...
    ├╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴┴╴╴╴╴╴╴╴┴╴╴╴╴╴...
-   | StorageClass: NOT_SET                                      
+   | StorageClass: NOT_SET
    | Items:
-   ...                                                   
+   ...
    ```
 
 - In the proto-json-base64 mode, the operation ID is in the "id" attribute:
@@ -155,4 +155,3 @@ You can use these IDs, for example, to run a loop to end all the current operati
 ```bash
 {{ ydb-cli }} -p quickstart operation list export/s3 --format proto-json-base64 | jq -r ".operations[].id" | while read line; do {{ ydb-cli }} -p quickstart operation forget $line;done
 ```
-

@@ -127,7 +127,7 @@ public:
             {
                 Block_ = just;
                 CallInst::Create(module.getFunction("WriteJust"), { buf }, "", Block_);
-                if (unwrappedType->IsOptional()) {
+                if (unwrappedType->IsOptional() || unwrappedType->IsPg()) {
                     const auto unwrappedElem = GetOptionalValue(context, elem, Block_);
                     const auto unwrappedElemPtr = new AllocaInst(valueType, 0U, "unwrapped", Block_);
                     new StoreInst(unwrappedElem, unwrappedElemPtr, Block_);

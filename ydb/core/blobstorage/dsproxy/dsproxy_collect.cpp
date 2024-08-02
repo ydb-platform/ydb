@@ -12,7 +12,7 @@ namespace NKikimr {
 // Blobs with generation < CollectGeneration, or generation == CollectGeneration and step <= CollectStep are collected.
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestActor<TBlobStorageGroupCollectGarbageRequest> {
+class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestActor {
     const ui64 TabletId;
     const ui32 RecordGeneration;
     const ui32 PerGenerationCounter;
@@ -33,7 +33,7 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
     ui32 ResponsesReceived = 0;
 
     void Handle(TEvBlobStorage::TEvVCollectGarbageResult::TPtr &ev) {
-        ProcessReplyFromQueue(ev);
+        ProcessReplyFromQueue(ev->Get());
         ResponsesReceived++;
         const NKikimrBlobStorage::TEvVCollectGarbageResult &record = ev->Get()->Record;
         Y_ABORT_UNLESS(record.HasStatus());
@@ -49,7 +49,7 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
     }
 
     void Handle(TEvBlobStorage::TEvVStatusResult::TPtr &ev) {
-        ProcessReplyFromQueue(ev);
+        ProcessReplyFromQueue(ev->Get());
         ResponsesReceived++;
         const auto& record = ev->Get()->Record;
         if (record.HasStatus() && record.HasVDiskID()) {
@@ -106,8 +106,7 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
             QuorumTracker.ToString().c_str(), RequestsSent, ResponsesReceived);
     }
 
-    friend class TBlobStorageGroupRequestActor<TBlobStorageGroupCollectGarbageRequest>;
-    void ReplyAndDie(NKikimrProto::EReplyStatus status) {
+    void ReplyAndDie(NKikimrProto::EReplyStatus status) override {
         auto result = std::make_unique<TEvBlobStorage::TEvCollectGarbageResult>(status, TabletId, RecordGeneration,
             PerGenerationCounter, Channel);
         result->ErrorReason = ErrorReason;
@@ -123,7 +122,7 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
         RequestsSent++;
     }
 
-    std::unique_ptr<IEventBase> RestartQuery(ui32 counter) {
+    std::unique_ptr<IEventBase> RestartQuery(ui32 counter) override {
         ++*Mon->NodeMon->RestartCollectGarbage;
         auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletId, RecordGeneration, PerGenerationCounter,
             Channel, Collect, CollectGeneration, CollectStep, Keep.release(), DoNotKeep.release(), Deadline, false, Hard);
@@ -133,12 +132,12 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::BS_GROUP_COLLECT_GARBAGE;
+    ::NMonitoring::TDynamicCounters::TCounterPtr& GetActiveCounter() const override {
+        return Mon->ActiveCollectGarbage;
     }
 
-    static const auto& ActiveCounter(const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon) {
-        return mon->ActiveCollectGarbage;
+    ERequestType GetRequestType() const override {
+        return ERequestType::CollectGarbage;
     }
 
     TBlobStorageGroupCollectGarbageRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
@@ -147,7 +146,8 @@ public:
             NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
                 NKikimrServices::BS_PROXY_COLLECT, false, {}, now, storagePoolCounters, ev->RestartCounter,
-                std::move(traceId), "DSProxy.CollectGarbage", ev, std::move(ev->ExecutionRelay))
+                std::move(traceId), "DSProxy.CollectGarbage", ev, std::move(ev->ExecutionRelay),
+                NKikimrServices::TActivity::BS_GROUP_COLLECT_GARBAGE)
         , TabletId(ev->TabletId)
         , RecordGeneration(ev->RecordGeneration)
         , PerGenerationCounter(ev->PerGenerationCounter)
@@ -164,7 +164,7 @@ public:
         , StartTime(now)
     {}
 
-    void Bootstrap() {
+    void Bootstrap() override {
         A_LOG_INFO_S("DSPC03", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
@@ -191,7 +191,7 @@ public:
             SendCollectGarbageRequest(Info->GetVDiskId(vdisk.OrderNumber));
         }
 
-        Become(&TThis::StateWait);
+        Become(&TBlobStorageGroupCollectGarbageRequest::StateWait);
     }
 
     STATEFN(StateWait) {

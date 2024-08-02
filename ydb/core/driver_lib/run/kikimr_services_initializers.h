@@ -3,9 +3,11 @@
 #include "factories.h"
 #include "service_initializer.h"
 
+#include <ydb/core/memory_controller/memory_controller.h>
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/statestorage.h>
+#include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/tablet/tablet_setup.h>
 #include <ydb/core/tablet/node_tablet_monitor.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
@@ -87,10 +89,8 @@ public:
 };
 
 class TSharedCacheInitializer : public IKikimrServicesInitializer {
-    TIntrusivePtr<TMemObserver> MemObserver;
-
 public:
-    TSharedCacheInitializer(const TKikimrRunConfig& runConfig, TIntrusivePtr<TMemObserver> memObserver);
+    TSharedCacheInitializer(const TKikimrRunConfig& runConfig);
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
@@ -358,10 +358,9 @@ public:
 };
 
 class TMemProfMonitorInitializer : public IKikimrServicesInitializer {
-    TIntrusivePtr<TMemObserver> MemObserver;
-
+    TIntrusiveConstPtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
 public:
-    TMemProfMonitorInitializer(const TKikimrRunConfig& runConfig, TIntrusivePtr<TMemObserver> memObserver);
+    TMemProfMonitorInitializer(const TKikimrRunConfig& runConfig, TIntrusiveConstPtr<NMemory::IProcessMemoryInfoProvider> processMemoryInfoProvider);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
@@ -369,6 +368,14 @@ public:
 class TMemoryTrackerInitializer : public IKikimrServicesInitializer {
 public:
     TMemoryTrackerInitializer(const TKikimrRunConfig& runConfig);
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
+class TMemoryControllerInitializer : public IKikimrServicesInitializer {
+    TIntrusiveConstPtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
+public:
+    TMemoryControllerInitializer(const TKikimrRunConfig& runConfig, TIntrusiveConstPtr<NMemory::IProcessMemoryInfoProvider> processMemoryInfoProvider);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };

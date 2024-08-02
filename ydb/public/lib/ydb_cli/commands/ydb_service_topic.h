@@ -122,6 +122,7 @@ namespace NYdb::NConsoleClient {
 
     private:
         TString ConsumerName_;
+        bool IsImportant_;
         TMaybe<ui64> StartingMessageTimestamp_;
     };
 

@@ -4,7 +4,6 @@
 #include "blobstorage_pdisk_ut_config.h"
 #include "blobstorage_pdisk_ut_context.h"
 
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/base/services/blobstorage_service_id.h>
 
 #include <util/folder/tempdir.h>

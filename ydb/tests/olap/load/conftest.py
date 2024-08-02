@@ -10,7 +10,7 @@ from time import time
 class LoadSuiteBase:
     iterations: int = 5
     workload_type: WorkloadType = None
-    timeout: float = 100.
+    timeout: float = 1800.
     refference: str = ''
 
     @property

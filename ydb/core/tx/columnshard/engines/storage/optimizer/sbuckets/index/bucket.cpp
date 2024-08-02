@@ -28,7 +28,7 @@ std::shared_ptr<NKikimr::NOlap::TColumnEngineChanges> TPortionsBucket::BuildOpti
     auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, context.GetPortions(), saverContext);
     for (auto&& i : context.GetSplitRightOpenIntervalPoints()) {
         NArrow::NMerger::TSortableBatchPosition pos(i.ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
-        result->AddCheckPoint(pos, false, false);
+        result->AddCheckPoint(pos, false);
     }
     return result;
 }

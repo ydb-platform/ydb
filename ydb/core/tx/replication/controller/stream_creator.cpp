@@ -26,6 +26,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
     void CreateStream() {
         switch (Kind) {
         case TReplication::ETargetKind::Table:
+        case TReplication::ETargetKind::IndexTable:
             Send(YdbProxy, new TEvYdbProxy::TEvAlterTableRequest(SrcPath, NYdb::NTable::TAlterTableSettings()
                 .AppendAddChangefeeds(Changefeed)));
             break;
@@ -64,8 +65,17 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         }
     }
 
+    TString BuildStreamPath() const {
+        switch (Kind) {
+        case TReplication::ETargetKind::Table:
+            return CanonizePath(ChildPath(SplitPath(SrcPath), Changefeed.GetName()));
+        case TReplication::ETargetKind::IndexTable:
+            return CanonizePath(ChildPath(SplitPath(SrcPath), {"indexImplTable", Changefeed.GetName()}));
+        }
+    }
+
     void CreateConsumer() {
-        const auto streamPath = CanonizePath(ChildPath(SplitPath(SrcPath), Changefeed.GetName()));
+        const auto streamPath = BuildStreamPath();
         const auto settings = NYdb::NTopic::TAlterTopicSettings()
             .BeginAddConsumer()
                 .ConsumerName(ReplicationConsumerName)

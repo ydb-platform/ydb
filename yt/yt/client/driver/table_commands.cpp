@@ -826,6 +826,15 @@ void TSelectRowsCommand::DoExecute(ICommandContextPtr context)
 
     if (PlaceholderValues) {
         Options.PlaceholderValues = ConvertToYsonString(PlaceholderValues);
+
+        YT_LOG_DEBUG("Query: %v, Timestamp: %v, PlaceholderValues: %v",
+            Query,
+            Options.Timestamp,
+            Options.PlaceholderValues);
+    } else {
+        YT_LOG_DEBUG("Query: %v, Timestamp: %v",
+            Query,
+            Options.Timestamp);
     }
 
     auto result = WaitFor(clientBase->SelectRows(Query, Options))

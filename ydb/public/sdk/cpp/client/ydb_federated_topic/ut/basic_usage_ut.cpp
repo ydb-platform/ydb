@@ -1096,6 +1096,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 ++(ev.IsSuccess() ? successfulSessionClosedEvents : otherSessionClosedEvents);
             });
 
+        writeSettings.EventHandlers_.HandlersExecutor(NTopic::CreateSyncExecutor());
+
         auto WriteSession = topicClient.CreateWriteSession(writeSettings);
 
         TMaybe<NTopic::TContinuationToken> token;

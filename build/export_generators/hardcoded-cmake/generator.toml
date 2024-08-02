@@ -27,7 +27,7 @@ android-x86_64="ANDROID AND CMAKE_ANDROID_ARCH STREQUAL \"x86_64\""
 
 [root]
 templates=[
-    { path="conanfile.jinja", dest="conanfile.txt" },
+    { path="conanfile.py.jinja", dest="conanfile.py" },
     { path="root_cmake_lists.jinja", dest="CMakeLists.txt" },
     { path="root_global_vars.jinja", dest="cmake/global_vars.cmake" },
 ]
@@ -99,8 +99,8 @@ attrs=[
     "conan_require_tool",
     "old_conan_cmake_install",
 ]
-copy=["cmake/conan.cmake"]
-add_values=[{attr="includes", values=["cmake/conan.cmake"]}]
+copy=["cmake/conan1_deprecated.cmake", "cmake/conan_provider.cmake"]
+add_values=[{attr="includes", values=["cmake/conan1_deprecated.cmake"]}]
 
 [[rules]]
 attrs=[

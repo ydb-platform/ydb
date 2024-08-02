@@ -231,7 +231,7 @@ void ValidateDuplicateAndRequiredValueColumns(
 
     auto columnSeenFlags = GetTlsScratchBuffer<bool>(schema.GetColumnCount());
 
-    for (const auto *valueGroupBeginIt = row.BeginValues(), *valueGroupEndIt = valueGroupBeginIt;
+    for (const auto* valueGroupBeginIt = row.BeginValues(), *valueGroupEndIt = valueGroupBeginIt;
         valueGroupBeginIt != row.EndValues();
         valueGroupBeginIt = valueGroupEndIt)
     {

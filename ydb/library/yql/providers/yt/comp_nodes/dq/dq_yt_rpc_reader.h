@@ -3,6 +3,7 @@
 #include "dq_yt_reader_impl.h"
 
 #include <yt/yt/core/actions/future.h>
+#include <mutex>
 
 namespace NYql::NDqs {
 

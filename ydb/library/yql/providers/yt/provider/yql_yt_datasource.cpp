@@ -744,6 +744,7 @@ private:
 
                 newReadNode = root;
                 ctx.Step
+                    .Repeat(TExprStep::ExpandApplyForLambdas)
                     .Repeat(TExprStep::ExprEval)
                     .Repeat(TExprStep::DiscoveryIO)
                     .Repeat(TExprStep::Epochs)

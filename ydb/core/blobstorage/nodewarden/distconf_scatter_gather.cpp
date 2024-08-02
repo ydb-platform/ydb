@@ -7,10 +7,13 @@ namespace NKikimr::NStorage {
         if (cookie == 0) {
             cookie = NextScatterCookie++;
         }
-        STLOG(PRI_DEBUG, BS_NODE, NWDC21, "IssueScatterTask", (Request, request), (Cookie, cookie));
-        Y_ABORT_UNLESS(actorId || Binding);
-        const auto [it, inserted] = ScatterTasks.try_emplace(cookie, actorId ? std::nullopt : Binding, std::move(request),
-            Scepter, actorId.value_or(TActorId()));
+        STLOG(PRI_DEBUG, BS_NODE, NWDC21, "IssueScatterTask", (Request, request), (Cookie, cookie), (ActorId, actorId),
+            (Binding, Binding), (Scepter, Scepter ? std::make_optional(Scepter->Id) : std::nullopt));
+        Y_ABORT_UNLESS(!actorId && Binding && !Scepter // just forwarding what we got from binding
+            || !actorId && !Binding && Scepter // initiating scatter task as a root node
+            || actorId && !Binding && Scepter); // query issued by InvokeOnRootNode machinery
+        const auto [it, inserted] = ScatterTasks.try_emplace(cookie, Binding, std::move(request), Scepter,
+            actorId.value_or(TActorId()));
         Y_ABORT_UNLESS(inserted);
         TScatterTask& task = it->second;
         PrepareScatterTask(cookie, task);
@@ -83,13 +86,17 @@ namespace NKikimr::NStorage {
         CheckCompleteScatterTask(it);
     }
 
-    void TDistributedConfigKeeper::AbortAllScatterTasks(const TBinding& binding) {
+    void TDistributedConfigKeeper::AbortAllScatterTasks(const std::optional<TBinding>& binding) {
         STLOG(PRI_DEBUG, BS_NODE, NWDC24, "AbortAllScatterTasks", (Binding, binding));
 
         for (auto& [cookie, task] : std::exchange(ScatterTasks, {})) {
-            Y_ABORT_UNLESS(task.Origin);
             Y_ABORT_UNLESS(task.Origin == binding);
-
+            if (task.ActorId) { // terminate the task prematurely -- and notify actor
+                auto ev = std::make_unique<TEvNodeConfigGather>();
+                task.Response.SetAborted(true);
+                task.Response.Swap(&ev->Record);
+                Send(task.ActorId, ev.release());
+            }
             for (const ui32 nodeId : task.PendingNodes) {
                 const auto it = DirectBoundNodes.find(nodeId);
                 Y_ABORT_UNLESS(it != DirectBoundNodes.end());

@@ -105,7 +105,7 @@ using TTypedServiceContext = TGenericTypedServiceContext<
 ////////////////////////////////////////////////////////////////////////////////
 
 DECLARE_REFCOUNTED_CLASS(THistogramExponentialBounds)
-DECLARE_REFCOUNTED_CLASS(THistogramConfig)
+DECLARE_REFCOUNTED_CLASS(TTimeHistogramConfig)
 DECLARE_REFCOUNTED_CLASS(TServerConfig)
 DECLARE_REFCOUNTED_CLASS(TServiceCommonConfig)
 DECLARE_REFCOUNTED_CLASS(TServerDynamicConfig)
@@ -183,7 +183,7 @@ YT_DEFINE_ERROR_ENUM(
     ((Overloaded)                   (118)) // The server is currently overloaded and unable to handle additional requests.
                                            // The client should try to reduce their request rate until the server has had a chance to recover.
     ((SslError)                     (static_cast<int>(NBus::EErrorCode::SslError)))
-    ((MemoryOverflow)               (120))
+    ((MemoryPressure)               (120))
     ((GlobalDiscoveryError)         (121)) // Single peer discovery interrupts discovery session.
 );
 

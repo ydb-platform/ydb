@@ -5,6 +5,7 @@
   - activation.h
   - activscp.h
   - adhoc.h
+  - afunix.h
   - apiset.h
   - apisetcconv.h
   - atltime.h

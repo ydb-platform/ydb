@@ -46,6 +46,10 @@ public:
     //! If true tcmalloc crashes when system allocates more memory than #ContainerMemoryRatio.
     bool Hard;
 
+    bool DumpMemoryProfileOnViolation;
+    TDuration DumpMemoryProfileTimeout;
+    TString DumpMemoryProfilePath;
+
     REGISTER_YSON_STRUCT(THeapSizeLimit);
 
     static void Register(TRegistrar registrar);

@@ -333,12 +333,7 @@ namespace NActors {
     };
 
     template <typename TEv, typename TRecord, ui32 TEventType>
-    class TEventPB : public TEventPBBase<TEv, TRecord, TEventType, TRecordHolder<TRecord> > {
-        typedef TEventPBBase<TEv, TRecord, TEventType, TRecordHolder<TRecord> > TPbBase;
-        // NOTE: No extra fields allowed: TEventPB must be a "template typedef"
-    public:
-        using TPbBase::TPbBase;
-    };
+    using TEventPB = TEventPBBase<TEv, TRecord, TEventType, TRecordHolder<TRecord> >;
 
     template <typename TEv, typename TRecord, ui32 TEventType, size_t InitialBlockSize = 512, size_t MaxBlockSize = 16*1024>
     using TEventPBWithArena = TEventPBBase<TEv, TRecord, TEventType, TArenaRecordHolder<TRecord, InitialBlockSize, MaxBlockSize> >;

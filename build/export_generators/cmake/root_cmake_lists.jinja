@@ -35,10 +35,13 @@ include(cmake/global_flags.cmake)
 include(cmake/global_vars.cmake)
 {% if includes is defined -%}
 {%     for incl in includes -%}
+{%         if not(use_conan2) or (incl != "cmake/conan1_deprecated.cmake") -%}
 include({{ incl }})
+{%         endif -%}
 {%     endfor -%}
-{% endif -%}
-{% if conan.requires or conan.tool_requires %}
+{%  endif -%}
+
+{%- if (conan.requires or conan.tool_requires) and not(use_conan2) %}
 if (CMAKE_CROSSCOMPILING)
   include(${PROJECT_BINARY_DIR}/conan_paths.cmake)
 else()
@@ -49,10 +52,11 @@ else()
     BUILD missing
     REMOTE conancenter
     SETTINGS ${settings}
-      ENV "CONAN_CMAKE_GENERATOR=${CMAKE_GENERATOR}"
-      CONF "tools.cmake.cmaketoolchain:generator=${CMAKE_GENERATOR}"
+    ENV "CONAN_CMAKE_GENERATOR=${CMAKE_GENERATOR}"
+    CONF "tools.cmake.cmaketoolchain:generator=${CMAKE_GENERATOR}"
   )
-endif(){% endif %}
+endif()
+{% endif -%}
 
 {%- if vanilla_protobuf %}
 

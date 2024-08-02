@@ -1,6 +1,7 @@
 #include "proto_builder.h"
 
 #include <ydb/library/yql/providers/common/codec/yql_codec.h>
+#include <ydb/library/yql/core/yql_type_annotation.h>
 #include <ydb/library/yql/dq/proto/dq_transport.pb.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
@@ -23,6 +24,7 @@ TVector<ui32> BuildColumnOrder(const TVector<TString>& columns, NKikimr::NMiniKQ
     if (resultType->GetKind() != TType::EKind::Struct || columns.empty()) {
         return {};
     }
+    TColumnOrder order(columns);
 
     TVector<ui32> columnOrder;
     THashMap<TString, ui32> column2id;
@@ -34,8 +36,8 @@ TVector<ui32> BuildColumnOrder(const TVector<TString>& columns, NKikimr::NMiniKQ
     columnOrder.resize(columns.size());
 
     int id = 0;
-    for (const auto& columnName : columns) {
-        columnOrder[id++] = column2id[columnName];
+    for (const auto& [columnName, generated] : order) {
+        columnOrder[id++] = column2id[generated];
     }
     return columnOrder;
 }

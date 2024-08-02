@@ -4,7 +4,7 @@
  *	  various support functions for SP-GiST
  *
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -62,6 +62,7 @@ spghandler(PG_FUNCTION_ARGS)
 	amroutine->amcanparallel = false;
 	amroutine->amcaninclude = true;
 	amroutine->amusemaintenanceworkmem = false;
+	amroutine->amsummarizing = false;
 	amroutine->amparallelvacuumoptions =
 		VACUUM_OPTION_PARALLEL_BULKDEL | VACUUM_OPTION_PARALLEL_COND_CLEANUP;
 	amroutine->amkeytype = InvalidOid;
@@ -372,7 +373,6 @@ Buffer
 SpGistNewBuffer(Relation index)
 {
 	Buffer		buffer;
-	bool		needLock;
 
 	/* First, try to get a page from FSM */
 	for (;;)
@@ -412,16 +412,8 @@ SpGistNewBuffer(Relation index)
 		ReleaseBuffer(buffer);
 	}
 
-	/* Must extend the file */
-	needLock = !RELATION_IS_LOCAL(index);
-	if (needLock)
-		LockRelationForExtension(index, ExclusiveLock);
-
-	buffer = ReadBuffer(index, P_NEW);
-	LockBuffer(buffer, BUFFER_LOCK_EXCLUSIVE);
-
-	if (needLock)
-		UnlockRelationForExtension(index, ExclusiveLock);
+	buffer = ExtendBufferedRel(BMR_REL(index), MAIN_FORKNUM, NULL,
+							   EB_LOCK_FIRST);
 
 	return buffer;
 }

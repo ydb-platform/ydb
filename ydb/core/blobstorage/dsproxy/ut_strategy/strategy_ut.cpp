@@ -97,14 +97,15 @@ void RunStrategyTest(TBlobStorageGroupType type) {
 
     std::unordered_map<TString, std::tuple<EStrategyOutcome, TString>> transitions;
 
-    for (ui32 iter = 0; iter < 1'000'000; ++iter) {
+    TString data(1000, 'x');
+    TLogoBlobID id(1'000'000'000, 1, 1, 0, data.size(), 0);
+    std::vector<TRope> parts(type.TotalPartCount());
+    ErasureSplit(TBlobStorageGroupType::CrcModeNone, type, TRope(data), parts);
+
+    for (ui32 iter = 0; iter < 100'000; ++iter) {
         Ctest << "iteration# " << iter << Endl;
 
         TBlackboard blackboard(&info, &groupQueues, NKikimrBlobStorage::UserData, NKikimrBlobStorage::FastRead);
-        TString data(1000, 'x');
-        TLogoBlobID id(1'000'000'000, 1, 1, 0, data.size(), 0);
-        std::vector<TRope> parts(type.TotalPartCount());
-        ErasureSplit(TBlobStorageGroupType::CrcModeNone, type, TRope(data), parts);
         blackboard.RegisterBlobForPut(id, 0);
         for (ui32 i = 0; i < parts.size(); ++i) {
             blackboard.AddPartToPut(id, i, TRope(parts[i]));

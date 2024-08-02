@@ -42,7 +42,7 @@ class UUID(ClickHouseType):
         if isinstance(first, str) or self.write_format(ctx) == 'string':
             for v in column:
                 if v:
-                    x = int(v, 16)
+                    x = int(v.replace('-', ''), 16)
                     dest += (x >> 64).to_bytes(8, 'little') + (x & 0xffffffffffffffff).to_bytes(8, 'little')
                 else:
                     dest += empty

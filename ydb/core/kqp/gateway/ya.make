@@ -20,6 +20,7 @@ PEERDIR(
     ydb/core/kqp/gateway/behaviour/resource_pool
     ydb/core/kqp/gateway/behaviour/view
     ydb/core/kqp/gateway/utils
+    ydb/core/statistics/service    
     ydb/library/yql/providers/result/expr_nodes
 )
 

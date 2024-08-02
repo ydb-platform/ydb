@@ -1,5 +1,7 @@
 | Version | Release date | Download | Changelog |
 :--- | :--- | :--- | :---
+**v24.1**
+v.24.1.18 | 31/07/2024 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.1.18`
 **v23.4**
 v.23.4.11 | 14/05/2024 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.4.11`
 **v23.3**

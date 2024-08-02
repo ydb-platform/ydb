@@ -9,7 +9,7 @@ namespace NKikimr::NOlap {
 class TFilteredSnapshotSchema: public ISnapshotSchema {
     ISnapshotSchema::TPtr OriginalSnapshot;
     std::shared_ptr<arrow::Schema> Schema;
-    std::set<ui32> ColumnIds;
+    YDB_READONLY_DEF(std::set<ui32>, ColumnIds);
 protected:
     virtual TString DoDebugString() const override;
 public:

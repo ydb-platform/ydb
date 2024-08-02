@@ -26,6 +26,7 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/client/scheme_cache_lib
+    ydb/core/tablet_flat
     ydb/core/tablet_flat/test/libs/rows
     ydb/core/testlib/default
 )

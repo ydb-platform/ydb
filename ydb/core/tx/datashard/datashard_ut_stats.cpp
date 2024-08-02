@@ -1,5 +1,5 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
-#include "ydb/core/tablet_flat/shared_sausagecache.h"
+#include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_make.h>
 
 namespace NKikimr {

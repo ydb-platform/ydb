@@ -277,6 +277,9 @@ message TEvInvalidateTable {
     optional uint64 TableId = 2;
 }
 
+message TEvInvalidateTableResult {
+}
+
 message TEvExportRequest {
     optional string DatabaseName = 1;
     optional string UserToken = 2;

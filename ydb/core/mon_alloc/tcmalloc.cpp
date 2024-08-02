@@ -446,13 +446,16 @@ public:
 
 class TTcMallocState : public IAllocState {
 public:
-    ui64 GetAllocatedMemoryEstimate() const override {
+    TState Get() const override {
         const auto properties = tcmalloc::MallocExtension::GetProperties();
 
         ui64 used = GetProperty(properties, "generic.physical_memory_used");
         ui64 caches = GetCachesSize(properties);
 
-        return used > caches ? used - caches : 0;
+        return {
+            used - Min(used, caches),
+            caches
+        };
     }
 };
 

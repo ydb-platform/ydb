@@ -138,7 +138,7 @@ std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const TSnapshot& sna
     for (auto&& i : ret) {
         result.emplace_back(TCommittedBlob(
             i->GetBlobRange(), i->GetSnapshot(), i->GetSchemaVersion(), i->GetMeta().GetNumRows(), i->GetMeta().GetFirstPK(pkSchema), i->GetMeta().GetLastPK(pkSchema)
-        , i->GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete));
+        , i->GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete, i->GetMeta().GetSchemaSubset()));
     }
 
     return result;

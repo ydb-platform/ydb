@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/engines/predicate/filter.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/program/program.h>
@@ -10,7 +11,7 @@ namespace NKikimr::NOlap::NReader {
 // Represents a batch of rows produced by ASC or DESC scan with applied filters and partial aggregation
 class TPartialReadResult {
 private:
-    YDB_READONLY_DEF(std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>>, ResourcesGuards);
+    YDB_READONLY_DEF(std::vector<std::shared_ptr<NColumnShard::TReaderResourcesGuard>>, ResourcesGuards);
     NArrow::TShardedRecordBatch ResultBatch;
 
     // This 1-row batch contains the last key that was read while producing the ResultBatch.
@@ -32,7 +33,7 @@ public:
         return ResultBatch.GetRecordBatch();
     }
 
-    const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& GetResourcesGuardOnly() const {
+    const std::shared_ptr<NColumnShard::TReaderResourcesGuard>& GetResourcesGuardOnly() const {
         AFL_VERIFY(ResourcesGuards.size() == 1);
         AFL_VERIFY(!!ResourcesGuards.front());
         return ResourcesGuards.front();
@@ -56,14 +57,12 @@ public:
         return LastReadKey;
     }
 
-    explicit TPartialReadResult(
-        const std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>>& resourcesGuards,
+    explicit TPartialReadResult(const std::vector<std::shared_ptr<NColumnShard::TReaderResourcesGuard>>& resourcesGuards,
         const NArrow::TShardedRecordBatch& batch, std::shared_ptr<arrow::RecordBatch> lastKey, const std::optional<ui32> notFinishedIntervalIdx)
         : ResourcesGuards(resourcesGuards)
         , ResultBatch(batch)
         , LastReadKey(lastKey)
-        , NotFinishedIntervalIdx(notFinishedIntervalIdx)
-    {
+        , NotFinishedIntervalIdx(notFinishedIntervalIdx) {
         for (auto&& i : ResourcesGuards) {
             AFL_VERIFY(i);
         }
@@ -72,16 +71,17 @@ public:
         Y_ABORT_UNLESS(LastReadKey->num_rows() == 1);
     }
 
-    explicit TPartialReadResult(
-        const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuards,
+    explicit TPartialReadResult(const std::shared_ptr<NColumnShard::TReaderResourcesGuard>& resourcesGuards,
         const NArrow::TShardedRecordBatch& batch, std::shared_ptr<arrow::RecordBatch> lastKey, const std::optional<ui32> notFinishedIntervalIdx)
-        : TPartialReadResult(std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>>({resourcesGuards}), batch, lastKey, notFinishedIntervalIdx) {
+        : TPartialReadResult(
+              std::vector<std::shared_ptr<NColumnShard::TReaderResourcesGuard>>({ resourcesGuards }), batch, lastKey, notFinishedIntervalIdx) {
         AFL_VERIFY(resourcesGuards);
     }
 
-    explicit TPartialReadResult(const NArrow::TShardedRecordBatch& batch, std::shared_ptr<arrow::RecordBatch> lastKey, const std::optional<ui32> notFinishedIntervalIdx)
-        : TPartialReadResult(std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>>(), batch, lastKey, notFinishedIntervalIdx) {
+    explicit TPartialReadResult(
+        const NArrow::TShardedRecordBatch& batch, std::shared_ptr<arrow::RecordBatch> lastKey, const std::optional<ui32> notFinishedIntervalIdx)
+        : TPartialReadResult(std::vector<std::shared_ptr<NColumnShard::TReaderResourcesGuard>>(), batch, lastKey, notFinishedIntervalIdx) {
     }
 };
 
-}
+}   // namespace NKikimr::NOlap::NReader

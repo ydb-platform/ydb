@@ -28,6 +28,7 @@ TProgramFactoryOptions::TProgramFactoryOptions()
     , UserData_()
     , LLVMSettings("OFF")
     , BlockEngineSettings("disable")
+    , ExprOutputStream(nullptr)
     , CountersProvider(nullptr)
     , NativeYtTypeFlags(0)
     , UseSystemColumns(false)
@@ -80,6 +81,11 @@ TProgramFactoryOptions& TProgramFactoryOptions::SetLLVMSettings(TStringBuf llvm_
 
 TProgramFactoryOptions& TProgramFactoryOptions::SetBlockEngineSettings(TStringBuf blockEngineSettings) {
     BlockEngineSettings = blockEngineSettings;
+    return *this;
+}
+
+TProgramFactoryOptions& TProgramFactoryOptions::SetExprOutputStream(IOutputStream* exprOutputStream) {
+    ExprOutputStream = exprOutputStream;
     return *this;
 }
 

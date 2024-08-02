@@ -3,7 +3,7 @@
  * spi.c
  *				Server Programming Interface
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -43,7 +43,9 @@
  * when entering/exiting a SPI nesting level.
  */
 __thread uint64		SPI_processed = 0;
+uint64* ImplPtrSPI_processed() { return &SPI_processed; }
 __thread SPITupleTable *SPI_tuptable = NULL;
+SPITupleTable ** ImplPtrSPI_tuptable() { return &SPI_tuptable; }
 __thread int			SPI_result = 0;
 
 static __thread _SPI_connection *_SPI_stack = NULL;
@@ -432,7 +434,7 @@ AtEOXact_SPI(bool isCommit)
 
 	/*
 	 * Pop stack entries, stopping if we find one marked internal_xact (that
-	 * one belongs to the caller of SPI_commit or SPI_abort).
+	 * one belongs to the caller of SPI_commit or SPI_rollback).
 	 */
 	while (_SPI_connected >= 0)
 	{
@@ -2488,35 +2490,35 @@ _SPI_execute_plan(SPIPlanPtr plan, const SPIExecuteOptions *options,
 		{
 			RawStmt    *parsetree = plansource->raw_parse_tree;
 			const char *src = plansource->query_string;
-			List	   *stmt_list;
+			List	   *querytree_list;
 
 			/*
 			 * Parameter datatypes are driven by parserSetup hook if provided,
 			 * otherwise we use the fixed parameter list.
 			 */
 			if (parsetree == NULL)
-				stmt_list = NIL;
+				querytree_list = NIL;
 			else if (plan->parserSetup != NULL)
 			{
 				Assert(plan->nargs == 0);
-				stmt_list = pg_analyze_and_rewrite_withcb(parsetree,
-														  src,
-														  plan->parserSetup,
-														  plan->parserSetupArg,
-														  _SPI_current->queryEnv);
+				querytree_list = pg_analyze_and_rewrite_withcb(parsetree,
+															   src,
+															   plan->parserSetup,
+															   plan->parserSetupArg,
+															   _SPI_current->queryEnv);
 			}
 			else
 			{
-				stmt_list = pg_analyze_and_rewrite_fixedparams(parsetree,
-															   src,
-															   plan->argtypes,
-															   plan->nargs,
-															   _SPI_current->queryEnv);
+				querytree_list = pg_analyze_and_rewrite_fixedparams(parsetree,
+																	src,
+																	plan->argtypes,
+																	plan->nargs,
+																	_SPI_current->queryEnv);
 			}
 
 			/* Finish filling in the CachedPlanSource */
 			CompleteCachedPlan(plansource,
-							   stmt_list,
+							   querytree_list,
 							   NULL,
 							   plan->argtypes,
 							   plan->nargs,
@@ -3345,7 +3347,7 @@ SPI_register_trigger_data(TriggerData *tdata)
 	if (tdata->tg_newtable)
 	{
 		EphemeralNamedRelation enr =
-		palloc(sizeof(EphemeralNamedRelationData));
+			palloc(sizeof(EphemeralNamedRelationData));
 		int			rc;
 
 		enr->md.name = tdata->tg_trigger->tgnewtable;
@@ -3362,7 +3364,7 @@ SPI_register_trigger_data(TriggerData *tdata)
 	if (tdata->tg_oldtable)
 	{
 		EphemeralNamedRelation enr =
-		palloc(sizeof(EphemeralNamedRelationData));
+			palloc(sizeof(EphemeralNamedRelationData));
 		int			rc;
 
 		enr->md.name = tdata->tg_trigger->tgoldtable;

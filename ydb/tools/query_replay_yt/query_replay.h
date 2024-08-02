@@ -19,6 +19,8 @@ struct TQueryReplayConfig {
     TString DstPath;
     ui32 ActorSystemThreadsCount = 5;
     TVector<TString> UdfFiles;
+    TString QueryFile;
+    NActors::NLog::EPriority YqlLogLevel = NActors::NLog::EPriority::PRI_ERROR;
 
     void ParseConfig(int argc, const char** argv);
 };

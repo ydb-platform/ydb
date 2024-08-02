@@ -121,6 +121,11 @@ public:
         YT_UNIMPLEMENTED();
     }
 
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
+    {
+        return MemoryUsageTracker_;
+    }
+
 private:
     IClientPtr Client_;
     std::optional<TDuration> ClientTimeout_;
@@ -128,6 +133,8 @@ private:
     const TString EndpointAddress_;
     const IAttributeDictionaryPtr EndpointAttributes_;
     const NConcurrency::IPollerPtr Poller_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
+
     bool IsHttps_;
     NHttps::TClientCredentialsConfigPtr Credentials_;
 

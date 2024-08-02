@@ -29,6 +29,7 @@ SRCS(
     actor_ut.cpp
     actorsystem_ut.cpp
     performance_ut.cpp
+    process_stats_ut.cpp
     ask_ut.cpp
     event_pb_payload_ut.cpp
     event_pb_ut.cpp

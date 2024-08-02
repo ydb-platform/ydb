@@ -114,7 +114,9 @@
   - endian.h:               contrib/libs/musl/include/endian.h
   - err.h:                  contrib/libs/musl/include/err.h
   - fcntl.h:                contrib/libs/musl/include/fcntl.h
-  - features.h:             contrib/libs/musl/include/features.h
+  - features.h:
+    - contrib/libs/musl/include/features.h
+    - contrib/libs/musl/src/include/features.h
   - fenv.h:                 contrib/libs/musl/include/fenv.h
   - fmtmsg.h:               contrib/libs/musl/include/fmtmsg.h
   - fnmatch.h:              contrib/libs/musl/include/fnmatch.h
@@ -256,3 +258,7 @@
 - source_filter: ^(contrib/libs/glibcasm/glibc/include/features\.h)
   includes:
   - stdc-predef.h: contrib/libs/musl/include/stdc-predef.h
+
+- source_filter: "^contrib/libs/musl"
+  includes:
+    - atomic.h:      contrib/libs/musl/src/internal/atomic.h

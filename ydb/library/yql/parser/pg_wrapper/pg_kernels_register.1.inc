@@ -143,3 +143,6 @@ RegisterExec(6201, arrow_extract_timetz());
 RegisterExec(6233, arrow_window_row_number_support());
 RegisterExec(6234, arrow_window_rank_support());
 RegisterExec(6235, arrow_window_dense_rank_support());
+RegisterExec(6306, arrow_window_percent_rank_support());
+RegisterExec(6307, arrow_window_cume_dist_support());
+RegisterExec(6308, arrow_window_ntile_support());

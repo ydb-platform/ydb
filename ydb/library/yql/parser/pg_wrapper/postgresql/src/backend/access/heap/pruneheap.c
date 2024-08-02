@@ -3,7 +3,7 @@
  * pruneheap.c
  *	  heap page pruning and HOT-chain management code
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -49,7 +49,7 @@ typedef struct
 	bool		old_snap_used;
 
 	TransactionId new_prune_xid;	/* new prune hint value for page */
-	TransactionId latestRemovedXid; /* latest xid to be removed by this prune */
+	TransactionId snapshotConflictHorizon;	/* latest xid removed */
 	int			nredirected;	/* numbers of entries in arrays below */
 	int			ndead;
 	int			nunused;
@@ -198,8 +198,7 @@ heap_page_prune_opt(Relation relation, Buffer buffer)
 		/*
 		 * Now that we have buffer lock, get accurate information about the
 		 * page's free space, and recheck the heuristic about whether to
-		 * prune. (We needn't recheck PageIsPrunable, since no one else could
-		 * have pruned while we hold pin.)
+		 * prune.
 		 */
 		if (PageIsFull(page) || PageGetHeapFreeSpace(page) < minfree)
 		{
@@ -295,7 +294,7 @@ heap_page_prune(Relation relation, Buffer buffer,
 	prstate.old_snap_xmin = old_snap_xmin;
 	prstate.old_snap_ts = old_snap_ts;
 	prstate.old_snap_used = false;
-	prstate.latestRemovedXid = InvalidTransactionId;
+	prstate.snapshotConflictHorizon = InvalidTransactionId;
 	prstate.nredirected = prstate.ndead = prstate.nunused = 0;
 	memset(prstate.marked, 0, sizeof(prstate.marked));
 
@@ -418,7 +417,8 @@ heap_page_prune(Relation relation, Buffer buffer,
 			xl_heap_prune xlrec;
 			XLogRecPtr	recptr;
 
-			xlrec.latestRemovedXid = prstate.latestRemovedXid;
+			xlrec.isCatalogRel = RelationIsAccessibleInLogicalDecoding(relation);
+			xlrec.snapshotConflictHorizon = prstate.snapshotConflictHorizon;
 			xlrec.nredirected = prstate.nredirected;
 			xlrec.ndead = prstate.ndead;
 
@@ -489,7 +489,7 @@ heap_page_prune(Relation relation, Buffer buffer,
  *
  * Due to its cost we also only want to call
  * TransactionIdLimitedForOldSnapshots() if necessary, i.e. we might not have
- * done so in heap_hot_prune_opt() if pd_prune_xid was old enough. But we
+ * done so in heap_page_prune_opt() if pd_prune_xid was old enough. But we
  * still want to be able to remove rows that are too new to be removed
  * according to prstate->vistest, but that can be removed based on
  * old_snapshot_threshold. So we call TransactionIdLimitedForOldSnapshots() on
@@ -532,7 +532,7 @@ heap_prune_satisfies_vacuum(PruneState *prstate, HeapTuple tup, Buffer buffer)
 		if (!TransactionIdIsValid(prstate->old_snap_xmin))
 		{
 			TransactionId horizon =
-			GlobalVisTestNonRemovableHorizon(prstate->vistest);
+				GlobalVisTestNonRemovableHorizon(prstate->vistest);
 
 			TransactionIdLimitedForOldSnapshots(horizon, prstate->rel,
 												&prstate->old_snap_xmin,
@@ -636,8 +636,8 @@ heap_prune_chain(Buffer buffer, OffsetNumber rootoffnum, PruneState *prstate)
 				!HeapTupleHeaderIsHotUpdated(htup))
 			{
 				heap_prune_record_unused(prstate, rootoffnum);
-				HeapTupleHeaderAdvanceLatestRemovedXid(htup,
-													   &prstate->latestRemovedXid);
+				HeapTupleHeaderAdvanceConflictHorizon(htup,
+													  &prstate->snapshotConflictHorizon);
 				ndeleted++;
 			}
 
@@ -773,8 +773,8 @@ heap_prune_chain(Buffer buffer, OffsetNumber rootoffnum, PruneState *prstate)
 		if (tupdead)
 		{
 			latestdead = offnum;
-			HeapTupleHeaderAdvanceLatestRemovedXid(htup,
-												   &prstate->latestRemovedXid);
+			HeapTupleHeaderAdvanceConflictHorizon(htup,
+												  &prstate->snapshotConflictHorizon);
 		}
 		else if (!recent_dead)
 			break;

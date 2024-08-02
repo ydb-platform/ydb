@@ -7,6 +7,7 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
+#include <ydb/core/protos/memory_stats.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
 #include <ydb/library/actors/interconnect/events_local.h>
 #include <ydb/library/actors/core/interconnect.h>
@@ -60,6 +61,7 @@ struct TEvWhiteboard{
         EvVDiskStateGenerationChange,
         EvVDiskDropDonors,
         EvClockSkewUpdate,
+        EvMemoryStatsUpdate,
         EvEnd
     };
 
@@ -361,12 +363,13 @@ struct TEvWhiteboard{
             }
         }
 
-        TEvSystemStateUpdate(const TVector<std::tuple<TString, double, ui32>>& poolStats) {
+        TEvSystemStateUpdate(const TVector<std::tuple<TString, double, ui32, ui32>>& poolStats) {
             for (const auto& row : poolStats) {
                 auto& pb = *Record.AddPoolStats();
                 pb.SetName(std::get<0>(row));
                 pb.SetUsage(std::get<1>(row));
                 pb.SetThreads(std::get<2>(row));
+                pb.SetLimit(std::get<3>(row));
             }
         }
 
@@ -385,13 +388,7 @@ struct TEvWhiteboard{
         }
     };
 
-    static TEvSystemStateUpdate *CreateSharedCacheStatsUpdateRequest(ui64 memUsedBytes, ui64 memLimitBytes) {
-        TEvSystemStateUpdate *request = new TEvSystemStateUpdate();
-        auto *pb = request->Record.MutableSharedCacheStats();
-        pb->SetUsedBytes(memUsedBytes);
-        pb->SetLimitBytes(memLimitBytes);
-        return request;
-    }
+    struct TEvMemoryStatsUpdate : TEventPB<TEvMemoryStatsUpdate, NKikimrMemory::TMemoryStats, EvMemoryStatsUpdate> {};
 
     static TEvSystemStateUpdate *CreateTotalSessionsUpdateRequest(ui32 totalSessions) {
         TEvSystemStateUpdate *request = new TEvSystemStateUpdate();

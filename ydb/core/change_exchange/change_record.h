@@ -45,8 +45,6 @@ public:
 
     virtual TString ToString() const = 0;
     virtual void Out(IOutputStream& out) const = 0;
-
-    virtual ui64 ResolvePartitionId(IChangeSenderResolver* const resolver) const = 0;
 }; // IChangeRecord
 
 template <typename T, typename TDerived> class TChangeRecordBuilder;

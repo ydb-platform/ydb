@@ -141,3 +141,4 @@ RegisterExec(6173, arrow_pg_get_statisticsobjdef_expressions());
 RegisterExec(6174, arrow_pg_get_statisticsobjdef_columns());
 RegisterExec(6197, arrow_pg_get_function_sqlbody());
 RegisterExec(6225, arrow_multirange_agg_transfn());
+RegisterExec(6311, arrow_system_user());

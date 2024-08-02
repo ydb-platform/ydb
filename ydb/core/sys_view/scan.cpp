@@ -217,6 +217,13 @@ THolder<NActors::IActor> CreateSystemViewScan(const NActors::TActorId& ownerId, 
         return CreatePgTablesScan(ownerId, scanId, tableId, tableRange, columns);
     }
 
+    if (tableId.SysViewInfo == InformationSchemaTablesName) {
+        return CreateInformationSchemaTablesScan(ownerId, scanId, tableId, tableRange, columns);
+    }
+        if (tableId.SysViewInfo == PgClassName) {
+        return CreatePgClassScan(ownerId, scanId, tableId, tableRange, columns);
+    }
+
     return {};
 }
 

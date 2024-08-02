@@ -22,7 +22,7 @@ bool TrySplitTablePath(const TString& path, std::pair<TString, TString>& result,
 bool SplitTablePath(const TString& tableName, const TString& database, std::pair<TString, TString>& pathPair,
     TString& error, bool createDir);
 
-TString CreateIndexTablePath(const TString& tableName, const TString& indexName);
+TVector<TString> CreateIndexTablePath(const TString& tableName, NYql::TIndexDescription::EType indexType, const TString& indexName);
 
 bool SetDatabaseForLoginOperation(TString& result, bool getDomainLoginOnly, TMaybe<TString> domainName,
     const TString& database);

@@ -24,7 +24,9 @@ namespace NYql {
                 const TUserDataTable& userData,
                 const TVector<const TStructExprType*>& inputTypes,
                 const TVector<const TStructExprType*>& originalInputTypes,
+                const TVector<const TStructExprType*>& rawInputTypes,
                 const TTypeAnnotationNode* outputType,
+                const TTypeAnnotationNode* rawOutputType,
                 const TString& LLVMSettings,
                 NKikimr::NUdf::ICountersProvider* countersProvider,
                 ui64 nativeYtTypeFlags,
@@ -44,9 +46,11 @@ namespace NYql {
             ui64 NativeYtTypeFlags_;
             TMaybe<TString> TimestampColumn_;
             const NKikimr::NMiniKQL::TType* OutputType_;
+            const NKikimr::NMiniKQL::TType* RawOutputType_;
             TVector<NKikimr::NMiniKQL::IComputationExternalNode*> SelfNodes_;
             TVector<const NKikimr::NMiniKQL::TStructType*> InputTypes_;
             TVector<const NKikimr::NMiniKQL::TStructType*> OriginalInputTypes_;
+            TVector<const NKikimr::NMiniKQL::TStructType*> RawInputTypes_;
         };
 
         template <typename TBase>
@@ -70,7 +74,9 @@ namespace NYql {
                 const TUserDataTable& userData,
                 const TVector<const TStructExprType*>& inputTypes,
                 const TVector<const TStructExprType*>& originalInputTypes,
+                const TVector<const TStructExprType*>& rawInputTypes,
                 const TTypeAnnotationNode* outputType,
+                const TTypeAnnotationNode* rawOutputType,
                 const TString& LLVMSettings,
                 NKikimr::NUdf::ICountersProvider* countersProvider,
                 ui64 nativeYtTypeFlags,
@@ -81,7 +87,10 @@ namespace NYql {
             ui32 GetInputsCount() const override;
             const NKikimr::NMiniKQL::TStructType* GetInputType(ui32, bool) const override;
             const NKikimr::NMiniKQL::TStructType* GetInputType(bool) const override;
+            const NKikimr::NMiniKQL::TStructType* GetRawInputType(ui32) const override;
+            const NKikimr::NMiniKQL::TStructType* GetRawInputType() const override;
             const NKikimr::NMiniKQL::TType* GetOutputType() const override;
+            const NKikimr::NMiniKQL::TType* GetRawOutputType() const override;
             NYT::TNode MakeInputSchema() const override;
             NYT::TNode MakeInputSchema(ui32) const override;
             NYT::TNode MakeOutputSchema() const override;

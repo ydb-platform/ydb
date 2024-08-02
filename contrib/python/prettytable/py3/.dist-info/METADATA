@@ -1,6 +1,6 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.3
 Name: prettytable
-Version: 3.10.0
+Version: 3.10.2
 Summary: A simple Python library for easily displaying tabular data in a visually appealing ASCII table format
 Project-URL: Changelog, https://github.com/jazzband/prettytable/releases
 Project-URL: Homepage, https://github.com/jazzband/prettytable
@@ -497,32 +497,32 @@ whatever you prefer. The `set_style` method just does this automatically for you
 
 The options are:
 
-| Option                       | Details                                                                                                                                                                                            |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `border`                     | A Boolean option (must be `True` or `False`). Controls whether a border is drawn inside and around the table.                                                                                      |
-| `preserve_internal_border`   | A Boolean option (must be `True` or `False`). Controls whether borders are still drawn within the table even when `border=False`.                                                                  |
-| `header`                     | A Boolean option (must be `True` or `False`). Controls whether the first row of the table is a header showing the names of all the fields.                                                         |
-| `hrules`                     | Controls printing of horizontal rules after rows. Allowed values: `FRAME`, `HEADER`, `ALL`, `NONE`.                                                                                                |
-| `HEADER`, `ALL`, `NONE`      | These are variables defined inside the `prettytable` module so make sure you import them or use `prettytable.FRAME` etc.                                                                           |
-| `vrules`                     | Controls printing of vertical rules between columns. Allowed values: `FRAME`, `ALL`, `NONE`.                                                                                                       |
-| `int_format`                 | A string which controls the way integer data is printed. This works like: `print("%<int_format>d" % data)`.                                                                                        |
-| `float_format`               | A string which controls the way floating point data is printed. This works like: `print("%<float_format>f" % data)`.                                                                               |
-| `custom_format`              | A dictionary of field and callable. This allows you to set any format you want `pf.custom_format["my_col_int"] = ()lambda f, v: f"{v:,}"`. The type of the callable if `callable[[str, Any], str]` |
-| `padding_width`              | Number of spaces on either side of column data (only used if left and right paddings are `None`).                                                                                                  |
-| `left_padding_width`         | Number of spaces on left-hand side of column data.                                                                                                                                                 |
-| `right_padding_width`        | Number of spaces on right-hand side of column data.                                                                                                                                                |
-| `vertical_char`              | Single character string used to draw vertical lines. Default: `\|`.                                                                                                                                |
-| `horizontal_char`            | Single character string used to draw horizontal lines. Default: `-`.                                                                                                                               |
-| `_horizontal_align_char`     | Single character string used to indicate column alignment in horizontal lines. Default: `:` for Markdown, otherwise `None`.                                                                        |
-| `junction_char`              | Single character string used to draw line junctions. Default: `+`.                                                                                                                                 |
-| `top_junction_char`          | Single character string used to draw top line junctions. Default: `junction_char`.                                                                                                                 |
-| `bottom_junction_char`       | single character string used to draw bottom line junctions. Default: `junction_char`.                                                                                                              |
-| `right_junction_char`        | Single character string used to draw right line junctions. Default: `junction_char`.                                                                                                               |
-| `left_junction_char`         | Single character string used to draw left line junctions. Default: `junction_char`.                                                                                                                |
-| `top_right_junction_char`    | Single character string used to draw top-right line junctions. Default: `junction_char`.                                                                                                           |
-| `top_left_junction_char`     | Single character string used to draw top-left line junctions. Default: `junction_char`.                                                                                                            |
-| `bottom_right_junction_char` | Single character string used to draw bottom-right line junctions. Default: `junction_char`.                                                                                                        |
-| `bottom_left_junction_char`  | Single character string used to draw bottom-left line junctions. Default: `junction_char`.                                                                                                         |
+| Option                       | Details                                                                                                                                                                                          |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `border`                     | A Boolean option (must be `True` or `False`). Controls whether a border is drawn inside and around the table.                                                                                    |
+| `preserve_internal_border`   | A Boolean option (must be `True` or `False`). Controls whether borders are still drawn within the table even when `border=False`.                                                                |
+| `header`                     | A Boolean option (must be `True` or `False`). Controls whether the first row of the table is a header showing the names of all the fields.                                                       |
+| `hrules`                     | Controls printing of horizontal rules after rows. Allowed values: `FRAME`, `HEADER`, `ALL`, `NONE`.                                                                                              |
+| `HEADER`, `ALL`, `NONE`      | These are variables defined inside the `prettytable` module so make sure you import them or use `prettytable.FRAME` etc.                                                                         |
+| `vrules`                     | Controls printing of vertical rules between columns. Allowed values: `FRAME`, `ALL`, `NONE`.                                                                                                     |
+| `int_format`                 | A string which controls the way integer data is printed. This works like: `print("%<int_format>d" % data)`.                                                                                      |
+| `float_format`               | A string which controls the way floating point data is printed. This works like: `print("%<float_format>f" % data)`.                                                                             |
+| `custom_format`              | A dictionary of field and callable. This allows you to set any format you want `pf.custom_format["my_col_int"] = lambda f, v: f"{v:,}"`. The type of the callable is `Callable[[str, Any], str]` |
+| `padding_width`              | Number of spaces on either side of column data (only used if left and right paddings are `None`).                                                                                                |
+| `left_padding_width`         | Number of spaces on left-hand side of column data.                                                                                                                                               |
+| `right_padding_width`        | Number of spaces on right-hand side of column data.                                                                                                                                              |
+| `vertical_char`              | Single character string used to draw vertical lines. Default: `\|`.                                                                                                                              |
+| `horizontal_char`            | Single character string used to draw horizontal lines. Default: `-`.                                                                                                                             |
+| `_horizontal_align_char`     | Single character string used to indicate column alignment in horizontal lines. Default: `:` for Markdown, otherwise `None`.                                                                      |
+| `junction_char`              | Single character string used to draw line junctions. Default: `+`.                                                                                                                               |
+| `top_junction_char`          | Single character string used to draw top line junctions. Default: `junction_char`.                                                                                                               |
+| `bottom_junction_char`       | single character string used to draw bottom line junctions. Default: `junction_char`.                                                                                                            |
+| `right_junction_char`        | Single character string used to draw right line junctions. Default: `junction_char`.                                                                                                             |
+| `left_junction_char`         | Single character string used to draw left line junctions. Default: `junction_char`.                                                                                                              |
+| `top_right_junction_char`    | Single character string used to draw top-right line junctions. Default: `junction_char`.                                                                                                         |
+| `top_left_junction_char`     | Single character string used to draw top-left line junctions. Default: `junction_char`.                                                                                                          |
+| `bottom_right_junction_char` | Single character string used to draw bottom-right line junctions. Default: `junction_char`.                                                                                                      |
+| `bottom_left_junction_char`  | Single character string used to draw bottom-left line junctions. Default: `junction_char`.                                                                                                       |
 
 You can set the style options to your own settings in two ways:
 

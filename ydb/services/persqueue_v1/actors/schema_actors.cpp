@@ -1070,10 +1070,26 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
 
     if (response.PQGroupInfo) {
         const auto& pqDescr = response.PQGroupInfo->Description;
-        for(ui32 i = 0; i < pqDescr.GetTotalGroupCount(); ++i) {
-            auto part = Result.add_partitions();
-            part->set_partition_id(i);
-            part->set_active(true);
+        for (auto& sourcePart: pqDescr.GetPartitions()) {
+            auto destPart = Result.add_partitions();
+            destPart->set_partition_id(sourcePart.GetPartitionId());
+            destPart->set_active(sourcePart.GetStatus() == ::NKikimrPQ::ETopicPartitionStatus::Active);
+            if (sourcePart.HasKeyRange()) {
+                if (sourcePart.GetKeyRange().HasFromBound()) {
+                    destPart->mutable_key_range()->set_from_bound(sourcePart.GetKeyRange().GetFromBound());
+                }
+                if (sourcePart.GetKeyRange().HasToBound()) {
+                    destPart->mutable_key_range()->set_to_bound(sourcePart.GetKeyRange().GetToBound());
+                }
+            }
+
+            for (size_t i = 0; i < sourcePart.ChildPartitionIdsSize(); ++i) {
+                destPart->add_child_partition_ids(static_cast<int64_t>(sourcePart.GetChildPartitionIds(i)));
+            }
+
+            for (size_t i = 0; i < sourcePart.ParentPartitionIdsSize(); ++i) {
+                destPart->add_parent_partition_ids(static_cast<int64_t>(sourcePart.GetParentPartitionIds(i)));
+            }
         }
 
         const auto &config = pqDescr.GetPQTabletConfig();
@@ -1090,6 +1106,9 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
                 break;
             case ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE:
                 Result.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->set_strategy(Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN);
+                break;
+            case ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_PAUSED:
+                Result.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->set_strategy(Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_PAUSED);
                 break;
             default:
                 Result.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->set_strategy(Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED);
@@ -1401,7 +1420,6 @@ void TDescribePartitionActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TE
     for (auto partData : record.GetPartResult()) {
         if ((ui32)partData.GetPartition() != Settings.Partitions[0])
             continue;
-
         Y_ABORT_UNLESS((ui32)(partData.GetPartition()) == Settings.Partitions[0]);
         partResult->set_partition_id(partData.GetPartition());
         partResult->set_active(true);

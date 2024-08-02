@@ -216,7 +216,6 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
                 "WHERE NameHash = $name_hash AND Name = $name";
 
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         TKikimrWithGrpcAndRootSchema server(appConfig);
         DoTestSplitByLoad(server, query, /* fill with data */ true, /* at least two splits */ 2);
     }

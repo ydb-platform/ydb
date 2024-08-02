@@ -12,7 +12,7 @@
  * For UPDATE and DELETE queries, the targetlist must also contain "junk"
  * tlist entries needed to allow the executor to identify the rows to be
  * updated or deleted; for example, the ctid of a heap row.  (The planner
- * adds these; they're not in what we receive from the planner/rewriter.)
+ * adds these; they're not in what we receive from the parser/rewriter.)
  *
  * For all query types, there can be additional junk tlist entries, such as
  * sort keys, Vars needed for a RETURNING list, and row ID information needed
@@ -25,7 +25,7 @@
  * rewriter's work is more concerned with SQL semantics.
  *
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION

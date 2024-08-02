@@ -10,6 +10,7 @@ namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+int CompareDoubleValues(double lhs, double rhs);
 int CompareYsonValues(NYson::TYsonStringBuf lhs, NYson::TYsonStringBuf rhs);
 TFingerprint CompositeFarmHash(NYson::TYsonStringBuf compositeValue);
 

@@ -79,6 +79,8 @@ common:
     to: /devops/manual/upgrade.md
   - from: /maintenance/backup_and_recovery.md
     to: /devops/manual/backup-and-recovery.md
+  - from: /deploy/index.md
+    to: /devops/index.md
 
 # Dev-related redirects
   - from: /db/index.md

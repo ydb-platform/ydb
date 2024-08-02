@@ -63,6 +63,7 @@ namespace NKikimrConfig {
     class TBackgroundCleaningConfig;
     class TGraphConfig;
     class TMetadataCacheConfig;
+    class TMemoryControllerConfig;
 }
 
 namespace NKikimrNetClassifier {
@@ -213,6 +214,7 @@ struct TAppData {
     NKikimrConfig::TGraphConfig& GraphConfig;
     NKikimrSharedCache::TSharedCacheConfig& SharedCacheConfig;
     NKikimrConfig::TMetadataCacheConfig& MetadataCacheConfig;
+    NKikimrConfig::TMemoryControllerConfig& MemoryControllerConfig;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request

@@ -106,19 +106,12 @@ message LoadAverageStatus {
     uint32 cores = 3;
 }
 
-message TimeDifferenceStatus {
-    StatusFlag.Status overall = 1;
-    int64 difference_ms = 2;
-    string peer = 3;
-}
-
 message ComputeNodeStatus {
     string id = 1;
     StatusFlag.Status overall = 2;
     repeated ComputeTabletStatus tablets = 3;
     repeated ThreadPoolStatus pools = 4;
     LoadAverageStatus load = 5;
-    TimeDifferenceStatus max_time_difference = 6;
 }
 
 message ComputeStatus {
@@ -174,7 +167,6 @@ message LocationCompute {
     LocationNode node = 1;
     LocationComputePool pool = 2;
     LocationComputeTablet tablet = 3;
-    LocationNode peer = 4;
 }
 
 message LocationDatabase {

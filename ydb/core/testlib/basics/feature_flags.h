@@ -61,6 +61,7 @@ public:
     FEATURE_FLAG_SETTER(EnableCMSRequestPriorities)
     FEATURE_FLAG_SETTER(EnableTableDatetime64)
     FEATURE_FLAG_SETTER(EnableResourcePools)
+    FEATURE_FLAG_SETTER(EnableChangefeedsOnIndexTables)
 
     #undef FEATURE_FLAG_SETTER
 };

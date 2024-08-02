@@ -12,7 +12,7 @@ namespace NYT {
 template <std::unsigned_integral T>
 struct TMaybeInfTraits
 {
-    constexpr static T Infinity = std::numeric_limits<T>::max();
+    static constexpr T Infinity = std::numeric_limits<T>::max();
 };
 
 //! Represents possibly infinite unsigned integer.

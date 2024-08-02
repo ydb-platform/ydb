@@ -28,9 +28,14 @@ class TestTpch10(TpchSuiteBase):
 
 class TestTpch100(TpchSuiteBase):
     size: int = 100
-    timeout = 300.
+    timeout = max(TpchSuiteBase.timeout, 300.)
 
 
 class TestTpch1000(TpchSuiteBase):
     size: int = 1000
-    timeout = 1000.
+    timeout = max(TpchSuiteBase.timeout, 1000.)
+
+
+class TestTpch10000(TpchSuiteBase):
+    size: int = 10000
+    timeout = max(TpchSuiteBase.timeout, 3600.)

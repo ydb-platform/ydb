@@ -31,29 +31,29 @@ Table structure:
 
 | Field | Description |
 --- | ---
-| `OwnerId` | ID of the SchemeShard serving the table.<br>Type: `Uint64`.<br>Key: `0`. |
-| `PathId` | ID of the SchemeShard path.<br>Type: `Uint64`.<br>Key: `1`. |
-| `PartIdx` | Partition sequence number.<br>Type: `Uint64`.<br>Key: `2`. |
-| `DataSize` | Approximate partition size in bytes.<br>Type: `Uint64`. |
-| `RowCount` | Approximate number of rows.<br>Type: `Uint64`. |
-| `IndexSize` | Partition index size in a tablet.<br>Type: `Uint64`. |
+| `OwnerId` | ID of the SchemeShard serving the table.<br/>Type: `Uint64`.<br/>Key: `0`. |
+| `PathId` | ID of the SchemeShard path.<br/>Type: `Uint64`.<br/>Key: `1`. |
+| `PartIdx` | Partition sequence number.<br/>Type: `Uint64`.<br/>Key: `2`. |
+| `DataSize` | Approximate partition size in bytes.<br/>Type: `Uint64`. |
+| `RowCount` | Approximate number of rows.<br/>Type: `Uint64`. |
+| `IndexSize` | Partition index size in a tablet.<br/>Type: `Uint64`. |
 | `CPUCores` | Double Instant value of load per partition (CPU share) |
-| `TabletId` | ID of the tablet serving the partition.<br>Type: `Uint64`. |
-| `Path` | Full path to the table.<br>Type: `Utf8`. |
-| `NodeId` | ID of the node that the partition is being served on.<br>Type: `Uint32`. |
-| `StartTime` | Last time when the tablet serving the partition was started.<br>Type: `Timestamp`. |
-| `AccessTime` | Last time when data from the partition was read.<br>Type: `Timestamp`. |
-| `UpdateTime` | Last time when data was written to the partition.<br>Type: `Timestamp`. |
-| `RowReads` | Number of point reads since the start of the partition tablet.<br>Type: `Uint64`. |
-| `RowUpdates` | Number of rows written since the start.<br>Type: `Uint64`. |
-| `RowDeletes` | Number of rows deleted since the start.<br>Type: `Uint64`. |
-| `RangeReads` | Number of row range reads since the start.<br>Type: `Uint64`. |
-| `RangeReadRows` | Number of rows read in the ranges since the start.<br>Type: `Uint64`. |
-| `InFlightTxCount` | Number of in-flight transactions.<br>Type: `Uint64`. |
-| `ImmediateTxCompleted` | Number of one-shard transactions completed since the start.<br>Type: `Uint64`. |
-| `CoordinatedTxCompleted` | Number of coordinated transactions completed since the start.<br>Type: `Uint64`. |
-| `TxRejectedByOverload` | Number of transactions rejected due to overload (since the start).<br>Type: `Uint64`. |
-| `TxRejectedByOutOfStorage` | Number of transactions rejected due to lack of storage space (since the start).<br>Type: `Uint64`. |
+| `TabletId` | ID of the tablet serving the partition.<br/>Type: `Uint64`. |
+| `Path` | Full path to the table.<br/>Type: `Utf8`. |
+| `NodeId` | ID of the node that the partition is being served on.<br/>Type: `Uint32`. |
+| `StartTime` | Last time when the tablet serving the partition was started.<br/>Type: `Timestamp`. |
+| `AccessTime` | Last time when data from the partition was read.<br/>Type: `Timestamp`. |
+| `UpdateTime` | Last time when data was written to the partition.<br/>Type: `Timestamp`. |
+| `RowReads` | Number of point reads since the start of the partition tablet.<br/>Type: `Uint64`. |
+| `RowUpdates` | Number of rows written since the start.<br/>Type: `Uint64`. |
+| `RowDeletes` | Number of rows deleted since the start.<br/>Type: `Uint64`. |
+| `RangeReads` | Number of row range reads since the start.<br/>Type: `Uint64`. |
+| `RangeReadRows` | Number of rows read in the ranges since the start.<br/>Type: `Uint64`. |
+| `InFlightTxCount` | Number of in-flight transactions.<br/>Type: `Uint64`. |
+| `ImmediateTxCompleted` | Number of one-shard transactions completed since the start.<br/>Type: `Uint64`. |
+| `CoordinatedTxCompleted` | Number of coordinated transactions completed since the start.<br/>Type: `Uint64`. |
+| `TxRejectedByOverload` | Number of transactions rejected due to overload (since the start).<br/>Type: `Uint64`. |
+| `TxRejectedByOutOfStorage` | Number of transactions rejected due to lack of storage space (since the start).<br/>Type: `Uint64`. |
 
 ### Example queries
 
@@ -103,34 +103,34 @@ All tables have the same set of fields:
 
 | Field | Description |
 --- | ---
-| `IntervalEnd` | The end of a one-minute or one-hour interval.<br>Type: `Timestamp`.<br>Key: `0`. |
-| `Rank` | Rank of a top query.<br>Type: `Uint32`.<br>Key: `1`. |
-| `QueryText` | Query text.<br>Type: `Utf8`. |
-| `Duration` | Total query execution time.<br>Type: `Interval`. |
-| `EndTime` | Query execution end time. <br>Type: `Timestamp`. |
-| `Type` | Query type (data, scan, or script).<br>Type: `String`. |
-| `ReadRows` | Number of rows read.<br>Type: `Uint64`. |
-| `ReadBytes` | Number of bytes read.<br>Type: `Uint64`. |
-| `UpdateRows` | Number of rows written.<br>Type: `Uint64`. |
-| `UpdateBytes` | Number of bytes written.<br>Type: `Uint64`. |
-| `DeleteRows` | Number of rows deleted.<br>Type: `Uint64`. |
-| `DeleteBytes` | Number of bytes deleted.<br>Type: `Uint64`. |
-| `Partitions` | Number of table partitions used during query execution.<br>Type: `Uint64`. |
-| `UserSID` | User Security ID.<br>Type: `String`. |
-| `ParametersSize` | Size of query parameters in bytes.<br>Type: `Uint64`. |
-| `CompileDuration` | Duration of query compilation.<br>Type: `Interval`. |
-| `FromQueryCache` | Shows whether the cache of prepared queries was used.<br>Type: `Bool`. |
-| `CPUTime` | Total CPU time used to execute the query (microseconds).<br>Type: `Uint64`. |
-| `ShardCount` | Number of shards used during query execution.<br>Type: `Uint64`. |
-| `SumShardCPUTime` | Total CPU time used in shards.<br>Type: `Uint64`. |
-| `MinShardCPUTime` | Minimum CPU time used in shards.<br>Type: `Uint64`. |
-| `MaxShardCPUTime` | Maximum CPU time used in shards.<br>Type: `Uint64`. |
-| `ComputeNodesCount` | Number of compute nodes used during query execution.<br>Type: `Uint64`. |
-| `SumComputeCPUTime` | Total CPU time used in compute nodes.<br>Type: `Uint64`. |
-| `MinComputeCPUTime` | Minimum CPU time used in compute nodes.<br>Type: `Uint64`. |
-| `MaxComputeCPUTime` | Maximum CPU time used in compute nodes.<br>Type: `Uint64`. |
-| `CompileCPUTime` | CPU time used to compile a query.<br>Type: `Uint64`. |
-| `ProcessCPUTime` | CPU time used for overall query handling.<br>Type: `Uint64`. |
+| `IntervalEnd` | The end of a one-minute or one-hour interval.<br/>Type: `Timestamp`.<br/>Key: `0`. |
+| `Rank` | Rank of a top query.<br/>Type: `Uint32`.<br/>Key: `1`. |
+| `QueryText` | Query text.<br/>Type: `Utf8`. |
+| `Duration` | Total query execution time.<br/>Type: `Interval`. |
+| `EndTime` | Query execution end time. <br/>Type: `Timestamp`. |
+| `Type` | Query type (data, scan, or script).<br/>Type: `String`. |
+| `ReadRows` | Number of rows read.<br/>Type: `Uint64`. |
+| `ReadBytes` | Number of bytes read.<br/>Type: `Uint64`. |
+| `UpdateRows` | Number of rows written.<br/>Type: `Uint64`. |
+| `UpdateBytes` | Number of bytes written.<br/>Type: `Uint64`. |
+| `DeleteRows` | Number of rows deleted.<br/>Type: `Uint64`. |
+| `DeleteBytes` | Number of bytes deleted.<br/>Type: `Uint64`. |
+| `Partitions` | Number of table partitions used during query execution.<br/>Type: `Uint64`. |
+| `UserSID` | User Security ID.<br/>Type: `String`. |
+| `ParametersSize` | Size of query parameters in bytes.<br/>Type: `Uint64`. |
+| `CompileDuration` | Duration of query compilation.<br/>Type: `Interval`. |
+| `FromQueryCache` | Shows whether the cache of prepared queries was used.<br/>Type: `Bool`. |
+| `CPUTime` | Total CPU time used to execute the query (microseconds).<br/>Type: `Uint64`. |
+| `ShardCount` | Number of shards used during query execution.<br/>Type: `Uint64`. |
+| `SumShardCPUTime` | Total CPU time used in shards.<br/>Type: `Uint64`. |
+| `MinShardCPUTime` | Minimum CPU time used in shards.<br/>Type: `Uint64`. |
+| `MaxShardCPUTime` | Maximum CPU time used in shards.<br/>Type: `Uint64`. |
+| `ComputeNodesCount` | Number of compute nodes used during query execution.<br/>Type: `Uint64`. |
+| `SumComputeCPUTime` | Total CPU time used in compute nodes.<br/>Type: `Uint64`. |
+| `MinComputeCPUTime` | Minimum CPU time used in compute nodes.<br/>Type: `Uint64`. |
+| `MaxComputeCPUTime` | Maximum CPU time used in compute nodes.<br/>Type: `Uint64`. |
+| `CompileCPUTime` | CPU time used to compile a query.<br/>Type: `Uint64`. |
+| `ProcessCPUTime` | CPU time used for overall query handling.<br/>Type: `Uint64`. |
 
 ### Example queries
 
@@ -182,33 +182,33 @@ Table structure:
 
 | Field | Description |
 ---|---
-| `IntervalEnd` | The end of a one-minute interval.<br>Type: `Timestamp`.<br>Key: `0`. |
-| `Rank` | Query rank within an interval (by the SumCPUTime field).<br>Type: `Uint32`.<br>Key: `1`. |
-| `QueryText` | Query text.<br>Type: `Utf8`. |
-| `Count` | Number of query runs.<br>Type: `Uint64`. |
-| `SumDuration` | Total duration of queries.<br>Type: `Interval`. |
-| `Count` | Number of query runs.<br>Type: `Uint64`. |
-| `SumDuration` | Total duration of queries.<br>Type: `Interval`. |
-| `MinDuration` | Minimum query duration.<br>Type: `Interval`. |
-| `MaxDuration` | Maximum query duration.<br>Type: `Interval`. |
-| `SumCPUTime` | Total CPU time used.<br>Type: `Uint64`. |
-| `MinCPUTime` | Minimum CPU time used.<br>Type: `Uint64`. |
-| `MaxCPUTime` | Maximum CPU time used.<br>Type: `Uint64`. |
-| `SumReadRows` | Total number of rows read.<br>Type: `Uint64`. |
-| `MinReadRows` | Minimum number of rows read.<br>Type: `Uint64`. |
-| `MaxReadRows` | Maximum number of rows read.<br>Type: `Uint64`. |
-| `SumReadBytes` | Total number of bytes read.<br>Type: `Uint64`. |
-| `MinReadBytes` | Minimum number of bytes read.<br>Type: `Uint64`. |
-| `MaxReadBytes` | Maximum number of bytes read.<br>Type: `Uint64`. |
-| `SumUpdateRows` | Total number of rows written.<br>Type: `Uint64`. |
-| `MinUpdateRows` | Minimum number of rows written.<br>Type: `Uint64`. |
-| `MaxUpdateRows` | Maximum number of rows written.<br>Type: `Uint64`. |
-| `SumUpdateBytes` | Total number of bytes written.<br>Type: `Uint64`. |
-| `MinUpdateBytes` | Minimum number of bytes written.<br>Type: `Uint64`. |
-| `MaxUpdateBytes` | Maximum number of bytes written.<br>Type: `Uint64`. |
-| `SumDeleteRows` | Total number of rows deleted.<br>Type: `Uint64`. |
-| `MinDeleteRows` | Minimum number of rows deleted.<br>Type: `Uint64`. |
-| `MaxDeleteRows` | Maximum number of rows deleted.<br>Type: `Uint64`. |
+| `IntervalEnd` | The end of a one-minute interval.<br/>Type: `Timestamp`.<br/>Key: `0`. |
+| `Rank` | Query rank within an interval (by the SumCPUTime field).<br/>Type: `Uint32`.<br/>Key: `1`. |
+| `QueryText` | Query text.<br/>Type: `Utf8`. |
+| `Count` | Number of query runs.<br/>Type: `Uint64`. |
+| `SumDuration` | Total duration of queries.<br/>Type: `Interval`. |
+| `Count` | Number of query runs.<br/>Type: `Uint64`. |
+| `SumDuration` | Total duration of queries.<br/>Type: `Interval`. |
+| `MinDuration` | Minimum query duration.<br/>Type: `Interval`. |
+| `MaxDuration` | Maximum query duration.<br/>Type: `Interval`. |
+| `SumCPUTime` | Total CPU time used.<br/>Type: `Uint64`. |
+| `MinCPUTime` | Minimum CPU time used.<br/>Type: `Uint64`. |
+| `MaxCPUTime` | Maximum CPU time used.<br/>Type: `Uint64`. |
+| `SumReadRows` | Total number of rows read.<br/>Type: `Uint64`. |
+| `MinReadRows` | Minimum number of rows read.<br/>Type: `Uint64`. |
+| `MaxReadRows` | Maximum number of rows read.<br/>Type: `Uint64`. |
+| `SumReadBytes` | Total number of bytes read.<br/>Type: `Uint64`. |
+| `MinReadBytes` | Minimum number of bytes read.<br/>Type: `Uint64`. |
+| `MaxReadBytes` | Maximum number of bytes read.<br/>Type: `Uint64`. |
+| `SumUpdateRows` | Total number of rows written.<br/>Type: `Uint64`. |
+| `MinUpdateRows` | Minimum number of rows written.<br/>Type: `Uint64`. |
+| `MaxUpdateRows` | Maximum number of rows written.<br/>Type: `Uint64`. |
+| `SumUpdateBytes` | Total number of bytes written.<br/>Type: `Uint64`. |
+| `MinUpdateBytes` | Minimum number of bytes written.<br/>Type: `Uint64`. |
+| `MaxUpdateBytes` | Maximum number of bytes written.<br/>Type: `Uint64`. |
+| `SumDeleteRows` | Total number of rows deleted.<br/>Type: `Uint64`. |
+| `MinDeleteRows` | Minimum number of rows deleted.<br/>Type: `Uint64`. |
+| `MaxDeleteRows` | Maximum number of rows deleted.<br/>Type: `Uint64`. |
 
 
 ### Example queries
@@ -254,17 +254,17 @@ Both tables have the same set of fields:
 
 | Field | Description |
 --- | ---
-| `IntervalEnd` | The end of a one-minute or one-hour interval.<br>Type: `Timestamp`.<br>Key: `0`. |
-| `Rank` | Partition rank within an interval (by CPUCores).<br>Type: `Uint32`.<br>Key: `1`. |
-| `TabletId` | ID of the tablet serving the partition.<br>Type: `Uint64`. |
-| `Path` | Full path to the table.<br>Type: `Utf8`. |
-| `PeakTime` | Peak time within an interval.<br>Type: `Timestamp`. |
-| `CPUCores` | Peak load per partition (CPU share).<br>Type: `Double`. |
-| `NodeId` | ID of the node where the partition was located during the peak load.<br>Type: `Uint32`. |
-| `DataSize` | Approximate partition size, in bytes, during the peak load.<br>Type: `Uint64`. |
-| `RowCount` | Approximate row count during the peak load.<br>Type: `Uint64`. |
-| `IndexSize` | Partition index size per tablet during the peak load.<br>Type: `Uint64`. |
-| `InFlightTxCount` | The number of in-flight transactions during the peak load.<br>Type: `Uint32`. |
+| `IntervalEnd` | The end of a one-minute or one-hour interval.<br/>Type: `Timestamp`.<br/>Key: `0`. |
+| `Rank` | Partition rank within an interval (by CPUCores).<br/>Type: `Uint32`.<br/>Key: `1`. |
+| `TabletId` | ID of the tablet serving the partition.<br/>Type: `Uint64`. |
+| `Path` | Full path to the table.<br/>Type: `Utf8`. |
+| `PeakTime` | Peak time within an interval.<br/>Type: `Timestamp`. |
+| `CPUCores` | Peak load per partition (CPU share).<br/>Type: `Double`. |
+| `NodeId` | ID of the node where the partition was located during the peak load.<br/>Type: `Uint32`. |
+| `DataSize` | Approximate partition size, in bytes, during the peak load.<br/>Type: `Uint64`. |
+| `RowCount` | Approximate row count during the peak load.<br/>Type: `Uint64`. |
+| `IndexSize` | Partition index size per tablet during the peak load.<br/>Type: `Uint64`. |
+| `InFlightTxCount` | The number of in-flight transactions during the peak load.<br/>Type: `Uint32`. |
 
 ### Example queries
 

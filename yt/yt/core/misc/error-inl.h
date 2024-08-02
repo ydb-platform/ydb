@@ -128,6 +128,26 @@ TError TError::operator << (TValue&& rhs) const &
     return TError(*this) << std::forward<TValue>(rhs);
 }
 
+template <CErrorNestable TValue>
+TError&& TError::operator << (const std::optional<TValue>& rhs) &&
+{
+    if (rhs) {
+        return std::move(*this <<= *rhs);
+    } else {
+        return std::move(*this);
+    }
+}
+
+template <CErrorNestable TValue>
+TError TError::operator << (const std::optional<TValue>& rhs) const &
+{
+    if (rhs) {
+        return TError(*this) << *rhs;
+    } else {
+        return *this;
+    }
+}
+
 template <class... TArgs>
 void TError::ThrowOnError(TArgs&&... args) const
 {
@@ -368,5 +388,7 @@ void ThrowErrorExceptionIfFailed(TErrorLike&& error, TArgs&&... args)
 }
 
 } // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

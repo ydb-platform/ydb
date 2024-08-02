@@ -131,6 +131,7 @@ public:
     bool IsCreateFinished() const;
     bool IsExternalTable() const;
     bool IsExternalDataSource() const;
+    bool IsIncrementalBackupTable() const;
     bool IsView() const;
     bool IsTemporary() const;
     bool IsResourcePool() const;

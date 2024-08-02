@@ -37,7 +37,6 @@ public:
     TLocalFixture() {
         TPortManager pm;
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetNodeCount(2)
@@ -135,7 +134,7 @@ Y_UNIT_TEST(ProposeError) {
         };
         fixture.Runtime->SetObserverFunc(mitm);
 
-        SendRequest(*fixture.Runtime, client, MakeSQLRequest(Q_("select * from `/Root/table-1`")));
+        SendRequest(*fixture.Runtime, client, MakeSQLRequest(Q_("upsert into `/Root/table-1` (key, value) values (5, 5);")));
 
         auto ev = fixture.Runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(client);
         auto& record = ev->Get()->Record.GetRef();
@@ -223,38 +222,6 @@ Y_UNIT_TEST(ProposeError) {
             Ydb::StatusIds::GENERIC_ERROR,
             NYql::TIssuesIds::DEFAULT_ERROR,
             "Error executing transaction: transaction failed.");
-}
-
-Y_UNIT_TEST(ProposeRequestUndelivered) {
-    TLocalFixture fixture;
-    auto mitm = [&](TAutoPtr<IEventHandle> &ev) {
-        if (ev->GetTypeRewrite() == TEvPipeCache::TEvForward::EventType) {
-            auto forwardEvent = ev.Get()->Get<TEvPipeCache::TEvForward>();
-            if (forwardEvent->Ev->Type() == TEvDataShard::TEvProposeTransaction::EventType) {
-                fixture.Runtime->Send(new IEventHandle(ev->Sender, ev->Recipient, new TEvPipeCache::TEvDeliveryProblem(forwardEvent->TabletId, /* NotDelivered */ true)));
-                return TTestActorRuntime::EEventAction::DROP;
-            }
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    };
-    fixture.Runtime->SetObserverFunc(mitm);
-
-    SendRequest(*fixture.Runtime, fixture.Client, MakeSQLRequest(Q_("select * from `/Root/table-1`")));
-
-    auto ev = fixture.Runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(fixture.Client);
-    auto& record = ev->Get()->Record.GetRef();
-    UNIT_ASSERT_VALUES_EQUAL_C(record.GetYdbStatus(), Ydb::StatusIds::UNAVAILABLE, record.DebugString());
-
-    Cerr << record.DebugString() << Endl;
-
-    TIssues issues;
-    IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
-    UNIT_ASSERT_C(HasIssue(issues, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-        "Kikimr cluster or one of its subsystems was unavailable."), record.GetResponse().DebugString());
-
-    UNIT_ASSERT_C(HasIssue(issues, NKikimrIssues::TIssuesIds::TX_STATE_UNKNOWN, "", [] (const TIssue& issue) {
-            return issue.GetMessage().StartsWith("Tx state unknown for shard");
-        }), record.GetResponse().DebugString());
 }
 
 void TestProposeResultLost(TTestActorRuntime& runtime, TActorId client, const TString& query,

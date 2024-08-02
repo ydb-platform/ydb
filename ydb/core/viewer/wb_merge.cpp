@@ -1,7 +1,6 @@
 #include "wb_merge.h"
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 using namespace NNodeWhiteboard;
 using namespace ::google::protobuf;
@@ -215,5 +214,4 @@ void TWhiteboardMergerBase::ProtoMerge(google::protobuf::Message& protoTo, const
     }
 }
 
-}
 }

@@ -5,10 +5,10 @@
 #include "flat_store_bundle.h"
 #include "flat_exec_broker.h"
 #include "logic_redo_eggs.h"
-#include "shared_cache_memtable.h"
 #include "util_fmt_line.h"
 #include <ydb/core/base/localdb.h>
 #include <library/cpp/time_provider/time_provider.h>
+#include <ydb/core/base/memory_controller_iface.h>
 
 namespace NKikimr {
 
@@ -86,7 +86,7 @@ struct TCompactionLogicState {
 
         THolder<NTable::ICompactionStrategy> Strategy;
 
-        TIntrusivePtr<NSharedCache::ISharedPageCacheMemTableRegistration> SharedPageCacheMemTableRegistration;
+        TIntrusivePtr<NMemory::IMemoryConsumer> MemTableMemoryConsumer;
 
         TDeque<TSnapRequest> SnapRequests;
 
@@ -159,7 +159,7 @@ struct TReflectSchemeChangesResult {
 };
 
 class TCompactionLogic {
-    THolder<NSharedCache::ISharedPageCacheMemTableObserver> SharedPageCacheMemTableObserver;
+    NTable::IMemTableMemoryConsumersCollection * const MemTableMemoryConsumersCollection;
     NUtil::ILogger * const Logger;
     NTable::IResourceBroker * const Broker;
     NTable::ICompactionBackend * const Backend;
@@ -193,7 +193,7 @@ public:
     static constexpr ui32 BAD_PRIORITY = Max<ui32>();
 
     TCompactionLogic(
-        THolder<NSharedCache::ISharedPageCacheMemTableObserver> sharedPageCacheMemTableObserver,
+        NTable::IMemTableMemoryConsumersCollection*,
         NUtil::ILogger*,
         NTable::IResourceBroker*,
         NTable::ICompactionBackend*,
@@ -229,7 +229,7 @@ public:
     void AllowBorrowedGarbageCompaction(ui32 table);
 
     TReflectSchemeChangesResult ReflectSchemeChanges();
-    void ProvideSharedPageCacheMemTableRegistration(ui32 table, TIntrusivePtr<NSharedCache::ISharedPageCacheMemTableRegistration> registration);
+    void ProvideMemTableMemoryConsumer(ui32 table, TIntrusivePtr<NMemory::IMemoryConsumer> memTableMemoryConsumer);
     void ReflectRemovedRowVersions(ui32 table);
     void UpdateInMemStatsStep(ui32 table, ui32 steps, ui64 size);
     void CheckInMemStats(ui32 table);

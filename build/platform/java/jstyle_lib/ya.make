@@ -1,6 +1,5 @@
 RESOURCES_LIBRARY()
 
-SUBSCRIBER(heretic)
 
 IF (USE_SYSTEM_JSTYLE_LIB)
     MESSAGE(WARNING System java codestyle library $USE_SYSTEM_JSTYLE_LIB will be used)

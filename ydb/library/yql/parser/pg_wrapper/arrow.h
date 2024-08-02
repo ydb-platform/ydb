@@ -15,6 +15,7 @@
 extern "C" {
 #include "postgres.h"
 #include "fmgr.h"
+#include "varatt.h"
 #include "catalog/pg_type_d.h"
 #include "catalog/pg_collation_d.h"
 }
@@ -633,12 +634,12 @@ private:
             }
 
             Zero(TransFuncInfo_);
-            fmgr_info(AggDesc_.TransFuncId, &TransFuncInfo_);
+            GetPgFuncAddr(AggDesc_.TransFuncId, TransFuncInfo_);
             Y_ENSURE(TransFuncInfo_.fn_addr);
             auto nargs = NPg::LookupProc(AggDesc_.TransFuncId).ArgTypes.size();
             if constexpr (HasSerialize) {
                 Zero(SerializeFuncInfo_);
-                fmgr_info(AggDesc_.SerializeFuncId, &SerializeFuncInfo_);
+                GetPgFuncAddr(AggDesc_.SerializeFuncId, SerializeFuncInfo_);
                 Y_ENSURE(SerializeFuncInfo_.fn_addr);
             }
 
@@ -651,13 +652,14 @@ private:
                 }
 
                 TypeIOParam_ = MakeTypeIOParam(transTypeDesc);
-                fmgr_info(inFuncId, &InFuncInfo_);
+                GetPgFuncAddr(inFuncId, InFuncInfo_);
                 Y_ENSURE(InFuncInfo_.fn_addr);
 
                 LOCAL_FCINFO(inCallInfo, 3);
                 inCallInfo->flinfo = &this->InFuncInfo_;
                 inCallInfo->nargs = 3;
                 inCallInfo->fncollation = DEFAULT_COLLATION_OID;
+                inCallInfo->context = (Node*)NKikimr::NMiniKQL::TlsAllocState->CurrentContext;
                 inCallInfo->isnull = false;
                 inCallInfo->args[0] = { (Datum)this->AggDesc_.InitValue.c_str(), false };
                 inCallInfo->args[1] = { ObjectIdGetDatum(this->TypeIOParam_), false };

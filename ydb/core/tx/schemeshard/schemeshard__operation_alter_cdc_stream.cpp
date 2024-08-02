@@ -143,8 +143,11 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotAsyncReplicaTable()
-                .IsCommonSensePath()
                 .NotUnderOperation();
+
+            if (checks && !tablePath.IsInsideTableIndexPath()) {
+                checks.IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -370,9 +373,12 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotAsyncReplicaTable()
-                .IsCommonSensePath()
                 .NotUnderDeleting()
                 .NotUnderOperation();
+
+            if (checks && !tablePath.IsInsideTableIndexPath()) {
+                checks.IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -476,10 +482,10 @@ private:
 } // anonymous
 
 std::variant<TStreamPaths, ISubOperation::TPtr> DoAlterStreamPathChecks(
-    const TOperationId& opId,
-    const TPath& workingDirPath,
-    const TString& tableName,
-    const TString& streamName)
+        const TOperationId& opId,
+        const TPath& workingDirPath,
+        const TString& tableName,
+        const TString& streamName)
 {
     const auto tablePath = workingDirPath.Child(tableName);
     {
@@ -492,8 +498,11 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoAlterStreamPathChecks(
             .NotDeleted()
             .IsTable()
             .NotAsyncReplicaTable()
-            .IsCommonSensePath()
             .NotUnderOperation();
+
+        if (checks && !tablePath.IsInsideTableIndexPath()) {
+            checks.IsCommonSensePath();
+        }
 
         if (!checks) {
             return CreateReject(opId, checks.GetStatus(), checks.GetError());
@@ -521,27 +530,24 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoAlterStreamPathChecks(
 }
 
 void DoAlterStream(
-    const NKikimrSchemeOp::TAlterCdcStream& op,
-    const TOperationId& opId,
-    const TPath& workingDirPath,
-    const TPath& tablePath,
-    TVector<ISubOperation::TPtr>& result)
+        TVector<ISubOperation::TPtr>& result,
+        const NKikimrSchemeOp::TAlterCdcStream& op,
+        const TOperationId& opId,
+        const TPath& workingDirPath,
+        const TPath& tablePath)
 {
     {
         auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamImpl);
         outTx.MutableAlterCdcStream()->CopyFrom(op);
-
         if (op.HasGetReady()) {
             outTx.MutableLockGuard()->SetOwnerTxId(op.GetGetReady().GetLockTxId());
         }
 
         result.push_back(CreateAlterCdcStreamImpl(NextPartId(opId, result), outTx));
     }
-
     {
         auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamAtTable);
         outTx.MutableAlterCdcStream()->CopyFrom(op);
-
         if (op.HasGetReady()) {
             outTx.MutableLockGuard()->SetOwnerTxId(op.GetGetReady().GetLockTxId());
         }
@@ -601,7 +607,7 @@ TVector<ISubOperation::TPtr> CreateAlterCdcStream(TOperationId opId, const TTxTr
 
     TVector<ISubOperation::TPtr> result;
 
-    DoAlterStream(op, opId, workingDirPath, tablePath, result);
+    DoAlterStream(result, op, opId, workingDirPath, tablePath);
 
     if (op.HasGetReady()) {
         auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropLock);
@@ -611,6 +617,14 @@ TVector<ISubOperation::TPtr> CreateAlterCdcStream(TOperationId opId, const TTxTr
         outTx.MutableLockGuard()->SetOwnerTxId(op.GetGetReady().GetLockTxId());
 
         result.push_back(DropLock(NextPartId(opId, result), outTx));
+    }
+
+    if (workingDirPath.IsTableIndex()) {
+        auto outTx = TransactionTemplate(workingDirPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
+        outTx.MutableAlterTableIndex()->SetName(workingDirPath.LeafName());
+        outTx.MutableAlterTableIndex()->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
+
+        result.push_back(CreateAlterTableIndex(NextPartId(opId, result), outTx));
     }
 
     return result;

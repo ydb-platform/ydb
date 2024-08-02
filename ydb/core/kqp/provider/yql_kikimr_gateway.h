@@ -64,6 +64,7 @@ struct TIndexDescription {
         GlobalSync = 0,
         GlobalAsync = 1,
         GlobalSyncUnique = 2,
+        GlobalSyncVectorKMeansTree = 3,
     };
 
     // Index states here must be in sync with NKikimrSchemeOp::EIndexState protobuf
@@ -83,8 +84,12 @@ struct TIndexDescription {
     const ui64 LocalPathId;
     const ui64 PathOwnerId;
 
+    using TSpecializedIndexDescription = std::variant<std::monostate, NKikimrKqp::TVectorIndexKmeansTreeDescription>;
+    TSpecializedIndexDescription SpecializedIndexDescription;
+
     TIndexDescription(const TString& name, const TVector<TString>& keyColumns, const TVector<TString>& dataColumns,
-        EType type, EIndexState state, ui64 schemaVersion, ui64 localPathId, ui64 pathOwnerId)
+        EType type, EIndexState state, ui64 schemaVersion, ui64 localPathId, ui64 pathOwnerId,
+        const TSpecializedIndexDescription& specializedIndexDescription)
         : Name(name)
         , KeyColumns(keyColumns)
         , DataColumns(dataColumns)
@@ -93,18 +98,25 @@ struct TIndexDescription {
         , SchemaVersion(schemaVersion)
         , LocalPathId(localPathId)
         , PathOwnerId(pathOwnerId)
+        , SpecializedIndexDescription(specializedIndexDescription)
     {}
 
     TIndexDescription(const NKikimrSchemeOp::TIndexDescription& index)
         : Name(index.GetName())
         , KeyColumns(index.GetKeyColumnNames().begin(), index.GetKeyColumnNames().end())
         , DataColumns(index.GetDataColumnNames().begin(), index.GetDataColumnNames().end())
-        , Type(ConvertIndexType(index))
+        , Type(ConvertIndexType(index.GetType()))
         , State(static_cast<EIndexState>(index.GetState()))
         , SchemaVersion(index.GetSchemaVersion())
         , LocalPathId(index.GetLocalPathId())
         , PathOwnerId(index.HasPathOwnerId() ? index.GetPathOwnerId() : 0ul)
-    {}
+    {
+        if (Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+            NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexDescription;
+            *vectorIndexDescription.MutableSettings() = index.GetVectorIndexKmeansTreeDescription().GetSettings();
+            SpecializedIndexDescription = vectorIndexDescription;
+        }
+    }
 
     TIndexDescription(const NKikimrKqp::TIndexDescriptionProto* message)
         : Name(message->GetName())
@@ -115,17 +127,38 @@ struct TIndexDescription {
         , SchemaVersion(message->GetSchemaVersion())
         , LocalPathId(message->GetLocalPathId())
         , PathOwnerId(message->GetPathOwnerId())
-    {}
-
-    static TIndexDescription::EType ConvertIndexType(const NKikimrSchemeOp::TIndexDescription& index) {
-        auto type = NYql::TIndexDescription::EType::GlobalSync;
-        if (index.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync) {
-            type = NYql::TIndexDescription::EType::GlobalAsync;
-        } else if (index.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique) {
-            type = NYql::TIndexDescription::EType::GlobalSyncUnique;
+    {
+        if (Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+            SpecializedIndexDescription = message->GetVectorIndexKmeansTreeDescription();
         }
+    }
 
-        return type;
+    static TIndexDescription::EType ConvertIndexType(const NKikimrSchemeOp::EIndexType indexType) {
+        switch (indexType) {
+            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobal:
+                return TIndexDescription::EType::GlobalSync;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync:
+                return TIndexDescription::EType::GlobalAsync;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique:
+                return TIndexDescription::EType::GlobalSyncUnique;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
+                return TIndexDescription::EType::GlobalSyncVectorKMeansTree;
+            default:
+                YQL_ENSURE(false, "Unexpected NKikimrSchemeOp::EIndexType::EIndexTypeInvalid");
+        }
+    }
+
+    static NKikimrSchemeOp::EIndexType ConvertIndexType(const TIndexDescription::EType indexType) {
+        switch (indexType) {
+            case TIndexDescription::EType::GlobalSync:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobal;
+            case TIndexDescription::EType::GlobalAsync:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync;
+            case TIndexDescription::EType::GlobalSyncUnique:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
+            case NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
+        }
     }
 
     void ToMessage(NKikimrKqp::TIndexDescriptionProto* message) const {
@@ -143,6 +176,11 @@ struct TIndexDescription {
         for(auto& data: DataColumns) {
             message->AddDataColumns(data);
         }
+
+        if (Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+            *message->MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
+        }
+
     }
 
     bool IsSameIndex(const TIndexDescription& other) const {
@@ -160,6 +198,8 @@ struct TIndexDescription {
                 return true;
             case EType::GlobalAsync:
                 return false;
+            case EType::GlobalSyncVectorKMeansTree:
+                return true;
         }
     }
 };
@@ -424,6 +464,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
     ui64 DataSize = 0;
     ui64 MemorySize = 0;
     ui32 ShardsCount = 0;
+    bool StatsLoaded = false;
 
     TInstant LastAccessTime;
     TInstant LastUpdateTime;
@@ -460,6 +501,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
         , Kind(static_cast<EKikimrTableKind>(message->GetKind()))
         , RecordsCount(message->GetRecordsCount())
         , DataSize(message->GetDataSize())
+        , StatsLoaded(message->GetStatsLoaded())
         , KeyColumnNames(message->GetKeyColunmNames().begin(), message->GetKeyColunmNames().end())
 
     {
@@ -525,6 +567,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
         PathId.ToMessage(message->MutablePathId());
         message->SetSchemaVersion(SchemaVersion);
         message->SetKind(static_cast<ui32>(Kind));
+        message->SetStatsLoaded(StatsLoaded);
         message->SetRecordsCount(RecordsCount);
         message->SetDataSize(DataSize);
         for(auto& [key, value] : Attributes) {
@@ -672,6 +715,7 @@ struct TSequenceSettings {
     TMaybe<i64> Increment;
     TMaybe<bool> Cycle;
     TMaybe<TString> OwnedBy;
+    TMaybe<TString> DataType;
 };
 
 struct TCreateSequenceSettings {
@@ -843,7 +887,6 @@ public:
     struct TQueryResult : public TGenericResult {
         TString SessionId;
         TVector<NKikimrMiniKQL::TResult*> Results;
-        TMaybe<NKikimrKqp::TQueryProfile> Profile; // TODO: Deprecate.
         NKqpProto::TKqpStatsQuery QueryStats;
         std::unique_ptr<NKikimrKqp::TPreparedQuery> PreparingQuery;
         std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery;
@@ -1007,8 +1050,6 @@ public:
     using TCreateDirFunc = std::function<void(const TString&, const TString&, NThreading::TPromise<TGenericResult>)>;
 
     static NThreading::TFuture<TGenericResult> CreatePath(const TString& path, TCreateDirFunc createDir);
-
-    static void BuildIndexMetadata(TTableMetadataResult& loadTableMetadataResult);
 };
 
 EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus);

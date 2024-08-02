@@ -19,6 +19,7 @@ message TOAuthToken {
 message TConnectionParams {
     optional string Endpoint = 1;
     optional string Database = 2;
+    optional bool EnableSsl = 5;
     // credentials
     oneof Credentials {
         TStaticCredentials StaticCredentials = 3;

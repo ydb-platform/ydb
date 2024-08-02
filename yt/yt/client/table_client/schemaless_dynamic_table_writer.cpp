@@ -11,6 +11,7 @@ namespace NYT::NTableClient {
 
 using namespace NApi;
 using namespace NConcurrency;
+using namespace NCrypto;
 using namespace NTransactionClient;
 using namespace NYPath;
 
@@ -62,6 +63,11 @@ public:
     const TNameTablePtr& GetNameTable() const override
     {
         return NameTable_;
+    }
+
+    std::optional<TMD5Hash> GetDigest() const override
+    {
+        return std::nullopt;
     }
 
 private:

@@ -24,6 +24,7 @@ public:
             , ValueBuilder(HolderFactory, NUdf::EValidatePolicy::Exception)
             , Args(argsCount)
         {
+            Alloc.Ref().EnableArrowTracking = false;
             Alloc.Release();
         }
 

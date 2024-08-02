@@ -280,42 +280,6 @@ void CheckContinuationToken(
     CheckRow(lastKey.GetCells(), goldRow, types);
 }
 
-template <typename TKeyType>
-TVector<TCell> ToCells(const std::vector<TKeyType>& keys) {
-    TVector<TCell> cells;
-    for (auto& key: keys) {
-        cells.emplace_back(TCell::Make(key));
-    }
-    return cells;
-}
-
-void AddKeyQuery(
-    TEvDataShard::TEvRead& request,
-    const std::vector<ui32>& keys)
-{
-    // convertion is ugly, but for tests is OK
-    auto cells = ToCells(keys);
-    request.Keys.emplace_back(cells);
-}
-
-template <typename TCellType>
-void AddRangeQuery(
-    TEvDataShard::TEvRead& request,
-    std::vector<TCellType> from,
-    bool fromInclusive,
-    std::vector<TCellType> to,
-    bool toInclusive)
-{
-    auto fromCells = ToCells(from);
-    auto toCells = ToCells(to);
-
-    // convertion is ugly, but for tests is OK
-    auto fromBuf = TSerializedCellVec::Serialize(fromCells);
-    auto toBuf = TSerializedCellVec::Serialize(toCells);
-
-    request.Ranges.emplace_back(fromBuf, toBuf, fromInclusive, toInclusive);
-}
-
 struct TTableInfo {
     TString Name;
 
@@ -502,20 +466,6 @@ struct TTestHelper {
     {
         const auto& table = Tables[tableName];
 
-        std::unique_ptr<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
-        auto& record = request->Record;
-
-        record.SetReadId(readId);
-        record.MutableTableId()->SetOwnerId(table.TableId.PathId.OwnerId);
-        record.MutableTableId()->SetTableId(table.UserTable.GetPathId());
-
-        const auto& description = table.UserTable.GetDescription();
-        for (const auto& column: description.GetColumns()) {
-            record.AddColumns(column.GetId());
-        }
-
-        record.MutableTableId()->SetSchemaVersion(description.GetTableSchemaVersion());
-
         TRowVersion readVersion;
         if (!snapshot) {
             readVersion = CreateVolatileSnapshot(
@@ -526,12 +476,13 @@ struct TTestHelper {
             readVersion = snapshot;
         }
 
-        record.MutableSnapshot()->SetStep(readVersion.Step);
-        record.MutableSnapshot()->SetTxId(readVersion.TxId);
-
-        record.SetResultFormat(format);
-
-        return request;
+        return ::NKikimr::GetBaseReadRequest(
+            table.TableId,
+            table.UserTable.GetDescription(),
+            readId,
+            format,
+            readVersion
+        );
     }
 
     std::unique_ptr<TEvDataShard::TEvRead> GetUserTablesRequest(
@@ -558,14 +509,7 @@ struct TTestHelper {
     }
 
     std::unique_ptr<TEvDataShard::TEvReadResult> WaitReadResult(TDuration timeout = TDuration::Max()) {
-        auto &runtime = *Server->GetRuntime();
-        TAutoPtr<IEventHandle> handle;
-        runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(handle, timeout);
-        if (!handle) {
-            return nullptr;
-        }
-        std::unique_ptr<TEvDataShard::TEvReadResult> event(handle->Release<TEvDataShard::TEvReadResult>().Release());
-        return event;
+        return ::NKikimr::WaitReadResult(Server, timeout);
     }
 
     void SendReadAsync(
@@ -579,14 +523,15 @@ struct TTestHelper {
         }
 
         const auto& table = Tables[tableName];
-        auto &runtime = *Server->GetRuntime();
-        runtime.SendToPipe(
+        ::NKikimr::SendReadAsync(
+            Server,
             table.TabletId,
-            sender,
             request,
+            sender,
             node,
             GetTestPipeConfig(),
-            table.ClientId);
+            table.ClientId
+        );
     }
 
     std::unique_ptr<TEvDataShard::TEvReadResult> SendRead(
@@ -596,9 +541,21 @@ struct TTestHelper {
         TActorId sender = {},
         TDuration timeout = TDuration::Max())
     {
-        SendReadAsync(tableName, request, node, sender);
+        if (!sender) {
+            sender = Sender;
+        }
 
-        return WaitReadResult(timeout);
+        const auto& table = Tables[tableName];
+        return ::NKikimr::SendRead(
+            Server,
+            table.TabletId,
+            request,
+            sender,
+            node,
+            GetTestPipeConfig(),
+            table.ClientId,
+            timeout
+        );
     }
 
     void SendReadAck(

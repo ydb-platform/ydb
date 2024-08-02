@@ -72,6 +72,7 @@
  * - pgstat_checkpointer.c
  * - pgstat_database.c
  * - pgstat_function.c
+ * - pgstat_io.c
  * - pgstat_relation.c
  * - pgstat_replslot.c
  * - pgstat_slru.c
@@ -82,7 +83,7 @@
  * specific kinds of stats.
  *
  *
- * Copyright (c) 2001-2022, PostgreSQL Global Development Group
+ * Copyright (c) 2001-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/utils/activity/pgstat.c
@@ -102,7 +103,7 @@
 #include "storage/lwlock.h"
 #include "storage/pg_shmem.h"
 #include "storage/shmem.h"
-#include "utils/guc.h"
+#include "utils/guc_hooks.h"
 #include "utils/memutils.h"
 #include "utils/pgstat_internal.h"
 #include "utils/timestamp.h"
@@ -298,7 +299,7 @@ static const PgStat_KindInfo pgstat_kind_infos[PGSTAT_NUM_KINDS] = {
 		.shared_size = sizeof(PgStatShared_Function),
 		.shared_data_off = offsetof(PgStatShared_Function, stats),
 		.shared_data_len = sizeof(((PgStatShared_Function *) 0)->stats),
-		.pending_size = sizeof(PgStat_BackendFunctionEntry),
+		.pending_size = sizeof(PgStat_FunctionCounts),
 
 		.flush_pending_cb = pgstat_function_flush_cb,
 	},
@@ -364,6 +365,15 @@ static const PgStat_KindInfo pgstat_kind_infos[PGSTAT_NUM_KINDS] = {
 
 		.reset_all_cb = pgstat_checkpointer_reset_all_cb,
 		.snapshot_cb = pgstat_checkpointer_snapshot_cb,
+	},
+
+	[PGSTAT_KIND_IO] = {
+		.name = "io",
+
+		.fixed_amount = true,
+
+		.reset_all_cb = pgstat_io_reset_all_cb,
+		.snapshot_cb = pgstat_io_snapshot_cb,
 	},
 
 	[PGSTAT_KIND_SLRU] = {
@@ -433,7 +443,7 @@ pgstat_discard_stats(void)
 		ereport(DEBUG2,
 				(errcode_for_file_access(),
 				 errmsg_internal("unlinked permanent statistics file \"%s\"",
-						PGSTAT_STAT_PERMANENT_FILENAME)));
+								 PGSTAT_STAT_PERMANENT_FILENAME)));
 	}
 
 	/*
@@ -563,7 +573,7 @@ pgstat_initialize(void)
  * suggested idle timeout is returned. Currently this is always
  * PGSTAT_IDLE_INTERVAL (10000ms). Callers can use the returned time to set up
  * a timeout after which to call pgstat_report_stat(true), but are not
- * required to to do so.
+ * required to do so.
  *
  * Note that this is called only when not within a transaction, so it is fair
  * to use transaction stop time as an approximation of current time.
@@ -589,6 +599,7 @@ pgstat_report_stat(bool force)
 
 	/* Don't expend a clock check if nothing to do */
 	if (dlist_is_empty(&pgStatPending) &&
+		!have_iostats &&
 		!have_slrustats &&
 		!pgstat_have_pending_wal())
 	{
@@ -604,10 +615,21 @@ pgstat_report_stat(bool force)
 	 */
 	Assert(!pgStatLocal.shmem->is_shutdown);
 
-	now = GetCurrentTransactionStopTimestamp();
-
-	if (!force)
+	if (force)
 	{
+		/*
+		 * Stats reports are forced either when it's been too long since stats
+		 * have been reported or in processes that force stats reporting to
+		 * happen at specific points (including shutdown). In the former case
+		 * the transaction stop time might be quite old, in the latter it
+		 * would never get cleared.
+		 */
+		now = GetCurrentTimestamp();
+	}
+	else
+	{
+		now = GetCurrentTransactionStopTimestamp();
+
 		if (pending_since > 0 &&
 			TimestampDifferenceExceeds(pending_since, now, PGSTAT_MAX_INTERVAL))
 		{
@@ -634,6 +656,9 @@ pgstat_report_stat(bool force)
 
 	/* flush database / relation / function / ... stats */
 	partial_flush |= pgstat_flush_pending_entries(nowait);
+
+	/* flush IO stats */
+	partial_flush |= pgstat_flush_io(nowait);
 
 	/* flush wal stats */
 	partial_flush |= pgstat_flush_wal(nowait);
@@ -796,7 +821,7 @@ pgstat_fetch_entry(PgStat_Kind kind, Oid dboid, Oid objoid)
 
 	/* should be called from backends */
 	Assert(IsUnderPostmaster || !IsPostmasterEnvironment);
-	AssertArg(!kind_info->fixed_amount);
+	Assert(!kind_info->fixed_amount);
 
 	pgstat_prep_snapshot();
 
@@ -915,8 +940,8 @@ pgstat_have_entry(PgStat_Kind kind, Oid dboid, Oid objoid)
 void
 pgstat_snapshot_fixed(PgStat_Kind kind)
 {
-	AssertArg(pgstat_is_kind_valid(kind));
-	AssertArg(pgstat_get_kind_info(kind)->fixed_amount);
+	Assert(pgstat_is_kind_valid(kind));
+	Assert(pgstat_get_kind_info(kind)->fixed_amount);
 
 	if (force_stats_snapshot_clear)
 		pgstat_clear_snapshot();
@@ -1006,6 +1031,7 @@ pgstat_build_snapshot(void)
 
 		entry->data = MemoryContextAlloc(pgStatLocal.snapshot.context,
 										 kind_info->shared_size);
+
 		/*
 		 * Acquire the LWLock directly instead of using
 		 * pg_stat_lock_entry_shared() which requires a reference.
@@ -1174,7 +1200,7 @@ pgstat_flush_pending_entries(bool nowait)
 	while (cur)
 	{
 		PgStat_EntryRef *entry_ref =
-		dlist_container(PgStat_EntryRef, pending_node, cur);
+			dlist_container(PgStat_EntryRef, pending_node, cur);
 		PgStat_HashKey key = entry_ref->shared_entry->key;
 		PgStat_Kind kind = key.kind;
 		const PgStat_KindInfo *kind_info = pgstat_get_kind_info(kind);
@@ -1239,7 +1265,7 @@ pgstat_is_kind_valid(int ikind)
 const PgStat_KindInfo *
 pgstat_get_kind_info(PgStat_Kind kind)
 {
-	AssertArg(pgstat_is_kind_valid(kind));
+	Assert(pgstat_is_kind_valid(kind));
 
 	return &pgstat_kind_infos[kind];
 }
@@ -1340,6 +1366,12 @@ pgstat_write_statsfile(void)
 	 */
 	pgstat_build_snapshot_fixed(PGSTAT_KIND_CHECKPOINTER);
 	write_chunk_s(fpout, &pgStatLocal.snapshot.checkpointer);
+
+	/*
+	 * Write IO stats struct
+	 */
+	pgstat_build_snapshot_fixed(PGSTAT_KIND_IO);
+	write_chunk_s(fpout, &pgStatLocal.snapshot.io);
 
 	/*
 	 * Write SLRU stats struct
@@ -1513,6 +1545,12 @@ pgstat_read_statsfile(void)
 	 * Read checkpointer stats struct
 	 */
 	if (!read_chunk_s(fpin, &shmem->checkpointer.stats))
+		goto error;
+
+	/*
+	 * Read IO stats struct
+	 */
+	if (!read_chunk_s(fpin, &shmem->io.stats))
 		goto error;
 
 	/*

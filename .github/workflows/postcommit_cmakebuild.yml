@@ -12,7 +12,5 @@ jobs:
     uses: ./.github/workflows/build_and_test_provisioned.yml
     with:
       runner_label: auto-provisioned, postcommit
-      run_unit_tests: false
-      run_functional_tests: false
     secrets: inherit
 

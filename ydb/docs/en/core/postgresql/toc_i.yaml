@@ -1,16 +1,9 @@
 items:
-- name: Overview
-  href: intro.md
-  hidden: false
 - name: Connection via PostgreSQL protocol
   href: docker-connect.md
-  hidden: false
 - name: PostgreSQL statements
   include: { mode: link, path: ./statements/toc_m.yaml }
-  hidden: false 
 - name: PostgreSQL functions
   href: functions.md
-  hidden: false
 - name: Data dump from PostgreSQL
   href: pg-dump.md
-  hidden: false

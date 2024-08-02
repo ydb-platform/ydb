@@ -125,9 +125,9 @@ private:
 
 }; // TSessionInfo
 
-struct TCredentialsKey: std::tuple<TString, TString, TString> {
-    explicit TCredentialsKey(const TString& endpoint, const TString& database, const TString& user)
-        : std::tuple<TString, TString, TString>(endpoint, database, user)
+struct TConnectionParams: std::tuple<TString, TString, bool, TString> {
+    explicit TConnectionParams(const TString& endpoint, const TString& database, bool ssl, const TString& user)
+        : std::tuple<TString, TString, bool, TString>(endpoint, database, ssl, user)
     {
     }
 
@@ -139,23 +139,31 @@ struct TCredentialsKey: std::tuple<TString, TString, TString> {
         return std::get<1>(*this);
     }
 
-    static TCredentialsKey FromParams(const NKikimrReplication::TConnectionParams& params) {
+    bool EnableSsl() const {
+        return std::get<2>(*this);
+    }
+
+    static TConnectionParams FromProto(const NKikimrReplication::TConnectionParams& params) {
+        const auto& endpoint = params.GetEndpoint();
+        const auto& database = params.GetDatabase();
+        const bool ssl = params.GetEnableSsl();
+
         switch (params.GetCredentialsCase()) {
         case NKikimrReplication::TConnectionParams::kStaticCredentials:
-            return TCredentialsKey(params.GetEndpoint(), params.GetDatabase(), params.GetStaticCredentials().GetUser());
+            return TConnectionParams(endpoint, database, ssl, params.GetStaticCredentials().GetUser());
         case NKikimrReplication::TConnectionParams::kOAuthToken:
-            return TCredentialsKey(params.GetEndpoint(), params.GetDatabase(), params.GetOAuthToken().GetToken() /* TODO */);
+            return TConnectionParams(endpoint, database, ssl, params.GetOAuthToken().GetToken());
         default:
             Y_ABORT("Unexpected credentials");
         }
     }
 
-}; // TCredentialsKey
+}; // TConnectionParams
 
 } // NKikimr::NReplication::NService
 
 template <>
-struct THash<NKikimr::NReplication::NService::TCredentialsKey> : THash<std::tuple<TString, TString, TString>> {};
+struct THash<NKikimr::NReplication::NService::TConnectionParams> : THash<std::tuple<TString, TString, bool, TString>> {};
 
 namespace NKikimr::NReplication {
 
@@ -209,11 +217,11 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     template <typename... Args>
-    const TActorId& GetOrCreateYdbProxy(TCredentialsKey&& key, Args&&... args) {
-        auto it = YdbProxies.find(key);
+    const TActorId& GetOrCreateYdbProxy(TConnectionParams&& params, Args&&... args) {
+        auto it = YdbProxies.find(params);
         if (it == YdbProxies.end()) {
-            auto ydbProxy = Register(CreateYdbProxy(key.Endpoint(), key.Database(), std::forward<Args>(args)...));
-            auto res = YdbProxies.emplace(std::move(key), std::move(ydbProxy));
+            auto ydbProxy = Register(CreateYdbProxy(params.Endpoint(), params.Database(), params.EnableSsl(), std::forward<Args>(args)...));
+            auto res = YdbProxies.emplace(std::move(params), std::move(ydbProxy));
             Y_ABORT_UNLESS(res.second);
             it = res.first;
         }
@@ -226,10 +234,10 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         const auto& params = settings.GetConnectionParams();
         switch (params.GetCredentialsCase()) {
         case NKikimrReplication::TConnectionParams::kStaticCredentials:
-            ydbProxy = GetOrCreateYdbProxy(TCredentialsKey::FromParams(params), params.GetStaticCredentials());
+            ydbProxy = GetOrCreateYdbProxy(TConnectionParams::FromProto(params), params.GetStaticCredentials());
             break;
         case NKikimrReplication::TConnectionParams::kOAuthToken:
-            ydbProxy = GetOrCreateYdbProxy(TCredentialsKey::FromParams(params), params.GetOAuthToken().GetToken());
+            ydbProxy = GetOrCreateYdbProxy(TConnectionParams::FromProto(params), params.GetOAuthToken().GetToken());
             break;
         default:
             Y_ABORT("Unexpected credentials");
@@ -430,7 +438,7 @@ private:
     mutable TMaybe<TString> LogPrefix;
     TActorId BoardPublisher;
     THashMap<ui64, TSessionInfo> Sessions;
-    THashMap<TCredentialsKey, TActorId> YdbProxies;
+    THashMap<TConnectionParams, TActorId> YdbProxies;
     THashMap<TActorId, ui64> WorkerActorIdToSession;
 
 }; // TReplicationService

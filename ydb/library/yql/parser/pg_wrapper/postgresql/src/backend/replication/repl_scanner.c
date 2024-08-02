@@ -1,6 +1,32 @@
 #line 2 "repl_scanner.c"
+/*-------------------------------------------------------------------------
+ *
+ * repl_scanner.l
+ *	  a lexical scanner for the replication commands
+ *
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1994, Regents of the University of California
+ *
+ *
+ * IDENTIFICATION
+ *	  src/backend/replication/repl_scanner.l
+ *
+ *-------------------------------------------------------------------------
+ */
+#include "postgres.h"
 
-#line 4 "repl_scanner.c"
+#include "nodes/parsenodes.h"
+#include "utils/builtins.h"
+#include "parser/scansup.h"
+
+/*
+ * NB: include repl_gram.h only AFTER including walsender_private.h, because
+ * walsender_private includes headers that define XLogRecPtr.
+ */
+#include "replication/walsender_private.h"
+#include "repl_gram.h"
+
+#line 30 "repl_scanner.c"
 
 #define  YY_INT_ALIGNED short int
 
@@ -903,26 +929,8 @@ __thread int yy_flex_debug = 0;
 #define YY_RESTORE_YY_MORE_OFFSET
 __thread char *yytext;
 #line 1 "repl_scanner.l"
-#line 2 "repl_scanner.l"
-/*-------------------------------------------------------------------------
- *
- * repl_scanner.l
- *	  a lexical scanner for the replication commands
- *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
- * Portions Copyright (c) 1994, Regents of the University of California
- *
- *
- * IDENTIFICATION
- *	  src/backend/replication/repl_scanner.l
- *
- *-------------------------------------------------------------------------
- */
-#include "postgres.h"
 
-#include "utils/builtins.h"
-#include "parser/scansup.h"
-
+#line 31 "repl_scanner.l"
 /* Avoid exit() on fatal scanner errors (a bit ugly -- see yy_fatal_error) */
 #undef fprintf
 #define fprintf(file, fmt, msg)  fprintf_to_ereport(fmt, msg)
@@ -949,7 +957,7 @@ static void addlitchar(unsigned char ychar);
 
 /* LCOV_EXCL_START */
 
-#line 953 "repl_scanner.c"
+#line 961 "repl_scanner.c"
 #define YY_NO_INPUT 1
 /*
  * Exclusive states:
@@ -963,7 +971,7 @@ static void addlitchar(unsigned char ychar);
 /* Double quote
  * Allows embedded spaces and other special characters into identifiers.
  */
-#line 967 "repl_scanner.c"
+#line 975 "repl_scanner.c"
 
 #define INITIAL 0
 #define xd 1
@@ -1180,11 +1188,11 @@ YY_DECL
 		}
 
 	{
-#line 95 "repl_scanner.l"
+#line 105 "repl_scanner.l"
 
 
 
-#line 99 "repl_scanner.l"
+#line 109 "repl_scanner.l"
 	/* This code is inserted at the start of replication_yylex() */
 
 	/* If we have a pushed-back token, return that. */
@@ -1197,7 +1205,7 @@ YY_DECL
 	}
 
 
-#line 1201 "repl_scanner.c"
+#line 1209 "repl_scanner.c"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -1252,128 +1260,128 @@ do_action:	/* This label is used only to access EOF actions. */
 
 case 1:
 YY_RULE_SETUP
-#line 111 "repl_scanner.l"
+#line 121 "repl_scanner.l"
 { return K_BASE_BACKUP; }
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
-#line 112 "repl_scanner.l"
+#line 122 "repl_scanner.l"
 { return K_IDENTIFY_SYSTEM; }
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 113 "repl_scanner.l"
+#line 123 "repl_scanner.l"
 { return K_READ_REPLICATION_SLOT; }
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
-#line 114 "repl_scanner.l"
+#line 124 "repl_scanner.l"
 { return K_SHOW; }
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 115 "repl_scanner.l"
+#line 125 "repl_scanner.l"
 { return K_TIMELINE; }
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 116 "repl_scanner.l"
+#line 126 "repl_scanner.l"
 { return K_START_REPLICATION; }
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 117 "repl_scanner.l"
+#line 127 "repl_scanner.l"
 { return K_CREATE_REPLICATION_SLOT; }
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
-#line 118 "repl_scanner.l"
+#line 128 "repl_scanner.l"
 { return K_DROP_REPLICATION_SLOT; }
 	YY_BREAK
 case 9:
 YY_RULE_SETUP
-#line 119 "repl_scanner.l"
+#line 129 "repl_scanner.l"
 { return K_TIMELINE_HISTORY; }
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 120 "repl_scanner.l"
+#line 130 "repl_scanner.l"
 { return K_PHYSICAL; }
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 121 "repl_scanner.l"
+#line 131 "repl_scanner.l"
 { return K_RESERVE_WAL; }
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 122 "repl_scanner.l"
+#line 132 "repl_scanner.l"
 { return K_LOGICAL; }
 	YY_BREAK
 case 13:
 YY_RULE_SETUP
-#line 123 "repl_scanner.l"
+#line 133 "repl_scanner.l"
 { return K_SLOT; }
 	YY_BREAK
 case 14:
 YY_RULE_SETUP
-#line 124 "repl_scanner.l"
+#line 134 "repl_scanner.l"
 { return K_TEMPORARY; }
 	YY_BREAK
 case 15:
 YY_RULE_SETUP
-#line 125 "repl_scanner.l"
+#line 135 "repl_scanner.l"
 { return K_TWO_PHASE; }
 	YY_BREAK
 case 16:
 YY_RULE_SETUP
-#line 126 "repl_scanner.l"
+#line 136 "repl_scanner.l"
 { return K_EXPORT_SNAPSHOT; }
 	YY_BREAK
 case 17:
 YY_RULE_SETUP
-#line 127 "repl_scanner.l"
+#line 137 "repl_scanner.l"
 { return K_NOEXPORT_SNAPSHOT; }
 	YY_BREAK
 case 18:
 YY_RULE_SETUP
-#line 128 "repl_scanner.l"
+#line 138 "repl_scanner.l"
 { return K_USE_SNAPSHOT; }
 	YY_BREAK
 case 19:
 YY_RULE_SETUP
-#line 129 "repl_scanner.l"
+#line 139 "repl_scanner.l"
 { return K_WAIT; }
 	YY_BREAK
 case 20:
 /* rule 20 can match eol */
 YY_RULE_SETUP
-#line 131 "repl_scanner.l"
+#line 141 "repl_scanner.l"
 { /* do nothing */ }
 	YY_BREAK
 case 21:
 YY_RULE_SETUP
-#line 133 "repl_scanner.l"
+#line 143 "repl_scanner.l"
 {
-					yylval.uintval = strtoul(yytext, NULL, 10);
+					replication_yylval.uintval = strtoul(yytext, NULL, 10);
 					return UCONST;
 				}
 	YY_BREAK
 case 22:
 YY_RULE_SETUP
-#line 138 "repl_scanner.l"
+#line 148 "repl_scanner.l"
 {
 					uint32	hi,
 							lo;
 					if (sscanf(yytext, "%X/%X", &hi, &lo) != 2)
-						yyerror("invalid streaming start location");
-					yylval.recptr = ((uint64) hi) << 32 | lo;
+						replication_yyerror("invalid streaming start location");
+					replication_yylval.recptr = ((uint64) hi) << 32 | lo;
 					return RECPTR;
 				}
 	YY_BREAK
 case 23:
 YY_RULE_SETUP
-#line 147 "repl_scanner.l"
+#line 157 "repl_scanner.l"
 {
 					BEGIN(xq);
 					startlit();
@@ -1381,17 +1389,17 @@ YY_RULE_SETUP
 	YY_BREAK
 case 24:
 YY_RULE_SETUP
-#line 152 "repl_scanner.l"
+#line 162 "repl_scanner.l"
 {
 					yyless(1);
 					BEGIN(INITIAL);
-					yylval.str = litbufdup();
+					replication_yylval.str = litbufdup();
 					return SCONST;
 				}
 	YY_BREAK
 case 25:
 YY_RULE_SETUP
-#line 159 "repl_scanner.l"
+#line 169 "repl_scanner.l"
 {
 					addlitchar('\'');
 				}
@@ -1399,14 +1407,14 @@ YY_RULE_SETUP
 case 26:
 /* rule 26 can match eol */
 YY_RULE_SETUP
-#line 163 "repl_scanner.l"
+#line 173 "repl_scanner.l"
 {
 					addlit(yytext, yyleng);
 				}
 	YY_BREAK
 case 27:
 YY_RULE_SETUP
-#line 167 "repl_scanner.l"
+#line 177 "repl_scanner.l"
 {
 					BEGIN(xd);
 					startlit();
@@ -1414,39 +1422,39 @@ YY_RULE_SETUP
 	YY_BREAK
 case 28:
 YY_RULE_SETUP
-#line 172 "repl_scanner.l"
+#line 182 "repl_scanner.l"
 {
 					int			len;
 
 					yyless(1);
 					BEGIN(INITIAL);
-					yylval.str = litbufdup();
-					len = strlen(yylval.str);
-					truncate_identifier(yylval.str, len, true);
+					replication_yylval.str = litbufdup();
+					len = strlen(replication_yylval.str);
+					truncate_identifier(replication_yylval.str, len, true);
 					return IDENT;
 				}
 	YY_BREAK
 case 29:
 /* rule 29 can match eol */
 YY_RULE_SETUP
-#line 183 "repl_scanner.l"
+#line 193 "repl_scanner.l"
 {
 					addlit(yytext, yyleng);
 				}
 	YY_BREAK
 case 30:
 YY_RULE_SETUP
-#line 187 "repl_scanner.l"
+#line 197 "repl_scanner.l"
 {
 					int			len = strlen(yytext);
 
-					yylval.str = downcase_truncate_identifier(yytext, len, true);
+					replication_yylval.str = downcase_truncate_identifier(yytext, len, true);
 					return IDENT;
 				}
 	YY_BREAK
 case 31:
 YY_RULE_SETUP
-#line 194 "repl_scanner.l"
+#line 204 "repl_scanner.l"
 {
 					/* Any char not recognized above is returned as itself */
 					return yytext[0];
@@ -1454,21 +1462,21 @@ YY_RULE_SETUP
 	YY_BREAK
 case YY_STATE_EOF(xq):
 case YY_STATE_EOF(xd):
-#line 199 "repl_scanner.l"
-{ yyerror("unterminated quoted string"); }
+#line 209 "repl_scanner.l"
+{ replication_yyerror("unterminated quoted string"); }
 	YY_BREAK
 case YY_STATE_EOF(INITIAL):
-#line 202 "repl_scanner.l"
+#line 212 "repl_scanner.l"
 {
 					yyterminate();
 				}
 	YY_BREAK
 case 32:
 YY_RULE_SETUP
-#line 206 "repl_scanner.l"
+#line 216 "repl_scanner.l"
 YY_FATAL_ERROR( "flex scanner jammed" );
 	YY_BREAK
-#line 1472 "repl_scanner.c"
+#line 1480 "repl_scanner.c"
 
 	case YY_END_OF_BUFFER:
 		{
@@ -2435,7 +2443,7 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 206 "repl_scanner.l"
+#line 216 "repl_scanner.l"
 
 
 /* LCOV_EXCL_STOP */
@@ -2465,7 +2473,7 @@ addlitchar(unsigned char ychar)
 }
 
 void
-yyerror(const char *message)
+replication_yyerror(const char *message)
 {
 	ereport(ERROR,
 			(errcode(ERRCODE_SYNTAX_ERROR),

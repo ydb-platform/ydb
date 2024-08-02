@@ -772,10 +772,15 @@ public:
             return nullptr;
         }
 
+        auto valueType = settings.ValueType.IsValid()
+            ? settings.ValueType.Cast()
+            : Build<TCoAtom>(ctx, node->Pos()).Value("Null").Done();
+
         return Build<TKiAlterSequence>(ctx, node->Pos())
             .World(node->Child(0))
             .DataSink(node->Child(1))
             .Sequence().Build(key.GetPGObjectId())
+            .ValueType(valueType)
             .SequenceSettings(settings.SequenceSettings.Cast())
             .Settings(settings.Other)
             .MissingOk<TCoAtom>()

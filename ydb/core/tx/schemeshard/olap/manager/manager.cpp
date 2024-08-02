@@ -29,12 +29,12 @@ void TTablesStorage::OnRemoveObject(const TPathId& pathId, TColumnTableInfo::TPt
     }
 }
 
-const std::set<NKikimr::TPathId>& TTablesStorage::GetTablesWithTiering(const TString& tieringId) const {
+const THashSet<TPathId>& TTablesStorage::GetTablesWithTiering(const TString& tieringId) const {
     auto it = PathsByTieringId.find(tieringId);
     if (it != PathsByTieringId.end()) {
         return it->second;
     } else {
-        return Default<std::set<TPathId>>();
+        return Default<THashSet<TPathId>>();
     }
 }
 

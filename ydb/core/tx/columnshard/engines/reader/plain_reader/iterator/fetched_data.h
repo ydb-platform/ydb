@@ -25,7 +25,7 @@ public:
 
     }
 
-    void SyncTableColumns(const std::vector<std::shared_ptr<arrow::Field>>& fields);
+    void SyncTableColumns(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ISnapshotSchema& schema);
 
     std::shared_ptr<NArrow::TColumnFilter> GetAppliedFilter() const {
         return UseFilter ? Filter : nullptr;
@@ -80,14 +80,10 @@ public:
         }
     }
 
-    void AddBatch(const std::shared_ptr<arrow::RecordBatch>& batch) {
-        return AddBatch(arrow::Table::Make(batch->schema(), batch->columns(), batch->num_rows()));
-    }
-
     void AddBatch(const std::shared_ptr<NArrow::TGeneralContainer>& table) {
         AFL_VERIFY(table);
         if (UseFilter) {
-            AddBatch(table->BuildTable());
+            AddBatch(table->BuildTableVerified());
         } else {
             if (!Table) {
                 Table = table;

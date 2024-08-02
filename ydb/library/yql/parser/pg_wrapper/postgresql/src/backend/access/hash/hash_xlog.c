@@ -4,7 +4,7 @@
  *	  WAL replay logic for hash index.
  *
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -240,7 +240,6 @@ hash_xlog_add_ovfl_page(XLogReaderState *record)
 		{
 			Page		mappage = (Page) BufferGetPage(mapbuffer);
 			uint32	   *freep = NULL;
-			char	   *data;
 			uint32	   *bitmap_page_bit;
 
 			freep = HashPageGetBitmap(mappage);
@@ -981,8 +980,10 @@ hash_xlog_vacuum_one_page(XLogReaderState *record)
 	Page		page;
 	XLogRedoAction action;
 	HashPageOpaque pageopaque;
+	OffsetNumber *toDelete;
 
 	xldata = (xl_hash_vacuum_one_page *) XLogRecGetData(record);
+	toDelete = xldata->offsets;
 
 	/*
 	 * If we have any conflict processing to do, it must happen before we
@@ -998,10 +999,12 @@ hash_xlog_vacuum_one_page(XLogReaderState *record)
 	 */
 	if (InHotStandby)
 	{
-		RelFileNode rnode;
+		RelFileLocator rlocator;
 
-		XLogRecGetBlockTag(record, 0, &rnode, NULL, NULL);
-		ResolveRecoveryConflictWithSnapshot(xldata->latestRemovedXid, rnode);
+		XLogRecGetBlockTag(record, 0, &rlocator, NULL, NULL);
+		ResolveRecoveryConflictWithSnapshot(xldata->snapshotConflictHorizon,
+											xldata->isCatalogRel,
+											rlocator);
 	}
 
 	action = XLogReadBufferForRedoExtended(record, 0, RBM_NORMAL, true, &buffer);
@@ -1010,14 +1013,7 @@ hash_xlog_vacuum_one_page(XLogReaderState *record)
 	{
 		page = (Page) BufferGetPage(buffer);
 
-		if (XLogRecGetDataLen(record) > SizeOfHashVacuumOnePage)
-		{
-			OffsetNumber *unused;
-
-			unused = (OffsetNumber *) ((char *) xldata + SizeOfHashVacuumOnePage);
-
-			PageIndexMultiDelete(page, unused, xldata->ntuples);
-		}
+		PageIndexMultiDelete(page, toDelete, xldata->ntuples);
 
 		/*
 		 * Mark the page as not containing any LP_DEAD items. See comments in

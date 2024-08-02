@@ -43,16 +43,16 @@ class ExternalFile:
             self.file_name = file_name
         else:
             raise ProgrammingError('Either data or file_path must be specified for external data')
+        self.structure = None
+        self.types = None
         if types:
             if structure:
                 raise ProgrammingError('Only types or structure should be specified for external data, not both')
-            self.structure = None
             if isinstance(types, str):
                 self.types = types
             else:
                 self.types = ','.join(types)
         elif structure:
-            self.types = None
             if isinstance(structure, str):
                 self.structure = structure
             else:

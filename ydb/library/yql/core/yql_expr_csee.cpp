@@ -254,8 +254,9 @@ namespace {
         if (left.GetAllConstraints() != right.GetAllConstraints()) {
             return false;
         }
-
-        if (coStore.Lookup(left.UniqueId()) != coStore.Lookup(right.UniqueId())) {
+        auto l = coStore.Lookup(left.UniqueId());
+        auto r = coStore.Lookup(right.UniqueId());
+        if (l && r && *l != *r) {
             return false;
         }
 

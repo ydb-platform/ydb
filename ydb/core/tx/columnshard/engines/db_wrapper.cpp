@@ -144,16 +144,23 @@ bool TDbWrapper::LoadPortions(const std::function<void(NOlap::TPortionInfoConstr
 }
 
 void TDbWrapper::WriteIndex(const TPortionInfo& portion, const TIndexChunk& row) {
-    AFL_VERIFY(row.GetBlobRange().IsValid());
     using IndexIndexes = NColumnShard::Schema::IndexIndexes;
     NIceDb::TNiceDb db(Database);
-    db.Table<IndexIndexes>().Key(portion.GetPathId(), portion.GetPortionId(), row.GetIndexId(), row.GetChunkIdx()).Update(
-            NIceDb::TUpdate<IndexIndexes::Blob>(portion.GetBlobId(row.GetBlobRange().GetBlobIdxVerified()).SerializeBinary()),
-            NIceDb::TUpdate<IndexIndexes::Offset>(row.GetBlobRange().Offset),
-            NIceDb::TUpdate<IndexIndexes::Size>(row.GetBlobRange().Size),
-            NIceDb::TUpdate<IndexIndexes::RecordsCount>(row.GetRecordsCount()),
-            NIceDb::TUpdate<IndexIndexes::RawBytes>(row.GetRawBytes())
-        );
+    if (auto bRange = row.GetBlobRangeOptional()) {
+        AFL_VERIFY(bRange->IsValid());
+        db.Table<IndexIndexes>()
+            .Key(portion.GetPathId(), portion.GetPortionId(), row.GetIndexId(), row.GetChunkIdx())
+            .Update(NIceDb::TUpdate<IndexIndexes::Blob>(portion.GetBlobId(bRange->GetBlobIdxVerified()).SerializeBinary()),
+                NIceDb::TUpdate<IndexIndexes::Offset>(bRange->Offset), NIceDb::TUpdate<IndexIndexes::Size>(row.GetDataSize()),
+                NIceDb::TUpdate<IndexIndexes::RecordsCount>(row.GetRecordsCount()), NIceDb::TUpdate<IndexIndexes::RawBytes>(row.GetRawBytes()));
+    } else if (auto bData = row.GetBlobDataOptional()) {
+        db.Table<IndexIndexes>()
+            .Key(portion.GetPathId(), portion.GetPortionId(), row.GetIndexId(), row.GetChunkIdx())
+            .Update(NIceDb::TUpdate<IndexIndexes::BlobData>(*bData),
+                NIceDb::TUpdate<IndexIndexes::RecordsCount>(row.GetRecordsCount()), NIceDb::TUpdate<IndexIndexes::RawBytes>(row.GetRawBytes()));
+    } else {
+        AFL_VERIFY(false);
+    }
 }
 
 void TDbWrapper::EraseIndex(const TPortionInfo& portion, const TIndexChunk& row) {

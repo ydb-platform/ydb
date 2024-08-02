@@ -10,7 +10,6 @@
 
 #include <yt/yt/core/rpc/public.h>
 
-
 namespace NYT::NObjectClient {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -80,6 +79,9 @@ bool IsUploadTransactionType(EObjectType type);
 
 //! Checks if node with the given type can contain other nodes.
 bool IsCompositeNodeType(EObjectType type);
+
+//! Checks if the given type is either Link or SequoiaLink.
+bool IsLinkType(EObjectType);
 
 //! Extracts the type component from #id.
 EObjectType TypeFromId(TObjectId id);

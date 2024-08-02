@@ -46,7 +46,7 @@
  * exported rather than being "static" in this file.)
  *
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -71,6 +71,9 @@
 #include "utils/date.h"
 #include "utils/datum.h"
 #include "utils/expandedrecord.h"
+#include "utils/json.h"
+#include "utils/jsonb.h"
+#include "utils/jsonfuncs.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/timestamp.h"
@@ -475,6 +478,8 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 		&&CASE_EEOP_SCALARARRAYOP,
 		&&CASE_EEOP_HASHED_SCALARARRAYOP,
 		&&CASE_EEOP_XMLEXPR,
+		&&CASE_EEOP_JSON_CONSTRUCTOR,
+		&&CASE_EEOP_IS_JSON,
 		&&CASE_EEOP_AGGREF,
 		&&CASE_EEOP_GROUPING_FUNC,
 		&&CASE_EEOP_WINDOW_FUNC,
@@ -490,12 +495,14 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 		&&CASE_EEOP_AGG_PLAIN_TRANS_INIT_STRICT_BYREF,
 		&&CASE_EEOP_AGG_PLAIN_TRANS_STRICT_BYREF,
 		&&CASE_EEOP_AGG_PLAIN_TRANS_BYREF,
+		&&CASE_EEOP_AGG_PRESORTED_DISTINCT_SINGLE,
+		&&CASE_EEOP_AGG_PRESORTED_DISTINCT_MULTI,
 		&&CASE_EEOP_AGG_ORDERED_TRANS_DATUM,
 		&&CASE_EEOP_AGG_ORDERED_TRANS_TUPLE,
 		&&CASE_EEOP_LAST
 	};
 
-	StaticAssertStmt(EEOP_LAST + 1 == lengthof(dispatch_table),
+	StaticAssertDecl(lengthof(dispatch_table) == EEOP_LAST + 1,
 					 "dispatch_table out of whack with ExprEvalOp");
 
 	if (unlikely(state == NULL))
@@ -1521,6 +1528,21 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 			EEO_NEXT();
 		}
 
+		EEO_CASE(EEOP_JSON_CONSTRUCTOR)
+		{
+			/* too complex for an inline implementation */
+			ExecEvalJsonConstructor(state, op, econtext);
+			EEO_NEXT();
+		}
+
+		EEO_CASE(EEOP_IS_JSON)
+		{
+			/* too complex for an inline implementation */
+			ExecEvalJsonIsPredicate(state, op);
+
+			EEO_NEXT();
+		}
+
 		EEO_CASE(EEOP_AGGREF)
 		{
 			/*
@@ -1637,7 +1659,7 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 		{
 			AggState   *aggstate = castNode(AggState, state->parent);
 			AggStatePerGroup pergroup_allaggs =
-			aggstate->all_pergroups[op->d.agg_plain_pergroup_nullcheck.setoff];
+				aggstate->all_pergroups[op->d.agg_plain_pergroup_nullcheck.setoff];
 
 			if (pergroup_allaggs == NULL)
 				EEO_JUMP(op->d.agg_plain_pergroup_nullcheck.jumpnull);
@@ -1662,7 +1684,7 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 			AggState   *aggstate = castNode(AggState, state->parent);
 			AggStatePerTrans pertrans = op->d.agg_trans.pertrans;
 			AggStatePerGroup pergroup =
-			&aggstate->all_pergroups[op->d.agg_trans.setoff][op->d.agg_trans.transno];
+				&aggstate->all_pergroups[op->d.agg_trans.setoff][op->d.agg_trans.transno];
 
 			Assert(pertrans->transtypeByVal);
 
@@ -1690,7 +1712,7 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 			AggState   *aggstate = castNode(AggState, state->parent);
 			AggStatePerTrans pertrans = op->d.agg_trans.pertrans;
 			AggStatePerGroup pergroup =
-			&aggstate->all_pergroups[op->d.agg_trans.setoff][op->d.agg_trans.transno];
+				&aggstate->all_pergroups[op->d.agg_trans.setoff][op->d.agg_trans.transno];
 
 			Assert(pertrans->transtypeByVal);
 
@@ -1708,7 +1730,7 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 			AggState   *aggstate = castNode(AggState, state->parent);
 			AggStatePerTrans pertrans = op->d.agg_trans.pertrans;
 			AggStatePerGroup pergroup =
-			&aggstate->all_pergroups[op->d.agg_trans.setoff][op->d.agg_trans.transno];
+				&aggstate->all_pergroups[op->d.agg_trans.setoff][op->d.agg_trans.transno];
 
 			Assert(pertrans->transtypeByVal);
 
@@ -1725,7 +1747,7 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 			AggState   *aggstate = castNode(AggState, state->parent);
 			AggStatePerTrans pertrans = op->d.agg_trans.pertrans;
 			AggStatePerGroup pergroup =
-			&aggstate->all_pergroups[op->d.agg_trans.setoff][op->d.agg_trans.transno];
+				&aggstate->all_pergroups[op->d.agg_trans.setoff][op->d.agg_trans.transno];
 
 			Assert(!pertrans->transtypeByVal);
 
@@ -1746,7 +1768,7 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 			AggState   *aggstate = castNode(AggState, state->parent);
 			AggStatePerTrans pertrans = op->d.agg_trans.pertrans;
 			AggStatePerGroup pergroup =
-			&aggstate->all_pergroups[op->d.agg_trans.setoff][op->d.agg_trans.transno];
+				&aggstate->all_pergroups[op->d.agg_trans.setoff][op->d.agg_trans.transno];
 
 			Assert(!pertrans->transtypeByVal);
 
@@ -1763,7 +1785,7 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 			AggState   *aggstate = castNode(AggState, state->parent);
 			AggStatePerTrans pertrans = op->d.agg_trans.pertrans;
 			AggStatePerGroup pergroup =
-			&aggstate->all_pergroups[op->d.agg_trans.setoff][op->d.agg_trans.transno];
+				&aggstate->all_pergroups[op->d.agg_trans.setoff][op->d.agg_trans.transno];
 
 			Assert(!pertrans->transtypeByVal);
 
@@ -1772,6 +1794,28 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 								   op->d.agg_trans.setno);
 
 			EEO_NEXT();
+		}
+
+		EEO_CASE(EEOP_AGG_PRESORTED_DISTINCT_SINGLE)
+		{
+			AggStatePerTrans pertrans = op->d.agg_presorted_distinctcheck.pertrans;
+			AggState   *aggstate = castNode(AggState, state->parent);
+
+			if (ExecEvalPreOrderedDistinctSingle(aggstate, pertrans))
+				EEO_NEXT();
+			else
+				EEO_JUMP(op->d.agg_presorted_distinctcheck.jumpdistinct);
+		}
+
+		EEO_CASE(EEOP_AGG_PRESORTED_DISTINCT_MULTI)
+		{
+			AggState   *aggstate = castNode(AggState, state->parent);
+			AggStatePerTrans pertrans = op->d.agg_presorted_distinctcheck.pertrans;
+
+			if (ExecEvalPreOrderedDistinctMulti(aggstate, pertrans))
+				EEO_NEXT();
+			else
+				EEO_JUMP(op->d.agg_presorted_distinctcheck.jumpdistinct);
 		}
 
 		/* process single-column ordered aggregate datum */
@@ -3896,8 +3940,10 @@ ExecEvalXmlExpr(ExprState *state, ExprEvalStep *op)
 					return;
 				value = argvalue[0];
 
-				*op->resvalue = PointerGetDatum(xmltotext_with_xmloption(DatumGetXmlP(value),
-																		 xexpr->xmloption));
+				*op->resvalue =
+					PointerGetDatum(xmltotext_with_options(DatumGetXmlP(value),
+														   xexpr->xmloption,
+														   xexpr->indent));
 				*op->resnull = false;
 			}
 			break;
@@ -3925,6 +3971,132 @@ ExecEvalXmlExpr(ExprState *state, ExprEvalStep *op)
 			break;
 	}
 }
+
+/*
+ * Evaluate a JSON constructor expression.
+ */
+void
+ExecEvalJsonConstructor(ExprState *state, ExprEvalStep *op,
+						ExprContext *econtext)
+{
+	Datum		res;
+	JsonConstructorExprState *jcstate = op->d.json_constructor.jcstate;
+	JsonConstructorExpr *ctor = jcstate->constructor;
+	bool		is_jsonb = ctor->returning->format->format_type == JS_FORMAT_JSONB;
+	bool		isnull = false;
+
+	if (ctor->type == JSCTOR_JSON_ARRAY)
+		res = (is_jsonb ?
+			   jsonb_build_array_worker :
+			   json_build_array_worker) (jcstate->nargs,
+										 jcstate->arg_values,
+										 jcstate->arg_nulls,
+										 jcstate->arg_types,
+										 jcstate->constructor->absent_on_null);
+	else if (ctor->type == JSCTOR_JSON_OBJECT)
+		res = (is_jsonb ?
+			   jsonb_build_object_worker :
+			   json_build_object_worker) (jcstate->nargs,
+										  jcstate->arg_values,
+										  jcstate->arg_nulls,
+										  jcstate->arg_types,
+										  jcstate->constructor->absent_on_null,
+										  jcstate->constructor->unique);
+	else
+		elog(ERROR, "invalid JsonConstructorExpr type %d", ctor->type);
+
+	*op->resvalue = res;
+	*op->resnull = isnull;
+}
+
+/*
+ * Evaluate a IS JSON predicate.
+ */
+void
+ExecEvalJsonIsPredicate(ExprState *state, ExprEvalStep *op)
+{
+	JsonIsPredicate *pred = op->d.is_json.pred;
+	Datum		js = *op->resvalue;
+	Oid			exprtype;
+	bool		res;
+
+	if (*op->resnull)
+	{
+		*op->resvalue = BoolGetDatum(false);
+		return;
+	}
+
+	exprtype = exprType(pred->expr);
+
+	if (exprtype == TEXTOID || exprtype == JSONOID)
+	{
+		text	   *json = DatumGetTextP(js);
+
+		if (pred->item_type == JS_TYPE_ANY)
+			res = true;
+		else
+		{
+			switch (json_get_first_token(json, false))
+			{
+				case JSON_TOKEN_OBJECT_START:
+					res = pred->item_type == JS_TYPE_OBJECT;
+					break;
+				case JSON_TOKEN_ARRAY_START:
+					res = pred->item_type == JS_TYPE_ARRAY;
+					break;
+				case JSON_TOKEN_STRING:
+				case JSON_TOKEN_NUMBER:
+				case JSON_TOKEN_TRUE:
+				case JSON_TOKEN_FALSE:
+				case JSON_TOKEN_NULL:
+					res = pred->item_type == JS_TYPE_SCALAR;
+					break;
+				default:
+					res = false;
+					break;
+			}
+		}
+
+		/*
+		 * Do full parsing pass only for uniqueness check or for JSON text
+		 * validation.
+		 */
+		if (res && (pred->unique_keys || exprtype == TEXTOID))
+			res = json_validate(json, pred->unique_keys, false);
+	}
+	else if (exprtype == JSONBOID)
+	{
+		if (pred->item_type == JS_TYPE_ANY)
+			res = true;
+		else
+		{
+			Jsonb	   *jb = DatumGetJsonbP(js);
+
+			switch (pred->item_type)
+			{
+				case JS_TYPE_OBJECT:
+					res = JB_ROOT_IS_OBJECT(jb);
+					break;
+				case JS_TYPE_ARRAY:
+					res = JB_ROOT_IS_ARRAY(jb) && !JB_ROOT_IS_SCALAR(jb);
+					break;
+				case JS_TYPE_SCALAR:
+					res = JB_ROOT_IS_ARRAY(jb) && JB_ROOT_IS_SCALAR(jb);
+					break;
+				default:
+					res = false;
+					break;
+			}
+		}
+
+		/* Key uniqueness check is redundant for jsonb */
+	}
+	else
+		res = false;
+
+	*op->resvalue = BoolGetDatum(res);
+}
+
 
 /*
  * ExecEvalGroupingFunc
@@ -4247,15 +4419,40 @@ ExecAggInitGroup(AggState *aggstate, AggStatePerTrans pertrans, AggStatePerGroup
 }
 
 /*
- * Ensure that the current transition value is a child of the aggcontext,
- * rather than the per-tuple context.
+ * Ensure that the new transition value is stored in the aggcontext,
+ * rather than the per-tuple context.  This should be invoked only when
+ * we know (a) the transition data type is pass-by-reference, and (b)
+ * the newValue is distinct from the oldValue.
  *
  * NB: This can change the current memory context.
+ *
+ * We copy the presented newValue into the aggcontext, except when the datum
+ * points to a R/W expanded object that is already a child of the aggcontext,
+ * in which case we need not copy.  We then delete the oldValue, if not null.
+ *
+ * If the presented datum points to a R/W expanded object that is a child of
+ * some other context, ideally we would just reparent it under the aggcontext.
+ * Unfortunately, that doesn't work easily, and it wouldn't help anyway for
+ * aggregate-aware transfns.  We expect that a transfn that deals in expanded
+ * objects and is aware of the memory management conventions for aggregate
+ * transition values will (1) on first call, return a R/W expanded object that
+ * is already in the right context, allowing us to do nothing here, and (2) on
+ * subsequent calls, modify and return that same object, so that control
+ * doesn't even reach here.  However, if we have a generic transfn that
+ * returns a new R/W expanded object (probably in the per-tuple context),
+ * reparenting that result would cause problems.  We'd pass that R/W object to
+ * the next invocation of the transfn, and then it would be at liberty to
+ * change or delete that object, and if it deletes it then our own attempt to
+ * delete the now-old transvalue afterwards would be a double free.  We avoid
+ * this problem by forcing the stored transvalue to always be a flat
+ * non-expanded object unless the transfn is visibly doing aggregate-aware
+ * memory management.  This is somewhat inefficient, but the best answer to
+ * that is to write a smarter transfn.
  */
 Datum
-ExecAggTransReparent(AggState *aggstate, AggStatePerTrans pertrans,
-					 Datum newValue, bool newValueIsNull,
-					 Datum oldValue, bool oldValueIsNull)
+ExecAggCopyTransValue(AggState *aggstate, AggStatePerTrans pertrans,
+					  Datum newValue, bool newValueIsNull,
+					  Datum oldValue, bool oldValueIsNull)
 {
 	Assert(newValue != oldValue);
 
@@ -4293,6 +4490,99 @@ ExecAggTransReparent(AggState *aggstate, AggStatePerTrans pertrans,
 	}
 
 	return newValue;
+}
+
+/*
+ * ExecEvalPreOrderedDistinctSingle
+ *		Returns true when the aggregate transition value Datum is distinct
+ *		from the previous input Datum and returns false when the input Datum
+ *		matches the previous input Datum.
+ */
+bool
+ExecEvalPreOrderedDistinctSingle(AggState *aggstate, AggStatePerTrans pertrans)
+{
+	Datum		value = pertrans->transfn_fcinfo->args[1].value;
+	bool		isnull = pertrans->transfn_fcinfo->args[1].isnull;
+
+	if (!pertrans->haslast ||
+		pertrans->lastisnull != isnull ||
+		(!isnull && !DatumGetBool(FunctionCall2Coll(&pertrans->equalfnOne,
+													pertrans->aggCollation,
+													pertrans->lastdatum, value))))
+	{
+		if (pertrans->haslast && !pertrans->inputtypeByVal &&
+			!pertrans->lastisnull)
+			pfree(DatumGetPointer(pertrans->lastdatum));
+
+		pertrans->haslast = true;
+		if (!isnull)
+		{
+			MemoryContext oldContext;
+
+			oldContext = MemoryContextSwitchTo(aggstate->curaggcontext->ecxt_per_tuple_memory);
+
+			pertrans->lastdatum = datumCopy(value, pertrans->inputtypeByVal,
+											pertrans->inputtypeLen);
+
+			MemoryContextSwitchTo(oldContext);
+		}
+		else
+			pertrans->lastdatum = (Datum) 0;
+		pertrans->lastisnull = isnull;
+		return true;
+	}
+
+	return false;
+}
+
+/*
+ * ExecEvalPreOrderedDistinctMulti
+ *		Returns true when the aggregate input is distinct from the previous
+ *		input and returns false when the input matches the previous input, or
+ *		when there was no previous input.
+ */
+bool
+ExecEvalPreOrderedDistinctMulti(AggState *aggstate, AggStatePerTrans pertrans)
+{
+	ExprContext *tmpcontext = aggstate->tmpcontext;
+	bool		isdistinct = false; /* for now */
+	TupleTableSlot *save_outer;
+	TupleTableSlot *save_inner;
+
+	for (int i = 0; i < pertrans->numTransInputs; i++)
+	{
+		pertrans->sortslot->tts_values[i] = pertrans->transfn_fcinfo->args[i + 1].value;
+		pertrans->sortslot->tts_isnull[i] = pertrans->transfn_fcinfo->args[i + 1].isnull;
+	}
+
+	ExecClearTuple(pertrans->sortslot);
+	pertrans->sortslot->tts_nvalid = pertrans->numInputs;
+	ExecStoreVirtualTuple(pertrans->sortslot);
+
+	/* save the previous slots before we overwrite them */
+	save_outer = tmpcontext->ecxt_outertuple;
+	save_inner = tmpcontext->ecxt_innertuple;
+
+	tmpcontext->ecxt_outertuple = pertrans->sortslot;
+	tmpcontext->ecxt_innertuple = pertrans->uniqslot;
+
+	if (!pertrans->haslast ||
+		!ExecQual(pertrans->equalfnMulti, tmpcontext))
+	{
+		if (pertrans->haslast)
+			ExecClearTuple(pertrans->uniqslot);
+
+		pertrans->haslast = true;
+		ExecCopySlot(pertrans->uniqslot, pertrans->sortslot);
+
+		isdistinct = true;
+	}
+
+	/* restore the original slots */
+	tmpcontext->ecxt_outertuple = save_outer;
+	tmpcontext->ecxt_innertuple = save_inner;
+
+	return isdistinct;
 }
 
 /*
@@ -4386,12 +4676,10 @@ ExecAggPlainTransByRef(AggState *aggstate, AggStatePerTrans pertrans,
 	/*
 	 * For pass-by-ref datatype, must copy the new value into aggcontext and
 	 * free the prior transValue.  But if transfn returned a pointer to its
-	 * first input, we don't need to do anything.  Also, if transfn returned a
-	 * pointer to a R/W expanded object that is already a child of the
-	 * aggcontext, assume we can adopt that value without copying it.
+	 * first input, we don't need to do anything.
 	 *
 	 * It's safe to compare newVal with pergroup->transValue without regard
-	 * for either being NULL, because ExecAggTransReparent() takes care to set
+	 * for either being NULL, because ExecAggCopyTransValue takes care to set
 	 * transValue to 0 when NULL. Otherwise we could end up accidentally not
 	 * reparenting, when the transValue has the same numerical value as
 	 * newValue, despite being NULL.  This is a somewhat hot path, making it
@@ -4400,10 +4688,10 @@ ExecAggPlainTransByRef(AggState *aggstate, AggStatePerTrans pertrans,
 	 * argument.
 	 */
 	if (DatumGetPointer(newVal) != DatumGetPointer(pergroup->transValue))
-		newVal = ExecAggTransReparent(aggstate, pertrans,
-									  newVal, fcinfo->isnull,
-									  pergroup->transValue,
-									  pergroup->transValueIsNull);
+		newVal = ExecAggCopyTransValue(aggstate, pertrans,
+									   newVal, fcinfo->isnull,
+									   pergroup->transValue,
+									   pergroup->transValueIsNull);
 
 	pergroup->transValue = newVal;
 	pergroup->transValueIsNull = fcinfo->isnull;

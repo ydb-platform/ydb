@@ -5,7 +5,7 @@
  * only be needed by files implementing statistics support (rather than ones
  * reporting / querying stats).
  *
- * Copyright (c) 2001-2022, PostgreSQL Global Development Group
+ * Copyright (c) 2001-2023, PostgreSQL Global Development Group
  *
  * src/include/utils/pgstat_internal.h
  * ----------
@@ -102,7 +102,7 @@ typedef struct PgStatShared_HashEntry
 } PgStatShared_HashEntry;
 
 /*
- * Common header struct for PgStatShm_Stat*Entry.
+ * Common header struct for PgStatShared_*.
  */
 typedef struct PgStatShared_Common
 {
@@ -162,8 +162,7 @@ typedef struct PgStat_SubXactStatus
 	 * if the transaction commits/aborts. To handle replicas and crashes,
 	 * stats drops are included in commit / abort records.
 	 */
-	dlist_head	pending_drops;
-	int			pending_drops_count;
+	dclist_head pending_drops;
 
 	/*
 	 * Tuple insertion/deletion counts for an open transaction can't be
@@ -330,6 +329,17 @@ typedef struct PgStatShared_Checkpointer
 	PgStat_CheckpointerStats reset_offset;
 } PgStatShared_Checkpointer;
 
+/* Shared-memory ready PgStat_IO */
+typedef struct PgStatShared_IO
+{
+	/*
+	 * locks[i] protects stats.stats[i]. locks[0] also protects
+	 * stats.stat_reset_timestamp.
+	 */
+	LWLock		locks[BACKEND_NUM_TYPES];
+	PgStat_IO	stats;
+} PgStatShared_IO;
+
 typedef struct PgStatShared_SLRU
 {
 	/* lock protects ->stats */
@@ -420,6 +430,7 @@ typedef struct PgStat_ShmemControl
 	PgStatShared_Archiver archiver;
 	PgStatShared_BgWriter bgwriter;
 	PgStatShared_Checkpointer checkpointer;
+	PgStatShared_IO io;
 	PgStatShared_SLRU slru;
 	PgStatShared_Wal wal;
 } PgStat_ShmemControl;
@@ -442,6 +453,8 @@ typedef struct PgStat_Snapshot
 	PgStat_BgWriterStats bgwriter;
 
 	PgStat_CheckpointerStats checkpointer;
+
+	PgStat_IO	io;
 
 	PgStat_SLRUStats slru[SLRU_NUM_ELEMENTS];
 
@@ -551,6 +564,15 @@ extern bool pgstat_function_flush_cb(PgStat_EntryRef *entry_ref, bool nowait);
 
 
 /*
+ * Functions in pgstat_io.c
+ */
+
+extern bool pgstat_flush_io(bool nowait);
+extern void pgstat_io_reset_all_cb(TimestampTz ts);
+extern void pgstat_io_snapshot_cb(void);
+
+
+/*
  * Functions in pgstat_relation.c
  */
 
@@ -580,7 +602,7 @@ extern void pgstat_attach_shmem(void);
 extern void pgstat_detach_shmem(void);
 
 extern PgStat_EntryRef *pgstat_get_entry_ref(PgStat_Kind kind, Oid dboid, Oid objoid,
-											 bool create, bool *found);
+											 bool create, bool *created_entry);
 extern bool pgstat_lock_entry(PgStat_EntryRef *entry_ref, bool nowait);
 extern bool pgstat_lock_entry_shared(PgStat_EntryRef *entry_ref, bool nowait);
 extern void pgstat_unlock_entry(PgStat_EntryRef *entry_ref);
@@ -627,6 +649,7 @@ extern void pgstat_wal_snapshot_cb(void);
 extern bool pgstat_subscription_flush_cb(PgStat_EntryRef *entry_ref, bool nowait);
 extern void pgstat_subscription_reset_timestamp_cb(PgStatShared_Common *header, TimestampTz ts);
 
+
 /*
  * Functions in pgstat_xact.c
  */
@@ -641,6 +664,13 @@ extern void pgstat_create_transactional(PgStat_Kind kind, Oid dboid, Oid objoid)
  */
 
 extern __thread PGDLLIMPORT PgStat_LocalState pgStatLocal;
+
+
+/*
+ * Variables in pgstat_io.c
+ */
+
+extern __thread PGDLLIMPORT bool have_iostats;
 
 
 /*
@@ -739,7 +769,7 @@ pgstat_copy_changecounted_stats(void *dst, void *src, size_t len,
 static inline int
 pgstat_cmp_hash_key(const void *a, const void *b, size_t size, void *arg)
 {
-	AssertArg(size == sizeof(PgStat_HashKey) && arg == NULL);
+	Assert(size == sizeof(PgStat_HashKey) && arg == NULL);
 	return memcmp(a, b, sizeof(PgStat_HashKey));
 }
 
@@ -749,7 +779,7 @@ pgstat_hash_hash_key(const void *d, size_t size, void *arg)
 	const PgStat_HashKey *key = (PgStat_HashKey *) d;
 	uint32		hash;
 
-	AssertArg(size == sizeof(PgStat_HashKey) && arg == NULL);
+	Assert(size == sizeof(PgStat_HashKey) && arg == NULL);
 
 	hash = murmurhash32(key->kind);
 	hash = hash_combine(hash, murmurhash32(key->dboid));

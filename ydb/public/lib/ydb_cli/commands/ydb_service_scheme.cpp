@@ -423,17 +423,23 @@ static TString ProgressOr(const std::optional<float>& value, const U& orValue) {
 int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result) const {
     const auto& desc = result.GetReplicationDescription();
 
-    Cout << Endl << "State: " << desc.GetState();
+    Cout << Endl << "State: ";
     switch (desc.GetState()) {
     case NReplication::TReplicationDescription::EState::Running:
-        if (ShowStats) {
-            const auto& stats = desc.GetRunningState().GetStats();
-            Cout << Endl << "Lag: " << ValueOr(stats.GetLag(), "n/a");
-            Cout << Endl << "Initial Scan progress: " << ProgressOr(stats.GetInitialScanProgress(), "n/a");
+        if (const auto& stats = desc.GetRunningState().GetStats(); ShowStats) {
+            if (const auto& progress = stats.GetInitialScanProgress(); progress && *progress < 100) {
+                Cout << "Initial scan (" << FloatToString(*progress, PREC_POINT_DIGITS, 2) << "%)";
+            } else if (const auto& lag = stats.GetLag()) {
+                Cout << "Standby (lag: " << *lag << ")";
+            } else {
+                Cout << desc.GetState();
+            }
+        } else {
+            Cout << desc.GetState();
         }
         break;
     case NReplication::TReplicationDescription::EState::Error:
-        Cout << Endl << "Issues: " << desc.GetErrorState().GetIssues().ToOneLineString();
+        Cout << "Error: " << desc.GetErrorState().GetIssues().ToOneLineString();
         break;
     default:
         break;

@@ -44,6 +44,12 @@ namespace {
 
 using TQueryResult = IKqpHost::TQueryResult;
 
+enum EReplyFlags : ui32 {
+    QUERY_REPLY_FLAG_RESULTS = 1,
+    QUERY_REPLY_FLAG_PLAN = 2,
+    QUERY_REPLY_FLAG_AST = 4,
+};
+
 struct TKqpQueryState {
     TActorId Sender;
     ui64 ProxyRequestId = 0;
@@ -194,10 +200,10 @@ public:
         QueryState->ProxyRequestId = proxyRequestId;
         QueryState->KeepSession = Settings.LongSession || queryRequest->GetKeepSession();
         QueryState->StartTime = now;
-        QueryState->ReplyFlags = queryRequest->Record.GetRequest().GetReplyFlags();
+        QueryState->ReplyFlags = EReplyFlags::QUERY_REPLY_FLAG_RESULTS;
 
         if (GetStatsMode(QueryState->RequestEv.get(), EKikimrStatsMode::None) > EKikimrStatsMode::Basic) {
-            QueryState->ReplyFlags |= NKikimrKqp::QUERY_REPLY_FLAG_AST;
+            QueryState->ReplyFlags |= EReplyFlags::QUERY_REPLY_FLAG_AST;
         }
 
         NCpuTime::TCpuTimer timer;
@@ -477,7 +483,7 @@ private:
 
             case NKikimrKqp::QUERY_ACTION_EXPLAIN: {
                 // Force reply flags
-                QueryState->ReplyFlags |= NKikimrKqp::QUERY_REPLY_FLAG_PLAN | NKikimrKqp::QUERY_REPLY_FLAG_AST;
+                QueryState->ReplyFlags |= EReplyFlags::QUERY_REPLY_FLAG_PLAN | EReplyFlags::QUERY_REPLY_FLAG_AST;
                 if (!ExplainQuery(ctx, QueryState->RequestEv->GetQuery(), queryType)) {
                     onBadRequest(QueryState->Error);
                     return;
@@ -936,9 +942,9 @@ private:
         bool replyAst = true;
 
         // TODO: Handle in KQP to avoid generation of redundant data
-        replyResults = replyResults && (QueryState->ReplyFlags & NKikimrKqp::QUERY_REPLY_FLAG_RESULTS);
-        replyPlan = replyPlan && (QueryState->ReplyFlags & NKikimrKqp::QUERY_REPLY_FLAG_PLAN);
-        replyAst = replyAst && (QueryState->ReplyFlags & NKikimrKqp::QUERY_REPLY_FLAG_AST);
+        replyResults = replyResults && (QueryState->ReplyFlags & EReplyFlags::QUERY_REPLY_FLAG_RESULTS);
+        replyPlan = replyPlan && (QueryState->ReplyFlags & EReplyFlags::QUERY_REPLY_FLAG_PLAN);
+        replyAst = replyAst && (QueryState->ReplyFlags & EReplyFlags::QUERY_REPLY_FLAG_AST);
 
         auto ydbStatus = GetYdbStatus(queryResult);
         auto issues = queryResult.Issues();

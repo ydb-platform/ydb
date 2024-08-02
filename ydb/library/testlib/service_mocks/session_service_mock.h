@@ -25,7 +25,7 @@ public:
     THashSet<TString> AllowedAccessTokens;
 
     TSessionServiceMock() {
-        AuthorizationRequiredMessage.Setauthorize_url("https://auth.cloud.yandex.ru/oauth/authorize");
+        AuthorizationRequiredMessage.Setauthorize_url("https://auth.test.net/oauth/authorize");
     }
 
     grpc::Status Check(grpc::ServerContext*,

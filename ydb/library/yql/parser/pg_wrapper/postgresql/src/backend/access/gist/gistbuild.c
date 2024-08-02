@@ -22,7 +22,7 @@
  * tuples (unless buffering mode is disabled).
  *
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -162,7 +162,7 @@ static BlockNumber gistbufferinginserttuples(GISTBuildState *buildstate,
 											 BlockNumber parentblk, OffsetNumber downlinkoffnum);
 static Buffer gistBufferingFindCorrectParent(GISTBuildState *buildstate,
 											 BlockNumber childblkno, int level,
-											 BlockNumber *parentblk,
+											 BlockNumber *parentblkno,
 											 OffsetNumber *downlinkoffnum);
 static void gistProcessEmptyingQueue(GISTBuildState *buildstate);
 static void gistEmptyAllBuffers(GISTBuildState *buildstate);
@@ -171,7 +171,8 @@ static int	gistGetMaxLevel(Relation index);
 static void gistInitParentMap(GISTBuildState *buildstate);
 static void gistMemorizeParent(GISTBuildState *buildstate, BlockNumber child,
 							   BlockNumber parent);
-static void gistMemorizeAllDownlinks(GISTBuildState *buildstate, Buffer parent);
+static void gistMemorizeAllDownlinks(GISTBuildState *buildstate,
+									 Buffer parentbuf);
 static BlockNumber gistGetParent(GISTBuildState *buildstate, BlockNumber child);
 
 
@@ -297,7 +298,7 @@ gistbuild(Relation heap, Relation index, IndexInfo *indexInfo)
 		Page		page;
 
 		/* initialize the root page */
-		buffer = gistNewBuffer(index);
+		buffer = gistNewBuffer(index, heap);
 		Assert(BufferGetBlockNumber(buffer) == GIST_ROOT_BLKNO);
 		page = BufferGetPage(buffer);
 
@@ -414,7 +415,7 @@ gist_indexsortbuild(GISTBuildState *state)
 	 * Write an empty page as a placeholder for the root page. It will be
 	 * replaced with the real root page at the end.
 	 */
-	page = palloc0(BLCKSZ);
+	page = palloc_aligned(BLCKSZ, PG_IO_ALIGN_SIZE, MCXT_ALLOC_ZERO);
 	smgrextend(RelationGetSmgr(state->indexrel), MAIN_FORKNUM, GIST_ROOT_BLKNO,
 			   page, true);
 	state->pages_allocated++;
@@ -462,7 +463,7 @@ gist_indexsortbuild(GISTBuildState *state)
 	smgrwrite(RelationGetSmgr(state->indexrel), MAIN_FORKNUM, GIST_ROOT_BLKNO,
 			  levelstate->pages[0], true);
 	if (RelationNeedsWAL(state->indexrel))
-		log_newpage(&state->indexrel->rd_node, MAIN_FORKNUM, GIST_ROOT_BLKNO,
+		log_newpage(&state->indexrel->rd_locator, MAIN_FORKNUM, GIST_ROOT_BLKNO,
 					levelstate->pages[0], true);
 
 	pfree(levelstate->pages[0]);
@@ -508,7 +509,8 @@ gist_indexsortbuild_levelstate_add(GISTBuildState *state,
 			levelstate->current_page++;
 
 		if (levelstate->pages[levelstate->current_page] == NULL)
-			levelstate->pages[levelstate->current_page] = palloc(BLCKSZ);
+			levelstate->pages[levelstate->current_page] =
+				palloc_aligned(BLCKSZ, PG_IO_ALIGN_SIZE, 0);
 
 		newPage = levelstate->pages[levelstate->current_page];
 		gistinitpage(newPage, old_page_flags);
@@ -578,7 +580,7 @@ gist_indexsortbuild_levelstate_flush(GISTBuildState *state,
 
 		/* Create page and copy data */
 		data = (char *) (dist->list);
-		target = palloc0(BLCKSZ);
+		target = palloc_aligned(BLCKSZ, PG_IO_ALIGN_SIZE, MCXT_ALLOC_ZERO);
 		gistinitpage(target, isleaf ? F_LEAF : 0);
 		for (int i = 0; i < dist->block.num; i++)
 		{
@@ -629,7 +631,7 @@ gist_indexsortbuild_levelstate_flush(GISTBuildState *state,
 		if (parent == NULL)
 		{
 			parent = palloc0(sizeof(GistSortedBuildLevelState));
-			parent->pages[0] = (Page) palloc(BLCKSZ);
+			parent->pages[0] = (Page) palloc_aligned(BLCKSZ, PG_IO_ALIGN_SIZE, 0);
 			parent->parent = NULL;
 			gistinitpage(parent->pages[0], 0);
 
@@ -663,7 +665,7 @@ gist_indexsortbuild_flush_ready_pages(GISTBuildState *state)
 	}
 
 	if (RelationNeedsWAL(state->indexrel))
-		log_newpages(&state->indexrel->rd_node, MAIN_FORKNUM, state->ready_num_pages,
+		log_newpages(&state->indexrel->rd_locator, MAIN_FORKNUM, state->ready_num_pages,
 					 state->ready_blknos, state->ready_pages, true);
 
 	for (int i = 0; i < state->ready_num_pages; i++)
@@ -1595,7 +1597,7 @@ gistMemorizeParent(GISTBuildState *buildstate, BlockNumber child, BlockNumber pa
 	bool		found;
 
 	entry = (ParentMapEntry *) hash_search(buildstate->parentMap,
-										   (const void *) &child,
+										   &child,
 										   HASH_ENTER,
 										   &found);
 	entry->parentblkno = parent;
@@ -1633,7 +1635,7 @@ gistGetParent(GISTBuildState *buildstate, BlockNumber child)
 
 	/* Find node buffer in hash table */
 	entry = (ParentMapEntry *) hash_search(buildstate->parentMap,
-										   (const void *) &child,
+										   &child,
 										   HASH_FIND,
 										   &found);
 	if (!found)

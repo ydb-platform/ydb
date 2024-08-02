@@ -41,15 +41,19 @@ struct TEvContinueRequest : public NActors::TEventLocal<TEvContinueRequest, TKqp
 };
 
 struct TEvCleanupRequest : public NActors::TEventLocal<TEvCleanupRequest, TKqpWorkloadServiceEvents::EvCleanupRequest> {
-    TEvCleanupRequest(const TString& database, const TString& sessionId, const TString& poolId)
+    TEvCleanupRequest(const TString& database, const TString& sessionId, const TString& poolId, TDuration duration, TDuration cpuConsumed)
         : Database(database)
         , SessionId(sessionId)
         , PoolId(poolId)
+        , Duration(duration)
+        , CpuConsumed(cpuConsumed)
     {}
 
     const TString Database;
     const TString SessionId;
     const TString PoolId;
+    const TDuration Duration;
+    const TDuration CpuConsumed;
 };
 
 struct TEvCleanupResponse : public NActors::TEventLocal<TEvCleanupResponse, TKqpWorkloadServiceEvents::EvCleanupResponse> {
@@ -60,6 +64,20 @@ struct TEvCleanupResponse : public NActors::TEventLocal<TEvCleanupResponse, TKqp
 
     const Ydb::StatusIds::StatusCode Status;
     const NYql::TIssues Issues;
+};
+
+struct TEvUpdatePoolInfo : public NActors::TEventLocal<TEvUpdatePoolInfo, TKqpWorkloadServiceEvents::EvUpdatePoolInfo> {
+    TEvUpdatePoolInfo(const TString& database, const TString& poolId, const std::optional<NResourcePool::TPoolSettings>& config, const std::optional<NACLib::TSecurityObject>& securityObject)
+        : Database(database)
+        , PoolId(poolId)
+        , Config(config)
+        , SecurityObject(securityObject)
+    {}
+
+    const TString Database;
+    const TString PoolId;
+    const std::optional<NResourcePool::TPoolSettings> Config;
+    const std::optional<NACLib::TSecurityObject> SecurityObject;
 };
 
 }  // NKikimr::NKqp::NWorkload

@@ -4,7 +4,7 @@
  *	  header file for postgres vacuum cleaner and statistics analyzer
  *
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/commands/vacuum.h
@@ -186,8 +186,11 @@ typedef struct VacAttrStats
 #define VACOPT_FREEZE 0x08		/* FREEZE option */
 #define VACOPT_FULL 0x10		/* FULL (non-concurrent) vacuum */
 #define VACOPT_SKIP_LOCKED 0x20 /* skip if cannot get lock */
-#define VACOPT_PROCESS_TOAST 0x40	/* process the TOAST table, if any */
-#define VACOPT_DISABLE_PAGE_SKIPPING 0x80	/* don't skip any pages */
+#define VACOPT_PROCESS_MAIN 0x40	/* process main relation */
+#define VACOPT_PROCESS_TOAST 0x80	/* process the TOAST table, if any */
+#define VACOPT_DISABLE_PAGE_SKIPPING 0x100	/* don't skip any pages */
+#define VACOPT_SKIP_DATABASE_STATS 0x200	/* skip vac_update_datfrozenxid() */
+#define VACOPT_ONLY_DATABASE_STATS 0x400	/* only vac_update_datfrozenxid() */
 
 /*
  * Values used by index_cleanup and truncate params.
@@ -210,6 +213,9 @@ typedef enum VacOptValue
  *
  * Note that at least one of VACOPT_VACUUM and VACOPT_ANALYZE must be set
  * in options.
+ *
+ * When adding a new VacuumParam member, consider adding it to vacuumdb as
+ * well.
  */
 typedef struct VacuumParams
 {
@@ -234,6 +240,45 @@ typedef struct VacuumParams
 	 */
 	int			nworkers;
 } VacuumParams;
+
+/*
+ * VacuumCutoffs is immutable state that describes the cutoffs used by VACUUM.
+ * Established at the beginning of each VACUUM operation.
+ */
+struct VacuumCutoffs
+{
+	/*
+	 * Existing pg_class fields at start of VACUUM
+	 */
+	TransactionId relfrozenxid;
+	MultiXactId relminmxid;
+
+	/*
+	 * OldestXmin is the Xid below which tuples deleted by any xact (that
+	 * committed) should be considered DEAD, not just RECENTLY_DEAD.
+	 *
+	 * OldestMxact is the Mxid below which MultiXacts are definitely not seen
+	 * as visible by any running transaction.
+	 *
+	 * OldestXmin and OldestMxact are also the most recent values that can
+	 * ever be passed to vac_update_relstats() as frozenxid and minmulti
+	 * arguments at the end of VACUUM.  These same values should be passed
+	 * when it turns out that VACUUM will leave no unfrozen XIDs/MXIDs behind
+	 * in the table.
+	 */
+	TransactionId OldestXmin;
+	MultiXactId OldestMxact;
+
+	/*
+	 * FreezeLimit is the Xid below which all Xids are definitely frozen or
+	 * removed in pages VACUUM scans and cleanup locks.
+	 *
+	 * MultiXactCutoff is the value below which all MultiXactIds are
+	 * definitely removed from Xmax in pages VACUUM scans and cleanup locks.
+	 */
+	TransactionId FreezeLimit;
+	MultiXactId MultiXactCutoff;
+};
 
 /*
  * VacDeadItems stores TIDs whose index tuples are deleted by index vacuuming.
@@ -264,11 +309,15 @@ extern __thread PGDLLIMPORT pg_atomic_uint32 *VacuumSharedCostBalance;
 extern __thread PGDLLIMPORT pg_atomic_uint32 *VacuumActiveNWorkers;
 extern __thread PGDLLIMPORT int VacuumCostBalanceLocal;
 
+extern __thread PGDLLIMPORT bool VacuumFailsafeActive;
+extern __thread PGDLLIMPORT double vacuum_cost_delay;
+extern __thread PGDLLIMPORT int vacuum_cost_limit;
 
 /* in commands/vacuum.c */
 extern void ExecVacuum(ParseState *pstate, VacuumStmt *vacstmt, bool isTopLevel);
 extern void vacuum(List *relations, VacuumParams *params,
-				   BufferAccessStrategy bstrategy, bool isTopLevel);
+				   BufferAccessStrategy bstrategy, MemoryContext vac_context,
+				   bool isTopLevel);
 extern void vac_open_indexes(Relation relation, LOCKMODE lockmode,
 							 int *nindexes, Relation **Irel);
 extern void vac_close_indexes(int nindexes, Relation *Irel, LOCKMODE lockmode);
@@ -286,16 +335,9 @@ extern void vac_update_relstats(Relation relation,
 								bool *frozenxid_updated,
 								bool *minmulti_updated,
 								bool in_outer_xact);
-extern bool vacuum_set_xid_limits(Relation rel,
-								  int freeze_min_age, int freeze_table_age,
-								  int multixact_freeze_min_age,
-								  int multixact_freeze_table_age,
-								  TransactionId *oldestXmin,
-								  MultiXactId *oldestMxact,
-								  TransactionId *freezeLimit,
-								  MultiXactId *multiXactCutoff);
-extern bool vacuum_xid_failsafe_check(TransactionId relfrozenxid,
-									  MultiXactId relminmxid);
+extern bool vacuum_get_cutoffs(Relation rel, const VacuumParams *params,
+							   struct VacuumCutoffs *cutoffs);
+extern bool vacuum_xid_failsafe_check(const struct VacuumCutoffs *cutoffs);
 extern void vac_update_datfrozenxid(void);
 extern void vacuum_delay_point(void);
 extern bool vacuum_is_relation_owner(Oid relid, Form_pg_class reltuple,
@@ -309,6 +351,10 @@ extern IndexBulkDeleteResult *vac_bulkdel_one_index(IndexVacuumInfo *ivinfo,
 extern IndexBulkDeleteResult *vac_cleanup_one_index(IndexVacuumInfo *ivinfo,
 													IndexBulkDeleteResult *istat);
 extern Size vac_max_items_to_alloc_size(int max_items);
+
+/* In postmaster/autovacuum.c */
+extern void AutoVacuumUpdateCostLimit(void);
+extern void VacuumUpdateCosts(void);
 
 /* in commands/vacuumparallel.c */
 extern ParallelVacuumState *parallel_vacuum_init(Relation rel, Relation *indrels,

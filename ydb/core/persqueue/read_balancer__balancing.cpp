@@ -65,6 +65,7 @@ bool TPartition::Reset() {
     bool result = IsInactive();
 
     ScaleAwareSDK = false;
+    StartedReadingFromEndOffset = false;
     ReadingFinished = false;
     Commited = false;
     ++Cookie;
@@ -1094,12 +1095,14 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                     GetPrefix() << "Reading of the partition " << partitionId << " was finished by " << ConsumerName
                     << " but the partition hasn't family");
+        return;
     }
 
     if (!family->Session) {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                     GetPrefix() << "Reading of the partition " << partitionId << " was finished by " << ConsumerName
                     << " but the partition hasn't reading session");
+        return;
     }
 
     auto& partition = Partitions[partitionId];
@@ -1629,6 +1632,12 @@ void TBalancer::Handle(TEvPQ::TEvWakeupReleasePartition::TPtr &ev, const TActorC
         return;
     }
 
+    if (partition->Commited) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                GetPrefix() << "skip releasing partition " << msg->PartitionId << " of consumer \"" << msg->Consumer << "\" by reading finished timeout because offset is commited");
+        return;
+    }
+
     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
             GetPrefix() << "releasing partition " << msg->PartitionId << " of consumer \"" << msg->Consumer << "\" by reading finished timeout");
 
@@ -1816,6 +1825,31 @@ void TBalancer::Handle(TEvPQ::TEvBalanceConsumer::TPtr& ev, const TActorContext&
         consumer->BalanceScheduled = false;
         consumer->Balance(ctx);
     }
+}
+
+void TBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& /*ctx*/) {
+    const auto& record = ev->Get()->Record;
+    for (const auto& partResult : record.GetPartResult()) {
+        for (const auto& consumerResult : partResult.GetConsumerResult()) {
+            PendingUpdates[partResult.GetPartition()].push_back(TData{partResult.GetGeneration(), partResult.GetCookie(), consumerResult.GetConsumer(), consumerResult.GetReadingFinished()});
+        }
+    }
+}
+
+void TBalancer::ProcessPendingStats(const TActorContext& ctx) {
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+            GetPrefix() << "ProcessPendingStats. PendingUpdates size " << PendingUpdates.size());
+
+    GetPartitionGraph().Travers([&](ui32 id) {
+        for (auto& d : PendingUpdates[id]) {
+            if (d.Commited) {
+                SetCommittedState(d.Consumer, id, d.Generation, d.Cookie, ctx);
+            }
+        }
+        return true;
+    });
+
+    PendingUpdates.clear();
 }
 
 TString TBalancer::GetPrefix() const {

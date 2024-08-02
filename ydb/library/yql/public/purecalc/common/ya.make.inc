@@ -19,7 +19,9 @@ SRCS(
     transformations/extract_used_columns.cpp
     transformations/output_columns_filter.cpp
     transformations/replace_table_reads.cpp
+    transformations/root_to_blocks.cpp
     transformations/type_annotation.cpp
+    transformations/utils.cpp
     type_from_schema.cpp
     worker.cpp
     worker_factory.cpp
@@ -43,6 +45,7 @@ PEERDIR(
     ydb/library/yql/providers/common/provider
     ydb/library/yql/providers/common/schema/expr
     ydb/library/yql/providers/common/udf_resolve
+    ydb/library/yql/providers/common/arrow_resolve
 )
 
 YQL_LAST_ABI_VERSION()

@@ -132,6 +132,27 @@ struct TCombinerNodes {
         }
     }
 
+    void ConsumeRawData(TComputationContext& /*ctx*/, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue** from, NUdf::TUnboxedValue* to) const {
+        std::fill_n(keys, KeyResultNodes.size(), NUdf::TUnboxedValuePod());
+        for (ui32 i = 0U; i < ItemNodes.size(); ++i) {
+            if (from[i] && IsInputItemNodeUsed(i)) {
+                to[i] = std::move(*(from[i]));
+            }
+        }
+    }
+
+    void ExtractRawData(TComputationContext& ctx, NUdf::TUnboxedValue* from, NUdf::TUnboxedValue* keys) const {
+        for (ui32 i = 0U; i != ItemNodes.size(); ++i) {
+            if (IsInputItemNodeUsed(i)) {
+                ItemNodes[i]->SetValue(ctx, std::move(from[i]));
+            }
+        }
+        for (ui32 i = 0U; i < KeyNodes.size(); ++i) {
+            auto& key = KeyNodes[i]->RefValue(ctx);
+            *keys++ = key = KeyResultNodes[i]->GetValue(ctx);
+        }
+    }
+
     void ProcessItem(TComputationContext& ctx, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue* state) const {
         if (keys) {
             std::fill_n(keys, KeyResultNodes.size(), NUdf::TUnboxedValuePod());
@@ -346,62 +367,61 @@ public:
     enum class ETasteResult: i8 {
         Init = -1,
         Update,
-        Skip
+        ConsumeRawData
+    };
+
+    enum class EUpdateResult: i8 {
+        Yield = -1,
+        ExtractRawData,
+        ReadInput,
+        Extract,
+        Finish
     };
     TSpillingSupportState(
-        TMemoryUsageInfo* memInfo, size_t wideFieldsIndex,
+        TMemoryUsageInfo* memInfo,
         const TMultiType* usedInputItemType, const TMultiType* keyAndStateType, ui32 keyWidth, size_t itemNodesSize,
         const THashFunc& hash, const TEqualsFunc& equal, bool allowSpilling, TComputationContext& ctx
     )
         : TBase(memInfo)
         , InMemoryProcessingState(memInfo, keyWidth, keyAndStateType->GetElementsCount() - keyWidth, hash, equal)
-        , WideFieldsIndex(wideFieldsIndex)
         , UsedInputItemType(usedInputItemType)
         , KeyAndStateType(keyAndStateType)
         , KeyWidth(keyWidth)
         , ItemNodesSize(itemNodesSize)
         , Hasher(hash)
         , Mode(EOperatingMode::InMemory)
+        , ViewForKeyAndState(keyAndStateType->GetElementsCount())
         , MemInfo(memInfo)
         , Equal(equal)
         , AllowSpilling(allowSpilling)
         , Ctx(ctx)
     {
         BufferForUsedInputItems.reserve(usedInputItemType->GetElementsCount());
-        BufferForKeyAndState.reserve(keyAndStateType->GetElementsCount());
         Tongue = InMemoryProcessingState.Tongue;
         Throat = InMemoryProcessingState.Throat;
     }
 
-    bool HasAnyData() const {
-        return !SpilledBuckets.empty();
-    }
+    EUpdateResult Update() {
+        if (IsEverythingExtracted) return EUpdateResult::Finish;
 
-    bool IsProcessingRequired() const {
-        if (InputStatus != EFetchResult::Finish) return true;
-
-        return HasDataForProcessing;
-    }
-
-    bool UpdateAndWait() {
         switch (GetMode()) {
             case EOperatingMode::InMemory: {
+                Tongue = InMemoryProcessingState.Tongue;
                 if (CheckMemoryAndSwitchToSpilling()) {
-                    return UpdateAndWait();
+                    return Update();
                 }
-                return false;
+                if (InputStatus == EFetchResult::Finish) return EUpdateResult::Extract;
+
+                return EUpdateResult::ReadInput;
             }
-                
-            case EOperatingMode::ProcessSpilled:
-                return ProcessSpilledDataAndWait();
             case EOperatingMode::Spilling: {
                 UpdateSpillingBuckets();
 
-                if (!HasMemoryForProcessing() && InputStatus != EFetchResult::Finish && TryToReduceMemoryAndWait()) return true;
+                if (!HasMemoryForProcessing() && InputStatus != EFetchResult::Finish && TryToReduceMemoryAndWait()) return EUpdateResult::Yield;
 
                 if (BufferForUsedInputItems.size()) {
                     auto& bucket = SpilledBuckets[BufferForUsedInputItemsBucketId];
-                    if (bucket.AsyncWriteOperation.has_value()) return true;
+                    if (bucket.AsyncWriteOperation.has_value()) return EUpdateResult::Yield;
 
                     bucket.AsyncWriteOperation = bucket.SpilledData->WriteWideItem(BufferForUsedInputItems);
                     BufferForUsedInputItems.resize(0); //for freeing allocated key value asap
@@ -409,10 +429,10 @@ public:
 
                 if (InputStatus == EFetchResult::Finish) return FlushSpillingBuffersAndWait();
 
-                // Prepare buffer for reading new key
-                BufferForKeyAndState.resize(KeyWidth);
-                return false;
+                return EUpdateResult::ReadInput;
             }
+            case EOperatingMode::ProcessSpilled:
+                return ProcessSpilledData();
         }
     }
 
@@ -420,78 +440,57 @@ public:
         if (GetMode() == EOperatingMode::InMemory) {
             bool isNew = InMemoryProcessingState.TasteIt();
             Throat = InMemoryProcessingState.Throat;
-            Tongue = InMemoryProcessingState.Tongue;
             return isNew ? ETasteResult::Init : ETasteResult::Update;
         }
         if (GetMode() == EOperatingMode::ProcessSpilled) {
             // while restoration we process buckets one by one starting from the first in a queue
             bool isNew = SpilledBuckets.front().InMemoryProcessingState->TasteIt();
             Throat = SpilledBuckets.front().InMemoryProcessingState->Throat;
-            Tongue = SpilledBuckets.front().InMemoryProcessingState->Tongue;
+            BufferForUsedInputItems.resize(0);
             return isNew ? ETasteResult::Init : ETasteResult::Update;
         }
 
-        MKQL_ENSURE(!BufferForKeyAndState.empty(), "Internal logic error");
-
-        auto hash = Hasher(BufferForKeyAndState.data());
+        auto hash = Hasher(ViewForKeyAndState.data());
         auto bucketId = hash % SpilledBucketCount;
         auto& bucket = SpilledBuckets[bucketId];
 
         if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory) {
-            MoveKeyToBucket(bucket);
+            std::copy_n(ViewForKeyAndState.data(), KeyWidth, static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Tongue));
             Throat = bucket.InMemoryProcessingState->Throat;
             return bucket.InMemoryProcessingState->TasteIt()? ETasteResult::Init : ETasteResult::Update;
         }
         
-        // Corresponding bucket is spilled, we don't need a key anymore, full input will be spilled
-        BufferForKeyAndState.resize(0);
-        TryToSpillRawData(bucket, bucketId);
-        
-        return ETasteResult::Skip;
+        // Prepare space for raw data 
+        MKQL_ENSURE(BufferForUsedInputItems.size() == 0, "Internal logic error");
+        BufferForUsedInputItems.resize(ItemNodesSize);
+        BufferForUsedInputItemsBucketId = bucketId;
+
+        Throat = BufferForUsedInputItems.data();
+
+        return ETasteResult::ConsumeRawData;
     }
 
     NUdf::TUnboxedValuePod* Extract() {
-        if (GetMode() == EOperatingMode::InMemory) return static_cast<NUdf::TUnboxedValue*>(InMemoryProcessingState.Extract());
+        NUdf::TUnboxedValue* value = nullptr;
+        if (GetMode() == EOperatingMode::InMemory) {
+            value = static_cast<NUdf::TUnboxedValue*>(InMemoryProcessingState.Extract());
+            if (!value) IsEverythingExtracted = true;
+            return value;
+        }
 
         MKQL_ENSURE(SpilledBuckets.front().BucketState == TSpilledBucket::EBucketState::InMemory, "Internal logic error");
         MKQL_ENSURE(SpilledBuckets.size() > 0, "Internal logic error");
 
-        auto value = static_cast<NUdf::TUnboxedValue*>(SpilledBuckets.front().InMemoryProcessingState->Extract());
+        value = static_cast<NUdf::TUnboxedValue*>(SpilledBuckets.front().InMemoryProcessingState->Extract());
         if (!value) {
             SpilledBuckets.pop_front();
+            if (SpilledBuckets.empty()) IsEverythingExtracted = true;
         }
 
         return value;
     }
 private:
-    void MoveKeyToBucket(TSpilledBucket& bucket) {
-        for (size_t i = 0; i < KeyWidth; ++i) {
-            //jumping into unsafe world, refusing ownership
-            static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Tongue[i]) = std::move(BufferForKeyAndState[i]);
-        }
-        BufferForKeyAndState.resize(0);
-    }
-
-    // Copies data from WideFields to local and tries to spill it using suitable bucket.
-    // if the bucket is already busy, then the buffer will wait for the next iteration.
-    void TryToSpillRawData(TSpilledBucket& bucket, size_t bucketId) {
-        auto **fields = Ctx.WideFields.data() + WideFieldsIndex;
-        MKQL_ENSURE(BufferForUsedInputItems.empty(), "Internal logic error");
-
-        for (size_t i = 0; i < ItemNodesSize; ++i) {
-            if (fields[i]) {
-                BufferForUsedInputItems.push_back(*fields[i]);
-            }
-        }
-        if (bucket.AsyncWriteOperation.has_value()) {
-            BufferForUsedInputItemsBucketId = bucketId;
-            return;
-        }
-        bucket.AsyncWriteOperation = bucket.SpilledData->WriteWideItem(BufferForUsedInputItems);
-        BufferForUsedInputItems.resize(0);
-    }
-
-    bool FlushSpillingBuffersAndWait() {
+    EUpdateResult FlushSpillingBuffersAndWait() {
         UpdateSpillingBuckets();
 
         ui64 finishedCount = 0;
@@ -507,12 +506,11 @@ private:
             }
         }
 
-        if (finishedCount != SpilledBuckets.size()) return true;
+        if (finishedCount != SpilledBuckets.size()) return EUpdateResult::Yield;
 
-        YQL_LOG(INFO) << "switching to ProcessSpilled";
         SwitchMode(EOperatingMode::ProcessSpilled);
 
-        return ProcessSpilledDataAndWait();
+        return ProcessSpilledData();
     }
 
     void SplitStateIntoBuckets() {
@@ -539,17 +537,26 @@ private:
 
     bool CheckMemoryAndSwitchToSpilling() {
         if (AllowSpilling && Ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
-            const auto used = TlsAllocState->GetUsed();
-            const auto limit = TlsAllocState->GetLimit();
-
-            YQL_LOG(INFO) << "yellow zone reached " << (used*100/limit) << "%=" << used << "/" << limit;
-            YQL_LOG(INFO) << "switching Memory mode to Spilling";
+            LogMemoryUsage();
 
             SwitchMode(EOperatingMode::Spilling);
             return true;
         }
 
         return false;
+    }
+
+    void LogMemoryUsage() const {
+        const auto used = TlsAllocState->GetUsed();
+        const auto limit = TlsAllocState->GetLimit();
+        TStringBuilder logmsg;
+        logmsg << "Memory usage: ";
+        if (limit) {
+            logmsg << (used*100/limit) << "%=";
+        }
+        logmsg << (used/1_MB) << "MB/" << (limit/1_MB) << "MB";
+
+        YQL_LOG(INFO) << logmsg;
     }
 
     void SpillMoreStateFromBucket(TSpilledBucket& bucket) {
@@ -608,11 +615,9 @@ private:
         return false;
     }
 
-    bool ProcessSpilledDataAndWait() {
-        if (SpilledBuckets.empty()) return false;
-
+    EUpdateResult ProcessSpilledData() {
         if (AsyncReadOperation) {
-            if (!AsyncReadOperation->HasValue()) return true;
+            if (!AsyncReadOperation->HasValue()) return EUpdateResult::Yield;
             if (RecoverState) {
                 SpilledBuckets[0].SpilledState->AsyncReadCompleted(AsyncReadOperation->ExtractValue().value(), Ctx.HolderFactory);
             } else {
@@ -620,28 +625,28 @@ private:
             }
             AsyncReadOperation = std::nullopt;
         }
+
         auto& bucket = SpilledBuckets.front();
-        if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory) return false;
+        if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory) return EUpdateResult::Extract;
+
         //recover spilled state
         while(!bucket.SpilledState->Empty()) {
             RecoverState = true;
-            BufferForKeyAndState.resize(KeyAndStateType->GetElementsCount());
-            AsyncReadOperation = bucket.SpilledState->ExtractWideItem(BufferForKeyAndState);
+            TTemporaryUnboxedValueVector bufferForKeyAndState(KeyAndStateType->GetElementsCount());
+            AsyncReadOperation = bucket.SpilledState->ExtractWideItem(bufferForKeyAndState);
             if (AsyncReadOperation) {
-                BufferForKeyAndState.resize(0);
-                return true;
+                return EUpdateResult::Yield;
             }
             for (size_t i = 0; i< KeyWidth; ++i) {
                 //jumping into unsafe world, refusing ownership
-                static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Tongue[i]) = std::move(BufferForKeyAndState[i]);
+                static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Tongue[i]) = std::move(bufferForKeyAndState[i]);
             }
             auto isNew = bucket.InMemoryProcessingState->TasteIt();
             MKQL_ENSURE(isNew, "Internal logic error");
             for (size_t i = KeyWidth; i < KeyAndStateType->GetElementsCount(); ++i) {
                 //jumping into unsafe world, refusing ownership
-                static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Throat[i - KeyWidth]) = std::move(BufferForKeyAndState[i]);
+                static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Throat[i - KeyWidth]) = std::move(bufferForKeyAndState[i]);
             }
-            BufferForKeyAndState.resize(0);
         }
         //process spilled data
         if (!bucket.SpilledData->Empty()) {
@@ -649,24 +654,16 @@ private:
             BufferForUsedInputItems.resize(UsedInputItemType->GetElementsCount());
             AsyncReadOperation = bucket.SpilledData->ExtractWideItem(BufferForUsedInputItems);
             if (AsyncReadOperation) {
-                return true;
-            }
-            auto **fields = Ctx.WideFields.data() + WideFieldsIndex;
-            for (size_t i = 0, j = 0; i < ItemNodesSize; ++i) {
-                if (fields[i]) {
-                    fields[i] = &(BufferForUsedInputItems[j++]);
-                }
+                return EUpdateResult::Yield;
             }
 
+            Throat = BufferForUsedInputItems.data();
             Tongue = bucket.InMemoryProcessingState->Tongue;
-            Throat = bucket.InMemoryProcessingState->Throat;
             
-            HasDataForProcessing = true;
-            return false;
+            return EUpdateResult::ExtractRawData;
         }
         bucket.BucketState = TSpilledBucket::EBucketState::InMemory;
-        HasDataForProcessing = false;
-        return false;
+        return EUpdateResult::Extract;
     }
 
     EOperatingMode GetMode() const {
@@ -676,10 +673,12 @@ private:
     void SwitchMode(EOperatingMode mode) {
         switch(mode) {
             case EOperatingMode::InMemory: {
+                YQL_LOG(INFO) << "switching Memory mode to InMemory";
                 MKQL_ENSURE(false, "Internal logic error");
                 break;
             }
             case EOperatingMode::Spilling: {
+                YQL_LOG(INFO) << "switching Memory mode to Spilling";
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
                 SpilledBuckets.resize(SpilledBucketCount);
                 auto spiller = Ctx.SpillerFactory->CreateSpiller();
@@ -690,14 +689,13 @@ private:
                 }
                 SplitStateIntoBuckets();
 
-                BufferForKeyAndState.resize(KeyAndStateType->GetElementsCount());
-                Tongue = BufferForKeyAndState.data();
+                Tongue = ViewForKeyAndState.data();
                 break;
             }
             case EOperatingMode::ProcessSpilled: {
+                YQL_LOG(INFO) << "switching Memory mode to ProcessSpilled";
                 MKQL_ENSURE(EOperatingMode::Spilling == Mode, "Internal logic error");
                 MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");
-                BufferForKeyAndState.resize(0);
                 break;
             }
 
@@ -710,9 +708,7 @@ private:
     }
 
     bool IsSwitchToSpillingModeCondition() const {
-        return false;
-        // TODO: YQL-18033
-        // return !HasMemoryForProcessing();
+        return !HasMemoryForProcessing();
     }
 
 public:
@@ -723,10 +719,9 @@ public:
 private:
     ui64 NextBucketToSpill = 0;
 
-    bool HasDataForProcessing = false;
+    bool IsEverythingExtracted = false;
 
     TState InMemoryProcessingState;
-    const size_t WideFieldsIndex;
     const TMultiType* const UsedInputItemType;
     const TMultiType* const KeyAndStateType;
     const size_t KeyWidth;
@@ -740,7 +735,7 @@ private:
     std::deque<TSpilledBucket> SpilledBuckets;
     ui64 BufferForUsedInputItemsBucketId;
     TUnboxedValueVector BufferForUsedInputItems;
-    TUnboxedValueVector BufferForKeyAndState;
+    std::vector<NUdf::TUnboxedValuePod, TMKQLAllocator<NUdf::TUnboxedValuePod>> ViewForKeyAndState;
 
     TMemoryUsageInfo* MemInfo = nullptr;
     TEqualsFunc const Equal;
@@ -1246,48 +1241,48 @@ public:
             auto **fields = ctx.WideFields.data() + WideFieldsIndex;
 
             while (true) {
-                for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i)
-                    fields[i] = Nodes.GetUsedInputItemNodePtrOrNull(ctx, i);
-
-                if (ptr->UpdateAndWait()) {
-                    return EFetchResult::Yield;
-                }
-
-                if (ptr->InputStatus != EFetchResult::Finish) {
-                    switch (ptr->InputStatus = Flow->FetchValues(ctx, fields)) {
-                        case EFetchResult::One:
-                            break;
-                        case EFetchResult::Finish:
-                            continue;
-                        case EFetchResult::Yield:
-                            return EFetchResult::Yield;
+                switch(ptr->Update()) {
+                    case TSpillingSupportState::EUpdateResult::ReadInput: {
+                        for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i)
+                            fields[i] = Nodes.GetUsedInputItemNodePtrOrNull(ctx, i);
+                        switch (ptr->InputStatus = Flow->FetchValues(ctx, fields)) {
+                            case EFetchResult::One:
+                                break;
+                            case EFetchResult::Finish:
+                                continue;
+                            case EFetchResult::Yield:
+                                return EFetchResult::Yield;
+                        }
+                        Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
+                        break;
                     }
+                    case TSpillingSupportState::EUpdateResult::Yield:
+                        return EFetchResult::Yield;
+                    case TSpillingSupportState::EUpdateResult::ExtractRawData:
+                        Nodes.ExtractRawData(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Throat), static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
+                        break;
+                    case TSpillingSupportState::EUpdateResult::Extract:
+                        if (const auto values = static_cast<NUdf::TUnboxedValue*>(ptr->Extract())) {
+                            Nodes.FinishItem(ctx, values, output);
+                            return EFetchResult::One;
+                        }
+                        continue;
+                    case TSpillingSupportState::EUpdateResult::Finish:
+                        return EFetchResult::Finish;
                 }
 
-                if (ptr->IsProcessingRequired()) {
-                    Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
-
-                    switch(ptr->TasteIt()) {
-                        case TSpillingSupportState::ETasteResult::Init:
-                            Nodes.ProcessItem(ctx, nullptr, static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
-                            break;
-                        case TSpillingSupportState::ETasteResult::Update:
-                            Nodes.ProcessItem(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
-                            break;
-                        case TSpillingSupportState::ETasteResult::Skip:
-                            break;
-                    }
-                    continue;
+                switch(ptr->TasteIt()) {
+                    case TSpillingSupportState::ETasteResult::Init:
+                        Nodes.ProcessItem(ctx, nullptr, static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
+                        break;
+                    case TSpillingSupportState::ETasteResult::Update:
+                        Nodes.ProcessItem(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
+                        break;
+                    case TSpillingSupportState::ETasteResult::ConsumeRawData:
+                        Nodes.ConsumeRawData(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), fields, static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
+                        break;
                 }
 
-                if (const auto values = static_cast<NUdf::TUnboxedValue*>(ptr->Extract())) {
-                    Nodes.FinishItem(ctx, values, output);
-                    return EFetchResult::One;
-                }
-
-                if (!ptr->HasAnyData()) {
-                    return EFetchResult::Finish;
-                }
             }
         }
         Y_UNREACHABLE();
@@ -1326,220 +1321,247 @@ public:
         const auto state = new LoadInst(valueType, statePtr, "state", block);
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
-        const auto boolFuncType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType()}, false);
         BranchInst::Create(more, block);
 
-        const auto full = BasicBlock::Create(context, "full", ctx.Func);
+        const auto pull = BasicBlock::Create(context, "pull", ctx.Func);
+        const auto rest = BasicBlock::Create(context, "rest", ctx.Func);
+        const auto test = BasicBlock::Create(context, "test", ctx.Func);
+        const auto good = BasicBlock::Create(context, "good", ctx.Func);
+        const auto load = BasicBlock::Create(context, "load", ctx.Func);
+        const auto fill = BasicBlock::Create(context, "fill", ctx.Func);
+        const auto data = BasicBlock::Create(context, "data", ctx.Func);
+        const auto done = BasicBlock::Create(context, "done", ctx.Func);
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
+        const auto stub = BasicBlock::Create(context, "stub", ctx.Func);
+
+        new UnreachableInst(context, stub);
+
         const auto result = PHINode::Create(statusType, 4U, "result", over);
 
-        {
-            const auto test = BasicBlock::Create(context, "test", ctx.Func);
-            const auto pull = BasicBlock::Create(context, "pull", ctx.Func);
-            const auto rest = BasicBlock::Create(context, "rest", ctx.Func);
-            const auto proc = BasicBlock::Create(context, "proc", ctx.Func);
-            const auto good = BasicBlock::Create(context, "good", ctx.Func);
+        std::vector<PHINode*> phis(Nodes.ItemNodes.size(), nullptr);
+        auto j = 0U;
+        std::generate(phis.begin(), phis.end(), [&]() {
+            return Nodes.IsInputItemNodeUsed(j++) ?
+                PHINode::Create(valueType, 2U, (TString("item_") += ToString(j)).c_str(), test) : nullptr;
+        });
 
-            block = more;
+        block = more;
 
-            const auto waitMoreFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::UpdateAndWait));
-            const auto waitMoreFuncPtr = CastInst::Create(Instruction::IntToPtr, waitMoreFunc, PointerType::getUnqual(boolFuncType), "wait_more_func", block);
-            const auto waitMore = CallInst::Create(boolFuncType, waitMoreFuncPtr, { stateArg }, "wait_more", block);
+        const auto updateFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::Update));
+        const auto updateType = FunctionType::get(wayType, {stateArg->getType()}, false);
+        const auto updateFuncPtr = CastInst::Create(Instruction::IntToPtr, updateFunc, PointerType::getUnqual(updateType), "update_func", block);
+        const auto update = CallInst::Create(updateType, updateFuncPtr, { stateArg }, "update", block);
 
-            result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
+        result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
 
-            BranchInst::Create(over, test, waitMore, block);
+        const auto updateWay = SwitchInst::Create(update, stub, 5U, block);
+        updateWay->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::EUpdateResult::Yield)), over);
+        updateWay->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::EUpdateResult::Extract)), fill);
+        updateWay->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::EUpdateResult::Finish)), done);
+        updateWay->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::EUpdateResult::ReadInput)), pull);
+        updateWay->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::EUpdateResult::ExtractRawData)), load);
 
-            block = test;
+        block = load;
 
-            const auto statusPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetStatus() }, "last", block);
-            const auto last = new LoadInst(statusType, statusPtr, "last", block);
-            const auto finish = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, last, ConstantInt::get(last->getType(), static_cast<i32>(EFetchResult::Finish)), "finish", block);
+        const auto extractorPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetThroat() }, "extractor_ptr", block);
+        const auto extractor = new LoadInst(ptrValueType, extractorPtr, "extractor", block);
 
-            BranchInst::Create(good, pull, finish, block);
-
-            block = pull;
-
-            const auto getres = GetNodeValues(Flow, ctx, block);
-
-            result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
-
-            const auto choise = SwitchInst::Create(getres.first, good, 2U, block);
-            choise->addCase(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), over);
-            choise->addCase(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), rest);
-
-            block = rest;
-            new StoreInst(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), statusPtr, block);
-            BranchInst::Create(more, block);
-
-            block = good;
-
-            const auto processingFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::IsProcessingRequired));
-            const auto processingFuncPtr = CastInst::Create(Instruction::IntToPtr, processingFunc, PointerType::getUnqual(boolFuncType), "processing_func", block);
-            const auto processing = CallInst::Create(boolFuncType, processingFuncPtr, { stateArg }, "processing", block);
-
-            BranchInst::Create(proc, full, processing, block);
-
-            block = proc;
-
-            std::vector<Value*> items(Nodes.ItemNodes.size(), nullptr);
-            for (ui32 i = 0U; i < items.size(); ++i) {
-                if (Nodes.ItemNodes[i]->GetDependencesCount() > 0U)
-                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.ItemNodes[i])->CreateSetValue(ctx, block, items[i] = getres.second[i](ctx, block));
-                else if (Nodes.PasstroughtItems[i])
-                    items[i] = getres.second[i](ctx, block);
-            }
-
-            const auto tonguePtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetTongue() }, "tongue_ptr", block);
-            const auto tongue = new LoadInst(ptrValueType, tonguePtr, "tongue", block);
-
-            std::vector<Value*> keyPointers(Nodes.KeyResultNodes.size(), nullptr), keys(Nodes.KeyResultNodes.size(), nullptr);
-            for (ui32 i = 0U; i < Nodes.KeyResultNodes.size(); ++i) {
-                auto& key = keys[i];
-                const auto keyPtr = keyPointers[i] = GetElementPtrInst::CreateInBounds(valueType, tongue, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("key_") += ToString(i)).c_str(), block);
-                if (const auto map = Nodes.KeysOnItems[i]) {
-                    auto& it = items[*map];
-                    if (!it)
-                        it = getres.second[*map](ctx, block);
-                    key = it;
-                } else {
-                    key = GetNodeValue(Nodes.KeyResultNodes[i], ctx, block);
-                }
-
-                if (Nodes.KeyNodes[i]->GetDependencesCount() > 0U)
-                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.KeyNodes[i])->CreateSetValue(ctx, block, key);
-
-                new StoreInst(key, keyPtr, block);
-            }
-
-            const auto atFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::TasteIt));
-            const auto atType = FunctionType::get(wayType, {stateArg->getType()}, false);
-            const auto atPtr = CastInst::Create(Instruction::IntToPtr, atFunc, PointerType::getUnqual(atType), "function", block);
-            const auto taste= CallInst::Create(atType, atPtr, {stateArg}, "taste", block);
-
-            const auto init = BasicBlock::Create(context, "init", ctx.Func);
-            const auto next = BasicBlock::Create(context, "next", ctx.Func);
-
-            const auto throatPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetThroat() }, "throat_ptr", block);
-            const auto throat = new LoadInst(ptrValueType, throatPtr, "throat", block);
-
-            std::vector<Value*> pointers;
-            pointers.reserve(Nodes.StateNodes.size());
-            for (ui32 i = 0U; i < Nodes.StateNodes.size(); ++i) {
-                pointers.emplace_back(GetElementPtrInst::CreateInBounds(valueType, throat, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("state_") += ToString(i)).c_str(), block));
-            }
-
-            const auto way = SwitchInst::Create(taste, more, 2U, block);
-            way->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::ETasteResult::Init)), init);
-            way->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::ETasteResult::Update)), next);
-
-            block = init;
-
-            for (ui32 i = 0U; i < Nodes.KeyResultNodes.size(); ++i) {
-                ValueAddRef(Nodes.KeyResultNodes[i]->GetRepresentation(), keyPointers[i], ctx, block);
-            }
-
-            for (ui32 i = 0U; i < Nodes.InitResultNodes.size(); ++i) {
-                if (const auto map = Nodes.InitOnItems[i]) {
-                    auto& it = items[*map];
-                    if (!it)
-                        it = getres.second[*map](ctx, block);
-                    new StoreInst(it, pointers[i], block);
-                    ValueAddRef(Nodes.InitResultNodes[i]->GetRepresentation(), it, ctx, block);
-                }  else if (const auto map = Nodes.InitOnKeys[i]) {
-                    const auto key = keys[*map];
-                    new StoreInst(key, pointers[i], block);
-                    ValueAddRef(Nodes.InitResultNodes[i]->GetRepresentation(), key, ctx, block);
-                } else {
-                    GetNodeValue(pointers[i], Nodes.InitResultNodes[i], ctx, block);
-                }
-            }
-
-            BranchInst::Create(more, block);
-
-            block = next;
-
-            std::vector<Value*> stored(Nodes.StateNodes.size(), nullptr);
-            for (ui32 i = 0U; i < stored.size(); ++i) {
-                const bool hasDependency = Nodes.StateNodes[i]->GetDependencesCount() > 0U;
-                if (const auto map = Nodes.StateOnUpdate[i]) {
-                    if (hasDependency || i != *map) {
-                        stored[i] = new LoadInst(valueType, pointers[i], (TString("state_") += ToString(i)).c_str(), block);
-                        if (hasDependency)
-                            EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.StateNodes[i])->CreateSetValue(ctx, block, stored[i]);
-                    }
-                } else if (hasDependency) {
-                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.StateNodes[i])->CreateSetValue(ctx, block, pointers[i]);
-                } else {
-                    ValueUnRef(Nodes.StateNodes[i]->GetRepresentation(), pointers[i], ctx, block);
-                }
-            }
-
-            for (ui32 i = 0U; i < Nodes.UpdateResultNodes.size(); ++i) {
-                if (const auto map = Nodes.UpdateOnState[i]) {
-                    if (const auto j = *map; i != j) {
-                        auto& it = stored[j];
-                        if (!it)
-                            it = new LoadInst(valueType, pointers[j], (TString("state_") += ToString(j)).c_str(), block);
-                        new StoreInst(it, pointers[i], block);
-                        if (i != *Nodes.StateOnUpdate[j])
-                            ValueAddRef(Nodes.UpdateResultNodes[i]->GetRepresentation(), it, ctx, block);
-                    }
-                } else if (const auto map = Nodes.UpdateOnItems[i]) {
-                    auto& it = items[*map];
-                    if (!it)
-                        it = getres.second[*map](ctx, block);
-                    new StoreInst(it, pointers[i], block);
-                    ValueAddRef(Nodes.UpdateResultNodes[i]->GetRepresentation(), it, ctx, block);
-                }  else if (const auto map = Nodes.UpdateOnKeys[i]) {
-                    const auto key = keys[*map];
-                    new StoreInst(key, pointers[i], block);
-                    ValueAddRef(Nodes.UpdateResultNodes[i]->GetRepresentation(), key, ctx, block);
-                } else {
-                    GetNodeValue(pointers[i], Nodes.UpdateResultNodes[i], ctx, block);
-                }
-            }
-
-            BranchInst::Create(more, block);
+        std::vector<Value*> items(phis.size(), nullptr);
+        for (ui32 i = 0U; i < items.size(); ++i) {
+            const auto ptr = GetElementPtrInst::CreateInBounds(valueType, extractor, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("load_ptr_") += ToString(i)).c_str(), block);
+            if (phis[i])
+                items[i] = new LoadInst(valueType, ptr, (TString("load_") += ToString(i)).c_str(), block);
+            if (i < Nodes.ItemNodes.size() && Nodes.ItemNodes[i]->GetDependencesCount() > 0U)
+                EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.ItemNodes[i])->CreateSetValue(ctx, block, items[i]);
         }
 
-        {
-            block = full;
+        for (ui32 i = 0U; i < phis.size(); ++i) {
+            if (const auto phi = phis[i]) {
+                phi->addIncoming(items[i], block);
+            }
+        }
 
-            const auto good = BasicBlock::Create(context, "good", ctx.Func);
-            const auto last = BasicBlock::Create(context, "last", ctx.Func);
+        BranchInst::Create(test, block);
 
-            const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::Extract));
-            const auto extractType = FunctionType::get(ptrValueType, {stateArg->getType()}, false);
-            const auto extractPtr = CastInst::Create(Instruction::IntToPtr, extractFunc, PointerType::getUnqual(extractType), "extract", block);
-            const auto out = CallInst::Create(extractType, extractPtr, {stateArg}, "out", block);
-            const auto has = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, out, ConstantPointerNull::get(ptrValueType), "has", block);
+        block = pull;
 
-            BranchInst::Create(good, last, has, block);
+        const auto getres = GetNodeValues(Flow, ctx, block);
 
-            block = good;
+        result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
 
-            for (ui32 i = 0U; i < Nodes.FinishNodes.size(); ++i) {
-                const auto ptr = GetElementPtrInst::CreateInBounds(valueType, out, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("out_key_") += ToString(i)).c_str(), block);
-                if (Nodes.FinishNodes[i]->GetDependencesCount() > 0 || Nodes.ItemsOnResult[i])
-                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.FinishNodes[i])->CreateSetValue(ctx, block, ptr);
-                else
-                    ValueUnRef(Nodes.FinishNodes[i]->GetRepresentation(), ptr, ctx, block);
+        const auto choise = SwitchInst::Create(getres.first, good, 2U, block);
+        choise->addCase(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), over);
+        choise->addCase(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), rest);
+
+        block = rest;
+        const auto statusPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetStatus() }, "last", block);
+        new StoreInst(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), statusPtr, block);
+        BranchInst::Create(more, block);
+
+        block = good;
+
+        for (ui32 i = 0U; i < items.size(); ++i) {
+            if (phis[i])
+                items[i] = getres.second[i](ctx, block);
+            if (Nodes.ItemNodes[i]->GetDependencesCount() > 0U)
+                EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.ItemNodes[i])->CreateSetValue(ctx, block, items[i]);
+        }
+
+        for (ui32 i = 0U; i < phis.size(); ++i) {
+            if (const auto phi = phis[i]) {
+                phi->addIncoming(items[i], block);
+            }
+        }
+
+        BranchInst::Create(test, block);
+
+        block = test;
+
+        const auto tonguePtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetTongue() }, "tongue_ptr", block);
+        const auto tongue = new LoadInst(ptrValueType, tonguePtr, "tongue", block);
+
+        std::vector<Value*> keyPointers(Nodes.KeyResultNodes.size(), nullptr), keys(Nodes.KeyResultNodes.size(), nullptr);
+        for (ui32 i = 0U; i < Nodes.KeyResultNodes.size(); ++i) {
+            auto& key = keys[i];
+            const auto keyPtr = keyPointers[i] = GetElementPtrInst::CreateInBounds(valueType, tongue, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("key_") += ToString(i)).c_str(), block);
+            if (const auto map = Nodes.KeysOnItems[i]) {
+                key = phis[*map];
+            } else {
+                key = GetNodeValue(Nodes.KeyResultNodes[i], ctx, block);
             }
 
-            result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::One)), block);
-            BranchInst::Create(over, block);
+            if (Nodes.KeyNodes[i]->GetDependencesCount() > 0U)
+                EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.KeyNodes[i])->CreateSetValue(ctx, block, key);
 
-            block = last;
-
-            const auto hasDataFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::HasAnyData));
-            const auto hasDataFuncPtr = CastInst::Create(Instruction::IntToPtr, hasDataFunc, PointerType::getUnqual(boolFuncType), "has_data_func", block);
-            const auto hasData = CallInst::Create(boolFuncType, hasDataFuncPtr, { stateArg }, "has_data", block);
-
-            result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), block);
-
-            BranchInst::Create(more, over, hasData, block);
+            new StoreInst(key, keyPtr, block);
         }
+
+        const auto atFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::TasteIt));
+        const auto atType = FunctionType::get(wayType, {stateArg->getType()}, false);
+        const auto atPtr = CastInst::Create(Instruction::IntToPtr, atFunc, PointerType::getUnqual(atType), "function", block);
+        const auto taste= CallInst::Create(atType, atPtr, {stateArg}, "taste", block);
+
+        const auto init = BasicBlock::Create(context, "init", ctx.Func);
+        const auto next = BasicBlock::Create(context, "next", ctx.Func);
+        const auto save = BasicBlock::Create(context, "save", ctx.Func);
+
+        const auto throatPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetThroat() }, "throat_ptr", block);
+        const auto throat = new LoadInst(ptrValueType, throatPtr, "throat", block);
+
+        std::vector<Value*> pointers;
+        const auto width = std::max(Nodes.StateNodes.size(), phis.size());
+        pointers.reserve(width);
+        for (ui32 i = 0U; i < width; ++i) {
+            pointers.emplace_back(GetElementPtrInst::CreateInBounds(valueType, throat, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("state_") += ToString(i)).c_str(), block));
+        }
+
+        const auto way = SwitchInst::Create(taste, stub, 3U, block);
+        way->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::ETasteResult::Init)), init);
+        way->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::ETasteResult::Update)), next);
+        way->addCase(ConstantInt::get(wayType, static_cast<i8>(TSpillingSupportState::ETasteResult::ConsumeRawData)), save);
+
+        block = init;
+
+        for (ui32 i = 0U; i < Nodes.KeyResultNodes.size(); ++i) {
+            ValueAddRef(Nodes.KeyResultNodes[i]->GetRepresentation(), keyPointers[i], ctx, block);
+        }
+
+        for (ui32 i = 0U; i < Nodes.InitResultNodes.size(); ++i) {
+            if (const auto map = Nodes.InitOnItems[i]) {
+                const auto item = phis[*map];
+                new StoreInst(item, pointers[i], block);
+                ValueAddRef(Nodes.InitResultNodes[i]->GetRepresentation(), item, ctx, block);
+            }  else if (const auto map = Nodes.InitOnKeys[i]) {
+                const auto key = keys[*map];
+                new StoreInst(key, pointers[i], block);
+                ValueAddRef(Nodes.InitResultNodes[i]->GetRepresentation(), key, ctx, block);
+            } else {
+                GetNodeValue(pointers[i], Nodes.InitResultNodes[i], ctx, block);
+            }
+        }
+
+        BranchInst::Create(more, block);
+
+        block = next;
+
+        std::vector<Value*> stored(Nodes.StateNodes.size(), nullptr);
+        for (ui32 i = 0U; i < stored.size(); ++i) {
+            const bool hasDependency = Nodes.StateNodes[i]->GetDependencesCount() > 0U;
+            if (const auto map = Nodes.StateOnUpdate[i]) {
+                if (hasDependency || i != *map) {
+                    stored[i] = new LoadInst(valueType, pointers[i], (TString("state_") += ToString(i)).c_str(), block);
+                    if (hasDependency)
+                        EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.StateNodes[i])->CreateSetValue(ctx, block, stored[i]);
+                }
+            } else if (hasDependency) {
+                EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.StateNodes[i])->CreateSetValue(ctx, block, pointers[i]);
+            } else {
+                ValueUnRef(Nodes.StateNodes[i]->GetRepresentation(), pointers[i], ctx, block);
+            }
+        }
+
+        for (ui32 i = 0U; i < Nodes.UpdateResultNodes.size(); ++i) {
+            if (const auto map = Nodes.UpdateOnState[i]) {
+                if (const auto j = *map; i != j) {
+                    const auto it = stored[j];
+                    new StoreInst(it, pointers[i], block);
+                    if (i != *Nodes.StateOnUpdate[j])
+                        ValueAddRef(Nodes.UpdateResultNodes[i]->GetRepresentation(), it, ctx, block);
+                }
+            } else if (const auto map = Nodes.UpdateOnItems[i]) {
+                const auto item = phis[*map];
+                new StoreInst(item, pointers[i], block);
+                ValueAddRef(Nodes.UpdateResultNodes[i]->GetRepresentation(), item, ctx, block);
+            }  else if (const auto map = Nodes.UpdateOnKeys[i]) {
+                const auto key = keys[*map];
+                new StoreInst(key, pointers[i], block);
+                ValueAddRef(Nodes.UpdateResultNodes[i]->GetRepresentation(), key, ctx, block);
+            } else {
+                GetNodeValue(pointers[i], Nodes.UpdateResultNodes[i], ctx, block);
+            }
+        }
+
+        BranchInst::Create(more, block);
+
+        block = save;
+
+        for (ui32 i = 0U; i < phis.size(); ++i) {
+            if (const auto item = phis[i]) {
+                new StoreInst(item, pointers[i], block);
+                ValueAddRef(Nodes.ItemNodes[i]->GetRepresentation(), item, ctx, block);
+            }
+        }
+
+        BranchInst::Create(more, block);
+
+        block = fill;
+
+        const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::Extract));
+        const auto extractType = FunctionType::get(ptrValueType, {stateArg->getType()}, false);
+        const auto extractPtr = CastInst::Create(Instruction::IntToPtr, extractFunc, PointerType::getUnqual(extractType), "extract", block);
+        const auto out = CallInst::Create(extractType, extractPtr, {stateArg}, "out", block);
+        const auto has = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, out, ConstantPointerNull::get(ptrValueType), "has", block);
+
+        BranchInst::Create(data, more, has, block);
+
+        block = data;
+
+        for (ui32 i = 0U; i < Nodes.FinishNodes.size(); ++i) {
+            const auto ptr = GetElementPtrInst::CreateInBounds(valueType, out, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("out_key_") += ToString(i)).c_str(), block);
+            if (Nodes.FinishNodes[i]->GetDependencesCount() > 0 || Nodes.ItemsOnResult[i])
+                EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.FinishNodes[i])->CreateSetValue(ctx, block, ptr);
+            else
+                ValueUnRef(Nodes.FinishNodes[i]->GetRepresentation(), ptr, ctx, block);
+        }
+
+        result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::One)), block);
+
+        BranchInst::Create(over, block);
+
+        block = done;
+
+        result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), block);
+        BranchInst::Create(over, block);
 
         block = over;
 
@@ -1553,8 +1575,7 @@ public:
 #endif
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
-        state = ctx.HolderFactory.Create<TSpillingSupportState>(WideFieldsIndex,
-            UsedInputItemType, KeyAndStateType,
+        state = ctx.HolderFactory.Create<TSpillingSupportState>(UsedInputItemType, KeyAndStateType,
             Nodes.KeyNodes.size(),
             Nodes.ItemNodes.size(),
 #ifdef MKQL_DISABLE_CODEGEN
@@ -1690,15 +1711,8 @@ IComputationNode* WrapWideCombinerT(TCallable& callable, const TComputationNodeF
     if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
         if constexpr (Last) {
             const auto inputItemTypes = GetWideComponents(inputType);
-            std::vector<TType *> usedInputItemTypes;
-            usedInputItemTypes.reserve(inputItemTypes.size());
-            for (size_t i = 0; i != inputItemTypes.size(); ++i) {
-                if (nodes.IsInputItemNodeUsed(i)) {
-                    usedInputItemTypes.push_back(inputItemTypes[i]);
-                }
-            }
             return new TWideLastCombinerWrapper(ctx.Mutables, wide, std::move(nodes),
-                TMultiType::Create(usedInputItemTypes.size(), usedInputItemTypes.data(), ctx.Env),
+                TMultiType::Create(inputItemTypes.size(), inputItemTypes.data(), ctx.Env),
                 std::move(keyTypes),
                 TMultiType::Create(keyAndStateItemTypes.size(),keyAndStateItemTypes.data(), ctx.Env),
                 allowSpilling

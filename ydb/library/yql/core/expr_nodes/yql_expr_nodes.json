@@ -43,7 +43,8 @@
                 {"Index": 1, "Name": "Type", "Type": "TCoAtom"},
                 {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
                 {"Index": 3, "Name": "DataColumns", "Type": "TCoAtomList"},
-                {"Index": 4, "Name": "TableSettings", "Type": "TCoNameValueTupleList", "Optional": true}
+                {"Index": 4, "Name": "TableSettings", "Type": "TCoNameValueTupleList"},
+                {"Index": 5, "Name": "IndexSettings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {

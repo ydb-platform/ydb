@@ -127,9 +127,7 @@ public:
                 .IsLikeDirectory()
                 .FailOnRestrictedCreateInTempZone();
 
-            if (op.GetAllowIndexImplLock()) {
-                checks.IsInsideTableIndexPath();
-            } else {
+            if (checks && !parentPath.IsTableIndex()) {
                 checks.IsCommonSensePath();
             }
 
@@ -151,7 +149,7 @@ public:
                 .IsTable()
                 .NotAsyncReplicaTable();
 
-            if (!op.GetAllowIndexImplLock()) {
+            if (checks && !parentPath.IsTableIndex()) {
                 checks.IsCommonSensePath();
             }
 

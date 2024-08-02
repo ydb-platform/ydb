@@ -20,7 +20,7 @@
  * Future versions may support iterators and incremental resizing; for now
  * the implementation is minimalist.
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -167,7 +167,7 @@ struct dshash_table
 
 static void delete_item(dshash_table *hash_table,
 						dshash_table_item *item);
-static void resize(dshash_table *hash_table, size_t new_size);
+static void resize(dshash_table *hash_table, size_t new_size_log2);
 static inline void ensure_valid_bucket_pointers(dshash_table *hash_table);
 static inline dshash_table_item *find_in_bucket(dshash_table *hash_table,
 												const void *key,

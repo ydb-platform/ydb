@@ -8,6 +8,13 @@ import sys
 from datetime import datetime
 from os import dup
 
+if sys.version_info.major >= 3:
+    from datetime import timezone
+    EPOCH_AWARE = datetime.fromtimestamp(0, tz=timezone.utc)
+    EPOCH_NAIVE = EPOCH_AWARE.replace(tzinfo=None)
+else:
+    EPOCH_NAIVE = datetime.utcfromtimestamp(0)
+
 
 cdef extern from "util/stream/fwd.h" nogil:
     cdef cppclass TAdaptivelyBuffered[T]:
@@ -138,7 +145,7 @@ def dump(registry, fp, format='spack', **kwargs):
     elif format == 'json':
         indent = int(kwargs.get('indent', 0))
         encoder = Encoder.create_json(fp, indent)
-    timestamp = kwargs.get('timestamp', datetime.utcfromtimestamp(0))
+    timestamp = kwargs.get('timestamp', EPOCH_NAIVE)
 
     registry.accept(timestamp, encoder)
     encoder.close()
@@ -166,7 +173,7 @@ def dumps(registry, format='spack', **kwargs):
     elif format == 'json':
         indent = int(kwargs.get('indent', 0))
         encoder = Encoder.create_json(None, indent)
-    timestamp = kwargs.get('timestamp', datetime.utcfromtimestamp(0))
+    timestamp = kwargs.get('timestamp', EPOCH_NAIVE)
 
     registry.accept(timestamp, encoder)
     encoder.close()

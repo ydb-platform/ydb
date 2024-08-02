@@ -21,8 +21,8 @@ namespace NKikimr::NOlap {
 class TColumnEngineChanges;
 class IBlobsGCAction;
 class TPortionInfo;
-namespace NStatistics {
-class TOperatorContainer;
+namespace NIndexes {
+class TIndexMetaContainer;
 }
 }
 namespace arrow {
@@ -143,7 +143,7 @@ public:
     void OnDataSharingStarted(const ui64 tabletId, const TString& sessionId) {
         return DoOnDataSharingStarted(tabletId, sessionId);
     }
-    virtual void OnStatisticsUsage(const NOlap::NStatistics::TOperatorContainer& /*statOperator*/) {
+    virtual void OnStatisticsUsage(const NOlap::NIndexes::TIndexMetaContainer& /*statOperator*/) {
 
     }
     virtual void OnPortionActualization(const NOlap::TPortionInfo& /*info*/) {

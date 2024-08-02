@@ -4,7 +4,7 @@
  *	  Relation descriptor cache definitions.
  *
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/relcache.h
@@ -15,6 +15,7 @@
 #define RELCACHE_H
 
 #include "access/tupdesc.h"
+#include "common/relpath.h"
 #include "nodes/bitmapset.h"
 
 
@@ -50,15 +51,19 @@ extern Oid	RelationGetReplicaIndex(Relation relation);
 extern List *RelationGetIndexExpressions(Relation relation);
 extern List *RelationGetDummyIndexExpressions(Relation relation);
 extern List *RelationGetIndexPredicate(Relation relation);
-extern Datum *RelationGetIndexRawAttOptions(Relation relation);
+extern Datum *RelationGetIndexRawAttOptions(Relation indexrel);
 extern bytea **RelationGetIndexAttOptions(Relation relation, bool copy);
 
+/*
+ * Which set of columns to return by RelationGetIndexAttrBitmap.
+ */
 typedef enum IndexAttrBitmapKind
 {
-	INDEX_ATTR_BITMAP_ALL,
 	INDEX_ATTR_BITMAP_KEY,
 	INDEX_ATTR_BITMAP_PRIMARY_KEY,
-	INDEX_ATTR_BITMAP_IDENTITY_KEY
+	INDEX_ATTR_BITMAP_IDENTITY_KEY,
+	INDEX_ATTR_BITMAP_HOT_BLOCKING,
+	INDEX_ATTR_BITMAP_SUMMARIZED
 } IndexAttrBitmapKind;
 
 extern Bitmapset *RelationGetIndexAttrBitmap(Relation relation,
@@ -103,7 +108,7 @@ extern Relation RelationBuildLocalRelation(const char *relname,
 										   TupleDesc tupDesc,
 										   Oid relid,
 										   Oid accessmtd,
-										   Oid relfilenode,
+										   RelFileNumber relfilenumber,
 										   Oid reltablespace,
 										   bool shared_relation,
 										   bool mapped_relation,
@@ -111,10 +116,10 @@ extern Relation RelationBuildLocalRelation(const char *relname,
 										   char relkind);
 
 /*
- * Routines to manage assignment of new relfilenode to a relation
+ * Routines to manage assignment of new relfilenumber to a relation
  */
-extern void RelationSetNewRelfilenode(Relation relation, char persistence);
-extern void RelationAssumeNewRelfilenode(Relation relation);
+extern void RelationSetNewRelfilenumber(Relation relation, char persistence);
+extern void RelationAssumeNewRelfilelocator(Relation relation);
 
 /*
  * Routines for flushing/rebuilding relcache entries in various scenarios

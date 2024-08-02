@@ -103,6 +103,7 @@ LLVM_BC(
     arrow_inetor
     arrow_inetpl
     arrow_json_agg_finalfn
+    arrow_json_agg_strict_transfn
     arrow_json_agg_transfn
     arrow_json_build_array
     arrow_json_build_array_noargs
@@ -111,7 +112,10 @@ LLVM_BC(
     arrow_json_in
     arrow_json_object
     arrow_json_object_agg_finalfn
+    arrow_json_object_agg_strict_transfn
     arrow_json_object_agg_transfn
+    arrow_json_object_agg_unique_strict_transfn
+    arrow_json_object_agg_unique_transfn
     arrow_json_object_two_arg
     arrow_json_out
     arrow_json_recv

@@ -65,6 +65,7 @@ SRCS(
     sliding_window_ut.cpp
     sync_cache_ut.cpp
     spsc_queue_ut.cpp
+    statistic_path_ut.cpp
     statistics_ut.cpp
     string_ut.cpp
     sync_expiring_cache_ut.cpp

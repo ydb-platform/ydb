@@ -39,10 +39,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
     }
 
     Y_UNIT_TEST(SupportedTypes) {
-        auto featureFlags = TFeatureFlags();
-        featureFlags.SetEnableTableDatetime64(true);
-
-        TEnv env(featureFlags);
+        TEnv env(TFeatureFlags().SetEnableTableDatetime64(true));
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
 
         env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{

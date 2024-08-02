@@ -13,6 +13,7 @@ LLVM_BC(
     NAME PgFuncs15
 
     SYMBOLS
+    arrow_any_value_transfn
     arrow_brin_bloom_add_value
     arrow_brin_bloom_consistent
     arrow_brin_bloom_opcinfo
@@ -178,6 +179,8 @@ LLVM_BC(
     arrow_pg_current_logfile
     arrow_pg_current_logfile_1arg
     arrow_pg_get_replica_identity_index
+    arrow_pg_input_error_info
+    arrow_pg_input_is_valid
     arrow_pg_num_nonnulls
     arrow_pg_num_nulls
     arrow_pg_relation_is_updatable

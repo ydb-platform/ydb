@@ -65,9 +65,11 @@ LLVM_BC(
     arrow_pg_last_wal_receive_lsn
     arrow_pg_last_wal_replay_lsn
     arrow_pg_last_xact_replay_timestamp
+    arrow_pg_log_standby_snapshot
     arrow_pg_promote
     arrow_pg_sequence_last_value
     arrow_pg_sequence_parameters
+    arrow_pg_split_walfile_name
     arrow_pg_switch_wal
     arrow_pg_wal_lsn_diff
     arrow_pg_wal_replay_pause

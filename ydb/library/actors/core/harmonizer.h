@@ -17,10 +17,11 @@ namespace NActors {
         ui64 DecreasingThreadsByStarvedState = 0;
         ui64 DecreasingThreadsByHoggishState = 0;
         ui64 DecreasingThreadsByExchange = 0;
-        i64 MaxConsumedCpu = 0.0;
-        i64 MinConsumedCpu = 0.0;
-        i64 MaxBookedCpu = 0.0;
-        i64 MinBookedCpu = 0.0;
+        float MaxConsumedCpu = 0.0;
+        float MinConsumedCpu = 0.0;
+        float AvgConsumedCpu = 0.0;
+        float MaxBookedCpu = 0.0;
+        float MinBookedCpu = 0.0;
         i16 PotentialMaxThreadCount = 0;
         bool IsNeedy = false;
         bool IsStarved = false;

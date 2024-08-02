@@ -3,10 +3,10 @@
 #include "target_discoverer.h"
 #include "util.h"
 
+#include <ydb/core/base/path.h>
+#include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
-
-#include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -25,7 +25,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
 
         auto it = Pending.find(ev->Cookie);
         if (it == Pending.end()) {
-            LOG_W("Unknown describe response"
+            LOG_W("Unknown describe path response"
                 << ": cookie# " << ev->Cookie);
             return;
         }
@@ -35,37 +35,95 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
 
         const auto& result = ev->Get()->Result;
         if (result.IsSuccess()) {
-            LOG_D("Describe succeeded"
+            LOG_D("Describe path succeeded"
                 << ": path# " << path.first);
 
-            auto entry = result.GetEntry();
+            const auto& entry = result.GetEntry();
             switch (entry.Type) {
             case NYdb::NScheme::ESchemeEntryType::SubDomain:
             case NYdb::NScheme::ESchemeEntryType::Directory:
                 Pending.erase(it);
                 return ListDirectory(path);
+            case NYdb::NScheme::ESchemeEntryType::Table:
+                return DescribeTable(ev->Cookie);
             default:
                 break;
             }
 
-            entry.Name = path.first; // replace by full path
+            LOG_W("Unsupported entry type"
+                << ": path# " << path.first
+                << ", type# " << entry.Type);
 
-            if (const auto kind = TryTargetKindFromEntryType(entry.Type)) {
-                LOG_I("Add target"
-                    << ": path# " << path.first
-                    << ", kind# " << kind);
-                ToAdd.emplace_back(std::move(entry), path.second);
+            NYql::TIssues issues;
+            issues.AddIssue(TStringBuilder() << "Unsupported entry type: " << entry.Type);
+            Failed.emplace_back(path.first, NYdb::TStatus(NYdb::EStatus::UNSUPPORTED, std::move(issues)));
+        } else {
+            LOG_E("Describe path failed"
+                << ": path# " << path.first
+                << ", status# " << result.GetStatus()
+                << ", issues# " << result.GetIssues().ToOneLineString());
+
+            if (IsRetryableError(result)) {
+                return RetryDescribe(*it);
             } else {
-                LOG_W("Unsupported entry type"
-                    << ": path# " << path.first
-                    << ", type# " << entry.Type);
+                Failed.emplace_back(path.first, result);
+            }
+        }
 
-                NYql::TIssues issues;
-                issues.AddIssue(TStringBuilder() << "Unsupported entry type: " << entry.Type);
-                Failed.emplace_back(path.first, NYdb::TStatus(NYdb::EStatus::UNSUPPORTED, std::move(issues)));
+        Pending.erase(it);
+        MaybeReply();
+    }
+
+    void DescribeTable(ui32 idx) {
+        Y_ABORT_UNLESS(idx < Paths.size());
+        Send(YdbProxy, new TEvYdbProxy::TEvDescribeTableRequest(Paths.at(idx).first, {}), 0, idx);
+        Pending.insert(idx);
+    }
+
+    void Handle(TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
+        LOG_T("Handle " << ev->Get()->ToString());
+
+        auto it = Pending.find(ev->Cookie);
+        if (it == Pending.end()) {
+            LOG_W("Unknown describe table response"
+                << ": cookie# " << ev->Cookie);
+            return;
+        }
+
+        Y_ABORT_UNLESS(*it < Paths.size());
+        const auto& path = Paths.at(*it);
+
+        const auto& result = ev->Get()->Result;
+        if (result.IsSuccess()) {
+            LOG_D("Describe table succeeded"
+                << ": path# " << path.first);
+
+            const auto& target = ToAdd.emplace_back(path.first, path.second, TReplication::ETargetKind::Table);
+            LOG_I("Add target"
+                << ": srcPath# " << target.SrcPath
+                << ", dstPath# " << target.DstPath
+                << ", kind# " << target.Kind);
+
+            for (const auto& index : result.GetTableDescription().GetIndexDescriptions()) {
+                switch (index.GetIndexType()) {
+                case NYdb::NTable::EIndexType::GlobalSync:
+                case NYdb::NTable::EIndexType::GlobalUnique:
+                    break;
+                default:
+                    continue;
+                }
+
+                const auto& target = ToAdd.emplace_back(
+                    CanonizePath(ChildPath(SplitPath(path.first), index.GetIndexName())),
+                    CanonizePath(ChildPath(SplitPath(path.second), {index.GetIndexName(), "indexImplTable"})),
+                    TReplication::ETargetKind::IndexTable);
+                LOG_I("Add target"
+                    << ": srcPath# " << target.SrcPath
+                    << ", dstPath# " << target.DstPath
+                    << ", kind# " << target.Kind);
             }
         } else {
-            LOG_E("Describe failed"
+            LOG_E("Describe table failed"
                 << ": path# " << path.first
                 << ", status# " << result.GetStatus()
                 << ", issues# " << result.GetIssues().ToOneLineString());
@@ -143,13 +201,13 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                             path.second + '/' + child.Name));
                     }
                     break;
+                case NYdb::NScheme::ESchemeEntryType::Table:
+                    Paths.emplace_back(
+                        path.first  + '/' + child.Name,
+                        path.second + '/' + child.Name);
+                    DescribeTable(Paths.size() - 1);
+                    break;
                 default:
-                    if (TryTargetKindFromEntryType(child.Type)) {
-                        Paths.emplace_back(
-                            path.first  + '/' + child.Name,
-                            path.second + '/' + child.Name);
-                        DescribePath(Paths.size() - 1);
-                    }
                     break;
                 }
             }
@@ -225,6 +283,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvDescribePathResponse, Handle);
             hFunc(TEvYdbProxy::TEvListDirectoryResponse, Handle);
+            hFunc(TEvYdbProxy::TEvDescribeTableResponse, Handle);
             sFunc(TEvents::TEvWakeup, Retry);
             sFunc(TEvents::TEvPoison, PassAway);
         }

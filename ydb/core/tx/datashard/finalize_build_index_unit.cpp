@@ -66,9 +66,9 @@ public:
         ui64 txId = params.GetSnapshotTxId();
         Y_ABORT_UNLESS(step != 0);
 
-        if (const auto* record = DataShard.GetBuildIndexManager().Get(params.GetBuildIndexId())) {
+        if (const auto* record = DataShard.GetScanManager().Get(params.GetBuildIndexId())) {
             DataShard.CancelScan(tableInfo->LocalTid, record->ScanId);
-            DataShard.GetBuildIndexManager().Drop(params.GetBuildIndexId());
+            DataShard.GetScanManager().Drop(params.GetBuildIndexId());
         }
 
         const TSnapshotKey key(pathId, step, txId);

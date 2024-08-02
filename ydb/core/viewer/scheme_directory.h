@@ -1,11 +1,10 @@
 #pragma once
-#include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
-#include <ydb/core/grpc_services/rpc_calls.h>
-#include "json_local_rpc.h"
 #include "json_handlers.h"
+#include "json_local_rpc.h"
+#include <ydb/core/grpc_services/rpc_calls.h>
+#include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 class TSchemeDirectory : public IActor {
 public:
@@ -66,6 +65,10 @@ public:
 
 class TJsonSchemeDirectoryHandler : public TJsonHandler<TSchemeDirectory> {
 public:
+    TJsonSchemeDirectoryHandler()
+        : TJsonHandler<TSchemeDirectory>(GetSwagger())
+    {}
+
     IActor* CreateRequestActor(IViewer* viewer, NMon::TEvHttpInfo::TPtr& event) override {
         switch (event->Get()->Request.GetMethod()) {
             case HTTP_METHOD_GET:
@@ -78,102 +81,100 @@ public:
                 throw std::logic_error("Bad request method");
         }
     }
+
+    static YAML::Node GetSwagger() {
+        YAML::Node node = YAML::Load(R"___(
+        get:
+            tags:
+              - scheme
+            summary: List directory
+            description: Returns information about given directory and objects inside it
+            parameters:
+              - name: database
+                in: query
+                description: database name
+                required: true
+                type: string
+              - name: path
+                in: query
+                description: path to directory
+                required: true
+                type: string
+            responses:
+                200:
+                    description: OK
+                    content:
+                        application/json:
+                            schema: {}
+                400:
+                    description: Bad Request
+                403:
+                    description: Forbidden
+                504:
+                    description: Gateway Timeout
+        post:
+            tags:
+              - scheme
+            summary: Make directory
+            description: Makes directory
+            parameters:
+              - name: database
+                in: query
+                description: database name
+                required: true
+                type: string
+              - name: path
+                in: query
+                description: path to directory
+                required: true
+                type: string
+            responses:
+                200:
+                    description: OK
+                    content:
+                        application/json:
+                            schema: {}
+                400:
+                    description: Bad Request
+                403:
+                    description: Forbidden
+                504:
+                    description: Gateway Timeout
+        delete:
+            tags:
+              - scheme
+            summary: Remove directory
+            description: Removes directory
+            parameters:
+              - name: database
+                in: query
+                description: database name
+                required: true
+                type: string
+              - name: path
+                in: query
+                description: path to directory
+                required: true
+                type: string
+            responses:
+                200:
+                    description: OK
+                    content:
+                        application/json:
+                            schema: {}
+                400:
+                    description: Bad Request
+                403:
+                    description: Forbidden
+                504:
+                    description: Gateway Timeout
+            )___");
+
+        node["get"]["responses"]["200"]["content"]["application/json"]["schema"] = TProtoToYaml::ProtoToYamlSchema<Ydb::Scheme::ListDirectoryResult>();
+        node["post"]["responses"]["200"]["content"]["application/json"]["schema"] = TProtoToYaml::ProtoToYamlSchema<Ydb::Scheme::MakeDirectoryResponse>();
+        node["delete"]["responses"]["200"]["content"]["application/json"]["schema"] = TProtoToYaml::ProtoToYamlSchema<Ydb::Scheme::RemoveDirectoryResponse>();
+        return node;
+    }
 };
 
-template<>
-YAML::Node TJsonRequestSwagger<TSchemeDirectory>::GetSwagger() {
-    YAML::Node node = YAML::Load(R"___(
-        get:
-          tags:
-          - scheme
-          summary: List directory
-          description: Returns information about given directory and objects inside it
-          parameters:
-          - name: database
-            in: query
-            description: database name
-            required: true
-            type: string
-          - name: path
-            in: query
-            description: path to directory
-            required: true
-            type: string
-          responses:
-            200:
-              description: OK
-              content:
-                application/json:
-                  schema: {}
-            400:
-              description: Bad Request
-            403:
-              description: Forbidden
-            504:
-              description: Gateway Timeout
-        post:
-          tags:
-          - scheme
-          summary: Make directory
-          description: Makes directory
-          parameters:
-          - name: database
-            in: query
-            description: database name
-            required: true
-            type: string
-          - name: path
-            in: query
-            description: path to directory
-            required: true
-            type: string
-          responses:
-            200:
-              description: OK
-              content:
-                application/json:
-                  schema: {}
-            400:
-              description: Bad Request
-            403:
-              description: Forbidden
-            504:
-              description: Gateway Timeout
-        delete:
-          tags:
-          - scheme
-          summary: Remove directory
-          description: Removes directory
-          parameters:
-          - name: database
-            in: query
-            description: database name
-            required: true
-            type: string
-          - name: path
-            in: query
-            description: path to directory
-            required: true
-            type: string
-          responses:
-            200:
-              description: OK
-              content:
-                application/json:
-                  schema: {}
-            400:
-              description: Bad Request
-            403:
-              description: Forbidden
-            504:
-              description: Gateway Timeout
-        )___");
-
-    node["get"]["responses"]["200"]["content"]["application/json"]["schema"] = TProtoToYaml::ProtoToYamlSchema<Ydb::Scheme::ListDirectoryResult>();
-    node["post"]["responses"]["200"]["content"]["application/json"]["schema"] = TProtoToYaml::ProtoToYamlSchema<Ydb::Scheme::MakeDirectoryResponse>();
-    node["delete"]["responses"]["200"]["content"]["application/json"]["schema"] = TProtoToYaml::ProtoToYamlSchema<Ydb::Scheme::RemoveDirectoryResponse>();
-    return node;
-}
-
-}
 }

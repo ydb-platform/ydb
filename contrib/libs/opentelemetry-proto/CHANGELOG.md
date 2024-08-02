@@ -2,11 +2,19 @@
 
 ## Unreleased
 
-Full list of differences found in [this compare](https://github.com/open-telemetry/opentelemetry-proto/compare/v1.1.0...main).
+The full list of changes can be found in the compare view for the respective release at <https://github.com/open-telemetry/opentelemetry-proto/releases>.
 
-### Added
+## 1.3.2 - 2024-06-28
 
 ### Changed
+
+* profiles: add missing java_package option to pprofextended. [#558](https://github.com/open-telemetry/opentelemetry-proto/pull/558)
+
+## 1.3.1 - 2024-05-07
+
+### Changed
+
+* profiles: fix versioning in selector. [#551](https://github.com/open-telemetry/opentelemetry-proto/pull/551)
 
 ## 1.3.0 - 2024-04-24
 

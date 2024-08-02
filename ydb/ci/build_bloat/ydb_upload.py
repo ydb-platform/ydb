@@ -70,6 +70,14 @@ def generate_column_types(row):
             assert False
     return column_types
 
+def chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
+
+# We split bulk upsert because of 
+# https://github.com/ydb-platform/ydb-python-sdk/issues/460
+BULK_UPSERT_CHUNK_SIZE = 5000
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -148,11 +156,11 @@ def main():
             row["compilation_time_s"] = time_s
             row["id"] = str(uuid.uuid4())
             rows.append(copy.copy(row))
-
-        if rows:
-            row = rows[0]
+        
+        for chunk_rows in chunks(rows, BULK_UPSERT_CHUNK_SIZE):
+            row = chunk_rows[0]
             driver.table_client.bulk_upsert(
-                DATABASE_PATH + "/code-agility/cpp_compile_time", rows, generate_column_types(row)
+                DATABASE_PATH + "/code-agility/cpp_compile_time", chunk_rows, generate_column_types(row)
             )
 
         # upload into total_compile_time
@@ -177,10 +185,10 @@ def main():
             row["inclusion_count"] = inclusion_count
             rows.append(copy.copy(row))
 
-        if rows:
-            row = rows[0]
+        for chunk_rows in chunks(rows, BULK_UPSERT_CHUNK_SIZE):
+            row = chunk_rows[0]
             driver.table_client.bulk_upsert(
-                DATABASE_PATH + "/code-agility/headers_impact", rows, generate_column_types(row)
+                DATABASE_PATH + "/code-agility/headers_impact", chunk_rows, generate_column_types(row)
             )
 
         # upload into compile_breakdown
@@ -201,10 +209,10 @@ def main():
 
                 rows.append(copy.copy(row))
 
-        if rows:
-            row = rows[0]
+        for chunk_rows in chunks(rows, BULK_UPSERT_CHUNK_SIZE):
+            row = chunk_rows[0]
             driver.table_client.bulk_upsert(
-                DATABASE_PATH + "/code-agility/compile_breakdown", rows, generate_column_types(row)
+                DATABASE_PATH + "/code-agility/compile_breakdown", chunk_rows, generate_column_types(row)
             )
 
 

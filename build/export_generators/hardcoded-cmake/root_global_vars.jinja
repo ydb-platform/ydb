@@ -5,9 +5,13 @@
 {%  if platforms_count > 0 -%}
 {%      for i in range(platforms_count) %}
 {%          if i != 0 %}else{% endif %}if ({{ platforms[platform_names[i]] }})
-{%-             for var in platform_vars[i] %}
+{%-         for var in platform_vars[i] %}
   set({% for arg in var %}{{arg}}{% if not loop.last %} {% endif %}{% endfor %})
-{%-             endfor %}
+{%-         endfor %}
+{%-         if "windows" in platform_names[i] %}
+  set(ENV{PYTHONIOENCODING} utf-8)
+  set(ENV{PYTHONUTF8} 1)
+{%-         endif %}
 {%-     endfor %}
 endif()
 {%  endif %}

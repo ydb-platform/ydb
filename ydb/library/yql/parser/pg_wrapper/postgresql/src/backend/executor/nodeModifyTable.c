@@ -3,7 +3,7 @@
  * nodeModifyTable.c
  *	  routines to handle ModifyTable nodes.
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -110,8 +110,8 @@ typedef struct ModifyTableContext
 typedef struct UpdateContext
 {
 	bool		updated;		/* did UPDATE actually occur? */
-	bool		updateIndexes;	/* index update required? */
 	bool		crossPartUpdate;	/* was it a cross-partition update? */
+	TU_UpdateIndexes updateIndexes; /* Which index updates are required? */
 
 	/*
 	 * Lock mode to acquire on the latest tuple version before performing
@@ -333,11 +333,14 @@ ExecCheckTIDVisible(EState *estate,
 /*
  * Initialize to compute stored generated columns for a tuple
  *
- * This fills the resultRelInfo's ri_GeneratedExprs field and makes an
- * associated ResultRelInfoExtra struct to hold ri_extraUpdatedCols.
- * (Currently, ri_extraUpdatedCols is consulted only in UPDATE, but we
- * must fill it in other cases too, since for example cmdtype might be
- * MERGE yet an UPDATE might happen later.)
+ * This fills the resultRelInfo's ri_GeneratedExprsI/ri_NumGeneratedNeededI
+ * or ri_GeneratedExprsU/ri_NumGeneratedNeededU fields, depending on cmdtype.
+ * If cmdType == CMD_UPDATE, the ri_extraUpdatedCols field is filled too.
+ *
+ * Note: usually, a given query would need only one of ri_GeneratedExprsI and
+ * ri_GeneratedExprsU per result rel; but MERGE can need both, and so can
+ * cross-partition UPDATEs, since a partition might be the target of both
+ * UPDATE and INSERT actions.
  */
 void
 ExecInitStoredGenerated(ResultRelInfo *resultRelInfo,
@@ -347,12 +350,10 @@ ExecInitStoredGenerated(ResultRelInfo *resultRelInfo,
 	Relation	rel = resultRelInfo->ri_RelationDesc;
 	TupleDesc	tupdesc = RelationGetDescr(rel);
 	int			natts = tupdesc->natts;
+	ExprState **ri_GeneratedExprs;
+	int			ri_NumGeneratedNeeded;
 	Bitmapset  *updatedCols;
-	ResultRelInfoExtra *rextra;
 	MemoryContext oldContext;
-
-	/* Don't call twice */
-	Assert(resultRelInfo->ri_GeneratedExprs == NULL);
 
 	/* Nothing to do if no generated columns */
 	if (!(tupdesc->constr && tupdesc->constr->has_generated_stored))
@@ -376,15 +377,8 @@ ExecInitStoredGenerated(ResultRelInfo *resultRelInfo,
 	 */
 	oldContext = MemoryContextSwitchTo(estate->es_query_cxt);
 
-	resultRelInfo->ri_GeneratedExprs =
-		(ExprState **) palloc0(natts * sizeof(ExprState *));
-	resultRelInfo->ri_NumGeneratedNeeded = 0;
-
-	rextra = palloc_object(ResultRelInfoExtra);
-	rextra->rinfo = resultRelInfo;
-	rextra->ri_extraUpdatedCols = NULL;
-	estate->es_resultrelinfo_extra = lappend(estate->es_resultrelinfo_extra,
-											 rextra);
+	ri_GeneratedExprs = (ExprState **) palloc0(natts * sizeof(ExprState *));
+	ri_NumGeneratedNeeded = 0;
 
 	for (int i = 0; i < natts; i++)
 	{
@@ -413,14 +407,33 @@ ExecInitStoredGenerated(ResultRelInfo *resultRelInfo,
 			}
 
 			/* No luck, so prepare the expression for execution */
-			resultRelInfo->ri_GeneratedExprs[i] = ExecPrepareExpr(expr, estate);
-			resultRelInfo->ri_NumGeneratedNeeded++;
+			ri_GeneratedExprs[i] = ExecPrepareExpr(expr, estate);
+			ri_NumGeneratedNeeded++;
 
-			/* And mark this column in rextra->ri_extraUpdatedCols */
-			rextra->ri_extraUpdatedCols =
-				bms_add_member(rextra->ri_extraUpdatedCols,
-							   i + 1 - FirstLowInvalidHeapAttributeNumber);
+			/* If UPDATE, mark column in resultRelInfo->ri_extraUpdatedCols */
+			if (cmdtype == CMD_UPDATE)
+				resultRelInfo->ri_extraUpdatedCols =
+					bms_add_member(resultRelInfo->ri_extraUpdatedCols,
+								   i + 1 - FirstLowInvalidHeapAttributeNumber);
 		}
+	}
+
+	/* Save in appropriate set of fields */
+	if (cmdtype == CMD_UPDATE)
+	{
+		/* Don't call twice */
+		Assert(resultRelInfo->ri_GeneratedExprsU == NULL);
+
+		resultRelInfo->ri_GeneratedExprsU = ri_GeneratedExprs;
+		resultRelInfo->ri_NumGeneratedNeededU = ri_NumGeneratedNeeded;
+	}
+	else
+	{
+		/* Don't call twice */
+		Assert(resultRelInfo->ri_GeneratedExprsI == NULL);
+
+		resultRelInfo->ri_GeneratedExprsI = ri_GeneratedExprs;
+		resultRelInfo->ri_NumGeneratedNeededI = ri_NumGeneratedNeeded;
 	}
 
 	MemoryContextSwitchTo(oldContext);
@@ -438,6 +451,7 @@ ExecComputeStoredGenerated(ResultRelInfo *resultRelInfo,
 	TupleDesc	tupdesc = RelationGetDescr(rel);
 	int			natts = tupdesc->natts;
 	ExprContext *econtext = GetPerTupleExprContext(estate);
+	ExprState **ri_GeneratedExprs;
 	MemoryContext oldContext;
 	Datum	   *values;
 	bool	   *nulls;
@@ -446,20 +460,25 @@ ExecComputeStoredGenerated(ResultRelInfo *resultRelInfo,
 	Assert(tupdesc->constr && tupdesc->constr->has_generated_stored);
 
 	/*
-	 * For relations named directly in the query, ExecInitStoredGenerated
-	 * should have been called already; but this might not have happened yet
-	 * for a partition child rel.  Also, it's convenient for outside callers
-	 * to not have to call ExecInitStoredGenerated explicitly.
+	 * Initialize the expressions if we didn't already, and check whether we
+	 * can exit early because nothing needs to be computed.
 	 */
-	if (resultRelInfo->ri_GeneratedExprs == NULL)
-		ExecInitStoredGenerated(resultRelInfo, estate, cmdtype);
-
-	/*
-	 * If no generated columns have been affected by this change, then skip
-	 * the rest.
-	 */
-	if (resultRelInfo->ri_NumGeneratedNeeded == 0)
-		return;
+	if (cmdtype == CMD_UPDATE)
+	{
+		if (resultRelInfo->ri_GeneratedExprsU == NULL)
+			ExecInitStoredGenerated(resultRelInfo, estate, cmdtype);
+		if (resultRelInfo->ri_NumGeneratedNeededU == 0)
+			return;
+		ri_GeneratedExprs = resultRelInfo->ri_GeneratedExprsU;
+	}
+	else
+	{
+		if (resultRelInfo->ri_GeneratedExprsI == NULL)
+			ExecInitStoredGenerated(resultRelInfo, estate, cmdtype);
+		/* Early exit is impossible given the prior Assert */
+		Assert(resultRelInfo->ri_NumGeneratedNeededI > 0);
+		ri_GeneratedExprs = resultRelInfo->ri_GeneratedExprsI;
+	}
 
 	oldContext = MemoryContextSwitchTo(GetPerTupleMemoryContext(estate));
 
@@ -473,7 +492,7 @@ ExecComputeStoredGenerated(ResultRelInfo *resultRelInfo,
 	{
 		Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
 
-		if (resultRelInfo->ri_GeneratedExprs[i])
+		if (ri_GeneratedExprs[i])
 		{
 			Datum		val;
 			bool		isnull;
@@ -482,7 +501,7 @@ ExecComputeStoredGenerated(ResultRelInfo *resultRelInfo,
 
 			econtext->ecxt_scantuple = slot;
 
-			val = ExecEvalExpr(resultRelInfo->ri_GeneratedExprs[i], econtext, &isnull);
+			val = ExecEvalExpr(ri_GeneratedExprs[i], econtext, &isnull);
 
 			/*
 			 * We must make a copy of val as we have no guarantees about where
@@ -721,7 +740,7 @@ ExecGetUpdateNewTuple(ResultRelInfo *relinfo,
  *
  *		Returns RETURNING result if any, otherwise NULL.
  *		*inserted_tuple is the tuple that's effectively inserted;
- *		*inserted_destrel is the relation where it was inserted.
+ *		*insert_destrel is the relation where it was inserted.
  *		These are only set on success.
  *
  *		This may change the currently active tuple conversion map in
@@ -862,7 +881,7 @@ ExecInsert(ModifyTableContext *context,
 			{
 				TupleDesc	tdesc = CreateTupleDescCopy(slot->tts_tupleDescriptor);
 				TupleDesc	plan_tdesc =
-				CreateTupleDescCopy(planSlot->tts_tupleDescriptor);
+					CreateTupleDescCopy(planSlot->tts_tupleDescriptor);
 
 				resultRelInfo->ri_Slots[resultRelInfo->ri_NumSlots] =
 					MakeSingleTupleTableSlot(tdesc, slot->tts_ops);
@@ -884,7 +903,7 @@ ExecInsert(ModifyTableContext *context,
 			 * If these are the first tuples stored in the buffers, add the
 			 * target rel and the mtstate to the
 			 * es_insert_pending_result_relations and
-			 * es_insert_pending_modifytables lists respectively, execpt in
+			 * es_insert_pending_modifytables lists respectively, except in
 			 * the case where flushing was done above, in which case they
 			 * would already have been added to the lists, so no need to do
 			 * this.
@@ -1079,7 +1098,8 @@ ExecInsert(ModifyTableContext *context,
 			recheckIndexes = ExecInsertIndexTuples(resultRelInfo,
 												   slot, estate, false, true,
 												   &specConflict,
-												   arbiterIndexes);
+												   arbiterIndexes,
+												   false);
 
 			/* adjust the tuple's state accordingly */
 			table_tuple_complete_speculative(resultRelationDesc, slot,
@@ -1118,7 +1138,8 @@ ExecInsert(ModifyTableContext *context,
 			if (resultRelInfo->ri_NumIndices > 0)
 				recheckIndexes = ExecInsertIndexTuples(resultRelInfo,
 													   slot, estate, false,
-													   false, NULL, NIL);
+													   false, NULL, NIL,
+													   false);
 		}
 	}
 
@@ -1301,9 +1322,9 @@ ExecDeletePrologue(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 		if (context->estate->es_insert_pending_result_relations != NIL)
 			ExecPendingInserts(context->estate);
 
-		return ExecBRDeleteTriggersNew(context->estate, context->epqstate,
-									   resultRelInfo, tupleid, oldtuple,
-									   epqreturnslot, result, &context->tmfd);
+		return ExecBRDeleteTriggers(context->estate, context->epqstate,
+									resultRelInfo, tupleid, oldtuple,
+									epqreturnslot, result, &context->tmfd);
 	}
 
 	return true;
@@ -1473,7 +1494,7 @@ ExecDelete(ModifyTableContext *context,
 		 * special-case behavior needed for referential integrity updates in
 		 * transaction-snapshot mode transactions.
 		 */
-ldelete:;
+ldelete:
 		result = ExecDeleteAct(context, resultRelInfo, tupleid, changingPart);
 
 		if (tmresult)
@@ -1899,9 +1920,9 @@ ExecUpdatePrologue(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 		if (context->estate->es_insert_pending_result_relations != NIL)
 			ExecPendingInserts(context->estate);
 
-		return ExecBRUpdateTriggersNew(context->estate, context->epqstate,
-									   resultRelInfo, tupleid, oldtuple, slot,
-									   result, &context->tmfd);
+		return ExecBRUpdateTriggers(context->estate, context->epqstate,
+									resultRelInfo, tupleid, oldtuple, slot,
+									result, &context->tmfd);
 	}
 
 	return true;
@@ -1947,9 +1968,6 @@ ExecUpdatePrepareSlot(ResultRelInfo *resultRelInfo,
  * caller is also in charge of doing EvalPlanQual if the tuple is found to
  * be concurrently updated.  However, in case of a cross-partition update,
  * this routine does it.
- *
- * Caller is in charge of doing EvalPlanQual as necessary, and of keeping
- * indexes current for the update.
  */
 static TM_Result
 ExecUpdateAct(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
@@ -2114,11 +2132,12 @@ ExecUpdateEpilogue(ModifyTableContext *context, UpdateContext *updateCxt,
 	List	   *recheckIndexes = NIL;
 
 	/* insert index entries for tuple if necessary */
-	if (resultRelInfo->ri_NumIndices > 0 && updateCxt->updateIndexes)
+	if (resultRelInfo->ri_NumIndices > 0 && (updateCxt->updateIndexes != TU_None))
 		recheckIndexes = ExecInsertIndexTuples(resultRelInfo,
 											   slot, context->estate,
 											   true, false,
-											   NULL, NIL);
+											   NULL, NIL,
+											   (updateCxt->updateIndexes == TU_Summarizing));
 
 	/* AFTER ROW UPDATE Triggers */
 	ExecARUpdateTriggers(context->estate, resultRelInfo,
@@ -2809,7 +2828,7 @@ ExecMergeMatched(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 	econtext->ecxt_innertuple = context->planSlot;
 	econtext->ecxt_outertuple = NULL;
 
-lmerge_matched:;
+lmerge_matched:
 
 	/*
 	 * This routine is only invoked for matched rows, and we must have found
@@ -3547,7 +3566,7 @@ ExecPrepareTupleRouting(ModifyTableState *mtstate,
 	/*
 	 * Convert the tuple, if necessary.
 	 */
-	map = partrel->ri_RootToPartitionMap;
+	map = ExecGetRootToChildMap(partrel, estate);
 	if (map != NULL)
 	{
 		TupleTableSlot *new_slot = partrel->ri_PartitionTupleSlot;
@@ -4018,8 +4037,8 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 	}
 
 	/* set up epqstate with dummy subplan data for the moment */
-	EvalPlanQualInitExt(&mtstate->mt_epqstate, estate, NULL, NIL,
-						node->epqParam, node->resultRelations);
+	EvalPlanQualInit(&mtstate->mt_epqstate, estate, NULL, NIL,
+					 node->epqParam, node->resultRelations);
 	mtstate->fireBSTriggers = true;
 
 	/*
@@ -4147,18 +4166,6 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 					elog(ERROR, "could not find junk wholerow column");
 			}
 		}
-
-		/*
-		 * For INSERT/UPDATE/MERGE, prepare to evaluate any generated columns.
-		 * We must do this now, even if we never insert or update any rows, to
-		 * cover the case where a MERGE does some UPDATE operations and later
-		 * some INSERTs.  We'll need ri_GeneratedExprs to cover all generated
-		 * columns, so we force it now.  (It might be sufficient to do this
-		 * only for operation == CMD_MERGE, but we'll avoid changing the data
-		 * structure definition in back branches.)
-		 */
-		if (operation == CMD_INSERT || operation == CMD_UPDATE || operation == CMD_MERGE)
-			ExecInitStoredGenerated(resultRelInfo, estate, operation);
 	}
 
 	/*

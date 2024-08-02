@@ -2,7 +2,7 @@
  * oracle_compat.c
  *	Oracle compatible functions.
  *
- * Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Copyright (c) 1996-2023, PostgreSQL Global Development Group
  *
  *	Author: Edmund Mergl <E.Mergl@bawue.de>
  *	Multibyte enhancement: Tatsuo Ishii <ishii@postgresql.org>
@@ -21,6 +21,7 @@
 #include "utils/builtins.h"
 #include "utils/formatting.h"
 #include "utils/memutils.h"
+#include "varatt.h"
 
 
 static text *dotrim(const char *string, int stringlen,

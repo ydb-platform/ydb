@@ -15,6 +15,7 @@ SRCS(
 END()
 
 RECURSE(
+    benchmark
     mt_ut
     perf
     ut

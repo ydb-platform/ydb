@@ -240,7 +240,20 @@ namespace NKikimr::NStorage {
         TString ErrorReason;
 
         // subscribed IC sessions
-        THashMap<ui32, TActorId> SubscribedSessions;
+        struct TSessionSubscription {
+            TActorId SessionId;
+            ui64 SubscriptionCookie = 0; // when nonzero, we didn't have TEvNodeConnected yet
+
+            TSessionSubscription(TActorId sessionId) : SessionId(sessionId) {}
+
+            TString ToString() const {
+                return TStringBuilder() << "{SessionId# " << SessionId << " SubscriptionCookie# " << SubscriptionCookie << "}";
+            }
+        };
+        THashMap<ui32, TSessionSubscription> SubscribedSessions;
+        ui64 NextSubscribeCookie = 1;
+        THashMap<ui64, ui32> SubscriptionCookieMap;
+        THashSet<ui32> UnsubscribeQueue;
 
         // child actors
         THashSet<TActorId> ChildActors;
@@ -265,15 +278,10 @@ namespace NKikimr::NStorage {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // PDisk configuration retrieval and storing
 
-        static void ReadConfig(TActorSystem *actorSystem, TActorId selfId, const std::vector<TString>& drives,
-            const TIntrusivePtr<TNodeWardenConfig>& cfg, ui64 cookie);
-
-        static void WriteConfig(TActorSystem *actorSystem, TActorId selfId, const std::vector<TString>& drives,
-            const TIntrusivePtr<TNodeWardenConfig>& cfg, const NKikimrBlobStorage::TPDiskMetadataRecord& record);
-
+        void ReadConfig(ui64 cookie = 0);
+        void WriteConfig(std::vector<TString> drives, NKikimrBlobStorage::TPDiskMetadataRecord record);
         void PersistConfig(TPersistCallback callback);
         void Handle(TEvPrivate::TEvStorageConfigStored::TPtr ev);
-
         void Handle(TEvPrivate::TEvStorageConfigLoaded::TPtr ev);
 
         static TString CalculateFingerprint(const NKikimrBlobStorage::TStorageConfig& config);
@@ -292,12 +300,13 @@ namespace NKikimr::NStorage {
         void BindToSession(TActorId sessionId);
         void Handle(TEvInterconnect::TEvNodeConnected::TPtr ev);
         void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr ev);
-        void Handle(TEvents::TEvUndelivered::TPtr ev);
+        void HandleDisconnect(ui32 nodeId, TActorId sessionId);
         void UnsubscribeInterconnect(ui32 nodeId);
+        TActorId SubscribeToPeerNode(ui32 nodeId, TActorId sessionId);
         void AbortBinding(const char *reason, bool sendUnbindMessage = true);
         void HandleWakeup();
         void Handle(TEvNodeConfigReversePush::TPtr ev);
-        void FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *config);
+        void FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *config, bool recurseConfigUpdate = false);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Binding requests from peer nodes
@@ -354,7 +363,7 @@ namespace NKikimr::NStorage {
         void IssueScatterTaskForNode(ui32 nodeId, TBoundNode& info, ui64 cookie, TScatterTask& task);
         void CompleteScatterTask(TScatterTask& task);
         void AbortScatterTask(ui64 cookie, ui32 nodeId);
-        void AbortAllScatterTasks(const TBinding& binding);
+        void AbortAllScatterTasks(const std::optional<TBinding>& binding);
         void Handle(TEvNodeConfigScatter::TPtr ev);
         void Handle(TEvNodeConfigGather::TPtr ev);
 

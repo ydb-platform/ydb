@@ -14,17 +14,21 @@ struct TArgs_hashtidextended_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,true};
 };
-struct TArgs_pg_read_binary_file_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {false,true,true,true};
-};
 struct TArgs_pg_read_binary_file_all_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
+struct TArgs_pg_read_binary_file_all_missing_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
 struct TArgs_pg_read_binary_file_off_len_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
+};
+struct TArgs_pg_read_binary_file_off_len_missing_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 4> IsFixedArg = {false,true,true,true};
 };
 struct TArgs_pg_read_file_Policy {
     static constexpr bool VarArgs = false;
@@ -34,11 +38,15 @@ struct TArgs_pg_read_file_all_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
+struct TArgs_pg_read_file_all_missing_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
 struct TArgs_pg_read_file_off_len_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
 };
-struct TArgs_pg_read_file_v2_Policy {
+struct TArgs_pg_read_file_off_len_missing_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 4> IsFixedArg = {false,true,true,true};
 };

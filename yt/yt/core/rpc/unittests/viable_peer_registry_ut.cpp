@@ -129,8 +129,15 @@ public:
         return 0;
     }
 
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
+    {
+        return MemoryUsageTracker_;
+    }
+
     DEFINE_SIGNAL_OVERRIDE(void(const TError&), Terminated);
 private:
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
+
     TString Address_;
     THashSet<TString>* ChannelRegistry_;
 };

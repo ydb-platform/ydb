@@ -227,12 +227,43 @@ public:
 
 std::optional<NKikimrSchemeOp::TSequenceDescription> GetAlterSequenceDescription(
         const NKikimrSchemeOp::TSequenceDescription& sequence, const NKikimrSchemeOp::TSequenceDescription& alter,
-        TString& errStr, NKikimrScheme::EStatus& status) {
+        const NScheme::TTypeRegistry& typeRegistry, bool pgTypesEnabled,
+        TString& errStr) {
 
     NKikimrSchemeOp::TSequenceDescription result = sequence;
 
     i64 minValue = result.GetMinValue();
     i64 maxValue = result.GetMaxValue();
+
+    auto dataType = result.GetDataType();
+    if (alter.HasDataType()) {
+        dataType = alter.GetDataType();
+    }
+
+    auto validationResult = ValidateSequenceType(sequence.GetName(), dataType, typeRegistry, pgTypesEnabled, errStr);
+    if (!validationResult) {
+        return std::nullopt;
+    }
+
+    auto [dataTypeMinValue, dataTypeMaxValue] = *validationResult;
+
+    if (maxValue != Max<i16>() && maxValue != Max<i32>() && maxValue != Max<i64>()) {
+        if (maxValue > dataTypeMaxValue) {
+            errStr = Sprintf("MAXVALUE (%ld) is out of range for sequence data type %s", maxValue, dataType.c_str());
+            return std::nullopt;
+        }
+    } else {
+        maxValue = dataTypeMaxValue;
+    }
+
+    if (minValue != Min<i16>() && minValue != Min<i32>() && minValue != Min<i64>()) {
+        if (minValue < dataTypeMinValue) {
+            errStr = Sprintf("MINVALUE (%ld) is out of range for sequence data type %s", minValue, dataType.c_str());
+            return std::nullopt;
+        }
+    } else {
+        minValue = dataTypeMinValue;
+    }
 
     if (alter.HasMinValue()) {
         minValue = alter.GetMinValue();
@@ -241,9 +272,18 @@ std::optional<NKikimrSchemeOp::TSequenceDescription> GetAlterSequenceDescription
         maxValue = alter.GetMaxValue();
     }
 
+    if (maxValue > dataTypeMaxValue) {
+        errStr = Sprintf("MAXVALUE (%ld) is out of range for sequence", maxValue);
+        return std::nullopt;
+    }
+
+    if (minValue < dataTypeMinValue) {
+        errStr = Sprintf("MINVALUE (%ld) is out of range for sequence", minValue);
+        return std::nullopt;
+    }
+
     if (minValue >= maxValue) {
         errStr = Sprintf("MINVALUE (%ld) must be less than MAXVALUE (%ld)", minValue, maxValue);
-        status = NKikimrScheme::StatusInvalidParameter;
         return std::nullopt;
     }
 
@@ -254,12 +294,10 @@ std::optional<NKikimrSchemeOp::TSequenceDescription> GetAlterSequenceDescription
 
     if (startValue > maxValue) {
         errStr = Sprintf("START value (%ld) cannot be greater than MAXVALUE (%ld)", startValue, maxValue);
-        status = NKikimrScheme::StatusInvalidParameter;
         return std::nullopt;
     }
     if (startValue < minValue) {
         errStr = Sprintf("START value (%ld) cannot be less than MINVALUE (%ld)",  startValue, minValue);
-        status = NKikimrScheme::StatusInvalidParameter;
         return std::nullopt;
     }
 
@@ -282,6 +320,7 @@ std::optional<NKikimrSchemeOp::TSequenceDescription> GetAlterSequenceDescription
     result.SetCycle(cycle);
     result.SetCache(cache);
     result.SetStartValue(startValue);
+    result.SetDataType(dataType);
 
     return result;
 }
@@ -411,9 +450,11 @@ public:
             return result;
         }
 
+        const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
         auto description = GetAlterSequenceDescription(
-                sequenceInfo->Description, sequenceAlter, errStr, status);
+                sequenceInfo->Description, sequenceAlter, *typeRegistry, context.SS->EnableTablePgTypes, errStr);
         if (!description) {
+            status = NKikimrScheme::StatusInvalidParameter;
             result->SetError(status, errStr);
             return result;
         }

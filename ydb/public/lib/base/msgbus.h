@@ -87,7 +87,7 @@ enum {
     MTYPE_CLIENT_TEST_SHARD_CONTROL = 10481,
     MTYPE_CLIENT_DS_LOAD_REQUEST = 10482, // deprecated
     MTYPE_CLIENT_DS_LOAD_RESPONSE = 10483, // deprecated
-    MTYPE_CLIENT_LOGIN_REQUEST = 10484,
+    /*MTYPE_CLIENT_LOGIN_REQUEST*/ MTYPE_CLIENT_DEPRECATED_10484 = 10484,
 };
 
 template <typename InstanceType, class TBufferRecord, int MType>
@@ -136,7 +136,6 @@ struct TBusInterconnectDebug : TBusMessage<TBusInterconnectDebug, NKikimrClient:
 struct TBusConsoleRequest : TBusMessage<TBusConsoleRequest, NKikimrClient::TConsoleRequest, MTYPE_CLIENT_CONSOLE_REQUEST> {};
 struct TBusConsoleResponse : TBusMessage<TBusConsoleResponse, NKikimrClient::TConsoleResponse, MTYPE_CLIENT_CONSOLE_RESPONSE> {};
 struct TBusTestShardControlRequest : TBusMessage<TBusTestShardControlRequest, NKikimrClient::TTestShardControlRequest, MTYPE_CLIENT_TEST_SHARD_CONTROL> {};
-struct TBusLoginRequest : TBusMessage<TBusLoginRequest, NKikimrClient::TLoginRequest, MTYPE_CLIENT_LOGIN_REQUEST> {};
 
 class TBusResponseStatus : public TBusResponse {
 public:
@@ -218,7 +217,6 @@ public:
         RegisterType(new TBusConsoleRequest);
         RegisterType(new TBusConsoleResponse);
         RegisterType(new TBusTestShardControlRequest);
-        RegisterType(new TBusLoginRequest);
     }
 
     const static ui32 DefaultPort = 2134;

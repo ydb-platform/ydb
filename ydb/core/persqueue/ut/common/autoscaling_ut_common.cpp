@@ -228,6 +228,7 @@ TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, si
 
 
     Session = client.CreateReadSession(readSettings);
+    Cerr << ">>>>> " << Impl->Name << " ReadSession was created" << Endl << Flush;
 }
 
 void TTestReadSession::WaitAllMessages() {
@@ -248,11 +249,13 @@ void TTestReadSession::Commit() {
 void TTestReadSession::TImpl::Acquire() {
     Cerr << ">>>>> " << Name << " Acquire()" << Endl << Flush;
     Semaphore.Acquire();
+    Cerr << ">>>>> " << Name << " Acquired" << Endl << Flush;
 }
 
 void TTestReadSession::TImpl::Release() {
     Cerr << ">>>>> " << Name << " Release()" << Endl << Flush;
     Semaphore.Release();
+    Cerr << ">>>>> " << Name << " Releaseed" << Endl << Flush;
 }
 
 NThreading::TFuture<std::set<size_t>> TTestReadSession::TImpl::Wait(std::set<size_t> partitions, const TString& message) {

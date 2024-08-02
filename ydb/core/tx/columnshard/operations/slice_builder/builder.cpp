@@ -43,7 +43,8 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
         return TConclusionStatus::Fail("no data in batch");
     }
     const auto& indexSchema = ActualSchema->GetIndexInfo().ArrowSchema();
-    auto reorderConclusion = NArrow::TColumnOperator().Reorder(OriginalBatch, indexSchema->field_names());
+    NArrow::TSchemaSubset subset;
+    auto reorderConclusion = NArrow::TColumnOperator().Adapt(OriginalBatch, indexSchema, &subset);
     if (reorderConclusion.IsFail()) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unadaptable schemas")("index", indexSchema->ToString())("problem", reorderConclusion.GetErrorMessage());
         ReplyError("cannot reorder schema: " + reorderConclusion.GetErrorMessage());
@@ -51,18 +52,17 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
     } else {
         OriginalBatch = reorderConclusion.DetachResult();
     }
-    if (!OriginalBatch->schema()->Equals(indexSchema)) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unequal schemas")("batch", OriginalBatch->schema()->ToString())
-            ("index", indexSchema->ToString());
-        ReplyError("unequal schemas");
-        return TConclusionStatus::Fail("unequal schemas");
-    }
+    if (OriginalBatch->num_columns() != indexSchema->num_fields()) {
+        AFL_VERIFY(OriginalBatch->num_columns() < indexSchema->num_fields())("original", OriginalBatch->num_columns())(
+                                                      "index", indexSchema->num_fields());
 
+    }
     WriteData.MutableWriteMeta().SetWriteMiddle2StartInstant(TMonotonic::Now());
     auto batches = BuildSlices();
     WriteData.MutableWriteMeta().SetWriteMiddle3StartInstant(TMonotonic::Now());
     if (batches) {
         auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
+        writeDataPtr->SetSchemaSubset(std::move(subset));
         auto result = std::make_unique<NColumnShard::NWriting::TEvAddInsertedDataToBuffer>(writeDataPtr, std::move(*batches));
         TActorContext::AsActorContext().Send(BufferActorId, result.release());
     } else {

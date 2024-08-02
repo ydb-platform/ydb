@@ -122,10 +122,10 @@ It is used for columns whose values can be represented as integers ranging from 
 | Field name                 | Mandatory | Description                                            | Example values          |
 |----------------------------|-----------|--------------------------------------------------------|-------------------------|
 | `projection.<field_name>.type` | Yes   | Data type of the field                                 | integer                 |
-| `projection.<field_name>.min`  | Yes   | Specifies the minimum allowable value as an integer    | -100<br>004             |
-| `projection.<field_name>.max`  | Yes   | Specifies the maximum allowable value as an integer    | -10<br>5000             |
-| `projection.<field_name>.interval` | No, default is `1` | Specifies the step between elements within the value range. For example, a step of 3 within the range 2 to 10 will result in the values: 2, 5, 8 | 2<br>11             |
-| `projection.<field_name>.digits` | No, default is `0` | Specifies the number of digits in the number. If the number of significant digits in the number is less than the specified value, the value is padded with leading zeros up to the specified number of digits. For example, if .digits=3 is specified and the number 2 is passed, it will be converted to 002 | 2<br>4 |
+| `projection.<field_name>.min`  | Yes   | Specifies the minimum allowable value as an integer    | -100<br/>004             |
+| `projection.<field_name>.max`  | Yes   | Specifies the maximum allowable value as an integer    | -10<br/>5000             |
+| `projection.<field_name>.interval` | No, default is `1` | Specifies the step between elements within the value range. For example, a step of 3 within the range 2 to 10 will result in the values: 2, 5, 8 | 2<br/>11             |
+| `projection.<field_name>.digits` | No, default is `0` | Specifies the number of digits in the number. If the number of significant digits in the number is less than the specified value, the value is padded with leading zeros up to the specified number of digits. For example, if .digits=3 is specified and the number 2 is passed, it will be converted to 002 | 2<br/>4 |
 
 ### Enum field type { #enum_type }
 
@@ -134,7 +134,7 @@ It is used for columns whose values can be represented as a set of enumerated va
 | Field name                   | Mandatory | Description                                           | Example values          |
 |------------------------------|-----------|-------------------------------------------------------|-------------------------|
 | `projection.<field_name>.type` | Yes     | Data type of the field                                | enum                    |
-| `projection.<field_name>.values` | Yes   | Specifies the allowable values, separated by commas. Spaces are not ignored | 1, 2<br>A,B,C |
+| `projection.<field_name>.values` | Yes   | Specifies the allowable values, separated by commas. Spaces are not ignored | 1, 2<br/>A,B,C |
 
 ### Date field type { #date_type }
 

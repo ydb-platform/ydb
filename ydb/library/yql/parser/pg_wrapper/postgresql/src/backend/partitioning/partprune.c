@@ -25,7 +25,7 @@
  *
  * See gen_partprune_steps_internal() for more details on step generation.
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -528,8 +528,8 @@ make_partitionedrel_pruneinfo(PlannerInfo *root, RelOptInfo *parentrel,
 			partprunequal = (List *)
 				adjust_appendrel_attrs_multilevel(root,
 												  (Node *) prunequal,
-												  subpart->relids,
-												  targetpart->relids);
+												  subpart,
+												  targetpart);
 		}
 
 		/*
@@ -2338,11 +2338,10 @@ match_clause_to_partition_key(GeneratePruningStepsContext *context,
 		elem_clauses = NIL;
 		foreach(lc1, elem_exprs)
 		{
-			Expr	   *rightop = (Expr *) lfirst(lc1),
-					   *elem_clause;
+			Expr	   *elem_clause;
 
 			elem_clause = make_opclause(saop_op, BOOLOID, false,
-										leftop, rightop,
+										leftop, lfirst(lc1),
 										InvalidOid, saop_coll);
 			elem_clauses = lappend(elem_clauses, elem_clause);
 		}
@@ -2438,10 +2437,10 @@ get_steps_using_prefix(GeneratePruningStepsContext *context,
 		   context->rel->part_scheme->strategy == PARTITION_STRATEGY_HASH);
 
 	/*
-	 * No recursive processing is required when 'prefix' is an empty list.  This
-	 * occurs when there is only 1 partition key column.
+	 * No recursive processing is required when 'prefix' is an empty list.
+	 * This occurs when there is only 1 partition key column.
 	 */
-	if (list_length(prefix) == 0)
+	if (prefix == NIL)
 	{
 		PartitionPruneStep *step;
 
@@ -2513,9 +2512,9 @@ get_steps_using_prefix_recurse(GeneratePruningStepsContext *context,
 		ListCell   *next_start;
 
 		/*
-		 * Find the first PartClauseInfo belonging to the next partition key, the
-		 * next recursive call must start iteration of the prefix list from that
-		 * point.
+		 * Find the first PartClauseInfo belonging to the next partition key,
+		 * the next recursive call must start iteration of the prefix list
+		 * from that point.
 		 */
 		for_each_cell(lc, prefix, start)
 		{
@@ -2529,9 +2528,9 @@ get_steps_using_prefix_recurse(GeneratePruningStepsContext *context,
 		next_start = lc;
 
 		/*
-		 * For each PartClauseInfo with keyno set to cur_keyno, add its expr and
-		 * cmpfn to step_exprs and step_cmpfns, respectively, and recurse using
-		 * 'next_start' as the starting point in the 'prefix' list.
+		 * For each PartClauseInfo with keyno set to cur_keyno, add its expr
+		 * and cmpfn to step_exprs and step_cmpfns, respectively, and recurse
+		 * using 'next_start' as the starting point in the 'prefix' list.
 		 */
 		for_each_cell(lc, prefix, start)
 		{
@@ -3667,7 +3666,11 @@ match_boolean_partition_clause(Oid partopfamily, Expr *clause, Expr *partkey,
 	*outconst = NULL;
 	*noteq = false;
 
-	if (!IsBooleanOpfamily(partopfamily))
+	/*
+	 * Partitioning currently can only use built-in AMs, so checking for
+	 * built-in boolean opfamilies is good enough.
+	 */
+	if (!IsBuiltinBooleanOpfamily(partopfamily))
 		return PARTCLAUSE_UNSUPPORTED;
 
 	if (IsA(clause, BooleanTest))

@@ -13,7 +13,6 @@
 #include "datashard_repl_offsets_client.h"
 #include "datashard_repl_offsets_server.h"
 #include "datashard_write.h"
-#include "build_index.h"
 #include "cdc_stream_heartbeat.h"
 #include "cdc_stream_scan.h"
 #include "change_exchange.h"
@@ -24,6 +23,7 @@
 #include "volatile_tx.h"
 #include "conflicts_cache.h"
 #include "reject_reason.h"
+#include "scan_common.h"
 
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
@@ -241,6 +241,7 @@ class TDataShard
     class TTxCdcStreamScanProgress;
     class TTxCdcStreamEmitHeartbeats;
     class TTxUpdateFollowerReadEdge;
+    class TTxRemoveSchemaSnapshots;
 
     template <typename T> friend class TTxDirectBase;
     class TTxUploadRows;
@@ -251,6 +252,7 @@ class TDataShard
 
     class TTxHandleSafeKqpScan;
     class TTxHandleSafeBuildIndexScan;
+    class TTxHandleSafeSampleKScan;
     class TTxHandleSafeStatisticsScan;
 
     class TTxMediatorStateRestored;
@@ -374,6 +376,7 @@ class TDataShard
             EvPlanPredictedTxs,
             EvStatisticsScanFinished,
             EvTableStatsError,
+            EvRemoveSchemaSnapshots,
             EvEnd
         };
 
@@ -595,6 +598,8 @@ class TDataShard
         struct TEvPlanPredictedTxs : public TEventLocal<TEvPlanPredictedTxs, EvPlanPredictedTxs> {};
 
         struct TEvStatisticsScanFinished : public TEventLocal<TEvStatisticsScanFinished, EvStatisticsScanFinished> {};
+
+        struct TEvRemoveSchemaSnapshots : public TEventLocal<TEvRemoveSchemaSnapshots, EvRemoveSchemaSnapshots> {};
     };
 
     struct Schema : NIceDb::Schema {
@@ -1318,6 +1323,8 @@ class TDataShard
     void Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanRegistered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TActorContext& ctx);
@@ -1382,6 +1389,8 @@ class TDataShard
     void Handle(TEvPrivate::TEvConfirmReadonlyLease::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvPlanPredictedTxs::TPtr& ev, const TActorContext& ctx);
+
+    void Handle(TEvPrivate::TEvRemoveSchemaSnapshots::TPtr& ev, const TActorContext& ctx);
 
     void HandleByReplicationSourceOffsetsServer(STATEFN_SIG);
 
@@ -1906,7 +1915,8 @@ public:
     void MoveChangeRecord(NIceDb::TNiceDb& db, ui64 order, const TPathId& pathId);
     void MoveChangeRecord(NIceDb::TNiceDb& db, ui64 lockId, ui64 lockOffset, const TPathId& pathId);
     void RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order);
-    void EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records, ui64 cookie = 0);
+    // TODO(ilnaz): remove 'afterMove' after #6541
+    void EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records, ui64 cookie = 0, bool afterMove = false);
     ui32 GetFreeChangeQueueCapacity(ui64 cookie);
     ui64 ReserveChangeQueueCapacity(ui32 capacity);
     void UpdateChangeExchangeLag(TInstant now);
@@ -1920,6 +1930,8 @@ public:
     bool LoadChangeRecordCommits(NIceDb::TNiceDb& db, TVector<IDataShardChangeCollector::TChange>& records);
     void ScheduleRemoveLockChanges(ui64 lockId);
     void ScheduleRemoveAbandonedLockChanges();
+    void ScheduleRemoveSchemaSnapshot(const TSchemaSnapshotKey& key);
+    void ScheduleRemoveAbandonedSchemaSnapshots();
 
     static void PersistCdcStreamScanLastKey(NIceDb::TNiceDb& db, const TSerializedCellVec& value,
         const TPathId& tablePathId, const TPathId& streamPathId);
@@ -1957,7 +1969,7 @@ public:
         return SnapshotManager.PromoteCompleteEdge(std::forward<Args>(args)...);
     }
 
-    TBuildIndexManager& GetBuildIndexManager() { return BuildIndexManager; }
+    TScanManager& GetScanManager() { return ScanManager; }
 
     // Returns true when datashard is working in mvcc mode
     bool IsMvccEnabled() const;
@@ -2656,7 +2668,7 @@ private:
 
     TReplicationSourceOffsetsServerLink ReplicationSourceOffsetsServer;
 
-    TBuildIndexManager BuildIndexManager;
+    TScanManager ScanManager;
 
     TS3UploadsManager S3Uploads;
     TS3DownloadsManager S3Downloads;
@@ -2803,24 +2815,29 @@ private:
         ui64 LockOffset;
         ui64 ReservationCookie;
 
-        explicit TEnqueuedRecord(ui64 bodySize, const TPathId& tableId,
-                ui64 schemaVersion, TInstant created, TInstant enqueued,
-                ui64 lockId = 0, ui64 lockOffset = 0, ui64 cookie = 0)
+        explicit TEnqueuedRecord(ui64 bodySize, const TPathId& tableId, ui64 schemaVersion,
+                TInstant created, ui64 lockId = 0, ui64 lockOffset = 0)
             : BodySize(bodySize)
             , TableId(tableId)
             , SchemaVersion(schemaVersion)
             , SchemaSnapshotAcquired(false)
             , CreatedAt(created)
-            , EnqueuedAt(enqueued)
+            , EnqueuedAt(TInstant::Zero())
             , LockId(lockId)
             , LockOffset(lockOffset)
-            , ReservationCookie(cookie)
+            , ReservationCookie(0)
         {
         }
 
-        explicit TEnqueuedRecord(const IDataShardChangeCollector::TChange& record, TInstant now, ui64 cookie)
-            : TEnqueuedRecord(record.BodySize, record.TableId, record.SchemaVersion, record.CreatedAt(), now,
-                record.LockId, record.LockOffset, cookie)
+        explicit TEnqueuedRecord(const IDataShardChangeCollector::TChange& record)
+            : TEnqueuedRecord(record.BodySize, record.TableId, record.SchemaVersion,
+                record.CreatedAt(), record.LockId, record.LockOffset)
+        {
+        }
+
+        explicit TEnqueuedRecord(const TChangeRecord& record)
+            : TEnqueuedRecord(record.GetBody().size(), record.GetTableId(), record.GetSchemaVersion(),
+                record.GetApproximateCreationDateTime(), record.GetLockId(), record.GetLockOffset())
         {
         }
     };
@@ -2862,9 +2879,11 @@ private:
         size_t Count = 0;
     };
 
+    TVector<ui64> CommittingChangeRecords;
     THashMap<ui64, TUncommittedLockChangeRecords> LockChangeRecords; // ui64 is lock id
     THashMap<ui64, TCommittedLockChangeRecords> CommittedLockChangeRecords; // ui64 is lock id
     TVector<ui64> PendingLockChangeRecordsToRemove;
+    TVector<TSchemaSnapshotKey> PendingSchemaSnapshotsToGc;
 
     // in
     THashMap<ui64, TInChangeSender> InChangeSenders; // ui64 is shard id
@@ -2964,6 +2983,16 @@ public:
         CommittedLockChangeRecords = std::move(committedLockChangeRecords);
     }
 
+    auto TakeChangesQueue() {
+        auto result = std::move(ChangesQueue);
+        ChangesQueue.clear();
+        return result;
+    }
+
+    void SetChangesQueue(THashMap<ui64, TEnqueuedRecord>&& changesQueue) {
+        ChangesQueue = std::move(changesQueue);
+    }
+
 protected:
     // Redundant init state required by flat executor implementation
     void StateInit(TAutoPtr<NActors::IEventHandle> &ev) {
@@ -2985,6 +3014,7 @@ protected:
             HFuncTraced(TEvMediatorTimecast::TEvNotifyPlanStep, Handle);
             HFuncTraced(TEvPrivate::TEvMediatorRestoreBackup, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveLockChangeRecords, Handle);
+            HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateInactive unhandled event type: " << ev->GetTypeRewrite()
@@ -3075,6 +3105,7 @@ protected:
             HFunc(TEvDataShard::TEvRefreshVolatileSnapshotRequest, Handle);
             HFunc(TEvDataShard::TEvDiscardVolatileSnapshotRequest, Handle);
             HFuncTraced(TEvDataShard::TEvBuildIndexCreateRequest, Handle);
+            HFunc(TEvDataShard::TEvSampleKRequest, Handle);
             HFunc(TEvDataShard::TEvCdcStreamScanRequest, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanRegistered, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanProgress, Handle);
@@ -3113,6 +3144,7 @@ protected:
             HFunc(TEvPrivate::TEvPlanPredictedTxs, Handle);
             HFunc(NStat::TEvStatistics::TEvStatisticsRequest, Handle);
             HFunc(TEvPrivate::TEvStatisticsScanFinished, Handle);
+            HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWork unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());

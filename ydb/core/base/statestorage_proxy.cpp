@@ -1,7 +1,6 @@
 #include "statestorage_impl.h"
 #include "tabletid.h"
 
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>

@@ -12,6 +12,9 @@
                         "Fk21",
                         "Value"
                     ],
+                    "lookup_by": [
+                        "Key (3)"
+                    ],
                     "type": "Lookup"
                 }
             ]

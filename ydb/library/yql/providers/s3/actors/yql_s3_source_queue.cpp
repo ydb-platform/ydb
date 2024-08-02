@@ -171,8 +171,9 @@ public:
         ui64 batchSizeLimit,
         ui64 batchObjectCountLimit,
         IHTTPGateway::TPtr gateway,
+        IHTTPGateway::TRetryPolicy::TPtr retryPolicy,
         TString url,
-        TS3Credentials::TAuthInfo authInfo,
+        const TS3Credentials& credentials,
         TString pattern,
         NS3Lister::ES3PatternVariant patternVariant,
         NS3Lister::ES3PatternType patternType)
@@ -186,8 +187,9 @@ public:
         , BatchSizeLimit(batchSizeLimit)
         , BatchObjectCountLimit(batchObjectCountLimit)
         , Gateway(std::move(gateway))
+        , RetryPolicy(std::move(retryPolicy))
         , Url(std::move(url))
-        , AuthInfo(std::move(authInfo))
+        , Credentials(credentials)
         , Pattern(std::move(pattern))
         , PatternVariant(patternVariant)
         , PatternType(patternType) {
@@ -488,9 +490,10 @@ private:
             CurrentDirectoryPathIndex = object.GetPathIndex();
             MaybeLister = NS3Lister::MakeS3Lister(
                 Gateway,
+                RetryPolicy,
                 NS3Lister::TListingRequest{
                     Url,
-                    AuthInfo,
+                    Credentials,
                     PatternVariant == NS3Lister::ES3PatternVariant::PathPattern
                         ? Pattern
                         : TStringBuilder{} << object.GetPath() << Pattern,
@@ -611,8 +614,9 @@ private:
     THashSet<NActors::TActorId> UpdatedConsumers;
 
     const IHTTPGateway::TPtr Gateway;
+    const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
     const TString Url;
-    const TS3Credentials::TAuthInfo AuthInfo;
+    const TS3Credentials Credentials;
     const TString Pattern;
     const NS3Lister::ES3PatternVariant PatternVariant;
     const NS3Lister::ES3PatternType PatternType;
@@ -632,8 +636,9 @@ NActors::IActor* CreateS3FileQueueActor(
         ui64 batchSizeLimit,
         ui64 batchObjectCountLimit,
         IHTTPGateway::TPtr gateway,
+        IHTTPGateway::TRetryPolicy::TPtr retryPolicy,
         TString url,
-        TS3Credentials::TAuthInfo authInfo,
+        const TS3Credentials& credentials,
         TString pattern,
         NS3Lister::ES3PatternVariant patternVariant,
         NS3Lister::ES3PatternType patternType) {
@@ -648,8 +653,9 @@ NActors::IActor* CreateS3FileQueueActor(
         batchSizeLimit,
         batchObjectCountLimit,
         gateway,
+        retryPolicy,
         url,
-        authInfo,
+        credentials,
         pattern,
         patternVariant,
         patternType

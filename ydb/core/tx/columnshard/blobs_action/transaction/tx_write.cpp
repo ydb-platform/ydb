@@ -18,10 +18,13 @@ bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSeriali
 
     const auto& writeMeta = batch.GetAggregation().GetWriteMeta();
     meta.SetModificationType(TEnumOperator<NEvWrite::EModificationType>::SerializeToProto(writeMeta.GetModificationType()));
+    *meta.MutableSchemaSubset() = batch.GetAggregation().GetSchemaSubset().SerializeToProto();
     auto schemeVersion = batch.GetAggregation().GetSchemaVersion();
     auto tableSchema = Self->TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaVerified(schemeVersion);
 
-    NOlap::TInsertedData insertData((ui64)writeId, writeMeta.GetTableId(), writeMeta.GetDedupId(), blobRange, meta, tableSchema->GetVersion(), batch->GetData());
+    NOlap::TInsertedData insertData((ui64)writeId, writeMeta.GetTableId(), writeMeta.GetDedupId(), blobRange, 
+        meta, tableSchema->GetVersion(),
+        batch->GetData());
     bool ok = Self->InsertTable->Insert(dbTable, std::move(insertData));
     if (ok) {
         Self->UpdateInsertTableCounters();
@@ -67,7 +70,7 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
 
             if (!InsertOneBlob(txc, i, writeId)) {
                 LOG_S_DEBUG(TxPrefix() << "duplicate writeId " << (ui64)writeId << TxSuffix());
-                Self->IncCounter(COUNTER_WRITE_DUPLICATE);
+                Self->Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_DUPLICATE);
             }
         }
     }
@@ -137,10 +140,10 @@ void TTxWrite::Complete(const TActorContext& ctx) {
     }
     for (ui32 i = 0; i < buffer.GetAggregations().size(); ++i) {
         const auto& writeMeta = buffer.GetAggregations()[i]->GetWriteMeta();
-        Self->CSCounters.OnWriteTxComplete(now - writeMeta.GetWriteStartInstant());
-        Self->CSCounters.OnSuccessWriteResponse();
+        Self->Counters.GetCSCounters().OnWriteTxComplete(now - writeMeta.GetWriteStartInstant());
+        Self->Counters.GetCSCounters().OnSuccessWriteResponse();
     }
-
+    Self->Counters.GetTabletCounters()->IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
 }
 
 }

@@ -548,7 +548,7 @@ std::shared_ptr<arrow::Scalar> DefaultScalar(const std::shared_ptr<arrow::DataTy
         }
         return true;
     });
-    Y_ABORT_UNLESS(out);
+    AFL_VERIFY(out)("type", type->ToString());
     return out;
 }
 
@@ -631,6 +631,19 @@ int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y) {
 int ScalarCompare(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
     Y_ABORT_UNLESS(x);
     Y_ABORT_UNLESS(y);
+    return ScalarCompare(*x, *y);
+}
+
+int ScalarCompareNullable(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
+    if (!x && !!y) {
+        return -1;
+    }
+    if (!!x && !y) {
+        return 1;
+    }
+    if (!x && !y) {
+        return 0;
+    }
     return ScalarCompare(*x, *y);
 }
 
@@ -892,24 +905,33 @@ std::shared_ptr<arrow::RecordBatch> MergeColumns(const std::vector<std::shared_p
 }
 
 std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std::shared_ptr<arrow::Table>& t) {
-    std::set<ui32> splitPositions;
-    const ui32 numRows = t->num_rows();
-    for (auto&& i : t->columns()) {
-        ui32 pos = 0;
-        for (auto&& arr : i->chunks()) {
-            splitPositions.emplace(pos);
-            pos += arr->length();
-        }
-        AFL_VERIFY(pos == t->num_rows());
+    if (!t->num_rows()) {
+        return {};
     }
+    std::vector<ui32> positions;
+    {
+        for (auto&& i : t->columns()) {
+            ui32 pos = 0;
+            for (auto&& arr : i->chunks()) {
+                positions.emplace_back(pos);
+                pos += arr->length();
+            }
+            AFL_VERIFY(pos == t->num_rows());
+        }
+        positions.emplace_back(t->num_rows());
+    }
+    std::sort(positions.begin(), positions.end());
+    positions.erase(std::unique(positions.begin(), positions.end()), positions.end());
+
     std::vector<std::vector<std::shared_ptr<arrow::Array>>> slicedData;
-    slicedData.resize(splitPositions.size());
-    std::vector<ui32> positions(splitPositions.begin(), splitPositions.end());
-    for (auto&& i : t->columns()) {
-        for (ui32 idx = 0; idx < positions.size(); ++idx) {
-            auto slice = i->Slice(positions[idx], ((idx + 1 == positions.size()) ? numRows : positions[idx + 1]) - positions[idx]);
-            AFL_VERIFY(slice->num_chunks() == 1);
-            slicedData[idx].emplace_back(slice->chunks().front());
+    slicedData.resize(positions.size() - 1);
+    {
+        for (auto&& i : t->columns()) {
+            for (ui32 idx = 0; idx + 1 < positions.size(); ++idx) {
+                auto slice = i->Slice(positions[idx], positions[idx + 1] - positions[idx]);
+                AFL_VERIFY(slice->num_chunks() == 1);
+                slicedData[idx].emplace_back(slice->chunks().front());
+            }
         }
     }
     std::vector<std::shared_ptr<arrow::RecordBatch>> result;

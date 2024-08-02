@@ -397,8 +397,8 @@ private:
     struct TKafkaProtocolWriterTag
     { };
 
-    constexpr static i64 InitialBufferSize = 16_KB;
-    constexpr static i64 BufferSizeMultiplier = 2;
+    static constexpr i64 InitialBufferSize = 16_KB;
+    static constexpr i64 BufferSizeMultiplier = 2;
 
     TSharedMutableRef Buffer_;
     i64 Size_ = 0;

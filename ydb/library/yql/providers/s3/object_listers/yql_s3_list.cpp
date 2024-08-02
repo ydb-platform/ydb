@@ -29,9 +29,7 @@ IOutputStream& operator<<(IOutputStream& stream, const TListingRequest& request)
                   << ",.Prefix=" << request.Prefix
                   << ",.Pattern=" << request.Pattern
                   << ",.PatternType=" << request.PatternType
-                  << ",.AwsUserPwd=<some token with length" << request.AuthInfo.GetAwsUserPwd().length() << ">"
-                  << ",.AwsSigV4=" << request.AuthInfo.GetAwsSigV4().length()
-                  << ",.Token=<some token with length " << request.AuthInfo.GetToken().length() << ">}";
+                  << ",.Credentials=" << request.Credentials << "}";
 }
 
 namespace {
@@ -243,6 +241,7 @@ public:
 
     TS3Lister(
         const IHTTPGateway::TPtr& httpGateway,
+        const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
         const TListingRequest& listingRequest,
         const TMaybe<TString>& delimiter,
         size_t maxFilesPerQuery,
@@ -265,7 +264,7 @@ public:
             NewPromise<TMaybe<TListingContext>>(),
             std::make_shared<TListEntries>(),
             IHTTPGateway::TWeakPtr(httpGateway),
-            GetHTTPDefaultRetryPolicy(),
+            retryPolicy,
             CreateGuidAsString(),
             std::move(request),
             delimiter,
@@ -286,7 +285,8 @@ public:
     ~TS3Lister() override = default;
 private:
     static void SubmitRequestIntoGateway(TListingContext& ctx) {
-        IHTTPGateway::THeaders headers = IHTTPGateway::MakeYcHeaders(ctx.RequestId, ctx.ListingRequest.AuthInfo.GetToken(), {}, ctx.ListingRequest.AuthInfo.GetAwsUserPwd(), ctx.ListingRequest.AuthInfo.GetAwsSigV4());
+        const auto& authInfo = ctx.ListingRequest.Credentials.GetAuthInfo();
+        IHTTPGateway::THeaders headers = IHTTPGateway::MakeYcHeaders(ctx.RequestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4());
 
         // We have to sort the cgi parameters for the correct aws signature
         // This requirement will be fixed in the curl library
@@ -391,7 +391,7 @@ private:
                     NewPromise<TMaybe<TListingContext>>(),
                     std::make_shared<TListEntries>(),
                     ctx.GatewayWeak,
-                    GetHTTPDefaultRetryPolicy(),
+                    ctx.RetryPolicy,
                     CreateGuidAsString(),
                     ctx.ListingRequest,
                     ctx.Delimiter,
@@ -457,15 +457,16 @@ public:
 
     TFuture<NS3Lister::IS3Lister::TPtr> Make(
         const IHTTPGateway::TPtr& httpGateway,
+        const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
         const NS3Lister::TListingRequest& listingRequest,
         const TMaybe<TString>& delimiter,
         bool allowLocalFiles) override {
         auto acquired = Semaphore->AcquireAsync();
         return acquired.Apply(
-            [ctx = SharedCtx, httpGateway, listingRequest, delimiter, allowLocalFiles](const auto& f) {
+            [ctx = SharedCtx, httpGateway, retryPolicy, listingRequest, delimiter, allowLocalFiles](const auto& f) {
                 return std::shared_ptr<NS3Lister::IS3Lister>(new TListerLockReleaseWrapper{
                     NS3Lister::MakeS3Lister(
-                        httpGateway, listingRequest, delimiter, allowLocalFiles, ctx),
+                        httpGateway, retryPolicy, listingRequest, delimiter, allowLocalFiles, ctx),
                     std::make_unique<TAsyncSemaphore::TAutoRelease>(
                         f.GetValue()->MakeAutoRelease())});
             });
@@ -507,13 +508,14 @@ private:
 
 IS3Lister::TPtr MakeS3Lister(
     const IHTTPGateway::TPtr& httpGateway,
+    const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
     const TListingRequest& listingRequest,
     const TMaybe<TString>& delimiter,
     bool allowLocalFiles,
     TSharedListingContextPtr sharedCtx) {
     if (listingRequest.Url.substr(0, 7) != "file://") {
         return std::make_shared<TS3Lister>(
-            httpGateway, listingRequest, delimiter, 1000, std::move(sharedCtx));
+            httpGateway, retryPolicy, listingRequest, delimiter, 1000, std::move(sharedCtx));
     }
 
     if (!allowLocalFiles) {

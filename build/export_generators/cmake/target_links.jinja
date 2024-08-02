@@ -6,7 +6,7 @@
 {%- if add_interfaces|length -%}
 {%-     set interfaces = interfaces + add_interfaces -%}
 {%- endif -%}
-{%- if current_target.is_fake_module -%}
+{%- if is_really_fake_module -%}
 {%-     set add_interfaces = current_target.link|map(attribute='publics')|sum -%}
 {%-     if add_interfaces|length -%}
 {%-         set interfaces = interfaces + add_interfaces -%}
@@ -28,12 +28,12 @@
 {%-     endif -%}
 {%- endif -%}
 {%- if (current_target.allocators is defined) and (current_target.allocators|length) -%}
-{%-     if (current_target.macro == "add_executable") or (current_target.macro == "add_library" and ("SHARED" in current_target.macro_args)) -%}
+{%-     if (current_target.macro == "add_executable") or (current_target.macro == "add_shared_library") or (current_target.macro == "add_library" and ("SHARED" in current_target.macro_args)) -%}
 {#-         support allocators -#}
 {%-         set allocators = allocators + current_target.allocators -%}
 {%-     else -%}
 {#-         not supported allocators -#}
-{%-         if current_target.is_fake_module -%}
+{%-         if is_really_fake_module -%}
 {%-             set interfaces = interfaces + current_target.allocators -%}
 {%-         else  -%}
 {%-             set publics = publics + current_target.allocators -%}

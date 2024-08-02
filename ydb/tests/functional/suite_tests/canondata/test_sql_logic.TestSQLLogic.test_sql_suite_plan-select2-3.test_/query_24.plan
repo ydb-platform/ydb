@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet_1",
-                "PlanNodeId": 9,
+                "PlanNodeId": 11,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,23 +14,23 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 7
+                                        "ExternalPlanNodeId": 9
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 8,
+                        "PlanNodeId": 10,
                         "Plans": [
                             {
                                 "Node Type": "Merge",
-                                "PlanNodeId": 7,
+                                "PlanNodeId": 9,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
                                         "CTE Name": "precompute_0_0",
-                                        "Node Type": "TopSort-CrossJoin-TableRangeScan-ConstantExpr",
+                                        "Node Type": "TopSort-CrossJoin-ConstantExpr",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -141,33 +141,13 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 2
+                                                        "ExternalPlanNodeId": 7
                                                     },
                                                     {
-                                                        "InternalOperatorId": 3
+                                                        "InternalOperatorId": 2
                                                     }
                                                 ],
                                                 "Name": "CrossJoin"
-                                            },
-                                            {
-                                                "Inputs": [],
-                                                "Name": "TableRangeScan",
-                                                "ReadColumns": [
-                                                    "a",
-                                                    "b",
-                                                    "c",
-                                                    "d",
-                                                    "e"
-                                                ],
-                                                "ReadRange": [
-                                                    "a (null)",
-                                                    "b (-\u221e, +\u221e)",
-                                                    "c (-\u221e, +\u221e)",
-                                                    "d (-\u221e, +\u221e)",
-                                                    "e (-\u221e, +\u221e)"
-                                                ],
-                                                "Scan": "Parallel",
-                                                "Table": "sqllogictest_select2-3.test_plan/t1"
                                             },
                                             {
                                                 "Inputs": [],
@@ -175,9 +155,37 @@
                                                 "ToFlow": "precompute_0_0"
                                             }
                                         ],
-                                        "PlanNodeId": 6,
-                                        "Tables": [
-                                            "sqllogictest_select2-3.test_plan/t1"
+                                        "PlanNodeId": 8,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "TableRangeScan",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [],
+                                                        "Name": "TableRangeScan",
+                                                        "ReadColumns": [
+                                                            "a",
+                                                            "b",
+                                                            "c",
+                                                            "d",
+                                                            "e"
+                                                        ],
+                                                        "ReadRange": [
+                                                            "a (null)",
+                                                            "b (-\u221e, +\u221e)",
+                                                            "c (-\u221e, +\u221e)",
+                                                            "d (-\u221e, +\u221e)",
+                                                            "e (-\u221e, +\u221e)"
+                                                        ],
+                                                        "Scan": "Parallel",
+                                                        "Table": "sqllogictest_select2-3.test_plan/t1"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 7,
+                                                "Tables": [
+                                                    "sqllogictest_select2-3.test_plan/t1"
+                                                ]
+                                            }
                                         ]
                                     }
                                 ],
@@ -196,7 +204,7 @@
             {
                 "Node Type": "Precompute_0",
                 "Parent Relationship": "InitPlan",
-                "PlanNodeId": 4,
+                "PlanNodeId": 5,
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
@@ -213,51 +221,60 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 2
+                                        "ExternalPlanNodeId": 3
                                     }
                                 ],
                                 "Limit": "1",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 3,
+                        "PlanNodeId": 4,
                         "Plans": [
                             {
                                 "Node Type": "UnionAll",
-                                "PlanNodeId": 2,
+                                "PlanNodeId": 3,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Aggregate-TableFullScan",
+                                        "Node Type": "Aggregate",
                                         "Operators": [
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 1
+                                                        "ExternalPlanNodeId": 1
                                                     }
                                                 ],
                                                 "Name": "Aggregate"
-                                            },
-                                            {
-                                                "Inputs": [],
-                                                "Name": "TableFullScan",
-                                                "ReadColumns": [
-                                                    "c"
-                                                ],
-                                                "ReadRanges": [
-                                                    "a (-\u221e, +\u221e)",
-                                                    "b (-\u221e, +\u221e)",
-                                                    "c (-\u221e, +\u221e)",
-                                                    "d (-\u221e, +\u221e)",
-                                                    "e (-\u221e, +\u221e)"
-                                                ],
-                                                "Scan": "Parallel",
-                                                "Table": "sqllogictest_select2-3.test_plan/t1"
                                             }
                                         ],
-                                        "PlanNodeId": 1,
-                                        "Tables": [
-                                            "sqllogictest_select2-3.test_plan/t1"
+                                        "PlanNodeId": 2,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "TableFullScan",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [],
+                                                        "Name": "TableFullScan",
+                                                        "ReadColumns": [
+                                                            "c"
+                                                        ],
+                                                        "ReadRanges": [
+                                                            "a (-\u221e, +\u221e)",
+                                                            "b (-\u221e, +\u221e)",
+                                                            "c (-\u221e, +\u221e)",
+                                                            "d (-\u221e, +\u221e)",
+                                                            "e (-\u221e, +\u221e)"
+                                                        ],
+                                                        "ReadRangesPointPrefixLen": "0",
+                                                        "Scan": "Parallel",
+                                                        "Table": "sqllogictest_select2-3.test_plan/t1"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 1,
+                                                "Tables": [
+                                                    "sqllogictest_select2-3.test_plan/t1"
+                                                ]
+                                            }
                                         ]
                                     }
                                 ]

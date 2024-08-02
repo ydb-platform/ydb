@@ -4,6 +4,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_defrag.h>
 #include <ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugeheap.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_heap_it.h>
 #include <ydb/core/blobstorage/vdisk/query/query_statalgo.h>
 
 namespace NKikimr {
@@ -337,25 +338,18 @@ namespace NKikimr {
         bool Scan(TDuration quota, THullDsSnap fullSnap) {
             // create iterator and set it up to point to next blob of interest
             TLogoBlobsSnapshot::TForwardIterator iter(fullSnap.HullCtx, &fullSnap.LogoBlobsSnap);
-            if (NextId) {
-                iter.Seek(*NextId);
-            } else {
-                iter.SeekToFirst();
-            }
-
+            THeapIterator<TKeyLogoBlob, TMemRecLogoBlob, true> heapIt(&iter);
             // calculate timestamp to finish scanning
             const ui64 endTime = GetCycleCountFast() + DurationToCycles(quota);
-            for (ui32 count = 0; iter.Valid(); iter.Next()) {
-                if (++count % 1024 == 0 && GetCycleCountFast() >= endTime) {
-                    break;
-                }
-                iter.PutToMerger(this);
+            ui32 count = 0;
+            auto callback = [&](TKeyLogoBlob /*key*/, auto* /*merger*/) -> bool {
+                return (++count % 1024 != 0 || GetCycleCountFast() < endTime);
+            };
+            heapIt.Walk(NextId.value_or(TLogoBlobID()), this, callback);
+            if (heapIt.Valid()) {
+                NextId.emplace(heapIt.GetCurKey().LogoBlobID());
             }
-
-            if (iter.Valid()) {
-                NextId.emplace(iter.GetCurKey().LogoBlobID());
-            }
-            return iter.Valid();
+            return heapIt.Valid();
         }
 
         void AddFromFresh(const TMemRecLogoBlob& memRec, const TRope* /*data*/, const TKeyLogoBlob& key, ui64 /*lsn*/) {
@@ -365,6 +359,10 @@ namespace NKikimr {
         void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key, ui64 /*circaLsn*/) {
             Update(key, memRec, outbound);
         }
+
+        void Finish() {}
+
+        void Clear() {}
 
         static constexpr bool HaveToMergeData() { return false; }
 

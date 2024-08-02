@@ -8,7 +8,7 @@
  * storage implementation and the details about individual types of
  * statistics.
  *
- * Copyright (c) 2001-2022, PostgreSQL Global Development Group
+ * Copyright (c) 2001-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/utils/activity/pgstat_slru.c
@@ -46,7 +46,7 @@ pgstat_reset_slru(const char *name)
 {
 	TimestampTz ts = GetCurrentTimestamp();
 
-	AssertArg(name != NULL);
+	Assert(name != NULL);
 
 	pgstat_reset_slru_counter_internal(pgstat_get_slru_index(name), ts);
 }

@@ -1,7 +1,6 @@
 #include "wb_aggregate.h"
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 void AggregateMessage(::google::protobuf::Message& protoTo, const ::google::protobuf::Message& protoFrom) {
     const Reflection& reflectionFrom = *protoFrom.GetReflection();
@@ -176,5 +175,4 @@ void AggregateMessage(::google::protobuf::Message& protoTo, const ::google::prot
     }
 }
 
-}
 }

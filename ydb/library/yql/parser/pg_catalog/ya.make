@@ -20,6 +20,7 @@ SRCS(
 PEERDIR(
     library/cpp/resource
     ydb/library/yql/public/issue
+    ydb/library/yql/protos
 )
 
 END()

@@ -83,6 +83,7 @@ void TPqIoTestFixture::InitSource(
             nullptr,
             actor.SelfId(),
             actor.GetHolderFactory(),
+            MakeIntrusive<NMonitoring::TDynamicCounters>(),
             freeSpace);
 
         actor.InitAsyncInput(dqSource, dqSourceAsActor);

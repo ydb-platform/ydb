@@ -3,7 +3,7 @@
  * basebackup.c
  *	  code for taking a base backup and streaming it to a standby
  *
- * Portions Copyright (c) 2010-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2010-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/backup/basebackup.c
@@ -17,6 +17,7 @@
 #include <time.h>
 
 #include "access/xlog_internal.h"
+#include "access/xlogbackup.h"
 #include "backup/backup_manifest.h"
 #include "backup/basebackup.h"
 #include "backup/basebackup_sink.h"
@@ -40,6 +41,7 @@
 #include "storage/ipc.h"
 #include "storage/reinit.h"
 #include "utils/builtins.h"
+#include "utils/guc.h"
 #include "utils/ps_status.h"
 #include "utils/relcache.h"
 #include "utils/resowner.h"
@@ -73,7 +75,7 @@ typedef struct
 	pg_checksum_type manifest_checksum_type;
 } basebackup_options;
 
-static int64 sendTablespace(bbsink *sink, char *path, char *oid, bool sizeonly,
+static int64 sendTablespace(bbsink *sink, char *path, char *spcoid, bool sizeonly,
 							struct backup_manifest_info *manifest);
 static int64 sendDir(bbsink *sink, const char *path, int basepathlen, bool sizeonly,
 					 List *tablespaces, bool sendtblspclinks,
@@ -230,9 +232,9 @@ perform_base_backup(basebackup_options *opt, bbsink *sink)
 	bbsink_state state;
 	XLogRecPtr	endptr;
 	TimeLineID	endtli;
-	StringInfo	labelfile;
-	StringInfo	tblspc_map_file;
 	backup_manifest_info manifest;
+	BackupState *backup_state;
+	StringInfo	tablespace_map;
 
 	/* Initial backup state, insofar as we know it now. */
 	state.tablespaces = NIL;
@@ -247,18 +249,21 @@ perform_base_backup(basebackup_options *opt, bbsink *sink)
 
 	backup_started_in_recovery = RecoveryInProgress();
 
-	labelfile = makeStringInfo();
-	tblspc_map_file = makeStringInfo();
 	InitializeBackupManifest(&manifest, opt->manifest,
 							 opt->manifest_checksum_type);
 
 	total_checksum_failures = 0;
 
+	/* Allocate backup related variables. */
+	backup_state = (BackupState *) palloc0(sizeof(BackupState));
+	tablespace_map = makeStringInfo();
+
 	basebackup_progress_wait_checkpoint();
-	state.startptr = do_pg_backup_start(opt->label, opt->fastcheckpoint,
-										&state.starttli,
-										labelfile, &state.tablespaces,
-										tblspc_map_file);
+	do_pg_backup_start(opt->label, opt->fastcheckpoint, &state.tablespaces,
+					   backup_state, tablespace_map);
+
+	state.startptr = backup_state->startpoint;
+	state.starttli = backup_state->starttli;
 
 	/*
 	 * Once do_pg_backup_start has been called, ensure that any failure causes
@@ -270,12 +275,12 @@ perform_base_backup(basebackup_options *opt, bbsink *sink)
 	PG_ENSURE_ERROR_CLEANUP(do_pg_abort_backup, BoolGetDatum(false));
 	{
 		ListCell   *lc;
-		tablespaceinfo *ti;
+		tablespaceinfo *newti;
 
 		/* Add a node for the base directory at the end */
-		ti = palloc0(sizeof(tablespaceinfo));
-		ti->size = -1;
-		state.tablespaces = lappend(state.tablespaces, ti);
+		newti = palloc0(sizeof(tablespaceinfo));
+		newti->size = -1;
+		state.tablespaces = lappend(state.tablespaces, newti);
 
 		/*
 		 * Calculate the total backup size by summing up the size of each
@@ -312,18 +317,21 @@ perform_base_backup(basebackup_options *opt, bbsink *sink)
 			{
 				struct stat statbuf;
 				bool		sendtblspclinks = true;
+				char	   *backup_label;
 
 				bbsink_begin_archive(sink, "base.tar");
 
 				/* In the main tar, include the backup_label first... */
-				sendFileWithContent(sink, BACKUP_LABEL_FILE, labelfile->data,
-									&manifest);
+				backup_label = build_backup_content(backup_state, false);
+				sendFileWithContent(sink, BACKUP_LABEL_FILE,
+									backup_label, &manifest);
+				pfree(backup_label);
 
 				/* Then the tablespace_map file, if required... */
 				if (opt->sendtblspcmapfile)
 				{
-					sendFileWithContent(sink, TABLESPACE_MAP, tblspc_map_file->data,
-										&manifest);
+					sendFileWithContent(sink, TABLESPACE_MAP,
+										tablespace_map->data, &manifest);
 					sendtblspclinks = false;
 				}
 
@@ -362,7 +370,7 @@ perform_base_backup(basebackup_options *opt, bbsink *sink)
 			else
 			{
 				/* Properly terminate the tarfile. */
-				StaticAssertStmt(2 * TAR_BLOCK_SIZE <= BLCKSZ,
+				StaticAssertDecl(2 * TAR_BLOCK_SIZE <= BLCKSZ,
 								 "BLCKSZ too small for 2 tar blocks");
 				memset(sink->bbs_buffer, 0, 2 * TAR_BLOCK_SIZE);
 				bbsink_archive_contents(sink, 2 * TAR_BLOCK_SIZE);
@@ -373,7 +381,15 @@ perform_base_backup(basebackup_options *opt, bbsink *sink)
 		}
 
 		basebackup_progress_wait_wal_archive(&state);
-		endptr = do_pg_backup_stop(labelfile->data, !opt->nowait, &endtli);
+		do_pg_backup_stop(backup_state, !opt->nowait);
+
+		endptr = backup_state->stoppoint;
+		endtli = backup_state->stoptli;
+
+		/* Deallocate backup-related variables. */
+		pfree(tablespace_map->data);
+		pfree(tablespace_map);
+		pfree(backup_state);
 	}
 	PG_END_ENSURE_ERROR_CLEANUP(do_pg_abort_backup, BoolGetDatum(false));
 
@@ -1173,7 +1189,8 @@ sendDir(bbsink *sink, const char *path, int basepathlen, bool sizeonly,
 		int			excludeIdx;
 		bool		excludeFound;
 		ForkNumber	relForkNum; /* Type of fork if file is a relation */
-		int			relOidChars;	/* Chars in filename that are the rel oid */
+		int			relnumchars;	/* Chars in filename that are the
+									 * relnumber */
 
 		/* Skip special stuff */
 		if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0)
@@ -1227,23 +1244,24 @@ sendDir(bbsink *sink, const char *path, int basepathlen, bool sizeonly,
 
 		/* Exclude all forks for unlogged tables except the init fork */
 		if (isDbDir &&
-			parse_filename_for_nontemp_relation(de->d_name, &relOidChars,
+			parse_filename_for_nontemp_relation(de->d_name, &relnumchars,
 												&relForkNum))
 		{
 			/* Never exclude init forks */
 			if (relForkNum != INIT_FORKNUM)
 			{
 				char		initForkFile[MAXPGPATH];
-				char		relOid[OIDCHARS + 1];
+				char		relNumber[OIDCHARS + 1];
 
 				/*
 				 * If any other type of fork, check if there is an init fork
-				 * with the same OID. If so, the file can be excluded.
+				 * with the same RelFileNumber. If so, the file can be
+				 * excluded.
 				 */
-				memcpy(relOid, de->d_name, relOidChars);
-				relOid[relOidChars] = '\0';
+				memcpy(relNumber, de->d_name, relnumchars);
+				relNumber[relnumchars] = '\0';
 				snprintf(initForkFile, sizeof(initForkFile), "%s/%s_init",
-						 path, relOid);
+						 path, relNumber);
 
 				if (lstat(initForkFile, &statbuf) == 0)
 				{
@@ -1325,15 +1343,8 @@ sendDir(bbsink *sink, const char *path, int basepathlen, bool sizeonly,
 		}
 
 		/* Allow symbolic links in pg_tblspc only */
-		if (strcmp(path, "./pg_tblspc") == 0 &&
-#ifndef WIN32
-			S_ISLNK(statbuf.st_mode)
-#else
-			pgwin32_is_junction(pathbuf)
-#endif
-			)
+		if (strcmp(path, "./pg_tblspc") == 0 && S_ISLNK(statbuf.st_mode))
 		{
-#if defined(HAVE_READLINK) || defined(WIN32)
 			char		linkpath[MAXPGPATH];
 			int			rllen;
 
@@ -1352,18 +1363,6 @@ sendDir(bbsink *sink, const char *path, int basepathlen, bool sizeonly,
 
 			size += _tarWriteHeader(sink, pathbuf + basepathlen + 1, linkpath,
 									&statbuf, sizeonly);
-#else
-
-			/*
-			 * If the platform does not have symbolic links, it should not be
-			 * possible to have tablespaces - clearly somebody else created
-			 * them. Warn about it and ignore.
-			 */
-			ereport(WARNING,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("tablespaces are not supported on this platform")));
-			continue;
-#endif							/* HAVE_READLINK */
 		}
 		else if (S_ISDIR(statbuf.st_mode))
 		{
@@ -1471,13 +1470,6 @@ is_checksummed_file(const char *fullpath, const char *filename)
 	else
 		return false;
 }
-
-/*****
- * Functions for handling tar file format
- *
- * Copied from pg_dump, but modified to work with libpq for sending
- */
-
 
 /*
  * Given the member, write the TAR header & send the file.
@@ -1614,11 +1606,21 @@ sendFile(bbsink *sink, const char *readfilename, const char *tarfilename,
 						 * Retry the block on the first failure.  It's
 						 * possible that we read the first 4K page of the
 						 * block just before postgres updated the entire block
-						 * so it ends up looking torn to us.  We only need to
-						 * retry once because the LSN should be updated to
-						 * something we can ignore on the next pass.  If the
-						 * error happens again then it is a true validation
-						 * failure.
+						 * so it ends up looking torn to us. If, before we
+						 * retry the read, the concurrent write of the block
+						 * finishes, the page LSN will be updated and we'll
+						 * realize that we should ignore this block.
+						 *
+						 * There's no guarantee that this will actually
+						 * happen, though: the torn write could take an
+						 * arbitrarily long time to complete. Retrying
+						 * multiple times wouldn't fix this problem, either,
+						 * though it would reduce the chances of it happening
+						 * in practice. The only real fix here seems to be to
+						 * have some kind of interlock that allows us to wait
+						 * until we can be certain that no write to the block
+						 * is in progress. Since we don't have any such thing
+						 * right now, we just do this and hope for the best.
 						 */
 						if (block_retry == false)
 						{
@@ -1751,7 +1753,7 @@ _tarWriteHeader(bbsink *sink, const char *filename, const char *linktarget,
 		 * large enough to fit an entire tar block. We double-check by means
 		 * of these assertions.
 		 */
-		StaticAssertStmt(TAR_BLOCK_SIZE <= BLCKSZ,
+		StaticAssertDecl(TAR_BLOCK_SIZE <= BLCKSZ,
 						 "BLCKSZ too small for tar block");
 		Assert(sink->bbs_buffer_length >= TAR_BLOCK_SIZE);
 
@@ -1815,11 +1817,7 @@ static void
 convert_link_to_directory(const char *pathbuf, struct stat *statbuf)
 {
 	/* If symlink, write it as a directory anyway */
-#ifndef WIN32
 	if (S_ISLNK(statbuf->st_mode))
-#else
-	if (pgwin32_is_junction(pathbuf))
-#endif
 		statbuf->st_mode = S_IFDIR | pg_dir_create_mode;
 }
 

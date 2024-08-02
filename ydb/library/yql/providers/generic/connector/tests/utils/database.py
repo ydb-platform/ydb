@@ -17,21 +17,21 @@ class Database:
                 self.name = name[:63].lower()
             case EDataSourceKind.CLICKHOUSE:
                 self.name = name[:255]
+            case EDataSourceKind.MYSQL:
+                self.name = name[:63]
             case EDataSourceKind.YDB:
-                # We use a different way of initialization when working with YDB.
-                # There is only one preinstalled database called
-                self.name = "local"
+                self.name = name
             case _:
                 raise Exception(f'invalid data source: {self.kind}')
 
-    def exists(self) -> str:
+    def query_exists(self) -> str:
         match self.kind:
             case EDataSourceKind.POSTGRESQL:
                 return f"SELECT 1 FROM pg_database WHERE datname = '{self.name}'"
             case _:
                 raise Exception(f'invalid data source: {self.kind}')
 
-    def create(self) -> str:
+    def query_create(self) -> str:
         match self.kind:
             case EDataSourceKind.CLICKHOUSE:
                 return f"CREATE DATABASE IF NOT EXISTS {self.name} ENGINE = Memory"
@@ -40,15 +40,16 @@ class Database:
             case _:
                 raise Exception(f'invalid data source: {self.kind}')
 
-    def sql_table_name(self, table_name: str) -> str:
-        return table_name
-
     def missing_database_msg(self) -> str:
         match self.kind:
             case EDataSourceKind.CLICKHOUSE:
-                return f"Database {self.name} doesn't exist"
+                return f"Database {self.name} does not exist"
             case EDataSourceKind.POSTGRESQL:
                 return f'database "{self.name}" does not exist'
+            case EDataSourceKind.YDB:
+                raise Exception("Fix me first in YQ-3315")
+            case EDataSourceKind.MYSQL:
+                return 'Unknown database'
             case _:
                 raise Exception(f'invalid data source: {self.kind}')
 
@@ -60,6 +61,8 @@ class Database:
                 return 'table does not exist'
             case EDataSourceKind.YDB:
                 return 'issues = [{\'Path not found\'}])'
+            case EDataSourceKind.MYSQL:
+                return 'table does not exist'
             case _:
                 raise Exception(f'invalid data source: {self.kind}')
 

@@ -220,14 +220,14 @@ public:
         return bucketForOptimization->BuildOptimizationTask(granule, locksManager, PrimaryKeysSchema, StoragesManager);
     }
 
-    std::vector<NArrow::NMerger::TSortableBatchPosition> GetBucketPositions() const {
-        std::vector<NArrow::NMerger::TSortableBatchPosition> result;
+    NArrow::NMerger::TIntervalPositions GetBucketPositions() const {
+        NArrow::NMerger::TIntervalPositions result;
         for (auto&& i : Buckets) {
             if (!i.first.HasValue()) {
                 continue;
             }
             NArrow::NMerger::TSortableBatchPosition posStart(i.first.GetValueVerified().ToBatch(PrimaryKeysSchema), 0, PrimaryKeysSchema->field_names(), {}, false);
-            result.emplace_back(posStart);
+            result.AddPosition(std::move(posStart), false);
         }
         return result;
     }

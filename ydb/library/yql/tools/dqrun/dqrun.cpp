@@ -507,6 +507,7 @@ int RunMain(int argc, const char* argv[])
     TString opId;
     IQStoragePtr qStorage;
     TQContext qContext;
+    TString ysonAttrs;
 
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
     opts.AddLongOption('p', "program", "Program to execute (use '-' to read from stdin)")
@@ -670,6 +671,7 @@ int RunMain(int argc, const char* argv[])
         .Optional()
         .RequiredArgument("ENDPOINT")
         .StoreResult(&tokenAccessorEndpoint);
+    opts.AddLongOption("yson-attrs", "Provide operation yson attribues").StoreResult(&ysonAttrs);
     opts.AddHelpOption('h');
 
     opts.SetFreeArgsNum(0);
@@ -1067,6 +1069,10 @@ int RunMain(int argc, const char* argv[])
 
     if (runOptions.LineageOnly) {
         runOptions.LineageStream = &Cout;
+    }
+
+    if (ysonAttrs) {
+        program->SetOperationAttrsYson(ysonAttrs);
     }
 
     int result = RunProgram(std::move(program), runOptions, clusters, sqlFlags);

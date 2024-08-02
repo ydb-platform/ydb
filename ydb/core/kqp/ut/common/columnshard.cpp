@@ -130,6 +130,14 @@ namespace NKqp {
         }
     }
 
+    void TTestHelper::WaitTabletDeletionInHive(ui64 tabletId, TDuration duration) {
+        auto deadline = TInstant::Now() + duration;
+        while (GetKikimr().GetTestClient().TabletExistsInHive(&GetRuntime(), tabletId) && TInstant::Now() <= deadline) {
+            Cerr << "WaitTabletDeletionInHive: wait until " << tabletId << " is deleted" << Endl;
+            Sleep(TDuration::Seconds(1));
+        }
+    }
+
     TString TTestHelper::TColumnSchema::BuildQuery() const {
         TStringBuilder str;
         str << Name << ' ';

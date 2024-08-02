@@ -27,7 +27,7 @@ struct TDqSettings {
         Disable     /* "disable" */,
         File        /* "file" */,
     };
-
+  
     struct TDefault {
         static constexpr ui32 MaxTasksPerStage = 20U;
         static constexpr ui32 MaxTasksPerOperation = 70U;

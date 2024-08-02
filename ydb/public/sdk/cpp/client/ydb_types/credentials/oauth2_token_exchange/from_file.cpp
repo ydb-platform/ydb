@@ -236,7 +236,7 @@ TOauth2TokenExchangeParams ReadOauth2ConfigJson(const TString& configJson, const
         }
 
         PROCESS_JSON_STRING_PARAM("grant-type", GrantType, false);
-        PROCESS_JSON_STRING_PARAM("res", Resource, false);
+        PROCESS_JSON_ARRAY_PARAM("res", Resource);
         PROCESS_JSON_STRING_PARAM("requested-token-type", RequestedTokenType, false);
         PROCESS_JSON_ARRAY_PARAM("aud", Audience);
         PROCESS_JSON_ARRAY_PARAM("scope", Scope);

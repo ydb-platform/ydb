@@ -134,7 +134,7 @@ public:
         return DoDebugString();
     }
 
-    virtual std::vector<NArrow::NMerger::TSortableBatchPosition> GetBucketPositions() const = 0;
+    virtual NArrow::NMerger::TIntervalPositions GetBucketPositions() const = 0;
     bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
         return DoIsLocked(dataLocksManager);
     }

@@ -173,7 +173,7 @@ TPingTaskParams ConstructHardPingTask(
                 internal.clear_operation_id();
             }
 
-            TRetryPolicyItem policy(0, TDuration::Seconds(1), TDuration::Zero());
+            TRetryPolicyItem policy(0, 0, TDuration::Seconds(1), TDuration::Zero());
             auto it = retryPolicies.find(request.status_code());
             auto policyFound = it != retryPolicies.end();
             if (policyFound) {
@@ -200,7 +200,7 @@ TPingTaskParams ConstructHardPingTask(
                 TStringBuilder builder;
                 builder << "Query failed with code " << NYql::NDqProto::StatusIds_StatusCode_Name(request.status_code());
                 if (policy.RetryCount) {
-                    builder << " (failure rate " << retryLimiter.RetryRate << " exceeds limit of "  << policy.RetryCount << ")";
+                    builder << " (" << retryLimiter.LastError << ")";
                 }
                 builder << " at " << Now();
 
@@ -283,6 +283,10 @@ TPingTaskParams ConstructHardPingTask(
 
         if (request.current_load()) {
             internal.set_current_load(request.current_load());
+        }
+
+        if (request.timeline()) {
+            internal.set_timeline(request.timeline());
         }
 
         if (request.flat_stats_size() != 0) {

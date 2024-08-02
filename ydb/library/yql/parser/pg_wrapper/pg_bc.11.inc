@@ -12,9 +12,15 @@ LLVM_BC(
     NAME PgFuncs11
 
     SYMBOLS
+    arrow_array_agg_array_combine
+    arrow_array_agg_array_deserialize
     arrow_array_agg_array_finalfn
+    arrow_array_agg_array_serialize
     arrow_array_agg_array_transfn
+    arrow_array_agg_combine
+    arrow_array_agg_deserialize
     arrow_array_agg_finalfn
+    arrow_array_agg_serialize
     arrow_array_agg_transfn
     arrow_array_append
     arrow_array_cat
@@ -22,6 +28,8 @@ LLVM_BC(
     arrow_array_position_start
     arrow_array_positions
     arrow_array_prepend
+    arrow_array_sample
+    arrow_array_shuffle
     arrow_array_typanalyze
     arrow_bit
     arrow_bit_and
@@ -176,10 +184,12 @@ LLVM_BC(
     arrow_timestamptz_le_timestamp
     arrow_timestamptz_lt_timestamp
     arrow_timestamptz_mi_interval
+    arrow_timestamptz_mi_interval_at_zone
     arrow_timestamptz_ne_timestamp
     arrow_timestamptz_out
     arrow_timestamptz_part
     arrow_timestamptz_pl_interval
+    arrow_timestamptz_pl_interval_at_zone
     arrow_timestamptz_recv
     arrow_timestamptz_scale
     arrow_timestamptz_send

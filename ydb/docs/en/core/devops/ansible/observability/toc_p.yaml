@@ -1,5 +1,3 @@
 items:
-- name: Overview
-  href: index.md
 - name: Logging
   href: logging.md

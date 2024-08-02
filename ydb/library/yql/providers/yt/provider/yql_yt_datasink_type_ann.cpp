@@ -1474,6 +1474,7 @@ private:
             | EYtSettingType::MonotonicKeys
             | EYtSettingType::MutationId
             | EYtSettingType::ColumnGroups
+            | EYtSettingType::SecurityTags
             , ctx))
         {
             return TStatus::Error;
@@ -1746,6 +1747,7 @@ private:
             | EYtSettingType::MonotonicKeys
             | EYtSettingType::MutationId
             | EYtSettingType::ColumnGroups
+            | EYtSettingType::SecurityTags
             , ctx))
         {
             return TStatus::Error;

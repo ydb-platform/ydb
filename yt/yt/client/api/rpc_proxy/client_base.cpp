@@ -1059,7 +1059,7 @@ TFuture<TPullRowsResult> TClientBase::PullRows(
         req->set_upper_timestamp(options.UpperTimestamp);
     }
     for (auto [tabletId, rowIndex] : options.StartReplicationRowIndexes) {
-        auto *protoReplicationRowIndex = req->add_start_replication_row_indexes();
+        auto* protoReplicationRowIndex = req->add_start_replication_row_indexes();
         ToProto(protoReplicationRowIndex->mutable_tablet_id(), tabletId);
         protoReplicationRowIndex->set_row_index(rowIndex);
     }

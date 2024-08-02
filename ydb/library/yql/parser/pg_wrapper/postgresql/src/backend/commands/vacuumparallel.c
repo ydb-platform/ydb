@@ -8,7 +8,7 @@
  *
  * In a parallel vacuum, we perform both index bulk deletion and index cleanup
  * with parallel worker processes.  Individual indexes are processed by one
- * vacuum process.  ParalleVacuumState contains shared information as well as
+ * vacuum process.  ParallelVacuumState contains shared information as well as
  * the memory space for storing dead items allocated in the DSM segment.  We
  * launch parallel worker processes at the start of parallel index
  * bulk-deletion and index cleanup and once all indexes are processed, the
@@ -16,7 +16,7 @@
  * the parallel context is re-initialized so that the same DSM can be used for
  * multiple passes of index bulk-deletion and index cleanup.
  *
- * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -88,6 +88,12 @@ typedef struct PVShared
 	int			maintenance_work_mem_worker;
 
 	/*
+	 * The number of buffers each worker's Buffer Access Strategy ring should
+	 * contain.
+	 */
+	int			ring_nbuffers;
+
+	/*
 	 * Shared vacuum cost balance.  During parallel vacuum,
 	 * VacuumSharedCostBalance points to this value and it accumulates the
 	 * balance of each parallel vacuum worker.
@@ -147,6 +153,9 @@ struct ParallelVacuumState
 {
 	/* NULL for worker processes */
 	ParallelContext *pcxt;
+
+	/* Parent Heap Relation */
+	Relation	heaprel;
 
 	/* Target indexes */
 	Relation   *indrels;
@@ -266,6 +275,7 @@ parallel_vacuum_init(Relation rel, Relation *indrels, int nindexes,
 	pvs->nindexes = nindexes;
 	pvs->will_parallel_vacuum = will_parallel_vacuum;
 	pvs->bstrategy = bstrategy;
+	pvs->heaprel = rel;
 
 	EnterParallelMode();
 	pcxt = CreateParallelContext("postgres", "parallel_vacuum_main",
@@ -360,6 +370,9 @@ parallel_vacuum_init(Relation rel, Relation *indrels, int nindexes,
 		(nindexes_mwm > 0) ?
 		maintenance_work_mem / Min(parallel_workers, nindexes_mwm) :
 		maintenance_work_mem;
+
+	/* Use the same buffer size for all workers */
+	shared->ring_nbuffers = GetAccessStrategyBufferCount(bstrategy);
 
 	pg_atomic_init_u32(&(shared->cost_balance), 0);
 	pg_atomic_init_u32(&(shared->active_nworkers), 0);
@@ -832,6 +845,7 @@ parallel_vacuum_process_one_index(ParallelVacuumState *pvs, Relation indrel,
 		istat = &(indstats->istat);
 
 	ivinfo.index = indrel;
+	ivinfo.heaprel = pvs->heaprel;
 	ivinfo.analyze_only = false;
 	ivinfo.report_progress = false;
 	ivinfo.message_level = DEBUG2;
@@ -990,7 +1004,7 @@ parallel_vacuum_main(dsm_segment *seg, shm_toc *toc)
 												 false);
 
 	/* Set cost-based vacuum delay */
-	VacuumCostActive = (VacuumCostDelay > 0);
+	VacuumUpdateCosts();
 	VacuumCostBalance = 0;
 	VacuumPageHit = 0;
 	VacuumPageMiss = 0;
@@ -1007,13 +1021,15 @@ parallel_vacuum_main(dsm_segment *seg, shm_toc *toc)
 	pvs.dead_items = dead_items;
 	pvs.relnamespace = get_namespace_name(RelationGetNamespace(rel));
 	pvs.relname = pstrdup(RelationGetRelationName(rel));
+	pvs.heaprel = rel;
 
 	/* These fields will be filled during index vacuum or cleanup */
 	pvs.indname = NULL;
 	pvs.status = PARALLEL_INDVAC_STATUS_INITIAL;
 
-	/* Each parallel VACUUM worker gets its own access strategy */
-	pvs.bstrategy = GetAccessStrategy(BAS_VACUUM);
+	/* Each parallel VACUUM worker gets its own access strategy. */
+	pvs.bstrategy = GetAccessStrategyWithSize(BAS_VACUUM,
+											  shared->ring_nbuffers * (BLCKSZ / 1024));
 
 	/* Setup error traceback support for ereport() */
 	errcallback.callback = parallel_vacuum_error_callback;

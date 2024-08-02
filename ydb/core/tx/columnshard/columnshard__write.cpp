@@ -16,22 +16,22 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
     Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
     switch (overloadReason) {
         case EOverloadStatus::Disk:
-            Counters.GetCSCounters().OnWriteOverloadDisk();
+            Counters.OnWriteOverloadDisk();
             break;
         case EOverloadStatus::InsertTable:
-            Counters.GetCSCounters().OnWriteOverloadInsertTable(writeData.GetSize());
+            Counters.OnWriteOverloadInsertTable(writeData.GetSize());
             break;
         case EOverloadStatus::OverloadMetadata:
-            Counters.GetCSCounters().OnWriteOverloadMetadata(writeData.GetSize());
+            Counters.OnWriteOverloadMetadata(writeData.GetSize());
             break;
         case EOverloadStatus::ShardTxInFly:
-            Counters.GetCSCounters().OnWriteOverloadShardTx(writeData.GetSize());
+            Counters.OnWriteOverloadShardTx(writeData.GetSize());
             break;
         case EOverloadStatus::ShardWritesInFly:
-            Counters.GetCSCounters().OnWriteOverloadShardWrites(writeData.GetSize());
+            Counters.OnWriteOverloadShardWrites(writeData.GetSize());
             break;
         case EOverloadStatus::ShardWritesSizeInFly:
-            Counters.GetCSCounters().OnWriteOverloadShardWritesSize(writeData.GetSize());
+            Counters.OnWriteOverloadShardWritesSize(writeData.GetSize());
             break;
         case EOverloadStatus::None:
             Y_ABORT("invalid function usage");

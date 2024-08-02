@@ -395,6 +395,9 @@ protected:
     }
 
 private:
+    std::unique_ptr<TTabletCountersBase> TabletCountersHolder;
+    TCountersManager Counters;
+
     std::unique_ptr<TTxController> ProgressTxController;
     std::unique_ptr<TOperationsManager> OperationsManager;
     std::shared_ptr<NOlap::NDataSharing::TSessionsManager> SharingSessionsManager;
@@ -440,9 +443,6 @@ private:
     TActorId ResourceSubscribeActor;
     TActorId BufferizationWriteActorId;
     TActorId StatsReportPipe;
-
-    std::unique_ptr<TTabletCountersBase> TabletCountersHolder;
-    TCountersManager Counters;
 
     TInFlightReadsTracker InFlightReadsTracker;
     TTablesManager TablesManager;

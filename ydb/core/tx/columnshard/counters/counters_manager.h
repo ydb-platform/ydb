@@ -27,7 +27,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TBackgroundControllerCounters>, BackgroundControllerCounters);
     YDB_READONLY_DEF(std::shared_ptr<TColumnTablesCounters>, ColumnTablesCounters);
 
-    YDB_READONLY(TCSCounters, CSCounters, TCSCounters(TabletCounters));
+    YDB_READONLY(TCSCounters, CSCounters, TCSCounters());
     YDB_READONLY(TIndexationCounters, EvictionCounters, TIndexationCounters("Eviction"));
     YDB_READONLY(TIndexationCounters, IndexationCounters, TIndexationCounters("Indexation"));
     YDB_READONLY(TIndexationCounters, CompactionCounters, TIndexationCounters("GeneralCompaction"));
@@ -41,6 +41,35 @@ public:
         , BackgroundControllerCounters(std::make_shared<TBackgroundControllerCounters>())
         , ColumnTablesCounters(std::make_shared<TColumnTablesCounters>())
         , SubscribeCounters(std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>()) {
+    }
+
+    void OnWriteOverloadDisk() const {
+        TabletCounters->IncCounter(COUNTER_OUT_OF_SPACE);
+    }
+
+    void OnWriteOverloadInsertTable(const ui64 size) const {
+        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
+        CSCounters.OnWriteOverloadInsertTable(size);
+    }
+
+    void OnWriteOverloadMetadata(const ui64 size) const {
+        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
+        CSCounters.OnWriteOverloadMetadata(size);
+    }
+
+    void OnWriteOverloadShardTx(const ui64 size) const {
+        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
+        CSCounters.OnWriteOverloadShardTx(size);
+    }
+
+    void OnWriteOverloadShardWrites(const ui64 size) const {
+        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
+        CSCounters.OnWriteOverloadShardWrites(size);
+    }
+
+    void OnWriteOverloadShardWritesSize(const ui64 size) const {
+        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
+        CSCounters.OnWriteOverloadShardWritesSize(size);
     }
 
     void FillTableStats(ui64 pathId, ::NKikimrTableStats::TTableStats& tableStats) {

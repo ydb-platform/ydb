@@ -84,20 +84,20 @@ private:
         NMonitoring::TDynamicCounters::TCounterPtr FinishPlannedTx;
         NMonitoring::TDynamicCounters::TCounterPtr AbortTx;
 
-        TProgressCounters(const TBase& owner)
+        TProgressCounters(const TCommonCountersOwner& owner)
             : TBase(owner)
-            , RegisterTx(owner.GetDeriviative("RegisterTx"))
-            , RegisterTxWithDeadline(owner.GetDeriviative("RegisterTxWithDeadline"))
-            , StartProposeOnExecute(owner.GetDeriviative("StartProposeOnExecute"))
-            , StartProposeOnComplete(owner.GetDeriviative("StartProposeOnComplete"))
-            , FinishProposeOnExecute(owner.GetDeriviative("FinishProposeOnExecute"))
-            , FinishProposeOnComplete(owner.GetDeriviative("FinishProposeOnComplete"))
-            , FinishPlannedTx(owner.GetDeriviative("FinishPlannedTx"))
-            , AbortTx(owner.GetDeriviative("AbortTx")) {
+            , RegisterTx(TBase::GetDeriviative("RegisterTx"))
+            , RegisterTxWithDeadline(TBase::GetDeriviative("RegisterTxWithDeadline"))
+            , StartProposeOnExecute(TBase::GetDeriviative("StartProposeOnExecute"))
+            , StartProposeOnComplete(TBase::GetDeriviative("StartProposeOnComplete"))
+            , FinishProposeOnExecute(TBase::GetDeriviative("FinishProposeOnExecute"))
+            , FinishProposeOnComplete(TBase::GetDeriviative("FinishProposeOnComplete"))
+            , FinishPlannedTx(TBase::GetDeriviative("FinishPlannedTx"))
+            , AbortTx(TBase::GetDeriviative("AbortTx")) {
         }
     };
 
-    THashMap<TOpType, TProgressCounters> SubGroups;
+    THashMap<TOpType, TProgressCounters> CountersByOpType;
 
 public:
     void OnRegisterTx(const TOpType& opType) {
@@ -138,20 +138,19 @@ public:
 
 private:
     TProgressCounters& GetSubGroup(const TOpType& opType) {
-        auto findSubGroup = SubGroups.FindPtr(opType);
+        auto findSubGroup = CountersByOpType.FindPtr(opType);
         if (findSubGroup) {
             return *findSubGroup;
         }
 
-        return SubGroups.emplace(opType, TBase::CreateSubGroup("operation", opType)).first->second;
+        auto subGroup = TBase::CreateSubGroup("operation", opType);
+        return CountersByOpType.emplace(opType, subGroup).first->second;
     }
 };
 
 class TCSCounters: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
-
-    std::shared_ptr<const TTabletCountersHandle> TabletCounters;
 
     NMonitoring::TDynamicCounters::TCounterPtr StartBackgroundCount;
     NMonitoring::TDynamicCounters::TCounterPtr TooEarlyBackgroundCount;
@@ -268,36 +267,27 @@ public:
         SplitCompactionGranulePortionsCount->SetValue(portionsCount);
     }
 
-    void OnWriteOverloadDisk() const {
-        TabletCounters->IncCounter(COUNTER_OUT_OF_SPACE);
-    }
-
     void OnWriteOverloadInsertTable(const ui64 size) const {
-        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
         OverloadInsertTableBytes->Add(size);
         OverloadInsertTableCount->Add(1);
     }
 
     void OnWriteOverloadMetadata(const ui64 size) const {
-        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
         OverloadMetadataBytes->Add(size);
         OverloadMetadataCount->Add(1);
     }
 
     void OnWriteOverloadShardTx(const ui64 size) const {
-        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
         OverloadShardTxBytes->Add(size);
         OverloadShardTxCount->Add(1);
     }
 
     void OnWriteOverloadShardWrites(const ui64 size) const {
-        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
         OverloadShardWritesBytes->Add(size);
         OverloadShardWritesCount->Add(1);
     }
 
     void OnWriteOverloadShardWritesSize(const ui64 size) const {
-        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
         OverloadShardWritesSizeBytes->Add(size);
         OverloadShardWritesSizeCount->Add(1);
     }
@@ -348,7 +338,7 @@ public:
         SetupCleanupCount->Add(1);
     }
 
-    TCSCounters(std::shared_ptr<const TTabletCountersHandle> tabletCounters);
+    TCSCounters();
 };
 
 }

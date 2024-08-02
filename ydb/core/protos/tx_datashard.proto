@@ -259,6 +259,8 @@ message TKqpReadRangesSourceSettings {
     optional uint64 MaxInFlightShards = 16;
     optional bool UseFollowers = 17 [default = false];
     optional bool AllowInconsistentReads = 18 [default = false];
+
+    repeated TKqpTransaction.TColumnMeta DeduplicateColumns = 19;
 }
 
 message TKqpTaskInfo {

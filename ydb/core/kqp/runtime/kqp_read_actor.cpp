@@ -382,6 +382,10 @@ public:
         if (Settings->HasMaxInFlightShards()) {
             MaxInFlight = Settings->GetMaxInFlightShards();
         }
+
+        if (Settings->DeduplicateColumnsSize() > 0) {
+            CollectDeduplicateStats = true;
+        }
     }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -797,6 +801,14 @@ public:
             }
         }
 
+        if (CollectDeduplicateStats) {
+            for (const auto& column : Settings->GetDeduplicateColumns()) {
+                if (!IsSystemColumn(column.GetId())) {
+                    record.AddColumns(column.GetId());
+                }
+            }
+        }
+
         if (Snapshot.IsValid()) {
             record.MutableSnapshot()->SetTxId(Snapshot.TxId);
             record.MutableSnapshot()->SetStep(Snapshot.Step);
@@ -1163,6 +1175,33 @@ public:
                 }
             }
 
+            if (CollectDeduplicateStats) {
+                TVector<TCell> cells;
+                cells.resize(DeduplicateColumns.size());
+                for (size_t deduplicateColumn = 0; deduplicateColumn < Settings->DeduplicateColumnsSize(); ++deduplicateColumn) {
+                    cells[deduplicateColumn] = row[columnIndex];
+                    columnIndex += 1;
+                }
+                TString result = TSerializedCellVec::Serialize(cells); 
+                if (auto ptr = DeduplicateStats.FindPtr(result)) {
+                    TVector<NScheme::TTypeInfo> types;
+                    for (auto& column : Settings->GetDeduplicateColumns()) {
+                        types.push_back(NScheme::TTypeInfo((NScheme::TTypeId)column.GetType()));
+                    }
+                    TString rowRepr = DebugPrintPoint(types, cells, *AppData()->TypeRegistry); 
+
+                    TStringBuilder rowMessage;
+                    rowMessage << "found duplicate rows from table "
+                        << Settings->GetTable().GetTablePath()
+                        << " previous shardId is " << *ptr
+                        << " current is " << handle.ShardId
+                        << " key is " << rowRepr;
+                    CA_LOG_E(rowMessage);
+                    RuntimeError(rowMessage, NYql::NDqProto::StatusIds::INTERNAL_ERROR, {});
+                    return stats;
+                }
+            }
+
             stats.DataBytes += rowSize;
             stats.AllocatedBytes += GetRowSize(rowItems).AllocatedBytes;
             freeSpace -= rowSize;
@@ -1404,6 +1443,18 @@ private:
             column.NotNull = srcColumn.GetNotNull();
             ResultColumns.push_back(column);
         }
+        if (CollectDeduplicateStats) {
+            DeduplicateColumns.reserve(Settings->ColumnsSize());
+            for (size_t deduplicateColumn = 0; deduplicateColumn < Settings->DeduplicateColumnsSize(); ++deduplicateColumn) {
+                const auto& srcColumn = Settings->GetDeduplicateColumns(deduplicateColumn);
+                TResultColumn column;
+                column.Tag = srcColumn.GetId();
+                column.TypeInfo = MakeTypeInfo(srcColumn);
+                column.IsSystem = IsSystemColumn(column.Tag);
+                column.NotNull = false;
+                DeduplicateColumns.push_back(column);
+            }
+        }
     }
 
 private:
@@ -1465,6 +1516,10 @@ private:
 
     NWilson::TSpan ReadActorSpan;
     NWilson::TSpan ReadActorStateSpan;
+
+    bool CollectDeduplicateStats = false;
+    THashMap<TString, ui64> DeduplicateStats;
+    TVector<TResultColumn> DeduplicateColumns;
 };
 
 

@@ -302,4 +302,6 @@ message TTableServiceConfig {
     optional bool EnableImplicitQueryParameterTypes = 66 [ default = true ];
 
     optional string EnableSpillingNodes = 67 [ default = "All" ];
+
+    optional bool EnableRowsDuplicationCheck = 68 [ default = false ];
 };

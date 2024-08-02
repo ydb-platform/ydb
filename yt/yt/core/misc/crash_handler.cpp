@@ -10,6 +10,8 @@
 
 #include <yt/yt/library/undumpable/undumpable.h>
 
+#include <library/cpp/yt/system/exit.h>
+
 #include <library/cpp/yt/assert/assert.h>
 
 #include <library/cpp/yt/string/raw_formatter.h>
@@ -463,7 +465,7 @@ void DumpSigcontext(void* uc)
 void CrashTimeoutHandler(int /*signal*/)
 {
     WriteToStderr("*** Process hung during crash ***\n");
-    _exit(1);
+    AbortProcess(ToUnderlying(EProcessExitCode::GenericError));
 }
 
 void DumpUndumpableBlocksInfo()

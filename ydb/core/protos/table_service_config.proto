@@ -309,4 +309,18 @@ message TTableServiceConfig {
 
     optional bool EnableImplicitQueryParameterTypes = 66 [ default = false ];
 
+    optional string EnableSpillingNodes = 67 [ default = "All" ];
+
+    message TSubPoolsConfiguration {
+        repeated TComputePoolConfiguration SubPools = 1;
+    };
+
+    message TComputePoolConfiguration {
+        optional double MaxCpuShare = 1;
+        oneof ResourceConfiguration {
+            string Name = 2;
+            TSubPoolsConfiguration SubPoolsConfiguration = 3;
+        }
+    };
+    optional TComputePoolConfiguration PoolsConfiguration = 68;
 };

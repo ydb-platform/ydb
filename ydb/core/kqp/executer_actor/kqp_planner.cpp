@@ -223,6 +223,8 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         request.SetSerializedGUCSettings(SerializedGUCSettings);
     }
 
+    request.SetSchedulerGroup(UserRequestContext->PoolId);
+
     return result;
 }
 

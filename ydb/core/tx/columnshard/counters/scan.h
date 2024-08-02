@@ -1,6 +1,7 @@
 #pragma once
 #include "common/owner.h"
 #include "common/histogram.h"
+#include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/columnshard/resources/memory.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/counters.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
@@ -127,6 +128,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr AckWaitingDuration;
 
     std::vector<NMonitoring::THistogramPtr> ScanDurationByStatus;
+    std::vector<NMonitoring::TDynamicCounters::TCounterPtr> ScansFinishedByStatus;
 
     NMonitoring::TDynamicCounters::TCounterPtr NoScanRecords;
     NMonitoring::TDynamicCounters::TCounterPtr NoScanIntervals;
@@ -212,9 +214,10 @@ public:
         LogScanIntervals->Add(1);
     }
 
-    void OnScanDuration(const EStatusFinish status, const TDuration d) const {
+    void OnScanFinished(const EStatusFinish status, const TDuration d) const {
         AFL_VERIFY((ui32)status < ScanDurationByStatus.size());
         ScanDurationByStatus[(ui32)status]->Collect(d.MilliSeconds());
+        ScansFinishedByStatus[(ui32)status]->Add(1);
     }
 
     void AckWaitingInfo(const TDuration d) const {
@@ -257,6 +260,8 @@ public:
     }
 
     TScanAggregations BuildAggregations();
+
+    void FillStats(::NKikimrTableStats::TTableStats& output) const;
 };
 
 class TCounterGuard: TNonCopyable {

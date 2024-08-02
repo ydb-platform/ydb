@@ -584,7 +584,6 @@ public:
     ,   PartialJoinCompleted(std::make_unique<bool>(false))
     ,   HaveMoreLeftRows(std::make_unique<bool>(true))
     ,   HaveMoreRightRows(std::make_unique<bool>(true))
-    ,   JoinedTuple(std::make_unique<std::vector<NUdf::TUnboxedValue*>>() )
     ,   IsSelfJoin_(isSelfJoin)
     ,   SelfJoinSameKeys_(isSelfJoin && (leftKeyColumns == rightKeyColumns))
     ,   IsSpillingAllowed(isSpillingAllowed)
@@ -822,6 +821,8 @@ private:
             }
 
             auto isYield = FetchAndPackData(ctx, output);
+            if (isYield == EFetchResult::One)
+                return isYield;
             if (IsSpillingAllowed && ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
                 LogMemoryUsage();
                 YQL_LOG(INFO) << (const void *)&*JoinedTablePtr << "# switching Memory mode to Spilling";
@@ -999,7 +1000,6 @@ private:
     const std::unique_ptr<bool> PartialJoinCompleted;
     const std::unique_ptr<bool> HaveMoreLeftRows;
     const std::unique_ptr<bool> HaveMoreRightRows;
-    const std::unique_ptr<std::vector<NUdf::TUnboxedValue*>> JoinedTuple;
     const bool IsSelfJoin_;
     const bool SelfJoinSameKeys_;
     const bool IsSpillingAllowed;

@@ -507,8 +507,8 @@ void TPartition::DestroyActor(const TActorContext& ctx)
         UsersInfoStorage->Clear(ctx);
     }
 
+    Send(ReadQuotaTrackerActor, new TEvents::TEvPoisonPill());
     if (!IsSupportive()) {
-        Send(ReadQuotaTrackerActor, new TEvents::TEvPoisonPill());
         Send(WriteQuotaTrackerActor, new TEvents::TEvPoisonPill());
     }
 

@@ -36,9 +36,7 @@ void TInsertColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnSha
         if (!DataToIndex.empty()) {
             self->UpdateInsertTableCounters();
         }
-        self->IncCounter(NColumnShard::COUNTER_INDEXING_BLOBS_WRITTEN, context.BlobsWritten);
-        self->IncCounter(NColumnShard::COUNTER_INDEXING_BYTES_WRITTEN, context.BytesWritten);
-        self->IncCounter(NColumnShard::COUNTER_INDEXING_TIME, context.Duration.MilliSeconds());
+        self->Counters.GetTabletCounters()->OnInsertionWriteIndexCompleted(context.BlobsWritten, context.BytesWritten, context.Duration);
     }
 }
 
@@ -53,7 +51,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Batch);
 
 public:
-    TBatchInfo(const std::shared_ptr<NArrow::TGeneralContainer>& batch, const NEvWrite::EModificationType modificationType)
+    TBatchInfo(const std::shared_ptr<NArrow::TGeneralContainer>& batch, const NEvWrite::EModificationType /*modificationType*/)
         : Batch(batch) {
     }
 };

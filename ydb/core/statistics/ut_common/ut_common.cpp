@@ -324,14 +324,18 @@ void ValidateCountMinAbsense(TTestActorRuntime& runtime, TPathId pathId) {
 }
 
 void Analyze(TTestActorRuntime& runtime, const std::vector<TPathId>& pathIds, ui64 saTabletId) {
+    const ui64 cookie = 555;
     auto ev = std::make_unique<TEvStatistics::TEvAnalyze>();
     auto& record = ev->Record;
+    record.SetCookie(cookie);
     for (const TPathId& pathId : pathIds)
         PathIdFromPathId(pathId, record.AddTables()->MutablePathId());
 
     auto sender = runtime.AllocateEdgeActor();
     runtime.SendToPipe(saTabletId, sender, ev.release());
-    runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+    auto evResponse = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+
+    UNIT_ASSERT_VALUES_EQUAL(evResponse->Get()->Record.GetCookie(), cookie);
 }
 
 void AnalyzeTable(TTestActorRuntime& runtime, const TPathId& pathId, ui64 shardTabletId) {

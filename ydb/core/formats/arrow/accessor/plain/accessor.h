@@ -12,7 +12,7 @@ private:
 protected:
     virtual std::optional<ui64> DoGetRawSize() const override;
 
-    virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 position) const override {
+    virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const override {
         return TLocalDataAddress(Array, 0, 0);
     }
     virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray() const override {

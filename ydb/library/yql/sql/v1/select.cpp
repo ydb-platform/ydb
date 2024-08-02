@@ -287,7 +287,7 @@ public:
         return ISource::DoInit(ctx, src);
     }
 
-    TNodePtr Build(TContext& ctx) final  {
+    TNodePtr Build(TContext& /*ctx*/) final  {
         auto nodeAst = AstNode(Node);
         if (WrapToList) {
             nodeAst = Y("ToList", nodeAst);

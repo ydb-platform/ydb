@@ -1,82 +1,39 @@
-#include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/core/mon/mon.h>
-#include <ydb/library/actors/core/mon.h>
-#include <ydb/core/base/appdata.h>
-#include <library/cpp/monlib/service/pages/templates.h>
-#include <ydb/library/actors/core/interconnect.h>
-#include <util/generic/algorithm.h>
-#include <ydb/core/base/path.h>
-#include <ydb/core/base/tablet_types.h>
-#include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include <ydb/core/base/statestorage.h>
-#include <library/cpp/mime/types/mime.h>
-#include <library/cpp/lwtrace/all.h>
-#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
-#include <contrib/libs/yaml-cpp/include/yaml-cpp/yaml.h>
-#include <library/cpp/yaml/as/tstring.h>
-#include <library/cpp/protobuf/json/proto2json.h>
-#include <util/system/fstat.h>
-#include <util/stream/file.h>
 #include "viewer.h"
-#include "viewer_request.h"
-#include "viewer_probes.h"
-#include <ydb/core/viewer/json/json.h>
-#include <ydb/core/util/wildcard.h>
-#include "browse_pq.h"
-#include "browse_db.h"
 #include "counters_hosts.h"
-#include "json_healthcheck.h"
-
 #include "json_handlers.h"
+#include "log.h"
+#include "viewer_request.h"
+#include <library/cpp/mime/types/mime.h>
+#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/protobuf/json/proto2json.h>
+#include <util/generic/algorithm.h>
+#include <util/stream/file.h>
+#include <util/system/fstat.h>
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
+#include <ydb/core/base/statestorage.h>
+#include <ydb/core/base/tablet_types.h>
+#include <ydb/core/mon/mon.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/util/wildcard.h>
+#include <ydb/library/aclib/aclib.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <util/system/hostname.h>
+#include <ydb/library/actors/core/mon.h>
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/public/api/protos/ydb_monitoring.pb.h>
 
-#include "json_bsgroupinfo.h"
-#include "json_nodeinfo.h"
-#include "json_vdiskinfo.h"
-
-
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 using namespace NNodeWhiteboard;
 
 extern void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers);
+extern void InitViewerBrowseJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitPDiskJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitVDiskJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitOperationJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitSchemeJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitStorageJsonHandlers(TJsonHandlers& jsonHandlers);
-
-void SetupPQVirtualHandlers(IViewer* viewer) {
-    viewer->RegisterVirtualHandler(
-        NKikimrViewer::EObjectType::Root,
-        [] (const TActorId& owner, const IViewer::TBrowseContext& browseContext) -> IActor* {
-            return new NViewerPQ::TBrowseRoot(owner, browseContext);
-        });
-    viewer->RegisterVirtualHandler(
-        NKikimrViewer::EObjectType::Consumers,
-        [] (const TActorId& owner, const IViewer::TBrowseContext& browseContext) -> IActor* {
-            return new NViewerPQ::TBrowseConsumers(owner, browseContext);
-        });
-    viewer->RegisterVirtualHandler(
-        NKikimrViewer::EObjectType::Consumer,
-        [] (const TActorId& owner, const IViewer::TBrowseContext& browseContext) -> IActor* {
-            return new NViewerPQ::TBrowseConsumer(owner, browseContext);
-        });
-    viewer->RegisterVirtualHandler(
-        NKikimrViewer::EObjectType::Topic,
-        [] (const TActorId& owner, const IViewer::TBrowseContext& browseContext) -> IActor* {
-            return new NViewerPQ::TBrowseTopic(owner, browseContext);
-        });
-}
-
-void SetupDBVirtualHandlers(IViewer* viewer) {
-    viewer->RegisterVirtualHandler(
-        NKikimrViewer::EObjectType::Table,
-        [] (const TActorId& owner, const IViewer::TBrowseContext& browseContext) -> IActor* {
-            return new NViewerDB::TBrowseTable(owner, browseContext);
-        });
-}
 
 class TViewer : public TActorBootstrapped<TViewer>, public IViewer {
 public:
@@ -95,7 +52,6 @@ public:
         Become(&TThis::StateWork);
         NActors::TMon* mon = AppData(ctx)->Mon;
         if (mon) {
-            NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(VIEWER_PROVIDER));
             TVector<TString> viewerAllowedSIDs;
             TVector<TString> monitoringAllowedSIDs;
             {
@@ -189,6 +145,7 @@ public:
             InitStorageJsonHandlers(JsonHandlers);
             InitOperationJsonHandlers(JsonHandlers);
             InitSchemeJsonHandlers(JsonHandlers);
+            InitViewerBrowseJsonHandlers(JsonHandlers);
 
             for (const auto& handler : JsonHandlers.JsonHandlersList) {
                 // temporary handling of old paths
@@ -206,9 +163,6 @@ public:
             JsonHandlers.JsonHandlersIndex["/viewer/v2/json/nodelist"] = JsonHandlers.JsonHandlersIndex["/viewer/nodelist"];
             JsonHandlers.JsonHandlersIndex["/viewer/v2/json/tabletinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/tabletinfo"];
             JsonHandlers.JsonHandlersIndex["/viewer/v2/json/nodeinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/nodeinfo"];
-
-            TWhiteboardInfo<NKikimrWhiteboard::TEvNodeStateResponse>::InitMerger();
-            TWhiteboardInfo<NKikimrWhiteboard::TEvBSGroupStateResponse>::InitMerger();
         }
     }
 
@@ -414,24 +368,9 @@ private:
         YAML::Node paths;
         for (const TString& name : JsonHandlers.JsonHandlersList) {
             const auto& handler = JsonHandlers.JsonHandlersIndex[name];
-            TString tag = TString(TStringBuf(name.substr(1)).Before('/'));
-            auto path = paths[name];
             auto swagger = handler->GetRequestSwagger();
-            if (swagger.IsNull()) {
-                auto get = path["get"];
-                get["tags"].push_back(tag);
-                if (auto summary = handler->GetRequestSummary()) {
-                    get["summary"] = summary;
-                }
-                if (auto description = handler->GetRequestDescription()) {
-                    get["description"] = description;
-                }
-                get["parameters"] = handler->GetRequestParameters();
-                auto responses = get["responses"];
-                auto response200 = responses["200"];
-                response200["content"]["application/json"]["schema"] = handler->GetResponseJsonSchema();
-            } else {
-                path = swagger;
+            if (!swagger.IsNull()) {
+                paths[name] = swagger;
             }
         }
         return paths;
@@ -987,100 +926,6 @@ NKikimrViewer::EFlag GetVDiskOverallFlag(const NKikimrWhiteboard::TVDiskStateInf
     return flag;
 }
 
-TBSGroupState GetBSGroupOverallStateWithoutLatency(
-        const NKikimrWhiteboard::TBSGroupStateInfo& info,
-        const TMap<NKikimrBlobStorage::TVDiskID, const NKikimrWhiteboard::TVDiskStateInfo&>& vDisksIndex,
-        const TMap<std::pair<ui32, ui32>, const NKikimrWhiteboard::TPDiskStateInfo&>& pDisksIndex) {
-
-    TBSGroupState groupState;
-    groupState.Overall = NKikimrViewer::EFlag::Grey;
-
-    const auto& vDiskIds = info.GetVDiskIds();
-    std::unordered_map<ui32, ui32> failedRings;
-    std::unordered_map<ui32, ui32> failedDomains;
-    TVector<NKikimrViewer::EFlag> vDiskFlags;
-    vDiskFlags.reserve(vDiskIds.size());
-    for (auto iv = vDiskIds.begin(); iv != vDiskIds.end(); ++iv) {
-        const NKikimrBlobStorage::TVDiskID& vDiskId = *iv;
-        NKikimrViewer::EFlag flag = NKikimrViewer::EFlag::Grey;
-        auto ie = vDisksIndex.find(vDiskId);
-        if (ie != vDisksIndex.end()) {
-            auto pDiskId = std::make_pair(ie->second.GetNodeId(), ie->second.GetPDiskId());
-            auto ip = pDisksIndex.find(pDiskId);
-            if (ip != pDisksIndex.end()) {
-                const NKikimrWhiteboard::TPDiskStateInfo& pDiskInfo(ip->second);
-                flag = Max(flag, GetPDiskOverallFlag(pDiskInfo));
-            } else {
-                flag = NKikimrViewer::EFlag::Red;
-            }
-            const NKikimrWhiteboard::TVDiskStateInfo& vDiskInfo(ie->second);
-            flag = Max(flag, GetVDiskOverallFlag(vDiskInfo));
-            if (vDiskInfo.GetDiskSpace() > NKikimrWhiteboard::EFlag::Green) {
-                groupState.SpaceProblems++;
-            }
-        } else {
-            flag = NKikimrViewer::EFlag::Red;
-        }
-        vDiskFlags.push_back(flag);
-        if (flag == NKikimrViewer::EFlag::Red || flag == NKikimrViewer::EFlag::Blue) {
-            groupState.MissingDisks++;
-            ++failedRings[vDiskId.GetRing()];
-            ++failedDomains[vDiskId.GetDomain()];
-        }
-        groupState.Overall = Max(groupState.Overall, flag);
-    }
-
-    groupState.Overall = Min(groupState.Overall, NKikimrViewer::EFlag::Yellow); // without failed rings we only allow to raise group status up to Blue/Yellow
-    TString erasure = info.GetErasureSpecies();
-    if (erasure == TErasureType::ErasureSpeciesName(TErasureType::ErasureNone)) {
-        if (!failedDomains.empty()) {
-            groupState.Overall = NKikimrViewer::EFlag::Red;
-        }
-    } else if (erasure == TErasureType::ErasureSpeciesName(TErasureType::ErasureMirror3dc)) {
-        if (failedRings.size() > 2) {
-            groupState.Overall = NKikimrViewer::EFlag::Red;
-        } else if (failedRings.size() == 2) { // TODO: check for 1 ring - 1 domain rule
-            groupState.Overall = NKikimrViewer::EFlag::Orange;
-        } else if (failedRings.size() > 0) {
-            groupState.Overall = Min(groupState.Overall, NKikimrViewer::EFlag::Yellow);
-        }
-    } else if (erasure == TErasureType::ErasureSpeciesName(TErasureType::Erasure4Plus2Block)) {
-        if (failedDomains.size() > 2) {
-            groupState.Overall = NKikimrViewer::EFlag::Red;
-        } else if (failedDomains.size() > 1) {
-            groupState.Overall = NKikimrViewer::EFlag::Orange;
-        } else if (failedDomains.size() > 0) {
-            groupState.Overall = Min(groupState.Overall, NKikimrViewer::EFlag::Yellow);
-        }
-    }
-    return groupState;
-}
-
-NKikimrViewer::EFlag GetBSGroupOverallFlagWithoutLatency(
-        const NKikimrWhiteboard::TBSGroupStateInfo& info,
-        const TMap<NKikimrBlobStorage::TVDiskID, const NKikimrWhiteboard::TVDiskStateInfo&>& vDisksIndex,
-        const TMap<std::pair<ui32, ui32>, const NKikimrWhiteboard::TPDiskStateInfo&>& pDisksIndex) {
-    return GetBSGroupOverallStateWithoutLatency(info, vDisksIndex, pDisksIndex).Overall;
-}
-
-TBSGroupState GetBSGroupOverallState(
-        const NKikimrWhiteboard::TBSGroupStateInfo& info,
-        const TMap<NKikimrBlobStorage::TVDiskID, const NKikimrWhiteboard::TVDiskStateInfo&>& vDisksIndex,
-        const TMap<std::pair<ui32, ui32>, const NKikimrWhiteboard::TPDiskStateInfo&>& pDisksIndex) {
-    TBSGroupState state = GetBSGroupOverallStateWithoutLatency(info, vDisksIndex, pDisksIndex);
-    if (info.HasLatency()) {
-        state.Overall = Max(state.Overall, Min(NKikimrViewer::EFlag::Yellow, GetViewerFlag(info.GetLatency())));
-    }
-    return state;
-}
-
-NKikimrViewer::EFlag GetBSGroupOverallFlag(
-        const NKikimrWhiteboard::TBSGroupStateInfo& info,
-        const TMap<NKikimrBlobStorage::TVDiskID, const NKikimrWhiteboard::TVDiskStateInfo&>& vDisksIndex,
-        const TMap<std::pair<ui32, ui32>, const NKikimrWhiteboard::TPDiskStateInfo&>& pDisksIndex) {
-    return GetBSGroupOverallState(info, vDisksIndex, pDisksIndex).Overall;
-}
-
 NKikimrViewer::EFlag GetViewerFlag(Ydb::Monitoring::StatusFlag::Status flag) {
     switch (flag) {
     case Ydb::Monitoring::StatusFlag::GREY:
@@ -1136,5 +981,4 @@ NKikimrViewer::EFlag GetViewerFlag(NKikimrWhiteboard::EFlag flag) {
     return static_cast<NKikimrViewer::EFlag>((int)flag);
 }
 
-} // NNodeTabletMonitor
-} // NKikimr
+}

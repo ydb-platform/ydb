@@ -147,6 +147,8 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
     settings.ApplicationName = ApplicationName;
     settings.GUCSettings = GUCSettings;
 
+    settings.Flags.insert("DisableRotateJoinTree");
+
     return settings;
 }
 

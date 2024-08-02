@@ -554,7 +554,8 @@ struct Schema : NIceDb::Schema {
         BackgroundSessions,
         ShardingInfo,
         Normalizers,
-        NormalizerEvents
+        NormalizerEvents,
+        InFlightSnapshots
         >;
 
     //

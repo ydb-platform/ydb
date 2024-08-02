@@ -71,23 +71,26 @@ public:
             const auto& pathDescription = pbRecord.GetPathDescription();
             const auto& partitions = pathDescription.GetTablePartitions();
             const auto& metrics = pathDescription.GetTablePartitionMetrics();
-            TVector<std::pair<ui64, int>> tabletsOrder;
 
-            for (int i = 0; i < metrics.size(); ++i) {
-                tabletsOrder.emplace_back(metrics.Get(i).GetCPU(), i);
-            }
+            if (!metrics.empty()) {
+                TVector<std::pair<ui64, int>> tabletsOrder;
 
-            Sort(tabletsOrder, std::greater<std::pair<ui64, int>>());
-            ui32 tablets = (ui32) std::max(1, (int) std::ceil(PollingFactor * tabletsOrder.size()));
-
-            for (ui32 i = 0; i < tablets; ++i) {
-                THolder<TEvDataShard::TEvGetDataHistogramRequest> request = MakeHolder<TEvDataShard::TEvGetDataHistogramRequest>();
-                if (EnableSampling) {
-                    request->Record.SetCollectKeySampleMs(30000); // 30 sec
+                for (int i = 0; i < metrics.size(); ++i) {
+                    tabletsOrder.emplace_back(metrics.Get(i).GetCPU(), i);
                 }
-                request->Record.SetActualData(true);
-                ui64 datashardId = partitions.Get(tabletsOrder[i].second).GetDatashardId();
-                SendRequestToPipe(ConnectTabletPipe(datashardId), request.Release());
+
+                Sort(tabletsOrder, std::greater<std::pair<ui64, int>>());
+                ui32 tablets = (ui32) std::max(1, (int) std::ceil(PollingFactor * tabletsOrder.size()));
+
+                for (ui32 i = 0; i < tablets; ++i) {
+                    THolder<TEvDataShard::TEvGetDataHistogramRequest> request = MakeHolder<TEvDataShard::TEvGetDataHistogramRequest>();
+                    if (EnableSampling) {
+                        request->Record.SetCollectKeySampleMs(30000); // 30 sec
+                    }
+                    request->Record.SetActualData(true);
+                    ui64 datashardId = partitions.Get(tabletsOrder[i].second).GetDatashardId();
+                    SendRequestToPipe(ConnectTabletPipe(datashardId), request.Release());
+                }
             }
         }
 

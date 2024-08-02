@@ -1366,7 +1366,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             constexpr const char* typeId = "BACKUP_COLLECTION";
             AddStatementToBlocks(blocks,
                                  BuildCreateObjectOperation(Ctx.Pos(),
-                                                            objectId,
+                                                            BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
                                                             typeId,
                                                             false,
                                                             false,
@@ -1397,11 +1397,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             constexpr const char* typeId = "BACKUP_COLLECTION";
             AddStatementToBlocks(blocks,
                                  BuildAlterObjectOperation(Ctx.Pos(),
-                                                            objectId,
-                                                            typeId,
-                                                            std::move(kv),
-                                                            std::move(toReset),
-                                                            context));
+                                                           BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                                           typeId,
+                                                           std::move(kv),
+                                                           std::move(toReset),
+                                                           context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore50: {
@@ -1421,7 +1421,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             constexpr const char* typeId = "BACKUP_COLLECTION";
             AddStatementToBlocks(blocks,
                                  BuildDropObjectOperation(Ctx.Pos(),
-                                                          objectId,
+                                                          BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
                                                           typeId,
                                                           false,
                                                           {},

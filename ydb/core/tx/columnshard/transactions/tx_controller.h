@@ -1,11 +1,10 @@
 #pragma once
 
-#include <ydb/core/tx/columnshard/columnshard_schema.h>
-
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/counters/columnshard.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/message_seqno.h>
-
 
 namespace NKikimr::NColumnShard {
 
@@ -191,6 +190,10 @@ public:
         virtual void DoStartProposeOnComplete(TColumnShard& owner, const TActorContext& ctx) = 0;
         virtual void DoFinishProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) = 0;
         virtual void DoFinishProposeOnComplete(TColumnShard& owner, const TActorContext& ctx) = 0;
+        virtual TString DoGetOpType() const {
+            // TODO: Correct if needed
+            return DebugString();
+        }
         virtual bool DoIsAsync() const = 0;
         virtual void DoSendReply(TColumnShard& owner, const TActorContext& ctx) = 0;
         virtual bool DoCheckAllowUpdate(const TFullTxInfo& currentTxInfo) const = 0;
@@ -218,6 +221,7 @@ public:
     public:
         using TPtr = std::shared_ptr<ITransactionOperator>;
         using TFactory = NObjectFactory::TParametrizedObjectFactory<ITransactionOperator, NKikimrTxColumnShard::ETransactionKind, TTxInfo>;
+        using OpType = TString;
 
         bool CheckTxInfoForReply(const TFullTxInfo& originalTxInfo) const {
             return DoCheckTxInfoForReply(originalTxInfo);
@@ -258,6 +262,10 @@ public:
 
         ui64 GetTxId() const {
             return TxInfo.TxId;
+        }
+
+        OpType GetOpType() const {
+            return DoGetOpType();
         }
 
         bool IsAsync() const {
@@ -355,6 +363,8 @@ private:
     std::set<TPlanQueueItem> RunningQueue;
 
     THashMap<ui64, ITransactionOperator::TPtr> Operators;
+
+    TTxProgressCounters Counters;
 
 private:
     ui64 GetAllowedStep() const;

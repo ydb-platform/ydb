@@ -58,9 +58,8 @@ private:
 using TColumnsTags = THashMap<TString, NTable::TTag>;
 using TTags = TVector<NTable::TTag>;
 using TProtoColumnsCRef = const google::protobuf::RepeatedPtrField<TString>&;
+using TColumnsTypes = THashMap<TString, NScheme::TTypeInfo>;
 using TRows = TVector<std::pair<TSerializedCellVec, TString>>;
-using TColumnsTags = THashMap<TString, NTable::TTag>;
-
 
 TColumnsTags GetAllTags(const TUserTable& tableInfo);
 TColumnsTypes GetAllTypes(const TUserTable& tableInfo);

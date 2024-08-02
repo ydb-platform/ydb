@@ -1417,15 +1417,12 @@ message TEvCheckConstraintCreateRequest {
     optional uint64 SnapshotTxId = 6;
     optional uint64 SnapshotStep = 7;
 
-    optional uint32 MaxBatchRows = 8;
-    optional uint64 MaxBatchBytes = 9;
+    optional uint64 SeqNoGeneration = 8;       // monotonically increasing sequence, first part
+    optional uint64 SeqNoRound = 9;            // monotonically increasing sequence, second part
 
-    optional uint64 SeqNoGeneration = 10;       // monotonically increasing sequence, first part
-    optional uint64 SeqNoRound = 11;            // monotonically increasing sequence, second part
+    optional NKikimrIndexBuilder.TCheckingNotNullSettings CheckingNotNullSettings = 10;
 
-    optional uint64 MaxRetries = 12;
-
-    optional NKikimrIndexBuilder.TCheckingNotNullSettings CheckingNotNullSettings = 13;
+    optional NKikimrTx.TKeyRange KeyRange = 11; // key range to transfer in term of source table
 }
 
 message TEvCheckConstraintProgressResponse {

@@ -368,18 +368,15 @@ public:
 
                     ev->Record.SetTargetName(TPath::Init(buildInfo->TablePathId, Self).PathString());
 
-                    THashSet<TString> columns = buildInfo->ImplTableColumns.Columns;
-                    for (const auto& x: columns) {
-                        *ev->Record.AddDataColumns() = x;
-                    }
-
                     buildInfo->SerializeToProto(Self, ev->Record.MutableCheckingNotNullSettings());
 
                     TIndexBuildInfo::TShardStatus& shardStatus = buildInfo->Shards.at(shardIdx);
-
-                    ev->Record.SetMaxBatchRows(buildInfo->Limits.MaxBatchRows);
-                    ev->Record.SetMaxBatchBytes(buildInfo->Limits.MaxBatchBytes);
-                    ev->Record.SetMaxRetries(buildInfo->Limits.MaxRetries);
+                    if (shardStatus.LastKeyAck) {
+                        TSerializedTableRange range = TSerializedTableRange(shardStatus.LastKeyAck, "", false, false);
+                        range.Serialize(*ev->Record.MutableKeyRange());
+                    } else {
+                        shardStatus.Range.Serialize(*ev->Record.MutableKeyRange());
+                    }
 
                     ev->Record.SetSnapshotTxId(ui64(buildInfo->SnapshotTxId));
                     ev->Record.SetSnapshotStep(ui64(buildInfo->SnapshotStep));

@@ -23,4 +23,5 @@ TColumnsTags GetAllTags(const TUserTable& tableInfo) {
 
     return result;
 }
+
 }

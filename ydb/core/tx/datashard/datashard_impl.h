@@ -252,6 +252,7 @@ class TDataShard
 
     class TTxHandleSafeKqpScan;
     class TTxHandleSafeBuildIndexScan;
+    class TTxHandleSafeCheckConstraintScan;
     class TTxHandleSafeSampleKScan;
     class TTxHandleSafeStatisticsScan;
 
@@ -3107,7 +3108,7 @@ protected:
             HFunc(TEvDataShard::TEvRefreshVolatileSnapshotRequest, Handle);
             HFunc(TEvDataShard::TEvDiscardVolatileSnapshotRequest, Handle);
             HFuncTraced(TEvDataShard::TEvBuildIndexCreateRequest, Handle);
-            HFuncTraced(TEvDataShatd::TEvCheckConstraintCreateRequest, Handle);
+            HFuncTraced(TEvDataShard::TEvCheckConstraintCreateRequest, Handle);
             HFunc(TEvDataShard::TEvSampleKRequest, Handle);
             HFunc(TEvDataShard::TEvCdcStreamScanRequest, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanRegistered, Handle);

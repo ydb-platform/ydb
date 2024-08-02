@@ -357,14 +357,14 @@ public:
         progress->Record.SetRequestSeqNoRound(SeqNo.Round);
 
         if (abort != EAbort::None) {
-            progress->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::ABORTED);
+            progress->Record.SetStatus(NKikimrTxDataShard::EBuildIndexStatus::ABORTED);
             UploadStatus.Issues.AddIssue(NYql::TIssue("Aborted by scan host env"));
 
             LOG_W(Debug());
         } else if (!UploadStatus.IsSuccess()) {
-            progress->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::BUILD_ERROR);
+            progress->Record.SetStatus(NKikimrTxDataShard::EBuildIndexStatus::BUILD_ERROR);
         } else {
-            progress->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::DONE);
+            progress->Record.SetStatus(NKikimrTxDataShard::EBuildIndexStatus::DONE);
         }
 
         UploadStatusToMessage(progress->Record);
@@ -467,7 +467,7 @@ private:
             progress->Record.SetBytesDelta(WriteBuf.GetBytes());
             WriteBuf.Clear();
 
-            progress->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::INPROGRESS);
+            progress->Record.SetStatus(NKikimrTxDataShard::EBuildIndexStatus::INPROGRESS);
             UploadStatusToMessage(progress->Record);
 
             ctx.Send(ProgressActorId, progress.Release());
@@ -653,14 +653,14 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
     auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
     response->Record.SetBuildIndexId(record.GetBuildIndexId());
     response->Record.SetTabletId(TabletID());
-    response->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::ACCEPTED);
+    response->Record.SetStatus(NKikimrTxDataShard::EBuildIndexStatus::ACCEPTED);
 
     TScanRecord::TSeqNo seqNo = {record.GetSeqNoGeneration(), record.GetSeqNoRound()};
     response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
     response->Record.SetRequestSeqNoRound(seqNo.Round);
 
     auto badRequest = [&](const TString& error) {
-        response->Record.SetStatus(NKikimrTxDataShard::TEvBuildIndexProgressResponse::BAD_REQUEST);
+        response->Record.SetStatus(NKikimrTxDataShard::EBuildIndexStatus::BAD_REQUEST);
         auto issue = response->Record.AddIssues();
         issue->set_severity(NYql::TSeverityIds::S_ERROR);
         issue->set_message(error);

@@ -165,7 +165,8 @@ public:
         TimeoutFinal,
     };
 
-    EGroupFields GroupSort = EGroupFields::PoolName;
+    EGroupFields SortBy = EGroupFields::PoolName;
+    EGroupFields GroupBy = EGroupFields::GroupId;
     EWith With = EWith::Everything;
     bool ReverseSort = false;
     std::optional<std::size_t> Offset;
@@ -425,7 +426,13 @@ public:
         }
     };
 
+    struct TGroupGroup {
+        TString Name;
+        std::vector<TGroup*> Groups;
+    };
+
     std::vector<TGroup> Groups;
+    std::vector<TGroupGroup> GroupGroups;
     std::unordered_map<TGroupId, TGroup*> GroupsByGroupId;
     std::unordered_map<TPDiskId, TPDisk> PDisks;
     std::unordered_map<TVSlotId, const NKikimrSysView::TVSlotInfo*> VSlotsByVSlotId;
@@ -471,6 +478,7 @@ public:
     }
 
     bool NeedFilter = false;
+    bool NeedGroup = false;
     bool NeedSort = false;
     bool NeedLimit = false;
     ui64 TotalGroups = 0;
@@ -564,8 +572,15 @@ public:
                 ReverseSort = (sort[0] == '-');
                 sort.Skip(1);
             }
-            GroupSort = ParseEGroupFields(sort);
-            FieldsRequired.set(+GroupSort);
+            SortBy = ParseEGroupFields(sort);
+            FieldsRequired.set(+SortBy);
+        }
+        TStringBuf group = params.Get("group");
+        if (group) {
+            NeedGroup = true;
+            GroupBy = ParseEGroupFields(group);
+            FieldsRequired.set(+GroupBy);
+            NeedSort = false; // group by is always sorted
         }
         bool whiteboardOnly = FromStringWithDefault<bool>(params.Get("whiteboard_only"), false);
         if (whiteboardOnly) {
@@ -751,9 +766,87 @@ public:
         }
     }
 
+    template<typename F>
+    void GroupCollection(std::vector<TGroup>& groups, F&& groupBy) {
+        GroupGroups.clear();
+        for (TGroup& group : groups) {
+            bool found = false;
+            for (TGroupGroup& groupGroup : GroupGroups) {
+                if (groupGroup.Name == groupBy(group)) {
+                    groupGroup.Groups.push_back(&group);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                GroupGroups.push_back({groupBy(group), {&group}});
+            }
+        }
+    }
+
+    void ApplyGroup() {
+        if (NeedGroup && FieldsAvailable.test(+GroupBy)) {
+            switch (GroupBy) {
+                case EGroupFields::GroupId:
+                    SortCollection(Groups, [](const TGroup& group) { return group.GroupId; }, ReverseSort);
+                    break;
+                case EGroupFields::Erasure:
+                    SortCollection(Groups, [](const TGroup& group) { return group.Erasure; }, ReverseSort);
+                    break;
+                case EGroupFields::Usage:
+                    SortCollection(Groups, [](const TGroup& group) { return group.Usage; }, ReverseSort);
+                    break;
+                case EGroupFields::Used:
+                    SortCollection(Groups, [](const TGroup& group) { return group.Used; }, ReverseSort);
+                    break;
+                case EGroupFields::Limit:
+                    SortCollection(Groups, [](const TGroup& group) { return group.Limit; }, ReverseSort);
+                    break;
+                case EGroupFields::Available:
+                    SortCollection(Groups, [](const TGroup& group) { return group.Available; }, ReverseSort);
+                    break;
+                case EGroupFields::PoolName:
+                    SortCollection(Groups, [](const TGroup& group) { return group.PoolName; }, ReverseSort);
+                    break;
+                case EGroupFields::Kind:
+                    SortCollection(Groups, [](const TGroup& group) { return group.Kind; }, ReverseSort);
+                    break;
+                case EGroupFields::Encryption:
+                    SortCollection(Groups, [](const TGroup& group) { return group.EncryptionMode; }, ReverseSort);
+                    break;
+                case EGroupFields::AllocationUnits:
+                    SortCollection(Groups, [](const TGroup& group) { return group.AllocationUnits; }, ReverseSort);
+                    break;
+                case EGroupFields::MediaType:
+                    SortCollection(Groups, [](const TGroup& group) { return group.MediaType; }, ReverseSort);
+                    break;
+                case EGroupFields::MissingDisks:
+                    SortCollection(Groups, [](const TGroup& group) { return group.MissingDisks; }, ReverseSort);
+                    break;
+                case EGroupFields::Read:
+                    SortCollection(Groups, [](const TGroup& group) { return group.Read; }, ReverseSort);
+                    break;
+                case EGroupFields::Write:
+                    SortCollection(Groups, [](const TGroup& group) { return group.Write; }, ReverseSort);
+                    break;
+                case EGroupFields::State:
+                    SortCollection(Groups, [](const TGroup& group) { return group.State; }, ReverseSort);
+                    break;
+                case EGroupFields::PDiskId:
+                case EGroupFields::NodeId:
+                case EGroupFields::PDisk:
+                case EGroupFields::VDisk:
+                case EGroupFields::COUNT:
+                    break;
+            }
+            NeedSort = false;
+            GroupsByGroupId.clear();
+        }
+    }
+
     void ApplySort() {
-        if (NeedSort && FieldsAvailable.test(+GroupSort)) {
-            switch (GroupSort) {
+        if (NeedSort && FieldsAvailable.test(+SortBy)) {
+            switch (SortBy) {
                 case EGroupFields::GroupId:
                     SortCollection(Groups, [](const TGroup& group) { return group.GroupId; }, ReverseSort);
                     break;
@@ -1723,26 +1816,26 @@ public:
                     in: query
                     description: >
                         filter groups by missing or space:
-                            * `missing`
-                            * `space`
+                          * `missing`
+                          * `space`
                     required: false
                     type: string
                   - name: sort
                     in: query
                     description: >
                         sort by:
-                            * `PoolName`
-                            * `Kind`
-                            * `MediaType`
-                            * `Erasure`
-                            * `MissingDisks`
-                            * `Usage`
-                            * `GroupId`
-                            * `Used`
-                            * `Limit`
-                            * `Usage`
-                            * `Read`
-                            * `Write`
+                          * `PoolName`
+                          * `Kind`
+                          * `MediaType`
+                          * `Erasure`
+                          * `MissingDisks`
+                          * `Usage`
+                          * `GroupId`
+                          * `Used`
+                          * `Limit`
+                          * `Usage`
+                          * `Read`
+                          * `Write`
                     required: false
                     type: string
                   - name: offset

@@ -803,10 +803,8 @@ public:
         }
 
         if (CollectDuplicateStats) {
-            for (const auto& column : Settings->GetDuplicateCheckColumns()) {
-                if (!IsSystemColumn(column.GetId())) {
-                    record.AddColumns(column.GetId());
-                }
+            for (const auto& column : DuplicateCheckExtraColumns) {
+                record.AddColumns(column.Tag);
             }
         }
 
@@ -1178,10 +1176,9 @@ public:
 
             if (CollectDuplicateStats) {
                 TVector<TCell> cells;
-                cells.resize(DuplicateCheckColumns.size());
-                for (size_t deduplicateColumn = 0; deduplicateColumn < Settings->DuplicateCheckColumnsSize(); ++deduplicateColumn) {
-                    cells[deduplicateColumn] = row[columnIndex];
-                    columnIndex += 1;
+                cells.resize(DuplicateCheckColumnRemap.size());
+                for (size_t deduplicateColumn = 0; deduplicateColumn < DuplicateCheckColumnRemap.size(); ++deduplicateColumn) {
+                    cells[deduplicateColumn] = row[DuplicateCheckColumnRemap[deduplicateColumn]];
                 }
                 TString result = TSerializedCellVec::Serialize(cells); 
                 if (auto ptr = DuplicateCheckStats.FindPtr(result)) {
@@ -1445,15 +1442,24 @@ private:
             ResultColumns.push_back(column);
         }
         if (CollectDuplicateStats) {
-            DuplicateCheckColumns.reserve(Settings->ColumnsSize());
+            THashMap<ui32, ui32> positions;
+            for (size_t i = 0; i < Settings->ColumnsSize(); ++i) {
+                positions[Settings->GetColumns(i).GetId()] = i;
+            }
+            DuplicateCheckExtraColumns.reserve(Settings->ColumnsSize());
             for (size_t deduplicateColumn = 0; deduplicateColumn < Settings->DuplicateCheckColumnsSize(); ++deduplicateColumn) {
                 const auto& srcColumn = Settings->GetDuplicateCheckColumns(deduplicateColumn);
                 TResultColumn column;
                 column.Tag = srcColumn.GetId();
-                column.TypeInfo = MakeTypeInfo(srcColumn);
-                column.IsSystem = IsSystemColumn(column.Tag);
-                column.NotNull = false;
-                DuplicateCheckColumns.push_back(column);
+                Y_ENSURE(!IsSystemColumn(column.Tag));
+                if (!positions.contains(column.Tag)) {
+                    positions[column.Tag] = Settings->ColumnsSize() + DuplicateCheckExtraColumns.size();
+                    column.TypeInfo = MakeTypeInfo(srcColumn);
+                    column.IsSystem = false;
+                    column.NotNull = false;
+                    DuplicateCheckExtraColumns.push_back(column);
+                }
+                DuplicateCheckColumnRemap.push_back(positions[column.Tag]);
             }
         }
     }
@@ -1520,7 +1526,8 @@ private:
 
     bool CollectDuplicateStats = false;
     THashMap<TString, ui64> DuplicateCheckStats;
-    TVector<TResultColumn> DuplicateCheckColumns;
+    TVector<TResultColumn> DuplicateCheckExtraColumns;
+    TVector<ui32> DuplicateCheckColumnRemap;
 };
 
 

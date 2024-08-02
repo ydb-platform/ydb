@@ -34,13 +34,7 @@ public:
     }
 
     bool IsEmpty() const {
-        if (Start.empty() && Finish.empty()) {
-            AFL_VERIFY(!MinMemoryRead);
-            return true;
-        } else {
-            AFL_VERIFY(MinMemoryRead);
-            return false;
-        }
+        return Start.empty() && Finish.empty();
     }
 
     void AddContained(const ui32 portionId, const ui64 minMemoryRead) {
@@ -52,6 +46,9 @@ public:
         AFL_VERIFY(minMemoryRead <= MinMemoryRead);
         MinMemoryRead -= minMemoryRead;
         AFL_VERIFY(PortionIds.erase(portionId));
+        if (PortionIds.empty()) {
+            AFL_VERIFY(!MinMemoryRead);
+        }
     }
 
     void RemoveStart(const std::shared_ptr<TPortionInfo>& p) {

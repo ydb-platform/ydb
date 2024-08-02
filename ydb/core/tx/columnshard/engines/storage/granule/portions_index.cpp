@@ -71,19 +71,19 @@ void TPortionsIndex::RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
         itFrom->second.RemoveStart(p);
         if (itFrom->second.IsEmpty()) {
             Points.erase(itFrom);
-            RemoveFromMemoryUsageControl(0);
+            RemoveFromMemoryUsageControl(itFrom->second.GetMinMemoryRead());
         }
         itTo->second.RemoveFinish(p);
         if (itTo->second.IsEmpty()) {
             Points.erase(itTo);
-            RemoveFromMemoryUsageControl(0);
+            RemoveFromMemoryUsageControl(itTo->second.GetMinMemoryRead());
         }
     } else {
         itTo->second.RemoveStart(p);
         itTo->second.RemoveFinish(p);
         if (itTo->second.IsEmpty()) {
             Points.erase(itTo);
-            RemoveFromMemoryUsageControl(0);
+            RemoveFromMemoryUsageControl(itTo->second.GetMinMemoryRead());
         }
     }
 }

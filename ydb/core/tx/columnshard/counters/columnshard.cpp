@@ -62,6 +62,12 @@ TCSCounters::TCSCounters()
     }
 
     SuccessWriteRequests = TBase::GetDeriviative("SuccessWriteRequests");
+
+    WriteUpsertRows = TBase::GetDeriviative("Upsert/Rows");
+    WriteInsertRows = TBase::GetDeriviative("Insert/Rows");
+    WriteUpdateRows = TBase::GetDeriviative("Update/Rows");
+    WriteReplaceRows = TBase::GetDeriviative("Replace/Rows");
+    WriteDeleteRows = TBase::GetDeriviative("Delete/Rows");
 }
 
 void TCSCounters::OnFailedWriteResponse(const EWriteFailReason reason) const {
@@ -71,4 +77,25 @@ void TCSCounters::OnFailedWriteResponse(const EWriteFailReason reason) const {
     it->second->Add(1);
 }
 
+void TCSCounters::OnWritePutBlobsSuccess(const TDuration d, const ui64 rows, const NKikimr::NEvWrite::EModificationType modificationType) const {
+    HistogramSuccessWritePutBlobsDurationMs->Collect(d.MilliSeconds());
+    WritePutBlobsCount->Sub(1);
+    switch (modificationType) {
+        case NKikimr::NEvWrite::EModificationType::Upsert:
+            WriteUpsertRows->Inc();
+            break;
+        case NKikimr::NEvWrite::EModificationType::Insert:
+            WriteInsertRows->Inc();
+            break;
+        case NKikimr::NEvWrite::EModificationType::Update:
+            WriteUpdateRows->Inc();
+            break;
+        case NKikimr::NEvWrite::EModificationType::Replace:
+            WriteReplaceRows->Inc();
+            break;
+        case NKikimr::NEvWrite::EModificationType::Delete:
+            WriteDeleteRows->Inc();
+            break;
+    }
+}
 }

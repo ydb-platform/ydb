@@ -106,8 +106,27 @@ public:
         IncCounter(NColumnShard::COUNTER_INDEXING_TIME, duration.MilliSeconds());
     }
 
+    void OnInsertionWriteIndexCompleted(const ui64 blobsWritten, const ui64 bytesWritten, const TDuration duration) const {
+        IncCounter(NColumnShard::COUNTER_INDEXING_BLOBS_WRITTEN, blobsWritten);
+        IncCounter(NColumnShard::COUNTER_INDEXING_BYTES_WRITTEN, bytesWritten);
+        IncCounter(NColumnShard::COUNTER_INDEXING_TIME, duration.MilliSeconds());
+    }
+
+    void OnWritePutBlobsSuccess(const ui64 rows, const NKikimr::NEvWrite::EModificationType modificationType) const {
+        switch (modificationType) {
+            case NKikimr::NEvWrite::EModificationType::Upsert:
+            case NKikimr::NEvWrite::EModificationType::Insert:
+            case NKikimr::NEvWrite::EModificationType::Update:
+            case NKikimr::NEvWrite::EModificationType::Replace:
+                IncCounter(NColumnShard::COUNTER_UPSERT_ROWS_WRITTEN, rows);
+                break;
+            case NKikimr::NEvWrite::EModificationType::Delete:
+                break;
+        }
+    }
+
     void FillStats(::NKikimrTableStats::TTableStats& output) const {
-        output.SetRowUpdates(GetValue(COUNTER_WRITE_SUCCESS));   // TODO: report number or rows written
+        output.SetRowUpdates(GetValue(COUNTER_UPSERT_ROWS_WRITTEN));
         output.SetRowDeletes(GetValue(COUNTER_ROWS_ERASED));
         output.SetRowReads(0);   // all reads are range reads
         output.SetRangeReadRows(GetValue(COUNTER_READ_INDEX_ROWS));

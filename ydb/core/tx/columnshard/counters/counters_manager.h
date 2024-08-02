@@ -37,6 +37,11 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TRequestsTracerCounters>, RequestsTracingCounters);
     YDB_READONLY_DEF(std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>, SubscribeCounters);
 
+    void OnWritePutBlobsSuccess(const TDuration d, const ui64 rows, const NKikimr::NEvWrite::EModificationType modificationType) const {
+        TabletCounters->OnWritePutBlobsSuccess(rows, modificationType);
+        CSCounters.OnWritePutBlobsSuccess(d, rows, modificationType);
+    }
+
 public:
     TCountersManager(TTabletCountersBase& tabletCounters)
         : TabletCounters(std::make_shared<const TTabletCountersHandle>(tabletCounters))

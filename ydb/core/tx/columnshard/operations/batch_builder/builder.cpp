@@ -42,7 +42,7 @@ TConclusionStatus TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*t
     std::shared_ptr<IMerger> merger;
     switch (WriteData.GetWriteMeta().GetModificationType()) {
         case NEvWrite::EModificationType::Upsert: {
-            // Counter.OnRowsUpserted();
+            // Counter.OnBuildBatchesForUpsert();
             if (defaultFields.empty()) {
                 AsyncBuildSlices(batch);
                 return TConclusionStatus::Success();
@@ -59,21 +59,21 @@ TConclusionStatus TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*t
             }
         }
         case NEvWrite::EModificationType::Insert: {
-            // Counter.OnRowsInserted();
+            // Counter.OnBuildBatchesForInsert();
             merger = std::make_shared<TInsertMerger>(batch, ActualSchema);
             break;
         }
         case NEvWrite::EModificationType::Update: {
-            // Counter.OnRowsUpdated();
+            // Counter.OnBuildBatchesForUpdate();
             merger = std::make_shared<TUpdateMerger>(batch, ActualSchema, "");
             break;
         }
         case NEvWrite::EModificationType::Replace:
-            // Counter.OnRowsReplaced();
+            // Counter.OnBuildBatchesForReplace();
             AsyncBuildSlices(batch);
             return TConclusionStatus::Success();
         case NEvWrite::EModificationType::Delete: {
-            // Counter.OnRowsDeleted();
+            // Counter.OnBuildBatchesForDelete();
             AsyncBuildSlices(batch);
             return TConclusionStatus::Success();
         }

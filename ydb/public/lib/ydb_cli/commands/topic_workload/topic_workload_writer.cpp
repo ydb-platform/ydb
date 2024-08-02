@@ -1,4 +1,5 @@
 #include "topic_workload_writer.h"
+#include "topic_workload_describe.h"
 
 #include <util/generic/overloaded.h>
 
@@ -81,7 +82,7 @@ bool TTopicWorkloadWriterWorker::WaitForInitSeqNo()
 
 void TTopicWorkloadWriterWorker::Process() {
     Sleep(TDuration::Seconds((float)Params.WarmupSec * Params.WriterIdx / Params.ProducerThreadCount));
-    
+
     const TInstant endTime = TInstant::Now() + TDuration::Seconds(Params.TotalSec);
 
     StartTimestamp = Now();
@@ -120,13 +121,13 @@ void TTopicWorkloadWriterWorker::Process() {
                 writingAllowed &= BytesWritten < bytesMustBeWritten;
                 WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "BytesWritten " << BytesWritten << " bytesMustBeWritten " << bytesMustBeWritten << " writingAllowed " << writingAllowed);
             }
-            else 
+            else
             {
                 writingAllowed &= InflightMessages.size() <= 1_MB / Params.MessageSize;
                 WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Inflight size " << InflightMessages.size() << " writingAllowed " << writingAllowed);
             }
 
-            if (writingAllowed) 
+            if (writingAllowed)
             {
                 TString data = GetGeneratedMessage();
 
@@ -142,7 +143,7 @@ void TTopicWorkloadWriterWorker::Process() {
                 ContinuationToken.Clear();
                 MessageId++;
             }
-            else 
+            else
                 Sleep(TDuration::MilliSeconds(1));
 
             if (events.empty())
@@ -220,11 +221,18 @@ bool TTopicWorkloadWriterWorker::ProcessSessionClosedEvent(
 
 void TTopicWorkloadWriterWorker::CreateWorker() {
     WRITE_LOG(Params.Log, ELogPriority::TLOG_INFO, TStringBuilder() << "Create writer worker for ProducerId " << Params.ProducerId << " PartitionId " << Params.PartitionId);
+    auto describeTopicResult = TCommandWorkloadTopicDescribe::DescribeTopic(Params.Database, Params.TopicName, Params.Driver);
+
     NYdb::NTopic::TWriteSessionSettings settings;
     settings.Codec((NYdb::NTopic::ECodec)Params.Codec);
     settings.Path(Params.TopicName);
     settings.ProducerId(Params.ProducerId);
-    settings.PartitionId(Params.PartitionId);
+    if (NYdb::NTopic::EAutoPartitioningStrategy::Disabled == describeTopicResult.GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy()) {
+        settings.PartitionId(Params.PartitionId);
+    } else {
+        settings.MessageGroupId(Params.ProducerId);
+    }
+
     settings.DirectWriteToPartition(Params.Direct);
     WriteSession = NYdb::NTopic::TTopicClient(Params.Driver).CreateWriteSession(settings);
 }

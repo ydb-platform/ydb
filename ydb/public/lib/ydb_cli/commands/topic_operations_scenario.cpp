@@ -91,13 +91,18 @@ void TTopicOperationsScenario::InitStatsCollector()
 void TTopicOperationsScenario::CreateTopic(const TString& database,
                                            const TString& topic,
                                            ui32 partitionCount,
-                                           ui32 consumerCount)
+                                           ui32 consumerCount,
+                                           bool autoscaling,
+                                           ui32 maxPartitionCount,
+                                           ui32 stabilizationWindowSeconds,
+                                           ui32 upUtilizationPercent,
+                                           ui32 downUtilizationPercent)
 {
     auto topicPath =
         TCommandWorkloadTopicDescribe::GenerateFullTopicName(database, topic);
 
     EnsureTopicNotExist(topicPath);
-    CreateTopic(topicPath, partitionCount, consumerCount);
+    CreateTopic(topicPath, partitionCount, consumerCount, autoscaling, maxPartitionCount, stabilizationWindowSeconds, upUtilizationPercent, downUtilizationPercent);
 }
 
 void TTopicOperationsScenario::DropTopic(const TString& database,
@@ -155,14 +160,32 @@ void TTopicOperationsScenario::EnsureTopicNotExist(const TString& topic)
 
 void TTopicOperationsScenario::CreateTopic(const TString& topic,
                                            ui32 partitionCount,
-                                           ui32 consumerCount)
+                                           ui32 consumerCount,
+                                           bool autoscaling,
+                                           ui32 maxPartitionCount,
+                                           ui32 stabilizationWindowSeconds,
+                                           ui32 upUtilizationPercent,
+                                           ui32 downUtilizationPercent)
 {
     Y_ABORT_UNLESS(Driver);
 
     NTopic::TTopicClient client(*Driver);
 
     NTopic::TCreateTopicSettings settings;
-    settings.PartitioningSettings(partitionCount, partitionCount);
+    if (autoscaling) {
+        settings.BeginConfigurePartitioningSettings()
+            .MinActivePartitions(partitionCount)
+            .MaxActivePartitions(maxPartitionCount)
+            .BeginConfigureAutoPartitioningSettings()
+                .Strategy(NTopic::EAutoPartitioningStrategy::ScaleUpAndDown)
+                .StabilizationWindow(TDuration::Seconds(stabilizationWindowSeconds))
+                .UpUtilizationPercent(upUtilizationPercent)
+                .DownUtilizationPercent(downUtilizationPercent)
+            .EndConfigureAutoPartitioningSettings()
+            .EndConfigurePartitioningSettings();
+    } else {
+        settings.PartitioningSettings(partitionCount, partitionCount);
+    }
 
     for (unsigned consumerIdx = 0; consumerIdx < consumerCount; ++consumerIdx) {
         settings
@@ -223,7 +246,8 @@ void TTopicOperationsScenario::StartConsumerThreads(std::vector<std::future<void
 void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void>>& threads,
                                                     ui32 partitionCount,
                                                     ui32 partitionSeed,
-                                                    const std::vector<TString>& generatedMessages)
+                                                    const std::vector<TString>& generatedMessages,
+                                                    const TString& database)
 {
     auto count = std::make_shared<std::atomic_uint>();
     for (ui32 writerIdx = 0; writerIdx < ProducerThreadCount; ++writerIdx) {
@@ -236,6 +260,7 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
             .ErrorFlag = ErrorFlag,
             .StartedCount = count,
             .GeneratedMessages = generatedMessages,
+            .Database = database,
             .TopicName = TopicName,
             .ByteRate = MessageRate != 0 ? MessageRate * MessageSize : ByteRate,
             .MessageSize = MessageSize,

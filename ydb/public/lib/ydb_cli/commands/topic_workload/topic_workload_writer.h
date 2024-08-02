@@ -20,6 +20,7 @@ namespace NYdb {
             std::shared_ptr<std::atomic<bool>> ErrorFlag;
             std::shared_ptr<std::atomic_uint> StartedCount;
             const std::vector<TString>& GeneratedMessages;
+            TString Database;
             TString TopicName;
             size_t ByteRate;
             size_t MessageSize;

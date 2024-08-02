@@ -2,6 +2,8 @@
 
 #include <ydb/core/tx/datashard/datashard.h>
 
+#include <util/string/vector.h>
+
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
@@ -24,12 +26,13 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        Self->PersistTraversalOperationIdAndCookie(db);
 
         const ui64 cookie = Record.GetCookie();
+        const TString types = JoinVectorIntoString(TVector<ui32>(Record.GetTypes().begin(), Record.GetTypes().end()), ",");
         
         for (const auto& table : Record.GetTables()) {
             const TPathId pathId = PathIdFromPathId(table.GetPathId());
+            const TString columnTags = JoinVectorIntoString(TVector<ui32>{table.GetColumnTags().begin(),table.GetColumnTags().end()},",");
 
             // drop request with the same cookie and path from this sender
             if (std::any_of(Self->ForceTraversals.begin(), Self->ForceTraversals.end(), 
@@ -46,16 +49,20 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
                 .OperationId = Self->NextForceTraversalOperationId,
                 .Cookie = cookie,
                 .PathId = pathId,
+                .ColumnTags = columnTags,
+                .Types = types,
                 .ReplyToActorId = ReplyToActorId
             };
             Self->ForceTraversals.emplace_back(operation);
-
 
             db.Table<Schema::ForceTraversals>().Key(Self->NextForceTraversalOperationId, pathId.OwnerId, pathId.LocalPathId).Update(
                 NIceDb::TUpdate<Schema::ForceTraversals::OperationId>(Self->NextForceTraversalOperationId),
                 NIceDb::TUpdate<Schema::ForceTraversals::OwnerId>(pathId.OwnerId),
                 NIceDb::TUpdate<Schema::ForceTraversals::LocalPathId>(pathId.LocalPathId),
-                NIceDb::TUpdate<Schema::ForceTraversals::Cookie>(cookie));
+                NIceDb::TUpdate<Schema::ForceTraversals::Cookie>(cookie),
+                NIceDb::TUpdate<Schema::ForceTraversals::ColumnTags>(columnTags),
+                NIceDb::TUpdate<Schema::ForceTraversals::Types>(types)
+            );
         }
 
         Self->PersistNextForceTraversalOperationId(db);

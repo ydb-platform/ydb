@@ -145,7 +145,7 @@ private:
 
     void PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const TString& value);
     void PersistTraversal(NIceDb::TNiceDb& db);
-    void PersistTraversalOperationIdAndCookie(NIceDb::TNiceDb& db);
+    void PersistForceTraversal(NIceDb::TNiceDb& db);
     void PersistStartKey(NIceDb::TNiceDb& db);
     void PersistNextForceTraversalOperationId(NIceDb::TNiceDb& db);    
     void PersistGlobalTraversalRound(NIceDb::TNiceDb& db);
@@ -308,6 +308,8 @@ private: // stored in local db
     
     ui64 ForceTraversalOperationId = 0;    
     ui64 ForceTraversalCookie = 0;
+    TString ForceTraversalColumnTags;
+    TString ForceTraversalTypes;
     TTableId TraversalTableId; 
     bool TraversalIsColumnTable = false;
     TSerializedCellVec TraversalStartKey;
@@ -328,6 +330,8 @@ private: // stored in local db
         ui64 OperationId = 0;
         ui64 Cookie = 0;
         TPathId PathId;
+        TString ColumnTags;
+        TString Types;
         TActorId ReplyToActorId;
     };
     std::list<TForceTraversal> ForceTraversals;

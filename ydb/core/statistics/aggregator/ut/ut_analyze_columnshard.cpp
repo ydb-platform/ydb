@@ -51,6 +51,14 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         Analyze(runtime, {tableInfo.PathId}, tableInfo.SaTabletId);
     }
 
+    Y_UNIT_TEST(AnalyzeAnalyzeOneColumnTableSpecificColumns) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        auto tableInfo = CreateDatabaseTables(env, 1, 1)[0];
+
+        Analyze(runtime, {{tableInfo.PathId, {1, 2}}}, tableInfo.SaTabletId);
+    }
+
     Y_UNIT_TEST(AnalyzeTwoColumnTables) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();

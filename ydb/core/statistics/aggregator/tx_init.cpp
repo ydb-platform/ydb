@@ -74,6 +74,16 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal table local path id: "
                             << Self->TraversalTableId.PathId.LocalPathId);
                         break;
+                    case Schema::SysParam_ForceTraversalColumnTags: {
+                        Self->ForceTraversalColumnTags = value;
+                        SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal columns tags: " << value);
+                        break;
+                    }
+                    case Schema::SysParam_ForceTraversalTypes: {
+                        Self->ForceTraversalTypes = value;
+                        SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal types: " << value);
+                        break;
+                    }                                            
                     case Schema::SysParam_TraversalStartTime: {
                         auto us = FromString<ui64>(value);
                         Self->TraversalStartTime = TInstant::MicroSeconds(us);
@@ -207,6 +217,8 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 ui64 ownerId = rowset.GetValue<Schema::ForceTraversals::OwnerId>();
                 ui64 localPathId = rowset.GetValue<Schema::ForceTraversals::LocalPathId>();
                 ui64 cookie = rowset.GetValue<Schema::ForceTraversals::Cookie>();
+                TString columnTags = rowset.GetValue<Schema::ForceTraversals::ColumnTags>();
+                TString types = rowset.GetValue<Schema::ForceTraversals::Types>();
 
                 auto pathId = TPathId(ownerId, localPathId);
 
@@ -214,6 +226,8 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                     .OperationId = operationId,
                     .Cookie = cookie,
                     .PathId = pathId,
+                    .ColumnTags = columnTags,
+                    .Types = types,
                     .ReplyToActorId = {}
                 };
                 Self->ForceTraversals.emplace_back(operation);

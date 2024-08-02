@@ -321,6 +321,10 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName name) {
                     !ExecCtx_.FunctionRegistry_->IsLoadedUdfModule(moduleName) ||
                     moduleName == TStringBuf("Geo");
 
+                if (moduleName.StartsWith("SystemPython")) {
+                    *RemoteExecutionFlag_ = true;
+                }
+
                 const auto udfPath = FindUdfPath(moduleName);
                 if (!udfPath.StartsWith(NMiniKQL::StaticModulePrefix)) {
                     const auto fileInfo = ExecCtx_.UserFiles_->GetFile(udfPath);

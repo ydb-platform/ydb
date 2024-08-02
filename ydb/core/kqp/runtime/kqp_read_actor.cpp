@@ -384,7 +384,7 @@ public:
             MaxInFlight = Settings->GetMaxInFlightShards();
         }
 
-        if (Settings->DeduplicateColumnsSize() > 0) {
+        if (Settings->DuplicateColumnsSize() > 0) {
             CollectDuplicateStats = true;
         }
     }
@@ -803,7 +803,7 @@ public:
         }
 
         if (CollectDuplicateStats) {
-            for (const auto& column : Settings->GetDeduplicateColumns()) {
+            for (const auto& column : Settings->GetDuplicateColumns()) {
                 if (!IsSystemColumn(column.GetId())) {
                     record.AddColumns(column.GetId());
                 }
@@ -1179,7 +1179,7 @@ public:
             if (CollectDuplicateStats) {
                 TVector<TCell> cells;
                 cells.resize(DuplicateCheckColumns.size());
-                for (size_t deduplicateColumn = 0; deduplicateColumn < Settings->DeduplicateColumnsSize(); ++deduplicateColumn) {
+                for (size_t deduplicateColumn = 0; deduplicateColumn < Settings->DuplicateColumnsSize(); ++deduplicateColumn) {
                     cells[deduplicateColumn] = row[columnIndex];
                     columnIndex += 1;
                 }
@@ -1446,8 +1446,8 @@ private:
         }
         if (CollectDuplicateStats) {
             DuplicateCheckColumns.reserve(Settings->ColumnsSize());
-            for (size_t deduplicateColumn = 0; deduplicateColumn < Settings->DeduplicateColumnsSize(); ++deduplicateColumn) {
-                const auto& srcColumn = Settings->GetDeduplicateColumns(deduplicateColumn);
+            for (size_t deduplicateColumn = 0; deduplicateColumn < Settings->DuplicateCheckColumnsSize(); ++deduplicateColumn) {
+                const auto& srcColumn = Settings->GetDuplicateCheckColumns(deduplicateColumn);
                 TResultColumn column;
                 column.Tag = srcColumn.GetId();
                 column.TypeInfo = MakeTypeInfo(srcColumn);

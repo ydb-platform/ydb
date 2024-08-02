@@ -94,9 +94,8 @@ public:
         auto it = SnapshotsLive.find(readMeta->GetRequestSnapshot());
         if (it == SnapshotsLive.end()) {
             it = SnapshotsLive.emplace(readMeta->GetRequestSnapshot(), TSnapshotLiveInfo::BuildFromRequest(readMeta->GetRequestSnapshot())).first;
-        } else {
-            it->second.AddRequest(cookie);
         }
+        it->second.AddRequest(cookie);
         auto status = AddToInFlightRequest(cookie, readMeta, index);
         if (!status) {
             return status;

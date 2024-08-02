@@ -379,24 +379,25 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
                     }
                 }
 
-                YQL_ENSURE(fargTypes.size() >= argTypes.size());
-                YQL_ENSURE(fargTypes.size() - argTypes.size() <= (*procPtr)->DefaultArgs.size());
-                for (size_t i = argTypes.size(); i < fargTypes.size(); ++i) {
-                    const auto& value = (*procPtr)->DefaultArgs[i + (*procPtr)->DefaultArgs.size() - fargTypes.size()];
-                    TExprNode::TPtr defNode;
-                    if (!value) {
-                        defNode = ctx.Expr.NewCallable(input->Pos(), "Null", {});
-                    } else {
-                        defNode = ctx.Expr.Builder(input->Pos())
-                            .Callable("PgConst")
-                                .Atom(0, *value)
-                                .Callable(1, "PgType")
-                                    .Atom(0, NPg::LookupType(fargTypes[i]).Name)
+                if (argTypes.size() < fargTypes.size()) {
+                    YQL_ENSURE(fargTypes.size() - argTypes.size() <= (*procPtr)->DefaultArgs.size());
+                    for (size_t i = argTypes.size(); i < fargTypes.size(); ++i) {
+                        const auto& value = (*procPtr)->DefaultArgs[i + (*procPtr)->DefaultArgs.size() - fargTypes.size()];
+                        TExprNode::TPtr defNode;
+                        if (!value) {
+                            defNode = ctx.Expr.NewCallable(input->Pos(), "Null", {});
+                        } else {
+                            defNode = ctx.Expr.Builder(input->Pos())
+                                .Callable("PgConst")
+                                    .Atom(0, *value)
+                                    .Callable(1, "PgType")
+                                        .Atom(0, NPg::LookupType(fargTypes[i]).Name)
+                                    .Seal()
                                 .Seal()
-                            .Seal()
-                            .Build();
+                                .Build();
+                        }
+                        children.insert(children.end(), defNode);
                     }
-                    children.insert(children.end(), defNode);
                 }
                 output = ctx.Expr.NewCallable(input->Pos(), "PgResolvedCall", std::move(children));
             } else if (const auto* typePtr = std::get_if<const NPg::TTypeDesc*>(&procOrType)) {

@@ -384,7 +384,7 @@ public:
             MaxInFlight = Settings->GetMaxInFlightShards();
         }
 
-        if (Settings->DuplicateColumnsSize() > 0) {
+        if (Settings->DuplicateCheckColumnsSize() > 0) {
             CollectDuplicateStats = true;
         }
     }
@@ -803,7 +803,7 @@ public:
         }
 
         if (CollectDuplicateStats) {
-            for (const auto& column : Settings->GetDuplicateColumns()) {
+            for (const auto& column : Settings->GetDuplicateCheckColumns()) {
                 if (!IsSystemColumn(column.GetId())) {
                     record.AddColumns(column.GetId());
                 }

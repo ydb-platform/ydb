@@ -227,7 +227,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     }
     { 
         TMemoryProfileGuard g("TTxInit/TInFlightReadsTracker");
-        TInFlightReadsTracker local(Self->StoragesManager);
+        TInFlightReadsTracker local(Self->StoragesManager, Self->Counters.GetRequestsTracingCounters());
         if (!local.LoadFromDatabase(txc.DB)) {
             return false;
         }

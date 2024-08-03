@@ -1,6 +1,9 @@
 #pragma once
 
 #include "blob.h"
+
+#include "counters/req_tracer.h"
+
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
 
 namespace NKikimr::NOlap {
@@ -20,9 +23,7 @@ private:
     YDB_READONLY(bool, IsLock, false);
 
     TSnapshotLiveInfo(const NOlap::TSnapshot& snapshot)
-        : Snapshot(snapshot)
-    {
-    
+        : Snapshot(snapshot) {
     }
 
 public:
@@ -74,6 +75,7 @@ public:
 class TInFlightReadsTracker {
 private:
     std::map<NOlap::TSnapshot, TSnapshotLiveInfo> SnapshotsLive;
+    std::shared_ptr<TRequestsTracerCounters> Counters;
 
 public:
     std::optional<NOlap::TSnapshot> GetSnapshotToClean() const {
@@ -89,11 +91,14 @@ public:
     [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> Ping(TColumnShard* self, const TDuration critDuration, const TInstant now);
 
     // Returns a unique cookie associated with this request
-    [[nodiscard]] TConclusion<ui64> AddInFlightRequest(NOlap::NReader::TReadMetadataBase::TConstPtr readMeta, const NOlap::TVersionedIndex* index) {
+    [[nodiscard]] TConclusion<ui64> AddInFlightRequest(
+        NOlap::NReader::TReadMetadataBase::TConstPtr readMeta, const NOlap::TVersionedIndex* index) {
         const ui64 cookie = NextCookie++;
         auto it = SnapshotsLive.find(readMeta->GetRequestSnapshot());
         if (it == SnapshotsLive.end()) {
-            it = SnapshotsLive.emplace(readMeta->GetRequestSnapshot(), TSnapshotLiveInfo::BuildFromRequest(readMeta->GetRequestSnapshot())).first;
+            it =
+                SnapshotsLive.emplace(readMeta->GetRequestSnapshot(), TSnapshotLiveInfo::BuildFromRequest(readMeta->GetRequestSnapshot())).first;
+            Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetSnapshotToClean());
         }
         it->second.AddRequest(cookie);
         auto status = AddToInFlightRequest(cookie, readMeta, index);
@@ -111,14 +116,14 @@ public:
         return delta;
     }
 
-    TInFlightReadsTracker(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager)
-        : StoragesManager(storagesManager)
-    {
-
+    TInFlightReadsTracker(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const std::shared_ptr<TRequestsTracerCounters>& counters)
+        : Counters(counters)
+        , StoragesManager(storagesManager) {
     }
 
 private:
-    [[nodiscard]] TConclusionStatus AddToInFlightRequest(const ui64 cookie, NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase, const NOlap::TVersionedIndex* index);
+    [[nodiscard]] TConclusionStatus AddToInFlightRequest(
+        const ui64 cookie, NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase, const NOlap::TVersionedIndex* index);
 
 private:
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
@@ -127,4 +132,4 @@ private:
     NOlap::TSelectInfo::TStats SelectStatsDelta;
 };
 
-}
+}   // namespace NKikimr::NColumnShard

@@ -23,6 +23,7 @@ void TInFlightReadsTracker::RemoveInFlightRequest(ui64 cookie, const NOlap::TVer
             AFL_VERIFY(it != SnapshotsLive.end());
             if (it->second.DelRequest(cookie, now)) {
                 SnapshotsLive.erase(it);
+                Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetSnapshotToClean());
             }
         }
 
@@ -98,8 +99,10 @@ std::unique_ptr<NTabletFlatExecutor::ITransaction> TInFlightReadsTracker::Ping(
     for (auto&& i : SnapshotsLive) {
         if (i.second.Ping(critDuration, now)) {
             if (i.second.GetIsLock()) {
+                Counters->OnSnapshotLocked();
                 snapshotsToSave.emplace(i.first);
             } else {
+                Counters->OnSnapshotUnlocked();
                 snapshotsToFree.emplace(i.first);
             }
         }
@@ -131,6 +134,7 @@ bool TInFlightReadsTracker::LoadFromDatabase(NTable::TDatabase& tableDB) {
             return false;
         }
     }
+    Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetSnapshotToClean());
     return true;
 }
 

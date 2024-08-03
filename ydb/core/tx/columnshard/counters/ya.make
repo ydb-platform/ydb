@@ -2,14 +2,16 @@ LIBRARY()
 
 SRCS(
     background_controller.cpp
-    column_tables.cpp
-    indexation.cpp
-    scan.cpp
-    engine_logs.cpp
+    counters_manager.cpp
     blobs_manager.cpp
+    column_tables.cpp
     columnshard.cpp
-    insert_table.cpp
     common_data.cpp
+    engine_logs.cpp
+    indexation.cpp
+    insert_table.cpp
+    req_tracer.cpp
+    scan.cpp
     splitter.cpp
 )
 

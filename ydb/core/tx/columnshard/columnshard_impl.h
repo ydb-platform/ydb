@@ -479,7 +479,7 @@ private:
     void SendWaitPlanStep(ui64 step);
     void RescheduleWaitingReads();
     NOlap::TSnapshot GetMaxReadVersion() const;
-    ui64 GetMinReadStep() const;
+    NOlap::TSnapshot GetMinReadSnapshot() const;
     ui64 GetOutdatedStep() const;
     TDuration GetTxCompleteLag() const {
         ui64 mediatorTime = MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0;

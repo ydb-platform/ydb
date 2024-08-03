@@ -4,10 +4,11 @@
 #include "data_sharing/common/transactions/tx_extension.h"
 #include "engines/column_engine.h"
 #include "engines/reader/plain_reader/constructor/read_metadata.h"
+#include "hooks/abstract/abstract.h"
 
 namespace NKikimr::NColumnShard {
 
-void TInFlightReadsTracker::RemoveInFlightRequest(ui64 cookie, const NOlap::TVersionedIndex* index) {
+void TInFlightReadsTracker::RemoveInFlightRequest(ui64 cookie, const NOlap::TVersionedIndex* index, const TInstant now) {
     Y_ABORT_UNLESS(RequestsMeta.contains(cookie), "Unknown request cookie %" PRIu64, cookie);
     const auto& readMetaList = RequestsMeta[cookie];
 
@@ -20,30 +21,8 @@ void TInFlightReadsTracker::RemoveInFlightRequest(ui64 cookie, const NOlap::TVer
         {
             auto it = SnapshotsLive.find(readMeta->GetRequestSnapshot());
             AFL_VERIFY(it != SnapshotsLive.end());
-            if (it->second.DelRequest(cookie)) {
+            if (it->second.DelRequest(cookie, now)) {
                 SnapshotsLive.erase(it);
-            }
-        }
-
-        THashMap<TString, THashSet<NOlap::TUnifiedBlobId>> portionBlobIds;
-        for (const auto& portion : readMeta->SelectInfo->PortionsOrderedPK) {
-            const ui64 portionId = portion->GetPortion();
-            AFL_VERIFY(index);
-            portion->FillBlobIdsByStorage(portionBlobIds, *index);
-            auto it = PortionUseCount.find(portionId);
-            Y_ABORT_UNLESS(it != PortionUseCount.end(), "Portion id %" PRIu64 " not found in request %" PRIu64, portionId, cookie);
-            if (it->second == 1) {
-                PortionUseCount.erase(it);
-            } else {
-                it->second--;
-            }
-        }
-
-        for (auto&& i : portionBlobIds) {
-            auto storage = StoragesManager->GetOperatorVerified(i.first);
-            auto tracker = storage->GetBlobsTracker();
-            for (auto& blobId : i.second) {
-                tracker->FreeBlob(blobId);
             }
         }
 
@@ -70,25 +49,6 @@ TConclusionStatus TInFlightReadsTracker::AddToInFlightRequest(
     auto selectInfo = readMeta->SelectInfo;
     Y_ABORT_UNLESS(selectInfo);
     SelectStatsDelta += selectInfo->Stats();
-
-    THashMap<TString, THashSet<NOlap::TUnifiedBlobId>> portionBlobIds;
-    for (const auto& portion : readMeta->SelectInfo->PortionsOrderedPK) {
-        const ui64 portionId = portion->GetPortion();
-        PortionUseCount[portionId]++;
-        AFL_VERIFY(index);
-        portion->FillBlobIdsByStorage(portionBlobIds, *index);
-    }
-
-    for (auto&& i : portionBlobIds) {
-        auto storage = StoragesManager->GetOperatorOptional(i.first);
-        if (!storage) {
-            return TConclusionStatus::Fail("blobs storage info not ready for '" + i.first + "'");
-        }
-        auto tracker = storage->GetBlobsTracker();
-        for (auto& blobId : i.second) {
-            tracker->UseBlob(blobId);
-        }
-    }
 
     auto insertStorage = StoragesManager->GetInsertOperator();
     auto tracker = insertStorage->GetBlobsTracker();
@@ -126,16 +86,17 @@ public:
         , SaveSnapshots(std::move(saveSnapshots))
         , RemoveSnapshots(std::move(removeSnapshots))
     {
-        AFL_VERIFY(saveSnapshots.size() || removeSnapshots.size());
+        AFL_VERIFY(SaveSnapshots.size() || RemoveSnapshots.size());
     }
 };
 }   // namespace
 
-std::unique_ptr<NTabletFlatExecutor::ITransaction> TInFlightReadsTracker::Ping(TColumnShard* self, const TDuration critDuration) {
+std::unique_ptr<NTabletFlatExecutor::ITransaction> TInFlightReadsTracker::Ping(
+    TColumnShard* self, const TDuration critDuration, const TInstant now) {
     std::set<NOlap::TSnapshot> snapshotsToSave;
     std::set<NOlap::TSnapshot> snapshotsToFree;
     for (auto&& i : SnapshotsLive) {
-        if (i.second.Ping(critDuration)) {
+        if (i.second.Ping(critDuration, now)) {
             if (i.second.GetIsLock()) {
                 snapshotsToSave.emplace(i.first);
             } else {
@@ -147,11 +108,11 @@ std::unique_ptr<NTabletFlatExecutor::ITransaction> TInFlightReadsTracker::Ping(T
         SnapshotsLive.erase(i);
     }
     if (snapshotsToFree.size() || snapshotsToSave.size()) {
+        NYDBTest::TControllers::GetColumnShardController()->OnRequestTracingChanges(snapshotsToSave, snapshotsToFree);
         return std::make_unique<TTransactionSavePersistentSnapshots>(self, std::move(snapshotsToSave), std::move(snapshotsToFree));
     } else {
         return nullptr;
     }
-    
 }
 
 bool TInFlightReadsTracker::LoadFromDatabase(NTable::TDatabase& tableDB) {

@@ -162,7 +162,9 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
     if (HasIndex()) {
         index = &GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex();
     }
-    InFlightReadsTracker.RemoveInFlightRequest(ev->Get()->RequestCookie, index);
+
+    InFlightReadsTracker.RemoveInFlightRequest(
+        ev->Get()->RequestCookie, index, TInstant::Now());
 
     ui64 txId = ev->Get()->TxId;
     if (ScanTxInFlight.contains(txId)) {
@@ -175,8 +177,8 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& ev, const TActorContext& ctx) {
-    if (auto writeTx =
-            InFlightReadsTracker.Ping(this, 0.6 * GetMaxReadStaleness())) {
+    if (auto writeTx = InFlightReadsTracker.Ping(
+            this, NYDBTest::TControllers::GetColumnShardController()->GetPingCheckPeriod(0.6 * GetMaxReadStaleness()), TInstant::Now())) {
         Execute(writeTx.release(), ctx);
     }
     ctx.Schedule(0.3 * GetMaxReadStaleness(), new TEvPrivate::TEvPingSnapshotsUsage());
@@ -191,6 +193,7 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
         SendWaitPlanStep(GetOutdatedStep());
 
         SendPeriodicStats();
+        EnqueueBackgroundActivities();
         ctx.Schedule(PeriodicWakeupActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
     }
 }

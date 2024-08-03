@@ -1123,7 +1123,15 @@ public:
         TStringBuilder builder;
         TVector<NScheme::TTypeInfo> types;
         for (auto& column : Settings->GetColumns()) {
-            types.push_back(NScheme::TTypeInfo((NScheme::TTypeId)column.GetType()));
+            if (!IsSystemColumn(column.GetId())) {
+                types.push_back(NScheme::TTypeInfo((NScheme::TTypeId)column.GetType()));
+            }
+        }
+
+        if (CollectDuplicateStats) {
+            for (auto& column : DuplicateCheckExtraColumns) {
+                types.push_back(column.TypeInfo);
+            }
         }
 
         for (size_t rowIndex = 0; rowIndex < result->GetRowsCount(); ++rowIndex) {
@@ -1444,8 +1452,12 @@ private:
         }
         if (CollectDuplicateStats) {
             THashMap<ui32, ui32> positions;
-            for (size_t i = 0; i < Settings->ColumnsSize(); ++i) {
-                positions[Settings->GetColumns(i).GetId()] = i;
+            size_t resultIndex = 0;
+            for (auto& column : Settings->GetColumns()) {
+                if (!IsSystemColumn(column.GetId())) {
+                    positions[column.GetId()] = resultIndex;
+                    resultIndex += 1;
+                }
             }
             DuplicateCheckExtraColumns.reserve(Settings->ColumnsSize());
             for (size_t deduplicateColumn = 0; deduplicateColumn < Settings->DuplicateCheckColumnsSize(); ++deduplicateColumn) {
@@ -1454,7 +1466,8 @@ private:
                 column.Tag = srcColumn.GetId();
                 Y_ENSURE(!IsSystemColumn(column.Tag));
                 if (!positions.contains(column.Tag)) {
-                    positions[column.Tag] = Settings->ColumnsSize() + DuplicateCheckExtraColumns.size();
+                    positions[column.Tag] = resultIndex;
+                    resultIndex += 1;
                     column.TypeInfo = MakeTypeInfo(srcColumn);
                     column.IsSystem = false;
                     column.NotNull = false;

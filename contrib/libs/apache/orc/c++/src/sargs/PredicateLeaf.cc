@@ -26,8 +26,6 @@
 #include <sstream>
 #include <type_traits>
 
-#include <util/generic/string.h>
-
 namespace orc {
 
   PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, const std::string& colName,

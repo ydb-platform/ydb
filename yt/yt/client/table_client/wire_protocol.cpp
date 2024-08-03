@@ -392,7 +392,7 @@ private:
                 return lhs.Id < rhs.Id;
             });
 
-        return MakeRange(PooledValues_);
+        return TRange(PooledValues_);
     }
 
     void UnsafeWriteNullBitmap(TUnversionedValueRange values)

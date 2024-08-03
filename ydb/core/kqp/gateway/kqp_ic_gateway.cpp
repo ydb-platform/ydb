@@ -1389,6 +1389,10 @@ public:
 
     TFuture<TGenericResult> Analyze(const TString& cluster, const NYql::TAnalyzeSettings& settings) override {
         try {
+            if (!CheckCluster(cluster)) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
+            
             auto analyzePromise = NewPromise<TGenericResult>();
             IActor* analyzeActor = new TAnalyzeActor(settings.TablePath, settings.Columns, analyzePromise);
             RegisterActor(analyzeActor);

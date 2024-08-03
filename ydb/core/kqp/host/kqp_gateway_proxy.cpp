@@ -2071,6 +2071,10 @@ public:
         CHECK_PREPARED_DDL(Analyze);
 
         try {
+            if (cluster != SessionCtx->GetCluster()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+            }
+            
             NKqpProto::TKqpAnalyzeOperation analyzeTx;
             analyzeTx.SetTablePath(settings.TablePath);
             for (const auto& column: settings.Columns) {

@@ -158,19 +158,21 @@ public:
         NKikimrViewer::TMetaInfo metaInfo;
         NKikimrViewer::TMetaCommonInfo& pbCommon = *metaInfo.MutableCommon();
         pbCommon.SetPath(CanonizePath(entry.Path));
-        pbCommon.SetOwner(entry.Self->Info.GetOwner());
-        if (entry.Self->Info.HasACL()) {
-            NACLib::TACL acl(entry.Self->Info.GetACL());
-            for (const NACLibProto::TACE& ace : acl.GetACE()) {
-                auto& pbAce = *pbCommon.AddACL();
-                FillACE(ace, pbAce);
+        if (entry.Self) {
+            pbCommon.SetOwner(entry.Self->Info.GetOwner());
+            if (entry.Self->Info.HasACL()) {
+                NACLib::TACL acl(entry.Self->Info.GetACL());
+                for (const NACLibProto::TACE& ace : acl.GetACE()) {
+                    auto& pbAce = *pbCommon.AddACL();
+                    FillACE(ace, pbAce);
+                }
             }
-        }
-        if (entry.Self->Info.HasEffectiveACL()) {
-            NACLib::TACL acl(entry.Self->Info.GetEffectiveACL());
-            for (const NACLibProto::TACE& ace : acl.GetACE()) {
-                auto& pbAce = *pbCommon.AddEffectiveACL();
-                FillACE(ace, pbAce);
+            if (entry.Self->Info.HasEffectiveACL()) {
+                NACLib::TACL acl(entry.Self->Info.GetEffectiveACL());
+                for (const NACLibProto::TACE& ace : acl.GetACE()) {
+                    auto& pbAce = *pbCommon.AddEffectiveACL();
+                    FillACE(ace, pbAce);
+                }
             }
         }
 

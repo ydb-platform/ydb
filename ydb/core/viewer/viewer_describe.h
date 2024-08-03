@@ -117,8 +117,6 @@ public:
 
     void FillDescription(NKikimrSchemeOp::TDirEntry* descr, ui64 schemeShardId) {
         descr->SetSchemeshardId(schemeShardId);
-        descr->SetPathId(InvalidLocalPathId);
-        descr->SetParentPathId(InvalidLocalPathId);
         descr->SetCreateFinished(true);
         descr->SetCreateTxId(0);
         descr->SetCreateStep(0);
@@ -177,11 +175,21 @@ public:
         result->SetReason(record.GetReason());
         result->SetPath(record.GetPath());
         result->MutablePathDescription()->CopyFrom(record.GetPathDescription());
-        result->SetPathId(record.GetPathId());
+        if (record.GetPathId() != 0 && record.GetPathId() != InvalidLocalPathId) {
+            result->SetPathId(record.GetPathId());
+        }
+        if (result->MutablePathDescription()->GetSelf().GetPathId() == 0 || result->MutablePathDescription()->GetSelf().GetPathId() == InvalidLocalPathId) {
+            result->MutablePathDescription()->MutableSelf()->ClearPathId();
+        }
+        if (result->MutablePathDescription()->GetSelf().GetParentPathId() == 0 || result->MutablePathDescription()->GetSelf().GetParentPathId() == InvalidLocalPathId) {
+            result->MutablePathDescription()->MutableSelf()->ClearParentPathId();
+        }
         result->SetLastExistedPrefixPath(record.GetLastExistedPrefixPath());
         result->SetLastExistedPrefixPathId(record.GetLastExistedPrefixPathId());
         result->MutableLastExistedPrefixDescription()->CopyFrom(record.GetLastExistedPrefixDescription());
-        result->SetPathOwnerId(record.GetPathOwnerId());
+        if (record.GetPathOwnerId() != 0 && record.GetPathOwnerId() != InvalidOwnerId) {
+            result->SetPathOwnerId(record.GetPathOwnerId());
+        }
         result->SetSource(NKikimrViewer::TEvDescribeSchemeInfo::SchemeShard);
 
         return result;
@@ -194,13 +202,23 @@ public:
 
         TAutoPtr<NKikimrViewer::TEvDescribeSchemeInfo> result(new NKikimrViewer::TEvDescribeSchemeInfo());
         result->SetPath(path);
-        result->SetPathId(entry.Self->Info.GetPathId());
-        result->SetPathOwnerId(entry.Self->Info.GetSchemeshardId());
-
         auto* pathDescription = result->MutablePathDescription();
         auto* self = pathDescription->MutableSelf();
-
-        self->CopyFrom(entry.Self->Info);
+        if (entry.Self) {
+            self->CopyFrom(entry.Self->Info);
+            if (self->GetPathId() == 0 || self->GetPathId() == InvalidLocalPathId) {
+                self->ClearPathId();
+            }
+            if (self->GetParentPathId() == 0 || self->GetParentPathId() == InvalidLocalPathId) {
+                self->ClearParentPathId();
+            }
+            if (entry.Self->Info.GetPathId() != 0 && entry.Self->Info.GetPathId() != InvalidLocalPathId) {
+                result->SetPathId(entry.Self->Info.GetPathId());
+            }
+            if (entry.Self->Info.GetSchemeshardId() != 0 && entry.Self->Info.GetSchemeshardId() != InvalidOwnerId) {
+                result->SetPathOwnerId(entry.Self->Info.GetSchemeshardId());
+            }
+        }
         FillDescription(self, schemeShardId);
 
         if (entry.ListNodeEntry) {
@@ -254,6 +272,14 @@ public:
                 Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPFORBIDDEN(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
                 PassAway();
                 return;
+            }
+            for (auto& child : *DescribeResult->MutablePathDescription()->MutableChildren()) {
+                if (child.GetPathId() == InvalidLocalPathId) {
+                    child.ClearPathId();
+                }
+                if (child.GetParentPathId() == InvalidLocalPathId) {
+                    child.ClearParentPathId();
+                }
             }
             TProtoToJson::ProtoToJson(json, *DescribeResult, JsonSettings);
             DecodeExternalTableContent(json);

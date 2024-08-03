@@ -71,6 +71,7 @@ public:
             const auto& pathDescription = pbRecord.GetPathDescription();
             const auto& partitions = pathDescription.GetTablePartitions();
             const auto& metrics = pathDescription.GetTablePartitionMetrics();
+
             if (!metrics.empty()) {
                 TVector<std::pair<ui64, int>> tabletsOrder;
 

@@ -4,9 +4,13 @@ from ydb.library.yql.providers.generic.connector.tests.utils.log import make_log
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
 from ydb.library.yql.providers.generic.connector.tests.utils.run.parent import Runner
 
-from ydb.library.yql.providers.generic.connector.tests.utils.clients.clickhouse import Client as ClickHouseClient
+from ydb.library.yql.providers.generic.connector.tests.utils.clients.clickhouse import (
+    Client as ClickHouseClient
+)
 import ydb.library.yql.providers.generic.connector.tests.utils.scenario.clickhouse as clickhouse_scenario
-from ydb.library.yql.providers.generic.connector.tests.utils.clients.postgresql import Client as PostgreSQLClient
+from ydb.library.yql.providers.generic.connector.tests.utils.clients.postgresql import (
+    Client as PostgreSQLClient
+)
 import ydb.library.yql.providers.generic.connector.tests.utils.scenario.postgresql as postgresql_scenario
 
 from test_case import TestCase

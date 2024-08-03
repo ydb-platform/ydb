@@ -88,10 +88,6 @@ ydb/tests/fq/plans test_stats_mode.py.TestStatsMode.test_mode[v1-STATS_MODE_FULL
 ydb/tests/fq/yds *
 ydb/tests/fq/control_plane_storage *
 ydb/tests/functional/audit *
-ydb/tests/functional/clickbench test.py.test_run_determentistic[column]
-ydb/tests/functional/clickbench test.py.test_run_benchmark[scan-column]
-ydb/tests/functional/clickbench test.py.test_run_benchmark[generic-column]
-ydb/tests/functional/clickbench test.py.test_plans[column]
 ydb/tests/functional/blobstorage test_replication.py.TestReplicationAfterNodesRestart.test_replication*
 ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach

@@ -264,7 +264,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     IOptimizerNew& opt,
     const TProviderCollectFunction& providerCollect
 ) {
-    int dummyEquiJoinCounter;
+    int dummyEquiJoinCounter = 0;
     return DqOptimizeEquiJoinWithCosts(node, ctx, typesCtx, optLevel, opt, providerCollect, dummyEquiJoinCounter);
 }
 

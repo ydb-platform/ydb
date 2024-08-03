@@ -49,9 +49,8 @@ private:
     struct TTxNavigate;
     struct TTxResolve;
     struct TTxDatashardScanResponse;
-    struct TTxSaveQueryResponse;
+    struct TTxFinishTraversal;
     struct TTxScheduleTrasersal;
-    struct TTxDeleteQueryResponse;
     struct TTxAggregateStatisticsResponse;
     struct TTxResponseTabletDistribution;
     struct TTxAckTimeout;
@@ -146,14 +145,17 @@ private:
 
     void PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const TString& value);
     void PersistTraversal(NIceDb::TNiceDb& db);
+    void PersistForceTraversal(NIceDb::TNiceDb& db);
     void PersistStartKey(NIceDb::TNiceDb& db);
-    void PersistLastForceTraversalOperationId(NIceDb::TNiceDb& db);
+    void PersistNextForceTraversalOperationId(NIceDb::TNiceDb& db);    
     void PersistGlobalTraversalRound(NIceDb::TNiceDb& db);
 
     void ResetTraversalState(NIceDb::TNiceDb& db);
     void ScheduleNextTraversal(NIceDb::TNiceDb& db);
     void StartTraversal(NIceDb::TNiceDb& db);
     void FinishTraversal(NIceDb::TNiceDb& db);
+
+    TString LastTraversalWasForceString() const;
 
     STFUNC(StateInit) {
         StateInitImpl(ev, SelfId());
@@ -239,7 +241,7 @@ private:
     std::queue<TEvStatistics::TEvRequestStats::TPtr> PendingRequests;
     bool ProcessUrgentInFlight = false;
 
-    std::unordered_set<TActorId> ReplyToActorIds;
+    TActorId ForceTraversalReplyToActorId = {};
 
     bool IsSchemeshardSeen = false;
     bool IsStatisticsTableCreated = false;
@@ -257,7 +259,7 @@ private:
     std::deque<TRange> DatashardRanges;
 
     // period for both force and schedule traversals
-    static constexpr TDuration TraversalPeriod = TDuration::Seconds(1);             
+    static constexpr TDuration TraversalPeriod = TDuration::Seconds(1);
     // if table traverse time is older, than traserse it on schedule
     static constexpr TDuration ScheduleTraversalPeriod = TDuration::Hours(24);
 
@@ -304,11 +306,15 @@ private:
 
 private: // stored in local db
     
+    ui64 ForceTraversalOperationId = 0;    
+    ui64 ForceTraversalCookie = 0;
+    TString ForceTraversalColumnTags;
+    TString ForceTraversalTypes;
     TTableId TraversalTableId; 
     bool TraversalIsColumnTable = false;
     TSerializedCellVec TraversalStartKey;
     TInstant TraversalStartTime;
-    ui64 LastForceTraversalOperationId = 0;  
+    ui64 NextForceTraversalOperationId = 0;
 
     size_t GlobalTraversalRound = 1; 
 
@@ -320,13 +326,15 @@ private: // stored in local db
         TTraversalsByTime;
     TTraversalsByTime ScheduleTraversalsByTime;
 
-    struct TForceTraversal : public TIntrusiveListItem<TForceTraversal> {
+    struct TForceTraversal {
         ui64 OperationId = 0;
+        ui64 Cookie = 0;
         TPathId PathId;
-        std::unordered_set<TActorId> ReplyToActorIds;
+        TString ColumnTags;
+        TString Types;
+        TActorId ReplyToActorId;
     };
-    TIntrusiveList<TForceTraversal> ForceTraversals;
-    std::unordered_map<TPathId, TForceTraversal> ForceTraversalsByPathId;  
+    std::list<TForceTraversal> ForceTraversals;
 };
 
 } // NKikimr::NStat

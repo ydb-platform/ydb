@@ -70,7 +70,7 @@ namespace NKikimr::NPDisk {
                 Release(actorSystem);
             }
 
-            void Release(TActorSystem *actorSystem) override {
+            void Release(TActorSystem * /*actorSystem*/) override {
                 delete this;
             }
         };
@@ -231,7 +231,7 @@ namespace NKikimr::NPDisk {
 
             bool CanHandleResult() const override { return true; }
 
-            void Exec(TActorSystem *actorSystem) override {
+            void Exec(TActorSystem * /*actorSystem*/) override {
                 LOG_DEBUG_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId
                     << " TCompletionWriteUnformattedMetadata::Exec"
                     << " Result# " << Result

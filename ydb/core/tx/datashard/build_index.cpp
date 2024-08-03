@@ -283,7 +283,7 @@ protected:
     }
 
     template <typename TAddRow>
-    EScan FeedImpl(TArrayRef<const TCell> key, const TRow& row, TAddRow&& addRow) noexcept {
+    EScan FeedImpl(TArrayRef<const TCell> key, const TRow& /*row*/, TAddRow&& addRow) noexcept {
         LOG_T("Feed key " << DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry) << " " << Debug());
 
         addRow();
@@ -440,7 +440,7 @@ private:
         }
     }
 
-    void HandleWakeup(const NActors::TActorContext& ctx) {
+    void HandleWakeup(const NActors::TActorContext& /*ctx*/) {
         LOG_D("Retry upload " << Debug());
 
         if (!WriteBuf.IsEmpty()) {

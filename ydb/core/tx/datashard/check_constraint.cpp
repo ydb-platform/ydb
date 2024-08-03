@@ -101,7 +101,6 @@ public:
     }
 
     EScan Seek(TLead& lead, ui64 seq) noexcept final {
-        std::cerr << seq << std::endl;
         Y_ABORT_UNLESS(seq == 0);
 
         auto scanRange = Intersect(KeyTypes, RequestedRange.ToTableRange(), TableRange.ToTableRange());
@@ -127,8 +126,6 @@ public:
         }
 
         const TConstArrayRef<TCell> rowCells = *row;
-
-        std::cerr << "CheckNotNullConstraint(rowCells = " << CheckNotNullConstraint(rowCells) << std::endl;
 
         if (!CheckNotNullConstraint(rowCells)) {
             CheckingNotNullStatus = ECheckingNotNullStatus::NullFound;
@@ -171,6 +168,10 @@ public:
         Driver = nullptr;
         PassAway();
         return nullptr;
+    }
+
+    EScan Exhausted() noexcept final {
+        return EScan::Final;
     }
 
     void Describe(IOutputStream& out) const noexcept final {

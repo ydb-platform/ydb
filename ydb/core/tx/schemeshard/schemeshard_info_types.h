@@ -2994,7 +2994,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             if (shardIdx) {
                 result << " ShardIdx: " << shardIdx;
             }
-            result << " Status: " << NKikimrTxDataShard::EBuildIndexStatus::Name(Status);
+            result << " Status: " << NKikimrTxDataShard::EBuildIndexStatus_Name(Status);
             result << " UploadStatus: " << Ydb::StatusIds::StatusCode_Name(UploadStatus);
             result << " DebugMessage: " << DebugMessage;
             result << " SeqNoRound: " << SeqNoRound;

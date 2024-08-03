@@ -8,7 +8,7 @@
 
 namespace NKikimr::NColumnShard {
 
-void TInFlightReadsTracker::RemoveInFlightRequest(ui64 cookie, const NOlap::TVersionedIndex* index, const TInstant now) {
+void TInFlightReadsTracker::RemoveInFlightRequest(ui64 cookie, const NOlap::TVersionedIndex* /*index*/, const TInstant now) {
     Y_ABORT_UNLESS(RequestsMeta.contains(cookie), "Unknown request cookie %" PRIu64, cookie);
     const auto& readMetaList = RequestsMeta[cookie];
 
@@ -38,7 +38,7 @@ void TInFlightReadsTracker::RemoveInFlightRequest(ui64 cookie, const NOlap::TVer
 }
 
 TConclusionStatus TInFlightReadsTracker::AddToInFlightRequest(
-    const ui64 cookie, NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase, const NOlap::TVersionedIndex* index) {
+    const ui64 cookie, NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase, const NOlap::TVersionedIndex* /*index*/) {
     RequestsMeta[cookie].push_back(readMetaBase);
 
     auto readMeta = std::dynamic_pointer_cast<const NOlap::NReader::NPlain::TReadMetadata>(readMetaBase);

@@ -8,6 +8,7 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/parser.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
+#include <ydb/services/lib/actors/pq_schema_actor.h>
 
 namespace NKikimr::NKqp {
 
@@ -108,7 +109,7 @@ bool ConvertDataSlotToYdbTypedValue(NYql::EDataSlot fromType, const TString& fro
     case NYql::EDataSlot::Interval64:
         toType->set_type_id(Ydb::Type::INTERVAL64);
         toValue->set_int64_value(FromString<i64>(fromValue));
-        break;        
+        break;
     default:
         return false;
     }
@@ -914,16 +915,134 @@ public:
         return dropPromise.GetFuture();
     }
 
-    TFuture<TGenericResult> CreateTopic(const TString& cluster, Ydb::Topic::CreateTopicRequest&& request) override {
-        FORWARD_ENSURE_NO_PREPARE(CreateTopic, cluster, std::move(request));
+    TFuture<TGenericResult> CreateTopic(const TString& cluster, Ydb::Topic::CreateTopicRequest&& request, bool existingOk) override {
+        CHECK_PREPARED_DDL(CreateTopic);
+        Y_UNUSED(cluster);
+
+        std::pair<TString, TString> pathPair;
+        TString error;
+        auto createPromise = NewPromise<TGenericResult>();
+        if (!NSchemeHelpers::SplitTablePath(request.path(), GetDatabase(), pathPair, error, false)) {
+            return MakeFuture(ResultFromError<TGenericResult>(error));
+        }
+        NKikimrSchemeOp::TModifyScheme schemeTx;
+        schemeTx.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
+
+        schemeTx.SetWorkingDir(pathPair.first);
+
+        auto pqDescr = schemeTx.MutableCreatePersQueueGroup();
+        pqDescr->SetName(pathPair.second);
+        NKikimr::NGRpcProxy::V1::FillProposeRequestImpl(pathPair.second, request, schemeTx, AppData(ActorSystem), error, pathPair.first);
+        TList<TString> warnings;
+
+        if (IsPrepare()) {
+            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            auto& phyTx = *phyQuery.AddTransactions();
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
+
+            phyTx.MutableSchemeOperation()->MutableCreateTopic()->Swap(&schemeTx);
+            phyTx.MutableSchemeOperation()->MutableCreateTopic()->SetFailedOnAlreadyExists(!existingOk);
+            TGenericResult result;
+            result.SetSuccess();
+            createPromise.SetValue(result);
+        } else {
+            Gateway->ModifyScheme(std::move(schemeTx)).Subscribe([createPromise, warnings]
+                        (const TFuture<TGenericResult>& future) mutable {
+                            auto result = future.GetValue();
+                            for (const auto& warning : warnings) {
+                                result.AddIssue(
+                                    NYql::TIssue(warning).SetCode(NKikimrIssues::TIssuesIds::WARNING,
+                                        NYql::TSeverityIds::S_WARNING)
+                                );
+                            }
+                            createPromise.SetValue(result);
+                        });
+        }
+        return createPromise.GetFuture();
     }
 
-    TFuture<TGenericResult> AlterTopic(const TString& cluster, Ydb::Topic::AlterTopicRequest&& request) override {
-        FORWARD_ENSURE_NO_PREPARE(AlterTopic, cluster, std::move(request));
+    TFuture<TGenericResult> AlterTopic(const TString& cluster, Ydb::Topic::AlterTopicRequest&& request, bool missingOk) override {
+        CHECK_PREPARED_DDL(AlterTopic);
+        Y_UNUSED(cluster);
+        std::pair<TString, TString> pathPair;
+        TString error;
+        if (!NSchemeHelpers::SplitTablePath(request.path(), GetDatabase(), pathPair, error, false)) {
+            return MakeFuture(ResultFromError<TGenericResult>(error));
+        }
+        //pqDescr->SetName(pathPair.second);
+        TList<TString> warnings;
+        auto alterPromise = NewPromise<TGenericResult>();
+
+        if (IsPrepare()) {
+            TAlterTopicSettings settings{std::move(request), pathPair.second, pathPair.first, missingOk};
+            auto getModifySchemeFuture = Gateway->AlterTopicPrepared(std::move(settings));
+
+
+            auto* phyQuery = SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+
+            getModifySchemeFuture.Subscribe([=] (const auto future) mutable {
+                TGenericResult result;
+                auto modifySchemeResult = future.GetValue();
+                if (modifySchemeResult.Status == Ydb::StatusIds::SUCCESS) {
+                    if (modifySchemeResult.ModifyScheme.HasAlterPersQueueGroup()) {
+                        auto* phyTx = phyQuery->AddTransactions();
+                        phyTx->SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                        phyTx->MutableSchemeOperation()->MutableAlterTopic()->Swap(&modifySchemeResult.ModifyScheme);
+                        phyTx->MutableSchemeOperation()->MutableAlterTopic()->SetSuccessOnNotExist(missingOk);
+                    }
+                    result.SetSuccess();
+
+                } else {
+                    result.SetStatus(NYql::YqlStatusFromYdbStatus(modifySchemeResult.Status));
+                    result.AddIssues(modifySchemeResult.Issues);
+                }
+                alterPromise.SetValue(result);
+            });
+
+        } else {
+            return Gateway->AlterTopic(cluster, std::move(request), missingOk);
+        }
+        return alterPromise.GetFuture();
+
     }
 
-    TFuture<TGenericResult> DropTopic(const TString& cluster, const TString& topic) override {
-        FORWARD_ENSURE_NO_PREPARE(DropTopic, cluster, topic);
+    NThreading::TFuture<NKikimr::NGRpcProxy::V1::TAlterTopicResponse> AlterTopicPrepared(TAlterTopicSettings&& settings) override {
+        return Gateway->AlterTopicPrepared(std::move(settings));
+    }
+
+    TFuture<TGenericResult> DropTopic(const TString& cluster, const TString& topic, bool missingOk) override {
+        CHECK_PREPARED_DDL(DropTopic);
+        Y_UNUSED(cluster);
+
+        std::pair<TString, TString> pathPair;
+        TString error;
+        auto dropPromise = NewPromise<TGenericResult>();
+        if (!NSchemeHelpers::SplitTablePath(topic, GetDatabase(), pathPair, error, false)) {
+            return MakeFuture(ResultFromError<TGenericResult>(error));
+        }
+
+        if (IsPrepare()) {
+            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            auto& phyTx = *phyQuery.AddTransactions();
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
+            NKikimrSchemeOp::TModifyScheme schemeTx;
+            schemeTx.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup);
+
+            schemeTx.SetWorkingDir(pathPair.first);
+            schemeTx.MutableDrop()->SetName(pathPair.second);
+
+            phyTx.MutableSchemeOperation()->MutableDropTopic()->Swap(&schemeTx);
+            phyTx.MutableSchemeOperation()->MutableDropTopic()->SetSuccessOnNotExist(missingOk);
+            TGenericResult result;
+            result.SetSuccess();
+            dropPromise.SetValue(result);
+        } else {
+            return Gateway->DropTopic(cluster, topic, missingOk);
+
+        }
+        return dropPromise.GetFuture();
     }
 
     TFuture<TGenericResult> ModifyPermissions(const TString& cluster,

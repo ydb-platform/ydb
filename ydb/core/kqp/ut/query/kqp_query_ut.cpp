@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 }
             }
 
-            auto permissionsSettings = 
+            auto permissionsSettings =
                 NYdb::NScheme::TModifyPermissionsSettings()
                 .AddGrantPermissions(NYdb::NScheme::TPermissions("user0@builtin", grantPermissions))
                 .AddRevokePermissions(NYdb::NScheme::TPermissions("user0@builtin", revokePermissions));
@@ -1459,8 +1459,8 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto client = kikimr.GetQueryClient();
         auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        
-        { 
+
+        {
             auto prepareResult = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/Source` (Col1, Col2) VALUES
                     (1u, 1), (100u, 100), (10u, 10);
@@ -1623,7 +1623,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-        { 
+        {
             auto prepareResult = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/Source` (Col1, Col2) VALUES
                     (1u, 1), (100u, 100), (10u, 10);
@@ -1676,7 +1676,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-        { 
+        {
             auto prepareResult = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/Source` (Col1, Col2) VALUES
                     (1u, 1), (100u, 100), (10u, 10);
@@ -1780,6 +1780,165 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
             CompareYson(output, R"([[1u;[1];["test1"]];[100u;[100];["test2"]]])");
+        }
+    }
+
+
+    void RunQuery (const TString& query, auto& session, bool expectOk = true) {
+        auto qResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        if (!qResult.IsSuccess()) {
+            Cerr << "Query failed, status: " << qResult.GetStatus() << ": " << qResult.GetIssues().ToString() << Endl;
+        }
+        UNIT_ASSERT(qResult.IsSuccess() == expectOk);
+    };
+
+    void ListDir(TKikimrRunner& kikimr, const TString& expectedEntry, const TString& unexpected, bool& found) {
+        auto res = kikimr.GetSchemeClient().ListDirectory("/Root").GetValueSync();
+        for (const auto& entry : res.GetChildren()) {
+            Cerr << "Scheme entry: " << entry << Endl;
+            if (!found && !expectedEntry.empty()) {
+                if (expectedEntry == entry.Name) {
+                    found = true;
+                    UNIT_ASSERT(entry.Type == NYdb::NScheme::ESchemeEntryType::Topic);
+                    return;
+                }
+            }
+            if (!unexpected.empty()) {
+                    UNIT_ASSERT(entry.Type != NYdb::NScheme::ESchemeEntryType::Topic
+                                || entry.Name != unexpected);
+            }
+        }
+        UNIT_ASSERT(found);
+    }
+
+    Y_UNIT_TEST(CreateAndDropTopic) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
+        TKikimrRunner kikimr(
+            serverSettings.SetWithSampleTables(false).SetEnableTempTables(true));
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        auto client = kikimr.GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+        auto pq = NYdb::NTopic::TTopicClient(kikimr.GetDriver(),
+                                             NYdb::NTopic::TTopicClientSettings().Database("/Root").AuthToken("root@builtin"));
+
+        {
+            const auto queryCreateTopic = Q_(R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/TempTopic` (CONSUMER cons1);
+            )");
+            RunQuery(queryCreateTopic, session);
+            Cerr << "Topic created\n";
+            auto desc = pq.DescribeTopic("/Root/TempTopic").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetConsumers().size(), 1);
+        }
+        {
+            const auto queryCreateTopic = Q_(R"(
+                --!syntax_v1
+                CREATE TOPIC IF NOT EXISTS `/Root/TempTopic` (CONSUMER cons1, CONSUMER cons2);
+            )");
+            RunQuery(queryCreateTopic, session);
+            Cerr << "Topic created\n";
+            auto desc = pq.DescribeTopic("/Root/TempTopic").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetConsumers().size(), 1);
+        }
+        {
+            const auto queryCreateTopic = Q_(R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/TempTopic` (CONSUMER cons1, CONSUMER cons2, CONSUMER cons3);
+            )");
+            RunQuery(queryCreateTopic, session, false);
+            Cerr << "Topic created\n";
+            auto desc = pq.DescribeTopic("/Root/TempTopic").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetConsumers().size(), 1);
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_v1
+                Drop TOPIC `/Root/TempTopic`;
+            )");
+            bool found = true;
+            RunQuery(query, session);
+            Cerr << "Topic dropped\n";
+            ListDir(kikimr, "", "TempTopic", found);
+        }
+        {
+            const auto query = Q_(R"(
+                --!syntax_v1
+                Drop TOPIC IF EXISTS `/Root/TempTopic`;
+            )");
+            RunQuery(query, session);
+        }
+        {
+            const auto query = Q_(R"(
+                --!syntax_v1
+                Drop TOPIC `/Root/TempTopic`;
+            )");
+            RunQuery(query, session, false);
+        }
+    }
+
+    Y_UNIT_TEST(CreateAndAlterTopic) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(
+            serverSettings.SetWithSampleTables(false).SetEnableTempTables(true));
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        auto client = kikimr.GetQueryClient(NYdb::NQuery::TClientSettings{}.AuthToken("root@builtin"));
+        auto session = client.GetSession().GetValueSync().GetSession();
+        auto pq = NYdb::NTopic::TTopicClient(kikimr.GetDriver(),
+                                             NYdb::NTopic::TTopicClientSettings().Database("/Root").AuthToken("root@builtin"));
+
+        {
+            const auto queryCreateTopic = Q_(R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/TempTopic` (CONSUMER cons1);
+            )");
+            RunQuery(queryCreateTopic, session);
+
+            auto desc = pq.DescribeTopic("/Root/TempTopic").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), 1);
+        }
+        {
+            const auto query = Q_(R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/TempTopic` SET (min_active_partitions = 10);
+            )");
+            RunQuery(query, session);
+            auto desc = pq.DescribeTopic("/Root/TempTopic").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), 10);
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/NoSuchTopic` SET (min_active_partitions = 10);
+            )");
+            bool found = true;
+            RunQuery(query, session, false);
+            ListDir(kikimr, "", "NoSuchTopic", found);
+            UNIT_ASSERT(!found);
+
+        }
+        {
+            const auto query = Q_(R"(
+                --!syntax_v1
+                ALTER TOPIC IF EXISTS `/Root/NoSuchTopic` SET (min_active_partitions = 10);
+            )");
+            bool found = false;
+            RunQuery(query, session);
+            ListDir(kikimr, "", "NoSuchTopic", found);
+            UNIT_ASSERT(!found);
         }
     }
 }

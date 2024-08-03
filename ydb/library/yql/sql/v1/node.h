@@ -564,7 +564,7 @@ namespace NSQLTranslationV1 {
         bool DoInit(TContext& ctx, ISource* src) override;
     public:
         TWinCumeDist(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args);
-    };    
+    };
 
     class TWinNTile final: public TWinAggrEmulation {
         TPtr DoClone() const final {
@@ -576,7 +576,7 @@ namespace NSQLTranslationV1 {
 
     private:
         TSourcePtr FakeSource;
-    };    
+    };
 
     class TWinLeadLag final: public TWinAggrEmulation {
         TPtr DoClone() const final {
@@ -1274,6 +1274,7 @@ namespace NSQLTranslationV1 {
     struct TCreateTopicParameters {
         TVector<TTopicConsumerDescription> Consumers;
         TTopicSettings TopicSettings;
+        bool ExistingOk;
     };
 
     struct TAlterTopicParameters {
@@ -1281,6 +1282,11 @@ namespace NSQLTranslationV1 {
         THashMap<TString, TTopicConsumerDescription> AlterConsumers;
         TVector<TIdentifier> DropConsumers;
         TTopicSettings TopicSettings;
+        bool MissingOk;
+    };
+
+    struct TDropTopicParameters {
+        bool MissingOk;
     };
 
     TString IdContent(TContext& ctx, const TString& str);
@@ -1415,7 +1421,8 @@ namespace NSQLTranslationV1 {
                               TScopedStatePtr scoped);
     TNodePtr BuildAlterTopic(TPosition pos, const TTopicRef& tr, const TAlterTopicParameters& params,
                               TScopedStatePtr scoped);
-    TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& topic, TScopedStatePtr scoped);
+    TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& topic, const TDropTopicParameters& params,
+                            TScopedStatePtr scoped);
 
     template<class TContainer>
     TMaybe<TString> FindMistypeIn(const TContainer& container, const TString& name) {

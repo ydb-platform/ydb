@@ -176,10 +176,10 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
 
 void TColumnShard::Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& ev, const TActorContext& ctx) {
     if (auto writeTx =
-            InFlightReadsTracker.Ping(this, NYDBTest::TControllers::GetColumnShardController()->GetReadTimeoutClean(MaxReadStaleness))) {
+            InFlightReadsTracker.Ping(this, 0.6 * GetMaxReadStaleness())) {
         Execute(writeTx.release(), ctx);
     }
-    ctx.Schedule(0.3 * MaxReadStaleness, new TEvPrivate::TEvPingSnapshotsUsage());
+    ctx.Schedule(0.3 * GetMaxReadStaleness(), new TEvPrivate::TEvPingSnapshotsUsage());
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx) {
@@ -191,10 +191,6 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
         SendWaitPlanStep(GetOutdatedStep());
 
         SendPeriodicStats();
-        if (auto writeTx =
-                InFlightReadsTracker.Ping(this, NYDBTest::TControllers::GetColumnShardController()->GetReadTimeoutClean(MaxReadStaleness))) {
-            Execute(writeTx.release(), ctx);
-        }
         ctx.Schedule(PeriodicWakeupActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
     }
 }

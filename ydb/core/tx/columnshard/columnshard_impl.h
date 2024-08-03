@@ -469,7 +469,7 @@ private:
     TLimits Limits;
     NOlap::TNormalizationController NormalizerController;
     NDataShard::TSysLocks SysLocks;
-    const TDuration MaxReadStaleness;
+    static TDuration GetMaxReadStaleness();
 
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();

@@ -189,7 +189,7 @@ runs:
         fi
 
         if [ true = ${{ inputs.run_tests }} ]; then
-          params+=(-A)
+          params+=(-A --skip-test-console-report)
         fi
 
         params+=(

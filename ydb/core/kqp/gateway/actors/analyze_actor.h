@@ -8,6 +8,16 @@
 
 namespace NKikimr::NKqp {
 
+
+struct TEvAnalyzePrivate {
+    enum EEv {
+        EvAnalyzeStatusCheck = EventSpaceBegin(TEvents::ES_PRIVATE),
+        EvEnd
+    };
+
+    struct TEvAnalyzeStatusCheck : public TEventLocal<TEvAnalyzeStatusCheck, EvAnalyzeStatusCheck> {};
+};
+
 class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> { 
 public:
     TAnalyzeActor(TString tablePath, TVector<TString> columns, NThreading::TPromise<NYql::IKikimrGateway::TGenericResult> promise)
@@ -22,6 +32,8 @@ public:
         switch(ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             HFunc(NStat::TEvStatistics::TEvAnalyzeResponse, Handle);
+            HFunc(NStat::TEvStatistics::TEvAnalyzeStatusResponse, Handle);
+            HFunc(TEvAnalyzePrivate::TEvAnalyzeStatusCheck, Handle);
             default: 
                 HandleUnexpectedEvent(ev->GetTypeRewrite());
         }
@@ -30,17 +42,24 @@ public:
 private:
     void Handle(NStat::TEvStatistics::TEvAnalyzeResponse::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(NStat::TEvStatistics::TEvAnalyzeStatusResponse::TPtr& ev, const TActorContext& ctx);
+
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
+
+    void Handle(TEvAnalyzePrivate::TEvAnalyzeStatusCheck::TPtr& ev, const TActorContext& ctx);
 
     void HandleUnexpectedEvent(ui32 typeRewrite);
 
     void SendStatisticsAggregatorAnalyze(const NSchemeCache::TSchemeCacheNavigate::TEntry&, const TActorContext&);
+
+    void SendAnalyzeStatus();
 
 private:
     TString TablePath;
     TVector<TString> Columns;
     NThreading::TPromise<NYql::IKikimrGateway::TGenericResult> Promise;
     // For Statistics Aggregator
+    std::optional<ui64> StatisticsAggregatorId;
     TPathId PathId;
 };
 

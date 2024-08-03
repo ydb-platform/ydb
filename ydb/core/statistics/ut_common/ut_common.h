@@ -18,7 +18,7 @@ NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSettings(
     
 class TTestEnv {
 public:
-    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 1, ui32 storagePools = 1);
+    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 1, ui32 storagePools = 1, bool useRealThreads = false);
     ~TTestEnv();
 
     Tests::TServer& GetServer() const {
@@ -74,7 +74,7 @@ void CreateUniformTable(TTestEnv& env, const TString& databaseName, const TStrin
 void CreateColumnStoreTable(TTestEnv& env, const TString& databaseName, const TString& tableName, int shardCount);
 void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableName);
 
-std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, TPathId pathId);
+std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, TPathId pathId, ui64 columnTag=1);
 void ValidateCountMin(TTestActorRuntime& runtime, TPathId pathId);
 void ValidateCountMinAbsense(TTestActorRuntime& runtime, TPathId pathId);
 

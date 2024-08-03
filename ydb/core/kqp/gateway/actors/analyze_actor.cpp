@@ -29,12 +29,58 @@ void TAnalyzeActor::Bootstrap() {
     Become(&TAnalyzeActor::StateWork);
 }
 
+void TAnalyzeActor::SendAnalyzeStatus() {
+    Y_ABORT_UNLESS(StatisticsAggregatorId.has_value());
+
+    auto getStatus = std::make_unique<NStat::TEvStatistics::TEvAnalyzeStatus>();
+    auto& record = getStatus->Record;
+    PathIdFromPathId(PathId, record.MutablePathId());
+
+    Send(
+        MakePipePerNodeCacheID(false),
+        new TEvPipeCache::TEvForward(getStatus.release(), StatisticsAggregatorId.value(), true)
+    );
+}
+
 void TAnalyzeActor::Handle(NStat::TEvStatistics::TEvAnalyzeResponse::TPtr& ev, const TActorContext& ctx) {
-    NYql::IKikimrGateway::TGenericResult result;
-    result.SetSuccess();
-    Promise.SetValue(std::move(result));
-    
-    this->Die(ctx);
+    SendAnalyzeStatus();
+}
+
+void TAnalyzeActor::Handle(TEvAnalyzePrivate::TEvAnalyzeStatusCheck::TPtr& ev, const TActorContext& ctx) {
+    SendAnalyzeStatus();
+}
+
+void TAnalyzeActor::Handle(NStat::TEvStatistics::TEvAnalyzeStatusResponse::TPtr& ev, const TActorContext& ctx) {
+    auto& record = ev->Get()->Record;
+    switch (record.GetStatus()) {
+        case NKikimrStat::TEvAnalyzeStatusResponse::STATUS_UNSPECIFIED: {
+            Promise.SetValue(
+                NYql::NCommon::ResultFromError<NYql::IKikimrGateway::TGenericResult>(
+                    YqlIssue(
+                        {}, NYql::TIssuesIds::UNEXPECTED, 
+                        TStringBuilder() << "Statistics Aggregator unspecified error"
+                    )
+                )
+            );
+            this->Die(ctx);
+            return;
+        }
+        case NKikimrStat::TEvAnalyzeStatusResponse::STATUS_NO_OPERATION: {
+            NYql::IKikimrGateway::TGenericResult result;
+            result.SetSuccess();
+            Promise.SetValue(std::move(result));
+            
+            this->Die(ctx);
+        }
+        case NKikimrStat::TEvAnalyzeStatusResponse::STATUS_ENQUEUED: {
+            Schedule(TDuration::Seconds(10), new TEvAnalyzePrivate::TEvAnalyzeStatusCheck());
+            return;
+        }
+        case NKikimrStat::TEvAnalyzeStatusResponse::STATUS_IN_PROGRESS: {
+            Schedule(TDuration::Seconds(5), new TEvAnalyzePrivate::TEvAnalyzeStatusCheck());
+            return;
+        }
+    }
 }
 
 void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
@@ -113,7 +159,9 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
 }
 
 void TAnalyzeActor::SendStatisticsAggregatorAnalyze(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TActorContext& ctx) {
-    Y_ASSERT(entry.DomainInfo->Params.HasStatisticsAggregator());
+    Y_ABORT_UNLESS(entry.DomainInfo->Params.HasStatisticsAggregator());
+
+    StatisticsAggregatorId = entry.DomainInfo->Params.GetStatisticsAggregator();
 
     auto analyzeRequest = std::make_unique<NStat::TEvStatistics::TEvAnalyze>();
     auto& record = analyzeRequest->Record;

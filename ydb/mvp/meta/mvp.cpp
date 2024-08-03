@@ -186,7 +186,7 @@ void TMVP::TryGetGenericOptionsFromConfig(
     TString& sslCertificateFile,
     bool& useStderr,
     bool& mlock,
-    NMvp::EAccessServiceType& accessServiceType
+    NMvp::EAccessServiceType& /*accessServiceType*/
 ) {
     if (!config["generic"]) {
         return;

@@ -43,10 +43,16 @@ void TAnalyzeActor::SendAnalyzeStatus() {
 }
 
 void TAnalyzeActor::Handle(NStat::TEvStatistics::TEvAnalyzeResponse::TPtr& ev, const TActorContext& ctx) {
+    Y_UNUSED(ev);
+    Y_UNUSED(ctx);
+
     SendAnalyzeStatus();
 }
 
 void TAnalyzeActor::Handle(TEvAnalyzePrivate::TEvAnalyzeStatusCheck::TPtr& ev, const TActorContext& ctx) {
+    Y_UNUSED(ev);
+    Y_UNUSED(ctx);
+    
     SendAnalyzeStatus();
 }
 

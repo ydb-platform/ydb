@@ -437,10 +437,16 @@ message TStorageGroupInfo {
     uint64 Used = 13;
     uint64 Limit = 14;
     uint64 Available = 15;
-    double Usage = 16;
+    float Usage = 16;
     uint64 Read = 17;
     uint64 Write = 18;
+    float DiskSpaceUsage = 19;
     repeated TStorageVDisk VDisks = 20;
+}
+
+message TStorageGroupGroup {
+    string GroupName = 1;
+    uint64 GroupCount = 2;
 }
 
 message TStoragePoolInfo {
@@ -467,15 +473,18 @@ message TStorageInfo {
 }
 
 message TStorageGroupsInfo {
-    uint64 Version = 1;
-    optional uint64 TotalGroups = 2;
-    optional uint64 FoundGroups = 3;
-    optional uint64 FieldsAvailable = 4;
-    optional uint64 FieldsRequired = 5;
+    uint32 Version = 1;
+    optional uint32 TotalGroups = 2;
+    optional uint32 FoundGroups = 3;
+    optional uint32 FieldsAvailable = 4;
+    optional uint32 FieldsRequired = 5;
     optional bool NeedFilter = 6;
-    optional bool NeedSort = 7;
-    optional bool NeedLimit = 8;
-    repeated TStorageGroupInfo StorageGroups = 10;
+    optional bool NeedGroup = 7;
+    optional bool NeedSort = 8;
+    optional bool NeedLimit = 9;
+    repeated string Problems = 10;
+    repeated TStorageGroupInfo StorageGroups = 11;
+    repeated TStorageGroupGroup StorageGroupGroups = 12;
 }
 
 message TStorageUsageStats {

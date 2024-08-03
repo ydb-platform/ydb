@@ -86,6 +86,11 @@ void TPortionsIndex::RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
             Points.erase(itTo);
         }
     }
+    if (CountMemoryUsages.size()) {
+        Counters.MinReadBytes->SetValue(CountMemoryUsages.rbegin()->first);
+    } else {
+        Counters.MinReadBytes->SetValue(0);
+    }
 }
 
 void TPortionsIndex::AddPortion(const std::shared_ptr<TPortionInfo>& p) {
@@ -104,6 +109,11 @@ void TPortionsIndex::AddPortion(const std::shared_ptr<TPortionInfo>& p) {
             break;
         }
         AFL_VERIFY(++it != Points.end());
+    }
+    if (CountMemoryUsages.size()) {
+        Counters.MinReadBytes->SetValue(CountMemoryUsages.rbegin()->first);
+    } else {
+        Counters.MinReadBytes->SetValue(0);
     }
 }
 

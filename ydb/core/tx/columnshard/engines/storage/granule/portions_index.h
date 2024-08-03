@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 
 namespace NKikimr::NOlap {
@@ -75,6 +76,7 @@ private:
     std::map<NArrow::TReplaceKey, TPortionsPKPoint> Points;
     std::map<ui64, i32> CountMemoryUsages;
     const TGranuleMeta& Owner;
+    const NColumnShard::TPortionsIndexCounters& Counters;
 
     std::map<NArrow::TReplaceKey, TPortionsPKPoint>::iterator InsertPoint(const NArrow::TReplaceKey& key) {
         auto it = Points.find(key);
@@ -99,8 +101,9 @@ private:
     }
 
 public:
-    TPortionsIndex(const TGranuleMeta& owner)
+    TPortionsIndex(const TGranuleMeta& owner, const NColumnShard::TPortionsIndexCounters& counters)
         : Owner(owner)
+        , Counters(counters)
     {
 
     }

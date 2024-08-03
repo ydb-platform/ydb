@@ -1431,7 +1431,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         case TRule_sql_stmt_core::kAltSqlStmtCore51: {
             // analyze_stmt: ANALYZE table_ref
             Ctx.BodyPart();
-            const auto& rule = core.GetAlt_sql_stmt_core48().GetRule_analyze_stmt1();
+            const auto& rule = core.GetAlt_sql_stmt_core51().GetRule_analyze_stmt1();
 
             if (!rule.GetRule_analyze_table_list2().GetBlock2().empty()) {
                 Error() << "ANALYZE with multitables hasn't been implemented yet";

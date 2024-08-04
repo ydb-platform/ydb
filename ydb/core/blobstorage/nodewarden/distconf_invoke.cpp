@@ -157,6 +157,9 @@ namespace NKikimr::NStorage {
         void Handle(TEvNodeConfigGather::TPtr ev) {
             auto& record = ev->Get()->Record;
             STLOG(PRI_DEBUG, BS_NODE, NWDC44, "Handle(TEvNodeConfigGather)", (SelfId, SelfId()), (Record, record));
+            if (record.GetAborted()) {
+                return FinishWithError(TResult::ERROR, "scatter task was aborted due to loss of quorum or other error");
+            }
             switch (record.GetResponseCase()) {
                 case TEvGather::kProposeStorageConfig: {
                     std::unique_ptr<TEvNodeConfigInvokeOnRootResult> ev;

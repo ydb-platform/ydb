@@ -377,7 +377,7 @@ bool CheckJoinColumns(const TExprBase& node) {
 }
 
 TExprBase DqRewriteEquiJoin(const TExprBase& node, EHashJoinMode mode, bool useCBO, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
-    int dummyJoinCounter;
+    int dummyJoinCounter = 0;
     return DqRewriteEquiJoin(node, mode, useCBO, ctx, typeCtx, dummyJoinCounter);
 }
 

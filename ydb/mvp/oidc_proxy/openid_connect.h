@@ -26,7 +26,7 @@ struct TOpenIdConnectSettings {
     TString ClientSecret;
     std::vector<TString> AllowedProxyHosts;
 
-    NMVP::EAuthProfile AuthProfile = NMVP::EAuthProfile::Yandex;
+    NMvp::EAccessServiceType AccessServiceType = NMvp::yandex_v2;
     TString AuthEndpoint = DEFAULT_AUTH_ENDPOINT;
     TString TokenEndpoint = DEFAULT_TOKEN_ENDPOINT;
     TString ExchangeEndpoint = DEFAULT_EXCHANGE_ENDPOINT;

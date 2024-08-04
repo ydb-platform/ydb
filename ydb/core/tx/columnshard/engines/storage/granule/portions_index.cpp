@@ -11,7 +11,7 @@ TPortionsIndex::TPortionIntervals TPortionsIndex::GetIntervalFeatures(const TPor
     TPortionIntervals portionExcludeIntervals;
     while (true) {
         std::optional<NArrow::TReplaceKey> nextKey;
-        for (auto&& p : itFrom->second.GetPortionIds()) {
+        for (auto&& [p, _] : itFrom->second.GetPortionIds()) {
             if (skipPortions.contains(p)) {
                 continue;
             }
@@ -55,9 +55,12 @@ void TPortionsIndex::RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
     auto itTo = Points.find(p->IndexKeyEnd());
     AFL_VERIFY(itTo != Points.end());
     {
+        const ui64 minMemoryRead = p->GetMinMemoryForReadColumns({});
         auto it = itFrom;
         while (true) {
-            it->second.RemoveContained(p->GetPortionId());
+            RemoveFromMemoryUsageControl(it->second.GetMinMemoryRead());
+            it->second.RemoveContained(p->GetPortionId(), minMemoryRead);
+            ++CountMemoryUsages[it->second.GetMinMemoryRead()];
             if (it == itTo) {
                 break;
             }
@@ -67,18 +70,26 @@ void TPortionsIndex::RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
     if (itFrom != itTo) {
         itFrom->second.RemoveStart(p);
         if (itFrom->second.IsEmpty()) {
+            RemoveFromMemoryUsageControl(itFrom->second.GetMinMemoryRead());
             Points.erase(itFrom);
         }
         itTo->second.RemoveFinish(p);
         if (itTo->second.IsEmpty()) {
+            RemoveFromMemoryUsageControl(itTo->second.GetMinMemoryRead());
             Points.erase(itTo);
         }
     } else {
         itTo->second.RemoveStart(p);
         itTo->second.RemoveFinish(p);
         if (itTo->second.IsEmpty()) {
+            RemoveFromMemoryUsageControl(itTo->second.GetMinMemoryRead());
             Points.erase(itTo);
         }
+    }
+    if (CountMemoryUsages.size()) {
+        Counters.MinReadBytes->SetValue(CountMemoryUsages.rbegin()->first);
+    } else {
+        Counters.MinReadBytes->SetValue(0);
     }
 }
 
@@ -89,12 +100,20 @@ void TPortionsIndex::AddPortion(const std::shared_ptr<TPortionInfo>& p) {
     itTo->second.AddFinish(p);
 
     auto it = itFrom;
+    const ui64 minMemoryRead = p->GetMinMemoryForReadColumns({});
     while (true) {
-        it->second.AddContained(p->GetPortionId());
+        RemoveFromMemoryUsageControl(it->second.GetMinMemoryRead());
+        it->second.AddContained(p->GetPortionId(), minMemoryRead);
+        ++CountMemoryUsages[it->second.GetMinMemoryRead()];
         if (it == itTo) {
             break;
         }
         AFL_VERIFY(++it != Points.end());
+    }
+    if (CountMemoryUsages.size()) {
+        Counters.MinReadBytes->SetValue(CountMemoryUsages.rbegin()->first);
+    } else {
+        Counters.MinReadBytes->SetValue(0);
     }
 }
 

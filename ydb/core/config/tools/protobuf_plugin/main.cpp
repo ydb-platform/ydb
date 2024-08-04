@@ -44,8 +44,7 @@ private:
         return name;
     }
 
-    TString ConstructFullFieldPath(const TDeque<const FieldDescriptor*>& fieldPath, const FieldDescriptor* field) const {
-
+    TString ConstructFullFieldPath(const TDeque<const FieldDescriptor*>& fieldPath, const FieldDescriptor* /*field*/) const {
         TVector<TString> path;
         path.push_back("");
         for (size_t i = 1; i < fieldPath.size(); ++i) {

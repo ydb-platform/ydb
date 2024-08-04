@@ -214,7 +214,7 @@ jobs:
         fetch-depth: 2
     - name: Clean ya cache
       shell: bash
-      run: ./ya gc cache
+      run: rm -rf ~/.ya
     - name: Setup ydb access
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
 import configparser
+import datetime
 import os
 import ydb
-import datetime
 
 
 dir = os.path.dirname(__file__)
@@ -13,7 +13,6 @@ config.read(config_file_path)
 
 DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
 DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
-
 
 def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type):
     if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
@@ -46,8 +45,7 @@ def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type):
             and status != 'skipped'
         );
 
-        select full_name,test_name,build_type, commit, branch, run_timestamp, status, status_description,rn, 
-        COUNT_IF(status = 'passed') over (PARTITION BY test_name) as count_of_passed
+        select full_name,test_name,build_type, commit, branch, run_timestamp, status, status_description,rn
         from  $tests
         WHERE rn <= $rn_max
         ORDER BY test_name, run_timestamp;  
@@ -65,27 +63,32 @@ def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type):
 
         with session.transaction() as transaction:
             prepared_query = session.prepare(query)
-            query_params = {
-                "$test_names": test_names_array,
-                "$rn_max": last_n_runs_of_test_amount,
-                "$build_type": build_type,
-            }
-
-            result_set = session.transaction(ydb.SerializableReadWrite()).execute(
-                prepared_query, parameters=query_params, commit_tx=True
-            )
 
             results = {}
-            for row in result_set[0].rows:
-                if not row["full_name"].decode("utf-8") in results:
-                    results[row["full_name"].decode("utf-8")] = {}
+            batch_size = 100
+            for start in range(0, len(test_names_array), batch_size):
+                test_names_batch = test_names_array[start:start + batch_size]
 
-                results[row["full_name"].decode("utf-8")][row["run_timestamp"]] = {
-                    "status": row["status"],
-                    "commit": row["commit"],
-                    "datetime": datetime.datetime.fromtimestamp(int(row["run_timestamp"] / 1000000)).strftime("%H:%m %B %d %Y"),
-                    "count_of_passed": row["count_of_passed"],
+                query_params = {
+                    "$test_names": test_names_batch,
+                    "$rn_max": last_n_runs_of_test_amount,
+                    "$build_type": build_type,
                 }
+
+                result_set = session.transaction(ydb.SerializableReadWrite()).execute(
+                    prepared_query, parameters=query_params, commit_tx=True
+                )
+        
+                for row in result_set[0].rows:
+                    if not row["full_name"].decode("utf-8") in results:
+                        results[row["full_name"].decode("utf-8")] = {}
+
+                    results[row["full_name"].decode("utf-8")][row["run_timestamp"]] = {
+                        "status": row["status"],
+                        "commit": row["commit"],
+                        "datetime": datetime.datetime.fromtimestamp(int(row["run_timestamp"] / 1000000)).strftime("%H:%m %B %d %Y"),
+                        "status_description": row["status_description"],
+                    }
             return results
 
 

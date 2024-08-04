@@ -58,8 +58,8 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
         }
 
         std::unordered_map<ui32, std::vector<ui64>> nonLocalTablets;
-
         Self->TabletsForReqDistribution.clear();
+
         for (auto& tablet : Record.GetFailedTablets()) {
             auto error = tablet.GetError();
             switch (error) {
@@ -82,6 +82,7 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
                 } else if (Action != EAction::SendReqDistribution) {
                     nonLocalTablets[nodeId].push_back(tablet.GetTabletId());
                 }
+                break;
             }
         }
 

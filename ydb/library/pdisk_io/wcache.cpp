@@ -668,9 +668,15 @@ std::optional<TDriveData> GetDriveData(const TString &path, TStringStream *outDe
     try {
         TFile f(path, OpenExisting | RdOnly);
         TDriveData data;
-        long size = 0;
-        if (ioctl(f.GetHandle(), BLKGETSIZE, &size) == 0) {
-            data.Size = size << 9;
+        if (off64_t off = lseek64(f.GetHandle(), 0, SEEK_END); off != (off64_t)-1) {
+            data.Size = off;
+        } else {
+            long size = 0;
+            if (!ioctl(f.GetHandle(), BLKGETSIZE64, &size)) {
+                data.Size = size;
+            } else if (!ioctl(f.GetHandle(), BLKGETSIZE, &size)) {
+                data.Size = size << 9;
+            }
         }
         EWriteCacheResult res = GetWriteCache(f.GetHandle(), path, &data, outDetails);
         if (res == EWriteCacheResult::WriteCacheResultOk) {

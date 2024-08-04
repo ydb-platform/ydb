@@ -74,7 +74,6 @@ private:
     const ui64 StatType;
     const std::vector<ui32> ColumnTags;
     const std::vector<TString> Data;
-
 public:
     TSaveStatisticsQuery(const TPathId& pathId, ui64 statType,
         std::vector<ui32>&& columnTags, std::vector<TString>&& data)

@@ -92,6 +92,7 @@ SRCS(
     long_tx_service.proto
     maintenance.proto
     memory_controller_config.proto
+    memory_stats.proto
     metrics.proto
     minikql_engine.proto
     mon.proto

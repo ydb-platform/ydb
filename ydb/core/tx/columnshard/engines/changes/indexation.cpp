@@ -36,9 +36,7 @@ void TInsertColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnSha
         if (!DataToIndex.empty()) {
             self->UpdateInsertTableCounters();
         }
-        self->IncCounter(NColumnShard::COUNTER_INDEXING_BLOBS_WRITTEN, context.BlobsWritten);
-        self->IncCounter(NColumnShard::COUNTER_INDEXING_BYTES_WRITTEN, context.BytesWritten);
-        self->IncCounter(NColumnShard::COUNTER_INDEXING_TIME, context.Duration.MilliSeconds());
+        self->Counters.GetTabletCounters()->OnInsertionWriteIndexCompleted(context.BlobsWritten, context.BytesWritten, context.Duration);
     }
 }
 
@@ -53,7 +51,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Batch);
 
 public:
-    TBatchInfo(const std::shared_ptr<NArrow::TGeneralContainer>& batch, const NEvWrite::EModificationType modificationType)
+    TBatchInfo(const std::shared_ptr<NArrow::TGeneralContainer>& batch, const NEvWrite::EModificationType /*modificationType*/)
         : Batch(batch) {
     }
 };
@@ -217,17 +215,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
     Y_ABORT_UNLESS(!DataToIndex.empty());
     Y_ABORT_UNLESS(AppendedPortions.empty());
 
-    auto maxSnapshot = TSnapshot::Zero();
-    for (auto& inserted : DataToIndex) {
-        TSnapshot insertSnap = inserted.GetSnapshot();
-        Y_ABORT_UNLESS(insertSnap.Valid());
-        if (insertSnap > maxSnapshot) {
-            maxSnapshot = insertSnap;
-        }
-    }
-    Y_ABORT_UNLESS(maxSnapshot.Valid());
-
-    auto resultSchema = context.SchemaVersions.GetSchema(maxSnapshot);
+    auto resultSchema = context.SchemaVersions.GetLastSchema();
     Y_ABORT_UNLESS(resultSchema->GetIndexInfo().IsSorted());
 
     TPathesData pathBatches(resultSchema);

@@ -21,9 +21,9 @@ void TMemTableMemoryConsumer::SetConsumption(ui64 consumption) {
 
 
 TMemTableMemoryConsumersCollection::TMemTableMemoryConsumersCollection(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, TIntrusivePtr<NMemory::IMemoryConsumer> memoryConsumer)
-    : MemTableTotalBytesCounter(counters->GetCounter("Consumer/MemTable/TotalBytes"))
-    , MemTableCompactingBytesCounter(counters->GetCounter("Consumer/MemTable/CompactingBytes"))
-    , MemTableCompactedBytesCounter(counters->GetCounter("Consumer/MemTable/CompactedBytes", true))
+    : MemTableTotalBytesCounter(counters->GetCounter("Consumer/MemTable/Total"))
+    , MemTableCompactingBytesCounter(counters->GetCounter("Consumer/MemTable/Compacting"))
+    , MemTableCompactedBytesCounter(counters->GetCounter("Consumer/MemTable/Compacted", true))
     , MemoryConsumer(std::move(memoryConsumer))
 {}
 

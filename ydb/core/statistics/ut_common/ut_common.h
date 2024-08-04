@@ -3,6 +3,10 @@
 #include <ydb/core/testlib/test_client.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+namespace NKikimrStat {
+    class TTable;
+}
+
 namespace NKikimr {
 namespace NStat {
 
@@ -74,8 +78,17 @@ std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, TPa
 void ValidateCountMin(TTestActorRuntime& runtime, TPathId pathId);
 void ValidateCountMinAbsense(TTestActorRuntime& runtime, TPathId pathId);
 
-void Analyze(TTestActorRuntime& runtime, const std::vector<TPathId>& pathIds, ui64 saTabletId);
-void AnalyzeTable(TTestActorRuntime& runtime, const TPathId& pathId, ui64 shardTabletId);
+struct TAnalyzedTable {
+    TPathId PathId;
+    std::vector<ui32> ColumnTags;
+    
+    TAnalyzedTable(const TPathId& pathId);
+    TAnalyzedTable(const TPathId& pathId, const std::vector<ui32>& columnTags);
+    void ToProto(NKikimrStat::TTable& tableProto) const;
+};
+
+void Analyze(TTestActorRuntime& runtime, const std::vector<TAnalyzedTable>& table, ui64 saTabletId);
+void AnalyzeTable(TTestActorRuntime& runtime, const TAnalyzedTable& table, ui64 shardTabletId);
 
 } // namespace NStat
 } // namespace NKikimr

@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 
 namespace NKikimr::NOlap {
@@ -11,22 +12,25 @@ class TPortionsPKPoint {
 private:
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Start;
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Finish;
-    THashSet<ui64> PortionIds;
+    THashMap<ui64, ui64> PortionIds;
+    YDB_READONLY(ui64, MinMemoryRead, 0);
+
 public:
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetStart() const {
         return Start;
     }
 
     void ProvidePortions(const TPortionsPKPoint& source) {
-        for (auto&& i : source.PortionIds) {
+        MinMemoryRead = 0;
+        for (auto&& [i, mem] : source.PortionIds) {
             if (source.Finish.contains(i)) {
                 continue;
             }
-            AFL_VERIFY(PortionIds.emplace(i).second);
+            AddContained(i, mem);
         }
     }
 
-    const THashSet<ui64>& GetPortionIds() const {
+    const THashMap<ui64, ui64>& GetPortionIds() const {
         return PortionIds;
     }
 
@@ -34,12 +38,18 @@ public:
         return Start.empty() && Finish.empty();
     }
 
-    void AddContained(const ui64 portionId) {
-        AFL_VERIFY(PortionIds.emplace(portionId).second);
+    void AddContained(const ui32 portionId, const ui64 minMemoryRead) {
+        MinMemoryRead += minMemoryRead;
+        AFL_VERIFY(PortionIds.emplace(portionId, minMemoryRead).second);
     }
 
-    void RemoveContained(const ui64 portionId) {
+    void RemoveContained(const ui32 portionId, const ui64 minMemoryRead) {
+        AFL_VERIFY(minMemoryRead <= MinMemoryRead);
+        MinMemoryRead -= minMemoryRead;
         AFL_VERIFY(PortionIds.erase(portionId));
+        if (PortionIds.empty()) {
+            AFL_VERIFY(!MinMemoryRead);
+        }
     }
 
     void RemoveStart(const std::shared_ptr<TPortionInfo>& p) {
@@ -64,7 +74,9 @@ public:
 class TPortionsIndex {
 private:
     std::map<NArrow::TReplaceKey, TPortionsPKPoint> Points;
+    std::map<ui64, i32> CountMemoryUsages;
     const TGranuleMeta& Owner;
+    const NColumnShard::TPortionsIndexCounters& Counters;
 
     std::map<NArrow::TReplaceKey, TPortionsPKPoint>::iterator InsertPoint(const NArrow::TReplaceKey& key) {
         auto it = Points.find(key);
@@ -75,15 +87,33 @@ private:
                 --itPred;
                 it->second.ProvidePortions(itPred->second);
             }
+            ++CountMemoryUsages[it->second.GetMinMemoryRead()];
         }
         return it;
     }
 
+    void RemoveFromMemoryUsageControl(const ui64 mem) {
+        auto it = CountMemoryUsages.find(mem);
+        AFL_VERIFY(it != CountMemoryUsages.end())("mem", mem);
+        if (!--it->second) {
+            CountMemoryUsages.erase(it);
+        }
+    }
+
 public:
-    TPortionsIndex(const TGranuleMeta& owner)
+    TPortionsIndex(const TGranuleMeta& owner, const NColumnShard::TPortionsIndexCounters& counters)
         : Owner(owner)
+        , Counters(counters)
     {
 
+    }
+
+    ui64 GetMinMemoryRead() const {
+        if (CountMemoryUsages.empty()) {
+            return 0;
+        } else {
+            return CountMemoryUsages.rbegin()->second;
+        }
     }
 
     const std::map<NArrow::TReplaceKey, TPortionsPKPoint>& GetPoints() const {

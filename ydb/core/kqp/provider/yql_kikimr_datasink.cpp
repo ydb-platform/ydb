@@ -1020,11 +1020,17 @@ public:
                             .Ptr();
                     }
                 } else if (mode == "analyze") {
+                    auto columns = Build<TCoAtomList>(ctx, node->Pos());
+
+                    for (const auto& column: settings.Columns.Cast().Ptr()->Children()) {
+                        columns.Add(column);
+                    }
+
                     return Build<TKiAnalyzeTable>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Table().Build(key.GetTablePath())
-                        .Columns(settings.Columns.Cast())
+                        .Columns(columns.Done())
                         .Done()
                         .Ptr();
                 } else {
@@ -1191,7 +1197,7 @@ public:
                         .Topic().Build(key.GetTopicPath())
                         .Settings(settings.Other)
                         .Done()
-                        .Ptr(); 
+                        .Ptr();
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Unknown operation type for topic"));
                     return nullptr;

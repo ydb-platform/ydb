@@ -503,7 +503,7 @@
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "Table", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "Columns", "Type": "TExprList"}
+                {"Index": 3, "Name": "Columns", "Type": "TCoAtomList"}
             ]
         }
     ]

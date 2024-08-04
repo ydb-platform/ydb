@@ -52,7 +52,7 @@ void TAnalyzeActor::Handle(NStat::TEvStatistics::TEvAnalyzeResponse::TPtr& ev, c
 void TAnalyzeActor::Handle(TEvAnalyzePrivate::TEvAnalyzeStatusCheck::TPtr& ev, const TActorContext& ctx) {
     Y_UNUSED(ev);
     Y_UNUSED(ctx);
-    
+
     SendAnalyzeStatus();
 }
 
@@ -77,6 +77,7 @@ void TAnalyzeActor::Handle(NStat::TEvStatistics::TEvAnalyzeStatusResponse::TPtr&
             Promise.SetValue(std::move(result));
             
             this->Die(ctx);
+            return;
         }
         case NKikimrStat::TEvAnalyzeStatusResponse::STATUS_ENQUEUED: {
             Schedule(TDuration::Seconds(10), new TEvAnalyzePrivate::TEvAnalyzeStatusCheck());

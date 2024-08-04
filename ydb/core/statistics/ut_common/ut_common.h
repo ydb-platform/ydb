@@ -74,7 +74,7 @@ void CreateUniformTable(TTestEnv& env, const TString& databaseName, const TStrin
 void CreateColumnStoreTable(TTestEnv& env, const TString& databaseName, const TString& tableName, int shardCount);
 void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableName);
 
-std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, TPathId pathId, ui64 columnTag=1);
+std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, TPathId pathId, ui64 columnTag = 1);
 void ValidateCountMin(TTestActorRuntime& runtime, TPathId pathId);
 void ValidateCountMinAbsense(TTestActorRuntime& runtime, TPathId pathId);
 

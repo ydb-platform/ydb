@@ -54,10 +54,6 @@ private:
 
     std::shared_ptr<NActualizer::TController> ActualizationController;
 
-    static TDuration GetRemovedPortionLivetime();
-
-    const TDuration RemovedPortionLivetime = GetRemovedPortionLivetime();
-
 public:
     const std::shared_ptr<NActualizer::TController>& GetActualizationController() const {
         return ActualizationController;
@@ -173,7 +169,7 @@ public:
     }
 
     void AddCleanupPortion(const TPortionInfo& info) {
-        CleanupPortions[info.GetRemoveSnapshotVerified().GetPlanInstant() + RemovedPortionLivetime].emplace_back(info);
+        CleanupPortions[info.GetRemoveSnapshotVerified().GetPlanInstant()].emplace_back(info);
     }
     void AddShardingInfo(const TGranuleShardingInfo& shardingInfo) {
         VersionedIndex.AddShardingInfo(shardingInfo);

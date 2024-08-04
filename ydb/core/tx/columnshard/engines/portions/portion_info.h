@@ -444,10 +444,7 @@ public:
             return false;
         }
 
-        bool visible = (Meta.RecordSnapshotMin <= snapshot);
-        if (visible && RemoveSnapshot.Valid()) {
-            visible = snapshot < RemoveSnapshot;
-        }
+        const bool visible = (Meta.RecordSnapshotMin <= snapshot) && (!RemoveSnapshot.Valid() || snapshot < RemoveSnapshot);
 
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "IsVisible")("analyze_portion", DebugString())("visible", visible)("snapshot", snapshot.DebugString());
         return visible;

@@ -225,6 +225,14 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
         }
         Self->SharingSessionsManager = local;
     }
+    { 
+        TMemoryProfileGuard g("TTxInit/TInFlightReadsTracker");
+        TInFlightReadsTracker local(Self->StoragesManager, Self->Counters.GetRequestsTracingCounters());
+        if (!local.LoadFromDatabase(txc.DB)) {
+            return false;
+        }
+        Self->InFlightReadsTracker = std::move(local);
+    }
 
     Self->UpdateInsertTableCounters();
     Self->UpdateIndexCounters();

@@ -12,7 +12,7 @@
 
 namespace NKikimr::NTxUT {
 
-class TShardReader {
+class TShardReader : TNonCopyable {
 private:
     TTestBasicRuntime& Runtime;
     const ui64 TabletId;

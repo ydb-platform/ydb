@@ -1,7 +1,9 @@
 #include "columnshard_impl.h"
+#include "common/limits.h"
 #include "blobs_action/transaction/tx_write.h"
 #include "blobs_action/transaction/tx_draft.h"
 #include "counters/columnshard.h"
+#include "engines/column_engine_logs.h"
 #include "operations/batch_builder/builder.h"
 #include "operations/write_data.h"
 
@@ -190,6 +192,17 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
             << " at tablet " << TabletID());
 
         Counters.GetCSCounters().OnFailedWriteResponse(EWriteFailReason::NoTable);
+        return returnFail(COUNTER_WRITE_FAIL);
+    }
+
+    const ui64 minMemoryRead = TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>()
+                                   .GetGranuleVerified(writeMeta.GetTableId())
+                                   .GetPortionsIndex()
+                                   .GetMinMemoryRead();
+    if (NOlap::TGlobalLimits::DefaultReduceMemoryIntervalLimit < minMemoryRead) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "overlimit")("reason", "read_memory")("current", minMemoryRead)(
+            "limit", NOlap::TGlobalLimits::DefaultReduceMemoryIntervalLimit)("table_id", writeMeta.GetTableId());
+        Counters.GetCSCounters().OnFailedWriteResponse(EWriteFailReason::OverlimitReadMemory);
         return returnFail(COUNTER_WRITE_FAIL);
     }
 

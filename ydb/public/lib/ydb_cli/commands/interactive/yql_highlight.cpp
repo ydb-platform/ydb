@@ -21,65 +21,23 @@ namespace NYdb {
 
             YQLHighlight::Color ColorOf(const YQLHighlight::ColorSchema& schema,
                                         const antlr4::Token* token) {
-                switch (token->getType()) {
-                    case antlr4::Token::INVALID_TYPE:
-                        return schema.unknown;
-                    case YQLLexer::STRING_VALUE:
-                        return schema.string;
-                    case YQLLexer::ID_PLAIN:
-                    case YQLLexer::ID_QUOTED:
-                        return schema.identifier;
-                    case YQLLexer::INTEGER_VALUE:
-                    case YQLLexer::REAL:
-                    case YQLLexer::BLOB:
-                    case YQLLexer::DIGITS:
-                        return schema.number;
-                    case YQLLexer::EQUALS:
-                    case YQLLexer::EQUALS2:
-                    case YQLLexer::NOT_EQUALS:
-                    case YQLLexer::NOT_EQUALS2:
-                    case YQLLexer::LESS:
-                    case YQLLexer::LESS_OR_EQ:
-                    case YQLLexer::GREATER:
-                    case YQLLexer::GREATER_OR_EQ:
-                    case YQLLexer::SHIFT_LEFT:
-                    case YQLLexer::ROT_LEFT:
-                    case YQLLexer::AMPERSAND:
-                    case YQLLexer::PIPE:
-                    case YQLLexer::DOUBLE_PIPE:
-                    case YQLLexer::STRUCT_OPEN:
-                    case YQLLexer::STRUCT_CLOSE:
-                    case YQLLexer::PLUS:
-                    case YQLLexer::MINUS:
-                    case YQLLexer::TILDA:
-                    case YQLLexer::SLASH:
-                    case YQLLexer::ASTERISK:
-                    case YQLLexer::BACKSLASH:
-                    case YQLLexer::PERCENT:
-                    case YQLLexer::SEMICOLON:
-                    case YQLLexer::DOT:
-                    case YQLLexer::COMMA:
-                    case YQLLexer::LPAREN:
-                    case YQLLexer::RPAREN:
-                    case YQLLexer::QUESTION:
-                    case YQLLexer::COLON:
-                    case YQLLexer::AT:
-                    case YQLLexer::DOUBLE_AT:
-                    case YQLLexer::DOLLAR:
-                    case YQLLexer::QUOTE_DOUBLE:
-                    case YQLLexer::QUOTE_SINGLE:
-                    case YQLLexer::BACKTICK:
-                    case YQLLexer::LBRACE_CURLY:
-                    case YQLLexer::RBRACE_CURLY:
-                    case YQLLexer::CARET:
-                    case YQLLexer::NAMESPACE:
-                    case YQLLexer::ARROW:
-                    case YQLLexer::RBRACE_SQUARE:
-                    case YQLLexer::LBRACE_SQUARE:
-                        return schema.operation;
-                    default:
-                        return schema.keyword;
-                };
+                const auto type = token->getType();
+                if (type == YQLLexer::STRING_VALUE) {
+                    return schema.string;
+                }
+                if (YQLLexer::ID_PLAIN <= type && type <= YQLLexer::ID_QUOTED) {
+                    return schema.identifier;
+                }
+                if (YQLLexer::DIGITS <= type && type <= YQLLexer::BLOB) {
+                    return schema.number;
+                }
+                if (YQLLexer::EQUALS <= type && type <= YQLLexer::LBRACE_SQUARE) {
+                    return schema.operation;
+                }
+                if (YQLLexer::ABORT <= type && type <= YQLLexer::XOR) {
+                    return schema.keyword;
+                }
+                return schema.unknown;
             }
 
         } // namespace

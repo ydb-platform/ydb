@@ -658,14 +658,14 @@ namespace NKikimr::NDataStreams::V1 {
         void StateWork(TAutoPtr<IEventHandle>& ev);
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
 
-        void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
+        void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext&) {
             if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
                 ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
                                           TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId);
             }
         }
 
-        void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
+        void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext&) {
             ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
                                           TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId);
         }
@@ -1655,14 +1655,14 @@ namespace NKikimr::NDataStreams::V1 {
         }
     }
 
-    void TGetRecordsActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
+    void TGetRecordsActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext&) {
         if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
             ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
                            TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId);
         }
     }
 
-    void TGetRecordsActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
+    void TGetRecordsActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext&) {
         ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
                        TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId);
     }
@@ -1938,14 +1938,14 @@ namespace NKikimr::NDataStreams::V1 {
         }
     }
 
-    void TListShardsActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
+    void TListShardsActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext&) {
         if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
             ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
                            TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId);
         }
     }
 
-    void TListShardsActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
+    void TListShardsActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext&) {
         ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
                        TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId);
     }

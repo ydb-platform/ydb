@@ -526,7 +526,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
     public:
 
-        TPQInternalSchemaActor(const TRequest& request, const TActorId& requester, bool notExistsOk = false)
+        TPQInternalSchemaActor(const TRequest& request, const TActorId& requester)
             : TBase(request.Topic, request.Database)
             , Request(request)
             , Requester(requester)

@@ -2,6 +2,7 @@ LIBRARY(clicommands)
 
 SRCS(
     interactive/interactive_cli.cpp
+    interactive/yql_highlight.cpp
     interactive/line_reader.cpp
     benchmark_utils.cpp
     topic_operations_scenario.cpp

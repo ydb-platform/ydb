@@ -1,6 +1,6 @@
 #include "columnshard_ut_common.h"
+#include "shard_reader.h"
 
-#include <ydb/core/tx/columnshard/common/tests/shard_reader.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/portions/portions.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
@@ -522,7 +522,7 @@ namespace NKikimr::NColumnShard {
             fields.emplace_back(f.GetName());
         }
 
-        NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+        NTxUT::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
         reader.SetReplyColumns(fields);
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());

@@ -134,6 +134,7 @@ public:
 
 class TIntervalMemoryAgentCounters: public TCommonCountersOwner {
 private:
+    using TBase = TCommonCountersOwner;
     const std::shared_ptr<TValueAggregationAgent> ReadBytes;
 public:
     TIntervalMemoryAgentCounters(const TCommonCountersOwner& base, const TString& memoryType)

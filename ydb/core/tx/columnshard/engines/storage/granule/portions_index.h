@@ -10,33 +10,34 @@ namespace NKikimr::NOlap::NGranule::NPortionsIndex {
 
 class TPortionInfoStat {
 private:
-    YDB_READONLY(ui64, MinReadRawBytes, 0);
-    YDB_READONLY(ui64, MinReadBlobBytes, 0);
+    YDB_READONLY(ui64, MinRawBytes, 0);
+    YDB_READONLY(ui64, BlobBytes, 0);
 
 public:
     TPortionInfoStat() = default;
 
     TPortionInfoStat(const ui64 rawBytes, const ui64 blobBytes)
-        : MinReadRawBytes(rawBytes)
-        , MinReadBlobBytes(blobBytes)
+        : MinRawBytes(rawBytes)
+        , BlobBytes(blobBytes)
     {
 
     }
 
     void Add(const TPortionInfoStat& source) {
-        MinReadRawBytes += source.MinReadRawBytes;
-        MinReadBlobBytes += source.MinReadBlobBytes;
+        MinRawBytes += source.MinRawBytes;
+        BlobBytes += source.BlobBytes;
     }
 
     void Sub(const TPortionInfoStat& source) {
-        AFL_VERIFY(MinReadRawBytes >= source.MinReadRawBytes);
-        MinReadRawBytes -= source.MinReadRawBytes;
-        AFL_VERIFY(MinReadBlobBytes >= source.MinReadBlobBytes);
-        MinReadBlobBytes -= source.MinReadBlobBytes;
+        AFL_VERIFY(MinRawBytes >= source.MinRawBytes);
+        MinRawBytes -= source.MinRawBytes;
+        AFL_VERIFY(BlobBytes >= source.BlobBytes);
+        BlobBytes -= source.BlobBytes;
+        AFL_VERIFY(!!BlobBytes == !!MinRawBytes);
     }
 
     bool operator!() const {
-        return !MinReadBlobBytes && !MinReadRawBytes;
+        return !BlobBytes && !MinRawBytes;
     }
 };
 
@@ -53,7 +54,7 @@ public:
     }
 
     void ProvidePortions(const TPortionsPKPoint& source) {
-        MinMemoryRead = TPortionInfoStat();
+        IntervalStats = TPortionInfoStat();
         for (auto&& [i, stat] : source.PortionIds) {
             if (source.Finish.contains(i)) {
                 continue;
@@ -71,15 +72,15 @@ public:
     }
 
     void AddContained(const ui32 portionId, const TPortionInfoStat& stat) {
-        MinMemoryRead.Add(stat);
-        AFL_VERIFY(PortionIds.emplace(portionId, minMemoryRead).second);
+        IntervalStats.Add(stat);
+        AFL_VERIFY(PortionIds.emplace(portionId, stat).second);
     }
 
     void RemoveContained(const ui32 portionId, const TPortionInfoStat& stat) {
-        MinMemoryRead.Sub(stat);
+        IntervalStats.Sub(stat);
         AFL_VERIFY(PortionIds.erase(portionId));
         if (PortionIds.empty()) {
-            AFL_VERIFY(!MinMemoryRead);
+            AFL_VERIFY(!IntervalStats);
         }
     }
 
@@ -110,7 +111,6 @@ private:
 public:
     void Add(const ui64 mem) {
         ++CountMemoryUsages[mem];
-        Counters.MinReadBytes->Set(CountMemoryUsages.rbegin()->first);
     }
 
     void Remove(const ui64 mem) {
@@ -118,7 +118,6 @@ public:
         AFL_VERIFY(it != CountMemoryUsages.end())("mem", mem);
         if (!--it->second) {
             CountMemoryUsages.erase(it);
-            Counters.MinReadBytes->Set(CountMemoryUsages.rbegin()->first);
         }
     }
 
@@ -137,7 +136,7 @@ public:
     }
 
     void FlushCounters() const {
-        Counters.MinReadBytes->Set(GetMax());
+        Counters.MinReadBytes->SetValue(GetMax());
     }
 };
 
@@ -147,7 +146,6 @@ private:
     TIntervalMemoryMonitoring RawMemoryUsage;
     TIntervalMemoryMonitoring BlobMemoryUsage;
     const TGranuleMeta& Owner;
-    const NColumnShard::TPortionsIndexCounters& Counters;
 
     std::map<NArrow::TReplaceKey, TPortionsPKPoint>::iterator InsertPoint(const NArrow::TReplaceKey& key) {
         auto it = Points.find(key);
@@ -158,22 +156,22 @@ private:
                 --itPred;
                 it->second.ProvidePortions(itPred->second);
             }
-            RawMemoryUsage.Add(it->second.GetIntervalStats().GetMinReadRawBytes());
-            BlobMemoryUsage.Add(it->second.GetIntervalStats().GetMinReadBlobBytes());
+            RawMemoryUsage.Add(it->second.GetIntervalStats().GetMinRawBytes());
+            BlobMemoryUsage.Add(it->second.GetIntervalStats().GetBlobBytes());
         }
         return it;
     }
 
-    void RemoveFromMemoryUsageControl(const ui64 rawMem, const ui64 blobMem) {
-        RawMemoryUsage.Remove(rawMem);
-        BlobMemoryUsage.Remove(blobMem);
+    void RemoveFromMemoryUsageControl(const TPortionInfoStat& stat) {
+        RawMemoryUsage.Remove(stat.GetMinRawBytes());
+        BlobMemoryUsage.Remove(stat.GetBlobBytes());
     }
 
 public:
     TPortionsIndex(const TGranuleMeta& owner, const NColumnShard::TPortionsIndexCounters& counters)
-        : Owner(owner)
-        , RawMemoryUsage()
-        , Counters(counters)
+        : RawMemoryUsage(counters.RawBytes)
+        , BlobMemoryUsage(counters.BlobBytes)
+        , Owner(owner)
     {
 
     }

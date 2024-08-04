@@ -85,17 +85,32 @@ public:
     }
 };
 
+class TPortionsIndexCounters {
+public:
+    const std::shared_ptr<TValueAggregationClient> MinReadBytes;
+    TPortionsIndexCounters(const std::shared_ptr<TValueAggregationClient>& minReadBytes)
+        : MinReadBytes(minReadBytes) {
+    }
+};
+
 class TGranuleDataCounters {
 private:
     const TDataClassCounters InsertedData;
     const TDataClassCounters CompactedData;
     const TDataClassCounters FullData;
+    const TPortionsIndexCounters PortionsIndexCounters;
+
 public:
-    TGranuleDataCounters(const TDataClassCounters& insertedData, const TDataClassCounters& compactedData, const TDataClassCounters& fullData)
+    const TPortionsIndexCounters& GetPortionsIndexCounters() const {
+        return PortionsIndexCounters;
+    }
+
+    TGranuleDataCounters(const TDataClassCounters& insertedData, const TDataClassCounters& compactedData, const TDataClassCounters& fullData,
+        const std::shared_ptr<TValueAggregationClient>& minReadBytes)
         : InsertedData(insertedData)
         , CompactedData(compactedData)
         , FullData(fullData)
-    {
+        , PortionsIndexCounters(minReadBytes) {
     }
 
     void OnPortionsDataRefresh(const TBaseGranuleDataClassSummary& inserted, const TBaseGranuleDataClassSummary& compacted) const {
@@ -105,20 +120,38 @@ public:
     }
 };
 
+class TPortionsIndexAgentsCounters: public TCommonCountersOwner {
+private:
+    using TBase = TCommonCountersOwner;
+
+public:
+    const std::shared_ptr<TValueAggregationAgent> MinReadBytes;
+
+    TPortionsIndexAgentsCounters(const TString& baseName)
+        : TBase(baseName)
+        , MinReadBytes(TBase::GetValueAutoAggregations("MinRead/Bytes")) {
+    }
+};
+
 class TAgentGranuleDataCounters {
 private:
     TAgentDataClassCounters InsertedData;
     TAgentDataClassCounters CompactedData;
     TAgentDataClassCounters FullData;
+    TPortionsIndexAgentsCounters PortionsIndex;
+
 public:
     TAgentGranuleDataCounters(const TString& ownerId)
         : InsertedData(ownerId, "ByGranule/Inserted")
         , CompactedData(ownerId, "ByGranule/Compacted")
-        , FullData(ownerId, "ByGranule/Full") {
+        , FullData(ownerId, "ByGranule/Full")
+        , PortionsIndex("ByGranule/PortionsIndex")
+    {
     }
 
     TGranuleDataCounters RegisterClient() const {
-        return TGranuleDataCounters(InsertedData.RegisterClient(), CompactedData.RegisterClient(), FullData.RegisterClient());
+        return TGranuleDataCounters(
+            InsertedData.RegisterClient(), CompactedData.RegisterClient(), FullData.RegisterClient(), PortionsIndex.MinReadBytes->GetClient());
     }
 };
 

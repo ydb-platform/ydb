@@ -14,7 +14,8 @@ enum class EWriteFailReason {
     LongTxDuplication /* "long_tx_duplication" */,
     NoTable /* "no_table" */,
     IncorrectSchema /* "incorrect_schema" */,
-    Overload /* "overload" */
+    Overload /* "overload" */,
+    OverlimitReadMemory /* "overlimit_read_memory" */
 };
 
 class TCSInitialization: public TCommonCountersOwner {

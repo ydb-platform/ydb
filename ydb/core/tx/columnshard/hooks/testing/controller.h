@@ -12,6 +12,7 @@ namespace NKikimr::NYDBTest::NColumnShard {
 class TController: public TReadOnlyController {
 private:
     using TBase = TReadOnlyController;
+    YDB_ACCESSOR_DEF(std::optional<TDuration>, RequestsTracePingCheckPeriod);
     YDB_ACCESSOR_DEF(std::optional<TDuration>, LagForCompactionBeforeTierings);
     YDB_ACCESSOR(std::optional<TDuration>, GuaranteeIndexationInterval, TDuration::Zero());
     YDB_ACCESSOR(std::optional<TDuration>, PeriodicWakeupActivationPeriod, std::nullopt);
@@ -131,6 +132,10 @@ protected:
     virtual ::NKikimr::NColumnShard::TBlobPutResult::TPtr OverrideBlobPutResultOnCompaction(const ::NKikimr::NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& actions) const override;
     virtual TDuration GetLagForCompactionBeforeTierings(const TDuration def) const override {
         return LagForCompactionBeforeTierings.value_or(def);
+    }
+
+    virtual TDuration GetPingCheckPeriod(const TDuration def) const override {
+        return RequestsTracePingCheckPeriod.value_or(def);
     }
 
     virtual TDuration GetCompactionActualizationLag(const TDuration def) const override {

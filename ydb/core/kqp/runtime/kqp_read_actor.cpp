@@ -53,10 +53,12 @@ public:
         TMaybe<NKikimr::NMiniKQL::TUnboxedValueVector> Batch;
         size_t ProcessedRows = 0;
         size_t PackedRows = 0;
+        ui64 ReadId;
 
-        TResult(ui64 shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>> readResult)
+        TResult(ui64 shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>> readResult, ui64 readId)
             : ShardId(shardId)
             , ReadResult(std::move(readResult))
+            , ReadId(readId)
         {
         }
     };
@@ -990,7 +992,7 @@ public:
             << " finished = " << ev->Get()->Record.GetFinished());
         CA_LOG_T(TStringBuilder() << "read #" << id << " pushed " << DebugPrintCells(ev->Get()) << " continuation token " << DebugPrintContionuationToken(record.GetContinuationToken()));
 
-        Results.push({Reads[id].Shard->TabletId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release())});
+        Results.push({Reads[id].Shard->TabletId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release()), id});
         NotifyCA();
     }
 
@@ -1055,7 +1057,7 @@ public:
     }
 
     NMiniKQL::TBytesStatistics PackArrow(TResult& handle, i64& freeSpace) {
-        auto& [shardId, result, batch, _, packed] = handle;
+        auto& [shardId, result, batch, _, packed, readId] = handle;
         NMiniKQL::TBytesStatistics stats;
         bool hasResultColumns = false;
         if (result->Get()->GetRowsCount() == 0) {
@@ -1142,7 +1144,7 @@ public:
     }
 
     NMiniKQL::TBytesStatistics PackCells(TResult& handle, i64& freeSpace) {
-        auto& [shardId, result, batch, processedRows, packed] = handle;
+        auto& [shardId, result, batch, processedRows, packed, readId] = handle;
         NMiniKQL::TBytesStatistics stats;
         batch->reserve(batch->size());
         CA_LOG_D(TStringBuilder() << "enter pack cells method "
@@ -1199,14 +1201,16 @@ public:
                     TStringBuilder rowMessage;
                     rowMessage << "found duplicate rows from table "
                         << Settings->GetTable().GetTablePath()
-                        << " previous shardId is " << *ptr
+                        << " previous shardId is " << ptr->ShardId
                         << " current is " << handle.ShardId
+                        << " previous readId is " << ptr->ReadId
+                        << " current is " << handle.ReadId
                         << " key is " << rowRepr;
                     CA_LOG_E(rowMessage);
                     RuntimeError(rowMessage, NYql::NDqProto::StatusIds::INTERNAL_ERROR, {});
                     return stats;
                 }
-                DuplicateCheckStats[result] = handle.ShardId;
+                DuplicateCheckStats[result] = {.ReadId = readId , .ShardId = handle.ShardId};
             }
 
             stats.DataBytes += rowSize;
@@ -1539,7 +1543,11 @@ private:
     NWilson::TSpan ReadActorStateSpan;
 
     bool CollectDuplicateStats = false;
-    THashMap<TString, ui64> DuplicateCheckStats;
+    struct TDuplicationStats {
+        ui64 ReadId;
+        ui64 ShardId;
+    };
+    THashMap<TString, TDuplicationStats> DuplicateCheckStats;
     TVector<TResultColumn> DuplicateCheckExtraColumns;
     TVector<ui32> DuplicateCheckColumnRemap;
 };

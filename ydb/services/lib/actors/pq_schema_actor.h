@@ -460,15 +460,14 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
     protected:
         THolder<NActors::TEventHandle<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> DescribeSchemeResult;
-
     };
 
 
     template<class TDerived, class TRequest>
     class TUpdateSchemeActor : public TPQGrpcSchemaBase<TDerived, TRequest>,
-                               public TUpdateSchemeActorBase<TUpdateSchemeActor<TDerived, TRequest>> {
+                               public TUpdateSchemeActorBase<TDerived> {
         using TBase = TPQGrpcSchemaBase<TDerived, TRequest>;
-        using TUpdateSchemeBase = TUpdateSchemeActorBase<TUpdateSchemeActor<TDerived, TRequest>>;
+        using TUpdateSchemeBase = TUpdateSchemeActorBase<TDerived>;
 
     public:
         TUpdateSchemeActor(NGRpcService::IRequestOpCtx* request, const TString& topicPath)

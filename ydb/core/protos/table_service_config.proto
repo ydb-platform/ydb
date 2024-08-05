@@ -276,4 +276,6 @@ message TTableServiceConfig {
 
     optional uint64 IdxLookupJoinPointsLimit = 58 [default = 1];
     optional bool OldLookupJoinBehaviour = 59 [default = true]; 
+    
+    optional bool EnableRowsDuplicationCheck = 69 [ default = false ];
 };

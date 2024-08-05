@@ -822,6 +822,8 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
         "PhyTx/DataTxTotalTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
     ScanTxTotalTimeHistogram = KqpGroup->GetHistogram(
         "PhyTx/ScanTxTotalTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+
+    RowsDuplicationsFound = KqpGroup->GetCounter("RowsDuplicationFound", true);
 }
 
 ::NMonitoring::TDynamicCounterPtr TKqpCounters::GetKqpCounters() const {

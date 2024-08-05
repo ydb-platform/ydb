@@ -140,7 +140,7 @@ public:
         const auto runConfig = RunConfigNode->GetValue(ctx);
         auto callable = udf.Run(ctx.Builder, &runConfig);
         Wrap(callable);
-        return runConfig;
+        return callable;
     }
 #ifndef MKQL_DISABLE_CODEGEN
     void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const {
@@ -154,6 +154,7 @@ public:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
 
         BranchInst::Create(main, make, HasValue(udfPtr, block), block);
+
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -166,10 +167,9 @@ public:
 
         block = main;
 
-        const auto udf = new LoadInst(valueType, udfPtr, "udf", block);
-
         GetNodeValue(pointer, RunConfigNode, ctx, block);
         const auto conf = new LoadInst(valueType, pointer, "conf", block);
+        const auto udf = new LoadInst(valueType, udfPtr, "udf", block);
 
         CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Run>(pointer, udf, ctx.Codegen, block, ctx.GetBuilder(), pointer);
 

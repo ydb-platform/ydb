@@ -4,7 +4,7 @@ SET(antlr_output ${ARCADIA_BUILD_ROOT}/${MODDIR})
 SET(antlr_templates ${antlr_output}/org/antlr/v4/tool/templates/codegen)
 SET(sql_grammar ${antlr_output}/SQLv4.g)
 
-SET(ANTLR_PACKAGE_NAME NSQLv4Generated)
+SET(ANTLR_PACKAGE_NAME NSQLv1Generated)
 
 SET(GRAMMAR_STRING_CORE_SINGLE "\"~(['#BACKSLASH#]) | (BACKSLASH .)\"")
 SET(GRAMMAR_STRING_CORE_DOUBLE "\"~([#DOUBLE_QUOTE##BACKSLASH#]) | (BACKSLASH .)\"")

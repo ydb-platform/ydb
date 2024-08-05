@@ -5,7 +5,7 @@
 
 namespace NSQLTranslationV1 {
 
-using namespace NSQLv4Generated;
+using namespace NSQLv1Generated;
 
 class TSqlSelect: public TSqlTranslation {
 public:

@@ -22,7 +22,7 @@ namespace NSQLFormat {
 
 namespace {
 
-using namespace NSQLv4Generated;
+using namespace NSQLv1Generated;
 
 using NSQLTranslation::TParsedToken;
 using NSQLTranslation::TParsedTokenList;

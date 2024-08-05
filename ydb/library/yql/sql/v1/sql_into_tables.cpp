@@ -9,7 +9,7 @@ namespace NSQLTranslationV1 {
 
 using NALPDefault::SQLv4Lexer;
 
-using namespace NSQLv4Generated;
+using namespace NSQLv1Generated;
 
 TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
     static const TMap<TString, ESQLWriteColumnMode> str2Mode = {

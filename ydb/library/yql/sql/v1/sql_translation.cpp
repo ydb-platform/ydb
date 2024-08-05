@@ -36,7 +36,7 @@ void VisitAllFields(const NProtoBuf::Message& msg, Callback& callback) {
 
 struct TTokenCollector {
     void operator()(const NProtoBuf::Message& message) {
-        if (const auto* token = dynamic_cast<const NSQLv4Generated::TToken*>(&message)) {
+        if (const auto* token = dynamic_cast<const NSQLv1Generated::TToken*>(&message)) {
             if (!Tokens.Empty()) {
                 Tokens << ' ';
             }
@@ -86,7 +86,7 @@ namespace NSQLTranslationV1 {
 
 using NALPDefault::SQLv4Lexer;
 
-using namespace NSQLv4Generated;
+using namespace NSQLv1Generated;
 
 TIdentifier GetKeywordId(TTranslation& ctx, const TRule_keyword& node) {
     // keyword:
@@ -1613,9 +1613,9 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
 
                         auto& token = spec.GetBlock2().GetToken1();
                         switch (token.GetId()) {
-                            case SQLv4Lexer::TASC:
+                            case SQLv4Lexer::TOKEN_ASC:
                                 return true;
-                            case SQLv4Lexer::TDESC:
+                            case SQLv4Lexer::TOKEN_DESC:
                                 desc = true;
                                 return true;
                             default:
@@ -3607,10 +3607,10 @@ bool TSqlTranslation::SortSpecification(const TRule_sort_specification& node, TV
         const auto& token = node.GetBlock2().GetToken1();
         Token(token);
         switch (token.GetId()) {
-            case SQLv4Lexer::TASC:
+            case SQLv4Lexer::TOKEN_ASC:
                 Ctx.IncrementMonCounter("sql_features", "OrderByAsc");
                 break;
-            case SQLv4Lexer::TDESC:
+            case SQLv4Lexer::TOKEN_DESC:
                 asc = false;
                 Ctx.IncrementMonCounter("sql_features", "OrderByDesc");
                 break;
@@ -3641,11 +3641,11 @@ bool TSqlTranslation::SortSpecificationList(const TRule_sort_specification_list&
 
 bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node) const {
     TPosition pos;
-    return node.HasBlock1() && node.GetBlock1().GetToken1().GetId() == SQLv4Lexer::TDISTINCT;
+    return node.HasBlock1() && node.GetBlock1().GetToken1().GetId() == SQLv4Lexer::TOKEN_DISTINCT;
 }
 
 bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node, TPosition& distinctPos) const {
-    if (node.HasBlock1() && node.GetBlock1().GetToken1().GetId() == SQLv4Lexer::TDISTINCT) {
+    if (node.HasBlock1() && node.GetBlock1().GetToken1().GetId() == SQLv4Lexer::TOKEN_DISTINCT) {
         distinctPos = Ctx.TokenPosition(node.GetBlock1().GetToken1());
         return true;
     }
@@ -4851,7 +4851,7 @@ public:
         Star = true;
     }
 
-    void AddColumn(const NSQLv4Generated::TRule_an_id & rule, TTranslation& ctx) {
+    void AddColumn(const NSQLv1Generated::TRule_an_id & rule, TTranslation& ctx) {
         ColumnNames.push_back(NSQLTranslationV1::Id(rule, ctx));
     }
 
@@ -4882,7 +4882,7 @@ private:
     bool Star = false;
 };
 
-TNodePtr TSqlTranslation::ReturningList(const ::NSQLv4Generated::TRule_returning_columns_list& columns) {
+TNodePtr TSqlTranslation::ReturningList(const ::NSQLv1Generated::TRule_returning_columns_list& columns) {
     auto result = MakeHolder<TReturningListColumns>(Ctx.Pos());
 
     if (columns.GetBlock2().Alt_case() == TRule_returning_columns_list_TBlock2::AltCase::kAlt1) {

@@ -8,7 +8,7 @@ SET(antlr_output ${ARCADIA_BUILD_ROOT}/${MODDIR})
 SET(antlr_templates ${antlr_output}/org/antlr/v4/tool/templates/codegen)
 SET(sql_grammar ${antlr_output}/SQLv4.g)
 
-SET(ANTLR_PACKAGE_NAME NSQLv4Generated)
+SET(ANTLR_PACKAGE_NAME NSQLv1Generated)
 SET(PROTOBUF_HEADER_PATH ydb/library/yql/parser/proto_ast/gen/v1_proto_split)
 SET(PROTOBUF_SUFFIX_PATH .pb.main.h)
 

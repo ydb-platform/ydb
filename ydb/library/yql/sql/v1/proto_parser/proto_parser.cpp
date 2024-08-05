@@ -23,7 +23,7 @@ namespace NSQLTranslationV1 {
     TMutex SanitizerSQLTranslationMutex;
 #endif
 
-using namespace NSQLv4Generated;
+using namespace NSQLv1Generated;
 
 google::protobuf::Message* SqlAST(const TString& query, const TString& queryName, TIssues& err, size_t maxErrors, bool ansiLexer, google::protobuf::Arena* arena) {
     YQL_ENSURE(arena);

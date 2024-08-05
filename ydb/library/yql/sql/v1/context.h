@@ -106,13 +106,13 @@ namespace NSQLTranslationV1 {
 
         void SetWarningPolicyFor(NYql::TIssueCode code, NYql::EWarningAction action);
 
-        const TString& Token(const NSQLv4Generated::TToken& token) {
+        const TString& Token(const NSQLv1Generated::TToken& token) {
             Position.Row = token.GetLine();
             Position.Column = token.GetColumn() + 1;
             return token.GetValue();
         }
 
-        TPosition TokenPosition(const NSQLv4Generated::TToken& token) {
+        TPosition TokenPosition(const NSQLv1Generated::TToken& token) {
             TPosition pos = Position;
             pos.Row = token.GetLine();
             pos.Column = token.GetColumn() + 1;
@@ -370,11 +370,11 @@ namespace NSQLTranslationV1 {
         TContext& Context();
         IOutputStream& Error();
 
-        const TString& Token(const NSQLv4Generated::TToken& token) {
+        const TString& Token(const NSQLv1Generated::TToken& token) {
             return Ctx.Token(token);
         }
 
-        TString Identifier(const NSQLv4Generated::TToken& token) {
+        TString Identifier(const NSQLv1Generated::TToken& token) {
             return IdContent(Ctx, Token(token));
         }
 

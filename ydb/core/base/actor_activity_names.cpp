@@ -18,6 +18,7 @@ public:
         }
     }
 
+
     TMap<TType, TString> Storage;
 };
 

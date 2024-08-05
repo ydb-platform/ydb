@@ -229,9 +229,9 @@ void TMVP::TryGetOidcOptionsFromConfig(const YAML::Node& config) {
     OpenIdConnectSettings.SessionServiceEndpoint = oidc["session_service_endpoint"].as<std::string>("");
     OpenIdConnectSettings.SessionServiceTokenName = oidc["session_service_token_name"].as<std::string>("");
     OpenIdConnectSettings.AuthorizationServerAddress = oidc["authorization_server_address"].as<std::string>("");
-    OpenIdConnectSettings.AuthEndpoint = oidc["auth_endpoint"].as<std::string>(OpenIdConnectSettings.DEFAULT_AUTH_ENDPOINT);
-    OpenIdConnectSettings.TokenEndpoint = oidc["token_endpoint"].as<std::string>(OpenIdConnectSettings.DEFAULT_TOKEN_ENDPOINT);
-    OpenIdConnectSettings.ExchangeEndpoint = oidc["exchange_endpoint"].as<std::string>(OpenIdConnectSettings.DEFAULT_EXCHANGE_ENDPOINT);
+    OpenIdConnectSettings.AuthUrlPath = oidc["auth_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_AUTH_URL_PATH);
+    OpenIdConnectSettings.TokenUrlPath = oidc["token_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_TOKEN_URL_PATH);
+    OpenIdConnectSettings.ExchangeUrlPath = oidc["exchange_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_EXCHANGE_URL_PATH);
     Cout << "Started processing allowed_proxy_hosts..." << Endl;
     for (const std::string& host : oidc["allowed_proxy_hosts"].as<std::vector<std::string>>()) {
         Cout << host << " added to allowed_proxy_hosts" << Endl;

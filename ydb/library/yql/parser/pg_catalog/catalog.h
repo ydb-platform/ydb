@@ -72,6 +72,7 @@ struct TProcDesc {
     ui32 VariadicType = 0;
     ui32 VariadicArgType = 0;
     TString VariadicArgName;
+    TVector<TMaybe<TString>> DefaultArgs;
     ui32 ExtensionIndex = 0;
 };
 

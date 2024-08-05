@@ -791,10 +791,11 @@ public:
             return result;
         }
 
-        const PQGroupReserve reserve(newTabletConfig, alterData->ActivePartitionCount + involvedPartitions.size());
+        const PQGroupReserve reserve(newTabletConfig, alterData->ActivePartitionCount);
+        const PQGroupReserve reserveForCheckLimit(newTabletConfig, alterData->ActivePartitionCount + involvedPartitions.size());
         const PQGroupReserve oldReserve(tabletConfig, topic->ActivePartitionCount);
 
-        const ui64 storageToReserve = reserve.Storage > oldReserve.Storage ? reserve.Storage - oldReserve.Storage : 0;
+        const ui64 storageToReserve = reserveForCheckLimit.Storage > oldReserve.Storage ? reserveForCheckLimit.Storage - oldReserve.Storage : 0;
 
         {
             TPath::TChecker checks = path.Check();

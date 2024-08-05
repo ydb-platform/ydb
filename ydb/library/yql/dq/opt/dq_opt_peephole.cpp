@@ -167,20 +167,12 @@ TExprBase DqPeepholeRewriteMapJoinWithGraceCore(const TExprBase& node, TExprCont
     auto [leftKeyColumnNodes, rightKeyColumnNodes] = JoinKeysToAtoms(ctx, graceJoin, leftTableLabel, rightTableLabel);
     const auto keyWidth = leftKeyColumnNodes.size();
 
-    ui32 outputIndex = 0;
-    const auto makeRenames = [&ctx, &outputIndex, pos](TStringBuf, const TStructExprType& type) {
-        TExprNode::TListType renames;
-        for (auto i = 0u; i < type.GetSize(); i++) {
-            renames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(i)));
-            renames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(outputIndex++)));
-        }
-        return renames;
-    };
-
     const auto itemTypeLeft = GetSequenceItemType(graceJoin.LeftInput(), false, ctx)->Cast<TStructExprType>();
     const auto itemTypeRight = GetSequenceItemType(graceJoin.RightInput(), false, ctx)->Cast<TStructExprType>();
 
+    TExprNode::TListType leftRenames, rightRenames;
     std::vector<TString> fullColNames;
+    ui32 outputIndex = 0;
 
     for (auto i = 0u; i < itemTypeLeft->GetSize(); i++) {
         TString name(itemTypeLeft->GetItems()[i]->GetName());
@@ -188,23 +180,19 @@ TExprBase DqPeepholeRewriteMapJoinWithGraceCore(const TExprBase& node, TExprCont
             name = leftTableLabel + "." + name;
         }
         fullColNames.push_back(name);
+        leftRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(i)));
+        leftRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(outputIndex++)));
     }
-    for (auto i = 0u; i < itemTypeRight->GetSize(); i++) {
-        TString name(itemTypeRight->GetItems()[i]->GetName());
-        if (rightTableLabel) {
-            name = rightTableLabel + "." + name;
+    if (graceJoin.JoinType().Value() != "LeftOnly" && graceJoin.JoinType().Value() != "LeftSemi") {
+        for (auto i = 0u; i < itemTypeRight->GetSize(); i++) {
+            TString name(itemTypeRight->GetItems()[i]->GetName());
+            if (rightTableLabel) {
+                name = rightTableLabel + "." + name;
+            }
+            fullColNames.push_back(name);
+            rightRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(i)));
+            rightRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(outputIndex++)));
         }
-        fullColNames.push_back(name);
-    }
-
-    TExprNode::TListType leftRenames = makeRenames(leftTableLabel, *itemTypeLeft);
-    TExprNode::TListType rightRenames, rightPayloads;
-    const bool withRightSide = graceJoin.JoinType().Value() != "LeftOnly" && graceJoin.JoinType().Value() != "LeftSemi";
-    if (withRightSide) {
-        rightRenames = makeRenames(rightTableLabel, *itemTypeRight);
-        rightPayloads.reserve(rightRenames.size() >> 1U);
-        for (auto it = rightRenames.cbegin(); rightRenames.cend() != it; ++++it)
-            rightPayloads.emplace_back(*it);
     }
 
     TTypeAnnotationNode::TListType keyTypesLeft(keyWidth);

@@ -352,7 +352,8 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             .AddExpectedPlanOptions("KqpOlapFilter")
 #if SSA_RUNTIME_VERSION >= 2U
             .AddExpectedPlanOptions("TKqpOlapAgg")
-            .MutableLimitChecker().SetExpectedResultCount(1)
+            // See https://github.com/ydb-platform/ydb/issues/7299 for explanation, why resultCount = 3
+            .MutableLimitChecker().SetExpectedResultCount(3)
 #else
             .AddExpectedPlanOptions("CombineCore")
 #endif

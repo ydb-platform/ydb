@@ -436,7 +436,7 @@ public:
                 srcDesc.MutableSettings()->insert({"addPathIndex", "true"});
             }
 
-            srcDesc.SetAsyncDecoding(State_->Configuration->AsyncDecoding.Get().GetOrElse(false));
+            srcDesc.SetAsyncDecoding(State_->Configuration->AsyncDecoding.Get().GetOrElse(true));
             srcDesc.SetAsyncDecompressing(State_->Configuration->AsyncDecompressing.Get().GetOrElse(false));
 
 #if defined(_linux_) || defined(_darwin_)

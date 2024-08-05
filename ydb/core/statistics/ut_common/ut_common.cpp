@@ -83,6 +83,9 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools, bool 
     CSController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
 
     Server->GetRuntime()->SetLogPriority(NKikimrServices::STATISTICS, NActors::NLog::PRI_DEBUG);
+        Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_DEBUG);
+        // Server->GetRuntime()->SetLogPriority(NKikimrServices::K, NActors::NLog::PRI_DEBUG);
+
 }
 
 TTestEnv::~TTestEnv() {

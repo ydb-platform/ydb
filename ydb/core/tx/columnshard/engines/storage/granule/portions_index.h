@@ -8,12 +8,45 @@ class TGranuleMeta;
 
 namespace NKikimr::NOlap::NGranule::NPortionsIndex {
 
+class TPortionInfoStat {
+private:
+    YDB_READONLY(ui64, MinRawBytes, 0);
+    YDB_READONLY(ui64, BlobBytes, 0);
+
+public:
+    TPortionInfoStat() = default;
+
+    TPortionInfoStat(const ui64 rawBytes, const ui64 blobBytes)
+        : MinRawBytes(rawBytes)
+        , BlobBytes(blobBytes)
+    {
+
+    }
+
+    void Add(const TPortionInfoStat& source) {
+        MinRawBytes += source.MinRawBytes;
+        BlobBytes += source.BlobBytes;
+    }
+
+    void Sub(const TPortionInfoStat& source) {
+        AFL_VERIFY(MinRawBytes >= source.MinRawBytes);
+        MinRawBytes -= source.MinRawBytes;
+        AFL_VERIFY(BlobBytes >= source.BlobBytes);
+        BlobBytes -= source.BlobBytes;
+        AFL_VERIFY(!!BlobBytes == !!MinRawBytes);
+    }
+
+    bool operator!() const {
+        return !BlobBytes && !MinRawBytes;
+    }
+};
+
 class TPortionsPKPoint {
 private:
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Start;
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Finish;
-    THashMap<ui64, ui64> PortionIds;
-    YDB_READONLY(ui64, MinMemoryRead, 0);
+    THashMap<ui64, TPortionInfoStat> PortionIds;
+    YDB_READONLY_DEF(TPortionInfoStat, IntervalStats);
 
 public:
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetStart() const {
@@ -21,16 +54,16 @@ public:
     }
 
     void ProvidePortions(const TPortionsPKPoint& source) {
-        MinMemoryRead = 0;
-        for (auto&& [i, mem] : source.PortionIds) {
+        IntervalStats = TPortionInfoStat();
+        for (auto&& [i, stat] : source.PortionIds) {
             if (source.Finish.contains(i)) {
                 continue;
             }
-            AddContained(i, mem);
+            AddContained(i, stat);
         }
     }
 
-    const THashMap<ui64, ui64>& GetPortionIds() const {
+    const THashMap<ui64, TPortionInfoStat>& GetPortionIds() const {
         return PortionIds;
     }
 
@@ -38,17 +71,16 @@ public:
         return Start.empty() && Finish.empty();
     }
 
-    void AddContained(const ui32 portionId, const ui64 minMemoryRead) {
-        MinMemoryRead += minMemoryRead;
-        AFL_VERIFY(PortionIds.emplace(portionId, minMemoryRead).second);
+    void AddContained(const ui32 portionId, const TPortionInfoStat& stat) {
+        IntervalStats.Add(stat);
+        AFL_VERIFY(PortionIds.emplace(portionId, stat).second);
     }
 
-    void RemoveContained(const ui32 portionId, const ui64 minMemoryRead) {
-        AFL_VERIFY(minMemoryRead <= MinMemoryRead);
-        MinMemoryRead -= minMemoryRead;
+    void RemoveContained(const ui32 portionId, const TPortionInfoStat& stat) {
+        IntervalStats.Sub(stat);
         AFL_VERIFY(PortionIds.erase(portionId));
         if (PortionIds.empty()) {
-            AFL_VERIFY(!MinMemoryRead);
+            AFL_VERIFY(!IntervalStats);
         }
     }
 
@@ -71,12 +103,49 @@ public:
     }
 };
 
+class TIntervalMemoryMonitoring {
+private:
+    std::map<ui64, i32> CountMemoryUsages;
+    const NColumnShard::TIntervalMemoryCounters& Counters;
+
+public:
+    void Add(const ui64 mem) {
+        ++CountMemoryUsages[mem];
+    }
+
+    void Remove(const ui64 mem) {
+        auto it = CountMemoryUsages.find(mem);
+        AFL_VERIFY(it != CountMemoryUsages.end())("mem", mem);
+        if (!--it->second) {
+            CountMemoryUsages.erase(it);
+        }
+    }
+
+    TIntervalMemoryMonitoring(const NColumnShard::TIntervalMemoryCounters& counters)
+        : Counters(counters)
+    {
+    
+    }
+
+    ui64 GetMax() const {
+        if (CountMemoryUsages.size()) {
+            return CountMemoryUsages.rbegin()->first;
+        } else {
+            return 0;
+        }
+    }
+
+    void FlushCounters() const {
+        Counters.MinReadBytes->SetValue(GetMax());
+    }
+};
+
 class TPortionsIndex {
 private:
     std::map<NArrow::TReplaceKey, TPortionsPKPoint> Points;
-    std::map<ui64, i32> CountMemoryUsages;
+    TIntervalMemoryMonitoring RawMemoryUsage;
+    TIntervalMemoryMonitoring BlobMemoryUsage;
     const TGranuleMeta& Owner;
-    const NColumnShard::TPortionsIndexCounters& Counters;
 
     std::map<NArrow::TReplaceKey, TPortionsPKPoint>::iterator InsertPoint(const NArrow::TReplaceKey& key) {
         auto it = Points.find(key);
@@ -87,33 +156,32 @@ private:
                 --itPred;
                 it->second.ProvidePortions(itPred->second);
             }
-            ++CountMemoryUsages[it->second.GetMinMemoryRead()];
+            RawMemoryUsage.Add(it->second.GetIntervalStats().GetMinRawBytes());
+            BlobMemoryUsage.Add(it->second.GetIntervalStats().GetBlobBytes());
         }
         return it;
     }
 
-    void RemoveFromMemoryUsageControl(const ui64 mem) {
-        auto it = CountMemoryUsages.find(mem);
-        AFL_VERIFY(it != CountMemoryUsages.end())("mem", mem);
-        if (!--it->second) {
-            CountMemoryUsages.erase(it);
-        }
+    void RemoveFromMemoryUsageControl(const TPortionInfoStat& stat) {
+        RawMemoryUsage.Remove(stat.GetMinRawBytes());
+        BlobMemoryUsage.Remove(stat.GetBlobBytes());
     }
 
 public:
     TPortionsIndex(const TGranuleMeta& owner, const NColumnShard::TPortionsIndexCounters& counters)
-        : Owner(owner)
-        , Counters(counters)
+        : RawMemoryUsage(counters.RawBytes)
+        , BlobMemoryUsage(counters.BlobBytes)
+        , Owner(owner)
     {
 
     }
 
-    ui64 GetMinMemoryRead() const {
-        if (CountMemoryUsages.empty()) {
-            return 0;
-        } else {
-            return CountMemoryUsages.rbegin()->second;
-        }
+    ui64 GetMinRawMemoryRead() const {
+        return RawMemoryUsage.GetMax();
+    }
+
+    ui64 GetMinBlobMemoryRead() const {
+        return BlobMemoryUsage.GetMax();
     }
 
     const std::map<NArrow::TReplaceKey, TPortionsPKPoint>& GetPoints() const {

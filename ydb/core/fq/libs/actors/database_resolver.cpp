@@ -610,7 +610,7 @@ private:
 
                 auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, databaseAuth.StructuredToken, databaseAuth.AddBearerToToken);
                 auto token = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
-                if (token) {
+                if (!token.empty()) {
                     httpRequest->Set("Authorization", token);
                 }
 

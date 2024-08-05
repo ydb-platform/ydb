@@ -6,7 +6,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/counters_logger.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/persqueue_impl.h>
 
-namespace NYdb::NPersQueue {
+namespace NYdb::inline V2::NPersQueue {
 
 // High level class that manages several read session impls.
 // Each one of them works with single cluster.

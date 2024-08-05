@@ -7,7 +7,7 @@
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 #include <ydb/core/fq/libs/shared_resources/db_exec.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb-cpp-sdk/client/value/value.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/typetraits.h>
@@ -121,8 +121,8 @@ protected:
                     result = prepare();
                 }
             } else {
-                issues.AddIssues(status.GetIssues());
-                internalIssues.AddIssues(status.GetIssues());
+                issues.AddIssues(NYdb::NAdapters::ToYqlIssues(status.GetIssues()));
+                internalIssues.AddIssues(NYdb::NAdapters::ToYqlIssues(status.GetIssues()));
             }
         } catch (const NYql::TCodeLineException& exception) {
             NYql::TIssue issue = MakeErrorIssue(exception.Code, exception.GetRawMessage());
@@ -165,7 +165,7 @@ protected:
         return static_cast<TDerived*>(this);
     }
 
-    void Subscribe(NYdb::TAsyncStatus& status, std::shared_ptr<TVector<NYdb::TResultSet>> resultSets = nullptr) {
+    void Subscribe(NYdb::TAsyncStatus& status, std::shared_ptr<std::vector<NYdb::TResultSet>> resultSets = nullptr) {
         status.Subscribe(
             [actorSystem = NActors::TActivationContext::ActorSystem(), selfId = this->SelfId(), resultSets] (const NYdb::TAsyncStatus& status) mutable {
                 actorSystem->Send(new IEventHandle(selfId, selfId, new TEvControlPlaneStorageInternal::TEvDbRequestResult(status, std::move(resultSets))));

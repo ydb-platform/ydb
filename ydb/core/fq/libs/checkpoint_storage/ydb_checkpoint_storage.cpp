@@ -4,7 +4,9 @@
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
+
 #include <util/stream/str.h>
 #include <util/string/builder.h>
 #include <util/string/printf.h>
@@ -196,7 +198,7 @@ TFuture<TStatus> CreateCheckpoint(const TCheckpointContextPtr& context) {
 
         TString serializedGraphDescription;
         if (!graphDescContext->NewGraphDescription->SerializeToString(&serializedGraphDescription)) {
-            NYql::TIssues issues;
+            NYdb::NIssue::TIssues issues;
             issues.AddIssue("Failed to serialize graph description proto");
             return MakeFuture(TStatus(EStatus::BAD_REQUEST, std::move(issues)));
         }
@@ -279,7 +281,7 @@ bool GraphDescIdExists(const TFuture<TDataQueryResult>& result) {
 
 TFuture<TStatus> GenerateGraphDescId(const TCheckpointContextPtr& context) {
     if (context->CheckpointGraphDescriptionContext->GraphDescId) { // already given
-        return MakeFuture(TStatus(EStatus::SUCCESS, NYql::TIssues()));
+        return MakeFuture(TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues()));
     }
 
     Y_ABORT_UNLESS(context->EntityIdGenerator);
@@ -291,7 +293,7 @@ TFuture<TStatus> GenerateGraphDescId(const TCheckpointContextPtr& context) {
                     return MakeFuture<TStatus>(result.GetValue());
                 }
                 if (!GraphDescIdExists(result)) {
-                    return MakeFuture(TStatus(EStatus::SUCCESS, NYql::TIssues()));
+                    return MakeFuture(TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues()));
                 } else {
                     context->CheckpointGraphDescriptionContext->GraphDescId = {}; // Regenerate
                     return GenerateGraphDescId(context);
@@ -415,10 +417,10 @@ TFuture<TStatus> ProcessCheckpoints(
             *parser.ColumnParser("modified_by").GetOptionalTimestamp());
 
         if (loadGraphDescription) {
-            if (const TMaybe<TString> graphDescription = parser.ColumnParser("graph_description").GetOptionalString(); graphDescription && *graphDescription) {
+            if (const std::optional<std::string> graphDescription = parser.ColumnParser("graph_description").GetOptionalString(); graphDescription && !graphDescription.value().empty()) {
                 NProto::TCheckpointGraphDescription graphDesc;
                 if (!graphDesc.ParseFromString(*graphDescription)) {
-                    NYql::TIssues issues;
+                    NYdb::NIssue::TIssues issues;
                     issues.AddIssue("Failed to deserialize graph description proto");
                     return MakeFuture(TStatus(EStatus::INTERNAL_ERROR, std::move(issues)));
                 }
@@ -637,7 +639,7 @@ TFuture<TIssues> TCheckpointStorage::Init()
     if (YdbConnection->DB != YdbConnection->TablePathPrefix) {
         auto status = YdbConnection->SchemeClient.MakeDirectory(YdbConnection->TablePathPrefix).GetValueSync();
         if (!status.IsSuccess() && status.GetStatus() != EStatus::ALREADY_EXISTS) {
-            issues = status.GetIssues();
+            issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());
 
             TStringStream ss;
             ss << "Failed to create path '" << YdbConnection->TablePathPrefix << "': " << status.GetStatus();
@@ -656,7 +658,7 @@ TFuture<TIssues> TCheckpointStorage::Init()
                                   tableName,                        \
                                   std::move(desc)).GetValueSync();  \
         if (!IsTableCreated(status)) {                              \
-            issues = status.GetIssues();                            \
+            issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());                            \
                                                                     \
             TStringStream ss;                                       \
             ss << "Failed to create " << tableName                  \
@@ -1088,7 +1090,7 @@ TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> TCheckpointStor
 
                         TResultSetParser parser = queryResult.GetResultSetParser(0);
                         if (parser.TryNextRow()) {
-                            result->Size = parser.ColumnParser(0).GetOptionalUint64().GetOrElse(0);
+                            result->Size = parser.ColumnParser(0).GetOptionalUint64().value_or(0);
                         } else {
                             result->Size = 0;
                         }

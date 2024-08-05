@@ -1,0 +1,3 @@
+add_subdirectory(ydb_endpoints)
+add_subdirectory(ydb_internal)
+add_subdirectory(ydb_stats)

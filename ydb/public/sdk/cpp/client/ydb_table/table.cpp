@@ -33,7 +33,7 @@
 
 #include <unordered_map>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 namespace NTable {
 
 using namespace NThreading;

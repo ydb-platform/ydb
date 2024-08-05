@@ -281,7 +281,7 @@ public:
     virtual TString GetCurrentLocation() const override {
         TString host;
         ui32 port;
-        NMsgBusProxy::TMsgBusClientConfig::CrackAddress(GRpcClient->GetConfig().Locator, host, port);
+        NMsgBusProxy::TMsgBusClientConfig::CrackAddress(TString{GRpcClient->GetConfig().Locator}, host, port);
         return host;
     }
 
@@ -301,7 +301,7 @@ public:
         NGRpcProxy::TGRpcClientConfig config(GRpcClient->GetConfig());
         TString hostname;
         ui32 port;
-        NMsgBusProxy::TMsgBusClientConfig::CrackAddress(config.Locator, hostname, port);
+        NMsgBusProxy::TMsgBusClientConfig::CrackAddress(TString{config.Locator}, hostname, port);
         TString newLocation = TStringBuilder() << EscapeIPv6(location) << ':' << port;
         if (newLocation == config.Locator) {
             return TCleanupCallback();

@@ -10,13 +10,13 @@
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_view.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb-cpp-sdk/client/draft/ydb_view.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb-cpp-sdk/client/value/value.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
@@ -39,7 +39,10 @@
 #include <util/system/file.h>
 #include <util/system/fs.h>
 
+#include <google/protobuf/text_format.h>
+
 #include <format>
+
 
 namespace NYdb::NBackup {
 
@@ -103,7 +106,7 @@ case EPrimitiveType::type:                          \
 
 #define CASE_PRINT_PRIMITIVE_STRING_TYPE(out, type) \
 case EPrimitiveType::type: {                        \
-        TString str = parser.Get##type();           \
+        auto str = TString{parser.Get##type()};           \
         CGIEscape(str);                             \
         out << '"' << str << '"';                   \
     }                                               \
@@ -348,7 +351,7 @@ void ReadTable(TDriver driver, const NTable::TTableDescription& desc, const TStr
     do {
         lastWrittenPK = TryReadTable(driver, desc, fullTablePath, folderPath, lastWrittenPK, &fileCounter, ordered);
         if (lastWrittenPK && retries) {
-            LOG_D("Retry read table from key: " << FormatValueYson(*lastWrittenPK).Quote());
+            LOG_D("Retry read table from key: " << TString{FormatValueYson(*lastWrittenPK)}.Quote());
         }
     } while (lastWrittenPK && retries--);
 
@@ -502,10 +505,10 @@ void BackupChangefeeds(TDriver driver, const TString& tablePath, const TFsPath& 
     auto desc = DescribeTable(driver, tablePath);
 
     for (const auto& changefeedDesc : desc.GetChangefeedDescriptions()) {
-        TFsPath changefeedDirPath = CreateDirectory(folderPath, changefeedDesc.GetName());
+        TFsPath changefeedDirPath = CreateDirectory(folderPath, TString{changefeedDesc.GetName()});
 
         auto protoChangeFeedDesc = ProtoFromChangefeedDesc(changefeedDesc);
-        const auto descTopicResult = DescribeTopic(driver, JoinDatabasePath(tablePath, changefeedDesc.GetName()));
+        const auto descTopicResult = DescribeTopic(driver, JoinDatabasePath(tablePath, TString{changefeedDesc.GetName()}));
         VerifyStatus(descTopicResult);
         const auto& topicDescription = descTopicResult.GetTopicDescription();
         const auto protoTopicDescription = NYdb::TProtoAccessor::GetProto(topicDescription);
@@ -584,7 +587,8 @@ void ValidateViewQuery(const TString& query, const TString& dbPath, NYql::TIssue
 }
 
 TString BuildCreateViewQuery(TStringBuf name, const NView::TViewDescription& description, TStringBuf backupRoot) {
-    auto [contextRecreation, select] = SplitViewQuery(description.GetQueryText());
+    auto queryText = TString{description.GetQueryText()};
+    auto [contextRecreation, select] = SplitViewQuery(queryText);
 
     const TString query = std::format(
         "-- backup root: \"{}\"\n"
@@ -630,7 +634,7 @@ void BackupView(TDriver driver, const TString& dbBackupRoot, const TString& dbPa
     NView::TViewClient client(driver);
     auto viewDescription = DescribeView(client, dbPath);
 
-    ValidateViewQuery(viewDescription.GetQueryText(), dbPath, issues);
+    ValidateViewQuery(TString{viewDescription.GetQueryText()}, dbPath, issues);
 
     const auto fsPath = fsBackupDir.Child(NDump::NFiles::CreateView().FileName);
     LOG_D("Write view creation query to " << fsPath.GetPath().Quote());

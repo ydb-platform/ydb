@@ -4,7 +4,7 @@
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 namespace NScripting {
 
 class TExecuteYqlResult : public TStatus {
@@ -102,8 +102,8 @@ using TAsyncExplainYqlResult = NThreading::TFuture<TExplainYqlResult>;
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TExecuteYqlRequestSettings : public TOperationRequestSettings<TExecuteYqlRequestSettings> {
-    FLUENT_SETTING_DEFAULT(Ydb::Query::Syntax, Syntax, Ydb::Query::SYNTAX_YQL_V1);
-    FLUENT_SETTING_DEFAULT(NTable::ECollectQueryStatsMode, CollectQueryStats, NTable::ECollectQueryStatsMode::None);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(Ydb::Query::Syntax, Syntax, Ydb::Query::SYNTAX_YQL_V1);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(NTable::ECollectQueryStatsMode, CollectQueryStats, NTable::ECollectQueryStatsMode::None);
 };
 
 enum class ExplainYqlRequestMode {
@@ -113,7 +113,7 @@ enum class ExplainYqlRequestMode {
 };
 
 struct TExplainYqlRequestSettings : public TOperationRequestSettings<TExplainYqlRequestSettings> {
-    FLUENT_SETTING_DEFAULT(ExplainYqlRequestMode, Mode, ExplainYqlRequestMode::Validate);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ExplainYqlRequestMode, Mode, ExplainYqlRequestMode::Validate);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

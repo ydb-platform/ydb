@@ -1474,7 +1474,7 @@ TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletLabeledCo
                 groupNames[j] = TString(1, toupper(groupNames[j][0])) + groupNames[j].substr(1);
                 if (groupNames[j] == "Topic") {
                     if (NPersQueue::CorrectName(groups[j])) {
-                        TString dc = to_title(NPersQueue::GetDC(groups[j]));
+                        TString dc = to_title(TString{NPersQueue::GetDC(groups[j])});
                         TString producer = NPersQueue::GetProducer(groups[j]);
                         TString topic = NPersQueue::GetRealTopic(groups[j]);
                         group = group->GetSubgroup("OriginDC", dc);

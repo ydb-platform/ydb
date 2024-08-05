@@ -3,6 +3,7 @@ use plato;
 SELECT
     count(cs_ext_list_price),
     sum(cs_ext_tax),
+    sum(cs_ext_list_price),
     min(cs_sales_price),
     max(cs_ext_list_price),
     avg(cs_ext_tax),

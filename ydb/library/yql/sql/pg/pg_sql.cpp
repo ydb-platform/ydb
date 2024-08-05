@@ -36,6 +36,7 @@ extern "C" {
 #include <ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/catalog/pg_type_d.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/library/yql/core/yql_callable_names.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
@@ -5423,15 +5424,30 @@ public:
         }
 
         bool hasArgNames = false;
-        ui32 defArgsCount = 0;
         for (int i = 0; i < ListLength(value->parameters); ++i) {
             auto node = LIST_CAST_NTH(FunctionParameter, value->parameters, i);
             hasArgNames = hasArgNames || (node->name != nullptr);
             if (node->mode == FUNC_PARAM_IN || node->mode == FUNC_PARAM_DEFAULT) {
                 if (node->defexpr) {
-                    ++defArgsCount;
+                    desc.DefaultArgs.emplace_back();
+                    auto& value = desc.DefaultArgs.back();
+                    auto expr = node->defexpr;
+                    if (NodeTag(expr) == T_TypeCast) {
+                        expr = CAST_NODE(TypeCast, expr)->arg;
+                    }
+
+                    if (NodeTag(expr) != T_A_Const) {
+                        return false;
+                    }
+
+                    auto pgConst = GetValueNType(CAST_NODE(A_Const, expr));
+                    if (!pgConst) {
+                        return false;
+                    }
+
+                    value = pgConst->value;
                 } else {
-                    Y_ENSURE(!defArgsCount);
+                    Y_ENSURE(desc.DefaultArgs.empty());
                 }
 
                 desc.InputArgNames.push_back(node->name ? node->name : "");
@@ -5470,17 +5486,6 @@ public:
         }
 
         Builder.CreateProc(desc);
-        if (defArgsCount) {
-            Y_ENSURE(!desc.VariadicType);
-            for (ui32 i = 0; i < defArgsCount; ++i) {
-                desc.ArgTypes.pop_back();
-                if (!desc.InputArgNames.empty()) {
-                    desc.InputArgNames.pop_back();
-                }
-
-                Builder.CreateProc(desc);
-            }
-        }
         return true;
     }
 
@@ -5584,6 +5589,8 @@ public:
         for (const auto& sql : sqls) {
             NYql::PGParse(sql, handler);
         }
+
+        NKikimr::NMiniKQL::RebuildTypeIndex();
     }
 };
 

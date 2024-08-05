@@ -324,6 +324,7 @@ protected:
     bool UseNullType = true;
 };
 
+void RebuildTypeIndex();
 
 } // namespace NMiniKQL
 } // namespace Nkikimr

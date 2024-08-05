@@ -146,7 +146,7 @@ bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
         return false;
     }
     if (storedGCBarrierPreparation < LastCollectedGenStep) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("mem_genstep", GCBarrierPreparation)("db_genstep", storedGCBarrierPreparation);
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("mem_genstep", GCBarrierPreparation)("last_genstep", LastCollectedGenStep)("db_genstep", storedGCBarrierPreparation);
     }
     AFL_VERIFY(!GCBarrierPreparation.Generation() || LastCollectedGenStep <= GCBarrierPreparation)("prepared", GCBarrierPreparation)("last", LastCollectedGenStep);
 

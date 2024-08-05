@@ -1812,11 +1812,6 @@
         }
     ],
     "test.test[match_recognize-simple_paritioning-default.txt-Results]": [],
-    "test.test[match_recognize-without_order_by--Results]": [
-        {
-            "uri": "file://test.test_match_recognize-without_order_by--Results_/extracted"
-        }
-    ],
     "test.test[optimizers-combinebykey_fields_subset--Analyze]": [
         {
             "checksum": "7bed37d7e9b15a7d4515b8cda8e73b3e",

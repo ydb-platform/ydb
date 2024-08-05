@@ -145,8 +145,8 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
     TExprNode::TPtr sortOrder;
     ExtractSortKeyAndOrder(pos, sortTraits, sortKey, sortOrder, ctx);
     TExprNode::TPtr result;
-    YQL_ENSURE(sortOrder->ChildrenSize() == 1, "Expect ORDER BY timestamp for MATCH_RECOGNIZE");
     if (isStreaming) {
+        YQL_ENSURE(sortOrder->ChildrenSize() == 1, "Expect ORDER BY timestamp for MATCH_RECOGNIZE");
         const auto reordered = ctx.Builder(pos)
             .Lambda()
             .Param("partition")
@@ -216,15 +216,15 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
             .Seal()
         .Build();
     } else { //non-streaming
-            result = ctx.Builder(pos)
-                .Callable("PartitionsByKeys")
-                    .Add(0, input)
-                    .Add(1, partitionKeySelector)
-                    .Add(2, sortOrder)
-                    .Add(3, sortKey)
-                    .Add(4, matchRecognize)
-                .Seal()
-            .Build();
+        result = ctx.Builder(pos)
+            .Callable("PartitionsByKeys")
+                .Add(0, input)
+                .Add(1, partitionKeySelector)
+                .Add(2, sortOrder)
+                .Add(3, sortKey)
+                .Add(4, matchRecognize)
+            .Seal()
+        .Build();
     }
     YQL_CLOG(INFO, Core) << "Expanded MatchRecognize";
     return result;

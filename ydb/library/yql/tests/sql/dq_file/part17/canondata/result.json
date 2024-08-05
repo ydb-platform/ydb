@@ -1719,7 +1719,7 @@
         {
             "checksum": "c8b1e13d6da573f8a1afd415db1d00e7",
             "size": 5787,
-            "uri": "https://{canondata_backend}/1775319/86ab0de654a60bf1e3145a3d8e3d7eae4a9f26b8/resource.tar.gz#test.test_match_recognize-alerts-default.txt-Debug_/opt.yql_patched"
+            "uri": "https://{canondata_backend}/1917492/86ab0de654a60bf1e3145a3d8e3d7eae4a9f26b8/resource.tar.gz#test.test_match_recognize-alerts-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[match_recognize-alerts-default.txt-Plan]": [

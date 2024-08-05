@@ -388,6 +388,11 @@ message TKqpPhyResult {
     optional uint32 QueryResultIndex = 5;
 }
 
+message TKqpAnalyzeOperation {
+    string TablePath = 1;
+    repeated string Columns = 2;
+}
+
 message TKqpPhyMetadataOperation {
     message TColumnValue {
         string Column = 1;
@@ -452,6 +457,7 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme CreateResourcePool = 38;
         NKikimrSchemeOp.TModifyScheme AlterResourcePool = 39;
         NKikimrSchemeOp.TModifyScheme DropResourcePool = 40;
+        TKqpAnalyzeOperation AnalyzeTable = 41;
     }
 }
 

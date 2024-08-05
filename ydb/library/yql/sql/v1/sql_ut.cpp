@@ -2521,12 +2521,12 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(AlterTableAddIndexWithIsNotSupported) {
         ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx GLOBAL ON (col) WITH (a=b)",
-            "<main>:1:40: Error: with: alternative is not implemented yet: 744:20: global_index\n");
+            "<main>:1:40: Error: with: alternative is not implemented yet: 745:20: global_index\n");
     }
 
     Y_UNIT_TEST(AlterTableAddIndexLocalIsNotSupported) {
         ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx LOCAL ON (col)",
-            "<main>:1:40: Error: local: alternative is not implemented yet: 744:35: local_index\n");
+            "<main>:1:40: Error: local: alternative is not implemented yet: 745:35: local_index\n");
     }
 
     Y_UNIT_TEST(CreateTableAddIndexVector) {

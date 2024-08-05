@@ -240,6 +240,7 @@ enum class TYdbOperation : ui32 {
     CreateReplication    = 1 << 24,
     AlterReplication     = 1 << 25,
     DropReplication      = 1 << 26,
+    Analyze              = 1 << 27,
 };
 
 Y_DECLARE_FLAGS(TYdbOperations, TYdbOperation);

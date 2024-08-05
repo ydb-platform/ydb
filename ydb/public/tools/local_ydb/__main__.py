@@ -25,7 +25,7 @@ To start already deployed, but stopped cluster:
 
 To update cluster (stop + start):
 
-  {prog} start --ydb-working-dir /absolute/path/to/working/directory --ydb-binary-path /path/to/kikimr/driver
+  {prog} update --ydb-working-dir /absolute/path/to/working/directory --ydb-binary-path /path/to/kikimr/driver
 \x1b[0m
 """
     program_name = 'local_ydb'

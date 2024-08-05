@@ -40,7 +40,7 @@ public:
         ui32 flags = 0;
         TFunctionTypeInfo funcInfo;
         const auto status = ctx.HolderFactory.GetFunctionRegistry()->FindFunctionTypeInfo(
-            *ctx.TypeEnv, ctx.TypeInfoHelper, ctx.CountersProvider, FunctionName, UserType,
+            ctx.TypeEnv, ctx.TypeInfoHelper, ctx.CountersProvider, FunctionName, UserType,
             TypeConfig, flags, Pos, ctx.SecureParamsProvider, &funcInfo);
 
         MKQL_ENSURE(status.IsOk(), status.GetError());
@@ -186,7 +186,7 @@ private:
         ui32 flags = 0;
         TFunctionTypeInfo funcInfo;
         const auto status = ctx.HolderFactory.GetFunctionRegistry()->FindFunctionTypeInfo(
-            *ctx.TypeEnv, ctx.TypeInfoHelper, ctx.CountersProvider, FunctionName, UserType,
+            ctx.TypeEnv, ctx.TypeInfoHelper, ctx.CountersProvider, FunctionName, UserType,
             TypeConfig, flags, Pos, ctx.SecureParamsProvider, &funcInfo);
 
         MKQL_ENSURE(status.IsOk(), status.GetError());

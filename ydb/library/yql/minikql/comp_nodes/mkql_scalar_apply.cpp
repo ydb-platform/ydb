@@ -54,7 +54,7 @@ public:
             , RandomProvider(CreateDefaultRandomProvider())
             , TimeProvider(CreateDefaultTimeProvider())
             , Ctx(HolderFactory, &ValueBuilder, TComputationOptsFull(
-                nullptr, Alloc.Ref(), &TypeEnv, *RandomProvider, *TimeProvider, NUdf::EValidatePolicy::Exception, originalContext.SecureParamsProvider, originalContext.CountersProvider),
+                nullptr, Alloc.Ref(), TypeEnv, *RandomProvider, *TimeProvider, NUdf::EValidatePolicy::Exception, originalContext.SecureParamsProvider, originalContext.CountersProvider),
                 originalContext.Mutables, *NYql::NUdf::GetYqlMemoryPool())
         {
             Alloc.Ref().EnableArrowTracking = false;

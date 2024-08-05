@@ -39,7 +39,7 @@ namespace NYql {
                                             MutableFunctionRegistry_.Get(),
                                             NUdf::EValidateMode::None, NUdf::EValidatePolicy::Fail, "", EGraphPerProcess::Multi);
             Pattern_ = MakeComputationPattern(Explorer_, node, {}, opts);
-            Graph_ = Pattern_->Clone(opts.ToComputationOptions(*RandomProvider_, *TimeProvider_, &Env_));
+            Graph_ = Pattern_->Clone(opts.ToComputationOptions(*RandomProvider_, *TimeProvider_));
 
             return Graph_->GetValue();
         }

@@ -1619,4 +1619,16 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
         TSetup setup;
         setup.Run(cases);
     }
+
+    Y_UNIT_TEST(Analyze) {
+        TCases cases = {
+            {"analyze table (col1, col2, col3)",
+             "ANALYZE table (col1, col2, col3);\n"},
+             {"analyze table",
+             "ANALYZE table;\n"}
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
 }

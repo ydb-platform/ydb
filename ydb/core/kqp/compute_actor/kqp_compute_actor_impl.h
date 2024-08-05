@@ -14,8 +14,8 @@ using namespace NYql::NDq;
 
 class TKqpTaskRunnerExecutionContext : public TDqTaskRunnerExecutionContext {
 public:
-    TKqpTaskRunnerExecutionContext(ui64 txId, bool withSpilling, IDqChannelStorage::TWakeUpCallback&& wakeUp)
-        : TDqTaskRunnerExecutionContext(txId, std::move(wakeUp))
+    TKqpTaskRunnerExecutionContext(ui64 txId, bool withSpilling, IDqChannelStorage::TWakeUpCallback&& wakeUpCallback, std::function<void(const TString& error)>&& errorCallback)
+        : TDqTaskRunnerExecutionContext(txId, std::move(wakeUpCallback), std::move(errorCallback))
         , WithSpilling_(withSpilling)
     {
     }

@@ -127,9 +127,9 @@ public:
 
         Become(&TDqAsyncComputeActor::StateFuncWrapper<&TDqAsyncComputeActor::StateFuncBody>);
 
-        auto wakeup = [this]{ ContinueExecute(EResumeSource::CABootstrapWakeup); };
-        // TODO: add real callback here
-        std::shared_ptr<IDqTaskRunnerExecutionContext> execCtx = std::make_shared<TDqTaskRunnerExecutionContext>(TxId, std::move(wakeup), nullptr);
+        auto wakeupCallback = [this]{ ContinueExecute(EResumeSource::CABootstrapWakeup); };
+        auto errorCallback = [this](const TString& error){ SendError(error); };
+        std::shared_ptr<IDqTaskRunnerExecutionContext> execCtx = std::make_shared<TDqTaskRunnerExecutionContext>(TxId, std::move(wakeupCallback), std::move(errorCallback));
 
         Send(TaskRunnerActorId,
             new NTaskRunnerActor::TEvTaskRunnerCreate(

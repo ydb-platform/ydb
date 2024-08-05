@@ -777,7 +777,7 @@ message TColumnTableSharding {
 }
 
 message TColumnPartitioningPolicy {
-    reserved = 1; // SizeToSplit 
+    reserved 1; // SizeToSplit 
 
     optional uint32 MinPartitionsCount = 2;
     optional uint32 MaxPartitionsCount = 3;

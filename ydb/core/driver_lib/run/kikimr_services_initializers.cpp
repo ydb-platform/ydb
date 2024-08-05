@@ -59,6 +59,7 @@
 
 #include <ydb/core/keyvalue/keyvalue.h>
 
+#include <ydb/core/memory_controller/memory_controller.h>
 #include <ydb/core/test_tablet/test_tablet.h>
 #include <ydb/core/test_tablet/state_server_interface.h>
 
@@ -109,6 +110,7 @@
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/node_limits.pb.h>
 #include <ydb/core/protos/compile_service_config.pb.h>
+#include <ydb/core/protos/memory_controller_config.pb.h>
 
 #include <ydb/core/public_http/http_service.h>
 
@@ -1131,9 +1133,8 @@ void TLocalServiceInitializer::InitializeServices(
 
 // TSharedCacheInitializer
 
-TSharedCacheInitializer::TSharedCacheInitializer(const TKikimrRunConfig& runConfig, TIntrusivePtr<TMemObserver> memObserver)
+TSharedCacheInitializer::TSharedCacheInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig)
-    , MemObserver(std::move(memObserver))
 {}
 
 void TSharedCacheInitializer::InitializeServices(
@@ -1149,27 +1150,26 @@ void TSharedCacheInitializer::InitializeServices(
         cfg.MergeFrom(Config.GetSharedCacheConfig());
     }
 
+    if (cfg.HasMemoryLimit() && cfg.GetMemoryLimit() != 0) {
+        // config limit is optional
+        // if preserved apply both memory controller limit and config limit
+        config->LimitBytes = cfg.GetMemoryLimit();
+    } else {
+        config->LimitBytes = {};
+    }
     config->TotalAsyncQueueInFlyLimit = cfg.GetAsyncQueueInFlyLimit();
     config->TotalScanQueueInFlyLimit = cfg.GetScanQueueInFlyLimit();
 
     if (cfg.HasActivePagesReservationPercent()) {
         config->ActivePagesReservationPercent = cfg.GetActivePagesReservationPercent();
     }
-    if (cfg.HasMemTableReservationPercent()) {
-        config->MemTableReservationPercent = cfg.GetMemTableReservationPercent();
-    }
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
     TIntrusivePtr<::NMonitoring::TDynamicCounters> sausageGroup = tabletGroup->GetSubgroup("type", "S_CACHE");
-
-    config->CacheConfig = new TCacheCacheConfig(cfg.GetMemoryLimit(),
-            sausageGroup->GetCounter("fresh"),
-            sausageGroup->GetCounter("staging"),
-            sausageGroup->GetCounter("warm"));
     config->Counters = new TSharedPageCacheCounters(sausageGroup);
 
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeSharedPageCacheId(0),
-        TActorSetupCmd(CreateSharedPageCache(std::move(config), MemObserver), TMailboxType::ReadAsFilled, appData->UserPoolId)));
+        TActorSetupCmd(CreateSharedPageCache(std::move(config)), TMailboxType::ReadAsFilled, appData->UserPoolId)));
 
     auto *configurator = NConsole::CreateSharedCacheConfigurator();
     setup->LocalServices.emplace_back(TActorId(),
@@ -2061,11 +2061,9 @@ void TPersQueueDirectReadCacheInitializer::InitializeServices(NActors::TActorSys
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
 }
 
-// TMemProfMonitorInitializer
-
-TMemProfMonitorInitializer::TMemProfMonitorInitializer(const TKikimrRunConfig& runConfig, TIntrusivePtr<TMemObserver> memObserver)
+TMemProfMonitorInitializer::TMemProfMonitorInitializer(const TKikimrRunConfig& runConfig, TIntrusiveConstPtr<NMemory::IProcessMemoryInfoProvider> processMemoryInfoProvider)
     : IKikimrServicesInitializer(runConfig)
-    , MemObserver(std::move(memObserver))
+    , ProcessMemoryInfoProvider(std::move(processMemoryInfoProvider))
 {}
 
 void TMemProfMonitorInitializer::InitializeServices(
@@ -2079,8 +2077,8 @@ void TMemProfMonitorInitializer::InitializeServices(
     }
 
     IActor* monitorActor = CreateMemProfMonitor(
-        MemObserver,
-        1, // seconds
+        TDuration::Seconds(1),
+        ProcessMemoryInfoProvider,
         appData->Counters,
         filePathPrefix);
 
@@ -2091,8 +2089,6 @@ void TMemProfMonitorInitializer::InitializeServices(
             TMailboxType::HTSwap,
             appData->BatchPoolId));
 }
-
-// TMemoryTrackerInitializer
 
 TMemoryTrackerInitializer::TMemoryTrackerInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig)
@@ -2106,6 +2102,23 @@ void TMemoryTrackerInitializer::InitializeServices(
     setup->LocalServices.emplace_back(
         TActorId(),
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)
+    );
+}
+
+TMemoryControllerInitializer::TMemoryControllerInitializer(const TKikimrRunConfig& runConfig, TIntrusiveConstPtr<NMemory::IProcessMemoryInfoProvider> processMemoryInfoProvider)
+    : IKikimrServicesInitializer(runConfig)
+    , ProcessMemoryInfoProvider(std::move(processMemoryInfoProvider))
+{}
+
+void TMemoryControllerInitializer::InitializeServices(
+    NActors::TActorSystemSetup* setup,
+    const NKikimr::TAppData* appData)
+{
+    auto config = appData->MemoryControllerConfig;
+    auto* actor = NMemory::CreateMemoryController(TDuration::Seconds(1), ProcessMemoryInfoProvider, config, appData->Counters);
+    setup->LocalServices.emplace_back(
+        NMemory::MakeMemoryControllerId(0),
+        TActorSetupCmd(actor, TMailboxType::HTSwap, appData->BatchPoolId)
     );
 }
 

@@ -1127,6 +1127,7 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
     TTabletId BalancerTabletID = InvalidTabletId;
     TShardIdx BalancerShardIdx = InvalidShardIdx;
     THashMap<ui32, TTopicTabletInfo::TTopicPartitionInfo*> Partitions;
+    size_t ActivePartitionCount = 0;
 
     TString PreSerializedPathDescription; // Cached path description
     TString PreSerializedPartitionsDescription; // Cached partition description
@@ -1223,6 +1224,7 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
         alterData->AlterVersion = AlterVersion + 1;
         Y_ABORT_UNLESS(alterData->TotalGroupCount);
         Y_ABORT_UNLESS(alterData->TotalPartitionCount);
+        Y_ABORT_UNLESS(0 < alterData->ActivePartitionCount && alterData->ActivePartitionCount <= alterData->TotalPartitionCount);
         Y_ABORT_UNLESS(alterData->NextPartitionId);
         Y_ABORT_UNLESS(alterData->MaxPartsPerTablet);
         alterData->KeySchema = KeySchema;
@@ -1236,6 +1238,7 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
         TotalGroupCount = AlterData->TotalGroupCount;
         NextPartitionId = AlterData->NextPartitionId;
         TotalPartitionCount = AlterData->TotalPartitionCount;
+        ActivePartitionCount = AlterData->ActivePartitionCount;
         MaxPartsPerTablet = AlterData->MaxPartsPerTablet;
         if (!AlterData->TabletConfig.empty())
             TabletConfig = std::move(AlterData->TabletConfig);
@@ -3288,7 +3291,7 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
     const THashMap<TString, ui32>& colName2Id,
     const TSubDomainInfo& subDomain, TString& errStr);
 
-std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceName, const TString& dataType, 
+std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceName, const TString& dataType,
     const NKikimr::NScheme::TTypeRegistry& typeRegistry, bool pgTypesEnabled, TString& errStr);
 
 }

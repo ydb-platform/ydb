@@ -590,7 +590,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
                 gt10k = MakeStrPredicate("10000", NArrow::EOperation::Greater);
             }
             NOlap::TPKRangesFilter pkFilter(false);
-            Y_ABORT_UNLESS(pkFilter.Add(gt10k, nullptr, nullptr));
+            Y_ABORT_UNLESS(pkFilter.Add(gt10k, nullptr, &indexInfo));
             auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), pkFilter);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 10);
         }
@@ -602,7 +602,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
                 lt10k = MakeStrPredicate("08999", NArrow::EOperation::Less);
             }
             NOlap::TPKRangesFilter pkFilter(false);
-            Y_ABORT_UNLESS(pkFilter.Add(nullptr, lt10k, nullptr));
+            Y_ABORT_UNLESS(pkFilter.Add(nullptr, lt10k, &indexInfo));
             auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), pkFilter);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 9);
         }

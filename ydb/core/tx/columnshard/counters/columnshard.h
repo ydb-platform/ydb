@@ -4,6 +4,7 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/hash_set.h>
+#include <ydb/core/tx/columnshard/counters/tablet_counters.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -13,12 +14,65 @@ enum class EWriteFailReason {
     LongTxDuplication /* "long_tx_duplication" */,
     NoTable /* "no_table" */,
     IncorrectSchema /* "incorrect_schema" */,
-    Overload /* "overload" */
+    Overload /* "overload" */,
+    OverlimitReadRawMemory /* "overlimit_read_raw_memory" */,
+    OverlimitReadBlobMemory /* "overlimit_read_blob_memory" */
+};
+
+class TCSInitialization: public TCommonCountersOwner {
+private:
+    using TBase = TCommonCountersOwner;
+
+    const NMonitoring::THistogramPtr HistogramTabletInitializationMs;
+    const NMonitoring::THistogramPtr HistogramTxInitDurationMs;
+    const NMonitoring::THistogramPtr HistogramTxUpdateSchemaDurationMs;
+    const NMonitoring::THistogramPtr HistogramTxInitSchemaDurationMs;
+    const NMonitoring::THistogramPtr HistogramActivateExecutorFromActivationDurationMs;
+    const NMonitoring::THistogramPtr HistogramSwitchToWorkFromActivationDurationMs;
+    const NMonitoring::THistogramPtr HistogramSwitchToWorkFromCreateDurationMs;
+
+public:
+    
+    void OnTxInitFinished(const TDuration d) const {
+        HistogramTxInitDurationMs->Collect(d.MilliSeconds());
+    }
+
+    void OnTxUpdateSchemaFinished(const TDuration d) const {
+        HistogramTxUpdateSchemaDurationMs->Collect(d.MilliSeconds());
+    }
+
+    void OnTxInitSchemaFinished(const TDuration d) const {
+        HistogramTxInitSchemaDurationMs->Collect(d.MilliSeconds());
+    }
+
+    void OnActivateExecutor(const TDuration fromCreate) const {
+        HistogramActivateExecutorFromActivationDurationMs->Collect(fromCreate.MilliSeconds());
+    }
+    void OnSwitchToWork(const TDuration fromStart, const TDuration fromCreate) const {
+        HistogramSwitchToWorkFromActivationDurationMs->Collect(fromStart.MilliSeconds());
+        HistogramSwitchToWorkFromCreateDurationMs->Collect(fromCreate.MilliSeconds());
+    }
+
+    TCSInitialization(TCommonCountersOwner& owner)
+        : TBase(owner, "stage", "initialization")
+        , HistogramTabletInitializationMs(TBase::GetHistogram("TabletInitializationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
+        , HistogramTxInitDurationMs(TBase::GetHistogram("TxInitDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
+        , HistogramTxUpdateSchemaDurationMs(TBase::GetHistogram("TxInitDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
+        , HistogramTxInitSchemaDurationMs(TBase::GetHistogram("TxInitSchemaDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
+        , HistogramActivateExecutorFromActivationDurationMs(
+              TBase::GetHistogram("ActivateExecutorFromActivationDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
+        , HistogramSwitchToWorkFromActivationDurationMs(
+              TBase::GetHistogram("SwitchToWorkFromActivationDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
+        , HistogramSwitchToWorkFromCreateDurationMs(
+              TBase::GetHistogram("SwitchToWorkFromCreateDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32))) {
+    }
 };
 
 class TCSCounters: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
+
+    std::shared_ptr<const TTabletCountersHandle> TabletCounters;
 
     NMonitoring::TDynamicCounters::TCounterPtr StartBackgroundCount;
     NMonitoring::TDynamicCounters::TCounterPtr TooEarlyBackgroundCount;
@@ -62,11 +116,15 @@ private:
     NMonitoring::THistogramPtr HistogramSuccessWriteMiddle6PutBlobsDurationMs;
     NMonitoring::THistogramPtr HistogramFailedWritePutBlobsDurationMs;
     NMonitoring::THistogramPtr HistogramWriteTxCompleteDurationMs;
+
     NMonitoring::TDynamicCounters::TCounterPtr WritePutBlobsCount;
     NMonitoring::TDynamicCounters::TCounterPtr WriteRequests;
     THashMap<EWriteFailReason, NMonitoring::TDynamicCounters::TCounterPtr> FailedWriteRequests;
     NMonitoring::TDynamicCounters::TCounterPtr SuccessWriteRequests;
+
 public:
+    const TCSInitialization Initialization;
+
     void OnStartWriteRequest() const {
         WriteRequests->Add(1);
     }
@@ -130,27 +188,36 @@ public:
         SplitCompactionGranulePortionsCount->SetValue(portionsCount);
     }
 
-    void OnOverloadInsertTable(const ui64 size) const {
+    void OnWriteOverloadDisk() const {
+        TabletCounters->IncCounter(COUNTER_OUT_OF_SPACE);
+    }
+
+    void OnWriteOverloadInsertTable(const ui64 size) const {
+        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
         OverloadInsertTableBytes->Add(size);
         OverloadInsertTableCount->Add(1);
     }
 
-    void OnOverloadMetadata(const ui64 size) const {
+    void OnWriteOverloadMetadata(const ui64 size) const {
+        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
         OverloadMetadataBytes->Add(size);
         OverloadMetadataCount->Add(1);
     }
 
-    void OnOverloadShardTx(const ui64 size) const {
+    void OnWriteOverloadShardTx(const ui64 size) const {
+        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
         OverloadShardTxBytes->Add(size);
         OverloadShardTxCount->Add(1);
     }
 
-    void OnOverloadShardWrites(const ui64 size) const {
+    void OnWriteOverloadShardWrites(const ui64 size) const {
+        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
         OverloadShardWritesBytes->Add(size);
         OverloadShardWritesCount->Add(1);
     }
 
-    void OnOverloadShardWritesSize(const ui64 size) const {
+    void OnWriteOverloadShardWritesSize(const ui64 size) const {
+        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
         OverloadShardWritesSizeBytes->Add(size);
         OverloadShardWritesSizeCount->Add(1);
     }
@@ -201,7 +268,7 @@ public:
         SetupCleanupCount->Add(1);
     }
 
-    TCSCounters();
+    TCSCounters(std::shared_ptr<const TTabletCountersHandle> tabletCounters);
 };
 
 }

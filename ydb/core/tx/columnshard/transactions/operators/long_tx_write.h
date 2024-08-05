@@ -37,7 +37,7 @@ namespace NKikimr::NColumnShard {
     public:
         using TBase::TBase;
 
-        void OnTabletInit(TColumnShard& owner) override {
+        virtual void DoOnTabletInit(TColumnShard& owner) override {
             for (auto&& writeId : WriteIds) {
                 AFL_VERIFY(owner.LongTxWrites.contains(writeId))("problem", "ltx_not_exists_for_write_id")("txId", GetTxId())("writeId", (ui64)writeId);
                 owner.AddLongTxWrite(writeId, GetTxId());
@@ -54,9 +54,9 @@ namespace NKikimr::NColumnShard {
 
             auto counters = owner.InsertTable->Commit(dbTable, version.GetPlanStep(), version.GetTxId(), WriteIds, pathExists);
 
-            owner.IncCounter(COUNTER_BLOBS_COMMITTED, counters.Rows);
-            owner.IncCounter(COUNTER_BYTES_COMMITTED, counters.Bytes);
-            owner.IncCounter(COUNTER_RAW_BYTES_COMMITTED, counters.RawBytes);
+            owner.Counters.GetTabletCounters()->IncCounter(COUNTER_BLOBS_COMMITTED, counters.Rows);
+            owner.Counters.GetTabletCounters()->IncCounter(COUNTER_BYTES_COMMITTED, counters.Bytes);
+            owner.Counters.GetTabletCounters()->IncCounter(COUNTER_RAW_BYTES_COMMITTED, counters.RawBytes);
 
             NIceDb::TNiceDb db(txc.DB);
             for (TWriteId writeId : WriteIds) {

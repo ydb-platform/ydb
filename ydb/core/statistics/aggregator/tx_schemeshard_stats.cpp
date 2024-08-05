@@ -21,10 +21,10 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
             << ", stats size# " << stats.size());
 
         NIceDb::TNiceDb db(txc.DB);
-        db.Table<Schema::BaseStats>().Key(schemeShardId).Update(
-            NIceDb::TUpdate<Schema::BaseStats::Stats>(stats));
+        db.Table<Schema::BaseStatistics>().Key(schemeShardId).Update(
+            NIceDb::TUpdate<Schema::BaseStatistics::Stats>(stats));
 
-        Self->BaseStats[schemeShardId] = stats;
+        Self->BaseStatistics[schemeShardId] = stats;
 
         if (!Self->EnableColumnStatistics) {
             return true;
@@ -33,39 +33,39 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
         NKikimrStat::TSchemeShardStats statRecord;
         Y_PROTOBUF_SUPPRESS_NODISCARD statRecord.ParseFromString(stats);
 
-        auto& oldPathIds = Self->ScanTablesBySchemeShard[schemeShardId];
+        auto& oldPathIds = Self->ScheduleTraversalsBySchemeShard[schemeShardId];
         std::unordered_set<TPathId> newPathIds;
 
         for (auto& entry : statRecord.GetEntries()) {
             auto pathId = PathIdFromPathId(entry.GetPathId());
             newPathIds.insert(pathId);
             if (oldPathIds.find(pathId) == oldPathIds.end()) {
-                TStatisticsAggregator::TScanTable scanTable;
-                scanTable.PathId = pathId;
-                scanTable.SchemeShardId = schemeShardId;
-                scanTable.LastUpdateTime = TInstant::MicroSeconds(0);
-                scanTable.IsColumnTable = entry.GetIsColumnTable();
-                auto [it, _] = Self->ScanTables.emplace(pathId, scanTable);
-                if (!Self->ScanTablesByTime.Has(&it->second)) {
-                    Self->ScanTablesByTime.Add(&it->second);
+                TStatisticsAggregator::TScheduleTraversal traversalTable;
+                traversalTable.PathId = pathId;
+                traversalTable.SchemeShardId = schemeShardId;
+                traversalTable.LastUpdateTime = TInstant::MicroSeconds(0);
+                traversalTable.IsColumnTable = entry.GetIsColumnTable();
+                auto [it, _] = Self->ScheduleTraversals.emplace(pathId, traversalTable);
+                if (!Self->ScheduleTraversalsByTime.Has(&it->second)) {
+                    Self->ScheduleTraversalsByTime.Add(&it->second);
                 }
-                db.Table<Schema::ScanTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
-                    NIceDb::TUpdate<Schema::ScanTables::SchemeShardId>(schemeShardId),
-                    NIceDb::TUpdate<Schema::ScanTables::LastUpdateTime>(0),
-                    NIceDb::TUpdate<Schema::ScanTables::IsColumnTable>(entry.GetIsColumnTable()));
+                db.Table<Schema::ScheduleTraversals>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+                    NIceDb::TUpdate<Schema::ScheduleTraversals::SchemeShardId>(schemeShardId),
+                    NIceDb::TUpdate<Schema::ScheduleTraversals::LastUpdateTime>(0),
+                    NIceDb::TUpdate<Schema::ScheduleTraversals::IsColumnTable>(entry.GetIsColumnTable()));
             }
         }
 
         for (auto& pathId : oldPathIds) {
             if (newPathIds.find(pathId) == newPathIds.end()) {
-                auto it = Self->ScanTables.find(pathId);
-                if (it != Self->ScanTables.end()) {
-                    if (Self->ScanTablesByTime.Has(&it->second)) {
-                        Self->ScanTablesByTime.Remove(&it->second);
+                auto it = Self->ScheduleTraversals.find(pathId);
+                if (it != Self->ScheduleTraversals.end()) {
+                    if (Self->ScheduleTraversalsByTime.Has(&it->second)) {
+                        Self->ScheduleTraversalsByTime.Remove(&it->second);
                     }
-                    Self->ScanTables.erase(it);
+                    Self->ScheduleTraversals.erase(it);
                 }
-                db.Table<Schema::ScanTables>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+                db.Table<Schema::ScheduleTraversals>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
             }
         }
 
@@ -76,6 +76,8 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
 
     void Complete(const TActorContext&) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxSchemeShardStats::Complete");
+
+        Self->IsSchemeshardSeen = true;
     }
 };
 

@@ -36,6 +36,16 @@ NKikimrSchemeOp::TOlapColumnDescription TTestColumn::CreateColumn(const ui32 id)
     return col;
 }
 
+std::set<std::string> TTestColumn::GetNullableSet(const std::vector<TTestColumn>& columns) {
+    std::set<std::string> result;
+    for (auto&& i : columns) {
+        if (!i.GetNullable()) {
+            result.emplace(i.GetName());
+        }
+    }
+    return result;
+}
+
 std::vector<std::pair<TString, NKikimr::NScheme::TTypeInfo>> TTestColumn::ConvertToPairs(const std::vector<TTestColumn>& columns) {
     std::vector<std::pair<TString, NScheme::TTypeInfo>> result;
     for (auto&& i : columns) {
@@ -70,15 +80,15 @@ std::vector<NKikimr::NArrow::NTest::TTestColumn> TTestColumn::CropSchema(const s
 
 namespace NKikimr::NArrow {
 
-std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(
-    const std::vector<NTest::TTestColumn>& columns, const std::set<std::string>& notNullColumns /*= {}*/) {
+std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const std::vector<NTest::TTestColumn>& columns) {
+    std::set<std::string> notNullColumns = NTest::TTestColumn::GetNullableSet(columns);
     auto result = MakeArrowFields(NTest::TTestColumn::ConvertToPairs(columns), notNullColumns);
     UNIT_ASSERT_C(result.ok(), result.status().ToString());
     return result.ValueUnsafe();
 }
 
-std::shared_ptr<arrow::Schema> MakeArrowSchema(
-    const std::vector<NTest::TTestColumn>& columns, const std::set<std::string>& notNullColumns /*= {}*/) {
+std::shared_ptr<arrow::Schema> MakeArrowSchema(const std::vector<NTest::TTestColumn>& columns) {
+    std::set<std::string> notNullColumns = NTest::TTestColumn::GetNullableSet(columns);
     auto result = MakeArrowSchema(NTest::TTestColumn::ConvertToPairs(columns), notNullColumns);
     UNIT_ASSERT_C(result.ok(), result.status().ToString());
     return result.ValueUnsafe();

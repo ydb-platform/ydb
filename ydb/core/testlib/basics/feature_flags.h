@@ -63,6 +63,7 @@ public:
     FEATURE_FLAG_SETTER(EnableResourcePools)
     FEATURE_FLAG_SETTER(EnableChangefeedsOnIndexTables)
     FEATURE_FLAG_SETTER(EnableChangeNotNullConstraint)
+    FEATURE_FLAG_SETTER(EnableBackupService)
 
     #undef FEATURE_FLAG_SETTER
 };

@@ -11,6 +11,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
+#include <ydb/core/kqp/common/events/workload_service.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
@@ -44,7 +45,8 @@
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/resource/resource.h>
-#include <util/generic/guid.h>
+
+#include <util/folder/dirut.h>
 
 namespace NKikimr::NKqp {
 
@@ -236,7 +238,8 @@ public:
         if (auto& cfg = TableServiceConfig.GetSpillingServiceConfig().GetLocalFileConfig(); cfg.GetEnable()) {
             TString spillingRoot = cfg.GetRoot();
             if (spillingRoot.empty()) {
-                spillingRoot = TStringBuilder() << "/tmp/ydb_spilling_" << CreateGuidAsString() << "/";
+                spillingRoot = NYql::NDq::GetTmpSpillingRootForCurrentUser();
+                MakeDirIfNotExist(spillingRoot);
             }
 
             SpillingService = TlsActivationContext->ExecutorThread.RegisterActor(NYql::NDq::CreateDqLocalFileSpillingService(
@@ -696,11 +699,8 @@ public:
             LocalSessions->AttachQueryText(sessionInfo, ev->Get()->GetQuery());
         }
 
-        if (!FeatureFlags.GetEnableResourcePools()) {
-            ev->Get()->SetPoolId("");
-        } else if (!ev->Get()->GetPoolId()) {
-            // TODO: do not use default pool if there is no limits
-            ev->Get()->SetPoolId(NResourcePool::DEFAULT_POOL_ID);
+        if (!TryFillPoolInfoFromCache(ev, requestId)) {
+            return;
         }
 
         TActorId targetId;
@@ -1352,6 +1352,7 @@ public:
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             hFunc(TEvKqp::TEvListSessionsRequest, Handle);
             hFunc(TEvKqp::TEvListProxyNodesRequest, Handle);
+            hFunc(NWorkload::TEvUpdatePoolInfo, Handle);
         default:
             Y_ABORT("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
                 ev->GetTypeRewrite(), ev->ToString().data());
@@ -1559,6 +1560,43 @@ private:
         }
     }
 
+    bool TryFillPoolInfoFromCache(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 requestId) {
+        if (!FeatureFlags.GetEnableResourcePools()) {
+            ev->Get()->SetPoolId("");
+            return true;
+        }
+
+        if (!ev->Get()->GetPoolId()) {
+            ev->Get()->SetPoolId(NResourcePool::DEFAULT_POOL_ID);
+        }
+
+        const auto& poolId = ev->Get()->GetPoolId();
+        const auto& poolInfo = ResourcePoolsCache.GetPoolInfo(ev->Get()->GetDatabase(), poolId);
+        if (!poolInfo) {
+            return true;
+        }
+
+        const auto& securityObject = poolInfo->SecurityObject;
+        const auto& userToken = ev->Get()->GetUserToken();
+        if (securityObject && userToken && !userToken->GetSerializedToken().empty()) {
+            if (!securityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *userToken)) {
+                ReplyProcessError(Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Resource pool " << poolId << " not found or you don't have access permissions", requestId);
+                return false;
+            }
+            if (!securityObject->CheckAccess(NACLib::EAccessRights::SelectRow, *userToken)) {
+                ReplyProcessError(Ydb::StatusIds::UNAUTHORIZED, TStringBuilder() << "You don't have access permissions for resource pool " << poolId, requestId);
+                return false;
+            }
+        }
+
+        const auto& poolConfig = poolInfo->Config;
+        if (!NWorkload::IsWorkloadServiceRequired(poolConfig)) {
+            ev->Get()->SetPoolConfig(poolConfig);
+        }
+
+        return true;
+    }
+
     void UpdateYqlLogLevels() {
         const auto& kqpYqlName = NKikimrServices::EServiceKikimr_Name(NKikimrServices::KQP_YQL);
         for (auto &entry : LogConfig.GetEntry()) {
@@ -1744,6 +1782,10 @@ private:
         Send(ev->Sender, result.release(), 0, ev->Cookie);
     }
 
+    void Handle(NWorkload::TEvUpdatePoolInfo::TPtr& ev) {
+        ResourcePoolsCache.UpdatePoolInfo(ev->Get()->Database, ev->Get()->PoolId, ev->Get()->Config, ev->Get()->SecurityObject);
+    }
+
 private:
     NKikimrConfig::TLogConfig LogConfig;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
@@ -1805,6 +1847,8 @@ private:
     std::deque<TDelayedEvent> DelayedEventsQueue;
     bool IsLookupByRmScheduled = false;
     TActorId KqpTempTablesAgentActor;
+
+    TResourcePoolsCache ResourcePoolsCache;
 };
 
 } // namespace

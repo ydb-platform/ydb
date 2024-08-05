@@ -22,12 +22,12 @@ class TSortableScanData;
 class TCursor {
 private:
     YDB_READONLY(ui64, Position, 0);
-    std::vector<NAccessor::IChunkedArray::TCurrentChunkAddress> PositionAddress;
+    std::vector<NAccessor::IChunkedArray::TFullDataAddress> PositionAddress;
 public:
     TCursor() = default;
     TCursor(const std::shared_ptr<arrow::Table>& table, const ui64 position, const std::vector<std::string>& columns);
 
-    TCursor(const ui64 position, const std::vector<NAccessor::IChunkedArray::TCurrentChunkAddress>& addresses)
+    TCursor(const ui64 position, const std::vector<NAccessor::IChunkedArray::TFullDataAddress>& addresses)
         : Position(position)
         , PositionAddress(addresses)
     {
@@ -64,7 +64,7 @@ public:
 class TSortableScanData {
 private:
     ui64 RecordsCount = 0;
-    YDB_READONLY_DEF(std::vector<NAccessor::IChunkedArray::TCurrentChunkAddress>, PositionAddress);
+    YDB_READONLY_DEF(std::vector<NAccessor::IChunkedArray::TFullDataAddress>, PositionAddress);
     YDB_READONLY_DEF(std::vector<std::shared_ptr<NAccessor::IChunkedArray>>, Columns);
     YDB_READONLY_DEF(std::vector<std::shared_ptr<arrow::Field>>, Fields);
     ui64 StartPosition = 0;
@@ -87,19 +87,18 @@ public:
         BuildPosition(position);
     }
 
-    const NAccessor::IChunkedArray::TCurrentChunkAddress& GetPositionAddress(const ui32 colIdx) const {
+    const NAccessor::IChunkedArray::TFullDataAddress& GetPositionAddress(const ui32 colIdx) const {
         AFL_VERIFY(colIdx < PositionAddress.size());
         return PositionAddress[colIdx];
     }
 
     ui32 GetPositionInChunk(const ui32 colIdx, const ui32 pos) const {
         AFL_VERIFY(colIdx < PositionAddress.size());
-        AFL_VERIFY(pos >= PositionAddress[colIdx].GetStartPosition());
-        return pos - PositionAddress[colIdx].GetStartPosition();
+        return PositionAddress[colIdx].GetAddress().GetLocalIndex(pos);
     }
 
-    std::shared_ptr<TSortableScanData> BuildCopy(const ui64 position) const {
-        return std::make_shared<TSortableScanData>(position, RecordsCount, Columns, Fields);
+    std::shared_ptr<TSortableScanData> BuildCopy(const ui64 /*position*/) const {
+        return std::make_shared<TSortableScanData>(*this);
     }
 
     TCursor BuildCursor(const ui64 position) const {
@@ -109,8 +108,8 @@ public:
         auto addresses = PositionAddress;
         ui32 idx = 0;
         for (auto&& i : addresses) {
-            if (!i.Contains(position)) {
-                i = Columns[idx]->GetChunk(i, position);
+            if (!i.GetAddress().Contains(position)) {
+                i = Columns[idx]->GetChunk(i.GetAddress(), position);
             }
             ++idx;
         }
@@ -129,15 +128,15 @@ public:
         } else {
             for (ui32 idx = 0; idx < PositionAddress.size(); ++idx) {
                 std::partial_ordering cmp = std::partial_ordering::equivalent;
-                const bool containsSelf = PositionAddress[idx].Contains(position);
-                const bool containsItem = item.PositionAddress[idx].Contains(itemPosition);
+                const bool containsSelf = PositionAddress[idx].GetAddress().Contains(position);
+                const bool containsItem = item.PositionAddress[idx].GetAddress().Contains(itemPosition);
                 if (containsSelf && containsItem) {
                     cmp = PositionAddress[idx].Compare(position, item.PositionAddress[idx], itemPosition);
                 } else if (containsSelf) {
-                    auto temporaryAddress = item.Columns[idx]->GetChunk(item.PositionAddress[idx], itemPosition);
+                    auto temporaryAddress = item.Columns[idx]->GetChunk(item.PositionAddress[idx].GetAddress(), itemPosition);
                     cmp = PositionAddress[idx].Compare(position, temporaryAddress, itemPosition);
                 } else if (containsItem) {
-                    auto temporaryAddress = Columns[idx]->GetChunk(PositionAddress[idx], position);
+                    auto temporaryAddress = Columns[idx]->GetChunk(PositionAddress[idx].GetAddress(), position);
                     cmp = temporaryAddress.Compare(position, item.PositionAddress[idx], itemPosition);
                 } else {
                     AFL_VERIFY(false);
@@ -153,7 +152,7 @@ public:
 
     void AppendPositionTo(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const ui64 position, ui64* recordSize) const;
 
-    bool InitPosition(const ui64 position);
+    [[nodiscard]] bool InitPosition(const ui64 position);
 
     std::shared_ptr<arrow::Table> Slice(const ui64 offset, const ui64 count) const {
         std::vector<std::shared_ptr<arrow::ChunkedArray>> slicedArrays;
@@ -210,6 +209,17 @@ protected:
     bool ReverseSort = false;
     std::shared_ptr<TSortableScanData> Sorting;
     std::shared_ptr<TSortableScanData> Data;
+
+    TSortableBatchPosition(const i64 position, const i64 recordsCount, const bool reverseSort, const std::shared_ptr<TSortableScanData>& sorting,
+        const std::shared_ptr<TSortableScanData>& data)
+        : Position(position)
+        , RecordsCount(recordsCount)
+        , ReverseSort(reverseSort)
+        , Sorting(sorting)
+        , Data(data) {
+        AFL_VERIFY(IsAvailablePosition(Position));
+    }
+
 public:
     TSortableBatchPosition() = default;
 
@@ -221,7 +231,7 @@ public:
         return RecordsCount;
     }
 
-    std::shared_ptr<TSortableScanData> GetSorting() const {
+    const std::shared_ptr<TSortableScanData>& GetSorting() const {
         return Sorting;
     }
 
@@ -240,16 +250,6 @@ public:
         return Sorting->GetFields();
     }
 
-    TSortableBatchPosition(const i64 position, const i64 recordsCount, const bool reverseSort, const std::shared_ptr<TSortableScanData>& sorting, const std::shared_ptr<TSortableScanData>& data)
-        : Position(position)
-        , RecordsCount(recordsCount)
-        , ReverseSort(reverseSort)
-        , Sorting(sorting)
-        , Data(data)
-    {
-
-    }
-
     TSortableBatchPosition(const TRWSortableBatchPosition& source) = delete;
     TSortableBatchPosition(TRWSortableBatchPosition& source) = delete;
     TSortableBatchPosition(TRWSortableBatchPosition&& source) = delete;
@@ -258,7 +258,7 @@ public:
     TSortableBatchPosition operator= (TRWSortableBatchPosition& source) = delete;
     TSortableBatchPosition operator= (TRWSortableBatchPosition&& source) = delete;
 
-    TRWSortableBatchPosition BuildRWPosition() const;
+    TRWSortableBatchPosition BuildRWPosition(const bool needData, const bool deepCopy) const;
 
     std::shared_ptr<arrow::Table> SliceData(const ui64 offset, const ui64 count) const {
         AFL_VERIFY(Data);
@@ -316,7 +316,12 @@ public:
         }
     };
 
-    static std::optional<TFoundPosition> FindPosition(const std::shared_ptr<arrow::RecordBatch>& batch, const TSortableBatchPosition& forFound, const bool needGreater, const std::optional<ui32> includedStartPosition);
+    [[nodiscard]] bool IsAvailablePosition(const i64 position) const {
+        return 0 <= position && position < RecordsCount;
+    }
+
+    static std::optional<TFoundPosition> FindPosition(const std::shared_ptr<arrow::RecordBatch>& batch, const TSortableBatchPosition& forFound,
+        const bool needGreater, const std::optional<ui32> includedStartPosition);
     static std::optional<TSortableBatchPosition::TFoundPosition> FindPosition(TRWSortableBatchPosition& position, const ui64 posStart, const ui64 posFinish, const TSortableBatchPosition& forFound, const bool greater);
 
     const TSortableScanData& GetData() const {
@@ -407,7 +412,7 @@ public:
 class TIntervalPosition {
 private:
     TSortableBatchPosition Position;
-    const bool LeftIntervalInclude;
+    bool LeftIntervalInclude;
 public:
     const TSortableBatchPosition& GetPosition() const {
         return Position;
@@ -459,20 +464,40 @@ public:
         return Positions.end();
     }
 
-    void AddPosition(TSortableBatchPosition&& position, const bool includeLeftInterval) {
-        TIntervalPosition intervalPosition(std::move(position), includeLeftInterval);
+    void InsertPosition(TIntervalPosition&& intervalPosition) {
+        Positions.emplace_back(std::move(intervalPosition));
+        ui32 index = Positions.size() - 1;
+        while (index >= 1 && Positions[index] < Positions[index - 1]) {
+            std::swap(Positions[index], Positions[index - 1]);
+            index = index - 1;
+        }
+    }
+
+    void InsertPosition(TSortableBatchPosition&& position, const bool includePositionToLeftInterval) {
+        TIntervalPosition intervalPosition(std::move(position), includePositionToLeftInterval);
+        InsertPosition(std::move(intervalPosition));
+    }
+
+    void InsertPosition(const TSortableBatchPosition& position, const bool includePositionToLeftInterval) {
+        TIntervalPosition intervalPosition(position, includePositionToLeftInterval);
+        InsertPosition(std::move(intervalPosition));
+    }
+
+    void AddPosition(TIntervalPosition&& intervalPosition) {
         if (Positions.size()) {
             AFL_VERIFY(Positions.back() < intervalPosition)("back", Positions.back().DebugJson())("pos", intervalPosition.DebugJson());
         }
         Positions.emplace_back(std::move(intervalPosition));
     }
 
-    void AddPosition(const TSortableBatchPosition& position, const bool includeLeftInterval) {
-        TIntervalPosition intervalPosition(position, includeLeftInterval);
-        if (Positions.size()) {
-            AFL_VERIFY(Positions.back() < intervalPosition)("back", Positions.back().DebugJson())("pos", intervalPosition.DebugJson());
-        }
-        Positions.emplace_back(std::move(intervalPosition));
+    void AddPosition(TSortableBatchPosition&& position, const bool includePositionToLeftInterval) {
+        TIntervalPosition intervalPosition(std::move(position), includePositionToLeftInterval);
+        AddPosition(std::move(intervalPosition));
+    }
+
+    void AddPosition(const TSortableBatchPosition& position, const bool includePositionToLeftInterval) {
+        TIntervalPosition intervalPosition(position, includePositionToLeftInterval);
+        AddPosition(std::move(intervalPosition));
     }
 };
 
@@ -482,23 +507,53 @@ private:
 public:
     using TBase::TBase;
 
-    bool NextPosition(const i64 delta) {
+    [[nodiscard]] bool NextPosition(const i64 delta) {
         return InitPosition(Position + delta);
     }
 
-    bool InitPosition(const i64 position) {
-        if (position < RecordsCount && position >= 0) {
-            Sorting->InitPosition(position);
-            if (Data) {
-                Data->InitPosition(position);
-            }
-            Position = position;
-            return true;
-        } else {
+    [[nodiscard]] bool InitPosition(const i64 position) {
+        if (!IsAvailablePosition(position)) {
             return false;
         }
-
+        AFL_VERIFY(Sorting->InitPosition(position))("pos", position)("count", RecordsCount);
+        if (Data) {
+            AFL_VERIFY(Data->InitPosition(position))("pos", position)("count", RecordsCount);
+        }
+        Position = position;
+        return true;
     }
+
+    class TAsymmetricPositionGuard: TNonCopyable {
+    private:
+        TRWSortableBatchPosition& Owner;
+    public:
+        TAsymmetricPositionGuard(TRWSortableBatchPosition& owner)
+            : Owner(owner)
+        {
+        }
+
+        [[nodiscard]] bool InitSortingPosition(const i64 position) {
+            if (!Owner.IsAvailablePosition(position)) {
+                return false;
+            }
+            AFL_VERIFY(Owner.Sorting->InitPosition(position));
+            Owner.Position = position;
+            return true;
+        }
+
+        ~TAsymmetricPositionGuard() {
+            if (Owner.IsAvailablePosition(Owner.Position)) {
+                if (Owner.Data) {
+                    AFL_VERIFY(Owner.Data->InitPosition(Owner.Position));
+                }
+            }
+        }
+    };
+
+    TAsymmetricPositionGuard CreateAsymmetricAccessGuard() {
+        return TAsymmetricPositionGuard(*this);
+    }
+
     TSortableBatchPosition::TFoundPosition SkipToLower(const TSortableBatchPosition& forFound);
 
     //  (-inf, it1), [it1, it2), [it2, it3), ..., [itLast, +inf)

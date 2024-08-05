@@ -21,6 +21,7 @@ import "ydb/core/protos/http_config.proto";
 import "ydb/core/protos/key.proto";
 import "ydb/core/protos/kqp.proto";
 import "ydb/core/protos/local.proto";
+import "ydb/core/protos/memory_controller_config.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/core/protos/node_broker.proto";
 import "ydb/core/protos/pqconfig.proto";
@@ -1288,6 +1289,11 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000000,
             DefaultValue: 1000 }];
+        optional uint64 DefaultHugeGarbagePerMille = 12 [(ControlOptions) = {
+            Description: "Default threshold of huge chunk garbage per mille which triggers huge chunk defragmentation",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 300 }];
     }
 
     message TTabletControls {
@@ -1510,7 +1516,6 @@ message TColumnShardConfig {
 
     optional TIndexMetadataMemoryLimit IndexMetadataMemoryLimit = 12;
     optional bool CleanupEnabled = 13 [default = true];
-    optional uint32 RemovedPortionLivetimeSeconds = 14 [default = 600];
 
     message TRepairInfo {
         optional string ClassName = 1;
@@ -1899,6 +1904,7 @@ message TAppConfig {
     optional TBlobCacheConfig BlobCacheConfig = 78;
     optional TLimiterConfig CompDiskLimiterConfig = 79;
     optional TMetadataCacheConfig MetadataCacheConfig = 80;
+    optional TMemoryControllerConfig MemoryControllerConfig = 81;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

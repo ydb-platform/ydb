@@ -72,6 +72,7 @@ struct TProcDesc {
     ui32 VariadicType = 0;
     ui32 VariadicArgType = 0;
     TString VariadicArgName;
+    TVector<TMaybe<TString>> DefaultArgs;
     ui32 ExtensionIndex = 0;
 };
 
@@ -129,6 +130,8 @@ struct TTypeDesc {
 
     // If TypType is 'c', typrelid is the OID of the class' entry in pg_class.
     ETypType TypType = ETypType::Base;
+
+    ui32 ExtensionIndex = 0;
 };
 
 enum class ECastMethod {
@@ -344,6 +347,7 @@ constexpr ui32 RelationRelationOid = 1259;
 struct TTableInfo : public TTableInfoKey {
     ERelKind Kind;
     ui32 Oid;
+    ui32 ExtensionIndex = 0;
 };
 
 struct TColumnInfo {
@@ -351,34 +355,48 @@ struct TColumnInfo {
     TString TableName;
     TString Name;
     TString UdtType;
+    ui32 ExtensionIndex = 0;
 };
 
 const TVector<TTableInfo>& GetStaticTables();
 const TTableInfo& LookupStaticTable(const TTableInfoKey& tableKey);
 const THashMap<TTableInfoKey, TVector<TColumnInfo>>& GetStaticColumns();
+const TVector<TMaybe<TString>>* ReadTable(
+    const TTableInfoKey& tableKey,
+    const TVector<TString>& columnNames,
+    size_t* columnsRemap, // should have the same length as columnNames
+    size_t& rowStep);
 
-void PrepareCatalog();
-bool IsExportFunctionsEnabled();
+bool AreAllFunctionsAllowed();
 
 struct TExtensionDesc {
-    TString Name;           // postgis
-    TString InstallName;    // $libdir/postgis-3
-    TString DDLPath;        // DDL path (CREATE TYPE/CREATE FUNCTION/etc)
-    TString LibraryPath;    // file path
-    bool TypesOnly = false; // Can't be loaded if true
+    TString Name;               // postgis
+    TString InstallName;        // $libdir/postgis-3
+    TVector<TString> SqlPaths;  // paths to SQL files with DDL (CREATE TYPE/CREATE FUNCTION/etc), DML (INSERT/VALUES)
+    TString LibraryPath;        // file path
+    bool TypesOnly = false;     // Can't be loaded if true
 };
 
-class IExtensionDDLBuilder {
+class IExtensionSqlBuilder {
 public:
-    virtual ~IExtensionDDLBuilder() = default;
+    virtual ~IExtensionSqlBuilder() = default;
 
     virtual void CreateProc(const TProcDesc& desc) = 0;
+
+    virtual void PrepareType(ui32 extensionIndex,const TString& name) = 0;
+
+    virtual void UpdateType(const TTypeDesc& desc) = 0;
+
+    virtual void CreateTable(const TTableInfo& table, const TVector<TColumnInfo>& columns) = 0;
+
+    virtual void InsertValues(const TTableInfoKey& table, const TVector<TString>& columns,
+        const TVector<TMaybe<TString>>& data) = 0; // row based layout
 };
 
-class IExtensionDDLParser {
+class IExtensionSqlParser {
 public:
-    virtual ~IExtensionDDLParser() = default;
-    virtual void Parse(const TString& sql, IExtensionDDLBuilder& builder) = 0;
+    virtual ~IExtensionSqlParser() = default;
+    virtual void Parse(ui32 extensionIndex, const TVector<TString>& sqls, IExtensionSqlBuilder& builder) = 0;
 };
 
 class IExtensionLoader {
@@ -389,7 +407,7 @@ public:
 
 // should be called at most once before other catalog functions
 void RegisterExtensions(const TVector<TExtensionDesc>& extensions, bool typesOnly,
-    IExtensionDDLParser& parser, IExtensionLoader* loader);
+    IExtensionSqlParser& parser, IExtensionLoader* loader);
 
 void EnumExtensions(std::function<void(ui32 extensionIndex, const TExtensionDesc&)> f);
 const TExtensionDesc& LookupExtension(ui32 extensionIndex);

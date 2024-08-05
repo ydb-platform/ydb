@@ -58,8 +58,8 @@ public:
 
     std::shared_ptr<arrow::Scalar> GetScalar(const ui32 index) const;
 
-    IChunkedArray::TCurrentChunkAddress GetChunk(
-        const std::optional<IChunkedArray::TCurrentChunkAddress>& chunkCurrent, const ui64 position, const ui32 chunkIdx) const;
+    IChunkedArray::TLocalDataAddress GetChunk(
+        const std::optional<IChunkedArray::TCommonChunkAddress>& chunkCurrent, const ui64 position, const ui32 chunkIdx) const;
 
     std::vector<std::shared_ptr<arrow::Array>> GetChunkedArray() const;
 
@@ -76,9 +76,10 @@ private:
     std::vector<TSparsedArrayChunk> Records;
 
 protected:
-    virtual TCurrentArrayAddress DoGetArray(const std::optional<TCurrentArrayAddress>& /*chunkCurrent*/, const ui64 /*position*/,
-        const std::shared_ptr<IChunkedArray>& selfPtr) const override {
-        return TCurrentArrayAddress(selfPtr, 0, 0);
+    virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(
+        const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const override {
+        AFL_VERIFY(false);
+        return TLocalChunkedArrayAddress(nullptr, 0, 0);
     }
 
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override;
@@ -86,7 +87,8 @@ protected:
     virtual std::vector<TChunkedArraySerialized> DoSplitBySizes(
         const TColumnSaver& saver, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) override;
 
-    virtual TCurrentChunkAddress DoGetChunk(const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position) const override {
+    virtual TLocalDataAddress DoGetLocalData(
+        const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override {
         ui32 currentIdx = 0;
         for (ui32 i = 0; i < Records.size(); ++i) {
             if (currentIdx <= position && position < currentIdx + Records[i].GetRecordsCount()) {
@@ -95,7 +97,7 @@ protected:
             currentIdx += Records[i].GetRecordsCount();
         }
         AFL_VERIFY(false);
-        return TCurrentChunkAddress(nullptr, 0, 0);
+        return TLocalDataAddress(nullptr, 0, 0);
     }
     virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray() const override {
         std::vector<std::shared_ptr<arrow::Array>> chunks;
@@ -113,7 +115,7 @@ protected:
         return bytes;
     }
 
-    TSparsedArray(std::vector<TSparsedArrayChunk>&& data, const std::shared_ptr<arrow::Scalar>& defaultValue,
+    TSparsedArray(std::vector<TSparsedArrayChunk>&& data, const std::shared_ptr<arrow::Scalar>& /*defaultValue*/,
         const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount)
         : TBase(recordsCount, EType::SparsedArray, type)
         , Records(std::move(data)) {

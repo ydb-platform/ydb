@@ -12,8 +12,8 @@ private:
     std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> Chunks;
 
 protected:
-    virtual TCurrentArrayAddress DoGetArray(const std::optional<TCurrentArrayAddress>& chunkCurrent, const ui64 /*position*/,
-        const std::shared_ptr<IChunkedArray>& selfPtr) const override;
+    virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(
+        const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
 
     virtual std::vector<NArrow::NAccessor::TChunkedArraySerialized> DoSplitBySizes(
         const TColumnSaver& /*saver*/, const TString& /*fullSerializedData*/, const std::vector<ui64>& /*splitSizes*/) override {
@@ -21,7 +21,7 @@ protected:
         return {};
     }
 
-    virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const override {
+    virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 /*index*/) const override {
         AFL_VERIFY(false)("problem", "cannot use method");
         return nullptr;
     }
@@ -32,7 +32,7 @@ protected:
         AFL_VERIFY(false);
         return nullptr;
     }
-    virtual TCurrentChunkAddress DoGetChunk(const std::optional<TCurrentChunkAddress>& chunkCurrent, const ui64 position) const override;
+    virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
     virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray() const override;
 
     TCompositeChunkedArray(std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>&& chunks, const ui32 recordsCount,

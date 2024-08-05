@@ -203,14 +203,15 @@ public:
             return TxInfo;
         }
 
+        virtual void DoOnTabletInit(TColumnShard& /*owner*/) {
+        
+        }
+
         void ResetStatusOnUpdate() {
             Status = {};
         }
 
         virtual TString DoDebugString() const = 0;
-        virtual bool DoOnStartAsync(TColumnShard& /*owner*/) {
-            return false;
-        }
 
         std::optional<bool> StartedAsync;
 
@@ -220,12 +221,6 @@ public:
 
         bool CheckTxInfoForReply(const TFullTxInfo& originalTxInfo) const {
             return DoCheckTxInfoForReply(originalTxInfo);
-        }
-
-        [[nodiscard]] bool OnStartAsync(TColumnShard& owner) {
-            AFL_VERIFY(!StartedAsync);
-            StartedAsync = DoOnStartAsync(owner);
-            return *StartedAsync;
         }
 
         TString DebugString() const {
@@ -345,7 +340,11 @@ public:
         virtual void RegisterSubscriber(const TActorId&) {
             AFL_VERIFY(false)("message", "Not implemented");
         };
-        virtual void OnTabletInit(TColumnShard& /*owner*/) {}
+        void OnTabletInit(TColumnShard& owner) {
+            AFL_VERIFY(!StartedAsync);
+            StartedAsync = true;
+            DoOnTabletInit(owner);
+        }
     };
 
 private:
@@ -359,7 +358,7 @@ private:
 
 private:
     ui64 GetAllowedStep() const;
-    bool AbortTx(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
+    bool AbortTx(const TPlanQueueItem planQueueItem, NTabletFlatExecutor::TTransactionContext& txc);
 
     TTxInfo RegisterTx(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc);
     TTxInfo RegisterTxWithDeadline(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc);
@@ -369,7 +368,6 @@ public:
 
     ITransactionOperator::TPtr GetTxOperator(const ui64 txId) const;
     ITransactionOperator::TPtr GetVerifiedTxOperator(const ui64 txId) const;
-    void StartOperators();
 
     ui64 GetMemoryUsage() const;
     bool HaveOutdatedTxs() const;

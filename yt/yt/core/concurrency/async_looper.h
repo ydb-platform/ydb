@@ -10,11 +10,9 @@ namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Class which indefenetely runs
-// two tasks:
+// Class which indefenetely runs two tasks:
 // 1. Async start which creates async action.
-// 2. Sync finish which is called after async action
-// is finished.
+// 2. Sync finish which is called after async action is finished.
 // Both are ran in Invoker_.
 // Both |Start| and |Stop| are completely
 // thread-safe, can be executed in any order and any number of times.
@@ -27,8 +25,7 @@ public:
         IInvokerPtr invoker,
         TCallback<TFuture<void>(bool cleanStart)> asyncStart,
         TCallback<void(bool cleanStart)> syncFinish,
-        TString name,
-        const NLogging::TLogger& logger = NLogging::TLogger("Looper logger"));
+        const NLogging::TLogger& logger = NLogging::TLogger("AsyncLooper"));
 
     // Starts polling.
     // First loop will have cleanStart == true
@@ -41,8 +38,9 @@ public:
 
 private:
     const IInvokerPtr Invoker_;
-    TCallback<TFuture<void>(bool)> AsyncStart_;
-    TCallback<void(bool)> SyncFinish_;
+    const TCallback<TFuture<void>(bool)> AsyncStart_;
+    const TCallback<void(bool)> SyncFinish_;
+    const NLogging::TLogger Logger;
 
     YT_DECLARE_SPIN_LOCK(NYT::NThreading::TSpinLock, StateLock_);
     using TGuard = TGuard<NYT::NThreading::TSpinLock>;
@@ -75,8 +73,6 @@ private:
     ui64 EpochNumber_ = 0;
     TFuture<void> Future_;
 
-    const NLogging::TLogger Logger;
-
     void DoStart();
 
     void StartLoop(bool cleanStart, const TGuard& guard);
@@ -89,4 +85,4 @@ DEFINE_REFCOUNTED_TYPE(TAsyncLooper);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // NYT::NConcurrency
+} // namespace NYT::NConcurrency

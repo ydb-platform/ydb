@@ -229,11 +229,6 @@ public:
 };
 
 
-NActors::IActor* CreateTakeResourcesSnapshotActor(
-    const TString& boardPath,
-    std::function<void(TVector<NKikimrKqp::TKqpNodeResources>&&)>&& callback);
-
-
 struct TResourceSnapshotState {
     std::shared_ptr<TVector<NKikimrKqp::TKqpNodeResources>> Snapshot;
     TMutex Lock;

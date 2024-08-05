@@ -437,7 +437,7 @@ public:
                     }
                     return nullptr;
                 },
-                new TCookieType(this, TlsActivationContext->ActorSystem(), SelfId(), ev->Get()->Metadata)));
+                new TCookieType(this, TlsActivationContext->ActorSystem(), SelfId(), std::move(ev->Get()->Metadata))));
 
         FormattingThread->Start();
     }

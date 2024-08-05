@@ -412,6 +412,7 @@ ETableType GetTableTypeFromString(const TStringBuf& tableType);
 bool GetTopicMeteringModeFromString(const TString& meteringMode,
                                                         Ydb::Topic::MeteringMode& result);
 TVector<Ydb::Topic::Codec> GetTopicCodecsFromString(const TStringBuf& codecsStr);
+bool GetTopicAutoPartitioningStrategyFromString(const TString& strategy, Ydb::Topic::AutoPartitioningStrategy& result);
 
 
 enum class EStoreType : ui32 {

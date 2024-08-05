@@ -281,7 +281,8 @@ private:
         limits.OutputChunkMaxSize = 2_MB;
 
         auto wakeup = [this]{ ResumeExecution(EResumeSource::Default); };
-        std::shared_ptr<IDqTaskRunnerExecutionContext> execCtx = std::make_shared<TDqTaskRunnerExecutionContext>(TraceId, std::move(wakeup));
+        // TODO: MISHA add actual callback
+        std::shared_ptr<IDqTaskRunnerExecutionContext> execCtx = std::make_shared<TDqTaskRunnerExecutionContext>(TraceId, std::move(wakeup), nullptr);
 
         Send(TaskRunnerActor, new TEvTaskRunnerCreate(std::move(ev->Get()->Record.GetTask()), limits, NDqProto::DQ_STATS_MODE_BASIC, execCtx));
     }

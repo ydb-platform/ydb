@@ -1154,7 +1154,7 @@ protected:
     }
 
     void HandleError(TEvDqCompute::TEvError::TPtr& ev) {
-        InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, ev->Get()->Error);
+        InternalError(TIssuesIds::DEFAULT_ERROR, ev->Get()->Error);
     }
 
     ui32 AllowedChannelsOvercommit() const {

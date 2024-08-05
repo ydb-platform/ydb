@@ -1,30 +1,42 @@
 #pragma once
 
+#include <util/system/unaligned_mem.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
-template <typename T, bool IsAligned>
+template <typename T, bool IsConst = std::is_const_v<T>>
 class TStateWrapper;
 
 template <typename T>
 class TStateWrapper<T, true> {
 public:
-    TStateWrapper(void* ptr)
-        : Ptr_(ptr) 
-    {
-        memcpy((void*)&State_, ptr, sizeof(State_));
+    TStateWrapper(const void* ptr)
+        : State_(ReadUnaligned<typename std::remove_const<T>::type>(ptr))
+    { }
+
+    T* Get() {
+        return &State_;
     }
 
-    TStateWrapper(const void* ptr)
-        : Ptr_(nullptr) 
-    {
-        memcpy((void*)&State_, ptr, sizeof(State_));
+    T* operator->() {
+        return Get();
     }
+
+private:
+    T State_;
+};
+
+template <typename T>
+class TStateWrapper<T, false> {
+public:
+    TStateWrapper(void* ptr)
+        : State_(ReadUnaligned<T>(ptr))
+        , Ptr_(ptr)
+    { }
 
     ~TStateWrapper() {
-        if (Ptr_) {
-            memcpy(Ptr_, (void*)&State_, sizeof(State_));
-        }
+        WriteUnaligned<T>(Ptr_, State_);
     }
 
     T* Get() {
@@ -41,32 +53,13 @@ private:
 };
 
 template <typename T>
-class TStateWrapper<T, false> {
-public:
-    TStateWrapper(void* ptr) : Ptr_(reinterpret_cast<T*>(ptr)) {}
-
-    TStateWrapper(const void* ptr) : Ptr_(reinterpret_cast<const T*>(ptr)) {}
-
-    T* Get() {
-        return Ptr_;
-    }
-
-    T* operator->() {
-        return Get();
-    }
-
-private:
-    T* Ptr_;
-};
-
-template <typename T>
-inline TStateWrapper<T, alignof(T) >= 16> MakeStateWrapper(void* ptr) {
-    return TStateWrapper<T, alignof(T) >= 16>(ptr);
+inline TStateWrapper<T> MakeStateWrapper(void* ptr) {
+    return TStateWrapper<T>(ptr);
 }
 
 template <typename T>
-inline TStateWrapper<const T, alignof(T) < 16> MakeStateWrapper(const void* ptr) {
-    return TStateWrapper<const T, alignof(T) < 16>(ptr);
+inline TStateWrapper<const T> MakeStateWrapper(const void* ptr) {
+    return TStateWrapper<const T>(ptr);
 }
 
 template<typename T>

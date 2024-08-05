@@ -186,7 +186,6 @@ class IntegrationTests:
                 self._kikimr_factory.stop()
             except RuntimeError as e:
                 print("rekby, stop ydbd runtime failed:", e)
-                pass
                 # TODO
                 # handle crash ydbdb as mark in tests
 

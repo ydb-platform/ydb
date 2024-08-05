@@ -15,9 +15,9 @@
 /ydb/services/persqueue_v1 @ydb-platform/Topics
 
 #Группа разработки строковых таблиц @azevaykin TEAM:?
-/ydb/core/tablet_flat azevaykin 
-/ydb/core/tx/datashard azevaykin 
-/ydb/core/mon_alloc azevaykin 
+/ydb/core/tablet_flat @azevaykin 
+/ydb/core/tx/datashard @azevaykin 
+/ydb/core/mon_alloc @azevaykin 
 
 # Сoordinator
 /ydb/core/tx/coordinator @snaury

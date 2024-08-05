@@ -307,7 +307,10 @@ struct TObjectStorageExternalSource : public IExternalSource {
             structuredTokenBuilder.SetNoAuth();
         }
 
-        const TString effectiveFilePattern = meta->TableLocation ? meta->TableLocation : "*";
+        auto effectiveFilePattern = meta->TableLocation;
+        if (meta->TableLocation.EndsWith('/')) {
+            effectiveFilePattern += '*';
+        } 
 
         const NYql::TS3Credentials credentials(CredentialsFactory, structuredTokenBuilder.ToJson());
         auto httpGateway = NYql::IHTTPGateway::Make();

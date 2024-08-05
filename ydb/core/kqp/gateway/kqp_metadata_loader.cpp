@@ -840,7 +840,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             return;
                         }
                         LoadExternalDataSourceSecretValues(entry, userToken, ActorSystem)
-                            .Subscribe([promise, externalDataSourceMetadata, settings](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
+                            .Subscribe([promise, externalDataSourceMetadata, settings, externalPath](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
                         {
                             UpdateExternalDataSourceSecretsValue(externalDataSourceMetadata, result.GetValue());
                             NExternalSource::IExternalSource::TPtr externalSource;
@@ -850,6 +850,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
                             if (externalSource && externalSource->CanLoadDynamicMetadata()) {
                                 auto externalSourceMeta = ConvertToExternalSourceMetadata(*externalDataSourceMetadata.Metadata);
+                                externalSourceMeta->TableLocation = *externalPath;
                                 externalSourceMeta->Attributes = settings.ReadAttributes; // attributes, collected from AST
                                 externalSource->LoadDynamicMetadata(std::move(externalSourceMeta))
                                     .Subscribe([promise = std::move(promise), externalDataSourceMetadata](const TFuture<std::shared_ptr<NExternalSource::TMetadata>>& result) mutable {

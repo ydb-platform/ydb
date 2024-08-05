@@ -3872,6 +3872,91 @@ bool TSqlTranslation::PermissionNameClause(const TRule_permission_name_target& n
     return true;
 }
 
+bool TSqlTranslation::StoreStringSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, std::map<TString, TDeferredAtom>& result) {
+    YQL_ENSURE(value);
+
+    const TString key = to_lower(id.Name);
+    if (result.find(key) != result.end()) {
+        Ctx.Error() << to_upper(key) << " duplicate keys";
+        return false;
+    }
+
+    switch (value->Alt_case()) {
+        case TRule_table_setting_value::kAltTableSettingValue2:
+            return StoreString(*value, result[key], Ctx, to_upper(key));
+
+        default:
+            Ctx.Error() << to_upper(key) << " value should be a string literal";
+            return false;
+    }
+
+    return true;
+}
+
+bool TSqlTranslation::StoreStringSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result) {
+    const TIdentifier id = IdEx(entry.GetRule_an_id1(), *this);
+    return StoreStringSettingsEntry(id, &entry.GetRule_table_setting_value3(), result);
+}
+
+bool TSqlTranslation::ParseBackupCollectionSettings(std::map<TString, TDeferredAtom>& result, const TRule_backup_collection_settings& settings) {
+    const auto& firstEntry = settings.GetRule_backup_collection_settings_entry1();
+    if (!StoreStringSettingsEntry(IdEx(firstEntry.GetRule_an_id1(), *this), &firstEntry.GetRule_table_setting_value3(), result)) {
+        return false;
+    }
+    for (const auto& block : settings.GetBlock2()) {
+        const auto& entry = block.GetRule_backup_collection_settings_entry2();
+        if (!StoreStringSettingsEntry(IdEx(entry.GetRule_an_id1(), *this), &entry.GetRule_table_setting_value3(), result)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+
+bool TSqlTranslation::ParseBackupCollectionSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_backup_collection_actions& actions) {
+    auto parseAction = [&](auto& actionVariant) {
+        switch (actionVariant.Alt_case()) {
+            case TRule_alter_backup_collection_action::kAltAlterBackupCollectionAction1: {
+                const auto& action = actionVariant.GetAlt_alter_backup_collection_action1().GetRule_alter_table_set_table_setting_compat1();
+                if (!StoreStringSettingsEntry(action.GetRule_alter_table_setting_entry3(), result)) {
+                    return false;
+                }
+                for (const auto& entry : action.GetBlock4()) {
+                    if (!StoreStringSettingsEntry(entry.GetRule_alter_table_setting_entry2(), result)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            case TRule_alter_backup_collection_action::kAltAlterBackupCollectionAction2: {
+                const auto& action = actionVariant.GetAlt_alter_backup_collection_action2().GetRule_alter_table_reset_table_setting1();
+                const TString firstKey = to_lower(IdEx(action.GetRule_an_id3(), *this).Name);
+                toReset.insert(firstKey);
+                for (const auto& key : action.GetBlock4()) {
+                    toReset.insert(to_lower(IdEx(key.GetRule_an_id2(), *this).Name));
+                }
+                return true;
+            }
+            case TRule_alter_backup_collection_action::ALT_NOT_SET:
+                Y_ABORT("You should change implementation according to grammar changes");
+        }
+    };
+
+    const auto& firstAction = actions.GetRule_alter_backup_collection_action1();
+    if (!parseAction(firstAction)) {
+        return false;
+    }
+
+    for (const auto& action : actions.GetBlock2()) {
+        if (!parseAction(action.GetRule_alter_backup_collection_action2())) {
+            return false;
+        }
+    }
+
+
+    return true;
+}
+
 TString TSqlTranslation::FrameSettingsToString(EFrameSettings settings, bool isUnbounded) {
     TString result;
     switch (settings) {

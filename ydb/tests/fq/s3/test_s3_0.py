@@ -293,11 +293,11 @@ Apple,2,22,
         logging.debug(str(result_set))
         assert len(result_set.columns) == 3
         assert result_set.columns[0].name == "a"
-        assert result_set.columns[0].type.type_id == ydb.Type.INT64
+        assert result_set.columns[0].type.optional_type.item.type_id == ydb.Type.INT64
         assert result_set.columns[1].name == "b"
-        assert result_set.columns[1].type.type_id == ydb.Type.INT64
+        assert result_set.columns[1].type.optional_type.item.type_id == ydb.Type.INT64
         assert result_set.columns[2].name == "c"
-        assert result_set.columns[2].type.type_id == ydb.Type.INT64
+        assert result_set.columns[2].type.optional_type.item.type_id == ydb.Type.INT64
         assert len(result_set.rows) == 3
         assert result_set.rows[0].items[0].int64_value == 1
         assert result_set.rows[0].items[1].int64_value == 2

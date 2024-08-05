@@ -307,15 +307,17 @@ struct TObjectStorageExternalSource : public IExternalSource {
             structuredTokenBuilder.SetNoAuth();
         }
 
+        const TString effectiveFilePattern = meta->TableLocation ? meta->TableLocation : "*";
+
         const NYql::TS3Credentials credentials(CredentialsFactory, structuredTokenBuilder.ToJson());
         auto httpGateway = NYql::IHTTPGateway::Make();
         auto httpRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
         auto s3Lister = NYql::NS3Lister::MakeS3Lister(httpGateway, httpRetryPolicy, NYql::NS3Lister::TListingRequest{
             .Url = meta->DataSourceLocation,
             .Credentials = credentials,
-            .Pattern = meta->TableLocation,
+            .Pattern = effectiveFilePattern,
         }, Nothing(), false);
-        auto afterListing = s3Lister->Next().Apply([path = meta->TableLocation](const NThreading::TFuture<NYql::NS3Lister::TListResult>& listResFut) {
+        auto afterListing = s3Lister->Next().Apply([path = effectiveFilePattern](const NThreading::TFuture<NYql::NS3Lister::TListResult>& listResFut) {
             auto& listRes = listResFut.GetValue();
             if (std::holds_alternative<NYql::NS3Lister::TListError>(listRes)) {
                 auto& error = std::get<NYql::NS3Lister::TListError>(listRes);

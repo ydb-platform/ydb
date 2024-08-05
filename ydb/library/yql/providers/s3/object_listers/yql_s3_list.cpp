@@ -86,26 +86,20 @@ std::pair<TPathFilter, TEarlyStopChecker> MakeFilterRegexp(const TString& regex,
 }
 
 std::pair<TPathFilter, TEarlyStopChecker> MakeFilterWildcard(const TString& pattern, const TSharedListingContextPtr& sharedCtx) {
-    auto augmentedPattern = pattern;
-    // we treat directories as 'directory/*'
-    if (augmentedPattern.Empty()) {
-        augmentedPattern += '*';
-    }
-
-    auto regexPatternPrefix = augmentedPattern.substr(0, NS3::GetFirstWildcardPos(augmentedPattern));
-    if (regexPatternPrefix == augmentedPattern) {
+    auto regexPatternPrefix = pattern.substr(0, NS3::GetFirstWildcardPos(pattern));
+    if (regexPatternPrefix == pattern) {
         // just match for equality
-        auto filter = [augmentedPattern](const TString& path, std::vector<TString>& matchedGlobs) {
+        auto filter = [pattern](const TString& path, std::vector<TString>& matchedGlobs) {
             matchedGlobs.clear();
-            return path == augmentedPattern;
+            return path == pattern;
         };
 
-        auto checker = [augmentedPattern](const TString& path) { return path > augmentedPattern; };
+        auto checker = [pattern](const TString& path) { return path > pattern; };
 
         return std::make_pair(std::move(filter), std::move(checker));
     }
 
-    const auto regex = NS3::RegexFromWildcards(augmentedPattern);
+    const auto regex = NS3::RegexFromWildcards(pattern);
     YQL_CLOG(DEBUG, ProviderS3) << "Got prefix: '" << regexPatternPrefix << "', regex: '"
                                 << regex << "' from original pattern '" << pattern << "'";
 

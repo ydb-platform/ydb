@@ -15,7 +15,7 @@ public:
         : ActorSystem_(actorSystem),
         TxId_(txId),
         WakeUpCallback_(wakeUpCallback),
-        ErrorCallback_(errorCallback),
+        ErrorCallback_(errorCallback)
     {
     }
 

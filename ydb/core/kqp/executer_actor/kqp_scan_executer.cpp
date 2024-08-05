@@ -48,7 +48,7 @@ public:
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         TPreparedQueryHolder::TConstPtr preparedQuery,
         TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext)
-        : TBase(std::move(request), database, userToken, counters,
+        : TBase(std::move(request), database, userToken, counters, tableServiceConfig,
             maximalSecretsSnapshotWaitTime, userRequestContext, TWilsonKqp::ScanExecuter, "ScanExecuter",
             false
         )

@@ -145,7 +145,9 @@ bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
     if (!db.LoadGCBarrierPreparation(storedGCBarrierPreparation)) {
         return false;
     }
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("mem_genstep", GCBarrierPreparation)("db_genstep", storedGCBarrierPreparation);
+    if (storedGCBarrierPreparation != GCBarrierPreparation) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("mem_genstep", GCBarrierPreparation)("db_genstep", storedGCBarrierPreparation);
+    }
     AFL_VERIFY(!GCBarrierPreparation.Generation() || LastCollectedGenStep <= GCBarrierPreparation)("prepared", GCBarrierPreparation)("last", LastCollectedGenStep);
 
     // Load the keep and delete queues

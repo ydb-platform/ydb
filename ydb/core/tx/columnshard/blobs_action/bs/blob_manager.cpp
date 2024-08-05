@@ -140,9 +140,10 @@ bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
     if (!db.LoadLastGcBarrier(LastCollectedGenStep)) {
         return false;
     }
-    if (!db.LoadGCBarrierPreparation(GCBarrierPreparation)) {
-        return false;
-    }
+    //https://github.com/ydb-platform/ydb/issues/7468
+    //if (!db.LoadGCBarrierPreparation(GCBarrierPreparation)) {
+    //    return false;
+    //}
     AFL_VERIFY(!GCBarrierPreparation.Generation() || LastCollectedGenStep <= GCBarrierPreparation)("prepared", GCBarrierPreparation)("last", LastCollectedGenStep);
 
     // Load the keep and delete queues

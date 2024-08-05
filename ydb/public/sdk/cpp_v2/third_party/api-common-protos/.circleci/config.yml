@@ -1,0 +1,163 @@
+version: 2
+workflows:
+  version: 2
+  tests:
+    jobs:
+      - compile:
+          filters:
+            tags:
+              only: /.*/
+      - publish_image:
+          requires:
+            - compile
+          filters:
+            branches:
+              only:
+                - input-contract
+                - main
+            tags:
+              only: /^\d+\.\d+\.\d+$/
+      - publish_python:
+          requires:
+            - compile
+          filters:
+            branches:
+              only:
+                - main
+            tags:
+              only: /^\d+\.\d+\.\d+$/
+jobs:
+  publish_python:
+    docker:
+      - image: python:3.10-alpine
+    environment:
+      PYTHON_PROTO_PATH: /tmp/python_protos
+    steps:
+      - checkout
+      - run:
+          name: Install git
+          command: |
+            apk add git
+      - run:
+          name: Get protoc builtins
+          command: |
+            apk add protoc curl unzip
+            # Note: for reasons unknown, the protoc built in types need to be
+            # downloaded separately.
+            mkdir -p /usr/src/protoc/
+            curl --location https://github.com/protocolbuffers/protobuf/releases/download/v3.11.2/protoc-3.11.2-linux-x86_64.zip --output /usr/src/protoc/protoc-3.11.2.zip
+            cd /usr/src/protoc/
+            unzip protoc-3.11.2.zip
+      - run:
+          name: Compile protos
+          # IAM is published separately because it is Cloud specific.
+          command: |
+            mkdir -p $PYTHON_PROTO_PATH
+            protoc --proto_path=/usr/src/protoc/include --proto_path=. --python_out=$PYTHON_PROTO_PATH $(find google -not -path "*/iam/*" -name "*.proto")
+      - run:
+          name: Install OpenSSL
+          command: |
+            apk add openssl
+      - run:
+          name: Decrypt PyPi config file
+          command: |
+            # We don't just use an environment variable to store the key because of character constraints in CircleCI env vars.
+            # The indirect key is much longer as a result.
+            openssl aes-256-ctr -pbkdf2 -d -k "${PYPI_PUBLISH_INDIRECT_KEY}" < ./.circleci/.pypirc.enc > /tmp/.pypirc
+      - run:
+          name: Install packaging and publishing tools
+          command: |
+            apk add gcc libc-dev libffi-dev openssl-dev
+            pip install setuptools twine
+      - run:
+          name: Package the Python bindings
+          command: |
+            set -euo pipefail
+            # Determine package verion info
+            PROTOS_VERSION=$(git describe --tags)
+            PACKAGING_FILES=$(realpath ./.circleci/packaging/python/)
+            # Create __init__.py files
+            cd $PYTHON_PROTO_PATH
+            cat << EOF > google/__init__.py
+            __import__('pkg_resources').declare_namespace(__name__)
+            EOF
+            for d in $(find google -not -path google -type d); do cp google/__init__.py ${d}; done
+            # Add packaging files from templates
+            cp -r ${PACKAGING_FILES}/* .
+            # Interpolate version info
+            sed -i "s/{PROTOS_VERSION}/$PROTOS_VERSION/g" $(find . -type f -not -path "./google/*")
+            # Make the tarball
+            python setup.py sdist
+            # Check the tarball
+            twine check dist/*
+      - run:
+          name: Publish the Python bindings
+          command: |
+            cd $PYTHON_PROTO_PATH
+            twine upload -u google_opensource --repository-url https://pypi.org/project/googleapis-common-protos/ dist/* < /tmp/.pypirc
+      - run:
+          name: Cleanup
+          command: |
+            rm -f /tmp/.pypirc
+          when: always
+  compile:
+    docker:
+      - image: ubuntu:22.04
+    steps:
+      - checkout
+      - run:
+          name: Install protoc.
+          command: |
+            apt-get update && apt-get install -y curl unzip
+            curl -o ~/protoc3.zip -L https://github.com/google/protobuf/releases/download/v${PROTO_VERSION}/protoc-${PROTO_VERSION}-linux-x86_64.zip
+            unzip ~/protoc3.zip -d ~/protoc3
+            mv ~/protoc3/bin/* /usr/local/bin/
+            mv ~/protoc3/include/* /usr/local/include/
+          environment:
+            PROTO_VERSION: 3.6.1
+      - run:
+          name: Verify that the protos compile.
+          command: protoc --proto_path=. google/**/*.proto -o /tmp/google.desc
+  publish_image:
+    docker:
+      - image: docker
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Build Docker image.
+          command: |
+            docker build . -t gcr.io/gapic-images/api-common-protos:latest
+      - run:
+          name: Download curl
+          command: apk add --no-cache curl
+      - run:
+          name: Download the GCR credential helper.
+          command: |
+            curl -fsSL https://github.com/GoogleCloudPlatform/docker-credential-gcr/releases/download/v1.5.0/docker-credential-gcr_linux_amd64-1.5.0.tar.gz \
+              | tar xz --to-stdout ./docker-credential-gcr \
+              > /usr/bin/docker-credential-gcr && chmod a+x /usr/bin/docker-credential-gcr
+      - run:
+          name: Set up authentication to Google Container Registry.
+          command: |
+            echo ${GCLOUD_SERVICE_KEY} > ${GOOGLE_APPLICATION_CREDENTIALS}
+            docker-credential-gcr configure-docker
+      - run:
+          name: Tag the Docker image and push it to Google Container Registry.
+          command: |
+            if [ -n "$CIRCLE_TAG" ]; then
+              export MAJOR=`echo $CIRCLE_TAG | awk -F '.' '{ print $1; }'`
+              export MINOR=`echo $CIRCLE_TAG | awk -F '.' '{ print $2; }'`
+              export PATCH=`echo $CIRCLE_TAG | awk -F '.' '{ print $3; }'`
+              docker tag gcr.io/gapic-images/api-common-protos:latest gcr.io/gapic-images/api-common-protos:$MAJOR.$MINOR.$PATCH
+              docker tag gcr.io/gapic-images/api-common-protos:latest gcr.io/gapic-images/api-common-protos:$MAJOR.$MINOR
+              docker tag gcr.io/gapic-images/api-common-protos:latest gcr.io/gapic-images/api-common-protos:$MAJOR
+              docker push gcr.io/gapic-images/api-common-protos:$MAJOR.$MINOR.$PATCH
+              docker push gcr.io/gapic-images/api-common-protos:$MAJOR.$MINOR
+              docker push gcr.io/gapic-images/api-common-protos:$MAJOR
+              docker push gcr.io/gapic-images/api-common-protos:latest
+            elif [ "$CIRCLE_BRANCH" == "main" ]; then
+              docker push gcr.io/gapic-images/api-common-protos:latest
+            elif [ "$CIRCLE_BRANCH" == "input-contract" ]; then
+              docker push gcr.io/gapic-images/api-common-protos:beta
+            fi

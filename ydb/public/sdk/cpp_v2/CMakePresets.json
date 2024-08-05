@@ -1,0 +1,105 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 22,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "ninja-generator",
+      "hidden": true,
+      "generator": "Ninja"
+    },
+    {
+      "name": "release-build",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "debug-build",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "clang-toolchain",
+      "hidden": true,
+      "toolchainFile": "${sourceDir}/clang.toolchain"
+    },
+    {
+      "name": "release",
+      "inherits": [
+        "ninja-generator",
+        "release-build",
+        "clang-toolchain"
+      ],
+      "displayName": "Default Release Config",
+      "description": "Default release build configuration using Ninja generator and Clang compiler",
+      "binaryDir": "${sourceDir}/../build"
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "displayName": "Default Release Build"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "displayName": "Default Release Tests",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "timeout": 1200
+      },
+      "environment": {
+        "YDB_ENDPOINT": "localhost:2136",
+        "YDB_DATABASE": "/local"
+      }
+    },
+    {
+      "name": "release-unit",
+      "configurePreset": "release",
+      "displayName": "Default Unit Release Tests",
+      "filter" : {
+        "include": {
+          "label": "unit"
+        }
+      },
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "timeout": 1200
+      }
+    },
+    {
+      "name": "release-integration",
+      "configurePreset": "release",
+      "displayName": "Default Integration Release Tests",
+      "output": {
+        "outputOnFailure": true
+      },
+      "filter" : {
+        "include": {
+          "label": "integration"
+        }
+      },
+      "execution": {
+        "timeout": 1200
+      },
+      "environment": {
+        "YDB_ENDPOINT": "localhost:2136",
+        "YDB_DATABASE": "/local"
+      }
+    }
+  ]
+}

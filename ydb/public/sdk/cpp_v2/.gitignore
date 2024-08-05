@@ -1,0 +1,77 @@
+CMakeLists.txt.user
+CMakeCache.txt
+CMakeFiles
+CMakeScripts
+Testing
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps
+
+# Ignore generated binaries -- any file without extension
+# Ignore all
+*
+# Unignore all with extensions
+!*.*
+# Unignore all dirs
+!*/
+# Unignore all files inside canondata dir
+!*/canondata/*
+
+# C libraries
+*.so
+*.a
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Generated protos
+*_pb2.py
+*_pb2_grpc.py
+*_pb2.pyi
+*.pb.h
+*.pb.cc
+
+# MacOS specific
+.DS_Store
+*.dSYM
+
+# clangd cache
+/.cache
+
+/compile_commands.json
+
+/build_*
+/build-*
+
+.idea/
+.vscode/
+
+# KDevelop IDE
+*.kdev4
+
+# Other symlinks
+src/util/all_datetime.cpp
+src/util/all_digest.cpp
+src/util/all_folder.cpp
+src/util/all_generic.cpp
+src/util/all_memory.cpp
+src/util/all_network.cpp
+src/util/all_random.cpp
+src/util/all_stream.cpp
+src/util/all_string.cpp
+src/util/all_system_1.cpp
+src/util/all_system_2.cpp
+src/util/all_thread.cpp
+src/util/all_util.cpp
+src/util/charset/all_charset.cpp
+
+cmake-build-debug
+llvm.sh
+
+# User CMake presets
+CMakeUserPresets.json

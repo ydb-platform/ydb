@@ -19,6 +19,11 @@ namespace NKikimr::NMetadata::NModifications {
 
 using TOperationParsingResult = TConclusion<NInternal::TTableRecord>;
 
+struct TAlterOperationContext {
+    TString SessionId;
+    TString TransactionId;
+};
+
 class TColumnInfo {
 private:
     YDB_READONLY_FLAG(Primary, false);
@@ -132,7 +137,7 @@ protected:
         TInternalModificationContext& context) const = 0;
     virtual void DoPrepareObjectsBeforeModification(std::vector<TObject>&& patchedObjects,
         typename IAlterPreparationController<TObject>::TPtr controller,
-        const TInternalModificationContext& context) const = 0;
+        const TInternalModificationContext& context, const TAlterOperationContext& alterContext) const = 0;
 public:
     using TPtr = std::shared_ptr<IObjectOperationsManager<TObject>>;
 
@@ -149,7 +154,7 @@ public:
 
     void PrepareObjectsBeforeModification(std::vector<TObject>&& patchedObjects,
         typename NModifications::IAlterPreparationController<TObject>::TPtr controller,
-        const TInternalModificationContext& context) const {
+        const TInternalModificationContext& context, const TAlterOperationContext& alterContext) const {
         return DoPrepareObjectsBeforeModification(std::move(patchedObjects), controller, context);
     }
 };

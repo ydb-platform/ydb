@@ -148,7 +148,8 @@ public:
         if (!PrepareRestoredObjects(objects)) {
             TBase::PassAway();
         } else {
-            Manager->PrepareObjectsBeforeModification(std::move(objects), InternalController, Context);
+            const TAlterOperationContext alterContext = {.SessionId = SessionId, .TransactionId = TransactionId};
+            Manager->PrepareObjectsBeforeModification(std::move(objects), InternalController, Context, alterContext);
         }
     }
 

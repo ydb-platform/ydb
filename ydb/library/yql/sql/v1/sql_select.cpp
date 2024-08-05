@@ -7,7 +7,7 @@
 
 namespace NSQLTranslationV1 {
 
-using namespace NSQLv4Generated;
+using namespace NSQLv1Generated;
 
 namespace {
 

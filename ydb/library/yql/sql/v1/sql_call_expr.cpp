@@ -10,7 +10,7 @@ namespace NSQLTranslationV1 {
 TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args,
     TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType, const TDeferredAtom& typeConfig, TNodePtr runConfig);
 
-using namespace NSQLv4Generated;
+using namespace NSQLv1Generated;
 
 static bool ValidateForCounters(const TString& input) {
     for (auto c : input) {

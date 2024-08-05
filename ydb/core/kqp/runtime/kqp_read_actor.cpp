@@ -1207,6 +1207,7 @@ public:
                         << " current is " << handle.ReadId
                         << " key is " << rowRepr;
                     CA_LOG_E(rowMessage);
+                    Counters->RowsDuplicationsFound->Inc();
                     RuntimeError(rowMessage, NYql::NDqProto::StatusIds::INTERNAL_ERROR, {});
                     return stats;
                 }

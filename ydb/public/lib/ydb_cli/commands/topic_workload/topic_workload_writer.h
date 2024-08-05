@@ -31,6 +31,7 @@ namespace NYdb {
             bool Direct;
             ui32 Codec = 0;
             bool UseTransactions = false;
+            bool UseAutoPartitioning = false;
         };
 
         class TTopicWorkloadWriterWorker {

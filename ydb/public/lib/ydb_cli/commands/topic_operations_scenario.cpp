@@ -249,6 +249,9 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
                                                     const std::vector<TString>& generatedMessages,
                                                     const TString& database)
 {
+    auto describeTopicResult = TCommandWorkloadTopicDescribe::DescribeTopic(database, TopicName, *Driver);
+    bool useAutoPartitioning = NYdb::NTopic::EAutoPartitioningStrategy::Disabled != describeTopicResult.GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy();
+
     auto count = std::make_shared<std::atomic_uint>();
     for (ui32 writerIdx = 0; writerIdx < ProducerThreadCount; ++writerIdx) {
         TTopicWorkloadWriterParams writerParams{
@@ -270,7 +273,8 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
             .PartitionId = (partitionSeed + writerIdx) % partitionCount,
             .Direct = Direct,
             .Codec = Codec,
-            .UseTransactions = UseTransactions
+            .UseTransactions = UseTransactions,
+            .UseAutoPartitioning = useAutoPartitioning
         };
 
         threads.push_back(std::async([writerParams = std::move(writerParams)]() mutable { TTopicWorkloadWriterWorker::WriterLoop(writerParams); }));

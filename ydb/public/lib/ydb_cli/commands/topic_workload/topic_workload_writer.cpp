@@ -221,16 +221,15 @@ bool TTopicWorkloadWriterWorker::ProcessSessionClosedEvent(
 
 void TTopicWorkloadWriterWorker::CreateWorker() {
     WRITE_LOG(Params.Log, ELogPriority::TLOG_INFO, TStringBuilder() << "Create writer worker for ProducerId " << Params.ProducerId << " PartitionId " << Params.PartitionId);
-    auto describeTopicResult = TCommandWorkloadTopicDescribe::DescribeTopic(Params.Database, Params.TopicName, Params.Driver);
 
     NYdb::NTopic::TWriteSessionSettings settings;
     settings.Codec((NYdb::NTopic::ECodec)Params.Codec);
     settings.Path(Params.TopicName);
     settings.ProducerId(Params.ProducerId);
-    if (NYdb::NTopic::EAutoPartitioningStrategy::Disabled == describeTopicResult.GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy()) {
-        settings.PartitionId(Params.PartitionId);
-    } else {
+    if (Params.UseAutoPartitioning) {
         settings.MessageGroupId(Params.ProducerId);
+    } else {
+        settings.PartitionId(Params.PartitionId);
     }
 
     settings.DirectWriteToPartition(Params.Direct);

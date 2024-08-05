@@ -1924,7 +1924,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 --!syntax_v1
                 ALTER TOPIC `/Root/NoSuchTopic` SET (min_active_partitions = 10);
             )");
-            bool found = true;
+            bool found = false;
             RunQuery(query, session, false);
             ListDir(kikimr, "", "NoSuchTopic", found);
             UNIT_ASSERT(!found);

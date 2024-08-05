@@ -830,15 +830,14 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
                 switch (entry.Kind) {
                     case EKind::KindExternalDataSource: {
-                        if (externalPath) {
-                            entry.Path = SplitPath(*externalPath);
-                        }
                         auto externalDataSourceMetadata = GetLoadTableMetadataResult(entry, cluster, mainCluster, table);
                         if (!externalDataSourceMetadata.Success() || !settings.RequestAuthInfo_) {
                             promise.SetValue(externalDataSourceMetadata);
                             return;
                         }
-                        externalDataSourceMetadata.Metadata->ExternalSource.TableLocation = *externalPath;
+                        if (externalPath) {
+                            externalDataSourceMetadata.Metadata->ExternalSource.TableLocation = *externalPath;
+                        }
                         LoadExternalDataSourceSecretValues(entry, userToken, ActorSystem)
                             .Subscribe([promise, externalDataSourceMetadata, settings](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
                         {

@@ -578,7 +578,6 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
     csControllerGuard->SetReadTimeoutClean(TDuration::Max());
-    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDisableCompactionController>();
     TColumnShardTestSetup testSetup;
 
     auto write = [&](ui64 writeId, ui64 tableId,
@@ -2665,7 +2664,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
         {
             auto read = std::make_unique<NColumnShard::TEvPrivate::TEvPingSnapshotsUsage>();
-            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
+            testSetup.ForwardToTablet(read.release());
         }
 
         Cerr << "Compactions happened: " << csDefaultControllerGuard->GetCompactionStartedCounter().Val() << Endl;
@@ -2695,21 +2694,21 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         csDefaultControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
         {
             auto read = std::make_unique<NColumnShard::TEvPrivate::TEvPingSnapshotsUsage>();
-            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
+            testSetup.ForwardToTablet(read.release());
         }
         planStep += (2 * delay).MilliSeconds();
         for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++planStep, ++txId) {
             std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
+            UNIT_ASSERT(testSetup.WriteData(writeId, tableId, triggerData, ydbSchema, true, &writeIds));
 
-            ProposeCommit(runtime, sender, txId, writeIds);
-            PlanCommit(runtime, sender, planStep, txId);
+            testSetup.ProposeCommit(txId, writeIds);
+            testSetup.PlanCommit(planStep, {txId});
         }
         UNIT_ASSERT_EQUAL(cleanupsHappened, 0);
         csDefaultControllerGuard->SetRequestsTracePingCheckPeriod(TDuration::Zero());
         {
             auto read = std::make_unique<NColumnShard::TEvPrivate::TEvPingSnapshotsUsage>();
-            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
+            testSetup.ForwardToTablet(read.release());
         }
         for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++planStep, ++txId) {
             std::vector<ui64> writeIds;

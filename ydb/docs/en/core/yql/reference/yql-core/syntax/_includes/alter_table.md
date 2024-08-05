@@ -83,6 +83,7 @@ These settings cannot be [reset](#additional-reset).
 #### Example
 
 The query in the following example enables automatic partitioning by load for the index named `title_index` of table `series` and sets its minimum partition count to 5:
+
 ```sql
 ALTER TABLE `series` ALTER INDEX `title_index` SET (
     AUTO_PARTITIONING_BY_LOAD = ENABLED,
@@ -214,7 +215,7 @@ If a YQL query contains multiple `ALTER TABLE ... RENAME TO ...` commands, each 
 Renaming can be used to move a table from one directory inside the database to another, for example:
 
 ```sql
-ALTER TABLE `table1` RENAME TO `/backup/table1`;
+ALTER TABLE `table1` RENAME TO `backup/table1`;
 ```
 
 ## Changing column groups {#column-family}
@@ -238,11 +239,11 @@ The two previous commands from listings 8 and 9 can be combined into one ```ALTE
 
 ```sql
 ALTER TABLE series_with_families
-	ADD FAMILY family_small (
-    	DATA = "ssd",
-    	COMPRESSION = "off"
-	),
-	ALTER COLUMN release_date SET FAMILY family_small;
+    ADD FAMILY family_small (
+        DATA = "ssd",
+        COMPRESSION = "off"
+    ),
+    ALTER COLUMN release_date SET FAMILY family_small;
 ```
 
 Using the ```ALTER FAMILY``` command, you can change the parameters of the column group. The code below changes the storage type to ```hdd``` for the ```default``` column group in the ```series_with_families``` table:

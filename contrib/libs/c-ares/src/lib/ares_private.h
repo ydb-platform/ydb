@@ -114,6 +114,7 @@ typedef struct ares_rand_state ares_rand_state;
 #include "ares__htable_strvp.h"
 #include "ares__htable_szvp.h"
 #include "ares__htable_asvp.h"
+#include "ares__htable_vpvp.h"
 #include "ares__buf.h"
 #include "ares_dns_private.h"
 #include "ares__iface_ips.h"
@@ -166,6 +167,22 @@ struct server_connection {
   ares__llist_t       *queries_to_conn;
 };
 
+#ifdef _MSC_VER
+typedef __int64          ares_int64_t;
+typedef unsigned __int64 ares_uint64_t;
+#else
+typedef long long          ares_int64_t;
+typedef unsigned long long ares_uint64_t;
+#endif
+
+/*! struct timeval on some systems like Windows doesn't support 64bit time so
+ *  therefore can't be used due to Y2K38 issues.  Make our own that does have
+ *  64bit time. */
+typedef struct {
+  ares_int64_t sec;  /*!< Seconds */
+  unsigned int usec; /*!< Microseconds. Can't be negative. */
+} ares_timeval_t;
+
 struct server_state {
   /* Configuration */
   size_t                    idx; /* index for server in system configuration */
@@ -182,7 +199,7 @@ struct server_state {
   struct server_connection *tcp_conn;
 
   /* The next time when we will retry this server if it has hit failures */
-  struct timeval            next_retry_time;
+  ares_timeval_t            next_retry_time;
 
   /* TCP buffer since multiple responses can come back in one read, or partial
    * in a read */
@@ -199,7 +216,7 @@ struct server_state {
 struct query {
   /* Query ID from qbuf, for faster lookup, and current timeout */
   unsigned short            qid; /* host byte order */
-  struct timeval            timeout;
+  ares_timeval_t            timeout;
   ares_channel_t           *channel;
 
   /*
@@ -331,8 +348,19 @@ struct ares_channeldata {
    * The retry delay is the minimum time in milliseconds to wait between doing
    * such retries (applied per-server).
    */
-  unsigned short server_retry_chance;
-  size_t         server_retry_delay;
+  unsigned short                      server_retry_chance;
+  size_t                              server_retry_delay;
+
+  /* Callback triggered when a server has a successful or failed response */
+  ares_server_state_callback          server_state_cb;
+  void                               *server_state_cb_data;
+
+  /* TRUE if a reinit is pending.  Reinit spawns a thread to read the system
+   * configuration and then apply the configuration since configuration
+   * reading may block.  The thread handle is provided for waiting on thread
+   * exit. */
+  ares_bool_t                         reinit_pending;
+  ares__thread_t                     *reinit_thread;
 };
 
 /* Does the domain end in ".onion" or ".onion."? Case-insensitive. */
@@ -346,12 +374,13 @@ void         *ares_malloc_zero(size_t size);
 void         *ares_realloc_zero(void *ptr, size_t orig_size, size_t new_size);
 
 /* return true if now is exactly check time or later */
-ares_bool_t   ares__timedout(const struct timeval *now,
-                             const struct timeval *check);
+ares_bool_t   ares__timedout(const ares_timeval_t *now,
+                             const ares_timeval_t *check);
 
 /* Returns one of the normal ares status codes like ARES_SUCCESS */
-ares_status_t ares__send_query(struct query *query, struct timeval *now);
-ares_status_t ares__requeue_query(struct query *query, struct timeval *now);
+ares_status_t ares__send_query(struct query *query, const ares_timeval_t *now);
+ares_status_t ares__requeue_query(struct query         *query,
+                                  const ares_timeval_t *now);
 
 /*! Retrieve a list of names to use for searching.  The first successful
  *  query in the list wins.  This function also uses the HOSTSALIASES file
@@ -390,10 +419,10 @@ void             ares__destroy_rand_state(ares_rand_state *state);
 void ares__rand_bytes(ares_rand_state *state, unsigned char *buf, size_t len);
 
 unsigned short ares__generate_new_id(ares_rand_state *state);
-struct timeval ares__tvnow(void);
-void           ares__timeval_remaining(struct timeval       *remaining,
-                                       const struct timeval *now,
-                                       const struct timeval *tout);
+ares_timeval_t ares__tvnow(void);
+void           ares__timeval_remaining(ares_timeval_t       *remaining,
+                                       const ares_timeval_t *now,
+                                       const ares_timeval_t *tout);
 ares_status_t  ares__expand_name_validated(const unsigned char *encoded,
                                            const unsigned char *abuf,
                                            size_t alen, char **s, size_t *enclen,
@@ -426,10 +455,17 @@ typedef struct {
   ares_bool_t      usevc;
 } ares_sysconfig_t;
 
+ares_status_t ares__sysconfig_set_options(ares_sysconfig_t *sysconfig,
+                                          const char       *str);
+
 ares_status_t ares__init_by_environment(ares_sysconfig_t *sysconfig);
 
 ares_status_t ares__init_sysconfig_files(const ares_channel_t *channel,
                                          ares_sysconfig_t     *sysconfig);
+#ifdef __APPLE__
+ares_status_t ares__init_sysconfig_macos(ares_sysconfig_t *sysconfig);
+#endif
+
 ares_status_t ares__parse_sortlist(struct apattern **sortlist, size_t *nsort,
                                    const char *str);
 
@@ -515,6 +551,8 @@ ares_status_t ares__sconfig_append_fromstr(ares__llist_t **sconfig,
 ares_status_t ares_in_addr_to_server_config_llist(const struct in_addr *servers,
                                                   size_t          nservers,
                                                   ares__llist_t **llist);
+ares_status_t ares_get_server_addr(const struct server_state *server,
+                                   ares__buf_t               *buf);
 
 struct ares_hosts_entry;
 typedef struct ares_hosts_entry ares_hosts_entry_t;
@@ -598,9 +636,9 @@ void          ares_queue_notify_empty(ares_channel_t *channel);
     }                                                             \
   } while (0)
 
-#define ARES_CONFIG_CHECK(x)                                             \
-  (x && x->lookups && ares__slist_len(x->servers) > 0 && \
-   x->timeout > 0 && x->tries > 0)
+#define ARES_CONFIG_CHECK(x)                                               \
+  (x && x->lookups && ares__slist_len(x->servers) > 0 && x->timeout > 0 && \
+   x->tries > 0)
 
 ares_bool_t   ares__subnet_match(const struct ares_addr *addr,
                                  const struct ares_addr *subnet,
@@ -619,18 +657,18 @@ ares_status_t ares__qcache_create(ares_rand_state *rand_state,
                                   ares__qcache_t **cache_out);
 void          ares__qcache_flush(ares__qcache_t *cache);
 ares_status_t ares_qcache_insert(ares_channel_t       *channel,
-                                 const struct timeval *now,
+                                 const ares_timeval_t *now,
                                  const struct query   *query,
                                  ares_dns_record_t    *dnsrec);
 ares_status_t ares_qcache_fetch(ares_channel_t           *channel,
-                                const struct timeval     *now,
+                                const ares_timeval_t     *now,
                                 const ares_dns_record_t  *dnsrec,
                                 const ares_dns_record_t **dnsrec_resp);
 
 ares_status_t ares__channel_threading_init(ares_channel_t *channel);
 void          ares__channel_threading_destroy(ares_channel_t *channel);
-void          ares__channel_lock(ares_channel_t *channel);
-void          ares__channel_unlock(ares_channel_t *channel);
+void          ares__channel_lock(const ares_channel_t *channel);
+void          ares__channel_unlock(const ares_channel_t *channel);
 
 struct ares_event_thread;
 typedef struct ares_event_thread ares_event_thread_t;
@@ -638,14 +676,6 @@ typedef struct ares_event_thread ares_event_thread_t;
 void          ares_event_thread_destroy(ares_channel_t *channel);
 ares_status_t ares_event_thread_init(ares_channel_t *channel);
 
-
-#ifdef _MSC_VER
-typedef __int64          ares_int64_t;
-typedef unsigned __int64 ares_uint64_t;
-#else
-typedef long long          ares_int64_t;
-typedef unsigned long long ares_uint64_t;
-#endif
 
 #ifdef _WIN32
 #  define HOSTENT_ADDRTYPE_TYPE short

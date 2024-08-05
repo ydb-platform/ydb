@@ -139,6 +139,7 @@ public:
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const = 0;
 
     virtual std::function<void()> GetWakeupCallback() const = 0;
+    virtual std::function<void(const TString& error)> GetErrorCallback() const = 0;
     virtual TTxId GetTxId() const = 0;
 };
 
@@ -162,6 +163,10 @@ public:
     };
 
     std::function<void()> GetWakeupCallback() const override {
+        return {};
+    }
+
+    std::function<void(const TString&)> GetErrorCallback() const override {
         return {};
     }
 

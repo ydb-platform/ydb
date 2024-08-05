@@ -202,6 +202,16 @@ struct TEvDqCompute {
         const TIssues Issues;
         const ui64 Generation;
     };
+
+    struct TEvError : public NActors::TEventLocal<TEvError, TDqComputeEvents::EvError> {
+        TEvError(const TString& error)
+            : Error(error)
+        { }
+
+        TEvError() = delete;
+
+        TString Error;
+    };
 };
 
 struct TDqExecutionSettings {

@@ -254,6 +254,7 @@ protected:
             hFunc(NActors::TEvInterconnect::TEvNodeConnected, HandleExecuteBase);
             hFunc(IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived, OnNewAsyncInputDataArrived);
             hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, OnAsyncInputError);
+            hFunc(TEvDqCompute::TEvError, HandleError);
             default: {
                 CA_LOG_C("TDqComputeActorBase, unexpected event: " << ev->GetTypeRewrite() << " (" << GetEventTypeString(ev) << ")");
                 InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite() << " (" << GetEventTypeString(ev) << ")");
@@ -627,6 +628,10 @@ protected:
             ResumeEventScheduled = true;
             this->Send(this->SelfId(), new TEvDqCompute::TEvResumeExecution{source});
         }
+    }
+
+    void SendError(const TString& error) {
+        this->Send(this->SelfId(), new TEvDqCompute::TEvError{error});
     }
 
 protected: //TDqComputeActorChannels::ICallbacks
@@ -1146,6 +1151,10 @@ protected:
         if (Checkpoints) {
             Checkpoints->Receive(iev);
         }
+    }
+
+    void HandleError(TEvDqCompute::TEvError::TPtr& ev) {
+        InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, ev->Get()->Error);
     }
 
     ui32 AllowedChannelsOvercommit() const {

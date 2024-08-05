@@ -6,9 +6,10 @@
 namespace NYql {
 namespace NDq {
 
-TDqTaskRunnerExecutionContext::TDqTaskRunnerExecutionContext(TTxId txId, IDqChannelStorage::TWakeUpCallback&& wakeUp)
+TDqTaskRunnerExecutionContext::TDqTaskRunnerExecutionContext(TTxId txId, IDqChannelStorage::TWakeUpCallback&& wakeUpCallback, std::function<void(const TString& error)>&& errorCallback)
     : TxId_(txId)
-    , WakeUp_(std::move(wakeUp))
+    , WakeUpCallback_(std::move(wakeUpCallback))
+    , ErrorCallback_(std::move(errorCallback))
 {
 }
 
@@ -18,14 +19,18 @@ IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64
 
 IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const {
     if (withSpilling) {
-        return CreateDqChannelStorage(TxId_, channelId, WakeUp_, actorSystem);
+        return CreateDqChannelStorage(TxId_, channelId, WakeUpCallback_, actorSystem);
     } else {
         return nullptr;
     }
 }
 
 std::function<void()> TDqTaskRunnerExecutionContext::GetWakeupCallback() const {
-    return WakeUp_;
+    return WakeUpCallback_;
+}
+
+std::function<void(const TString&)> TDqTaskRunnerExecutionContext::GetErrorCallback() const {
+    return ErrorCallback_;
 }
 
 TTxId TDqTaskRunnerExecutionContext::GetTxId() const {

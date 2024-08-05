@@ -36,9 +36,9 @@ class TCheckColumnScan final: public TActor<TCheckColumnScan>, public NTable::IS
 private:
     ui64 BuildIndexId;
     TString TargetTable;
-    const TScanRecord::TSeqNo& SeqNo;
+    const TScanRecord::TSeqNo SeqNo;
     ui64 DataShardId;
-    const TActorId& ProgressActorId;
+    const TActorId ProgressActorId;
 
     const TSerializedTableRange RequestedRange;
     const TVector<NScheme::TTypeInfo> KeyTypes;

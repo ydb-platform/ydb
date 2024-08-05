@@ -647,6 +647,7 @@ private:
               << ", record: " << record.ShortDebugString());
 
         TTabletId shardId = TTabletId(record.GetTabletId());
+
         if (!Self->TabletIdToShardIdx.contains(shardId)) {
             return true;
         }
@@ -686,6 +687,7 @@ private:
             shardStatus.DebugMessage = issues.ToString();
 
             NIceDb::TNiceDb db(txc.DB);
+            Self->PersistBuildIndexUploadProgress(db, buildInfo, shardIdx);
 
             switch (shardStatus.Status) {
             case NKikimrTxDataShard::EBuildIndexStatus::INVALID:

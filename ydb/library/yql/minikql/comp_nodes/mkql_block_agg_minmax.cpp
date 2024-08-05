@@ -629,7 +629,7 @@ public:
 
     void InitState(void* ptr) final {
         TStateType state;
-        UnalignedWrite<TStateType>(ptr, state);
+        WriteUnaligned<TStateType>(ptr, state);
     }
 
     void DestroyState(void* state) noexcept final {
@@ -776,7 +776,7 @@ public:
 
     void InitKey(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
         TStateType st;
-        UnalignedWrite<TStateType>(state, st);
+        WriteUnaligned<TStateType>(state, st);
         UpdateKey(state, batchNum, columns, row);
     }
 
@@ -817,7 +817,7 @@ public:
 
     void LoadState(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
         TStateType st;
-        memcpy(state, &st, sizeof(st));
+        WriteUnaligned<TStateType>(state, st);
         UpdateState(state, batchNum, columns, row);
     }
 

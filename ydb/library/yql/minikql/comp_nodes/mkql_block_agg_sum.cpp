@@ -148,7 +148,7 @@ public:
 
     void InitState(void* state) final {
         TStateType st;
-        memcpy(state, (void*)&st, sizeof(st));
+        WriteUnaligned<TStateType>(state, st);
     }
 
     void DestroyState(void* state) noexcept final {
@@ -293,7 +293,7 @@ public:
 
     void InitKey(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
         TStateType st;
-        memcpy(state, (void*)&st, sizeof(st));
+        WriteUnaligned<TStateType>(state, st);
         UpdateKey(state, batchNum, columns, row);
     }
 
@@ -333,7 +333,7 @@ public:
 
     void LoadState(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
         TStateType st;
-        memcpy(state, (void*)&st, sizeof(st));
+        WriteUnaligned<TStateType>(state, st);
         UpdateState(state, batchNum, columns, row);
     }
 
@@ -373,7 +373,7 @@ public:
 
     void InitState(void* state) final {
         TAvgState<TOut> st;
-        memcpy(state, (void*)&st, sizeof(st));
+        WriteUnaligned<TAvgState<TOut>>(state, st);
     }
 
     void DestroyState(void* state) noexcept final {
@@ -478,7 +478,7 @@ public:
 
     void InitKey(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
         TAvgState<TOut> st;
-        memcpy(state, (void*)&st, sizeof(st));
+        WriteUnaligned<TAvgState<TOut>>(state, st);
         UpdateKey(state, batchNum, columns, row);
     }
 
@@ -535,7 +535,7 @@ public:
 
     void LoadState(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
         TAvgState<TOut> st;
-        memcpy(state, (void*)&st, sizeof(st));
+        WriteUnaligned<TAvgState<TOut>>(state, st);
         UpdateState(state, batchNum, columns, row);
     }
 

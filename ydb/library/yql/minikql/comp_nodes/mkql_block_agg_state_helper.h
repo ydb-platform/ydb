@@ -68,9 +68,7 @@ inline T Cast(T t) {
 }
 
 inline NYql::NDecimal::TDecimal Cast(const std::shared_ptr<arrow::Buffer>& buffer) {
-    NYql::NDecimal::TDecimal t;
-    memcpy((void*)&t, buffer->data(), buffer->size());
-    return t;
+    return *reinterpret_cast<const NYql::NDecimal::TDecimal*>(buffer->data());
 }
 
 }

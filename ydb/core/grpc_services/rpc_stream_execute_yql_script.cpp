@@ -7,6 +7,7 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/grpc_services/grpc_integrity_trails.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 
@@ -341,7 +342,9 @@ private:
     }
 
     // Final response
-    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext&) {
+    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
+        NDataIntegrity::LogIntegrityTrails(*GetProtoRequest(), ev, ctx);
+
         auto& record = ev->Get()->Record.GetRef();
 
         NYql::TIssues issues;

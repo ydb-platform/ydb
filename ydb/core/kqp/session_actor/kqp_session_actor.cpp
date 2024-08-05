@@ -2,6 +2,7 @@
 #include "kqp_worker_common.h"
 #include "kqp_query_state.h"
 #include "kqp_query_stats.h"
+#include "session_actor_integrity_trails.h"
 
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
@@ -414,7 +415,9 @@ public:
             << " rpcActor: " << QueryState->RequestActorId
             << " database: " << QueryState->GetDatabase()
             << " pool id: " << QueryState->UserRequestContext->PoolId
-        );
+        );    
+
+        NDataIntegrity::LogIntegrityTrails(ev, TlsActivationContext->AsActorContext());    
 
         switch (action) {
             case NKikimrKqp::QUERY_ACTION_EXPLAIN:
@@ -960,6 +963,7 @@ public:
         if (queryState) {
             request.Snapshot = queryState->TxCtx->GetSnapshot();
             request.IsolationLevel = *queryState->TxCtx->EffectiveIsolationLevel;
+            request.UserTxId = QueryState->TxId.GetValue().GetHumanStr();
         } else {
             request.IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
         }
@@ -983,6 +987,7 @@ public:
         if (queryState) {
             request.Snapshot = queryState->TxCtx->GetSnapshot();
             request.IsolationLevel = *queryState->TxCtx->EffectiveIsolationLevel;
+            request.UserTxId = QueryState->TxId.GetValue().GetHumanStr();
         } else {
             request.IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
         }
@@ -1906,6 +1911,8 @@ public:
         for (auto& issue : record.GetResponse().GetQueryIssues()) {
             Counters->ReportIssues(Settings.DbCounters, CachedIssueCounters, issue);
         }
+
+        // TODO: log QueryResponse
 
         Send(QueryState->Sender, QueryResponse.release(), 0, QueryState->ProxyRequestId);
         LOG_D("Sent query response back to proxy, proxyRequestId: " << QueryState->ProxyRequestId

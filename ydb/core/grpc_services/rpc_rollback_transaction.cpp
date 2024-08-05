@@ -1,5 +1,6 @@
 #include "service_table.h"
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/grpc_integrity_trails.h>
 
 #include "rpc_calls.h"
 #include "rpc_kqp_base.h"
@@ -74,6 +75,8 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
+        NDataIntegrity::LogIntegrityTrails(*GetProtoRequest(), ev, ctx);
+
         const auto& record = ev->Get()->Record.GetRef();
         AddServerHintsIfAny(record);
 

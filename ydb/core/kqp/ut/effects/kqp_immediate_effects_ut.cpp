@@ -911,10 +911,11 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
         }
     }
 
-    Y_UNIT_TEST(UpsertConflictInteractiveTxAborted) {
+    Y_UNIT_TEST(UpsertConflictInteractiveTxAborted) { // TODO
         NKikimrConfig::TAppConfig appConfig;
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::DATA_INTEGRITY, NLog::PRI_DEBUG);
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
         auto session2 = db.CreateSession().GetValueSync().GetSession();
@@ -933,6 +934,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             tx = result.GetTransaction();
             UNIT_ASSERT(tx);
+            Cerr << "txId: " << tx->GetId() << Endl;
         }
 
         {

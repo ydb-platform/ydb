@@ -5,6 +5,7 @@
 #include <ydb/core/grpc_services/audit_dml_operations.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/cancelation/cancelation_event.h>
+#include <ydb/core/grpc_services/grpc_integrity_trails.h>
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
@@ -384,7 +385,9 @@ private:
         ctx.Send(channel.ActorId, resp.Release());
     }
 
-    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext&) {
+    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
+        NDataIntegrity::LogIntegrityTrails(*Request_->GetProtoRequest(), ev, ctx);
+
         auto& record = ev->Get()->Record.GetRef();
 
         const auto& issueMessage = record.GetResponse().GetQueryIssues();

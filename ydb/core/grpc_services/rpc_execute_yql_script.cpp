@@ -3,6 +3,7 @@
 #include "rpc_common/rpc_common.h"
 #include "audit_dml_operations.h"
 
+#include <ydb/core/grpc_services/grpc_integrity_trails.h>
 #include <ydb/public/api/protos/ydb_scripting.pb.h>
 
 namespace NKikimr {
@@ -83,6 +84,8 @@ public:
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
+        NDataIntegrity::LogIntegrityTrails(*GetProtoRequest(), ev, ctx);
+
         const auto& record = ev->Get()->Record.GetRef();
         SetCost(record.GetConsumedRu());
         AddServerHintsIfAny(record);

@@ -158,6 +158,7 @@ public:
         std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
         NKikimrKqp::EIsolationLevel IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
         TMaybe<NKikimrKqp::TRlPath> RlPath;
+        TString UserTxId;
         bool NeedTxId = true;
         bool UseImmediateEffects = false;
 

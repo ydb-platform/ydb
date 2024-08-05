@@ -85,8 +85,9 @@ def signature(script, name):
         name = name.decode("utf-8")
 
     try:
-        exec(script)
-        func = locals()[name]
+        local_variables = {}
+        exec(script, None, local_variables)
+        func = local_variables[name]
         if typing is not None and hasattr(func, "__annotations__"):
             ann = func.__annotations__
             if ann:

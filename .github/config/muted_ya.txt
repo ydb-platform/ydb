@@ -10,7 +10,6 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.*
 ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDataSourceMetadata
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.*
 ydb/core/kqp/ut/olap KqpOlapStatistics.StatsUsageWithTTL
-ydb/core/kqp/ut/olap KqpOlapAggregations.Aggregation_ResultCountAll_FilterL
 ydb/core/kqp/ut/pg KqpPg.CreateIndex
 ydb/core/kqp/ut/query KqpLimits.QueryReplySize
 ydb/core/kqp/ut/query KqpQuery.QueryTimeout
@@ -88,10 +87,6 @@ ydb/tests/fq/plans test_stats_mode.py.TestStatsMode.test_mode[v1-STATS_MODE_FULL
 ydb/tests/fq/yds *
 ydb/tests/fq/control_plane_storage *
 ydb/tests/functional/audit *
-ydb/tests/functional/clickbench test.py.test_run_determentistic[column]
-ydb/tests/functional/clickbench test.py.test_run_benchmark[scan-column]
-ydb/tests/functional/clickbench test.py.test_run_benchmark[generic-column]
-ydb/tests/functional/clickbench test.py.test_plans[column]
 ydb/tests/functional/blobstorage test_replication.py.TestReplicationAfterNodesRestart.test_replication*
 ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach

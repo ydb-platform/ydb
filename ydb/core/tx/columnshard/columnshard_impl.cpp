@@ -74,7 +74,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , PeriodicWakeupActivationPeriod(NYDBTest::TControllers::GetColumnShardController()->GetPeriodicWakeupActivationPeriod(
           TSettings::DefaultPeriodicWakeupActivationPeriod))
     , StatsReportInterval(NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval(TSettings::DefaultStatsReportInterval))
-    , InFlightReadsTracker(StoragesManager)
+    , InFlightReadsTracker(StoragesManager, Counters.GetRequestsTracingCounters())
     , TablesManager(StoragesManager, info->TabletID)
     , Subscribers(std::make_shared<NSubscriber::TManager>(*this))
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
@@ -84,8 +84,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , TTLTaskSubscription(NOlap::TTTLColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , BackgroundController(Counters.GetBackgroundControllerCounters())
     , NormalizerController(StoragesManager, Counters.GetSubscribeCounters())
-    , SysLocks(this)
-    , MaxReadStaleness(TDuration::MilliSeconds(AppDataVerified().ColumnShardConfig.GetMaxReadStaleness_ms())) {
+    , SysLocks(this) {
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {
@@ -186,12 +185,18 @@ ui64 TColumnShard::GetOutdatedStep() const {
     return step;
 }
 
-ui64 TColumnShard::GetMinReadStep() const {
-    const TDuration maxReadStaleness = NYDBTest::TControllers::GetColumnShardController()->GetReadTimeoutClean(MaxReadStaleness);
-    ui64 delayMillisec = maxReadStaleness.MilliSeconds();
+NOlap::TSnapshot TColumnShard::GetMinReadSnapshot() const {
+    ui64 delayMillisec = GetMaxReadStaleness().MilliSeconds();
     ui64 passedStep = GetOutdatedStep();
     ui64 minReadStep = (passedStep > delayMillisec ? passedStep - delayMillisec : 0);
-    return minReadStep;
+    Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(minReadStep));
+
+    if (auto ssClean = InFlightReadsTracker.GetSnapshotToClean()) {
+        if (ssClean->GetPlanStep() < minReadStep) {
+            return *ssClean;
+        }
+    }
+    return NOlap::TSnapshot::MaxForPlanStep(minReadStep);
 }
 
 TWriteId TColumnShard::HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId) const {
@@ -785,9 +790,8 @@ void TColumnShard::SetupCleanupPortions() {
         return;
     }
 
-    NOlap::TSnapshot cleanupSnapshot{GetMinReadStep(), 0};
-
-    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupPortions(cleanupSnapshot, TablesManager.GetPathsToDrop(), DataLocksManager);
+    auto changes =
+        TablesManager.MutablePrimaryIndex().StartCleanupPortions(GetMinReadSnapshot(), TablesManager.GetPathsToDrop(), DataLocksManager);
     if (!changes) {
         ACFL_DEBUG("background", "cleanup")("skip_reason", "no_changes");
         return;
@@ -1132,6 +1136,11 @@ void TColumnShard::OnTieringModified(const std::optional<ui64> pathId) {
 const NKikimr::NColumnShard::NTiers::TManager* TColumnShard::GetTierManagerPointer(const TString& tierId) const {
     Y_ABORT_UNLESS(!!Tiers);
     return Tiers->GetManagerOptional(tierId);
+}
+
+TDuration TColumnShard::GetMaxReadStaleness() {
+    return NYDBTest::TControllers::GetColumnShardController()->GetReadTimeoutClean(
+        TDuration::MilliSeconds(AppDataVerified().ColumnShardConfig.GetMaxReadStaleness_ms()));
 }
 
 }

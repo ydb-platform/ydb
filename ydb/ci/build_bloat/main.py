@@ -4,8 +4,9 @@ import argparse
 import json
 from functools import partial
 import os
-import shutil
 from concurrent.futures import ProcessPoolExecutor
+
+from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 HEADER_COMPILE_TIME_TO_SHOW = 0.5  # sec
 
@@ -408,7 +409,21 @@ def main():
         print("Performing '{}'".format(description))
         tree = fn(args.build_dir, output_path, base_src_dir)
 
-        shutil.copytree(html_dir, output_path, dirs_exist_ok=True)
+        env = Environment(loader=FileSystemLoader(html_dir), undefined=StrictUndefined)
+        types = [
+            ("h", "Header", "#66C2A5"),
+            ("cpp", "Cpp", "#FC8D62"),
+            ("dir", "Dir", "#8DA0CB"),
+        ]
+        file_names = os.listdir(html_dir)
+        os.makedirs(output_path, exist_ok=True)
+        for file_name in file_names:
+            data = env.get_template(file_name).render(types=types)
+
+            dst_path = os.path.join(output_path, file_name)
+            with open(dst_path, "w") as f:
+                f.write(data)
+
         with open(os.path.join(output_path, "bloat.json"), "w") as f:
             f.write("var kTree = ")
             json.dump(tree, f, indent=4)

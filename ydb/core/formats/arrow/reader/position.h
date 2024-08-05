@@ -97,7 +97,7 @@ public:
         return PositionAddress[colIdx].GetAddress().GetLocalIndex(pos);
     }
 
-    std::shared_ptr<TSortableScanData> BuildCopy(const ui64 position) const {
+    std::shared_ptr<TSortableScanData> BuildCopy(const ui64 /*position*/) const {
         return std::make_shared<TSortableScanData>(*this);
     }
 

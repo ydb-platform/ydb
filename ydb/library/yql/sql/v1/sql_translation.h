@@ -242,6 +242,10 @@ protected:
     bool PermissionNameClause(const TRule_permission_name_target& node, TVector<TDeferredAtom>& result, bool withGrantOption);
     bool PermissionNameClause(const TRule_permission_name& node, TDeferredAtom& result);
     bool PermissionNameClause(const TRule_permission_id& node, TDeferredAtom& result);
+    bool StoreStringSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, std::map<TString, TDeferredAtom>& result);
+    bool StoreStringSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result);
+    bool ParseBackupCollectionSettings(std::map<TString, TDeferredAtom>& result, const TRule_backup_collection_settings& settings);
+    bool ParseBackupCollectionSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_backup_collection_actions& actions);
 
     bool ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result);
     bool ValidateExternalTable(const TCreateTableParameters& params);

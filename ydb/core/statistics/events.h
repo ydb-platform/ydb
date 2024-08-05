@@ -64,6 +64,7 @@ struct TEvStatistics {
 
         EvStatTableCreationResponse,
         EvSaveStatisticsQueryResponse,
+        EvDeleteStatisticsQueryResponse,
         EvLoadStatisticsQueryResponse,
 
         EvAnalyze,
@@ -74,8 +75,6 @@ struct TEvStatistics {
         EvAnalyzeTable,
         EvAnalyzeTableResponse,
 
-        EvDeleteStatisticsQueryResponse,
-
         EvStatisticsRequest,
         EvStatisticsResponse,
 
@@ -83,6 +82,8 @@ struct TEvStatistics {
         EvAggregateStatisticsResponse,
         EvAggregateKeepAlive,
         EvAggregateKeepAliveAck,
+
+        EvFinishTraversal,
 
         EvEnd
     };

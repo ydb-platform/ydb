@@ -1,28 +1,26 @@
 #pragma once
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/interconnect.h>
-#include <ydb/library/actors/core/mon.h>
-#include <ydb/library/services/services.pb.h>
+#include "json_pipe_req.h"
+#include "log.h"
+#include "viewer.h"
+#include "wb_filter.h"
+#include "wb_group.h"
+#include "wb_merge.h"
+#include "wb_req.h"
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/viewer/json/json.h>
+#include <ydb/core/viewer/yaml/yaml.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
-#include "viewer.h"
-#include "json_pipe_req.h"
-#include "wb_merge.h"
-#include "wb_group.h"
-#include "wb_filter.h"
-#include "wb_req.h"
-#include "log.h"
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 using namespace NActors;
 using namespace NNodeWhiteboard;
 
+YAML::Node GetWhiteboardRequestParameters();
+
 template<typename TRequestEventType, typename TResponseEventType>
 class TJsonWhiteboardRequest : public TWhiteboardRequest<TRequestEventType, TResponseEventType> {
-protected:
+public:
     using TThis = TJsonWhiteboardRequest<TRequestEventType, TResponseEventType>;
     using TBase = TWhiteboardRequest<TRequestEventType, TResponseEventType>;
     using TResponseType = typename TResponseEventType::ProtoRecordType;
@@ -30,7 +28,6 @@ protected:
     NMon::TEvHttpInfo::TPtr Event;
     TJsonSettings JsonSettings;
 
-public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
@@ -131,86 +128,4 @@ public:
     }
 };
 
-template <typename RequestType, typename ResponseType>
-struct TJsonRequestParameters<TJsonWhiteboardRequest<RequestType, ResponseType>> {
-    static YAML::Node GetParameters() {
-            return YAML::Load(R"___(
-                    - name: node_id
-                      in: query
-                      description: node identifier
-                      required: false
-                      type: integer
-                    - name: merge
-                      in: query
-                      description: merge information from nodes
-                      required: false
-                      type: boolean
-                    - name: group
-                      in: query
-                      description: group information by field
-                      required: false
-                      type: string
-                    - name: all
-                      in: query
-                      description: return all possible key combinations (for enums only)
-                      required: false
-                      type: boolean
-                    - name: filter
-                      in: query
-                      description: filter information by field
-                      required: false
-                      type: string
-                    - name: alive
-                      in: query
-                      description: request from alive (connected) nodes only
-                      required: false
-                      type: boolean
-                    - name: enums
-                      in: query
-                      description: convert enums to strings
-                      required: false
-                      type: boolean
-                    - name: ui64
-                      in: query
-                      description: return ui64 as number
-                      required: false
-                      type: boolean
-                    - name: timeout
-                      in: query
-                      description: timeout in ms
-                      required: false
-                      type: integer
-                    - name: retries
-                      in: query
-                      description: number of retries
-                      required: false
-                      type: integer
-                    - name: retry_period
-                      in: query
-                      description: retry period in ms
-                      required: false
-                      type: integer
-                      default: 500
-                    - name: static
-                      in: query
-                      description: request from static nodes only
-                      required: false
-                      type: boolean
-                    - name: since
-                      in: query
-                      description: filter by update time
-                      required: false
-                      type: string
-            )___");
-    }
-};
-
-template <typename RequestType, typename ResponseType>
-struct TJsonRequestSchema<TJsonWhiteboardRequest<RequestType, ResponseType>> {
-    static YAML::Node GetSchema() {
-        return TProtoToYaml::ProtoToYamlSchema<typename ResponseType::ProtoRecordType>();
-    }
-};
-
-}
 }

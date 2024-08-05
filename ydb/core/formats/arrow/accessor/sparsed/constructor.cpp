@@ -27,7 +27,7 @@ NKikimrArrowAccessorProto::TConstructor TConstructor::DoSerializeToProto() const
     return result;
 }
 
-bool TConstructor::DoDeserializeFromProto(const NKikimrArrowAccessorProto::TConstructor& proto) {
+bool TConstructor::DoDeserializeFromProto(const NKikimrArrowAccessorProto::TConstructor& /*proto*/) {
     return true;
 }
 

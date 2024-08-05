@@ -132,7 +132,7 @@ struct TCombinerNodes {
         }
     }
 
-    void ConsumeRawData(TComputationContext& ctx, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue** from, NUdf::TUnboxedValue* to) const {
+    void ConsumeRawData(TComputationContext& /*ctx*/, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue** from, NUdf::TUnboxedValue* to) const {
         std::fill_n(keys, KeyResultNodes.size(), NUdf::TUnboxedValuePod());
         for (ui32 i = 0U; i < ItemNodes.size(); ++i) {
             if (from[i] && IsInputItemNodeUsed(i)) {

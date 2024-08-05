@@ -261,6 +261,7 @@ struct TBucketThrottleRequest
     TPromise<void> Promise = NewPromise<void>();
     std::atomic<bool> Cancelled = false;
     NProfiling::TCpuInstant StartTime = NProfiling::GetCpuInstant();
+    TGuid RequestId = TGuid::Create();
 
     void Cancel(const TError& /*error*/)
     {
@@ -371,7 +372,10 @@ public:
         request->Promise.OnCanceled(BIND(&TBucketThrottleRequest::Cancel, MakeWeak(request)));
         request->Promise.ToFuture().Subscribe(BIND(&TBucketThrottler::OnRequestComplete, MakeWeak(this), amount));
 
-        YT_LOG_DEBUG("Started waiting for throttler (Amount: %v)", amount);
+        YT_LOG_DEBUG(
+            "Started waiting for throttler (Amount: %v, RequestId: %v)",
+            amount,
+            request->RequestId);
 
         auto guard = Guard(Lock_);
         Queue_.push_back(request);

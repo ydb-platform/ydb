@@ -97,8 +97,8 @@ TEST_F(ArrowInferenceTest, csv_simple) {
     ASSERT_EQ(fields[0].type().optional_type().item().type_id(), Ydb::Type::INT64);
     ASSERT_EQ(fields[0].name(), "A");
 
-    ASSERT_TRUE(fields[1].type().optional_type().item().has_type_id());
-    ASSERT_EQ(fields[1].type().optional_type().item().type_id(), Ydb::Type::UTF8);
+    ASSERT_TRUE(fields[1].type().has_type_id());
+    ASSERT_EQ(fields[1].type().type_id(), Ydb::Type::UTF8);
     ASSERT_EQ(fields[1].name(), "B");
 
     ASSERT_TRUE(fields[2].type().optional_type().item().has_type_id());
@@ -133,8 +133,8 @@ TEST_F(ArrowInferenceTest, tsv_simple) {
     ASSERT_EQ(fields[0].type().optional_type().item().type_id(), Ydb::Type::INT64);
     ASSERT_EQ(fields[0].name(), "A");
 
-    ASSERT_TRUE(fields[1].type().optional_type().item().has_type_id());
-    ASSERT_EQ(fields[1].type().optional_type().item().type_id(), Ydb::Type::UTF8);
+    ASSERT_TRUE(fields[1].type().has_type_id());
+    ASSERT_EQ(fields[1].type().type_id(), Ydb::Type::UTF8);
     ASSERT_EQ(fields[1].name(), "B");
 
     ASSERT_TRUE(fields[2].type().optional_type().item().has_type_id());

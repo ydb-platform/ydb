@@ -233,11 +233,7 @@ Apple,2,22,
         assert result_set.columns[0].name == "Date"
         assert result_set.columns[0].type.optional_type.item.type_id == ydb.Type.DATE
         assert result_set.columns[1].name == "Fruit"
-<<<<<<< HEAD
         assert result_set.columns[1].type.type_id == ydb.Type.UTF8
-=======
-        assert result_set.columns[1].type.optional_type.item.type_id == ydb.Type.UTF8
->>>>>>> c32a7b9c2d81707390155eb3764d4edbd1e9be39
         assert result_set.columns[2].name == "Price"
         assert result_set.columns[2].type.optional_type.item.type_id == ydb.Type.INT64
         assert result_set.columns[3].name == "Weight"
@@ -252,11 +248,7 @@ Apple,2,22,
         assert result_set.rows[1].items[2].int64_value == 2
         assert result_set.rows[1].items[3].int64_value == 22
         assert result_set.rows[2].items[0].uint32_value == 19849
-<<<<<<< HEAD
         assert result_set.rows[2].items[1].text_value == ""
-=======
-        assert result_set.rows[2].items[1].null_flag_value == NullValue.NULL_VALUE
->>>>>>> c32a7b9c2d81707390155eb3764d4edbd1e9be39
         assert result_set.rows[2].items[2].int64_value == 15
         assert result_set.rows[2].items[3].int64_value == 33
 

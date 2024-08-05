@@ -4943,14 +4943,7 @@ bool TSqlTranslation::ParseResourcePoolSettings(std::map<TString, TDeferredAtom>
 bool TSqlTranslation::ParseResourcePoolSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_resource_pool_action& alterAction) {
     switch (alterAction.Alt_case()) {
         case TRule_alter_resource_pool_action::kAltAlterResourcePoolAction1: {
-            const auto& action = alterAction.GetAlt_alter_resource_pool_action1().GetRule_alter_table_set_table_setting_uncompat1();
-            if (!StoreResourcePoolSettingsEntry(IdEx(action.GetRule_an_id2(), *this), &action.GetRule_table_setting_value3(), result)) {
-                return false;
-            }
-            return true;
-        }
-        case TRule_alter_resource_pool_action::kAltAlterResourcePoolAction2: {
-            const auto& action = alterAction.GetAlt_alter_resource_pool_action2().GetRule_alter_table_set_table_setting_compat1();
+            const auto& action = alterAction.GetAlt_alter_resource_pool_action1().GetRule_alter_table_set_table_setting_compat1();
             if (!StoreResourcePoolSettingsEntry(action.GetRule_alter_table_setting_entry3(), result)) {
                 return false;
             }
@@ -4961,8 +4954,8 @@ bool TSqlTranslation::ParseResourcePoolSettings(std::map<TString, TDeferredAtom>
             }
             return true;
         }
-        case TRule_alter_resource_pool_action::kAltAlterResourcePoolAction3: {
-            const auto& action = alterAction.GetAlt_alter_resource_pool_action3().GetRule_alter_table_reset_table_setting1();
+        case TRule_alter_resource_pool_action::kAltAlterResourcePoolAction2: {
+            const auto& action = alterAction.GetAlt_alter_resource_pool_action2().GetRule_alter_table_reset_table_setting1();
             const TString firstKey = to_lower(IdEx(action.GetRule_an_id3(), *this).Name);
             toReset.insert(firstKey);
             for (const auto& key : action.GetBlock4()) {
@@ -5021,14 +5014,7 @@ bool TSqlTranslation::ParseResourcePoolClassifierSettings(std::map<TString, TDef
 bool TSqlTranslation::ParseResourcePoolClassifierSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_resource_pool_classifier_action& alterAction) {
     switch (alterAction.Alt_case()) {
         case TRule_alter_resource_pool_classifier_action::kAltAlterResourcePoolClassifierAction1: {
-            const auto& action = alterAction.GetAlt_alter_resource_pool_classifier_action1().GetRule_alter_table_set_table_setting_uncompat1();
-            if (!StoreResourcePoolClassifierSettingsEntry(IdEx(action.GetRule_an_id2(), *this), &action.GetRule_table_setting_value3(), result)) {
-                return false;
-            }
-            return true;
-        }
-        case TRule_alter_resource_pool_classifier_action::kAltAlterResourcePoolClassifierAction2: {
-            const auto& action = alterAction.GetAlt_alter_resource_pool_classifier_action2().GetRule_alter_table_set_table_setting_compat1();
+            const auto& action = alterAction.GetAlt_alter_resource_pool_classifier_action1().GetRule_alter_table_set_table_setting_compat1();
             if (!StoreResourcePoolClassifierSettingsEntry(action.GetRule_alter_table_setting_entry3(), result)) {
                 return false;
             }
@@ -5039,8 +5025,8 @@ bool TSqlTranslation::ParseResourcePoolClassifierSettings(std::map<TString, TDef
             }
             return true;
         }
-        case TRule_alter_resource_pool_classifier_action::kAltAlterResourcePoolClassifierAction3: {
-            const auto& action = alterAction.GetAlt_alter_resource_pool_classifier_action3().GetRule_alter_table_reset_table_setting1();
+        case TRule_alter_resource_pool_classifier_action::kAltAlterResourcePoolClassifierAction2: {
+            const auto& action = alterAction.GetAlt_alter_resource_pool_classifier_action2().GetRule_alter_table_reset_table_setting1();
             const TString firstKey = to_lower(IdEx(action.GetRule_an_id3(), *this).Name);
             toReset.insert(firstKey);
             for (const auto& key : action.GetBlock4()) {

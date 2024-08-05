@@ -840,8 +840,7 @@ alter_resource_pool_stmt: ALTER RESOURCE POOL object_ref
   alter_resource_pool_action (COMMA alter_resource_pool_action)*
 ;
 alter_resource_pool_action:
-    alter_table_set_table_setting_uncompat
-  | alter_table_set_table_setting_compat
+    alter_table_set_table_setting_compat
   | alter_table_reset_table_setting
 ;
 
@@ -855,8 +854,7 @@ alter_resource_pool_classifier_stmt: ALTER RESOURCE POOL CLASSIFIER object_ref
   alter_resource_pool_classifier_action (COMMA alter_resource_pool_classifier_action)*
 ;
 alter_resource_pool_classifier_action:
-    alter_table_set_table_setting_uncompat
-  | alter_table_set_table_setting_compat
+    alter_table_set_table_setting_compat
   | alter_table_reset_table_setting
 ;
 

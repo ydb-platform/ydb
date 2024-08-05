@@ -6990,8 +6990,7 @@ Y_UNIT_TEST_SUITE(ResourcePool) {
         NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
                 ALTER RESOURCE POOL MyResourcePool
-                    SET (CONCURRENT_QUERY_LIMIT = 30, Weight = 5),
-                    SET QUEUE_TYPE "UNORDERED",
+                    SET (CONCURRENT_QUERY_LIMIT = 30, Weight = 5, QUEUE_TYPE = "UNORDERED"),
                     RESET (Query_Cancel_After_Seconds, Query_Count_Limit);
             )sql");
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());

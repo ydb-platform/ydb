@@ -78,6 +78,7 @@ public:
             tableInfo->Description.MutableTtlSettings()->CopyFrom(*TtlSettings);
             tableInfo->Description.MutableTtlSettings()->SetVersion(1);
         }
+        FillDefaultPartitioningPolicy(*tableInfo->Description.MutablePartitioningPolicy());
 
         return tableInfo;
     }
@@ -86,6 +87,11 @@ private:
     virtual TConclusionStatus BuildDescription(const TOperationContext& context, TColumnTableInfo::TPtr& table) const = 0;
     virtual bool DoDeserialize(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) = 0;
     virtual const TOlapSchema& GetSchema() const = 0;
+
+    void FillDefaultPartitioningPolicy(NKikimrSchemeOp::TPartitioningPolicy& policy) const {
+        policy.SetMinPartitionsCount(ShardsCount);
+        policy.SetMaxPartitionsCount(ShardsCount);
+    }
 
     static void FillDefaultSharding(NKikimrSchemeOp::TColumnTableSharding& info) {
         if (info.HasRandomSharding()) {

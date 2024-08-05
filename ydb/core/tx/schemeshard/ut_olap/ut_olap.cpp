@@ -125,9 +125,18 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", tableSchema);
         env.TestWaitNotification(runtime, txId);
 
+        auto checkPartitioningPolicyFn = [&](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            UNIT_ASSERT_VALUES_EQUAL(record.GetPath(), "/MyRoot/OlapStore/MyDir/ColumnTable");
+
+            auto& partitioningPolicy = record.GetPathDescription().GetColumnTableDescription().GetPartitioningPolicy();
+            UNIT_ASSERT_VALUES_EQUAL(partitioningPolicy.GetMinPartitionsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(partitioningPolicy.GetMaxPartitionsCount(), 1);
+        };
+
         TestLs(runtime, "/MyRoot/OlapStore/MyDir/ColumnTable", false, NLs::All(
             NLs::PathExist,
-            NLs::HasColumnTableSchemaPreset("default")));
+            NLs::HasColumnTableSchemaPreset("default"),
+            checkPartitioningPolicyFn));
 
         // Missing column from schema preset
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(

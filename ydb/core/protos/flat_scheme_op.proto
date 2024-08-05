@@ -805,6 +805,8 @@ message TColumnTableDescription {
 
     // Channels for standalone column table
     optional TColumnStorageConfig StorageConfig = 13;
+
+    optional TPartitioningPolicy PartitioningPolicy = 14;
 }
 
 message TAlterColumnTable {

@@ -477,6 +477,7 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
     auto description = pathDescription->MutableColumnTableDescription();
     description->CopyFrom(tableInfo->Description);
     description->MutableSharding()->CopyFrom(tableInfo->Description.GetSharding());
+    description->MutablePartitioningPolicy()->CopyFrom(tableInfo->Description.GetPartitioningPolicy());
 
     if (tableInfo->IsStandalone()) {
         FillAggregatedStats(*pathDescription, tableInfo->GetStats());

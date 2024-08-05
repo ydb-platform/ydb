@@ -79,7 +79,9 @@ using TWideFlowSourceCodegeneratorNode = TWideFlowSourceComputationNode<TDerived
 #include <llvm/IR/DebugInfoMetadata.h>
 #include <llvm/IR/DIBuilder.h>
 
+#if !__clang__ || (__clang_major__ >= 16)
 #include <source_location>
+#endif
 
 namespace NKikimr {
 namespace NMiniKQL {

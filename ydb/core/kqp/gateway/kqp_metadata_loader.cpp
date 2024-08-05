@@ -281,7 +281,6 @@ TTableMetadataResult GetExternalDataSourceMetadataResult(const NSchemeCache::TSc
     tableMeta->ExternalSource.DataSourceAuth = description.GetAuth();
     tableMeta->ExternalSource.Properties = description.GetProperties();
     tableMeta->ExternalSource.DataSourcePath = tableName;
-    tableMeta->ExternalSource.TableLocation = JoinPath(entry.Path);
     return result;
 }
 
@@ -839,6 +838,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             promise.SetValue(externalDataSourceMetadata);
                             return;
                         }
+                        externalDataSourceMetadata.Metadata->ExternalSource.TableLocation = *externalPath;
                         LoadExternalDataSourceSecretValues(entry, userToken, ActorSystem)
                             .Subscribe([promise, externalDataSourceMetadata, settings, externalPath](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
                         {
@@ -850,7 +850,6 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
                             if (externalSource && externalSource->CanLoadDynamicMetadata()) {
                                 auto externalSourceMeta = ConvertToExternalSourceMetadata(*externalDataSourceMetadata.Metadata);
-                                externalSourceMeta->TableLocation = *externalPath;
                                 externalSourceMeta->Attributes = settings.ReadAttributes; // attributes, collected from AST
                                 externalSource->LoadDynamicMetadata(std::move(externalSourceMeta))
                                     .Subscribe([promise = std::move(promise), externalDataSourceMetadata](const TFuture<std::shared_ptr<NExternalSource::TMetadata>>& result) mutable {

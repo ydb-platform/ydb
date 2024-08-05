@@ -15,7 +15,8 @@ enum class EWriteFailReason {
     NoTable /* "no_table" */,
     IncorrectSchema /* "incorrect_schema" */,
     Overload /* "overload" */,
-    OverlimitReadMemory /* "overlimit_read_memory" */
+    OverlimitReadRawMemory /* "overlimit_read_raw_memory" */,
+    OverlimitReadBlobMemory /* "overlimit_read_blob_memory" */
 };
 
 class TCSInitialization: public TCommonCountersOwner {

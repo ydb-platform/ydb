@@ -1649,13 +1649,17 @@ public:
         }                                                                                               \
     }
 
-            INSERT_TOPIC_SETTING(PartitionsLimit)
+            INSERT_TOPIC_SETTING(MaxPartitions)
             INSERT_TOPIC_SETTING(MinPartitions)
             INSERT_TOPIC_SETTING(RetentionPeriod)
             INSERT_TOPIC_SETTING(SupportedCodecs)
             INSERT_TOPIC_SETTING(PartitionWriteSpeed)
             INSERT_TOPIC_SETTING(PartitionWriteBurstSpeed)
             INSERT_TOPIC_SETTING(MeteringMode)
+            INSERT_TOPIC_SETTING(AutoPartitioningStabilizationWindow)
+            INSERT_TOPIC_SETTING(AutoPartitioningUpUtilizationPercent)
+            INSERT_TOPIC_SETTING(AutoPartitioningDownUtilizationPercent)
+            INSERT_TOPIC_SETTING(AutoPartitioningStrategy)
 
 #undef INSERT_TOPIC_SETTING
 
@@ -1766,13 +1770,17 @@ public:
         }                                                                                               \
     }
 
-            INSERT_TOPIC_SETTING(PartitionsLimit)
+            INSERT_TOPIC_SETTING(MaxPartitions)
             INSERT_TOPIC_SETTING(MinPartitions)
             INSERT_TOPIC_SETTING(RetentionPeriod)
             INSERT_TOPIC_SETTING(SupportedCodecs)
             INSERT_TOPIC_SETTING(PartitionWriteSpeed)
             INSERT_TOPIC_SETTING(PartitionWriteBurstSpeed)
             INSERT_TOPIC_SETTING(MeteringMode)
+            INSERT_TOPIC_SETTING(AutoPartitioningStabilizationWindow)
+            INSERT_TOPIC_SETTING(AutoPartitioningUpUtilizationPercent)
+            INSERT_TOPIC_SETTING(AutoPartitioningDownUtilizationPercent)
+            INSERT_TOPIC_SETTING(AutoPartitioningStrategy)
 
 #undef INSERT_TOPIC_SETTING
 

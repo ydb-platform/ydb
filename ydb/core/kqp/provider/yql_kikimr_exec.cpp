@@ -429,8 +429,8 @@ namespace {
                 request->mutable_partitioning_settings()->set_min_active_partitions(
                         FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
                 );
-            } else if (name == "setPartitionsLimit") {
-                request->mutable_partitioning_settings()->set_partition_count_limit(
+            } else if (name == "setMaxPartitions") {
+                request->mutable_partitioning_settings()->set_max_active_partitions(
                         FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
                 );
             } else if (name == "setRetentionPeriod") {
@@ -460,8 +460,29 @@ namespace {
                 );
                 auto* protoCodecs = request->mutable_supported_codecs();
                 for (auto codec : codecs) {
-                    protoCodecs->add_codecs(codec);
+                        protoCodecs->add_codecs(codec);
                 }
+            } else if (name == "setAutoPartitioningStabilizationWindow") {
+                auto microValue = FromString<ui64>(setting.Value().Cast<TCoInterval>().Literal().Value());
+                request->mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->mutable_stabilization_window()->set_seconds(
+                        static_cast<ui64>(microValue / 1'000'000)
+                );
+            } else if (name == "setAutoPartitioningUpUtilizationPercent") {
+                request->mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_up_utilization_percent(
+                        FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
+                );
+            } else if (name == "setAutoPartitioningDownUtilizationPercent") {
+                request->mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_down_utilization_percent(
+                        FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
+                );
+            } else if (name == "setAutoPartitioningStrategy") {
+                Ydb::Topic::AutoPartitioningStrategy strategy;
+                auto result = GetTopicAutoPartitioningStrategyFromString(
+                        TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()),
+                        strategy
+                );
+                YQL_ENSURE(result);
+                request->mutable_partitioning_settings()->mutable_auto_partitioning_settings()->set_strategy(strategy);
             }
         }
     }
@@ -474,7 +495,7 @@ namespace {
                 request->mutable_alter_partitioning_settings()->set_set_min_active_partitions(
                         FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
                 );
-            } else if (name == "setPartitionsLimit") {
+            } else if (name == "setMaxPartitions") {
                 request->mutable_alter_partitioning_settings()->set_set_partition_count_limit(
                         FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
                 );
@@ -507,6 +528,27 @@ namespace {
                 for (auto codec : codecs) {
                     protoCodecs->add_codecs(codec);
                 }
+            } else if (name == "setAutoPartitioningStabilizationWindow") {
+                auto microValue = FromString<ui64>(setting.Value().Cast<TCoInterval>().Literal().Value());
+                request->mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->mutable_set_partition_write_speed()->mutable_set_stabilization_window()->set_seconds(
+                        static_cast<ui64>(microValue / 1'000'000)
+                );
+            } else if (name == "setAutoPartitioningUpUtilizationPercent") {
+                request->mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->mutable_set_partition_write_speed()->set_set_up_utilization_percent(
+                        FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
+                );
+            } else if (name == "setAutoPartitioningDownUtilizationPercent") {
+                request->mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->mutable_set_partition_write_speed()->set_set_down_utilization_percent(
+                        FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
+                );
+            } else if (name == "setAutoPartitioningStrategy") {
+                Ydb::Topic::AutoPartitioningStrategy strategy;
+                auto result = GetTopicAutoPartitioningStrategyFromString(
+                        TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()),
+                        strategy
+                );
+                YQL_ENSURE(result);
+                request->mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->set_set_strategy(strategy);
             }
         }
     }

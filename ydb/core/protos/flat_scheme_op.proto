@@ -776,6 +776,13 @@ message TColumnTableSharding {
     repeated TGranuleShardInfo ShardsInfo = 7;
 }
 
+message TColumnPartitioningPolicy {
+    reserved = 1; // SizeToSplit 
+
+    optional uint32 MinPartitionsCount = 2;
+    optional uint32 MaxPartitionsCount = 3;
+}
+
 message TColumnTableDescription {
     optional string Name = 1;
 
@@ -806,7 +813,7 @@ message TColumnTableDescription {
     // Channels for standalone column table
     optional TColumnStorageConfig StorageConfig = 13;
 
-    optional TPartitioningPolicy PartitioningPolicy = 14;
+    optional TColumnPartitioningPolicy PartitioningPolicy = 14;
 }
 
 message TAlterColumnTable {

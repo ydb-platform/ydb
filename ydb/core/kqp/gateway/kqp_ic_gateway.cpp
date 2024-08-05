@@ -997,9 +997,9 @@ public:
 
         NKikimr::NGRpcProxy::V1::TAlterTopicRequest request{
                 std::move(settings.Request), settings.WorkDir, settings.Name, Database, GetTokenCompat(),
-                settings.NotExistsOk
+                settings.MissingOk
         };
-        IActor* requestHandler = new NKikimr::NGRpcProxy::V1::TAlterTopicActorInternal(std::move(request), std::move(schemaTxPromise), settings.NotExistsOk);
+        IActor* requestHandler = new NKikimr::NGRpcProxy::V1::TAlterTopicActorInternal(std::move(request), std::move(schemaTxPromise), settings.MissingOk);
         RegisterActor(requestHandler);
         return schemaTxFuture;
     }

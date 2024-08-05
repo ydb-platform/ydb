@@ -676,18 +676,18 @@ struct TGetPartitionsLocationRequest : public TLocalRequestBase {
 
 struct TAlterTopicRequest : public TLocalRequestBase {
     TAlterTopicRequest(Ydb::Topic::AlterTopicRequest&& request, const TString& workDir, const TString& name,
-                       const TString& database, const TString& token, bool notExistsOk)
+                       const TString& database, const TString& token, bool missingOk)
         : TLocalRequestBase(request.path(), database, token)
         , Request(std::move(request))
         , WorkingDir(workDir)
         , Name(name)
-        , NotExistsOk(notExistsOk)
+        , MissingOk(missingOk)
     {}
 
     Ydb::Topic::AlterTopicRequest Request;
     TString WorkingDir;
     TString Name;
-    bool NotExistsOk;
+    bool MissingOk;
 };
 
 

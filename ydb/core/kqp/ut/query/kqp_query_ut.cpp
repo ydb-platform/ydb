@@ -1792,23 +1792,40 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT(qResult.IsSuccess() == expectOk);
     };
 
-    void ListDir(TKikimrRunner& kikimr, const TString& expectedEntry, const TString& unexpected, bool& found) {
+    struct TEntryCheck {
+        NYdb::NScheme::ESchemeEntryType Type;
+        TString Name;
+        bool IsExpected;
+        bool WasFound = false;
+    };
+
+    TEntryCheck ExpectedTopic(const TString& name) {
+        return TEntryCheck{NYdb::NScheme::ESchemeEntryType::Topic, name, true};
+    }
+    TEntryCheck UnexpectedTopic(const TString& name) {
+        return TEntryCheck{NYdb::NScheme::ESchemeEntryType::Topic, name, false};
+    }
+
+    void CheckDirEntry(TKikimrRunner& kikimr, TVector<TEntryCheck>& entriesToCheck) {
         auto res = kikimr.GetSchemeClient().ListDirectory("/Root").GetValueSync();
         for (const auto& entry : res.GetChildren()) {
             Cerr << "Scheme entry: " << entry << Endl;
-            if (!found && !expectedEntry.empty()) {
-                if (expectedEntry == entry.Name) {
-                    found = true;
-                    UNIT_ASSERT(entry.Type == NYdb::NScheme::ESchemeEntryType::Topic);
-                    return;
+            for (auto& checkEntry : entriesToCheck) {
+                if (checkEntry.Name != entry.Name)
+                    continue;
+                if (checkEntry.IsExpected) {
+                    UNIT_ASSERT_C(entry.Type == checkEntry.Type, checkEntry.Name);
+                    checkEntry.WasFound = true;
+                } else {
+                    UNIT_ASSERT_C(entry.Type != checkEntry.Type, checkEntry.Name);
                 }
             }
-            if (!unexpected.empty()) {
-                    UNIT_ASSERT(entry.Type != NYdb::NScheme::ESchemeEntryType::Topic
-                                || entry.Name != unexpected);
+        }
+        for (auto& checkEntry : entriesToCheck) {
+            if (checkEntry.IsExpected) {
+                UNIT_ASSERT_C(checkEntry.WasFound, checkEntry.Name);
             }
         }
-        UNIT_ASSERT(found);
     }
 
     Y_UNIT_TEST(CreateAndDropTopic) {
@@ -1821,7 +1838,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
         TKikimrRunner kikimr(
             serverSettings.SetWithSampleTables(false).SetEnableTempTables(true));
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
         auto client = kikimr.GetQueryClient();
         auto session = client.GetSession().GetValueSync().GetSession();
         auto pq = NYdb::NTopic::TTopicClient(kikimr.GetDriver(),
@@ -1843,7 +1859,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 CREATE TOPIC IF NOT EXISTS `/Root/TempTopic` (CONSUMER cons1, CONSUMER cons2);
             )");
             RunQuery(queryCreateTopic, session);
-            Cerr << "Topic created\n";
             auto desc = pq.DescribeTopic("/Root/TempTopic").ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetConsumers().size(), 1);
         }
@@ -1853,20 +1868,21 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 CREATE TOPIC `/Root/TempTopic` (CONSUMER cons1, CONSUMER cons2, CONSUMER cons3);
             )");
             RunQuery(queryCreateTopic, session, false);
-            Cerr << "Topic created\n";
             auto desc = pq.DescribeTopic("/Root/TempTopic").ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetConsumers().size(), 1);
         }
 
+        TVector<TEntryCheck> entriesToCheck = {ExpectedTopic("TempTopic")};
+        CheckDirEntry(kikimr, entriesToCheck);
         {
             const auto query = Q_(R"(
                 --!syntax_v1
                 Drop TOPIC `/Root/TempTopic`;
             )");
-            bool found = true;
             RunQuery(query, session);
             Cerr << "Topic dropped\n";
-            ListDir(kikimr, "", "TempTopic", found);
+            TVector<TEntryCheck> entriesToCheck = {UnexpectedTopic("TempTopic")};
+            CheckDirEntry(kikimr, entriesToCheck);
         }
         {
             const auto query = Q_(R"(
@@ -1891,9 +1907,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
             .SetKqpSettings({setting});
-        TKikimrRunner kikimr(
-            serverSettings.SetWithSampleTables(false).SetEnableTempTables(true));
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        TKikimrRunner kikimr{serverSettings};
         auto client = kikimr.GetQueryClient(NYdb::NQuery::TClientSettings{}.AuthToken("root@builtin"));
         auto session = client.GetSession().GetValueSync().GetSession();
         auto pq = NYdb::NTopic::TTopicClient(kikimr.GetDriver(),
@@ -1918,28 +1932,107 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             auto desc = pq.DescribeTopic("/Root/TempTopic").ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), 10);
         }
+        {
+            const auto query = Q_(R"(
+                --!syntax_v1
+                ALTER TOPIC IF EXISTS `/Root/TempTopic` SET (min_active_partitions = 15);
+            )");
+            RunQuery(query, session);
+            auto desc = pq.DescribeTopic("/Root/TempTopic").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), 15);
+        }
 
         {
             const auto query = Q_(R"(
                 --!syntax_v1
                 ALTER TOPIC `/Root/NoSuchTopic` SET (min_active_partitions = 10);
             )");
-            bool found = false;
             RunQuery(query, session, false);
-            ListDir(kikimr, "", "NoSuchTopic", found);
-            UNIT_ASSERT(!found);
 
+            TVector<TEntryCheck> entriesToCheck = {UnexpectedTopic("NoSuchTopic")};
+            CheckDirEntry(kikimr, entriesToCheck);
         }
         {
             const auto query = Q_(R"(
                 --!syntax_v1
                 ALTER TOPIC IF EXISTS `/Root/NoSuchTopic` SET (min_active_partitions = 10);
             )");
-            bool found = false;
             RunQuery(query, session);
-            ListDir(kikimr, "", "NoSuchTopic", found);
-            UNIT_ASSERT(!found);
+            TVector<TEntryCheck> entriesToCheck = {UnexpectedTopic("NoSuchTopic")};
+            CheckDirEntry(kikimr, entriesToCheck);
         }
+    }
+    Y_UNIT_TEST(CreateOrDropTopicOverTable) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr{serverSettings};
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            auto tcSession = tableClient.CreateSession().GetValueSync().GetSession();
+            UNIT_ASSERT(tcSession.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/TmpTable` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )").GetValueSync().IsSuccess());
+            tcSession.Close();
+        }
+
+        auto client = kikimr.GetQueryClient(NYdb::NQuery::TClientSettings{}.AuthToken("root@builtin"));
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        TVector<TEntryCheck> entriesToCheck = {TEntryCheck{.Type = NYdb::NScheme::ESchemeEntryType::Table,
+                                                           .Name = "TmpTable", .IsExpected = true}};
+        {
+            const auto queryCreateTopic = Q_(R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/TmpTable` (CONSUMER cons1);
+            )");
+            RunQuery(queryCreateTopic, session, false);
+            CheckDirEntry(kikimr, entriesToCheck);
+
+        }
+        {
+            const auto queryCreateTopic = Q_(R"(
+                --!syntax_v1
+                CREATE TOPIC IF NOT EXISTS `/Root/TmpTable` (CONSUMER cons1);
+            )");
+            RunQuery(queryCreateTopic, session, false);
+            CheckDirEntry(kikimr, entriesToCheck);
+        }
+        {
+            const auto queryDropTopic = Q_(R"(
+                --!syntax_v1
+                DROP TOPIC `/Root/TmpTable`;
+            )");
+            RunQuery(queryDropTopic, session, false);
+        }
+        {
+            const auto queryDropTopic = Q_(R"(
+                --!syntax_v1
+                DROP TOPIC IF EXISTS `/Root/TmpTable`;
+            )");
+            RunQuery(queryDropTopic, session, false);
+            CheckDirEntry(kikimr, entriesToCheck);
+        }
+        {
+            auto tcSession = tableClient.CreateSession().GetValueSync().GetSession();
+            auto type = TTypeBuilder().BeginOptional().Primitive(EPrimitiveType::Uint64).EndOptional().Build();
+            auto alter = TAlterTableSettings().AppendAddColumns(TColumn("NewColumn", type));
+
+            auto alterResult = tcSession.AlterTable("/Root/TmpTable", alter
+                            ).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL(alterResult.GetStatus(), EStatus::SUCCESS);
+        }
+
+
     }
 }
 

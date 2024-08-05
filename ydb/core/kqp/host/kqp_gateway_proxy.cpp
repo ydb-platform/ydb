@@ -970,7 +970,6 @@ public:
         if (!NSchemeHelpers::SplitTablePath(request.path(), GetDatabase(), pathPair, error, false)) {
             return MakeFuture(ResultFromError<TGenericResult>(error));
         }
-        //pqDescr->SetName(pathPair.second);
         TList<TString> warnings;
         auto alterPromise = NewPromise<TGenericResult>();
 

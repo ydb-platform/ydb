@@ -1550,11 +1550,11 @@ void TPartitionsLocationActor::RaiseError(const TString& error, const Ydb::PersQ
 TAlterTopicActorInternal::TAlterTopicActorInternal(
         TAlterTopicActorInternal::TRequest&& request,
         NThreading::TPromise<TAlterTopicResponse>&& promise,
-        bool notExistsOk
+        bool missingOk
 )
     : TActorBase(std::move(request), TActorId{})
     , Promise(std::move(promise))
-    , NotExistsOk(notExistsOk)
+    , MissingOk(missingOk)
 {}
 
 void TAlterTopicActorInternal::Bootstrap(const NActors::TActorContext&) {
@@ -1591,7 +1591,7 @@ void TAlterTopicActorInternal::ModifyPersqueueConfig(
 }
 
 bool TAlterTopicActorInternal::RespondOverride(Ydb::StatusIds::StatusCode status, bool notFound) {
-    if (NotExistsOk && notFound) {
+    if (MissingOk && notFound) {
         Response->Response.Status = Ydb::StatusIds::SUCCESS;
         Response->Response.ModifyScheme.Clear();
 

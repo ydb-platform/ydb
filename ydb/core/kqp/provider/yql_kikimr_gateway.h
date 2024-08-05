@@ -669,7 +669,7 @@ struct TAlterTopicSettings {
     Ydb::Topic::AlterTopicRequest Request;
     TString Name;
     TString WorkDir;
-    bool NotExistsOk;
+    bool MissingOk;
 };
 
 struct TSequenceSettings {

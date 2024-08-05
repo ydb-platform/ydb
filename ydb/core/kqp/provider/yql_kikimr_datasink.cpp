@@ -1133,6 +1133,7 @@ public:
                 auto mode = settings.Mode.Cast();
 
                 if (mode == "create" || mode == "create_if_not_exists") {
+                    bool existingOk = mode == "create_if_not_exists";
                     return Build<TKiCreateTopic>(ctx, node->Pos())
                             .World(node->Child(0))
                             .DataSink(node->Child(1))
@@ -1140,7 +1141,7 @@ public:
                             .TopicSettings(settings.TopicSettings.Cast())
                             .Consumers(settings.Consumers.Cast())
                             .Settings(settings.Other)
-                            .ExistingOk<TCoAtom>().Value(mode == "create_if_not_exists").Build()
+                            .ExistingOk<TCoAtom>().Value(existingOk).Build()
                             .Done()
                             .Ptr();
                 } else if (mode == "alter" || mode == "alter_if_exists") {

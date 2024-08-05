@@ -1909,8 +1909,6 @@ public:
             AddTopicSettingsToRequest(&createReq,maybeCreate.Cast().TopicSettings());
             bool existingOk = (maybeCreate.ExistingOk().Cast().Value() == "1");
 
-            // DEBUG
-            // Cerr << "Create topic request proto: " << createReq.DebugString() << Endl;
             auto future = Gateway->CreateTopic(cluster, std::move(createReq), existingOk);
 
             return WrapFuture(future,

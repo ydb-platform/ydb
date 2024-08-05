@@ -412,7 +412,7 @@ protected:
 
 private:
     NThreading::TPromise<TAlterTopicResponse> Promise;
-    bool NotExistsOk;
+    bool MissingOk;
 };
 
 class TPartitionsLocationActor : public TPQInternalSchemaActor<TPartitionsLocationActor,

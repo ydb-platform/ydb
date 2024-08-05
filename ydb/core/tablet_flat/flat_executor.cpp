@@ -2220,7 +2220,8 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
                     Y_ABORT_UNLESS(srcSubset->Frozen.empty(), "Unexpected frozen parts in src subset");
 
                     // Check scheme compatibility (it may have changed due to alter)
-                    srcSubset->Scheme->CheckCompatability(*dstSubset->Scheme);
+                    auto tableInfo = Database->GetScheme().Tables.FindPtr(src);
+                    srcSubset->Scheme->CheckCompatibility(tableInfo ? tableInfo->Name : "", *dstSubset->Scheme);
 
                     // Don't do anything if there's nothing to move
                     if (srcSubset->Flatten.empty()) {

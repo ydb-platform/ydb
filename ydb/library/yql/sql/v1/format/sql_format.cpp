@@ -1527,6 +1527,36 @@ private:
         VisitAllFields(TRule_drop_resource_pool_stmt::GetDescriptor(), msg);
     }
 
+    void VisitCreateBackupCollection(const TRule_create_backup_collection_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_create_backup_collection_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitAlterBackupCollection(const TRule_alter_backup_collection_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitToken(msg.GetToken1());
+        Visit(msg.GetRule_backup_collection2());
+
+        NewLine();
+        PushCurrentIndent();
+        Visit(msg.GetRule_alter_backup_collection_actions3().GetRule_alter_backup_collection_action1());
+        for (const auto& action : msg.GetRule_alter_backup_collection_actions3().GetBlock2()) {
+            Visit(action.GetToken1()); // comma
+            NewLine();
+            Visit(action.GetRule_alter_backup_collection_action2());
+        }
+
+        PopCurrentIndent();
+    }
+
+    void VisitDropBackupCollection(const TRule_drop_backup_collection_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_drop_backup_collection_stmt::GetDescriptor(), msg);
+    }
+
     void VisitAllFields(const NProtoBuf::Descriptor* descr, const NProtoBuf::Message& msg) {
         VisitAllFieldsImpl<TPrettyVisitor, &TPrettyVisitor::Visit>(this, descr, msg);
     }
@@ -2743,7 +2773,10 @@ TStaticData::TStaticData()
         {TRule_drop_view_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropView)},
         {TRule_create_resource_pool_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateResourcePool)},
         {TRule_alter_resource_pool_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterResourcePool)},
-        {TRule_drop_resource_pool_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropResourcePool)}
+        {TRule_drop_resource_pool_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropResourcePool)},
+        {TRule_create_backup_collection_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateBackupCollection)},
+        {TRule_alter_backup_collection_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterBackupCollection)},
+        {TRule_drop_backup_collection_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropBackupCollection)},
         })
     , ObfuscatingVisitDispatch({
         {TToken::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitToken)},

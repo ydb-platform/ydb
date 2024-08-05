@@ -564,7 +564,7 @@ namespace NSQLTranslationV1 {
         bool DoInit(TContext& ctx, ISource* src) override;
     public:
         TWinCumeDist(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args);
-    };    
+    };
 
     class TWinNTile final: public TWinAggrEmulation {
         TPtr DoClone() const final {
@@ -576,7 +576,7 @@ namespace NSQLTranslationV1 {
 
     private:
         TSourcePtr FakeSource;
-    };    
+    };
 
     class TWinLeadLag final: public TWinAggrEmulation {
         TPtr DoClone() const final {
@@ -1296,17 +1296,31 @@ namespace NSQLTranslationV1 {
     };
     struct TTopicSettings {
         NYql::TResetableSetting<TNodePtr, void> MinPartitions;
-        NYql::TResetableSetting<TNodePtr, void> PartitionsLimit;
+        NYql::TResetableSetting<TNodePtr, void> MaxPartitions;
         NYql::TResetableSetting<TNodePtr, void> RetentionPeriod;
         NYql::TResetableSetting<TNodePtr, void> RetentionStorage;
         NYql::TResetableSetting<TNodePtr, void> SupportedCodecs;
         NYql::TResetableSetting<TNodePtr, void> PartitionWriteSpeed;
         NYql::TResetableSetting<TNodePtr, void> PartitionWriteBurstSpeed;
         NYql::TResetableSetting<TNodePtr, void> MeteringMode;
+        NYql::TResetableSetting<TNodePtr, void> AutoPartitioningStabilizationWindow;
+        NYql::TResetableSetting<TNodePtr, void> AutoPartitioningUpUtilizationPercent;
+        NYql::TResetableSetting<TNodePtr, void> AutoPartitioningDownUtilizationPercent;
+        NYql::TResetableSetting<TNodePtr, void> AutoPartitioningStrategy;
 
         bool IsSet() const {
-            return MinPartitions || PartitionsLimit || RetentionPeriod || RetentionStorage
-                   || SupportedCodecs || PartitionWriteSpeed|| PartitionWriteBurstSpeed || MeteringMode
+            return MinPartitions ||
+                   MaxPartitions ||
+                   RetentionPeriod ||
+                   RetentionStorage ||
+                   SupportedCodecs ||
+                   PartitionWriteSpeed ||
+                   PartitionWriteBurstSpeed ||
+                   MeteringMode ||
+                   AutoPartitioningStabilizationWindow ||
+                   AutoPartitioningUpUtilizationPercent ||
+                   AutoPartitioningDownUtilizationPercent ||
+                   AutoPartitioningStrategy
             ;
         }
     };

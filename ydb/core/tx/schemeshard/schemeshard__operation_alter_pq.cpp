@@ -587,6 +587,7 @@ public:
                 && NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
                 && NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
 
+        THashSet<ui32> involvedPartitions;
         if (splitMergeEnabled) {
             auto Hex = [](const auto& value) {
                 return HexText(TBasicStringBuf(value));
@@ -594,8 +595,6 @@ public:
 
             ui32 nextId = topic->NextPartitionId;
             ui32 nextGroupId = topic->TotalGroupCount;
-
-            THashSet<ui32> involvedPartitions;
 
             for (const auto& split : alter.GetSplit()) {
                 alterData->TotalGroupCount += 2;
@@ -792,7 +791,7 @@ public:
             return result;
         }
 
-        const PQGroupReserve reserve(newTabletConfig, alterData->ActivePartitionCount);
+        const PQGroupReserve reserve(newTabletConfig, alterData->ActivePartitionCount + involvedPartitions.size());
         const PQGroupReserve oldReserve(tabletConfig, topic->ActivePartitionCount);
 
         const ui64 storageToReserve = reserve.Storage > oldReserve.Storage ? reserve.Storage - oldReserve.Storage : 0;

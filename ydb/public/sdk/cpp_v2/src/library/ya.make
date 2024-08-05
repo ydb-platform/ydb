@@ -1,0 +1,9 @@
+RECURSE(
+    grpc/client
+    jwt
+    operation_id
+    persqueue/obfuscate
+    persqueue/topic_parser_public
+    uuid
+    yql
+)

@@ -1,0 +1,29 @@
+name: Address Sanitizer
+
+on: [push, pull_request]
+
+jobs:
+
+  asan:
+    runs-on: ubuntu-20.04
+    timeout-minutes: 10
+    env:
+       CC: gcc
+    steps:
+    - uses: actions/checkout@v3
+    - name: Retrieve test compression corpus
+      run: |
+        git clone https://github.com/ariya/compression-corpus.git
+        cd compression-corpus
+        cd enwik
+        unzip enwik8.zip
+    - run: sudo apt install -y make gcc
+    - run: gcc --version
+    - run: cd tests && make roundtrip
+      name: Perform round-trip tests
+      env:
+        CFLAGS: "-g -fno-omit-frame-pointer -fsanitize=address"
+    - run: cd tests && make roundtrip
+      name: Perform round-trip tests with FASTLZ_USE_MEMMOVE=0
+      env:
+        CFLAGS: "-g -fno-omit-frame-pointer -fsanitize=address -DFASTLZ_USE_MEMMOVE=0"

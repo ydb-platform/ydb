@@ -1,0 +1,59 @@
+set(YDB-CPP-SDK_AVAILABLE_COMPONENTS @YDB-CPP-SDK_AVAILABLE_COMPONENTS@)
+set(YDB-CPP-SDK_COMPONENT_TARGETS @YDB-CPP-SDK_COMPONENT_TARGETS@)
+
+if (NOT YDB-CPP-SDK_FIND_COMPONENTS)
+  set(YDB-CPP-SDK_FIND_COMPONENTS ${YDB-CPP-SDK_AVAILABLE_COMPONENTS})
+endif()
+
+list(REMOVE_DUPLICATES YDB-CPP-SDK_FIND_COMPONENTS)
+
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/Modules")
+
+find_package(IDN REQUIRED)
+find_package(Iconv REQUIRED)
+find_package(OpenSSL REQUIRED)
+find_package(Protobuf REQUIRED)
+find_package(gRPC REQUIRED)
+find_package(ZLIB REQUIRED)
+find_package(xxHash REQUIRED)
+find_package(ZSTD REQUIRED)
+find_package(BZip2 REQUIRED)
+find_package(LZ4 REQUIRED)
+find_package(Snappy 1.1.8 REQUIRED)
+find_package(base64 REQUIRED)
+find_package(Brotli 1.1.0 REQUIRED)
+find_package(jwt-cpp REQUIRED)
+find_package(GTest REQUIRED)
+find_package(double-conversion REQUIRED)
+
+if (@YDB_SDK_USE_RAPID_JSON@)
+  find_package(RapidJSON REQUIRED)
+
+  add_library(RapidJSON::RapidJSON INTERFACE IMPORTED)
+
+  target_include_directories(RapidJSON::RapidJSON INTERFACE
+    ${RAPIDJSON_INCLUDE_DIRS}
+  )
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/release/ydb-cpp-sdk-targets.cmake")
+
+function(_find_ydb_sdk_component CompName)
+  list(FIND YDB-CPP-SDK_AVAILABLE_COMPONENTS ${CompName} CompId)
+  if (CompId EQUAL -1)
+    message(FATAL_ERROR "${CompName} is not available component")
+  endif()
+  list(GET YDB-CPP-SDK_COMPONENT_TARGETS ${CompId} Tgt)
+  add_library(YDB-CPP-SDK::${CompName} ALIAS YDB-CPP-SDK::${Tgt})
+  set(YDB-CPP-SDK_${CompName}_FOUND TRUE PARENT_SCOPE)
+endfunction()
+
+message(STATUS "YDB SDK components: ${YDB-CPP-SDK_FIND_COMPONENTS}")
+
+foreach(ITEM_COMPONENT IN LISTS YDB-CPP-SDK_FIND_COMPONENTS)
+  _find_ydb_sdk_component(${ITEM_COMPONENT})
+endforeach()
+
+@PACKAGE_INIT@
+
+check_required_components(YDB-CPP-SDK)

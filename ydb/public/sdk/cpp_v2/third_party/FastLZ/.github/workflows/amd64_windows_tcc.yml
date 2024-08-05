@@ -1,0 +1,35 @@
+name: amd64_windows_tcc
+
+on: [push, pull_request]
+
+jobs:
+
+  amd64_windows_tcc:
+    runs-on: windows-2019
+    timeout-minutes: 10
+    steps:
+    - uses: actions/checkout@v3
+    - name: Retrieve test compression corpus
+      run: |
+        git clone https://github.com/ariya/compression-corpus.git
+        cd compression-corpus
+        cd enwik
+        unzip enwik8.zip
+    - name: Install tcc
+      run: |
+        echo "5a3979bd5044b795547a4948a5625a12  tcc.zip" > checksum.md5
+        dos2unix checksum.md5
+        curl -L -o tcc.zip https://archive.org/download/tinyccompiler/tcc-0.9.27-win32-bin.zip
+        md5sum -c checksum.md5 && unzip -q tcc.zip
+    - run: tcc\x86_64-win32-tcc.exe -v
+    - run: cd tests && make roundtrip CC=..\tcc\x86_64-win32-tcc.exe
+      name: Perform round-trip tests
+    - name: 'Build examples: 6pack and 6unpack'
+      run: cd examples && make CC=..\tcc\x86_64-win32-tcc.exe
+    - name: 'Run examples: 6pack and 6unpack'
+      run: |
+        cd examples
+        ./6pack -v
+        ./6pack ../compression-corpus/enwik/enwik8.txt archive.6pk
+        ./6unpack -v
+        ./6unpack archive.6pk

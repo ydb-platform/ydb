@@ -1,0 +1,9 @@
+package NRetry;
+
+message TRetryOptionsPB {
+    optional uint32 MaxTries                       = 1 [default = 5];
+    optional uint32 InitialSleepMs                 = 2 [default = 0];
+    optional uint32 SleepIncrementMs               = 3 [default = 0];
+    optional uint32 RandomDeltaMs                  = 4 [default = 10];
+    optional uint32 ExponentalMultiplierMs         = 5 [default = 100];
+}

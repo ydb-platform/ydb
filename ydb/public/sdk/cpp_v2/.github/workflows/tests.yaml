@@ -1,0 +1,112 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  unit:
+    concurrency:
+      group: unit-${{ github.ref }}-${{ matrix.os }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+    env:
+      OS: ubuntu-22.04
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Checkout PR
+      uses: actions/checkout@v3
+      if: github.event.pull_request.head.sha != ''
+      with:
+        submodules: true
+        ref: ${{ github.event.pull_request.head.sha }}
+    - name: Checkout
+      uses: actions/checkout@v3
+      if: github.event.pull_request.head.sha == ''
+      with:
+        submodules: true
+    - name: Install dependencies
+      uses: ./.github/actions/prepare_vm
+    - name: Prepare ccache timestamp
+      id: ccache_cache_timestamp
+      shell: cmake -P {0}
+      run: |
+        string(TIMESTAMP current_date "%Y-%m-%d-%H;%M;%S" UTC)
+        message("::set-output name=timestamp::${current_date}")
+    - name: Restore cache files
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.ccache
+        key: ubuntu-22.04-ccache-${{steps.ccache_cache_timestamp.outputs.timestamp}}
+        restore-keys: |
+          ubuntu-22.04-ccache-
+    - name: Build
+      uses: ./.github/actions/build
+    - name: Test
+      shell: bash
+      run: |
+        ctest -j32 --preset release-unit
+
+  integration:
+    concurrency:
+      group: integration-${{ github.ref }}-${{ matrix.ydb-version }}
+      cancel-in-progress: true
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        ydb-version: [23.3, 24.1, trunk]
+    services:
+      ydb:
+        image: ydbplatform/local-ydb:${{ matrix.ydb-version }}
+        ports:
+          - 2135:2135
+          - 2136:2136
+          - 8765:8765
+        volumes:
+          - /tmp/ydb_certs:/ydb_certs
+        env:
+          YDB_LOCAL_SURVIVE_RESTART: true
+          YDB_USE_IN_MEMORY_PDISKS: true
+          YDB_TABLE_ENABLE_PREPARED_DDL: true
+        options: '-h localhost'
+    steps:
+    - name: Checkout PR
+      uses: actions/checkout@v3
+      if: github.event.pull_request.head.sha != ''
+      with:
+        submodules: true
+        ref: ${{ github.event.pull_request.head.sha }}
+    - name: Checkout
+      uses: actions/checkout@v3
+      if: github.event.pull_request.head.sha == ''
+      with:
+        submodules: true
+    - name: Install dependencies
+      uses: ./.github/actions/prepare_vm
+    - name: Prepare ccache timestamp
+      id: ccache_cache_timestamp
+      shell: cmake -P {0}
+      run: |
+        string(TIMESTAMP current_date "%Y-%m-%d-%H;%M;%S" UTC)
+        message("::set-output name=timestamp::${current_date}")
+    - name: Restore cache files
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.ccache
+        key: ubuntu-22.04-ccache-${{steps.ccache_cache_timestamp.outputs.timestamp}}
+        restore-keys: |
+          ubuntu-22.04-ccache-
+    - name: Build
+      uses: ./.github/actions/build
+    - name: Test
+      shell: bash
+      run: |
+        ctest -j32 --preset release-integration

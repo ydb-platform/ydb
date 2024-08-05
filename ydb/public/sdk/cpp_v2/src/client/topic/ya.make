@@ -1,0 +1,25 @@
+LIBRARY()
+
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp_v2/headers.inc)
+
+SRCS(
+    out.cpp
+    proto_accessor.cpp
+)
+
+PEERDIR(
+    ydb/public/sdk/cpp_v2/src/client/topic/common
+    ydb/public/sdk/cpp_v2/src/client/topic/impl
+    ydb/public/sdk/cpp_v2/include/ydb-cpp-sdk/client/topic
+
+    ydb/public/sdk/cpp_v2/src/client/proto
+    ydb/public/sdk/cpp_v2/src/client/driver
+    ydb/public/sdk/cpp_v2/src/client/table
+    ydb/public/api/grpc
+    ydb/public/api/grpc/draft
+    ydb/public/api/protos
+
+    library/cpp/retry
+)
+
+END()

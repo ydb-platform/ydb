@@ -1,0 +1,20 @@
+name: Build
+description: Build YDB SDK
+
+runs:
+  using: "composite"
+  steps:
+    - name: Configure
+      shell: bash
+      run: |
+        mkdir -p ../build
+        rm -rf ../build/*
+        cmake -DYDB_SDK_TESTS=On -DYDB_SDK_EXAMPLES=On --preset release
+    - name: Build
+      shell: bash
+      run: |
+        ccache -z
+        export CCACHE_BASEDIR=`realpath ..`
+        export CCACHE_DIR=~/.ccache
+        cmake --build --preset release -- -j32
+        ccache -s

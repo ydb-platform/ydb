@@ -1,0 +1,52 @@
+name: i586_dos_gcc_cross
+
+on: [push, pull_request]
+
+jobs:
+
+  i586_dos_gcc_cross:
+    runs-on: ubuntu-20.04
+    timeout-minutes: 15
+    env:
+      CC: /opt/djgpp/bin/i586-pc-msdosdjgpp-gcc
+      LDFLAGS: -static
+    steps:
+    - uses: actions/checkout@v3
+    - name: Retrieve test compression corpus
+      run: |
+        git clone https://github.com/ariya/compression-corpus.git
+        cd compression-corpus
+        cd enwik
+        unzip enwik8.zip
+    - run: sudo apt-get -y -qq update
+    - name: Prepare cross-compiler
+      run: |
+        curl -OL https://github.com/andrewwutw/build-djgpp/releases/download/v3.3/djgpp-linux64-gcc1210.tar.bz2
+        tar xf djgpp-linux64-gcc1210.tar.bz2 -C /opt
+    - name: Verify compiler version
+      run: /opt/djgpp/bin/i586-pc-msdosdjgpp-gcc --version
+    - name: Install DOSEMU2
+      run: |
+        sudo add-apt-repository -y ppa:dosemu2/ppa
+        sudo apt update -y
+        sudo apt install -y dosemu2
+    - run: dosemu --version
+    - name: Perform round-trip tests
+      run: |
+        cd tests
+        ln -s ../compression-corpus/ corpus
+        make test_roundtrip TEST_ROUNDTRIP=testrr
+        file ./testrr.exe
+        dosemu -dumb -K . -t -E "testrr corpus/"
+    - name: 'Build and run example: 6pack and 6unpack'
+      run: |
+        cd examples
+        ln -s ../compression-corpus/enwik/enwik8.txt enwik8.txt
+        make
+        file ./6pack.exe
+        dosemu -K . -t -E "6pack.exe -v"
+        dosemu -K . -t -E "6pack.exe enwik8.txt archive.6pk"
+        mv enwik8.txt enwik8.txt.orig
+        dosemu -K . -t -E "6unpack.exe -v"
+        dosemu -K . -t -E "6unpack.exe archive.6pk"
+        ls -l enwik8*

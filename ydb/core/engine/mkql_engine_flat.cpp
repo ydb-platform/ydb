@@ -639,7 +639,7 @@ public:
                         NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception,
                         Settings.LlvmRuntime ? "" : "OFF", EGraphPerProcess::Multi);
                     Pattern = MakeComputationPattern(ProxyProgramExplorer, ProxyProgram, {}, opts);
-                    ResultGraph = Pattern->Clone(opts.ToComputationOptions(Settings.RandomProvider, Settings.TimeProvider));
+                    ResultGraph = Pattern->Clone(opts.ToComputationOptions(Settings.RandomProvider, Settings.TimeProvider, &Env));
 
                     const TBindTerminator bind(ResultGraph->GetTerminator());
 
@@ -1028,7 +1028,7 @@ public:
                 NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception,
                 Settings.LlvmRuntime ? "" : "OFF", EGraphPerProcess::Multi);
             auto pattern = MakeComputationPattern(explorer, runPgm, {}, opts);
-            auto graph = pattern->Clone(opts.ToComputationOptions(Settings.RandomProvider, Settings.TimeProvider));
+            auto graph = pattern->Clone(opts.ToComputationOptions(Settings.RandomProvider, Settings.TimeProvider, &Env));
 
             const TBindTerminator bind(graph->GetTerminator());
 
@@ -1357,7 +1357,7 @@ public:
                         NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception,
                         Settings.LlvmRuntime ? "" : "OFF", EGraphPerProcess::Multi);
                     auto pattern = MakeComputationPattern(runExplorer, runPgm, {}, opts);
-                    auto compOpts = opts.ToComputationOptions(Settings.RandomProvider, Settings.TimeProvider);
+                    auto compOpts = opts.ToComputationOptions(Settings.RandomProvider, Settings.TimeProvider, &Env);
                     THolder<IComputationGraph> runGraph = pattern->Clone(compOpts);
 
                     const TBindTerminator bind(runGraph->GetTerminator());

@@ -45,10 +45,11 @@ struct TComputationOpts {
 };
 
 struct TComputationOptsFull: public TComputationOpts {
-    TComputationOptsFull(IStatsRegistry* stats, TAllocState& allocState, IRandomProvider& randomProvider,
+    TComputationOptsFull(IStatsRegistry* stats, TAllocState& allocState, const TTypeEnvironment* typeEnv, IRandomProvider& randomProvider,
             ITimeProvider& timeProvider, NUdf::EValidatePolicy validatePolicy, const NUdf::ISecureParamsProvider* secureParamsProvider, NUdf::ICountersProvider* countersProvider)
         : TComputationOpts(stats)
         , AllocState(allocState)
+        , TypeEnv(typeEnv)
         , RandomProvider(randomProvider)
         , TimeProvider(timeProvider)
         , ValidatePolicy(validatePolicy)
@@ -56,7 +57,7 @@ struct TComputationOptsFull: public TComputationOpts {
         , CountersProvider(countersProvider)
     {}
 
-    TComputationOptsFull(IStatsRegistry* stats, TTypeEnvironment* typeEnv, IRandomProvider& randomProvider,
+    TComputationOptsFull(IStatsRegistry* stats, const TTypeEnvironment* typeEnv, IRandomProvider& randomProvider,
             ITimeProvider& timeProvider, NUdf::EValidatePolicy validatePolicy, const NUdf::ISecureParamsProvider* secureParamsProvider, NUdf::ICountersProvider* countersProvider)
         : TComputationOpts(stats)
         , AllocState(typeEnv->GetAllocator().Ref())
@@ -69,7 +70,7 @@ struct TComputationOptsFull: public TComputationOpts {
     {}
 
     TAllocState& AllocState;
-    TTypeEnvironment* TypeEnv = nullptr;
+    const TTypeEnvironment *const TypeEnv;
     IRandomProvider& RandomProvider;
     ITimeProvider& TimeProvider;
     NUdf::EValidatePolicy ValidatePolicy;
@@ -122,7 +123,7 @@ struct TComputationContext : public TComputationContextLLVM {
     bool ExecuteLLVM = false;
     arrow::MemoryPool& ArrowMemoryPool;
     std::vector<NUdf::TUnboxedValue*> WideFields;
-    TTypeEnvironment* TypeEnv = nullptr;
+    const TTypeEnvironment* TypeEnv = nullptr;
     const TComputationMutables Mutables;
     std::shared_ptr<ISpillerFactory> SpillerFactory;
     const NUdf::ITypeInfoHelper::TPtr TypeInfoHelper;
@@ -398,8 +399,8 @@ struct TComputationPatternOpts {
     const NUdf::ISecureParamsProvider* SecureParamsProvider = nullptr;
 
     /// \todo split and exclude
-    TComputationOptsFull ToComputationOptions(IRandomProvider& randomProvider, ITimeProvider& timeProvider, TAllocState* allocStatePtr = nullptr) const {
-        return TComputationOptsFull(Stats, allocStatePtr ? *allocStatePtr : AllocState, randomProvider, timeProvider, ValidatePolicy, SecureParamsProvider, CountersProvider);
+    TComputationOptsFull ToComputationOptions(IRandomProvider& randomProvider, ITimeProvider& timeProvider, const TTypeEnvironment* typeEnv, TAllocState* allocStatePtr = nullptr) const {
+        return TComputationOptsFull(Stats, allocStatePtr ? *allocStatePtr : AllocState, typeEnv, randomProvider, timeProvider, ValidatePolicy, SecureParamsProvider, CountersProvider);
     }
 
     TComputationOptsFull ToComputationOptions(IRandomProvider& randomProvider, ITimeProvider& timeProvider, TTypeEnvironment* typeEnv) const {

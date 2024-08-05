@@ -255,7 +255,7 @@ private:
 
         std::vector<TNode*> entryPoints(1, root.GetNode());
         auto pattern = MakeComputationPattern(explorer, root, entryPoints, opts);
-        auto graph = pattern->Clone(opts.ToComputationOptions(*randomProvider, *timeProvider));
+        auto graph = pattern->Clone(opts.ToComputationOptions(*randomProvider, *timeProvider, &env));
         TBindTerminator bind(graph->GetTerminator());
 
         TVector<const TItemExprType*> items;

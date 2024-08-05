@@ -42,7 +42,7 @@ namespace {
             RandomProvider_ = CreateDefaultRandomProvider();
             TimeProvider_ = CreateDefaultTimeProvider();
 
-            Graph_ = Pattern_->Clone(opts.ToComputationOptions(*RandomProvider_, *TimeProvider_));
+            Graph_ = Pattern_->Clone(opts.ToComputationOptions(*RandomProvider_, *TimeProvider_, &Env_));
             NKikimr::NMiniKQL::TBindTerminator terminator(Graph_->GetTerminator());
             Topology_ = Graph_->GetKernelsTopology();
             MKQL_ENSURE(Topology_->Items.size() >= 3, "Expected at least 3 kernels");

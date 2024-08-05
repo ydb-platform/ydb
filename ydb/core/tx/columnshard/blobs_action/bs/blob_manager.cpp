@@ -145,7 +145,7 @@ bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
     if (!db.LoadGCBarrierPreparation(storedGCBarrierPreparation)) {
         return false;
     }
-    if (storedGCBarrierPreparation != GCBarrierPreparation) {
+    if (storedGCBarrierPreparation < LastCollectedGenStep) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("mem_genstep", GCBarrierPreparation)("db_genstep", storedGCBarrierPreparation);
     }
     AFL_VERIFY(!GCBarrierPreparation.Generation() || LastCollectedGenStep <= GCBarrierPreparation)("prepared", GCBarrierPreparation)("last", LastCollectedGenStep);

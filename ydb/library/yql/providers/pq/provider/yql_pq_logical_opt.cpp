@@ -10,6 +10,7 @@
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 #include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/utils/plan/plan_utils.h>
 
 #include <ydb/library/yql/providers/common/pushdown/collection.h>
 #include <ydb/library/yql/providers/common/pushdown/physical_opt.h>
@@ -25,7 +26,7 @@ namespace {
             : NPushdown::TSettings(NLog::EComponent::ProviderGeneric)
         {
             using EFlag = NPushdown::TSettings::EFeatureFlag;
-            Enable(EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 | EFlag::StringTypes);
+            Enable(EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 | EFlag::StringTypes | EFlag::LikeOperator);
         }
     };
 
@@ -250,9 +251,12 @@ public:
         
         auto newFilterLambda = MakePushdownPredicate(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
         if (!newFilterLambda) {
-             YQL_CLOG(TRACE, ProviderPq) << "MakePushdownPredicate failed";
+            ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "MakePushdownPredicate failed"));
+            YQL_CLOG(TRACE, ProviderPq) << "MakePushdownPredicate failed";
             return node;
         }
+
+        ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Predicate: " + NPlanUtils::PrettyExprStr(newFilterLambda.Cast())));
 
         return Build<TCoFlatMap>(ctx, flatmap.Pos())
             .InitFrom(flatmap) // Leave existing filter in flatmap for the case of not applying predicate in connector
@@ -292,9 +296,12 @@ public:
         
         auto newFilterLambda = NPushdown::MakePushdownPredicate(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
         if (!newFilterLambda) {
+            ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "MakePushdownPredicate failed"));
             YQL_CLOG(TRACE, ProviderPq) << "MakePushdownPredicate failed";
             return node;
         }
+
+        ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Predicate: " + NPlanUtils::PrettyExprStr(newFilterLambda.Cast())));
 
         return Build<TCoFlatMap>(ctx, flatmap.Pos())
             .InitFrom(flatmap) // Leave existing filter in flatmap for the case of not applying predicate in connector

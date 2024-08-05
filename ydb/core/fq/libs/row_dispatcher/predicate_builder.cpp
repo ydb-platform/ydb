@@ -5,19 +5,23 @@
 namespace NFq {
 
 TString FormatColumn(const TString& value);
-TString FormatValue(/*formatter SQLFormatter, args []any,*/ Ydb::TypedValue value) ;
+TString FormatValue(Ydb::TypedValue value) ;
 TString FormatNull(NYql::NPq::NProto::TExpression_TNull);
-TString FormatExpression(/*formatter SQLFormatter, */ NYql::NPq::NProto::TExpression expression);
+TString FormatExpression(NYql::NPq::NProto::TExpression expression);
 TString FormatArithmeticalExpression(NYql::NPq::NProto::TExpression_TArithmeticalExpression expression);
-TString FormatComparison(/*formatter SQLFormatter, args []any, */NYql::NPq::NProto::TPredicate_TComparison comparison);
-TString FormatPredicate(const NYql::NPq::NProto::TPredicate& predicate, bool /*topLevel*/ );
+TString FormatNegation(const NYql::NPq::NProto::TPredicate_TNegation& negation);
+TString FormatComparison(NYql::NPq::NProto::TPredicate_TComparison comparison);
+TString FormatConjunction(const NYql::NPq::NProto::TPredicate_TConjunction& conjunction, bool topLevel);
+TString FormatDisjunction(const NYql::NPq::NProto::TPredicate_TDisjunction& disjunction);
+TString FormatIsNull(NYql::NPq::NProto::TPredicate_TIsNull isNull);
+TString FormatIsNotNull(NYql::NPq::NProto::TPredicate_TIsNotNull isNotNull);
+TString FormatPredicate(const NYql::NPq::NProto::TPredicate& predicate, bool topLevel);
 
 TString FormatColumn(const TString& value) {
-	//return formatter.SanitiseIdentifier(col), args, nil
     return value;
 }
 
-TString FormatValue(/*formatter SQLFormatter, args []any,*/ Ydb::TypedValue value) {
+TString FormatValue(Ydb::TypedValue value) {
 	switch (value.value().value_case()) {
 	case  Ydb::Value::kBoolValue:
 		return ToString(value.value().bool_value());
@@ -46,10 +50,7 @@ TString FormatNull(NYql::NPq::NProto::TExpression_TNull) {
 	return "NULL";
 }
 
-TString FormatExpression(/*formatter SQLFormatter, */ NYql::NPq::NProto::TExpression expression) {
-	// if !formatter.SupportsPushdownExpression(expression) {
-	// 	return "", args, common.ErrUnsupportedExpression
-	// }
+TString FormatExpression(NYql::NPq::NProto::TExpression expression) {
     switch (expression.payload_case()) {
 	case NYql::NPq::NProto::TExpression::kColumn:
 		return FormatColumn(expression.column());
@@ -89,12 +90,96 @@ TString FormatArithmeticalExpression(NYql::NPq::NProto::TExpression_TArithmetica
 		ythrow yexception() << "ErrUnimplementedArithmeticalExpression";
 	}
 
-	auto left = FormatExpression(/*formatter, args,*/ expression.left_value());
-	auto right = FormatExpression(/*formatter, args, */expression.right_value());
+	auto left = FormatExpression(expression.left_value());
+	auto right = FormatExpression(expression.right_value());
 	return left + operation + right;
 }
 
-TString FormatComparison(/*formatter SQLFormatter, args []any, */NYql::NPq::NProto::TPredicate_TComparison comparison) {
+TString FormatNegation(const NYql::NPq::NProto::TPredicate_TNegation& negation) {
+	auto pred = FormatPredicate(negation.operand(), false);
+	return "(NOT " + pred + ")";
+}
+
+TString FormatConjunction(const NYql::NPq::NProto::TPredicate_TConjunction& conjunction, bool /*topLevel*/) {
+	ui32 succeeded = 0;
+	TStringStream stream;
+	TString first;
+
+	for (const auto& predicate : conjunction.operands()) {
+		auto statement = FormatPredicate(predicate, false);
+
+		if (succeeded > 0) {
+			if (succeeded == 1) {
+				stream << "(";
+				stream << first;
+			}
+			stream << " AND ";
+			stream << statement;
+		} else {
+			first = statement;
+		}
+		succeeded++;
+	}
+
+	if (succeeded == 0) {
+		ythrow yexception() << "failed to format AND statement, no operands";
+	}
+
+	if (succeeded == 1) {
+		stream << first;
+	} else {
+		stream << ")";
+	}
+
+	return stream.Str();
+}
+
+TString FormatDisjunction(const NYql::NPq::NProto::TPredicate_TDisjunction& disjunction) {
+	TStringStream stream;
+	TString first;
+	ui32 cnt = 0;
+
+	for (const auto& predicate : disjunction.operands()) {
+		auto statement = FormatPredicate(predicate, false);
+
+		if (cnt > 0) {
+			if (cnt == 1) {
+				stream << "(";
+				stream << first;
+			}
+
+			stream << " OR ";
+			stream << statement;
+		} else {
+			first = statement;
+		}
+		cnt++;
+	}
+
+	if (cnt == 0) {
+		ythrow yexception() << "failed to format OR statement: no operands";
+	}
+
+	if (cnt == 1) {
+		stream << first;
+	} else {
+		stream << ")";
+	}
+
+	return stream.Str();
+}
+
+TString FormatIsNull(NYql::NPq::NProto::TPredicate_TIsNull isNull) {
+	auto statement = FormatExpression(isNull.value());
+	return "(" + statement + " IS NULL)";
+}
+
+TString FormatIsNotNull(NYql::NPq::NProto::TPredicate_TIsNotNull isNotNull) {
+	auto statement = FormatExpression(isNotNull.value());
+	return "(" + statement + " IS NOT NULL)";
+}
+
+TString FormatComparison(NYql::NPq::NProto::TPredicate_TComparison comparison) {
 	TString operation;
 
     switch (comparison.operation()) {
@@ -120,30 +205,30 @@ TString FormatComparison(/*formatter SQLFormatter, args []any, */NYql::NPq::NPro
 		ythrow yexception() << "UnimplementedOperation";
 	}
 
-	auto left = FormatExpression(/*formatter, args,*/ comparison.left_value());
-	auto right = FormatExpression(/*formatter, args, */comparison.right_value());
+	auto left = FormatExpression(comparison.left_value());
+	auto right = FormatExpression(comparison.right_value());
 
 	return left + operation + right;
 }
 
-TString FormatPredicate(const NYql::NPq::NProto::TPredicate& predicate, bool /*topLevel*/ ) {
+TString FormatPredicate(const NYql::NPq::NProto::TPredicate& predicate, bool topLevel ) {
     switch (predicate.payload_case()) {
         case NYql::NPq::NProto::TPredicate::PAYLOAD_NOT_SET:
                 return {};
-       /* case NYql::NPq::NProto::::TPredicate::kNegation:
-    		return formatNegation(formatter, args, predicate.GetNegation())
-        case NYql::NPq::NProto::::TPredicate::kConjunction:
-            return formatConjunction(formatter, args, p.Conjunction, topLevel)
-        case NYql::NPq::NProto::::TPredicate::kDisjunction:
-            return formatDisjunction(formatter, args, p.Disjunction)
-        case NYql::NPq::NProto::::TPredicate::kIsNull:
-            return formatIsNull(formatter, args, p.IsNull)
-        case NYql::NPq::NProto::::TPredicate::kIsNotNull:
-            return formatIsNotNull(formatter, args, p.IsNotNull)*/
+        case NYql::NPq::NProto::TPredicate::kNegation:
+    		return FormatNegation(predicate.negation());
+        case NYql::NPq::NProto::TPredicate::kConjunction:
+            return FormatConjunction(predicate.conjunction(), topLevel);
+        case NYql::NPq::NProto::TPredicate::kDisjunction:
+            return FormatDisjunction(predicate.disjunction());
+        case NYql::NPq::NProto::TPredicate::kIsNull:
+            return FormatIsNull(predicate.is_null());
+        case NYql::NPq::NProto::TPredicate::kIsNotNull:
+            return FormatIsNotNull(predicate.is_not_null());
         case NYql::NPq::NProto::TPredicate::kComparison:
-            return FormatComparison(/*formatter, args, */predicate.comparison());
-        // case NYql::NPq::NProto::::TPredicate::kBoolExpression:
-        //     return formatExpression(formatter, args, p.BoolExpression.Value)
+            return FormatComparison(predicate.comparison());
+        case NYql::NPq::NProto::TPredicate::kBoolExpression:
+            return FormatExpression(predicate.bool_expression().value());
         default:
             ythrow yexception() << "UnimplementedPredicateType";
 	}

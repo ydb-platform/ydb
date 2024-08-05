@@ -25,6 +25,7 @@
 #include <ydb/library/yql/minikql/mkql_mem_info.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 
+#include <util/generic/queue.h>
 #include <util/stream/file.h>
 #include <util/string/join.h>
 #include <util/string/strip.h>

@@ -117,7 +117,7 @@ class BaseTenant(abc.ABC):
         self.enable_logging("FQ_QUOTA_PROXY")
         self.enable_logging("PUBLIC_HTTP")
         self.enable_logging("FQ_CONTROL_PLANE_CONFIG")
-        self.enable_logging("YQ_ROW_DISPATCHER", LogLevels.DEBUG)
+        self.enable_logging("YQ_ROW_DISPATCHER", LogLevels.TRACE)
         # self.enable_logging("GRPC_SERVER")
 
     @abc.abstractclassmethod

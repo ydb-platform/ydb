@@ -464,14 +464,17 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvAck::TPtr &ev) {
     YQL_ENSURE(sessionIt != Sessions.end(), "Unknown partition id");
     auto& sessionInfo = sessionIt->second;
     if (!sessionInfo.EventsQueue.OnEventReceived(ev)) {
-        SRC_LOG_D("TEvAck failed");
+        SRC_LOG_W("Wrong seq num, ignore message");
+        //return;
     }
-    sessionInfo.EventsQueue.ChangeRecipientId(ev->Sender);
+
     //sessionInfo.EventsQueue.Send(new NFq::TEvRowDispatcher::TEvGetNextBatch());
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr &ev) {
     SRC_LOG_D("TEvSessionError " << ev->Sender);
+
+
     Stop(ev->Get()->Record.GetMessage());
 }
 
@@ -481,6 +484,10 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev
     auto sessionIt = Sessions.find(partitionId);
     YQL_ENSURE(sessionIt != Sessions.end(), "Unknown partition id");
     auto& sessionInfo = sessionIt->second;
+    if (sessionInfo.EventsQueue.OnEventReceived(ev)) {
+        SRC_LOG_W("Wrong seq num, ignore message");
+        //return;
+    }
     sessionInfo.NewDataArrived = true;
     sessionInfo.EventsQueue.Send(new NFq::TEvRowDispatcher::TEvGetNextBatch());
 }
@@ -583,8 +590,8 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev) 
     }
     auto& sessionInfo = it->second;
     if (!sessionInfo.EventsQueue.OnEventReceived(ev)) {
-        SRC_LOG_D("OnEventReceived failed ");
-        return;
+        SRC_LOG_W("Wrong seq num, ignore message");
+       // return;
     }
     for (const auto& message : ev->Get()->Record.GetMessages()) {
         SRC_LOG_D("Json: " << message.GetJson());    

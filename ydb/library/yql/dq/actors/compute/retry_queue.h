@@ -87,12 +87,9 @@ public:
     template <TProtobufEventWithTransportMeta T>
     void Send(THolder<T> ev, ui64 cookie = 0) {
         if (LocalRecipient) {
-            std::cerr << "LocalRecipient" << std::endl;
             NActors::TActivationContext::Send(new NActors::IEventHandle(RecipientId, SenderId, ev.Release(), cookie));
             return;
         }
-
-        std::cerr << "no LocalRecipient" << std::endl;
 
         IRetryableEvent::TPtr retryableEvent = Store(RecipientId, SenderId, std::move(ev), cookie);
         if (Connected) {
@@ -137,14 +134,13 @@ public:
         }
         return false;
     }
-    
+
     bool RemoveConfirmedEvents() {
         RemoveConfirmedEvents(MyConfirmedSeqNo);
         return !Events.empty();
     }
 
     void OnNewRecipientId(const NActors::TActorId& recipientId, bool unsubscribe = true);
-    void ChangeRecipientId(const NActors::TActorId& recipientId, bool unsubscribe = true);
     void HandleNodeConnected(ui32 nodeId);
     void HandleNodeDisconnected(ui32 nodeId);
     bool HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev);

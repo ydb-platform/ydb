@@ -232,7 +232,6 @@ without_column_name: an_id DOT an_id | an_id_without;
 
 column_list: column_name (COMMA column_name)* COMMA?;
 without_column_list: without_column_name (COMMA without_column_name)* COMMA?;
-column_list_in_parens: LPAREN column_list RPAREN;
 
 named_expr: expr (AS an_id_or_type)?;
 
@@ -1010,7 +1009,7 @@ commit_stmt: COMMIT;
 
 rollback_stmt: ROLLBACK;
 
-analyze_table: simple_table_ref (column_list_in_parens?);
+analyze_table: simple_table_ref (LPAREN column_list RPAREN)?;
 analyze_table_list: analyze_table (COMMA analyze_table)* COMMA?;
 analyze_stmt: ANALYZE analyze_table_list;
 

@@ -1442,7 +1442,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             TVector<TString> columns;
             if (analyzeTable.HasBlock2()) {
                 auto columnsNode = 
-                    analyzeTable.GetBlock2().GetBlock1().GetRule_column_list_in_parens1().GetRule_column_list2();
+                    analyzeTable.GetBlock2().GetRule_column_list2();
+                    // .GetBlock1().GetBlock2().GetRule_column_list2();
 
                 if (columnsNode.HasRule_column_name1()) {
                     columns.push_back(Id(columnsNode.GetRule_column_name1().GetRule_an_id2(), *this));

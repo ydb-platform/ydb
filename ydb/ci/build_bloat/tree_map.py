@@ -5,7 +5,7 @@ import os
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
-def add_to_tree(tree, path):
+def _add_to_tree(tree, path):
     current_name, current_type, current_size = path[0]
     tree["name"] = current_name
     if "children" not in tree:
@@ -24,50 +24,49 @@ def add_to_tree(tree, path):
         next_name = path[1][0]
         if next_name not in tree["children"]:
             tree["children"][next_name] = {}
-        add_to_tree(tree["children"][next_name], path[1:])
+        _add_to_tree(tree["children"][next_name], path[1:])
 
-def children_to_list(tree):
+def _children_to_list(tree):
     if "children" not in tree:
         return
     tree["children"] = list(tree["children"].values())
     for child in tree["children"]:
-        children_to_list(child)
+        _children_to_list(child)
 
-def propogate_size(tree):
+def _propogate_size(tree):
     for child in tree.get("children", []):
-        tree["size"] += propogate_size(child)
+        tree["size"] += _propogate_size(child)
     return tree["size"]
 
-def enrich_names_with_units(tree, unit_name, factor):
-    area = 0
+def _intify_size(tree):
+    for child in tree.get("children", []):
+        _intify_size(child)
+    tree["size"] = int(tree["size"])
+
+def _enrich_names_with_units(tree, unit_name, factor):
     for child_ in tree.get("children", []):
-        enrich_names_with_units(child_, unit_name, factor)
+        _enrich_names_with_units(child_, unit_name, factor)
 
-    tree["name"] = tree["name"] + " " + "{:_} {}".format(int(tree["size"]*factor), unit_name)
-    if "count" in tree:
-        tree["name"] += ", {} times".format(tree["count"])
+    tree["name"] = tree["name"] + ", {:_} {}".format(int(tree["size"]*factor), unit_name)
 
-def build_tree_map(paths_to_add, unit_name, factor):
+def _build_tree_map(paths_to_add, unit_name, factor):
     tree = {}
     for path in paths_to_add:
-        add_to_tree(tree, path)
-    children_to_list(tree)
-    propogate_size(tree)
-    enrich_names_with_units(tree, unit_name, factor)
+        _add_to_tree(tree, path)
+    _children_to_list(tree)
+    _propogate_size(tree)
+    _intify_size(tree)
+    _enrich_names_with_units(tree, unit_name, factor)
     return tree
 
 
-def generate_tree_map_html(output_dir, tree_paths, unit_name, factor):
+def generate_tree_map_html(output_dir: str, tree_paths: list[tuple[str, str, int]], unit_name: str, factor: float, types: list[tuple[str, str, str]]):
     current_script_dir = os.path.dirname(os.path.realpath(__file__))
     html_dir = os.path.join(current_script_dir, "html")
 
-    tree = build_tree_map(tree_paths, unit_name, factor)
+    tree = _build_tree_map(tree_paths, unit_name, factor)
 
     env = Environment(loader=FileSystemLoader(html_dir), undefined=StrictUndefined)
-    types = [
-        ("namespace", "Namespace", "#66C2A5"),
-        ("function", "Function", "#FC8D62"),
-    ]
     file_names = os.listdir(html_dir)
     os.makedirs(output_dir, exist_ok=True)
     for file_name in file_names:

@@ -1,32 +1,46 @@
 #!/usr/bin/env python3
 import argparse
 import json
-import os
 import sys
 
 import tree_map
-
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 THRESHHOLD_TO_SHOW_ON_TREE_VIEW = 1024*10 
 
 def remove_brackets(name, b1, b2):
     inside_template = 0
-    final_name = ""
-    for c in name:
+    final_name_builder = []
+    pos = 0
+    while pos != len(name):
+        pos_next_b1 = name.find(b1, pos)
+        pos_next_b2 = name.find(b2, pos)
+
+        pos_next = pos_next_b1
+        if pos_next == -1:
+            pos_next = pos_next_b2
+        elif pos_next_b2 != -1 and pos_next_b2 < pos_next:
+            pos_next = pos_next_b2
+
+        c = name[pos_next]
+
         if c == b1:
             inside_template += 1
             if inside_template == 1:
-                final_name += c
+                final_name_builder.append(name[pos:pos_next])
+                
         elif c == b2:
             inside_template -= 1
             if inside_template == 0:
-                final_name += c
+                final_name_builder.append(c)
         else:
-            if inside_template:
-                continue
-            final_name += c
-    return final_name
+            if inside_template == 0:
+                final_name_builder.append(name[pos:pos_next])
+            
+        if pos_next == -1:
+            break
+        pos = pos_next + 1
+             
+    return "".join(final_name_builder)
 
 def get_aggregation_key(name):
     final_name = name
@@ -173,7 +187,11 @@ def main():
     if options.html_template_bloat:
         output_dir = options.html_template_bloat
         tree_paths = get_tree_paths(items)
-        tree_map.generate_tree_map_html(output_dir, tree_paths, unit_name="KiB", factor=1.0/1024)
+        types = [
+            ("namespace", "Namespace", "#66C2A5"),
+            ("function", "Function", "#FC8D62"),
+        ]
+        tree_map.generate_tree_map_html(output_dir, tree_paths, unit_name="KiB", factor=1.0/1024, types=types)
 
     return 0
 

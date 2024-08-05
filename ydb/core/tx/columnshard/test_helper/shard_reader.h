@@ -10,7 +10,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <optional>
 
-namespace NKikimr::NOlap::NTests {
+namespace NKikimr::NTxUT {
 
 class TShardReader {
 private:
@@ -267,4 +267,4 @@ public:
     }
 };
 
-}
+} //namespace NKikimr::NTxUT

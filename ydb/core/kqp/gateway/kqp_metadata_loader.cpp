@@ -840,7 +840,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                         }
                         externalDataSourceMetadata.Metadata->ExternalSource.TableLocation = *externalPath;
                         LoadExternalDataSourceSecretValues(entry, userToken, ActorSystem)
-                            .Subscribe([promise, externalDataSourceMetadata, settings, externalPath](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
+                            .Subscribe([promise, externalDataSourceMetadata, settings](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
                         {
                             UpdateExternalDataSourceSecretsValue(externalDataSourceMetadata, result.GetValue());
                             NExternalSource::IExternalSource::TPtr externalSource;

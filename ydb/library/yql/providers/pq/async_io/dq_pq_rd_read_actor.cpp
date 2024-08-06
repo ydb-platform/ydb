@@ -161,7 +161,7 @@ public:
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev);
-    void Handle(NFq::TEvRowDispatcher::TEvAck::TPtr &ev);
+    void Handle(NFq::TEvRowDispatcher::TEvStartSessionAck::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr &ev);
 
@@ -180,7 +180,7 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorResult, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvNewDataArrived, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvMessageBatch, Handle);
-        hFunc(NFq::TEvRowDispatcher::TEvAck, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvStartSessionAck, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvSessionError, Handle);
 
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
@@ -263,7 +263,7 @@ void TDqPqRdReadActor::ProcessState() {
 
             SRC_LOG_D("readOffset " << readOffset << " partitionId " << partitionId );
 
-            auto event = new NFq::TEvRowDispatcher::TEvAddConsumer(
+            auto event = new NFq::TEvRowDispatcher::TEvStartSession(
                 SourceParams,
                 partitionId,
                 Token,
@@ -452,9 +452,9 @@ std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
     return res;
 }
 
-void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvAck::TPtr &ev) {
-    SRC_LOG_D("TEvAck " << ev->Sender);
-    
+void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStartSessionAck::TPtr &ev) {
+    SRC_LOG_D("TEvStartSessionAck " << ev->Sender);
+
     //  TODO 
     ui64 partitionId = ev->Get()->Record.GetConsumer().GetPartitionId();
     auto sessionIt = Sessions.find(partitionId);

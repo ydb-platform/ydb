@@ -98,7 +98,7 @@ private:
     bool IsStopped = false;
 
     struct ConsumersInfo {
-        NFq::NRowDispatcherProto::TEvAddConsumer Consumer;
+        NFq::NRowDispatcherProto::TEvStartSession Consumer;
         NActors::TActorId ReadActorId;
         ui64 LastSendedMessage = 0;
         std::unique_ptr<TJsonFilter> Filter;
@@ -152,7 +152,7 @@ public:
     //void Handle(TEvRowDispatcher::TEvSessionAddConsumer::TPtr&);
     void Handle(TEvRowDispatcher::TEvSessionDeleteConsumer::TPtr&);
     void Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev);
-    void Handle(NFq::TEvRowDispatcher::TEvAddConsumer::TPtr &ev);
+    void Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev);
     
 
     static constexpr char ActorName[] = "YQ_ROW_DISPATCHER_SESSION";
@@ -162,8 +162,7 @@ private:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvPqEventsReady, Handle);
         hFunc(TEvRowDispatcher::TEvGetNextBatch, Handle);
-        //hFunc(TEvRowDispatcher::TEvSessionAddConsumer, Handle);
-        hFunc(NFq::TEvRowDispatcher::TEvAddConsumer, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvStartSession, Handle);
         hFunc(TEvRowDispatcher::TEvSessionDeleteConsumer, Handle);
         cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
         hFunc(NFq::TEvRowDispatcher::TEvStopSession, Handle);
@@ -534,7 +533,7 @@ void TTopicSession::SendData(ConsumersInfo& info) {
     Send(RowDispatcherActorId, event.release());
 }
 
-void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvAddConsumer::TPtr &ev) {
+void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvSessionAddConsumer");
     if (IsStopped) {
         // TODO

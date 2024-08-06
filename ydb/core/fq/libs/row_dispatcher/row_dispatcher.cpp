@@ -60,7 +60,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> , public NYql::
             NActors::TActorId readActorId,
             NActors::TActorId selfId,
             ui64 eventQueueId,
-            NFq::NRowDispatcherProto::TEvAddConsumer& proto,
+            NFq::NRowDispatcherProto::TEvStartSession& proto,
             NYql::NDq::TRetryEventsQueue::ICallbacks* cbs,
             TActorId topicSessionId)
             : ReadActorId(readActorId)
@@ -85,7 +85,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> , public NYql::
         NYql::NDq::TRetryEventsQueue EventsQueue;
         TQueue<std::pair<ui64, TString>> Buffer;
         ui64 EventQueueId;
-        NFq::NRowDispatcherProto::TEvAddConsumer Proto;
+        NFq::NRowDispatcherProto::TEvStartSession Proto;
         TActorId TopicSessionId;
     };
 
@@ -122,7 +122,7 @@ public:
     void Handle(NActors::TEvents::TEvWakeup::TPtr &ev);
     void Handle(NActors::TEvents::TEvPong::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvRowDispatcherRequest::TPtr &ev);
-    void Handle(NFq::TEvRowDispatcher::TEvAddConsumer::TPtr &ev);
+    void Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr &ev);
     void Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev);
@@ -149,7 +149,7 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvRowDispatcherRequest, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvGetNextBatch, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvMessageBatch, Handle);
-        hFunc(NFq::TEvRowDispatcher::TEvAddConsumer, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvStartSession, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStopSession, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvSessionError, Handle);
 
@@ -274,8 +274,8 @@ void TRowDispatcher::PrintInternalState(const TString& prefix) {
     LOG_ROW_DISPATCHER_DEBUG(prefix << ":\n" << str.Str());
 }
 
-void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvAddConsumer::TPtr &ev) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvAddConsumer, topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
+void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
+    LOG_ROW_DISPATCHER_DEBUG("TEvStartSession, topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
         " partitionId " << ev->Get()->Record.GetPartitionId());
 
     PrintInternalState("Before AddConsumer:");
@@ -324,7 +324,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvAddConsumer::TPtr &ev) {
         sessionActorId = sessionIt->first;
     }
     consumerInfo->TopicSessionId = sessionActorId;
-    consumerInfo->EventsQueue.Send(new NFq::TEvRowDispatcher::TEvAck(consumerInfo->Proto));
+    consumerInfo->EventsQueue.Send(new NFq::TEvRowDispatcher::TEvStartSessionAck(consumerInfo->Proto));
 
     Forward(ev, sessionActorId);
     PrintInternalState("After AddConsumer:");

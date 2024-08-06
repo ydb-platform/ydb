@@ -21,7 +21,7 @@ message TEvGetAddressResponse {
     repeated TEvPartitionAddress Partitions = 1;
 }
 
-message TEvAddConsumer {
+message TEvStartSession {
     NYql.NPq.NProto.TDqPqTopicSource Source = 1;
     uint32 PartitionId = 2;
     string Token = 3;
@@ -31,8 +31,8 @@ message TEvAddConsumer {
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 
-message TEvAck {
-    TEvAddConsumer Consumer = 1;
+message TEvStartSessionAck {
+    TEvStartSession Consumer = 1;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 

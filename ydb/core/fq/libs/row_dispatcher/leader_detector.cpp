@@ -21,6 +21,8 @@ using NYql::TIssues;
 
 namespace {
 
+const ui64 TimeoutDurationSec = 3;
+
 struct TEvPrivate {
     // Event ids
     enum EEv : ui32 {
@@ -29,7 +31,7 @@ struct TEvPrivate {
         EvCreateSessionResult,
         EvDescribeSemaphoreResult,
         EvSessionStopped,
-        Ev,
+        EvTimeout,
         EvEnd
     };
 
@@ -51,6 +53,9 @@ struct TEvPrivate {
         NYdb::NCoordination::TDescribeSemaphoreResult Result;
         explicit TEvDescribeSemaphoreResult(NYdb::NCoordination::TDescribeSemaphoreResult result)
             : Result(std::move(result)) {}
+    };
+
+    struct TEvTimeout : NActors::TEventLocal<TEvTimeout, EvTimeout> {
     };
 
     struct TEvSessionStopped : NActors::TEventLocal<TEvSessionStopped, EvSessionStopped> {};
@@ -88,7 +93,7 @@ public:
     void Handle(TEvPrivate::TEvDescribeSemaphoreResult::TPtr& ev);
     void Handle(TEvPrivate::TEvOnChangedResult::TPtr& ev);
     void Handle(TEvPrivate::TEvSessionStopped::TPtr& ev);
-    void Handle(NActors::TEvents::TEvWakeup::TPtr&);
+    void Handle(TEvPrivate::TEvTimeout::TPtr&);
 
     STRICT_STFUNC(
         StateFunc, {
@@ -96,7 +101,7 @@ public:
         hFunc(TEvPrivate::TEvDescribeSemaphoreResult, Handle);
         hFunc(TEvPrivate::TEvOnChangedResult, Handle);
         hFunc(TEvPrivate::TEvSessionStopped, Handle);
-        hFunc(NActors::TEvents::TEvWakeup, Handle);
+        hFunc(TEvPrivate::TEvTimeout, Handle);
 
     })
 
@@ -173,7 +178,7 @@ void TLeaderDetector::DescribeSemaphore() {
 void TLeaderDetector::Handle(TEvPrivate::TEvCreateSessionResult::TPtr& ev) {
     if (!ev->Get()->Result.IsSuccess()) {
         LOG_ROW_DISPATCHER_DEBUG("StartSession fail, " << ev->Get()->Result.GetIssues());
-        Schedule(TDuration::Seconds(3), new NActors::TEvents::TEvWakeup());
+        Schedule(TDuration::Seconds(TimeoutDurationSec), new TEvPrivate::TEvTimeout());
         return;
     }
     Session =  ev->Get()->Result.GetResult();
@@ -185,7 +190,7 @@ void TLeaderDetector::Handle(TEvPrivate::TEvDescribeSemaphoreResult::TPtr& ev) {
     if (!ev->Get()->Result.IsSuccess()) {
         HasSubcription = false;
         LOG_ROW_DISPATCHER_DEBUG("Semaphore describe fail, " <<  ev->Get()->Result.GetIssues());
-        Schedule(TDuration::Seconds(3), new NActors::TEvents::TEvWakeup());
+        Schedule(TDuration::Seconds(TimeoutDurationSec), new TEvPrivate::TEvTimeout());
         return;
     }
     LOG_ROW_DISPATCHER_DEBUG("Semaphore successfully described:");
@@ -230,12 +235,11 @@ void TLeaderDetector::Handle(TEvPrivate::TEvOnChangedResult::TPtr& ev) {
 void TLeaderDetector::Handle(TEvPrivate::TEvSessionStopped::TPtr&) {
     LOG_ROW_DISPATCHER_DEBUG("TEvSessionStopped");
     Session.Clear();
-    // TODO use timeout
-    ProcessState();
+    Schedule(TDuration::Seconds(TimeoutDurationSec), new TEvPrivate::TEvTimeout());
 }
 
-void TLeaderDetector::Handle(NActors::TEvents::TEvWakeup::TPtr&) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvWakeup");
+void TLeaderDetector::Handle(TEvPrivate::TEvTimeout::TPtr&) {
+    LOG_ROW_DISPATCHER_DEBUG("TEvTimeout");
     ProcessState(); 
 }
 

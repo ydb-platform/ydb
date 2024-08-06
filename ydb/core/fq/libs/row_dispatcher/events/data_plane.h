@@ -17,8 +17,8 @@ struct TEvRowDispatcher {
     enum EEv : ui32 {
         EvCreateSemaphoreResult = YqEventSubspaceBegin(TYqEventSubspace::RowDispatcher),
         EvCoordinatorChanged,
-        EvAddConsumer,
-        EvAck,
+        EvStartSession,
+        EvStartSessionAck,
         EvNewDataArrived,
         EvGetNextBatch,
         EvMessageBatch,
@@ -69,11 +69,11 @@ struct TEvRowDispatcher {
 
     //  Read actor <-> row_dispatcher : 
 
-    struct TEvAddConsumer : public NActors::TEventPB<TEvAddConsumer,
-        NFq::NRowDispatcherProto::TEvAddConsumer, EEv::EvAddConsumer> {
+    struct TEvStartSession : public NActors::TEventPB<TEvStartSession,
+        NFq::NRowDispatcherProto::TEvStartSession, EEv::EvStartSession> {
             
-        TEvAddConsumer() = default;
-        TEvAddConsumer(
+        TEvStartSession() = default;
+        TEvStartSession(
             const NYql::NPq::NProto::TDqPqTopicSource& sourceParams,
             ui64 partitionId,
             const TString token,
@@ -91,11 +91,11 @@ struct TEvRowDispatcher {
         }
     };
 
-    struct TEvAck : public NActors::TEventPB<TEvAck,
-        NFq::NRowDispatcherProto::TEvAck, EEv::EvAck> {
-        TEvAck() = default;
-        explicit TEvAck(
-            const NFq::NRowDispatcherProto::TEvAddConsumer& consumer) {
+    struct TEvStartSessionAck : public NActors::TEventPB<TEvStartSessionAck,
+        NFq::NRowDispatcherProto::TEvStartSessionAck, EEv::EvStartSessionAck> {
+        TEvStartSessionAck() = default;
+        explicit TEvStartSessionAck(
+            const NFq::NRowDispatcherProto::TEvStartSession& consumer) {
             Record.MutableConsumer()->CopyFrom(consumer);
         }
     };

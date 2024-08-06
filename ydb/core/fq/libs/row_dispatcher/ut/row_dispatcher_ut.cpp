@@ -73,7 +73,7 @@ public:
     }
 
     void AddSession(const TString& topic, ui64 partitionId, TActorId readActorId) {
-        auto event = new NFq::TEvRowDispatcher::TEvAddConsumer(
+        auto event = new NFq::TEvRowDispatcher::TEvStartSession(
             BuildPqTopicSourceSettings(topic),
             partitionId,          // partitionId
             "Token",

@@ -1700,9 +1700,9 @@
     ],
     "test.test[match_recognize-alerts_without_order-default.txt-Debug]": [
         {
-            "checksum": "17c5c1f84ac65b6a82234cd0b0a41a68",
-            "size": 5699,
-            "uri": "https://{canondata_backend}/1917492/ef839f70e5a2f493427f7f92ed00d26a993f6d4a/resource.tar.gz#test.test_match_recognize-alerts_without_order-default.txt-Debug_/opt.yql_patched"
+            "checksum": "9583095b37a579b3d8f782ca1410d648",
+            "size": 5669,
+            "uri": "https://{canondata_backend}/1899731/890436ebed3dccde167428c56cdadbadb0d99610/resource.tar.gz#test.test_match_recognize-alerts_without_order-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[match_recognize-alerts_without_order-default.txt-Plan]": [

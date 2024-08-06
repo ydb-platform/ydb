@@ -93,13 +93,6 @@ runs:
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
 
         python3 -m pip install ydb ydb[yc] codeowners
-    
-
-    - name: set environment variables required by some tests
-      if: inputs.run_tests
-      shell: bash
-      run: |
-        echo "PSQL_BINARY=/usr/bin/psql" >> $GITHUB_ENV
 
     - name: ya build and test
       id: build

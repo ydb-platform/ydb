@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: pytest-lazy-fixtures
-Version: 1.1.0
+Version: 1.1.1
 Summary: Allows you to use fixtures in @pytest.mark.parametrize.
 Home-page: https://github.com/dev-petrov/pytest-lazy-fixtures
 License: MIT

@@ -535,7 +535,7 @@ These components are:
 
 - KQP
 
-The memory limit for these components indicates the amount of memory a component may try to consume, but consumption can be rejected if it exceeds the soft memory limit.
+The memory limit for these components indicates the amount of memory a component may try to consume, but consumption can be rejected if a database node exceeds the soft memory limit. Therefore, the sum of these limits may exceed the soft memory limit, but each individual limit is expected to be less than the soft memory limit.
 
 Example of the `memory_controller_config` section with a specified KQP limit:
 

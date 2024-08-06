@@ -11,6 +11,24 @@
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
+class TPositiveControlInteger {
+private:
+    ui64 Value = 0;
+
+
+public:
+    void Add(const ui64 value) {
+        Value += value;
+    }
+    void Sub(const ui64 value) {
+        AFL_VERIFY(value <= Value);
+        Value -= value;
+    }
+    ui64 Val() const {
+        return Value;
+    }
+};
+
 class TManager {
 private:
     const TConfig Config;
@@ -18,13 +36,14 @@ private:
     const TCounters& Signals;
     const NActors::TActorId OwnerActorId;
 
-    ui64 ResourceUsage = 0;
+    TPositiveControlInteger Allocated;
+    TPositiveControlInteger Waiting;
 
     ui64 GetFreeMemory() const {
-        if (Config.GetMemoryLimit() < ResourceUsage) {
+        if (Config.GetMemoryLimit() < Allocated.Val()) {
             return 0;
         } else {
-            return Config.GetMemoryLimit() - ResourceUsage;
+            return Config.GetMemoryLimit() - Allocated.Val();
         }
     }
 
@@ -32,15 +51,45 @@ private:
     private:
         std::shared_ptr<IAllocation> Allocation;
         YDB_READONLY_DEF(THashSet<ui64>, GroupIds);
-        YDB_ACCESSOR(ui64, AllocatedVolume, 0);
+        ui64 AllocatedVolume = 0;
         YDB_READONLY(ui64, Identifier, 0);
+        TPositiveControlInteger* WaitMemory = nullptr;
+        TPositiveControlInteger* AllocatedMemory = nullptr;
 
     public:
+        ~TAllocationInfo() {
+            if (IsAllocated()) {
+                AllocatedMemory->Sub(AllocatedVolume);
+            } else {
+                WaitMemory->Sub(AllocatedVolume);
+            }
+        }
+
+        void SetAllocatedVolume(const ui64 value) {
+            if (IsAllocated()) {
+                AllocatedMemory->Sub(AllocatedVolume);
+            } else {
+                WaitMemory->Sub(AllocatedVolume);
+            }
+            AllocatedVolume = value;
+            if (IsAllocated()) {
+                AllocatedMemory->Add(AllocatedVolume);
+            } else {
+                WaitMemory->Add(AllocatedVolume);
+            }
+        }
+
+        ui64 GetAllocatedVolume() const {
+            return AllocatedVolume;
+        }
+
         void Allocate(const NActors::TActorId& ownerId) {
             AFL_VERIFY(Allocation);
             Allocation->OnAllocated(
                 std::make_shared<TAllocationGuard>(ownerId, Allocation->GetIdentifier(), Allocation->GetMemory()), Allocation);
             Allocation = nullptr;
+            AllocatedMemory->Add(AllocatedVolume);
+            WaitMemory->Sub(AllocatedVolume);
         }
 
         bool IsAllocated() const {
@@ -59,13 +108,21 @@ private:
             AFL_VERIFY(GroupIds.erase(groupId));
         }
 
-        TAllocationInfo(const std::shared_ptr<IAllocation>& allocation)
+        TAllocationInfo(const std::shared_ptr<IAllocation>& allocation, TPositiveControlInteger* allocatedMemory,
+            TPositiveControlInteger* waitMemory)
             : Allocation(allocation)
             , Identifier(Allocation->GetIdentifier())
+            , WaitMemory(waitMemory)
+            , AllocatedMemory(allocatedMemory)
         {
             AFL_VERIFY(Allocation);
-            AFL_VERIFY(!Allocation->IsAllocated());
             AllocatedVolume = Allocation->GetMemory();
+            if (allocation->IsAllocated()) {
+                Allocation = nullptr;
+                AllocatedMemory->Add(AllocatedVolume);
+            } else {
+                WaitMemory->Add(AllocatedVolume);
+            }
         }
     };
 
@@ -116,7 +173,6 @@ private:
                 auto allocated = it->second.AllocatePossible(internalGroupId == minGroupId, manager.GetFreeMemory());
                 for (auto&& i : allocated) {
                     i->Allocate(manager.OwnerActorId);
-                    manager.ResourceUsage += i->GetAllocatedVolume();
                     for (auto&& g : i->GetGroupIds()) {
                         it->second.Remove(i);
                         destination.AddAllocation(g, i);
@@ -191,6 +247,10 @@ private:
     std::optional<ui64> GetMinInternalGroupIdOptional() const;
     ui64 GetMinInternalGroupIdVerified() const;
     void TryAllocateWaiting();
+    void RefreshSignals() const {
+        Signals.MemoryUsageBytes->Set(Allocated.Val());
+        Signals.MemoryWaitingBytes->Set(Waiting.Val());
+    }
 
 public:
     TManager(const NActors::TActorId& ownerActorId, const TConfig& config, const TString& name, const TCounters& signals)
@@ -198,7 +258,6 @@ public:
         , Name(name)
         , Signals(signals)
         , OwnerActorId(ownerActorId) {
-        Y_UNUSED(Signals);
     }
 
     void RegisterAllocation(const std::shared_ptr<IAllocation>& task, const ui64 externalGroupId);
@@ -207,7 +266,7 @@ public:
     void UpdateAllocation(const ui64 allocationId, const ui64 volume);
     void UnregisterGroup(const ui64 usageGroupId);
     bool IsEmpty() const {
-        return ResourceUsage == 0 && AllocationInfo.empty() && WaitAllocations.IsEmpty() && ReadyAllocations.IsEmpty();
+        return AllocationInfo.empty() && WaitAllocations.IsEmpty() && ReadyAllocations.IsEmpty();
     }
 };
 

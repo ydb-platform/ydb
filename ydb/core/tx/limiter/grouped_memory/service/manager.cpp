@@ -33,7 +33,7 @@ ui64 TManager::GetInternalGroupIdVerified(const ui64 externalGroupId) const {
 const std::shared_ptr<TManager::TAllocationInfo>& TManager::RegisterAllocationImpl(const std::shared_ptr<IAllocation>& task) {
     auto it = AllocationInfo.find(task->GetIdentifier());
     if (it == AllocationInfo.end()) {
-        it = AllocationInfo.emplace(task->GetIdentifier(), std::make_shared<TAllocationInfo>(task)).first;
+        it = AllocationInfo.emplace(task->GetIdentifier(), std::make_shared<TAllocationInfo>(task, &Allocated, &Waiting)).first;
     }
     return it->second;
 }
@@ -65,27 +65,26 @@ void TManager::RegisterAllocation(const std::shared_ptr<IAllocation>& task, cons
         ReadyAllocations.AddAllocation(internalGroupId, allocationInfo);
     } else if (WaitAllocations.GetMinGroupId().value_or(externalGroupId) < externalGroupId) {
         WaitAllocations.AddAllocation(internalGroupId, allocationInfo);
-    } else if (!ResourceUsage || ResourceUsage + allocationInfo->GetAllocatedVolume() <= Config.GetMemoryLimit() ||
+    } else if (!Allocated.Val() || Allocated.Val() + allocationInfo->GetAllocatedVolume() <= Config.GetMemoryLimit() ||
                externalGroupId == GetMinInternalGroupIdOptional().value_or(externalGroupId)) {
         allocationInfo->Allocate(OwnerActorId);
-        ResourceUsage += allocationInfo->GetAllocatedVolume();
         ReadyAllocations.AddAllocation(internalGroupId, allocationInfo);
     } else {
         WaitAllocations.AddAllocation(internalGroupId, allocationInfo);
     }
+    RefreshSignals();
 }
 
 void TManager::UpdateAllocation(const ui64 allocationId, const ui64 volume) {
     auto& info = GetAllocationInfoVerified(allocationId);
-    AFL_VERIFY(ResourceUsage >= info.GetAllocatedVolume());
-    ResourceUsage -= info.GetAllocatedVolume();
-    ResourceUsage += volume;
     info.SetAllocatedVolume(volume);
     TryAllocateWaiting();
+    RefreshSignals();
 }
 
 void TManager::TryAllocateWaiting() {
     WaitAllocations.AllocateTo(*this, ReadyAllocations);
+    RefreshSignals();
 }
 
 void TManager::UnregisterAllocation(const ui64 allocationId) {
@@ -102,10 +101,9 @@ void TManager::UnregisterAllocation(const ui64 allocationId) {
         AllocationInfo.erase(it);
     }
     if (memoryAllocated) {
-        AFL_VERIFY(memoryAllocated <= ResourceUsage);
-        ResourceUsage -= memoryAllocated;
         TryAllocateWaiting();
     }
+    RefreshSignals();
 }
 
 void TManager::UnregisterGroup(const ui64 externalGroupId) {
@@ -125,7 +123,7 @@ void TManager::UnregisterGroup(const ui64 externalGroupId) {
     if (minGroupId && *minGroupId == externalGroupId) {
         TryAllocateWaiting();
     }
-    
+    RefreshSignals();
 }
 
 ui64 TManager::GetMinInternalGroupIdVerified() const {

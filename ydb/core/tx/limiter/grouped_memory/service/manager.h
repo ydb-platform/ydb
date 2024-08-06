@@ -20,6 +20,14 @@ private:
 
     ui64 ResourceUsage = 0;
 
+    ui64 GetFreeMemory() const {
+        if (Config.GetMemoryLimit() < ResourceUsage) {
+            return 0;
+        } else {
+            return Config.GetMemoryLimit() - ResourceUsage;
+        }
+    }
+
     class TAllocationInfo {
     private:
         std::shared_ptr<IAllocation> Allocation;
@@ -66,6 +74,10 @@ private:
         THashMap<ui64, std::shared_ptr<TAllocationInfo>> Allocations;
 
     public:
+        THashMap<ui64, std::shared_ptr<TAllocationInfo>> ExtractAllocations() {
+            return std::move(Allocations);
+        }
+
         const THashMap<ui64, std::shared_ptr<TAllocationInfo>>& GetAllocations() const {
             return Allocations;
         }
@@ -82,11 +94,85 @@ private:
             AFL_VERIFY(Allocations.erase(allocation->GetIdentifier()));
         }
 
-        std::vector<std::shared_ptr<TAllocationInfo>> AllocatePossible(TManager& manager, const bool force);
+        std::vector<std::shared_ptr<TAllocationInfo>> AllocatePossible(const bool force, const ui64 freeMemory);
     };
 
-    std::map<ui64, TGrouppedAllocations> WaitAllocations;
-    std::map<ui64, TGrouppedAllocations> ReadyAllocations;
+    class TAllocationGroups {
+    private:
+        std::map<ui64, TGrouppedAllocations> Groups;
+
+    public:
+        bool IsEmpty() const {
+            return Groups.empty();
+        }
+
+        void AllocateTo(TManager& manager, TAllocationGroups& destination) {
+            if (Groups.empty()) {
+                return;
+            }
+            const ui64 minGroupId = manager.GetMinInternalGroupIdVerified();
+            for (auto it = Groups.begin(); it != Groups.end();) {
+                auto internalGroupId = it->first;
+                auto allocated = it->second.AllocatePossible(internalGroupId == minGroupId, manager.GetFreeMemory());
+                for (auto&& i : allocated) {
+                    i->Allocate(manager.OwnerActorId);
+                    manager.ResourceUsage += i->GetAllocatedVolume();
+                    for (auto&& g : i->GetGroupIds()) {
+                        it->second.Remove(i);
+                        destination.AddAllocation(g, i);
+                    }
+                }
+                if (!it->second.IsEmpty()) {
+                    break;
+                }
+                it = Groups.erase(it);
+            }
+        }
+
+        std::optional<THashMap<ui64, std::shared_ptr<TAllocationInfo>>> ExtractGroup(const ui64 id) {
+            auto it = Groups.find(id);
+            if (it == Groups.end()) {
+                return std::nullopt;
+            }
+            auto result = it->second.ExtractAllocations();
+            Groups.erase(it);
+            return result;
+        }
+
+        std::optional<ui64> GetMinGroupId() const {
+            if (Groups.size()) {
+                return Groups.begin()->first;
+            } else {
+                return std::nullopt;
+            }
+        }
+
+        [[nodiscard]] bool RemoveAllocation(const ui64 groupId, const std::shared_ptr<TAllocationInfo>& allocation) {
+            auto groupIt = Groups.find(groupId);
+            if (groupIt == Groups.end()) {
+                return false;
+            }
+            groupIt->second.Remove(allocation);
+            if (groupIt->second.IsEmpty()) {
+                Groups.erase(groupIt);
+            }
+            return true;
+        }
+
+        void AddAllocation(const ui64 groupId, const std::shared_ptr<TAllocationInfo>& allocation) {
+            Groups[groupId].AddAllocation(allocation);
+        }
+
+        void AddAllocations(const ui64 groupId, const std::vector<std::shared_ptr<TAllocationInfo>>& allocated) {
+            auto& readyAllocations = Groups[groupId];
+            for (auto&& i : allocated) {
+                readyAllocations.AddAllocation(i);
+            }
+        }
+    };
+
+    TAllocationGroups WaitAllocations;
+    TAllocationGroups ReadyAllocations;
     THashMap<ui64, std::shared_ptr<TAllocationInfo>> AllocationInfo;
     THashMap<ui64, ui64> ExternalGroupIntoInternalGroup;
 
@@ -121,7 +207,7 @@ public:
     void UpdateAllocation(const ui64 allocationId, const ui64 volume);
     void UnregisterGroup(const ui64 usageGroupId);
     bool IsEmpty() const {
-        return ResourceUsage == 0 && AllocationInfo.empty() && WaitAllocations.empty() && ReadyAllocations.empty();
+        return ResourceUsage == 0 && AllocationInfo.empty() && WaitAllocations.IsEmpty() && ReadyAllocations.IsEmpty();
     }
 };
 

@@ -3,20 +3,15 @@
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
-std::vector<std::shared_ptr<TManager::TAllocationInfo>> TManager::TGrouppedAllocations::AllocatePossible(TManager& manager, const bool force) {
+std::vector<std::shared_ptr<TManager::TAllocationInfo>> TManager::TGrouppedAllocations::AllocatePossible(
+    const bool force, const ui64 freeMemory) {
     std::vector<std::shared_ptr<TManager::TAllocationInfo>> result;
-    while (Allocations.size()) {
-        const auto& allocation = Allocations.begin()->second;
-        if (allocation->GetAllocatedVolume() + manager.ResourceUsage < manager.Config.GetMemoryLimit() || force) {
-            if (!allocation->IsAllocated()) {
-                allocation->Allocate(manager.OwnerActorId);
-                manager.ResourceUsage += allocation->GetAllocatedVolume();
-            }
+    ui64 allocationMemory = 0;
+    for (auto&& [_, allocation] : Allocations) {
+        if (allocation->GetAllocatedVolume() + allocationMemory < freeMemory || force) {
+            allocationMemory += allocation->GetAllocatedVolume();
             result.emplace_back(allocation);
-        } else {
-            return result;
         }
-        Allocations.erase(Allocations.begin());
     }
     return result;
 }
@@ -44,15 +39,17 @@ const std::shared_ptr<TManager::TAllocationInfo>& TManager::RegisterAllocationIm
 }
 
 std::optional<ui64> TManager::GetMinInternalGroupIdOptional() const {
-    if (WaitAllocations.size()) {
-        if (ReadyAllocations.size()) {
-            return std::min(WaitAllocations.begin()->first, ReadyAllocations.begin()->first);
+    auto waitMinGroupId = WaitAllocations.GetMinGroupId();
+    auto readyMinGroupId = ReadyAllocations.GetMinGroupId();
+    if (waitMinGroupId) {
+        if (readyMinGroupId) {
+            return std::min(*readyMinGroupId, *waitMinGroupId);
         } else {
-            return WaitAllocations.begin()->first;
+            return *waitMinGroupId;
         }
     } else {
-        if (ReadyAllocations.size()) {
-            return ReadyAllocations.begin()->first;
+        if (readyMinGroupId) {
+            return *readyMinGroupId;
         } else {
             return std::nullopt;
         }
@@ -65,16 +62,16 @@ void TManager::RegisterAllocation(const std::shared_ptr<IAllocation>& task, cons
     auto allocationInfo = RegisterAllocationImpl(task);
     allocationInfo->AddGroupId(internalGroupId);
     if (task->IsAllocated()) {
-        ReadyAllocations[internalGroupId].AddAllocation(allocationInfo);
-    } else if (WaitAllocations.size() && WaitAllocations.begin()->first < externalGroupId) {
-        WaitAllocations[internalGroupId].AddAllocation(allocationInfo);
+        ReadyAllocations.AddAllocation(internalGroupId, allocationInfo);
+    } else if (WaitAllocations.GetMinGroupId().value_or(externalGroupId) < externalGroupId) {
+        WaitAllocations.AddAllocation(internalGroupId, allocationInfo);
     } else if (!ResourceUsage || ResourceUsage + allocationInfo->GetAllocatedVolume() <= Config.GetMemoryLimit() ||
                externalGroupId == GetMinInternalGroupIdOptional().value_or(externalGroupId)) {
         allocationInfo->Allocate(OwnerActorId);
         ResourceUsage += allocationInfo->GetAllocatedVolume();
-        ReadyAllocations[internalGroupId].AddAllocation(allocationInfo);
+        ReadyAllocations.AddAllocation(internalGroupId, allocationInfo);
     } else {
-        WaitAllocations[internalGroupId].AddAllocation(allocationInfo);
+        WaitAllocations.AddAllocation(internalGroupId, allocationInfo);
     }
 }
 
@@ -88,19 +85,7 @@ void TManager::UpdateAllocation(const ui64 allocationId, const ui64 volume) {
 }
 
 void TManager::TryAllocateWaiting() {
-    for (auto it = WaitAllocations.begin(); it != WaitAllocations.end();) {
-        auto internalGroupId = it->first;
-        auto allocated = it->second.AllocatePossible(*this, internalGroupId == GetMinInternalGroupIdVerified());
-        auto& readyAllocations = ReadyAllocations[internalGroupId];
-        for (auto&& i : allocated) {
-            readyAllocations.AddAllocation(i);
-        }
-        if (it->second.IsEmpty()) {
-            it = WaitAllocations.erase(it);
-        } else {
-            break;
-        }
-    }
+    WaitAllocations.AllocateTo(*this, ReadyAllocations);
 }
 
 void TManager::UnregisterAllocation(const ui64 allocationId) {
@@ -109,24 +94,9 @@ void TManager::UnregisterAllocation(const ui64 allocationId) {
         auto it = AllocationInfo.find(allocationId);
         AFL_VERIFY(it != AllocationInfo.end());
         for (auto&& usageGroupId : it->second->GetGroupIds()) {
-            {
-                auto groupIt = WaitAllocations.find(usageGroupId);
-                if (groupIt != WaitAllocations.end()) {
-                    groupIt->second.Remove(it->second);
-                    if (groupIt->second.IsEmpty()) {
-                        WaitAllocations.erase(groupIt);
-                    }
-                }
-            }
-            {
-                auto groupIt = ReadyAllocations.find(usageGroupId);
-                if (groupIt != ReadyAllocations.end()) {
-                    groupIt->second.Remove(it->second);
-                    if (groupIt->second.IsEmpty()) {
-                        ReadyAllocations.erase(groupIt);
-                    }
-                }
-            }
+            const bool waitFlag = WaitAllocations.RemoveAllocation(usageGroupId, it->second);
+            const bool readyFlag = ReadyAllocations.RemoveAllocation(usageGroupId, it->second);
+            AFL_VERIFY(waitFlag ^ readyFlag);
         }
         memoryAllocated = it->second->GetAllocatedVolume();
         AllocationInfo.erase(it);
@@ -141,24 +111,21 @@ void TManager::UnregisterAllocation(const ui64 allocationId) {
 void TManager::UnregisterGroup(const ui64 externalGroupId) {
     const ui64 usageGroupId = GetInternalGroupIdVerified(externalGroupId);
     ExternalGroupIntoInternalGroup.erase(externalGroupId);
-    {
-        auto it = WaitAllocations.find(usageGroupId);
-        if (it != WaitAllocations.end()) {
-            for (auto&& [_, allocation] : it->second.GetAllocations()) {
-                GetAllocationInfoVerified(allocation->GetIdentifier()).RemoveGroup(usageGroupId);
-            }
-            WaitAllocations.erase(it);
+    auto minGroupId = GetMinInternalGroupIdOptional();
+    if (auto data = WaitAllocations.ExtractGroup(usageGroupId)) {
+        for (auto&& [_, allocation] : *data) {
+            GetAllocationInfoVerified(allocation->GetIdentifier()).RemoveGroup(usageGroupId);
         }
     }
-    {
-        auto it = ReadyAllocations.find(usageGroupId);
-        if (it != ReadyAllocations.end()) {
-            for (auto&& [_, allocation] : it->second.GetAllocations()) {
-                GetAllocationInfoVerified(allocation->GetIdentifier()).RemoveGroup(usageGroupId);
-            }
-            ReadyAllocations.erase(it);
+    if (auto data = ReadyAllocations.ExtractGroup(usageGroupId)) {
+        for (auto&& [_, allocation] : *data) {
+            GetAllocationInfoVerified(allocation->GetIdentifier()).RemoveGroup(usageGroupId);
         }
     }
+    if (minGroupId && *minGroupId == externalGroupId) {
+        TryAllocateWaiting();
+    }
+    
 }
 
 ui64 TManager::GetMinInternalGroupIdVerified() const {

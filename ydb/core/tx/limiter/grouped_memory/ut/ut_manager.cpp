@@ -53,10 +53,9 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
             manager->UnregisterAllocation(alloc1_1->GetIdentifier());
             AFL_VERIFY(!alloc2->IsAllocated());
             manager->UnregisterGroup(1);
-            AFL_VERIFY(!alloc2->IsAllocated());
+            AFL_VERIFY(alloc2->IsAllocated());
 
             manager->UnregisterAllocation(alloc1->GetIdentifier());
-            AFL_VERIFY(alloc2->IsAllocated());
             AFL_VERIFY(!alloc3->IsAllocated());
             manager->UnregisterGroup(3);
             manager->UnregisterAllocation(alloc2->GetIdentifier());

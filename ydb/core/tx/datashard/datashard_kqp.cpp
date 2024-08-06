@@ -1012,11 +1012,11 @@ public:
         return {};
     }
 
-    std::function<void()> GetWakeupCallback() const override {
+    NDq::TWakeUpCallback GetWakeupCallback() const override {
         return {};
     }
 
-    std::function<void(const TString&)> GetErrorCallback() const override {
+    NDq::TErrorCallback GetErrorCallback() const override {
         return {};
     }
 

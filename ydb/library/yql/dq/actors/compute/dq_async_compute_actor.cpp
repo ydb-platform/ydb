@@ -83,6 +83,7 @@ public:
         bool ownCounters)
         : TBase(executerId, txId, task, std::move(asyncIoFactory), functionRegistry, settings, memoryLimits, /* ownMemoryQuota = */ false, false, taskCounters)
         , TaskRunnerActorFactory(taskRunnerActorFactory)
+        , TaskCounters(taskCounters)
         , ReadyToCheckpointFlag(false)
         , SentStatsRequest(false)
         , QuoterServiceActorId(quoterServiceActorId)
@@ -1115,6 +1116,7 @@ private:
     THashMap<TInstant, ui32> WatermarkTakeInputChannelDataRequests;
     ui64 Cookie = 0;
     NDq::TDqTaskRunnerStatsView TaskRunnerStats;
+    ::NMonitoring::TDynamicCounterPtr TaskCounters;
     bool ReadyToCheckpointFlag;
     TVector<std::pair<NActors::TActorId, ui64>> WaitingForStateResponse;
     bool SentStatsRequest;

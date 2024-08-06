@@ -47,7 +47,8 @@ struct ITaskRunnerActorFactory {
         const TTxId& txId,
         ui64 taskId,
         THashSet<ui32>&& inputChannelsWithDisabledCheckpoints = {},
-        THolder<NYql::NDq::TDqMemoryQuota>&& memoryQuota = {}) = 0;
+        THolder<NYql::NDq::TDqMemoryQuota>&& memoryQuota = {}, 
+        ::NMonitoring::TDynamicCounterPtr taskCounters = {}) = 0;
 };
 
 ITaskRunnerActorFactory::TPtr CreateLocalTaskRunnerActorFactory(const TTaskRunnerFactory& factory);

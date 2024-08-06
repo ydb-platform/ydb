@@ -12,4 +12,17 @@ TSpillingCounters::TSpillingCounters(const TIntrusivePtr<::NMonitoring::TDynamic
     SpillingIoErrors = counters->GetCounter("Spilling/IoErrors", true);
 }
 
+TSpillingCountersPerTaskRunner::TSpillingCountersPerTaskRunner(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 taskId) 
+    : Counters(counters), TaskId(taskId) {
+    TString prefix = "Spilling/TaskRunner-" + ToString(TaskId) + "/";
+    SpillingReadBytes = Counters->GetCounter(prefix + "ReadBytes", true);
+    SpillingWriteBytes = Counters->GetCounter(prefix + "WriteBytes", true);
+}
+
+TSpillingCountersPerTaskRunner::~TSpillingCountersPerTaskRunner() {
+    TString prefix = "Spilling/TaskRunner-" + ToString(TaskId) + "/";
+    Counters->RemoveCounter(prefix + "ReadBytes");
+    Counters->RemoveCounter(prefix + "WriteBytes");
+}
+
 } // namespace NYql::NDq

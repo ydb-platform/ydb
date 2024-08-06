@@ -1,6 +1,7 @@
 #pragma once
 
 #include "compute_storage_actor.h"
+#include "spilling_counters.h"
 
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/minikql/computation/mkql_spiller.h>
@@ -17,7 +18,7 @@ class TDqComputeStorage : public NKikimr::NMiniKQL::ISpiller
 {
 public:
 
-    TDqComputeStorage(TTxId txId, std::function<void()> wakeUpCallback, NActors::TActorSystem* actorSystem);
+    TDqComputeStorage(TTxId txId, std::function<void()> wakeUpCallback, TIntrusivePtr<TSpillingCountersPerTaskRunner> spillingCounters, NActors::TActorSystem* actorSystem);
 
     ~TDqComputeStorage();
 

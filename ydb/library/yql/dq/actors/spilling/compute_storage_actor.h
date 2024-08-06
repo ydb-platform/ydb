@@ -1,5 +1,7 @@
 #pragma once
 
+#include "spilling_counters.h"
+
 #include "ydb/library/yql/dq/common/dq_common.h"
 
 #include <ydb/library/actors/core/actor.h>
@@ -61,6 +63,6 @@ struct TEvDelete : NActors::TEventLocal<TEvDelete, TDqComputeStorageActorEvents:
     NThreading::TPromise<void> Promise_;
 };
 
-IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback);
+IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback, TIntrusivePtr<TSpillingCountersPerTaskRunner> spillingCounters);
 
 } // namespace NYql::NDq

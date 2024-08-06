@@ -11,6 +11,7 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_memory_quota.h>
 
+#include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
 #include <ydb/library/yql/dq/actors/task_runner/task_runner_actor.h>
 
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
@@ -40,7 +41,7 @@ class TLocalTaskRunnerActor
 public:
     static constexpr char ActorName[] = "YQL_DQ_TASK_RUNNER";
 
-    TLocalTaskRunnerActor(ITaskRunnerActor::ICallbacks* parent, const TTaskRunnerFactory& factory, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const TTxId& txId, ui64 taskId, THashSet<ui32>&& inputChannelsWithDisabledCheckpoints, THolder<NYql::NDq::TDqMemoryQuota>&& memoryQuota)
+    TLocalTaskRunnerActor(ITaskRunnerActor::ICallbacks* parent, const TTaskRunnerFactory& factory, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const TTxId& txId, ui64 taskId, THashSet<ui32>&& inputChannelsWithDisabledCheckpoints, THolder<NYql::NDq::TDqMemoryQuota>&& memoryQuota, ::NMonitoring::TDynamicCounterPtr taskCounter)
         : TActor<TLocalTaskRunnerActor>(&TLocalTaskRunnerActor::Handler)
         , Alloc(alloc)
         , Parent(parent)
@@ -49,6 +50,7 @@ public:
         , TaskId(taskId)
         , InputChannelsWithDisabledCheckpoints(std::move(inputChannelsWithDisabledCheckpoints))
         , MemoryQuota(std::move(memoryQuota))
+        , SpillingCounters(MakeIntrusive<TSpillingCountersPerTaskRunner>(taskCounter, taskId))
     {
     }
 
@@ -441,7 +443,7 @@ private:
 
         if (settings.GetEnableSpilling()) {
             auto wakeUpCallback = ev->Get()->ExecCtx->GetWakeupCallback();
-            TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(TxId, NActors::TActivationContext::ActorSystem(), wakeUpCallback));
+            TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(TxId, NActors::TActivationContext::ActorSystem(), wakeUpCallback, SpillingCounters));
         }
 
         auto event = MakeHolder<TEvTaskRunnerCreateFinished>(
@@ -492,6 +494,7 @@ private:
     TIntrusivePtr<NDq::IDqTaskRunner> TaskRunner;
     THashSet<ui32> InputChannelsWithDisabledCheckpoints;
     THolder<TDqMemoryQuota> MemoryQuota;
+    TIntrusivePtr<TSpillingCountersPerTaskRunner> SpillingCounters;
 };
 
 struct TLocalTaskRunnerActorFactory: public ITaskRunnerActorFactory {
@@ -505,9 +508,10 @@ struct TLocalTaskRunnerActorFactory: public ITaskRunnerActorFactory {
         const TTxId& txId,
         ui64 taskId,
         THashSet<ui32>&& inputChannelsWithDisabledCheckpoints,
-        THolder<NYql::NDq::TDqMemoryQuota>&& memoryQuota) override
+        THolder<NYql::NDq::TDqMemoryQuota>&& memoryQuota, 
+        ::NMonitoring::TDynamicCounterPtr taskCounters) override
     {
-        auto* actor = new TLocalTaskRunnerActor(parent, Factory, alloc, txId, taskId, std::move(inputChannelsWithDisabledCheckpoints), std::move(memoryQuota));
+        auto* actor = new TLocalTaskRunnerActor(parent, Factory, alloc, txId, taskId, std::move(inputChannelsWithDisabledCheckpoints), std::move(memoryQuota), taskCounters);
         return std::make_tuple(
             static_cast<ITaskRunnerActor*>(actor),
             static_cast<NActors::IActor*>(actor)

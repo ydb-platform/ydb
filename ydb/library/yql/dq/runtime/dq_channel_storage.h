@@ -16,6 +16,7 @@ public:
     using TPtr = TIntrusivePtr<IDqChannelStorage>;
 
     using TWakeUpCallback = std::function<void()>;
+    using TErrorCallback = std::function<void(const TString& error)>;
 
 public:
     virtual ~IDqChannelStorage() = default;

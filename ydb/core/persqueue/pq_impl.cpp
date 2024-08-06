@@ -1018,10 +1018,11 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
     }
 
     Y_ABORT_UNLESS(readRange.HasStatus());
-    if (readRange.GetStatus() != NKikimrProto::OK && readRange.GetStatus() != NKikimrProto::NODATA) {
-        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
-            "Tablet " << TabletID() << " Transactions read error " << ctx.SelfID <<
-            " Error status code " << readRange.GetStatus());
+    if (readRange.GetStatus() != NKikimrProto::OK &&
+        //readRange.GetStatus() != NKikimrProto::OVERRUN &&
+        readRange.GetStatus() != NKikimrProto::NODATA) {
+        PQ_LOG_ERROR("Transactions read error " << ctx.SelfID <<
+                     " Error status code " << readRange.GetStatus());
         ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
         return;
     }

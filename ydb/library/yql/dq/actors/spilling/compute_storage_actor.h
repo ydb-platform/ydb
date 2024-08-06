@@ -61,6 +61,6 @@ struct TEvDelete : NActors::TEventLocal<TEvDelete, TDqComputeStorageActorEvents:
     NThreading::TPromise<void> Promise_;
 };
 
-IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback);
+IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback, std::function<void(const TString& error)> errorCallback);
 
 } // namespace NYql::NDq

@@ -40,10 +40,11 @@ class TDqComputeStorageActor : public NActors::TActorBootstrapped<TDqComputeStor
     // void promise that completes when block is removed
     using TDeletingBlobInfo = NThreading::TPromise<void>;
 public:
-    TDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback)
+    TDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback, std::function<void(const TString& error)> errorCallback)
         : TxId_(txId),
         SpillerName_(spillerName),
-        WakeupCallback_(wakeupCallback)
+        WakeupCallback_(wakeupCallback),
+        ErrorCallback_(errorCallback)
     {
     }
 
@@ -63,18 +64,18 @@ public:
 protected:
 
     void FailWithError(const TString& error) {
-        LOG_E("Error: " << error);
-        SendInternal(SpillingActorId_, new TEvents::TEvPoison);
-        PassAway();
+        std::cerr << "MISHA ERROR CALLBACK: " << (bool)ErrorCallback_ << std::endl;
+        if (!ErrorCallback_) Y_ABORT("Error: %s", error.c_str());
 
-        // Currently there is no better way to handle the error.
-        // Since the message was not sent from the actor system, there is no one to send the error message to.
-        Y_ABORT("Error: %s", error.c_str());
+        LOG_E("Error: " << error);
+        ErrorCallback_(error);
+        SendInternal(SpillingActorId_, new TEvents::TEvPoison);
+        // Become(&TDqComputeStorageActor::DeadState);
+        TBase::PassAway();
     }
 
     void SendInternal(const TActorId& recipient, IEventBase* ev, TEventFlags flags = IEventHandle::FlagTrackDelivery) {
-        bool isSent = Send(recipient, ev, flags);
-        Y_ABORT_UNLESS(isSent, "Event was not sent");
+        if (!Send(recipient, ev, flags)) FailWithError("Event was not sent");
     }
 
 private:
@@ -94,12 +95,24 @@ private:
         }
     }
 
+    STATEFN(DeadState) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvents::TEvPoison, HandleWork);
+            default: {
+                LOG_E("Skip unexpected event " << ev->GetTypeRewrite() << " at DeadState");
+            }
+        }
+    }
+
     void HandleWork(TEvents::TEvPoison::TPtr&) {
         SendInternal(SpillingActorId_, new TEvents::TEvPoison);
         PassAway();
     }
 
     void HandleWork(TEvPut::TPtr& ev) {
+        std::cerr << "MISHA PUT\n";
+        FailWithError("HELLO FROM MISHA");
+        return;
         auto& msg = *ev->Get();
         ui64 size = msg.Blob_.size();
 
@@ -245,14 +258,15 @@ private:
     bool IsInitialized_ = false;
 
     std::function<void()> WakeupCallback_;
+    std::function<void(const TString& error)> ErrorCallback_;
 
     TSet<TKey> StoredBlobs_;
 };
 
 } // anonymous namespace
 
-IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback) {
-    return new TDqComputeStorageActor(txId, spillerName, wakeupCallback);
+IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback, std::function<void(const TString& error)> errorCallback) {
+    return new TDqComputeStorageActor(txId, spillerName, wakeupCallback, errorCallback);
 }
 
 } // namespace NYql::NDq 

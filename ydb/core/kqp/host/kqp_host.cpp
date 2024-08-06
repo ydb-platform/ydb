@@ -1776,7 +1776,7 @@ private:
 
         auto queryExecutor = MakeIntrusive<TKqpQueryExecutor>(Gateway, Cluster, SessionCtx, KqpRunner);
         auto kikimrDataSource = CreateKikimrDataSource(*FuncRegistry, *TypesCtx, gatewayProxy, SessionCtx,
-            ExternalSourceFactory, IsInternalCall);
+            ExternalSourceFactory, IsInternalCall, GUCSettings);
         auto kikimrDataSink = CreateKikimrDataSink(*FuncRegistry, *TypesCtx, gatewayProxy, SessionCtx, ExternalSourceFactory, queryExecutor);
 
         FillSettings.AllResultsBytesLimit = Nothing();

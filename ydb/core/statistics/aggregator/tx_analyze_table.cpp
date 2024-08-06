@@ -54,7 +54,7 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
                 .ReplyToActorId = ReplyToActorId
             };
             Self->ForceTraversals.emplace_back(operation);
-
+/*
             db.Table<Schema::ForceTraversals>().Key(Self->NextForceTraversalOperationId, pathId.OwnerId, pathId.LocalPathId).Update(
                 NIceDb::TUpdate<Schema::ForceTraversals::OperationId>(Self->NextForceTraversalOperationId),
                 NIceDb::TUpdate<Schema::ForceTraversals::OwnerId>(pathId.OwnerId),
@@ -63,6 +63,7 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
                 NIceDb::TUpdate<Schema::ForceTraversals::ColumnTags>(columnTags),
                 NIceDb::TUpdate<Schema::ForceTraversals::Types>(types)
             );
+*/
         }
 
         Self->PersistNextForceTraversalOperationId(db);

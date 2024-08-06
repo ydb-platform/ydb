@@ -147,7 +147,7 @@ Y_UNIT_TEST(HandleErrorsCorrectly) {
     Cerr << planres.GetStats()->GetAst() << Endl;
 
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
 }
 
 Y_UNIT_TEST(SelfJoinQueryService) {

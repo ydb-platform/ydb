@@ -300,7 +300,7 @@ The **bootstrapper** is the primary mechanism for launching tablets, used for se
 
 ### Shared cache {#shared-cache}
 
-A **shared cache** is an actor that stores data pages recently accessed and read from Blob Storage. By caching these pages, it reduces disk I/O operations and accelerates data retrieval, enhancing overall system performance.
+A **shared cache** is an actor that stores data pages recently accessed and read from [distributed storage](#distributed-storage). By caching these pages, it reduces disk I/O operations and accelerates data retrieval, enhancing overall system performance.
 
 ### Memory controller {#memory-controller}
 

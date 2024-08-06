@@ -486,13 +486,36 @@ memory_controller_config:
   hard_limit_bytes: 16106127360
 ```
 
+### Soft memory limit {#soft-memory-limit}
+
+The soft memory limit specifies a threshold for memory usage that is considered as dangerous and shouldn't be exceeded under normal operating conditions.
+
+If the soft limit is exceeded, {{ ydb-short-name }} starts to reduce the shared cache size to zero. Therefore, more database nodes should be added to the cluster as soon as possible or per component memory limits should be reduced.
+
+### Target memory utilization {#target-memory-utilization}
+
+Target memory utilization specifies a threshold for memory usage that is considered as optimal.
+
+Flexible cache sizes are calculated according to their limit thresholds to keep process consumption around this value. 
+
+For example, in a database that consumes a little memory on queries execution, caches consumes memory around this threshold, and other memory stays free. And if queries execution consumes more memory, caches starts to reduce their limits to their minimum threshold.
+
 ### Per component memory limits
 
-Certain {{ ydb-short-name }} components support limiting their individual memory usage. Most memory limits have both minimum and maximum thresholds, allowing for dynamic adjustment based on current process consumption.
+#### Flexible memory limits
 
-Memory limits can be configured either in absolute bytes or as a percentage relative to the [hard memory limit](#hard-memory-limit). Using percentages is advantageous for managing clusters with nodes of varying capacities. If both absolute byte and percentage limits are specified, the memory controller uses a combination of both.
+Some {{ ydb-short-name }} components have both minimum and maximum memory limit thresholds, allowing for dynamic adjustment based on current process consumption.
 
-Example of the `memory_controller_config` section with specified Shared Cache limits:
+These components are:
+
+- Shared cache
+- MemTable
+
+Each of these components limit is dynamically recalculated each second, so that each of them consumes memory proportionally to its limit threshold and total consumed memory stays around target memory utilization.
+
+Memory limits can be configured either in absolute bytes or as a percentage relative to the [hard memory limit](#hard-memory-limit). Using percentages is advantageous for managing clusters with nodes of varying capacities. If both absolute byte and percentage limits are specified, the memory controller uses a combination of both (maximum for lower limits, minimum for upper limits).
+
+Example of the `memory_controller_config` section with specified shared cache limits:
 
 ```yaml
 memory_controller_config:
@@ -500,15 +523,33 @@ memory_controller_config:
   shared_cache_max_percent: 30
 ```
 
+#### Non-flexible memory limits
+
+Other {{ ydb-short-name }} components have only one memory limit for their consumption.
+
+These components are:
+
+- KQP
+
+Example of the `memory_controller_config` section with specified KQP limit:
+
+```yaml
+memory_controller_config:
+  query_execution_limit_percent: 25
+```
+
+### Configuration
+
 Parameters | Default | Description
 --- | --- | ---
-`hard_limit_bytes` | CGroup&nbsp;memory&nbsp;limit&nbsp;/<br/>Host memory | A hard memory usage limit for the database.
-`soft_limit_percent`&nbsp;/<br/>`soft_limit_bytes` | 75% | A soft memory usage limit for the database. When this threshold is exceeded, the database starts to reduce the Shared Cache size to zero.
-`target_utilization_percent`&nbsp;/<br/>`target_utilization_bytes` | 50% | An ideal target for memory usage. Optimal cache sizes are calculated to keep process consumption around this value.
-`shared_cache_min_percent`&nbsp;/<br/>`shared_cache_min_bytes` | 20% | A minimum threshold for the Shared Cache memory limit.
-`shared_cache_max_percent`&nbsp;/<br/>`shared_cache_max_bytes` | 50% | A maximum threshold for the Shared Cache memory limit.
+`hard_limit_bytes` | CGroup&nbsp;memory&nbsp;limit&nbsp;/<br/>Host memory | Hard memory usage limit for the database.
+`soft_limit_percent`&nbsp;/<br/>`soft_limit_bytes` | 75% | Soft memory usage limit for the database.
+`target_utilization_percent`&nbsp;/<br/>`target_utilization_bytes` | 50% | Target memory utilization for the database.
+`shared_cache_min_percent`&nbsp;/<br/>`shared_cache_min_bytes` | 20% | A minimum threshold for the shared cache memory limit.
+`shared_cache_max_percent`&nbsp;/<br/>`shared_cache_max_bytes` | 50% | A maximum threshold for the shared cache memory limit.
 `mem_table_min_percent`&nbsp;/<br/>`mem_table_min_bytes` | 1% | A minimum threshold for the MemTable memory limit.
 `mem_table_max_percent`&nbsp;/<br/>`mem_table_max_bytes` | 3% | A maximum threshold for the MemTable memory limit.
+`query_execution_limit_percent`&nbsp;/<br/>`query_execution_limit_bytes` | 20% | A maximum threshold for the MemTable memory limit.
 
 ## blob_storage_config: Static cluster group {#blob-storage-config}
 

@@ -157,6 +157,24 @@ SELECT
 ;
 ```
 
+### Список псевдноимов типов PostgreSQL при их использовании в YQL {#pgyqltypes}
+
+Ниже приведены типы данных YQL, соответствующие им логические типы PostgreSQL и названия типов PostgreSQL при их использовании в YQL:
+
+{% include [pgyqltypes](_includes/pgyqltypes.md) %}
+
+### Таблица соответствия типов `ToPg` {#topg}
+
+Таблица соответствия типов данных YQL и PostgreSQL при использовании функции `ToPg`:
+
+{% include [topg](_includes/topg.md) %}
+
+### Таблица соответствия типов `FromPg` {#frompg}
+
+Таблица соответствия типов данных PostgreSQL и YQL при использовании функции `FromPg`:
+
+{% include [frompg](_includes/frompg.md) %}
+
 ## Вызов PostgreSQL функций {#callpgfunction}
 
 Чтобы вызвать PostgreSQL функцию, необходимо добавить префикс `Pg::` к ее имени:

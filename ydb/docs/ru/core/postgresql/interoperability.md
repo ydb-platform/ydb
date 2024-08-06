@@ -41,7 +41,7 @@
 Система типов данных {{ydb-name}} и PostgreSQL похожи, но при этом не совпадают.
 
 ### Использование данных таблиц, созданных в YQL синтаксисе, в синтаксисе PostgreSQL {#topg}
-Типы данных из {{ydb-name}} автоматически преобразовываются в соответствующие им типы PostgreSQL.
+Типы данных из {{ydb-name}} автоматически преобразовываются в соответствующие им типы PostgreSQL. Преобразование выполняется неявно с помощью команды [`ToPg`](./advanced.md#topg).
 
 Пример:
 1. Создадим таблицу {{ydb-name}} с помощью YQL-синтаксиса
@@ -61,49 +61,14 @@
     (1 row)
     ```
 
- Таблица соответствия типов данных {{ydb-name}}, при их использовании в PostgreSQL запросах:
+ Таблица соответствия типов данных YQL, при их использовании в PostgreSQL запросах:
 
-| {{ydb-name}} | PostgreSQL | Название PostgreSQL-типа в YDB|
-|---|---|---|
-| `Bool` | `bool` |`pgbool` |
-| `Int8` | `int2` |`pgint2` |
-| `Uint8` | `int2` |`pgint2` |
-| `Int16` | `int2` |`pgint2` |
-| `Uint16` | `int4` |`pgint4` |
-| `Int32` | `int4` |`pgint4` |
-| `Uint32` | `int8` |`pgint8` |
-| `Int64` | `int8` |`pgint8` |
-| `Uint64` | `numeric` |`pgnumeric` |
-| `Float` | `float4` |`pgfloat4` |
-| `Double` | `float8` |`pgfloat8` |
-| `String` | `bytea` |`pgbytea` |
-| `Utf8` | `text` |`pgtext` |
-| `Yson` | `bytea` |`pgbytea` |
-| `Json` | `json` |`pgjson` |
-| `Uuid` | `uuid` |`pguuid` |
-| `JsonDocument` | `jsonb` |`pgjsonb` |
-| `Date` | `date` |`pgdate` |
-| `Datetime` | `timestamp` |`pgtimestamp` |
-| `Timestamp` | `timestamp` |`pgtimestamp` |
-| `Interval` | `interval` | `pginterval` |
-| `TzDate` | `text` |`pgtext` |
-| `TzDatetime` | `text` |`pgtext` |
-| `TzTimestamp` | `text` |`pgtext` |
-| `Date32` | `date` | `pgdate`|
-| `Datetime64` | `timestamp` |`pgtimestamp` |
-| `Timestamp64` | `timestamp` |`pgtimestamp` |
-| `Interval64`| `interval` |`pginterval` |
-| `TzDate32` | `text` |  |`pgtext` |
-| `TzDatetime64` | `text` |  |`pgtext` |
-| `TzTimestamp64` | `text` |  |`pgtext` |
-| `Decimal` | `numeric` |`pgnumeric` |
-| `DyNumber` | `numeric` |`pgnumeric` |
-
+{% include [topg](_includes/topg.md) %}
 
 
 ### Использование данных таблиц, созданных в PostgreSQL синтаксисе, в синтаксисе YQL {#frompg}
 
-Для использования данных таблиц, созданных в PostgreSQL синтаксисе, необходимо явное преобразование типов с помощью функции [`FromPg`](./advanced.md#frompgtopg).
+Для использования данных таблиц, созданных в PostgreSQL синтаксисе, необходимо явное преобразование типов с помощью функции [`FromPg`](./advanced.md#frompg).
 
 Пример:
 1. Создадим таблицу {{ydb-name}} с помощью PostgreSQL-синтаксиса
@@ -123,23 +88,9 @@
     (1 row)
     ```
 
-Таблица соответствия типов данных PostgreSQL, при их использовании в {{ydb-name}} запросах:
+Таблица соответствия типов данных PostgreSQL, при их использовании в запросах на YQL-синтаксисе:
 
-| PostgreSQL | {{ydb-name}} |
-|---|---|
-| `bool` | `bool` |
-| `int2` | `Int16` |
-| `int4` | `Int32` |
-| `int8` | `Int64` |
-| `float4` | `Float` |
-| `float8` | `Double` |
-| `bytea` | `String` |
-| `varchar` | `Utf8` |
-| `text` | `Utf8` |
-| `cstring` | `Utf8` |
-| `uuid` | `Uuid` |
-| `date` | `Date32` |
-| `timestamp` | `Timestamp64` |
+{% include [frompg](_includes/frompg.md) %}
 
 Поддерживаются только преобразования типов приведенное выше.
 

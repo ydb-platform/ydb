@@ -462,10 +462,10 @@ There are many components inside {{ ydb-short-name }} [nodes](../../concepts/glo
 
 Examples of components managed by the memory controller:
 
-- Shared Cache: Stores recently accessed data pages read from Blob Storage to reduce disk I/O and accelerate data retrieval;
-- MemTable: Holds data that has not yet been flushed to SST;
-- KQP: Executes queries and stores their intermediate results;
-- Allocator Caches: Keeps memory blocks which have been released but not yet returned to the operating system.
+- [Shared cache](../../concepts/glossary.md#shared-cache): stores recently accessed data pages read from Blob Storage to reduce disk I/O and accelerate data retrieval.
+- [MemTable](../../concepts/glossary.md#memtable): holds data that has not yet been flushed to SST.
+- [KQP](../../concepts/glossary.md#kqp): stores intermediate query results.
+- Allocator Caches: keeps memory blocks which have been released but not yet returned to the operating system.
 
 Memory limits can be configured to control the overall memory usage, ensuring the database operates efficiently within the available resources.
 

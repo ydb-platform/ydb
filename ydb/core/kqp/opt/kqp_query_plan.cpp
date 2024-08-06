@@ -2003,9 +2003,6 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
             op["LookupKeyColumns"] = plan.GetMapSafe().at("LookupKeyColumns");
             op["Table"] = plan.GetMapSafe().at("Table");
 
-            if (plan.GetMapSafe().contains("E-OwnCost")) {
-                op["E-OwnCost"] = plan.GetMapSafe().at("E-OwnCost");
-            } 
             if (plan.GetMapSafe().contains("E-Cost")) {
                 op["E-Cost"] = plan.GetMapSafe().at("E-Cost");
             } 

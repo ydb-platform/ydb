@@ -119,21 +119,22 @@ void TManager::UnregisterGroup(const ui64 externalGroupId) {
     if (!usageGroupId) {
         return;
     }
+    const ui64 internalGroupId = *usageGroupId;
     AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "remove_group")("external_group_id", externalGroupId)(
-        "internal_group_id", usageGroupId);
+        "internal_group_id", internalGroupId);
     ExternalGroupIntoInternalGroup.erase(externalGroupId);
     auto minGroupId = GetMinInternalGroupIdOptional();
-    if (auto data = WaitAllocations.ExtractGroup(*usageGroupId)) {
+    if (auto data = WaitAllocations.ExtractGroup(internalGroupId)) {
         for (auto&& [_, allocation] : *data) {
-            GetAllocationInfoVerified(allocation->GetIdentifier()).RemoveGroup(*usageGroupId);
+            GetAllocationInfoVerified(allocation->GetIdentifier()).RemoveGroup(internalGroupId);
         }
     }
-    if (auto data = ReadyAllocations.ExtractGroup(*usageGroupId)) {
+    if (auto data = ReadyAllocations.ExtractGroup(internalGroupId)) {
         for (auto&& [_, allocation] : *data) {
-            GetAllocationInfoVerified(allocation->GetIdentifier()).RemoveGroup(*usageGroupId);
+            GetAllocationInfoVerified(allocation->GetIdentifier()).RemoveGroup(internalGroupId);
         }
     }
-    if (minGroupId && *minGroupId == externalGroupId) {
+    if (minGroupId && *minGroupId == internalGroupId) {
         TryAllocateWaiting();
     }
     RefreshSignals();

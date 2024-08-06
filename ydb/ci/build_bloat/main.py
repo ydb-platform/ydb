@@ -211,6 +211,16 @@ def generate_cpp_bloat(build_output_dir: str, result_dir: str, base_src_dir: str
     ]
     tree_map.generate_tree_map_html(result_dir, tree_paths, unit_name="ms", factor=1, types=types)
 
+    os.makedirs(result_dir, exist_ok=True)
+
+    human_readable_output = {
+        "total_compilation_time": total_compilation_time,
+        "cpp_compilation_times": cpp_compilation_times,
+    }
+
+    with open(os.path.join(result_dir, "output.json"), "w") as f:
+        json.dump(human_readable_output, f, indent=4)
+
 
 def parse_includes(trace_path: str, base_src_dir: str) -> tuple[list[tuple[int, str]], dict]:
     print("Processing includes in {}".format(trace_path))

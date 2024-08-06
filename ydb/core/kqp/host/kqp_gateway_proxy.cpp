@@ -947,17 +947,7 @@ public:
             result.SetSuccess();
             createPromise.SetValue(result);
         } else {
-            Gateway->ModifyScheme(std::move(schemeTx)).Subscribe([createPromise, warnings]
-                        (const TFuture<TGenericResult>& future) mutable {
-                            auto result = future.GetValue();
-                            for (const auto& warning : warnings) {
-                                result.AddIssue(
-                                    NYql::TIssue(warning).SetCode(NKikimrIssues::TIssuesIds::WARNING,
-                                        NYql::TSeverityIds::S_WARNING)
-                                );
-                            }
-                            createPromise.SetValue(result);
-                        });
+            return Gateway->CreateTopic(cluster, std::move(request), existingOk);
         }
         return createPromise.GetFuture();
     }
@@ -1039,7 +1029,6 @@ public:
             dropPromise.SetValue(result);
         } else {
             return Gateway->DropTopic(cluster, topic, missingOk);
-
         }
         return dropPromise.GetFuture();
     }

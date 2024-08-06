@@ -4,8 +4,6 @@ IF (NOT SANITIZER_TYPE)  # for some reasons some tests with asan are failed, see
     NO_EXPORT_DYNAMIC_SYMBOLS()
 ENDIF()
 
-SPLIT_DWARF()
-
 IF (OS_LINUX)
     ALLOCATOR(TCMALLOC_256K)
 ENDIF()

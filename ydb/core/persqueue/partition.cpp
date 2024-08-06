@@ -317,7 +317,6 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
     FilterDeadlinedWrites(ctx);
 
     ctx.Schedule(WAKE_TIMEOUT, new TEvents::TEvWakeup());
-    PQ_LOG_D("send TEvPQ::TEvPartitionCounters");
     ctx.Send(Tablet, new TEvPQ::TEvPartitionCounters(Partition, TabletCounters));
 
     ui64 usedStorage = GetUsedStorage(ctx.Now());

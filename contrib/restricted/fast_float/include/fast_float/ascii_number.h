@@ -123,24 +123,6 @@ uint64_t simd_read8_to_u64(UC const*) {
   return 0;
 }
 
-
-fastfloat_really_inline FASTFLOAT_CONSTEXPR20
-void write_u64(uint8_t *chars, uint64_t val) {
-  if (cpp20_and_in_constexpr()) {
-    for(int i = 0; i < 8; ++i) {
-      *chars = uint8_t(val);
-      val >>= 8;
-      ++chars;
-    }
-    return;
-  }
-#if FASTFLOAT_IS_BIG_ENDIAN == 1
-  // Need to read as-if the number was in little-endian order.
-  val = byteswap(val);
-#endif
-  ::memcpy(chars, &val, sizeof(uint64_t));
-}
-
 // credit  @aqrit
 fastfloat_really_inline FASTFLOAT_CONSTEXPR14
 uint32_t parse_eight_digits_unrolled(uint64_t val) {
@@ -367,7 +349,7 @@ parsed_number_string_t<UC> parse_number_string(UC const *p, UC const * pend, par
       ++p;
     }
     if ((p == pend) || !is_integer(*p)) {
-      if(!(fmt & chars_format::fixed)) {
+      if(!(fmt & chars_format::fixed) || (fmt & FASTFLOAT_JSONFMT)) {
         // We are in error.
         return answer;
       }

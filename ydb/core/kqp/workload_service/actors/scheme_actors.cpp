@@ -390,10 +390,10 @@ private:
 
     void BuildCreatePoolRequest(NKikimrSchemeOp::TResourcePoolDescription& poolDescription) {
         poolDescription.SetName(PoolId);
-        for (auto& [property, value] : NResourcePool::GetPropertiesMap(PoolConfig)) {
+        for (auto& [property, value] : PoolConfig.GetPropertiesMap()) {
             poolDescription.MutableProperties()->MutableProperties()->insert({
                 property,
-                std::visit(NResourcePool::TSettingsExtractor{}, value)
+                std::visit(NResourcePool::TPoolSettings::TExtractor{}, value)
             });
         }
     }

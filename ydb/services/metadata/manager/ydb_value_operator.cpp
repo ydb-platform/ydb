@@ -120,6 +120,12 @@ Ydb::Value TYDBValue::UInt64(const ui64 value) {
     return result;
 }
 
+Ydb::Value TYDBValue::Int64(const i64 value) {
+    Ydb::Value result;
+    result.set_int64_value(value);
+    return result;
+}
+
 Ydb::Value TYDBValue::Bool(const bool value) {
     Ydb::Value result;
     result.set_bool_value(value);

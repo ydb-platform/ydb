@@ -513,7 +513,11 @@ These components are:
 
 Each of these components' limits is dynamically recalculated every second so that each component consumes memory proportionally to its limit threshold and the total consumed memory stays around the target memory utilization.
 
+The minimum memory limit threshold for these components isn't reserved and remains free until consumed.
+
 Memory limits can be configured either in absolute bytes or as a percentage relative to the [hard memory limit](#hard-memory-limit). Using percentages is advantageous for managing clusters with nodes of varying capacities. If both absolute byte and percentage limits are specified, the memory controller uses a combination of both (maximum for lower limits and minimum for upper limits).
+
+Both the minimum and maximum thresholds should be overridden if needed; otherwise, a missing threshold will have a default value.
 
 Example of the `memory_controller_config` section with specified shared cache limits:
 
@@ -531,6 +535,8 @@ These components are:
 
 - KQP
 
+The memory limit for these components indicates the amount of memory a component may try to consume, but consumption can be rejected if it exceeds the soft memory limit.
+
 Example of the `memory_controller_config` section with a specified KQP limit:
 
 ```yaml
@@ -540,11 +546,13 @@ memory_controller_config:
 
 ### Configuration
 
+Each configuration parameter applies within the context of a single database node.
+
 Parameters | Default | Description
 --- | --- | ---
-`hard_limit_bytes` | CGroup&nbsp;memory&nbsp;limit&nbsp;/<br/>Host memory | Hard memory usage limit for the database.
-`soft_limit_percent`&nbsp;/<br/>`soft_limit_bytes` | 75% | Soft memory usage limit for the database.
-`target_utilization_percent`&nbsp;/<br/>`target_utilization_bytes` | 50% | Target memory utilization for the database.
+`hard_limit_bytes` | CGroup&nbsp;memory&nbsp;limit&nbsp;/<br/>Host memory | Hard memory usage limit.
+`soft_limit_percent`&nbsp;/<br/>`soft_limit_bytes` | 75% | Soft memory usage limit.
+`target_utilization_percent`&nbsp;/<br/>`target_utilization_bytes` | 50% | Target memory utilization.
 `shared_cache_min_percent`&nbsp;/<br/>`shared_cache_min_bytes` | 20% | Minimum threshold for the shared cache memory limit.
 `shared_cache_max_percent`&nbsp;/<br/>`shared_cache_max_bytes` | 50% | Maximum threshold for the shared cache memory limit.
 `mem_table_min_percent`&nbsp;/<br/>`mem_table_min_bytes` | 1% | Minimum threshold for the MemTable memory limit.

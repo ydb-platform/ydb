@@ -38,7 +38,7 @@ psql -h <ydb_address> -U <user_name> <database_name>
 
 ```
 ydb -e <ydb_address> -d <database_name> --user <user_name> sql -s '--!syntax_pg
-select 1;
+SELECT 1;
 '
 ```
 

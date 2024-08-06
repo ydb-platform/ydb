@@ -148,7 +148,7 @@ public:
 
     void Handle(TEvPrivate::TEvRanksCheckerResponse::TPtr& ev) {
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            FailAndPassAway("Resource pool classifier ranks check failed", ev->Get()->Status, ev->Get()->Issues);
+            FailAndPassAway("Resource pool classifier rank check failed", ev->Get()->Status, ev->Get()->Issues);
             return;
         }
 
@@ -241,12 +241,18 @@ private:
     }
 
     void CheckFeatureFlag(const NKikimrConfig::TFeatureFlags& featureFlags) {
+        if (Context.GetActivityType() == NMetadata::NModifications::IOperationsManager::EActivityType::Drop) {
+            FeatureFlagChecked = true;
+            TryFinish();
+            return;
+        }
+
         if (!featureFlags.GetEnableResourcePools()) {
-            FailAndPassAway("Resource pools classifiers are disabled. Please contact your system administrator to enable it");
+            FailAndPassAway("Resource pool classifiers are disabled. Please contact your system administrator to enable it");
             return;
         }
         if (Serverless && !featureFlags.GetEnableResourcePoolsOnServerless()) {
-            FailAndPassAway("Resource pools classifiers are disabled for serverless domains. Please contact your system administrator to enable it");
+            FailAndPassAway("Resource pool classifiers are disabled for serverless domains. Please contact your system administrator to enable it");
             return;
         }
 

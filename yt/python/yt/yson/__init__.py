@@ -54,7 +54,7 @@ except ImportError as error:
         print("Warning! Failed to import YSON bindings: " + message, file=_sys.stderr)
 
 try:
-    from yt_yson_bindings import upload_parquet, dump_parquet # noqa
+    from yt_yson_bindings import upload_parquet, dump_parquet, dump_orc, upload_orc # noqa
     HAS_PARQUET = True
 except ImportError as error:
     message = str(error)

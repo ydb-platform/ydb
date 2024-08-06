@@ -23,7 +23,11 @@
 #include "orc/Type.hh"
 #include "orc/Vector.hh"
 
+#include <google/protobuf/message.h>
+
 #include <string>
+
+using TProtoStringType = decltype(std::declval<::google::protobuf::MessageLite>().GetTypeName());
 
 namespace orc {
 

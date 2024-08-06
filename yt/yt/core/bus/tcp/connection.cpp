@@ -214,7 +214,9 @@ void TTcpConnection::Start()
     }
 
     if (!Poller_->TryRegister(this)) {
-        Abort(TError(NBus::EErrorCode::TransportError, "Cannot register connection pollable"));
+        auto error = TError(NBus::EErrorCode::TransportError, "Cannot register connection pollable");
+        Abort(error);
+        YT_LOG_WARNING(error << *EndpointAttributes_, "Connection aborted");
         return;
     }
 
@@ -223,8 +225,9 @@ void TTcpConnection::Start()
     try {
         InitBuffers();
     } catch (const std::exception& ex) {
-        Abort(TError(NBus::EErrorCode::TransportError, "I/O buffers allocation error")
-            << ex);
+        auto error = TError(NBus::EErrorCode::TransportError, "I/O buffers allocation error") << ex;
+        Abort(error);
+        YT_LOG_WARNING(error << *EndpointAttributes_, "Connection aborted");
         return;
     }
 

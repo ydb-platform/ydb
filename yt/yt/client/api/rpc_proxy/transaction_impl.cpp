@@ -441,7 +441,7 @@ void TTransaction::ModifyRows(
 
     req->Attachments() = SerializeRowset(
         nameTable,
-        MakeRange(rows),
+        TRange(rows),
         req->mutable_rowset_descriptor());
 
     TFuture<void> future;
@@ -571,7 +571,7 @@ TFuture<TPushQueueProducerResult> TTransaction::PushQueueProducer(
 
     req->Attachments() = SerializeRowset(
         nameTable,
-        MakeRange(rows),
+        TRange(rows),
         req->mutable_rowset_descriptor());
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPushQueueProducerPtr& rsp) {

@@ -1633,7 +1633,7 @@ std::pair<TSharedRange<TUnversionedRow>, i64> CaptureRowsImpl(
 
     return {
         MakeSharedRange(
-            MakeRange(capturedRows, rows.Size()),
+            TRange(capturedRows, rows.Size()),
             std::move(buffer.ReleaseHolder())),
         bufferSize
     };

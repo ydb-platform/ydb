@@ -27,8 +27,6 @@
 #include "Timezone.hh"
 #include "TypeImpl.hh"
 
-#include <util/generic/string.h>
-
 namespace orc {
 
   /**

@@ -22,13 +22,13 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             auto baseStatisticsRowset = db.Table<Schema::BaseStatistics>().Range().Select();
             auto statisticsRowset = db.Table<Schema::ColumnStatistics>().Range().Select();
             auto scheduleTraversalRowset = db.Table<Schema::ScheduleTraversals>().Range().Select();
-            auto forceTraversalRowset = db.Table<Schema::ForceTraversals>().Range().Select();
+//            auto forceTraversalRowset = db.Table<Schema::ForceTraversals>().Range().Select();
 
             if (!sysParamsRowset.IsReady() ||
                 !baseStatisticsRowset.IsReady() ||
                 !statisticsRowset.IsReady() ||
-                !scheduleTraversalRowset.IsReady() ||
-                !forceTraversalRowset.IsReady())
+                !scheduleTraversalRowset.IsReady())
+//                !forceTraversalRowset.IsReady())
             {
                 return false;
             }
@@ -204,6 +204,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
         }
 
         // ForceTraversals
+/*
         {
             Self->ForceTraversals.clear();
 
@@ -240,7 +241,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             SA_LOG_D("[" << Self->TabletID() << "] Loaded ForceTraversals: "
                 << "table count# " << Self->ForceTraversals.size());
         }
-
+*/
         return true;
     }
 

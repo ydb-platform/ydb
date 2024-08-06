@@ -180,7 +180,7 @@ protected:
         LOG_D("Start pool fetching");
         auto event = NTableCreator::BuildSchemeCacheNavigateRequest(
             {{".resource_pools", PoolId}},
-            Database,
+            Database ? Database : AppData()->TenantName,
             UserToken
         );
         event->ResultSet[0].Access |= NACLib::SelectRow;
@@ -326,7 +326,7 @@ protected:
         auto event = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
 
         auto& schemeTx = *event->Record.MutableTransaction()->MutableModifyScheme();
-        schemeTx.SetWorkingDir(JoinPath({Database, ".resource_pools"}));
+        schemeTx.SetWorkingDir(JoinPath({Database ? Database : AppData()->TenantName, ".resource_pools"}));
         schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateResourcePool);
         schemeTx.SetInternal(true);
 
@@ -496,7 +496,11 @@ public:
 protected:
     void StartRequest() override {
         LOG_D("Start database fetching");
-        auto event = NTableCreator::BuildSchemeCacheNavigateRequest({{}}, Database, nullptr);
+        auto event = NTableCreator::BuildSchemeCacheNavigateRequest(
+            {{}},
+            Database ? Database : AppData()->TenantName,
+            nullptr
+        );
         event->ResultSet[0].Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(event.Release()), IEventHandle::FlagTrackDelivery);
     }

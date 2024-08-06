@@ -40,7 +40,7 @@ public:
         ui32 flags = 0;
         TFunctionTypeInfo funcInfo;
         const auto status = ctx.HolderFactory.GetFunctionRegistry()->FindFunctionTypeInfo(
-            ctx.TypeEnv, ctx.TypeInfoHelper, ctx.CountersProvider, FunctionName, UserType,
+            ctx.TypeEnv, ctx.TypeInfoHelper, ctx.CountersProvider, FunctionName, UserType->IsVoid() ? nullptr : UserType,
             TypeConfig, flags, Pos, ctx.SecureParamsProvider, &funcInfo);
 
         MKQL_ENSURE(status.IsOk(), status.GetError());
@@ -187,7 +187,7 @@ private:
         ui32 flags = 0;
         TFunctionTypeInfo funcInfo;
         const auto status = ctx.HolderFactory.GetFunctionRegistry()->FindFunctionTypeInfo(
-            ctx.TypeEnv, ctx.TypeInfoHelper, ctx.CountersProvider, FunctionName, UserType,
+            ctx.TypeEnv, ctx.TypeInfoHelper, ctx.CountersProvider, FunctionName, UserType->IsVoid() ? nullptr : UserType,
             TypeConfig, flags, Pos, ctx.SecureParamsProvider, &funcInfo);
 
         MKQL_ENSURE(status.IsOk(), status.GetError());
@@ -265,6 +265,7 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
     ui32 flags = 0;
     TFunctionTypeInfo funcInfo;
     const auto userType = static_cast<TType*>(userTypeNode.GetNode());
+
     const auto status = ctx.FunctionRegistry.FindFunctionTypeInfo(
         ctx.Env, ctx.TypeInfoHelper, ctx.CountersProvider, funcName, userType->IsVoid() ? nullptr : userType,
         typeConfig, flags, pos, ctx.SecureParamsProvider, &funcInfo);

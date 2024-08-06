@@ -44,7 +44,7 @@ TExampleSet TExampleSetBuilder::Build() {
 /////////////////////////////////////////////////////////////////
 
 void TCommandWithExamples::AddExamplesOption(TClientCommand::TConfig& config) {
-    config.Opts->AddLongOption("help-ex", "Print usage with examples")
+    config.Opts->AddLongOption("help-ex", "Print usage examples")
         .HasArg(NLastGetopt::NO_ARGUMENT)
         .IfPresentDisableCompletion()
         .Handler(&NLastGetopt::PrintUsageAndExit);
@@ -80,7 +80,7 @@ namespace {
 }
 
 void TCommandWithExamples::CheckExamples(const TClientCommand::TConfig& config) {
-    if (!IsOptionCalled(config)) {
+    if (!IsOptionCalled(config) && config.HelpCommandVerbosiltyLevel <= 1) {
         return;
     }
 

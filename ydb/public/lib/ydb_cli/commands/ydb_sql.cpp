@@ -58,12 +58,35 @@ void TCommandSql::Config(TConfig& config) {
         EOutputFormat::Parquet,
     });
 
+    AddParametersOption(config);
+
+    AddParamFormats(config, {
+        EOutputFormat::JsonUnicode,
+        EOutputFormat::JsonBase64
+    });
+
+    AddStdinFormats(config, {
+        EOutputFormat::JsonUnicode,
+        EOutputFormat::JsonBase64,
+        EOutputFormat::Raw,
+        EOutputFormat::Csv,
+        EOutputFormat::Tsv
+    }, {
+        EOutputFormat::NoFraming,
+        EOutputFormat::NewlineDelimited
+    });
+
+    AddParametersStdinOption(config, "script");
+
+    CheckExamples(config);
+
     config.SetFreeArgsNum(0);
 }
 
 void TCommandSql::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ParseFormats();
+    ParseParameters(config);
     if (Query && QueryFile) {
         throw TMisuseException() << "Both mutually exclusive options \"Text of query\" (\"--query\", \"-q\") "
             << "and \"Path to file with query text\" (\"--file\", \"-f\") were provided.";
@@ -80,8 +103,19 @@ void TCommandSql::Parse(TConfig& config) {
         throw TMisuseException() << "Statistics collection mode option \"--stats\" has no effect in explain mode"
             "Relevant for execution mode only.";
     }
+    if (ReadParametersFromStdin && QueryFile == "-") {
+        throw TMisuseException() << "Both path to script file and param file are \"-\". Can't read both values from stdin";
+    }
     if (QueryFile) {
-        Query = ReadFromFile(QueryFile, "query");
+        if (QueryFile == "-") {
+            if (IsStdinInteractive()) {
+                throw TMisuseException() << "Path to script file is \"-\", meaning that script text should be read "
+                    "from stdin. This is only available in non-interactive mode";
+            }
+            Query = Cin.ReadAll();
+        } else {
+            Query = ReadFromFile(QueryFile, "query");
+        }
     }
 }
 
@@ -112,16 +146,40 @@ int TCommandSql::RunCommand(TConfig& config) {
     } else {
         throw TMisuseException() << "Unknow syntax option \"" << Syntax << "\"";
     }
-    // Execute query without parameters
-    auto asyncResult = client.StreamExecuteQuery(
-        Query,
-        NQuery::TTxControl::NoTx(),
-        settings
-    );
+    if (!Parameters.empty() || ReadParametersFromStdin) {
+        ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
+            ExplainQuery(config, Query, NScripting::ExplainYqlRequestMode::Validate));
+        // Execute query with parameters
+        THolder<TParamsBuilder> paramBuilder;
+        while (!IsInterrupted() && GetNextParams(paramBuilder)) {
+            auto asyncResult = client.StreamExecuteQuery(
+                    Query,
+                    // TODO: NoTx by default
+                    NQuery::TTxControl::BeginTx().CommitTx(),
+                    paramBuilder->Build(),
+                    settings
+                );
 
-    auto result = asyncResult.GetValueSync();
-    ThrowOnError(result);
-    return PrintResponse(result);
+            auto result = asyncResult.GetValueSync();
+            ThrowOnError(result);
+            int printResult = PrintResponse(result);
+            if (printResult != EXIT_SUCCESS) {
+                return printResult;
+            }
+        }
+    } else {
+        // Execute query without parameters
+        auto asyncResult = client.StreamExecuteQuery(
+            Query,
+            NQuery::TTxControl::NoTx(),
+            settings
+        );
+
+        auto result = asyncResult.GetValueSync();
+        ThrowOnError(result);
+        return PrintResponse(result);
+    }
+    return EXIT_SUCCESS;
 }
 
 int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {

@@ -676,7 +676,7 @@ std::shared_ptr<NArrow::NAccessor::TDeserializeChunkedArray> TPortionInfo::TPrep
     chunks.reserve(Blobs.size());
     ui64 recordsCount = 0;
     for (auto& blob : Blobs) {
-        chunks.push_back(blob.BuildDeserializeChunk(Loader), blob.Get);
+        chunks.push_back(blob.BuildDeserializeChunk(Loader));
         if (!!blob.GetData()) {
             recordsCount += blob.GetExpectedRowsCountVerified();
         } else {

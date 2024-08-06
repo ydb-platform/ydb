@@ -45,7 +45,7 @@ struct TAggregatorSchema : NIceDb::Schema {
             IsColumnTable
         >;
     };
-
+/*
     struct ForceTraversals : Table<5> {
         struct OperationId    : Column<1, NScheme::NTypeIds::Uint64> {};
         struct OwnerId        : Column<2, NScheme::NTypeIds::Uint64> {};
@@ -64,13 +64,13 @@ struct TAggregatorSchema : NIceDb::Schema {
             Types
         >;
     };
-
+*/
     using TTables = SchemaTables<
         SysParams,
         BaseStatistics,
         ColumnStatistics,
-        ScheduleTraversals,
-        ForceTraversals
+        ScheduleTraversals
+//        ForceTraversals
     >;
 
     using TSettings = SchemaSettings<

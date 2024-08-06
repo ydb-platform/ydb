@@ -140,27 +140,18 @@ runs:
               --build "release" --sanitize="address"
               -DDEBUGINFO_LINES_ONLY
             )
-            if [ $TEST_RETRY_COUNT -z ]; then
-              TEST_RETRY_COUNT=1
-            fi
             ;;
           release-tsan)
             params+=(
               --build "release" --sanitize="thread"
               -DDEBUGINFO_LINES_ONLY
             )
-            if [ $TEST_RETRY_COUNT -z ]; then
-              TEST_RETRY_COUNT=1
-            fi
             ;;
           release-msan)
             params+=(
               --build "release" --sanitize="memory"
               -DDEBUGINFO_LINES_ONLY
             )
-            if [ $TEST_RETRY_COUNT -z ]; then
-              TEST_RETRY_COUNT=1
-            fi
             ;;
           *)
             echo "Invalid preset: $BUILD_PRESET"

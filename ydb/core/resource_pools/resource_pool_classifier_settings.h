@@ -1,6 +1,6 @@
 #pragma once
 
-#include "settings_common.h"
+#include "resource_pool_settings.h"
 
 #include <unordered_map>
 
@@ -28,7 +28,7 @@ struct TClassifierSettings : public TSettingsBase {
     std::unordered_map<TString, TProperty> GetPropertiesMap();
 
     i64 Rank = -1;  // -1 = max rank + CLASSIFIER_RANK_OFFSET
-    TString ResourcePool = "";
+    TString ResourcePool = DEFAULT_POOL_ID;
     TString Membername = "";
 };
 

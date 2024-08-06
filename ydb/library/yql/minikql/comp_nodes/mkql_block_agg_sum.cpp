@@ -634,9 +634,12 @@ std::unique_ptr<typename TTag::TPreparedAggregator> PrepareSum(TTupleType* tuple
         sumRetType = TDataType::Create(NUdf::TDataType<i64>::Id, env);
     } else if (typeInfo.Features & NYql::NUdf::EDataTypeFeatures::UnsignedIntegralType) {
         sumRetType = TDataType::Create(NUdf::TDataType<ui64>::Id, env);
-    } else if (*dataType->GetDataSlot() == NUdf::EDataSlot::Decimal
-        || *dataType->GetDataSlot() == NUdf::EDataSlot::Interval) {
-        sumRetType = TDataType::Create(NUdf::TDataType<NUdf::TDecimal>::Id, env);
+    } else if (*dataType->GetDataSlot() == NUdf::EDataSlot::Decimal) {
+        auto decimalType = static_cast<TDataDecimalType*>(dataType);
+        auto [precision, scale] = decimalType->GetParams();
+        sumRetType = TDataDecimalType::Create(precision, scale, env);
+    } else if (*dataType->GetDataSlot() == NUdf::EDataSlot::Interval) {
+        sumRetType = TDataDecimalType::Create(NYql::NDecimal::MaxPrecision, 0, env);
     } else {
         Y_ENSURE(typeInfo.Features & NYql::NUdf::EDataTypeFeatures::FloatType);
         sumRetType = dataType;
@@ -751,12 +754,8 @@ template <typename TTag>
 std::unique_ptr<typename TTag::TPreparedAggregator> PrepareAvgOverInput(TTupleType* tupleType, std::optional<ui32> filterColumn, ui32 argColumn, const TTypeEnvironment& env) {
     auto doubleType = TDataType::Create(NUdf::TDataType<double>::Id, env);
     auto ui64Type = TDataType::Create(NUdf::TDataType<ui64>::Id, env);
-    auto decimalType = TDataType::Create(NUdf::TDataType<NUdf::TDecimal>::Id, env);
     TVector<TType*> tupleElements = { doubleType, ui64Type };
     auto avgRetType = TOptionalType::Create(TTupleType::Create(2, tupleElements.data(), env), env);
-
-    TVector<TType*> tupleDecimalElements = { decimalType, ui64Type };
-    auto avgRetDecimalType = TOptionalType::Create(TTupleType::Create(2, tupleDecimalElements.data(), env), env);
 
     auto argType = AS_TYPE(TBlockType, tupleType->GetElementType(argColumn))->GetItemType();
     bool isOptional;
@@ -783,10 +782,19 @@ std::unique_ptr<typename TTag::TPreparedAggregator> PrepareAvgOverInput(TTupleTy
         return std::make_unique<TPreparedAvgBlockAggregator<TTag, float, double>>(filterColumn, argColumn, avgRetType);
     case NUdf::EDataSlot::Double:
         return std::make_unique<TPreparedAvgBlockAggregator<TTag, double, double>>(filterColumn, argColumn, avgRetType);
-    case NUdf::EDataSlot::Interval:
+    case NUdf::EDataSlot::Interval: {
+        auto decimalType = TDataDecimalType::Create(NYql::NDecimal::MaxPrecision, 0, env);
+        TVector<TType*> tupleDecimalElements = { decimalType, ui64Type };
+        auto avgRetDecimalType = TOptionalType::Create(TTupleType::Create(2, tupleDecimalElements.data(), env), env);
         return std::make_unique<TPreparedAvgBlockAggregator<TTag, i64, NYql::NDecimal::TInt128>>(filterColumn, argColumn, avgRetDecimalType);
-    case NUdf::EDataSlot::Decimal:
+    }
+    case NUdf::EDataSlot::Decimal: {
+        auto [precision, scale] = static_cast<TDataDecimalType*>(dataType)->GetParams();
+        auto decimalType = TDataDecimalType::Create(precision, scale, env);
+        TVector<TType*> tupleDecimalElements = { decimalType, ui64Type };
+        auto avgRetDecimalType = TOptionalType::Create(TTupleType::Create(2, tupleDecimalElements.data(), env), env);
         return std::make_unique<TPreparedAvgBlockAggregator<TTag, NYql::NDecimal::TInt128, NYql::NDecimal::TInt128>>(filterColumn, argColumn, avgRetDecimalType);
+    }
     default:
         throw yexception() << "Unsupported AVG input type";
     }

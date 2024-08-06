@@ -488,17 +488,17 @@ memory_controller_config:
 
 ### Soft memory limit {#soft-memory-limit}
 
-The soft memory limit specifies a threshold for memory usage that is considered as dangerous and shouldn't be exceeded under normal operating conditions.
+The soft memory limit specifies a dangerous threshold that should not be exceeded under normal conditions.
 
 If the soft limit is exceeded, {{ ydb-short-name }} starts to reduce the shared cache size to zero. Therefore, more database nodes should be added to the cluster as soon as possible or per component memory limits should be reduced.
 
 ### Target memory utilization {#target-memory-utilization}
 
-Target memory utilization specifies a threshold for memory usage that is considered as optimal.
+The target memory utilization specifies a threshold for memory usage that is considered as optimal.
 
 Flexible cache sizes are calculated according to their limit thresholds to keep process consumption around this value. 
 
-For example, in a database that consumes a little memory on queries execution, caches consumes memory around this threshold, and other memory stays free. And if queries execution consumes more memory, caches starts to reduce their limits to their minimum threshold.
+For example, in a database that consumes a little memory on queries execution, caches consume memory around this threshold, and other memory stays free. And if queries execution consumes more memory, caches start to reduce their limits to their minimum threshold.
 
 ### Per component memory limits
 
@@ -511,7 +511,7 @@ These components are:
 - Shared cache
 - MemTable
 
-Each of these components limit is dynamically recalculated each second, so that each of them consumes memory proportionally to its limit threshold and total consumed memory stays around target memory utilization.
+Each of these components' limit is dynamically recalculated each second, so that each of them consumes memory proportionally to its limit threshold and total consumed memory stays around target memory utilization.
 
 Memory limits can be configured either in absolute bytes or as a percentage relative to the [hard memory limit](#hard-memory-limit). Using percentages is advantageous for managing clusters with nodes of varying capacities. If both absolute byte and percentage limits are specified, the memory controller uses a combination of both (maximum for lower limits, minimum for upper limits).
 

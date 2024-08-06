@@ -152,6 +152,7 @@ SRCS(
     queue_client/consumer_client.cpp
     queue_client/helpers.cpp
     queue_client/partition_reader.cpp
+    queue_client/producer_client.cpp
     queue_client/queue_rowset.cpp
 
     ypath/rich.cpp

@@ -4,11 +4,14 @@
 #include "config.h"
 #include "private.h"
 
-#include <yt/yt/client/transaction_client/helpers.h>
+#include <yt/yt/client/api/transaction.h>
+
+#include <yt/yt/client/table_client/name_table.h>
+#include <yt/yt/client/table_client/wire_protocol.h>
 
 #include <yt/yt/client/tablet_client/table_mount_cache.h>
 
-#include <yt/yt/client/api/transaction.h>
+#include <yt/yt/client/transaction_client/helpers.h>
 
 namespace NYT::NApi::NRpcProxy {
 
@@ -534,7 +537,7 @@ TFuture<TPushQueueProducerResult> TTransaction::PushQueueProducer(
     const TQueueProducerSessionId& sessionId,
     TQueueProducerEpoch epoch,
     NTableClient::TNameTablePtr nameTable,
-    TSharedRange<NTableClient::TUnversionedRow> rows,
+    const std::vector<TSharedRef>& serializedRows,
     const TPushQueueProducerOptions& options)
 {
     ValidateTabletTransactionId(GetId());
@@ -569,10 +572,16 @@ TFuture<TPushQueueProducerResult> TTransaction::PushQueueProducer(
         ToProto(req->mutable_user_meta(), ConvertToYsonString(options.UserMeta).ToString());
     }
 
-    req->Attachments() = SerializeRowset(
-        nameTable,
-        TRange(rows),
-        req->mutable_rowset_descriptor());
+    auto* descriptor = req->mutable_rowset_descriptor();
+    descriptor->Clear();
+    descriptor->set_wire_format_version(NApi::NRpcProxy::CurrentWireFormatVersion);
+    descriptor->set_rowset_kind(NProto::RK_UNVERSIONED);
+    for (int id = 0; id < nameTable->GetSize(); ++id) {
+        auto* entry = descriptor->add_name_table_entries();
+        entry->set_name(TString(nameTable->GetName(id)));
+    }
+
+    req->Attachments() = serializedRows;
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPushQueueProducerPtr& rsp) {
         return TPushQueueProducerResult{
@@ -580,6 +589,22 @@ TFuture<TPushQueueProducerResult> TTransaction::PushQueueProducer(
             .SkippedRowCount = rsp->skipped_row_count(),
         };
     }));
+}
+
+TFuture<TPushQueueProducerResult> TTransaction::PushQueueProducer(
+    const NYPath::TRichYPath& producerPath,
+    const NYPath::TRichYPath& queuePath,
+    const TQueueProducerSessionId& sessionId,
+    TQueueProducerEpoch epoch,
+    NTableClient::TNameTablePtr nameTable,
+    TSharedRange<NTableClient::TUnversionedRow> rows,
+    const TPushQueueProducerOptions& options)
+{
+    auto writer = CreateWireProtocolWriter();
+    writer->WriteUnversionedRowset(rows);
+    auto serializedRows = writer->Finish();
+
+    return PushQueueProducer(producerPath, queuePath, sessionId, epoch, nameTable, serializedRows, options);
 }
 
 TFuture<ITransactionPtr> TTransaction::StartTransaction(

@@ -28,6 +28,9 @@ namespace NKikimr::NColumnShard {
         }
         virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
         }
+        virtual TString DoGetOpType() const override {
+            return "LongTxWrite";
+        }
         virtual bool DoIsAsync() const override {
             return false;
         }

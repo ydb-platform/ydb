@@ -6,12 +6,10 @@
 
 namespace NKikimr::NColumnShard {
 
-TCSCounters::TCSCounters(std::shared_ptr<const TTabletCountersHandle> tabletCounters)
+TCSCounters::TCSCounters()
     : TBase("CS")
-    , TabletCounters(std::move(tabletCounters))
-    , Initialization(*this) {
-    Y_ABORT_UNLESS(TabletCounters);
-
+    , Initialization(*this)
+    , TxProgress(*this) {
     StartBackgroundCount = TBase::GetDeriviative("StartBackground/Count");
     TooEarlyBackgroundCount = TBase::GetDeriviative("TooEarlyBackground/Count");
     SetupCompactionCount = TBase::GetDeriviative("SetupCompaction/Count");

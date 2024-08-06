@@ -506,6 +506,14 @@ private:
 
     void MoveTopTxToCalculating(TDistributedTransaction& tx, const TActorContext& ctx);
     void DeletePartition(const TPartitionId& partitionId, const TActorContext& ctx);
+
+    std::deque<std::pair<ui64, ui64>> PlannedTxs;
+
+    void BeginInitTransactions();
+    void ContinueInitTransactions(const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange);
+    void EndInitTransactions(THashMap<ui32, TVector<TTransaction>>& partitionTxs);
+
+    void EndReadConfig(const TActorContext& ctx);
 };
 
 

@@ -1019,7 +1019,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
 
     Y_ABORT_UNLESS(readRange.HasStatus());
     if (readRange.GetStatus() != NKikimrProto::OK &&
-        //readRange.GetStatus() != NKikimrProto::OVERRUN &&
+        readRange.GetStatus() != NKikimrProto::OVERRUN &&
         readRange.GetStatus() != NKikimrProto::NODATA) {
         PQ_LOG_ERROR("Transactions read error " << ctx.SelfID <<
                      " Error status code " << readRange.GetStatus());
@@ -1068,6 +1068,18 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
     THashMap<ui32, TVector<TTransaction>> partitionTxs;
     InitTransactions(readRange, partitionTxs);
 
+    if (readRange.GetStatus() == NKikimrProto::OVERRUN) {
+        PQ_LOG_ERROR("Transactions read error " << ctx.SelfID <<
+                     " Error status code " << readRange.GetStatus());
+        ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
+        return;
+    }
+
+    EndReadConfig(ctx);
+}
+
+void TPersQueue::EndReadConfig(const TActorContext& ctx)
+{
     for (const auto& partition : Config.GetPartitions()) { // no partitions will be created with empty config
         const TPartitionId partitionId(partition.GetPartitionId());
         CreateOriginalPartition(Config,
@@ -4437,16 +4449,22 @@ void TPersQueue::EnsurePartitionsAreNotDeleted(const NKikimrPQ::TPQTabletConfig&
     }
 }
 
-void TPersQueue::InitTransactions(const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange,
-                                  THashMap<ui32, TVector<TTransaction>>& partitionTxs)
+void TPersQueue::BeginInitTransactions()
 {
     Txs.clear();
     TxQueue.clear();
 
-    std::deque<std::pair<ui64, ui64>> plannedTxs;
+    PlannedTxs.clear();
+}
 
+void TPersQueue::ContinueInitTransactions(const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange)
+{
     for (size_t i = 0; i < readRange.PairSize(); ++i) {
         auto& pair = readRange.GetPair(i);
+
+        PQ_LOG_D("ReadRange pair." <<
+                 " Key " << (pair.HasKey() ? pair.GetKey() : "unknown") <<
+                 ", Status " << pair.GetStatus());
 
         NKikimrPQ::TTransaction tx;
         Y_ABORT_UNLESS(tx.ParseFromString(pair.GetValue()));
@@ -4457,13 +4475,16 @@ void TPersQueue::InitTransactions(const NKikimrClient::TKeyValueResponse::TReadR
 
         if (tx.HasStep()) {
             if (std::make_pair(tx.GetStep(), tx.GetTxId()) >= std::make_pair(ExecStep, ExecTxId)) {
-                plannedTxs.emplace_back(tx.GetStep(), tx.GetTxId());
+                PlannedTxs.emplace_back(tx.GetStep(), tx.GetTxId());
             }
         }
     }
+}
 
-    std::sort(plannedTxs.begin(), plannedTxs.end());
-    for (auto& item : plannedTxs) {
+void TPersQueue::EndInitTransactions(THashMap<ui32, TVector<TTransaction>>& partitionTxs)
+{
+    std::sort(PlannedTxs.begin(), PlannedTxs.end());
+    for (auto& item : PlannedTxs) {
         TxQueue.push(item);
     }
 
@@ -4472,6 +4493,14 @@ void TPersQueue::InitTransactions(const NKikimrClient::TKeyValueResponse::TReadR
     }
 
     Y_UNUSED(partitionTxs);
+}
+
+void TPersQueue::InitTransactions(const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange,
+                                  THashMap<ui32, TVector<TTransaction>>& partitionTxs)
+{
+    BeginInitTransactions();
+    ContinueInitTransactions(readRange);
+    EndInitTransactions(partitionTxs);
 }
 
 void TPersQueue::TryStartTransaction(const TActorContext& ctx)

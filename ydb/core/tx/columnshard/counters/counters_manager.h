@@ -88,8 +88,8 @@ public:
         ScanCounters.FillStats(tableStats);
     }
 
-    void OnWritePutBlobsSuccess(const TDuration d, const ui64 rows, const NKikimr::NEvWrite::EModificationType modificationType) const {
-        TabletCounters->OnWritePutBlobsSuccess(rows, modificationType);
+    void OnWritePutBlobsSuccess(const TDuration d, const ui64 rowsWritten) const {
+        TabletCounters->OnWritePutBlobsSuccess(rowsWritten);
         CSCounters.OnWritePutBlobsSuccess(d);
     }
 };

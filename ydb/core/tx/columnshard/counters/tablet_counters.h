@@ -106,10 +106,8 @@ public:
         IncCounter(NColumnShard::COUNTER_INDEXING_TIME, duration.MilliSeconds());
     }
 
-    void OnWritePutBlobsSuccess(const ui64 rows, const NKikimr::NEvWrite::EModificationType modificationType) const {
-        if (modificationType != NKikimr::NEvWrite::EModificationType::Delete) {
-            IncCounter(NColumnShard::COUNTER_UPSERT_ROWS_WRITTEN, rows);
-        }
+    void OnWritePutBlobsSuccess(const ui64 rowsWritten) const {
+        IncCounter(NColumnShard::COUNTER_UPSERT_ROWS_WRITTEN, rowsWritten);
     }
 
     void OnDropPortionEvent(const ui64 rawBytes, const ui64 blobBytes, const ui64 rows) const {

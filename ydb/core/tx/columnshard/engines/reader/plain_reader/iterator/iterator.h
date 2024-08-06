@@ -84,7 +84,7 @@ public:
             ;
     }
 
-    virtual void Apply(IDataTasksProcessor::ITask::TPtr task) override;
+    virtual void Apply(const std::shared_ptr<IApplyAction>& task) override;
 
     bool Finished() const  override {
         return IndexedData->IsFinished() && ReadyResults.empty();

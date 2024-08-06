@@ -776,7 +776,10 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     RmExternalMemory = KqpGroup->GetCounter("RM/ExternalMemory", false);
     RmNotEnoughMemory = KqpGroup->GetCounter("RM/NotEnoughMemory", true);
     RmNotEnoughComputeActors = KqpGroup->GetCounter("RM/NotEnoughComputeActors", true);
+    RmOnStartAllocs = KqpGroup->GetCounter("Rm/OnStartAllocs", true);
     RmExtraMemAllocs = KqpGroup->GetCounter("RM/ExtraMemAllocs", true);
+    RmExtraMemFree = KqpGroup->GetCounter("RM/ExtraMemFree", true);
+    RmOnCompleteFree = KqpGroup->GetCounter("RM/OnCompleteFree", true);
     RmInternalError = KqpGroup->GetCounter("RM/InternalError", true);
     RmSnapshotLatency = KqpGroup->GetHistogram(
         "RM/SnapshotLatency", NMonitoring::ExponentialHistogram(20, 2, 1));

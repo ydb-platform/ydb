@@ -15,7 +15,7 @@ std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TBloomIndexConstructor::Do
         }
         AFL_VERIFY(columnIds.emplace(columnInfo->GetId()).second);
     }
-    return std::make_shared<TBloomIndexMeta>(indexId, indexName, columnIds, FalsePositiveProbability);
+    return std::make_shared<TBloomIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId), columnIds, FalsePositiveProbability);
 }
 
 NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {

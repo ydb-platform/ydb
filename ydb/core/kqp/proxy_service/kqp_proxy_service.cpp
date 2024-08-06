@@ -11,6 +11,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
+#include <ydb/core/kqp/common/events/workload_service.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
@@ -269,7 +270,11 @@ public:
                 MakeKqpCompileComputationPatternServiceID(SelfId().NodeId()), CompileComputationPatternService);
         }
 
-        KqpNodeService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpNodeService(TableServiceConfig, Counters, AsyncIoFactory, FederatedQuerySetup));
+        ResourceManager_ = GetKqpResourceManager();
+        CaFactory_ = NComputeActor::MakeKqpCaFactory(
+            TableServiceConfig.GetResourceManager(), ResourceManager_, AsyncIoFactory, FederatedQuerySetup);
+
+        KqpNodeService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpNodeService(TableServiceConfig, ResourceManager_, CaFactory_, Counters, AsyncIoFactory, FederatedQuerySetup));
         TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
             MakeKqpNodeServiceID(SelfId().NodeId()), KqpNodeService);
 
@@ -687,11 +692,8 @@ public:
             LocalSessions->AttachQueryText(sessionInfo, ev->Get()->GetQuery());
         }
 
-        if (!FeatureFlags.GetEnableResourcePools()) {
-            ev->Get()->SetPoolId("");
-        } else if (!ev->Get()->GetPoolId()) {
-            // TODO: do not use default pool if there is no limits
-            ev->Get()->SetPoolId(NResourcePool::DEFAULT_POOL_ID);
+        if (!TryFillPoolInfoFromCache(ev, requestId)) {
+            return;
         }
 
         TActorId targetId;
@@ -1344,6 +1346,7 @@ public:
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             hFunc(TEvKqp::TEvListSessionsRequest, Handle);
             hFunc(TEvKqp::TEvListProxyNodesRequest, Handle);
+            hFunc(NWorkload::TEvUpdatePoolInfo, Handle);
         default:
             Y_ABORT("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
                 ev->GetTypeRewrite(), ev->ToString().data());
@@ -1479,7 +1482,7 @@ private:
 
         auto config = CreateConfig(KqpSettings, workerSettings);
 
-        IActor* sessionActor = CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings,
+        IActor* sessionActor = CreateKqpSessionActor(SelfId(), ResourceManager_, CaFactory_, sessionId, KqpSettings, workerSettings,
             FederatedQuerySetup, AsyncIoFactory, ModuleResolverState, Counters,
             QueryServiceConfig, KqpTempTablesAgentActor);
         auto workerId = TlsActivationContext->ExecutorThread.RegisterActor(sessionActor, TMailboxType::HTSwap, AppData()->UserPoolId);
@@ -1564,6 +1567,43 @@ private:
         if (ShutdownRequested) {
             ShutdownState->Update(LocalSessions->size());
         }
+    }
+
+    bool TryFillPoolInfoFromCache(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 requestId) {
+        if (!FeatureFlags.GetEnableResourcePools()) {
+            ev->Get()->SetPoolId("");
+            return true;
+        }
+
+        if (!ev->Get()->GetPoolId()) {
+            ev->Get()->SetPoolId(NResourcePool::DEFAULT_POOL_ID);
+        }
+
+        const auto& poolId = ev->Get()->GetPoolId();
+        const auto& poolInfo = ResourcePoolsCache.GetPoolInfo(ev->Get()->GetDatabase(), poolId);
+        if (!poolInfo) {
+            return true;
+        }
+
+        const auto& securityObject = poolInfo->SecurityObject;
+        const auto& userToken = ev->Get()->GetUserToken();
+        if (securityObject && userToken && !userToken->GetSerializedToken().empty()) {
+            if (!securityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *userToken)) {
+                ReplyProcessError(Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Resource pool " << poolId << " not found or you don't have access permissions", requestId);
+                return false;
+            }
+            if (!securityObject->CheckAccess(NACLib::EAccessRights::SelectRow, *userToken)) {
+                ReplyProcessError(Ydb::StatusIds::UNAUTHORIZED, TStringBuilder() << "You don't have access permissions for resource pool " << poolId, requestId);
+                return false;
+            }
+        }
+
+        const auto& poolConfig = poolInfo->Config;
+        if (!NWorkload::IsWorkloadServiceRequired(poolConfig)) {
+            ev->Get()->SetPoolConfig(poolConfig);
+        }
+
+        return true;
     }
 
     void UpdateYqlLogLevels() {
@@ -1751,6 +1791,10 @@ private:
         Send(ev->Sender, result.release(), 0, ev->Cookie);
     }
 
+    void Handle(NWorkload::TEvUpdatePoolInfo::TPtr& ev) {
+        ResourcePoolsCache.UpdatePoolInfo(ev->Get()->Database, ev->Get()->PoolId, ev->Get()->Config, ev->Get()->SecurityObject);
+    }
+
 private:
     NKikimrConfig::TLogConfig LogConfig;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
@@ -1768,6 +1812,8 @@ private:
     THashMap<ui64, NKikimrConsole::TConfigItem::EKind> ConfigSubscriptions;
     THashMap<ui64, TActorId> TimeoutTimers;
 
+    std::shared_ptr<NRm::IKqpResourceManager> ResourceManager_;
+    std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
     TIntrusivePtr<TKqpShutdownState> ShutdownState;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
 
@@ -1810,6 +1856,8 @@ private:
     std::deque<TDelayedEvent> DelayedEventsQueue;
     bool IsLookupByRmScheduled = false;
     TActorId KqpTempTablesAgentActor;
+
+    TResourcePoolsCache ResourcePoolsCache;
 };
 
 } // namespace

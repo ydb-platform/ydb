@@ -404,6 +404,98 @@ public:
 
 };
 
+class TIntervalPosition {
+private:
+    TSortableBatchPosition Position;
+    bool LeftIntervalInclude;
+public:
+    const TSortableBatchPosition& GetPosition() const {
+        return Position;
+    }
+    bool IsIncludedToLeftInterval() const {
+        return LeftIntervalInclude;
+    }
+    TIntervalPosition(TSortableBatchPosition&& position, const bool leftIntervalInclude)
+        : Position(std::move(position))
+        , LeftIntervalInclude(leftIntervalInclude) {
+
+    }
+
+    TIntervalPosition(const TSortableBatchPosition& position, const bool leftIntervalInclude)
+        : Position(position)
+        , LeftIntervalInclude(leftIntervalInclude) {
+
+    }
+
+    bool operator<(const TIntervalPosition& item) const {
+        std::partial_ordering cmp = Position.Compare(item.Position);
+        if (cmp == std::partial_ordering::equivalent) {
+            return (LeftIntervalInclude ? 1 : 0) < (item.LeftIntervalInclude ? 1 : 0);
+        } 
+        return cmp == std::partial_ordering::less;
+    }
+
+    NJson::TJsonValue DebugJson() const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("position", Position.DebugJson());
+        result.InsertValue("include", LeftIntervalInclude);
+        return result;
+    }
+};
+
+class TIntervalPositions {
+private:
+    std::vector<TIntervalPosition> Positions;
+public:
+    bool IsEmpty() const {
+        return Positions.empty();
+    }
+
+    std::vector<TIntervalPosition>::const_iterator begin() const {
+        return Positions.begin();
+    }
+
+    std::vector<TIntervalPosition>::const_iterator end() const {
+        return Positions.end();
+    }
+
+    void InsertPosition(TIntervalPosition&& intervalPosition) {
+        Positions.emplace_back(std::move(intervalPosition));
+        ui32 index = Positions.size() - 1;
+        while (index >= 1 && Positions[index] < Positions[index - 1]) {
+            std::swap(Positions[index], Positions[index - 1]);
+            index = index - 1;
+        }
+    }
+
+    void InsertPosition(TSortableBatchPosition&& position, const bool includePositionToLeftInterval) {
+        TIntervalPosition intervalPosition(std::move(position), includePositionToLeftInterval);
+        InsertPosition(std::move(intervalPosition));
+    }
+
+    void InsertPosition(const TSortableBatchPosition& position, const bool includePositionToLeftInterval) {
+        TIntervalPosition intervalPosition(position, includePositionToLeftInterval);
+        InsertPosition(std::move(intervalPosition));
+    }
+
+    void AddPosition(TIntervalPosition&& intervalPosition) {
+        if (Positions.size()) {
+            AFL_VERIFY(Positions.back() < intervalPosition)("back", Positions.back().DebugJson())("pos", intervalPosition.DebugJson());
+        }
+        Positions.emplace_back(std::move(intervalPosition));
+    }
+
+    void AddPosition(TSortableBatchPosition&& position, const bool includePositionToLeftInterval) {
+        TIntervalPosition intervalPosition(std::move(position), includePositionToLeftInterval);
+        AddPosition(std::move(intervalPosition));
+        }
+
+    void AddPosition(const TSortableBatchPosition& position, const bool includePositionToLeftInterval) {
+        TIntervalPosition intervalPosition(position, includePositionToLeftInterval);
+        AddPosition(std::move(intervalPosition));
+    }
+};
+
 class TRWSortableBatchPosition: public TSortableBatchPosition, public TMoveOnly {
 private:
     using TBase = TSortableBatchPosition;

@@ -39,6 +39,9 @@ void PrintSchemeEntry(IOutputStream& o, const NScheme::TSchemeEntry& entry, NCol
     case NScheme::ESchemeEntryType::ExternalDataSource:
         o << colors.LightWhite();
         break;
+    case NScheme::ESchemeEntryType::ResourcePool:
+        o << colors.LightWhite();
+        break;
     default:
         o << colors.RedColor();
     }
@@ -106,6 +109,8 @@ TString EntryTypeToString(NScheme::ESchemeEntryType entry) {
         return "view";
     case NScheme::ESchemeEntryType::Replication:
         return "replication";
+    case NScheme::ESchemeEntryType::ResourcePool:
+        return "resource-pool";
     case NScheme::ESchemeEntryType::Unknown:
     case NScheme::ESchemeEntryType::Sequence:
         return "unknown";

@@ -42,12 +42,13 @@ private:
 
 protected:
     std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
+public:
+    using TConstPtr = std::shared_ptr<const TReadMetadataBase>;
+
     const TVersionedIndex& GetIndexVersions() const {
         AFL_VERIFY(IndexVersionsPointer);
         return *IndexVersionsPointer;
     }
-public:
-    using TConstPtr = std::shared_ptr<const TReadMetadataBase>;
 
     const std::optional<TGranuleShardingInfo>& GetRequestShardingInfo() const {
         return RequestShardingInfo;

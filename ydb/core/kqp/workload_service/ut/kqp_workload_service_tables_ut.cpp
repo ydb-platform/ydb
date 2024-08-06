@@ -133,22 +133,26 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceTables) {
     Y_UNIT_TEST(TestLeaseExpiration) {
         auto ydb = TYdbSetupSettings()
             .ConcurrentQueryLimit(1)
+            .QueryCancelAfter(TDuration::Zero())
             .Create();
 
         // Create tables
-        TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query));
+        auto hangingRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().HangUpDuringExecution(true));
+        ydb->WaitQueryExecution(hangingRequest);
 
-        const TDuration leaseDuration = TDuration::Seconds(10);
-        StartRequest(ydb, "test_session", leaseDuration);
-        DelayRequest(ydb, "test_session",  leaseDuration);
-        CheckPoolDescription(ydb, 1, 1, leaseDuration);
+        auto delayedRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().ExecutionExpected(false));
+        ydb->WaitPoolState({.DelayedRequests = 1, .RunningRequests = 1});
 
         ydb->StopWorkloadService();
         ydb->WaitPoolHandlersCount(0);
 
         // Check that lease expired
-        Sleep(leaseDuration + TDuration::Seconds(5));
-        CheckPoolDescription(ydb, 0, 0);
+        IYdbSetup::WaitFor(TDuration::Seconds(60), "lease expiration", [ydb](TString& errorString) {
+            auto description = ydb->GetPoolDescription(TDuration::Zero());
+
+            errorString = TStringBuilder() << "delayed = " << description.DelayedRequests << ", running = " << description.RunningRequests;
+            return description.AmountRequests() == 0;
+        });
     }
 
     Y_UNIT_TEST(TestLeaseUpdates) {

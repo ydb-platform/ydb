@@ -4075,6 +4075,70 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(ChangefeedOnIndexTable) {
+        TKikimrRunner kikimr(TKikimrSettings()
+            .SetPQConfig(DefaultPQConfig())
+            .SetEnableChangefeedsOnIndexTables(true));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key),
+                    INDEX SyncIndex GLOBAL SYNC ON (`Value`),
+                    INDEX AsyncIndex GLOBAL ASYNC ON (`Value`)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const auto changefeed = TChangefeedDescription("feed", EChangefeedMode::KeysOnly, EChangefeedFormat::Json);
+        {
+            auto result = session.AlterTable("/Root/table/AsyncIndex", TAlterTableSettings()
+                .AppendAddChangefeeds(changefeed)
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        }
+        {
+            auto result = session.AlterTable("/Root/table/SyncIndex", TAlterTableSettings()
+                .AppendAddChangefeeds(changefeed)
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(DescribeIndexTable) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key),
+                    INDEX SyncIndex GLOBAL SYNC ON (`Value`)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto desc = session.DescribeTable("/Root/table/SyncIndex").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetEntry().Name, "SyncIndex");
+        }
+    }
+
     Y_UNIT_TEST(CreatedAt) {
         TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
         auto scheme = NYdb::NScheme::TSchemeClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
@@ -6055,16 +6119,75 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    void AsyncReplicationConnectionParams(TKikimrRunner& kikimr, const TString& connectionParam, bool ssl = false) {
+        using namespace NReplication;
+
+        auto repl = TReplicationClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table` (Key Uint64, Value String, PRIMARY KEY (Key));
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    %s, TOKEN = "root@builtin"
+                );
+            )", connectionParam.c_str());
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            const auto result = repl.DescribeReplication("/Root/replication").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            const auto& params = result.GetReplicationDescription().GetConnectionParams();
+            UNIT_ASSERT_VALUES_EQUAL(params.GetDiscoveryEndpoint(), kikimr.GetEndpoint());
+            UNIT_ASSERT_VALUES_EQUAL(params.GetDatabase(), "/Root");
+            UNIT_ASSERT_VALUES_EQUAL(params.GetEnableSsl(), ssl);
+        }
+    }
+
+    Y_UNIT_TEST(AsyncReplicationConnectionString) {
+        TKikimrRunner kikimr;
+        AsyncReplicationConnectionParams(kikimr, Sprintf(R"(CONNECTION_STRING = "grpc://%s/?database=/Root")", kikimr.GetEndpoint().c_str()));
+    }
+
+    Y_UNIT_TEST(AsyncReplicationConnectionStringWithSsl) {
+        TKikimrRunner kikimr;
+        AsyncReplicationConnectionParams(kikimr, Sprintf(R"(CONNECTION_STRING = "grpcs://%s/?database=/Root")", kikimr.GetEndpoint().c_str()), true);
+    }
+
+    Y_UNIT_TEST(AsyncReplicationEndpointAndDatabase) {
+        TKikimrRunner kikimr;
+        AsyncReplicationConnectionParams(kikimr, Sprintf(R"(ENDPOINT = "%s", DATABASE = "/Root")", kikimr.GetEndpoint().c_str()));
+    }
+
     Y_UNIT_TEST(DisableResourcePools) {
         TKikimrRunner kikimr(TKikimrSettings().SetEnableResourcePools(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto checkDisabled = [&session](const TString& query) {
+        auto checkQuery = [&session](const TString& query, EStatus status, const TString& error) {
             Cerr << "Check query:\n" << query << "\n";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED);
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pools are disabled. Please contact your system administrator to enable it");
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), status);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), error);
+        };
+
+        auto checkDisabled = [checkQuery](const TString& query) {
+            checkQuery(query, EStatus::UNSUPPORTED, "Resource pools are disabled. Please contact your system administrator to enable it");
         };
 
         // CREATE RESOURCE POOL
@@ -6083,7 +6206,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )");
 
         // DROP RESOURCE POOL
-        checkDisabled("DROP RESOURCE POOL MyResourcePool;");
+        checkQuery("DROP RESOURCE POOL MyResourcePool;",
+            EStatus::SCHEME_ERROR,
+            "Path does not exist");
     }
 
     Y_UNIT_TEST(ResourcePoolsValidation) {

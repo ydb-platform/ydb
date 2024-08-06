@@ -2327,7 +2327,8 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
         nodeUsageHistogram.IncrementFor(record.Usage * 100);
     }
 
-    if (stats.MaxUsage >= GetMaxNodeUsageToKick()) {
+    double minUsageToKick = GetMaxNodeUsageToKick() - GetNodeUsageRangeToKick();
+    if (stats.MaxUsage >= GetMaxNodeUsageToKick() && stats.MinUsage < minUsageToKick) {
         std::vector<TNodeId> overloadedNodes;
         for (const auto& [nodeId, nodeInfo] : Nodes) {
             if (nodeInfo.IsAlive() && !nodeInfo.Down && nodeInfo.IsOverloaded()) {

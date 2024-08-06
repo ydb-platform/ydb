@@ -598,8 +598,9 @@ void TSchemeShard::ClearDescribePathCaches(const TPathElement::TPtr node, bool f
     } else if (node->PathType == NKikimrSchemeOp::EPathType::EPathTypeTable) {
         Y_ABORT_UNLESS(Tables.contains(node->PathId));
         TTableInfo::TPtr tabletInfo = Tables.at(node->PathId);
-        tabletInfo->PreSerializedPathDescription.clear();
-        tabletInfo->PreSerializedPathDescriptionWithoutRangeKey.clear();
+        tabletInfo->PreserializedTablePartitions.clear();
+        tabletInfo->PreserializedTablePartitionsNoKeys.clear();
+        tabletInfo->PreserializedTableSplitBoundaries.clear();
     }
 }
 
@@ -4462,6 +4463,8 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     appData->Icb->RegisterSharedControl(DisablePublicationsOfDropping, "SchemeShard_DisablePublicationsOfDropping");
     appData->Icb->RegisterSharedControl(FillAllocatePQ, "SchemeShard_FillAllocatePQ");
 
+    appData->Icb->RegisterSharedControl(MaxCommitRedoMB, "TabletControls.MaxCommitRedoMB");
+
     AllowDataColumnForIndexTable = appData->FeatureFlags.GetEnableDataColumnForIndexTable();
     appData->Icb->RegisterSharedControl(AllowDataColumnForIndexTable, "SchemeShard_AllowDataColumnForIndexTable");
 
@@ -7009,6 +7012,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableTempTables = featureFlags.GetEnableTempTables();
     EnableReplaceIfExistsForExternalEntities = featureFlags.GetEnableReplaceIfExistsForExternalEntities();
     EnableTableDatetime64 = featureFlags.GetEnableTableDatetime64();
+    EnableResourcePoolsOnServerless = featureFlags.GetEnableResourcePoolsOnServerless();
 }
 
 void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {

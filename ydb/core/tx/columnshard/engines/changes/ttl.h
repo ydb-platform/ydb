@@ -40,7 +40,7 @@ private:
         }
     };
 
-    std::optional<TWritePortionInfoWithBlobs> UpdateEvictedPortion(TPortionForEviction& info, NBlobOperations::NRead::TCompositeReadBlobs& srcBlobs,
+    std::optional<TWritePortionInfoWithBlobsResult> UpdateEvictedPortion(TPortionForEviction& info, NBlobOperations::NRead::TCompositeReadBlobs& srcBlobs,
         TConstructionContext& context) const;
 
     std::vector<TPortionForEviction> PortionsToEvict;

@@ -159,7 +159,10 @@ public:
         return NKikimrServices::TActivity::KQP_SESSION_ACTOR;
     }
 
-   TKqpSessionActor(const TActorId& owner, const TString& sessionId, const TKqpSettings::TConstPtr& kqpSettings,
+   TKqpSessionActor(const TActorId& owner,
+            std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> resourceManager,
+            std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> caFactory,
+            const TString& sessionId, const TKqpSettings::TConstPtr& kqpSettings,
             const TKqpWorkerSettings& workerSettings,
             std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
             NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
@@ -168,6 +171,8 @@ public:
             const TActorId& kqpTempTablesAgentActor)
         : Owner(owner)
         , SessionId(sessionId)
+        , ResourceManager_(std::move(resourceManager))
+        , CaFactory_(std::move(caFactory))
         , Counters(counters)
         , Settings(workerSettings)
         , AsyncIoFactory(std::move(asyncIoFactory))
@@ -237,6 +242,12 @@ public:
     }
 
     void PassRequestToResourcePool() {
+        if (QueryState->UserRequestContext->PoolConfig) {
+            LOG_D("request placed into pool from cache: " << QueryState->UserRequestContext->PoolId);
+            CompileQuery();
+            return;
+        }
+
         Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvPlaceRequestIntoPool(
             QueryState->Database,
             SessionId,
@@ -470,6 +481,7 @@ public:
 
     void Handle(NWorkload::TEvContinueRequest::TPtr& ev) {
         YQL_ENSURE(QueryState);
+        QueryState->ContinueTime = TInstant::Now();
 
         if (ev->Get()->Status == Ydb::StatusIds::UNSUPPORTED) {
             LOG_T("Failed to place request in resource pool, feature flag is disabled");
@@ -1264,6 +1276,8 @@ public:
         request.PerRequestDataSizeLimit = RequestControls.PerRequestDataSizeLimit;
         request.MaxShardCount = RequestControls.MaxShardCount;
         request.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
+        request.CaFactory_ = CaFactory_;
+        request.ResourceManager_ = ResourceManager_;
         LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
 
         const bool useEvWrite = ((HasOlapTable && Settings.TableService.GetEnableOlapSink()) || (!HasOlapTable && Settings.TableService.GetEnableOltpSink()))
@@ -1545,6 +1559,9 @@ public:
 
         stats->DurationUs = ((TInstant::Now() - QueryState->StartTime).MicroSeconds());
         stats->WorkerCpuTimeUs = (QueryState->GetCpuTime().MicroSeconds());
+        if (const auto continueTime = QueryState->ContinueTime) {
+            stats->QueuedTimeUs = (continueTime - QueryState->StartTime).MicroSeconds();
+        }
         if (QueryState->CompileResult) {
             stats->Compilation.emplace();
             stats->Compilation->FromCache = (QueryState->CompileStats.FromCache);
@@ -2069,8 +2086,15 @@ public:
             }
             CleanupCtx->Final = isFinal;
             CleanupCtx->IsWaitingForWorkloadServiceCleanup = true;
+
+            const auto& stats = QueryState->QueryStats;
+            auto event = std::make_unique<NWorkload::TEvCleanupRequest>(
+                QueryState->Database, SessionId, QueryState->UserRequestContext->PoolId,
+                TDuration::MicroSeconds(stats.DurationUs), TDuration::MicroSeconds(stats.WorkerCpuTimeUs)
+            );
+
             auto forwardId = MakeKqpWorkloadServiceId(SelfId().NodeId());
-            Send(new IEventHandle(*QueryState->PoolHandlerActor, SelfId(), new NWorkload::TEvCleanupRequest(QueryState->Database, SessionId, QueryState->UserRequestContext->PoolId), IEventHandle::FlagForwardOnNondelivery, 0, &forwardId));
+            Send(new IEventHandle(*QueryState->PoolHandlerActor, SelfId(), event.release(), IEventHandle::FlagForwardOnNondelivery, 0, &forwardId));
             QueryState->PoolHandlerActor = Nothing();
         }
 
@@ -2492,6 +2516,8 @@ private:
     TActorId Owner;
     TString SessionId;
 
+    std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
+    std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
     // cached lookups to issue counters
     THashMap<ui32, ::NMonitoring::TDynamicCounters::TCounterPtr> CachedIssueCounters;
     TInstant CreationTime;
@@ -2531,7 +2557,8 @@ private:
 
 } // namespace
 
-IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
+IActor* CreateKqpSessionActor(const TActorId& owner, std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> resourceManager,
+    std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> caFactory, const TString& sessionId,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
@@ -2539,7 +2566,7 @@ IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
     const TActorId& kqpTempTablesAgentActor)
 {
-    return new TKqpSessionActor(owner, sessionId, kqpSettings, workerSettings, federatedQuerySetup,
+    return new TKqpSessionActor(owner, std::move(resourceManager), std::move(caFactory), sessionId, kqpSettings, workerSettings, federatedQuerySetup,
                                 std::move(asyncIoFactory),  std::move(moduleResolverState), counters,
                                 queryServiceConfig, kqpTempTablesAgentActor);
 }

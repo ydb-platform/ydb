@@ -17,7 +17,7 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self,
         AFL_VERIFY(usedPortionIds.emplace(portionInfo.GetPortionId()).second)("portion_info", portionInfo.DebugString(true));
         portionInfo.SaveToDatabase(context.DBWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
     }
-    const auto predRemoveDroppedTable = [self](const TWritePortionInfoWithBlobs& item) {
+    const auto predRemoveDroppedTable = [self](const TWritePortionInfoWithBlobsResult& item) {
         auto& portionInfo = item.GetPortionResult();
         if (!!self && (!self->TablesManager.HasTable(portionInfo.GetPathId()) || self->TablesManager.GetTable(portionInfo.GetPathId()).IsDropped())) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_inserted_data")("reason", "table_removed")("path_id", portionInfo.GetPathId());
@@ -100,49 +100,6 @@ void TChangesWithAppend::DoOnAfterCompile() {
     for (auto&& i : AppendedPortions) {
         i.FinalizePortionConstructor();
     }
-}
-
-std::vector<TWritePortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions(const std::shared_ptr<arrow::RecordBatch> batch,
-    const ui64 pathId, const TSnapshot& snapshot, const TGranuleMeta* granuleMeta, TConstructionContext& context, const std::optional<NArrow::NSerialization::TSerializerContainer>& overrideSaver) const {
-    Y_ABORT_UNLESS(batch->num_rows());
-
-    auto resultSchema = context.SchemaVersions.GetSchema(snapshot);
-
-    std::shared_ptr<NOlap::TSerializationStats> stats = std::make_shared<NOlap::TSerializationStats>();
-    if (granuleMeta) {
-        stats = granuleMeta->BuildSerializationStats(resultSchema);
-    }
-    auto schema = std::make_shared<TDefaultSchemaDetails>(resultSchema, stats);
-    if (overrideSaver) {
-        schema->SetOverrideSerializer(*overrideSaver);
-    }
-    std::vector<TWritePortionInfoWithBlobs> out;
-    {
-        std::vector<TBatchSerializedSlice> pages = TBatchSerializedSlice::BuildSimpleSlices(batch, NSplitter::TSplitSettings(), context.Counters.SplitterCounters, schema);
-        std::vector<TGeneralSerializedSlice> generalPages;
-        for (auto&& i : pages) {
-            auto portionColumns = i.GetPortionChunksToHash();
-            resultSchema->GetIndexInfo().AppendIndexes(portionColumns);
-            generalPages.emplace_back(portionColumns, schema, context.Counters.SplitterCounters);
-        }
-
-        const NSplitter::TEntityGroups groups = resultSchema->GetIndexInfo().GetEntityGroupsByStorageId(IStoragesManager::DefaultStorageId, *SaverContext.GetStoragesManager());
-        TSimilarPacker slicer(NSplitter::TSplitSettings().GetExpectedPortionSize());
-        auto packs = slicer.Split(generalPages);
-
-        ui32 recordIdx = 0;
-        for (auto&& i : packs) {
-            TGeneralSerializedSlice slice(std::move(i));
-            auto b = batch->Slice(recordIdx, slice.GetRecordsCount());
-            out.emplace_back(TWritePortionInfoWithBlobs::BuildByBlobs(slice.GroupChunksByBlobs(groups), pathId, resultSchema->GetVersion(), snapshot, SaverContext.GetStoragesManager()));
-            out.back().FillStatistics(resultSchema->GetIndexInfo());
-            out.back().GetPortionConstructor().AddMetadata(*resultSchema, b);
-            out.back().GetPortionConstructor().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);
-            recordIdx += slice.GetRecordsCount();
-        }
-    }
-
-    return out;
 }
 
 void TChangesWithAppend::DoStart(NColumnShard::TColumnShard& /*self*/) {

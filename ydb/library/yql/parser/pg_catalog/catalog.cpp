@@ -2529,13 +2529,14 @@ bool IsExactMatch(const TVector<ui32>& procArgTypes, ui32 procVariadicType, cons
     return true;
 }
 
-ui64 CalcProcScore(const TVector<ui32>& procArgTypes, ui32 procVariadicType, const TVector<ui32>& argTypeIds, const TCatalog& catalog) {
+ui64 CalcProcScore(const TVector<ui32>& procArgTypes, ui32 procVariadicType, ui32 procDefArgs, const TVector<ui32>& argTypeIds, const TCatalog& catalog) {
     ui64 result = 0UL;
     if (!procVariadicType) {
         ++result;
     }
 
-    if (argTypeIds.size() < procArgTypes.size()) {
+    Y_ENSURE(procArgTypes.size() >= procDefArgs);
+    if (argTypeIds.size() < procArgTypes.size() - procDefArgs) {
         return ArgTypeMismatch;
     }
 
@@ -2804,7 +2805,7 @@ std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TStri
         }
 
         // https://www.postgresql.org/docs/14/typeconv-func.html, steps 4.a, 4.c, 4.d
-        auto score = NPrivate::CalcProcScore(d->ArgTypes, d->VariadicType, argTypeIds, catalog);
+        auto score = NPrivate::CalcProcScore(d->ArgTypes, d->VariadicType, d->DefaultArgs.size(), argTypeIds, catalog);
         if (bestScore < score) {
             bestScore = score;
 
@@ -3169,7 +3170,7 @@ const TAggregateDesc& LookupAggregation(const TString& name, const TVector<ui32>
         }
 
         // https://www.postgresql.org/docs/14/typeconv-func.html, steps 4.a, 4.c, 4.d
-        auto score = NPrivate::CalcProcScore(d->ArgTypes, 0, argTypeIds, catalog);
+        auto score = NPrivate::CalcProcScore(d->ArgTypes, 0, 0, argTypeIds, catalog);
 
         if (bestScore < score) {
             bestScore = score;

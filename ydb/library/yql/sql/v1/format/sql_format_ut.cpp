@@ -1594,12 +1594,56 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
              "CREATE RESOURCE POOL naMe WITH (a = \"b\");\n"},
              {"create resource pool eds with (a=\"a\",b=\"b\",c = true)",
              "CREATE RESOURCE POOL eds WITH (\n\ta = \"a\",\n\tb = \"b\",\n\tc = TRUE\n);\n"},
-             {"alTer reSOurcE poOl naMe sEt a tRue, resEt (b, c), seT (x=y, z=false)",
-             "ALTER RESOURCE POOL naMe\n\tSET a TRUE,\n\tRESET (b, c),\n\tSET (x = y, z = FALSE);\n"},
+             {"alTer reSOurcE poOl naMe resEt (b, c), seT (x=y, z=false)",
+             "ALTER RESOURCE POOL naMe\n\tRESET (b, c),\n\tSET (x = y, z = FALSE);\n"},
              {"alter resource pool eds reset (a), set (x=y)",
              "ALTER RESOURCE POOL eds\n\tRESET (a),\n\tSET (x = y);\n"},
             {"dRop reSourCe poOl naMe",
              "DROP RESOURCE POOL naMe;\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(BackupCollectionOperations) {
+        TCases cases = {
+            {"creAte  BackuP colLection `-naMe` wIth (a = \"b\")",
+             "CREATE BACKUP COLLECTION `-naMe` WITH (a = \"b\");\n"},
+             {"alTer bACKuP coLLECTION naMe resEt (b, c), seT (x=y, z=false)",
+             "ALTER BACKUP COLLECTION naMe\n\tRESET (b, c),\n\tSET (x = y, z = FALSE);\n"},
+            {"DROP backup collectiOn       `/some/path`",
+             "DROP BACKUP COLLECTION `/some/path`;\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(Analyze) {
+        TCases cases = {
+            {"analyze table (col1, col2, col3)",
+             "ANALYZE table (col1, col2, col3);\n"},
+             {"analyze table",
+             "ANALYZE table;\n"}
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(ResourcePoolClassifierOperations) {
+        TCases cases = {
+            {"creAte reSourCe poOl ClaSsiFIer naMe With (a = \"b\")",
+             "CREATE RESOURCE POOL CLASSIFIER naMe WITH (a = \"b\");\n"},
+             {"create resource pool classifier eds with (a=\"a\",b=\"b\",c = true)",
+             "CREATE RESOURCE POOL CLASSIFIER eds WITH (\n\ta = \"a\",\n\tb = \"b\",\n\tc = TRUE\n);\n"},
+             {"alTer reSOurcE poOl ClaSsiFIer naMe resEt (b, c), seT (x=y, z=false)",
+             "ALTER RESOURCE POOL CLASSIFIER naMe\n\tRESET (b, c),\n\tSET (x = y, z = FALSE);\n"},
+             {"alter resource pool classifier eds reset (a), set (x=y)",
+             "ALTER RESOURCE POOL CLASSIFIER eds\n\tRESET (a),\n\tSET (x = y);\n"},
+            {"dRop reSourCe poOl ClaSsiFIer naMe",
+             "DROP RESOURCE POOL CLASSIFIER naMe;\n"},
         };
 
         TSetup setup;

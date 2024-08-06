@@ -593,7 +593,7 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
 
         PersistForceTraversal(db);
 
-        db.Table<Schema::ForceTraversals>().Key(operation.OperationId, operation.PathId.OwnerId, operation.PathId.LocalPathId).Delete();
+//        db.Table<Schema::ForceTraversals>().Key(operation.OperationId, operation.PathId.OwnerId, operation.PathId.LocalPathId).Delete();
         ForceTraversals.pop_front();
     } else if (!ScheduleTraversalsByTime.Empty()){
         LastTraversalWasForce = false;

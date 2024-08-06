@@ -142,6 +142,7 @@ private:
         serverSettings.SetYtGateway(Settings_.YtGateway);
         serverSettings.S3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
         serverSettings.SetInitializeFederatedQuerySetupFactory(true);
+        serverSettings.SetVerbose(false);
 
         SetLoggerSettings(serverSettings);
         SetFunctionRegistry(serverSettings);

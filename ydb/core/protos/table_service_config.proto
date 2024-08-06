@@ -315,4 +315,6 @@ message TTableServiceConfig {
         }
     };
     optional TComputePoolConfiguration PoolsConfiguration = 68;
+    
+    optional bool EnableRowsDuplicationCheck = 69 [ default = false ];
 };

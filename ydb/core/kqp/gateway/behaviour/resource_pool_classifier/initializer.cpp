@@ -36,6 +36,7 @@ void TResourcePoolClassifierInitializer::DoPrepare(NMetadata::NInitializer::IIni
     }
     result.emplace_back(NMetadata::NInitializer::TACLModifierConstructor::GetReadOnlyModifier(TResourcePoolClassifierConfig::GetBehaviour()->GetStorageTablePath(), "acl"));
     result.emplace_back(NMetadata::NInitializer::TACLModifierConstructor::GetReadOnlyModifier(TResourcePoolClassifierConfig::GetBehaviour()->GetStorageHistoryTablePath(), "acl_history"));
+    controller->OnPreparationFinished(result);
 }
 
 }  // namespace NKikimr::NKqp

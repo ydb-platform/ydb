@@ -44,7 +44,7 @@ NMetadata::NInternal::TTableRecord TResourcePoolClassifierConfig::SerializeToRec
     NMetadata::NInternal::TTableRecord result;
     result.SetColumn(TDecoder::Database, NMetadata::NInternal::TYDBValue::Utf8(Database));
     result.SetColumn(TDecoder::Name, NMetadata::NInternal::TYDBValue::Utf8(Name));
-    result.SetColumn(TDecoder::Rank, NMetadata::NInternal::TYDBValue::UInt64(Rank));
+    result.SetColumn(TDecoder::Rank, NMetadata::NInternal::TYDBValue::Int64(Rank));
     result.SetColumn(TDecoder::ResourcePool, NMetadata::NInternal::TYDBValue::Utf8(ResourcePool));
     result.SetColumn(TDecoder::Membername, NMetadata::NInternal::TYDBValue::Utf8(Membername));
     return result;

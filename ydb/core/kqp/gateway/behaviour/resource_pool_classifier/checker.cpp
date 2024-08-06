@@ -34,24 +34,9 @@ public:
     void OnRunQuery() override {
         const auto& tablePath = TResourcePoolClassifierConfig::GetBehaviour()->GetStorageTablePath();
 
-        TString sql = TStringBuilder() << R"(
+        TStringBuilder sql = TStringBuilder() << R"(
             -- TRanksCheckerActor::OnRunQuery
-            PRAGMA AnsiInForEmptyOrNullableItemsCollections;
-
             DECLARE $database AS Text;
-            DECLARE $ranks AS List<Int64>;
-
-            SELECT
-                rank, name
-            FROM `)" << tablePath << R"(`
-            WHERE database = $database
-              AND rank IN $ranks;
-
-            SELECT
-                MAX(rank) AS MaxRank,
-                COUNT(*) AS NumberClassifiers
-            FROM `)" << tablePath << R"(`
-            WHERE database = $database;
         )";
 
         NYdb::TParamsBuilder params;
@@ -60,23 +45,47 @@ public:
                 .Utf8(Database)
                 .Build();
 
-        auto& param = params.AddParam("$ranks").BeginList();
-        for (const auto& [rank, _] : RanksToCheck) {
-            param.AddListItem().Int64(rank);
+        if (!RanksToCheck.empty()) {
+            sql << R"(
+                DECLARE $ranks AS List<Int64>;
+                PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+
+                SELECT
+                    rank, name
+                FROM `)" << tablePath << R"(`
+                WHERE database = $database
+                  AND rank IN $ranks;
+            )";
+
+            auto& param = params.AddParam("$ranks").BeginList();
+            for (const auto& [rank, _] : RanksToCheck) {
+                param.AddListItem().Int64(rank);
+            }
+            param.EndList().Build();
+
+            ExpectedResultSets++;
         }
-        param.EndList().Build();
+
+        sql << R"(
+            SELECT
+                MAX(rank) AS MaxRank,
+                COUNT(*) AS NumberClassifiers
+            FROM `)" << tablePath << R"(`
+            WHERE database = $database;
+        )";
 
         RunDataQuery(sql, &params, TTxControl::ContinueTx());
     }
 
     void OnQueryResult() override {
-        if (ResultSets.size() != 2) {
+        if (ResultSets.size() != ExpectedResultSets) {
             Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
             return;
         }
 
-        {   // Ranks description
-            NYdb::TResultSetParser result(ResultSets[0]);
+        ui64 resultSetId = 0;
+        if (!RanksToCheck.empty()) {
+            NYdb::TResultSetParser result(ResultSets[resultSetId++]);
             while (result.TryNextRow()) {
                 TMaybe<i64> rank = result.ColumnParser("rank").GetOptionalInt64();
                 if (!rank) {
@@ -89,14 +98,14 @@ public:
                 }
 
                 if (auto it = RanksToCheck.find(*rank); it != RanksToCheck.end() && it->second != *name) {
-                    Finish(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder() << "Classifier with rank " << *rank << " already exists (classifier name " << it->second << ")");
+                    Finish(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder() << "Classifier with rank " << *rank << " already exists, its name " << *name);
                     return;
                 }
             }
         }
 
         {   // Classifiers stats
-            NYdb::TResultSetParser result(ResultSets[1]);
+            NYdb::TResultSetParser result(ResultSets[resultSetId++]);
             if (!result.TryNextRow()) {
                 Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
                 return;
@@ -117,6 +126,7 @@ private:
     const TString Database;
     const std::unordered_map<i64, TString> RanksToCheck;
 
+    ui64 ExpectedResultSets = 1;
     i64 MaxRank = 0;
     ui64 NumberClassifiers = 0;
 };
@@ -131,6 +141,7 @@ public:
     {}
 
     void Bootstrap() {
+        Become(&TResourcePoolClassifierPreparationActor::StateFunc);
         ValidateRanks();
         GetDatabaseInfo();
     }
@@ -152,7 +163,7 @@ public:
                 continue;
             }
             if (maxRank > std::numeric_limits<i64>::max() - CLASSIFIER_RANK_OFFSET) {
-                FailAndPassAway(TStringBuilder() << "The rank could not be set automatically, the maximum rank of the resource pool classifier is too high " << ev->Get()->MaxRank);
+                FailAndPassAway(TStringBuilder() << "The rank could not be set automatically, the maximum rank of the resource pool classifier is too high: " << ev->Get()->MaxRank);
                 return;
             }
 
@@ -244,11 +255,7 @@ private:
     }
 
     void FailAndPassAway(const TString& message, Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
-        NYql::TIssue rootIssue(TStringBuilder() << message << ", " << status);
-        for (const auto& issue : issues) {
-            rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
-        }
-        FailAndPassAway(rootIssue.ToString(true));
+        FailAndPassAway(TStringBuilder() << message << ", status: " << status << ", reason: " << issues.ToOneLineString());
     }
 
     void FailAndPassAway(const TString& message) {

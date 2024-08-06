@@ -24,6 +24,14 @@ ui64 TManager::BuildInternalGroupId(const ui64 externalGroupId) {
     return it->second;
 }
 
+std::optional<ui64> TManager::GetInternalGroupIdOptional(const ui64 externalGroupId) const {
+    auto it = ExternalGroupIntoInternalGroup.find(externalGroupId);
+    if (it != ExternalGroupIntoInternalGroup.end()) {
+        return it->second;
+    }
+    return std::nullopt;
+}
+
 ui64 TManager::GetInternalGroupIdVerified(const ui64 externalGroupId) const {
     auto it = ExternalGroupIntoInternalGroup.find(externalGroupId);
     AFL_VERIFY(it != ExternalGroupIntoInternalGroup.end());
@@ -63,10 +71,10 @@ void TManager::RegisterAllocation(const std::shared_ptr<IAllocation>& task, cons
     allocationInfo->AddGroupId(internalGroupId);
     if (task->IsAllocated()) {
         ReadyAllocations.AddAllocation(internalGroupId, allocationInfo);
-    } else if (WaitAllocations.GetMinGroupId().value_or(externalGroupId) < externalGroupId) {
+    } else if (WaitAllocations.GetMinGroupId().value_or(internalGroupId) < internalGroupId) {
         WaitAllocations.AddAllocation(internalGroupId, allocationInfo);
     } else if (Counters.GetAllocatedBytes().Val() + allocationInfo->GetAllocatedVolume() <= Config.GetMemoryLimit() ||
-               externalGroupId == GetMinInternalGroupIdOptional().value_or(externalGroupId)) {
+               internalGroupId <= GetMinInternalGroupIdOptional().value_or(internalGroupId)) {
         allocationInfo->Allocate(OwnerActorId);
         ReadyAllocations.AddAllocation(internalGroupId, allocationInfo);
     } else {
@@ -107,17 +115,22 @@ void TManager::UnregisterAllocation(const ui64 allocationId) {
 }
 
 void TManager::UnregisterGroup(const ui64 externalGroupId) {
-    const ui64 usageGroupId = GetInternalGroupIdVerified(externalGroupId);
+    const std::optional<ui64> usageGroupId = GetInternalGroupIdOptional(externalGroupId);
+    if (!usageGroupId) {
+        return;
+    }
+    AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "remove_group")("external_group_id", externalGroupId)(
+        "internal_group_id", usageGroupId);
     ExternalGroupIntoInternalGroup.erase(externalGroupId);
     auto minGroupId = GetMinInternalGroupIdOptional();
-    if (auto data = WaitAllocations.ExtractGroup(usageGroupId)) {
+    if (auto data = WaitAllocations.ExtractGroup(*usageGroupId)) {
         for (auto&& [_, allocation] : *data) {
-            GetAllocationInfoVerified(allocation->GetIdentifier()).RemoveGroup(usageGroupId);
+            GetAllocationInfoVerified(allocation->GetIdentifier()).RemoveGroup(*usageGroupId);
         }
     }
-    if (auto data = ReadyAllocations.ExtractGroup(usageGroupId)) {
+    if (auto data = ReadyAllocations.ExtractGroup(*usageGroupId)) {
         for (auto&& [_, allocation] : *data) {
-            GetAllocationInfoVerified(allocation->GetIdentifier()).RemoveGroup(usageGroupId);
+            GetAllocationInfoVerified(allocation->GetIdentifier()).RemoveGroup(*usageGroupId);
         }
     }
     if (minGroupId && *minGroupId == externalGroupId) {

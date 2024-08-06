@@ -39,6 +39,7 @@ public:
     }
 
     ui32 GetIntervalId() const {
+        AFL_VERIFY(IntervalGroupGuard);
         return IntervalGroupGuard->GetGroupId();
     }
 

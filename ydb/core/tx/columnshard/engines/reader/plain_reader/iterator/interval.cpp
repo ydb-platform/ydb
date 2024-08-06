@@ -1,4 +1,5 @@
 #include "interval.h"
+
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
@@ -50,8 +51,7 @@ TFetchingInterval::TFetchingInterval(const NArrow::NMerger::TSortableBatchPositi
     , Sources(sources)
     , IntervalIdx(intervalIdx)
     , IntervalGroupGuard(NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildGroupGuard())
-    , IntervalStateGuard(Context->GetCommonContext()->GetCounters().CreateIntervalStateGuard())
-{
+    , IntervalStateGuard(Context->GetCommonContext()->GetCounters().CreateIntervalStateGuard()) {
     AFL_VERIFY(Sources.size());
     for (auto&& [_, i] : Sources) {
         if (!i->IsDataReady()) {
@@ -91,4 +91,4 @@ void TFetchingInterval::OnPartSendingComplete() {
     NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation({ task }, GetIntervalId());
 }
 
-}
+}   // namespace NKikimr::NOlap::NReader::NPlain

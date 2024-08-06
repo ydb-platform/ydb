@@ -415,7 +415,7 @@ public:
 void RegisterExtensions(const TVector<TExtensionDesc>& extensions, bool typesOnly,
     IExtensionSqlParser& parser, IExtensionLoader* loader);
 // converts all library paths to basenames
-TString ExportExtensions(TMaybe<TSet<ui32>> filter = Nothing());
+TString ExportExtensions(const TMaybe<TSet<ui32>>& filter = Nothing());
 void ImportExtensions(const TString& exported, bool typesOnly, IExtensionLoader* loader);
 void ClearExtensions();
 

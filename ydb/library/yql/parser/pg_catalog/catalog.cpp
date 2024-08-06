@@ -3481,7 +3481,7 @@ void RegisterExtensions(const TVector<TExtensionDesc>& extensions, bool typesOnl
     }
 }
 
-TString ExportExtensions(TMaybe<TSet<ui32>> filter) {
+TString ExportExtensions(const TMaybe<TSet<ui32>>& filter) {
     auto& catalog = TCatalog::Instance();
     if (catalog.Extensions.empty()) {
         return TString();

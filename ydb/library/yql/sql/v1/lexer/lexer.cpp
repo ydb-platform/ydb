@@ -2,8 +2,8 @@
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/parser/proto_ast/collect_issues/collect_issues.h>
-#include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv4Lexer.h>
-#include <ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv4Lexer.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Antlr4Lexer.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1Antlr4Lexer.h>
 
 #if defined(_tsan_enabled_)
 #include <util/system/mutex.h>
@@ -34,10 +34,10 @@ public:
 #endif
         NSQLTranslation::TErrorCollectorOverIssues collector(newIssues, maxErrors, "");
         if (Ansi) {
-            NProtoAST::TLexerTokensCollector<NALPAnsi::SQLv4Lexer> tokensCollector(query, queryName);
+            NProtoAST::TLexerTokensCollector<NALPAnsi::SQLv1Antlr4Lexer> tokensCollector(query, queryName);
             tokensCollector.CollectTokens(collector, onNextToken);
         } else {
-            NProtoAST::TLexerTokensCollector<NALPDefault::SQLv4Lexer> tokensCollector(query, queryName);
+            NProtoAST::TLexerTokensCollector<NALPDefault::SQLv1Antlr4Lexer> tokensCollector(query, queryName);
             tokensCollector.CollectTokens(collector, onNextToken);
         }
 

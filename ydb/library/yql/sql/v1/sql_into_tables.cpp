@@ -7,7 +7,7 @@ using namespace NYql;
 
 namespace NSQLTranslationV1 {
 
-using NALPDefault::SQLv4Lexer;
+using NALPDefault::SQLv1Antlr4Lexer;
 
 using namespace NSQLv1Generated;
 

@@ -266,6 +266,7 @@ namespace NProtoAST {
                     last.Content = token->getText();
                     last.Line = token->getLine();
                     last.LinePos = token->getCharPositionInLine();
+                    last.IsAntlr4 = true;
                     onNextToken(std::move(last));
                     if (isEOF) {
                         break;

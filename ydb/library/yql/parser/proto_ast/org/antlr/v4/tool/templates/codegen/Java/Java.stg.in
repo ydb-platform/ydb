@@ -57,11 +57,12 @@ message TToken {
     uint32 Column = 3;
     uint32 Element = 4;
     string Value = 5;
+    bool IsAntlr4 = 6;
 }
 
 <parser>
 
-message T<file.parser.name>AST {
+message TSQLv1ParserAST {
     <first(parser.funcs):{r | TRule_<r.currentRule.name> Rule_<r.currentRule.name> = 1;}; separator="">
 }
 >>

@@ -33,7 +33,7 @@ ui64 TManager::GetInternalGroupIdVerified(const ui64 externalGroupId) const {
 const std::shared_ptr<TManager::TAllocationInfo>& TManager::RegisterAllocationImpl(const std::shared_ptr<IAllocation>& task) {
     auto it = AllocationInfo.find(task->GetIdentifier());
     if (it == AllocationInfo.end()) {
-        it = AllocationInfo.emplace(task->GetIdentifier(), std::make_shared<TAllocationInfo>(task, &Allocated, &Waiting)).first;
+        it = AllocationInfo.emplace(task->GetIdentifier(), std::make_shared<TAllocationInfo>(task, &Counters)).first;
     }
     return it->second;
 }
@@ -65,7 +65,7 @@ void TManager::RegisterAllocation(const std::shared_ptr<IAllocation>& task, cons
         ReadyAllocations.AddAllocation(internalGroupId, allocationInfo);
     } else if (WaitAllocations.GetMinGroupId().value_or(externalGroupId) < externalGroupId) {
         WaitAllocations.AddAllocation(internalGroupId, allocationInfo);
-    } else if (!Allocated.Val() || Allocated.Val() + allocationInfo->GetAllocatedVolume() <= Config.GetMemoryLimit() ||
+    } else if (Counters.GetAllocatedBytes().Val() + allocationInfo->GetAllocatedVolume() <= Config.GetMemoryLimit() ||
                externalGroupId == GetMinInternalGroupIdOptional().value_or(externalGroupId)) {
         allocationInfo->Allocate(OwnerActorId);
         ReadyAllocations.AddAllocation(internalGroupId, allocationInfo);

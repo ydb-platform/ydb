@@ -29,21 +29,46 @@ public:
     }
 };
 
+class TCommonCounters {
+private:
+    YDB_READONLY_DEF(TPositiveControlInteger, AllocatedBytes);
+    YDB_READONLY_DEF(TPositiveControlInteger, WaitingBytes);
+    YDB_READONLY_DEF(TPositiveControlInteger, AllocatedCount);
+    YDB_READONLY_DEF(TPositiveControlInteger, WaitingCount);
+public:
+    void AddAllocated(const ui64 bytes) {
+        AllocatedBytes.Add(bytes);
+        AllocatedCount.Add(1);
+    }
+
+    void SubAllocated(const ui64 bytes) {
+        AllocatedBytes.Sub(bytes);
+        AllocatedCount.Sub(1);
+    }
+    void AddWaiting(const ui64 bytes) {
+        WaitingBytes.Add(bytes);
+        WaitingCount.Add(1);
+    }
+
+    void SubWaiting(const ui64 bytes) {
+        WaitingBytes.Sub(bytes);
+        WaitingCount.Sub(1);
+    }
+};
+
 class TManager {
 private:
     const TConfig Config;
     const TString Name;
     const TCounters& Signals;
     const NActors::TActorId OwnerActorId;
-
-    TPositiveControlInteger Allocated;
-    TPositiveControlInteger Waiting;
+    TCommonCounters Counters;
 
     ui64 GetFreeMemory() const {
-        if (Config.GetMemoryLimit() < Allocated.Val()) {
+        if (Config.GetMemoryLimit() < Counters.GetAllocatedBytes().Val()) {
             return 0;
         } else {
-            return Config.GetMemoryLimit() - Allocated.Val();
+            return Config.GetMemoryLimit() - Counters.GetAllocatedBytes().Val();
         }
     }
 
@@ -53,29 +78,28 @@ private:
         YDB_READONLY_DEF(THashSet<ui64>, GroupIds);
         ui64 AllocatedVolume = 0;
         YDB_READONLY(ui64, Identifier, 0);
-        TPositiveControlInteger* WaitMemory = nullptr;
-        TPositiveControlInteger* AllocatedMemory = nullptr;
+        TCommonCounters* Counters = nullptr;
 
     public:
         ~TAllocationInfo() {
             if (IsAllocated()) {
-                AllocatedMemory->Sub(AllocatedVolume);
+                Counters->SubAllocated(AllocatedVolume);
             } else {
-                WaitMemory->Sub(AllocatedVolume);
+                Counters->SubWaiting(AllocatedVolume);
             }
         }
 
         void SetAllocatedVolume(const ui64 value) {
             if (IsAllocated()) {
-                AllocatedMemory->Sub(AllocatedVolume);
+                Counters->SubAllocated(AllocatedVolume);
             } else {
-                WaitMemory->Sub(AllocatedVolume);
+                Counters->SubWaiting(AllocatedVolume);
             }
             AllocatedVolume = value;
             if (IsAllocated()) {
-                AllocatedMemory->Add(AllocatedVolume);
+                Counters->AddAllocated(AllocatedVolume);
             } else {
-                WaitMemory->Add(AllocatedVolume);
+                Counters->AddWaiting(AllocatedVolume);
             }
         }
 
@@ -88,8 +112,8 @@ private:
             Allocation->OnAllocated(
                 std::make_shared<TAllocationGuard>(ownerId, Allocation->GetIdentifier(), Allocation->GetMemory()), Allocation);
             Allocation = nullptr;
-            AllocatedMemory->Add(AllocatedVolume);
-            WaitMemory->Sub(AllocatedVolume);
+            Counters->SubWaiting(AllocatedVolume);
+            Counters->AddAllocated(AllocatedVolume);
         }
 
         bool IsAllocated() const {
@@ -108,20 +132,18 @@ private:
             AFL_VERIFY(GroupIds.erase(groupId));
         }
 
-        TAllocationInfo(const std::shared_ptr<IAllocation>& allocation, TPositiveControlInteger* allocatedMemory,
-            TPositiveControlInteger* waitMemory)
+        TAllocationInfo(const std::shared_ptr<IAllocation>& allocation, TCommonCounters* counters)
             : Allocation(allocation)
             , Identifier(Allocation->GetIdentifier())
-            , WaitMemory(waitMemory)
-            , AllocatedMemory(allocatedMemory)
+            , Counters(counters)
         {
             AFL_VERIFY(Allocation);
             AllocatedVolume = Allocation->GetMemory();
             if (allocation->IsAllocated()) {
                 Allocation = nullptr;
-                AllocatedMemory->Add(AllocatedVolume);
+                Counters->AddAllocated(AllocatedVolume);
             } else {
-                WaitMemory->Add(AllocatedVolume);
+                Counters->AddWaiting(AllocatedVolume);
             }
         }
     };
@@ -248,8 +270,10 @@ private:
     ui64 GetMinInternalGroupIdVerified() const;
     void TryAllocateWaiting();
     void RefreshSignals() const {
-        Signals.MemoryUsageBytes->Set(Allocated.Val());
-        Signals.MemoryWaitingBytes->Set(Waiting.Val());
+        Signals.MemoryUsageCount->Set(Counters.GetAllocatedCount().Val());
+        Signals.MemoryWaitingCount->Set(Counters.GetWaitingCount().Val());
+        Signals.MemoryUsageBytes->Set(Counters.GetAllocatedBytes().Val());
+        Signals.MemoryWaitingBytes->Set(Counters.GetWaitingBytes().Val());
     }
 
 public:

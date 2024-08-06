@@ -3,7 +3,7 @@
 {% include [./_includes/alert.md](./_includes/alert_preview.md) %}
 
 Поддержка исполнения запросов в {{ydb-name}} на синтаксисе PostgreSQL реализована с помощью слоя совместимости:
-1. Программа отправляет запросы в YDB, где их обрабатывает компонент под названием `pgwire`. Pgwire реализует [сетевой протокол](https://postgrespro.ru/docs/postgresql/14/protocol) PostgreSQL и передает команды в query processor.
+1. Программа отправляет запросы в {{ ydb-short-name }}, где их обрабатывает компонент под названием `pgwire`. Pgwire реализует [сетевой протокол](https://www.postgresql.org/docs/16/protocol.html) PostgreSQL и передает команды в query processor.
 2. Query processor транслирует PostgreSQL запросы в YQL AST.
 3. После обработки запросов результаты собираются и отправляются обратно в программу, отправившую запрос, по сетевому протоколу PostgreSQL. При обработке запроса он может распараллеливаться и исполняться на произвольном количестве узлов {{ydb-name}}.
 

@@ -107,7 +107,7 @@ public:
     }
 
     void OnWritePutBlobsSuccess(const ui64 rowsWritten) const {
-        IncCounter(NColumnShard::COUNTER_UPSERT_ROWS_WRITTEN, rowsWritten);
+        IncCounter(NColumnShard::COUNTER_ROWS_WRITTEN, rowsWritten);
     }
 
     void OnDropPortionEvent(const ui64 rawBytes, const ui64 blobBytes, const ui64 rows) const {
@@ -117,7 +117,7 @@ public:
     }
 
     void FillStats(::NKikimrTableStats::TTableStats& output) const {
-        output.SetRowUpdates(GetValue(COUNTER_UPSERT_ROWS_WRITTEN));
+        output.SetRowUpdates(GetValue(COUNTER_ROWS_WRITTEN));
         output.SetRowDeletes(GetValue(COUNTER_ROWS_ERASED));
         output.SetRowReads(0);   // all reads are range reads
         output.SetRangeReadRows(GetValue(COUNTER_READ_INDEX_ROWS));

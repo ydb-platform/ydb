@@ -815,7 +815,7 @@ private:
 
         TCounterPtr ColumnShardScannedBytes_;
         TCounterPtr ColumnShardScannedRows_;
-        TCounterPtr ColumnShardUpsertRowsWritten_;
+        TCounterPtr ColumnShardRowsWritten_;
         TCounterPtr ColumnShardUpsertBytesWritten_;
         TCounterPtr ColumnShardErasedBytes_;
         TCounterPtr ColumnShardErasedRows_;
@@ -967,7 +967,7 @@ private:
 
                 ColumnShardScannedBytes_ = appGroup->GetCounter("ColumnShard/ScannedBytes");
                 ColumnShardScannedRows_ = appGroup->GetCounter("ColumnShard/ScannedRows");
-                ColumnShardUpsertRowsWritten_ = appGroup->GetCounter("ColumnShard/UpsertRowsWritten");
+                ColumnShardRowsWritten_ = appGroup->GetCounter("ColumnShard/RowsWritten");
                 ColumnShardUpsertBytesWritten_ = appGroup->GetCounter("ColumnShard/UpsertBytesWritten");
                 ColumnShardErasedBytes_ = appGroup->GetCounter("ColumnShard/BytesErased");
                 ColumnShardErasedRows_ = appGroup->GetCounter("ColumnShard/RowsErased");
@@ -1023,7 +1023,7 @@ private:
                 ColumnShardScanBytes_->Set(ColumnShardScannedBytes_->Val());
                 ColumnShardWriteRows_->Set(0);
                 ColumnShardWriteBytes_->Set(0);
-                ColumnShardBulkUpsertRows_->Set(ColumnShardUpsertRowsWritten_->Val());
+                ColumnShardBulkUpsertRows_->Set(ColumnShardRowsWritten_->Val());
                 ColumnShardBulkUpsertBytes_->Set(ColumnShardUpsertBytesWritten_->Val());
                 ColumnShardEraseRows_->Set(ColumnShardErasedRows_->Val());
                 ColumnShardEraseBytes_->Set(ColumnShardErasedBytes_->Val());

@@ -6214,8 +6214,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // ALTER RESOURCE POOL
         checkDisabled(R"(
             ALTER RESOURCE POOL MyResourcePool
-                SET (CONCURRENT_QUERY_LIMIT = 30),
-                SET QUEUE_SIZE 100,
+                SET (CONCURRENT_QUERY_LIMIT = 30, QUEUE_SIZE = 100),
                 RESET (QUERY_MEMORY_LIMIT_PERCENT_PER_NODE);
             )");
 
@@ -6252,7 +6251,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         result = session.ExecuteSchemeQuery(R"(
             ALTER RESOURCE POOL MyResourcePool
-                SET ANOTHER_LIMIT 5,
+                SET (ANOTHER_LIMIT = 5),
                 RESET (SOME_LIMIT);
             )").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
@@ -6365,8 +6364,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto query = R"(
                 ALTER RESOURCE POOL MyResourcePool
-                    SET (CONCURRENT_QUERY_LIMIT = 30),
-                    SET QUEUE_SIZE 100,
+                    SET (CONCURRENT_QUERY_LIMIT = 30, QUEUE_SIZE = 100),
                     RESET (QUERY_MEMORY_LIMIT_PERCENT_PER_NODE);
                 )";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -6395,8 +6393,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto query = R"(
             ALTER RESOURCE POOL MyResourcePool
-                SET (CONCURRENT_QUERY_LIMIT = 30),
-                SET QUEUE_SIZE 100,
+                SET (CONCURRENT_QUERY_LIMIT = 30, QUEUE_SIZE = 100),
                 RESET (QUERY_MEMORY_LIMIT_PERCENT_PER_NODE);
             )";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();

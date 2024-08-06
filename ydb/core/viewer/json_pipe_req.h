@@ -220,6 +220,10 @@ protected:
         return Requests == 1;
     }
 
+    bool NoMoreRequests(ui32 requestsDone = 0) const {
+        return Requests == requestsDone;
+    }
+
     TRequestState GetRequest() const;
     void ReplyAndPassAway(TString data, const TString& error = {});
 

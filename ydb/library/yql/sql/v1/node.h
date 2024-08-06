@@ -1243,6 +1243,12 @@ namespace NSQLTranslationV1 {
         bool Temporary = false;
     };
 
+    struct TTableRef;
+    struct TAnalyzeParams {
+        std::shared_ptr<TTableRef> Table;
+        TVector<TString> Columns;
+    };
+
     struct TAlterTableParameters {
         TVector<TColumnSchema> AddColumns;
         TVector<TString> DropColumns;

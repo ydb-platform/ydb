@@ -304,7 +304,7 @@ A **shared cache** is a memory buffer that stores data pages recently accessed a
 
 #### Memory controller {#memory-controller}
 
-A **memory controller** is an actor that [manages](../../configuration/config.md#memory-controller) {{ ydb-short-name }} components memory limits.
+A **memory controller** is an actor that manages {{ ydb-short-name }} components [memory limits](../deploy/configuration/config.md#memory-controller).
 
 ### Tablet types {#tablet-types}
 

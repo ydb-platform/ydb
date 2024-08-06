@@ -107,15 +107,8 @@ public:
     }
 
     void OnWritePutBlobsSuccess(const ui64 rows, const NKikimr::NEvWrite::EModificationType modificationType) const {
-        switch (modificationType) {
-            case NKikimr::NEvWrite::EModificationType::Upsert:
-            case NKikimr::NEvWrite::EModificationType::Insert:
-            case NKikimr::NEvWrite::EModificationType::Update:
-            case NKikimr::NEvWrite::EModificationType::Replace:
-                IncCounter(NColumnShard::COUNTER_UPSERT_ROWS_WRITTEN, rows);
-                break;
-            case NKikimr::NEvWrite::EModificationType::Delete:
-                break;
+        if (modificationType != NKikimr::NEvWrite::EModificationType::Delete) {
+            IncCounter(NColumnShard::COUNTER_UPSERT_ROWS_WRITTEN, rows);
         }
     }
 

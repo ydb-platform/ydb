@@ -106,11 +106,12 @@ public:
             return true;
         }
 
-        if (Limit_.load() >= 0) {
+        auto limit = Limit_.load();
+        if (limit >= 0) {
             while (true) {
                 TryUpdateAvailable();
                 auto available = Available_.load();
-                if (available < 0) {
+                if ((limit > 0 && available < 0) || (limit == 0 && available <= 0)) {
                     return false;
                 }
                 if (Available_.compare_exchange_weak(available, available - amount)) {
@@ -472,7 +473,16 @@ private:
         std::vector<TThrottlerRequestPtr> readyList;
 
         auto limit = Limit_.load();
-        while (!Requests_.empty() && (limit < 0 || Available_ >= 0)) {
+        auto canSpend = [&] {
+            auto available = Available_.load();
+            return
+                limit < 0 ||
+                // NB(coteeq): Do not spend tokens if limit is zero.
+                (limit == 0 && available > 0) ||
+                (limit > 0 && available >= 0);
+        };
+
+        while (!Requests_.empty() && canSpend()) {
             const auto& request = Requests_.front();
             if (!request->Set.test_and_set()) {
                 NTracing::TTraceContextGuard traceGuard(std::move(request->TraceContext));

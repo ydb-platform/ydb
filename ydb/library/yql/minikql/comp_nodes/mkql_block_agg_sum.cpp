@@ -636,8 +636,8 @@ std::unique_ptr<typename TTag::TPreparedAggregator> PrepareSum(TTupleType* tuple
         sumRetType = TDataType::Create(NUdf::TDataType<ui64>::Id, env);
     } else if (*dataType->GetDataSlot() == NUdf::EDataSlot::Decimal) {
         auto decimalType = static_cast<TDataDecimalType*>(dataType);
-        auto [precision, scale] = decimalType->GetParams();
-        sumRetType = TDataDecimalType::Create(precision, scale, env);
+        auto [_, scale] = decimalType->GetParams();
+        sumRetType = TDataDecimalType::Create(NYql::NDecimal::MaxPrecision, scale, env);
     } else if (*dataType->GetDataSlot() == NUdf::EDataSlot::Interval) {
         sumRetType = TDataDecimalType::Create(NYql::NDecimal::MaxPrecision, 0, env);
     } else {

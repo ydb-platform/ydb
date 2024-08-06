@@ -12,7 +12,7 @@ User logic is located between the basic tablet and the user and lets you process
 
 ### How does a tablet store data and what are they like? {#storage}
 
-A basic tablet is an LSM tree that holds all of its table data. One level below the basic tablet is BlobStorage that, roughly speaking, is KeyValue storage that stores binary large objects (blobs). *BLOB* is a binary fragment from 1 byte to 10 MB in size, which has a fixed ID (that is usually called *BlobId* and is of the TLogoBlobID type) and contains related data. Storage is immutable, meaning that only one value corresponds to each ID and it cannot change over time. You can write and read a blob and then delete it when you no longer need it.
+A basic tablet is an [LSM tree](glossary.md#lsm) that holds all of its table data. One level below the basic tablet is BlobStorage that, roughly speaking, is KeyValue storage that stores binary large objects (blobs). *BLOB* is a binary fragment from 1 byte to 10 MB in size, which has a fixed ID (that is usually called *BlobId* and is of the TLogoBlobID type) and contains related data. Storage is immutable, meaning that only one value corresponds to each ID and it cannot change over time. You can write and read a blob and then delete it when you no longer need it.
 
 To learn more about blobs and distributed storages, see [here](../../distributed_storage.md).
 

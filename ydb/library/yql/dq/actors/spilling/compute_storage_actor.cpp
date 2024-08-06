@@ -64,14 +64,12 @@ public:
 protected:
 
     void FailWithError(const TString& error) {
-        std::cerr << "MISHA ERROR CALLBACK: " << (bool)ErrorCallback_ << std::endl;
         if (!ErrorCallback_) Y_ABORT("Error: %s", error.c_str());
 
         LOG_E("Error: " << error);
         ErrorCallback_(error);
         SendInternal(SpillingActorId_, new TEvents::TEvPoison);
-        // Become(&TDqComputeStorageActor::DeadState);
-        TBase::PassAway();
+        PassAway();
     }
 
     void SendInternal(const TActorId& recipient, IEventBase* ev, TEventFlags flags = IEventHandle::FlagTrackDelivery) {
@@ -95,24 +93,12 @@ private:
         }
     }
 
-    STATEFN(DeadState) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvents::TEvPoison, HandleWork);
-            default: {
-                LOG_E("Skip unexpected event " << ev->GetTypeRewrite() << " at DeadState");
-            }
-        }
-    }
-
     void HandleWork(TEvents::TEvPoison::TPtr&) {
         SendInternal(SpillingActorId_, new TEvents::TEvPoison);
         PassAway();
     }
 
     void HandleWork(TEvPut::TPtr& ev) {
-        std::cerr << "MISHA PUT\n";
-        FailWithError("HELLO FROM MISHA");
-        return;
         auto& msg = *ev->Get();
         ui64 size = msg.Blob_.size();
 

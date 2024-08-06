@@ -87,9 +87,6 @@ public:
     }
 
 private:
-    void OnError(TEvError::TPtr& ev) {
-        throw yexception() << ev->ToString();
-    }
 
     void OnStatisticsRequest(TEvStatistics::TPtr& ev) {
 
@@ -446,9 +443,7 @@ private:
 
         if (settings.GetEnableSpilling()) {
             auto wakeUpCallback = ev->Get()->ExecCtx->GetWakeupCallback();
-            const auto errorCallback = [this](const TString& error) {
-                Send(SelfId(), new TEvError(error));
-            };
+            auto errorCallback = ev->Get()->ExecCtx->GetErrorCallback();
             TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(TxId, NActors::TActivationContext::ActorSystem(), wakeUpCallback, errorCallback));
         }
 

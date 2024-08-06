@@ -40,7 +40,7 @@ class TDqComputeStorageActor : public NActors::TActorBootstrapped<TDqComputeStor
     // void promise that completes when block is removed
     using TDeletingBlobInfo = NThreading::TPromise<void>;
 public:
-    TDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback, std::function<void(const TString& error)> errorCallback)
+    TDqComputeStorageActor(TTxId txId, const TString& spillerName, TWakeUpCallback wakeupCallback, TErrorCallback errorCallback)
         : TxId_(txId),
         SpillerName_(spillerName),
         WakeupCallback_(wakeupCallback),
@@ -243,15 +243,15 @@ private:
 
     bool IsInitialized_ = false;
 
-    std::function<void()> WakeupCallback_;
-    std::function<void(const TString& error)> ErrorCallback_;
+    TWakeUpCallback WakeupCallback_;
+    TErrorCallback ErrorCallback_;
 
     TSet<TKey> StoredBlobs_;
 };
 
 } // anonymous namespace
 
-IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback, std::function<void(const TString& error)> errorCallback) {
+IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, TWakeUpCallback wakeupCallback, TErrorCallback errorCallback) {
     return new TDqComputeStorageActor(txId, spillerName, wakeupCallback, errorCallback);
 }
 

@@ -43,7 +43,7 @@ class TDqChannelStorageActor : public IDqChannelStorageActor,
     using TBase = TActorBootstrapped<TDqChannelStorageActor>;
 public:
 
-    TDqChannelStorageActor(TTxId txId, ui64 channelId, IDqChannelStorage::TWakeUpCallback&& wakeUpCallback, IDqChannelStorage::TErrorCallback&& errorCallback, TActorSystem* actorSystem)
+    TDqChannelStorageActor(TTxId txId, ui64 channelId, TWakeUpCallback&& wakeUpCallback, TErrorCallback&& errorCallback, TActorSystem* actorSystem)
         : TxId_(txId)
         , ChannelId_(channelId)
         , WakeUpCallback_(std::move(wakeUpCallback))
@@ -163,8 +163,8 @@ private:
 private:
     const TTxId TxId_;
     const ui64 ChannelId_;
-    IDqChannelStorage::TWakeUpCallback WakeUpCallback_;
-    IDqChannelStorage::TErrorCallback ErrorCallback_;
+    TWakeUpCallback WakeUpCallback_;
+    TErrorCallback ErrorCallback_;
     TActorId SpillingActorId_;
 
     // BlobId -> promise that blob is saved
@@ -179,8 +179,8 @@ private:
 } // anonymous namespace
 
 IDqChannelStorageActor* CreateDqChannelStorageActor(TTxId txId, ui64 channelId,
-    IDqChannelStorage::TWakeUpCallback&& wakeUpCallback,
-    IDqChannelStorage::TErrorCallback&& errorCallback,
+    TWakeUpCallback&& wakeUpCallback,
+    TErrorCallback&& errorCallback,
     NActors::TActorSystem* actorSystem)
 {
     return new TDqChannelStorageActor(txId, channelId, std::move(wakeUpCallback), std::move(errorCallback), actorSystem);

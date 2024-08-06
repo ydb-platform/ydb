@@ -6,7 +6,7 @@
 namespace NYql {
 namespace NDq {
 
-TDqTaskRunnerExecutionContext::TDqTaskRunnerExecutionContext(TTxId txId, IDqChannelStorage::TWakeUpCallback&& wakeUpCallback, std::function<void(const TString& error)>&& errorCallback)
+TDqTaskRunnerExecutionContext::TDqTaskRunnerExecutionContext(TTxId txId, TWakeUpCallback&& wakeUpCallback, TErrorCallback&& errorCallback)
     : TxId_(txId)
     , WakeUpCallback_(std::move(wakeUpCallback))
     , ErrorCallback_(std::move(errorCallback))
@@ -25,11 +25,11 @@ IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64
     }
 }
 
-std::function<void()> TDqTaskRunnerExecutionContext::GetWakeupCallback() const {
+TWakeUpCallback TDqTaskRunnerExecutionContext::GetWakeupCallback() const {
     return WakeUpCallback_;
 }
 
-std::function<void(const TString&)> TDqTaskRunnerExecutionContext::GetErrorCallback() const {
+TErrorCallback TDqTaskRunnerExecutionContext::GetErrorCallback() const {
     return ErrorCallback_;
 }
 

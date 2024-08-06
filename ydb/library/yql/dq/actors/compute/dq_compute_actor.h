@@ -208,8 +208,6 @@ struct TEvDqCompute {
             : Error(error)
         { }
 
-        TEvError() = delete;
-
         TString Error;
     };
 };

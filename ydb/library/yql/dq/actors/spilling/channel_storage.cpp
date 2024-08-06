@@ -120,8 +120,8 @@ private:
 } // anonymous namespace
 
 IDqChannelStorage::TPtr CreateDqChannelStorage(TTxId txId, ui64 channelId,
-    IDqChannelStorage::TWakeUpCallback wakeUpCallback,
-    IDqChannelStorage::TErrorCallback errorCallback,
+    TWakeUpCallback wakeUpCallback,
+    TErrorCallback errorCallback,
     TActorSystem* actorSystem)
 {
     return new TDqChannelStorage(txId, channelId, std::move(wakeUpCallback), std::move(errorCallback), actorSystem);

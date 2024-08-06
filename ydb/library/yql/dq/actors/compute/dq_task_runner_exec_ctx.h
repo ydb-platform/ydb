@@ -9,19 +9,19 @@ namespace NDq {
 
 class TDqTaskRunnerExecutionContext : public TDqTaskRunnerExecutionContextBase {
 public:
-    TDqTaskRunnerExecutionContext(TTxId txId, IDqChannelStorage::TWakeUpCallback&& WakeUpCallback_, std::function<void(const TString& error)>&& ErrorCallback_);
+    TDqTaskRunnerExecutionContext(TTxId txId, TWakeUpCallback&& WakeUpCallback_, TErrorCallback&& ErrorCallback_);
 
     IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling) const override;
     IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const override;
 
-    std::function<void()> GetWakeupCallback() const override;
-    std::function<void(const TString& error)> GetErrorCallback() const override;
+    TWakeUpCallback GetWakeupCallback() const override;
+    TErrorCallback GetErrorCallback() const override;
     TTxId GetTxId() const override;
 
 private:
     const TTxId TxId_;
-    const IDqChannelStorage::TWakeUpCallback WakeUpCallback_;
-    const std::function<void(const TString& error)> ErrorCallback_;
+    const TWakeUpCallback WakeUpCallback_;
+    const TErrorCallback ErrorCallback_;
 };
 
 } // namespace NDq

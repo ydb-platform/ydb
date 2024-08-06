@@ -18,22 +18,22 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
     Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
     switch (overloadReason) {
         case EOverloadStatus::Disk:
-            Counters.GetCSCounters().OnWriteOverloadDisk();
+            Counters.OnWriteOverloadDisk();
             break;
         case EOverloadStatus::InsertTable:
-            Counters.GetCSCounters().OnWriteOverloadInsertTable(writeData.GetSize());
+            Counters.OnWriteOverloadInsertTable(writeData.GetSize());
             break;
         case EOverloadStatus::OverloadMetadata:
-            Counters.GetCSCounters().OnWriteOverloadMetadata(writeData.GetSize());
+            Counters.OnWriteOverloadMetadata(writeData.GetSize());
             break;
         case EOverloadStatus::ShardTxInFly:
-            Counters.GetCSCounters().OnWriteOverloadShardTx(writeData.GetSize());
+            Counters.OnWriteOverloadShardTx(writeData.GetSize());
             break;
         case EOverloadStatus::ShardWritesInFly:
-            Counters.GetCSCounters().OnWriteOverloadShardWrites(writeData.GetSize());
+            Counters.OnWriteOverloadShardWrites(writeData.GetSize());
             break;
         case EOverloadStatus::ShardWritesSizeInFly:
-            Counters.GetCSCounters().OnWriteOverloadShardWritesSize(writeData.GetSize());
+            Counters.OnWriteOverloadShardWritesSize(writeData.GetSize());
             break;
         case EOverloadStatus::None:
             Y_ABORT("invalid function usage");
@@ -86,7 +86,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
     auto baseAggregations = wBuffer.GetAggregations();
     wBuffer.InitReplyReceived(TMonotonic::Now());
 
-    auto wg = Counters.GetWritesMonitor()->OnFinishWrite(wBuffer.GetSumSize(), wBuffer.GetAggregations().size());
+    Counters.GetWritesMonitor()->OnFinishWrite(wBuffer.GetSumSize(), wBuffer.GetAggregations().size());
 
     for (auto&& aggr : baseAggregations) {
         const auto& writeMeta = aggr->GetWriteMeta();
@@ -158,7 +158,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     const TString dedupId = record.GetDedupId();
     const auto source = ev->Sender;
 
-    Counters.GetColumnTablesCounters()->GetPathIdCounter(tableId)->OnUpdate();
+    Counters.GetColumnTablesCounters()->GetPathIdCounter(tableId)->OnWriteEvent();
 
     std::optional<ui32> granuleShardingVersion;
     if (record.HasGranuleShardingVersion()) {
@@ -397,7 +397,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
-    auto wg = Counters.GetWritesMonitor()->OnStartWrite(arrowData->GetSize());
+    Counters.GetWritesMonitor()->OnStartWrite(arrowData->GetSize());
 
     std::optional<ui32> granuleShardingVersionId;
     if (record.HasGranuleShardingVersionId()) {

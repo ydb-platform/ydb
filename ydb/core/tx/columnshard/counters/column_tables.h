@@ -47,11 +47,11 @@ public:
         , TotalLastUpdateTime(owner.LastUpdateTime) {
     }
 
-    void OnAccess() {
+    void OnReadEvent() {
         UpdateLastAccessTime(TAppData::TimeProvider->Now());
     }
 
-    void OnUpdate() {
+    void OnWriteEvent() {
         TInstant now = TAppData::TimeProvider->Now();
         UpdateLastUpdateTime(now);
         UpdateLastAccessTime(now);

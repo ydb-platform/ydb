@@ -236,7 +236,7 @@ def main():
     batch_size_default = 30
     dir = os.path.dirname(__file__)
     git_root = f"{dir}/../.."
-    codeowners = f"{git_root}/.github/TESTOWNERS"
+    codeowners = f"{git_root}/.github/TESTOWNERS.ini"
     config = configparser.ConfigParser()
     config_file_path = f"{git_root}/.github/config/ydb_qa_db.ini"
     config.read(config_file_path)

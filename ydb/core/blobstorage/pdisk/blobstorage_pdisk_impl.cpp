@@ -13,6 +13,8 @@
 
 #include <util/system/unaligned_mem.h>
 
+constexpr size_t MAX_REQS_PER_CYCLE = 200; // 200 requests take ~0.2ms in EnqueueAll function
+
 namespace NKikimr {
 namespace NPDisk {
 
@@ -3440,7 +3442,14 @@ void TPDisk::ProcessYardInitSet() {
 }
 
 void TPDisk::EnqueueAll() {
+    TInstant start = TInstant::Now();
+
     TGuard<TMutex> guard(StateMutex);
+    size_t initialQueueSize = InputQueue.GetWaitingSize();
+    size_t processedReqs = 0;
+    size_t pushedToForsetiReqs = 0;
+
+
     while (InputQueue.GetWaitingSize() > 0) {
         TRequestBase* request = InputQueue.Pop();
         AtomicSub(InputQueueCost, request->Cost);
@@ -3483,9 +3492,17 @@ void TPDisk::EnqueueAll() {
         } else {
             if (PreprocessRequest(request)) {
                 PushRequestToForseti(request);
+                ++pushedToForsetiReqs;
             }
         }
+        ++processedReqs;
+        if (processedReqs >= MAX_REQS_PER_CYCLE) {
+            break;
+        }
     }
+
+    double spentTimeMs = (TInstant::Now() - start).MillisecondsFloat();
+    LWPROBE(PDiskEnqueueAllDetails, PDiskId, initialQueueSize, processedReqs, pushedToForsetiReqs, spentTimeMs);
 }
 
 void TPDisk::Update() {

@@ -146,6 +146,7 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
     AFL_VERIFY(!Script->IsFinished(CurrentStepIdx));
     while (!Script->IsFinished(CurrentStepIdx)) {
         if (source->GetStageData().IsEmpty()) {
+            source->OnEmptyStageData();
             break;
         }
         auto step = Script->GetStep(CurrentStepIdx);

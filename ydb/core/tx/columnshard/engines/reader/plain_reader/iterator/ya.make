@@ -18,6 +18,7 @@ PEERDIR(
     ydb/core/formats/arrow
     ydb/core/tx/columnshard/blobs_action
     ydb/core/tx/conveyor/usage
+    ydb/core/tx/limiter/grouped_memory/usage
 )
 
 END()

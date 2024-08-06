@@ -41,7 +41,7 @@ public:
     const ui64 RejectMemoryIntervalLimit = NYDBTest::TControllers::GetColumnShardController()->GetRejectMemoryIntervalLimit(DefaultRejectMemoryIntervalLimit);
     const ui64 ReadSequentiallyBufferSize = DefaultReadSequentiallyBufferSize;
 
-    ui64 GetMemoryForSources(const THashMap<ui32, std::shared_ptr<IDataSource>>& sources, const bool isExclusive);
+    ui64 GetMemoryForSources(const THashMap<ui32, std::shared_ptr<IDataSource>>& sources);
 
     const TReadMetadata::TConstPtr& GetReadMetadata() const {
         return ReadMetadata;

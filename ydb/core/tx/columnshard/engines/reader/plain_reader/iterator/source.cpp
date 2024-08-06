@@ -1,15 +1,15 @@
-#include "source.h"
-
 #include "constructor.h"
 #include "fetched_data.h"
 #include "interval.h"
 #include "plain_read_data.h"
+#include "source.h"
 
 #include <ydb/core/formats/arrow/simple_arrays_cache.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/blobs_reader/events.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
@@ -19,10 +19,14 @@ void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetch
     FetchingPlan = fetching;
 }
 
-void IDataSource::RegisterInterval(TFetchingInterval& interval) {
+void IDataSource::RegisterInterval(TFetchingInterval& interval, const std::shared_ptr<IDataSource>& sourcePtr) {
     AFL_VERIFY(FetchingPlan);
     if (!IsReadyFlag) {
         AFL_VERIFY(Intervals.emplace(interval.GetIntervalIdx(), &interval).second);
+    }
+    if (AtomicCas(&SourceStartedFlag, 1, 0)) {
+        sourcePtr->SetMemoryForAllocation(FetchingPlan->PredictRawBytes(sourcePtr));
+        NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation({ sourcePtr }, interval.GetIntervalId());
     }
 }
 
@@ -36,7 +40,9 @@ void IDataSource::SetIsReady() {
     Intervals.clear();
 }
 
-void IDataSource::OnInitResourcesGuard(const std::shared_ptr<IDataSource>& sourcePtr) {
+void IDataSource::DoOnAllocated(
+    std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard, const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation) {
+    ResourcesGuard = std::move(guard);
     AFL_VERIFY(FetchingPlan);
     if (AtomicCas(&FilterStageFlag, 1, 0)) {
         StageData = std::make_unique<TFetchedData>(GetExclusiveIntervalOnly() && IsSourceInMemory());
@@ -47,7 +53,8 @@ void IDataSource::OnInitResourcesGuard(const std::shared_ptr<IDataSource>& sourc
             return;
         }
         TFetchingScriptCursor cursor(FetchingPlan, 0);
-        auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), Context->GetCommonContext()->GetScanActorId());
+        auto task = std::make_shared<TStepAction>(
+            static_pointer_cast<IDataSource>(allocation), std::move(cursor), Context->GetCommonContext()->GetScanActorId());
         NConveyor::TScanServiceOperator::SendTaskToExecute(task);
     }
 }
@@ -67,7 +74,8 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
         for (auto&& c : columnChunks) {
             Y_ABORT_UNLESS(!itFinished);
             if (!itFilter.IsBatchForSkip(c->GetMeta().GetNumRows())) {
-                auto reading = blobsAction.GetReading(Schema->GetIndexInfo().GetColumnStorageId(c->GetColumnId(), Portion->GetMeta().GetTierName()));
+                auto reading =
+                    blobsAction.GetReading(Schema->GetIndexInfo().GetColumnStorageId(c->GetColumnId(), Portion->GetMeta().GetTierName()));
                 reading->SetIsBackgroundProcess(false);
                 reading->AddRange(Portion->RestoreBlobRange(c->BlobRange));
                 ++fetchedChunks;
@@ -80,11 +88,12 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
         }
         AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", Portion->NumRows(i));
     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "chunks_stats")("fetch", fetchedChunks)("null", nullChunks)
-        ("reading_actions", blobsAction.GetStorageIds())("columns", columnIds.size());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "chunks_stats")("fetch", fetchedChunks)("null", nullChunks)(
+        "reading_actions", blobsAction.GetStorageIds())("columns", columnIds.size());
 }
 
-bool TPortionDataSource::DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& columns) {
+bool TPortionDataSource::DoStartFetchingColumns(
+    const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& columns) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName());
     AFL_VERIFY(columns->GetColumnsCount());
     AFL_VERIFY(!StageData->GetAppliedFilter() || !StageData->GetAppliedFilter()->IsTotalDenyFilter());
@@ -108,7 +117,8 @@ bool TPortionDataSource::DoStartFetchingColumns(const std::shared_ptr<IDataSourc
     return true;
 }
 
-bool TPortionDataSource::DoStartFetchingIndexes(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) {
+bool TPortionDataSource::DoStartFetchingIndexes(
+    const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName());
     Y_ABORT_UNLESS(indexes->GetIndexesCount());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName())("fetching_info", step.DebugString());
@@ -191,7 +201,8 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
                                     .AssembleToGeneralContainer(SequentialEntityIds));
 }
 
-bool TCommittedDataSource::DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& /*columns*/) {
+bool TCommittedDataSource::DoStartFetchingColumns(
+    const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& /*columns*/) {
     if (ReadStarted) {
         return false;
     }
@@ -204,7 +215,7 @@ bool TCommittedDataSource::DoStartFetchingColumns(const std::shared_ptr<IDataSou
     readAction->SetIsBackgroundProcess(false);
     readAction->AddRange(CommittedBlob.GetBlobRange());
 
-    std::vector<std::shared_ptr<IBlobsReadingAction>> actions = {readAction};
+    std::vector<std::shared_ptr<IBlobsReadingAction>> actions = { readAction };
     auto constructor = std::make_shared<TBlobsFetcherTask>(actions, sourcePtr, step, GetContext(), "CS::READ::" + step.GetName(), "");
     NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(constructor));
     return true;

@@ -8,13 +8,13 @@ std::unique_ptr<NArrow::NMerger::TMergePartialStream> TSpecialReadContext::Build
         IIndexInfo::GetSnapshotColumnNames());
 }
 
-ui64 TSpecialReadContext::GetMemoryForSources(const THashMap<ui32, std::shared_ptr<IDataSource>>& sources, const bool isExclusive) {
+ui64 TSpecialReadContext::GetMemoryForSources(const THashMap<ui32, std::shared_ptr<IDataSource>>& sources) {
     ui64 result = 0;
     bool hasSequentialReadSources = false;
     for (auto&& i : sources) {
         auto fetchingPlan = GetColumnsFetchingPlan(i.second);
         AFL_VERIFY(i.second->GetIntervalsCount());
-        const ui64 sourceMemory = std::max<ui64>(1, fetchingPlan->PredictRawBytes(i.second) / i.second->GetIntervalsCount());
+        const ui64 sourceMemory = std::max<ui64>(1, i.second->GetResourcesGuard()->GetMemory() / i.second->GetIntervalsCount());
         if (!i.second->IsSourceInMemory()) {
             hasSequentialReadSources = true;
         }
@@ -23,10 +23,6 @@ ui64 TSpecialReadContext::GetMemoryForSources(const THashMap<ui32, std::shared_p
     AFL_VERIFY(result);
     if (hasSequentialReadSources) {
         result += ReadSequentiallyBufferSize;
-    } else {
-        if (!isExclusive && !CommonContext->IsReverse()) {
-            result = 2 * result;   // due to in time we will have data in original portion + data in merged(or reversed) interval
-        }
     }
     return result;
 }

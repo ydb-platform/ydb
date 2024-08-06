@@ -6,9 +6,8 @@
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
-class TFetchingInterval: public TNonCopyable, public NResourceBroker::NSubscribe::ITask {
+class TFetchingInterval: public TNonCopyable {
 private:
-    using TTaskBase = NResourceBroker::NSubscribe::ITask;
     std::shared_ptr<TMergingContext> MergingContext;
     bool AbortedFlag = false;
     TAtomic SourcesFinalized = 0;
@@ -20,14 +19,11 @@ private:
 
     void ConstructResult();
 
-    std::shared_ptr<NColumnShard::TReaderResourcesGuard> ResourcesGuard;
     const ui32 IntervalIdx;
+    const std::shared_ptr<NGroupedMemoryManager::TGroupGuard> IntervalGroupGuard;
     TAtomicCounter ReadySourcesCount = 0;
-    TAtomicCounter ReadyGuards = 0;
     ui32 WaitSourcesCount = 0;
     NColumnShard::TConcreteScanCounters::TScanIntervalStateGuard IntervalStateGuard;
-protected:
-    virtual void DoOnAllocationSuccess(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard) override;
 
 public:
     std::set<ui64> GetPathIds() const {
@@ -42,12 +38,12 @@ public:
         return IntervalIdx;
     }
 
-    const THashMap<ui32, std::shared_ptr<IDataSource>>& GetSources() const {
-        return Sources;
+    ui32 GetIntervalId() const {
+        return IntervalGroupGuard->GetGroupId();
     }
 
-    const std::shared_ptr<NColumnShard::TReaderResourcesGuard>& GetResourcesGuard() const {
-        return ResourcesGuard;
+    const THashMap<ui32, std::shared_ptr<IDataSource>>& GetSources() const {
+        return Sources;
     }
 
     void Abort() {
@@ -86,6 +82,9 @@ public:
     TFetchingInterval(const NArrow::NMerger::TSortableBatchPosition& start, const NArrow::NMerger::TSortableBatchPosition& finish,
         const ui32 intervalIdx, const THashMap<ui32, std::shared_ptr<IDataSource>>& sources, const std::shared_ptr<TSpecialReadContext>& context,
         const bool includeFinish, const bool includeStart, const bool isExclusiveInterval);
+    
+    ~TFetchingInterval() {
+    }
 };
 
 }

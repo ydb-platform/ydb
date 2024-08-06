@@ -1016,6 +1016,10 @@ public:
         return {};
     }
 
+    std::function<void(const TString&)> GetErrorCallback() const override {
+        return {};
+    }
+
     NDq::TTxId GetTxId() const override {
         return {};
     }

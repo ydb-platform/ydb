@@ -499,7 +499,7 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
 
         switch (childPath->PathType) {
         case NKikimrSchemeOp::EPathTypeTableIndex:
-            Self->DescribeTableIndex(childPathId, childName, returnConfig, false, *entry->AddTableIndexes());
+            Self->DescribeTableIndex(childPathId, childName, returnConfig, returnBoundaries, *entry->AddTableIndexes());
             break;
         case NKikimrSchemeOp::EPathTypeCdcStream:
             Self->DescribeCdcStream(childPathId, childName, *entry->AddCdcStreams());
@@ -1339,6 +1339,9 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
             FillPartitionConfig(tableInfo.PartitionConfig(), *tableDescription->MutablePartitionConfig());
         }
         if (fillBoundaries) {
+            // column info is necessary for split boundary type conversion
+            FillColumns(tableInfo, *tableDescription->MutableColumns());
+            FillKeyColumns(tableInfo, *tableDescription->MutableKeyColumnNames(), *tableDescription->MutableKeyColumnIds());
             FillTableBoundaries(tableDescription->MutableSplitBoundary(), tableInfo);
         }
     }

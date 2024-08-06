@@ -1,8 +1,6 @@
 LIBRARY()
 
-SRCS(
-    table_stats.cpp
-)
+SRCS()
 
 PEERDIR(
     ydb/core/protos

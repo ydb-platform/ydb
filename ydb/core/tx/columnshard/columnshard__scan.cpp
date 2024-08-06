@@ -30,7 +30,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext
         return;
     }
 
-    Counters.GetColumnTablesCounters()->GetPathIdCounter(record.GetLocalPathId())->OnAccess();
+    Counters.GetColumnTablesCounters()->GetPathIdCounter(record.GetLocalPathId())->OnReadEvent();
     ScanTxInFlight.insert({txId, TAppData::TimeProvider->Now()});
     Counters.GetTabletCounters()->SetCounter(COUNTER_SCAN_IN_FLY, ScanTxInFlight.size());
     Execute(new NOlap::NReader::TTxScan(this, ev), ctx);

@@ -14,38 +14,22 @@ private:
     YDB_READONLY(ui64, WritesSizeInFlight, 0);
 
 public:
-    class TGuard: public TNonCopyable {
-        friend class TWritesMonitor;
-
-    private:
-        TWritesMonitor& Owner;
-
-        explicit TGuard(TWritesMonitor& owner)
-            : Owner(owner) {
-        }
-
-    public:
-        ~TGuard() {
-            Owner.UpdateCounters();
-        }
-    };
-
     TWritesMonitor(TTabletCountersBase& stats)
         : Stats(stats) {
     }
 
-    TGuard OnStartWrite(const ui64 dataSize) {
+    void OnStartWrite(const ui64 dataSize) {
         ++WritesInFlight;
         WritesSizeInFlight += dataSize;
-        return TGuard(*this);
+        UpdateTabletCounters();
     }
 
-    TGuard OnFinishWrite(const ui64 dataSize, const ui32 writesCount = 1) {
+    void OnFinishWrite(const ui64 dataSize, const ui32 writesCount = 1) {
         Y_ABORT_UNLESS(WritesInFlight > 0);
         Y_ABORT_UNLESS(WritesSizeInFlight >= dataSize);
         WritesInFlight -= writesCount;
         WritesSizeInFlight -= dataSize;
-        return TGuard(*this);
+        UpdateTabletCounters();
     }
 
     TString DebugString() const {
@@ -54,7 +38,7 @@ public:
     }
 
 private:
-    void UpdateCounters() {
+    void UpdateTabletCounters() {
         Stats.Simple()[COUNTER_WRITES_IN_FLY].Set(WritesInFlight);
     }
 };

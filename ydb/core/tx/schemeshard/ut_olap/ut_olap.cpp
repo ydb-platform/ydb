@@ -732,6 +732,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         csController->WaitIndexation(TDuration::Seconds(5));
         {
             auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/OlapStore", true, true);
+            Cerr << description.DebugString() << Endl;
             auto& tabletStats = description.GetPathDescription().GetTableStats();
 
             UNIT_ASSERT_GT(tabletStats.GetRowCount(), 0);
@@ -740,6 +741,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
             UNIT_ASSERT_GT(tabletStats.GetRowUpdates(), 0);
             UNIT_ASSERT_GT(tabletStats.GetImmediateTxCompleted(), 0);
             UNIT_ASSERT_GT(tabletStats.GetPlannedTxCompleted(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetLastAccessTime(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetLastUpdateTime(), 0);
         }
 
         {
@@ -750,9 +753,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
             UNIT_ASSERT_GT(tabletStats.GetRowCount(), 0);
             UNIT_ASSERT_GT(tabletStats.GetDataSize(), 0);
             UNIT_ASSERT_GT(tabletStats.GetPartCount(), 0);
-            UNIT_ASSERT_GT(tabletStats.GetRowUpdates(), 0);
-            UNIT_ASSERT_GT(tabletStats.GetImmediateTxCompleted(), 0);
-            UNIT_ASSERT_GT(tabletStats.GetPlannedTxCompleted(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetLastAccessTime(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetLastUpdateTime(), 0);
         }
 
 #if 0

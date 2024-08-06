@@ -155,7 +155,7 @@ public:
     void PrepareObjectsBeforeModification(std::vector<TObject>&& patchedObjects,
         typename NModifications::IAlterPreparationController<TObject>::TPtr controller,
         const TInternalModificationContext& context, const TAlterOperationContext& alterContext) const {
-        return DoPrepareObjectsBeforeModification(std::move(patchedObjects), controller, context);
+        return DoPrepareObjectsBeforeModification(std::move(patchedObjects), controller, context, alterContext);
     }
 };
 

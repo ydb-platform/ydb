@@ -445,9 +445,11 @@ private:
 
 class TDatabaseFetcherActor : public TSchemeActorBase<TDatabaseFetcherActor> {
 public:
-    TDatabaseFetcherActor(const TActorId& replyActorId, const TString& database)
+    TDatabaseFetcherActor(const TActorId& replyActorId, const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken, NACLib::EAccessRights checkAccess)
         : ReplyActorId(replyActorId)
         , Database(database)
+        , UserToken(userToken)
+        , CheckAccess(checkAccess)
     {}
 
     void DoBootstrap() {
@@ -467,10 +469,12 @@ public:
             case EStatus::PathNotTable:
             case EStatus::PathNotPath:
             case EStatus::RedirectLookupError:
-            case EStatus::AccessDenied:
             case EStatus::RootUnknown:
             case EStatus::PathErrorUnknown:
                 Reply(Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Database " << Database << " not found or you don't have access permissions");
+                return;
+            case EStatus::AccessDenied:
+                Reply(Ydb::StatusIds::UNAUTHORIZED, TStringBuilder() << "You don't have access permissions for database " << Database);
                 return;
             case EStatus::LookupError:
             case EStatus::TableCreationNotComplete:
@@ -496,8 +500,9 @@ public:
 protected:
     void StartRequest() override {
         LOG_D("Start database fetching");
-        auto event = NTableCreator::BuildSchemeCacheNavigateRequest({{}}, Database, nullptr);
+        auto event = NTableCreator::BuildSchemeCacheNavigateRequest({{}}, Database, UserToken);
         event->ResultSet[0].Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+        event->ResultSet[0].Access |= CheckAccess;
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(event.Release()), IEventHandle::FlagTrackDelivery);
     }
 
@@ -529,6 +534,8 @@ private:
 private:
     const TActorId ReplyActorId;
     const TString Database;
+    const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    const NACLib::EAccessRights CheckAccess;
 
     bool Serverless = false;
 };
@@ -547,8 +554,8 @@ IActor* CreatePoolCreatorActor(const TActorId& replyActorId, const TString& data
     return new TPoolCreatorActor(replyActorId, database, poolId, poolConfig, userToken, diffAcl);
 }
 
-IActor* CreateDatabaseFetcherActor(const TActorId& replyActorId, const TString& database) {
-    return new TDatabaseFetcherActor(replyActorId, database);
+IActor* CreateDatabaseFetcherActor(const TActorId& replyActorId, const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken, NACLib::EAccessRights checkAccess) {
+    return new TDatabaseFetcherActor(replyActorId, database, userToken, checkAccess);
 }
 
 }  // NKikimr::NKqp::NWorkload

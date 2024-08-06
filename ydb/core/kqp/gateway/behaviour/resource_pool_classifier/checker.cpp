@@ -1,6 +1,8 @@
 #include "checker.h"
 
 #include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/kqp/workload_service/actors/actors.h>
+#include <ydb/core/kqp/workload_service/common/events.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/resource_pools/resource_pool_classifier_settings.h>
 
@@ -13,31 +15,8 @@ namespace {
 
 using namespace NActors;
 using namespace NResourcePool;
+using namespace NWorkload;
 
-
-struct TEvPrivate {
-    enum EEv : ui32 {
-        EvRanksCheckerResponse = EventSpaceBegin(TEvents::ES_PRIVATE),
-
-        EvEnd
-    };
-
-    static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
-
-    struct TEvRanksCheckerResponse : public TEventLocal<TEvRanksCheckerResponse, EvRanksCheckerResponse> {
-        TEvRanksCheckerResponse(Ydb::StatusIds::StatusCode status, i64 maxRank, ui64 numberClassifiers, NYql::TIssues issues)
-            : Status(status)
-            , MaxRank(maxRank)
-            , NumberClassifiers(numberClassifiers)
-            , Issues(std::move(issues))
-        {}
-
-        const Ydb::StatusIds::StatusCode Status;
-        const i64 MaxRank;
-        const ui64 NumberClassifiers;
-        const NYql::TIssues Issues;
-    };
-};
 
 class TRanksCheckerActor : public NKikimr::TQueryBase {
     using TBase = NKikimr::TQueryBase;
@@ -152,33 +131,13 @@ public:
     {}
 
     void Bootstrap() {
-        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::TEvConfigsDispatcher::TEvGetConfigRequest(
-            (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem
-        ), IEventHandle::FlagTrackDelivery);
-    }
-
-    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-        switch (ev->Get()->SourceType) {
-            case NConsole::TEvConfigsDispatcher::EvGetConfigRequest:
-                CheckFeatureFlag(AppData()->FeatureFlags);
-                break;
-
-            default:
-                break;
-        }
-    }
-
-    void Handle(NConsole::TEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev) {
-        CheckFeatureFlag(ev->Get()->Config->GetFeatureFlags());
+        ValidateRanks();
+        GetDatabaseInfo();
     }
 
     void Handle(TEvPrivate::TEvRanksCheckerResponse::TPtr& ev) {
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            NYql::TIssue rootIssue(TStringBuilder() << "Resource pool classifier ranks check failed, " << ev->Get()->Status);
-            for (const auto& issue : ev->Get()->Issues) {
-                rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
-            }
-            FailAndPassAway(rootIssue.ToString(true));
+            FailAndPassAway("Resource pool classifier ranks check failed", ev->Get()->Status, ev->Get()->Issues);
             return;
         }
 
@@ -205,13 +164,48 @@ public:
         TryFinish();
     }
 
+    void Handle(TEvPrivate::TEvFetchDatabaseResponse::TPtr& ev) {
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            FailAndPassAway("Database check failed", ev->Get()->Status, ev->Get()->Issues);
+            return;
+        }
+
+        Serverless = ev->Get()->Serverless;
+
+        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::TEvConfigsDispatcher::TEvGetConfigRequest(
+            (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem
+        ), IEventHandle::FlagTrackDelivery);
+    }
+
+    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
+        switch (ev->Get()->SourceType) {
+            case NConsole::TEvConfigsDispatcher::EvGetConfigRequest:
+                CheckFeatureFlag(AppData()->FeatureFlags);
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    void Handle(NConsole::TEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev) {
+        CheckFeatureFlag(ev->Get()->Config->GetFeatureFlags());
+    }
+
     STRICT_STFUNC(StateFunc,
+        hFunc(TEvPrivate::TEvRanksCheckerResponse, Handle);
+        hFunc(TEvPrivate::TEvFetchDatabaseResponse, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
         hFunc(NConsole::TEvConfigsDispatcher::TEvGetConfigResponse, Handle);
-        hFunc(TEvPrivate::TEvRanksCheckerResponse, Handle);
     )
 
 private:
+    void GetDatabaseInfo() const {
+        const auto& externalContext = Context.GetExternalData();
+        const auto userToken = externalContext.GetUserToken() ? MakeIntrusive<NACLib::TUserToken>(*externalContext.GetUserToken()) : nullptr;
+        Register(CreateDatabaseFetcherActor(SelfId(), externalContext.GetDatabase(), userToken, NACLib::EAccessRights::GenericFull));
+    }
+
     void ValidateRanks() {
         if (Context.GetActivityType() == NMetadata::NModifications::IOperationsManager::EActivityType::Drop) {
             RanksChecked = true;
@@ -237,12 +231,24 @@ private:
 
     void CheckFeatureFlag(const NKikimrConfig::TFeatureFlags& featureFlags) {
         if (!featureFlags.GetEnableResourcePools()) {
-            FailAndPassAway("Resource pools are disabled. Please contact your system administrator to enable it");
+            FailAndPassAway("Resource pools classifiers are disabled. Please contact your system administrator to enable it");
+            return;
+        }
+        if (Serverless && !featureFlags.GetEnableResourcePoolsOnServerless()) {
+            FailAndPassAway("Resource pools classifiers are disabled for serverless domains. Please contact your system administrator to enable it");
             return;
         }
 
         FeatureFlagChecked = true;
         TryFinish();
+    }
+
+    void FailAndPassAway(const TString& message, Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
+        NYql::TIssue rootIssue(TStringBuilder() << message << ", " << status);
+        for (const auto& issue : issues) {
+            rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
+        }
+        FailAndPassAway(rootIssue.ToString(true));
     }
 
     void FailAndPassAway(const TString& message) {
@@ -263,6 +269,7 @@ private:
     const NMetadata::NModifications::IOperationsManager::TInternalModificationContext& Context;
     const NMetadata::NModifications::TAlterOperationContext& AlterContext;
 
+    bool Serverless = false;
     bool FeatureFlagChecked = false;
     bool RanksChecked = false;
 

@@ -244,10 +244,10 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     double newByteSize = leftStats.Nrows ? (leftStats.ByteSize / leftStats.Nrows) * newCard : 0 +
             rightStats.Nrows ? (rightStats.ByteSize / rightStats.Nrows) * newCard : 0;
 
-    double cost = ComputeJoinCost(leftStats, rightStats, newCard, newByteSize, joinAlgo)
-        + leftStats.Cost + rightStats.Cost;
+    double ownCost = ComputeJoinCost(leftStats, rightStats, newCard, newByteSize, joinAlgo);
+    double cost = ownCost + leftStats.Cost + rightStats.Cost;
 
-    auto result = TOptimizerStatistics(outputType, newCard, newNCols, newByteSize, cost,
+    auto result = TOptimizerStatistics(outputType, newCard, newNCols, newByteSize, ownCost, cost,
         leftKeyColumns ? leftStats.KeyColumns : ( rightKeyColumns ? rightStats.KeyColumns : TIntrusivePtr<TOptimizerStatistics::TKeyColumns>()));
     result.Selectivity = selectivity;
     return result;

@@ -670,7 +670,18 @@ private:
             }
         }
 
+        double stageCost = 0.0;
         VisitExpr(stage.Program().Ptr(), [&](const TExprNode::TPtr& exprNode) {
+
+            auto stats = TypesCtx.GetStats(exprNode.Get());
+            if (stats) {
+                if (stats->OwnCost) {
+                    stageCost += stats->OwnCost;
+                } else {
+                    stageCost += stats->Cost;
+                }
+            }
+
             TExprBase node(exprNode);
             if (auto maybeReadTable = node.Maybe<TKqpWideReadTable>()) {
                 auto readTable = maybeReadTable.Cast();
@@ -757,6 +768,7 @@ private:
             }
             return true;
         });
+        stageProto.SetStageCost(stageCost);
 
         const auto& secureParams = FindSecureParams(stage.Program().Ptr(), TypesCtx, SecretNames);
         stageProto.MutableSecureParams()->insert(secureParams.begin(), secureParams.end());

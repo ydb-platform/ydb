@@ -531,11 +531,13 @@ private:
 
                 if (auto stats = SerializerCtx.TypeCtx.GetStats(tableLookup.Raw())) {
                     planNode.OptEstimates["E-Rows"] = TStringBuilder() << stats->Nrows;
+                    planNode.OptEstimates["E-OwnCost"] = TStringBuilder() << stats->OwnCost;
                     planNode.OptEstimates["E-Cost"] = TStringBuilder() << stats->Cost;
                     planNode.OptEstimates["E-Size"] = TStringBuilder() << stats->ByteSize;
                 }
                 else {
                     planNode.OptEstimates["E-Rows"] = "No estimate";
+                    planNode.OptEstimates["E-OwnCost"] = "No estimate";
                     planNode.OptEstimates["E-Cost"] = "No estimate";
                     planNode.OptEstimates["E-Size"] = "No estimate";
                 }
@@ -829,6 +831,7 @@ private:
 
         if (auto stats = SerializerCtx.TypeCtx.GetStats(dataSource.Raw())) {
             op.Properties["E-Rows"] = TStringBuilder() << stats->Nrows;
+            op.Properties["E-OwnCost"] = TStringBuilder() << stats->OwnCost;
             op.Properties["E-Cost"] = TStringBuilder() << stats->Cost;
             op.Properties["E-Size"] = TStringBuilder() << stats->ByteSize;
         }
@@ -1453,11 +1456,13 @@ private:
 
         if (auto stats = SerializerCtx.TypeCtx.GetStats(expr.Raw())) {
             op.Properties["E-Rows"] = TStringBuilder() << stats->Nrows;
+            op.Properties["E-OwnCost"] = TStringBuilder() << stats->OwnCost;
             op.Properties["E-Cost"] = TStringBuilder() << stats->Cost;
             op.Properties["E-Size"] = TStringBuilder() << stats->ByteSize;
         }
         else {
             op.Properties["E-Rows"] = "No estimate";
+            op.Properties["E-OwnCost"] = "No estimate";
             op.Properties["E-Cost"] = "No estimate";
             op.Properties["E-Size"] = "No estimate";
 
@@ -1998,6 +2003,9 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
             op["LookupKeyColumns"] = plan.GetMapSafe().at("LookupKeyColumns");
             op["Table"] = plan.GetMapSafe().at("Table");
 
+            if (plan.GetMapSafe().contains("E-OwnCost")) {
+                op["E-OwnCost"] = plan.GetMapSafe().at("E-OwnCost");
+            } 
             if (plan.GetMapSafe().contains("E-Cost")) {
                 op["E-Cost"] = plan.GetMapSafe().at("E-Cost");
             } 

@@ -102,11 +102,12 @@ class TestPqRowDispatcher(TestYdsBase):
 
         data = [
             '{"time": 101, "data": "hello1", "event": "event1"}',
-            '{"time": 102, "data": "hello2", "event": "event2"}'
+            '{"time": 102, "data": "hello2", "event": "event2"}',
+            '{"time": 103, "data": "hello3", "event": "event3"}'
         ]
 
         self.write_stream(data)
-        expected = ['101', '102']
+        expected = ['101', '102', '103']
         assert self.read_stream(len(expected), topic_path = self.output_topic) == expected
 
         wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)

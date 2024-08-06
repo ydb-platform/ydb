@@ -285,7 +285,6 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvAddConsumer::TPtr &ev) {
     }
 
     ConsumerSessionKey key{ev->Sender, ev->Get()->Record.GetPartitionId()};
-    
     auto it = Consumers.find(key);
     if (it != Consumers.end()) {
         LOG_ROW_DISPATCHER_DEBUG("Wrong"); // TODO
@@ -342,7 +341,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr &ev) {
     }
     if (!it->second->EventsQueue.OnEventReceived(ev)) {
         LOG_ROW_DISPATCHER_DEBUG("Wrong seq num, ignore message");
-        //return;
+        return;
     }
     Forward(ev, it->second->TopicSessionId);
 }
@@ -355,6 +354,7 @@ void TRowDispatcher::Handle(NActors::TEvents::TEvPing::TPtr& ev) {
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvStopSession, topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
         " partitionId " << ev->Get()->Record.GetPartitionId());
+
     ConsumerSessionKey key{ev->Sender, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(key);
     if (it == Consumers.end()) {
@@ -363,7 +363,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr &ev) {
     }
     if (!it->second->EventsQueue.OnEventReceived(ev)) {
         LOG_ROW_DISPATCHER_DEBUG("Wrong seq num, ignore message");
-        //return;
+        return;
     }
     DeleteConsumer(key);
 }

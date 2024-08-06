@@ -29,6 +29,7 @@ struct TEvPrivate {
         EvCreateSessionResult,
         EvDescribeSemaphoreResult,
         EvSessionStopped,
+        Ev,
         EvEnd
     };
 
@@ -229,6 +230,7 @@ void TLeaderDetector::Handle(TEvPrivate::TEvOnChangedResult::TPtr& ev) {
 void TLeaderDetector::Handle(TEvPrivate::TEvSessionStopped::TPtr&) {
     LOG_ROW_DISPATCHER_DEBUG("TEvSessionStopped");
     Session.Clear();
+    // TODO use timeout
     ProcessState();
 }
 

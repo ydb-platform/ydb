@@ -257,7 +257,7 @@ public:
     }
 
     void Push(ui64 offset, const TList<TString>& value) {
-        LOG_ROW_DISPATCHER_DEBUG("Push ");
+        LOG_ROW_DISPATCHER_TRACE("Push");
         InputConsumer->OnObject(std::make_pair(offset, value));
     }
 

@@ -253,26 +253,20 @@ public:
         }
         auto factory = NYql::NPureCalc::MakeProgramFactory(options);
 
-        try {
-            LOG_ROW_DISPATCHER_DEBUG("Creating program...");
-            Program = factory->MakePushStreamProgram(
-                TParserInputSpec(),
-                TParserOutputSpec(MakeOutputSchema(columns)),
-                Sql,
-                NYql::NPureCalc::ETranslationMode::SQL
-            );
-            LOG_ROW_DISPATCHER_DEBUG("Program created");
-            InputConsumer = Program->Apply(MakeHolder<TParserOutputConsumer>(callback));
-            LOG_ROW_DISPATCHER_DEBUG("InputConsumer created");
-
-        } catch (NYql::NPureCalc::TCompileError& e) {
-            Cerr << e.GetIssues() << Endl; // TODO
-            throw;
-        }
+        LOG_ROW_DISPATCHER_DEBUG("Creating program...");
+        Program = factory->MakePushStreamProgram(
+            TParserInputSpec(),
+            TParserOutputSpec(MakeOutputSchema(columns)),
+            Sql,
+            NYql::NPureCalc::ETranslationMode::SQL
+        );
+        LOG_ROW_DISPATCHER_DEBUG("Program created");
+        InputConsumer = Program->Apply(MakeHolder<TParserOutputConsumer>(callback));
+        LOG_ROW_DISPATCHER_DEBUG("InputConsumer created");
     }
 
     void Push( ui64 offset, const TString& value) {
-        LOG_ROW_DISPATCHER_DEBUG("Push " << value);
+        LOG_ROW_DISPATCHER_TRACE("Push " << value);
         InputConsumer->OnObject(std::make_pair(offset, value));
     }
 

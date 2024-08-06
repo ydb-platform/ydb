@@ -104,6 +104,7 @@ private:
         std::unique_ptr<TJsonFilter> Filter;
         ui64 EventQueueId = 0;
         TQueue<std::pair<ui64, TString>> Buffer;
+        bool DataArrivedSent = false;
     };
     TMap<NActors::TActorId, ConsumersInfo> Consumers;
     std::unique_ptr<TJsonParser> Parser;
@@ -205,7 +206,6 @@ void TTopicSession::Bootstrap() {
     Become(&TTopicSession::StateFunc);
     LogPrefix = LogPrefix + " " + SelfId().ToString() + " ";
     LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << SourceParams.GetTopicPath() << ", PartitionId " << PartitionId);
-    std::cerr << " TTopicSession::Bootstrap" << std::endl;
     InitParser();
 }
 
@@ -353,7 +353,7 @@ std::optional<NYql::TIssues> TTopicSession::ProcessDataReceivedEvent(NYdb::NTopi
         const TString& data = message.GetData();
         IngressStats.Bytes += data.size();
         // LWPROBE(PqReadDataReceived, TString(TStringBuilder() << Self.TxId), Self.SourceParams.GetTopicPath(), data);
-        LOG_ROW_DISPATCHER_DEBUG("Data received: " << message.DebugString(true));
+        LOG_ROW_DISPATCHER_TRACE("Data received: " << message.DebugString(true));
 
         // if (message.GetWriteTime() < StartingMessageTimestamp) {
         //     LOG_ROW_DISPATCHER_DEBUG("Skip data. StartingMessageTimestamp: " << StartingMessageTimestamp << ". Write time: " << message.GetWriteTime());
@@ -497,10 +497,10 @@ void TTopicSession::ParseData() {
 }
 
 void TTopicSession::DataParsed(ui64 offset, TList<TString>&& value) {
-    LOG_ROW_DISPATCHER_DEBUG("DataParsed, offset " << offset);
+    LOG_ROW_DISPATCHER_TRACE("DataParsed, offset " << offset);
     
     for (auto v: value) {
-        LOG_ROW_DISPATCHER_DEBUG("v " << v);
+        LOG_ROW_DISPATCHER_TRACE("v " << v);
     }
 
     for (auto& [actorId, info] : Consumers) {
@@ -513,6 +513,7 @@ void TTopicSession::DataParsed(ui64 offset, TList<TString>&& value) {
 }
 
 void TTopicSession::SendData(ConsumersInfo& info) {
+    info.DataArrivedSent = false;
     if (info.Buffer.empty()) {
         return;
     }
@@ -569,9 +570,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvAddConsumer::TPtr &ev) {
                 auto& consumerInfo = it->second;
                 consumerInfo.Buffer.push(std::make_pair(offset, json));
                 LOG_ROW_DISPATCHER_DEBUG("JsonFilter data: " << json);
-                
                 SendDataArrived();
-
             });
 
         LOG_ROW_DISPATCHER_DEBUG("Consumers size " << Consumers.size());
@@ -653,9 +652,10 @@ void TTopicSession::StopReadSession() {
 
 void TTopicSession::SendDataArrived() {
     for (auto& [readActorId, info] : Consumers) {
-        if (info.Buffer.empty()) {
+        if (info.Buffer.empty() || info.DataArrivedSent) {
             continue;
         }
+        info.DataArrivedSent = true;
         LOG_ROW_DISPATCHER_DEBUG("Send TEvNewDataArrived to " << readActorId);
         auto event = std::make_unique<TEvRowDispatcher::TEvNewDataArrived>();
         event->Record.SetPartitionId(PartitionId);

@@ -5,7 +5,7 @@ SRCS(
     sql_format.cpp
 )
 
-RESOURCE(DONT_PARSE ../SQLv4.g.in SQLv4.g.in)
+RESOURCE(DONT_PARSE ../SQLv1Antlr4.g.in SQLv1Antlr4.g.in)
 
 PEERDIR(
     ydb/library/yql/parser/lexer_common

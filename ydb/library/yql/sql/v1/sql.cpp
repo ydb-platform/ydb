@@ -10,12 +10,12 @@ using namespace NSQLv1Generated;
 
 TAstNode* SqlASTToYql(const google::protobuf::Message& protoAst, TContext& ctx) {
     const google::protobuf::Descriptor* d = protoAst.GetDescriptor();
-    if (d && d->name() != "TSQLv4ParserAST") {
-        ctx.Error() << "Invalid AST structure: " << d->name() << ", expected TSQLv4ParserAST";
+    if (d && d->name() != "TSQLv1ParserAST") {
+        ctx.Error() << "Invalid AST structure: " << d->name() << ", expected TSQLv1ParserAST";
         return nullptr;
     }
     TSqlQuery query(ctx, ctx.Settings.Mode, true);
-    TNodePtr node(query.Build(static_cast<const TSQLv4ParserAST&>(protoAst)));
+    TNodePtr node(query.Build(static_cast<const TSQLv1ParserAST&>(protoAst)));
     try {
         if (node && node->Init(ctx, nullptr)) {
             return node->Translate(ctx);
@@ -197,7 +197,7 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const NS
 
     google::protobuf::Message* astProto(SqlAST(query, queryName, collector, settings.AnsiLexer, settings.Arena));
     if (astProto) {
-        auto ast = static_cast<const TSQLv4ParserAST&>(*astProto);
+        auto ast = static_cast<const TSQLv1ParserAST&>(*astProto);
         const auto& query = ast.GetRule_sql_query();
         if (query.Alt_case() == NSQLv1Generated::TRule_sql_query::kAltSqlQuery1) {
             std::vector<::NSQLv1Generated::TRule_sql_stmt_core> commonStates;

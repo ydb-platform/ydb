@@ -407,7 +407,7 @@ void <parser.grammarName; format = "lower">ParserInitialize() {
   try {
     RuleReturnType root(<parser.name>::<first(parser.funcs).name>());
     if (!error && root) {
-      auto ast = google::protobuf::Arena::CreateMessage\<@ANTLR_PACKAGE_NAME@::T<parser.name>AST>(Arena);
+      auto ast = google::protobuf::Arena::CreateMessage\<@ANTLR_PACKAGE_NAME@::TSQLv1ParserAST>(Arena);
       Y_ASSERT(dynamic_cast\<@ANTLR_PACKAGE_NAME@::TRule_<first(parser.funcs).name>* >(root));
       ast->unsafe_arena_set_allocated_rule_<first(parser.funcs).name>(static_cast\<@ANTLR_PACKAGE_NAME@::TRule_<first(parser.funcs).name>* >(root));
       return ast;
@@ -1097,6 +1097,7 @@ MatchToken(m) ::= <<
     parent->MutableToken<elemId>()->SetColumn(token->getCharPositionInLine());
     parent->MutableToken<elemId>()->SetElement(<elemId>);
     parent->MutableToken<elemId>()->SetValue(token->getText().c_str());
+    parent->MutableToken<elemId>()->SetIsAntlr4(true);
   \} else {
     parent = nullptr;
   }
@@ -1125,6 +1126,7 @@ else {
     parent->MutableToken<elemId>()->SetColumn(token->getCharPositionInLine());
     parent->MutableToken<elemId>()->SetElement(<elemId>);
     parent->MutableToken<elemId>()->SetValue(token->getText().c_str());
+    parent->MutableToken<elemId>()->SetIsAntlr4(true);
   }
   _errHandler->reportMatch(this);
   consume();

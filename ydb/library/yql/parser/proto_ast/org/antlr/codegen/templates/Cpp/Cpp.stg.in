@@ -1745,6 +1745,7 @@ tokenRef(token,label,elementIndex,terminalOptions) ::= <<
         parent->MutableToken<elemId>()->SetColumn(token->get_charPositionInLine());
         parent->MutableToken<elemId>()->SetElement(<elementIndex>);
         parent->MutableToken<elemId>()->SetValue(token->getText().c_str());
+        parent->MutableToken<elemId>()->SetIsAntlr4(false);
         <endif>
     }
 }
@@ -1803,6 +1804,7 @@ matchSet(s,label,elementIndex,terminalOptions,postmatchCode="") ::= <<
             parent->MutableToken<elemId>()->SetColumn(token->get_charPositionInLine());
             parent->MutableToken<elemId>()->SetElement(<elementIndex>);
             parent->MutableToken<elemId>()->SetValue(token->getText().c_str());
+            parent->MutableToken<elemId>()->SetIsAntlr4(false);
             <endif>
         }
         <endif>

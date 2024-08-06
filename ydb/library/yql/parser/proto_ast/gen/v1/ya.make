@@ -6,7 +6,7 @@ PEERDIR (
 
 SET(antlr_output ${ARCADIA_BUILD_ROOT}/${MODDIR})
 SET(antlr_templates ${antlr_output}/org/antlr/v4/tool/templates/codegen)
-SET(sql_grammar ${antlr_output}/SQLv4.g)
+SET(sql_grammar ${antlr_output}/SQLv1Antlr4.g)
 
 SET(ANTLR_PACKAGE_NAME NSQLv1Generated)
 SET(PROTOBUF_HEADER_PATH ydb/library/yql/parser/proto_ast/gen/v1_proto_split)
@@ -24,7 +24,7 @@ CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/v4/too
 IF(EXPORT_CMAKE)
     MANUAL_GENERATION(${sql_grammar})
 ELSE()
-    CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/sql/v1/SQLv4.g.in ${sql_grammar})
+    CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/sql/v1/SQLv1Antlr4.g.in ${sql_grammar})
 ENDIF()
 
 NO_COMPILER_WARNINGS()
@@ -42,9 +42,9 @@ RUN_ANTLR4(
     -lib .
     -o ${antlr_output}
     IN ${sql_grammar} ${antlr_templates}/Cpp/Cpp.stg ${antlr_templates}/Cpp/Files.stg
-    OUT SQLv4Parser.cpp SQLv4Lexer.cpp SQLv4Parser.h SQLv4Lexer.h
+    OUT SQLv1Antlr4Parser.cpp SQLv1Antlr4Lexer.cpp SQLv1Antlr4Parser.h SQLv1Antlr4Lexer.h
     OUTPUT_INCLUDES
-    ${PROTOBUF_HEADER_PATH}/SQLv4Parser.pb.main.h
+    ${PROTOBUF_HEADER_PATH}/SQLv1Antlr4Parser.pb.main.h
     ${STG_INCLUDES}
     CWD ${antlr_output}
 )

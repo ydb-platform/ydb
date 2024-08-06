@@ -1,4 +1,4 @@
-grammar SQLv4;
+grammar SQLv1Antlr4;
 
 options {
     language = Cpp;

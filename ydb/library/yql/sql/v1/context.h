@@ -27,6 +27,11 @@ namespace NSQLTranslationV1 {
         return service == NYql::RtmrProviderName || service == NYql::PqProviderName;
     }
 
+    constexpr uint unifiedToken(uint tokenId, bool isAntlr4) {
+        return (tokenId << 16) + isAntlr4;
+    }
+
+
     struct TNodeWithUsageInfo : public TThrRefBase {
         explicit TNodeWithUsageInfo(const TNodePtr& node, TPosition namePos, int level)
             : Node(node)

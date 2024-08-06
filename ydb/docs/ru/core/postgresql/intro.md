@@ -16,5 +16,4 @@ PostgreSQL совместимость упрощает миграцию прил
 - [{#T}](connect.md)
 - [{#T}](interoperability.md)
 - [{#T}](functions.md)
-- [{#T}](pg-dump.md)
-- [{#T}](advanced.md)
+- [{#T}](import.md)

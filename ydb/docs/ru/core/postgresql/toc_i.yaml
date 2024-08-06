@@ -12,6 +12,5 @@ items:
 - name: Функции PostgreSQL
   href: functions.md
 - name: Импорт данных из PostgreSQL
-  href: pg-dump.md
-- name: Расширенные возможности
-  href: advanced.md
+  href: import.md
+

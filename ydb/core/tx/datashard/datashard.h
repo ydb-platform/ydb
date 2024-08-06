@@ -284,8 +284,8 @@ struct TEvDataShard {
         EvConditionalEraseRowsRequest,
         EvConditionalEraseRowsResponse,
 
-        EvCheckConstraintCreateRequest,
-        EvCheckConstraintProgressResponse,
+        EvBuildIndexCreateRequest,
+        EvBuildIndexProgressResponse,
 
         EvGetS3DownloadInfo,
         EvStoreS3DownloadInfo,
@@ -332,8 +332,8 @@ struct TEvDataShard {
         EvSampleKRequest,
         EvSampleKResponse,
 
-        EvBuildIndexCreateRequest,
-        EvBuildIndexProgressResponse,
+        EvCheckConstraintCreateRequest,
+        EvCheckConstraintProgressResponse,
 
         EvEnd
     };

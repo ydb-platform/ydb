@@ -65,7 +65,7 @@ TColumnsTags GetAllTags(const TUserTable& tableInfo);
 TColumnsTypes GetAllTypes(const TUserTable& tableInfo);
 
 template<typename TColumns>
-void AddTags(TTags& tags, const TColumnsTags& allTags, TColumns columns) {
+void AddTags(TTags& tags, const TColumnsTags& allTags, const TColumns& columns) {
     for (const auto& colName : columns) {
         tags.push_back(allTags.at(colName));
     }

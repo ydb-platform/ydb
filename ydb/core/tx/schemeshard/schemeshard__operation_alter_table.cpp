@@ -78,7 +78,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
             copyAlter.DropColumnsSize() != 0);
 
     if (copyAlter.HasIsBackup() && copyAlter.GetIsBackup() !=  table->IsBackup) {
-        errStr = Sprintf("Cannot add/remove 'IsBackup' property");
+        errStr = "Cannot add/remove 'IsBackup' property";
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
     }
@@ -88,14 +88,14 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         && !copyAlter.HasTTLSettings()
         && !copyAlter.HasReplicationConfig())
     {
-        errStr = Sprintf("No changes specified");
+        errStr = "No changes specified";
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
     }
 
     if (copyAlter.HasPartitionConfig() && copyAlter.GetPartitionConfig().HasFreezeState()) {
         if (hasSchemaChanges) {
-            errStr = Sprintf("Mix freeze cmd with other options is forbidden");
+            errStr = "Mix freeze cmd with other options is forbidden";
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
         }
@@ -105,20 +105,20 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     for (auto& col : *copyAlter.MutableColumns()) {
         bool hasDefault = col.HasDefaultFromLiteral();
         if (hasDefault && !context.SS->EnableAddColumsWithDefaults) {
-            errStr = Sprintf("Column addition with default value is not supported now.");
+            errStr = "Column addition with default value is not supported now.";
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
         }
 
         bool hasSetNotNull = col.HasIsCheckingNotNullInProgress();
         if (hasSetNotNull && !context.SS->EnableChangeNotNullConstraint) {
-            errStr = Sprintf("Set/drop not null is not supported now.");
+            errStr = "Set/drop not null is not supported now.";
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
         }
 
         if (col.GetNotNull() && !hasDefault) {
-            errStr = Sprintf("Not null columns without defaults are not supported.");
+            errStr = "Not null columns without defaults are not supported.";
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
         }
@@ -128,7 +128,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
 
     for (auto& col : *copyAlter.MutableDropColumns()) {
         if (col.GetName().empty()) {
-            errStr = Sprintf("Must specify name for the column to drop");
+            errStr = "Must specify name for the column to drop";
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
         }
@@ -136,7 +136,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     }
 
     if (CheckFreezeStateAlreadySet(table, copyAlter)) {
-        errStr = Sprintf("Requested freeze state already set");
+        errStr = "Requested freeze state already set";
         status = NKikimrScheme::StatusAlreadyExists;
         return nullptr;
     }

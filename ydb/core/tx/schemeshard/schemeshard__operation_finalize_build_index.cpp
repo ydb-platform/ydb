@@ -159,7 +159,7 @@ public:
         tableInfo->AlterVersion += 1;
 
         for (auto& [cId, cInfo]: tableInfo->Columns) {
-            if (cInfo.IsDropped() || !cInfo.IsBuildInProgress && !cInfo.IsCheckingNotNullInProgress) {
+            if (cInfo.IsDropped()) {
                 continue;
             }
 
@@ -172,7 +172,7 @@ public:
 
                 cInfo.IsBuildInProgress = false;
                 context.SS->PersistTableFinishColumnBuilding(db, txState->TargetPathId, tableInfo, cId);
-            } else { // if (cInfo.IsCheckingNotNullInProgress)
+            } else if (cInfo.IsCheckingNotNullInProgress) {
                 const auto& outcome = txState->BuildIndexOutcome;
                 bool isError = (outcome && outcome->HasCancel() && outcome->GetCancel().HasCancelByCheckingNotNull() && outcome->GetCancel().GetCancelByCheckingNotNull());
                 LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

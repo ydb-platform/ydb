@@ -22,6 +22,10 @@
 
 namespace NKikimr::NDataShard {
 
+#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
+#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
+
 bool CheckNotNullConstraint(const TConstArrayRef<TCell>& cells) {
     for (const auto& cell : cells) {
         if (cell.IsNull()) {
@@ -49,12 +53,10 @@ private:
     TTags ScanTags;
 
     enum ECheckingNotNullStatus {
-        None,
         Ok,
         NullFound
     } CheckingNotNullStatus = ECheckingNotNullStatus::Ok;
 
-    int countOfRows = 0;
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::CHECK_CONSTRAINT_ACTOR;
@@ -83,6 +85,7 @@ public:
         Y_ABORT_UNLESS(checkingNotNullSettings.columnSize() > 0);
 
         TVector<TString> columnNames;
+        columnNames.reserve(checkingNotNullSettings.Getcolumn().size());
         for (auto& col : checkingNotNullSettings.Getcolumn()) {
             columnNames.push_back(col.GetColumnName());
         }
@@ -93,6 +96,7 @@ public:
     ~TCheckColumnScan() final = default;
 
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept final {
+        LOG_D("Prepare " << Debug());
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
 
         Driver = driver;
@@ -101,6 +105,7 @@ public:
     }
 
     EScan Seek(TLead& lead, ui64 seq) noexcept final {
+        LOG_D("Seek " << Debug());
         Y_ABORT_UNLESS(seq == 0);
 
         auto scanRange = Intersect(KeyTypes, RequestedRange.ToTableRange(), TableRange.ToTableRange());
@@ -119,25 +124,20 @@ public:
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final {
-        // made it for future checks of constraints
-        if (countOfRows++ == 0) {
-            CheckingNotNullStatus = ECheckingNotNullStatus::None;
-        }
+    EScan Feed(TArrayRef<const TCell>, const TRow& row) noexcept final {
+        LOG_D("Feed");
 
         const TConstArrayRef<TCell> rowCells = *row;
-
         if (!CheckNotNullConstraint(rowCells)) {
             CheckingNotNullStatus = ECheckingNotNullStatus::NullFound;
             return EScan::Final;
-        } else {
-            CheckingNotNullStatus = ECheckingNotNullStatus::Ok;
         }
 
         return EScan::Feed;
     }
 
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final {
+        LOG_D("Finish " << Debug());
         auto ctx = TActivationContext::AsActorContext().MakeFor(SelfId());
 
         auto progress = MakeHolder<TEvDataShard::TEvCheckConstraintProgressResponse>();
@@ -148,19 +148,25 @@ public:
 
         if (abort != EAbort::None) {
             progress->Record.SetStatus(NKikimrTxDataShard::EBuildIndexStatus::ABORTED);
-            // progress->Record.AddIssues(NYql::TIssue("Aborted by scan host env"));
+            Ydb::Issue::IssueMessage* issue = progress->Record.AddIssues();
+            issue->set_message("Aborted by scan host env");
+            issue->set_severity(NYql::TSeverityIds::S_ERROR);
+
+            LOG_W(Debug());
         }
 
         switch (CheckingNotNullStatus) {
             case ECheckingNotNullStatus::NullFound:
+            {
                 progress->Record.SetStatus(NKikimrTxDataShard::EBuildIndexStatus::CHECKING_NOT_NULL_ERROR);
-                // progress->Record.AddIssues(NYql::TIssue("Column contains null value, so not-null constraint was not set."));
+                Ydb::Issue::IssueMessage* issue = progress->Record.AddIssues();
+                issue->set_message("Column contains null value, so not-null constraint was not set.");
+                issue->set_severity(NYql::TSeverityIds::S_ERROR);
                 break;
+            }
             case ECheckingNotNullStatus::Ok:
                 progress->Record.SetStatus(NKikimrTxDataShard::EBuildIndexStatus::DONE);
                 break;
-            case ECheckingNotNullStatus::None:
-                Y_ABORT("unreachable");
         }
 
         ctx.Send(ProgressActorId, progress.Release());
@@ -171,6 +177,7 @@ public:
     }
 
     EScan Exhausted() noexcept final {
+        LOG_D("Exhausted " << Debug());
         return EScan::Final;
     }
 
@@ -179,15 +186,18 @@ public:
     }
 
     TString Debug() const {
-        return "kek";
+        return TStringBuilder() << "TCheckColumnScan: "
+                                << "datashard id: " << DataShardId
+                                << ", generation: " << SeqNo.Generation
+                                << ", round: " << SeqNo.Round
+                                << ", requested range: " << DebugPrintRange(KeyTypes, RequestedRange.ToTableRange(), *AppData()->TypeRegistry);
     }
 
 private:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             default:
-                break;
-                // LOG_E("TCheckColumnScan: StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString() << " " << Debug());
+                LOG_E("TCheckColumnScan: StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString() << " " << Debug());
         }
     }
 };

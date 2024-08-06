@@ -22,6 +22,11 @@ namespace {
 using namespace NCommon;
 using namespace NNodes;
 
+template<typename TColumn>
+static bool IsNotNull(const TColumn& column) {
+    return column.IsCheckingNotNullInProgress || column.NotNull;
+}
+
 const TTypeAnnotationNode* GetExpectedRowType(const TKikimrTableDescription& tableDesc,
     const TVector<TString>& columns, const TPosition& pos, TExprContext& ctx)
 {
@@ -319,7 +324,7 @@ namespace {
             }
 
             const bool isNull = IsPgNullExprNode(constrValue) || defaultType->HasNull();
-            if (isNull && (columnMeta.IsCheckingNotNullInProgress || columnMeta.NotNull)) {
+            if (isNull && IsNotNull(columnMeta)) {
                 ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default expr " << columnName
                     << " is nullable or optional, but column has not null constraint. "));
                 return false;
@@ -557,7 +562,7 @@ private:
         if (op == TYdbOperation::InsertAbort || op == TYdbOperation::InsertRevert ||
             op == TYdbOperation::Upsert || op == TYdbOperation::Replace) {
             for (const auto& [name, meta] : table->Metadata->Columns) {
-                if (meta.NotNull || meta.IsCheckingNotNullInProgress) {
+                if (IsNotNull(meta)) {
                     if (!rowType->FindItem(name) && !meta.IsDefaultKindDefined()) {
                         ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
                             << "Missing not null column in input: " << name
@@ -589,7 +594,7 @@ private:
                 auto column = table->Metadata->Columns.FindPtr(TString(item->GetName()));
                 YQL_ENSURE(column);
                 if (item->GetItemType()->GetKind() != ETypeAnnotationKind::Pg) {
-                    if ((column->NotNull || column->IsCheckingNotNullInProgress) && item->HasOptionalOrNull()) {
+                    if (IsNotNull(*column) && item->HasOptionalOrNull()) {
                         ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
                             << "Can't set NULL or optional value to not null column: " << column->Name));
                         return TStatus::Error;
@@ -758,7 +763,7 @@ private:
                 return TStatus::Error;
             }
 
-            if ((column->NotNull || column->IsCheckingNotNullInProgress) && item->HasOptionalOrNull()) {
+            if (IsNotNull(*column) && item->HasOptionalOrNull()) {
                 if (item->GetItemType()->GetKind() == ETypeAnnotationKind::Pg) {
                     //no type-level notnull check for pg types.
                     continue;

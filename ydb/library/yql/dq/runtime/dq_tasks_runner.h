@@ -162,11 +162,11 @@ public:
         return {};
     };
 
-    std::function<void()> GetWakeupCallback() const override {
+    TWakeUpCallback GetWakeupCallback() const override {
         return {};
     }
 
-    std::function<void(const TString&)> GetErrorCallback() const override {
+    TErrorCallback GetErrorCallback() const override {
         return {};
     }
 

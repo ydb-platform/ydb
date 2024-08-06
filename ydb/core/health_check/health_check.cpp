@@ -1700,12 +1700,9 @@ public:
                                  ETags::PDiskState);
         }
         switch (status->number()) {
-            case NKikimrBlobStorage::ACTIVE: {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
-                break;
-            }
+            case NKikimrBlobStorage::ACTIVE:
             case NKikimrBlobStorage::INACTIVE: {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "PDisk is inactive", ETags::PDiskState);
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                 break;
             }
             case NKikimrBlobStorage::FAULTY:

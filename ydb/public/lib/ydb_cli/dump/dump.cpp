@@ -13,6 +13,7 @@ namespace NYdb {
 namespace NDump {
 
 extern const char SCHEME_FILE_NAME[] = "scheme.pb";
+extern const char PERMISSIONS_FILE_NAME[] = "permissions.pb";
 extern const char INCOMPLETE_FILE_NAME[] = "incomplete";
 extern const char EMPTY_FILE_NAME[] = "empty_dir";
 

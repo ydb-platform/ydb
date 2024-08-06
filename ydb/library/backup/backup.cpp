@@ -596,9 +596,6 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
                     BackupTable(driver, dbIt.GetTraverseRoot(), backupPrefix, dbIt.GetRelPath(),
                             childFolderPath, schemaOnly, preservePoolKinds, ordered);
                     childFolderPath.Child(INCOMPLETE_FILE_NAME).DeleteIfExists();
-                } else if (dbIt.IsDir()) {
-                    BackupPermissions(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
-                    childFolderPath.Child(INCOMPLETE_FILE_NAME).DeleteIfExists();
                 }
             } else if (!avoidCopy) {
                 if (dbIt.IsTable()) {
@@ -632,6 +629,7 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
                 Y_ENSURE(!childFolderPath.Child(INCOMPLETE_FILE_NAME).Exists());
             } else if (dbIt.IsDir()) {
                 MaybeCreateEmptyFile(childFolderPath);
+                BackupPermissions(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
             }
 
             childFolderPath.Child(INCOMPLETE_FILE_NAME).DeleteIfExists();
@@ -670,8 +668,8 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
                     DropTable(driver, tmpTablePath);
                 }
             } else if (dbIt.IsDir()) {
-                BackupPermissions(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
                 MaybeCreateEmptyFile(childFolderPath);
+                BackupPermissions(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
                 if (!avoidCopy) {
                     RemoveClusterDirectory(driver, tmpTablePath);
                 }

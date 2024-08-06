@@ -1,16 +1,19 @@
 #pragma once
-#include "context.h"
 #include "columns_set.h"
+#include "context.h"
 #include "fetched_data.h"
+
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/action.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
-#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/insert_table/data.h>
-#include <ydb/core/tx/columnshard/resource_subscriber/task.h>
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
-#include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/reader/position.h>
+#include <ydb/core/tx/columnshard/resource_subscriber/task.h>
+#include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr::NOlap {
@@ -24,7 +27,7 @@ class TPlainReadData;
 class IFetchTaskConstructor;
 class IFetchingStep;
 
-class IDataSource {
+class IDataSource: public NGroupedMemoryManager::IAllocation {
 private:
     YDB_ACCESSOR(bool, ExclusiveIntervalOnly, true);
     YDB_READONLY(ui32, SourceIdx, 0);
@@ -42,7 +45,12 @@ private:
     virtual NJson::TJsonValue DoDebugJson() const = 0;
     bool MergingStartedFlag = false;
     bool AbortedFlag = false;
+    TAtomic SourceStartedFlag = 0;
     std::shared_ptr<TFetchingScript> FetchingPlan;
+    std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> ResourcesGuard;
+    virtual void DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
+        const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation) override;
+
 protected:
     bool IsSourceInMemoryFlag = true;
     THashMap<ui32, TFetchingInterval*> Intervals;
@@ -53,8 +61,10 @@ protected:
     TAtomic FilterStageFlag = 0;
     bool IsReadyFlag = false;
 
-    virtual bool DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& columns) = 0;
-    virtual bool DoStartFetchingIndexes(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) = 0;
+    virtual bool DoStartFetchingColumns(
+        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& columns) = 0;
+    virtual bool DoStartFetchingIndexes(
+        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) = 0;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) = 0;
     virtual void DoAbort() = 0;
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexMeta) = 0;
@@ -62,9 +72,8 @@ protected:
     virtual NJson::TJsonValue DoDebugJsonForMemory() const {
         return NJson::JSON_MAP;
     }
-public:
-    void OnInitResourcesGuard(const std::shared_ptr<IDataSource>& sourcePtr);
 
+public:
     bool IsAborted() const {
         return AbortedFlag;
     }
@@ -80,6 +89,10 @@ public:
         return false;
     }
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const = 0;
+
+    const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& GetResourcesGuard() const {
+        return ResourcesGuard;
+    }
 
     virtual ui64 GetPathId() const = 0;
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
@@ -114,12 +127,14 @@ public:
         DoAssembleColumns(columns);
     }
 
-    bool StartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& columns) {
+    bool StartFetchingColumns(
+        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& columns) {
         AFL_VERIFY(columns);
         return DoStartFetchingColumns(sourcePtr, step, columns);
     }
 
-    bool StartFetchingIndexes(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) {
+    bool StartFetchingIndexes(
+        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) {
         AFL_VERIFY(indexes);
         return DoStartFetchingIndexes(sourcePtr, step, indexes);
     }
@@ -172,6 +187,15 @@ public:
         return IsReadyFlag;
     }
 
+    void OnEmptyStageData() {
+        AFL_VERIFY(ResourcesGuard);
+        if (ExclusiveIntervalOnly) {
+            ResourcesGuard->Update(0);
+        } else {
+            ResourcesGuard->Update(GetColumnRawBytes(Context->GetPKColumns()->GetColumnIds()));
+        }
+    }
+
     const TFetchedData& GetStageData() const {
         AFL_VERIFY(StageData);
         return *StageData;
@@ -182,11 +206,11 @@ public:
         return *StageData;
     }
 
-    void RegisterInterval(TFetchingInterval& interval);
+    void RegisterInterval(TFetchingInterval& interval, const std::shared_ptr<IDataSource>& sourcePtr);
 
-    IDataSource(const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
-        const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& finish, const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax,
-                const ui32 recordsCount, const std::optional<ui64> shardingVersion, const bool hasDeletions)
+    IDataSource(const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const NArrow::TReplaceKey& start,
+        const NArrow::TReplaceKey& finish, const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const ui32 recordsCount,
+        const std::optional<ui64> shardingVersion, const bool hasDeletions)
         : SourceIdx(sourceIdx)
         , Start(context->GetReadMetadata()->BuildSortedPosition(start))
         , Finish(context->GetReadMetadata()->BuildSortedPosition(finish))
@@ -197,8 +221,7 @@ public:
         , RecordSnapshotMax(recordSnapshotMax)
         , RecordsCount(recordsCount)
         , ShardingVersionOptional(shardingVersion)
-        , HasDeletions(hasDeletions)
-    {
+        , HasDeletions(hasDeletions) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugJson())("finish", Finish.DebugJson());
         if (Start.IsReverseSort()) {
             std::swap(Start, Finish);
@@ -218,13 +241,14 @@ private:
     std::shared_ptr<TPortionInfo> Portion;
     std::shared_ptr<ISnapshotSchema> Schema;
 
-    void NeedFetchColumns(const std::set<ui32>& columnIds,
-        TBlobsAction& blobsAction, THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo>& nullBlocks,
-        const std::shared_ptr<NArrow::TColumnFilter>& filter);
+    void NeedFetchColumns(const std::set<ui32>& columnIds, TBlobsAction& blobsAction,
+        THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo>& nullBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter);
 
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexChecker) override;
-    virtual bool DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& columns) override;
-    virtual bool DoStartFetchingIndexes(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) override;
+    virtual bool DoStartFetchingColumns(
+        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& columns) override;
+    virtual bool DoStartFetchingIndexes(
+        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) override;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) override;
     virtual NJson::TJsonValue DoDebugJson() const override {
         NJson::TJsonValue result = NJson::JSON_MAP;
@@ -239,7 +263,7 @@ private:
         for (auto&& i : SequentialEntityIds) {
             AFL_VERIFY(columns.erase(i));
         }
-//        result.InsertValue("sequential_columns", JoinSeq(",", SequentialEntityIds));
+        //        result.InsertValue("sequential_columns", JoinSeq(",", SequentialEntityIds));
         if (SequentialEntityIds.size()) {
             result.InsertValue("min_memory_seq", Portion->GetMinMemoryForReadColumns(SequentialEntityIds));
             result.InsertValue("min_memory_seq_blobs", Portion->GetColumnBlobBytes(SequentialEntityIds));
@@ -289,9 +313,8 @@ public:
                     selectedInMem.emplace(i);
                 }
             }
-            return Portion->GetMinMemoryForReadColumns(selectedSeq)
-                + Portion->GetColumnBlobBytes(selectedSeq)
-                + Portion->GetColumnRawBytes(selectedInMem, false);
+            return Portion->GetMinMemoryForReadColumns(selectedSeq) + Portion->GetColumnBlobBytes(selectedSeq) +
+                   Portion->GetColumnRawBytes(selectedInMem, false);
         } else {
             return Portion->GetColumnRawBytes(columnsIds, false);
         }
@@ -311,11 +334,10 @@ public:
 
     TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context,
         const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& finish)
-        : TBase(sourceIdx, context, start, finish, portion->RecordSnapshotMin(), portion->RecordSnapshotMax(), portion->GetRecordsCount(), portion->GetShardingVersionOptional(),
-            portion->GetMeta().GetDeletionsCount())
+        : TBase(sourceIdx, context, start, finish, portion->RecordSnapshotMin(), portion->RecordSnapshotMax(), portion->GetRecordsCount(),
+              portion->GetShardingVersionOptional(), portion->GetMeta().GetDeletionsCount())
         , Portion(portion)
-        , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*Portion))
-    {
+        , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*Portion)) {
     }
 };
 
@@ -326,11 +348,12 @@ private:
     bool ReadStarted = false;
 
     virtual void DoAbort() override {
-
     }
 
-    virtual bool DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& columns) override;
-    virtual bool DoStartFetchingIndexes(const std::shared_ptr<IDataSource>& /*sourcePtr*/, const TFetchingScriptCursor& /*step*/, const std::shared_ptr<TIndexesSet>& /*indexes*/) override {
+    virtual bool DoStartFetchingColumns(
+        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& columns) override;
+    virtual bool DoStartFetchingIndexes(const std::shared_ptr<IDataSource>& /*sourcePtr*/, const TFetchingScriptCursor& /*step*/,
+        const std::shared_ptr<TIndexesSet>& /*indexes*/) override {
         return false;
     }
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& /*indexMeta*/) override {
@@ -350,6 +373,7 @@ private:
     virtual bool DoAddSequentialEntityIds(const ui32 /*entityId*/) override {
         return false;
     }
+
 public:
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const override {
         THashMap<TChunkAddress, TString> result;
@@ -385,10 +409,9 @@ public:
     TCommittedDataSource(const ui32 sourceIdx, const TCommittedBlob& committed, const std::shared_ptr<TSpecialReadContext>& context,
         const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& finish)
         : TBase(sourceIdx, context, start, finish, committed.GetSnapshot(), committed.GetSnapshot(), committed.GetRecordsCount(), {},
-            committed.GetIsDelete())
+              committed.GetIsDelete())
         , CommittedBlob(committed) {
-
     }
 };
 
-}
+}   // namespace NKikimr::NOlap::NReader::NPlain

@@ -5,8 +5,9 @@
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
-void TScanHead::OnIntervalResult(const std::optional<NArrow::TShardedRecordBatch>& newBatch, const std::shared_ptr<arrow::RecordBatch>& lastPK,
-    std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger, const ui32 intervalIdx, TPlainReadData& reader) {
+void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& allocationGuard, const std::optional<NArrow::TShardedRecordBatch>& newBatch,
+    const std::shared_ptr<arrow::RecordBatch>& lastPK, std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger, const ui32 intervalIdx,
+    TPlainReadData& reader) {
     if (Context->GetReadMetadata()->Limit && (!newBatch || newBatch->GetRecordsCount() == 0) && InFlightLimit < 1000) {
         if (++ZeroCount == std::max<ui64>(16, InFlightLimit)) {
             InFlightLimit = std::min<ui32>(MaxInFlight, InFlightLimit * 2);
@@ -21,7 +22,7 @@ void TScanHead::OnIntervalResult(const std::optional<NArrow::TShardedRecordBatch
     AFL_VERIFY(Context->GetCommonContext()->GetReadMetadata()->IsSorted());
     if (newBatch && newBatch->GetRecordsCount()) {
         const std::optional<ui32> callbackIdxSubscriver = itInterval->second->HasMerger() ? std::optional<ui32>(intervalIdx) : std::nullopt;
-        AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, std::make_shared<TPartialReadResult>(itInterval->second->GetResourcesGuard(), *newBatch, lastPK, callbackIdxSubscriver)).second);
+        AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, std::make_shared<TPartialReadResult>(std::move(allocationGuard), *newBatch, lastPK, callbackIdxSubscriver)).second);
     } else {
         AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, nullptr).second);
     }
@@ -33,7 +34,8 @@ void TScanHead::OnIntervalResult(const std::optional<NArrow::TShardedRecordBatch
         if (it == ReadyIntervals.end()) {
             break;
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_result")("interval_idx", intervalIdx)("count", it->second ? it->second->GetRecordsCount() : 0);
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_result")("interval_idx", intervalIdx)(
+            "count", it->second ? it->second->GetRecordsCount() : 0);
         auto result = it->second;
         ReadyIntervals.erase(it);
         if (result) {
@@ -51,7 +53,8 @@ void TScanHead::OnIntervalResult(const std::optional<NArrow::TShardedRecordBatch
         AFL_VERIFY(ReadyIntervals.empty());
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "intervals_finished");
     } else {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "wait_interval")("remained", FetchingIntervals.size())("interval_idx", FetchingIntervals.begin()->first);
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "wait_interval")("remained", FetchingIntervals.size())(
+            "interval_idx", FetchingIntervals.begin()->first);
     }
 }
 
@@ -260,7 +263,6 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
                 CurrentState.GetCurrentSources(), Context, true, true, false);
             FetchingIntervals.emplace(intervalIdx, interval);
             IntervalStats.emplace_back(CurrentState.GetCurrentSources().size(), true);
-            NResourceBroker::NSubscribe::ITask::StartResourceSubscription(Context->GetCommonContext()->GetResourceSubscribeActorId(), interval);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "new_interval")("interval_idx", intervalIdx)(
                 "interval", interval->DebugJson());
         }
@@ -280,7 +282,6 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
             IntervalStats.emplace_back(CurrentState.GetCurrentSources().size(), false);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "new_interval")("interval_idx", intervalIdx)(
                 "interval", interval->DebugJson());
-            NResourceBroker::NSubscribe::ITask::StartResourceSubscription(Context->GetCommonContext()->GetResourceSubscribeActorId(), interval);
             return true;
         } else {
             IntervalStats.emplace_back(CurrentState.GetCurrentSources().size(), false);

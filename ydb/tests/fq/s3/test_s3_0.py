@@ -273,15 +273,15 @@ Apple,2,22,
         read_data_2 = '''a,b,c
 1,2,3'''
 
-        s3_client.put_object(Body=read_data_1, Bucket='fbucket', Key='/test/1.csv', ContentType='text/plain')
-        s3_client.put_object(Body=read_data_2, Bucket='fbucket', Key='/test/2.csv', ContentType='text/plain')
+        s3_client.put_object(Body=read_data_1, Bucket='fbucket', Key='/1.csv', ContentType='text/plain')
+        s3_client.put_object(Body=read_data_2, Bucket='fbucket', Key='/2.csv', ContentType='text/plain')
         kikimr.control_plane.wait_bootstrap(1)
         storage_connection_name = unique_prefix + "multiple_files_bucket"
         client.create_storage_connection(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT *
-            FROM `{storage_connection_name}`.`/test/`
+            FROM `{storage_connection_name}`.`/`
             WITH (format=csv_with_names, with_infer='true');
             '''
 

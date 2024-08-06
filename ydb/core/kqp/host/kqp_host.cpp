@@ -1607,16 +1607,10 @@ private:
                 || settingName == "Warning"
                 || settingName == "UseBlocks"
                 || settingName == "BlockEngine"
-<<<<<<< HEAD
-=======
-                || settingName == "FilterPushdownOverJoinOptionalSide"
-                || settingName == "DisableFilterPushdownOverJoinOptionalSide"
-                || settingName == "RotateJoinTree"
                 || settingName == "TimeOrderRecoverDelay"
                 || settingName == "TimeOrderRecoverAhead"
                 || settingName == "TimeOrderRecoverRowLimit"
                 || settingName == "MatchRecognizeStream"
->>>>>>> 18b7d766e7... YDB-2568 Enable match_recognize in ydb (#6807)
                 ;
         };
         auto configProvider = CreateConfigProvider(*TypesCtx, gatewaysConfig, {}, allowSettings);

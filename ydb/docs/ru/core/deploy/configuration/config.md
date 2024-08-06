@@ -358,7 +358,7 @@ domains_config:
             - {type: ROT}
           vdisk_kind: Default
       - kind: ssdencrypted
-        pool_config:****
+        pool_config:
           box_id: '1'
           encryption_mode: 1
           erasure_species: block-4-2

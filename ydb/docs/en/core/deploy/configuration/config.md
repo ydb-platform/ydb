@@ -456,9 +456,11 @@ actor_system_config:
 | `progress_threshold` | The actor system supports requesting message sending scheduled for a later point in time. The system might fail to send all scheduled messages at some point. In this case, it starts sending them in "virtual time" by handling message sending in each loop over a period that doesn't exceed the `progress_threshold` value in microseconds and shifting the virtual time by the `progress_threshold` value until it reaches real time. |
 | `resolution` | When making a schedule for sending messages, discrete time slots are used. The slot duration is set by the `resolution` parameter in microseconds. |
 
-## Memory {#memory}
+## Memory controller {#memory-controller}
 
-Several components utilize memory, including but not limited to:
+There are many components inside {{ ydb-short-name }} [nodes](../../concepts/glossary.md) that utilize memory. Most of them need a fixed amount, but some are flexible and can use varying amounts of memory, typically to gain performance improvement. If such components allocate more memory than is physically available, the operating system is likely to [terminate](https://en.wikipedia.org/wiki/Out_of_memory#Recovery) the entire {{ ydb-short-name }} node, which is undesirable. The memory controller's goal is to allow {{ ydb-short-name }} to avoid out-of-memory situations while still efficiently using the available memory.
+
+Examples of components managed by the memory controller:
 
 - Shared Cache: Stores recently accessed data pages read from Blob Storage to reduce disk I/O and accelerate data retrieval;
 - MemTable: Holds data that has not yet been flushed to SST;
@@ -467,15 +469,15 @@ Several components utilize memory, including but not limited to:
 
 Memory limits can be configured to control the overall memory usage, ensuring the database operates efficiently within the available resources.
 
-### Hard memory limit
+### Hard memory limit {#hard-memory-limit}
 
 The hard memory limit specifies the total amount of available memory.
 
-By default, the hard memory limit is set to the process's CGroup memory limit. 
+By default, the hard memory limit is set to the {{ ydb-short-name }} node process's [cgroups](https://en.wikipedia.org/wiki/Cgroups) memory limit. 
 
-In environments without a CGroup memory limit, the default hard memory limit is equal to the total available memory of the host. This allows the database to utilize all available resources in unrestricted environments, though it may lead to resource contention with other processes running on the same host.
+In environments without a cgroups memory limit, the default hard memory limit is equal to the host's total available memory. This allows the database to utilize all available resources in unrestricted environments, though it may lead to resource contention with other processes running on the same host.
 
-Additionally, the hard memory limit can be specified in the configuration. Note that the database process may still exceed this limit, so it is highly recommended to use CGroup memory limits in production environments to enforce strict memory control.
+Additionally, the hard memory limit can be specified in the configuration. Note that the database process may still exceed this limit, so it is highly recommended to use cgroups memory limits in production environments to enforce strict memory control.
 
 Example of the `memory_controller_config` section with a specified hard memory limit:
 
@@ -486,11 +488,9 @@ memory_controller_config:
 
 ### Per component memory limits
 
-Certain components have their own memory limits. Currently, these components are Shared Cache and MemTable.
+Certain {{ ydb-short-name }} components support limiting their individual memory usage. Most memory limits have both minimum and maximum thresholds, allowing for dynamic adjustment based on current process consumption.
 
-Most memory limits have both minimum and maximum thresholds, allowing for dynamic adjustment based on current process consumption.
-
-Memory limits can be configured either in absolute bytes or as a percentage relative to the hard memory limit. Using percentages is advantageous for managing database clusters with nodes of varying capacities. If both absolute byte limits and percentage limits are specified, the system uses a combination of both.
+Memory limits can be configured either in absolute bytes or as a percentage relative to the [hard memory limit](#hard-memory-limit). Using percentages is advantageous for managing clusters with nodes of varying capacities. If both absolute byte and percentage limits are specified, the memory controller uses a combination of both.
 
 Example of the `memory_controller_config` section with specified Shared Cache limits:
 

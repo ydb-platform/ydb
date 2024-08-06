@@ -126,13 +126,13 @@ Some system settings are updated without restarting nodes. To change them, uploa
 
 List of dynamically updated settings:
 
-* `immediate_controls_config`;
-* `log_config`;
-* `memory_controller_config`;
-* `monitoring_config`;
-* `table_service_config`;
-* `tracing_config.external_throttling`;
-* `tracing_config.sampling`.
+* `immediate_controls_config`
+* `log_config`
+* `memory_controller_config`
+* `monitoring_config`
+* `table_service_config`
+* `tracing_config.external_throttling`
+* `tracing_config.sampling`
 
 The list may be expanded in the future.
 

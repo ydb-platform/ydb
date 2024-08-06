@@ -82,11 +82,11 @@ public:
         , KeyTypes(tableInfo.KeyColumnTypes)
         , TableRange(tableInfo.Range)
     {
-        Y_ABORT_UNLESS(checkingNotNullSettings.columnSize() > 0);
+        Y_ABORT_UNLESS(checkingNotNullSettings.ColumnsSize() > 0);
 
         TVector<TString> columnNames;
-        columnNames.reserve(checkingNotNullSettings.Getcolumn().size());
-        for (auto& col : checkingNotNullSettings.Getcolumn()) {
+        columnNames.reserve(checkingNotNullSettings.GetColumns().size());
+        for (auto& col : checkingNotNullSettings.GetColumns()) {
             columnNames.push_back(col.GetColumnName());
         }
 

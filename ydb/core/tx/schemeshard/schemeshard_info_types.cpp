@@ -2171,7 +2171,7 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TC
     Y_ABORT_UNLESS(IsCheckingNotNull());
     result->SetTable(TPath::Init(TablePathId, ss).PathString());
     for (const auto& column : CheckingNotNullColumns) {
-        column.SerializeToProto(result->add_column());
+        column.SerializeToProto(result->AddColumns());
     }
 }
 

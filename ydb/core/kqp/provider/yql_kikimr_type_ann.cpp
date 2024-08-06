@@ -1,6 +1,8 @@
 #include "yql_kikimr_provider_impl.h"
 #include "yql_kikimr_type_ann_pg.h"
 
+#include <ydb/core/kqp/common/kqp_yql.h>
+
 #include <ydb/core/docapi/traits.h>
 
 #include <ydb/library/yql/core/type_ann/type_ann_impl.h>
@@ -21,11 +23,6 @@ namespace {
 
 using namespace NCommon;
 using namespace NNodes;
-
-template<typename TColumn>
-static bool IsNotNull(const TColumn& column) {
-    return column.IsCheckingNotNullInProgress || column.NotNull;
-}
 
 const TTypeAnnotationNode* GetExpectedRowType(const TKikimrTableDescription& tableDesc,
     const TVector<TString>& columns, const TPosition& pos, TExprContext& ctx)

@@ -1509,7 +1509,7 @@ public:
                             if (value == "drop_not_null") {
                                 alter_columns->set_not_null(false);
                             } else if (value == "set_not_null") {
-                                auto setting = indexBuildSettings.mutable_column_check_not_null()->add_column();
+                                auto setting = indexBuildSettings.mutable_column_check_not_null()->AddColumns();
                                 setting->SetColumnName(TString(columnName));
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()

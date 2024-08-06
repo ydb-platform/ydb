@@ -68,6 +68,7 @@ runs:
       uses: actions/setup-node@v3
       with:
         node-version: 19
+        registry-url: "https://mirror.yandex.ru/mirrors/nodejs.org"
     
     - name: Init
       id: init

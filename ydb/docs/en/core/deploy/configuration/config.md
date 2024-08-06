@@ -458,7 +458,7 @@ actor_system_config:
 
 ## Memory controller {#memory-controller}
 
-There are many components inside {{ ydb-short-name }} [database nodes](../../concepts/glossary.md#database-node) that utilize memory. Most of them need a fixed amount, but some are flexible and can use varying amounts of memory, typically to gain performance improvement. If such components allocate more memory than is physically available, the operating system is likely to [terminate](https://en.wikipedia.org/wiki/Out_of_memory#Recovery) the entire {{ ydb-short-name }} node, which is undesirable. The memory controller's goal is to allow {{ ydb-short-name }} to avoid out-of-memory situations while still efficiently using the available memory.
+There are many components inside {{ ydb-short-name }} [database nodes](../../concepts/glossary.md#database-node) that utilize memory. Most of them need a fixed amount, but some are flexible and can use varying amounts of memory, typically to improve performance. If such components allocate more memory than is physically available, the operating system is likely to [terminate](https://en.wikipedia.org/wiki/Out_of_memory#Recovery) the entire {{ ydb-short-name }} node, which is undesirable. The memory controller's goal is to allow {{ ydb-short-name }} to avoid out-of-memory situations while still efficiently using the available memory.
 
 Examples of components managed by the memory controller:
 
@@ -467,13 +467,13 @@ Examples of components managed by the memory controller:
 - [KQP](../../concepts/glossary.md#kqp): stores intermediate query results.
 - Allocator Caches: keeps memory blocks which have been released but not yet returned to the operating system.
 
-Memory limits can be configured to control the overall memory usage, ensuring the database operates efficiently within the available resources.
+Memory limits can be configured to control overall memory usage, ensuring the database operates efficiently within the available resources.
 
 ### Hard memory limit {#hard-memory-limit}
 
 The hard memory limit specifies the total amount of available memory.
 
-By default, the hard memory limit is set to the {{ ydb-short-name }} node process's [cgroups](https://en.wikipedia.org/wiki/Cgroups) memory limit. 
+By default, the hard memory limit is set to the {{ ydb-short-name }} node process's [cgroups](https://en.wikipedia.org/wiki/Cgroups) memory limit.
 
 In environments without a cgroups memory limit, the default hard memory limit is equal to the host's total available memory. This allows the database to utilize all available resources in unrestricted environments, though it may lead to resource contention with other processes running on the same host.
 
@@ -490,17 +490,17 @@ memory_controller_config:
 
 The soft memory limit specifies a dangerous threshold that should not be exceeded under normal conditions.
 
-If the soft limit is exceeded, {{ ydb-short-name }} starts to reduce the shared cache size to zero. Therefore, more database nodes should be added to the cluster as soon as possible or per component memory limits should be reduced.
+If the soft limit is exceeded, {{ ydb-short-name }} starts to reduce the shared cache size to zero. Therefore, more database nodes should be added to the cluster as soon as possible or per-component memory limits should be reduced.
 
 ### Target memory utilization {#target-memory-utilization}
 
-The target memory utilization specifies a threshold for memory usage that is considered as optimal.
+The target memory utilization specifies a threshold for memory usage that is considered optimal.
 
-Flexible cache sizes are calculated according to their limit thresholds to keep process consumption around this value. 
+Flexible cache sizes are calculated according to their limit thresholds to keep process consumption around this value.
 
-For example, in a database that consumes a little memory on queries execution, caches consume memory around this threshold, and other memory stays free. And if queries execution consumes more memory, caches start to reduce their limits to their minimum threshold.
+For example, in a database that consumes a little memory on query execution, caches consume memory around this threshold and other memory stays free. And if query execution consumes more memory, caches start to reduce their limits to their minimum threshold.
 
-### Per component memory limits
+### Per-component memory limits
 
 #### Flexible memory limits
 
@@ -511,9 +511,9 @@ These components are:
 - Shared cache
 - MemTable
 
-Each of these components' limit is dynamically recalculated each second, so that each of them consumes memory proportionally to its limit threshold and total consumed memory stays around target memory utilization.
+Each of these components' limits is dynamically recalculated every second so that each component consumes memory proportionally to its limit threshold and the total consumed memory stays around the target memory utilization.
 
-Memory limits can be configured either in absolute bytes or as a percentage relative to the [hard memory limit](#hard-memory-limit). Using percentages is advantageous for managing clusters with nodes of varying capacities. If both absolute byte and percentage limits are specified, the memory controller uses a combination of both (maximum for lower limits, minimum for upper limits).
+Memory limits can be configured either in absolute bytes or as a percentage relative to the [hard memory limit](#hard-memory-limit). Using percentages is advantageous for managing clusters with nodes of varying capacities. If both absolute byte and percentage limits are specified, the memory controller uses a combination of both (maximum for lower limits and minimum for upper limits).
 
 Example of the `memory_controller_config` section with specified shared cache limits:
 
@@ -531,7 +531,7 @@ These components are:
 
 - KQP
 
-Example of the `memory_controller_config` section with specified KQP limit:
+Example of the `memory_controller_config` section with a specified KQP limit:
 
 ```yaml
 memory_controller_config:
@@ -545,11 +545,11 @@ Parameters | Default | Description
 `hard_limit_bytes` | CGroup&nbsp;memory&nbsp;limit&nbsp;/<br/>Host memory | Hard memory usage limit for the database.
 `soft_limit_percent`&nbsp;/<br/>`soft_limit_bytes` | 75% | Soft memory usage limit for the database.
 `target_utilization_percent`&nbsp;/<br/>`target_utilization_bytes` | 50% | Target memory utilization for the database.
-`shared_cache_min_percent`&nbsp;/<br/>`shared_cache_min_bytes` | 20% | A minimum threshold for the shared cache memory limit.
-`shared_cache_max_percent`&nbsp;/<br/>`shared_cache_max_bytes` | 50% | A maximum threshold for the shared cache memory limit.
-`mem_table_min_percent`&nbsp;/<br/>`mem_table_min_bytes` | 1% | A minimum threshold for the MemTable memory limit.
-`mem_table_max_percent`&nbsp;/<br/>`mem_table_max_bytes` | 3% | A maximum threshold for the MemTable memory limit.
-`query_execution_limit_percent`&nbsp;/<br/>`query_execution_limit_bytes` | 20% | A maximum threshold for the MemTable memory limit.
+`shared_cache_min_percent`&nbsp;/<br/>`shared_cache_min_bytes` | 20% | Minimum threshold for the shared cache memory limit.
+`shared_cache_max_percent`&nbsp;/<br/>`shared_cache_max_bytes` | 50% | Maximum threshold for the shared cache memory limit.
+`mem_table_min_percent`&nbsp;/<br/>`mem_table_min_bytes` | 1% | Minimum threshold for the MemTable memory limit.
+`mem_table_max_percent`&nbsp;/<br/>`mem_table_max_bytes` | 3% | Maximum threshold for the MemTable memory limit.
+`query_execution_limit_percent`&nbsp;/<br/>`query_execution_limit_bytes` | 20% | KQP memory limit.
 
 ## blob_storage_config: Static cluster group {#blob-storage-config}
 

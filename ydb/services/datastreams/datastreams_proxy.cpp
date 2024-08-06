@@ -484,9 +484,6 @@ namespace NKikimr::NDataStreams::V1 {
             auto& s = GetProtoRequest()->partitioning_settings();
             auto* t = groupConfig.MutablePQTabletConfig()->MutablePartitionStrategy();
 
-            t->SetMinPartitionCount(s.min_active_partitions() ? s.min_active_partitions() : 1);
-            t->SetMaxPartitionCount(s.max_active_partitions() ? s.max_active_partitions() : 1);
-
             auto& as = s.auto_partitioning_settings();
             switch(as.strategy()) {
                 case Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_UNSPECIFIED:
@@ -507,6 +504,13 @@ namespace NKikimr::NDataStreams::V1 {
                 case  Ydb::DataStreams::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_PAUSED:
                     t->SetPartitionStrategyType(NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_PAUSED);
                     break;
+            }
+
+            t->SetMinPartitionCount(s.min_active_partitions() ? s.min_active_partitions() : 1);
+            if (!s.max_active_partitions() && t->GetPartitionStrategyType() != NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED) {
+                t->SetMaxPartitionCount(1);
+            } else {
+                t->SetMaxPartitionCount(s.max_active_partitions());
             }
 
             auto& ws = as.partition_write_speed();

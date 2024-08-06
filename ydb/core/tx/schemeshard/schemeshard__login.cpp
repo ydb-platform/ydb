@@ -20,10 +20,16 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
     TTxType GetTxType() const override { return TXTYPE_LOGIN; }
 
     NLogin::TLoginProvider::TLoginUserRequest GetLoginRequest() const {
+        const auto& record(Request->Get()->Record);
         return {
-            .User = Request->Get()->Record.GetUser(),
-            .Password = Request->Get()->Record.GetPassword(),
-            .ExternalAuth = Request->Get()->Record.GetExternalAuth()
+            .User = record.GetUser(),
+            .Password = record.GetPassword(),
+            .Options = {
+                .ExpiresAfter = record.HasExpiresAfterMs()
+                    ? std::chrono::milliseconds(record.GetExpiresAfterMs())
+                    : std::chrono::system_clock::duration::zero()
+                },
+            .ExternalAuth = record.GetExternalAuth(),
             };
     }
 

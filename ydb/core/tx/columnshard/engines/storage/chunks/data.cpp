@@ -9,4 +9,13 @@ void TPortionIndexChunk::DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRan
     portionInfo.AddIndex(TIndexChunk(GetEntityId(), GetChunkIdxVerified(), RecordsCount, RawBytes, bRange));
 }
 
+std::shared_ptr<IPortionDataChunk> TPortionIndexChunk::DoCopyWithAnotherBlob(
+    TString&& data, const TSimpleColumnInfo& /*columnInfo*/) const {
+    return std::make_shared<TPortionIndexChunk>(GetChunkAddressVerified(), RecordsCount, RawBytes, std::move(data));
+}
+
+void TPortionIndexChunk::DoAddInplaceIntoPortion(TPortionInfoConstructor& portionInfo) const {
+    portionInfo.AddIndex(TIndexChunk(GetEntityId(), GetChunkIdxVerified(), RecordsCount, RawBytes, GetData()));
+}
+
 }   // namespace NKikimr::NOlap::NIndexes

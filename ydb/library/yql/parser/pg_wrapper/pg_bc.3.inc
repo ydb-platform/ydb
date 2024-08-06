@@ -46,6 +46,7 @@ LLVM_BC(
     arrow_regexeqsel
     arrow_regexnejoinsel
     arrow_regexnesel
+    arrow_text_starts_with_support
     arrow_texticlike_support
     arrow_texticregexeq_support
     arrow_textlike_support

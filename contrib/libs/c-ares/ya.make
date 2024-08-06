@@ -5,16 +5,15 @@ LIBRARY()
 LICENSE(
     BSD-3-Clause AND
     ISC AND
-    LicenseRef-scancode-mit-no-advert-export-control AND
     MIT AND
     Public-Domain
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.20.1)
+VERSION(1.28.1)
 
-ORIGINAL_SOURCE(https://github.com/c-ares/c-ares/archive/cares-1_20_1.tar.gz)
+ORIGINAL_SOURCE(https://github.com/c-ares/c-ares/archive/cares-1_28_1.tar.gz)
 
 PEERDIR(
     contrib/libs/libc_compat
@@ -52,22 +51,36 @@ SRCS(
     src/lib/ares__addrinfo_localhost.c
     src/lib/ares__buf.c
     src/lib/ares__close_sockets.c
-    src/lib/ares__get_hostent.c
+    src/lib/ares__hosts_file.c
     src/lib/ares__htable.c
     src/lib/ares__htable_asvp.c
-    src/lib/ares__htable_stvp.c
+    src/lib/ares__htable_strvp.c
+    src/lib/ares__htable_szvp.c
+    src/lib/ares__iface_ips.c
     src/lib/ares__llist.c
     src/lib/ares__parse_into_addrinfo.c
-    src/lib/ares__read_line.c
-    src/lib/ares__readaddrinfo.c
     src/lib/ares__slist.c
+    src/lib/ares__socket.c
     src/lib/ares__sortaddrinfo.c
+    src/lib/ares__threads.c
     src/lib/ares__timeval.c
     src/lib/ares_android.c
     src/lib/ares_cancel.c
     src/lib/ares_create_query.c
     src/lib/ares_data.c
     src/lib/ares_destroy.c
+    src/lib/ares_dns_mapping.c
+    src/lib/ares_dns_name.c
+    src/lib/ares_dns_parse.c
+    src/lib/ares_dns_record.c
+    src/lib/ares_dns_write.c
+    src/lib/ares_event_epoll.c
+    src/lib/ares_event_kqueue.c
+    src/lib/ares_event_poll.c
+    src/lib/ares_event_select.c
+    src/lib/ares_event_thread.c
+    src/lib/ares_event_wake_pipe.c
+    src/lib/ares_event_win32.c
     src/lib/ares_expand_name.c
     src/lib/ares_expand_string.c
     src/lib/ares_fds.c
@@ -82,8 +95,7 @@ SRCS(
     src/lib/ares_getsock.c
     src/lib/ares_init.c
     src/lib/ares_library_init.c
-    src/lib/ares_mkquery.c
-    src/lib/ares_nowarn.c
+    src/lib/ares_math.c
     src/lib/ares_options.c
     src/lib/ares_parse_a_reply.c
     src/lib/ares_parse_aaaa_reply.c
@@ -98,18 +110,21 @@ SRCS(
     src/lib/ares_parse_uri_reply.c
     src/lib/ares_platform.c
     src/lib/ares_process.c
+    src/lib/ares_qcache.c
     src/lib/ares_query.c
     src/lib/ares_rand.c
     src/lib/ares_search.c
     src/lib/ares_send.c
+    src/lib/ares_str.c
     src/lib/ares_strcasecmp.c
-    src/lib/ares_strdup.c
     src/lib/ares_strerror.c
     src/lib/ares_strsplit.c
+    src/lib/ares_sysconfig.c
+    src/lib/ares_sysconfig_files.c
     src/lib/ares_timeout.c
+    src/lib/ares_update_servers.c
     src/lib/ares_version.c
     src/lib/atomic.cpp
-    src/lib/bitncmp.c
     src/lib/inet_net_pton.c
     src/lib/inet_ntop.c
     src/lib/windows_port.c

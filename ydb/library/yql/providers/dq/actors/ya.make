@@ -25,6 +25,7 @@ PEERDIR(
     ydb/library/yql/core/services
     ydb/library/yql/core/services/mounts
     ydb/library/yql/core/user_data
+    ydb/library/yql/core
     ydb/library/yql/utils/actors
     ydb/library/yql/utils/actor_log
     ydb/library/yql/utils/backtrace

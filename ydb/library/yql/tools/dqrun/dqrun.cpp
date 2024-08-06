@@ -59,6 +59,7 @@
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/minikql/mkql_utils.h>
 #include <ydb/library/yql/protos/yql_mount.pb.h>
+#include <ydb/library/yql/protos/pg_ext.pb.h>
 #include <ydb/library/yql/core/file_storage/proto/file_storage.pb.h>
 #include <ydb/library/yql/core/file_storage/http_download/http_download.h>
 #include <ydb/library/yql/core/file_storage/file_storage.h>
@@ -67,6 +68,8 @@
 #include <ydb/library/yql/core/services/yql_out_transformers.h>
 #include <ydb/library/yql/core/url_lister/url_lister_manager.h>
 #include <ydb/library/yql/core/yql_library_compiler.h>
+#include <ydb/library/yql/core/pg_ext/yql_pg_ext.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
 #include <ydb/library/yql/utils/log/tls_backend.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
@@ -477,6 +480,7 @@ int RunMain(int argc, const char* argv[])
     clusterMapping["pg_catalog"] = PgProviderName;
     clusterMapping["information_schema"] = PgProviderName;
 
+    TString pgExtConfig;
     TString mountConfig;
     TString mestricsPusherConfig;
     TString udfResolver;
@@ -507,6 +511,7 @@ int RunMain(int argc, const char* argv[])
     TString opId;
     IQStoragePtr qStorage;
     TQContext qContext;
+    TString ysonAttrs;
 
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
     opts.AddLongOption('p', "program", "Program to execute (use '-' to read from stdin)")
@@ -670,6 +675,8 @@ int RunMain(int argc, const char* argv[])
         .Optional()
         .RequiredArgument("ENDPOINT")
         .StoreResult(&tokenAccessorEndpoint);
+    opts.AddLongOption("yson-attrs", "Provide operation yson attribues").StoreResult(&ysonAttrs);
+    opts.AddLongOption("pg-ext", "pg extensions config file").StoreResult(&pgExtConfig);
     opts.AddHelpOption('h');
 
     opts.SetFreeArgsNum(0);
@@ -773,6 +780,16 @@ int RunMain(int argc, const char* argv[])
           : NYson::EYsonFormat::Pretty;
 
     runOptions.User = user;
+
+    if (!pgExtConfig.empty()) {
+        NProto::TPgExtensions config;
+        Y_ABORT_UNLESS(NKikimr::ParsePBFromFile(pgExtConfig, &config));
+        TVector<NPg::TExtensionDesc> extensions;
+        PgExtensionsFromProto(config, extensions);
+        NPg::RegisterExtensions(extensions, false,
+            *NSQLTranslationPG::CreateExtensionSqlParser(),
+            NKikimr::NMiniKQL::CreateExtensionLoader().get());
+    }
 
     TUserDataTable dataTable;
     FillUsedFiles(filesMappingList, dataTable);
@@ -1067,6 +1084,10 @@ int RunMain(int argc, const char* argv[])
 
     if (runOptions.LineageOnly) {
         runOptions.LineageStream = &Cout;
+    }
+
+    if (ysonAttrs) {
+        program->SetOperationAttrsYson(ysonAttrs);
     }
 
     int result = RunProgram(std::move(program), runOptions, clusters, sqlFlags);

@@ -4,8 +4,9 @@ import argparse
 import json
 from functools import partial
 import os
-import shutil
 from concurrent.futures import ProcessPoolExecutor
+
+from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 HEADER_COMPILE_TIME_TO_SHOW = 0.5  # sec
 
@@ -57,13 +58,10 @@ def get_compile_duration_and_cpp_path(time_trace_path: str) -> tuple[float, str,
 
 
 def add_to_tree(chunks: list[tuple[str, str]], value: int, tree: dict) -> None:
-    if "data" not in tree:
-        tree["data"] = {}
-
     tree["name"] = chunks[0][0]
-    tree["data"]["$symbol"] = chunks[0][1]
+    tree["type"] = chunks[0][1]
     if len(chunks) == 1:
-        tree["data"]["$area"] = value
+        tree["size"] = value
     else:
         if "children" not in tree:
             tree["children"] = []
@@ -79,16 +77,13 @@ def add_to_tree(chunks: list[tuple[str, str]], value: int, tree: dict) -> None:
 
 
 def propogate_area(tree):
-    if "data" not in tree:
-        tree["data"] = {}
-
     area = 0
     for child_ in tree.get("children", []):
         propogate_area(child_)
-        area += child_["data"]["$area"]
+        area += child_["size"]
 
-    if "$area" not in tree["data"]:
-        tree["data"]["$area"] = area
+    if "size" not in tree:
+        tree["size"] = area
 
 
 def enrich_names_with_sec(tree):
@@ -96,7 +91,7 @@ def enrich_names_with_sec(tree):
     for child_ in tree.get("children", []):
         enrich_names_with_sec(child_)
 
-    tree["name"] = tree["name"] + " " + "{:_} ms".format(tree["data"]["$area"])
+    tree["name"] = tree["name"] + " " + "{:_} ms".format(tree["size"])
 
 
 def build_include_tree(path: str, build_output_dir: str, base_src_dir: str) -> list:
@@ -414,7 +409,21 @@ def main():
         print("Performing '{}'".format(description))
         tree = fn(args.build_dir, output_path, base_src_dir)
 
-        shutil.copytree(html_dir, output_path, dirs_exist_ok=True)
+        env = Environment(loader=FileSystemLoader(html_dir), undefined=StrictUndefined)
+        types = [
+            ("h", "Header", "#66C2A5"),
+            ("cpp", "Cpp", "#FC8D62"),
+            ("dir", "Dir", "#8DA0CB"),
+        ]
+        file_names = os.listdir(html_dir)
+        os.makedirs(output_path, exist_ok=True)
+        for file_name in file_names:
+            data = env.get_template(file_name).render(types=types)
+
+            dst_path = os.path.join(output_path, file_name)
+            with open(dst_path, "w") as f:
+                f.write(data)
+
         with open(os.path.join(output_path, "bloat.json"), "w") as f:
             f.write("var kTree = ")
             json.dump(tree, f, indent=4)

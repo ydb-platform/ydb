@@ -9,7 +9,6 @@
 #include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_request_id.h"
 
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/blobstorage/crypto/crypto.h>
 
 #include <util/generic/deque.h>

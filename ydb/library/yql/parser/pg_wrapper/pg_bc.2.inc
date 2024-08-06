@@ -3,6 +3,7 @@ LLVM_BC(
     postgresql/src/backend/access/hash/hash.c
     postgresql/src/backend/access/spgist/spgkdtreeproc.c
     postgresql/src/backend/access/transam/xlogfuncs.c
+    postgresql/src/backend/commands/dbcommands.c
     postgresql/src/backend/commands/sequence.c
     postgresql/src/backend/tsearch/wparser_def.c
     postgresql/src/backend/utils/adt/array_selfuncs.c
@@ -51,23 +52,24 @@ LLVM_BC(
     arrow_networkjoinsel
     arrow_networksel
     arrow_nextval_oid
-    arrow_pg_backup_start_time
+    arrow_pg_backup_start
+    arrow_pg_backup_stop
     arrow_pg_create_restore_point
     arrow_pg_current_wal_flush_lsn
     arrow_pg_current_wal_insert_lsn
     arrow_pg_current_wal_lsn
+    arrow_pg_database_collation_actual_version
     arrow_pg_get_wal_replay_pause_state
-    arrow_pg_is_in_backup
     arrow_pg_is_in_recovery
     arrow_pg_is_wal_replay_paused
     arrow_pg_last_wal_receive_lsn
     arrow_pg_last_wal_replay_lsn
     arrow_pg_last_xact_replay_timestamp
+    arrow_pg_log_standby_snapshot
     arrow_pg_promote
     arrow_pg_sequence_last_value
     arrow_pg_sequence_parameters
-    arrow_pg_start_backup
-    arrow_pg_stop_backup
+    arrow_pg_split_walfile_name
     arrow_pg_switch_wal
     arrow_pg_wal_lsn_diff
     arrow_pg_wal_replay_pause

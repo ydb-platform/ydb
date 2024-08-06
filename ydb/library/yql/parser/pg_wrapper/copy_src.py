@@ -50,48 +50,11 @@ def is_inside_source_dirs(filename):
     return False
 
 no_copy_sources = [
-    # not used (and linux/darwin-only)
-    "postgresql/src/backend/port/posix_sema.c",
-    "postgresql/src/backend/port/sysv_shmem.c",
-    # not used, was excluded earlier
-    "postgresql/src/include/utils/help_config.h",
-    "postgresql/src/backend/utils/misc/help_config.c",
-    # provided in libc_compat
-    "postgresql/src/port/strlcat.c",
-    "postgresql/src/port/strlcpy.c",
-
-    # unneded headers
-    "postgresql/src/common/md5_int.h",
-    "postgresql/src/common/sha1_int.h",
-    "postgresql/src/common/sha2_int.h",
-    "postgresql/src/include/common/connect.h",
-    "postgresql/src/include/common/logging.h",
-    "postgresql/src/include/common/restricted_token.h",
-    "postgresql/src/include/fe_utils/",
-    "postgresql/src/include/getopt_long.h",
-    "postgresql/src/include/jit/llvmjit.h",
-    "postgresql/src/include/jit/llvmjit_emit.h",
-    "postgresql/src/include/libpq/be-gssapi-common.h",
-    "postgresql/src/include/port/aix.h",
-    "postgresql/src/include/port/atomics/arch-hppa.h",
-    "postgresql/src/include/port/atomics/arch-ia64.h",
-    "postgresql/src/include/port/atomics/arch-ppc.h",
-    "postgresql/src/include/port/atomics/generic-acc.h",
-    "postgresql/src/include/port/atomics/generic-sunpro.h",
-    "postgresql/src/include/port/cygwin.h",
-    "postgresql/src/include/port/darwin.h",
-    "postgresql/src/include/port/freebsd.h",
-    "postgresql/src/include/port/hpux.h",
-    "postgresql/src/include/port/linux.h",
-    "postgresql/src/include/port/netbsd.h",
-    "postgresql/src/include/port/openbsd.h",
-    "postgresql/src/include/port/pg_pthread.h",
-    "postgresql/src/include/port/solaris.h",
+    "postgresql/src/include/port/win32/sys/un.h",
+    "postgresql/src/include/port/win32/netinet/tcp.h",
+    "postgresql/src/include/port/win32/sys/resource.h",
+    "postgresql/src/include/port/win32/sys/select.h",
     "postgresql/src/include/port/win32/dlfcn.h",
-    "postgresql/src/include/port/win32.h",
-    "postgresql/src/include/replication/pgoutput.h",
-    "postgresql/src/include/snowball/",
-    "postgresql/src/port/pthread-win32.h",
 ]
 
 def need_copy(filename):
@@ -106,6 +69,10 @@ exclude_from_source_list = set([
     # platform-specific, explicitly added in ya.make
     "postgresql/src/port/pg_crc32c_sse42.c",
     "postgresql/src/port/pg_crc32c_sse42_choose.c",
+    "postgresql/src/backend/port/posix_sema.c",
+    "postgresql/src/backend/port/sysv_shmem.c",
+    "postgresql/src/port/strlcat.c",
+    "postgresql/src/port/strlcpy.c",
 ])
 
 def fix_line(line, all_lines, pos):
@@ -268,6 +235,14 @@ def fix_line(line, all_lines, pos):
         ret+="\n";
         thread_funcs.append(found_v+"_init");
 
+    if "DCLIST_STATIC_INIT" in ret:
+        # rewrite without {{}} inits
+        pos=ret.find("=");
+        ret=ret[:pos] + ";";
+        ret+="void "+found_v+"_init(void) { dlist_init(&" + found_v + ".dlist); " + found_v + ".count = 0; }";
+        ret+="\n";
+        thread_funcs.append(found_v+"_init");
+
     if "CurrentTransactionState" in ret or "mainrdata_last" in ret:
         # rewrite with address of TLS var
         pos=ret.find("=");
@@ -327,6 +302,11 @@ def make_sources_list(build_dir):
             for line in fsrc:
                 #print(line.strip())
                 name = line.strip()
+                if name.endswith(".funcs.c"): continue
+                if name.endswith(".switch.c"): continue
+                basename = os.path.basename(name)
+                if basename.startswith("regc_") and basename.endswith(".c"): continue
+                if basename == "rege_dfa.c": continue
                 if name.endswith(".c") and need_copy(name) and name not in exclude_from_source_list:
                     fdst.write("    " + name + "\n")
             fdst.write(")\n")
@@ -347,9 +327,6 @@ def get_vars(build_dir):
     all_vars.remove("BlockSig")
     all_vars.remove("StartupBlockSig")
     all_vars.remove("UnBlockSig")
-    all_vars.remove("on_proc_exit_index")
-    all_vars.remove("on_shmem_exit_index")
-    all_vars.remove("before_shmem_exit_index")
 
     all_vars.add("yychar")
     all_vars.add("yyin")
@@ -359,11 +336,6 @@ def get_vars(build_dir):
     all_vars.add("yytext")
     all_vars.add("yy_flex_debug")
     all_vars.add("yylineno")
-
-    all_vars.remove("UsedShmemSegID")
-    all_vars.remove("UsedShmemSegAddr")
-    all_vars.remove("local_my_wait_event_info")
-    all_vars.remove("my_wait_event_info")
 
     with open("vars.txt","w") as f:
         for a in sorted(all_vars):
@@ -381,7 +353,8 @@ static __thread int pg_thread_init_flag;
 
 void pg_thread_init(void) {
     if (pg_thread_init_flag) return;
-    pg_thread_init_flag=1;""", file=f)
+    pg_thread_init_flag=1;
+    my_wait_event_info_init();""", file=f)
 
         for a in sorted(thread_funcs):
             print("    " + a + "();", file=f)

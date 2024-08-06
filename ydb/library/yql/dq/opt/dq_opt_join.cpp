@@ -377,7 +377,7 @@ bool CheckJoinColumns(const TExprBase& node) {
 }
 
 TExprBase DqRewriteEquiJoin(const TExprBase& node, EHashJoinMode mode, bool useCBO, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
-    int dummyJoinCounter;
+    int dummyJoinCounter = 0;
     return DqRewriteEquiJoin(node, mode, useCBO, ctx, typeCtx, dummyJoinCounter);
 }
 
@@ -623,6 +623,19 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
     if (!supportedTypes.contains(joinType)) {
         return join;
     }
+
+    TExprNode::TListType flags;
+    if (const auto maybeFlags = join.Flags()) {
+        flags = maybeFlags.Cast().Ref().ChildrenList();
+    }
+
+    for (auto& flag : flags) {
+        if (flag->IsAtom("LeftAny") || flag->IsAtom("RightAny")) {
+            ctx.AddError(TIssue(ctx.GetPosition(join.Ptr()->Pos()), "ANY join kind is not currently supported"));
+            return join;
+        }
+    }
+
 
     YQL_ENSURE(join.LeftInput().Maybe<TDqCnUnionAll>());
     TDqCnUnionAll leftCn = join.LeftInput().Cast<TDqCnUnionAll>();

@@ -25,15 +25,17 @@ void TWritePortionInfoWithBlobsResult::TBlobInfo::RegisterBlobId(TWritePortionIn
 }
 
 TWritePortionInfoWithBlobsConstructor TWritePortionInfoWithBlobsConstructor::BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
+    const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks,
     const ui64 granule, const ui64 schemaVersion, const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators)
 {
     TPortionInfoConstructor constructor(granule);
     constructor.SetMinSnapshotDeprecated(snapshot);
     constructor.SetSchemaVersion(schemaVersion);
-    return BuildByBlobs(std::move(chunks), std::move(constructor), operators);
+    return BuildByBlobs(std::move(chunks), inplaceChunks, std::move(constructor), operators);
 }
 
-TWritePortionInfoWithBlobsConstructor TWritePortionInfoWithBlobsConstructor::BuildByBlobs(std::vector<TSplittedBlob>&& chunks, TPortionInfoConstructor&& constructor, const std::shared_ptr<IStoragesManager>& operators) {
+TWritePortionInfoWithBlobsConstructor TWritePortionInfoWithBlobsConstructor::BuildByBlobs(
+    std::vector<TSplittedBlob>&& chunks, const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks, TPortionInfoConstructor&& constructor, const std::shared_ptr<IStoragesManager>& operators) {
     TWritePortionInfoWithBlobsConstructor result(std::move(constructor));
     for (auto&& blob : chunks) {
         auto storage = operators->GetOperatorVerified(blob.GetGroupName());
@@ -42,6 +44,11 @@ TWritePortionInfoWithBlobsConstructor TWritePortionInfoWithBlobsConstructor::Bui
             blobInfo.AddChunk(chunk);
         }
     }
+    for (auto&& [_, i] : inplaceChunks) {
+        result.GetPortionConstructor().AddIndex(
+            TIndexChunk(i->GetEntityId(), i->GetChunkIdxVerified(), i->GetRecordsCountVerified(), i->GetRawBytesVerified(), i->GetData()));
+    }
+
     return result;
 }
 
@@ -60,18 +67,6 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TWritePortionInfoWithBlobsConstr
         result.emplace_back(i.second);
     }
     return result;
-}
-
-void TWritePortionInfoWithBlobsConstructor::FillStatistics(const TIndexInfo& index) {
-    NStatistics::TPortionStorage storage;
-    for (auto&& i : index.GetStatisticsByName()) {
-        THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> data;
-        for (auto&& entityId : i.second->GetEntityIds()) {
-            data.emplace(entityId, GetEntityChunks(entityId));
-        }
-        i.second->FillStatisticsData(data, storage, index);
-    }
-    GetPortionConstructor().MutableMeta().SetStatisticsStorage(std::move(storage));
 }
 
 TString TWritePortionInfoWithBlobsResult::GetBlobByRangeVerified(const ui32 entityId, const ui32 chunkIdx) const {

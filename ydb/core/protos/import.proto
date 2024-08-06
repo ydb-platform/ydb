@@ -19,6 +19,7 @@ message TImport {
     oneof Settings {
         Ydb.Import.ImportFromS3Settings ImportFromS3Settings = 6;
     }
+    optional string UserSID = 9;
 }
 
 message TCreateImportRequest {

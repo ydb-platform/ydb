@@ -24,6 +24,7 @@ PEERDIR(
 SRCS(
     ut_async_index.cpp
     ut_unique_index.cpp
+    ut_vector_index.cpp
 )
 
 YQL_LAST_ABI_VERSION()

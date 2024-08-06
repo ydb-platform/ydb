@@ -74,6 +74,10 @@ namespace NKikimr::NOlap {
                 , CLContext(rowset, dsGroupSelector)
             {}
 
+            ui32 GetRecordsCount() const {
+                return CLContext.GetMetaProto().GetNumRows();
+            }
+
             const TBlobRange& GetBlobRange() const {
                 return CLContext.GetBlobRange();
             }

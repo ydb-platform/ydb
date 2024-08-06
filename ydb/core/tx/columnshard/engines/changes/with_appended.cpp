@@ -42,13 +42,13 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
                 case NOlap::TPortionMeta::EProduced::UNSPECIFIED:
                     Y_ABORT_UNLESS(false);   // unexpected
                 case NOlap::TPortionMeta::EProduced::INSERTED:
-                    self->IncCounter(NColumnShard::COUNTER_INDEXING_PORTIONS_WRITTEN);
+                    self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_INDEXING_PORTIONS_WRITTEN);
                     break;
                 case NOlap::TPortionMeta::EProduced::COMPACTED:
-                    self->IncCounter(NColumnShard::COUNTER_COMPACTION_PORTIONS_WRITTEN);
+                    self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_COMPACTION_PORTIONS_WRITTEN);
                     break;
                 case NOlap::TPortionMeta::EProduced::SPLIT_COMPACTED:
-                    self->IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_PORTIONS_WRITTEN);
+                    self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_PORTIONS_WRITTEN);
                     break;
                 case NOlap::TPortionMeta::EProduced::EVICTED:
                     Y_ABORT("Unexpected evicted case");
@@ -58,19 +58,19 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
                     break;
             }
         }
-        self->IncCounter(NColumnShard::COUNTER_PORTIONS_DEACTIVATED, PortionsToRemove.size());
+        self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_PORTIONS_DEACTIVATED, PortionsToRemove.size());
 
         THashSet<TUnifiedBlobId> blobsDeactivated;
         for (auto& [_, portionInfo] : PortionsToRemove) {
             for (auto& rec : portionInfo.Records) {
                 blobsDeactivated.emplace(portionInfo.GetBlobId(rec.BlobRange.GetBlobIdxVerified()));
             }
-            self->IncCounter(NColumnShard::COUNTER_RAW_BYTES_DEACTIVATED, portionInfo.GetTotalRawBytes());
+            self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_RAW_BYTES_DEACTIVATED, portionInfo.GetTotalRawBytes());
         }
 
-        self->IncCounter(NColumnShard::COUNTER_BLOBS_DEACTIVATED, blobsDeactivated.size());
+        self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_BLOBS_DEACTIVATED, blobsDeactivated.size());
         for (auto& blobId : blobsDeactivated) {
-            self->IncCounter(NColumnShard::COUNTER_BYTES_DEACTIVATED, blobId.BlobSize());
+            self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_BYTES_DEACTIVATED, blobId.BlobSize());
         }
     }
     {
@@ -100,50 +100,6 @@ void TChangesWithAppend::DoOnAfterCompile() {
     for (auto&& i : AppendedPortions) {
         i.FinalizePortionConstructor();
     }
-}
-
-std::vector<TWritePortionInfoWithBlobsConstructor> TChangesWithAppend::MakeAppendedPortions(const std::shared_ptr<arrow::RecordBatch> batch,
-    const ui64 pathId, const TSnapshot& snapshot, const TGranuleMeta* granuleMeta, TConstructionContext& context, const std::optional<NArrow::NSerialization::TSerializerContainer>& overrideSaver) const {
-    Y_ABORT_UNLESS(batch->num_rows());
-
-    auto resultSchema = context.SchemaVersions.GetSchema(snapshot);
-
-    std::shared_ptr<NOlap::TSerializationStats> stats = std::make_shared<NOlap::TSerializationStats>();
-    if (granuleMeta) {
-        stats = granuleMeta->BuildSerializationStats(resultSchema);
-    }
-    auto schema = std::make_shared<TDefaultSchemaDetails>(resultSchema, stats);
-    if (overrideSaver) {
-        schema->SetOverrideSerializer(*overrideSaver);
-    }
-    std::vector<TWritePortionInfoWithBlobsConstructor> out;
-    {
-        std::vector<TBatchSerializedSlice> pages = TBatchSerializedSlice::BuildSimpleSlices(batch, NSplitter::TSplitSettings(), context.Counters.SplitterCounters, schema);
-        std::vector<TGeneralSerializedSlice> generalPages;
-        for (auto&& i : pages) {
-            auto portionColumns = i.GetPortionChunksToHash();
-            resultSchema->GetIndexInfo().AppendIndexes(portionColumns);
-            generalPages.emplace_back(portionColumns, schema, context.Counters.SplitterCounters);
-        }
-
-        const NSplitter::TEntityGroups groups = resultSchema->GetIndexInfo().GetEntityGroupsByStorageId(IStoragesManager::DefaultStorageId, *SaverContext.GetStoragesManager());
-        TSimilarPacker slicer(NSplitter::TSplitSettings().GetExpectedPortionSize());
-        auto packs = slicer.Split(generalPages);
-
-        ui32 recordIdx = 0;
-        for (auto&& i : packs) {
-            TGeneralSerializedSlice slice(std::move(i));
-            auto b = batch->Slice(recordIdx, slice.GetRecordsCount());
-            auto constructor = TWritePortionInfoWithBlobsConstructor::BuildByBlobs(slice.GroupChunksByBlobs(groups), pathId, resultSchema->GetVersion(), snapshot, SaverContext.GetStoragesManager());
-            constructor.FillStatistics(resultSchema->GetIndexInfo());
-            constructor.GetPortionConstructor().AddMetadata(*resultSchema, b);
-            constructor.GetPortionConstructor().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);
-            out.emplace_back(std::move(constructor));
-            recordIdx += slice.GetRecordsCount();
-        }
-    }
-
-    return out;
 }
 
 void TChangesWithAppend::DoStart(NColumnShard::TColumnShard& /*self*/) {

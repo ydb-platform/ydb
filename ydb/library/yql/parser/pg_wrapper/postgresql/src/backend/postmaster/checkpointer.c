@@ -10,9 +10,6 @@
  * fill WAL segments; the checkpointer itself doesn't watch for the
  * condition.)
  *
- * The checkpointer is started by the postmaster as soon as the startup
- * subprocess finishes, or as soon as recovery begins if we are doing archive
- * recovery.  It remains alive until the postmaster commands it to terminate.
  * Normal termination is by SIGUSR2, which instructs the checkpointer to
  * execute a shutdown checkpoint and then exit(0).  (All backends must be
  * stopped before SIGUSR2 is issued!)  Emergency termination is by SIGQUIT;
@@ -26,7 +23,7 @@
  * restart needs to be forced.)
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -41,6 +38,7 @@
 
 #include "access/xlog.h"
 #include "access/xlog_internal.h"
+#include "access/xlogrecovery.h"
 #include "libpq/pqsignal.h"
 #include "miscadmin.h"
 #include "pgstat.h"
@@ -215,6 +213,16 @@ CheckpointerMain(void)
 	last_checkpoint_time = last_xlog_switch_time = (pg_time_t) time(NULL);
 
 	/*
+	 * Write out stats after shutdown. This needs to be called by exactly one
+	 * process during a normal shutdown, and since checkpointer is shut down
+	 * very late...
+	 *
+	 * Walsenders are shut down after the checkpointer, but currently don't
+	 * report stats. If that changes, we need a more complicated solution.
+	 */
+	before_shmem_exit(pgstat_before_server_shutdown, 0);
+
+	/*
 	 * Create a memory context that we will do all our work in.  We do this so
 	 * that we can reset the context during error recovery and thereby avoid
 	 * possible memory leaks.  Formerly this code just ran in
@@ -263,7 +271,6 @@ CheckpointerMain(void)
 		LWLockReleaseAll();
 		ConditionVariableCancelSleep();
 		pgstat_report_wait_end();
-		AbortBufferIO();
 		UnlockBuffers();
 		ReleaseAuxProcessResources(false);
 		AtEOXact_Buffers(false);
@@ -318,7 +325,7 @@ CheckpointerMain(void)
 	/*
 	 * Unblock signals (they were blocked when the postmaster forked us)
 	 */
-	PG_SETMASK(&UnBlockSig);
+	sigprocmask(SIG_SETMASK, &UnBlockSig, NULL);
 
 	/*
 	 * Ensure all shared memory values are set correctly for the config. Doing
@@ -360,7 +367,7 @@ CheckpointerMain(void)
 		if (((volatile CheckpointerShmemStruct *) CheckpointerShmem)->ckpt_flags)
 		{
 			do_checkpoint = true;
-			BgWriterStats.m_requested_checkpoints++;
+			PendingCheckpointerStats.requested_checkpoints++;
 		}
 
 		/*
@@ -374,7 +381,7 @@ CheckpointerMain(void)
 		if (elapsed_secs >= CheckPointTimeout)
 		{
 			if (!do_checkpoint)
-				BgWriterStats.m_timed_checkpoints++;
+				PendingCheckpointerStats.timed_checkpoints++;
 			do_checkpoint = true;
 			flags |= CHECKPOINT_CAUSE_TIME;
 		}
@@ -387,11 +394,7 @@ CheckpointerMain(void)
 			bool		ckpt_performed = false;
 			bool		do_restartpoint;
 
-			/*
-			 * Check if we should perform a checkpoint or a restartpoint. As a
-			 * side-effect, RecoveryInProgress() initializes TimeLineID if
-			 * it's not set yet.
-			 */
+			/* Check if we should perform a checkpoint or a restartpoint. */
 			do_restartpoint = RecoveryInProgress();
 
 			/*
@@ -498,17 +501,9 @@ CheckpointerMain(void)
 		/* Check for archive_timeout and switch xlog files if necessary. */
 		CheckArchiveTimeout();
 
-		/*
-		 * Send off activity statistics to the stats collector.  (The reason
-		 * why we re-use bgwriter-related code for this is that the bgwriter
-		 * and checkpointer used to be just one process.  It's probably not
-		 * worth the trouble to split the stats support into two independent
-		 * stats message types.)
-		 */
-		pgstat_send_bgwriter();
-
-		/* Send WAL statistics to the stats collector. */
-		pgstat_send_wal(true);
+		/* Report pending statistics to the cumulative stats system */
+		pgstat_report_checkpointer();
+		pgstat_report_wal(true);
 
 		/*
 		 * If any checkpoint flags have been set, redo the loop to handle the
@@ -580,17 +575,21 @@ HandleCheckpointerInterrupts(void)
 		 * Close down the database.
 		 *
 		 * Since ShutdownXLOG() creates restartpoint or checkpoint, and
-		 * updates the statistics, increment the checkpoint request and send
-		 * the statistics to the stats collector.
+		 * updates the statistics, increment the checkpoint request and flush
+		 * out pending statistic.
 		 */
-		BgWriterStats.m_requested_checkpoints++;
+		PendingCheckpointerStats.requested_checkpoints++;
 		ShutdownXLOG(0, 0);
-		pgstat_send_bgwriter();
-		pgstat_send_wal(true);
+		pgstat_report_checkpointer();
+		pgstat_report_wal(true);
 
 		/* Normal exit from the checkpointer is here */
 		proc_exit(0);			/* done */
 	}
+
+	/* Perform logging of memory contexts of this process */
+	if (LogMemoryContextPending)
+		ProcessLogMemoryContextInterrupt();
 }
 
 /*
@@ -724,10 +723,8 @@ CheckpointWriteDelay(int flags, double progress)
 
 		CheckArchiveTimeout();
 
-		/*
-		 * Report interim activity statistics to the stats collector.
-		 */
-		pgstat_send_bgwriter();
+		/* Report interim statistics to the cumulative stats system */
+		pgstat_report_checkpointer();
 
 		/*
 		 * This sleep used to be connected to bgwriter_delay, typically 200ms.
@@ -1209,7 +1206,7 @@ CompactCheckpointerRequestQueue(void)
 		 * We use the request struct directly as a hashtable key.  This
 		 * assumes that any padding bytes in the structs are consistently the
 		 * same, which should be okay because we zeroed them in
-		 * CheckpointerShmemInit.  Note also that RelFileNode had better
+		 * CheckpointerShmemInit.  Note also that RelFileLocator had better
 		 * contain no pad bytes.
 		 */
 		request = &CheckpointerShmem->requests[n];
@@ -1274,8 +1271,10 @@ AbsorbSyncRequests(void)
 	LWLockAcquire(CheckpointerCommLock, LW_EXCLUSIVE);
 
 	/* Transfer stats counts into pending pgstats message */
-	BgWriterStats.m_buf_written_backend += CheckpointerShmem->num_backend_writes;
-	BgWriterStats.m_buf_fsync_backend += CheckpointerShmem->num_backend_fsync;
+	PendingCheckpointerStats.buf_written_backend
+		+= CheckpointerShmem->num_backend_writes;
+	PendingCheckpointerStats.buf_fsync_backend
+		+= CheckpointerShmem->num_backend_fsync;
 
 	CheckpointerShmem->num_backend_writes = 0;
 	CheckpointerShmem->num_backend_fsync = 0;

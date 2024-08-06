@@ -53,9 +53,9 @@ TIntrusivePtr<IKqpHost> CreateKikimrQueryProcessor(TIntrusivePtr<IKqpGateway> ga
     UNIT_ASSERT(TryParseFromTextFormat(defaultSettingsStream, defaultSettings));
     kikimrConfig->Init(defaultSettings.GetDefaultSettings(), cluster, settings, true);
 
-    auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}, {}, nullptr, nullptr});
+    auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}, {}, nullptr, nullptr, {}});
     return NKqp::CreateKqpHost(gateway, cluster, "/Root", kikimrConfig, moduleResolver,
-                               federatedQuerySetup, nullptr, nullptr, {}, funcRegistry, funcRegistry, keepConfigChanges, nullptr, actorSystem);
+                               federatedQuerySetup, nullptr, nullptr, NKikimrConfig::TQueryServiceConfig(), {}, funcRegistry, funcRegistry, keepConfigChanges, nullptr, actorSystem, nullptr);
 }
 
 NYql::NNodes::TExprBase GetExpr(const TString& ast, NYql::TExprContext& ctx, NYql::IModuleResolver* moduleResolver) {
@@ -90,7 +90,8 @@ void CreateTableWithIndexWithState(
             state,
             0,
             0,
-            0
+            0,
+            {}
         )
     );
     metadata->KeyColumnNames.push_back("key");
@@ -159,13 +160,12 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
         }
     }
 
-    void TestNoReadFromMainTableBeforeJoin(bool UseExtractPredicates) {
+    void TestNoReadFromMainTableBeforeJoin() {
         using namespace NYql;
         using namespace NYql::NNodes;
 
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetPredicateExtract20(UseExtractPredicates);
         settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
@@ -259,8 +259,8 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(TestNoReadFromMainTableBeforeJoin, ExtractPredicate) {
-        TestNoReadFromMainTableBeforeJoin(ExtractPredicate);
+    Y_UNIT_TEST(TestNoReadFromMainTableBeforeJoin) {
+        TestNoReadFromMainTableBeforeJoin();
     }
 
     Y_UNIT_TEST(HandleWriteOnlyIndex) {
@@ -1466,10 +1466,6 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        const auto& config = kikimr.GetTestServer().GetSettings().AppConfig;
-        auto& tableSettings = config->GetTableServiceConfig();
-        bool useSchemeCacheMeta = tableSettings.GetUseSchemeCacheMetadata();
-
         {
             auto tableBuilder = db.GetTableBuilder();
             tableBuilder
@@ -1541,8 +1537,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                                      TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                               .ExtractValueSync();
             // KIKIMR-7997
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(),
-                useSchemeCacheMeta ? NYdb::EStatus::SCHEME_ERROR : NYdb::EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
         }
 
         {

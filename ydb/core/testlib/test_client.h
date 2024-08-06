@@ -109,6 +109,7 @@ namespace Tests {
         int GrpcMaxMessageSize = 0;  // 0 - default (4_MB), -1 - no limit
         ui16 MonitoringPortOffset = 0;
         bool MonitoringTypeAsync = false;
+        bool NeedStatsCollectors = false;
         NKikimrProto::TAuthConfig AuthConfig;
         NKikimrPQ::TPQConfig PQConfig;
         NKikimrPQ::TPQClusterDiscoveryConfig PQClusterDiscoveryConfig;
@@ -156,6 +157,7 @@ namespace Tests {
         NYql::IYtGateway::TPtr YtGateway;
         bool InitializeFederatedQuerySetupFactory = false;
         TString ServerCertFilePath;
+        bool Verbose = true;
 
         std::function<IActor*(const TTicketParserSettings&)> CreateTicketParser = NKikimr::CreateTicketParser;
         std::shared_ptr<TGrpcServiceFactory> GrpcServiceFactory;
@@ -164,6 +166,7 @@ namespace Tests {
         TServerSettings& SetGrpcPort(ui16 value) { GrpcPort = value; return *this; }
         TServerSettings& SetGrpcMaxMessageSize(int value) { GrpcMaxMessageSize = value; return *this; }
         TServerSettings& SetMonitoringPortOffset(ui16 value, bool monitoringTypeAsync = false) { MonitoringPortOffset = value; MonitoringTypeAsync = monitoringTypeAsync; return *this; }
+        TServerSettings& SetNeedStatsCollectors(bool value) { NeedStatsCollectors = value; return *this; }
         TServerSettings& SetSupportsRedirect(bool value) { SupportsRedirect = value; return *this; }
         TServerSettings& SetTracePath(const TString& value) { TracePath = value; return *this; }
         TServerSettings& SetDomain(ui32 value) { Domain = value; return *this; }
@@ -205,6 +208,7 @@ namespace Tests {
         TServerSettings& SetComputationFactory(NMiniKQL::TComputationNodeFactory computationFactory) { ComputationFactory = std::move(computationFactory); return *this; }
         TServerSettings& SetYtGateway(NYql::IYtGateway::TPtr ytGateway) { YtGateway = std::move(ytGateway); return *this; }
         TServerSettings& SetInitializeFederatedQuerySetupFactory(bool value) { InitializeFederatedQuerySetupFactory = value; return *this; }
+        TServerSettings& SetVerbose(bool value) { Verbose = value; return *this; }
         TServerSettings& SetPersQueueGetReadSessionsInfoWorkerFactory(
             std::shared_ptr<NKikimr::NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> factory
         ) {
@@ -592,6 +596,7 @@ namespace Tests {
         const TString DomainName;
         const bool SupportsRedirect;
         const TStoragePoolKinds StoragePoolTypes;
+        const bool Verbose;
         NScheme::TKikimrTypeRegistry TypeRegistry;
         TIntrusivePtr<NMiniKQL::IFunctionRegistry> FunctionRegistry;
         NMsgBusProxy::TMsgBusClientConfig ClientConfig;

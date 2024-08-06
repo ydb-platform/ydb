@@ -83,6 +83,7 @@ These settings cannot be [reset](#additional-reset).
 #### Example
 
 The query in the following example enables automatic partitioning by load for the index named `title_index` of table `series` and sets its minimum partition count to 5:
+
 ```sql
 ALTER TABLE `series` ALTER INDEX `title_index` SET (
     AUTO_PARTITIONING_BY_LOAD = ENABLED,
@@ -140,9 +141,9 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
    * `NEW_AND_OLD_IMAGES`: A combination of `NEW_IMAGE` and `OLD_IMAGE` modes. Any column values _prior to_ and _resulting from_ updates are written.
 * `FORMAT`: Data write format.
    * `JSON`: Write data in [JSON](../../../../concepts/cdc.md#json-record-structure) format.
+   * `DEBEZIUM_JSON`: Write data in the [Debezium-like JSON format](../../../../concepts/cdc.md#debezium-json-record-structure).
 {% if audience == "tech" %}
    * `DYNAMODB_STREAMS_JSON`: Write data in the [JSON format compatible with Amazon DynamoDB Streams](../../../../concepts/cdc.md#dynamodb-streams-json-record-structure).
-   * `DEBEZIUM_JSON`: Write data in the [Debezium-like JSON format](../../../../concepts/cdc.md#debezium-json-record-structure).
 {% endif %}
 * `VIRTUAL_TIMESTAMPS`: Enabling/disabling [virtual timestamps](../../../../concepts/cdc.md#virtual-timestamps). Disabled by default.
 * `RETENTION_PERIOD`: [Record retention period](../../../../concepts/cdc.md#retention-period). The value type is `Interval` and the default value is 24 hours (`Interval('PT24H')`).
@@ -214,7 +215,7 @@ If a YQL query contains multiple `ALTER TABLE ... RENAME TO ...` commands, each 
 Renaming can be used to move a table from one directory inside the database to another, for example:
 
 ```sql
-ALTER TABLE `table1` RENAME TO `/backup/table1`;
+ALTER TABLE `table1` RENAME TO `backup/table1`;
 ```
 
 ## Changing column groups {#column-family}
@@ -238,11 +239,11 @@ The two previous commands from listings 8 and 9 can be combined into one ```ALTE
 
 ```sql
 ALTER TABLE series_with_families
-	ADD FAMILY family_small (
-    	DATA = "ssd",
-    	COMPRESSION = "off"
-	),
-	ALTER COLUMN release_date SET FAMILY family_small;
+    ADD FAMILY family_small (
+        DATA = "ssd",
+        COMPRESSION = "off"
+    ),
+    ALTER COLUMN release_date SET FAMILY family_small;
 ```
 
 Using the ```ALTER FAMILY``` command, you can change the parameters of the column group. The code below changes the storage type to ```hdd``` for the ```default``` column group in the ```series_with_families``` table:

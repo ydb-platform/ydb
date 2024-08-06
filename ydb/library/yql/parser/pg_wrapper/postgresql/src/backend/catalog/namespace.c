@@ -9,7 +9,7 @@
  * and implementing search-path-controlled searches.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -28,6 +28,7 @@
 #include "catalog/pg_authid.h"
 #include "catalog/pg_collation.h"
 #include "catalog/pg_conversion.h"
+#include "catalog/pg_database.h"
 #include "catalog/pg_namespace.h"
 #include "catalog/pg_opclass.h"
 #include "catalog/pg_operator.h"
@@ -51,7 +52,7 @@
 #include "utils/acl.h"
 #include "utils/builtins.h"
 #include "utils/catcache.h"
-#include "utils/guc.h"
+#include "utils/guc_hooks.h"
 #include "utils/inval.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
@@ -586,7 +587,7 @@ RangeVarGetAndCheckCreationNamespace(RangeVar *relation,
 			break;
 
 		/* Check namespace permissions. */
-		aclresult = pg_namespace_aclcheck(nspid, GetUserId(), ACL_CREATE);
+		aclresult = object_aclcheck(NamespaceRelationId, nspid, GetUserId(), ACL_CREATE);
 		if (aclresult != ACLCHECK_OK)
 			aclcheck_error(aclresult, OBJECT_SCHEMA,
 						   get_namespace_name(nspid));
@@ -612,7 +613,7 @@ RangeVarGetAndCheckCreationNamespace(RangeVar *relation,
 		/* Lock relation, if required if and we have permission. */
 		if (lockmode != NoLock && OidIsValid(relid))
 		{
-			if (!pg_class_ownercheck(relid, GetUserId()))
+			if (!object_ownercheck(RelationRelationId, relid, GetUserId()))
 				aclcheck_error(ACLCHECK_NOT_OWNER, get_relkind_objtype(get_rel_relkind(relid)),
 							   relation->relname);
 			if (relid != oldrelid)
@@ -1151,10 +1152,8 @@ FuncnameGetCandidates(List *names, int nargs, List *argnames,
 		if (argnumbers)
 		{
 			/* Re-order the argument types into call's logical order */
-			int			i;
-
-			for (i = 0; i < pronargs; i++)
-				newResult->args[i] = proargtypes[argnumbers[i]];
+			for (int j = 0; j < pronargs; j++)
+				newResult->args[j] = proargtypes[argnumbers[j]];
 		}
 		else
 		{
@@ -1163,12 +1162,10 @@ FuncnameGetCandidates(List *names, int nargs, List *argnames,
 		}
 		if (variadic)
 		{
-			int			i;
-
 			newResult->nvargs = effective_nargs - pronargs + 1;
 			/* Expand variadic argument into N copies of element type */
-			for (i = pronargs - 1; i < effective_nargs; i++)
-				newResult->args[i] = va_elem_type;
+			for (int j = pronargs - 1; j < effective_nargs; j++)
+				newResult->args[j] = va_elem_type;
 		}
 		else
 			newResult->nvargs = 0;
@@ -2958,7 +2955,7 @@ LookupExplicitNamespace(const char *nspname, bool missing_ok)
 	if (missing_ok && !OidIsValid(namespaceId))
 		return InvalidOid;
 
-	aclresult = pg_namespace_aclcheck(namespaceId, GetUserId(), ACL_USAGE);
+	aclresult = object_aclcheck(NamespaceRelationId, namespaceId, GetUserId(), ACL_USAGE);
 	if (aclresult != ACLCHECK_OK)
 		aclcheck_error(aclresult, OBJECT_SCHEMA,
 					   nspname);
@@ -2994,7 +2991,7 @@ LookupCreationNamespace(const char *nspname)
 
 	namespaceId = get_namespace_oid(nspname, false);
 
-	aclresult = pg_namespace_aclcheck(namespaceId, GetUserId(), ACL_CREATE);
+	aclresult = object_aclcheck(NamespaceRelationId, namespaceId, GetUserId(), ACL_CREATE);
 	if (aclresult != ACLCHECK_OK)
 		aclcheck_error(aclresult, OBJECT_SCHEMA,
 					   nspname);
@@ -3027,7 +3024,7 @@ CheckSetNamespace(Oid oldNspOid, Oid nspOid)
 
 /*
  * QualifiedNameGetCreationNamespace
- *		Given a possibly-qualified name for an object (in List-of-Values
+ *		Given a possibly-qualified name for an object (in List-of-Strings
  *		format), determine what namespace the object should be created in.
  *		Also extract and return the object name (last component of list).
  *
@@ -3141,7 +3138,7 @@ makeRangeVarFromNameList(List *names)
  * This is used primarily to form error messages, and so we do not quote
  * the list elements, for the sake of legibility.
  *
- * In most scenarios the list elements should always be Value strings,
+ * In most scenarios the list elements should always be String values,
  * but we also allow A_Star for the convenience of ColumnRef processing.
  */
 char *
@@ -3648,7 +3645,7 @@ PopOverrideSearchPath(void)
  * database's encoding.
  */
 Oid
-get_collation_oid(List *name, bool missing_ok)
+get_collation_oid(List *collname, bool missing_ok)
 {
 	char	   *schemaname;
 	char	   *collation_name;
@@ -3658,7 +3655,7 @@ get_collation_oid(List *name, bool missing_ok)
 	ListCell   *l;
 
 	/* deconstruct the name list */
-	DeconstructQualifiedName(name, &schemaname, &collation_name);
+	DeconstructQualifiedName(collname, &schemaname, &collation_name);
 
 	if (schemaname)
 	{
@@ -3694,7 +3691,7 @@ get_collation_oid(List *name, bool missing_ok)
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
 				 errmsg("collation \"%s\" for encoding \"%s\" does not exist",
-						NameListToString(name), GetDatabaseEncodingName())));
+						NameListToString(collname), GetDatabaseEncodingName())));
 	return InvalidOid;
 }
 
@@ -3702,7 +3699,7 @@ get_collation_oid(List *name, bool missing_ok)
  * get_conversion_oid - find a conversion by possibly qualified name
  */
 Oid
-get_conversion_oid(List *name, bool missing_ok)
+get_conversion_oid(List *conname, bool missing_ok)
 {
 	char	   *schemaname;
 	char	   *conversion_name;
@@ -3711,7 +3708,7 @@ get_conversion_oid(List *name, bool missing_ok)
 	ListCell   *l;
 
 	/* deconstruct the name list */
-	DeconstructQualifiedName(name, &schemaname, &conversion_name);
+	DeconstructQualifiedName(conname, &schemaname, &conversion_name);
 
 	if (schemaname)
 	{
@@ -3749,7 +3746,7 @@ get_conversion_oid(List *name, bool missing_ok)
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
 				 errmsg("conversion \"%s\" does not exist",
-						NameListToString(name))));
+						NameListToString(conname))));
 	return conoid;
 }
 
@@ -3844,8 +3841,8 @@ recomputeNamespacePath(void)
 				ReleaseSysCache(tuple);
 				if (OidIsValid(namespaceId) &&
 					!list_member_oid(oidlist, namespaceId) &&
-					pg_namespace_aclcheck(namespaceId, roleid,
-										  ACL_USAGE) == ACLCHECK_OK &&
+					object_aclcheck(NamespaceRelationId, namespaceId, roleid,
+									ACL_USAGE) == ACLCHECK_OK &&
 					InvokeNamespaceSearchHook(namespaceId, false))
 					oidlist = lappend_oid(oidlist, namespaceId);
 			}
@@ -3872,8 +3869,8 @@ recomputeNamespacePath(void)
 			namespaceId = get_namespace_oid(curname, true);
 			if (OidIsValid(namespaceId) &&
 				!list_member_oid(oidlist, namespaceId) &&
-				pg_namespace_aclcheck(namespaceId, roleid,
-									  ACL_USAGE) == ACLCHECK_OK &&
+				object_aclcheck(NamespaceRelationId, namespaceId, roleid,
+								ACL_USAGE) == ACLCHECK_OK &&
 				InvokeNamespaceSearchHook(namespaceId, false))
 				oidlist = lappend_oid(oidlist, namespaceId);
 		}
@@ -4008,8 +4005,8 @@ InitTempTableNamespace(void)
 	 * But there's no need to make the namespace in the first place until a
 	 * temp table creation request is made by someone with appropriate rights.
 	 */
-	if (pg_database_aclcheck(MyDatabaseId, GetUserId(),
-							 ACL_CREATE_TEMP) != ACLCHECK_OK)
+	if (object_aclcheck(DatabaseRelationId, MyDatabaseId, GetUserId(),
+						ACL_CREATE_TEMP) != ACLCHECK_OK)
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 				 errmsg("permission denied to create temporary tables in database \"%s\"",
@@ -4101,7 +4098,7 @@ InitTempTableNamespace(void)
 	MyProc->tempNamespaceId = namespaceId;
 
 	/* It should not be done already. */
-	AssertState(myTempNamespaceSubID == InvalidSubTransactionId);
+	Assert(myTempNamespaceSubID == InvalidSubTransactionId);
 	myTempNamespaceSubID = GetCurrentSubTransactionId();
 
 	baseSearchPathValid = false;	/* need to rebuild list */

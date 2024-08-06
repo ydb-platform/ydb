@@ -2,7 +2,7 @@
  * backend_status.h
  *	  Definitions related to backend status reporting
  *
- * Copyright (c) 2001-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2001-2023, PostgreSQL Global Development Group
  *
  * src/include/utils/backend_status.h
  * ----------
@@ -13,6 +13,7 @@
 #include "datatype/timestamp.h"
 #include "libpq/pqcomm.h"
 #include "miscadmin.h"			/* for BackendType */
+#include "storage/backendid.h"
 #include "utils/backend_progress.h"
 
 
@@ -76,6 +77,7 @@ typedef struct PgBackendGSSStatus
 	char		gss_princ[NAMEDATALEN]; /* GSSAPI Principal used to auth */
 	bool		gss_auth;		/* If GSSAPI authentication was used */
 	bool		gss_enc;		/* If encryption is being used */
+	bool		gss_delegation; /* If credentials delegated */
 
 } PgBackendGSSStatus;
 
@@ -85,8 +87,8 @@ typedef struct PgBackendGSSStatus
  *
  * Each live backend maintains a PgBackendStatus struct in shared memory
  * showing its current activity.  (The structs are allocated according to
- * BackendId, but that is not critical.)  Note that the collector process
- * has no involvement in, or even access to, these structs.
+ * BackendId, but that is not critical.)  Note that this is unrelated to the
+ * cumulative stats system (i.e. pgstat.c et al).
  *
  * Each auxiliary process also maintains a PgBackendStatus struct in shared
  * memory.
@@ -248,6 +250,13 @@ typedef struct LocalPgBackendStatus
 	PgBackendStatus backendStatus;
 
 	/*
+	 * The backend ID.  For auxiliary processes, this will be set to a value
+	 * greater than MaxBackends (since auxiliary processes do not have proper
+	 * backend IDs).
+	 */
+	BackendId	backend_id;
+
+	/*
 	 * The xid of the current transaction if available, InvalidTransactionId
 	 * if not.
 	 */
@@ -258,6 +267,17 @@ typedef struct LocalPgBackendStatus
 	 * not.
 	 */
 	TransactionId backend_xmin;
+
+	/*
+	 * Number of cached subtransactions in the current session.
+	 */
+	int			backend_subxact_count;
+
+	/*
+	 * The number of subtransactions in the current session which exceeded the
+	 * cached subtransaction limit.
+	 */
+	bool		backend_subxact_overflowed;
 } LocalPgBackendStatus;
 
 
@@ -313,8 +333,9 @@ extern uint64 pgstat_get_my_query_id(void);
  * ----------
  */
 extern int	pgstat_fetch_stat_numbackends(void);
-extern PgBackendStatus *pgstat_fetch_stat_beentry(int beid);
-extern LocalPgBackendStatus *pgstat_fetch_stat_local_beentry(int beid);
+extern PgBackendStatus *pgstat_get_beentry_by_backend_id(BackendId beid);
+extern LocalPgBackendStatus *pgstat_get_local_beentry_by_backend_id(BackendId beid);
+extern LocalPgBackendStatus *pgstat_get_local_beentry_by_index(int idx);
 extern char *pgstat_clip_activity(const char *raw_activity);
 
 

@@ -123,9 +123,7 @@ public:
     TKqpExecuterBase(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         TKqpRequestCounters::TPtr counters,
-        const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
-        const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
-        const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
+        const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex, ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase", bool streamResult = false)
         : Request(std::move(request))
@@ -134,8 +132,8 @@ public:
         , Counters(counters)
         , ExecuterSpan(spanVerbosity, std::move(Request.TraceId), spanName)
         , Planner(nullptr)
-        , ExecuterRetriesConfig(executerRetriesConfig)
-        , AggregationSettings(aggregation)
+        , ExecuterRetriesConfig(tableServiceConfig.GetExecuterRetriesConfig())
+        , AggregationSettings(tableServiceConfig.GetAggregationConfig())
         , HasOlapTable(false)
         , StreamResult(streamResult)
         , StatementResultIndex(statementResultIndex)
@@ -143,12 +141,14 @@ public:
         TasksGraph.GetMeta().Snapshot = IKqpGateway::TKqpSnapshot(Request.Snapshot.Step, Request.Snapshot.TxId);
         TasksGraph.GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
         TasksGraph.GetMeta().Database = Database;
-        TasksGraph.GetMeta().ChannelTransportVersion = chanTransportVersion;
+        TasksGraph.GetMeta().ChannelTransportVersion = tableServiceConfig.GetChannelTransportVersion();
         TasksGraph.GetMeta().UserRequestContext = userRequestContext;
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc, ExecType);
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
+
+        CheckDuplicateRows = tableServiceConfig.GetEnableRowsDuplicationCheck();
     }
 
     void Bootstrap() {
@@ -962,7 +962,12 @@ protected:
 
         ui32 taskCount = externalSource.GetPartitionedTaskParams().size();
 
-        if (!resourceSnapshot.empty()) {
+        auto taskCountHint = stage.GetTaskCount();
+        if (taskCountHint) {
+            if (taskCount > taskCountHint) {
+                taskCount = taskCountHint;
+            }
+        } else if (!resourceSnapshot.empty()) {
             ui32 maxTaskcount = resourceSnapshot.size() * 2;
             if (taskCount > maxTaskcount) {
                 taskCount = maxTaskcount;
@@ -1126,6 +1131,20 @@ protected:
                     *protoColumn->MutableTypeInfo() = *columnType.TypeInfo;
                 }
                 protoColumn->SetName(column.Name);
+            }
+
+            if (CheckDuplicateRows) {
+                for (auto& colName : tableInfo->KeyColumns) {
+                    const auto& tableColumn = tableInfo->Columns.at(colName);
+                    auto* protoColumn = settings->AddDuplicateCheckColumns();
+                    protoColumn->SetId(tableColumn.Id);
+                    auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(tableColumn.Type, tableColumn.TypeMod);
+                    protoColumn->SetType(columnType.TypeId);
+                    if (columnType.TypeInfo) {
+                        *protoColumn->MutableTypeInfo() = *columnType.TypeInfo;
+                    }
+                    protoColumn->SetName(colName);
+                }
             }
 
             if (AppData()->FeatureFlags.GetEnableArrowFormatAtDatashard()) {
@@ -1342,7 +1361,11 @@ protected:
         }
 
         if (isShuffle) {
-            partitionsCount = std::max(partitionsCount, GetMaxTasksAggregation(stageInfo, inputTasks, nodesCount));
+            if (stage.GetTaskCount()) {
+                partitionsCount = stage.GetTaskCount();
+            } else {
+                partitionsCount = std::max(partitionsCount, GetMaxTasksAggregation(stageInfo, inputTasks, nodesCount));
+            }
         }
 
         for (ui32 i = 0; i < partitionsCount; ++i) {
@@ -1981,6 +2004,8 @@ protected:
     THashMap<ui64, TActorId> ResultChannelToComputeActor;
     THashMap<NYql::NDq::TStageId, THashMap<ui64, TShardInfo>> SourceScanStageIdToParititions;
 
+    bool CheckDuplicateRows = false;
+
     ui32 StatementResultIndex;
     bool AlreadyReplied = false;
 
@@ -1992,19 +2017,16 @@ private:
 
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters, bool streamResult,
-    const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
-    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
-    NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-    const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator,
+    const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+    NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     const bool enableOlapSink, const bool useEvWrite, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
-    const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
-    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
-    TPreparedQueryHolder::TConstPtr preparedQuery, const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
+    const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+    TPreparedQueryHolder::TConstPtr preparedQuery,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex);
 
 } // namespace NKqp

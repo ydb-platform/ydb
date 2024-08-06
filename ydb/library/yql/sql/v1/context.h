@@ -318,6 +318,7 @@ namespace NSQLTranslationV1 {
         ui64 ParallelModeCount = 0;
         bool CompactNamedExprs = false;
         bool ValidateUnusedExprs = false;
+        bool AnsiImplicitCrossJoin = false; // select * from A,B
     };
 
     class TColumnRefScope {

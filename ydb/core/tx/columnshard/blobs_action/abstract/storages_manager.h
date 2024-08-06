@@ -24,6 +24,7 @@ protected:
 public:
     static const inline TString DefaultStorageId = NBlobOperations::TGlobal::DefaultStorageId;
     static const inline TString MemoryStorageId = NBlobOperations::TGlobal::MemoryStorageId;
+    static const inline TString LocalMetadataStorageId = NBlobOperations::TGlobal::LocalMetadataStorageId;
     virtual ~IStoragesManager() = default;
 
     void Initialize(const ui64 generation) {

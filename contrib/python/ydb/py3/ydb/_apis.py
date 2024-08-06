@@ -122,6 +122,7 @@ class TopicService(object):
 
     CreateTopic = "CreateTopic"
     DescribeTopic = "DescribeTopic"
+    AlterTopic = "AlterTopic"
     DropTopic = "DropTopic"
     StreamRead = "StreamRead"
     StreamWrite = "StreamWrite"

@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_rules.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
+#include <ydb/library/yql/core/yql_opt_match_recognize.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
@@ -30,7 +31,6 @@ public:
         , Config(config)
     {
 #define HNDL(name) "KqpLogical-"#name, Hndl(&TKqpLogicalOptTransformer::name)
-        AddHandler(0, &TCoFlatMapBase::Match, HNDL(PushPredicateToReadTable));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(PushExtractedPredicateToReadTable));
         AddHandler(0, &TCoAggregate::Match, HNDL(RewriteAggregate));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushdownOlapGroupByKeys));
@@ -61,8 +61,8 @@ public:
         AddHandler(0, &TCoNarrowFlatMap::Match, HNDL(DqReadWideWrapFieldSubset));
         AddHandler(0, &TCoNarrowMultiMap::Match, HNDL(DqReadWideWrapFieldSubset));
         AddHandler(0, &TCoWideMap::Match, HNDL(DqReadWideWrapFieldSubset));
+        AddHandler(0, &TCoMatchRecognize::Match, HNDL(MatchRecognize));
 
-        AddHandler(1, &TCoFlatMap::Match, HNDL(LatePushExtractedPredicateToReadTable));
         AddHandler(1, &TCoTop::Match, HNDL(RewriteTopSortOverIndexRead));
         AddHandler(1, &TCoTopSort::Match, HNDL(RewriteTopSortOverIndexRead));
         AddHandler(1, &TCoTake::Match, HNDL(RewriteTakeOverIndexRead));
@@ -88,28 +88,7 @@ public:
     }
 
 protected:
-    TMaybeNode<TExprBase> PushPredicateToReadTable(TExprBase node, TExprContext& ctx) {
-        if (KqpCtx.Config->PredicateExtract20) {
-            return node;
-        }
-        TExprBase output = KqpPushPredicateToReadTable(node, ctx, KqpCtx);
-        DumpAppliedRule("PushPredicateToReadTable", node.Ptr(), output.Ptr(), ctx);
-        return output;
-    }
-
     TMaybeNode<TExprBase> PushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
-        if (!KqpCtx.Config->PredicateExtract20) {
-            return node;
-        }
-        TExprBase output = KqpPushExtractedPredicateToReadTable(node, ctx, KqpCtx, TypesCtx, *getParents());
-        DumpAppliedRule("PushExtractedPredicateToReadTable", node.Ptr(), output.Ptr(), ctx);
-        return output;
-    }
-
-    TMaybeNode<TExprBase> LatePushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
-        if (KqpCtx.Config->PredicateExtract20) {
-            return node;
-        }
         TExprBase output = KqpPushExtractedPredicateToReadTable(node, ctx, KqpCtx, TypesCtx, *getParents());
         DumpAppliedRule("PushExtractedPredicateToReadTable", node.Ptr(), output.Ptr(), ctx);
         return output;
@@ -167,7 +146,7 @@ protected:
 
     TMaybeNode<TExprBase> OptimizeEquiJoinWithCosts(TExprBase node, TExprContext& ctx) {
         auto maxDPccpDPTableSize = Config->MaxDPccpDPTableSize.Get().GetOrElse(TDqSettings::TDefault::MaxDPccpDPTableSize);
-        auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel);
+        auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel);
         auto providerCtx = TKqpProviderContext(KqpCtx, optLevel);
         auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, maxDPccpDPTableSize));
         TExprBase output = DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, optLevel,
@@ -180,14 +159,14 @@ protected:
     }
 
     TMaybeNode<TExprBase> RewriteEquiJoin(TExprBase node, TExprContext& ctx) {
-        bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel) == 3;
+        bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel) == 3;
         TExprBase output = DqRewriteEquiJoin(node, KqpCtx.Config->GetHashJoinMode(), useCBO, ctx, TypesCtx, KqpCtx.JoinsCount);
         DumpAppliedRule("RewriteEquiJoin", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
     TMaybeNode<TExprBase> JoinToIndexLookup(TExprBase node, TExprContext& ctx) {
-        bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel) == 3;
+        bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel) == 3;
         TExprBase output = KqpJoinToIndexLookup(node, ctx, KqpCtx, useCBO);
         DumpAppliedRule("JoinToIndexLookup", node.Ptr(), output.Ptr(), ctx);
         return output;
@@ -307,6 +286,14 @@ protected:
         auto output = NDq::DqReadWideWrapFieldSubset(node, ctx, getParents, TypesCtx);
         if (output) {
             DumpAppliedRule("DqReadWideWrapFieldSubset", node.Ptr(), output.Cast().Ptr(), ctx);
+        }
+        return output;
+    }
+
+    TMaybeNode<TExprBase> MatchRecognize(TExprBase node, TExprContext& ctx) {
+        auto output = ExpandMatchRecognize(node.Ptr(), ctx, TypesCtx);
+        if (output) {
+            DumpAppliedRule("MatchRecognize", node.Ptr(), output, ctx);
         }
         return output;
     }

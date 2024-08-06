@@ -1,5 +1,4 @@
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tablet/tablet_impl.h>
 #include <ydb/core/testlib/test_client.h>

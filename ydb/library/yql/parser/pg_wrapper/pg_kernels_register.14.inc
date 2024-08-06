@@ -115,3 +115,5 @@ RegisterExec(5093, arrow_anycompatiblenonarray_out());
 RegisterExec(5094, arrow_anycompatiblerange_in());
 RegisterExec(5095, arrow_anycompatiblerange_out());
 RegisterExec(5096, arrow_xid8cmp());
+RegisterExec(5097, arrow_xid8_larger());
+RegisterExec(5098, arrow_xid8_smaller());

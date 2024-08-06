@@ -120,6 +120,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
 
     NKikimrConfig::TAppConfig appConfig = settings.AppConfig;
     appConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
+    appConfig.MutableTableServiceConfig()->SetEnableRowsDuplicationCheck(true);
     ServerSettings->SetAppConfig(appConfig);
     ServerSettings->SetFeatureFlags(settings.FeatureFlags);
     ServerSettings->SetNodeCount(settings.NodeCount);
@@ -502,6 +503,7 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     SetupLogLevelFromTestParam(NKikimrServices::KQP_TASKS_RUNNER);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_EXECUTER);
     SetupLogLevelFromTestParam(NKikimrServices::TX_PROXY_SCHEME_CACHE);
+    SetupLogLevelFromTestParam(NKikimrServices::TX_PROXY);
     SetupLogLevelFromTestParam(NKikimrServices::SCHEME_BOARD_REPLICA);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_WORKER);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_SESSION);
@@ -1288,7 +1290,6 @@ THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime,
 {
     auto &runtime = *server->GetRuntime();
     TAutoPtr<IEventHandle> handle;
-    TVector<ui64> shards;
 
     auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
     request->Record.MutableDescribePath()->SetPath(path);

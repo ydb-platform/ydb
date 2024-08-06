@@ -6,7 +6,7 @@
  * Generic code supporting statistics objects created via CREATE STATISTICS.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -25,6 +25,7 @@
 #include "catalog/pg_statistic_ext.h"
 #include "catalog/pg_statistic_ext_data.h"
 #include "executor/executor.h"
+#include "commands/defrem.h"
 #include "commands/progress.h"
 #include "miscadmin.h"
 #include "nodes/nodeFuncs.h"
@@ -78,11 +79,11 @@ typedef struct StatExtEntry
 static List *fetch_statentries_for_relation(Relation pg_statext, Oid relid);
 static VacAttrStats **lookup_var_attr_stats(Relation rel, Bitmapset *attrs, List *exprs,
 											int nvacatts, VacAttrStats **vacatts);
-static void statext_store(Oid statOid,
+static void statext_store(Oid statOid, bool inh,
 						  MVNDistinct *ndistinct, MVDependencies *dependencies,
 						  MCVList *mcv, Datum exprs, VacAttrStats **stats);
 static int	statext_compute_stattarget(int stattarget,
-									   int natts, VacAttrStats **stats);
+									   int nattrs, VacAttrStats **stats);
 
 /* Information needed to analyze a single simple expression. */
 typedef struct AnlExprData
@@ -98,7 +99,7 @@ static Datum serialize_expr_stats(AnlExprData *exprdata, int nexprs);
 static Datum expr_fetch_func(VacAttrStatsP stats, int rownum, bool *isNull);
 static AnlExprData *build_expr_data(List *exprs, int stattarget);
 
-static StatsBuildData *make_build_data(Relation onerel, StatExtEntry *stat,
+static StatsBuildData *make_build_data(Relation rel, StatExtEntry *stat,
 									   int numrows, HeapTuple *rows,
 									   VacAttrStats **stats, int stattarget);
 
@@ -111,7 +112,7 @@ static StatsBuildData *make_build_data(Relation onerel, StatExtEntry *stat,
  * requested stats, and serializes them back into the catalog.
  */
 void
-BuildRelationExtStatistics(Relation onerel, double totalrows,
+BuildRelationExtStatistics(Relation onerel, bool inh, double totalrows,
 						   int numrows, HeapTuple *rows,
 						   int natts, VacAttrStats **vacattrstats)
 {
@@ -231,7 +232,8 @@ BuildRelationExtStatistics(Relation onerel, double totalrows,
 		}
 
 		/* store the statistics in the catalog */
-		statext_store(stat->statOid, ndistinct, dependencies, mcv, exprstats, stats);
+		statext_store(stat->statOid, inh,
+					  ndistinct, dependencies, mcv, exprstats, stats);
 
 		/* for reporting progress */
 		pgstat_progress_update_param(PROGRESS_ANALYZE_EXT_STATS_COMPUTED,
@@ -463,9 +465,8 @@ fetch_statentries_for_relation(Relation pg_statext, Oid relid)
 		}
 
 		/* decode the stxkind char array into a list of chars */
-		datum = SysCacheGetAttr(STATEXTOID, htup,
-								Anum_pg_statistic_ext_stxkind, &isnull);
-		Assert(!isnull);
+		datum = SysCacheGetAttrNotNull(STATEXTOID, htup,
+									   Anum_pg_statistic_ext_stxkind);
 		arr = DatumGetArrayTypeP(datum);
 		if (ARR_NDIM(arr) != 1 ||
 			ARR_HASNULL(arr) ||
@@ -700,11 +701,11 @@ examine_expression(Node *expr, int stattarget)
 }
 
 /*
- * Using 'vacatts' of size 'nvacatts' as input data, return a newly built
+ * Using 'vacatts' of size 'nvacatts' as input data, return a newly-built
  * VacAttrStats array which includes only the items corresponding to
- * attributes indicated by 'stxkeys'. If we don't have all of the per column
- * stats available to compute the extended stats, then we return NULL to indicate
- * to the caller that the stats should not be built.
+ * attributes indicated by 'attrs'.  If we don't have all of the per-column
+ * stats available to compute the extended stats, then we return NULL to
+ * indicate to the caller that the stats should not be built.
  */
 static VacAttrStats **
 lookup_var_attr_stats(Relation rel, Bitmapset *attrs, List *exprs,
@@ -782,22 +783,26 @@ lookup_var_attr_stats(Relation rel, Bitmapset *attrs, List *exprs,
  *	tuple.
  */
 static void
-statext_store(Oid statOid,
+statext_store(Oid statOid, bool inh,
 			  MVNDistinct *ndistinct, MVDependencies *dependencies,
 			  MCVList *mcv, Datum exprs, VacAttrStats **stats)
 {
 	Relation	pg_stextdata;
-	HeapTuple	stup,
-				oldtup;
+	HeapTuple	stup;
 	Datum		values[Natts_pg_statistic_ext_data];
 	bool		nulls[Natts_pg_statistic_ext_data];
-	bool		replaces[Natts_pg_statistic_ext_data];
 
 	pg_stextdata = table_open(StatisticExtDataRelationId, RowExclusiveLock);
 
 	memset(nulls, true, sizeof(nulls));
-	memset(replaces, false, sizeof(replaces));
 	memset(values, 0, sizeof(values));
+
+	/* basic info */
+	values[Anum_pg_statistic_ext_data_stxoid - 1] = ObjectIdGetDatum(statOid);
+	nulls[Anum_pg_statistic_ext_data_stxoid - 1] = false;
+
+	values[Anum_pg_statistic_ext_data_stxdinherit - 1] = BoolGetDatum(inh);
+	nulls[Anum_pg_statistic_ext_data_stxdinherit - 1] = false;
 
 	/*
 	 * Construct a new pg_statistic_ext_data tuple, replacing the calculated
@@ -831,25 +836,15 @@ statext_store(Oid statOid,
 		values[Anum_pg_statistic_ext_data_stxdexpr - 1] = exprs;
 	}
 
-	/* always replace the value (either by bytea or NULL) */
-	replaces[Anum_pg_statistic_ext_data_stxdndistinct - 1] = true;
-	replaces[Anum_pg_statistic_ext_data_stxddependencies - 1] = true;
-	replaces[Anum_pg_statistic_ext_data_stxdmcv - 1] = true;
-	replaces[Anum_pg_statistic_ext_data_stxdexpr - 1] = true;
+	/*
+	 * Delete the old tuple if it exists, and insert a new one. It's easier
+	 * than trying to update or insert, based on various conditions.
+	 */
+	RemoveStatisticsDataById(statOid, inh);
 
-	/* there should already be a pg_statistic_ext_data tuple */
-	oldtup = SearchSysCache1(STATEXTDATASTXOID, ObjectIdGetDatum(statOid));
-	if (!HeapTupleIsValid(oldtup))
-		elog(ERROR, "cache lookup failed for statistics object %u", statOid);
-
-	/* replace it */
-	stup = heap_modify_tuple(oldtup,
-							 RelationGetDescr(pg_stextdata),
-							 values,
-							 nulls,
-							 replaces);
-	ReleaseSysCache(oldtup);
-	CatalogTupleUpdate(pg_stextdata, &stup->t_self, stup);
+	/* form and insert a new tuple */
+	stup = heap_form_tuple(RelationGetDescr(pg_stextdata), values, nulls);
+	CatalogTupleInsert(pg_stextdata, stup);
 
 	heap_freetuple(stup);
 
@@ -962,7 +957,7 @@ compare_datums_simple(Datum a, Datum b, SortSupport ssup)
  * build_attnums_array
  *		Transforms a bitmap into an array of AttrNumber values.
  *
- * This is used for extended statistics only, so all the attribute must be
+ * This is used for extended statistics only, so all the attributes must be
  * user-defined. That means offsetting by FirstLowInvalidHeapAttributeNumber
  * is not necessary here (and when querying the bitmap).
  */
@@ -1133,7 +1128,7 @@ build_sorted_items(StatsBuildData *data, int *nitems,
 	}
 
 	/* do the sort, using the multi-sort */
-	qsort_interruptible((void *) items, nrows, sizeof(SortItem),
+	qsort_interruptible(items, nrows, sizeof(SortItem),
 						multi_sort_compare, mss);
 
 	return items;
@@ -1235,7 +1230,7 @@ stat_covers_expressions(StatisticExtInfo *stat, List *exprs,
  * further tiebreakers are needed.
  */
 StatisticExtInfo *
-choose_best_statistics(List *stats, char requiredkind,
+choose_best_statistics(List *stats, char requiredkind, bool inh,
 					   Bitmapset **clause_attnums, List **clause_exprs,
 					   int nclauses)
 {
@@ -1255,6 +1250,10 @@ choose_best_statistics(List *stats, char requiredkind,
 
 		/* skip statistics that are not of the correct type */
 		if (info->kind != requiredkind)
+			continue;
+
+		/* skip statistics with mismatching inheritance flag */
+		if (info->inherit != inh)
 			continue;
 
 		/*
@@ -1598,6 +1597,7 @@ statext_is_compatible_clause(PlannerInfo *root, Node *clause, Index relid,
 							 Bitmapset **attnums, List **exprs)
 {
 	RangeTblEntry *rte = root->simple_rte_array[relid];
+	RelOptInfo *rel = root->simple_rel_array[relid];
 	RestrictInfo *rinfo;
 	int			clause_relid;
 	Oid			userid;
@@ -1646,10 +1646,9 @@ statext_is_compatible_clause(PlannerInfo *root, Node *clause, Index relid,
 		return false;
 
 	/*
-	 * Check that the user has permission to read all required attributes. Use
-	 * checkAsUser if it's set, in case we're accessing the table via a view.
+	 * Check that the user has permission to read all required attributes.
 	 */
-	userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
+	userid = OidIsValid(rel->userid) ? rel->userid : GetUserId();
 
 	/* Table-level SELECT privilege is sufficient for all columns */
 	if (pg_class_aclcheck(rte->relid, userid, ACL_SELECT) != ACLCHECK_OK)
@@ -1750,16 +1749,6 @@ statext_mcv_clauselist_selectivity(PlannerInfo *root, List *clauses, int varReli
 	Selectivity sel = (is_or) ? 0.0 : 1.0;
 	RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
 
-	/*
-	 * When dealing with regular inheritance trees, ignore extended stats
-	 * (which were built without data from child rels, and thus do not
-	 * represent them). For partitioned tables data there's no data in the
-	 * non-leaf relations, so we build stats only for the inheritance tree.
-	 * So for partitioned tables we do consider extended stats.
-	 */
-	if (rte->inh && rte->relkind != RELKIND_PARTITIONED_TABLE)
-		return sel;
-
 	/* check if there's any stats that might be useful for us. */
 	if (!has_stats_of_kind(rel->statlist, STATS_EXT_MCV))
 		return sel;
@@ -1811,7 +1800,7 @@ statext_mcv_clauselist_selectivity(PlannerInfo *root, List *clauses, int varReli
 		Bitmapset  *simple_clauses;
 
 		/* find the best suited statistics object for these attnums */
-		stat = choose_best_statistics(rel->statlist, STATS_EXT_MCV,
+		stat = choose_best_statistics(rel->statlist, STATS_EXT_MCV, rte->inh,
 									  list_attnums, list_exprs,
 									  list_length(clauses));
 
@@ -1900,7 +1889,7 @@ statext_mcv_clauselist_selectivity(PlannerInfo *root, List *clauses, int varReli
 			MCVList    *mcv_list;
 
 			/* Load the MCV list stored in the statistics object */
-			mcv_list = statext_mcv_load(stat->statOid);
+			mcv_list = statext_mcv_load(stat->statOid, rte->inh);
 
 			/*
 			 * Compute the selectivity of the ORed list of clauses covered by
@@ -2248,8 +2237,8 @@ compute_expr_stats(Relation onerel, double totalrows,
 		if (tcnt > 0)
 		{
 			AttributeOpts *aopt =
-			get_attribute_options(stats->attr->attrelid,
-								  stats->attr->attnum);
+				get_attribute_options(stats->attr->attrelid,
+									  stats->attr->attnum);
 
 			stats->exprvals = exprvals;
 			stats->exprnulls = exprnulls;
@@ -2408,10 +2397,7 @@ serialize_expr_stats(AnlExprData *exprdata, int nexprs)
 
 				for (n = 0; n < nnum; n++)
 					numdatums[n] = Float4GetDatum(stats->stanumbers[k][n]);
-				/* XXX knows more than it should about type float4: */
-				arry = construct_array(numdatums, nnum,
-									   FLOAT4OID,
-									   sizeof(float4), true, TYPALIGN_INT);
+				arry = construct_array_builtin(numdatums, nnum, FLOAT4OID);
 				values[i++] = PointerGetDatum(arry);	/* stanumbersN */
 			}
 			else
@@ -2461,7 +2447,7 @@ serialize_expr_stats(AnlExprData *exprdata, int nexprs)
  * identified by the supplied index.
  */
 HeapTuple
-statext_expressions_load(Oid stxoid, int idx)
+statext_expressions_load(Oid stxoid, bool inh, int idx)
 {
 	bool		isnull;
 	Datum		value;
@@ -2471,7 +2457,8 @@ statext_expressions_load(Oid stxoid, int idx)
 	HeapTupleData tmptup;
 	HeapTuple	tup;
 
-	htup = SearchSysCache1(STATEXTDATASTXOID, ObjectIdGetDatum(stxoid));
+	htup = SearchSysCache2(STATEXTDATASTXOID,
+						   ObjectIdGetDatum(stxoid), BoolGetDatum(inh));
 	if (!HeapTupleIsValid(htup))
 		elog(ERROR, "cache lookup failed for statistics object %u", stxoid);
 

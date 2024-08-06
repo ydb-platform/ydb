@@ -13,7 +13,7 @@
  * we must return a tuples-processed count in the QueryCompletion.  (We no
  * longer do that for CTAS ... WITH NO DATA, however.)
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -333,7 +333,7 @@ ExecCreateTableAs(ParseState *pstate, CreateTableAsStmt *stmt,
 		ExecutorStart(queryDesc, GetIntoRelEFlags(into));
 
 		/* run the plan to completion */
-		ExecutorRun(queryDesc, ForwardScanDirection, 0L, true);
+		ExecutorRun(queryDesc, ForwardScanDirection, 0, true);
 
 		/* save the rowcount if we're given a qc to fill */
 		if (qc)

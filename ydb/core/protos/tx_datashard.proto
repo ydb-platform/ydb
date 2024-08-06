@@ -259,6 +259,8 @@ message TKqpReadRangesSourceSettings {
     optional uint64 MaxInFlightShards = 16;
     optional bool UseFollowers = 17 [default = false];
     optional bool AllowInconsistentReads = 18 [default = false];
+
+    repeated TKqpTransaction.TColumnMeta DuplicateCheckColumns = 19;
 }
 
 message TKqpTaskInfo {
@@ -1453,6 +1455,51 @@ message TEvBuildIndexProgressResponse {
     optional uint64 RequestSeqNoRound = 13;
 }
 
+message TEvSampleKRequest {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional NKikimrProto.TPathID PathId = 3;
+
+    optional uint64 K = 4;
+    optional uint64 Seed = 5;
+
+    repeated string Columns = 6;
+    optional NKikimrTx.TKeyRange KeyRange = 7;
+
+    optional uint64 SnapshotTxId = 8;
+    optional uint64 SnapshotStep = 9;
+
+    optional uint64 SeqNoGeneration = 10;
+    optional uint64 SeqNoRound = 11;
+}
+
+message TEvSampleKResponse {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional NKikimrProto.TPathID PathId = 3;
+
+    enum EStatus {
+        INVALID = 0;
+        DONE = 1;
+
+        ABORTED = 2;
+        BAD_REQUEST = 3;
+    }
+
+    optional EStatus Status = 4;
+    repeated Ydb.Issue.IssueMessage Issues = 5;
+
+    optional NKikimrTx.TKeyRange RequestedKeyRange = 6;
+
+    optional uint64 RequestSeqNoGeneration = 7;
+    optional uint64 RequestSeqNoRound = 8;
+
+    repeated uint64 Probabilities = 9;
+    repeated bytes Rows = 10;
+}
+
 message TEvCdcStreamScanRequest {
     message TLimits {
         optional uint32 BatchMaxBytes = 1 [default = 512000];
@@ -1829,6 +1876,7 @@ message TEvApplyReplicationChangesResult {
         REASON_SCHEME_ERROR = 2;
         REASON_BAD_REQUEST = 3;
         REASON_UNEXPECTED_ROW_OPERATION = 4;
+        REASON_OUTDATED_SCHEME = 6;
     }
 
     optional EStatus Status = 1;

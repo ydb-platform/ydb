@@ -393,8 +393,60 @@ message TTenantInfo {
     repeated string Errors = 2;
 }
 
+message TStoragePDisk {
+    string PDiskId = 1;
+    string Path = 2;
+    string Type = 3;
+    string Guid = 4;
+    uint64 Category = 5;
+    uint64 TotalSize = 6;
+    uint64 AvailableSize = 7;
+    string Status = 8;
+    EFlag DiskSpace = 9;
+    string DecommitStatus = 10;
+    uint64 SlotSize = 11;
+    NKikimrWhiteboard.TPDiskStateInfo Whiteboard = 50;
+}
+
+message TStorageVDisk {
+    string VDiskId = 1;
+    uint32 NodeId = 2;
+    uint64 AllocatedSize = 3;
+    uint64 AvailableSize = 4;
+    string Kind = 5;
+    string Status = 6;
+    EFlag DiskSpace = 7;
+    repeated TStorageVDisk Donors = 8;
+    TStoragePDisk PDisk = 20;
+    NKikimrWhiteboard.TVDiskStateInfo Whiteboard = 50;
+}
+
 message TStorageGroupInfo {
     string GroupId = 1;
+    uint64 GroupGeneration = 2;
+    string PoolName = 3;
+    bool Encryption = 4;
+    EFlag Overall = 5;
+    EFlag DiskSpace = 6;
+    string Kind = 7;
+    string MediaType = 8;
+    string ErasureSpecies = 9;
+    uint64 AllocationUnits = 10;
+    string State = 11;
+    uint64 MissingDisks = 12; // Degraded
+    uint64 Used = 13;
+    uint64 Limit = 14;
+    uint64 Available = 15;
+    float Usage = 16;
+    uint64 Read = 17;
+    uint64 Write = 18;
+    float DiskSpaceUsage = 19;
+    repeated TStorageVDisk VDisks = 20;
+}
+
+message TStorageGroupGroup {
+    string GroupName = 1;
+    uint64 GroupCount = 2;
 }
 
 message TStoragePoolInfo {
@@ -418,6 +470,21 @@ message TStorageInfo {
     optional uint64 TotalGroups = 3;
     optional uint64 FoundGroups = 4;
     repeated TStorageGroupInfo StorageGroups = 5;
+}
+
+message TStorageGroupsInfo {
+    uint32 Version = 1;
+    optional uint32 TotalGroups = 2;
+    optional uint32 FoundGroups = 3;
+    optional uint32 FieldsAvailable = 4;
+    optional uint32 FieldsRequired = 5;
+    optional bool NeedFilter = 6;
+    optional bool NeedGroup = 7;
+    optional bool NeedSort = 8;
+    optional bool NeedLimit = 9;
+    repeated string Problems = 10;
+    repeated TStorageGroupInfo StorageGroups = 11;
+    repeated TStorageGroupGroup StorageGroupGroups = 12;
 }
 
 message TStorageUsageStats {
@@ -580,18 +647,17 @@ message TEvDescribeSchemeInfo {
         Cache = 2;
     }
 
-    optional string Status = 1;
-    optional string Reason = 2;
-    optional string Path = 3;
-    optional NKikimrSchemeOp.TPathDescription PathDescription = 4;
-    optional fixed64 DEPRECATED_PathOwner = 5;  // replaced by PathOwnerId
-    optional fixed64 PathId = 6;
-
-    optional string LastExistedPrefixPath = 7;
-    optional fixed64 LastExistedPrefixPathId = 8;
-    optional NKikimrSchemeOp.TPathDescription LastExistedPrefixDescription = 9;
-    optional fixed64 PathOwnerId = 10;
-    optional ESource Source = 11;
+    string Status = 1;
+    string Reason = 2;
+    string Path = 3;
+    NKikimrSchemeOp.TPathDescription PathDescription = 4;
+    fixed64 DEPRECATED_PathOwner = 5;  // replaced by PathOwnerId
+    fixed64 PathId = 6;
+    string LastExistedPrefixPath = 7;
+    fixed64 LastExistedPrefixPathId = 8;
+    NKikimrSchemeOp.TPathDescription LastExistedPrefixDescription = 9;
+    fixed64 PathOwnerId = 10;
+    ESource Source = 11;
 }
 
 enum EAutocompleteType {

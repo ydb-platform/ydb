@@ -36,7 +36,7 @@
  * to look like NO SCROLL cursors.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/portal.h
@@ -130,6 +130,7 @@ typedef struct PortalData
 	 */
 	SubTransactionId createSubid;	/* the creating subxact */
 	SubTransactionId activeSubid;	/* the last subxact with activity */
+	int			createLevel;	/* creating subxact's nesting level */
 
 	/* The query or queries the portal will execute */
 	const char *sourceText;		/* text of query (as of 8.4, never NULL) */
@@ -202,9 +203,6 @@ typedef struct PortalData
 	/* Presentation data, primarily used by the pg_cursors system view */
 	TimestampTz creation_time;	/* time at which this portal was defined */
 	bool		visible;		/* include this portal in pg_cursors? */
-
-	/* Stuff added at the end to avoid ABI break in stable branches: */
-	int			createLevel;	/* creating subxact's nesting level */
 }			PortalData;
 
 /*

@@ -4,7 +4,7 @@
  *	  POSTGRES shared cache invalidation communication definitions.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/storage/sinval.h
@@ -16,7 +16,7 @@
 
 #include <signal.h>
 
-#include "storage/relfilenode.h"
+#include "storage/relfilelocator.h"
 
 /*
  * We support several types of shared-invalidation messages:
@@ -90,7 +90,7 @@ typedef struct
 	int8		id;				/* type field --- must be first */
 	int8		backend_hi;		/* high bits of backend ID, if temprel */
 	uint16		backend_lo;		/* low bits of backend ID, if temprel */
-	RelFileNode rnode;			/* spcNode, dbNode, relNode */
+	RelFileLocator rlocator;	/* spcOid, dbOid, relNumber */
 } SharedInvalSmgrMsg;
 
 #define SHAREDINVALRELMAP_ID	(-4)
@@ -123,9 +123,9 @@ typedef union
 
 
 /* Counter of messages processed; don't worry about overflow. */
-extern __thread uint64 SharedInvalidMessageCounter;
+extern __thread PGDLLIMPORT uint64 SharedInvalidMessageCounter;
 
-extern __thread volatile sig_atomic_t catchupInterruptPending;
+extern __thread PGDLLIMPORT volatile sig_atomic_t catchupInterruptPending;
 
 extern void SendSharedInvalidMessages(const SharedInvalidationMessage *msgs,
 									  int n);

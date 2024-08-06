@@ -27,7 +27,7 @@ message TTableServiceConfig {
         optional uint64 MkqlHeavyProgramMemoryLimit = 5 [default = 31457280];   // 30 MB
         optional uint64 QueryMemoryLimit = 6 [default = 32212254720];           // 30 GB
         optional uint32 PublishStatisticsIntervalSec = 7 [default = 2];
-        optional bool EnableInstantMkqlMemoryAlloc = 8 [default = true];
+        reserved 8; // optional bool EnableInstantMkqlMemoryAlloc = 8 [default = true];
         reserved 9;  // optional uint32 InstantMkqlMemoryAllocWaitTimeMs = 9 [default = 20];
         reserved 10; // optional uint32 InstantMkqlMemoryAllocStepTimeMs = 10 [default = 1];
 
@@ -47,8 +47,8 @@ message TTableServiceConfig {
 
     message TSpillingServiceConfig {
         message TLocalFileConfig {
-            optional bool Enable = 1 [default = false];
-            optional string Root = 2 [default = "/tmp/kikimr_spilling/"];
+            optional bool Enable = 1 [default = true];
+            optional string Root = 2 [default = ""];
             optional uint64 MaxTotalSize = 3 [default = 21474836480];  // 20 GiB
             optional uint64 MaxFileSize = 4 [default = 5368709120];    // 5 GiB
             optional uint64 MaxFilePartSize = 5 [default = 104857600]; // 100 MB
@@ -202,8 +202,8 @@ message TTableServiceConfig {
     optional uint32 CompileQueryCacheSize = 6 [default = 1000];
     optional uint32 CompileMaxActiveRequests = 7 [default = 4];
     optional uint32 CompileRequestQueueSize = 8 [default = 1000];
-    optional bool UseSchemeCacheMetadata = 9 [default = true];
-    optional bool UseSessionBusyStatus = 10 [default = true];
+    reserved 9; // optional bool UseSchemeCacheMetadata = 9 [default = true];
+    reserved 10; // optional bool UseSessionBusyStatus = 10 [default = true];
     reserved 11; // (deprecated) AllowUnsafeCommit
     optional uint32 CompileTimeoutMs = 12 [default = 60000];
     optional TResourceManager ResourceManager = 13;
@@ -221,7 +221,7 @@ message TTableServiceConfig {
     reserved 25; // optional bool EnableKqpPatternCacheCompute = 25 [default = false];
 
     optional bool EnableKqpScanQuerySourceRead = 26 [default = false];
-    optional bool EnableKqpDataQuerySourceRead = 27 [default = true];
+    reserved 27; // EnableKqpDataQuerySourceRead
     optional uint64 SessionIdleDurationSeconds = 28 [default = 600];
     optional TAggregationConfig AggregationConfig = 29;
     optional bool EnableKqpScanQueryStreamLookup = 30 [default = true];
@@ -233,7 +233,7 @@ message TTableServiceConfig {
     optional bool EnableKqpDataQueryStreamIdxLookupJoin = 49 [default = false];
     reserved 36; //optional bool EnablePredicateExtractForScanQueries = 36 [default = true];
     reserved 37; //optional bool EnablePredicateExtractForDataQueries = 37 [default = true];
-    optional bool EnableKqpImmediateEffects = 38 [default = true];
+    reserved 38; // optional bool EnableKqpImmediateEffects = 38 [default = true];
     reserved 39; // optional bool EnableSequentialReads = 39 [default = true];
     optional bool EnablePreparedDdl = 42 [default = true];
     optional bool EnableSequences = 43 [default = true];
@@ -249,7 +249,7 @@ message TTableServiceConfig {
 
     optional EBindingsMode BindingsMode = 40 [default = BM_ENABLED];
     optional TIteratorReadsRetrySettings IteratorReadsRetrySettings = 41;
-    optional bool PredicateExtract20 = 44 [default = true];
+    reserved 44; // optional bool PredicateExtract20 = 44 [default = true];
     optional TIteratorReadQuotaSettings IteratorReadQuotaSettings = 45;
 
     enum EChannelTransportVersion {
@@ -274,13 +274,13 @@ message TTableServiceConfig {
 
     optional uint64 ExtractPredicateRangesLimit = 54 [default = 10000];
 
-    optional bool EnableOlapSink = 55 [default = true];
+    optional bool EnableOlapSink = 55 [default = false];
 
     optional bool EnablePerStatementQueryExecution = 56 [default = false];
     optional bool EnableCreateTableAs = 57 [default = true];
 
-    optional uint64 IdxLookupJoinPointsLimit = 58 [default = 1];
-    optional bool OldLookupJoinBehaviour = 59 [default = false];
+    optional uint64 IdxLookupJoinPointsLimit = 58 [default = 3];
+    reserved 59; //optional bool OldLookupJoinBehaviour = 59 [default = false];
 
     optional bool EnableOltpSink = 60 [default = false];
 
@@ -294,4 +294,27 @@ message TTableServiceConfig {
     optional uint64 QueryReplayCacheUploadTTLSec = 62 [default = 36000];
 
     optional bool EnableQueryServiceSpilling = 63 [ default = true ];
+
+    optional uint32 DefaultCostBasedOptimizationLevel = 64 [default = 3];
+
+    optional bool EnableConstantFolding = 65 [ default = true ];
+
+    optional bool EnableImplicitQueryParameterTypes = 66 [ default = true ];
+
+    optional string EnableSpillingNodes = 67 [ default = "All" ];
+
+    message TSubPoolsConfiguration {
+        repeated TComputePoolConfiguration SubPools = 1;
+    };
+
+    message TComputePoolConfiguration {
+        optional double MaxCpuShare = 1;
+        oneof ResourceConfiguration {
+            string Name = 2;
+            TSubPoolsConfiguration SubPoolsConfiguration = 3;
+        }
+    };
+    optional TComputePoolConfiguration PoolsConfiguration = 68;
+    
+    optional bool EnableRowsDuplicationCheck = 69 [ default = false ];
 };

@@ -3,7 +3,7 @@
  * pg_foreign_data_wrapper_d.h
  *    Macro definitions for pg_foreign_data_wrapper
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -19,6 +19,8 @@
 #define PG_FOREIGN_DATA_WRAPPER_D_H
 
 #define ForeignDataWrapperRelationId 2328
+#define ForeignDataWrapperOidIndexId 112
+#define ForeignDataWrapperNameIndexId 548
 
 #define Anum_pg_foreign_data_wrapper_oid 1
 #define Anum_pg_foreign_data_wrapper_fdwname 2

@@ -84,22 +84,18 @@ LLVM_BC(
     arrow_circle_same
     arrow_circle_send
     arrow_circle_sub_pt
-    arrow_close_lb
     arrow_close_ls
     arrow_close_lseg
     arrow_close_pb
     arrow_close_pl
     arrow_close_ps
     arrow_close_sb
-    arrow_close_sl
     arrow_construct_point
     arrow_cr_circle
-    arrow_dist_bl
     arrow_dist_bp
     arrow_dist_bs
     arrow_dist_cpoint
     arrow_dist_cpoly
-    arrow_dist_lb
     arrow_dist_lp
     arrow_dist_ls
     arrow_dist_pathp
@@ -159,7 +155,6 @@ LLVM_BC(
     arrow_path_add
     arrow_path_add_pt
     arrow_path_area
-    arrow_path_center
     arrow_path_close
     arrow_path_distance
     arrow_path_div_pt

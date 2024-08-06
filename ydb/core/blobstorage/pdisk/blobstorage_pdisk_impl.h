@@ -18,6 +18,7 @@
 #include "blobstorage_pdisk_thread.h"
 #include "blobstorage_pdisk_util_countedqueuemanyone.h"
 #include "blobstorage_pdisk_writer.h"
+#include "blobstorage_pdisk_impl_metadata.h"
 
 #include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/core/base/resource_profile.h>
@@ -196,12 +197,15 @@ public:
     // Debug
     std::function<TString()> DebugInfoGenerator;
 
+    // Metadata storage
+    NMeta::TInfo Meta;
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Initialization
     TPDisk(const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
     TString DynamicStateToString(bool isMultiline);
     TCheckDiskFormatResult ReadChunk0Format(ui8* formatSectors, const TMainKey& mainKey); // Called by actor
-    bool IsFormatMagicValid(ui8 *magicData, ui32 magicDataSize); // Called by actor
+    bool IsFormatMagicValid(ui8 *magicData, ui32 magicDataSize, const TMainKey& mainKey); // Called by actor
     bool CheckGuid(TString *outReason); // Called by actor
     bool CheckFormatComplete(); // Called by actor
     void ReadSysLog(const TActorId &pDiskActor); // Called by actor
@@ -316,7 +320,8 @@ public:
     void WriteApplyFormatRecord(TDiskFormat format, const TKey &mainKey);
     void WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes, const ui64 &diskGuid,
             const TKey &chunkKey, const TKey &logKey, const TKey &sysLogKey, const TKey &mainKey,
-            TString textMessage, const bool isErasureEncodeUserLog, const bool trimEntireDevice);
+            TString textMessage, const bool isErasureEncodeUserLog, const bool trimEntireDevice,
+            std::optional<TRcBuf> metadata);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Owner initialization
     void ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str);
@@ -356,6 +361,33 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Drive info and write cache
     void OnDriveStartup();
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Metadata processing
+    void InitFormattedMetadata();
+    void ReadFormattedMetadataIfNeeded();
+    void ProcessInitialReadMetadataResult(TInitialReadMetadataResult& request);
+    void FinishReadingFormattedMetadata();
+
+    void ProcessPushUnformattedMetadataSector(TPushUnformattedMetadataSector& request);
+
+    void ProcessMetadataRequestQueue();
+    void ProcessReadMetadata(std::unique_ptr<TRequestBase> req);
+    void HandleNextReadMetadata();
+    void ProcessWriteMetadata(std::unique_ptr<TRequestBase> req);
+    void HandleNextWriteMetadata();
+    void ProcessWriteMetadataResult(TWriteMetadataResult& request);
+
+    void DropAllMetadataRequests();
+
+    TRcBuf CreateMetadataPayload(TRcBuf& metadata, size_t offset, size_t payloadSize, ui32 sectorSize, bool encryption,
+        const TKey& key, ui64 sequenceNumber, ui32 recordIndex, ui32 totalRecords);
+    bool WriteMetadataSync(TRcBuf&& metadata, const TDiskFormat& format);
+
+    static std::optional<TMetadataFormatSector> CheckMetadataFormatSector(const ui8 *data, size_t len, const TMainKey& mainKey);
+    static void MakeMetadataFormatSector(ui8 *data, const TMainKey& mainKey, const TMetadataFormatSector& format);
+
+    NMeta::TFormatted& GetFormattedMeta();
+    NMeta::TUnformatted& GetUnformattedMeta();
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Internal interface
 

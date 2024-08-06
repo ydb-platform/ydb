@@ -4,6 +4,7 @@
 extern "C" {
 #include "postgres.h"
 #include "fmgr.h"
+#include "varatt.h"
 }
 
 #undef Max

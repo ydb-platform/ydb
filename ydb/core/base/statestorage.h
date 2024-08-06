@@ -62,11 +62,6 @@ struct TEvStateStorage {
         EvReplicaBoardInfo,
         EvReplicaBoardInfoUpdate,
 
-        EvReplicaProbeSubscribe = EvLock + 6 * 512,
-        EvReplicaProbeUnsubscribe,
-        EvReplicaProbeConnected,
-        EvReplicaProbeDisconnected,
-
         EvEnd
     };
 
@@ -385,10 +380,6 @@ struct TEvStateStorage {
     struct TEvListStateStorageResult;
     struct TEvPublishActorGone;
     struct TEvUpdateGroupConfig;
-    struct TEvReplicaProbeSubscribe;
-    struct TEvReplicaProbeUnsubscribe;
-    struct TEvReplicaProbeConnected;
-    struct TEvReplicaProbeDisconnected;
 
     struct TEvReplicaShutdown : public TEventPB<TEvStateStorage::TEvReplicaShutdown, NKikimrStateStorage::TEvReplicaShutdown, TEvStateStorage::EvReplicaShutdown> {
     };

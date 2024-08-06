@@ -1,30 +1,32 @@
 #pragma once
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
-
-#include <ydb/services/metadata/abstract/fetcher.h>
 #include <ydb/core/tx/tiering/snapshot.h>
 
 #include <ydb/library/accessor/accessor.h>
-#include <util/generic/singleton.h>
-#include <util/generic/refcount.h>
+#include <ydb/services/metadata/abstract/fetcher.h>
+
 #include <util/datetime/base.h>
+#include <util/generic/refcount.h>
+#include <util/generic/singleton.h>
+
 #include <memory>
 
 namespace NKikimr::NColumnShard {
 class TTiersManager;
 class TColumnShard;
-}
+}   // namespace NKikimr::NColumnShard
 
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;
 class IBlobsGCAction;
 class TPortionInfo;
-namespace NStatistics {
-class TOperatorContainer;
+namespace NIndexes {
+class TIndexMetaContainer;
 }
-}
+}   // namespace NKikimr::NOlap
 namespace arrow {
 class RecordBatch;
 }
@@ -41,7 +43,8 @@ class ILocalDBModifier {
 public:
     using TPtr = std::shared_ptr<ILocalDBModifier>;
 
-    virtual ~ILocalDBModifier() {}
+    virtual ~ILocalDBModifier() {
+    }
 
     virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const = 0;
 };
@@ -55,6 +58,7 @@ public:
         Cleanup,
         GC
     };
+
 protected:
     virtual void DoOnTabletInitCompleted(const ::NKikimr::NColumnShard::TColumnShard& /*shard*/) {
         return;
@@ -77,10 +81,18 @@ protected:
     }
     virtual void DoOnDataSharingFinished(const ui64 /*tabletId*/, const TString& /*sessionId*/) {
     }
-    virtual void DoOnDataSharingStarted(const ui64 /*tabletId*/, const TString & /*sessionId*/) {
+    virtual void DoOnDataSharingStarted(const ui64 /*tabletId*/, const TString& /*sessionId*/) {
     }
 
 public:
+    virtual void OnRequestTracingChanges(
+        const std::set<NOlap::TSnapshot>& /*snapshotsToSave*/, const std::set<NOlap::TSnapshot>& /*snapshotsToRemove*/) {
+    }
+
+    virtual TDuration GetPingCheckPeriod(const TDuration def) const {
+        return def;
+    }
+
     virtual bool IsBackgroundEnabled(const EBackground /*id*/) const {
         return true;
     }
@@ -93,14 +105,14 @@ public:
     }
 
     virtual void OnSelectShardingFilter() {
-    
     }
 
     virtual TDuration GetCompactionActualizationLag(const TDuration def) const {
         return def;
     }
 
-    virtual NColumnShard::TBlobPutResult::TPtr OverrideBlobPutResultOnCompaction(const NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& /*actions*/) const {
+    virtual NColumnShard::TBlobPutResult::TPtr OverrideBlobPutResultOnCompaction(
+        const NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& /*actions*/) const {
         return original;
     }
 
@@ -125,16 +137,12 @@ public:
         return def;
     }
     virtual void OnExportFinished() {
-
     }
     virtual void OnActualizationRefreshScheme() {
-
     }
     virtual void OnActualizationRefreshTiering() {
-
     }
     virtual void AddPortionForActualizer(const i32 /*portionsCount*/) {
-
     }
 
     void OnDataSharingFinished(const ui64 tabletId, const TString& sessionId) {
@@ -143,11 +151,9 @@ public:
     void OnDataSharingStarted(const ui64 tabletId, const TString& sessionId) {
         return DoOnDataSharingStarted(tabletId, sessionId);
     }
-    virtual void OnStatisticsUsage(const NOlap::NStatistics::TOperatorContainer& /*statOperator*/) {
-
+    virtual void OnStatisticsUsage(const NOlap::NIndexes::TIndexMetaContainer& /*statOperator*/) {
     }
     virtual void OnPortionActualization(const NOlap::TPortionInfo& /*info*/) {
-
     }
     virtual void OnMaxValueUsage() {
     }
@@ -215,7 +221,8 @@ public:
     }
 
     virtual NMetadata::NFetcher::ISnapshot::TPtr GetFallbackTiersSnapshot() const {
-        static std::shared_ptr<NColumnShard::NTiers::TConfigsSnapshot> result = std::make_shared<NColumnShard::NTiers::TConfigsSnapshot>(TInstant::Now());
+        static std::shared_ptr<NColumnShard::NTiers::TConfigsSnapshot> result =
+            std::make_shared<NColumnShard::NTiers::TConfigsSnapshot>(TInstant::Now());
         return result;
     }
 
@@ -231,15 +238,16 @@ public:
 class TControllers {
 private:
     ICSController::TPtr CSController = std::make_shared<ICSController>();
+
 public:
     template <class TController>
     class TGuard: TNonCopyable {
     private:
         std::shared_ptr<TController> Controller;
+
     public:
         TGuard(std::shared_ptr<TController> controller)
-            : Controller(controller)
-        {
+            : Controller(controller) {
             Y_ABORT_UNLESS(Controller);
         }
 
@@ -270,4 +278,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NYDBTest

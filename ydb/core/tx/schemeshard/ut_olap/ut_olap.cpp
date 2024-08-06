@@ -1,6 +1,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 
@@ -39,7 +40,7 @@ static const TString defaultTableSchema = R"(
 )";
 
 static const TVector<NArrow::NTest::TTestColumn> defaultYdbSchema = {
-    NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) ),
+    NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)).SetNullable(false),
     NArrow::NTest::TTestColumn("data", TTypeInfo(NTypeIds::Utf8) )
 };
 
@@ -634,16 +635,16 @@ Y_UNIT_TEST_SUITE(TOlap) {
         env.TestWaitNotification(runtime, txId);
     }
 
-    // TODO: AlterTiers
-    // negatives for store: disallow alters
-    // negatives for table: wrong tiers count, wrong tiers, wrong eviction column, wrong eviction values,
-    //      different TTL columns in tiers
-#if 0
     Y_UNIT_TEST(StoreStats) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
         runtime.UpdateCurrentTime(TInstant::Now() - TDuration::Seconds(600));
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
 
         // disable stats batching
         auto& appData = runtime.GetAppData();
@@ -690,6 +691,16 @@ Y_UNIT_TEST_SUITE(TOlap) {
         UNIT_ASSERT(shardId);
         UNIT_ASSERT(pathId);
         UNIT_ASSERT(planStep);
+        {
+            auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/OlapStore/ColumnTable", true, true);
+            Cerr << description.DebugString() << Endl;
+            auto& tabletStats = description.GetPathDescription().GetTableStats();
+
+            UNIT_ASSERT(description.GetPathDescription().HasTableStats());
+            UNIT_ASSERT_EQUAL(tabletStats.GetRowCount(), 0);
+            UNIT_ASSERT_EQUAL(tabletStats.GetDataSize(), 0);
+        }
+
 
         ui32 rowsInBatch = 100000;
 
@@ -702,7 +713,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             TSet<ui64> txIds;
             for (ui32 i = 0; i < 10; ++i) {
                 std::vector<ui64> writeIds;
-                NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds);
+                NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert);
                 NTxUT::ProposeCommit(runtime, sender, shardId, ++txId, writeIds);
                 txIds.insert(txId);
             }
@@ -714,16 +725,38 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
             // trigger periodic stats at shard (after timeout)
             std::vector<ui64> writeIds;
-            NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds);
+            NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert);
             NTxUT::ProposeCommit(runtime, sender, shardId, ++txId, writeIds);
             NTxUT::PlanCommit(runtime, sender, shardId, ++planStep, {txId});
         }
+        csController->WaitIndexation(TDuration::Seconds(5));
+        {
+            auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/OlapStore", true, true);
+            Cerr << description.DebugString() << Endl;
+            auto& tabletStats = description.GetPathDescription().GetTableStats();
 
-        auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/OlapStore", true, true);
-        auto& tabletStats = description.GetPathDescription().GetTableStats();
+            UNIT_ASSERT_GT(tabletStats.GetRowCount(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetDataSize(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetPartCount(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetRowUpdates(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetImmediateTxCompleted(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetPlannedTxCompleted(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetLastAccessTime(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetLastUpdateTime(), 0);
+        }
 
-        UNIT_ASSERT_GT(tabletStats.GetRowCount(), 0);
-        UNIT_ASSERT_GT(tabletStats.GetDataSize(), 0);
+        {
+            auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/OlapStore/ColumnTable", true, true);
+            Cerr << description.DebugString() << Endl;
+            auto& tabletStats = description.GetPathDescription().GetTableStats();
+
+            UNIT_ASSERT_GT(tabletStats.GetRowCount(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetDataSize(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetPartCount(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetLastAccessTime(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetLastUpdateTime(), 0);
+        }
+
 #if 0
         TestDropColumnTable(runtime, ++txId, "/MyRoot/OlapStore", "ColumnTable");
         env.TestWaitNotification(runtime, txId);
@@ -738,5 +771,4 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestLsPathId(runtime, 2, NLs::PathStringEqual(""));
 #endif
     }
-#endif
 }

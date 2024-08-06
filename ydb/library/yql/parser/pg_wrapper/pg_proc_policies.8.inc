@@ -362,9 +362,57 @@ struct TArgs_pg_replication_origin_xact_setup_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
+struct TArgs_pg_stop_making_pinned_objects_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 0> IsFixedArg = {};
+};
 struct TArgs_pgsql_version_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 0> IsFixedArg = {};
+};
+struct TArgs_regexp_count_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 4> IsFixedArg = {false,false,true,false};
+};
+struct TArgs_regexp_count_no_flags_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {false,false,true};
+};
+struct TArgs_regexp_count_no_start_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+struct TArgs_regexp_instr_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 7> IsFixedArg = {false,false,true,true,true,false,true};
+};
+struct TArgs_regexp_instr_no_endoption_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 4> IsFixedArg = {false,false,true,true};
+};
+struct TArgs_regexp_instr_no_flags_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 5> IsFixedArg = {false,false,true,true,true};
+};
+struct TArgs_regexp_instr_no_n_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {false,false,true};
+};
+struct TArgs_regexp_instr_no_start_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+struct TArgs_regexp_instr_no_subexpr_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 6> IsFixedArg = {false,false,true,true,true,false};
+};
+struct TArgs_regexp_like_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {false,false,false};
+};
+struct TArgs_regexp_like_no_flags_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
 struct TArgs_regexp_match_Policy {
     static constexpr bool VarArgs = false;
@@ -381,6 +429,26 @@ struct TArgs_regexp_split_to_array_Policy {
 struct TArgs_regexp_split_to_array_no_flags_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+struct TArgs_regexp_substr_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 6> IsFixedArg = {false,false,true,true,false,true};
+};
+struct TArgs_regexp_substr_no_flags_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 4> IsFixedArg = {false,false,true,true};
+};
+struct TArgs_regexp_substr_no_n_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {false,false,true};
+};
+struct TArgs_regexp_substr_no_start_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+struct TArgs_regexp_substr_no_subexpr_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 5> IsFixedArg = {false,false,true,true,false};
 };
 struct TArgs_repeat_Policy {
     static constexpr bool VarArgs = false;
@@ -445,6 +513,18 @@ struct TArgs_textregexne_Policy {
 struct TArgs_textregexreplace_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 4> IsFixedArg = {false,false,false,false};
+};
+struct TArgs_textregexreplace_extended_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 6> IsFixedArg = {false,false,false,true,true,false};
+};
+struct TArgs_textregexreplace_extended_no_flags_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 5> IsFixedArg = {false,false,false,true,true};
+};
+struct TArgs_textregexreplace_extended_no_n_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 4> IsFixedArg = {false,false,false,true};
 };
 struct TArgs_textregexreplace_noopt_Policy {
     static constexpr bool VarArgs = false;

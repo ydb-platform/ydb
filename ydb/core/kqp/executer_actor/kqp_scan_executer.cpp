@@ -45,13 +45,11 @@ public:
 
     TKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
-        const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
-        const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
+        const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         TPreparedQueryHolder::TConstPtr preparedQuery,
-        const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex)
-        : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, chanTransportVersion, aggregation,
+        : TBase(std::move(request), database, userToken, counters, tableServiceConfig,
             userRequestContext, statementResultIndex, TWilsonKqp::ScanExecuter, "ScanExecuter",
             false
         )
@@ -388,13 +386,12 @@ private:
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
-    const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
-    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
-    TPreparedQueryHolder::TConstPtr preparedQuery, const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
+    const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+    TPreparedQueryHolder::TConstPtr preparedQuery,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex)
 {
-    return new TKqpScanExecuter(std::move(request), database, userToken, counters, aggregation, executerRetriesConfig,
-        preparedQuery, chanTransportVersion, userRequestContext, statementResultIndex);
+    return new TKqpScanExecuter(std::move(request), database, userToken, counters, tableServiceConfig,
+        preparedQuery, userRequestContext, statementResultIndex);
 }
 
 } // namespace NKqp

@@ -15,7 +15,7 @@ Currently, the {{ ydb-short-name }}  provider for Terraform is under development
 
 To get started, you need to:
 
-1. Deploy the [{{ ydb-short-name }}](../deploy/index.md) cluster
+1. Deploy the [{{ ydb-short-name }}](../devops/index.md) cluster
 2. Create a database (described in paragraph 1 for the appropriate type of cluster deployment)
 3. Install [Terraform](https://developer.hashicorp.com/terraform/install)
 4. Install and configure [Terraform provider for {{ ydb-short-name }}](https://github.com/ydb-platform/terraform-provider-ydb/)

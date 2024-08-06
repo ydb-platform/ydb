@@ -288,16 +288,6 @@ void TTcpConnection::RunPeriodicCheck()
     }
 }
 
-EPollablePriority TTcpConnection::GetPriority() const
-{
-    switch (MultiplexingBand_.load(std::memory_order::relaxed)) {
-        case EMultiplexingBand::RealTime:
-            return EPollablePriority::RealTime;
-        default:
-            return EPollablePriority::Normal;
-    }
-}
-
 const TString& TTcpConnection::GetLoggingTag() const
 {
     return LoggingTag_;

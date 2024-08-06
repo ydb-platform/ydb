@@ -51,59 +51,49 @@
 
 {% endlist %}
 
+Перейдите в корневой каталог загруженного репозитория и выполните команду `ansible-galaxy install -r requirements.yaml` – она скачает коллекции Ansible `ydb_platform.ydb` и `community.general`, которые содержат роли и плагины для установки {{ ydb-short-name }}.
 
-## Настройка Ansible проекта { #ansible-project-setup } 
+## Настройка проекта Ansible {#ansible-project-setup}
 
-Перейдите в корневую директорию скачанного репозитория и выполните команду `ansible-galaxy install -r requirements.yaml` – будут скачаны Ansible коллекции `ydb_platform.ydb` и `community.general`, которые содержат роли и плагины для установки {{ ydb-short-name }}.
+### Редактирование инвентори-файлов {#inventory-edit}
 
-[Скачайте](../../downloads/index.md#ydb-server) архив актуальной версию {{ ydb-short-name }} в корневую директорию проекта. Например, с помощью wget: `wget https://binaries.ydb.tech/release/23.3.17/ydbd-23.3.17-linux-amd64.tar.gz` и скопируйте сюда же приватную часть SSH-ключа для доступа к серверам кластера {{ ydb-short-name }}. На SSH-ключе должны быть установлены следующие права:
-```text
--rw------- (600)  #Только владелец имеет разрешение на чтение и запись. 
-```
-Установить нужные права можно командой `sudo chmod 600 <ssh-key name>`.
+Независимо от выбранной топологии кластера (`3-nodes-mirror-3-dc`, `9-nodes-mirror-3-dc` или `8-nodes-block-4-2`), основные параметры для установки и настройки {{ ydb-short-name }} содержатся в инвентори-файле `50-inventory.yaml`, который находится в каталоге `inventory/`.
 
-Далее можно перейти в директорию TLS и указать в файле `ydb-ca-nodes.txt` список FQDN серверов, для которых будут сгенерированы TLS сертификаты. По умолчанию список выглядит следующим образом:
-```text
-static-node-1 static-node-1.ydb-cluster.com
-static-node-2 static-node-2.ydb-cluster.com
-static-node-3 static-node-3.ydb-cluster.com
-```
-
-Сгенерировать набор TLS сертификатов, который будут размещены в поддиректории CA (`TLS/CA/certs/<create date_crete time>`) можно скриптом `ydb-ca-update.sh`.
-
-После генерации TLS сертификатов, установки Ansible коллекций, загрузки приватной части ssh-ключа и скачивания актуальной версии {{ ydb-short-name }} необходимо обновить инвентаризационные файлы в соответствии с выбранным видом кластера для развертывания.  
-
-### Изменения инвентаризационных файлов проекта { #inventory-edit }
-
-Вне зависимости от вида создаваемого кластера (восемь серверов – `8-nodes-block-4-2` или девять серверов – `9-nodes-mirror-3-dc`) основные параметра установки и настройки {{ ydb-short-name }} содержатся в инвентаризационном файле `50-inventory.yaml`, который расположен в директории `<cluster model>/inventory/`.
-
-В инвентаризационном файле `50-inventory.yaml` нужно указать актуальный список FQDN серверов, на которые будет установлена {{ ydb-short-name }}. По умолчанию список выглядит следующим образом:
+В инвентори-файле `50-inventory.yaml` необходимо указать текущий список FQDN серверов, на которых будет установлен {{ ydb-short-name }}. По умолчанию список выглядит следующим образом:
   ```yaml
   all:
     children:
       ydb:
-        hosts:
-          static-node-1.ydb-cluster.com:
-          static-node-2.ydb-cluster.com:
-          static-node-3.ydb-cluster.com:
+        static-node-1.ydb-cluster.com:
+        static-node-2.ydb-cluster.com:
+        static-node-3.ydb-cluster.com:
   ```
 
-Далее нужно внести следующие изменения в раздел `vars` инвентаризационного файла:
+Далее необходимо внести следующие изменения в разделе `vars` инвентори-файла:
 
-  * `ansible_user` – укажите пользователь для подключения Ansible по SSH.
-  * `ansible_ssh_common_args: "-o ProxyJump=<ansible_user>@<static-node-1 IP>"` – опция для подключения Ansible к серверу по IP, с которого будет устанавливаться {{ ydb-short-name }} (включая ProxyJump сервер). Используется при установки {{ ydb-short-name }} с локальной машины, не входящей в приватную DNS-зону.
-  * `ansible_ssh_private_key_file` – измените дефолтное название ssh-ключа, на актуальное: `"../<ssh-private-key-name>"`.
-  * `ydb_archive` — укажите путь к скачанному ранее архиву с дистрибутивом {{ ydb-short-name }}.
-  * `ydb_tls_dir` – укажите актуальную часть пути (`/files/CA/certs/<date_time create certs>`) к сертификатам безопасности после их генерации скриптом `ydb-ca-update.sh`.
-  * `ydb_brokers` – укажите список FQDN нод брокеров. Например:
+  * `ansible_user` – укажите пользователя, от имени которого Ansible будет подключаться через SSH.
+  * `ansible_ssh_common_args: "-o ProxyJump=<ansible_user>@<static-node-1-IP>"` – опция для подключения Ansible к серверу по IP, с которого будет установлен {{ ydb-short-name }} (включая сервер ProxyJump). Используется при установке {{ ydb-short-name }} с локальной машины, не входящей в частную DNS-зону.
+  * `ansible_ssh_private_key_file` – измените путь до приватного SSH-ключа  на фактическое: `"../<ssh-private-key-name>"`.
+  * Выберите один из доступных вариантов развёртывания исполняемых файлов {{ ydb-short-name }}:
+    * `ydb_version`: автоматически загрузить один из [официальных релизов {{ ydb-short-name }}](../../downloads/index.md#ydb-server) по номеру версии. Например, `23.4.11`.
+    * `ydb_git_version`: автоматически скомпилировать исполняемые файлы {{ ydb-short-name }} из исходного кода, загруженного из [официального репозитория GitHub](https://github.com/ydb-platform/ydb). Значение настройки – это имя ветки, тега или коммита. Например, `main`.
+    * `ydb_archive`: локальный путь к архиву с дистрибутивом {{ ydb-short-name }}, [загруженного](../../downloads/index.md#ydb-server) или подготовленного заранее.
+    * `ydbd_binary` и `ydb_cli_binary`: локальные пути к исполняемым файлам сервера и клиента {{ ydb-short-name }}, [загруженным](../../downloads/index.md#ydb-server) или подготовленным заранее.
+
+#### Дополнительные изменения в инвентори-файлах
+
+При необходимости можно изменить эти настройки, но это не обязательно в простых случаях:
+
+  * `ydb_cores_static` – количество процессорных ядер, выделенных для статических узлов.
+  * `ydb_cores_dynamic` – количество процессорных ядер, выделенных для динамических узлов.
+  * `ydb_tls_dir` – укажите локальный путь к папке с заранее подготовленными TLS-сертификатами. Она должна содержать файл `ca.crt` и подкаталоги с именами, соответствующими именам узлов, содержащие сертификаты для каждого узла. Если параметр не указан, самоподписанные TLS-сертификаты будут сгенерированы автоматически для всего кластера {{ ydb-short-name }}.
+  * `ydb_brokers` – укажите список FQDN брокерных узлов. Например:
     ```yaml
     ydb_brokers:
       - static-node-1.ydb-cluster.com
       - static-node-2.ydb-cluster.com
       - static-node-3.ydb-cluster.com
     ``` 
-  * `ydb_cores_static` – задайте количество ядер CPU, потребляемое статической нодой;
-  * `ydb_cores_dynamic` – задайте количество ядер CPU, потребляемое динамической нодой.
 
 Значение переменной `ydb_database_groups` в разделе `vars` имеет фиксированное значение, которое привязано к типу избыточности и не зависит от размера кластера:
 
@@ -134,13 +124,17 @@ static-node-3 static-node-3.ydb-cluster.com
 
 {% endlist %}
 
-Изменения других секций конфигурационного файла `50-inventory.yaml` не требуются. Далее можно изменить стандартный пароль root пользователя {{ ydb-short-name }}, который содержится в зашифрованном инвентаризационном файле `99-inventory-vault.yaml` и файле `ansible_vault_password_file.txt`. Для изменения пароля укажите новый пароль в файле `ansible_vault_password_file.txt` и продублируйте его в файле `99-inventory-vault.yaml` в формате:
+Изменения других секций конфигурационного файла `50-inventory.yaml` не требуются.
+
+#### Изменение пароля пользователя root { #change-password }
+
+ Далее можно изменить стандартный пароль root пользователя {{ ydb-short-name }}, который содержится в зашифрованном инвентаризационном файле `99-inventory-vault.yaml` и файле `ansible_vault_password_file.txt`. Для изменения пароля укажите новый пароль в файле `ansible_vault_password_file.txt` и продублируйте его в файле `99-inventory-vault.yaml` в формате:
   ```yaml
   all:
     children:
       ydb:
         vars:
-          ydb_password: <new password>
+          ydb_password: <new-password>
   ```
 
 Для шифрования `99-inventory-vault.yaml` выполните команду `ansible-vault encrypt inventory/99-inventory-vault.yaml`.

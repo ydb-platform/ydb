@@ -84,6 +84,14 @@ void EnsureScriptSpecificTypes(
         case EScriptType::CustomPython:
         case EScriptType::CustomPython2:
         case EScriptType::CustomPython3:
+        case EScriptType::SystemPython2:
+        case EScriptType::SystemPython3:
+        case EScriptType::SystemPython3_8:
+        case EScriptType::SystemPython3_9:
+        case EScriptType::SystemPython3_10:
+        case EScriptType::SystemPython3_11:
+        case EScriptType::SystemPython3_12:
+        case EScriptType::SystemPython3_13:
             return TPythonTypeChecker().Walk(funcType, env);
         case EScriptType::Javascript:
             return TJavascriptTypeChecker().Walk(funcType, env);
@@ -301,6 +309,12 @@ bool IsCustomPython(EScriptType type) {
 bool IsSystemPython(EScriptType type) {
     return type == EScriptType::SystemPython2
         || type == EScriptType::SystemPython3
+        || type == EScriptType::SystemPython3_8
+        || type == EScriptType::SystemPython3_9
+        || type == EScriptType::SystemPython3_10
+        || type == EScriptType::SystemPython3_11
+        || type == EScriptType::SystemPython3_12
+        || type == EScriptType::SystemPython3_13
         || type == EScriptType::Python
         || type == EScriptType::Python2;
 }

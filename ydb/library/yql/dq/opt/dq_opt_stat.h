@@ -24,5 +24,6 @@ void InferStatisticsForListParam(const TExprNode::TPtr& input, TTypeAnnotationCo
 double ComputePredicateSelectivity(const NNodes::TExprBase& input, const std::shared_ptr<TOptimizerStatistics>& stats);
 bool NeedCalc(NNodes::TExprBase node);
 bool IsConstantExpr(const TExprNode::TPtr& input);
+bool IsConstantExprWithParams(const TExprNode::TPtr& input);
 
 } // namespace NYql::NDq {

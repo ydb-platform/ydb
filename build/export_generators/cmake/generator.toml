@@ -30,7 +30,7 @@ android-x86_64="ANDROID AND CMAKE_ANDROID_ARCH STREQUAL \"x86_64\""
 
 [root]
 templates=[
-    { path="conanfile.jinja", dest="conanfile.txt" },
+    { path="conanfile.py.jinja", dest="conanfile.py" },
     { path="root_cmake_lists.jinja", dest="CMakeLists.txt" },
     { path="root_global_vars.jinja", dest="cmake/global_vars.cmake" },
 ]
@@ -84,15 +84,22 @@ find_package="skip"
 include="skip"
 
 # Really used attributes
+
+# All Conan attributes make sorted_set for stability generated conanfile,
+# order has no effect for all conan options
 conan-requires="sorted_set"
 conan-tool_requires="sorted_set"
 conan-imports="sorted_set"
-conan-options="set"
+conan-options="sorted_set"
 conan-generators="sorted_set"
 
-project_languages="set"
+# For project languages order important only for ASM, it must be after C/CXX,
+# this special logic maked in template, here use sorted_set for stability generated vars
+project_languages="sorted_set"
 vanilla_protobuf="flag"
-includes="set"
+
+# Use sorted_set for include(*.cmake) for stability generated CMakeLists.txt
+includes="sorted_set"
 
 [attrs.platform]
 platform_vars-FAT_OBJECT_PREFIX="str"
@@ -115,6 +122,9 @@ dir_macroses="list"
 dir_macroses-ITEM="dict"
 dir_macroses-macro="str"
 dir_macroses-args="list"
+
+# This dir_includes translated to add_subdirectory(), order may be important (depends on the code),
+# that is why here use set and not sort it
 dir_includes="set"
 
 [attrs.target]
@@ -269,8 +279,8 @@ attrs=[
     "conan-options",
     "conan-generators",
 ]
-copy=["cmake/conan.cmake"]
-add_values=[{attr="includes", values=["cmake/conan.cmake"]}]
+copy=["cmake/conan1_deprecated.cmake", "cmake/conan_provider.cmake"]
+add_values=[{attr="includes", values=["cmake/conan1_deprecated.cmake"]}]
 
 [[rules]]
 attrs=[

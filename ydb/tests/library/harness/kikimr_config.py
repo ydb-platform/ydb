@@ -83,6 +83,8 @@ def load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure, 
     yaml_dict["log_config"]["entry"] = []
     for log, level in six.iteritems(log_configs):
         yaml_dict["log_config"]["entry"].append({"component": log, "level": int(level)})
+    if os.getenv("YDB_ENABLE_COLUMN_TABLES", "") == "true":
+        yaml_dict |= {"column_shard_config": {"disabled_on_scheme_shard": False}}
     return yaml_dict
 
 
@@ -266,7 +268,6 @@ class KikimrConfigGenerator(object):
 
         if disable_iterator_reads:
             self.yaml_config["table_service_config"]["enable_kqp_scan_query_source_read"] = False
-            self.yaml_config["table_service_config"]["enable_kqp_data_query_source_read"] = False
 
         if disable_iterator_lookups:
             self.yaml_config["table_service_config"]["enable_kqp_scan_query_stream_lookup"] = False
@@ -396,6 +397,13 @@ class KikimrConfigGenerator(object):
             self.yaml_config["feature_flags"]['enable_temp_tables'] = True
             self.yaml_config["feature_flags"]['enable_table_pg_types'] = True
             self.yaml_config['feature_flags']['enable_uniq_constraint'] = True
+            if not "local_pg_wire_config" in self.yaml_config:
+                self.yaml_config["local_pg_wire_config"] = {}
+
+            ydb_pg_port=5432
+            if 'YDB_PG_PORT' in os.environ:
+                ydb_pg_port = os.environ['YDB_PG_PORT']
+            self.yaml_config['local_pg_wire_config']['listening_port'] = ydb_pg_port
 
             # https://github.com/ydb-platform/ydb/issues/5152
             # self.yaml_config["table_service_config"]["enable_pg_consts_to_params"] = True

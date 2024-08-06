@@ -1,0 +1,14 @@
+package NYql.NProto;
+option java_package = "ru.yandex.yql.proto";
+
+message TPgExtension {
+    optional string Name = 1;
+    optional string InstallName = 2;
+    repeated string SqlPath = 3;
+    optional string LibraryPath = 4;
+    optional bool TypesOnly = 5;
+}
+
+message TPgExtensions {
+    repeated TPgExtension Extension = 1;
+}

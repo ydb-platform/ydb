@@ -20,6 +20,9 @@ namespace NKikimr::NColumnShard {
         }
         virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
         }
+        virtual TString DoGetOpType() const override {
+            return "EvWrite";
+        }
         virtual bool DoIsAsync() const override {
             return false;
         }
@@ -52,11 +55,12 @@ namespace NKikimr::NColumnShard {
     public:
         using TBase::TBase;
 
-        virtual bool ExecuteOnProgress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
+        virtual bool ProgressOnExecute(
+            TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
             return owner.OperationsManager->CommitTransaction(owner, GetTxId(), txc, version);
         }
 
-        virtual bool CompleteOnProgress(TColumnShard& owner, const TActorContext& ctx) override {
+        virtual bool ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) override {
             auto result = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(owner.TabletID(), GetTxId());
             ctx.Send(TxInfo.Source, result.release(), 0, TxInfo.Cookie);
             return true;

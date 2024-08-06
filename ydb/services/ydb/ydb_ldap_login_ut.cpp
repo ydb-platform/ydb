@@ -99,9 +99,9 @@ void InitLdapSettingsWithEmptyBindPassword(NKikimrProto::TLdapAuthentication* ld
 
 class TLoginClientConnection {
 public:
-    TLoginClientConnection(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, TTempFileHandle&)> initLdapSettings)
+    TLoginClientConnection(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, TTempFileHandle&)> initLdapSettings, bool isLoginAuthenticationEnabled = true)
         : CaCertificateFile()
-        , Server(InitAuthSettings(std::move(initLdapSettings)))
+        , Server(InitAuthSettings(std::move(initLdapSettings), isLoginAuthenticationEnabled))
         , Connection(GetDriverConfig(Server.GetPort()))
         , Client(Connection)
     {}
@@ -119,7 +119,7 @@ public:
     }
 
 private:
-    NKikimrConfig::TAppConfig InitAuthSettings(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, TTempFileHandle&)>&& initLdapSettings) {
+    NKikimrConfig::TAppConfig InitAuthSettings(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, TTempFileHandle&)>&& initLdapSettings, bool isLoginAuthenticationEnabled = true) {
         TPortManager tp;
         LdapPort = tp.GetPort(389);
 
@@ -128,6 +128,7 @@ private:
 
         authConfig->SetUseBlackBox(false);
         authConfig->SetUseLoginProvider(true);
+        authConfig->SetEnableLoginAuthentication(isLoginAuthenticationEnabled);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
 
@@ -210,10 +211,7 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
 
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        TStringBuilder expectedErrorMessage;
-        expectedErrorMessage << "Could not perform initial LDAP bind for dn cn=invalidRobouser,dc=search,dc=yandex,dc=net on server "
-                             << "ldap://localhost:" << loginConnection.GetLdapPort() << "\nInvalid credentials";
-        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, expectedErrorMessage);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "User is unauthorized in LDAP server");
 
         loginConnection.Stop();
         ldapServer.Stop();
@@ -231,10 +229,7 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
 
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        TStringBuilder expectedErrorMessage;
-        expectedErrorMessage << "Could not perform initial LDAP bind for dn cn=robouser,dc=search,dc=yandex,dc=net on server "
-                             << "ldap://localhost:" << loginConnection.GetLdapPort() << "\nInvalid credentials";
-        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, expectedErrorMessage);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "User is unauthorized in LDAP server");
 
         loginConnection.Stop();
         ldapServer.Stop();
@@ -252,10 +247,7 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
 
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        TStringBuilder expectedErrorMessage;
-        expectedErrorMessage << "Could not search for filter &(uid=" << login << ")() on server "
-                             << "ldap://localhost:" << loginConnection.GetLdapPort() << "\nBad search filter";
-        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, expectedErrorMessage);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "User is unauthorized in LDAP server");
 
         loginConnection.Stop();
         ldapServer.Stop();
@@ -278,7 +270,7 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
     }
 
     Y_UNIT_TEST(LdapAuthServerIsUnavailable) {
-        CheckRequiredLdapSettings(InitLdapSettingsWithUnavailableHost, "Could not start TLS\nCan't contact LDAP server");
+        CheckRequiredLdapSettings(InitLdapSettingsWithUnavailableHost, "User is unauthorized in LDAP server");
     }
 
     Y_UNIT_TEST(LdapAuthSettingsWithEmptyHosts) {
@@ -325,11 +317,7 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
 
         auto factory = CreateLoginCredentialsProviderFactory({.User = nonExistentUser + "@ldap", .Password = password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        TStringBuilder expectedErrorMessage;
-        expectedErrorMessage << "LDAP user " << nonExistentUser << " does not exist. LDAP search for filter uid="
-                             << nonExistentUser << " on server "
-                             << "ldap://localhost:" << loginConnection.GetLdapPort() << " return no entries";
-        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, expectedErrorMessage);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "User is unauthorized in LDAP server");
 
         loginConnection.Stop();
         ldapServer.Stop();
@@ -370,13 +358,37 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
 
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        TStringBuilder expectedErrorMessage;
-        expectedErrorMessage << "LDAP login failed for user uid=" << login << ",dc=search,dc=yandex,dc=net on server "
-                             << "ldap://localhost:" << loginConnection.GetLdapPort() << "\nInvalid credentials";
-        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, expectedErrorMessage);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "User is unauthorized in LDAP server");
 
         loginConnection.Stop();
         ldapServer.Stop();
+    }
+
+    Y_UNIT_TEST(LdapAuthSetIncorrectDomain) {
+        TString login = "ldapuser";
+        TString password = "ldapUserPassword";
+        const TString incorrectLdapDomain = "@ldap.domain"; // Correct domain is AuthConfig.LdapAuthenticationDomain: "ldap"
+
+        auto factory = CreateLoginCredentialsProviderFactory({.User = login + incorrectLdapDomain, .Password = password});
+        TLoginClientConnection loginConnection(InitLdapSettings);
+        auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
+        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Invalid user");
+
+        loginConnection.Stop();
+    }
+
+    Y_UNIT_TEST(DisableBuiltinAuthMechanism) {
+        TString login = "builtinUser";
+        TString password = "builtinUserPassword";
+
+        TLoginClientConnection loginConnection(InitLdapSettings, false);
+
+        auto factory = CreateLoginCredentialsProviderFactory({.User = login, .Password = password});
+        auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
+        TStringBuilder expectedErrorMessage;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Login authentication is disabled");
+
+        loginConnection.Stop();
     }
 }
 } //namespace NKikimr

@@ -3,7 +3,7 @@
  * pg_largeobject_d.h
  *    Macro definitions for pg_largeobject
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -19,6 +19,7 @@
 #define PG_LARGEOBJECT_D_H
 
 #define LargeObjectRelationId 2613
+#define LargeObjectLOidPNIndexId 2683
 
 #define Anum_pg_largeobject_loid 1
 #define Anum_pg_largeobject_pageno 2

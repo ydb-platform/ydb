@@ -318,6 +318,11 @@ public:
                 node.Statistics = nodeRowset.GetValueOrDefault<Schema::Node::Statistics>();
                 node.Name = nodeRowset.GetValueOrDefault<Schema::Node::Name>();
                 node.BecomeUpOnRestart = nodeRowset.GetValueOrDefault<Schema::Node::BecomeUpOnRestart>(false);
+                if (node.BecomeUpOnRestart) {
+                    // If a node must become up on restart, it must have been down
+                    // That was not persisted to avoid issues with downgrades
+                    node.Down = true;
+                }
                 if (nodeRowset.HaveValue<Schema::Node::Location>()) {
                     auto location = nodeRowset.GetValue<Schema::Node::Location>();
                     if (location.HasDataCenter()) {

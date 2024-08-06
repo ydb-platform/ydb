@@ -58,13 +58,125 @@ void TTypeAnnotationContext::Reset() {
     StatisticsMap.clear();
 }
 
+TString TColumnOrder::Find(const TString& name) const {
+    auto it = GeneratedToOriginal_.find(name);
+    if (it == GeneratedToOriginal_.end()) {
+        return name;
+    }
+    return it->second;
+}
+
+TColumnOrder& TColumnOrder::operator=(const TColumnOrder& rhs) {
+    GeneratedToOriginal_ = rhs.GeneratedToOriginal_;
+    Order_ = rhs.Order_;
+    UseCount_ = rhs.UseCount_;
+    return *this;
+}
+
+TColumnOrder::TColumnOrder(const TVector<TString>& order) {
+    Reserve(order.size());
+    for (auto& e: order) {
+        AddColumn(e);
+    }
+}
+
+TString TColumnOrder::AddColumn(const TString& name) {
+    auto lcase = to_lower(name);
+    if (uint64_t count = ++UseCount_[lcase]; count > 1) {
+        TString generated = name + "_generated_" + ToString(count);
+        GeneratedToOriginal_[generated] = name;
+        Order_.emplace_back(name, generated);
+        ++UseCount_[to_lower(generated)];
+        return generated;
+    }
+    Order_.emplace_back(name, name);
+    GeneratedToOriginal_[name] = name;
+    return name;
+}
+
+bool TColumnOrder::IsDuplicated(const TString& name) const {
+    auto it = UseCount_.find(to_lower(name));
+    return it != UseCount_.end() && it->second > 1;
+}
+
+void TColumnOrder::Shrink(size_t remain) {
+    for (size_t i = remain; i < Order_.size(); ++i) {
+        auto logicalLcase = to_lower(Order_[i].LogicalName);
+        if (!--UseCount_[logicalLcase]) {
+            UseCount_.erase(logicalLcase);
+        }
+        auto physicalLcase = to_lower(Order_[i].PhysicalName);
+        if (!--UseCount_[physicalLcase]) {
+            UseCount_.erase(physicalLcase);
+        }
+        GeneratedToOriginal_.erase(Order_[i].PhysicalName);
+    }
+    while (Order_.size() > remain) {
+        Order_.pop_back(); // No default ctor, can't call .resize()
+    }
+}
+
+void TColumnOrder::Reserve(size_t count) {
+    Order_.reserve(count);
+}
+
+void TColumnOrder::Clear() {
+    Order_.clear();
+    GeneratedToOriginal_.clear();
+    UseCount_.clear();
+}
+
+void TColumnOrder::EraseIf(const std::function<bool(const TString&)>& fn) {
+    TColumnOrder newOrder;
+    for (const auto& e: Order_) {
+        if (!fn(e.LogicalName)) {
+            newOrder.AddColumn(e.LogicalName);
+        }
+    }
+    std::swap(*this, newOrder);
+}
+
+void TColumnOrder::EraseIf(const std::function<bool(const TOrderedItem&)>& fn) {
+    TColumnOrder newOrder;
+    for (const auto& e: Order_) {
+        if (!fn(e)) {
+            newOrder.AddColumn(e.LogicalName);
+        }
+    }
+    std::swap(*this, newOrder);
+}
+
+size_t TColumnOrder::Size() const {
+    return Order_.size();
+}
+
 TString FormatColumnOrder(const TMaybe<TColumnOrder>& columnOrder, TMaybe<size_t> maxColumns) {
     TStringStream ss;
     if (columnOrder) {
-        if (maxColumns.Defined() && columnOrder->size() > *maxColumns) {
-            ss << "[" << JoinRange(", ", columnOrder->begin(), columnOrder->begin() + *maxColumns) << ", ... ]";
+        if (maxColumns.Defined() && columnOrder->Size() > *maxColumns) {
+            size_t i = 0;
+            ss << "[";
+            for (auto& [e, gen_e]: *columnOrder) {
+                if (i++ >= *maxColumns) {
+                    break;
+                }
+                ss << "(" << e << "->" << gen_e << ")";
+                if (++i != columnOrder->Size()) {
+                    ss << ", ";
+                }
+            }
+            ss << ", ... ]";
         } else {
-            ss << "[" << JoinSeq(", ", *columnOrder) << "]";
+            ss << "[";
+            size_t i = 0;
+            for (auto& [e, gen_e]: *columnOrder) {
+                
+                ss << "(" << e << "->" << gen_e << ")";
+                if (++i != columnOrder->Size()) {
+                    ss << ", ";
+                }
+            }
+            ss << "]";
         }
     } else {
         ss << "default";
@@ -77,8 +189,8 @@ ui64 AddColumnOrderHash(const TMaybe<TColumnOrder>& columnOrder, ui64 hash) {
         return hash;
     }
 
-    hash = CombineHashes(hash, NumericHash(columnOrder->size()));
-    for (auto& col : *columnOrder) {
+    hash = CombineHashes(hash, NumericHash(columnOrder->Size()));
+    for (auto& [col, gen_col] : *columnOrder) {
         hash = CombineHashes(hash, THash<TString>()(col));
     }
 
@@ -125,8 +237,8 @@ IGraphTransformer::TStatus TTypeAnnotationContext::SetColumnOrder(const TExprNod
 
     TSet<TStringBuf> allColumns = GetColumnsOfStructOrSequenceOfStruct(*nodeType);
 
-    for (auto& col : columnOrder) {
-        auto it = allColumns.find(col);
+    for (auto& [col, gen_col] : columnOrder) {
+        auto it = allColumns.find(gen_col);
         if (it == allColumns.end()) {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
                 TStringBuilder() << "Unable to set column order " << FormatColumnOrder(columnOrder) << " for node "

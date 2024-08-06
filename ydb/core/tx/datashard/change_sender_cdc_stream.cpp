@@ -293,6 +293,37 @@ private:
 
 }; // TCdcChangeSenderPartition
 
+class TMd5Partitioner final : public NChangeExchange::IChangeSenderPartitioner<TChangeRecord> {
+public:
+    TMd5Partitioner(size_t partitionCount)
+        : PartitionCount(partitionCount) {
+    }
+
+    ui64 ResolvePartitionId(const typename TChangeRecord::TPtr& record) const override {
+        using namespace NKikimr::NDataStreams::V1;
+        const auto hashKey = HexBytesToDecimal(record->GetPartitionKey() /* MD5 */);
+        return ShardFromDecimal(hashKey, PartitionCount);
+    }
+
+private:
+    size_t PartitionCount;
+};
+
+class TBoundaryPartitioner final : public NChangeExchange::IChangeSenderPartitioner<TChangeRecord> {
+public:
+    TBoundaryPartitioner(const NKikimrSchemeOp::TPersQueueGroupDescription& config) {
+        Chooser = NPQ::CreatePartitionChooser(config);
+    }
+
+    ui64 ResolvePartitionId(const typename TChangeRecord::TPtr& record) const override {
+        auto* p = Chooser->GetPartition(record->GetPartitionKey());
+        return p->TabletId;
+    }
+
+private:
+    std::shared_ptr<NPQ::IPartitionChooser> Chooser;
+};
+
 class TCdcChangeSenderMain
     : public TActorBootstrapped<TCdcChangeSenderMain>
     , public NChangeExchange::TBaseChangeSender<TChangeRecord>
@@ -574,7 +605,6 @@ class TCdcChangeSenderMain
         }
 
         TSet<TPQPartitionInfo, TPQPartitionInfo::TLess> partitions(schema);
-        THashSet<ui64> shards;
 
         for (const auto& partition : pqDesc.GetPartitions()) {
             const auto partitionId = partition.GetPartitionId();
@@ -587,7 +617,6 @@ class TCdcChangeSenderMain
             Y_ABORT_UNLESS(!keyRange.ToBound || keyRange.ToBound->GetCells().size() == schema.size());
 
             partitions.insert({partitionId, shardId, std::move(keyRange)});
-            shards.insert(shardId);
         }
 
         // used to validate
@@ -631,6 +660,14 @@ class TCdcChangeSenderMain
         KeyDesc = NKikimr::TKeyDesc::CreateMiniKeyDesc(schema);
         KeyDesc->Partitioning = std::make_shared<TVector<NKikimr::TKeyDesc::TPartitionInfo>>(std::move(partitioning));
 
+        if (::NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED != pqConfig.GetPartitionStrategy().GetPartitionStrategyType()) {
+            SetPartitioner(new TBoundaryPartitioner(pqDesc));
+        } else if (NKikimrSchemeOp::ECdcStreamFormatProto == Stream.Format) {
+            SetPartitioner(NChangeExchange::CreateSchemaBoundaryPartitioner<TChangeRecord>(*KeyDesc.Get()));
+        } else {
+            SetPartitioner(new TMd5Partitioner(KeyDesc->GetPartitions().size()));
+        }
+
         CreateSenders(MakePartitionIds(*KeyDesc->Partitioning), versionChanged);
         Become(&TThis::StateMain);
     }
@@ -648,10 +685,6 @@ class TCdcChangeSenderMain
     bool IsResolved() const override {
         return KeyDesc && KeyDesc->Partitioning;
     }
-
-    const TVector<NKikimr::TKeyDesc::TPartitionInfo>& GetPartitions() const override { return KeyDesc->GetPartitions(); }
-    const TVector<NScheme::TTypeInfo>& GetSchema() const override { return KeyDesc->KeyColumnTypes; }
-    NKikimrSchemeOp::ECdcStreamFormat GetStreamFormat() const override { return Stream.Format; }
 
     IActor* CreateSender(ui64 partitionId) const override {
         Y_ABORT_UNLESS(PartitionToShard.contains(partitionId));

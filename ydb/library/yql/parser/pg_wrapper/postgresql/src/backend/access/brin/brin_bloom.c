@@ -2,7 +2,7 @@
  * brin_bloom.c
  *		Implementation of Bloom opclass for BRIN
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -49,7 +49,7 @@
  * We use a scheme requiring only two functions described in this paper:
  *
  * Less Hashing, Same Performance:Building a Better Bloom Filter
- * Adam Kirsch, Michael Mitzenmacher†, Harvard School of Engineering and
+ * Adam Kirsch, Michael Mitzenmacher, Harvard School of Engineering and
  * Applied Sciences, Cambridge, Massachusetts [DOI 10.1002/rsa.20208]
  *
  * The two hash functions h1 and h2 are calculated using hard-coded seeds,
@@ -257,7 +257,6 @@ typedef struct BloomFilter
 
 	/* data of the bloom filter */
 	char		data[FLEXIBLE_ARRAY_MEMBER];
-
 } BloomFilter;
 
 
@@ -770,7 +769,7 @@ brin_bloom_summary_out(PG_FUNCTION_ARGS)
 	StringInfoData str;
 
 	/* detoast the data to get value with a full 4B header */
-	filter = (BloomFilter *) PG_DETOAST_DATUM(PG_GETARG_BYTEA_PP(0));
+	filter = (BloomFilter *) PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
 
 	initStringInfo(&str);
 	appendStringInfoChar(&str, '{');

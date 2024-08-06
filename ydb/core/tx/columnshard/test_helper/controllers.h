@@ -45,7 +45,7 @@ public:
         return ExportsFinishedCount.Val();
     }
 
-    virtual void OnStatisticsUsage(const NKikimr::NOlap::NStatistics::TOperatorContainer& /*statOperator*/) override {
+    virtual void OnStatisticsUsage(const NKikimr::NOlap::NIndexes::TIndexMetaContainer& /*statOperator*/) override {
         StatisticsUsageCount.Inc();
     }
     virtual void OnMaxValueUsage() override {

@@ -31,7 +31,7 @@ struct TEvAcceleratePut : public TEventLocal<TEvAcceleratePut, TEvBlobStorage::E
 // GET request
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobStorageGroupGetRequest> {
+class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
     TGetImpl GetImpl;
     TRootCause RootCauseTrack;
     NLWTrace::TOrbit Orbit;
@@ -103,7 +103,9 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> &vPuts) {
         ReportBytes(GetImpl.GrabBytesToReport());
         RequestsSent += vGets.size() + vPuts.size();
-        CountPuts(vPuts);
+        for (const auto& vPut : vPuts) {
+            CountPut(vPut->GetBufferBytes());
+        }
         if (vPuts.size()) {
             if (!IsPutStarted) {
                 IsPutStarted = true;
@@ -136,8 +138,14 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
             }
             DiskCounters[orderNumber].Sent++;
         }
-        SendToQueues(vGets, false);
-        SendToQueues(vPuts, false);
+        for (auto& ev : vGets) {
+            const ui64 cookie = ev->Record.GetCookie();
+            SendToQueue(std::move(ev), cookie);
+        }
+        for (auto& ev : vPuts) {
+            const ui64 cookie = ev->Record.GetCookie();
+            SendToQueue(std::move(ev), cookie);
+        }
     }
 
     ui32 CountDisksWithActiveRequests() {
@@ -161,8 +169,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
     }
 
     void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev) {
-        ProcessReplyFromQueue(ev);
-        CountEvent(*ev->Get());
+        ProcessReplyFromQueue(ev->Get());
 
         const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
         ev->Get()->Record.MutableTimestamps()->SetReceivedByDSProxyUs(GetCycleCountFast() / cyclesPerUs);
@@ -251,7 +258,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
     }
 
     void Handle(TEvBlobStorage::TEvVPutResult::TPtr &ev) {
-        ProcessReplyFromQueue(ev);
+        ProcessReplyFromQueue(ev->Get());
         HandleVPutResult(ev);
     }
 
@@ -374,33 +381,29 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
         return SendResponseAndDie(std::unique_ptr<TEvBlobStorage::TEvGetResult>(evResult.Release()));
     }
 
-    std::unique_ptr<IEventBase> RestartQuery(ui32 counter) {
+    std::unique_ptr<IEventBase> RestartQuery(ui32 counter) override {
         ++*Mon->NodeMon->RestartIndexRestoreGet;
         return GetImpl.RestartQuery(counter);
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::BS_PROXY_GET_ACTOR;
+    ::NMonitoring::TDynamicCounters::TCounterPtr& GetActiveCounter() const override {
+        return Mon->ActiveGet;
     }
 
-    static constexpr ERequestType RequestType() {
+    ERequestType GetRequestType() const override {
         return ERequestType::Get;
-    }
-
-    static const auto& ActiveCounter(const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon) {
-        return mon->ActiveGet;
     }
 
     TBlobStorageGroupGetRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
             const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
             const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvGet *ev, ui64 cookie,
-            NWilson::TSpan&& span, TNodeLayoutInfoPtr&& nodeLayout, TMaybe<TGroupStat::EKind> latencyQueueKind,
+            NWilson::TTraceId&& traceId, TNodeLayoutInfoPtr&& nodeLayout, TMaybe<TGroupStat::EKind> latencyQueueKind,
             TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
                 NKikimrServices::BS_PROXY_GET, ev->IsVerboseNoDataEnabled || ev->CollectDebugInfo,
-                latencyQueueKind, now, storagePoolCounters, ev->RestartCounter, std::move(span),
-                std::move(ev->ExecutionRelay))
+                latencyQueueKind, now, storagePoolCounters, ev->RestartCounter, std::move(traceId), "DSProxy.Get", ev,
+                std::move(ev->ExecutionRelay), NKikimrServices::TActivity::BS_PROXY_GET_ACTOR)
         , GetImpl(info, state, ev, std::move(nodeLayout), LogCtx.RequestPrefix)
         , Orbit(std::move(ev->Orbit))
         , Deadline(ev->Deadline)
@@ -424,7 +427,7 @@ public:
         *Mon->ActiveGetCapacity += bytes;
     }
 
-    void Bootstrap() {
+    void Bootstrap() override {
         A_LOG_INFO_S("BPG01", "bootstrap"
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
@@ -441,12 +444,11 @@ public:
         TryScheduleGetAcceleration();
 
         Y_ABORT_UNLESS(RequestsSent > ResponsesReceived);
-        Become(&TThis::StateWait);
+        Become(&TBlobStorageGroupGetRequest::StateWait);
         SanityCheck(); // May Die
     }
 
-    friend class TBlobStorageGroupRequestActor<TBlobStorageGroupGetRequest>;
-    void ReplyAndDie(NKikimrProto::EReplyStatus status) {
+    void ReplyAndDie(NKikimrProto::EReplyStatus status) override {
         TAutoPtr<TEvBlobStorage::TEvGetResult> getResult;
         GetImpl.PrepareReply(status, ErrorReason, LogCtx, getResult);
         SendReplyAndDie(getResult);
@@ -472,12 +474,7 @@ IActor* CreateBlobStorageGroupGetRequest(const TIntrusivePtr<TBlobStorageGroupIn
         ui64 cookie, NWilson::TTraceId traceId, TNodeLayoutInfoPtr&& nodeLayout,
         TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
         TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
-    NWilson::TSpan span(TWilson::BlobStorage, std::move(traceId), "DSProxy.Get");
-    if (span) {
-        span.Attribute("event", ev->ToString());
-    }
-
-    return new TBlobStorageGroupGetRequest(info, state, source, mon, ev, cookie, std::move(span),
+    return new TBlobStorageGroupGetRequest(info, state, source, mon, ev, cookie, std::move(traceId),
             std::move(nodeLayout), latencyQueueKind, now, storagePoolCounters);
 }
 

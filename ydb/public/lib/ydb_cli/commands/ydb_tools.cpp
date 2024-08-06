@@ -295,7 +295,7 @@ int TCommandCopy::Run(TConfig& config) {
 ////////////////////////////////////////////////////////////////////////////////
 
 TCommandRename::TCommandRename()
-    : TTableCommand("rename", {}, "Rename or repalce table(s)")
+    : TTableCommand("rename", {}, "Rename or replace table(s)")
 {
     TItem::DefineFields({
         {"Source", {{"source", "src"}, "Source table path", true}},

@@ -153,12 +153,13 @@ public:
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
 
+        const auto ptrType = PointerType::getUnqual(StructType::get(context));
+        const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
+
         BranchInst::Create(main, make, HasValue(udfPtr, block), block);
 
         block = make;
 
-        const auto ptrType = PointerType::getUnqual(StructType::get(context));
-        const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
         const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TUdfWrapper::MakeUdf));
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), udfPtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);

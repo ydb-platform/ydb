@@ -32,13 +32,13 @@ NKikimrConfig::TAppConfig AppCfg() {
     return appCfg;
 }
 
-NKikimrConfig::TAppConfig AppCfgLowComputeLimits(ui64 reasonableTreshold) {
+NKikimrConfig::TAppConfig AppCfgLowComputeLimits(double reasonableTreshold) {
     NKikimrConfig::TAppConfig appCfg;
 
     auto* rm = appCfg.MutableTableServiceConfig()->MutableResourceManager();
     rm->SetMkqlLightProgramMemoryLimit(100);
     rm->SetMkqlHeavyProgramMemoryLimit(300);
-    rm->SetReasonableSpillingTreshold(reasonableTreshold);
+    rm->SetSpillingPercent(reasonableTreshold);
     appCfg.MutableTableServiceConfig()->SetEnableQueryServiceSpilling(true);
 
     auto* spilling = appCfg.MutableTableServiceConfig()->MutableSpillingServiceConfig()->MutableLocalFileConfig();
@@ -73,7 +73,7 @@ Y_UNIT_TEST(SpillingPragmaParseError) {
 }
 
 Y_UNIT_TEST_TWIN(SpillingInRuntimeNodes, EnabledSpilling) {
-    ui64 reasonableTreshold = EnabledSpilling ? 100 : 200_MB;
+    double reasonableTreshold = EnabledSpilling ? 0.01 : 100;
     Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
     TKikimrRunner kikimr(AppCfgLowComputeLimits(reasonableTreshold));
 

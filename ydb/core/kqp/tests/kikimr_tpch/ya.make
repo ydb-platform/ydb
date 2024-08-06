@@ -2,10 +2,12 @@ UNITTEST()
 
 #INCLUDE(${ARCADIA_ROOT}/kikimr/public/tools/ydb_recipe/recipe.inc)
 
+TAG(ya:manual)
+
 DEPENDS(
-    kikimr/driver
-    kikimr/public/tools/ydb_recipe
-    tools/python
+    # kikimr/driver
+    ydb/public/tools/ydb_recipe
+    # contrib/tools/python
     ydb/library/yql/udfs/common/datetime
     ydb/library/yql/udfs/common/datetime2
     ydb/library/yql/udfs/common/pire
@@ -14,7 +16,7 @@ DEPENDS(
 )
 
 USE_RECIPE(
-    kikimr/public/tools/ydb_recipe/ydb_recipe
+    ydb/public/tools/ydb_recipe/ydb_recipe
     --suppress-version-check
     #        --debug-logging KQP_YQL KQP_GATEWAY KQP_COMPUTE KQP_TASKS_RUNNER KQP_EXECUTER KQP_WORKER KQP_PROXY TABLET_EXECUTOR
 )

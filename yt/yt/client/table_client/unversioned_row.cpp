@@ -2083,18 +2083,23 @@ TUnversionedValueRange ToKeyRef(TUnversionedRow row, int prefixLength)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void FormatValue(TStringBuilderBase* builder, TUnversionedValueRange values, TStringBuf format)
+{
+    builder->AppendChar('[');
+    JoinToString(
+        builder,
+        values.Begin(),
+        values.End(),
+        [&] (TStringBuilderBase* builder, const TUnversionedValue& value) {
+            FormatValue(builder, value, format);
+        });
+    builder->AppendChar(']');
+}
+
 void FormatValue(TStringBuilderBase* builder, TUnversionedRow row, TStringBuf format)
 {
     if (row) {
-        builder->AppendChar('[');
-        JoinToString(
-            builder,
-            row.Begin(),
-            row.End(),
-            [&] (TStringBuilderBase* builder, const TUnversionedValue& value) {
-                FormatValue(builder, value, format);
-            });
-        builder->AppendChar(']');
+        FormatValue(builder, row.Elements(), format);
     } else {
         builder->AppendString("<null>");
     }

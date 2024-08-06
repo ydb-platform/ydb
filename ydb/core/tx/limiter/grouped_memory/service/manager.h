@@ -4,6 +4,7 @@
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/config.h>
 
+#include <ydb/library/accessor/validator.h>
 #include <ydb/library/actors/core/log.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -14,7 +15,6 @@ namespace NKikimr::NOlap::NGroupedMemoryManager {
 class TPositiveControlInteger {
 private:
     ui64 Value = 0;
-
 
 public:
     void Add(const ui64 value) {
@@ -35,6 +35,7 @@ private:
     YDB_READONLY_DEF(TPositiveControlInteger, WaitingBytes);
     YDB_READONLY_DEF(TPositiveControlInteger, AllocatedCount);
     YDB_READONLY_DEF(TPositiveControlInteger, WaitingCount);
+
 public:
     void AddAllocated(const ui64 bytes) {
         AllocatedBytes.Add(bytes);
@@ -87,6 +88,7 @@ private:
             } else {
                 Counters->SubWaiting(AllocatedVolume);
             }
+            AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "destroy")("allocation_id", Identifier);
         }
 
         void SetAllocatedVolume(const ui64 value) {
@@ -108,6 +110,7 @@ private:
         }
 
         void Allocate(const NActors::TActorId& ownerId) {
+            AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "allocated")("allocation_id", Identifier);
             AFL_VERIFY(Allocation);
             Allocation->OnAllocated(
                 std::make_shared<TAllocationGuard>(ownerId, Allocation->GetIdentifier(), Allocation->GetMemory()), Allocation);
@@ -125,21 +128,25 @@ private:
         }
 
         void AddGroupId(const ui64 groupId) {
+            AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "add_group")("allocation_id", Identifier)("allocation_group_id", groupId);
             AFL_VERIFY(GroupIds.emplace(groupId).second);
         }
 
         void RemoveGroup(const ui64 groupId) {
+            AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "remove_group")("allocation_id", Identifier)(
+                "allocation_group_id", groupId);
             AFL_VERIFY(GroupIds.erase(groupId));
         }
 
         TAllocationInfo(const std::shared_ptr<IAllocation>& allocation, TCommonCounters* counters)
             : Allocation(allocation)
-            , Identifier(Allocation->GetIdentifier())
-            , Counters(counters)
-        {
+            , Identifier(TValidator::CheckNotNull(Allocation)->GetIdentifier())
+            , Counters(counters) {
             AFL_VERIFY(Allocation);
+            AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "add")("id", Allocation->GetIdentifier());
             AllocatedVolume = Allocation->GetMemory();
             if (allocation->IsAllocated()) {
+                AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "allocated_on_add")("allocation_id", Identifier);
                 Allocation = nullptr;
                 Counters->AddAllocated(AllocatedVolume);
             } else {
@@ -258,6 +265,7 @@ private:
 
     ui64 BuildInternalGroupId(const ui64 externalGroupId);
     ui64 GetInternalGroupIdVerified(const ui64 externalGroupId) const;
+    std::optional<ui64> GetInternalGroupIdOptional(const ui64 externalGroupId) const;
 
     const std::shared_ptr<TAllocationInfo>& RegisterAllocationImpl(const std::shared_ptr<IAllocation>& task);
     TAllocationInfo& GetAllocationInfoVerified(const ui64 allocationId) {
@@ -274,6 +282,7 @@ private:
         Signals.MemoryWaitingCount->Set(Counters.GetWaitingCount().Val());
         Signals.MemoryUsageBytes->Set(Counters.GetAllocatedBytes().Val());
         Signals.MemoryWaitingBytes->Set(Counters.GetWaitingBytes().Val());
+        Signals.GroupsCount->Set(ExternalGroupIntoInternalGroup.size());
     }
 
 public:

@@ -24,8 +24,8 @@ public:
     using TThis = TJsonWhiteboardRequest<TRequestEventType, TResponseEventType>;
     using TBase = TWhiteboardRequest<TRequestEventType, TResponseEventType>;
     using TResponseType = typename TResponseEventType::ProtoRecordType;
-    IViewer* Viewer;
-    NMon::TEvHttpInfo::TPtr Event;
+    using TBase::Event;
+    using TBase::ReplyAndPassAway;
     TJsonSettings JsonSettings;
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -33,8 +33,7 @@ public:
     }
 
     TJsonWhiteboardRequest(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : Viewer(viewer)
-        , Event(ev)
+        : TBase(viewer, ev)
     {}
 
     void Bootstrap() override {
@@ -65,7 +64,6 @@ public:
             TBase::RequestSettings.StaticNodesOnly = FromStringWithDefault<bool>(params.Get("static"), false);
         }
         TBase::RequestSettings.Format = params.Get("format");
-
         TBase::Bootstrap();
     }
 
@@ -120,11 +118,10 @@ public:
                 }
                 json << '}';
             }
-            TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), std::move(json.Str())), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+            ReplyAndPassAway(TBase::GetHTTPOKJSON(json.Str()));
         } catch (const std::exception& e) {
-            TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(TString("HTTP/1.1 400 Bad Request\r\n\r\n") + e.what(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+            ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", e.what()));
         }
-        TBase::PassAway();
     }
 };
 

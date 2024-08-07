@@ -804,7 +804,7 @@ void TPersQueue::SendTransactionsReadRequest(const TString& fromKey, bool includ
                                              const TActorContext& ctx)
 {
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
-    request->Record.SetCookie(READ_CONFIG_STAGE_2_COOKIE);
+    request->Record.SetCookie(READ_TXS_COOKIE);
 
     AddCmdReadTransactionRange(*request, fromKey, includeFrom);
 
@@ -1329,11 +1329,11 @@ void TPersQueue::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
     case WRITE_CONFIG_COOKIE:
         EndWriteConfig(resp, ctx);
         break;
-    case READ_CONFIG_STAGE_1_COOKIE:
+    case READ_CONFIG_COOKIE:
         // read is only for config - is signal to create interal actors
         HandleConfigReadResponse(std::move(resp), ctx);
         break;
-    case READ_CONFIG_STAGE_2_COOKIE:
+    case READ_TXS_COOKIE:
         HandleTransactionsReadResponse(std::move(resp), ctx);
         break;
     case WRITE_STATE_COOKIE:
@@ -3172,7 +3172,7 @@ void TPersQueue::Handle(TEvInterconnect::TEvNodeInfo::TPtr& ev, const TActorCont
     ResourceMetrics = Executor()->GetResourceMetrics();
 
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
-    request->Record.SetCookie(READ_CONFIG_STAGE_1_COOKIE);
+    request->Record.SetCookie(READ_CONFIG_COOKIE);
 
     request->Record.AddCmdRead()->SetKey(KeyConfig());
     request->Record.AddCmdRead()->SetKey(KeyState());

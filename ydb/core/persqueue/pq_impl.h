@@ -32,12 +32,10 @@ struct TTransaction;
 class TPersQueue : public NKeyValue::TKeyValueFlat {
     enum ECookie : ui64 {
         WRITE_CONFIG_COOKIE = 2,
-        //READ_CONFIG_COOKIE  = 3,
+        READ_CONFIG_COOKIE  = 3,
         WRITE_STATE_COOKIE  = 4,
         WRITE_TX_COOKIE = 5,
-        READ_CONFIG_STAGE_1_COOKIE = 6,
-        READ_CONFIG_STAGE_2_COOKIE = 7,
-        READ_TXS_COOKIE = 8,
+        READ_TXS_COOKIE = 6,
     };
 
     void CreatedHook(const TActorContext& ctx) override;

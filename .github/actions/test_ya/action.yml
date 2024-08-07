@@ -306,7 +306,7 @@ runs:
           (./ya make ${{ inputs.build_target }} "${params[@]}" \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.log"  \
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
-            -G --dump-graph-to-file "$CURRENT_PUBLIC_DIR_RELATIVE/graph.json" \
+            -G --dump-graph-to-file "$CURRENT_PUBLIC_DIR/graph.json" \
             --junit "$CURRENT_JUNIT_XML_PATH" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
           set -ex
           RC=`cat exit_code`

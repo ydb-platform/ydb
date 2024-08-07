@@ -32,10 +32,6 @@ NRpc::IChannelPtr CreateServiceTicketInjectingChannel(
     NRpc::IChannelPtr underlyingChannel,
     const TAuthenticationOptions& options);
 
-NRpc::IChannelPtr CreateServiceTicketInjectingChannel(
-    NRpc::IChannelPtr underlyingChannel,
-    const TAuthenticationOptions& options);
-
 ////////////////////////////////////////////////////////////////////////////////
 
 NRpc::IChannelFactoryPtr CreateServiceTicketInjectingChannelFactory(

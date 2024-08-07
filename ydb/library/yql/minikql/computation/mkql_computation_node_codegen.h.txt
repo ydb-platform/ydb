@@ -1259,7 +1259,7 @@ public:
     Instruction* operator()(Instruction* inst, const TSrcLocation& location = TSrcLocation::current()) const;
 
 private:
-    DISubprogramAnnotator& SubprogramAnnotator;
+    DISubprogramAnnotator* SubprogramAnnotator;
     DIScope* Scope;
 };
 

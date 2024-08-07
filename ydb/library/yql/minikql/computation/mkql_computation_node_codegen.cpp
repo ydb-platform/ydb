@@ -2656,14 +2656,16 @@ DISubprogram* DISubprogramAnnotator::MakeDISubprogram(const StringRef& name, con
 }
 
 DIScopeAnnotator::DIScopeAnnotator(DISubprogramAnnotator* subprogramAnnotator, const TSrcLocation& location)
-    : SubprogramAnnotator(*subprogramAnnotator)
-    , Scope(SubprogramAnnotator.DebugBuilder->createLexicalBlock(SubprogramAnnotator.Subprogram, SubprogramAnnotator.MakeDIFile(location), location.line(), location.column()))
+    : SubprogramAnnotator(nullptr)
+    , Scope(nullptr)
 {
     Y_ENSURE(subprogramAnnotator != nullptr);
+    SubprogramAnnotator = subprogramAnnotator;
+    Scope = SubprogramAnnotator->DebugBuilder->createLexicalBlock(SubprogramAnnotator->Subprogram, SubprogramAnnotator->MakeDIFile(location), location.line(), location.column());
 }
 
 Instruction* DIScopeAnnotator::operator()(Instruction* inst, const TSrcLocation& location) const {
-    inst->setDebugLoc(DILocation::get(SubprogramAnnotator.Ctx.Codegen.GetContext(), location.line(), location.column(), Scope));
+    inst->setDebugLoc(DILocation::get(SubprogramAnnotator->Ctx.Codegen.GetContext(), location.line(), location.column(), Scope));
     return inst;
 }
 

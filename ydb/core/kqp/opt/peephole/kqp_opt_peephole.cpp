@@ -93,7 +93,8 @@ public:
     {
 #define HNDL(name) "KqpPeephole-"#name, Hndl(&TKqpPeepholeTransformer::name)
         AddHandler(0, &TDqReplicate::Match, HNDL(RewriteReplicate));
-        AddHandler(0, &TDqPhyMapJoin::Match, HNDL(RewriteMapJoin));
+        AddHandler(0, &TDqPhyGraceJoin::Match, HNDL(RewriteMapJoinWithGraceCore));
+        AddHandler(0, &TDqPhyMapJoin::Match, HNDL(RewriteMapJoinWithMapCore));
         AddHandler(0, &TDqPhyCrossJoin::Match, HNDL(RewriteCrossJoin));
         AddHandler(0, &TDqPhyJoinDict::Match, HNDL(RewriteDictJoin));
         AddHandler(0, &TDqJoin::Match, HNDL(RewritePureJoin));
@@ -110,9 +111,15 @@ protected:
         return output;
     }
 
-    TMaybeNode<TExprBase> RewriteMapJoin(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqPeepholeRewriteMapJoin(node, ctx);
-        DumpAppliedRule("RewriteMapJoin", node.Ptr(), output.Ptr(), ctx);
+    TMaybeNode<TExprBase> RewriteMapJoinWithGraceCore(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqPeepholeRewriteMapJoinWithGraceCore(node, ctx);
+        DumpAppliedRule("RewriteMapJoinWithGraceCore", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteMapJoinWithMapCore(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqPeepholeRewriteMapJoinWithMapCore(node, ctx);
+        DumpAppliedRule("RewriteMapJoinWithMapCore", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

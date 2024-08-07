@@ -47,7 +47,7 @@ private:
                 return !TDqConnection::Match(n.Get()) && !TDqPhyPrecompute::Match(n.Get()) && !TDqReadWrapBase::Match(n.Get());
             },
             [&readPerProvider_ = ReadsPerProvider_, &hasErrors, &hasJoin, &hasMapJoin, &ctx = Ctx_, &typeCtx = TypeCtx_](const TExprNode::TPtr& n) {
-                if (TDqPhyMapJoin::Match(n.Get())) {
+                if (TDqPhyMapJoin::Match(n.Get()) || TDqPhyGraceJoin::Match(n.Get())) {
                     hasJoin = hasMapJoin = true;
                 } else if (TCoGraceJoinCore::Match(n.Get()) || TCoGraceSelfJoinCore::Match(n.Get())) {
                     hasJoin = true;

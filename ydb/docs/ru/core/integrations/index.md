@@ -32,7 +32,7 @@
 | Другие JDBC-совместимые IDE | — | C помощью [JDBC-драйвера](https://github.com/ydb-platform/ydb-jdbc-driver/releases)|
 
 
-## Визуализация данных {#bi}
+## Визуализация данных (Business Intelligence, BI) {#bi}
 
 | Среда | Уровень поддержки  | Инструкция |
 | --- | :---: | --- |

@@ -1,14 +1,14 @@
 #include "manager.h"
+
 #include <ydb/library/accessor/validator.h>
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
-std::vector<std::shared_ptr<TManager::TAllocationInfo>> TManager::TGrouppedAllocations::AllocatePossible(
-    const bool force, const ui64 freeMemory) {
+std::vector<std::shared_ptr<TManager::TAllocationInfo>> TManager::TGrouppedAllocations::AllocatePossible(const bool force) {
     std::vector<std::shared_ptr<TManager::TAllocationInfo>> result;
     ui64 allocationMemory = 0;
     for (auto&& [_, allocation] : Allocations) {
-        if (allocation->GetAllocatedVolume() + allocationMemory < freeMemory || force) {
+        if (allocation->IsAllocatable(allocationMemory) || force) {
             allocationMemory += allocation->GetAllocatedVolume();
             result.emplace_back(allocation);
         }
@@ -19,7 +19,7 @@ std::vector<std::shared_ptr<TManager::TAllocationInfo>> TManager::TGrouppedAlloc
 ui64 TManager::BuildInternalGroupId(const ui64 externalGroupId) {
     auto it = ExternalGroupIntoInternalGroup.find(externalGroupId);
     if (it == ExternalGroupIntoInternalGroup.end()) {
-        it = ExternalGroupIntoInternalGroup.emplace(externalGroupId, ++CurrentInternalGroupId).first;
+        it = ExternalGroupIntoInternalGroup.emplace(externalGroupId, externalGroupId).first;
     }
     return it->second;
 }
@@ -38,45 +38,44 @@ ui64 TManager::GetInternalGroupIdVerified(const ui64 externalGroupId) const {
     return it->second;
 }
 
-const std::shared_ptr<TManager::TAllocationInfo>& TManager::RegisterAllocationImpl(const std::shared_ptr<IAllocation>& task) {
+const std::shared_ptr<TManager::TAllocationInfo>& TManager::RegisterAllocationImpl(
+    const std::shared_ptr<IAllocation>& task, const std::shared_ptr<TStageFeatures>& stage) {
     auto it = AllocationInfo.find(task->GetIdentifier());
     if (it == AllocationInfo.end()) {
-        it = AllocationInfo.emplace(task->GetIdentifier(), std::make_shared<TAllocationInfo>(task, &Counters)).first;
+        it = AllocationInfo.emplace(task->GetIdentifier(), std::make_shared<TAllocationInfo>(task, stage)).first;
     }
     return it->second;
 }
 
 std::optional<ui64> TManager::GetMinInternalGroupIdOptional() const {
-    auto waitMinGroupId = WaitAllocations.GetMinGroupId();
-    auto readyMinGroupId = ReadyAllocations.GetMinGroupId();
-    if (waitMinGroupId) {
-        if (readyMinGroupId) {
-            return std::min(*readyMinGroupId, *waitMinGroupId);
-        } else {
-            return *waitMinGroupId;
-        }
+    if (ExternalGroupIntoInternalGroup.empty()) {
+        return {};
     } else {
-        if (readyMinGroupId) {
-            return *readyMinGroupId;
-        } else {
-            return std::nullopt;
-        }
+        return ExternalGroupIntoInternalGroup.begin()->first;
     }
 }
 
-void TManager::RegisterAllocation(const std::shared_ptr<IAllocation>& task, const ui64 externalGroupId) {
+void TManager::RegisterGroup(const ui64 externalGroupId) {
+    BuildInternalGroupId(externalGroupId);
+}
+
+void TManager::RegisterAllocation(
+    const std::shared_ptr<IAllocation>& task, const std::shared_ptr<TStageFeatures>& stage, const ui64 externalGroupId) {
     AFL_VERIFY(task);
-    const ui64 internalGroupId = BuildInternalGroupId(externalGroupId);
-    auto allocationInfo = RegisterAllocationImpl(task);
+    AFL_VERIFY(stage);
+    const ui64 internalGroupId = GetInternalGroupIdVerified(externalGroupId);
+    auto allocationInfo = RegisterAllocationImpl(task, stage);
     allocationInfo->AddGroupId(internalGroupId);
     if (task->IsAllocated()) {
         ReadyAllocations.AddAllocation(internalGroupId, allocationInfo);
     } else if (WaitAllocations.GetMinGroupId().value_or(internalGroupId) < internalGroupId) {
         WaitAllocations.AddAllocation(internalGroupId, allocationInfo);
-    } else if (Counters.GetAllocatedBytes().Val() + allocationInfo->GetAllocatedVolume() <= Config.GetMemoryLimit() ||
-               internalGroupId <= GetMinInternalGroupIdOptional().value_or(internalGroupId)) {
-        allocationInfo->Allocate(OwnerActorId);
-        ReadyAllocations.AddAllocation(internalGroupId, allocationInfo);
+    } else if (allocationInfo->IsAllocatable(0) || internalGroupId <= GetMinInternalGroupIdOptional().value_or(internalGroupId)) {
+        if (!allocationInfo->Allocate(OwnerActorId)) {
+            UnregisterAllocation(allocationInfo->GetIdentifier());
+        } else {
+            ReadyAllocations.AddAllocation(internalGroupId, allocationInfo);
+        }
     } else {
         WaitAllocations.AddAllocation(internalGroupId, allocationInfo);
     }
@@ -122,8 +121,8 @@ void TManager::UnregisterGroup(const ui64 externalGroupId) {
     const ui64 internalGroupId = *usageGroupId;
     AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "remove_group")("external_group_id", externalGroupId)(
         "internal_group_id", internalGroupId);
-    ExternalGroupIntoInternalGroup.erase(externalGroupId);
     auto minGroupId = GetMinInternalGroupIdOptional();
+    ExternalGroupIntoInternalGroup.erase(externalGroupId);
     if (auto data = WaitAllocations.ExtractGroup(internalGroupId)) {
         for (auto&& [_, allocation] : *data) {
             GetAllocationInfoVerified(allocation->GetIdentifier()).RemoveGroup(internalGroupId);
@@ -144,4 +143,4 @@ ui64 TManager::GetMinInternalGroupIdVerified() const {
     return *TValidator::CheckNotNull(GetMinInternalGroupIdOptional());
 }
 
-}
+}   // namespace NKikimr::NOlap::NGroupedMemoryManager

@@ -12,66 +12,12 @@
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
-class TPositiveControlInteger {
-private:
-    ui64 Value = 0;
-
-public:
-    void Add(const ui64 value) {
-        Value += value;
-    }
-    void Sub(const ui64 value) {
-        AFL_VERIFY(value <= Value);
-        Value -= value;
-    }
-    ui64 Val() const {
-        return Value;
-    }
-};
-
-class TCommonCounters {
-private:
-    YDB_READONLY_DEF(TPositiveControlInteger, AllocatedBytes);
-    YDB_READONLY_DEF(TPositiveControlInteger, WaitingBytes);
-    YDB_READONLY_DEF(TPositiveControlInteger, AllocatedCount);
-    YDB_READONLY_DEF(TPositiveControlInteger, WaitingCount);
-
-public:
-    void AddAllocated(const ui64 bytes) {
-        AllocatedBytes.Add(bytes);
-        AllocatedCount.Add(1);
-    }
-
-    void SubAllocated(const ui64 bytes) {
-        AllocatedBytes.Sub(bytes);
-        AllocatedCount.Sub(1);
-    }
-    void AddWaiting(const ui64 bytes) {
-        WaitingBytes.Add(bytes);
-        WaitingCount.Add(1);
-    }
-
-    void SubWaiting(const ui64 bytes) {
-        WaitingBytes.Sub(bytes);
-        WaitingCount.Sub(1);
-    }
-};
-
 class TManager {
 private:
     const TConfig Config;
     const TString Name;
     const TCounters& Signals;
     const NActors::TActorId OwnerActorId;
-    TCommonCounters Counters;
-
-    ui64 GetFreeMemory() const {
-        if (Config.GetMemoryLimit() < Counters.GetAllocatedBytes().Val()) {
-            return 0;
-        } else {
-            return Config.GetMemoryLimit() - Counters.GetAllocatedBytes().Val();
-        }
-    }
 
     class TAllocationInfo {
     private:
@@ -79,44 +25,37 @@ private:
         YDB_READONLY_DEF(THashSet<ui64>, GroupIds);
         ui64 AllocatedVolume = 0;
         YDB_READONLY(ui64, Identifier, 0);
-        TCommonCounters* Counters = nullptr;
+        const std::shared_ptr<TStageFeatures> Stage;
 
     public:
         ~TAllocationInfo() {
-            if (IsAllocated()) {
-                Counters->SubAllocated(AllocatedVolume);
-            } else {
-                Counters->SubWaiting(AllocatedVolume);
-            }
-            AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "destroy")("allocation_id", Identifier);
+            Stage->Free(AllocatedVolume, IsAllocated());
+            AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "destroy")("allocation_id", Identifier)("stage", Stage->GetName());
+        }
+
+        bool IsAllocatable(const ui64 additional) const {
+            return Stage->IsAllocatable(AllocatedVolume, additional);
         }
 
         void SetAllocatedVolume(const ui64 value) {
-            if (IsAllocated()) {
-                Counters->SubAllocated(AllocatedVolume);
-            } else {
-                Counters->SubWaiting(AllocatedVolume);
-            }
+            Stage->UpdateVolume(AllocatedVolume, value, IsAllocated());
             AllocatedVolume = value;
-            if (IsAllocated()) {
-                Counters->AddAllocated(AllocatedVolume);
-            } else {
-                Counters->AddWaiting(AllocatedVolume);
-            }
         }
 
         ui64 GetAllocatedVolume() const {
             return AllocatedVolume;
         }
 
-        void Allocate(const NActors::TActorId& ownerId) {
-            AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "allocated")("allocation_id", Identifier);
+        [[nodiscard]] bool Allocate(const NActors::TActorId& ownerId) {
+            AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "allocated")("allocation_id", Identifier)("stage", Stage->GetName());
             AFL_VERIFY(Allocation);
-            Allocation->OnAllocated(
+            const bool result = Allocation->OnAllocated(
                 std::make_shared<TAllocationGuard>(ownerId, Allocation->GetIdentifier(), Allocation->GetMemory()), Allocation);
-            Allocation = nullptr;
-            Counters->SubWaiting(AllocatedVolume);
-            Counters->AddAllocated(AllocatedVolume);
+            if (result) {
+                Stage->Allocate(AllocatedVolume);
+                Allocation = nullptr;
+            }
+            return result;
         }
 
         bool IsAllocated() const {
@@ -128,29 +67,31 @@ private:
         }
 
         void AddGroupId(const ui64 groupId) {
-            AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "add_group")("allocation_id", Identifier)("allocation_group_id", groupId);
+            AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "add_group")("allocation_id", Identifier)("allocation_group_id", groupId)(
+                "stage", Stage->GetName());
             AFL_VERIFY(GroupIds.emplace(groupId).second);
         }
 
         void RemoveGroup(const ui64 groupId) {
             AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "remove_group")("allocation_id", Identifier)(
-                "allocation_group_id", groupId);
+                "allocation_group_id", groupId)("stage", Stage->GetName());
             AFL_VERIFY(GroupIds.erase(groupId));
         }
 
-        TAllocationInfo(const std::shared_ptr<IAllocation>& allocation, TCommonCounters* counters)
+        TAllocationInfo(
+            const std::shared_ptr<IAllocation>& allocation, const std::shared_ptr<TStageFeatures>& stage)
             : Allocation(allocation)
             , Identifier(TValidator::CheckNotNull(Allocation)->GetIdentifier())
-            , Counters(counters) {
+            , Stage(stage) {
+            AFL_VERIFY(Stage);
             AFL_VERIFY(Allocation);
-            AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "add")("id", Allocation->GetIdentifier());
+            AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "add")("id", Allocation->GetIdentifier())("stage", Stage->GetName());
             AllocatedVolume = Allocation->GetMemory();
+            Stage->Add(AllocatedVolume, Allocation->IsAllocated());
             if (allocation->IsAllocated()) {
-                AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "allocated_on_add")("allocation_id", Identifier);
+                AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "allocated_on_add")("allocation_id", Identifier)(
+                    "stage", Stage->GetName());
                 Allocation = nullptr;
-                Counters->AddAllocated(AllocatedVolume);
-            } else {
-                Counters->AddWaiting(AllocatedVolume);
             }
         }
     };
@@ -180,7 +121,7 @@ private:
             AFL_VERIFY(Allocations.erase(allocation->GetIdentifier()));
         }
 
-        std::vector<std::shared_ptr<TAllocationInfo>> AllocatePossible(const bool force, const ui64 freeMemory);
+        std::vector<std::shared_ptr<TAllocationInfo>> AllocatePossible(const bool force);
     };
 
     class TAllocationGroups {
@@ -193,24 +134,33 @@ private:
         }
 
         void AllocateTo(TManager& manager, TAllocationGroups& destination) {
-            if (Groups.empty()) {
-                return;
-            }
-            const ui64 minGroupId = manager.GetMinInternalGroupIdVerified();
-            for (auto it = Groups.begin(); it != Groups.end();) {
-                auto internalGroupId = it->first;
-                auto allocated = it->second.AllocatePossible(internalGroupId == minGroupId, manager.GetFreeMemory());
-                for (auto&& i : allocated) {
-                    i->Allocate(manager.OwnerActorId);
-                    for (auto&& g : i->GetGroupIds()) {
-                        it->second.Remove(i);
-                        destination.AddAllocation(g, i);
+            while (true) {
+                std::vector<ui64> toRemove;
+                for (auto it = Groups.begin(); it != Groups.end();) {
+                    ui64 minGroupId = manager.GetMinInternalGroupIdVerified();
+                    auto internalGroupId = it->first;
+                    auto allocated = it->second.AllocatePossible(internalGroupId == minGroupId);
+                    for (auto&& i : allocated) {
+                        if (!i->Allocate(manager.OwnerActorId)) {
+                            toRemove.emplace_back(i->GetIdentifier());
+                        } else {
+                            for (auto&& g : i->GetGroupIds()) {
+                                it->second.Remove(i);
+                                destination.AddAllocation(g, i);
+                            }
+                        }
                     }
+                    if (!it->second.IsEmpty()) {
+                        break;
+                    }
+                    it = Groups.erase(it);
                 }
-                if (!it->second.IsEmpty()) {
+                for (auto&& i : toRemove) {
+                    manager.UnregisterAllocation(i);
+                }
+                if (toRemove.empty()) {
                     break;
                 }
-                it = Groups.erase(it);
             }
         }
 
@@ -259,15 +209,14 @@ private:
     TAllocationGroups WaitAllocations;
     TAllocationGroups ReadyAllocations;
     THashMap<ui64, std::shared_ptr<TAllocationInfo>> AllocationInfo;
-    THashMap<ui64, ui64> ExternalGroupIntoInternalGroup;
-
-    ui64 CurrentInternalGroupId = 0;
+    std::map<ui64, ui64> ExternalGroupIntoInternalGroup;
 
     ui64 BuildInternalGroupId(const ui64 externalGroupId);
     ui64 GetInternalGroupIdVerified(const ui64 externalGroupId) const;
     std::optional<ui64> GetInternalGroupIdOptional(const ui64 externalGroupId) const;
 
-    const std::shared_ptr<TAllocationInfo>& RegisterAllocationImpl(const std::shared_ptr<IAllocation>& task);
+    const std::shared_ptr<TAllocationInfo>& RegisterAllocationImpl(
+        const std::shared_ptr<IAllocation>& task, const std::shared_ptr<TStageFeatures>& stage);
     TAllocationInfo& GetAllocationInfoVerified(const ui64 allocationId) {
         auto it = AllocationInfo.find(allocationId);
         AFL_VERIFY(it != AllocationInfo.end());
@@ -278,10 +227,10 @@ private:
     ui64 GetMinInternalGroupIdVerified() const;
     void TryAllocateWaiting();
     void RefreshSignals() const {
-        Signals.MemoryUsageCount->Set(Counters.GetAllocatedCount().Val());
-        Signals.MemoryWaitingCount->Set(Counters.GetWaitingCount().Val());
-        Signals.MemoryUsageBytes->Set(Counters.GetAllocatedBytes().Val());
-        Signals.MemoryWaitingBytes->Set(Counters.GetWaitingBytes().Val());
+//        Signals.MemoryUsageCount->Set(Counters.GetAllocatedCount().Val());
+//        Signals.MemoryWaitingCount->Set(Counters.GetWaitingCount().Val());
+//        Signals.MemoryUsageBytes->Set(Counters.GetAllocatedBytes().Val());
+//        Signals.MemoryWaitingBytes->Set(Counters.GetWaitingBytes().Val());
         Signals.GroupsCount->Set(ExternalGroupIntoInternalGroup.size());
     }
 
@@ -293,7 +242,8 @@ public:
         , OwnerActorId(ownerActorId) {
     }
 
-    void RegisterAllocation(const std::shared_ptr<IAllocation>& task, const ui64 externalGroupId);
+    void RegisterAllocation(const std::shared_ptr<IAllocation>& task, const std::shared_ptr<TStageFeatures>& stage, const ui64 externalGroupId);
+    void RegisterGroup(const ui64 externalGroupId);
 
     void UnregisterAllocation(const ui64 allocationId);
     void UpdateAllocation(const ui64 allocationId, const ui64 volume);

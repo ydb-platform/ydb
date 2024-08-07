@@ -75,7 +75,7 @@ protected:
 
 private:
     virtual bool DoApply(IDataReader& indexedDataRead) const override;
-    virtual void DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
+    virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation) override;
 
 public:

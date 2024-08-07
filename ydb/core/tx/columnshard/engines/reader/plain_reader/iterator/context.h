@@ -25,6 +25,10 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, FFColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, ProgramInputColumns);
 
+    YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TStageFeatures>, MergeStageMemory);
+    YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TStageFeatures>, FilterStageMemory);
+    YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TStageFeatures>, FetchingStageMemory);
+
     NIndexes::TIndexCheckerContainer IndexChecker;
     TReadMetadata::TConstPtr ReadMetadata;
     std::shared_ptr<TColumnsSet> EmptyColumns = std::make_shared<TColumnsSet>();
@@ -42,6 +46,9 @@ public:
     const ui64 ReadSequentiallyBufferSize = DefaultReadSequentiallyBufferSize;
 
     ui64 GetMemoryForSources(const THashMap<ui32, std::shared_ptr<IDataSource>>& sources);
+    ui64 GetRequestedMemoryBytes() const {
+        return MergeStageMemory->GetFullMemory() + FilterStageMemory->GetFullMemory() + FetchingStageMemory->GetFullMemory();
+    }
 
     const TReadMetadata::TConstPtr& GetReadMetadata() const {
         return ReadMetadata;

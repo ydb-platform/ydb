@@ -60,10 +60,11 @@ bool TBaseMergeTask::DoApply(IDataReader& indexedDataRead) const {
     return true;
 }
 
-void TBaseMergeTask::DoOnAllocated(
+bool TBaseMergeTask::DoOnAllocated(
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard, const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation) {
     AllocationGuard = std::move(guard);
     NConveyor::TScanServiceOperator::SendTaskToExecute(static_pointer_cast<TBaseMergeTask>(allocation));
+    return true;
 }
 
 TConclusionStatus TStartMergeTask::DoExecuteImpl() {

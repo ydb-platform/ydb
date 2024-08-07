@@ -434,7 +434,8 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
     NYql::NDq::TComputeRuntimeSettings settings;
     if (!TxInfo) {
         TxInfo = MakeIntrusive<NRm::TTxState>(
-            TxId, TInstant::Now(), ResourceManager_->GetCounters());
+            TxId, TInstant::Now(), ResourceManager_->GetCounters(),
+            UserRequestContext->PoolId, UserRequestContext->PoolConfig->QueryMemoryLimitPercentPerNode);
     }
 
     auto startResult = CaFactory_->CreateKqpComputeActor({
@@ -455,7 +456,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .StatsMode = GetDqStatsMode(StatsMode),
         .Deadline = Deadline,
         .ShareMailbox = (computeTasksSize <= 1),
-        .RlPath = Nothing()
+        .RlPath = Nothing(),
     });
 
     if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&startResult)) {

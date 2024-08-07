@@ -3,6 +3,7 @@
 PROGRAM(bison)
 
 LICENSE(
+    Bison-exception-2.2 AND
     GPL-3.0-only AND
     GPL-3.0-or-later AND
     GPL-3.0-or-later WITH Bison-exception-2.2
@@ -10,9 +11,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(3.3.2)
+VERSION(3.5.4)
 
-ORIGINAL_SOURCE(mirror://gnu/bison/bison-3.3.2.tar.gz)
+ORIGINAL_SOURCE(mirror://gnu/bison/bison-3.5.4.tar.gz)
 
 PEERDIR(
     contrib/tools/bison/lib
@@ -29,15 +30,12 @@ NO_RUNTIME()
 
 CFLAGS(
     -DEXEEXT=\"\"
-    -DINSTALLDIR=\"/var/empty/bison-3.3.2/bin\"
-    -DBISON_DATA_DIR=contrib/tools/bison/data
+    -DINSTALLDIR=\"/var/empty/bison-3.5.4/bin\"
 )
 
 SRCS(
-    arcadia_root.cpp.in
     src/AnnotationList.c
     src/InadequacyList.c
-    src/LR0.c
     src/Sbitset.c
     src/assoc.c
     src/closure.c
@@ -52,15 +50,16 @@ SRCS(
     src/ielr.c
     src/lalr.c
     src/location.c
+    src/lr0.c
     src/main.c
     src/muscle-tab.c
     src/named-ref.c
     src/nullable.c
     src/output.c
     src/parse-gram.c
+    src/print-graph.c
     src/print-xml.c
     src/print.c
-    src/print_graph.c
     src/reader.c
     src/reduce.c
     src/relation.c

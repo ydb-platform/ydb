@@ -609,9 +609,6 @@ class Build(object):
         if self.is_size_optimized:
             emit('_BUILD_SIZE_OPTIMIZED', 'yes')
 
-        if self.with_ndebug:
-            emit('_BUILD_WITH_NDEBUG', 'yes')
-
         toolchain_type, compiler_type, linker_type = Compilers[self.tc.type]
         toolchain = toolchain_type(self.tc, self)
         compiler = compiler_type(self.tc, self)
@@ -662,10 +659,6 @@ class Build(object):
     def is_sanitized(self):
         sanitizer = preset('SANITIZER_TYPE')
         return bool(sanitizer) and not is_negative_str(sanitizer)
-
-    @property
-    def with_ndebug(self):
-        return self.build_type in ('release', 'minsizerel', 'valgrind-release', 'profile', 'gprof', 'debugnoasserts')
 
     @property
     def is_valgrind(self):
@@ -1597,11 +1590,6 @@ class GnuCompiler(Compiler):
                     self.c_foptions.extend(['-faddrsig'])
             else:
                 self.optimize = '-O3'
-
-        if self.build.with_ndebug:
-            self.c_defines.append('-DNDEBUG')
-        else:
-            self.c_defines.append('-UNDEBUG')
 
         if self.build.profiler_type in (Profiler.Generic, Profiler.GProf):
             self.c_foptions.append('-fno-omit-frame-pointer')

@@ -15,13 +15,13 @@
 #include <yt/yt/core/actions/invoker_util.h>
 
 #include <library/cpp/yt/system/handle_eintr.h>
+#include <library/cpp/yt/system/exit.h>
 
 #include <util/folder/dirut.h>
 
 #include <util/generic/guid.h>
 
 #include <util/string/ascii.h>
-
 #include <util/string/util.h>
 
 #include <util/system/env.h>
@@ -657,7 +657,7 @@ private:
                 YT_VERIFY(Pipe_);
                 ssize_t size = HandleEintr(::write, Pipe_->GetWriteFD(), &data, sizeof(data));
                 YT_VERIFY(size == sizeof(data));
-                _exit(1);
+                AbortProcess(ToUnderlying(EProcessExitCode::GenericError));
             }
         }
         YT_ABORT();

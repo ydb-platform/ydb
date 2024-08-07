@@ -21,7 +21,7 @@ TEST_P(TFarmHashTest, TFarmHashUnversionedValueTest)
     const auto& params = GetParam();
 
     std::array<TUnversionedValue, 2> values{std::get<0>(params), std::get<1>(params)};
-    auto valueRange = MakeRange(values);
+    auto valueRange = TRange(values);
 
     auto expected1 = std::get<2>(params);
     auto expected2 = std::get<3>(params);

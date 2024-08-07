@@ -1,4 +1,4 @@
-#include "sql_ut.h"
+#include "sql_ut_antlr4.h"
 #include "format/sql_format.h"
 #include "lexer/lexer.h"
 
@@ -17,7 +17,7 @@ using namespace NSQLTranslation;
 namespace {
 
 TParsedTokenList Tokenize(const TString& query) {
-    auto lexer = NSQLTranslationV1::MakeLexer(true, true);
+    auto lexer = NSQLTranslationV1::MakeLexer(true);
     TParsedTokenList tokens;
     NYql::TIssues issues;
     UNIT_ASSERT_C(Tokenize(*lexer, query, "Query", tokens, issues, SQL_MAX_PARSER_ERRORS),

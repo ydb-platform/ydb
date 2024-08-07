@@ -12,7 +12,7 @@ SET(ANTLR_PACKAGE_NAME NSQLv1Generated)
 SET(PROTOBUF_HEADER_PATH ydb/library/yql/parser/proto_ast/gen/v1_proto_split)
 SET(PROTOBUF_SUFFIX_PATH .pb.main.h)
 
-SET(LEXER_PARSER_NAMESPACE NALPDefault)
+SET(LEXER_PARSER_NAMESPACE NALPDefaultAntlr4)
 
 SET(GRAMMAR_STRING_CORE_SINGLE "\"~(['#BACKSLASH#]) | (BACKSLASH .)\"")
 SET(GRAMMAR_STRING_CORE_DOUBLE "\"~([#DOUBLE_QUOTE##BACKSLASH#]) | (BACKSLASH .)\"")
@@ -38,7 +38,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templ
 RUN_ANTLR4(
     ${sql_grammar}
     -no-listener
-    -package NALPDefault
+    -package NALPDefaultAntlr4
     -lib .
     -o ${antlr_output}
     IN ${sql_grammar} ${antlr_templates}/Cpp/Cpp.stg ${antlr_templates}/Cpp/Files.stg

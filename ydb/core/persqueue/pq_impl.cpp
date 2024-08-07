@@ -1292,6 +1292,9 @@ TPartitionInfo& TPersQueue::GetPartitionInfo(const TPartitionId& partitionId)
 
 void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorContext& ctx)
 {
+    PQ_LOG_D("Handle TEvPQ::TEvPartitionCounters" <<
+             " PartitionId " << ev->Get()->Partition);
+
     const auto& partitionId = ev->Get()->Partition;
     auto& partition = GetPartitionInfo(partitionId);
     auto diff = ev->Get()->Counters.MakeDiffForAggr(partition.Baseline);
@@ -2580,7 +2583,9 @@ const TPartitionInfo& TPersQueue::GetPartitionInfo(const NKikimrClient::TPersQue
     const TWriteId writeId = GetWriteId(req);
     ui32 originalPartitionId = req.GetPartition();
 
-    Y_ABORT_UNLESS(TxWrites.contains(writeId) && TxWrites.at(writeId).Partitions.contains(originalPartitionId));
+    Y_ABORT_UNLESS(TxWrites.contains(writeId) && TxWrites.at(writeId).Partitions.contains(originalPartitionId),
+                   "PQ %" PRIu64 ", WriteId {%" PRIu64 ", %" PRIu64 "}, Partition %" PRIu32,
+                   TabletID(), writeId.NodeId, writeId.KeyId, originalPartitionId);
 
     const TPartitionId& partitionId = TxWrites.at(writeId).Partitions.at(originalPartitionId);
     Y_ABORT_UNLESS(Partitions.contains(partitionId));
@@ -3589,7 +3594,9 @@ void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx)
 
             if (tx.WriteId.Defined()) {
                 const TWriteId& writeId = *tx.WriteId;
-                Y_ABORT_UNLESS(TxWrites.contains(writeId));
+                Y_ABORT_UNLESS(TxWrites.contains(writeId),
+                               "PQ %" PRIu64 ", TxId %" PRIu64 ", WriteId {%" PRIu64 ", %" PRIu64 "}",
+                               TabletID(), tx.TxId, writeId.NodeId, writeId.KeyId);
                 TTxWriteInfo& writeInfo = TxWrites.at(writeId);
                 writeInfo.TxId = tx.TxId;
             }
@@ -3901,7 +3908,9 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
 
     if (tx.WriteId.Defined()) {
         const TWriteId& writeId = *tx.WriteId;
-        Y_ABORT_UNLESS(TxWrites.contains(writeId));
+        Y_ABORT_UNLESS(TxWrites.contains(writeId),
+                       "PQ %" PRIu64 ", TxId %" PRIu64 ", WriteId {%" PRIu64 ", %" PRIu64 "}",
+                       TabletID(), tx.TxId, writeId.NodeId, writeId.KeyId);
         const TTxWriteInfo& writeInfo = TxWrites.at(writeId);
 
         for (auto& [originalPartitionId, partitionId] : writeInfo.Partitions) {
@@ -4146,9 +4155,6 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         PQ_LOG_D("TxId " << tx.TxId <<
                  ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
 
-        [[fallthrough]];
-
-    case NKikimrPQ::TTransaction::WAIT_RS:
         //
         // the number of TEvReadSetAck sent should not be greater than the number of senders
         // from TEvProposeTransaction
@@ -4160,6 +4166,9 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
         SendEvReadSetToReceivers(ctx, tx);
 
+        [[fallthrough]];
+
+    case NKikimrPQ::TTransaction::WAIT_RS:
         PQ_LOG_D("HaveParticipantsDecision " << tx.HaveParticipantsDecision());
 
         if (tx.HaveParticipantsDecision()) {
@@ -4604,8 +4613,6 @@ void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& e
         return;
     }
 
-    PQ_LOG_D("delete write info for WriteId " << writeId << " and TxId " << writeInfo.TxId);
-
     if (!writeInfo.TxId.Defined()) {
         PQ_LOG_D("delete write info for WriteId " << writeId);
         // the message TEvProposeTransaction will not come anymore
@@ -4656,7 +4663,9 @@ void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorCon
     auto* event = ev->Get();
     Y_ABORT_UNLESS(event->PartitionId.WriteId.Defined());
     const TWriteId& writeId = *event->PartitionId.WriteId;
-    Y_ABORT_UNLESS(TxWrites.contains(writeId));
+    Y_ABORT_UNLESS(TxWrites.contains(writeId),
+                   "PQ %" PRIu64 ", WriteId {%" PRIu64 ", %" PRIu64 "}",
+                   TabletID(), writeId.NodeId, writeId.KeyId);
     TTxWriteInfo& writeInfo = TxWrites.at(writeId);
     Y_ABORT_UNLESS(writeInfo.Partitions.contains(event->PartitionId.OriginalPartitionId));
     const TPartitionId& partitionId = writeInfo.Partitions.at(event->PartitionId.OriginalPartitionId);
@@ -4690,7 +4699,9 @@ void TPersQueue::Handle(TEvPQ::TEvTransactionCompleted::TPtr& ev, const TActorCo
     }
 
     const TWriteId& writeId = *event->WriteId;
-    Y_ABORT_UNLESS(TxWrites.contains(writeId));
+    Y_ABORT_UNLESS(TxWrites.contains(writeId),
+                   "PQ %" PRIu64 ", WriteId {%" PRIu64 ", %" PRIu64 "}",
+                   TabletID(), writeId.NodeId, writeId.KeyId);
     TTxWriteInfo& writeInfo = TxWrites.at(writeId);
     Y_ABORT_UNLESS(writeInfo.Partitions.size() == 1);
 

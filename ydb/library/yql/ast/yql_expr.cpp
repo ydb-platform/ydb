@@ -2228,16 +2228,9 @@ namespace {
         }
     }
 
-    template <class TPMap>
-    bool GatherParentsImpl(const TExprNode& node, TPMap& parentsMap, TNodeSet& visited, bool withLeaves) {
-        if (node.Type() == TExprNode::Arguments) {
+    bool GatherParentsImpl(const TExprNode& node, TParentsMap& parentsMap, TNodeSet& visited) {
+        if (node.Type() == TExprNode::Arguments || node.Type() == TExprNode::Atom || node.Type() == TExprNode::World) {
             return false;
-        }
-
-        if (!withLeaves) {
-            if (node.Type() == TExprNode::Atom || node.Type() == TExprNode::World) {
-                return false;
-            }
         }
 
         if (!visited.emplace(&node).second) {
@@ -2245,7 +2238,7 @@ namespace {
         }
 
         node.ForEachChild([&](const TExprNode& child) {
-            if (GatherParentsImpl<TPMap>(child, parentsMap, visited, withLeaves)) {
+            if (GatherParentsImpl(child, parentsMap, visited)) {
                 parentsMap[&child].emplace(&node);
             }
         });
@@ -3650,16 +3643,10 @@ bool CompareExprTreeParts(const TExprNode& one, const TExprNode& two, const TNod
     return CompareExpressions(l, r, map, level, visited);
 }
 
-void GatherParents(const TExprNode& node, TParentsMap& parentsMap, bool withLeaves) {
+void GatherParents(const TExprNode& node, TParentsMap& parentsMap) {
     parentsMap.clear();
     TNodeSet visisted;
-    GatherParentsImpl<TParentsMap>(node, parentsMap, visisted, withLeaves);
-}
-
-void GatherParentsMulti(const TExprNode& node, TParentsMultiMap& parentsMap, bool withLeaves) {
-    parentsMap.clear();
-    TNodeSet visisted;
-    GatherParentsImpl<TParentsMultiMap>(node, parentsMap, visisted, withLeaves);
+    GatherParentsImpl(node, parentsMap, visisted);
 }
 
 void CheckCounts(const TExprNode& root) {

@@ -49,6 +49,7 @@ using NYT::ToProto;
 static const auto InfiniteRequestThrottlerConfig = New<TThroughputThrottlerConfig>();
 static const auto DefaultLoggingSuppressionFailedRequestThrottlerConfig = TThroughputThrottlerConfig::Create(1'000);
 
+constexpr int MaxUserAgentLength = 200;
 constexpr auto ServiceLivenessCheckPeriod = TDuration::MilliSeconds(100);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -745,7 +746,7 @@ private:
         auto userAgent = RequestHeader_->has_user_agent()
             ? TStringBuf(RequestHeader_->user_agent())
             : UnknownUserAgent;
-        PerformanceCounters_->IncrementRequestsPerUserAgent(userAgent.SubString(0, 200));
+        PerformanceCounters_->IncrementRequestsPerUserAgent(userAgent.SubString(0, MaxUserAgentLength));
 
         MethodPerformanceCounters_->RequestCounter.Increment();
         MethodPerformanceCounters_->RequestMessageBodySizeCounter.Increment(

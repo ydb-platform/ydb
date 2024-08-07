@@ -796,11 +796,6 @@ void TPersQueue::HandleConfigReadResponse(NKikimrClient::TResponse&& resp, const
 
     ConfigReadResponse = std::move(resp);
 
-//    ReadTxInfo(resp.GetReadResult(2), ctx);
-//    ReadConfig(resp.GetReadResult(0), resp.GetReadRangeResult(0), ctx);
-//    ReadTxWrites(resp.GetReadResult(2), ctx);
-//    ReadState(resp.GetReadResult(1), ctx);
-
     BeginInitTransactions();
     SendTransactionsReadRequest(GetTxKey(Min<ui64>()), true, ctx);
 }
@@ -847,7 +842,6 @@ void TPersQueue::HandleTransactionsReadResponse(NKikimrClient::TResponse&& resp,
     }
 
     TransactionsReadResults.emplace_back(std::move(result));
-    //ReadNextTransactionsPart(result, ctx);
 
     if (status == NKikimrProto::OVERRUN) {
         SendTransactionsReadRequest(GetLastKey(result), false, ctx);
@@ -1062,25 +1056,6 @@ void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxInfo& info,
     NewSupportivePartitions.clear();
 }
 
-//void TPersQueue::ReadNextTransactionsPart(const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange,
-//                                          const TActorContext& ctx)
-//{
-//    if (readRange.GetStatus() == NKikimrProto::OVERRUN) {
-//        if (readRange.PairSize() == 0) {
-//            PQ_LOG_ERROR_AND_DIE("Unexpected transactions read status: " << readRange.GetStatus());
-//            return;
-//        }
-//
-//        BeginInitTransactions();
-//        TString nextBeginKey = ContinueInitTransactions(readRange);
-//        RequestTransactionRange(nextBeginKey, ctx);
-//    } else {
-//        THashMap<ui32, TVector<TTransaction>> partitionTxs;
-//        InitTransactions(readRange, partitionTxs);
-//        EndReadConfig(ctx);
-//    }
-//}
-
 void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult& read,
                             const TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult>& readRanges,
                             const TActorContext& ctx)
@@ -1164,23 +1139,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
     }
 
     EndInitTransactions();
-
-//    if (readRange.GetStatus() == NKikimrProto::OVERRUN) {
-//        if (readRange.PairSize() == 0) {
-//            PQ_LOG_ERROR_AND_DIE("Unexpected transactions read status: " << readRange.GetStatus());
-//            return;
-//        }
-//
-//        BeginInitTransactions();
-//        TString nextBeginKey = ContinueInitTransactions(readRange);
-//        RequestTransactionRange(nextBeginKey, ctx);
-//    } else {
-//        THashMap<ui32, TVector<TTransaction>> partitionTxs;
-//        InitTransactions(readRange, partitionTxs);
-//        EndReadConfig(ctx);
-//    }
-
-     EndReadConfig(ctx);
+    EndReadConfig(ctx);
 }
 
 void TPersQueue::EndReadConfig(const TActorContext& ctx)
@@ -3219,13 +3178,11 @@ void TPersQueue::Handle(TEvInterconnect::TEvNodeInfo::TPtr& ev, const TActorCont
     request->Record.AddCmdRead()->SetKey(KeyState());
     request->Record.AddCmdRead()->SetKey(KeyTxInfo());
 
-    //AddCmdReadTransactionRange(*request, GetTxKey(Min<ui64>()), true);
-
     request->Record.MutableCmdSetExecutorFastLogPolicy()
                 ->SetIsAllowed(AppData(ctx)->PQConfig.GetTactic() == NKikimrClient::TKeyValueRequest::MIN_LATENCY);
     ctx.Send(ctx.SelfID, request.Release());
 
-    //ctx.Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup());
+    ctx.Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup());
 }
 
 void TPersQueue::AddCmdReadTransactionRange(TEvKeyValue::TEvRequest& request,
@@ -4576,38 +4533,6 @@ void TPersQueue::BeginInitTransactions()
     PlannedTxs.clear();
 }
 
-//TString TPersQueue::ContinueInitTransactions(const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange)
-//{
-//    for (size_t i = 0; i < readRange.PairSize(); ++i) {
-//        auto& pair = readRange.GetPair(i);
-//
-//        PQ_LOG_D("ReadRange pair." <<
-//                 " Key " << (pair.HasKey() ? pair.GetKey() : "unknown") <<
-//                 ", Status " << pair.GetStatus());
-//
-//        NKikimrPQ::TTransaction tx;
-//        Y_ABORT_UNLESS(tx.ParseFromString(pair.GetValue()));
-//
-//        PQ_LOG_D("Load tx " << tx.ShortDebugString());
-//
-//        Txs.emplace(tx.GetTxId(), tx);
-//
-//        if (tx.HasStep()) {
-//            if (std::make_pair(tx.GetStep(), tx.GetTxId()) >= std::make_pair(ExecStep, ExecTxId)) {
-//                PlannedTxs.emplace_back(tx.GetStep(), tx.GetTxId());
-//            }
-//        }
-//    }
-//
-//    if (!readRange.PairSize()) {
-//        return {};
-//    }
-//
-//    const auto& pair = readRange.GetPair(readRange.PairSize() - 1);
-//
-//    return pair.GetKey();
-//}
-
 void TPersQueue::EndInitTransactions()
 {
     PQ_LOG_D("Txs.size=" << Txs.size() << ", PlannedTxs.size=" << PlannedTxs.size());
@@ -4621,14 +4546,6 @@ void TPersQueue::EndInitTransactions()
         PQ_LOG_D("top tx queue (" << TxQueue.front().first << ", " << TxQueue.front().second << ")");
     }
 }
-
-//void TPersQueue::InitTransactions(const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange,
-//                                  THashMap<ui32, TVector<TTransaction>>& partitionTxs)
-//{
-//    BeginInitTransactions();
-//    ContinueInitTransactions(readRange);
-//    EndInitTransactions(partitionTxs);
-//}
 
 void TPersQueue::TryStartTransaction(const TActorContext& ctx)
 {

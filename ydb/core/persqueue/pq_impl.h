@@ -514,12 +514,10 @@ private:
     std::deque<std::pair<ui64, ui64>> PlannedTxs;
 
     void BeginInitTransactions();
-    //TString ContinueInitTransactions(const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange);
     void EndInitTransactions();
 
     void EndReadConfig(const TActorContext& ctx);
 
-    void RequestTransactionRange(const TString& fromKey, const TActorContext& ctx);
     void AddCmdReadTransactionRange(TEvKeyValue::TEvRequest& request,
                                     const TString& fromKey, bool includeFrom);
 

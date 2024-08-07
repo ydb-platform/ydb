@@ -32,7 +32,7 @@ public:
 
     void Rewind() override {}
 
-    ~TKqpColumnsGetterTransformer() override = default;
+    ~TKqpColumnsGetterTransformer() override  = default;
 
 private:
     bool BeforeLambdas(const TExprNode::TPtr& input);
@@ -47,7 +47,7 @@ private:
 
 private:
     THashMap<TExprNode::TPtr, TExprNode::TPtr> TableByExprNode;
-    THashMap<TString, TVector<TString>> ColumnsByTableName;
+    THashMap<TString, THashSet<TString>> ColumnsByTableName;
     // const TKikimrConfiguration::TPtr& Config;
 };
 

@@ -40,8 +40,6 @@ IGraphTransformer::TStatus TKqpColumnsGetterTransformer::DoTransform(TExprNode::
     //     return IGraphTransformer::TStatus::Ok;
     // }
 
-    Cerr << "Zhopa" << Endl;
-
     VisitExprLambdasLast(
         input, 
         [&](const TExprNode::TPtr& input) {
@@ -102,8 +100,12 @@ bool TKqpColumnsGetterTransformer::AfterLambdas(const TExprNode::TPtr& input) {
                     }
                     auto table = TExprBase(TableByExprNode[input.Get()]).Cast<TKqpTable>().Path().StringValue();
                     auto column = member.Name().StringValue();
+                    size_t pointPos = column.find('.'); // table.column
+                    if (pointPos != TString::npos) {
+                        column = column.substr(pointPos + 1);
+                    }
 
-                    ColumnsByTableName[table].push_back(std::move(column));
+                    ColumnsByTableName[table].insert(std::move(column));
                 }
 
                 return true;

@@ -3514,6 +3514,10 @@ TString PgValueToNativeText(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId) 
 template <typename F>
 void PgValueToNativeBinaryImpl(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId, bool needCanonizeFp, F f) {
     YQL_ENSURE(value); // null could not be represented as binary
+    if (!NPg::HasType(pgTypeId)) {
+        f(TStringBuf(value.AsStringRef()));
+        return;
+    }
 
     const bool oldNeedCanonizeFp = NeedCanonizeFp;
     NeedCanonizeFp = needCanonizeFp;
@@ -3748,6 +3752,10 @@ NUdf::TUnboxedValue ReadYsonValueInTableFormatPg(TPgType* type, char cmd, TInput
 }
 
 NUdf::TUnboxedValue PgValueFromNativeBinary(const TStringBuf binary, ui32 pgTypeId) {
+    if (!NPg::HasType(pgTypeId)) {
+        return MakeString(binary);
+    }
+    
     TPAllocScope call;
     StringInfoData stringInfo;
     stringInfo.data = (char*)binary.Data();

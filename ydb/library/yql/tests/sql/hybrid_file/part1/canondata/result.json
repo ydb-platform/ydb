@@ -533,9 +533,9 @@
     ],
     "test.test[blocks-combine_all_decimal--Debug]": [
         {
-            "checksum": "7a0e71a7e966054ebec101c237fc821a",
-            "size": 8576,
-            "uri": "https://{canondata_backend}/1809005/7142336c5d0d72d24df8de2731d5f39f0b6e741c/resource.tar.gz#test.test_blocks-combine_all_decimal--Debug_/opt.yql_patched"
+            "checksum": "6a14942091e192a9cfc41b1f8bd222f0",
+            "size": 9047,
+            "uri": "https://{canondata_backend}/1871182/aba145d12e60259474a4d54a3c0451194ac1617f/resource.tar.gz#test.test_blocks-combine_all_decimal--Debug_/opt.yql_patched"
         }
     ],
     "test.test[blocks-combine_all_decimal--Plan]": [

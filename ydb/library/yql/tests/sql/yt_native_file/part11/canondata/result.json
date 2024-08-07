@@ -410,16 +410,16 @@
     ],
     "test.test[blocks-combine_all_decimal--Debug]": [
         {
-            "checksum": "2d87ece920dd279ffeb53ddeb221e21e",
-            "size": 7769,
-            "uri": "https://{canondata_backend}/1937027/3073fd2cfde77b81b6a295ad45a9161e0a1e4b68/resource.tar.gz#test.test_blocks-combine_all_decimal--Debug_/opt.yql"
+            "checksum": "114289acc7a4144ba97bc98472aba836",
+            "size": 8215,
+            "uri": "https://{canondata_backend}/1936273/3dc94c747fd0323396d150e2c3d46e4c23a5a7bc/resource.tar.gz#test.test_blocks-combine_all_decimal--Debug_/opt.yql"
         }
     ],
     "test.test[blocks-combine_all_decimal--Peephole]": [
         {
-            "checksum": "67212ff9f74c53f8029a6845b0bceace",
-            "size": 6260,
-            "uri": "https://{canondata_backend}/1937027/3073fd2cfde77b81b6a295ad45a9161e0a1e4b68/resource.tar.gz#test.test_blocks-combine_all_decimal--Peephole_/opt.yql"
+            "checksum": "b4aa8df16bc21d01673b7b5b3c12ca33",
+            "size": 6592,
+            "uri": "https://{canondata_backend}/1936273/3dc94c747fd0323396d150e2c3d46e4c23a5a7bc/resource.tar.gz#test.test_blocks-combine_all_decimal--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_all_decimal--Plan]": [

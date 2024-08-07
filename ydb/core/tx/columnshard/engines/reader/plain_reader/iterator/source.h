@@ -27,7 +27,7 @@ class TPlainReadData;
 class IFetchTaskConstructor;
 class IFetchingStep;
 
-class IDataSource: public NGroupedMemoryManager::IAllocation {
+class IDataSource {
 private:
     YDB_ACCESSOR(bool, ExclusiveIntervalOnly, true);
     YDB_READONLY(ui32, SourceIdx, 0);
@@ -47,9 +47,9 @@ private:
     bool AbortedFlag = false;
     TAtomic SourceStartedFlag = 0;
     std::shared_ptr<TFetchingScript> FetchingPlan;
-    std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> ResourcesGuard;
-    virtual void DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
-        const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation) override;
+    std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
+    std::optional<ui64> FirstIntervalId;
+    ui32 CurrentPlanStepIndex = 0;
 
 protected:
     bool IsSourceInMemoryFlag = true;
@@ -74,11 +74,31 @@ protected:
     }
 
 public:
+    ui64 GetResourceGuardsMemory() const {
+        ui64 result = 0;
+        for (auto&& i : ResourceGuards) {
+            result += i->GetMemory();
+        }
+        return result;
+    }
+
+    void RegisterAllocationGuard(const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& guard) {
+        ResourceGuards.emplace_back(guard);
+    }
+
     bool IsAborted() const {
         return AbortedFlag;
     }
     bool IsSourceInMemory() const {
         return IsSourceInMemoryFlag;
+    }
+    void SetFirstIntervalId(const ui64 value) {
+        AFL_VERIFY(!FirstIntervalId);
+        FirstIntervalId = value;
+    }
+    ui64 GetFirstIntervalId() const {
+        AFL_VERIFY(!!FirstIntervalId);
+        return *FirstIntervalId;
     }
     virtual bool IsSourceInMemory(const std::set<ui32>& fieldIds) const = 0;
     bool AddSequentialEntityIds(const ui32 entityId) {
@@ -89,10 +109,6 @@ public:
         return false;
     }
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const = 0;
-
-    const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& GetResourcesGuard() const {
-        return ResourcesGuard;
-    }
 
     virtual ui64 GetPathId() const = 0;
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
@@ -188,11 +204,13 @@ public:
     }
 
     void OnEmptyStageData() {
-        AFL_VERIFY(ResourcesGuard);
+        if (!ResourceGuards.size()) {
+            return;
+        }
         if (ExclusiveIntervalOnly) {
-            ResourcesGuard->Update(0);
+            ResourceGuards.back()->Update(0);
         } else {
-            ResourcesGuard->Update(GetColumnRawBytes(Context->GetPKColumns()->GetColumnIds()));
+            ResourceGuards.back()->Update(GetColumnRawBytes(Context->GetPKColumns()->GetColumnIds()));
         }
     }
 

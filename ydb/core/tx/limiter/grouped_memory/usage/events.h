@@ -12,6 +12,7 @@ struct TEvExternal {
     enum EEv {
         EvStartAllocationTask = EventSpaceBegin(TKikimrEvents::ES_GROUPED_ALLOCATIONS_MANAGER),
         EvFinishAllocationTask,
+        EvStartAllocationGroup,
         EvFinishAllocationGroup,
         EvUpdateAllocationTask,
         EvEnd
@@ -20,12 +21,17 @@ struct TEvExternal {
     class TEvStartTask: public NActors::TEventLocal<TEvStartTask, EvStartAllocationTask> {
     private:
         YDB_READONLY_DEF(std::vector<std::shared_ptr<IAllocation>>, Allocations);
+        YDB_READONLY_DEF(std::shared_ptr<TStageFeatures>, StageFeatures);
         YDB_READONLY(ui64, ExternalGroupId, 0);
 
     public:
-        explicit TEvStartTask(const std::vector<std::shared_ptr<IAllocation>>& allocations, const ui64 externalGroupId)
+        explicit TEvStartTask(const std::vector<std::shared_ptr<IAllocation>>& allocations, const std::shared_ptr<TStageFeatures>& stageFeatures,
+            const ui64 externalGroupId)
             : Allocations(allocations)
+            , StageFeatures(stageFeatures)
             , ExternalGroupId(externalGroupId) {
+            AFL_VERIFY(Allocations.size());
+            AFL_VERIFY(StageFeatures);
         }
     };
 
@@ -58,6 +64,16 @@ struct TEvExternal {
 
     public:
         explicit TEvFinishGroup(const ui64 externalGroupId)
+            : ExternalGroupId(externalGroupId) {
+        }
+    };
+
+    class TEvStartGroup: public NActors::TEventLocal<TEvStartGroup, EvStartAllocationGroup> {
+    private:
+        YDB_READONLY(ui64, ExternalGroupId, 0);
+
+    public:
+        explicit TEvStartGroup(const ui64 externalGroupId)
             : ExternalGroupId(externalGroupId) {
         }
     };

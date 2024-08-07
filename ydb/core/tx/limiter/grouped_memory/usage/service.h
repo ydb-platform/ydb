@@ -13,10 +13,12 @@ namespace NKikimr::NOlap::NGroupedMemoryManager {
 template <class TMemoryLimiterPolicy>
 class TServiceOperatorImpl {
 private:
-    bool IsEnabledFlag = false;
+    TConfig ServiceConfig = TConfig::BuildDisabledConfig();
+    std::shared_ptr<TStageFeatures> DefaultStageFeatures = std::make_shared<TStageFeatures>("DEFAULT", ((ui64)3) << 30, nullptr);
     using TSelf = TServiceOperatorImpl<TMemoryLimiterPolicy>;
     static void Register(const TConfig& serviceConfig) {
-        Singleton<TSelf>()->IsEnabledFlag = serviceConfig.IsEnabled();
+        Singleton<TSelf>()->ServiceConfig = serviceConfig;
+        Singleton<TSelf>()->DefaultStageFeatures = std::make_shared<TStageFeatures>("GLOBAL", serviceConfig.GetMemoryLimit(), nullptr);
     }
     static const TString& GetMemoryLimiterName() {
         Y_ABORT_UNLESS(TMemoryLimiterPolicy::Name.size() == 4);
@@ -24,6 +26,16 @@ private:
     }
 
 public:
+    static std::shared_ptr<TStageFeatures> BuildStageFeatures(const TString& name, const ui64 limit) {
+        AFL_VERIFY(Singleton<TSelf>()->DefaultStageFeatures);
+        return std::make_shared<TStageFeatures>(name, limit, Singleton<TSelf>()->DefaultStageFeatures);
+    }
+
+    static std::shared_ptr<TStageFeatures> GetDefaultStageFeatures() {
+        AFL_VERIFY(Singleton<TSelf>()->DefaultStageFeatures);
+        return Singleton<TSelf>()->DefaultStageFeatures;
+    }
+
     static std::shared_ptr<TGroupGuard> BuildGroupGuard() {
         static TAtomicCounter counter = 0;
         auto& context = NActors::TActorContext::AsActorContext();
@@ -31,23 +43,23 @@ public:
         return std::make_shared<TGroupGuard>(MakeServiceId(selfId.NodeId()), counter.Inc());
     }
 
-    static bool SendToAllocation(const std::vector<std::shared_ptr<IAllocation>>& tasks, const ui64 groupId) {
+    static bool SendToAllocation(const std::vector<std::shared_ptr<IAllocation>>& tasks, const std::shared_ptr<TStageFeatures>& stage, const ui64 groupId) {
         auto& context = NActors::TActorContext::AsActorContext();
         const NActors::TActorId& selfId = context.SelfID;
         if (TSelf::IsEnabled()) {
-            context.Send(MakeServiceId(selfId.NodeId()), new NEvents::TEvExternal::TEvStartTask(tasks, groupId));
+            context.Send(MakeServiceId(selfId.NodeId()), new NEvents::TEvExternal::TEvStartTask(tasks, stage, groupId));
             return true;
         } else {
             for (auto&& i : tasks) {
                 if (!i->IsAllocated()) {
-                    i->OnAllocated(std::make_shared<TAllocationGuard>(NActors::TActorId(), 0, i->GetMemory()), i);
+                    AFL_VERIFY(i->OnAllocated(std::make_shared<TAllocationGuard>(NActors::TActorId(), 0, i->GetMemory()), i));
                 }
             }
             return false;
         }
     }
     static bool IsEnabled() {
-        return Singleton<TSelf>()->IsEnabledFlag;
+        return Singleton<TSelf>()->ServiceConfig.IsEnabled();
     }
     static NActors::TActorId MakeServiceId(const ui32 nodeId) {
         return NActors::TActorId(nodeId, "SrvcMlmt" + GetMemoryLimiterName());

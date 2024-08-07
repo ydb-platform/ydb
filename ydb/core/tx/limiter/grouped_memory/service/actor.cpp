@@ -9,7 +9,7 @@ void TMemoryLimiterActor::Bootstrap() {
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartTask::TPtr& ev) {
     for (auto&& i : ev->Get()->GetAllocations()) {
-        Manager->RegisterAllocation(i, ev->Get()->GetExternalGroupId());
+        Manager->RegisterAllocation(i, ev->Get()->GetStageFeatures(), ev->Get()->GetExternalGroupId());
     }
 }
 
@@ -24,5 +24,10 @@ void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvUpdateTask::TPtr& ev) 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvFinishGroup::TPtr& ev) {
     Manager->UnregisterGroup(ev->Get()->GetExternalGroupId());
 }
+
+void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartGroup::TPtr& ev) {
+    Manager->RegisterGroup(ev->Get()->GetExternalGroupId());
+}
+
 
 }

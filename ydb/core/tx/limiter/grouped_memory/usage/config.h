@@ -11,6 +11,12 @@ private:
 
 public:
 
+    static TConfig BuildDisabledConfig() {
+        TConfig result;
+        result.Enabled = false;
+        return result;
+    }
+
     bool IsEnabled() const {
         return Enabled;
     }

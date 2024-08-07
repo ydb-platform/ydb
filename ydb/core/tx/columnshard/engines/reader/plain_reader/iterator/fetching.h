@@ -1,10 +1,14 @@
 #pragma once
 #include "columns_set.h"
-#include <ydb/library/accessor/accessor.h>
-#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
-#include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
+
+#include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/conveyor_task.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
+#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
+
+#include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
 class IDataSource;
@@ -19,6 +23,7 @@ protected:
     virtual TString DoDebugString() const {
         return "";
     }
+
 public:
     void AddDuration(const TDuration d) {
         SumDuration += d;
@@ -37,9 +42,7 @@ public:
     }
 
     IFetchingStep(const TString& name)
-        : Name(name)
-    {
-
+        : Name(name) {
     }
 
     TString DebugString() const {
@@ -53,6 +56,7 @@ class TFetchingScript {
 private:
     YDB_ACCESSOR(TString, BranchName, "UNDEFINED");
     std::vector<std::shared_ptr<IFetchingStep>> Steps;
+
 public:
     TFetchingScript() = default;
 
@@ -83,7 +87,7 @@ public:
 
     ui64 PredictRawBytes(const std::shared_ptr<IDataSource>& source) const {
         ui64 result = 0;
-        for (auto&& current: Steps) {
+        for (auto&& current : Steps) {
             result += current->DoPredictRawBytes(source);
         }
         return result;
@@ -125,9 +129,7 @@ private:
 public:
     TFetchingScriptCursor(const std::shared_ptr<TFetchingScript>& script, const ui32 index)
         : CurrentStepIdx(index)
-        , Script(script)
-    {
-
+        , Script(script) {
     }
 
     const TString& GetName() const {
@@ -152,6 +154,7 @@ private:
     std::shared_ptr<IDataSource> Source;
     TFetchingScriptCursor Cursor;
     bool FinishedFlag = false;
+
 protected:
     virtual bool DoApply(IDataReader& owner) const override;
     virtual TConclusionStatus DoExecuteImpl() override;
@@ -164,9 +167,7 @@ public:
     TStepAction(const std::shared_ptr<IDataSource>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId)
         : TBase(ownerActorId)
         , Source(source)
-        , Cursor(std::move(cursor))
-    {
-
+        , Cursor(std::move(cursor)) {
     }
 };
 
@@ -174,16 +175,17 @@ class TBuildFakeSpec: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
     const ui32 Count = 0;
+
 protected:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     virtual ui64 DoPredictRawBytes(const std::shared_ptr<IDataSource>& /*source*/) const override {
         return TIndexInfo::GetSpecialColumnsRecordSize() * Count;
     }
+
 public:
     TBuildFakeSpec(const ui32 count)
         : TBase("FAKE_SPEC")
-        , Count(count)
-    {
+        , Count(count) {
         AFL_VERIFY(Count);
     }
 };
@@ -192,14 +194,53 @@ class TApplyIndexStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
     const NIndexes::TIndexCheckerContainer IndexChecker;
+
 protected:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+
 public:
     TApplyIndexStep(const NIndexes::TIndexCheckerContainer& indexChecker)
         : TBase("APPLY_INDEX")
-        , IndexChecker(indexChecker)
-    {
+        , IndexChecker(indexChecker) {
+    }
+};
 
+class TAllocateMemoryStep: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+    std::shared_ptr<TColumnsSet> Columns;
+    const std::shared_ptr<NGroupedMemoryManager::TStageFeatures> Stage;
+
+protected:
+    class TFetchingStepAllocation: public NGroupedMemoryManager::IAllocation {
+    private:
+        using TBase = NGroupedMemoryManager::IAllocation;
+        std::weak_ptr<IDataSource> Source;
+        TFetchingScriptCursor Step;
+        NColumnShard::TCounterGuard TasksGuard;
+        virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
+            const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation) override;
+
+    public:
+        TFetchingStepAllocation(const std::shared_ptr<IDataSource>& source, const ui64 mem, const TFetchingScriptCursor& step);
+    };
+
+    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    virtual ui64 DoPredictRawBytes(const std::shared_ptr<IDataSource>& /*source*/) const override {
+        return 0;
+    }
+    virtual TString DoDebugString() const override {
+        return TStringBuilder() << "columns=" << Columns->DebugString() << ";stage=" << Stage->DebugString() << ";";
+    }
+
+public:
+    TAllocateMemoryStep(const std::shared_ptr<TColumnsSet>& columns, const std::shared_ptr<NGroupedMemoryManager::TStageFeatures>& stage)
+        : TBase("ALLOCATE_MEMORY::" + TValidator::CheckNotNull(stage)->GetName())
+        , Columns(columns)
+        , Stage(stage) {
+        AFL_VERIFY(Stage);
+        AFL_VERIFY(Columns);
+        AFL_VERIFY(Columns->GetColumnsCount());
     }
 };
 
@@ -207,12 +248,14 @@ class TColumnBlobsFetchingStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
     std::shared_ptr<TColumnsSet> Columns;
+
 protected:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     virtual ui64 DoPredictRawBytes(const std::shared_ptr<IDataSource>& source) const override;
     virtual TString DoDebugString() const override {
         return TStringBuilder() << "columns=" << Columns->DebugString() << ";";
     }
+
 public:
     TColumnBlobsFetchingStep(const std::shared_ptr<TColumnsSet>& columns)
         : TBase("FETCHING_COLUMNS")
@@ -226,12 +269,14 @@ class TIndexBlobsFetchingStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
     std::shared_ptr<TIndexesSet> Indexes;
+
 protected:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     virtual ui64 DoPredictRawBytes(const std::shared_ptr<IDataSource>& source) const override;
     virtual TString DoDebugString() const override {
         return TStringBuilder() << "indexes=" << Indexes->DebugString() << ";";
     }
+
 public:
     TIndexBlobsFetchingStep(const std::shared_ptr<TIndexesSet>& indexes)
         : TBase("FETCHING_INDEXES")
@@ -248,12 +293,12 @@ private:
     virtual TString DoDebugString() const override {
         return TStringBuilder() << "columns=" << Columns->DebugString() << ";";
     }
+
 public:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     TAssemblerStep(const std::shared_ptr<TColumnsSet>& columns, const TString& specName = Default<TString>())
         : TBase("ASSEMBLER" + (specName ? "::" + specName : ""))
-        , Columns(columns)
-    {
+        , Columns(columns) {
         AFL_VERIFY(Columns);
         AFL_VERIFY(Columns->GetColumnsCount());
     }
@@ -266,8 +311,10 @@ private:
     virtual TString DoDebugString() const override {
         return TStringBuilder() << "columns=" << Columns->DebugString() << ";";
     }
+
 protected:
     virtual bool DoInitSourceSeqColumnIds(const std::shared_ptr<IDataSource>& source) const override;
+
 public:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     TOptionalAssemblerStep(const std::shared_ptr<TColumnsSet>& columns, const TString& specName = Default<TString>())
@@ -282,29 +329,30 @@ class TFilterProgramStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
     std::shared_ptr<NSsa::TProgramStep> Step;
+
 protected:
     virtual ui64 DoPredictRawBytes(const std::shared_ptr<IDataSource>& source) const override;
+
 public:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     TFilterProgramStep(const std::shared_ptr<NSsa::TProgramStep>& step)
         : TBase("PROGRAM")
-        , Step(step)
-    {
+        , Step(step) {
     }
 };
 
 class TPredicateFilter: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
+
 public:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     TPredicateFilter()
         : TBase("PREDICATE") {
-
     }
 };
 
-class TSnapshotFilter : public IFetchingStep {
+class TSnapshotFilter: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
 
@@ -326,7 +374,7 @@ public:
     }
 };
 
-class TShardingFilter : public IFetchingStep {
+class TShardingFilter: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
 
@@ -337,5 +385,4 @@ public:
     }
 };
 
-
-}
+}   // namespace NKikimr::NOlap::NReader::NPlain

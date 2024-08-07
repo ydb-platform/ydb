@@ -20,6 +20,8 @@ void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocat
     AFL_VERIFY(itInterval != FetchingIntervals.end());
     itInterval->second->SetMerger(std::move(merger));
     AFL_VERIFY(Context->GetCommonContext()->GetReadMetadata()->IsSorted());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_result_received")("interval_idx", intervalIdx)(
+        "intervalId", itInterval->second->GetIntervalId());
     if (newBatch && newBatch->GetRecordsCount()) {
         const std::optional<ui32> callbackIdxSubscriver = itInterval->second->HasMerger() ? std::optional<ui32>(intervalIdx) : std::nullopt;
         AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, std::make_shared<TPartialReadResult>(std::move(allocationGuard), *newBatch, lastPK, callbackIdxSubscriver)).second);
@@ -32,10 +34,13 @@ void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocat
         const ui32 intervalIdx = interval->GetIntervalIdx();
         auto it = ReadyIntervals.find(intervalIdx);
         if (it == ReadyIntervals.end()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_result_absent")("interval_idx", intervalIdx)(
+                "merger", interval->HasMerger())("intervalId", interval->GetIntervalId());
             break;
+        } else {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_result")("interval_idx", intervalIdx)("count",
+                it->second ? it->second->GetRecordsCount() : 0)("merger", interval->HasMerger())("intervalId", interval->GetIntervalId());
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_result")("interval_idx", intervalIdx)(
-            "count", it->second ? it->second->GetRecordsCount() : 0);
         auto result = it->second;
         ReadyIntervals.erase(it);
         if (result) {
@@ -248,7 +253,7 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
                     "count", FetchingIntervals.size())("limit", InFlightLimit);
                 return false;
             }
-            if (Context->GetCommonContext()->GetCounters().GetRequestedMemoryBytes() >= MaxInFlightMemory) {
+            if (Context->GetRequestedMemoryBytes() >= MaxInFlightMemory) {
                 AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_next_interval")("reason", "a lot of memory in usage")(
                     "volume", Context->GetCommonContext()->GetCounters().GetRequestedMemoryBytes())("limit", MaxInFlightMemory);
                 return false;

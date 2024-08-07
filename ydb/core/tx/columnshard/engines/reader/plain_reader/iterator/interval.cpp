@@ -6,33 +6,24 @@
 namespace NKikimr::NOlap::NReader::NPlain {
 
 void TFetchingInterval::ConstructResult() {
-    if (ReadySourcesCount.Val() != WaitSourcesCount) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_construct_result")("interval_idx", IntervalIdx);
+    const ui32 ready = ReadySourcesCount.Val();
+    if (ready != WaitSourcesCount) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_construct_result")("interval_idx", IntervalIdx)(
+            "count", WaitSourcesCount)("ready", ready)("interval_id", GetIntervalId());
         return;
     } else {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "start_construct_result")("interval_idx", IntervalIdx);
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "start_construct_result")("interval_idx", IntervalIdx)(
+            "interval_id", GetIntervalId());
     }
     if (AtomicCas(&SourcesFinalized, 1, 0)) {
         IntervalStateGuard.SetStatus(NColumnShard::TScanCounters::EIntervalStatus::WaitMergerStart);
 
-        std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> guard;
-        if (MergingContext->IsExclusiveInterval()) {
-            AFL_VERIFY(Sources.size() == 1)("size", Sources.size());
-            guard = Sources.begin()->second->GetResourcesGuard();
-            MergingContext->SetIntervalChunkMemory(guard->GetMemory());
-        } else {
-            MergingContext->SetIntervalChunkMemory(Context->GetMemoryForSources(Sources));
-        }
+        MergingContext->SetIntervalChunkMemory(Context->GetMemoryForSources(Sources));
 
         auto task = std::make_shared<TStartMergeTask>(MergingContext, Context, std::move(Sources));
         task->SetPriority(NConveyor::ITask::EPriority::High);
-        if (guard) {
-            task->SetMemoryForAllocation(guard->GetMemory());
-            task->OnAllocated(std::move(guard), task);
-        } else {
-            task->SetMemoryForAllocation(MergingContext->GetIntervalChunkMemory());
-            NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation({ task }, GetIntervalId());
-        }
+        task->SetMemoryForAllocation(MergingContext->GetIntervalChunkMemory());
+        NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation({ task }, Context->GetMergeStageMemory(), GetIntervalId());
     }
 }
 
@@ -56,7 +47,10 @@ TFetchingInterval::TFetchingInterval(const NArrow::NMerger::TSortableBatchPositi
     for (auto&& [_, i] : Sources) {
         if (!i->IsDataReady()) {
             ++WaitSourcesCount;
+        } else {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "ready_source")("interval_idx", IntervalIdx)("interval_id", GetIntervalId());
         }
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "register_source")("interval_idx", IntervalIdx)("interval_id", GetIntervalId());
         i->RegisterInterval(*this, i);
     }
     IntervalStateGuard.SetStatus(NColumnShard::TScanCounters::EIntervalStatus::WaitResources);
@@ -88,7 +82,7 @@ void TFetchingInterval::OnPartSendingComplete() {
     auto task = std::make_shared<TContinueMergeTask>(MergingContext, Context, std::move(Merger));
     task->SetPriority(NConveyor::ITask::EPriority::High);
     task->SetMemoryForAllocation(MergingContext->GetIntervalChunkMemory());
-    NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation({ task }, GetIntervalId());
+    NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation({ task }, Context->GetMergeStageMemory(), GetIntervalId());
 }
 
 }   // namespace NKikimr::NOlap::NReader::NPlain

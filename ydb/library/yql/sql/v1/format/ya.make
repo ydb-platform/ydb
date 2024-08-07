@@ -5,6 +5,7 @@ SRCS(
     sql_format.cpp
 )
 
+RESOURCE(DONT_PARSE ../SQLv1.g.in SQLv1.g)
 RESOURCE(DONT_PARSE ../SQLv1Antlr4.g.in SQLv1Antlr4.g.in)
 
 PEERDIR(

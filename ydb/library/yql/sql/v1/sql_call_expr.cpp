@@ -1,7 +1,7 @@
 #include "sql_call_expr.h"
 #include "sql_expression.h"
 
-#include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Antlr4Lexer.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Lexer.h>
 
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 

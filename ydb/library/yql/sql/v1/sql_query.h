@@ -2,7 +2,7 @@
 
 #include "sql_translation.h"
 
-#include <ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Antlr4Parser.pb.main.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
 #include <util/string/split.h>
 
 namespace NSQLTranslationV1 {
@@ -61,7 +61,13 @@ private:
         humanStatementName.clear();
         const auto& descr = AltDescription(node);
         TVector<TString> parts;
-        Split(descr, "_", parts);
+        if (!Ctx.Settings.Antlr4Parser) {
+            const auto pos = descr.find(": ");
+            Y_DEBUG_ABORT_UNLESS(pos != TString::npos);
+            Split(TString(descr.begin() + pos + 2, descr.end()), "_", parts);   
+        } else {
+            Split(descr, "_", parts);
+        }
         Y_DEBUG_ABORT_UNLESS(parts.size() > 1);
         parts.pop_back();
         for (auto& part: parts) {

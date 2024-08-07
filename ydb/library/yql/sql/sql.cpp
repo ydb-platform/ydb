@@ -125,7 +125,7 @@ namespace NSQLTranslation {
 
                 return NSQLTranslationV0::MakeLexer();
             case 1:
-                return NSQLTranslationV1::MakeLexer(parsedSettings.AnsiLexer);
+                return NSQLTranslationV1::MakeLexer(parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
             default:
                 issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                     TStringBuilder() << "Unknown SQL syntax version: " << parsedSettings.SyntaxVersion));

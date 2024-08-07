@@ -4,6 +4,6 @@
 
 namespace NSQLTranslationV1 {
 
-NSQLTranslation::ILexer::TPtr MakeLexer(bool ansi);
+NSQLTranslation::ILexer::TPtr MakeLexer(bool ansi, bool antlr4);
 
 }

@@ -2,8 +2,10 @@
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/parser/proto_ast/collect_issues/collect_issues.h>
-#include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Antlr4Lexer.h>
-#include <ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1Antlr4Lexer.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Lexer.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1Lexer.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Lexer.h>
 
 #if defined(_tsan_enabled_)
 #include <util/system/mutex.h>
@@ -22,8 +24,8 @@ using NSQLTranslation::ILexer;
 
 class TV1Lexer : public ILexer {
 public:
-    explicit TV1Lexer(bool ansi)
-        : Ansi(ansi)
+    explicit TV1Lexer(bool ansi, bool antlr4)
+        : Ansi(ansi), Antlr4(antlr4)
     {
     }
 
@@ -33,7 +35,13 @@ public:
         TGuard<TMutex> grd(SanitizerSQLTranslationMutex);
 #endif
         NSQLTranslation::TErrorCollectorOverIssues collector(newIssues, maxErrors, "");
-        if (Ansi) {
+        if (Ansi && !Antlr4) {
+            NProtoAST::TLexerTokensCollector<NALPAnsi::SQLv1Lexer> tokensCollector(query, (const char**)NALPAnsi::SQLv1ParserTokenNames, queryName);
+            tokensCollector.CollectTokens(collector, onNextToken);
+        } else if (!Ansi && !Antlr4) {
+            NProtoAST::TLexerTokensCollector<NALPDefault::SQLv1Lexer> tokensCollector(query, (const char**)NALPDefault::SQLv1ParserTokenNames, queryName);
+            tokensCollector.CollectTokens(collector, onNextToken);
+        } else if (Ansi && Antlr4) {
             NProtoAST::TLexerTokensCollector<NALPAnsi::SQLv1Antlr4Lexer> tokensCollector(query, queryName);
             tokensCollector.CollectTokens(collector, onNextToken);
         } else {
@@ -47,12 +55,13 @@ public:
 
 private:
     const bool Ansi;
+    const bool Antlr4;
 };
 
 } // namespace
 
-NSQLTranslation::ILexer::TPtr MakeLexer(bool ansi) {
-    return NSQLTranslation::ILexer::TPtr(new TV1Lexer(ansi));
+NSQLTranslation::ILexer::TPtr MakeLexer(bool ansi, bool antlr4) {
+    return NSQLTranslation::ILexer::TPtr(new TV1Lexer(ansi, antlr4));
 }
 
 } //  namespace NSQLTranslationV1

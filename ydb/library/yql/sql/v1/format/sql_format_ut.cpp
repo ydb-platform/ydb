@@ -15,33 +15,47 @@ struct TSetup {
         NSQLTranslation::TTranslationSettings settings;
         settings.Arena = &Arena;
         Formatter = NSQLFormat::MakeSqlFormatter(settings);
+        settings.Antlr4Parser = true;
+        FormatterAntlr4 = NSQLFormat::MakeSqlFormatter(settings);
     }
 
     void Run(const TCases& cases, NSQLFormat::EFormatMode mode = NSQLFormat::EFormatMode::Pretty) {
         for (const auto& c : cases) {
             NYql::TIssues issues;
+            NYql::TIssues issuesAntlr4;
             TString formatted;
+            TString formattedAntlr4;
             auto res = Formatter->Format(c.first, formatted, issues, mode);
+            auto resAntlr4 = FormatterAntlr4->Format(c.first, formattedAntlr4, issuesAntlr4, mode);
             UNIT_ASSERT_C(res, issues.ToString());
+            UNIT_ASSERT_C(resAntlr4, issuesAntlr4.ToString());
             auto expected = c.second;
             SubstGlobal(expected, "\t", TString(NSQLFormat::OneIndent, ' '));
             UNIT_ASSERT_NO_DIFF(formatted, expected);
+            UNIT_ASSERT_NO_DIFF(formattedAntlr4, expected);
 
             TString formatted2;
+            TString formatted2Antlt4;
             auto res2 = Formatter->Format(formatted, formatted2, issues);
+            auto res2Antlr4 = FormatterAntlr4->Format(formatted, formatted2Antlt4, issuesAntlr4);
             UNIT_ASSERT_C(res2, issues.ToString());
+            UNIT_ASSERT_C(res2Antlr4, issuesAntlr4.ToString());
             UNIT_ASSERT_NO_DIFF(formatted, formatted2);
+            UNIT_ASSERT_NO_DIFF(formattedAntlr4, formatted2Antlt4);
 
             if (mode == NSQLFormat::EFormatMode::Pretty) {
                 auto mutatedQuery = NSQLFormat::MutateQuery(c.first);
                 auto res3 = Formatter->Format(mutatedQuery, formatted, issues);
+                auto res3Antlr4 = FormatterAntlr4->Format(mutatedQuery, formattedAntlr4, issuesAntlr4);
                 UNIT_ASSERT_C(res3, issues.ToString());
+                UNIT_ASSERT_C(res3Antlr4, issuesAntlr4.ToString());
             }
         }
     }
 
     google::protobuf::Arena Arena;
     NSQLFormat::ISqlFormatter::TPtr Formatter;
+    NSQLFormat::ISqlFormatter::TPtr FormatterAntlr4;
 };
 
 }

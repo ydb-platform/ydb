@@ -279,8 +279,8 @@ private:
     }
 
 private:
-    const NMetadata::NModifications::IOperationsManager::TInternalModificationContext& Context;
-    const NMetadata::NModifications::TAlterOperationContext& AlterContext;
+    const NMetadata::NModifications::IOperationsManager::TInternalModificationContext Context;
+    const NMetadata::NModifications::TAlterOperationContext AlterContext;
 
     bool Serverless = false;
     bool FeatureFlagChecked = false;

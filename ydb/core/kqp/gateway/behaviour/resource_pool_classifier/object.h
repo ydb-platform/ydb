@@ -36,6 +36,8 @@ public:
     NMetadata::NInternal::TTableRecord SerializeToRecord() const;
     NJson::TJsonValue GetDebugJson() const;
 
+    bool operator==(const TResourcePoolClassifierConfig& other) const;
+
     static NMetadata::IClassBehaviour::TPtr GetBehaviour();
     static TString GetTypeId();
 };

@@ -6921,7 +6921,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":{\"MyResourcePoolClassifier\":{\"rank\":20,\"name\":\"MyResourcePoolClassifier\",\"membername\":\"test@user\",\"resource_pool\":\"test_pool\",\"database\":\"\\/Root\"}}}");
+        UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":[{\"rank\":20,\"name\":\"MyResourcePoolClassifier\",\"membername\":\"test@user\",\"resource_pool\":\"test_pool\",\"database\":\"\\/Root\"}]}");
 
         // Auto rank
         query = R"(
@@ -6930,7 +6930,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             );)";
         result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":{\"AnotherResourcePoolClassifier\":{\"rank\":1020,\"name\":\"AnotherResourcePoolClassifier\",\"membername\":\"another@user\",\"resource_pool\":\"default\",\"database\":\"\\/Root\"},\"MyResourcePoolClassifier\":{\"rank\":20,\"name\":\"MyResourcePoolClassifier\",\"membername\":\"test@user\",\"resource_pool\":\"test_pool\",\"database\":\"\\/Root\"}}}");
+        UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":[{\"rank\":20,\"name\":\"MyResourcePoolClassifier\",\"membername\":\"test@user\",\"resource_pool\":\"test_pool\",\"database\":\"\\/Root\"},{\"rank\":1020,\"name\":\"AnotherResourcePoolClassifier\",\"membername\":\"another@user\",\"resource_pool\":\"default\",\"database\":\"\\/Root\"}]}");
     }
 
     Y_UNIT_TEST(DoubleCreateResourcePoolClassifier) {
@@ -6984,7 +6984,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":{\"MyResourcePoolClassifier\":{\"rank\":20,\"name\":\"MyResourcePoolClassifier\",\"membername\":\"\",\"resource_pool\":\"test_pool\",\"database\":\"\\/Root\"}}}");
+            UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":[{\"rank\":20,\"name\":\"MyResourcePoolClassifier\",\"membername\":\"\",\"resource_pool\":\"test_pool\",\"database\":\"\\/Root\"}]}");
         }
 
         // Alter sample pool
@@ -6996,7 +6996,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 )";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":{\"MyResourcePoolClassifier\":{\"rank\":1,\"name\":\"MyResourcePoolClassifier\",\"membername\":\"test@user\",\"resource_pool\":\"default\",\"database\":\"\\/Root\"}}}");
+            UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":[{\"rank\":1,\"name\":\"MyResourcePoolClassifier\",\"membername\":\"test@user\",\"resource_pool\":\"default\",\"database\":\"\\/Root\"}]}");
         }
 
         // Create another pool
@@ -7007,7 +7007,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":{\"AnotherResourcePoolClassifier\":{\"rank\":42,\"name\":\"AnotherResourcePoolClassifier\",\"membername\":\"\",\"resource_pool\":\"default\",\"database\":\"\\/Root\"},\"MyResourcePoolClassifier\":{\"rank\":1,\"name\":\"MyResourcePoolClassifier\",\"membername\":\"test@user\",\"resource_pool\":\"default\",\"database\":\"\\/Root\"}}}");
+            UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":[{\"rank\":1,\"name\":\"MyResourcePoolClassifier\",\"membername\":\"test@user\",\"resource_pool\":\"default\",\"database\":\"\\/Root\"},{\"rank\":42,\"name\":\"AnotherResourcePoolClassifier\",\"membername\":\"\",\"resource_pool\":\"default\",\"database\":\"\\/Root\"}]}");
         }
 
         // Test rank reset
@@ -7018,7 +7018,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 )";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":{\"AnotherResourcePoolClassifier\":{\"rank\":42,\"name\":\"AnotherResourcePoolClassifier\",\"membername\":\"\",\"resource_pool\":\"default\",\"database\":\"\\/Root\"},\"MyResourcePoolClassifier\":{\"rank\":1042,\"name\":\"MyResourcePoolClassifier\",\"membername\":\"test@user\",\"resource_pool\":\"default\",\"database\":\"\\/Root\"}}}");
+            UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":[{\"rank\":1042,\"name\":\"MyResourcePoolClassifier\",\"membername\":\"test@user\",\"resource_pool\":\"default\",\"database\":\"\\/Root\"},{\"rank\":42,\"name\":\"AnotherResourcePoolClassifier\",\"membername\":\"\",\"resource_pool\":\"default\",\"database\":\"\\/Root\"}]}");
         }
     }
 
@@ -7040,14 +7040,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":{\"MyResourcePoolClassifier\":{\"rank\":20,\"name\":\"MyResourcePoolClassifier\",\"membername\":\"\",\"resource_pool\":\"default\",\"database\":\"\\/Root\"}}}");
+            UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":[{\"rank\":20,\"name\":\"MyResourcePoolClassifier\",\"membername\":\"\",\"resource_pool\":\"default\",\"database\":\"\\/Root\"}]}");
         }
 
         {
             auto query = "DROP RESOURCE POOL CLASSIFIER MyResourcePoolClassifier";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":{}}");
+            UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":[]}");
         }
     }
 }

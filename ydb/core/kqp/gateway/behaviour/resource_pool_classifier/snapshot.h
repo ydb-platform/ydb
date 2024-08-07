@@ -9,7 +9,7 @@ namespace NKikimr::NKqp {
 
 class TResourcePoolClassifierSnapshot : public NMetadata::NFetcher::ISnapshot {
     using TBase = NMetadata::NFetcher::ISnapshot;
-    using TConfigsMap = TMap<TString, TResourcePoolClassifierConfig>;
+    using TConfigsMap = std::unordered_map<TString, std::unordered_map<TString, TResourcePoolClassifierConfig>>;
 
     YDB_ACCESSOR_DEF(TConfigsMap, ResourcePoolClassifierConfigs);
 

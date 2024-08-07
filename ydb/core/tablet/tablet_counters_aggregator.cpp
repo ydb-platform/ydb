@@ -815,8 +815,8 @@ private:
 
         TCounterPtr ColumnShardScannedBytes_;
         TCounterPtr ColumnShardScannedRows_;
-        TCounterPtr ColumnShardRowsWritten_;
-        TCounterPtr ColumnShardUpsertBytesWritten_;
+        TCounterPtr ColumnShardOperationsRowsWritten_;
+        TCounterPtr ColumnShardOperationsBytesWritten_;
         TCounterPtr ColumnShardErasedBytes_;
         TCounterPtr ColumnShardErasedRows_;
         THistogramPtr ColumnShardConsumedCpuHistogram;
@@ -967,8 +967,8 @@ private:
 
                 ColumnShardScannedBytes_ = appGroup->GetCounter("ColumnShard/ScannedBytes");
                 ColumnShardScannedRows_ = appGroup->GetCounter("ColumnShard/ScannedRows");
-                ColumnShardRowsWritten_ = appGroup->GetCounter("ColumnShard/RowsWritten");
-                ColumnShardUpsertBytesWritten_ = appGroup->GetCounter("ColumnShard/UpsertBytesWritten");
+                ColumnShardOperationsRowsWritten_ = appGroup->GetCounter("ColumnShard/RowsWritten");
+                ColumnShardOperationsBytesWritten_ = appGroup->GetCounter("ColumnShard/OperationsBytesWritten");
                 ColumnShardErasedBytes_ = appGroup->GetCounter("ColumnShard/BytesErased");
                 ColumnShardErasedRows_ = appGroup->GetCounter("ColumnShard/RowsErased");
                 ColumnShardConsumedCpuHistogram = appGroup->FindHistogram("HIST(ConsumedCPU)");
@@ -1023,8 +1023,8 @@ private:
                 ColumnShardScanBytes_->Set(ColumnShardScannedBytes_->Val());
                 ColumnShardWriteRows_->Set(0);
                 ColumnShardWriteBytes_->Set(0);
-                ColumnShardBulkUpsertRows_->Set(ColumnShardRowsWritten_->Val());
-                ColumnShardBulkUpsertBytes_->Set(ColumnShardUpsertBytesWritten_->Val());
+                ColumnShardBulkUpsertRows_->Set(ColumnShardOperationsRowsWritten_->Val());
+                ColumnShardBulkUpsertBytes_->Set(ColumnShardOperationsBytesWritten_->Val());
                 ColumnShardEraseRows_->Set(ColumnShardErasedRows_->Val());
                 ColumnShardEraseBytes_->Set(ColumnShardErasedBytes_->Val());
 

@@ -71,9 +71,6 @@ public:
     }
 
     void OnWriteSuccess(const ui64 blobsWritten, const ui64 bytesWritten) const {
-        IncCounter(NColumnShard::COUNTER_UPSERT_BLOBS_WRITTEN, blobsWritten);
-        IncCounter(NColumnShard::COUNTER_UPSERT_BYTES_WRITTEN, bytesWritten);
-        //    self.Stats.GetTabletCounters().IncCounter(NColumnShard::COUNTER_RAW_BYTES_UPSERTED, insertedBytes);
         IncCounter(NColumnShard::COUNTER_WRITE_SUCCESS);
     }
 
@@ -106,8 +103,10 @@ public:
         IncCounter(NColumnShard::COUNTER_INDEXING_TIME, duration.MilliSeconds());
     }
 
-    void OnWritePutBlobsSuccess(const ui64 rowsWritten) const {
-        IncCounter(NColumnShard::COUNTER_ROWS_WRITTEN, rowsWritten);
+    void OnWritePutBlobsSuccess(const ui64 rowsWritten, const ui64 bytesWritten) const {
+        IncCounter(NColumnShard::COUNTER_OPERATIONS_BLOBS_WRITTEN, blobsWritten);
+        IncCounter(NColumnShard::COUNTER_OPERATIONS_BYTES_WRITTEN, bytesWritten);
+        IncCounter(NColumnShard::COUNTER_OPERATIONS_ROWS_WRITTEN, rowsWritten);
     }
 
     void OnDropPortionEvent(const ui64 rawBytes, const ui64 blobBytes, const ui64 rows) const {

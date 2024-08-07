@@ -88,8 +88,8 @@ public:
         ScanCounters.FillStats(tableStats);
     }
 
-    void OnWritePutBlobsSuccess(const TDuration d, const ui64 rowsWritten) const {
-        TabletCounters->OnWritePutBlobsSuccess(rowsWritten);
+    void OnWritePutBlobsSuccess(const TDuration d, const ui64 rowsWritten, const ui64 bytesWritten) const {
+        TabletCounters->OnWritePutBlobsSuccess(rowsWritten, bytesWritten);
         CSCounters.OnWritePutBlobsSuccess(d);
     }
 };

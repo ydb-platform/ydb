@@ -754,6 +754,7 @@ public:
                 }
 
                 ctx.Step
+                    .Repeat(TExprStep::ExpandApplyForLambdas)
                     .Repeat(TExprStep::ExprEval)
                     .Repeat(TExprStep::DiscoveryIO)
                     .Repeat(TExprStep::Epochs)
@@ -762,7 +763,7 @@ public:
                     .Repeat(TExprStep::RewriteIO);
 
                 const auto& query = tableDesc.Metadata->ViewPersistedData.QueryText;
-                return RewriteReadFromView(node, ctx, query, cluster);
+                return RewriteReadFromView(node, ctx, query, cluster, Types.Modules);
             }
         }
 

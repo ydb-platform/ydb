@@ -529,7 +529,7 @@ memory_controller_config:
 
 #### Non-flexible memory limits
 
-Other {{ ydb-short-name }} components have only fixed memory limit without minimum and maximum thresholds for their memory consumption.
+Other {{ ydb-short-name }} components have only a fixed memory limit without minimum and maximum thresholds.
 
 These components are:
 

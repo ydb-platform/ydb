@@ -410,6 +410,8 @@ public:
     NMonitoring::THistogramPtr DataTxTotalTimeHistogram;
     NMonitoring::THistogramPtr ScanTxTotalTimeHistogram;
 
+    NMonitoring::TDynamicCounters::TCounterPtr RowsDuplicationsFound;
+
     TAlignedPagePoolCounters AllocCounters;
 
     // db counters

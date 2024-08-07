@@ -1021,8 +1021,8 @@ private:
                 ColumnShardReadBytes_->Set(0);
                 ColumnShardScanRows_->Set(ColumnShardScannedRows_->Val());
                 ColumnShardScanBytes_->Set(ColumnShardScannedBytes_->Val());
-                ColumnShardWriteRows_->Set(0);
-                ColumnShardWriteBytes_->Set(0);
+                ColumnShardWriteRows_->Set(ColumnShardOperationsRowsWritten_->Val());
+                ColumnShardWriteBytes_->Set(ColumnShardOperationsBytesWritten_->Val());
                 ColumnShardBulkUpsertRows_->Set(ColumnShardOperationsRowsWritten_->Val());
                 ColumnShardBulkUpsertBytes_->Set(ColumnShardOperationsBytesWritten_->Val());
                 ColumnShardEraseRows_->Set(ColumnShardErasedRows_->Val());

@@ -71,6 +71,8 @@ public:
     }
 
     void OnWriteSuccess(const ui64 blobsWritten, const ui64 bytesWritten) const {
+        IncCounter(NColumnShard::COUNTER_OPERATIONS_BLOBS_WRITTEN, blobsWritten);
+        IncCounter(NColumnShard::COUNTER_OPERATIONS_BYTES_WRITTEN, bytesWritten);
         IncCounter(NColumnShard::COUNTER_WRITE_SUCCESS);
     }
 
@@ -103,9 +105,7 @@ public:
         IncCounter(NColumnShard::COUNTER_INDEXING_TIME, duration.MilliSeconds());
     }
 
-    void OnWritePutBlobsSuccess(const ui64 rowsWritten, const ui64 bytesWritten) const {
-        IncCounter(NColumnShard::COUNTER_OPERATIONS_BLOBS_WRITTEN, blobsWritten);
-        IncCounter(NColumnShard::COUNTER_OPERATIONS_BYTES_WRITTEN, bytesWritten);
+    void OnWritePutBlobsSuccess(const ui64 rowsWritten) const {
         IncCounter(NColumnShard::COUNTER_OPERATIONS_ROWS_WRITTEN, rowsWritten);
     }
 
@@ -116,7 +116,7 @@ public:
     }
 
     void FillStats(::NKikimrTableStats::TTableStats& output) const {
-        output.SetRowUpdates(GetValue(COUNTER_ROWS_WRITTEN));
+        output.SetRowUpdates(GetValue(COUNTER_OPERATIONS_ROWS_WRITTEN));
         output.SetRowDeletes(GetValue(COUNTER_ROWS_ERASED));
         output.SetRowReads(0);   // all reads are range reads
         output.SetRangeReadRows(GetValue(COUNTER_READ_INDEX_ROWS));

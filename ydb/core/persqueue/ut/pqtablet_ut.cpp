@@ -1588,7 +1588,6 @@ Y_UNIT_TEST_F(Huge_ProposeTransacton, TPQTabletFixture)
                                              .Consumers={
                                              {.Consumer="client-1", .Generation=0},
                                              {.Consumer="client-3", .Generation=7},
-                                             {.Consumer=TString(7'000'000, 'a'), .Generation=7}
                                              },
                                              .Partitions={
                                              {.Id=0},
@@ -1598,7 +1597,8 @@ Y_UNIT_TEST_F(Huge_ProposeTransacton, TPQTabletFixture)
                                              {.Id=0, .TabletId=Ctx->TabletId, .Children={}, .Parents={2}},
                                              {.Id=1, .TabletId=Ctx->TabletId, .Children={}, .Parents={2}},
                                              {.Id=2, .TabletId=mockTabletId,  .Children={0, 1}, .Parents={}}
-                                             }});
+                                             },
+                                             .HugeConfig = true});
 
     const ui64 txId_1 = 67890;
     SendProposeTransactionRequest({.TxId=txId_1,
@@ -1621,10 +1621,9 @@ Y_UNIT_TEST_F(Huge_ProposeTransacton, TPQTabletFixture)
     PQTabletRestart(*Ctx);
     ResetPipe();
 
-    WaitForProposePartitionConfigResult(2);
-//    SendPlanStep({.Step=100, .TxIds={txId_1, txId_2}});
-//    WaitPlanStepAck({.Step=100, .TxIds={txId_1, txId_2}});
-//    WaitPlanStepAccepted({.Step=100});
+    SendPlanStep({.Step=100, .TxIds={txId_1, txId_2}});
+    WaitPlanStepAck({.Step=100, .TxIds={txId_1, txId_2}});
+    WaitPlanStepAccepted({.Step=100});
 }
 
 }

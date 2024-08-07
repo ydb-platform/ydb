@@ -743,7 +743,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         const TInstant now = Now() - TDuration::Days(100);
         runtime.UpdateCurrentTime(now);
 
-        lHelper.StartSchemaRequest("GRANT SELECT ATTRIBUTES, MODIFY ATTRIBUTES, ALTER SCHEMA, DESCRIBE SCHEMA ON `/Root/olapStore/olapTable` TO `user@builtin`");
+        lHelper.StartSchemaRequest("GRANT ALTER SCHEMA, DESCRIBE SCHEMA ON `/Root/olapStore/olapTable` TO `user@builtin`");
 
         lHelper.StartSchemaRequest("ALTER TABLE `/Root/olapStore/olapTable` SET (TIERING = 'tiering2', TTL = Interval(\"P1D\") ON `timestamp`);",
             true, true, "user@builtin");

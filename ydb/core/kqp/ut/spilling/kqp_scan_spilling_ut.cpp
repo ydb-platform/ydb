@@ -39,11 +39,11 @@ NKikimrConfig::TAppConfig AppCfgLowComputeLimits(double reasonableTreshold, bool
     rm->SetMkqlLightProgramMemoryLimit(100);
     rm->SetMkqlHeavyProgramMemoryLimit(300);
     rm->SetSpillingPercent(reasonableTreshold);
-    appCfg.MutableTableServiceConfig()->SetEnableQueryServiceSpilling(true);
+    appCfg.MutableTableServiceConfig()->SetEnableQueryServiceSpilling(enableSpilling);
 
     auto* spilling = appCfg.MutableTableServiceConfig()->MutableSpillingServiceConfig()->MutableLocalFileConfig();
 
-    spilling->SetEnable(enableSpilling);
+    spilling->SetEnable(true);
     spilling->SetRoot("./spilling/");
 
     return appCfg;
@@ -68,6 +68,7 @@ constexpr auto SimpleGraceJoinWithSpillingQuery = R"(
         from `/Root/KeyValue` as t1 full join `/Root/KeyValue` as t2 on t1.Value = t2.Value
         order by t1.Value
     )";
+
 
 } // anonymous namespace
 
@@ -121,7 +122,7 @@ Y_UNIT_TEST_TWIN(SpillingInRuntimeNodes, EnabledSpilling) {
 
 Y_UNIT_TEST(HandleErrorsCorrectly) {
     Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
-    TKikimrRunner kikimr(AppCfgLowComputeLimits(100, false));
+    TKikimrRunner kikimr(AppCfgLowComputeLimits(0.01, false));
 
     auto db = kikimr.GetQueryClient();
 

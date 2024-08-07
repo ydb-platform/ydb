@@ -148,3 +148,22 @@
     │ "::"   │
     └────────┘
     ```
+
+Кроме этого, при работе с PostgreSQL типами данных [можно использовать функции самого PostgreSQL](../yql/reference/udf/list/postgres.md#callpgfunction) непосредственно из YQL-синтаксиса:
+
+1. Создадим таблицу {{ydb-name}} с помощью PostgreSQL-синтаксиса
+    ```sql
+    CREATE TABLE test_table_array(col INT, col2 _INT, PRIMARY KEY(col));
+    ```
+1. Добавим туда тестовые данные
+    ```sql
+    INSERT INTO test_table_array(col, col2) VALUES(1, '{1,2,3}')
+    ```
+1. Вызовем встроенную функцию PostgreSQL `array_length`:
+    ```
+    ydb sql -s "select Pg::array_length(col2, 1) FROM test_table_array"
+    col
+    ---
+    "3" -- число элементов в массиве
+    (1 row)
+    ```

@@ -1486,34 +1486,34 @@ const TLegacyOwningKey& ChooseMaxKey(const TLegacyOwningKey& a, const TLegacyOwn
     return result >= 0 ? a : b;
 }
 
-void ToProto(TProtoStringType* protoRow, TUnversionedRow row)
+void ToProto(TProtobufString* protoRow, TUnversionedRow row)
 {
     *protoRow = SerializeToString(row);
 }
 
-void ToProto(TProtoStringType* protoRow, const TUnversionedOwningRow& row)
+void ToProto(TProtobufString* protoRow, const TUnversionedOwningRow& row)
 {
     ToProto(protoRow, row.Get());
 }
 
-void ToProto(TProtoStringType* protoRow, TUnversionedValueRange range)
+void ToProto(TProtobufString* protoRow, TUnversionedValueRange range)
 {
     *protoRow = SerializeToString(range);
 }
 
-void ToProto(TProtoStringType* protoRow, const TRange<TUnversionedOwningValue>& values)
+void ToProto(TProtobufString* protoRow, const TRange<TUnversionedOwningValue>& values)
 {
     std::vector<TUnversionedValue> notOwningValues(values.size());
     std::copy(values.begin(), values.end(), notOwningValues.begin());
     ToProto(protoRow, notOwningValues);
 }
 
-void FromProto(TUnversionedOwningRow* row, const TProtoStringType& protoRow, std::optional<int> nullPaddingWidth)
+void FromProto(TUnversionedOwningRow* row, const TProtobufString& protoRow, std::optional<int> nullPaddingWidth)
 {
     *row = DeserializeFromString(TString{protoRow}, nullPaddingWidth);
 }
 
-void FromProto(TUnversionedRow* row, const TProtoStringType& protoRow, const TRowBufferPtr& rowBuffer)
+void FromProto(TUnversionedRow* row, const TProtobufString& protoRow, const TRowBufferPtr& rowBuffer)
 {
     if (protoRow == SerializedNullRow) {
         *row = TUnversionedRow();
@@ -1539,7 +1539,7 @@ void FromProto(TUnversionedRow* row, const TProtoStringType& protoRow, const TRo
     }
 }
 
-void FromProto(std::vector<TUnversionedOwningValue>* values, const TProtoStringType& protoRow)
+void FromProto(std::vector<TUnversionedOwningValue>* values, const TProtobufString& protoRow)
 {
     TUnversionedOwningRow row;
     FromProto(&row, protoRow);

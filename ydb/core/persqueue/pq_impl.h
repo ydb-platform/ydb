@@ -32,9 +32,12 @@ struct TTransaction;
 class TPersQueue : public NKeyValue::TKeyValueFlat {
     enum ECookie : ui64 {
         WRITE_CONFIG_COOKIE = 2,
-        READ_CONFIG_COOKIE  = 3,
+        //READ_CONFIG_COOKIE  = 3,
         WRITE_STATE_COOKIE  = 4,
         WRITE_TX_COOKIE = 5,
+        READ_CONFIG_STAGE_1_COOKIE = 6,
+        READ_CONFIG_STAGE_2_COOKIE = 7,
+        READ_TXS_COOKIE = 8,
     };
 
     void CreatedHook(const TActorContext& ctx) override;
@@ -97,7 +100,8 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     //response from KV on READ or WRITE config request
     void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx);
-    void HandleConfigReadResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx);
+    void HandleConfigReadResponse(NKikimrClient::TResponse&& resp, const TActorContext& ctx);
+    void HandleTransactionsReadResponse(NKikimrClient::TResponse&& resp, const TActorContext& ctx);
     void ApplyNewConfigAndReply(const TActorContext& ctx);
     void ApplyNewConfig(const NKikimrPQ::TPQTabletConfig& newConfig,
                         const TActorContext& ctx);
@@ -108,7 +112,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void ReadTxWrites(const NKikimrClient::TKeyValueResponse::TReadResult& read,
                       const TActorContext& ctx);
     void ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult& read,
-                    const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange,
+                    const TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult>& readRanges,
                     const TActorContext& ctx);
     void ReadState(const NKikimrClient::TKeyValueResponse::TReadResult& read, const TActorContext& ctx);
 
@@ -510,10 +514,20 @@ private:
     std::deque<std::pair<ui64, ui64>> PlannedTxs;
 
     void BeginInitTransactions();
-    void ContinueInitTransactions(const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange);
-    void EndInitTransactions(THashMap<ui32, TVector<TTransaction>>& partitionTxs);
+    //TString ContinueInitTransactions(const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange);
+    void EndInitTransactions();
 
     void EndReadConfig(const TActorContext& ctx);
+
+    void RequestTransactionRange(const TString& fromKey, const TActorContext& ctx);
+    void AddCmdReadTransactionRange(TEvKeyValue::TEvRequest& request,
+                                    const TString& fromKey, bool includeFrom);
+
+    NKikimrClient::TResponse ConfigReadResponse;
+    TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult> TransactionsReadResults;
+
+    void SendTransactionsReadRequest(const TString& fromKey, bool includeFrom,
+                                     const TActorContext& ctx);
 };
 
 

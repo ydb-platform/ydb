@@ -177,6 +177,7 @@ protected:
     void SetUp(NUnitTest::TTestContext&) override;
     void TearDown(NUnitTest::TTestContext&) override;
 
+    void ResetPipe();
     void EnsurePipeExist();
     void SendToPipe(const TActorId& sender,
                     IEventBase* event,
@@ -256,8 +257,14 @@ void TPQTabletFixture::SetUp(NUnitTest::TTestContext&)
 
 void TPQTabletFixture::TearDown(NUnitTest::TTestContext&)
 {
+    ResetPipe();
+}
+
+void TPQTabletFixture::ResetPipe()
+{
     if (Pipe != TActorId()) {
         Ctx->Runtime->ClosePipe(Pipe, Ctx->Edge, 0);
+        Pipe = TActorId();
     }
 }
 
@@ -1612,10 +1619,12 @@ Y_UNIT_TEST_F(Huge_ProposeTransacton, TPQTabletFixture)
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
 
     PQTabletRestart(*Ctx);
-
-    SendPlanStep({.Step=100, .TxIds={txId_1}});
+    ResetPipe();
 
     WaitForProposePartitionConfigResult(2);
+//    SendPlanStep({.Step=100, .TxIds={txId_1, txId_2}});
+//    WaitPlanStepAck({.Step=100, .TxIds={txId_1, txId_2}});
+//    WaitPlanStepAccepted({.Step=100});
 }
 
 }

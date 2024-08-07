@@ -31,11 +31,9 @@ NO_RUNTIME()
 CFLAGS(
     -DEXEEXT=\"\"
     -DINSTALLDIR=\"/var/empty/bison-3.5.4/bin\"
-    -DBISON_DATA_DIR=contrib/tools/bison/data
 )
 
 SRCS(
-    arcadia_root.cpp.in
     src/AnnotationList.c
     src/InadequacyList.c
     src/Sbitset.c

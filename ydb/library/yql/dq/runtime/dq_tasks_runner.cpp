@@ -457,7 +457,7 @@ public:
         auto opts = CreatePatternOpts(task, Alloc(), TypeEnv());
 
         AllocatedHolder->ProgramParsed.CompGraph = AllocatedHolder->ProgramParsed.GetPattern()->Clone(
-            opts.ToComputationOptions(*Context.RandomProvider, *Context.TimeProvider, &TypeEnv()));
+            opts.ToComputationOptions(*Context.RandomProvider, *Context.TimeProvider));
 
         TBindTerminator term(AllocatedHolder->ProgramParsed.CompGraph->GetTerminator());
 

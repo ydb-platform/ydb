@@ -53,7 +53,6 @@ PEERDIR(
     ydb/library/yql/udfs/common/hyperloglog
     ydb/library/yql/udfs/common/ip_base
     ydb/library/yql/udfs/common/knn
-    ydb/library/yql/udfs/common/json
     ydb/library/yql/udfs/common/json2
     ydb/library/yql/udfs/common/math
     ydb/library/yql/udfs/common/pire

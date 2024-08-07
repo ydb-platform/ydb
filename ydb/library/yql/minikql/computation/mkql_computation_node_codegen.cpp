@@ -1010,10 +1010,6 @@ Value* TUnboxedImmutableCodegeneratorNode::CreateGetValue(const TCodegenContext&
     return ConstantInt::get(Type::getInt128Ty(ctx.Codegen.GetContext()), APInt(128, 2, reinterpret_cast<const uint64_t*>(&UnboxedValue)));
 }
 
-TUnboxedImmutableRunCodegeneratorNode::TUnboxedImmutableRunCodegeneratorNode(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& value)
-    : TUnboxedImmutableComputationNode(memInfo, std::move(value))
-{}
-
 TExternalCodegeneratorNode::TExternalCodegeneratorNode(TComputationMutables& mutables, EValueRepresentation kind)
     : TExternalComputationNode(mutables, kind)
 {}

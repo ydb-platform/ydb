@@ -60,12 +60,14 @@ void FillTableWithData(NQuery::TQueryClient& db, ui64 numRows=300) {
 }
 
 constexpr auto SimpleGraceJoinWithSpillingQuery = R"(
-    --!syntax_v1
-    PRAGMA ydb.EnableSpillingNodes="GraceJoin1";
-    select t1.Key, t1.Value, t2.Key, t2.Value
-    from `/Root/KeyValue` as t1 full join `/Root/KeyValue` as t2 on t1.Value = t2.Value
-    order by t1.Value
-)";
+        --!syntax_v1
+        PRAGMA ydb.EnableSpillingNodes="GraceJoin";
+        PRAGMA ydb.CostBasedOptimizationLevel='0';
+        PRAGMA ydb.HashJoinMode='graceandself';
+        select t1.Key, t1.Value, t2.Key, t2.Value
+        from `/Root/KeyValue` as t1 full join `/Root/KeyValue` as t2 on t1.Value = t2.Value
+        order by t1.Value
+    )";
 
 } // anonymous namespace
 

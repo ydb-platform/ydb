@@ -146,7 +146,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
 
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::OVERLOADED);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
     }
 
     Y_UNIT_TEST(DatashardProgramSize) {

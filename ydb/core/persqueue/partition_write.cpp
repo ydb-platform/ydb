@@ -167,7 +167,7 @@ void TPartition::ProcessReserveRequests(const TActorContext& ctx) {
         const bool& lastRequest = ReserveRequests.front()->LastRequest;
 
         if (!IsActive()) {
-            ReplyError(ctx, cookie, NPersQueue::NErrorCode::OVERLOAD, "ReserveRequest to inactive partition");
+            ReplyOk(ctx, cookie);
             ReserveRequests.pop_front();
             continue;
         }

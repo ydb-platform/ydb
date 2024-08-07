@@ -1,4 +1,4 @@
-# Автоматический выбор индексов
+# Автоматический выбор вторичных индексов
 
 Включение данного механизма производится с помощью [настройки в table_service_config](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/table_service_config.proto#L268)
 

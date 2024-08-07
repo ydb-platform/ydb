@@ -1515,12 +1515,12 @@ void TRequestQueue::RunRequest(TServiceBase::TServiceContextPtr context)
     options.SetHeavy(RuntimeInfo_->Heavy.load(std::memory_order::relaxed));
 
     if (options.Heavy) {
-        BIND([this, this_ = MakeStrong(this), context, options] {
-            return RuntimeInfo_->Descriptor.HeavyHandler.Run(context, options);
+        BIND([context, options, heavyHandler = RuntimeInfo_->Descriptor.HeavyHandler] {
+            return heavyHandler.Run(context, options);
         })
             .AsyncVia(TDispatcher::Get()->GetHeavyInvoker())
             .Run()
-            .Subscribe(BIND(&TServiceBase::TServiceContext::CheckAndRun, std::move(context)));
+            .Subscribe(BIND(&TServiceBase::TServiceContext::CheckAndRun, context));
     } else {
         context->Run(RuntimeInfo_->Descriptor.LiteHandler);
     }
@@ -2409,7 +2409,7 @@ void TServiceBase::DecrementActiveRequestCount()
     }
 }
 
-void TServiceBase::InitContext(IServiceContextPtr /*context*/)
+void TServiceBase::InitContext(IServiceContext* /*context*/)
 { }
 
 void TServiceBase::RegisterDiscoverRequest(const TCtxDiscoverPtr& context)

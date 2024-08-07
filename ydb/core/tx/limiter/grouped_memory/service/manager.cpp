@@ -95,19 +95,7 @@ void TManager::TryAllocateWaiting() {
 }
 
 void TManager::UnregisterAllocation(const ui64 allocationId) {
-    ui64 memoryAllocated = 0;
-    {
-        auto it = AllocationInfo.find(allocationId);
-        AFL_VERIFY(it != AllocationInfo.end());
-        for (auto&& usageGroupId : it->second->GetGroupIds()) {
-            const bool waitFlag = WaitAllocations.RemoveAllocation(usageGroupId, it->second);
-            const bool readyFlag = ReadyAllocations.RemoveAllocation(usageGroupId, it->second);
-            AFL_VERIFY(waitFlag ^ readyFlag);
-        }
-        memoryAllocated = it->second->GetAllocatedVolume();
-        AllocationInfo.erase(it);
-    }
-    if (memoryAllocated) {
+    if (UnregisterAllocationImpl(allocationId)) {
         TryAllocateWaiting();
     }
     RefreshSignals();

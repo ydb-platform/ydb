@@ -78,8 +78,7 @@ private:
             AFL_VERIFY(GroupIds.erase(groupId));
         }
 
-        TAllocationInfo(
-            const std::shared_ptr<IAllocation>& allocation, const std::shared_ptr<TStageFeatures>& stage)
+        TAllocationInfo(const std::shared_ptr<IAllocation>& allocation, const std::shared_ptr<TStageFeatures>& stage)
             : Allocation(allocation)
             , Identifier(TValidator::CheckNotNull(Allocation)->GetIdentifier())
             , Stage(stage) {
@@ -117,8 +116,8 @@ private:
             AFL_VERIFY(Allocations.emplace(allocation->GetIdentifier(), allocation).second);
         }
 
-        void Remove(const std::shared_ptr<TAllocationInfo>& allocation) {
-            AFL_VERIFY(Allocations.erase(allocation->GetIdentifier()));
+        [[nodiscard]] bool Remove(const std::shared_ptr<TAllocationInfo>& allocation) {
+            return Allocations.erase(allocation->GetIdentifier());
         }
 
         std::vector<std::shared_ptr<TAllocationInfo>> AllocatePossible(const bool force);
@@ -145,7 +144,7 @@ private:
                             toRemove.emplace_back(i->GetIdentifier());
                         } else {
                             for (auto&& g : i->GetGroupIds()) {
-                                it->second.Remove(i);
+                                AFL_VERIFY(it->second.Remove(i));
                                 destination.AddAllocation(g, i);
                             }
                         }
@@ -156,7 +155,7 @@ private:
                     it = Groups.erase(it);
                 }
                 for (auto&& i : toRemove) {
-                    manager.UnregisterAllocation(i);
+                    manager.UnregisterAllocationImpl(i);
                 }
                 if (toRemove.empty()) {
                     break;
@@ -187,7 +186,9 @@ private:
             if (groupIt == Groups.end()) {
                 return false;
             }
-            groupIt->second.Remove(allocation);
+            if (!groupIt->second.Remove(allocation)) {
+                return false;
+            }
             if (groupIt->second.IsEmpty()) {
                 Groups.erase(groupIt);
             }
@@ -232,6 +233,20 @@ private:
 //        Signals.MemoryUsageBytes->Set(Counters.GetAllocatedBytes().Val());
 //        Signals.MemoryWaitingBytes->Set(Counters.GetWaitingBytes().Val());
         Signals.GroupsCount->Set(ExternalGroupIntoInternalGroup.size());
+    }
+
+    bool UnregisterAllocationImpl(const ui64 allocationId) {
+        ui64 memoryAllocated = 0;
+        auto it = AllocationInfo.find(allocationId);
+        AFL_VERIFY(it != AllocationInfo.end());
+        for (auto&& usageGroupId : it->second->GetGroupIds()) {
+            const bool waitFlag = WaitAllocations.RemoveAllocation(usageGroupId, it->second);
+            const bool readyFlag = ReadyAllocations.RemoveAllocation(usageGroupId, it->second);
+            AFL_VERIFY(waitFlag ^ readyFlag)("wait", waitFlag)("ready", readyFlag);
+        }
+        memoryAllocated = it->second->GetAllocatedVolume();
+        AllocationInfo.erase(it);
+        return !!memoryAllocated;
     }
 
 public:

@@ -851,7 +851,10 @@ bool FillUsedFilesImpl(
         return true;
     }
 
-    usedPgExtensions |= node.GetTypeAnn()->GetUsedPgExtensions();
+    if (node.GetTypeAnn()) {
+        usedPgExtensions |= node.GetTypeAnn()->GetUsedPgExtensions();
+    }
+    
     if (node.IsCallable("PgResolvedCall")) {
         auto procId = FromString<ui32>(node.Child(1)->Content());
         const auto& proc = NPg::LookupProc(procId);

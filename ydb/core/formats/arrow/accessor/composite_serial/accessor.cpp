@@ -24,9 +24,7 @@ public:
         return Chunks[idx].GetRecordsCount();
     }
     void OnArray(const ui32 chunkIdx, const ui32 startPosition) const {
-        if (!CachedDataOwner->GetChunk() || CachedDataOwner->GetIndex() != chunkIdx) {
-            Result = IChunkedArray::TLocalChunkedArrayAddress(Chunks[chunkIdx].GetArrayVerified(Loader), startPosition, chunkIdx);
-        }
+        Result = IChunkedArray::TLocalChunkedArrayAddress(Chunks[chunkIdx].GetArrayVerified(Loader), startPosition, chunkIdx);
     }
 };
 }   // namespace

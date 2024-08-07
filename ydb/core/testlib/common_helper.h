@@ -58,8 +58,10 @@ protected:
     void WaitForSchemeOperation(TActorId sender, ui64 txId);
     void PrintResultSet(const NYdb::TResultSet& resultSet, NYson::TYsonWriter& writer) const;
 
-    void StartSchemaRequestTableServiceImpl(const TString& request, const bool expectSuccess, const bool waiting) const;
-    void StartSchemaRequestQueryServiceImpl(const TString& request, const bool expectSuccess, const bool waiting) const;
+    void StartSchemaRequestTableServiceImpl(
+        const TString& request, const bool expectSuccess, const bool waiting, const TString& authToken = "root@builtin") const;
+    void StartSchemaRequestQueryServiceImpl(
+        const TString& request, const bool expectSuccess, const bool waiting, const TString& authToken = "root@builtin") const;
 
     Tests::TServer& Server;
     bool UseQueryService = false;
@@ -75,8 +77,11 @@ public:
 
     void DropTable(const TString& tablePath);
 
-    void StartScanRequest(const TString& request, const bool expectSuccess, TVector<THashMap<TString, NYdb::TValue>>* result) const;
-    void StartDataRequest(const TString& request, const bool expectSuccess = true, TString* result = nullptr) const;
-    void StartSchemaRequest(const TString& request, const bool expectSuccess = true, const bool waiting = true) const;
+    void StartScanRequest(const TString& request, const bool expectSuccess, TVector<THashMap<TString, NYdb::TValue>>* result,
+        const TString& authToken = "root@builtin") const;
+    void StartDataRequest(
+        const TString& request, const bool expectSuccess = true, TString* result = nullptr, const TString& authToken = "root@builtin") const;
+    void StartSchemaRequest(
+        const TString& request, const bool expectSuccess = true, const bool waiting = true, const TString& authToken = "root@builtin") const;
 };
 }

@@ -537,6 +537,21 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             SecretKey: "SId:secretSecretKey"
         }
     )";
+    const TString UserTierConfigProtoStr =
+        R"(
+        Name : "fakeTier"
+        ObjectStorage : {
+            Endpoint: "fake"
+            Bucket: "fake"
+            SecretableAccessKey: {
+                SecretId: {
+                    Id: "secretAccessKey"
+                    OwnerId: "user@builtin"
+                }
+            }
+            SecretKey: "SId:secretSecretKey"
+        }
+    )";
     const TString TierEndpoint = "fake";
 #endif
 
@@ -669,6 +684,76 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 #ifndef S3_TEST_USAGE
         UNIT_ASSERT_EQUAL(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucketsCount(), 1);
 #endif
+    }
+
+    Y_UNIT_TEST(AlterTieringPermissions) {
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TFastTTLCompactionController>();
+
+        TPortManager pm;
+
+        ui32 grpcPort = pm.GetPort();
+        ui32 msgbPort = pm.GetPort();
+
+        NKikimrProto::TAuthConfig authConfig;
+        authConfig.SetUseBuiltinDomain(true);
+        Tests::TServerSettings serverSettings(msgbPort, authConfig);
+        serverSettings.Port = msgbPort;
+        serverSettings.GrpcPort = grpcPort;
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetEnableMetadataProvider(true);
+
+        Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
+        server->EnableGRpc(grpcPort);
+        Tests::TClient client(serverSettings);
+        Tests::NCommon::TLoggerInit(server->GetRuntime()).Clear().SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").Initialize();
+
+        auto& runtime = *server->GetRuntime();
+        //        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
+        //        runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_TRACE);
+
+        auto sender = runtime.AllocateEdgeActor();
+        server->SetupRootStoragePools(sender);
+
+        //        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_NOTICE);
+        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BG_TASKS, NLog::PRI_DEBUG);
+        //        runtime.SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NLog::PRI_DEBUG);
+
+        TLocalHelper lHelper(*server);
+        lHelper.SetOptionalStorageId("__DEFAULT");
+        lHelper.StartSchemaRequest("CREATE OBJECT secretAccessKey (TYPE SECRET) WITH (value = ak)", true, true, "user@builtin");
+        lHelper.StartSchemaRequest("CREATE OBJECT secretSecretKey (TYPE SECRET) WITH (value = fakeSecret)", true, true, "user@builtin");
+        Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
+
+        lHelper.StartSchemaRequest(
+            "CREATE OBJECT tier1 (TYPE TIER) WITH (tierConfig = `" + UserTierConfigProtoStr + "`)", true, true, "user@builtin");
+        lHelper.StartSchemaRequest(
+            "CREATE OBJECT tier2 (TYPE TIER) WITH (tierConfig = `" + UserTierConfigProtoStr + "`)", true, true, "user@builtin");
+
+        lHelper.StartSchemaRequest(
+            "CREATE OBJECT tiering1 (TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" + ConfigTiering1Str + "` )", true,
+            true, "user@builtin");
+        lHelper.StartSchemaRequest(
+            "CREATE OBJECT tiering2 (TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" + ConfigTiering1Str + "` )", true,
+            true, "user@builtin");
+
+        lHelper.CreateTestOlapTable("olapTable", 2);
+        Cerr << "Wait tables" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(20));
+        Cerr << "Initialization tables" << Endl;
+        const TInstant now = Now() - TDuration::Days(100);
+        runtime.UpdateCurrentTime(now);
+
+        lHelper.StartSchemaRequest("GRANT SELECT ATTRIBUTES, MODIFY ATTRIBUTES, ALTER SCHEMA, DESCRIBE SCHEMA ON `/Root/olapStore/olapTable` TO `user@builtin`");
+
+        lHelper.StartSchemaRequest("ALTER TABLE `/Root/olapStore/olapTable` SET (TIERING = 'tiering2', TTL = Interval(\"P1D\") ON `timestamp`);",
+            true, true, "user@builtin");
+        lHelper.StartSchemaRequest(
+            "ALTER OBJECT tiering2 (TYPE TIERING_RULE) SET (defaultColumn = timestamp, description = `" + ConfigTieringNothingStr + "` )", true,
+            true, "user@builtin");
+
+        lHelper.StartSchemaRequest(
+            "ALTER TABLE `/Root/olapStore/olapTable` SET (TIERING = 'tiering2', TTL = Interval(\"P1D\") ON `ts_INVALID_COLUMN`);",
+            /*expectSuccess=*/false, true, "user@builtin");
     }
 
     std::optional<NYdb::TValue> GetValueResult(const THashMap<TString, NYdb::TValue>& hMap, const TString& fName) {

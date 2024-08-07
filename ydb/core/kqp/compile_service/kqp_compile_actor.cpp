@@ -275,7 +275,7 @@ private:
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
 
         KqpHost = CreateKqpHost(Gateway, QueryId.Cluster, QueryId.Database, Config, ModuleResolverState->ModuleResolver,
-            FederatedQuerySetup, UserToken, GUCSettings, ApplicationName, AppData(ctx)->FunctionRegistry,
+            FederatedQuerySetup, UserToken, GUCSettings, QueryServiceConfig, ApplicationName, AppData(ctx)->FunctionRegistry,
             false, false, std::move(TempTablesState), nullptr, SplitCtx);
 
         IKqpHost::TPrepareSettings prepareSettings;

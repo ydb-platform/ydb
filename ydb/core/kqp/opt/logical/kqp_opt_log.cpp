@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_rules.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
+#include <ydb/library/yql/core/yql_opt_match_recognize.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
@@ -53,6 +54,7 @@ public:
         AddHandler(0, &TKqlLookupTableBase::Match, HNDL(ApplyExtractMembersToLookupTable<false>));
         AddHandler(0, &TCoTop::Match, HNDL(TopSortOverExtend));
         AddHandler(0, &TCoTopSort::Match, HNDL(TopSortOverExtend));
+        AddHandler(0, &TCoMatchRecognize::Match, HNDL(MatchRecognize));
 
         AddHandler(1, &TCoFlatMap::Match, HNDL(LatePushExtractedPredicateToReadTable));
         AddHandler(1, &TCoTop::Match, HNDL(RewriteTopSortOverIndexRead));
@@ -231,6 +233,14 @@ protected:
     TMaybeNode<TExprBase> TopSortOverExtend(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
         auto output = KqpTopSortOverExtend(node, ctx, *getParents());
         DumpAppliedRule("TopSortOverExtend", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> MatchRecognize(TExprBase node, TExprContext& ctx) {
+        auto output = ExpandMatchRecognize(node.Ptr(), ctx, TypesCtx);
+        if (output) {
+            DumpAppliedRule("MatchRecognize", node.Ptr(), output, ctx);
+        }
         return output;
     }
 

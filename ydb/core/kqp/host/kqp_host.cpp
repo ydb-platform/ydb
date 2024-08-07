@@ -922,6 +922,7 @@ public:
     TKqpHost(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster, const TString& database,
         TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
         std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
+        const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
         const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges,
         bool isInternalCall, TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
         NActors::TActorSystem* actorSystem = nullptr)
@@ -938,6 +939,7 @@ public:
         , FakeWorld(ExprCtx->NewWorld(TPosition()))
         , ExecuteCtx(MakeIntrusive<TExecuteContext>())
         , ActorSystem(actorSystem ? actorSystem : NActors::TActivationContext::ActorSystem())
+        , QueryServiceConfig(queryServiceConfig)
     {
         if (funcRegistry) {
             FuncRegistry = funcRegistry;
@@ -1559,10 +1561,15 @@ private:
                 || settingName == "Warning"
                 || settingName == "UseBlocks"
                 || settingName == "BlockEngine"
+                || settingName == "TimeOrderRecoverDelay"
+                || settingName == "TimeOrderRecoverAhead"
+                || settingName == "TimeOrderRecoverRowLimit"
+                || settingName == "MatchRecognizeStream"
                 ;
         };
         auto configProvider = CreateConfigProvider(*TypesCtx, gatewaysConfig, {}, allowSettings);
         TypesCtx->AddDataSource(ConfigProviderName, configProvider);
+        TypesCtx->MatchRecognize = QueryServiceConfig.GetEnableMatchRecognize();
 
         YQL_ENSURE(TypesCtx->Initialize(*ExprCtx));
 
@@ -1653,6 +1660,7 @@ private:
 
     TKqpTempTablesState::TConstPtr TempTablesState;
     NActors::TActorSystem* ActorSystem = nullptr;
+    NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
 };
 
 } // namespace
@@ -1673,10 +1681,11 @@ Ydb::Table::QueryStatsCollection::Mode GetStatsMode(NYql::EKikimrStatsMode stats
 TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, const TString& database, TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
+    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
     const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges, bool isInternalCall,
     TKqpTempTablesState::TConstPtr tempTablesState, NActors::TActorSystem* actorSystem)
 {
-    return MakeIntrusive<TKqpHost>(gateway, cluster, database, config, moduleResolver, federatedQuerySetup, userToken, funcRegistry,
+    return MakeIntrusive<TKqpHost>(gateway, cluster, database, config, moduleResolver, federatedQuerySetup, userToken, queryServiceConfig, funcRegistry,
                                    keepConfigChanges, isInternalCall, std::move(tempTablesState), actorSystem);
 }
 

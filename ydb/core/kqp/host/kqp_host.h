@@ -109,7 +109,8 @@ public:
 
 TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, const TString& database, NYql::TKikimrConfiguration::TPtr config, NYql::IModuleResolver::TPtr moduleResolver,
-    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry = nullptr,
+    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, 
+    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry = nullptr,
     bool keepConfigChanges = false, bool isInternalCall = false, TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
     NActors::TActorSystem* actorSystem = nullptr /*take from TLS by default*/);
 

@@ -2814,8 +2814,7 @@ bool CompareExprTrees(const TExprNode*& one, const TExprNode*& two);
 
 bool CompareExprTreeParts(const TExprNode& one, const TExprNode& two, const TNodeMap<ui32>& argsMap);
 
-void GatherParents(const TExprNode& node, TParentsMap& parentsMap, bool withLeaves = false);
-void GatherParentsMulti(const TExprNode& node, TParentsMultiMap& parentsMap, bool withLeaves = false);
+void GatherParents(const TExprNode& node, TParentsMap& parentsMap);
 
 struct TConvertToAstSettings {
     ui32 AnnotationFlags = 0;

@@ -237,6 +237,10 @@ namespace NYql::NDq::NWorker {
         if (backendConfig.GetEnforceJobUtc()) {
             pfOptions.Env["TZ"] = "UTC0";
         }
+        if (backendConfig.GetEnforceJobYtIsolation()) {
+            pfOptions.Env["YT_ALLOW_HTTP_REQUESTS_TO_YT_FROM_JOB"] = "0";
+            pfOptions.Env["YT_FORBID_REQUESTS_FROM_JOB"] = "1";
+        }
         pfOptions.EnablePorto = backendConfig.GetEnablePorto() == "isolate";
         pfOptions.PortoLayer = backendConfig.GetPortoLayer().size() == 0 ? "" : layerDir;
         pfOptions.MaxProcesses = capacity*1.5;

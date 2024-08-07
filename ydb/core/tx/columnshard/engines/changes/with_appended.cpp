@@ -42,13 +42,13 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
                 case NOlap::TPortionMeta::EProduced::UNSPECIFIED:
                     Y_ABORT_UNLESS(false);   // unexpected
                 case NOlap::TPortionMeta::EProduced::INSERTED:
-                    self->IncCounter(NColumnShard::COUNTER_INDEXING_PORTIONS_WRITTEN);
+                    self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_INDEXING_PORTIONS_WRITTEN);
                     break;
                 case NOlap::TPortionMeta::EProduced::COMPACTED:
-                    self->IncCounter(NColumnShard::COUNTER_COMPACTION_PORTIONS_WRITTEN);
+                    self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_COMPACTION_PORTIONS_WRITTEN);
                     break;
                 case NOlap::TPortionMeta::EProduced::SPLIT_COMPACTED:
-                    self->IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_PORTIONS_WRITTEN);
+                    self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_PORTIONS_WRITTEN);
                     break;
                 case NOlap::TPortionMeta::EProduced::EVICTED:
                     Y_ABORT("Unexpected evicted case");
@@ -58,19 +58,19 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
                     break;
             }
         }
-        self->IncCounter(NColumnShard::COUNTER_PORTIONS_DEACTIVATED, PortionsToRemove.size());
+        self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_PORTIONS_DEACTIVATED, PortionsToRemove.size());
 
         THashSet<TUnifiedBlobId> blobsDeactivated;
         for (auto& [_, portionInfo] : PortionsToRemove) {
             for (auto& rec : portionInfo.Records) {
                 blobsDeactivated.emplace(portionInfo.GetBlobId(rec.BlobRange.GetBlobIdxVerified()));
             }
-            self->IncCounter(NColumnShard::COUNTER_RAW_BYTES_DEACTIVATED, portionInfo.GetTotalRawBytes());
+            self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_RAW_BYTES_DEACTIVATED, portionInfo.GetTotalRawBytes());
         }
 
-        self->IncCounter(NColumnShard::COUNTER_BLOBS_DEACTIVATED, blobsDeactivated.size());
+        self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_BLOBS_DEACTIVATED, blobsDeactivated.size());
         for (auto& blobId : blobsDeactivated) {
-            self->IncCounter(NColumnShard::COUNTER_BYTES_DEACTIVATED, blobId.BlobSize());
+            self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_BYTES_DEACTIVATED, blobId.BlobSize());
         }
     }
     {

@@ -1597,7 +1597,7 @@ const char* AllowedProcsRaw[] = {
 #include "postgis_procs.h"
 };
 
-struct TCatalog : public IExtensionDDLBuilder {
+struct TCatalog : public IExtensionSqlBuilder {
     TCatalog() {
         for (size_t i = 0; i < Y_ARRAY_SIZE(AllStaticTablesRaw); ++i) {
             const auto& raw = AllStaticTablesRaw[i];
@@ -2008,6 +2008,59 @@ struct TCatalog : public IExtensionDDLBuilder {
         *byIdPtr = desc;
     }
 
+    void CreateTable(const TTableInfo& table, const TVector<TColumnInfo>& columns) final {
+        Y_ENSURE(!columns.empty());
+        THashSet<TString> usedColumns;
+        for (const auto& c : columns) {
+            Y_ENSURE(c.Schema == table.Schema);
+            Y_ENSURE(c.TableName == table.Name);
+            Y_ENSURE(c.ExtensionIndex == table.ExtensionIndex);
+            Y_ENSURE(usedColumns.insert(c.Name).second);
+        }
+
+        TTableInfoKey key{table};
+        Y_ENSURE(StaticTables.emplace(key, table).second);
+        Y_ENSURE(StaticColumns.emplace(key, columns).second);
+
+        AllStaticTables.push_back(table);
+        for (const auto& c : columns) {
+            AllStaticColumns.push_back(c);
+        }
+    }
+
+    void InsertValues(const TTableInfoKey& table, const TVector<TString>& columns,
+        const TVector<TMaybe<TString>>& data) final {
+        Y_ENSURE(StaticTables.contains(table));
+        const auto& columnDefs = *StaticColumns.FindPtr(table);
+        Y_ENSURE(columnDefs.size() == columns.size());
+        Y_ENSURE(data.size() % columns.size() == 0);
+        THashMap<TString, ui32> columnToIndex;
+        for (ui32 i = 0; i < columnDefs.size(); ++i) {
+            columnToIndex[columnDefs[i].Name] = i;
+        }
+
+        THashSet<TString> usedColumns;
+        TVector<ui32> dataColumnRemap;
+        for (const auto& c : columns) {
+            Y_ENSURE(usedColumns.insert(c).second);
+            dataColumnRemap.push_back(*columnToIndex.FindPtr(c));
+        }
+
+        auto& tableData = StaticTablesData[table];
+        size_t writePos = tableData.size();
+        tableData.resize(tableData.size() + data.size());
+        size_t readRowPos = 0;
+        while (writePos < tableData.size()) {
+            for (size_t colIdx = 0; colIdx < columns.size(); ++colIdx) {
+                tableData[writePos++] = data[readRowPos + dataColumnRemap[colIdx]];
+            }
+
+            readRowPos += columns.size();
+        }
+
+        Y_ENSURE(readRowPos == data.size());
+    }
+
     static const TCatalog& Instance() {
         return *Singleton<TCatalog>();
     }
@@ -2044,6 +2097,7 @@ struct TCatalog : public IExtensionDDLBuilder {
     TVector<TColumnInfo> AllStaticColumns;
     THashMap<TTableInfoKey, TTableInfo> StaticTables;
     THashMap<TTableInfoKey, TVector<TColumnInfo>> StaticColumns;
+    THashMap<TTableInfoKey, TVector<TMaybe<TString>>> StaticTablesData;
 
     mutable TMaybe<TFile> ExportFile;
     bool AllowAllFunctions = false;
@@ -2475,13 +2529,14 @@ bool IsExactMatch(const TVector<ui32>& procArgTypes, ui32 procVariadicType, cons
     return true;
 }
 
-ui64 CalcProcScore(const TVector<ui32>& procArgTypes, ui32 procVariadicType, const TVector<ui32>& argTypeIds, const TCatalog& catalog) {
+ui64 CalcProcScore(const TVector<ui32>& procArgTypes, ui32 procVariadicType, ui32 procDefArgs, const TVector<ui32>& argTypeIds, const TCatalog& catalog) {
     ui64 result = 0UL;
     if (!procVariadicType) {
         ++result;
     }
 
-    if (argTypeIds.size() < procArgTypes.size()) {
+    Y_ENSURE(procArgTypes.size() >= procDefArgs);
+    if (argTypeIds.size() < procArgTypes.size() - procDefArgs) {
         return ArgTypeMismatch;
     }
 
@@ -2750,7 +2805,7 @@ std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TStri
         }
 
         // https://www.postgresql.org/docs/14/typeconv-func.html, steps 4.a, 4.c, 4.d
-        auto score = NPrivate::CalcProcScore(d->ArgTypes, d->VariadicType, argTypeIds, catalog);
+        auto score = NPrivate::CalcProcScore(d->ArgTypes, d->VariadicType, d->DefaultArgs.size(), argTypeIds, catalog);
         if (bestScore < score) {
             bestScore = score;
 
@@ -3115,7 +3170,7 @@ const TAggregateDesc& LookupAggregation(const TString& name, const TVector<ui32>
         }
 
         // https://www.postgresql.org/docs/14/typeconv-func.html, steps 4.a, 4.c, 4.d
-        auto score = NPrivate::CalcProcScore(d->ArgTypes, 0, argTypeIds, catalog);
+        auto score = NPrivate::CalcProcScore(d->ArgTypes, 0, 0, argTypeIds, catalog);
 
         if (bestScore < score) {
             bestScore = score;
@@ -3323,13 +3378,45 @@ const TTableInfo& LookupStaticTable(const TTableInfoKey& tableKey) {
     return *tablePtr;
 }
 
+const TVector<TMaybe<TString>>* ReadTable(
+    const TTableInfoKey& tableKey,
+    const TVector<TString>& columnNames,
+    size_t* columnsRemap, // should have the same length as columnNames
+    size_t& rowStep) {
+    const auto& catalog = TCatalog::Instance();
+    auto dataPtr = catalog.StaticTablesData.FindPtr(tableKey);
+    if (!dataPtr) {
+        throw yexception() << "Missing data for table " 
+            << tableKey.Schema << "." << tableKey.Name;
+    }
+
+    const auto& allColumns = *catalog.StaticColumns.FindPtr(tableKey);
+    THashMap<TString, size_t> columnsToIndex;
+    for (size_t i = 0; i < allColumns.size(); ++i) {
+        Y_ENSURE(columnsToIndex.emplace(allColumns[i].Name,i).second);
+    }
+
+    rowStep = allColumns.size();
+    for (size_t i = 0; i < columnNames.size(); ++i) {
+        auto indexPtr = columnsToIndex.FindPtr(columnNames[i]);
+        if (!indexPtr) {
+            throw yexception() << "Missing column " << columnNames[i] << " in table "
+                << tableKey.Schema << "." << tableKey.Name;
+        }
+
+        columnsRemap[i] = *indexPtr;
+    }
+
+    return dataPtr;
+}
+
 bool AreAllFunctionsAllowed() {
     const auto& catalog = TCatalog::Instance();
     return catalog.AllowAllFunctions;
 }
 
 void RegisterExtensions(const TVector<TExtensionDesc>& extensions, bool typesOnly,
-    IExtensionDDLParser& parser, IExtensionLoader* loader) {
+    IExtensionSqlParser& parser, IExtensionLoader* loader) {
     auto& catalog = TCatalog::MutableInstance();
     with_lock (catalog.ExtensionsGuard) {
         Y_ENSURE(!catalog.ExtensionsInit);
@@ -3351,8 +3438,13 @@ void RegisterExtensions(const TVector<TExtensionDesc>& extensions, bool typesOnl
             }
 
             catalog.Extensions.push_back(e);
-            TString sql = TFileInput(e.DDLPath).ReadAll();;
-            parser.Parse(i + 1, sql, catalog);
+            TVector<TString> sqls;
+            for (const auto& p : e.SqlPaths) {
+                TString sql = TFileInput(p).ReadAll();
+                sqls.push_back(sql);
+            }
+
+            parser.Parse(i + 1, sqls, catalog);
             if (loader && !e.TypesOnly) {
                 loader->Load(i + 1, e.Name, e.LibraryPath);
             }

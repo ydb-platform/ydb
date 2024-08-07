@@ -216,15 +216,16 @@ public:
         YT_UNIMPLEMENTED();
     }
 
-    IMemoryUsageTrackerPtr GetChannelMemoryTracker() override
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
     {
-        return GetNullMemoryUsageTracker();
+        return MemoryUsageTracker_;
     }
 
 private:
     const TChannelConfigPtr Config_;
     const TString EndpointAddress_;
     const IAttributeDictionaryPtr EndpointAttributes_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
 
     TSingleShotCallbackList<void(const TError&)> Terminated_;
 

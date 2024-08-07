@@ -36,6 +36,7 @@ extern "C" {
 #include <ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/catalog/pg_type_d.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/library/yql/core/yql_callable_names.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
@@ -207,6 +208,86 @@ std::tuple<TStringBuf, TStringBuf> getSchemaAndObjectName(const List* nameList) 
     }
 }
 
+struct TPgConst {
+    TMaybe<TString> value;
+    enum class Type {
+        boolean,
+        int4,
+        int8,
+        numeric,
+        text,
+        unknown,
+        bit,
+        nil,
+    };
+
+    static TString ToString(const TPgConst::Type& type) {
+        switch (type) {
+            case TPgConst::Type::boolean:
+                return "bool";
+            case TPgConst::Type::int4:
+                return "int4";
+            case TPgConst::Type::int8:
+                return "int8";
+            case TPgConst::Type::numeric:
+                return "numeric";
+            case TPgConst::Type::text:
+                return "text";
+            case TPgConst::Type::unknown:
+                return "unknown";
+            case TPgConst::Type::bit:
+                return "bit";
+            case TPgConst::Type::nil:
+                return "unknown";
+            }
+    }
+
+    Type type;
+};
+
+TMaybe<TPgConst> GetValueNType(const A_Const* value) {
+    TPgConst pgConst;
+    if (value->isnull) {
+        pgConst.type = TPgConst::Type::nil;
+        return pgConst;
+    }
+
+    const auto& val = value->val;
+    switch (NodeTag(val)) {
+        case T_Boolean: {
+            pgConst.value = BoolVal(val) ? "t" : "f";
+            pgConst.type = TPgConst::Type::boolean;
+            return pgConst;
+        }
+        case T_Integer: {
+            pgConst.value = ToString(IntVal(val));
+            pgConst.type = TPgConst::Type::int4;
+            return pgConst;
+        }
+        case T_Float: {
+            auto s = StrFloatVal(val);
+            i64 v;
+            const bool isInt8 = TryFromString<i64>(s, v);
+            pgConst.value = ToString(s);
+            pgConst.type = isInt8 ? TPgConst::Type::int8 : TPgConst::Type::numeric;
+            return pgConst;
+        }
+        case T_String: {
+            pgConst.value = ToString(StrVal(val));
+            pgConst.type = TPgConst::Type::unknown; // to support implicit casts
+            return pgConst;
+        }
+        case T_BitString: {
+            pgConst.value = ToString(StrVal(val));
+            pgConst.type = TPgConst::Type::bit;
+            return pgConst;
+        }
+        default: {
+            return {};
+        }
+    }
+}
+
 class TConverter : public IPGParseEvents {
     friend class TLocationGuard;
 
@@ -255,43 +336,6 @@ public:
         TString Name;
         TVector<TString> ColNames;
         TAstNode* Source = nullptr;
-    };
-
-    struct TPgConst {
-        TMaybe<TString> value;
-        enum class Type {
-            boolean,
-            int4,
-            int8,
-            numeric,
-            text,
-            unknown,
-            bit,
-            nil,
-        };
-
-        static TString ToString(const TPgConst::Type& type) {
-            switch (type) {
-                case TPgConst::Type::boolean:
-                    return "bool";
-                case TPgConst::Type::int4:
-                    return "int4";
-                case TPgConst::Type::int8:
-                    return "int8";
-                case TPgConst::Type::numeric:
-                    return "numeric";
-                case TPgConst::Type::text:
-                    return "text";
-                case TPgConst::Type::unknown:
-                    return "unknown";
-                case TPgConst::Type::bit:
-                    return "bit";
-                case TPgConst::Type::nil:
-                    return "unknown";
-                }
-        }
-
-        Type type;
     };
 
     using TViews = THashMap<TString, TView>;
@@ -3651,50 +3695,6 @@ public:
         }
     }
 
-    TMaybe<TPgConst> GetValueNType(const A_Const* value) {
-        TPgConst pgConst;
-        if (value->isnull) {
-            pgConst.type = TPgConst::Type::nil;
-            return pgConst;
-        }
-
-        const auto& val = value->val;
-        switch (NodeTag(val)) {
-            case T_Boolean: {
-                pgConst.value = BoolVal(val) ? "t" : "f";
-                pgConst.type = TPgConst::Type::boolean;
-                return pgConst;
-            }
-            case T_Integer: {
-                pgConst.value = ToString(IntVal(val));
-                pgConst.type = TPgConst::Type::int4;
-                return pgConst;
-            }
-            case T_Float: {
-                auto s = StrFloatVal(val);
-                i64 v;
-                const bool isInt8 = TryFromString<i64>(s, v);
-                pgConst.value = ToString(s);
-                pgConst.type = isInt8 ? TPgConst::Type::int8 : TPgConst::Type::numeric;
-                return pgConst;
-            }
-            case T_String: {
-                pgConst.value = ToString(StrVal(val));
-                pgConst.type = TPgConst::Type::unknown; // to support implicit casts
-                return pgConst;
-            }
-            case T_BitString: {
-                pgConst.value = ToString(StrVal(val));
-                pgConst.type = TPgConst::Type::bit;
-                return pgConst;
-            }
-            default: {
-                NodeNotImplemented((const Node*)value);
-                return {};
-            }
-        }
-    }
-
     TAstNode* AutoParametrizeConst(TPgConst&& valueNType, TAstNode* pgType) {
         Ydb::TypedValue typedValue;
 
@@ -5161,7 +5161,7 @@ TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQ
 
 class TExtensionHandler : public IPGParseEvents {
 public:
-    TExtensionHandler(ui32 extensionIndex, NYql::NPg::IExtensionDDLBuilder& builder)
+    TExtensionHandler(ui32 extensionIndex, NYql::NPg::IExtensionSqlBuilder& builder)
         : ExtensionIndex(extensionIndex)
         , Builder(builder)
     {}
@@ -5186,6 +5186,10 @@ public:
             return ParseCreateFunctionStmt(CAST_NODE(CreateFunctionStmt, node));
         case T_DefineStmt:
             return ParseDefineStmt(CAST_NODE(DefineStmt, node));
+        case T_CreateStmt:
+            return ParseCreateStmt(CAST_NODE(CreateStmt, node));
+        case T_InsertStmt:
+            return ParseInsertStmt(CAST_NODE(InsertStmt, node));
         default:
             return false;
         }
@@ -5420,15 +5424,30 @@ public:
         }
 
         bool hasArgNames = false;
-        ui32 defArgsCount = 0;
         for (int i = 0; i < ListLength(value->parameters); ++i) {
             auto node = LIST_CAST_NTH(FunctionParameter, value->parameters, i);
             hasArgNames = hasArgNames || (node->name != nullptr);
             if (node->mode == FUNC_PARAM_IN || node->mode == FUNC_PARAM_DEFAULT) {
                 if (node->defexpr) {
-                    ++defArgsCount;
+                    desc.DefaultArgs.emplace_back();
+                    auto& value = desc.DefaultArgs.back();
+                    auto expr = node->defexpr;
+                    if (NodeTag(expr) == T_TypeCast) {
+                        expr = CAST_NODE(TypeCast, expr)->arg;
+                    }
+
+                    if (NodeTag(expr) != T_A_Const) {
+                        return false;
+                    }
+
+                    auto pgConst = GetValueNType(CAST_NODE(A_Const, expr));
+                    if (!pgConst) {
+                        return false;
+                    }
+
+                    value = pgConst->value;
                 } else {
-                    Y_ENSURE(!defArgsCount);
+                    Y_ENSURE(desc.DefaultArgs.empty());
                 }
 
                 desc.InputArgNames.push_back(node->name ? node->name : "");
@@ -5467,17 +5486,73 @@ public:
         }
 
         Builder.CreateProc(desc);
-        if (defArgsCount) {
-            Y_ENSURE(!desc.VariadicType);
-            for (ui32 i = 0; i < defArgsCount; ++i) {
-                desc.ArgTypes.pop_back();
-                if (!desc.InputArgNames.empty()) {
-                    desc.InputArgNames.pop_back();
-                }
+        return true;
+    }
 
-                Builder.CreateProc(desc);
+    [[nodiscard]]
+    bool ParseCreateStmt(const CreateStmt* value) {
+        NPg::TTableInfo table;
+        table.Schema = "pg_catalog";
+        table.Name = value->relation->relname;
+        table.Kind = NPg::ERelKind::Relation;
+        table.ExtensionIndex = ExtensionIndex;
+        TVector<NPg::TColumnInfo> columns;
+        for (int i = 0; i < ListLength(value->tableElts); ++i) {
+            auto node = ListNodeNth(value->tableElts, i);
+            if (NodeTag(node) != T_ColumnDef) {
+                continue;
+            }
+
+            auto columnDef = CAST_NODE(ColumnDef, node);
+            NPg::TColumnInfo column;
+            column.Schema = table.Schema;
+            column.TableName = table.Name;
+            column.Name = columnDef->colname;
+            column.ExtensionIndex = ExtensionIndex;
+            Y_ENSURE(ParseTypeName(columnDef->typeName, column.UdtType));
+            columns.push_back(column);
+        }
+
+        Builder.CreateTable(table, columns);
+        return true;
+    }
+
+    [[nodiscard]]
+    bool ParseInsertStmt(const InsertStmt* value) {
+        TString tableName = value->relation->relname;
+        TVector<TString> colNames;
+        for (int i = 0; i < ListLength(value->cols); ++i) {
+            auto node = LIST_CAST_NTH(ResTarget, value->cols, i);
+            colNames.push_back(node->name);
+        }
+
+        auto select = CAST_NODE(SelectStmt, value->selectStmt);
+        int rows = ListLength(select->valuesLists);
+        if (!rows) {
+            return false;
+        }
+
+        int cols = ListLength(CAST_NODE(List, ListNodeNth(select->valuesLists, 0)));
+        TVector<TMaybe<TString>> data;
+        data.reserve(rows * cols);
+
+        for (int rowIdx = 0; rowIdx < rows; ++rowIdx) {
+            const auto rawRow = CAST_NODE(List, ListNodeNth(select->valuesLists, rowIdx));
+
+            for (int colIdx = 0; colIdx < ListLength(rawRow); ++colIdx) {
+                const auto rawCell = ListNodeNth(rawRow, colIdx);
+                if (NodeTag(rawCell) != T_A_Const) {
+                    return false;
+                }
+                auto pgConst = GetValueNType(CAST_NODE(A_Const, rawCell));
+                if (!pgConst) {
+                    return false;
+                }
+                data.push_back(pgConst->value);
             }
         }
+
+        Builder.InsertValues(NPg::TTableInfoKey{"pg_catalog", tableName}, colNames, data);
         return true;
     }
 
@@ -5504,19 +5579,23 @@ public:
 
 private:
     const ui32 ExtensionIndex;
-    NYql::NPg::IExtensionDDLBuilder& Builder;
+    NYql::NPg::IExtensionSqlBuilder& Builder;
 };
 
-class TExtensionDDLParser : public NYql::NPg::IExtensionDDLParser {
+class TExtensionSqlParser : public NYql::NPg::IExtensionSqlParser {
 public:
-    void Parse(ui32 extensionIndex, const TString& sql, NYql::NPg::IExtensionDDLBuilder& builder) final {
+    void Parse(ui32 extensionIndex, const TVector<TString>& sqls, NYql::NPg::IExtensionSqlBuilder& builder) final {
         TExtensionHandler handler(extensionIndex, builder);
-        NYql::PGParse(sql, handler);
+        for (const auto& sql : sqls) {
+            NYql::PGParse(sql, handler);
+        }
+
+        NKikimr::NMiniKQL::RebuildTypeIndex();
     }
 };
 
-std::unique_ptr<NPg::IExtensionDDLParser> CreateExtensionDDLParser() {
-    return std::make_unique<TExtensionDDLParser>();
+std::unique_ptr<NPg::IExtensionSqlParser> CreateExtensionSqlParser() {
+    return std::make_unique<TExtensionSqlParser>();
 }
 
 } // NSQLTranslationPG

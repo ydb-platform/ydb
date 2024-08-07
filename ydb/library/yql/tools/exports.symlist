@@ -1086,6 +1086,7 @@ makeString;
 makeStringInfo;
 MemoryContextAlloc;
 MemoryContextAllocZero;
+MemoryContextDelete;
 MemoryContextRegisterResetCallback;
 MemoryContextStrdup;
 nocache_index_getattr;
@@ -1164,6 +1165,14 @@ ImplPtrInterruptPending;
 ImplPtrLocalBufferBlockPointers;
 ImplPtrSPI_processed;
 ImplPtrSPI_tuptable;
+
+# Extra PG API
+yql_read_table;
+yql_iterator_error;
+yql_iterator_has_data;
+yql_iterator_value;
+yql_iterator_move;
+yql_iterator_close;
 
 local: *;
 };

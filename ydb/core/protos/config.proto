@@ -1016,6 +1016,7 @@ message TQueryServiceConfig {
     optional TFinalizeScriptServiceConfig FinalizeScriptServiceConfig = 12;
     optional uint64 ProgressStatsPeriodMs = 14 [default = 0]; // 0 = disabled
     optional uint32 QueryTimeoutDefaultSeconds = 19 [default = 1800];
+    optional bool EnableMatchRecognize = 20 [default = false];
 }
 
 // Config describes immediate controls and allows
@@ -1289,6 +1290,11 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000000,
             DefaultValue: 1000 }];
+        optional uint64 DefaultHugeGarbagePerMille = 12 [(ControlOptions) = {
+            Description: "Default threshold of huge chunk garbage per mille which triggers huge chunk defragmentation",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 300 }];
     }
 
     message TTabletControls {
@@ -1511,7 +1517,6 @@ message TColumnShardConfig {
 
     optional TIndexMetadataMemoryLimit IndexMetadataMemoryLimit = 12;
     optional bool CleanupEnabled = 13 [default = true];
-    optional uint32 RemovedPortionLivetimeSeconds = 14 [default = 600];
 
     message TRepairInfo {
         optional string ClassName = 1;

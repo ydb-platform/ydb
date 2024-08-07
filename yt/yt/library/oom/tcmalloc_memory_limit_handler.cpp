@@ -93,6 +93,7 @@ public:
 
 private:
     const TTCMallocLimitHandlerOptions Options_;
+
     bool Fired_ = false;
     bool NeedToHandle_ = false;
     std::mutex Mutex_;
@@ -123,12 +124,12 @@ private:
             SetupMemoryProfileTimeout(Options_.Timeout.Seconds());
             CollectAndDumpMemoryProfile(heapDumpPath);
 
-            Cerr << "TTCMallocLimitHandler: Heap profile written." << Endl;
+            Cerr << "TTCMallocLimitHandler: Heap profile written" << Endl;
             ::_exit(0);
         }
 
         if (childPid < 0) {
-            Cerr << "TTCMallocLimitHandler: fork failed with code:" << LastSystemErrorText() << Endl;
+            Cerr << "TTCMallocLimitHandler: Fork failed: " << LastSystemErrorText() << Endl;
             ::_exit(1);
         }
 
@@ -180,26 +181,28 @@ void SetSoftMemoryLimitHandler(THandler handler)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static TAtomicIntrusivePtr<TTCMallocLimitHandler> LimitHandler_;
+namespace {
 
-////////////////////////////////////////////////////////////////////////////////
+YT_DEFINE_GLOBAL(TAtomicIntrusivePtr<TTCMallocLimitHandler>, LimitHandler);
 
 void HandleTCMallocLimit()
 {
-    if (auto handler = LimitHandler_.Acquire()) {
+    if (auto handler = LimitHandler().Acquire()) {
         handler->Fire();
     }
 }
 
+} // namespace
+
 void EnableTCMallocLimitHandler(TTCMallocLimitHandlerOptions options)
 {
     {
-        if (LimitHandler_.Acquire()) {
+        if (LimitHandler().Acquire()) {
             return;
         }
 
-        TAtomicIntrusivePtr<TTCMallocLimitHandler>::TRawPtr expected{nullptr};
-        LimitHandler_.CompareAndSwap(expected, New<TTCMallocLimitHandler>(options));
+        TAtomicIntrusivePtr<TTCMallocLimitHandler>::TRawPtr expected = nullptr;
+        LimitHandler().CompareAndSwap(expected, New<TTCMallocLimitHandler>(options));
     }
 
     SetSoftMemoryLimitHandler<tcmalloc::MallocExtension>(&HandleTCMallocLimit);
@@ -207,7 +210,9 @@ void EnableTCMallocLimitHandler(TTCMallocLimitHandlerOptions options)
 
 void DisableTCMallocLimitHandler()
 {
-    LimitHandler_.Reset();
+    LimitHandler().Reset();
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

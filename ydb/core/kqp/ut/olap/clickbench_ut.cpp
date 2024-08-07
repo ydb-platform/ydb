@@ -155,7 +155,7 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
             //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
             // Should be fixed in https://st.yandex-team.ru/KIKIMR-17009
             // .SetExpectedReadNodeType("TableFullScan");
-            .SetExpectedReadNodeType("Aggregate-TableFullScan");
+            .SetExpectedReadNodeType("TableFullScan");
         q7.FillExpectedAggregationGroupByPlanOptions();
 
         TAggregationTestCase q9;
@@ -185,7 +185,7 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
             //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
             // Should be fixed in https://st.yandex-team.ru/KIKIMR-17009
             // .SetExpectedReadNodeType("TableFullScan");
-            .SetExpectedReadNodeType("Aggregate-TableFullScan");
+            .SetExpectedReadNodeType("TableFullScan");
         q12.FillExpectedAggregationGroupByPlanOptions();
 
         TAggregationTestCase q14;
@@ -201,7 +201,7 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
             //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
             // Should be fixed in https://st.yandex-team.ru/KIKIMR-17009
             // .SetExpectedReadNodeType("TableFullScan");
-            .SetExpectedReadNodeType("Aggregate-TableFullScan");
+            .SetExpectedReadNodeType("TableFullScan");
         q14.FillExpectedAggregationGroupByPlanOptions();
 
         TAggregationTestCase q22;

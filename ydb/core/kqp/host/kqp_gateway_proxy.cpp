@@ -2067,6 +2067,39 @@ public:
         }
     }
 
+    TFuture<TGenericResult> Analyze(const TString& cluster, const NYql::TAnalyzeSettings& settings) override {
+        CHECK_PREPARED_DDL(Analyze);
+
+        try {
+            if (cluster != SessionCtx->GetCluster()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+            }
+            
+            NKqpProto::TKqpAnalyzeOperation analyzeTx;
+            analyzeTx.SetTablePath(settings.TablePath);
+            for (const auto& column: settings.Columns) {
+                *analyzeTx.AddColumns() = column;
+            }
+
+            if (IsPrepare()) {
+                auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                auto& phyTx = *phyQuery.AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
+                phyTx.MutableSchemeOperation()->MutableAnalyzeTable()->Swap(&analyzeTx);
+                
+                TGenericResult result;
+                result.SetSuccess();
+                return MakeFuture(result);
+            } else {
+                return Gateway->Analyze(cluster, settings);
+            }
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
     TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() override {
         return Gateway->GetCollectedSchemeData();
     }

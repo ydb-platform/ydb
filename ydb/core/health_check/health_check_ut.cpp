@@ -163,12 +163,12 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     }
 
     void AddVSlotsToSysViewResponse(NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr* ev, size_t groupCount,
-                                    const TVector<NKikimrBlobStorage::EVDiskStatus>& vdiskStatuses) {
+                                    const TVector<NKikimrBlobStorage::EVDiskStatus>& vdiskStatuses, ui32 groupStartId = GROUP_START_ID) {
         auto& record = (*ev)->Get()->Record;
         auto entrySample = record.entries(0);
         record.clear_entries();
 
-        auto groupId = GROUP_START_ID;
+        auto groupId = groupStartId;
         const auto *descriptor = NKikimrBlobStorage::EVDiskStatus_descriptor();
         for (size_t i = 0; i < groupCount; ++i) {
             auto vslotId = VCARD_START_ID;
@@ -252,13 +252,13 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         sPool->set_name(STORAGE_POOL_NAME);
     };
 
-    void AddVSlotInVDiskStateResponse(TEvWhiteboard::TEvVDiskStateResponse::TPtr* ev, int groupCount, int vslotCount) {
+    void AddVSlotInVDiskStateResponse(TEvWhiteboard::TEvVDiskStateResponse::TPtr* ev, int groupCount, int vslotCount, ui32 groupStartId = GROUP_START_ID) {
         auto& pbRecord = (*ev)->Get()->Record;
 
         auto sample = pbRecord.vdiskstateinfo(0);
         pbRecord.clear_vdiskstateinfo();
 
-        auto groupId = GROUP_START_ID;
+        auto groupId = groupStartId;
         for (int i = 0; i < groupCount; i++) {
             auto slotId = VCARD_START_ID;
             for (int j = 0; j < vslotCount; j++) {
@@ -270,6 +270,12 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 state->set_nodeid(1);
             }
             groupId++;
+        }
+    }
+
+    void ChangeGroupStateResponse(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateResponse::TPtr* ev) {
+        for (auto& groupInfo : *(*ev)->Get()->Record.mutable_bsgroupstateinfo()) {
+            groupInfo.set_erasurespecies(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
         }
     }
 
@@ -383,7 +389,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         CheckHcResult(result, groupNumber, vdiscPerGroupNumber, isMergeRecords);
     }
 
-    Ydb::Monitoring::SelfCheckResult RequestHcWithVdisks(const NKikimrBlobStorage::TGroupStatus::E groupStatus, const TVector<NKikimrBlobStorage::EVDiskStatus>& vdiskStatuses) {
+    Ydb::Monitoring::SelfCheckResult RequestHcWithVdisks(const NKikimrBlobStorage::TGroupStatus::E groupStatus, const TVector<NKikimrBlobStorage::EVDiskStatus>& vdiskStatuses, bool forStaticGroup = false) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -418,7 +424,11 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 }
                 case NSysView::TEvSysView::EvGetVSlotsResponse: {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr*>(&ev);
-                    AddVSlotsToSysViewResponse(x, 1, vdiskStatuses);
+                    if (forStaticGroup) {
+                        AddVSlotsToSysViewResponse(x, 1, vdiskStatuses, 0);
+                    } else {
+                        AddVSlotsToSysViewResponse(x, 1, vdiskStatuses);
+                    }
                     break;
                 }
                 case NSysView::TEvSysView::EvGetGroupsResponse: {
@@ -430,6 +440,19 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr*>(&ev);
                     AddStoragePoolsToSysViewResponse(x);
                     break;
+                }
+                case NNodeWhiteboard::TEvWhiteboard::EvVDiskStateResponse: {
+                    auto *x = reinterpret_cast<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev);
+                    if (forStaticGroup) {
+                        AddVSlotInVDiskStateResponse(x, 1, vdiskStatuses.size(), 0);
+                    } else {
+                        AddVSlotInVDiskStateResponse(x, 1, vdiskStatuses.size());
+                    }
+                    break;
+                }
+                case NNodeWhiteboard::TEvWhiteboard::EvBSGroupStateResponse: {
+                    auto* x = reinterpret_cast<NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateResponse::TPtr*>(&ev);
+                    ChangeGroupStateResponse(x);
                 }
             }
 
@@ -444,10 +467,12 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         return runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
     }
 
-    void CheckHcResultHasIssuesWithStatus(Ydb::Monitoring::SelfCheckResult& result, const TString& type, const Ydb::Monitoring::StatusFlag::Status expectingStatus, ui32 total) {
+    void CheckHcResultHasIssuesWithStatus(Ydb::Monitoring::SelfCheckResult& result, const TString& type,
+                                          const Ydb::Monitoring::StatusFlag::Status expectingStatus, ui32 total, 
+                                          std::string_view pool = "/Root:test") {
         int issuesCount = 0;
         for (const auto& issue_log : result.Getissue_log()) {
-            if (issue_log.type() == type && issue_log.location().storage().pool().name() == "/Root:test" && issue_log.status() == expectingStatus) {
+            if (issue_log.type() == type && issue_log.location().storage().pool().name() == pool && issue_log.status() == expectingStatus) {
                 issuesCount++;
             }
         }
@@ -587,6 +612,12 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     Y_UNIT_TEST(RedGroupIssueWhenDisintegratedGroupStatus) {
         auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::DISINTEGRATED, {3, NKikimrBlobStorage::ERROR});
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1);
+    }
+
+    Y_UNIT_TEST(StaticGroupIssue) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, {NKikimrBlobStorage::ERROR}, /*forStatic*/ true);
+        Cerr << result.ShortDebugString() << Endl;
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1, "static");
     }
 
     /* HC currently infers group status on its own, so it's never unknown

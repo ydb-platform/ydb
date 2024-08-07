@@ -240,6 +240,7 @@ enum class TYdbOperation : ui32 {
     CreateReplication    = 1 << 24,
     AlterReplication     = 1 << 25,
     DropReplication      = 1 << 26,
+    Analyze              = 1 << 27,
 };
 
 Y_DECLARE_FLAGS(TYdbOperations, TYdbOperation);
@@ -548,7 +549,8 @@ TIntrusivePtr<IDataProvider> CreateKikimrDataSource(
     TIntrusivePtr<IKikimrGateway> gateway,
     TIntrusivePtr<TKikimrSessionContext> sessionCtx,
     const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& sourceFactory,
-    bool isInternalCall);
+    bool isInternalCall,
+    TGUCSettings::TPtr gucSettings);
 
 TIntrusivePtr<IDataProvider> CreateKikimrDataSink(
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,

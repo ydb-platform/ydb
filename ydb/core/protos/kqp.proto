@@ -549,6 +549,7 @@ message TEvStartKqpTasksRequest {
     optional bool StartAllOrFail = 6 [default = true];
     optional uint64 OutputChunkMaxSize = 7 [default = 0]; // 0 - use some default value
     optional string SerializedGUCSettings = 8;
+    optional string SchedulerGroup = 9;
 }
 
 message TEvStartKqpTasksResponse {

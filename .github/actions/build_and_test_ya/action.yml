@@ -77,6 +77,10 @@ runs:
             -d '{"state":"pending","description":"The check has been started","context":"test_${{inputs.build_preset}}"}'
         fi
    
+    - name: Clean ya cache
+      shell: bash
+      run: rm -rf ~/.ya
+
     - name: Prepare s3cmd
       uses: ./.github/actions/s3cmd
       with:

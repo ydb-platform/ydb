@@ -135,6 +135,8 @@ enum ECumulativeCounters {
     COUNTER_READING_EXPORTED_BLOBS = 79                     [(CounterOpts) = {Name: "ReadingExportedBlobs"}];
     COUNTER_READING_EXPORTED_BYTES = 80                     [(CounterOpts) = {Name: "ReadingExportedBytes"}];
     COUNTER_READING_EXPORTED_RANGES = 81                    [(CounterOpts) = {Name: "ReadingExportedRanges"}];
+    COUNTER_PLANNED_TX_COMPLETED = 82                       [(CounterOpts) = {Name: "PlannedTxCompleted"}];
+    COUNTER_IMMEDIATE_TX_COMPLETED = 83                     [(CounterOpts) = {Name: "ImmediateTxCompleted"}];
 }
 
 enum EPercentileCounters {

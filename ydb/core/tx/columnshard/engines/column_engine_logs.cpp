@@ -381,7 +381,7 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
             }
             const auto inserted = uniquePortions.emplace(it->second[i].GetAddress()).second;
             if (inserted) {
-                Y_ABORT_UNLESS(it->second[i].CheckForCleanup(snapshot));
+                AFL_VERIFY(it->second[i].CheckForCleanup(snapshot))("p_snapshot", it->second[i].GetRemoveSnapshotOptional())("snapshot", snapshot);
                 if (txSize + it->second[i].GetTxVolume() < txSizeLimit || changes->PortionsToDrop.empty()) {
                     txSize += it->second[i].GetTxVolume();
                 } else {
@@ -516,7 +516,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
                 continue;
             }
             Y_ABORT_UNLESS(portionInfo->Produced());
-            const bool skipPortion = !pkRangesFilter.IsPortionInUsage(*portionInfo, VersionedIndex.GetLastSchema()->GetIndexInfo());
+            const bool skipPortion = !pkRangesFilter.IsPortionInUsage(*portionInfo);
             AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", skipPortion ? "portion_skipped" : "portion_selected")
                 ("pathId", pathId)("portion", portionInfo->DebugString());
             if (skipPortion) {
@@ -573,14 +573,6 @@ void TColumnEngineForLogs::DoRegisterTable(const ui64 pathId) {
         g->StartActualizationIndex();
         g->RefreshScheme();
     }
-}
-
-TDuration TColumnEngineForLogs::GetRemovedPortionLivetime() {
-    TDuration result = TDuration::Minutes(10);
-    if (HasAppData() && AppDataVerified().ColumnShardConfig.HasRemovedPortionLivetimeSeconds()) {
-        result = TDuration::Seconds(AppDataVerified().ColumnShardConfig.GetRemovedPortionLivetimeSeconds());
-    }
-    return NYDBTest::TControllers::GetColumnShardController()->GetRemovedPortionLivetime(result);
 }
 
 } // namespace NKikimr::NOlap

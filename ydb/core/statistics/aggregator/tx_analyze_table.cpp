@@ -2,16 +2,17 @@
 
 #include <ydb/core/tx/datashard/datashard.h>
 
+#include <util/string/vector.h>
+
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
-    TPathId PathId;
-    TActorId ReplyToActorId;
-    ui64 OperationId = 0;
+    const NKikimrStat::TEvAnalyze& Record;
+    TActorId ReplyToActorId;    
 
-    TTxAnalyzeTable(TSelf* self, const TPathId& pathId, TActorId replyToActorId)
+    TTxAnalyzeTable(TSelf* self, const NKikimrStat::TEvAnalyze& record, TActorId replyToActorId)
         : TTxBase(self)
-        , PathId(pathId)
+        , Record(record)
         , ReplyToActorId(replyToActorId)
     {}
 
@@ -24,45 +25,61 @@ struct TStatisticsAggregator::TTxAnalyzeTable : public TTxBase {
             return true;
         }
 
-        auto itOp = Self->ForceTraversalsByPathId.find(PathId);
-        if (itOp != Self->ForceTraversalsByPathId.end()) {
-            itOp->second.ReplyToActorIds.insert(ReplyToActorId);
-            OperationId = itOp->second.OperationId;
-            return true;
-        }
-
         NIceDb::TNiceDb db(txc.DB);
 
-        TForceTraversal& operation = Self->ForceTraversalsByPathId[PathId];
-        operation.PathId = PathId;
-        operation.OperationId = ++Self->LastForceTraversalOperationId;
-        operation.ReplyToActorIds.insert(ReplyToActorId);
-        Self->ForceTraversals.PushBack(&operation);
+        const ui64 cookie = Record.GetCookie();
+        const TString types = JoinVectorIntoString(TVector<ui32>(Record.GetTypes().begin(), Record.GetTypes().end()), ",");
+        
+        for (const auto& table : Record.GetTables()) {
+            const TPathId pathId = PathIdFromPathId(table.GetPathId());
+            const TString columnTags = JoinVectorIntoString(TVector<ui32>{table.GetColumnTags().begin(),table.GetColumnTags().end()},",");
 
-        Self->PersistLastForceTraversalOperationId(db);
+            // drop request with the same cookie and path from this sender
+            if (std::any_of(Self->ForceTraversals.begin(), Self->ForceTraversals.end(), 
+                [this, &pathId, &cookie](const TForceTraversal& elem) { 
+                    return elem.PathId == pathId 
+                        && elem.Cookie == cookie
+                        && elem.ReplyToActorId == ReplyToActorId
+                    ;})) {
+                return true;
+            }
 
-        db.Table<Schema::ForceTraversals>().Key(operation.OperationId).Update(
-            NIceDb::TUpdate<Schema::ForceTraversals::OwnerId>(PathId.OwnerId),
-            NIceDb::TUpdate<Schema::ForceTraversals::LocalPathId>(PathId.LocalPathId));
+            // create new force trasersal
+            TForceTraversal operation {
+                .OperationId = Self->NextForceTraversalOperationId,
+                .Cookie = cookie,
+                .PathId = pathId,
+                .ColumnTags = columnTags,
+                .Types = types,
+                .ReplyToActorId = ReplyToActorId
+            };
+            Self->ForceTraversals.emplace_back(operation);
+/*
+            db.Table<Schema::ForceTraversals>().Key(Self->NextForceTraversalOperationId, pathId.OwnerId, pathId.LocalPathId).Update(
+                NIceDb::TUpdate<Schema::ForceTraversals::OperationId>(Self->NextForceTraversalOperationId),
+                NIceDb::TUpdate<Schema::ForceTraversals::OwnerId>(pathId.OwnerId),
+                NIceDb::TUpdate<Schema::ForceTraversals::LocalPathId>(pathId.LocalPathId),
+                NIceDb::TUpdate<Schema::ForceTraversals::Cookie>(cookie),
+                NIceDb::TUpdate<Schema::ForceTraversals::ColumnTags>(columnTags),
+                NIceDb::TUpdate<Schema::ForceTraversals::Types>(types)
+            );
+*/
+        }
 
-        OperationId = operation.OperationId;
+        Self->PersistNextForceTraversalOperationId(db);
 
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& /*ctx*/) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTable::Complete");
     }
 };
 
 void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyze::TPtr& ev) {
-    const auto& record = ev->Get()->Record;
+    ++NextForceTraversalOperationId;
 
-    // TODO: replace by queue
-    for (const auto& table : record.GetTables()) {
-        Execute(new TTxAnalyzeTable(this, PathIdFromPathId(table.GetPathId()), ev->Sender), TActivationContext::AsActorContext());
-    }
-
+    Execute(new TTxAnalyzeTable(this, ev->Get()->Record, ev->Sender), TActivationContext::AsActorContext());
 }
 
 } // NKikimr::NStat

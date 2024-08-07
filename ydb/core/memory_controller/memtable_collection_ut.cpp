@@ -26,14 +26,14 @@ Y_UNIT_TEST_SUITE(TMemTableMemoryConsumersCollection) {
 #define VERIFY_TOTAL(expected) \
 do { \
     UNIT_ASSERT_VALUES_EQUAL(collection->GetTotalConsumption(), expected); \
-    UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("Consumer/MemTable/TotalBytes")->Val(), i64(expected)); \
+    UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("Consumer/MemTable/Total")->Val(), i64(expected)); \
     UNIT_ASSERT_VALUES_EQUAL(collectionConsumer->GetConsumption(), expected); \
 } while (false)
 
 #define VERIFY_COMPACTING(expected) \
 do { \
     UNIT_ASSERT_VALUES_EQUAL(collection->GetTotalCompacting(), expected); \
-    UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("Consumer/MemTable/CompactingBytes")->Val(), i64(expected)); \
+    UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("Consumer/MemTable/Compacting")->Val(), i64(expected)); \
 } while (false)
 
 Y_UNIT_TEST(Empty) {

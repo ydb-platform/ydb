@@ -41,6 +41,17 @@ struct IMemoryUsageTracker
 
 DEFINE_REFCOUNTED_TYPE(IMemoryUsageTracker)
 
+/////////////////////////////////////////////////////////////////////////////
+
+struct IReservingMemoryUsageTracker
+    : public IMemoryUsageTracker
+{
+    virtual void ReleaseUnusedReservation() = 0;
+    virtual TError TryReserve(i64 size) = 0;
+};
+
+DEFINE_REFCOUNTED_TYPE(IReservingMemoryUsageTracker)
+
 ////////////////////////////////////////////////////////////////////////////////
 
 IMemoryUsageTrackerPtr GetNullMemoryUsageTracker();

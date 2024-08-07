@@ -136,6 +136,10 @@ public:
                 return nullptr;
             }
 
+            if (!alterConfig.HasPartitionStrategy() && tabletConfig->HasPartitionStrategy()) {
+                alterConfig.MutablePartitionStrategy()->CopyFrom(tabletConfig->GetPartitionStrategy());
+            }
+
             if (alterConfig.GetPartitionConfig().HasLifetimeSeconds()) {
                 const auto lifetimeSeconds = alterConfig.GetPartitionConfig().GetLifetimeSeconds();
                 if (lifetimeSeconds <= 0 || (ui32)lifetimeSeconds > TSchemeShard::MaxPQLifetimeSeconds) {
@@ -583,6 +587,7 @@ public:
                 && NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
                 && NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
 
+        THashSet<ui32> involvedPartitions;
         if (splitMergeEnabled) {
             auto Hex = [](const auto& value) {
                 return HexText(TBasicStringBuf(value));
@@ -590,8 +595,6 @@ public:
 
             ui32 nextId = topic->NextPartitionId;
             ui32 nextGroupId = topic->TotalGroupCount;
-
-            THashSet<ui32> involvedPartitions;
 
             for (const auto& split : alter.GetSplit()) {
                 alterData->TotalGroupCount += 2;
@@ -789,9 +792,10 @@ public:
         }
 
         const PQGroupReserve reserve(newTabletConfig, alterData->ActivePartitionCount);
+        const PQGroupReserve reserveForCheckLimit(newTabletConfig, alterData->ActivePartitionCount + involvedPartitions.size());
         const PQGroupReserve oldReserve(tabletConfig, topic->ActivePartitionCount);
 
-        const ui64 storageToReserve = reserve.Storage > oldReserve.Storage ? reserve.Storage - oldReserve.Storage : 0;
+        const ui64 storageToReserve = reserveForCheckLimit.Storage > oldReserve.Storage ? reserveForCheckLimit.Storage - oldReserve.Storage : 0;
 
         {
             TPath::TChecker checks = path.Check();

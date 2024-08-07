@@ -30,7 +30,10 @@ class LockfilePackageMeta(object):
         return " ".join([self.tarball_url, self.sky_id, self.integrity, self.integrity_algorithm])
 
     def to_uri(self):
-        pkg_uri = f"{self.tarball_url}#integrity={self.integrity_algorithm}-{self.integrity}"
+        tarball_url: str = self.tarball_url
+        if not tarball_url.startswith("https://") and not tarball_url.startswith("http://"):
+            tarball_url = "https://npm.yandex-team.ru/" + tarball_url
+        pkg_uri = f"{tarball_url}#integrity={self.integrity_algorithm}-{self.integrity}"
         return pkg_uri
 
 

@@ -412,7 +412,7 @@ private:
         }
         IdleChecksStarted = true;
 
-        Schedule(IDLE_DURATION / 2, new TEvents::TEvWakeup());
+        Schedule(IDLE_DURATION / 2, new TEvents::TEvWakeup(static_cast<ui64>(EWakeUp::IdleCheck)));
     }
 
     void RunIdleCheck() {
@@ -466,7 +466,7 @@ private:
     }
 
     void ScheduleNodeInfoRequest() const {
-        Schedule(IDLE_DURATION * 2, new TEvents::TEvWakeup(static_cast<ui64>(EWakeUp::StartCpuLoadRequest)));
+        Schedule(IDLE_DURATION * 2, new TEvents::TEvWakeup(static_cast<ui64>(EWakeUp::StartNodeInfoRequest)));
     }
 
     void RunNodeInfoRequest() const {
@@ -537,6 +537,10 @@ private:
 };
 
 }  // anonymous namespace
+
+bool IsWorkloadServiceRequired(const NResourcePool::TPoolSettings& config) {
+    return config.ConcurrentQueryLimit != -1 || config.DatabaseLoadCpuThreshold >= 0.0 || config.QueryCancelAfter;
+}
 
 }  // namespace NWorkload
 

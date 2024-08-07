@@ -34,7 +34,7 @@ psql -h <ydb_address> -U <user_name> <database_name>
 1. Получить адрес [кластера](../concepts/glossary.md#cluster), к которому производится подключение.
 1. Получить название [базы данных](../concepts/glossary.md#database) в кластере, к которому производится подключение.
 
-Выполнить запрос в {{ydb-name}}:
+Выполнить запрос к {{ ydb-name }}:
 
 ```
 ydb -e <ydb_address> -d <database_name> --user <user_name> sql -s '--!syntax_pg

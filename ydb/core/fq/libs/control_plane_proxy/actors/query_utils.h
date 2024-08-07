@@ -19,7 +19,8 @@ TString MakeCreateExternalDataSourceQuery(
     const FederatedQuery::ConnectionContent& connectionContent,
     const TSigner::TPtr& signer,
     const NConfig::TCommonConfig& common,
-    bool replaceIfExists);
+    bool replaceIfExists,
+    const TString& scope);
 
 TString MakeDeleteExternalDataSourceQuery(const TString& sourceName);
 

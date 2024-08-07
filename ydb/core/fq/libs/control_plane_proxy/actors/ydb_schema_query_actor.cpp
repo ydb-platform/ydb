@@ -605,7 +605,7 @@ IActor* MakeCreateConnectionActor(
         statements.push_back(TSchemaQueryTask{
             .SQL = MakeCreateExternalDataSourceQuery(
                 connectionContent, signer, commonConfig,
-                computeConfig.IsReplaceIfExistsSyntaxSupported()),
+                computeConfig.IsReplaceIfExistsSyntaxSupported(), scope),
                              .ScheduleErrorRecoverySQLGeneration =
                                  withoutRollback
                                      ? NoRecoverySQLGeneration()
@@ -687,7 +687,7 @@ IActor* MakeModifyConnectionActor(
 
             statements.push_back(TSchemaQueryTask{
                 .SQL = MakeCreateExternalDataSourceQuery(
-                    newConnectionContent, signer, commonConfig, replaceSupported)});
+                    newConnectionContent, signer, commonConfig, replaceSupported, scope)});
             return statements;
         }
 
@@ -716,7 +716,7 @@ IActor* MakeModifyConnectionActor(
         statements.push_back(TSchemaQueryTask{
             .SQL = TString{MakeDeleteExternalDataSourceQuery(oldConnectionContent.name())},
             .RollbackSQL           = TString{MakeCreateExternalDataSourceQuery(
-                oldConnectionContent, signer, commonConfig, false)},
+                oldConnectionContent, signer, commonConfig, false, scope)},
             .ShouldSkipStepOnError = IsPathDoesNotExistIssue});
 
         if (dropOldSecret) {
@@ -735,7 +735,7 @@ IActor* MakeModifyConnectionActor(
 
         statements.push_back(
             TSchemaQueryTask{.SQL         = TString{MakeCreateExternalDataSourceQuery(
-                                 newConnectionContent, signer, commonConfig, false)},
+                                 newConnectionContent, signer, commonConfig, false, scope)},
                              .RollbackSQL = TString{MakeDeleteExternalDataSourceQuery(
                                  newConnectionContent.name())}});
 
@@ -800,7 +800,7 @@ IActor* MakeDeleteConnectionActor(
             TSchemaQueryTask{.SQL = TString{MakeDeleteExternalDataSourceQuery(
                                  connectionContent.name())},
                              .RollbackSQL = MakeCreateExternalDataSourceQuery(
-                                 connectionContent, signer, commonConfig, false),
+                                 connectionContent, signer, commonConfig, false, scope),
                              .ShouldSkipStepOnError = IsPathDoesNotExistIssue}};
         if (dropSecret) {
             statements.push_back(

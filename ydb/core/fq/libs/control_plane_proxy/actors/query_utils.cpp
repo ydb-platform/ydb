@@ -125,8 +125,10 @@ TMaybe<TString> CreateSecretObjectQuery(const FederatedQuery::ConnectionSetting&
 
 TString CreateAuthParamsQuery(const FederatedQuery::ConnectionSetting& setting,
                               const TString& name,
-                              const TSigner::TPtr& signer) {
+                              const TSigner::TPtr& signer,
+                              const TString& scope) {
     using namespace fmt::literals;
+    const TString folderId = NYdb::NFq::TScope{scope}.ParseFolder();
     auto authMethod = GetYdbComputeAuthMethod(setting);
     switch (authMethod) {
         case EYdbComputeAuth::UNKNOWN:
@@ -142,7 +144,7 @@ TString CreateAuthParamsQuery(const FederatedQuery::ConnectionSetting& setting,
                 )",
             "auth_method"_a = ToString(authMethod),
             "service_account_id"_a = EncloseAndEscapeString(ExtractServiceAccountId(setting), '"'),
-            "sa_secret_name"_a = EncloseAndEscapeString(signer ? "k1" + name : TString{}, '"'));
+            "sa_secret_name"_a = EncloseAndEscapeString(signer ? TStringBuilder{} << "f1_" << folderId << name : TString{}, '"'));
         case EYdbComputeAuth::BASIC:
             return fmt::format(
                     R"(,
@@ -152,7 +154,7 @@ TString CreateAuthParamsQuery(const FederatedQuery::ConnectionSetting& setting,
                     )",
                 "auth_method"_a = ToString(authMethod),
                 "login"_a = EncloseAndEscapeString(GetLogin(setting).GetOrElse({}), '"'),
-                "password_secret_name"_a = EncloseAndEscapeString("k2" + name, '"'));
+                "password_secret_name"_a = EncloseAndEscapeString(TStringBuilder{} << "f2_" << folderId << name, '"'));
         case EYdbComputeAuth::MDB_BASIC:
             return fmt::format(
                 R"(,
@@ -164,9 +166,9 @@ TString CreateAuthParamsQuery(const FederatedQuery::ConnectionSetting& setting,
                     )",
                 "auth_method"_a = ToString(authMethod),
                 "service_account_id"_a = EncloseAndEscapeString(ExtractServiceAccountId(setting), '"'),
-                "sa_secret_name"_a = EncloseAndEscapeString(signer ? "k1" + name : TString{}, '"'),
+                "sa_secret_name"_a = EncloseAndEscapeString(signer ? TStringBuilder{} << "f1_" << folderId << name : TString{}, '"'),
                 "login"_a = EncloseAndEscapeString(GetLogin(setting).GetOrElse({}), '"'),
-                "password_secret_name"_a = EncloseAndEscapeString("k2" + name, '"'));
+                "password_secret_name"_a = EncloseAndEscapeString(TStringBuilder{} << "f2_" << folderId << name, '"'));
     }
 }
 
@@ -174,7 +176,8 @@ TString MakeCreateExternalDataSourceQuery(
     const FederatedQuery::ConnectionContent& connectionContent,
     const TSigner::TPtr& signer,
     const NConfig::TCommonConfig& common,
-    bool replaceIfExists) {
+    bool replaceIfExists,
+    const TString& scope) {
     using namespace fmt::literals;
 
     TString properties;
@@ -281,7 +284,8 @@ TString MakeCreateExternalDataSourceQuery(
         "auth_params"_a =
             CreateAuthParamsQuery(connectionContent.setting(),
                                   connectionContent.name(),
-                                  signer));
+                                  signer,
+                                  scope));
 }
 
 TMaybe<TString> DropSecretObjectQuery(const TString& name, const TString& scope) {

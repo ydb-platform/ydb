@@ -3237,6 +3237,10 @@ void TPersQueue::AddCmdReadTransactionRange(TEvKeyValue::TEvRequest& request,
     cmd->MutableRange()->SetTo(GetTxKey(Max<ui64>()));
     cmd->MutableRange()->SetIncludeTo(true);
     cmd->SetIncludeData(true);
+
+    PQ_LOG_D("Transactions request." <<
+             " From " << cmd->MutableRange()->GetFrom() <<
+             ", To " << cmd->MutableRange()->GetTo());
 }
 
 void TPersQueue::HandleWakeup(const TActorContext& ctx) {

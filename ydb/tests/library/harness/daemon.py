@@ -73,9 +73,9 @@ class Daemon(object):
         self.killed = False
         self.__core_pattern = core_pattern
         self.logger = logger.getChild(self.__class__.__name__)
-        self.__stdout_file = open(stdout_file, mode='ab')
-        self.__stdin_file = open(stdin_file, mode='ab')
-        self.__stderr_file = open(stderr_file, mode='ab')
+        self.__stdout_file = open(stdout_file, mode='wb')
+        self.__stdin_file = open(stdin_file, mode='rb')
+        self.__stderr_file = open(stderr_file, mode='wb')
 
     @property
     def daemon(self):

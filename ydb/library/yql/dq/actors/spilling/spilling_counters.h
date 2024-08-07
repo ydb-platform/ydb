@@ -19,17 +19,4 @@ struct TSpillingCounters : public TThrRefBase {
     ::NMonitoring::TDynamicCounters::TCounterPtr SpillingIoErrors;
 };
 
-struct TSpillingCountersPerTaskRunner : public TThrRefBase {
-
-    TSpillingCountersPerTaskRunner(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 taskId);
-
-    ~TSpillingCountersPerTaskRunner();
-
-    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
-    ui64 TaskId;
-
-    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingWriteBytes;
-    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingReadBytes;
-};
-
 } // namespace NYql::NDq

@@ -40,11 +40,10 @@ class TDqComputeStorageActor : public NActors::TActorBootstrapped<TDqComputeStor
     // void promise that completes when block is removed
     using TDeletingBlobInfo = NThreading::TPromise<void>;
 public:
-    TDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback, TIntrusivePtr<TSpillingCountersPerTaskRunner> spillingCounters)
+    TDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback)
         : TxId_(txId),
         SpillerName_(spillerName),
-        WakeupCallback_(wakeupCallback),
-        SpillingCounters_(spillingCounters)
+        WakeupCallback_(wakeupCallback)
     {
     }
 
@@ -158,7 +157,6 @@ private:
 
         StoredBlobsCount_++;
         StoredBlobsSize_ += size;
-        SpillingCounters_->SpillingReadBytes->Add(size);
 
         // complete future and wake up waiting compute node
         promise.SetValue(msg.BlobId);
@@ -192,8 +190,7 @@ private:
         }
 
         TRope res(TString(reinterpret_cast<const char*>(msg.Blob.Data()), msg.Blob.Size()));
-        SpillingCounters_->SpillingReadBytes->Add(msg.Blob.Size());
-        
+
         auto& promise = it->second.second;
         promise.SetValue(std::move(res));
 
@@ -250,14 +247,12 @@ private:
     std::function<void()> WakeupCallback_;
 
     TSet<TKey> StoredBlobs_;
-
-    TIntrusivePtr<TSpillingCountersPerTaskRunner> SpillingCounters_;
 };
 
 } // anonymous namespace
 
-IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback, TIntrusivePtr<TSpillingCountersPerTaskRunner> spillingCounters) {
-    return new TDqComputeStorageActor(txId, spillerName, wakeupCallback, spillingCounters);
+IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback) {
+    return new TDqComputeStorageActor(txId, spillerName, wakeupCallback);
 }
 
 } // namespace NYql::NDq 

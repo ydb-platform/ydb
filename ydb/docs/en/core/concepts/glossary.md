@@ -217,7 +217,7 @@ An **actor system** is a C++ library with {{ ydb-short-name }}'s [implementation
 
 #### Actor service {#actor-service}
 
-An **actor service** is an actor that has a well-known name and is usually run in a single instance on a [node](#node).
+An **actor service** is an [actor](#actor) that has a well-known name and is usually run in a single instance on a [node](#node).
 
 #### ActorId {#actorid}
 
@@ -274,17 +274,17 @@ A **tablet local database** or **local database** is a set of data structures an
 
 Each local database table is stored using the [LSM tree](#lsm-tree) data structure.
 
-#### LSM tree {#lsm-tree}
+#### Log-structured merge-tree {#lsm-tree}
 
-An **LSM tree**, or [log-structured merge-tree](https://en.wikipedia.org/wiki/Log-structured_merge-tree), is a data structure designed to optimize write and read performance in storage systems and used in {{ ydb-short-name }} to store local database tables.
+A **[log-structured merge-tree](https://en.wikipedia.org/wiki/Log-structured_merge-tree)** or **LSM tree**, is a data structure designed to optimize write and read performance in storage systems. It is used in {{ ydb-short-name }} for storing [local database](#local-database) tables and [VDisks](#vdisk) data.
 
 #### MemTable {#memtable}
 
-All incoming data is initially written to an in-memory structure called a **MemTable**. When the MemTable reaches a predefined size, it is flushed to disk as an immutable [SST](#sst) file.
+All data written to a [local database](#local-database) tables is initially stored in an in-memory data structure called a **MemTable**. When the MemTable reaches a predefined size, it is flushed to disk as an immutable [SST](#sst).
 
-#### SST {#sst}
+#### Sorted string table {#sst}
 
-An **SST**, or sorted string table, is an immutable file that stores rows sorted by key, facilitating efficient lookups and range queries. Each SST is composed of a contiguous series of small data pages, typically around 7 KiB in size, which further optimizes the process of reading data from disk.
+A **sorted string table** or **SST** is an immutable data structure that stores rows sorted by key, facilitating efficient key lookups and range queries. Each SST is composed of a contiguous series of small data pages, typically around 7 KiB in size, which further optimizes the process of reading data from disk. An SST typically represents a part of [LSM tree](#lsm-tree).
 
 #### Tablet pipe {#tablet-pipe}
 
@@ -300,11 +300,11 @@ The **bootstrapper** is the primary mechanism for launching tablets, used for se
 
 ### Shared cache {#shared-cache}
 
-A **shared cache** is an actor that stores data pages recently accessed and read from [distributed storage](#distributed-storage). By caching these pages, it reduces disk I/O operations and accelerates data retrieval, enhancing overall system performance.
+A **shared cache** is an [actor](#actor) that stores data pages recently accessed and read from [distributed storage](#distributed-storage). Caching these pages reduces disk I/O operations and accelerates data retrieval, enhancing overall system performance.
 
 ### Memory controller {#memory-controller}
 
-A **memory controller** is an actor that manages {{ ydb-short-name }} [memory limits](../deploy/configuration/config.md#memory-controller).
+A **memory controller** is an [actor](#actor) that manages {{ ydb-short-name }} [memory limits](../deploy/configuration/config.md#memory-controller).
 
 ### Tablet types {#tablet-types}
 
@@ -427,7 +427,7 @@ PDisk contains a scheduler that provides device bandwidth sharing between severa
 
 #### Skeleton {#skeleton}
 
-A **Skeleton** is an actor that provides an interface to a [VDisk](#vdisk).
+A **Skeleton** is an [actor](#actor) that provides an interface to a [VDisk](#vdisk).
 
 #### SkeletonFront {#skeletonfront}
 

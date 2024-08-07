@@ -18,14 +18,19 @@ public:
     {
     }
 
+    void SetTaskCounters(TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters) override {
+        SpillingTaskCounters_ = spillingTaskCounters;
+    }
+
     NKikimr::NMiniKQL::ISpiller::TPtr CreateSpiller() override {
-        return std::make_shared<TDqComputeStorage>(TxId_, WakeUpCallback_, ActorSystem_);
+        return std::make_shared<TDqComputeStorage>(TxId_, WakeUpCallback_, SpillingTaskCounters_, ActorSystem_);
     }
 
 private:
     TActorSystem* ActorSystem_;
     TTxId TxId_;
     std::function<void()> WakeUpCallback_;
+    TIntrusivePtr<TSpillingTaskCounters> SpillingTaskCounters_;
 };
 
 } // namespace NYql::NDq

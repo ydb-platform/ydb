@@ -40,10 +40,12 @@ class TDqComputeStorageActor : public NActors::TActorBootstrapped<TDqComputeStor
     // void promise that completes when block is removed
     using TDeletingBlobInfo = NThreading::TPromise<void>;
 public:
-    TDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback)
+    TDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback, 
+        TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters)
         : TxId_(txId),
         SpillerName_(spillerName),
-        WakeupCallback_(wakeupCallback)
+        WakeupCallback_(wakeupCallback),
+        SpillingTaskCounters_(spillingTaskCounters)
     {
     }
 
@@ -158,6 +160,9 @@ private:
         StoredBlobsCount_++;
         StoredBlobsSize_ += size;
 
+        if (SpillingTaskCounters_) {
+            SpillingTaskCounters_->SpillingWriteBytes.Add(size);
+        }
         // complete future and wake up waiting compute node
         promise.SetValue(msg.BlobId);
 
@@ -170,6 +175,10 @@ private:
     void HandleWork(TEvDqSpilling::TEvReadResult::TPtr& ev) {
         auto& msg = *ev->Get();
         LOG_T("[TEvReadResult] blobId: " << msg.BlobId << ", size: " << msg.Blob.size());
+
+        if (SpillingTaskCounters_) {
+            SpillingTaskCounters_->SpillingReadBytes.Add(msg.Blob.Size());
+        }
 
         // Deletion is read without fetching the results. So, after the deletion library sends TEvReadResult event
         // Check if the intention was to delete and complete correct future in this case.
@@ -224,7 +233,7 @@ private:
         StoredBlobs_.erase(blobId);
     }
 
-    protected:
+protected:
     const TTxId TxId_;
     TActorId SpillingActorId_;
 
@@ -245,14 +254,16 @@ private:
     bool IsInitialized_ = false;
 
     std::function<void()> WakeupCallback_;
+    TIntrusivePtr<TSpillingTaskCounters> SpillingTaskCounters_;
 
     TSet<TKey> StoredBlobs_;
 };
 
 } // anonymous namespace
 
-IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback) {
-    return new TDqComputeStorageActor(txId, spillerName, wakeupCallback);
+IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, 
+    std::function<void()> wakeupCallback, TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters) {
+    return new TDqComputeStorageActor(txId, spillerName, wakeupCallback, spillingTaskCounters);
 }
 
 } // namespace NYql::NDq 

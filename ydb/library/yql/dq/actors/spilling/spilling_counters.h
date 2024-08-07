@@ -19,4 +19,10 @@ struct TSpillingCounters : public TThrRefBase {
     ::NMonitoring::TDynamicCounters::TCounterPtr SpillingIoErrors;
 };
 
+struct TSpillingTaskCounters : public TThrRefBase {
+    // Maybe change to std::atomic<ui64>
+    TAtomicCounter SpillingReadBytes;
+    TAtomicCounter SpillingWriteBytes;
+};
+
 } // namespace NYql::NDq

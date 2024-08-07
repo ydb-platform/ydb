@@ -66,6 +66,8 @@ struct TTaskRunnerStatsBase {
 };
 
 struct TDqTaskRunnerStats : public TTaskRunnerStatsBase {
+    ui64 SpillingReadBytes;
+    ui64 SpillingWriteBytes;
 };
 
 // Provides read access to TTaskRunnerStatsBase

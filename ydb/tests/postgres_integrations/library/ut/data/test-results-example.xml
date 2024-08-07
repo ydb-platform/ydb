@@ -8,6 +8,9 @@
         <testcase name="failed2" classname="f" time="0.000">
             <failure message="Failed"><![CDATA[escaped error]]></failure>
         </testcase>
+		<testcase name="error1" classname="f" time="0.000">
+			<error message="No test result found">panic and timeout</error>
+		</testcase>
         <testcase name="skipped1" classname="s" time="0.000">
             <skipped message="Skipped">skip message</skipped>
         </testcase>

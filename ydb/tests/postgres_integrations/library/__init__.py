@@ -1,5 +1,6 @@
 __all__ = [
-    'IntegrationTests'
+    'IntegrationTests',
+    'PgTestWrapper',
 ]
 
 from .pytest_integration import *

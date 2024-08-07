@@ -1,19 +1,14 @@
 
 # from os import path
-# from typing import Sequence
+from typing import List, Sequence
 
-# import yatest
+import yatest
 
-# import pytest
+import pytest
 
-
-# from ydb.tests.postgres_integrations.library import IntegrationTests
-
-# integrations=IntegrationTests(yatest.common.source_path("ydb/tests/postgres_integrations/go-libpq/data"))
-
-# def pytest_generate_tests(metafunc: pytest.Metafunc):
-#     integrations.pytest_generate_tests(metafunc)
+selected_items: List[pytest.Function] = []
 
 
-# def pytest_deselected(items: Sequence[pytest.Item]):
-#     integrations.pytest_deselected(items)
+def pytest_collection_finish(session: pytest.Session):
+    global selected_items
+    selected_items = session.items

@@ -128,12 +128,8 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
             Counters.GetCSCounters().OnFailedWriteResponse(EWriteFailReason::PutBlob);
             wBuffer.RemoveData(aggr, StoragesManager->GetInsertOperator());
         } else {
-            ui64 rows = 0;
-            for (auto& batch : aggr->GetSplittedBlobs()) {
-                rows += batch->GetRowsCount();
-            }
             const TMonotonic now = TMonotonic::Now();
-            Counters.OnWritePutBlobsSuccess(now - writeMeta.GetWriteStartInstant(), rows);
+            Counters.OnWritePutBlobsSuccess(now - writeMeta.GetWriteStartInstant(), aggr->GetRows());
             Counters.GetCSCounters().OnWriteMiddle1PutBlobsSuccess(now - writeMeta.GetWriteMiddle1StartInstant());
             Counters.GetCSCounters().OnWriteMiddle2PutBlobsSuccess(now - writeMeta.GetWriteMiddle2StartInstant());
             Counters.GetCSCounters().OnWriteMiddle3PutBlobsSuccess(now - writeMeta.GetWriteMiddle3StartInstant());

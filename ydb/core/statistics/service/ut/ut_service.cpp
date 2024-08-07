@@ -183,7 +183,6 @@ std::unordered_map<ui32, ui32> ReverseMap(const std::unordered_map<ui32, ui32>& 
     return res;
 }
 
-
 Y_UNIT_TEST_SUITE(StatisticsService) {
     Y_UNIT_TEST(ShouldBeVisitEveryNodeAndTablet) {
         size_t nodeCount = 10;
@@ -384,6 +383,164 @@ Y_UNIT_TEST_SUITE(StatisticsService) {
                 }
             }
         }
+    }
+
+    Y_UNIT_TEST(ShouldBeGettingStatisticResponseIntime) {
+        size_t nodeCount = 1;
+        auto runtime = TTestActorRuntime(nodeCount, 1, false);
+        auto settings = GetDefaultSettings()
+            .SetStatisticsResponseTimeout(TDuration::MilliSeconds(3));
+        auto indexToNodeIdMap = InitializeRuntime(runtime, nodeCount, settings);
+        std::vector<ui64> localTabletsIds = {1, 2, 3, 4, 5};
+        std::vector<TAggregateStatisticsRequest::TTablets> nodesTablets = {{.NodeId = indexToNodeIdMap[0], .Ids{localTabletsIds}}};
+
+        std::vector<TTestActorRuntimeBase::TEventObserverHolder> observers;
+        observers.emplace_back(runtime.AddObserver<TEvPipeCache::TEvGetTabletNode>([&](TEvPipeCache::TEvGetTabletNode::TPtr& ev) {
+            auto tabletId = ev->Get()->TabletId;
+            if (tabletId <= (localTabletsIds.size() + 1)/2) {
+                runtime.Send(new IEventHandle(ev->Sender, ev->Sender,
+                    CreateStatisticsResponse(TStatisticsResponse{
+                        .TabletId = tabletId,
+                        .Status = NKikimrStat::TEvStatisticsResponse::STATUS_SUCCESS
+                    }).release(), 0, ev->Cookie), 0, true);
+            } else {
+                runtime.Send(new IEventHandle(ev->Sender, ev->Sender,
+                    new TEvPipeCache::TEvGetTabletNodeResult(tabletId, indexToNodeIdMap[0]), 0, ev->Cookie), 0, true);
+            }
+            ev.Reset();
+        }));
+
+        auto sender = runtime.AllocateEdgeActor();
+        runtime.Send(NStat::MakeStatServiceID(indexToNodeIdMap[0]), sender, CreateStatisticsRequest(TAggregateStatisticsRequest{
+            .Round = 1,
+            .PathId{3, 3},
+            .Nodes{ nodesTablets },
+            .ColumnTags{1}
+        }).release());
+        auto res = runtime.GrabEdgeEvent<TEvStatistics::TEvAggregateStatisticsResponse>(sender);
+        const auto& record = res->Get()->Record;
+        UNIT_ASSERT(record.GetFailedTablets().size() == localTabletsIds.size()/2);
+
+        std::unordered_set<ui64> failedTablets;
+        for (const auto& fail :record.GetFailedTablets()) {
+            failedTablets.emplace(fail.GetTabletId());
+        }
+
+        for (size_t i = (localTabletsIds.size() + 1)/2; i < localTabletsIds.size(); ++i) {
+            UNIT_ASSERT(failedTablets.find(localTabletsIds[i]) != failedTablets.end());
+        }
+    }
+
+    Y_UNIT_TEST(ShouldBeIdenticalNodeIdWithStatisticResponse) {
+        size_t nodeCount = 2;
+        auto runtime = TTestActorRuntime(nodeCount, 1, false);
+        auto indexToNodeIdMap = InitializeRuntime(runtime, nodeCount);
+        auto nodeIdToIndexMap = ReverseMap(indexToNodeIdMap);
+        std::vector<ui64> localTabletsIds = {1, 2, 3, 4, 5};
+        std::vector<TAggregateStatisticsRequest::TTablets> nodesTablets = {{.NodeId = indexToNodeIdMap[0], .Ids{localTabletsIds}}};
+
+        std::vector<TTestActorRuntimeBase::TEventObserverHolder> observers;
+        observers.emplace_back(runtime.AddObserver<TEvPipeCache::TEvGetTabletNode>([&](TEvPipeCache::TEvGetTabletNode::TPtr& ev) {
+            auto tabletId = ev->Get()->TabletId;
+            if (tabletId <= (localTabletsIds.size() + 1)/2) {
+                runtime.Send(new IEventHandle(ev->Sender, ev->Sender,
+                    CreateStatisticsResponse(TStatisticsResponse{
+                        .TabletId = tabletId,
+                        .Status = NKikimrStat::TEvStatisticsResponse::STATUS_SUCCESS
+                    }).release(), 0, ev->Cookie), nodeIdToIndexMap[ev->Sender.NodeId()], true);
+            } else {
+                runtime.Send(new IEventHandle(ev->Sender, NStat::MakeStatServiceID(indexToNodeIdMap[1]),
+                    CreateStatisticsResponse(TStatisticsResponse{
+                        .TabletId = tabletId,
+                        .Status = NKikimrStat::TEvStatisticsResponse::STATUS_SUCCESS
+                    }).release(), 0, ev->Cookie), 1, true);
+            }
+            ev.Reset();
+        }));
+
+        auto sender = runtime.AllocateEdgeActor();
+        runtime.Send(NStat::MakeStatServiceID(indexToNodeIdMap[0]), sender, CreateStatisticsRequest(TAggregateStatisticsRequest{
+            .Round = 1,
+            .PathId{3, 3},
+            .Nodes{ nodesTablets },
+            .ColumnTags{1}
+        }).release());
+        auto res = runtime.GrabEdgeEvent<TEvStatistics::TEvAggregateStatisticsResponse>(sender);
+        const auto& record = res->Get()->Record;
+        UNIT_ASSERT(record.GetFailedTablets().size() == localTabletsIds.size()/2);
+
+        std::unordered_set<ui64> failedTablets;
+        for (const auto& fail :record.GetFailedTablets()) {
+            failedTablets.emplace(fail.GetTabletId());
+        }
+
+        for (size_t i = (localTabletsIds.size() + 1)/2; i < localTabletsIds.size(); ++i) {
+            UNIT_ASSERT(failedTablets.find(localTabletsIds[i]) != failedTablets.end());
+        }
+    }
+
+    Y_UNIT_TEST(ShouldBePings) {
+        size_t nodeCount = 2;
+        auto runtime = TTestActorRuntime(nodeCount, 1, false);
+        auto indexToNodeIdMap = InitializeRuntime(runtime, nodeCount,
+            GetDefaultSettings()
+                .SetAggregateKeepAlivePeriod(TDuration::MilliSeconds(10))
+                .SetAggregateKeepAliveTimeout(TDuration::Seconds(3))
+                .SetAggregateKeepAliveAckTimeout(TDuration::Seconds(3)));
+        auto nodeIdToIndexMap = ReverseMap(indexToNodeIdMap);
+        std::vector<TAggregateStatisticsRequest::TTablets> nodesTablets = {{.NodeId = indexToNodeIdMap[0], .Ids{1}},
+            {.NodeId = indexToNodeIdMap[1], .Ids{2}}};
+
+        std::vector<int> ping(3);
+        std::vector<int> pong(3);
+        auto sender = runtime.AllocateEdgeActor();
+
+        std::vector<TTestActorRuntimeBase::TEventObserverHolder> observers;
+        observers.emplace_back(runtime.AddObserver<TEvStatistics::TEvAggregateKeepAlive>([&](TEvStatistics::TEvAggregateKeepAlive::TPtr& ev) {
+            if (ev->Recipient == sender) {
+                ++ping[0];
+                ev.Reset();
+                return;
+            }
+
+            auto it = nodeIdToIndexMap.find(ev->Recipient.NodeId());
+            if (it != nodeIdToIndexMap.end()) {
+                ++ping[it->second + 1];
+            }
+        }));
+        observers.emplace_back(runtime.AddObserver<TEvStatistics::TEvAggregateKeepAliveAck>([&](TEvStatistics::TEvAggregateKeepAliveAck::TPtr& ev) {
+            auto it = nodeIdToIndexMap.find(ev->Recipient.NodeId());
+            if (it != nodeIdToIndexMap.end()) {
+                ++pong[it->second + 1];
+            }
+        }));
+        runtime.Send(NStat::MakeStatServiceID(indexToNodeIdMap[0]), sender, CreateStatisticsRequest(TAggregateStatisticsRequest{
+            .Round = 1,
+            .PathId{3, 3},
+            .Nodes{ nodesTablets },
+            .ColumnTags{1, 2}
+        }).release());
+
+        runtime.DispatchEvents(TDispatchOptions{
+            .CustomFinalCondition = [&]() {
+                    return ping[0] >= 10 && ping[1] >= 10 && pong[2] >= 10;
+            }
+        });
+
+        for (const auto& node : nodesTablets) {
+            for (auto tabletId : node.Ids) {
+                auto actorId = NStat::MakeStatServiceID(node.NodeId);
+                runtime.Send(new IEventHandle(actorId, actorId, 
+                    CreateStatisticsResponse(TStatisticsResponse{
+                        .TabletId = tabletId,
+                        .Status = NKikimrStat::TEvStatisticsResponse::STATUS_SUCCESS
+                    }).release(), 0, 1), nodeIdToIndexMap[node.NodeId], true);
+            }
+        }
+
+        auto res = runtime.GrabEdgeEvent<TEvStatistics::TEvAggregateStatisticsResponse>(sender);
+        const auto& record = res->Get()->Record;
+        UNIT_ASSERT(record.GetFailedTablets().empty());
     }
 }
 

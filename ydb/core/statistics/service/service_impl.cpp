@@ -128,6 +128,7 @@ public:
             EvDispatchKeepAlive,
             EvKeepAliveTimeout,
             EvKeepAliveAckTimeout,
+            EvStatisticsResponseTimeout,
 
             EvEnd
         };
@@ -154,6 +155,13 @@ public:
 
             ui64 Round;
             ui32 NodeId;
+        };
+
+        struct TEvStatisticsResponseTimeout: public NActors::TEventLocal<TEvStatisticsResponseTimeout, EvStatisticsResponseTimeout> {
+            TEvStatisticsResponseTimeout(ui64 round, ui64 tabletId): Round(round), TabletId(tabletId) {}
+
+            ui64 Round;
+            ui64 TabletId;
         };
     };
 
@@ -195,6 +203,7 @@ public:
             hFunc(TEvStatistics::TEvAggregateKeepAlive, Handle);
             hFunc(TEvPrivate::TEvDispatchKeepAlive, Handle);
             hFunc(TEvPrivate::TEvKeepAliveTimeout, Handle);
+            hFunc(TEvPrivate::TEvStatisticsResponseTimeout, Handle);
             hFunc(TEvPipeCache::TEvGetTabletNodeResult, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(TEvStatistics::TEvStatisticsResponse, Handle);
@@ -275,10 +284,35 @@ private:
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvGetTabletNode(tabletId), 0, AggregationStatistics.Round);
     }
 
+    void Handle(TEvPrivate::TEvStatisticsResponseTimeout::TPtr& ev) {
+        const auto round = ev->Get()->Round;
+        if (IsNotCurrentRound(round)) {
+            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                "Skip TEvStatisticsResponseTimeout");
+            return;
+        }
+
+        const auto tabletId = ev->Get()->TabletId;
+        if (OnTabletFinished(tabletId)) {
+            LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                "Waiting limit for the response from the tablet " << tabletId << " has been exceeded.");
+
+            AggregationStatistics.FailedTablets.emplace_back(tabletId, 0,
+                NKikimrStat::TEvAggregateStatisticsResponse::TYPE_NON_LOCAL_TABLET);
+
+            SendRequestToNextTablet();
+
+            if (AggregationStatistics.IsCompleted()) {
+                OnAggregateStatisticsFinished();
+            }
+        }
+    }
+
     void Handle(TEvPipeCache::TEvGetTabletNodeResult::TPtr& ev) {
         const auto msg = ev->Get();
+        const auto tabletId = msg->TabletId;
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Received TEvGetTabletNodeResult NodeId: " << msg->NodeId << ", TabletId: " << msg->TabletId);
+            "Received TEvGetTabletNodeResult NodeId: " << msg->NodeId << ", TabletId: " << tabletId);
 
         const auto round = ev->Cookie;
         if (IsNotCurrentRound(round)) {
@@ -290,14 +324,14 @@ private:
         // there is no need for retries, as the tablet must be local
         // no problems are expected in resolving
         if (currentNodeId != msg->NodeId) {
-            const auto tabletFinished = OnTabletFinished(msg->TabletId);
+            const auto tabletFinished = OnTabletFinished(tabletId);
             Y_ABORT_UNLESS(tabletFinished);
 
             LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
                 "Tablet is not local. Table node: " << msg->NodeId << ", current node: " << ev->Recipient.NodeId());
 
-            const auto error = NKikimrStat::TEvAggregateStatisticsResponse::TYPE_NON_LOCAL_TABLET;
-            AggregationStatistics.FailedTablets.emplace_back(msg->TabletId, msg->NodeId, error);
+            AggregationStatistics.FailedTablets.emplace_back(tabletId, msg->NodeId,
+                NKikimrStat::TEvAggregateStatisticsResponse::TYPE_NON_LOCAL_TABLET);
 
             SendRequestToNextTablet();
 
@@ -322,8 +356,9 @@ private:
         }
 
         Send(MakePipePerNodeCacheID(false),
-            new TEvPipeCache::TEvForward(request.release(), msg->TabletId, true, round),
+            new TEvPipeCache::TEvForward(request.release(), tabletId, true, round),
             IEventHandle::FlagTrackDelivery, round);
+        Schedule(Settings.StatisticsResponseTimeout, new TEvPrivate::TEvStatisticsResponseTimeout(round, tabletId));
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -337,9 +372,8 @@ private:
             return;
         }
 
-        const auto nodeId = ev->Recipient.NodeId();
-        const auto error = NKikimrStat::TEvAggregateStatisticsResponse::TYPE_NON_LOCAL_TABLET;
-        AggregationStatistics.FailedTablets.emplace_back(tabletId, nodeId, error);
+        AggregationStatistics.FailedTablets.emplace_back(tabletId, 0,
+            NKikimrStat::TEvAggregateStatisticsResponse::TYPE_NON_LOCAL_TABLET);
 
         SendRequestToNextTablet();
 
@@ -372,8 +406,9 @@ private:
     }
 
     void Handle(TEvStatistics::TEvStatisticsResponse::TPtr& ev) {
+        const auto tabletId = ev->Get()->Record.GetShardTabletId();
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Received TEvStatisticsResponse TabletId: " << ev->Get()->Record.GetShardTabletId());
+            "Received TEvStatisticsResponse TabletId: " << tabletId);
 
         const auto round = ev->Cookie;
         const auto& record = ev->Get()->Record;
@@ -382,7 +417,17 @@ private:
             return;
         }
 
-        AggregateStatistics(record.GetColumns());
+        const auto senderNodeId = ev->Sender.NodeId();
+        const auto recipientNodeId = ev->Recipient.NodeId();
+        if (senderNodeId == recipientNodeId) {
+            AggregateStatistics(record.GetColumns());
+        } else {
+            LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                "Response was received from a non-local node. SenderNodeId: " << senderNodeId << ", RecipientNodeId: " << recipientNodeId);
+
+            AggregationStatistics.FailedTablets.emplace_back(tabletId, ev->Sender.NodeId(),
+                NKikimrStat::TEvAggregateStatisticsResponse::TYPE_NON_LOCAL_TABLET);
+        }
 
         SendRequestToNextTablet();
 
@@ -684,8 +729,6 @@ private:
         // forming the right and left child nodes
         size_t k = 0;
         for (const auto& node : nodes) {
-            ++k;
-
             if (node.GetNodeId() == currentNodeId) {
                 AggregationStatistics.LocalTablets.Ids.reserve(node.GetTabletIds().size());
 
@@ -703,6 +746,7 @@ private:
             }
 
             AggregationStatistics.Nodes[k % Settings.FanOutFactor].Tablets.push_back(std::move(nodeTablets));
+            ++k;
         }
 
         for (auto& node : AggregationStatistics.Nodes) {

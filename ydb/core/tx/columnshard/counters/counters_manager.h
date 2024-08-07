@@ -87,6 +87,11 @@ public:
         BackgroundControllerCounters->FillTotalStats(tableStats);
         ScanCounters.FillStats(tableStats);
     }
+
+    void OnWritePutBlobsSuccess(const TDuration d, const ui64 rowsWritten) const {
+        TabletCounters->OnWritePutBlobsSuccess(rowsWritten);
+        CSCounters.OnWritePutBlobsSuccess(d);
+    }
 };
 
 } // namespace NKikimr::NColumnShard

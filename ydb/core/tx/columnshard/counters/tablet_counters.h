@@ -71,9 +71,8 @@ public:
     }
 
     void OnWriteSuccess(const ui64 blobsWritten, const ui64 bytesWritten) const {
-        IncCounter(NColumnShard::COUNTER_UPSERT_BLOBS_WRITTEN, blobsWritten);
-        IncCounter(NColumnShard::COUNTER_UPSERT_BYTES_WRITTEN, bytesWritten);
-        //    self.Stats.GetTabletCounters().IncCounter(NColumnShard::COUNTER_RAW_BYTES_UPSERTED, insertedBytes);
+        IncCounter(NColumnShard::COUNTER_OPERATIONS_BLOBS_WRITTEN, blobsWritten);
+        IncCounter(NColumnShard::COUNTER_OPERATIONS_BYTES_WRITTEN, bytesWritten);
         IncCounter(NColumnShard::COUNTER_WRITE_SUCCESS);
     }
 
@@ -106,9 +105,19 @@ public:
         IncCounter(NColumnShard::COUNTER_INDEXING_TIME, duration.MilliSeconds());
     }
 
+    void OnWritePutBlobsSuccess(const ui64 rowsWritten) const {
+        IncCounter(NColumnShard::COUNTER_OPERATIONS_ROWS_WRITTEN, rowsWritten);
+    }
+
+    void OnDropPortionEvent(const ui64 rawBytes, const ui64 blobBytes, const ui64 rows) const {
+        IncCounter(NColumnShard::COUNTER_RAW_BYTES_ERASED, rawBytes);
+        IncCounter(NColumnShard::COUNTER_BYTES_ERASED, blobBytes);
+        IncCounter(NColumnShard::COUNTER_ROWS_ERASED, rows);
+    }
+
     void FillStats(::NKikimrTableStats::TTableStats& output) const {
-        output.SetRowUpdates(GetValue(COUNTER_WRITE_SUCCESS));
-        output.SetRowDeletes(0); // manual deletes are not supported
+        output.SetRowUpdates(GetValue(COUNTER_OPERATIONS_ROWS_WRITTEN));
+        output.SetRowDeletes(GetValue(COUNTER_ROWS_ERASED));
         output.SetRowReads(0);   // all reads are range reads
         output.SetRangeReadRows(GetValue(COUNTER_READ_INDEX_ROWS));
 

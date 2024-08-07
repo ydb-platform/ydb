@@ -67,7 +67,7 @@ runs:
     - name: Install Node required for Testmo CLI
       uses: actions/setup-node@v3
       with:
-        node-version: 20
+        node-version: 20.13.1
     
     - name: Init
       id: init

@@ -42,6 +42,8 @@ bool TBuffer::ReturnToPool() {
         Pool->Push(this);
         return true;
     }
+
+    delete this;
     return false;
 }
 

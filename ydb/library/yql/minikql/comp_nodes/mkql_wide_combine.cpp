@@ -708,7 +708,6 @@ private:
     }
 
     bool IsSwitchToSpillingModeCondition() const {
-        return true;
         return !HasMemoryForProcessing();
     }
 

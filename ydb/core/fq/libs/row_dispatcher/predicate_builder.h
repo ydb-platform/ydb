@@ -4,6 +4,5 @@
 
 namespace NFq {
 
-    TString FormatWhere(const NYql::NPq::NProto::TPredicate& predicate);
 
 } // namespace NFq

@@ -41,8 +41,8 @@ public:
             ).release());
 
         EdgeActor = Runtime.AllocateEdgeActor();
-        ReadActor1 = Runtime.AllocateEdgeActor();
-        ReadActor2 = Runtime.AllocateEdgeActor();
+        ReadActorId1 = Runtime.AllocateEdgeActor();
+        ReadActorId2 = Runtime.AllocateEdgeActor();
         Runtime.EnableScheduleForActor(RowDispatcher);
 
         TDispatchOptions options;
@@ -89,8 +89,8 @@ public:
     NActors::TTestActorRuntime Runtime;
     NActors::TActorId RowDispatcher;
     NActors::TActorId EdgeActor;
-    NActors::TActorId ReadActor1;
-    NActors::TActorId ReadActor2;
+    NActors::TActorId ReadActorId1;
+    NActors::TActorId ReadActorId2;
 };
 
 Y_UNIT_TEST_SUITE(RowDispatcherTests) {

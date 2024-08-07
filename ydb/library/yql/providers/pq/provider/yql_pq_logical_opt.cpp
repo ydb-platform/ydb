@@ -251,12 +251,9 @@ public:
         
         auto newFilterLambda = MakePushdownPredicate(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
         if (!newFilterLambda) {
-            ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "MakePushdownPredicate failed"));
-            YQL_CLOG(TRACE, ProviderPq) << "MakePushdownPredicate failed";
+            ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "No predicate to pushdown"));
             return node;
         }
-
-        ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Predicate: " + NPlanUtils::PrettyExprStr(newFilterLambda.Cast())));
 
         return Build<TCoFlatMap>(ctx, flatmap.Pos())
             .InitFrom(flatmap) // Leave existing filter in flatmap for the case of not applying predicate in connector
@@ -296,12 +293,10 @@ public:
         
         auto newFilterLambda = NPushdown::MakePushdownPredicate(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
         if (!newFilterLambda) {
-            ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "MakePushdownPredicate failed"));
             YQL_CLOG(TRACE, ProviderPq) << "MakePushdownPredicate failed";
+            ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "No predicate to pushdown"));
             return node;
         }
-
-        ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Predicate: " + NPlanUtils::PrettyExprStr(newFilterLambda.Cast())));
 
         return Build<TCoFlatMap>(ctx, flatmap.Pos())
             .InitFrom(flatmap) // Leave existing filter in flatmap for the case of not applying predicate in connector

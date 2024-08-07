@@ -128,19 +128,6 @@ struct TEvRowDispatcher {
         TEvSessionError() = default;
         NActors::TActorId ReadActorId;
     };
-
-
-    // //  Row_dispatcher  <->  session: 
-    // struct TEvSessionAddConsumer : public NActors::TEventLocal<TEvSessionAddConsumer, EEv::EvSessionAddConsumer> {
-    //     TEvSessionAddConsumer(THolder<NFq::Consumer>&& consumer) 
-    //         : Consumer(consumer.Release()) // TODO 
-    //         {}
-    //     THolder<NFq::Consumer> Consumer;
-   // };
-
-    struct TEvSessionDeleteConsumer : public NActors::TEventLocal<TEvSessionDeleteConsumer, EEv::EvSessionDeleteConsumer> {
-        NActors::TActorId ReadActorId;
-    };
 };
 
 } // namespace NFq

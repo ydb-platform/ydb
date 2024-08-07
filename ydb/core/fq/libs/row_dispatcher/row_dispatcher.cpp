@@ -305,8 +305,8 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr &ev) {
     if (topicSessionInfo.Sessions.empty() || readOffset) {
         LOG_ROW_DISPATCHER_DEBUG("Create new session " << readOffset);
         sessionActorId = Register(NewTopicSession(
+            Config,
             SelfId(),
-            ev->Get()->Record.GetSource(),
             ev->Get()->Record.GetPartitionId(),
             YqSharedResources->UserSpaceYdbDriver,
             CreateCredentialsProviderFactoryForStructuredToken(
@@ -431,38 +431,35 @@ void TRowDispatcher::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvPing::TPtr
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr &ev) {
-    LOG_ROW_DISPATCHER_TRACE("TEvNewDataArrived");
-
     ConsumerSessionKey key{ev->Get()->ReadActorId, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(key);
     if (it == Consumers.end()) {
         LOG_ROW_DISPATCHER_DEBUG("Wrong consumer"); // TODO
         return;
     }
+    LOG_ROW_DISPATCHER_TRACE("Resend TEvNewDataArrived to " << ev->Get()->ReadActorId);
     it->second->EventsQueue.Send(ev.Release()->Release().Release());
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr &ev) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvNewDataArrived");
-
     ConsumerSessionKey key{ev->Get()->ReadActorId, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(key);
     if (it == Consumers.end()) {
         LOG_ROW_DISPATCHER_DEBUG("Wrong consumer"); // TODO
         return;
     }
+    LOG_ROW_DISPATCHER_TRACE("Resend TEvMessageBatch to " << ev->Get()->ReadActorId);
     it->second->EventsQueue.Send(ev.Release()->Release().Release());
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr &ev) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvSessionError");
-
     ConsumerSessionKey key{ev->Get()->ReadActorId, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(key);
     if (it == Consumers.end()) {
         LOG_ROW_DISPATCHER_DEBUG("Wrong consumer"); // TODO
         return;
     }
+    LOG_ROW_DISPATCHER_TRACE("Resend TEvSessionError to " << ev->Get()->ReadActorId);
     it->second->EventsQueue.Send(ev.Release()->Release().Release());
 }
 

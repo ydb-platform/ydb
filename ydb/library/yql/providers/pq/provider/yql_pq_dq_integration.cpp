@@ -1,4 +1,5 @@
 #include "yql_pq_dq_integration.h"
+#include "yql_pq_dq_predicate.h"
 #include "yql_pq_helpers.h"
 #include "yql_pq_mkql_compiler.h"
 
@@ -12,6 +13,7 @@
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_dq_predicate.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <util/string/builder.h>
@@ -225,192 +227,7 @@ public:
         }
     }
 
-    bool SerializeMember(const TCoMember& member, NPq::NProto::TExpression* proto, const TCoArgument& arg, TStringBuilder& err) {
-        if (member.Struct().Raw() != arg.Raw()) { // member callable called not for lambda argument
-            err << "member callable called not for lambda argument";
-            return false;
-        }
-        proto->set_column(member.Name().StringValue());
-        return true;
-    }
-
-    template <class T>
-    T Cast(const TStringBuf& from) {
-        return FromString<T>(from);
-    }
-
-    // Special convertation from TStringBuf to TString
-    template <>
-    TString Cast<TString>(const TStringBuf& from) {
-        return TString(from);
-    }
-
-#define MATCH_ATOM(AtomType, ATOM_ENUM, proto_name, cpp_type)                             \
-    if (auto atom = expression.Maybe<Y_CAT(TCo, AtomType)>()) {                           \
-        auto* value = proto->mutable_typed_value();                                       \
-        auto* t = value->mutable_type();                                                  \
-        t->set_type_id(Ydb::Type::ATOM_ENUM);                                             \
-        auto* v = value->mutable_value();                                                 \
-        v->Y_CAT(Y_CAT(set_, proto_name), _value)(Cast<cpp_type>(atom.Cast().Literal())); \
-        return true;                                                                      \
-    }
-
-#define MATCH_ARITHMETICAL(OpType, OP_ENUM)                                                                                                                                  \
-    if (auto maybeExpr = expression.Maybe<Y_CAT(TCo, OpType)>()) {                                                                                                           \
-        auto expr = maybeExpr.Cast();                                                                                                                                        \
-        auto* exprProto = proto->mutable_arithmetical_expression();                                                                                                          \
-        exprProto->set_operation(NPq::NProto::TExpression::TArithmeticalExpression::OP_ENUM);                                                                                             \
-        return SerializeExpression(expr.Left(), exprProto->mutable_left_value(), arg, err) && SerializeExpression(expr.Right(), exprProto->mutable_right_value(), arg, err); \
-    }
-
-    bool SerializeExpression(const TExprBase& expression, NPq::NProto::TExpression* proto, const TCoArgument& arg, TStringBuilder& err) {
-        if (auto member = expression.Maybe<TCoMember>()) {
-            return SerializeMember(member.Cast(), proto, arg, err);
-        }
-
-        // data
-        MATCH_ATOM(Int8, INT8, int32, i8);
-        MATCH_ATOM(Uint8, UINT8, uint32, ui8);
-        MATCH_ATOM(Int16, INT16, int32, i16);
-        MATCH_ATOM(Uint16, UINT16, uint32, ui16);
-        MATCH_ATOM(Int32, INT32, int32, i32);
-        MATCH_ATOM(Uint32, UINT32, uint32, ui32);
-        MATCH_ATOM(Int64, INT64, int64, i64);
-        MATCH_ATOM(Uint64, UINT64, uint64, ui64);
-        MATCH_ATOM(Float, FLOAT, float, float);
-        MATCH_ATOM(Double, DOUBLE, double, double);
-        MATCH_ATOM(String, STRING, bytes, TString);
-        MATCH_ATOM(Utf8, UTF8, text, TString);
-        MATCH_ARITHMETICAL(Sub, SUB);
-        MATCH_ARITHMETICAL(Add, ADD);
-        MATCH_ARITHMETICAL(Mul, MUL);
-
-        if (auto maybeNull = expression.Maybe<TCoNull>()) {
-            proto->mutable_null();
-            return true;
-        }
-
-        err << "unknown expression: " << expression.Raw()->Content();
-        return false;
-    }
-
-#undef MATCH_ATOM
-
-#define EXPR_NODE_TO_COMPARE_TYPE(TExprNodeType, COMPARE_TYPE)       \
-    if (!opMatched && compare.Maybe<TExprNodeType>()) {              \
-        opMatched = true;                                            \
-        proto->set_operation(NPq::NProto::TPredicate::TComparison::COMPARE_TYPE); \
-    }
-
-    bool SerializeCompare(const TCoCompare& compare, NPq::NProto::TPredicate* predicateProto, const TCoArgument& arg, TStringBuilder& err) {
-        NPq::NProto::TPredicate::TComparison* proto = predicateProto->mutable_comparison();
-        bool opMatched = false;
-
-        EXPR_NODE_TO_COMPARE_TYPE(TCoCmpEqual, EQ);
-        EXPR_NODE_TO_COMPARE_TYPE(TCoCmpNotEqual, NE);
-        EXPR_NODE_TO_COMPARE_TYPE(TCoCmpLess, L);
-        EXPR_NODE_TO_COMPARE_TYPE(TCoCmpLessOrEqual, LE);
-        EXPR_NODE_TO_COMPARE_TYPE(TCoCmpGreater, G);
-        EXPR_NODE_TO_COMPARE_TYPE(TCoCmpGreaterOrEqual, GE);
-
-        if (proto->operation() == NPq::NProto::TPredicate::TComparison::COMPARISON_OPERATION_UNSPECIFIED) {
-            err << "unknown operation: " << compare.Raw()->Content();
-            return false;
-        }
-        return SerializeExpression(compare.Left(), proto->mutable_left_value(), arg, err) && SerializeExpression(compare.Right(), proto->mutable_right_value(), arg, err);
-    }
-
-#undef EXPR_NODE_TO_COMPARE_TYPE
-
-    bool SerializeCoalesce(const TCoCoalesce& coalesce, NPq::NProto::TPredicate* proto, const TCoArgument& arg, TStringBuilder& err) {
-        auto predicate = coalesce.Predicate();
-        if (auto compare = predicate.Maybe<TCoCompare>()) {
-            return SerializeCompare(compare.Cast(), proto, arg, err);
-        }
-
-        err << "unknown coalesce predicate: " << predicate.Raw()->Content();
-        return false;
-    }
-
-
-    bool SerializeExists(const TCoExists& exists, NPq::NProto::TPredicate* proto, const TCoArgument& arg, TStringBuilder& err, bool withNot = false) {
-        auto* expressionProto = withNot ? proto->mutable_is_null()->mutable_value() : proto->mutable_is_not_null()->mutable_value();
-        return SerializeExpression(exists.Optional(), expressionProto, arg, err);
-    }
-
-    bool SerializeAnd(const TCoAnd& andExpr, NPq::NProto::TPredicate* proto, const TCoArgument& arg, TStringBuilder& err) {
-        auto* dstProto = proto->mutable_conjunction();
-        for (const auto& child : andExpr.Ptr()->Children()) {
-            if (!SerializePredicate(TExprBase(child), dstProto->add_operands(), arg, err)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    bool SerializeOr(const TCoOr& orExpr, NPq::NProto::TPredicate* proto, const TCoArgument& arg, TStringBuilder& err) {
-        auto* dstProto = proto->mutable_disjunction();
-        for (const auto& child : orExpr.Ptr()->Children()) {
-            if (!SerializePredicate(TExprBase(child), dstProto->add_operands(), arg, err)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    bool SerializeNot(const TCoNot& notExpr, NPq::NProto::TPredicate* proto, const TCoArgument& arg, TStringBuilder& err) {
-        // Special case: (Not (Exists ...))
-        if (auto exists = notExpr.Value().Maybe<TCoExists>()) {
-            return SerializeExists(exists.Cast(), proto, arg, err, true);
-        }
-        auto* dstProto = proto->mutable_negation();
-        return SerializePredicate(notExpr.Value(), dstProto->mutable_operand(), arg, err);
-    }
-
-    bool SerializeMember(const TCoMember& member, NPq::NProto::TPredicate* proto, const TCoArgument& arg, TStringBuilder& err) {
-        return SerializeMember(member, proto->mutable_bool_expression()->mutable_value(), arg, err);
-    }
-
-    bool SerializePredicate(const TExprBase& predicate, NPq::NProto::TPredicate* proto, const TCoArgument& arg, TStringBuilder& err) {
-        if (auto compare = predicate.Maybe<TCoCompare>()) {
-            return SerializeCompare(compare.Cast(), proto, arg, err);
-        }
-        if (auto coalesce = predicate.Maybe<TCoCoalesce>()) {
-            return SerializeCoalesce(coalesce.Cast(), proto, arg, err);
-        }
-        if (auto andExpr = predicate.Maybe<TCoAnd>()) {
-            return SerializeAnd(andExpr.Cast(), proto, arg, err);
-        }
-        if (auto orExpr = predicate.Maybe<TCoOr>()) {
-            return SerializeOr(orExpr.Cast(), proto, arg, err);
-        }
-        if (auto notExpr = predicate.Maybe<TCoNot>()) {
-            return SerializeNot(notExpr.Cast(), proto, arg, err);
-        }
-        if (auto member = predicate.Maybe<TCoMember>()) {
-            return SerializeMember(member.Cast(), proto, arg, err);
-        }
-        if (auto exists = predicate.Maybe<TCoExists>()) {
-            return SerializeExists(exists.Cast(), proto, arg, err);
-        }
-
-        err << "unknown predicate: " << predicate.Raw()->Content();
-        return false;
-    }
-
-    bool IsEmptyFilterPredicate(const TCoLambda& lambda) {
-        auto maybeBool = lambda.Body().Maybe<TCoBool>();
-        if (!maybeBool) {
-            return false;
-        }
-        return TStringBuf(maybeBool.Cast().Literal()) == "true"sv;
-    }
-
-    bool SerializeFilterPredicate(const TCoLambda& predicate, NPq::NProto::TPredicate* proto, TStringBuilder& err) {
-        return SerializePredicate(predicate.Body(), proto, predicate.Args().Arg(0), err);
-    }
-
-    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t) override {
+    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t, TExprContext& ctx) override {
         if (auto maybeDqSource = TMaybeNode<TDqSource>(&node)) {
             auto settings = maybeDqSource.Cast().Settings();
             if (auto maybeTopicSource = TMaybeNode<TDqPqTopicSource>(settings.Raw())) {
@@ -475,19 +292,26 @@ public:
                     srcDesc.AddColumnTypes(columnTypes.StringValue());
                 }
             
-                if (auto predicate = topicSource.FilterPredicate(); !IsEmptyFilterPredicate(predicate)) {
+                NPq::NProto::TPredicate predicateProto;
+                if (auto predicate = topicSource.FilterPredicate(); !NYql::NDqPredicate::IsEmptyFilterPredicate(predicate)) {
                     TStringBuilder err;
-                    if (!SerializeFilterPredicate(predicate, srcDesc.MutablePredicate(), err)) {
+                    if (!NYql::NDqPredicate::SerializeFilterPredicate(predicate, &predicateProto, err)) {
                         ythrow yexception() << "Failed to serialize filter predicate for source: " << err;
                     }
                 }
 
+                TString predicateSql = NYql::NDqPredicate::FormatWhere(predicateProto);
+                srcDesc.SetPredicate(predicateSql);
+
                 YQL_CLOG(INFO, Core) << "UseRowDispatcher " << useRowDispatcher;
                 YQL_CLOG(INFO, Core) << "UseRowDispatcher format" << format;
 
-                //useRowDispatcher = true; // TODO
+                useRowDispatcher = true; // TODO
                 protoSettings.PackFrom(srcDesc);
                 useRowDispatcher = useRowDispatcher && (format == "json_each_row");
+                if (useRowDispatcher) {
+                    ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + predicateSql));
+                }
                 sourceType = !useRowDispatcher ? "PqSource" : "PqRdSource";
             }
         }

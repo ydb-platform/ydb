@@ -147,7 +147,7 @@ message TDqPqTopicSource {
     repeated string MetadataFields = 10;
     TWatermarks Watermarks = 11;
     repeated string Columns = 12;
-    TPredicate Predicate = 13;
+    string Predicate = 13;
     repeated string ColumnTypes = 14;
 }
 

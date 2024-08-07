@@ -967,7 +967,7 @@ private:
 
                 ColumnShardScannedBytes_ = appGroup->GetCounter("ColumnShard/ScannedBytes");
                 ColumnShardScannedRows_ = appGroup->GetCounter("ColumnShard/ScannedRows");
-                ColumnShardOperationsRowsWritten_ = appGroup->GetCounter("ColumnShard/RowsWritten");
+                ColumnShardOperationsRowsWritten_ = appGroup->GetCounter("ColumnShard/OperationsRowsWritten");
                 ColumnShardOperationsBytesWritten_ = appGroup->GetCounter("ColumnShard/OperationsBytesWritten");
                 ColumnShardErasedBytes_ = appGroup->GetCounter("ColumnShard/BytesErased");
                 ColumnShardErasedRows_ = appGroup->GetCounter("ColumnShard/RowsErased");
